@@ -18,8 +18,8 @@ looks only at the merge base with the selected base and at HEAD.
   changes over it (product code exactly as before the PR, except the `mod`
   lines below) and runs the selected
   packages/specs in that snapshot. It is red when at least one changed test
-  fails by name, or when the changed Rust test target fails to compile because
-  a test names an item the PR adds (see below).
+  fails by name, or when a changed Rust test target or Playwright spec cannot
+  compile/load because it names an item the PR adds (see below).
 - **Mount lines**: a Rust test file is compiled only where a `mod` item loads it,
   and that item usually lives in a product file. For each changed Rust test file
   that `head` mounts from a product file the merge base does not declare it in,
@@ -45,6 +45,8 @@ looks only at the merge base with the selected base and at HEAD.
   stack, because only a test that ran can fail by name and green shows what ran.
   The duel's own green keeps its exemption for ignored and cfg-gated tests.
 
+## Compile-red
+
 A Rust test that calls an API the PR adds cannot compile at the merge base. That
 is accepted as red only when every compiler error is located in a changed test
 file and at least one is a "cannot find" kind
@@ -55,6 +57,30 @@ errors on values built from the missing items); each such file still needs a tes
 that runs and passes at HEAD. The record names the missing items. An error
 outside the changed tests, a build with no such miss, a truncated build log, a
 timeout, a cancellation or a nameless crash is not red.
+
+Playwright collection/load errors count only when every error belongs to a
+changed spec or a changed helper statically imported by a selected spec
+(including transitive relative imports and `.js`/`.mjs`/`.cjs` specifiers resolving
+to `.ts`/`.mts`/`.cts` helpers). The fresh JSON report's top-level and
+suite errors must identify a missing module (`Cannot find module`,
+`Failed to load url`, `ERR_MODULE_NOT_FOUND`, or a missing `copyfile` source),
+or an export (`does not provide an export named`). Each missing module must
+exist at HEAD and not at the merge base; each missing export must occur on a
+line the PR adds to non-test code. The record's `missing` names those paths or
+exports. An accompanying `No tests found` collection summary is accepted only
+with explained load errors. Unknown errors, errors outside that scope, missing
+or truncated JSON, deadlines and runner failures remain unavailable/refused.
+Playwright's `<anonymous>` ESM eval location needs a named source/importer in
+the message or stack. A real file location remains authoritative, including
+when it points outside the changed scope.
+At green, every affected spec must have at least one changed test that ran and
+passed; helper failures require this of each importing spec. Passing evidence
+requires Playwright's `expected` outcome, `expectedStatus: passed`, and a final
+result with `status: passed`. Expected failures (`test.fail()`), fixme, skipped,
+filtered or unobserved tests cannot earn proof. These test names are recorded
+in `ran`, as for Rust.
+
+## Runs and records
 
 Rust packages, WASM suites and exact Playwright spec filters reuse the duel's
 focused tooling. Each exported snapshot uses separate Cargo build output and
