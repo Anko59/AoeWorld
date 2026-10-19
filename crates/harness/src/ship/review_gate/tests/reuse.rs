@@ -190,13 +190,14 @@ fn reuse_requires_the_current_merge_grade_and_records_it() {
 
     let (_temp, root) = fixture("true");
     let reviewed = source_report(&root, Tier::Low, 8);
-    advance_dev_with_grade(&root, 8);
+    // Dev keeps today's bar (7, gates/review.json): only the base moves.
+    advance_dev_with_grade(&root, 7);
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     let reused = Report::reuse_for_change(&root, &head, "feature", &["low"], "")
         .unwrap()
-        .expect("grade 8 should be reusable under today's grade 8 threshold");
+        .expect("grade 8 should be reusable under today's grade 7 threshold");
     assert_eq!(reused.reused_from.as_deref(), Some(reviewed.head.as_str()));
-    assert_eq!(reused.merge_grade, 8);
+    assert_eq!(reused.merge_grade, 7);
     assert_eq!(reused.floor, "low");
 }
 
