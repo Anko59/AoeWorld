@@ -115,6 +115,14 @@ pub enum ClientMessage {
         entity_id: EntityId,
         farm_id: EntityId,
     },
+    /// Send villagers to finish an unfinished foundation the player owns;
+    /// nothing is charged.
+    ConstructOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "economy::bounded_builders")]
+        builder_ids: Vec<EntityId>,
+        building_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

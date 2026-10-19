@@ -115,7 +115,9 @@ of `3 x base seconds x tick rate` work, the AoE II rule `base x 3 / (n + 2)`: on
 builder takes the base time, three take three fifths of it. Builders stop on
 completion; beside a new camp or mill they gather the nearest matching resource,
 the builder of a farm farms it, and a palisade builder continues to unfinished
-segments within three tiles. A Move order abandons construction. Cancelling a
+segments within eight tiles (the nearest four are tried). A Move order
+abandons construction; `ConstructOrder` sends villagers back to an unfinished
+foundation the player owns, at no charge. Cancelling a
 foundation refunds the cost in proportion to the work not yet done (all of it
 before any progress). One palisade order lays at most 64 segments, all or none.
 
@@ -128,12 +130,14 @@ owned building that accepts its load (`nearest_dropoff`).
 A farm holds 175 food from placement, but only a completed one can be worked,
 by one villager standing on it (`UnitTask::Farming`, food rate as gathering). It
 returns each 10-food load to the nearest food drop-off, and when the 175th
-unit is delivered the farm building is removed (a removal on the wire); a farmer
-that stops earlier leaves the farm marked exhausted at `food_remaining = Some(0)`.
+unit is delivered the farm building is removed (a removal on the wire). A farm
+with no food left is also removed when its farmer is ordered away (Move, build,
+farm or gather) before delivering; a farm with food left stays workable.
 Per-tick cost is bounded by builders and gatherers (at most 80 each) and the
 building count (at most 256); placement and completion alone scan buildings.
 
-Wire: `BuildOrder`, `BuildWallOrder`, `CancelConstructionOrder` and `FarmOrder`;
+Wire: `BuildOrder`, `BuildWallOrder`, `ConstructOrder`, `CancelConstructionOrder` and
+`FarmOrder`;
 each building state carries `construction`, `progress_permille`, `hp`, `max_hp`,
 `los` and `food_remaining`; `UnitTask` gains `Building` and `Farming`. Hit
 points are authoritative state for the combat track to change.

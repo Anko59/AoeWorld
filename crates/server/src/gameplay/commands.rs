@@ -115,6 +115,19 @@ impl GameplayService {
         };
         self.queue_command(session_id, sequence, action).await;
     }
+    pub async fn queue_construct(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        builder_ids: Vec<EntityId>,
+        building_id: EntityId,
+    ) {
+        let action = PendingAction::Construct {
+            builder_ids,
+            building_id,
+        };
+        self.queue_command(session_id, sequence, action).await;
+    }
     pub async fn queue_cancel_construction(
         &self,
         session_id: u64,
@@ -244,6 +257,10 @@ pub(super) fn apply(
         } => world
             .issue_build_wall(player, &builder_ids, from, to)
             .map(|_| ()),
+        PendingAction::Construct {
+            builder_ids,
+            building_id,
+        } => world.issue_construct(player, &builder_ids, building_id),
         PendingAction::CancelConstruction { building_id } => {
             world.issue_cancel_construction(player, building_id)
         }

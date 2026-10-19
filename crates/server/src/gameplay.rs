@@ -102,6 +102,10 @@ enum PendingAction {
         from: aoe_core::TileCoord,
         to: aoe_core::TileCoord,
     },
+    Construct {
+        builder_ids: Vec<EntityId>,
+        building_id: EntityId,
+    },
     CancelConstruction {
         building_id: EntityId,
     },

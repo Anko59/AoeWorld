@@ -109,6 +109,14 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
             vec![10, 9, 3, 7],
         ),
         (
+            GameplayClientMessage::ConstructOrder {
+                sequence: 8,
+                builder_ids: vec![EntityId(3)],
+                building_id: EntityId(7),
+            },
+            vec![11, 8, 1, 3, 7],
+        ),
+        (
             GameplayClientMessage::GatherOrder {
                 sequence: 9,
                 entity_id: EntityId(3),

@@ -79,16 +79,63 @@ fn a_move_order_abandons_construction_and_the_foundation_stays() {
         .unwrap();
     advance(&mut world, 100);
     assert_eq!(world.building(id).unwrap().progress_permille(), progress);
-    // A second villager resumes it.
+    // A second villager resumes the stranded foundation; nothing is charged.
+    let wood = stock(&world).1;
     let other = villager_at(&mut world, 99, 101);
-    world
-        .issue_build(
-            PlayerId(0),
-            &[other],
-            BuildingKind::LumberCamp,
-            at(120, 120),
+    world.issue_construct(PlayerId(0), &[other], id).unwrap();
+    assert_eq!(stock(&world).1, wood, "resuming costs nothing");
+    advance(&mut world, 60);
+    assert!(world.building(id).unwrap().progress_permille() > progress);
+    finish(&mut world, id, 700);
+    assert_eq!(
+        world.player_economy(PlayerId(0)).unwrap().population_cap,
+        10
+    );
+}
+
+#[test]
+fn construct_orders_reject_complete_foreign_and_missing_buildings() {
+    let (mut world, _, center) = village();
+    let builder = villager_at(&mut world, 99, 100);
+    let house = world
+        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .unwrap();
+    let other = villager_at(&mut world, 99, 101);
+    let stranger = world
+        .spawn_villager(
+            PlayerId(1),
+            WorldPosition::from_tile_center(at(30, 30)).unwrap(),
         )
         .unwrap();
+    let before = world.canonical_hash();
+    for (player, builders, target, expected) in [
+        (
+            PlayerId(0),
+            vec![other],
+            center,
+            EconomyError::AlreadyComplete,
+        ),
+        (
+            PlayerId(0),
+            vec![other],
+            EntityId(9999),
+            EconomyError::UnknownEntity,
+        ),
+        (PlayerId(1), vec![stranger], house, EconomyError::NotOwner),
+        (PlayerId(0), vec![stranger], house, EconomyError::NotOwner),
+        (PlayerId(0), vec![], house, EconomyError::Capacity),
+    ] {
+        assert_eq!(
+            world.issue_construct(player, &builders, target),
+            Err(expected)
+        );
+        assert_eq!(world.canonical_hash(), before);
+    }
+    finish(&mut world, house, 700);
+    assert_eq!(
+        world.issue_construct(PlayerId(0), &[other], house),
+        Err(EconomyError::AlreadyComplete)
+    );
 }
 
 fn wall_ring(world: &mut GameWorld, builders: &[EntityId]) -> Vec<EntityId> {

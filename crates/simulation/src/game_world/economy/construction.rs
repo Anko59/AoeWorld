@@ -135,6 +135,33 @@ impl GameWorld {
         Ok(id)
     }
 
+    /// Send villagers to an existing unfinished foundation of `player`
+    /// (right-clicking it). Nothing is charged: the cost was paid on placement.
+    pub fn issue_construct(
+        &mut self,
+        player: PlayerId,
+        builders: &[EntityId],
+        building: EntityId,
+    ) -> Result<(), EconomyError> {
+        let builders = self.validate_builders(player, builders)?;
+        let state = self
+            .economy
+            .buildings
+            .get(&building)
+            .ok_or(EconomyError::UnknownEntity)?;
+        if state.player != player {
+            return Err(EconomyError::NotOwner);
+        }
+        if state.is_complete() {
+            return Err(EconomyError::AlreadyComplete);
+        }
+        if self.assign_builders(&builders, |_| building) {
+            Ok(())
+        } else {
+            Err(crate::GameWorldError::Unreachable.into())
+        }
+    }
+
     /// Cancel a foundation. The cost is refunded in proportion to the work
     /// still undone, so a cancel before any progress refunds all of it.
     pub fn issue_cancel_construction(
