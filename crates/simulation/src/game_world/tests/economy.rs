@@ -1,3 +1,5 @@
+mod barracks;
+mod research;
 use super::*;
 use crate::{BuildingKind, CarriedResource, EconomyError, UnitKind, UnitTask, VILLAGE_RULES};
 use aoe_map::{ResourceKind, ResourceNode};

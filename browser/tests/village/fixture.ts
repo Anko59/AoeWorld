@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { scoutCombat, villagerCombat } from "../wire/combat.js";
-import { townCenterState } from "../wire/buildings.js";
+import { darkAgeState, townCenterState } from "../wire/buildings.js";
 
 function uint(value: number): number[] {
   const bytes: number[] = [];
@@ -85,6 +85,7 @@ export async function fiveVillagerFixture(page: Page) {
           ...uint(200),
           6,
           10,
+          ...darkAgeState,
           1,
           1,
           0,

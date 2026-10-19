@@ -100,6 +100,9 @@ pub struct PlayerEconomy {
     pub stockpile: Stockpile,
     pub population_used: u16,
     pub population_cap: u16,
+    pub age: super::Age,
+    /// Bit `1 << tech as u8` is set once researched.
+    pub researched: u32,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TrainingEntry {
@@ -124,6 +127,7 @@ pub struct GameBuilding {
     pub los: u8,
     /// Food left on a farm; `Some(0)` is an exhausted farm.
     pub food_remaining: Option<u16>,
+    pub research: Option<super::ResearchEntry>,
 }
 impl GameBuilding {
     /// Construction progress in thousandths, 1000 once complete.
@@ -208,6 +212,14 @@ pub enum EconomyError {
     RequirementMissing,
     #[error("the building is still under construction")]
     UnderConstruction,
+    #[error("that building cannot research that technology")]
+    NotResearchable,
+    #[error("the technology is already researched")]
+    AlreadyResearched,
+    #[error("this building or technology is already busy researching")]
+    ResearchBusy,
+    #[error("the technology requirements are not met")]
+    TechRequirementMissing,
     #[error("the farm is exhausted or already worked")]
     FarmUnavailable,
     #[error("bounded village state is full")]

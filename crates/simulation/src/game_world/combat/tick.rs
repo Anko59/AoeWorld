@@ -224,14 +224,9 @@ impl GameWorld {
         };
         self.combat.stats.hits += 1;
         if let Some(&victim_index) = self.lookup.get(&target) {
+            let (melee, pierce) = self.unit_armour(target).unwrap_or_default();
             let victim = &mut self.units[victim_index].state;
-            let armour = unit_combat(victim.kind);
-            let damage = damage_dealt(
-                stats.attack,
-                stats.attack_kind,
-                armour.melee_armour,
-                armour.pierce_armour,
-            );
+            let damage = damage_dealt(stats.attack, stats.attack_kind, melee, pierce);
             victim.hp = victim.hp.saturating_sub(damage);
             victim.last_hit = Some(hit);
             let (hp, victim_id) = (victim.hp, victim.id);

@@ -26,6 +26,7 @@ impl GameWorld {
         self.advance_combat(&mut changed);
         self.advance_construction(&mut changed);
         self.advance_gathering(sink, &mut changed);
+        self.advance_research(&mut changed);
         self.advance_training(&mut changed);
         self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
         changed.sort_by_key(|unit| unit.id);

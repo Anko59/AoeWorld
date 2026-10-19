@@ -113,6 +113,13 @@ enum PendingAction {
         entity_id: EntityId,
         farm_id: EntityId,
     },
+    Research {
+        building_id: EntityId,
+        tech: aoe_protocol::Tech,
+    },
+    CancelResearch {
+        building_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy)]

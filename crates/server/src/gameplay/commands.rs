@@ -85,6 +85,25 @@ impl GameplayService {
         )
         .await;
     }
+    pub async fn queue_research(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        tech: aoe_protocol::Tech,
+    ) {
+        let action = PendingAction::Research { building_id, tech };
+        self.queue_command(session_id, sequence, action).await;
+    }
+    pub async fn queue_cancel_research(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+    ) {
+        let action = PendingAction::CancelResearch { building_id };
+        self.queue_command(session_id, sequence, action).await;
+    }
     pub async fn queue_build(
         &self,
         session_id: u64,
@@ -265,6 +284,12 @@ pub(super) fn apply(
             world.issue_cancel_construction(player, building_id)
         }
         PendingAction::Farm { entity_id, farm_id } => world.issue_farm(player, entity_id, farm_id),
+        PendingAction::Research { building_id, tech } => {
+            world.issue_research(player, building_id, super::economy::native_tech(tech))
+        }
+        PendingAction::CancelResearch { building_id } => {
+            world.issue_cancel_research(player, building_id)
+        }
     };
     use aoe_simulation::{EconomyError as E, GameWorldError as W};
     match result {
@@ -286,6 +311,10 @@ pub(super) fn apply(
         Err(E::UnderConstruction) => CommandResult::RejectedUnderConstruction,
         Err(E::AlreadyComplete) => CommandResult::RejectedAlreadyComplete,
         Err(E::FarmUnavailable) => CommandResult::RejectedFarmUnavailable,
+        Err(E::NotResearchable) => CommandResult::RejectedNotResearchable,
+        Err(E::AlreadyResearched) => CommandResult::RejectedAlreadyResearched,
+        Err(E::ResearchBusy) => CommandResult::RejectedResearchBusy,
+        Err(E::TechRequirementMissing) => CommandResult::RejectedTechRequirement,
         Err(E::Capacity) => CommandResult::RejectedQueueFull,
         Err(E::Movement(W::Unreachable)) => CommandResult::RejectedUnreachable,
         Err(E::Movement(W::PathBudgetExceeded)) => CommandResult::RejectedPathBudgetExceeded,

@@ -84,6 +84,7 @@ fn browser_building_combat_fragment_matches_the_current_codec() {
         progress_permille: 1000,
         los: 8,
         food_remaining: None,
+        research: None,
     };
     let mut expected = vec![1, 1, 0, 0, 0, 1, 1, 0, 0, 10, 10, 18, 18];
     expected.extend(hex(include_str!(
@@ -107,6 +108,8 @@ fn snapshot() -> GameplayServerMessage {
             },
             population_used: 6,
             population_cap: 10,
+            age: aoe_protocol::Age::Dark,
+            researched: 0,
         }],
         buildings: vec![GameplayBuildingState {
             id: EntityId(1),
@@ -119,6 +122,7 @@ fn snapshot() -> GameplayServerMessage {
             max_hp: 2400,
             los: 8,
             food_remaining: None,
+            research: None,
             training_queue: vec![],
             last_hit: None,
         }],
@@ -129,9 +133,12 @@ fn browser_bytes() -> Vec<u8> {
     let mut bytes = vec![
         1, 1, 0, 0, // Snapshot, revision, tick, units.
         1, 0, 200, 1, 200, 1, 100, 200, 1, 6, 10, // Player and stockpile.
+    ];
+    bytes.extend(hex(include_str!("../../../browser/tests/wire/player.hex")));
+    bytes.extend([
         1, 1, 0, 0, // Building count, id, player, TownCenter.
         252, 127, 252, 127, 132, 128, 1, 132, 128, 1, // Footprint.
-    ];
+    ]);
     bytes.extend(
         include_str!("../../../browser/tests/wire/town-center.hex")
             .split_whitespace()
