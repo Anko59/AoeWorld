@@ -68,3 +68,41 @@ async fn queue_move_rejects_unknown_and_non_controller_sessions_then_deduplicate
     }
     assert!(rejected > MAX_ACK_HISTORY);
 }
+
+#[test]
+fn attack_orders_apply_with_typed_rejections_and_reach_the_wire_state() {
+    use aoe_core::PlayerId;
+    use aoe_protocol::UnitTask;
+    let (mut world, scout) = aoe_simulation::GameWorld::default_with_village(Seed(1));
+    let position = world.unit(scout).unwrap().position;
+    let enemy = world.spawn_militia(PlayerId(1), position).unwrap();
+    let attack = |entity_id, target_id| PendingAction::Attack {
+        entity_id,
+        target_id,
+    };
+    let own = PlayerId(0);
+    assert_eq!(
+        apply(&mut world, own, attack(scout, scout)),
+        CommandResult::RejectedInvalidTarget
+    );
+    assert_eq!(
+        apply(&mut world, own, attack(EntityId(9_999), enemy)),
+        CommandResult::RejectedUnknownEntity
+    );
+    assert_eq!(
+        apply(&mut world, PlayerId(1), attack(scout, enemy)),
+        CommandResult::RejectedNotOwner
+    );
+    assert_eq!(
+        apply(&mut world, own, attack(scout, enemy)),
+        CommandResult::Accepted
+    );
+    world.advance();
+    let attacker = super::super::economy::unit_state(&world, &world.unit(scout).unwrap());
+    assert_eq!(attacker.task, UnitTask::Attacking);
+    assert_eq!(attacker.attack_target, Some(enemy));
+    let victim = super::super::economy::unit_state(&world, &world.unit(enemy).unwrap());
+    assert_eq!((victim.hp, victim.max_hp), (37, 40));
+    let hit = victim.last_hit.expect("the hit is reported");
+    assert_eq!((hit.attacker, hit.tick), (scout, world.tick()));
+}

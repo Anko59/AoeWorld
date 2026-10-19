@@ -14,6 +14,10 @@ fn state(x: i32, moving: bool) -> GameplayUnitState {
         task: aoe_protocol::UnitTask::Idle,
         carried: None,
         gathering: None,
+        hp: 25,
+        max_hp: 25,
+        attack_target: None,
+        last_hit: None,
     }
 }
 

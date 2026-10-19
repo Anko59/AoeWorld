@@ -78,6 +78,10 @@ fn subscription_response_classification_rejects_changed_revision_or_nonstationar
         task: aoe_protocol::UnitTask::Idle,
         carried: None,
         gathering: None,
+        hp: 25,
+        max_hp: 25,
+        attack_target: None,
+        last_hit: None,
     };
     let messages = [
         GameplayServerMessage::Tick {

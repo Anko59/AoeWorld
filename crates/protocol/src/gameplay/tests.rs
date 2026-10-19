@@ -65,6 +65,10 @@ fn gameplay_collections_are_bounded() {
             task: UnitTask::Idle,
             carried: None,
             gathering: None,
+            hp: 25,
+            max_hp: 25,
+            attack_target: None,
+            last_hit: None,
         };
         MAX_SUBSCRIBED_UNITS + 1
     ];

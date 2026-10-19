@@ -54,6 +54,7 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
                     Ok(GameplayClientMessage::GatherOrder { sequence, entity_id, resource_id }) => service.queue_gather(session_id, sequence, entity_id, resource_id).await,
                     Ok(GameplayClientMessage::CancelTrainingOrder { sequence, building_id }) => service.queue_cancel_training(session_id, sequence, building_id).await,
                     Ok(GameplayClientMessage::TrainOrder { sequence, building_id, kind }) => service.queue_train(session_id, sequence, building_id, kind).await,
+                    Ok(GameplayClientMessage::AttackOrder { sequence, entity_id, target_id }) => service.queue_attack(session_id, sequence, entity_id, target_id).await,
                     Ok(GameplayClientMessage::Resync { revision }) => service.resync(session_id, revision).await,
                     Ok(GameplayClientMessage::Hello { .. }) | Err(_) => {
                         let _ = send_socket(&mut sink, GameplayServerMessage::Error { code: 400, message: "invalid gameplay request".to_owned() }).await;

@@ -1,4 +1,9 @@
 import type { Page } from "@playwright/test";
+import {
+  scoutCombat,
+  townCenterCombat,
+  villagerCombat,
+} from "../wire/combat.js";
 
 function uint(value: number): number[] {
   const bytes: number[] = [];
@@ -54,6 +59,7 @@ export async function fiveVillagerFixture(page: Page) {
         0,
         0,
         0,
+        ...(kind === 1 ? scoutCombat : villagerCombat),
       ];
       const units = [
         unit(0, 8195.5, 8190.5, 1),
@@ -91,6 +97,7 @@ export async function fiveVillagerFixture(page: Page) {
           ...uint(8194 * 2),
           ...uint(8194 * 2),
           0,
+          ...townCenterCombat,
         ]),
       );
     });

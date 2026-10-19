@@ -49,6 +49,7 @@ impl GameWorld {
         self.terrain.update_mutable_state_hash(&mut hash);
         hash.update(&self.next_entity_id.to_le_bytes());
         self.economy.update_hash(&mut hash);
+        self.combat.update_hash(&mut hash);
         for unit in &self.units {
             hash.update(&unit.state.id.0.to_le_bytes());
             hash.update(&unit.state.player.0.to_le_bytes());
@@ -63,6 +64,17 @@ impl GameWorld {
                 unit.state.kind as u8,
                 unit.state.task as u8,
             ]);
+            hash.update(&unit.next_hit_tick.to_le_bytes());
+            hash.update(&unit.state.hp.to_le_bytes());
+            hash.update(&unit.state.max_hp.to_le_bytes());
+            hash.update(
+                &unit
+                    .state
+                    .attack_target
+                    .map_or(u32::MAX, |id| id.0)
+                    .to_le_bytes(),
+            );
+            super::combat::hash_hit(&mut hash, unit.state.last_hit);
             if let Some(load) = unit.state.carried {
                 hash.update(&[1, load.kind as u8]);
                 hash.update(&load.amount.to_le_bytes());

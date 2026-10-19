@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { scoutCombat, villagerCombat } from "../wire/combat.js";
 function uint(value: number): number[] {
   const bytes: number[] = [];
   do {
@@ -56,6 +57,7 @@ export async function workerFixture(page: Page) {
         task,
         ...load,
         ...(task === 2 ? [1, 2] : [0]),
+        ...(kind === 1 ? scoutCombat : villagerCombat),
       ];
       socket.send(
         Buffer.from([

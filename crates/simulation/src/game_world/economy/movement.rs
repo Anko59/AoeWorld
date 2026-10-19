@@ -4,7 +4,12 @@ use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileCoord};
 
 impl GameWorld {
     pub(crate) fn movement_speed(&self, kind: UnitKind) -> (u64, u64) {
-        if kind == UnitKind::Scout {
+        if let Some(tenths) = crate::game_world::combat::unit_combat(kind).speed_tenths {
+            (
+                u64::from(tenths) * FIXED_SUBUNITS_PER_TILE as u64,
+                10 * u64::from(self.config.tick_hz),
+            )
+        } else if kind == UnitKind::Scout {
             (
                 self.config.move_speed_subunits_per_tick as u64,
                 self.config.move_speed_subunits_per_tick_denominator,
