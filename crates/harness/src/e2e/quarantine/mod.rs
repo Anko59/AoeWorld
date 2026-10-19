@@ -7,6 +7,9 @@ use serde_json::Value;
 use std::{error::Error, fs, path::Path, process::Command, time::Duration};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+mod evidence;
+
+pub(super) const REPORTER: &str = "--reporter=./quarantine-reporter.ts,json";
 
 #[derive(Debug, PartialEq)]
 struct Case {
@@ -52,6 +55,7 @@ fn string<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
 }
 
 fn cases(value: &Value) -> Result<Vec<Case>> {
+    let mut evidence = evidence::Evidence::new(value)?;
     if !value
         .get("errors")
         .and_then(Value::as_array)
@@ -75,7 +79,8 @@ fn cases(value: &Value) -> Result<Vec<Case>> {
         return Err("invalid Playwright rootDir".into());
     }
     let mut cases = Vec::new();
-    collect(value, &[], root, &mut cases)?;
+    collect(value, &[], root, &mut cases, &mut evidence)?;
+    evidence.finish()?;
     let stats = value
         .get("stats")
         .ok_or("Playwright report missing stats")?;
@@ -94,7 +99,13 @@ fn cases(value: &Value) -> Result<Vec<Case>> {
     Ok(cases)
 }
 
-fn collect(suite: &Value, parents: &[String], root: &Path, cases: &mut Vec<Case>) -> Result<()> {
+fn collect(
+    suite: &Value,
+    parents: &[String],
+    root: &Path,
+    cases: &mut Vec<Case>,
+    evidence: &mut evidence::Evidence<'_>,
+) -> Result<()> {
     if let Some(specs) = suite.get("specs").and_then(Value::as_array) {
         for spec in specs {
             let file = string(spec, "file")?;
@@ -130,13 +141,13 @@ fn collect(suite: &Value, parents: &[String], root: &Path, cases: &mut Vec<Case>
                 let actual = string(result, "status")?;
                 let expected = string(test, "expectedStatus")?;
                 if !matches!(actual, "passed" | "failed" | "timedOut" | "skipped")
-                    || (status == "unexpected"
-                        && (expected != "passed" || !matches!(actual, "failed" | "timedOut")))
+                    || (status == "unexpected" && (expected != "passed" || actual != "failed"))
                     || (status == "expected" && actual != expected)
-                    || (status == "skipped" && actual != "skipped")
+                    || (status == "skipped" && (actual != "skipped" || expected != "skipped"))
                 {
                     return Err("inconsistent or interrupted Playwright test result".into());
                 }
+                evidence.case(test, status == "unexpected")?;
                 cases.push(Case {
                     key: key.to_owned(),
                     file: root.join(file).to_string_lossy().into_owned(),
@@ -161,7 +172,7 @@ fn collect(suite: &Value, parents: &[String], root: &Path, cases: &mut Vec<Case>
         if !title.ends_with(".spec.ts") && !title.is_empty() {
             titles.push(title.to_owned());
         }
-        collect(child, &titles, root, cases)?;
+        collect(child, &titles, root, cases, evidence)?;
     }
     Ok(())
 }
@@ -173,10 +184,17 @@ fn failures(value: &Value) -> Result<Vec<Case>> {
         .collect())
 }
 
+fn check_exit(success: bool, value: &Value) -> Result<()> {
+    if success != (value["config"]["metadata"]["aoeQuarantine"]["status"] == "passed") {
+        return Err("Playwright exit disagrees with full-run status".into());
+    }
+    Ok(())
+}
+
 fn retry_args(original: &[String], case: &Case) -> Result<Vec<String>> {
     let separator = original
         .iter()
-        .position(|arg| arg == "--reporter=json")
+        .position(|arg| arg == REPORTER)
         .ok_or("missing JSON reporter")?;
     let mut args = original[..=separator].to_vec();
     // Initial spec filters and sharding apply once; select exactly this failed case.
@@ -242,6 +260,7 @@ fn resolve(
 ) -> Result<()> {
     let (success, value) = run_attempt(args, report)?;
     let failed = failures(&value)?;
+    check_exit(success, &value)?;
     if success {
         if !failed.is_empty() {
             return Err("successful Playwright exit with failed tests".into());
@@ -264,12 +283,14 @@ fn resolve(
             policy.and_then(|policy| policy.find("test-e2e", &case.key)),
             &case.name(),
             journal,
+            &mut 0,
             || {
                 attempt_number += 1;
                 let report =
                     report.with_extension(format!("retry-{}-{attempt_number}.json", index + 1));
                 let (success, value) = run_attempt(&retry_args(args, case)?, &report)?;
                 let selected = cases(&value)?;
+                check_exit(success, &value)?;
                 let [selected] = selected.as_slice() else {
                     return Err("Playwright rerun did not select exactly one case".into());
                 };

@@ -1,0 +1,165 @@
+{
+  "config": {
+    "rootDir": "/checkout/browser/tests",
+    "metadata": {
+      "aoeQuarantine": {
+        "selected": [
+          "d77ef19a241c8947e290-1c14b723fa827a228c59"
+        ],
+        "status": "failed",
+        "results": {
+          "d77ef19a241c8947e290-1c14b723fa827a228c59": {
+            "errors": [
+              {
+                "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /checkout/browser/tests/quarantine-review/fixture.spec.ts:4:54",
+                "location": {
+                  "file": "/checkout/browser/tests/quarantine-review/fixture.spec.ts",
+                  "column": 54,
+                  "line": 4
+                },
+                "snippet": "  2 | import { expect } from \"@playwright/test\";\n  3 |\n> 4 | test(\"ordinary assertion failure\", () => { expect(1).toBe(2); });\n    |                                                      ^\n  5 | test(\"unexpected worker exit\", () => { process.kill(process.pid, \"SIGKILL\"); });\n  6 | test.describe(\"setup failure\", () => {\n  7 |   test.beforeAll(() => { expect(1).toBe(2); });"
+              }
+            ],
+            "steps": [
+              {
+                "category": "hook",
+                "error": null,
+                "steps": [
+                  {
+                    "category": "fixture",
+                    "error": null,
+                    "steps": []
+                  }
+                ]
+              },
+              {
+                "category": "expect",
+                "error": {
+                  "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                  "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /checkout/browser/tests/quarantine-review/fixture.spec.ts:4:54",
+                  "location": {
+                    "file": "/checkout/browser/tests/quarantine-review/fixture.spec.ts",
+                    "column": 54,
+                    "line": 4
+                  },
+                  "snippet": "  2 | import { expect } from \"@playwright/test\";\n  3 |\n> 4 | test(\"ordinary assertion failure\", () => { expect(1).toBe(2); });\n    |                                                      ^\n  5 | test(\"unexpected worker exit\", () => { process.kill(process.pid, \"SIGKILL\"); });\n  6 | test.describe(\"setup failure\", () => {\n  7 |   test.beforeAll(() => { expect(1).toBe(2); });"
+                },
+                "steps": []
+              },
+              {
+                "category": "hook",
+                "error": null,
+                "steps": [
+                  {
+                    "category": "fixture",
+                    "error": null,
+                    "steps": []
+                  }
+                ]
+              },
+              {
+                "category": "hook",
+                "error": null,
+                "steps": []
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "quarantine-review/fixture.spec.ts",
+      "file": "quarantine-review/fixture.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "ordinary assertion failure",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "aoe-quarantine-id",
+                  "description": "d77ef19a241c8947e290-1c14b723fa827a228c59"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webgpu",
+              "projectName": "webgpu",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 8,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /checkout/browser/tests/quarantine-review/fixture.spec.ts:4:54",
+                    "location": {
+                      "file": "/checkout/browser/tests/quarantine-review/fixture.spec.ts",
+                      "column": 54,
+                      "line": 4
+                    },
+                    "snippet": "  2 | import { expect } from \"@playwright/test\";\n  3 |\n> 4 | test(\"ordinary assertion failure\", () => { expect(1).toBe(2); });\n    |                                                      ^\n  5 | test(\"unexpected worker exit\", () => { process.kill(process.pid, \"SIGKILL\"); });\n  6 | test.describe(\"setup failure\", () => {\n  7 |   test.beforeAll(() => { expect(1).toBe(2); });"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/checkout/browser/tests/quarantine-review/fixture.spec.ts",
+                        "column": 54,
+                        "line": 4
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m2\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  2 | import { expect } from \"@playwright/test\";\n  3 |\n> 4 | test(\"ordinary assertion failure\", () => { expect(1).toBe(2); });\n    |                                                      ^\n  5 | test(\"unexpected worker exit\", () => { process.kill(process.pid, \"SIGKILL\"); });\n  6 | test.describe(\"setup failure\", () => {\n  7 |   test.beforeAll(() => { expect(1).toBe(2); });\n    at /checkout/browser/tests/quarantine-review/fixture.spec.ts:4:54"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-19T20:43:52.925Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/checkout/browser/test-results/quarantine-review-fixture-ordinary-assertion-failure-webgpu/error-context.md"
+                    },
+                    {
+                      "name": "trace",
+                      "contentType": "application/zip",
+                      "path": "/checkout/browser/test-results/quarantine-review-fixture-ordinary-assertion-failure-webgpu/trace.zip"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/checkout/browser/tests/quarantine-review/fixture.spec.ts",
+                    "column": 54,
+                    "line": 4
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "d77ef19a241c8947e290-1c14b723fa827a228c59",
+          "file": "quarantine-review/fixture.spec.ts",
+          "line": 4,
+          "column": 1
+        }
+      ],
+      "suites": []
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "expected": 0,
+    "unexpected": 1,
+    "skipped": 0,
+    "flaky": 0
+  },
+  "specs": []
+}

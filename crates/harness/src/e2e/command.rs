@@ -81,7 +81,7 @@ pub(super) fn docker_args(run: &Run) -> Result<Vec<String>, Box<dyn std::error::
         "run".to_owned(),
         "test:e2e".to_owned(),
         "--".to_owned(),
-        "--reporter=json".to_owned(),
+        super::quarantine::REPORTER.to_owned(),
     ]);
     if !run.specs.is_empty() {
         args.extend(run.specs.iter().cloned());

@@ -156,15 +156,18 @@ fn message(test: &str, attempt: u8, issue: &str) -> String {
     format!("flaky: {test} passed on attempt {attempt} (quarantined, {issue})")
 }
 
-/// The caller has already observed attempt 1 failing. Only this entry can retry.
+/// The caller has observed an initial failure. Keep `used` for this test's gate run.
 pub(crate) fn retry(
     entry: Option<&Entry>,
     test: &str,
     journal: &mut Journal,
+    used: &mut u8,
     mut rerun: impl FnMut() -> Result<bool>,
 ) -> Result<bool> {
     let Some(entry) = entry else { return Ok(false) };
-    for attempt in 2..=3 {
+    while *used < 2 {
+        *used += 1;
+        let attempt = *used + 1;
         if rerun()? {
             journal.record(&Pass {
                 test,

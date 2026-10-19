@@ -1,7 +1,7 @@
 //! Fail closed unless the completed runner accounts for every failed test.
 use super::{CARGO_DEADLINE, Result, SUITES};
 use crate::process::{self, Cancellation, CaptureExit};
-use std::{fs, path::Path, process::Command};
+use std::{collections::BTreeMap, fs, path::Path, process::Command};
 
 struct SuiteOutcome {
     result: std::result::Result<(), process::ProcessError>,
@@ -28,6 +28,7 @@ pub(super) fn run_suites(
     environment: &[(&str, &str)],
     policy: &crate::gates::flaky::Policy,
     journal: &mut crate::gates::flaky::Journal,
+    retries: &mut BTreeMap<String, u8>,
 ) -> std::result::Result<(), Failure> {
     for suite in SUITES {
         let arguments = suite.cargo_arguments();
@@ -37,20 +38,28 @@ pub(super) fn run_suites(
             if let Some(names) = outcome.failed_tests {
                 for name in names {
                     let entry = policy.find("test-wasm", &name);
-                    let recovered = crate::gates::flaky::retry(entry, &name, journal, || {
-                        let mut arguments = arguments.clone();
-                        arguments.extend(["--".into(), name.clone(), "--exact".into()]);
-                        let retried = run_suite(&arguments, environment, Some(&name))?;
-                        if retried.result.is_ok() {
-                            return Ok(true);
-                        }
-                        if retried.failed_tests.as_deref() != Some(std::slice::from_ref(&name)) {
-                            return Err(
-                                "quarantined WASM rerun did not complete the selected test".into(),
-                            );
-                        }
-                        Ok(false)
-                    })?;
+                    let recovered = crate::gates::flaky::retry(
+                        entry,
+                        &name,
+                        journal,
+                        retries.entry(name.clone()).or_default(),
+                        || {
+                            let mut arguments = arguments.clone();
+                            arguments.extend(["--".into(), name.clone(), "--exact".into()]);
+                            let retried = run_suite(&arguments, environment, Some(&name))?;
+                            if retried.result.is_ok() {
+                                return Ok(true);
+                            }
+                            if retried.failed_tests.as_deref() != Some(std::slice::from_ref(&name))
+                            {
+                                return Err(
+                                    "quarantined WASM rerun did not complete the selected test"
+                                        .into(),
+                                );
+                            }
+                            Ok(false)
+                        },
+                    )?;
                     if !recovered {
                         unresolved.push(name);
                     }

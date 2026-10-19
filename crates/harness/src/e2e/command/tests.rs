@@ -64,7 +64,7 @@ fn a_shard_reaches_playwright_after_the_npm_separator() {
             "run",
             "test:e2e",
             "--",
-            "--reporter=json",
+            "--reporter=./quarantine-reporter.ts,json",
             "--shard=2/3"
         ]
     );
@@ -80,7 +80,7 @@ fn the_whole_suite_and_focused_runs_carry_no_shard() {
             "run",
             "test:e2e",
             "--",
-            "--reporter=json"
+            "--reporter=./quarantine-reporter.ts,json"
         ]
     );
     let focused = args(
@@ -96,7 +96,7 @@ fn the_whole_suite_and_focused_runs_carry_no_shard() {
             "run",
             "test:e2e",
             "--",
-            "--reporter=json",
+            "--reporter=./quarantine-reporter.ts,json",
             "tests/a.spec.ts"
         ]
     );
@@ -129,7 +129,7 @@ fn a_filtered_run_passes_its_resolved_specs_after_the_json_reporter() {
             "run",
             "test:e2e",
             "--",
-            "--reporter=json",
+            "--reporter=./quarantine-reporter.ts,json",
             "tests/village/selection-density.play.spec.ts"
         ]
     );

@@ -82,7 +82,7 @@ pairs, empty metadata, invalid dates and future dates fail validation.
 remove fixed entries or resolve the tracking issue before expiry.
 
 Nothing is skipped. After an ordinary completed failure, Rust retries only the
-named quarantined case, at most twice (three attempts total). A recovery prints
+named quarantined case, at most twice per gate run. A recovery prints
 `flaky: <test> passed on attempt N (quarantined, #391)`; three failures still
 fail the gate. Unlisted failures stay failed, even if another test recovers.
 WASM entries use the full runner name; E2E entries use the spec path relative
@@ -91,6 +91,11 @@ E2E retries select one failed case by file, line, project and escaped title;
 Playwright's global retry count stays zero. The initial shard applies once,
 so retry selection cannot move a case into another shard. Filtered local
 `make test-e2e` runs use quarantine too; duel checks do not.
+The reporter supplies the selected test IDs, full-run status and raw step/error
+evidence. Every selected case must have a completed result; a runnable case
+reported as skipped fails the gate. Only assertion errors in `expect` steps
+outside setup/teardown qualify. Hook or fixture failures, worker exits, test
+timeouts, whole-run timeouts and interruptions fail without recovery.
 
 Each recovered pass appends one JSON object with `test`, `gate`, `issue` and
 `attempt` to the run's fresh JSON-lines report: `reports/wasm/quarantine.jsonl`,
@@ -107,8 +112,10 @@ Chromium through a disposable ChromeDriver container. On failure it retries the
 browser suites exactly once when at least one named failed test reports a runner
 WebGL context/graphics error (#391), even alongside value assertions or other test
 failures. The log names the tests with context errors; the second full run decides
-the gate. Exhausted quarantined failures fail immediately rather than obtaining
-more attempts through that fallback. Only the existing narrow WebGL2 creation, lost-context, graphics,
+the gate. Each test keeps one two-retry quarantine allowance for the entire gate,
+including the whole-suite fallback. Exhausted quarantined failures fail immediately
+rather than obtaining more attempts through that fallback. Only the existing
+narrow WebGL2 creation, lost-context, graphics,
 shader, and link error messages qualify. Caught Rust panics include the runner's
 `JS exception that was thrown:` / `RuntimeError: unreachable` section; that is
 normal test failure detail. An unlisted pixel-only failure does not retry.

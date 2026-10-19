@@ -82,6 +82,7 @@ fn flaky_fail_then_pass_is_reported_and_stops_retrying() {
             policy.find("test-wasm", "tiling_pixels::flaky"),
             "tiling_pixels::flaky",
             &mut journal,
+            &mut 0,
             || {
                 calls += 1;
                 Ok(true)
@@ -117,6 +118,7 @@ fn flaky_fail_fail_pass_records_attempt_three() {
             policy.find("test-wasm", "tiling_pixels::flaky"),
             "tiling_pixels::flaky",
             &mut journal,
+            &mut 0,
             || {
                 calls += 1;
                 Ok(calls == 2)
@@ -140,6 +142,7 @@ fn flaky_fail_fail_fail_and_unlisted_failure_stay_red() {
             policy.find("test-wasm", "tiling_pixels::flaky"),
             "tiling_pixels::flaky",
             &mut journal,
+            &mut 0,
             || {
                 calls += 1;
                 Ok(false)
@@ -153,9 +156,13 @@ fn flaky_fail_fail_fail_and_unlisted_failure_stay_red() {
         ("test-e2e", "tiling_pixels::flaky"),
     ] {
         assert!(
-            !retry(policy.find(gate, test), test, &mut journal, || panic!(
-                "unlisted test retried"
-            ))
+            !retry(
+                policy.find(gate, test),
+                test,
+                &mut journal,
+                &mut 0,
+                || panic!("unlisted test retried")
+            )
             .unwrap()
         );
     }
@@ -173,6 +180,7 @@ fn flaky_retry_infrastructure_errors_are_not_retried_or_hidden() {
             policy.find("test-wasm", "tiling_pixels::flaky"),
             "flaky",
             &mut journal,
+            &mut 0,
             || {
                 calls += 1;
                 Err("cancelled".into())

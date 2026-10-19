@@ -19,6 +19,20 @@ pub(super) fn run(tool: &str) {
                 .parse()
                 .unwrap();
             fs::write(calls, (count + 1).to_string()).unwrap();
+            if let Ok(script) = fs::read(root.join("script.json")) {
+                let script: Vec<Option<String>> = serde_json::from_slice(&script).unwrap();
+                if let Some(Some(diagnostic)) = script.get(count) {
+                    print!("\n{diagnostic}");
+                    std::process::exit(1);
+                }
+                if let Some((_, name)) = args.split_once(" -- ") {
+                    let name = name.strip_suffix(" --exact").expect("exact retry filter");
+                    println!(
+                        "\ntest {name} ... ok\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 filtered out; finished in 0.01s"
+                    );
+                }
+                std::process::exit(0);
+            }
             let fail_until: usize = fs::read_to_string(root.join("fail-until"))
                 .unwrap_or_else(|_| "1".into())
                 .parse()

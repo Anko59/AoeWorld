@@ -141,7 +141,8 @@ pub fn run() -> Result<()> {
         .to_str()
         .ok_or("non-UTF-8 WebDriver configuration path")?;
     let environment = runner_environment(&remote, capabilities);
-    if let Err(failure) = retry::run_suites(&environment, &policy, &mut journal) {
+    let mut retries = std::collections::BTreeMap::new();
+    if let Err(failure) = retry::run_suites(&environment, &policy, &mut journal, &mut retries) {
         let Some(names) = failure.context_failures else {
             return Err(failure.error);
         };
@@ -149,7 +150,8 @@ pub fn run() -> Result<()> {
             "test-wasm: retrying once: runner WebGL context errors in: {} (#391)",
             names.join(", ")
         );
-        retry::run_suites(&environment, &policy, &mut journal).map_err(|failure| failure.error)?;
+        retry::run_suites(&environment, &policy, &mut journal, &mut retries)
+            .map_err(|failure| failure.error)?;
     }
     let report = Report {
         version: 1,
