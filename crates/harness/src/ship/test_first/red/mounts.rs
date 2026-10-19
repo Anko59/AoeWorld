@@ -41,6 +41,12 @@ fn mount(root: &Path, base: &str, head: &str, target: &Path, module: &str) -> gi
     }
     let mut source = fs::read_to_string(&red).unwrap_or_default();
     if mounts_of(&source, &parent, module).is_empty() {
+        // The PR moved an inline `#[cfg(test)] mod name { .. }` into its own file (the
+        // test-placement hook forces that move): the base still defines it inline, so the
+        // red tree keeps only the moved file. Only a `cfg(test)` block goes, never product code.
+        for range in inline_tests(&source, &text).into_iter().rev() {
+            source.replace_range(range, "");
+        }
         source.push_str(&format!("\n{text}\n"));
         if let Some(directory) = red.parent() {
             fs::create_dir_all(directory).map_err(|e| e.to_string())?;
@@ -123,6 +129,36 @@ fn mounts_of(source: &str, parent: &str, module: &str) -> Vec<std::ops::Range<us
             _ => None,
         })
         .filter(|m| loads(parent, m).iter().any(|p| p == module))
+        .map(|m| {
+            let (start, end) = (m.span().start(), m.span().end());
+            offset(source, start.line, start.column)..offset(source, end.line, end.column)
+        })
+        .collect()
+}
+
+/// Byte ranges of inline `#[cfg(test)] mod name { .. }` items of `source` named like the
+/// declaration `text` (`#[cfg(test)] mod name;`).
+fn inline_tests(source: &str, text: &str) -> Vec<std::ops::Range<usize>> {
+    let (Ok(file), Ok(declared)) = (
+        syn::parse_file(source),
+        syn::parse_str::<syn::ItemMod>(text),
+    ) else {
+        return Vec::new();
+    };
+    let cfg_test = |item: &syn::ItemMod| {
+        item.attrs.iter().any(|a| {
+            a.path().is_ident("cfg")
+                && a.parse_args::<syn::Ident>()
+                    .is_ok_and(|ident| ident == "test")
+        })
+    };
+    file.items
+        .iter()
+        .filter_map(|item| match item {
+            syn::Item::Mod(m) if m.content.is_some() && m.ident == declared.ident => Some(m),
+            _ => None,
+        })
+        .filter(|m| cfg_test(m))
         .map(|m| {
             let (start, end) = (m.span().start(), m.span().end());
             offset(source, start.line, start.column)..offset(source, end.line, end.column)

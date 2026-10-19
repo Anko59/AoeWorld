@@ -9,8 +9,11 @@ const MISSING: &[&str] = &[
     "E0609",
 ];
 
-/// The items of the PR's added product code that the red build could not find,
-/// when every compile error is such a miss inside a changed test file.
+/// The items of the PR's added product code that the red build could not find. Every compile
+/// error must sit in a changed test file. At least one must be a miss (`MISSING`) naming an
+/// identifier the PR adds; the others in changed test files are its cascade: inference and
+/// method errors on values built from the missing items (E0282, E0283, E0599 on an unknown
+/// type...). Each such file must still have a test that runs and passes at head (`ran`).
 pub(super) fn missing(
     root: &Path,
     base: &str,
@@ -25,24 +28,34 @@ pub(super) fn missing(
         );
     }
     let added = added_identifiers(root, base, head)?;
+    let refuse = |code: Option<&str>, path: &str| {
+        format!(
+            "red: build error {} at {path} is not a changed test calling an API the PR adds",
+            code.unwrap_or("(no code)")
+        )
+    };
+    if let Some(outside) = report
+        .compile_errors
+        .iter()
+        .find(|e| !paths.contains(&e.path))
+    {
+        return Err(refuse(outside.code.as_deref(), &outside.path));
+    }
     let mut missing = BTreeSet::new();
     for error in &report.compile_errors {
-        let mut named = error
-            .items
-            .iter()
-            .filter(|item| added.contains(last_segment(item)))
-            .peekable();
-        if !paths.contains(&error.path)
-            || !error.code.as_deref().is_some_and(|c| MISSING.contains(&c))
-            || named.peek().is_none()
-        {
-            return Err(format!(
-                "red: build error {} at {} is not a changed test calling an API the PR adds",
-                error.code.as_deref().unwrap_or("(no code)"),
-                error.path
-            ));
+        if error.code.as_deref().is_some_and(|c| MISSING.contains(&c)) {
+            missing.extend(
+                error
+                    .items
+                    .iter()
+                    .filter(|item| added.contains(last_segment(item)))
+                    .cloned(),
+            );
         }
-        missing.extend(named.cloned());
+    }
+    if missing.is_empty() {
+        let first = &report.compile_errors[0];
+        return Err(refuse(first.code.as_deref(), &first.path));
     }
     Ok(missing.into_iter().collect())
 }

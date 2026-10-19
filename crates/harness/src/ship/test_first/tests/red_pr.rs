@@ -225,6 +225,9 @@ fn a_test_against_an_api_the_pr_adds_is_compile_red_and_names_it() {
     assert_eq!(record.ran, [NAME]);
     let text = red::require(root, &base, &head).unwrap();
     assert!(text.contains("missing: new_api"), "{text}");
+    // The review's facts ask for `HEAD`: the record is still found.
+    let by_ref = red::require(root, &base, "HEAD").unwrap_or_else(|e| panic!("{e}"));
+    assert!(by_ref.contains("PASS"), "{by_ref}");
 }
 
 #[test]
@@ -339,5 +342,43 @@ fn an_edit_after_the_proof_or_another_base_voids_the_record() {
     assert!(
         red::require(root, &base, &tip(root)).is_err(),
         "a new head needs its own proof"
+    );
+}
+
+/// The red build of `new_api`'s test with a cascade error next to the miss.
+fn cascade(path: &str) -> impl FnMut(&std::path::Path, &[String]) -> git::Result<CheckReport> {
+    let path = path.to_owned();
+    move |snapshot, _| {
+        let mut report = green(snapshot);
+        if !report.passed {
+            report.compile_errors.push(CompileError {
+                path: path.clone(),
+                code: Some("E0282".into()),
+                items: vec![],
+            });
+        }
+        Ok(report)
+    }
+}
+
+#[test]
+fn a_cascade_error_beside_a_missing_api_in_changed_tests_is_compile_red() {
+    let (temp, base, head) = new_api(true);
+    let root = temp.path();
+    let record = red::run_with(root, &base, &head, &mut cascade(TESTS))
+        .unwrap_or_else(|e| panic!("type annotations needed on new_api's value: {e}"));
+    assert_eq!(record.missing, ["new_api"]);
+    assert_eq!(record.ran, [NAME]);
+}
+
+#[test]
+fn a_cascade_error_outside_the_changed_tests_is_refused() {
+    let (temp, base, head) = new_api(true);
+    let root = temp.path();
+    let error =
+        red::run_with(root, &base, &head, &mut cascade("crates/sim/src/lib.rs")).unwrap_err();
+    assert!(
+        error.contains("E0282 at crates/sim/src/lib.rs"),
+        "product code that does not build is never red: {error}"
     );
 }
