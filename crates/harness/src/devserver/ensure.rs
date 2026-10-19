@@ -9,6 +9,7 @@ use super::{
 };
 use nix::fcntl::{Flock, FlockArg};
 use std::{
+    collections::BTreeSet,
     fs::{self, File, OpenOptions},
     path::{Path, PathBuf},
     thread,
@@ -21,6 +22,10 @@ pub(crate) const PLAY: &str = "play";
 const START_DEADLINE: Duration = Duration::from_secs(60);
 /// View servers kept besides the play server; the oldest is stopped past it.
 const MAX_VIEWS: usize = 3;
+
+#[cfg(test)]
+#[path = "tests/ready.rs"]
+mod tests;
 
 /// The settings of one command, read once from `AOE_DEV_SERVER_*`.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -349,36 +354,59 @@ pub(crate) fn ensure_play(root: &Path, settings: &Settings) -> Result<bool> {
 /// skirmish does not pay for it under the server's 30 s budget (warm.rs). A
 /// failure is reported, not fatal: the server itself is up.
 fn warm_presets(port: u16, wanted: &[serde_json::Value]) {
-    let deadline = Instant::now() + warm::BUDGET;
-    let mut said = Vec::new();
+    warm_presets_for(port, wanted, warm::BUDGET);
+}
+
+fn warm_presets_for(port: u16, wanted: &[serde_json::Value], budget: Duration) {
+    let deadline = Instant::now() + budget;
+    let mut warmed = BTreeSet::new();
     loop {
-        match warm::maps(port, wanted, warm::BUDGET) {
-            Ok(warmed) => {
-                for (hash, took) in warmed {
-                    if !said.contains(&hash) {
-                        eprintln!(
-                            "dev-server: map {} ready ({} ms)",
-                            &hash[..12.min(hash.len())],
-                            took.as_millis()
-                        );
-                        said.push(hash);
-                    }
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            eprintln!(
+                "dev-server: warning: maps are still being prepared or warmed after {} s",
+                budget.as_secs()
+            );
+            return;
+        }
+        let jobs = process::http_get_for(port, "/maps/jobs", left).unwrap_or_default();
+        let completed: Vec<_> = wanted
+            .iter()
+            .map(|want| warm::completed(&jobs, want))
+            .collect();
+        if let Some(hash) = completed
+            .iter()
+            .flatten()
+            .find(|hash| !warmed.contains(*hash))
+        {
+            match warm::raster(
+                port,
+                hash,
+                deadline.saturating_duration_since(Instant::now()),
+            ) {
+                Ok(took) => {
+                    eprintln!(
+                        "dev-server: map {} ready ({} ms)",
+                        &hash[..12.min(hash.len())],
+                        took.as_millis()
+                    );
+                    warmed.insert(hash.clone());
+                }
+                Err(why) => {
+                    eprintln!("dev-server: warning: {why}");
+                    return;
                 }
             }
-            Err(why) => {
-                eprintln!("dev-server: warning: {why}");
-                return;
-            }
+            // A different job may have completed during this request. Read
+            // again before warming another map or declaring the set ready.
+            continue;
         }
-        let (ready, total) = presets::ready(port, wanted);
-        if ready >= total {
+        if completed.iter().all(|hashes| !hashes.is_empty()) {
             return;
         }
-        if Instant::now() >= deadline {
-            eprintln!("dev-server: maps ready {ready}/{total}; the rest are still being prepared");
-            return;
-        }
-        thread::sleep(Duration::from_secs(5));
+        thread::sleep(
+            Duration::from_secs(5).min(deadline.saturating_duration_since(Instant::now())),
+        );
     }
 }
 

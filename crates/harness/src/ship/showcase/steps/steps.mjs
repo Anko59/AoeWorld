@@ -4,7 +4,7 @@
 // waiting for, so a take that cannot proceed says where and why.
 import { FAILED_MS, failingFor, landed, quiet, sample } from "./readiness.mjs";
 import { RECONNECTS, describe, fatal, lostLease, serverError, snapshot, transition, wantsReconnect, watch } from "./pagestate.mjs";
-import { centredOn, clickable, nearestOf, steady, worldAt } from "./framing.mjs";
+import { centredOn, clickable, nearestOf, sameCamera, steady, worldAt } from "./framing.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // The settle rule of `make compare` and the showcase view wait, shared in
@@ -82,13 +82,25 @@ async function gather(page, op) {
   const camera = await cameraOf(page);
   const aim = centredOn(worldAt(camera, view, nearest), zoom);
   await page.evaluate((hash) => { location.hash = hash; }, `x=${aim.x}&y=${aim.y}&zoom=${aim.zoom}`);
-  let previous = null;
+  let previous = null, previousCamera = null, hudAfter = null;
   const target = await until(op.timeout_ms, async () => {
-    const now = await cameraOf(page);
-    const node = nearestOf(await targets(), op.kind);
-    const framed = Math.abs(now.x - aim.x) <= 0.01 && Math.abs(now.y - aim.y) <= 0.01 && Math.abs(now.zoom - aim.zoom) <= 0.001
-      && node && clickable(view, node);
+    // Read the revision with its coordinates in one page task. Minimap camera
+    // attributes update each frame; HUD positions update only every 250 ms.
+    const frame = await page.evaluate(() => {
+      const m = document.getElementById("minimap");
+      const scene = document.getElementById("scene");
+      return {
+        camera: { x: Number(m.dataset.cameraX), y: Number(m.dataset.cameraY), zoom: Number(m.dataset.zoom) },
+        revision: Number(scene.dataset.hudRevision ?? 0),
+        targets: JSON.parse(scene.dataset.resourceTargets ?? "[]"),
+      };
+    });
+    const stopped = sameCamera(previousCamera, frame.camera) && Math.abs(frame.camera.zoom - zoom) <= 0.001;
+    if (!stopped) hudAfter = frame.revision;
+    const node = nearestOf(frame.targets, op.kind);
+    const framed = stopped && frame.revision > hudAfter && node && clickable(view, node);
     const settled = framed && steady(previous, node);
+    previousCamera = frame.camera;
     previous = framed ? node : null;
     return settled ? node : null;
   }, async () => `node was at (${nearest.x},${nearest.y}) under camera ${JSON.stringify(camera)}; aimed at ${JSON.stringify(aim)}, `

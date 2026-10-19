@@ -49,6 +49,7 @@ export function updateDetails(values) {
   const targets = [];
   for (; at+3<values.length; at+=4) targets.push({kind:values[at], x:values[at+1], y:values[at+2], distance:values[at+3]});
   byId('scene').dataset.resourceTargets = JSON.stringify(targets);
+  byId('scene').dataset.hudRevision = String(Number(byId('scene').dataset.hudRevision ?? 0) + 1);
   const signature = actors + '|' + resources;
   if (signature !== markers) {
     byId('minimap-entities').innerHTML = actors;

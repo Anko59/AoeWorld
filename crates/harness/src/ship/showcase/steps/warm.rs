@@ -9,33 +9,48 @@
 use crate::devserver;
 use crate::ship::showcase::{Step, browser::Plan};
 use serde_json::Value;
+use std::collections::BTreeMap;
 
-/// The loopback port of a scene's URL, or `None` for any other host.
-fn local_port(url: &str) -> Option<u16> {
+/// The loopback port and storage origin, or `None` for any other host.
+fn local_origin(url: &str) -> Option<(u16, String)> {
     let url = url::Url::parse(url).ok()?;
-    matches!(url.host_str(), Some("127.0.0.1" | "localhost"))
+    let port = matches!(url.host_str(), Some("127.0.0.1" | "localhost"))
         .then(|| url.port_or_known_default())
-        .flatten()
+        .flatten()?;
+    Some((port, url.origin().ascii_serialization()))
 }
 
 /// Each distinct (port, map request) the plan's skirmish starts will open.
 pub(crate) fn skirmish_maps(plan: &Plan<'_>) -> Vec<(u16, Value)> {
     let mut maps: Vec<(u16, Value)> = Vec::new();
+    // record.mjs reuses one tab: sessionStorage survives scene navigation,
+    // with a separate saved setup for each origin (web/start/sequence.js).
+    let mut sizes = BTreeMap::new();
     for planned in &plan.scenes {
         let (Some(url), crate::ship::showcase::Scene::Browser { steps, .. }) =
             (planned.url.as_deref(), planned.scene)
         else {
             continue;
         };
-        let Some(port) = local_port(url) else {
+        let Some((port, origin)) = local_origin(url) else {
             continue;
         };
+        let km = sizes.entry(origin).or_insert(super::DEFAULT_SIZE_KM);
         for step in steps {
+            if let Step::Select { selector, value } = step
+                && selector == "#start-size"
+                && let Ok(size) = value.parse::<u64>()
+                && [30, 120, 480, 1920].contains(&size)
+            {
+                *km = size;
+            }
             let Step::StartSkirmish(start) = step else {
                 continue;
             };
-            let km = start.size.map_or(super::DEFAULT_SIZE_KM, super::Size::km);
-            let Some(request) = devserver::skirmish_request(start.preset.id(), km) else {
+            if let Some(size) = start.size {
+                *km = size.km();
+            }
+            let Some(request) = devserver::skirmish_request(start.preset.id(), *km) else {
                 continue;
             };
             if !maps.iter().any(|(p, r)| *p == port && *r == request) {

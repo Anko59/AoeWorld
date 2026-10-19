@@ -63,3 +63,49 @@ fn each_build_is_warmed_on_its_own_port_and_other_scenes_need_nothing() {
     let ports: Vec<u16> = maps.iter().map(|(port, _)| *port).collect();
     assert_eq!(ports, [8091, 8123]);
 }
+
+#[test]
+fn an_omitted_size_uses_the_size_saved_by_an_earlier_scene_on_that_origin() {
+    let maps = maps_of(
+        json!([
+            scene(
+                "after",
+                json!([{"start_skirmish": {"preset": "finland", "size": "tiny"}}])
+            ),
+            scene("before", json!([{"start_skirmish": {"preset": "alps"}}])),
+            scene("after", json!([{"start_skirmish": {"preset": "paris"}}])),
+        ]),
+        "http://127.0.0.1:8123/",
+        Some("http://127.0.0.1:8091/"),
+    );
+    let sides: Vec<_> = maps
+        .iter()
+        .map(|(port, r)| (*port, r["requested_side_meters"].as_u64().unwrap()))
+        .collect();
+    assert_eq!(sides, [(8123, 30_000), (8091, 480_000), (8123, 30_000)]);
+}
+
+#[test]
+fn an_explicit_form_selection_is_also_saved_for_later_starts() {
+    let maps = maps_of(
+        json!([
+            scene(
+                "after",
+                json!([{"select": {"selector": "#start-size", "value": "120"}}])
+            ),
+            scene("after", json!([{"start_skirmish": {"preset": "paris"}}])),
+            scene(
+                "after",
+                json!([{"start_skirmish": {"preset": "alps", "size": "tiny"}}])
+            ),
+            scene("after", json!([{"start_skirmish": {"preset": "finland"}}])),
+        ]),
+        "http://127.0.0.1:8123/",
+        None,
+    );
+    let sides: Vec<_> = maps
+        .iter()
+        .map(|(_, request)| request["requested_side_meters"].as_u64().unwrap())
+        .collect();
+    assert_eq!(sides, [120_000, 30_000, 30_000]);
+}

@@ -36,3 +36,9 @@ export function nearestOf(targets, kind) {
 export function steady(a, b) {
   return Boolean(a) && Boolean(b) && Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5;
 }
+
+// A clamped camera is allowed to stop short of its requested aim.
+export function sameCamera(a, b) {
+  return Boolean(a) && Boolean(b) && Math.abs(a.x - b.x) <= 0.01
+    && Math.abs(a.y - b.y) <= 0.01 && Math.abs(a.zoom - b.zoom) <= 0.001;
+}

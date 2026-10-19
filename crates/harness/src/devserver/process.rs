@@ -21,9 +21,18 @@ const MAX_REPLY: u64 = 256 << 20;
 
 /// `GET path` on loopback `port`; the body of a 200, nothing otherwise.
 pub(crate) fn http_get(port: u16, path: &str) -> Option<String> {
+    http_get_for(port, path, HTTP_TIMEOUT)
+}
+
+/// A body read bounded by the caller's remaining overall budget, including
+/// connect, write and every read (a slow trickle cannot reset the timeout).
+pub(crate) fn http_get_for(port: u16, path: &str, patience: Duration) -> Option<String> {
+    let deadline = Instant::now() + patience;
     let address = SocketAddr::from(([127, 0, 0, 1], port));
-    let mut stream = TcpStream::connect_timeout(&address, HTTP_TIMEOUT).ok()?;
-    stream.set_read_timeout(Some(HTTP_TIMEOUT)).ok()?;
+    let mut stream = TcpStream::connect_timeout(&address, HTTP_TIMEOUT.min(patience)).ok()?;
+    stream
+        .set_write_timeout(Some(deadline.checked_duration_since(Instant::now())?))
+        .ok()?;
     stream
         .write_all(
             format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
@@ -31,7 +40,18 @@ pub(crate) fn http_get(port: u16, path: &str) -> Option<String> {
         )
         .ok()?;
     let mut reply = Vec::new();
-    stream.take(MAX_BODY).read_to_end(&mut reply).ok()?;
+    let mut chunk = [0; 16 * 1024];
+    while (reply.len() as u64) < MAX_BODY {
+        stream
+            .set_read_timeout(Some(deadline.checked_duration_since(Instant::now())?))
+            .ok()?;
+        let limit = chunk.len().min(MAX_BODY as usize - reply.len());
+        let count = stream.read(&mut chunk[..limit]).ok()?;
+        if count == 0 {
+            break;
+        }
+        reply.extend_from_slice(&chunk[..count]);
+    }
     let text = String::from_utf8_lossy(&reply);
     let (head, body) = text.split_once("\r\n\r\n")?;
     head.starts_with("HTTP/1.1 200").then(|| body.to_owned())
@@ -43,7 +63,10 @@ pub(crate) fn http_get(port: u16, path: &str) -> Option<String> {
 pub(crate) fn http_status(port: u16, path: &str, patience: Duration) -> Option<u16> {
     let address = SocketAddr::from(([127, 0, 0, 1], port));
     let started = Instant::now();
-    let mut stream = TcpStream::connect_timeout(&address, HTTP_TIMEOUT).ok()?;
+    let mut stream = TcpStream::connect_timeout(&address, HTTP_TIMEOUT.min(patience)).ok()?;
+    stream
+        .set_write_timeout(Some(patience.checked_sub(started.elapsed())?))
+        .ok()?;
     stream
         .write_all(
             format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
