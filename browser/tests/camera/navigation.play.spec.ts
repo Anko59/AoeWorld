@@ -4,6 +4,7 @@ import { PNG } from "pngjs";
 import { gameAssets } from "../game-assets.js";
 import { activateSyntheticMap } from "../synthetic-map.js";
 import { forceCanvas } from "../rendering/backends.js";
+import { scoutCombat } from "../wire/combat.js";
 
 async function position(page: Page): Promise<[number, number]> {
   return (await page.locator("#world-position").innerText())
@@ -70,6 +71,7 @@ async function wideWorld(page: Page) {
           0, // Idle
           0, // No carried resource
           0, // No gathering job
+          ...scoutCombat,
           0, // Players
           0, // Buildings
         ]),

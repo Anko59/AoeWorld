@@ -2,6 +2,7 @@ import { expect, type Page, type WebSocketRoute } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { syntheticChunk } from "../synthetic-map.js";
+import { scoutCombat } from "../wire/combat.js";
 
 // Browser feedback only: synthetic immutable terrain and server messages do not
 // qualify real geographic maps, simulation behavior or hardware performance.
@@ -106,6 +107,7 @@ async function feedbackWorld(
             0, // Idle
             0, // No carried resource
             0, // No gathering job
+            ...scoutCombat,
             0, // Players
             0, // Buildings
           ]),

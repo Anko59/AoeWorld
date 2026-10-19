@@ -2,6 +2,7 @@ import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { syntheticChunk } from "../synthetic-map.js";
+import { scoutCombat } from "../wire/combat.js";
 
 const hash = "02".repeat(32);
 
@@ -94,6 +95,7 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
           0, // Idle
           0, // No carried resource
           0, // No gathering job
+          ...scoutCombat,
           0, // Players
           0, // Buildings
         ]),
