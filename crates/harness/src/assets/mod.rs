@@ -1,12 +1,24 @@
 //! `aoe-harness assets`: inspect, import and verify the local asset packs.
+mod dat_table;
+
 use clap::Subcommand;
 use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
 pub(crate) enum AssetCommand {
-    Inspect { input: Option<PathBuf> },
-    Import { input: Option<PathBuf> },
-    Verify { pack: Option<PathBuf> },
+    Inspect {
+        input: Option<PathBuf>,
+    },
+    Import {
+        input: Option<PathBuf>,
+    },
+    Verify {
+        pack: Option<PathBuf>,
+    },
+    /// Decode empires2.dat into a local-only name to sprite table.
+    DatTable {
+        input: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error>> {
@@ -28,6 +40,10 @@ pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error
                 "{}",
                 aoe_assets::pack::import(&input, Path::new("local-assets/packs"))?.display()
             );
+        }
+        AssetCommand::DatTable { input } => {
+            let input = input.unwrap_or_else(|| PathBuf::from("local-assets/trial/Data"));
+            dat_table::run(&input, Path::new("local-assets/dat-table"))?;
         }
         AssetCommand::Verify { pack } => {
             let packs = if let Some(pack) = pack {

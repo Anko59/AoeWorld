@@ -19,7 +19,8 @@ game DRS archives and canonical palette are converted together. For other
 extracted layouts, it imports `local-assets/trial`; the Rust CLI also accepts an
 explicit input directory. The separate campaign media has multiple palettes,
 so it is not included in the default game sprite pack. `make assets-verify`
-validates every local pack. The Rust importer bounds DRS, palette, and SLP
+validates every local pack. `make assets-dat-table` decodes `empires2.dat` into a
+local unit and building to sprite table ([game data](assets/game-data.md)). The Rust importer bounds DRS, palette, and SLP
 decoding, creates deterministic padded PNG atlas pages with separate player,
 shadow, and outline masks, and writes a versioned manifest.
 Importer-generated pages use RGBA8 with transparent black, opaque color and
