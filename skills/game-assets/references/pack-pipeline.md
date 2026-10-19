@@ -29,8 +29,9 @@ To specify a different extracted input or verify one pack, use the equivalent
 harness CLI through the pinned tools image rather than adding logic to Make:
 
 ```sh
+cargo_cache="$(git rev-parse --path-format=absolute --git-common-dir)/aoe-cargo"
 docker run --rm --init --user "$(id -u):$(id -g)" \
-  -e CARGO_HOME="$PWD/.cache/cargo" -v "$PWD:$PWD" -w "$PWD" \
+  -e CARGO_HOME="$cargo_cache" -v "$cargo_cache:$cargo_cache" -v "$PWD:$PWD" -w "$PWD" \
   aoeworld/rust-tools:1.93.1 \
   cargo run --locked -p aoe-harness -- assets import local-assets/trial/Data
 ```

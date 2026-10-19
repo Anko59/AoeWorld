@@ -1,3 +1,5 @@
+use crate::process::{self, Cancellation, CaptureExit};
+use std::time::Duration;
 use std::{
     collections::{BTreeMap, BTreeSet},
     error::Error,
@@ -41,7 +43,8 @@ fn crate_roots(
     let manifest = root.join("Cargo.toml");
     if manifest.is_file() {
         let manifest = manifest.to_str().ok_or("non-UTF-8 Cargo manifest path")?;
-        let output = Command::new("cargo")
+        let mut command = Command::new("cargo");
+        command
             .args([
                 "metadata",
                 "--no-deps",
@@ -52,16 +55,23 @@ fn crate_roots(
                 "--manifest-path",
                 manifest,
             ])
-            .current_dir(root)
-            .output()?;
-        if !output.status.success() {
+            .current_dir(root);
+        let mut metadata = Vec::new();
+        let output = process::capture_command_retaining_stdout(
+            command,
+            Duration::from_secs(120),
+            &Cancellation::default(),
+            &mut metadata,
+        );
+        if !matches!(output.exit, CaptureExit::Success) {
             return Err(format!(
-                "cargo metadata failed: {}",
+                "cargo metadata failed ({:?}): {}",
+                output.exit,
                 String::from_utf8_lossy(&output.stderr)
             )
             .into());
         }
-        let metadata: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+        let metadata: serde_json::Value = serde_json::from_slice(&metadata)?;
         let mut roots = BTreeSet::new();
         for package in metadata["packages"]
             .as_array()

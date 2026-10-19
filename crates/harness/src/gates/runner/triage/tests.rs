@@ -117,6 +117,12 @@ fn root(recipe: &str) -> (tempfile::TempDir, ExecutionRoot) {
         format!("alpha:\n\t@{recipe}\ngamma:\n\t@printf 'later independent success\\n'\n"),
     )
     .unwrap();
+    let initialized = std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .current_dir(owner.path())
+        .output()
+        .unwrap();
+    assert!(initialized.status.success(), "{initialized:?}");
     let root = ExecutionRoot::new(owner.path()).unwrap();
     (owner, root)
 }
@@ -451,4 +457,30 @@ fn error_kind_downcast_never_exports_text() {
     assert_eq!(io_kind(&error), SafeErrorKind::PermissionDenied);
     let other: Box<dyn std::error::Error> = "ERROR_SECRET".into();
     assert_eq!(io_kind(other.as_ref()), SafeErrorKind::OtherUnknown);
+}
+
+#[test]
+fn actual_make_receives_the_source_repository_shared_cargo_home() {
+    let (owner, root) = root("true");
+    let expected = crate::process::cargo_cache::home(owner.path()).unwrap();
+    fs::write(
+        owner.path().join("Makefile"),
+        format!(
+            "alpha:\n\t@test \"$$HARNESS_CARGO_CACHE\" = '{}'\n",
+            expected.display()
+        ),
+    )
+    .unwrap();
+    let destination = tempfile::tempdir().unwrap();
+    let output = PrivateOutput::new(destination.path(), &[owner.path().into()]).unwrap();
+    let ledger = runner::run(
+        &mut fixture(owner.path(), &output),
+        &root,
+        &plan(false),
+        runner::tests::metadata(),
+        budget(),
+    );
+    assert_eq!(ledger.results[0].verdict, Verdict::Pass);
+    assert!(expected.is_dir());
+    assert!(!owner.path().join(".cache/cargo").exists());
 }

@@ -7,6 +7,8 @@ pub(crate) use observation::{SafeErrorKind, SafeObservation, safe_observation};
 pub(crate) enum CaptureExit {
     Success,
     Failed(Option<i32>),
+    /// The single online Cargo recovery fetch failed.
+    CargoFetch(Option<i32>),
     Deadline,
     Cancelled,
     /// The machine slept while the child ran; `at` is the wall time it was noticed.
@@ -176,6 +178,28 @@ pub(crate) fn capture_command_retaining_stdout(
 }
 
 fn capture_with_stdout<W: Write>(
+    command: Command,
+    deadline: Duration,
+    cancellation: &Cancellation,
+    mut retained: Option<&mut W>,
+    clock: &suspend::Clock<'_>,
+) -> Captured {
+    cargo_cache::capture(command, deadline, |command, budget, retain| {
+        capture_once(
+            command,
+            budget,
+            cancellation,
+            if retain {
+                retained.as_deref_mut()
+            } else {
+                None
+            },
+            clock,
+        )
+    })
+}
+
+fn capture_once<W: Write>(
     mut command: Command,
     deadline: Duration,
     cancellation: &Cancellation,

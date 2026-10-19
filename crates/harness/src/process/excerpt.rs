@@ -11,7 +11,10 @@ const PANIC_CONTEXT: usize = 3;
 /// The excerpt to print before the error line, or `None` when the command succeeded or never ran.
 pub(super) fn excerpt_for(captured: &Captured, log: &str) -> Option<String> {
     match captured.exit {
-        CaptureExit::Failed(_) | CaptureExit::Deadline | CaptureExit::Cancelled => {}
+        CaptureExit::Failed(_)
+        | CaptureExit::CargoFetch(_)
+        | CaptureExit::Deadline
+        | CaptureExit::Cancelled => {}
         _ => return None,
     }
     let mut text = String::from_utf8_lossy(&captured.stdout).into_owned();

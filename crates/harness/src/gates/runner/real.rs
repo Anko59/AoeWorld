@@ -231,7 +231,19 @@ fn make_fixed(
     deadline: Duration,
     slots: &SlotEnv,
 ) -> Receipt {
-    let cargo = source.join(".cache/cargo");
+    let cargo = match crate::process::cargo_cache::home(source) {
+        Ok(path) => path,
+        Err(error) => {
+            return Receipt {
+                exit: Exit::StartError,
+                reason: format!("shared Cargo cache unavailable: {error}"),
+                log: None,
+                triage: Some(triage::CommandObservation::NotStarted {
+                    reason: triage::Precondition::PreconditionUnavailable,
+                }),
+            };
+        }
+    };
     let target = source.join("target");
     let Some(cargo) = cargo.to_str() else {
         return Receipt {
@@ -324,7 +336,9 @@ fn make_fixed(
     };
     let (exit, reason) = match captured.exit {
         CaptureExit::Success => (Exit::Success, "supervised command exited zero".to_owned()),
-        CaptureExit::Failed(code) => (Exit::Failed, format!("exit {code:?}")),
+        CaptureExit::Failed(code) | CaptureExit::CargoFetch(code) => {
+            (Exit::Failed, format!("exit {code:?}"))
+        }
         CaptureExit::Deadline => (Exit::Deadline, "wall deadline exceeded".into()),
         CaptureExit::Cancelled => (Exit::Cancelled, "human cancellation".into()),
         // Reported as a monitor failure: the gate's own result is unknown, not failed.

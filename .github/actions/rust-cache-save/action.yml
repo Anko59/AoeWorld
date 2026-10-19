@@ -14,13 +14,13 @@ runs:
       if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/dev' && env.RUST_CACHE_EXACT != 'true' }}
       shell: bash
       run: |
-        rm -rf target/*/incremental target/tmp .cache/cargo/registry/src
-        du -sh target .cache/cargo/registry .cache/cargo/git 2>/dev/null || true
+        rm -rf target/*/incremental target/tmp .git/aoe-cargo/registry/src
+        du -sh target .git/aoe-cargo/registry .git/aoe-cargo/git 2>/dev/null || true
     - if: ${{ steps.trim.outcome == 'success' }}
       uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
       with:
         path: |
-          .cache/cargo/registry
-          .cache/cargo/git
+          .git/aoe-cargo/registry
+          .git/aoe-cargo/git
           target
-        key: rust-${{ inputs.leg }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'docker/rust-tools.Dockerfile') }}
+        key: rust-shared-${{ inputs.leg }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'docker/rust-tools.Dockerfile') }}

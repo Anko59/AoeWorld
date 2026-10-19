@@ -28,7 +28,10 @@ impl CommandObservation {
         let (status, exit_code) = match result {
             Ok(()) => ("SUCCESS", None),
             Err(error) => match error.downcast_ref::<process::ProcessError>() {
-                Some(process::ProcessError::Exit { code, .. }) => ("FAILED", *code),
+                Some(
+                    process::ProcessError::Exit { code, .. }
+                    | process::ProcessError::CargoFetch { code, .. },
+                ) => ("FAILED", *code),
                 Some(process::ProcessError::Deadline { .. }) => ("DEADLINE", None),
                 Some(process::ProcessError::Cancelled { .. }) => ("CANCELLED", None),
                 Some(process::ProcessError::Start { .. }) => ("START_UNAVAILABLE", None),
@@ -287,7 +290,8 @@ pub(super) fn observe_execution(
             },
             Err(error) => {
                 let (status, exit_code) = match error {
-                    process::ProcessError::Exit { code, .. } => ("FAILED", *code),
+                    process::ProcessError::Exit { code, .. }
+                    | process::ProcessError::CargoFetch { code, .. } => ("FAILED", *code),
                     process::ProcessError::Deadline { .. } => ("DEADLINE", None),
                     process::ProcessError::Cancelled { .. } => ("CANCELLED", None),
                     process::ProcessError::Start { .. } => ("START_UNAVAILABLE", None),

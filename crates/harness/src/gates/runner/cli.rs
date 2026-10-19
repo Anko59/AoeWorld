@@ -53,11 +53,10 @@ pub(crate) fn execute(root: &Path, options: Options, slots: &SlotEnv) -> Result<
         _ => return Err("--revision must be supplied only with --scope commit".into()),
     };
     let git_common = crate::hooks::common_directory(&source)?;
-    let cargo = source.join(".cache/cargo");
-    let target = source.join("target");
     let mut excluded = vec![source.clone(), git_common];
     if options.backend == Backend::BootstrapLocal {
-        fs::create_dir_all(&cargo)?;
+        let cargo = crate::process::cargo_cache::home(&source)?;
+        let target = source.join("target");
         fs::create_dir_all(&target)?;
         excluded.extend([cargo, target]);
     }
