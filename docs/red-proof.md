@@ -29,8 +29,11 @@ looks only at the merge base with the selected base and at HEAD.
   child, itself mounted in turn, so the tests of a new module fail to compile
   against the missing item (compile-red). For a test file the PR deletes, the
   declaration the product parent dropped is removed from the red tree, so the
-  build does not stop at E0583. Declarations inside inline `mod x { .. }` blocks
-  are not followed (limit).
+  build does not stop at E0583. When the PR moved an inline `#[cfg(test)] mod
+  name { .. }` into its own file (the test-placement hook forces that move), the
+  base's inline block of that name is removed from the red tree, so the module is
+  defined once (no E0428); only a `cfg(test)` block is removed. Declarations inside
+  inline `mod x { .. }` blocks are not followed (limit).
 - **Pre-existing failures never count**: the old test files are run at the merge
   base too, and any name failing there is removed from the evidence. Changed
   tests that all pass at the merge base, or already fail there, are refused.
@@ -43,12 +46,15 @@ looks only at the merge base with the selected base and at HEAD.
   The duel's own green keeps its exemption for ignored and cfg-gated tests.
 
 A Rust test that calls an API the PR adds cannot compile at the merge base. That
-is accepted as red only when every compiler error is a "cannot find" kind
-(`E0405 E0412 E0422 E0423 E0425 E0432 E0433 E0531 E0560 E0599 E0609`) located in a
-changed test file and names an identifier that occurs on a line the PR adds to
-non-test code. The record names those missing items. Any other build error, a
-truncated build log, an error outside the changed tests, a timeout, a
-cancellation or a nameless crash is not red.
+is accepted as red only when every compiler error is located in a changed test
+file and at least one is a "cannot find" kind
+(`E0405 E0412 E0422 E0423 E0425 E0432 E0433 E0531 E0560 E0599 E0609`) naming an
+identifier that occurs on a line the PR adds to non-test code. The other errors in
+those files are its cascade (E0282/E0283 "type annotations needed" and method
+errors on values built from the missing items); each such file still needs a test
+that runs and passes at HEAD. The record names the missing items. An error
+outside the changed tests, a build with no such miss, a truncated build log, a
+timeout, a cancellation or a nameless crash is not red.
 
 Rust packages, WASM suites and exact Playwright spec filters reuse the duel's
 focused tooling. Each exported snapshot uses separate Cargo build output and
