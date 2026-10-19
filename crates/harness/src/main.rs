@@ -33,6 +33,7 @@ mod repo_policy;
 mod review;
 mod ship;
 mod slots;
+mod timeline;
 mod wasm_test;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
@@ -103,6 +104,8 @@ enum Command {
     /// The seed sweeps and full-axis geodata round-trips that `test-unit` excludes.
     TestExhaustive,
     LoadStatus,
+    /// Report delivery stages over the last TIMELINE_DAYS (default seven).
+    Timeline,
     /// Print the CPUs each heavy slot gives its containers (gates/heavy.json cores shared among its slots).
     SlotCpus,
     /// Run `argv` holding a heavy slot named `gate`: the make wrapper's steps always queue.
@@ -281,6 +284,7 @@ fn run(
         Command::TestUnit => native::test_unit(native::affected::requested())?,
         Command::TestSourceQualification => native::test_source_qualification()?,
         Command::TestExhaustive => native::test_exhaustive()?,
+        Command::Timeline => timeline::run(Path::new("."))?,
         Command::LoadStatus => {
             ship::lock::print_status(Path::new("."))?;
             slots::print_status(Path::new("."), slots)?

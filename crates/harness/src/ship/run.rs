@@ -153,9 +153,10 @@ pub(crate) fn run_gates_selecting(
         root,
         gates,
         slots,
-        crate::slots::hold,
+        crate::slots::guard::hold_timed,
         select,
         &Retry::here(),
+        true,
     )
 }
 
@@ -167,7 +168,7 @@ pub(crate) fn run_gates_retrying(
     take: TakeSlot,
     retry: &Retry,
 ) -> Vec<GateResult> {
-    run_gates_scoped(root, gates, slots, take, None, retry)
+    run_gates_scoped(root, gates, slots, take, None, retry, false)
 }
 
 /// The same gate path with acquisition injected for queue/load fixtures.
@@ -187,6 +188,7 @@ fn run_gates_scoped(
     take: TakeSlot,
     select: Option<&str>,
     retry: &Retry,
+    observe: bool,
 ) -> Vec<GateResult> {
     let mut docker: Option<bool> = None;
     gates
@@ -195,16 +197,17 @@ fn run_gates_scoped(
             if gate.capabilities.contains(&Capability::Docker)
                 && !*docker.get_or_insert_with(docker_available)
             {
-                return GateResult {
+                GateResult {
                     gate: gate.id.clone(),
                     verdict: GateVerdict::Unavailable,
                     seconds: 0.0,
                     summary: "Docker is not reachable".into(),
                     tail: String::new(),
                     attempts: Vec::new(),
-                };
+                }
+            } else {
+                run_one(root, gate, slots, take, select, retry, observe)
             }
-            run_one(root, gate, slots, take, select, retry)
         })
         .collect()
 }
@@ -216,6 +219,7 @@ fn run_one(
     take: TakeSlot,
     select: Option<&str>,
     retry: &Retry,
+    observe: bool,
 ) -> GateResult {
     // A heavy gate queues for its slot first: its budget starts when it runs, not when it waits.
     let slot = match take(root, &gate.id, slots) {
@@ -231,19 +235,29 @@ fn run_one(
             };
         }
     };
-    let first = run_once(root, gate, &slot, select, &retry.load);
+    let first = run_once(root, gate, &slot, select, &retry.load, observe);
     if !(retry.local && first.overloaded) {
         return first.result;
     }
     // The same budget again, once the load has fallen; a refused wait keeps the first timeout.
     let earlier = first.attempt;
     let mut result = first.result;
-    if let Err(reason) = (retry.wait)() {
+    let waited = if observe {
+        crate::timeline::stage(
+            root,
+            "load-wait",
+            serde_json::json!({"gate":gate.id,"retry":true}),
+            || (retry.wait)(),
+        )
+    } else {
+        (retry.wait)()
+    };
+    if let Err(reason) = waited {
         result.summary = format!("{}; not retried: {reason}", result.summary);
         result.attempts = vec![earlier];
         return result;
     }
-    let later = run_once(root, gate, &slot, select, &retry.load);
+    let later = run_once(root, gate, &slot, select, &retry.load, observe);
     let mut result = later.result;
     result.attempts = vec![earlier, later.attempt];
     result
@@ -263,6 +277,7 @@ fn run_once(
     slot: &Guard,
     select: Option<&str>,
     reader: &load::Reader<'_>,
+    observe: bool,
 ) -> Run {
     let mut command = Command::new("sh");
     command.arg("-c").arg(&gate.command).current_dir(root);
@@ -270,11 +285,25 @@ fn run_once(
     if let (Some(base), "test-unit") = (select, gate.id.as_str()) {
         command.env("AOE_TEST_SELECT", base);
     }
+    let stage = format!("gate/{}", gate.id);
+    if observe {
+        crate::timeline::mark(root, &stage, "start", serde_json::json!({}));
+    }
     let captured = capture_command(
         command,
         Duration::from_secs(u64::from(gate.budget_s)),
         &Cancellation::default(),
     );
+    if observe {
+        crate::timeline::mark(
+            root,
+            &stage,
+            "end",
+            serde_json::json!({
+                "ok":matches!(captured.exit, CaptureExit::Success), "timed_out":matches!(captured.exit, CaptureExit::Deadline)
+            }),
+        );
+    }
     let mut output = String::from_utf8_lossy(&captured.stdout).into_owned();
     output.push_str(&String::from_utf8_lossy(&captured.stderr));
     let output = strip_ansi(&output);

@@ -119,7 +119,19 @@ pub(crate) fn require_task(
         },
         crate::review::config::runtime_key(options.runtime)
     );
+    let detail = serde_json::json!({"tier":tier.name(), "closing":plan.closing_style()});
+    crate::timeline::mark(root, "review", "start", detail.clone());
     let reviewed = reviewer(root, tier, options.runtime, task, &plan);
+    let mut ended = detail;
+    match &reviewed {
+        Ok(report) => {
+            ended["grade"] = serde_json::json!(report.grade);
+            ended["rounds"] = serde_json::json!(report.rounds);
+            ended["ok"] = serde_json::json!(report.passes());
+        }
+        Err(_) => ended["ok"] = serde_json::json!(false),
+    }
+    crate::timeline::mark(root, "review", "end", ended);
     drop(review::take_announced());
     let mut report = reviewed?;
     report.decision.get_or_insert(line);
