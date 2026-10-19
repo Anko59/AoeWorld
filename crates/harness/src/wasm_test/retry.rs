@@ -3,10 +3,11 @@ use super::{CARGO_DEADLINE, Result, SUITES};
 use crate::process::{self, Cancellation, CaptureExit};
 use std::{fs, path::Path, process::Command};
 
-type SuiteOutcome = (
-    std::result::Result<(), process::ProcessError>,
-    Option<Vec<String>>,
-);
+struct SuiteOutcome {
+    result: std::result::Result<(), process::ProcessError>,
+    context_failures: Option<Vec<String>>,
+    failed_tests: Option<Vec<String>>,
+}
 
 pub(super) struct Failure {
     pub(super) error: Box<dyn std::error::Error>,
@@ -22,11 +23,52 @@ impl From<Box<dyn std::error::Error>> for Failure {
     }
 }
 
-/// One pass only; the caller owns the single retry for the entire browser gate.
-pub(super) fn run_suites(environment: &[(&str, &str)]) -> std::result::Result<(), Failure> {
+/// Only named quarantined failures get individual retries; unrelated tests stay failed.
+pub(super) fn run_suites(
+    environment: &[(&str, &str)],
+    policy: &crate::gates::flaky::Policy,
+    journal: &mut crate::gates::flaky::Journal,
+) -> std::result::Result<(), Failure> {
     for suite in SUITES {
-        let outcome = run_suite(&suite.cargo_arguments(), environment)?;
-        if let (Err(error), context_failures) = outcome {
+        let arguments = suite.cargo_arguments();
+        let outcome = run_suite(&arguments, environment, None)?;
+        if let Err(error) = outcome.result {
+            let mut unresolved = Vec::new();
+            if let Some(names) = outcome.failed_tests {
+                for name in names {
+                    let entry = policy.find("test-wasm", &name);
+                    let recovered = crate::gates::flaky::retry(entry, &name, journal, || {
+                        let mut arguments = arguments.clone();
+                        arguments.extend(["--".into(), name.clone(), "--exact".into()]);
+                        let retried = run_suite(&arguments, environment, Some(&name))?;
+                        if retried.result.is_ok() {
+                            return Ok(true);
+                        }
+                        if retried.failed_tests.as_deref() != Some(std::slice::from_ref(&name)) {
+                            return Err(
+                                "quarantined WASM rerun did not complete the selected test".into(),
+                            );
+                        }
+                        Ok(false)
+                    })?;
+                    if !recovered {
+                        unresolved.push(name);
+                    }
+                }
+                if unresolved.is_empty() {
+                    continue;
+                }
+            }
+            // Exhausted quarantined tests cannot obtain additional quarantine attempts
+            // via the existing whole-gate context fallback.
+            let context_failures = if unresolved
+                .iter()
+                .any(|name| policy.find("test-wasm", name).is_some())
+            {
+                None
+            } else {
+                outcome.context_failures
+            };
             return Err(Failure {
                 error: error.into(),
                 context_failures,
@@ -36,7 +78,11 @@ pub(super) fn run_suites(environment: &[(&str, &str)]) -> std::result::Result<()
     Ok(())
 }
 
-fn run_suite(arguments: &[String], environment: &[(&str, &str)]) -> Result<SuiteOutcome> {
+fn run_suite(
+    arguments: &[String],
+    environment: &[(&str, &str)],
+    selected: Option<&str>,
+) -> Result<SuiteOutcome> {
     let directory = Path::new("reports/process");
     fs::create_dir_all(directory)?;
     // A failing runner repeats panic stacks in its console dump. Its bounded
@@ -53,6 +99,22 @@ fn run_suite(arguments: &[String], environment: &[(&str, &str)]) -> Result<Suite
         stdout.as_file_mut(),
     );
     let mut context_failures = None;
+    let mut names = None;
+    if let Some(name) = selected
+        && matches!(captured.exit, CaptureExit::Success)
+    {
+        if stdout.as_file().metadata()?.len() > 8 * 1024 * 1024 {
+            return Err("quarantined WASM success diagnostics exceed 8 MiB".into());
+        }
+        let output = fs::read_to_string(stdout.path())?;
+        if !output
+            .lines()
+            .any(|line| line.trim() == format!("test {name} ... ok"))
+            || !output.contains("test result: ok. 1 passed; 0 failed;")
+        {
+            return Err("quarantined WASM rerun did not pass exactly one selected test".into());
+        }
+    }
     if !matches!(captured.exit, CaptureExit::Success) {
         let (_, path) = stdout.keep()?;
         eprintln!("test-wasm: complete runner stdout: {}", path.display());
@@ -61,12 +123,14 @@ fn run_suite(arguments: &[String], environment: &[(&str, &str)]) -> Result<Suite
             && let Ok(output) = fs::read_to_string(&path)
         {
             context_failures = classify_completed(&captured.exit, &output, &captured.stderr);
+            names = failed_tests(&captured.exit, &output, &captured.stderr);
         }
     }
-    Ok((
-        process::report_captured("cargo", captured, CARGO_DEADLINE),
+    Ok(SuiteOutcome {
+        result: process::report_captured("cargo", captured, CARGO_DEADLINE),
         context_failures,
-    ))
+        failed_tests: names,
+    })
 }
 
 fn context_message(message: &str) -> bool {
@@ -111,6 +175,22 @@ pub(super) fn classify_completed(
 /// Identify context panics in named failure blocks of a complete runner result.
 /// Other failed tests do not veto the one retry; the second full pass decides.
 pub(super) fn context_failures(output: &str) -> Option<Vec<String>> {
+    let (_, contexts) = completed_failures(output)?;
+    (!contexts.is_empty()).then_some(contexts)
+}
+
+pub(super) fn failed_tests(exit: &CaptureExit, stdout: &str, stderr: &[u8]) -> Option<Vec<String>> {
+    if !matches!(exit, CaptureExit::Failed(Some(1)))
+        || stdout.len() > 8 * 1024 * 1024
+        || stderr.len() >= 64 * 1024
+    {
+        return None;
+    }
+    let stderr = std::str::from_utf8(stderr).ok()?;
+    completed_failures(&format!("{stdout}\n{stderr}")).map(|(names, _)| names)
+}
+
+fn completed_failures(output: &str) -> Option<(Vec<String>, Vec<String>)> {
     let lines: Vec<_> = output.lines().map(str::trim).collect();
     if lines.iter().any(|line| {
         line.starts_with("error[E")
@@ -235,5 +315,5 @@ pub(super) fn context_failures(output: &str) -> Option<Vec<String>> {
             return None;
         }
     }
-    (!contexts.is_empty()).then_some(contexts)
+    Some((names.into_iter().map(str::to_owned).collect(), contexts))
 }

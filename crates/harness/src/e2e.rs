@@ -5,6 +5,7 @@ mod country;
 mod filter;
 mod landscape;
 mod matrix;
+mod quarantine;
 mod servers;
 mod shard;
 mod source;
@@ -135,7 +136,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     let shard = shard::Shard::from_env(coverage.as_deref())?;
     if specs.is_empty() {
-        return run_specs(&[], None, shard);
+        return run_specs(&[], None, shard, true);
     }
     if shard.is_some() {
         return Err("AOE_E2E_SPECS selects part of the suite; unset AOE_E2E_SHARD".into());
@@ -148,6 +149,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         &selected,
         Some(std::path::Path::new(filter::FILTERED_REPORT)),
         None,
+        true,
     )?;
     if let Some(report) = filter::expected_report(&selected) {
         filter::check_report(&root, report)?;
@@ -162,13 +164,14 @@ pub(crate) fn run_focused(
     if specs.is_empty() {
         return Err("no focused browser specs".into());
     }
-    run_specs(specs, Some(report), None)
+    run_specs(specs, Some(report), None, false)
 }
 
 fn run_specs(
     specs: &[String],
     report: Option<&std::path::Path>,
     shard: Option<shard::Shard>,
+    enable_quarantine: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::current_dir()?.canonicalize()?;
     // The browser specs write their evidence here; the harness makes the directory first.
@@ -200,41 +203,31 @@ fn run_specs(
         specs,
         shard,
     })?;
-    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let cancellation = process::Cancellation::default();
     let browser_result = thread::scope(|scope| -> Result<(), Box<dyn std::error::Error>> {
         let worker_cancellation = cancellation.clone();
         let (sender, receiver) = mpsc::channel();
         scope.spawn(move || {
-            let result = if specs.is_empty() {
-                process::run_cancellable("docker", &refs, run_deadline, &worker_cancellation)
-                    .map_err(|e| e.to_string())
-            } else {
-                // Stream reporter stdout into the same bounded retention used for nextest.
-                // No unbounded Playwright report is written by the browser container.
-                (|| {
-                    let mut retained = crate::ship::JsonOutput::create(
-                        report.ok_or("focused Playwright report path missing")?,
-                        "Playwright",
-                    )
-                    .map_err(|e| e.to_string())?;
-                    let mut command = Command::new("docker");
-                    command.args(&refs);
-                    let captured = process::capture_command_retaining_stdout(
-                        command,
-                        run_deadline,
-                        &worker_cancellation,
-                        &mut retained,
-                    );
-                    match captured.exit {
-                        process::CaptureExit::Success => Ok(()),
-                        other => Err(format!(
-                            "focused Playwright check unavailable: {other:?}\n{}",
-                            stderr_tail(&captured.stderr)
-                        )),
-                    }
-                })()
+            let report_path = match report {
+                Some(path) => path.to_path_buf(),
+                None => match shard {
+                    Some(shard) => std::path::PathBuf::from(format!(
+                        "reports/e2e/playwright-shard-{}-of-{}.json",
+                        shard.index, shard.count
+                    )),
+                    None => std::path::PathBuf::from("reports/e2e/playwright.json"),
+                },
             };
+            let journal = report_path.with_extension("quarantine.jsonl");
+            let result = quarantine::run(
+                &args,
+                &report_path,
+                &journal,
+                run_deadline,
+                &worker_cancellation,
+                enable_quarantine,
+            )
+            .map_err(|error| error.to_string());
             let _ = sender.send(result);
         });
         loop {
@@ -326,12 +319,6 @@ fn renderer_evidence(
         evidence.push(value);
     }
     Ok(serde_json::Value::Array(evidence))
-}
-
-fn stderr_tail(stderr: &[u8]) -> String {
-    let text = String::from_utf8_lossy(stderr);
-    let lines: Vec<_> = text.lines().rev().take(40).collect();
-    lines.into_iter().rev().collect::<Vec<_>>().join("\n")
 }
 
 fn server_binary(coverage: Option<&str>) -> Result<&'static str, &'static str> {

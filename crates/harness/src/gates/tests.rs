@@ -128,6 +128,7 @@ fn documentation_gate_rejects_drift_and_missing_local_links() {
         "[gates](../gates.md) [web](https://example.com) [heading](#top)",
     )
     .expect("guide");
+    fs::write(root.join("gates/flaky.json"), "[]").expect("quarantine");
     docs_check(root).expect("valid docs");
     fs::write(root.join("docs/nested/guide.md"), "[missing](gone.md)").expect("broken link");
     assert!(docs_check(root).is_err());

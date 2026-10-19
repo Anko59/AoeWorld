@@ -129,6 +129,10 @@ fn runner_environment<'a>(remote: &'a str, capabilities: &'a str) -> [(&'static 
 
 pub fn run() -> Result<()> {
     let root = std::env::current_dir()?.canonicalize()?;
+    let policy = crate::gates::flaky::Policy::load(&root)?;
+    let mut journal =
+        crate::gates::flaky::Journal::create(Path::new("reports/wasm/quarantine.jsonl"))?;
+    let _ = fs::remove_file("reports/wasm/browser.json");
     let port = unused_port()?;
     let _driver = start_driver(port)?;
     let remote = format!("http://127.0.0.1:{port}/");
@@ -137,7 +141,7 @@ pub fn run() -> Result<()> {
         .to_str()
         .ok_or("non-UTF-8 WebDriver configuration path")?;
     let environment = runner_environment(&remote, capabilities);
-    if let Err(failure) = retry::run_suites(&environment) {
+    if let Err(failure) = retry::run_suites(&environment, &policy, &mut journal) {
         let Some(names) = failure.context_failures else {
             return Err(failure.error);
         };
@@ -145,7 +149,7 @@ pub fn run() -> Result<()> {
             "test-wasm: retrying once: runner WebGL context errors in: {} (#391)",
             names.join(", ")
         );
-        retry::run_suites(&environment).map_err(|failure| failure.error)?;
+        retry::run_suites(&environment, &policy, &mut journal).map_err(|failure| failure.error)?;
     }
     let report = Report {
         version: 1,

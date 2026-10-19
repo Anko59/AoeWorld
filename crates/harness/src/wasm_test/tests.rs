@@ -251,3 +251,6 @@ fn completion_metadata_must_prove_a_normal_exit_one_and_untruncated_capture() {
     let oversized = format!("{}{}", " ".repeat(8 * 1024 * 1024), output);
     assert!(retry::classify_completed(&CaptureExit::Failed(Some(1)), &oversized, b"").is_none());
 }
+
+#[path = "tests/quarantine_tests.rs"]
+mod quarantine_tests;

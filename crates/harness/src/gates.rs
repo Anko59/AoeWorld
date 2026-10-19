@@ -1,6 +1,7 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
 pub(crate) mod contracts;
 pub(crate) mod dispatch_status;
+pub(crate) mod flaky;
 mod paths;
 pub(crate) mod placement;
 pub(crate) mod registry;
@@ -109,6 +110,7 @@ fn local_links_exist(path: &Path) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn docs_check(root: &Path) -> Result<(), Box<dyn Error>> {
+    flaky::Policy::load(root)?;
     let registry = Registry::load(root)?;
     let expected = table(&registry);
     let actual = fs::read_to_string(root.join("docs/gates.md"))?;

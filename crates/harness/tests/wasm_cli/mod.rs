@@ -64,6 +64,8 @@ fn command_replays_real_failure_sections_and_only_retries_once() {
         fs::create_dir_all(&cache).unwrap();
         let root = tempfile::tempdir_in(cache).unwrap();
         let root = root.path();
+        fs::create_dir(root.join("gates")).unwrap();
+        fs::write(root.join("gates/flaky.json"), "[]").unwrap();
         fs::write(root.join("diagnostic"), diagnostic).unwrap();
         fs::write(root.join("exit"), exit.to_string()).unwrap();
         fs::write(root.join("repeat"), repeat.to_string()).unwrap();
@@ -154,3 +156,5 @@ fn fixture_process() {
         fixture::run(&tool);
     }
 }
+
+mod quarantine_tests;
