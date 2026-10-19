@@ -99,11 +99,24 @@ extern "C" {
 #[wasm_bindgen_test]
 fn insufficient_array_layers_or_integer_attribute_capacity_fail_initialization() {
     for layers in [false, true] {
-        let (canvas, renderer) = target(&page_atlas());
-        drop(renderer);
+        let canvas = canvas();
         restrict_array_limits(&canvas, layers).unwrap();
         assert!(WebGlRenderer::new(&canvas).is_err());
     }
+}
+
+#[wasm_bindgen_test]
+fn dropping_webgl_renderer_retires_its_context_without_browser_gc() -> Result<(), JsValue> {
+    let (canvas, renderer) = target(&page_atlas());
+    // Hold the exact live context across Drop so GC cannot supply the retirement.
+    let gl = webgl_test_context(&canvas).unwrap();
+    assert!(!context_is_lost(&gl));
+    drop(renderer);
+    // Return the failure without duplicate Rust panic stacks in runner output.
+    if !context_is_lost(&gl) {
+        return Err(JsValue::from_str("Drop must retire the owned context"));
+    }
+    Ok(())
 }
 
 #[wasm_bindgen_test]

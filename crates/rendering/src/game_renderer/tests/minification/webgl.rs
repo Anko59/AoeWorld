@@ -42,7 +42,7 @@ fn target(atlas: &[u8]) -> (HtmlCanvasElement, WebGlRenderer) {
     (canvas, renderer)
 }
 
-fn render(placed: &Placed) -> HtmlCanvasElement {
+fn render(placed: &Placed) -> (HtmlCanvasElement, WebGlRenderer) {
     let (canvas, mut renderer) = target(&fixture::atlas());
     let mut sprites = [placed.sprite];
     assert_eq!(std::mem::size_of::<Sprite>(), 112, "shared GPU sprite ABI");
@@ -50,7 +50,7 @@ fn render(placed: &Placed) -> HtmlCanvasElement {
         renderer.render(&mut sprites).expect("actual WebGL2 render"),
         "frame not presented"
     );
-    canvas
+    (canvas, renderer)
 }
 
 fn pixel(canvas: &HtmlCanvasElement, x: u32, y: u32) -> [u8; 4] {
@@ -87,7 +87,7 @@ fn webgl_quarter_size_checker_averages_without_single_pixel_extremes() {
     ])
     .unwrap();
     assert_eq!(expected, [0, 128, 0, 255]);
-    let canvas = render(&placed);
+    let (canvas, _renderer) = render(&placed);
     let [left, top] = placed.left_top.map(|value| value as u32);
     for y in top..top + 4 {
         for x in left..left + 4 {
@@ -110,7 +110,7 @@ fn webgl_minified_edge_takes_no_colour_from_hidden_or_adjacent_texels() {
         false,
         fixture::HALO_PHASE,
     );
-    let canvas = render(&placed);
+    let (canvas, _renderer) = render(&placed);
     let left = placed.left_top[0] as u32;
     let top = placed.left_top[1] as u32;
     // Column tap pairs (frame-local x): {0,0} clamped, {1,2}, {3,4}, {5,6}
@@ -146,7 +146,7 @@ fn webgl_native_size_checker_stays_pixel_exact() {
         false,
         fixture::PHASE,
     );
-    let canvas = render(&placed);
+    let (canvas, _renderer) = render(&placed);
     let left = placed.left_top[0] as u32;
     let top = placed.left_top[1] as u32;
     for y in 0..16_u32 {
