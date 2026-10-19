@@ -182,6 +182,31 @@ that bounds each wait inside it. Waits are measured, not planned, like page load
 
 Refusals happen in `make showcase-check`, before any image is built.
 
+A step that fails says where the page was: the message ends with its state
+(`[page: start_state="loading" loading_phase="Sampling overview · 347 / 1,388
+pages" raster="pending" …]`) and the latest console errors and failed
+requests. While a step waits, the recorder reads that state every second and
+prints each change as `showcase-phase page_state`, and a wait slower than a
+second as `showcase-phase op_ms`. A page that can no longer succeed fails the
+step at once instead of at its limit: the client did not start (no asset
+pack, `#unsupported`), the loading screen shows its error, or the page has only
+observed for 45 s because another tab or session holds the controller lease
+(the server frees a lost one after 30 s). `gather` frames the node in the
+middle of the canvas and clicks where the client reports it, once it is on
+screen, clear of the HUD and still; it never expects a computed pixel.
+Without a prepared map (`make dev`, no `AOE_PRESET_MAPS`) `start_skirmish`
+prepares the real map: about two minutes for `tiny` on a loaded machine.
+
+Before a take with `start_skirmish` the harness makes each map it opens ready on
+its server: it requests the minimap raster of every completed job for that
+preset and size (`showcase-phase map_warm_ms`). The server computes the raster on
+its first request under a 30 s budget and answers 503 past it, and the client
+takes that for a failed raster for good, so a start on a freshly restarted or
+loaded server used to sit on "Opening terrain" until its limit (21.7 s measured
+at load 8 on a restart; 2 ms afterwards). A client whose connection label reads
+`server error: …` while loading (a rejected subscription; only a new Welcome
+clears it) has the game menu's Reconnect pressed after 4 s, up to three times.
+
 ```json
 {"title": "Gather", "scenes": [{"kind": "browser", "path": "/?skipIntro=1", "caption": "A skirmish",
   "seconds": 3, "steps": [

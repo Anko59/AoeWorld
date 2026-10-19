@@ -6,6 +6,7 @@
 //! for. Nothing here invents DOM: a step the client has no hook for is
 //! refused when the storyboard is checked, before any image is built.
 mod script;
+pub(crate) mod warm;
 
 use super::browser::Step;
 use crate::ship::compare::{Bookmarks, DEFAULT_BOOKMARKS};
@@ -59,6 +60,33 @@ pub(crate) enum Size {
     Large,
     Giant,
 }
+
+impl Preset {
+    /// The id of the preset button (`data-preset`) and of the dev server's presets.
+    pub(crate) fn id(self) -> &'static str {
+        match self {
+            Self::Paris => "paris",
+            Self::Alps => "alps",
+            Self::Brittany => "brittany",
+            Self::Finland => "finland",
+        }
+    }
+}
+
+impl Size {
+    /// The side in kilometres, the value of the setup form's `#start-size`.
+    pub(crate) fn km(self) -> u64 {
+        match self {
+            Self::Tiny => 30,
+            Self::Small => 120,
+            Self::Large => 480,
+            Self::Giant => 1920,
+        }
+    }
+}
+
+/// The side the setup form starts with when a storyboard chooses none.
+pub(crate) const DEFAULT_SIZE_KM: u64 = 480;
 
 /// `{"start_skirmish": {"preset": "alps"}}`: Single Player, the preset's map,
 /// Start Game, then waits for a running match with its chunks ready. The

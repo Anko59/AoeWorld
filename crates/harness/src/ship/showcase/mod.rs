@@ -48,6 +48,8 @@ pub(crate) use scenes::{Role, Verdict};
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 pub(crate) use steps::resolve_bookmarks;
+#[cfg(test)]
+pub(crate) use steps::warm::skirmish_maps;
 pub(crate) use timing::{Segment, Timings, check_duration, durations, measured_duration, track};
 #[cfg(test)]
 pub(crate) use workdir::{create_work_dir, write_recorder};
