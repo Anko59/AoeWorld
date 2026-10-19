@@ -1,6 +1,6 @@
 use super::*;
 
-fn fetching() -> Options {
+pub(super) fn fetching() -> Options {
     Options {
         no_fetch: false,
         ..offline()

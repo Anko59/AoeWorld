@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 mod carry;
+mod merge;
 pub(super) mod start;
 
 #[cfg(test)]
@@ -250,8 +251,10 @@ fn gained(root: &Path, current: &str, latest: &str) -> Result<Vec<String>> {
         .collect())
 }
 
-/// Replay only the branch's own commits onto the new base; a conflict aborts
-/// the rebase and leaves the branch exactly as the round found it.
+/// Replay only the branch's own commits onto the new base. A conflict aborts
+/// the rebase and tries a merge of the base instead (the rebase replays every
+/// commit, including earlier merge resolutions); only when both conflict is the
+/// branch left exactly as the round found it.
 fn rebase(
     root: &Path,
     options: &Options,
@@ -283,6 +286,14 @@ fn rebase(
         .into());
     }
     let base = &options.base;
+    if !files.is_empty() && merge::clean(root, latest, round_head)? {
+        eprintln!(
+            "ship: {base} {when}; the rebase conflicted in {} but a merge of {} is clean, merged instead",
+            files.lines().collect::<Vec<_>>().join(", "),
+            short(latest)
+        );
+        return Ok(());
+    }
     if files.is_empty() {
         return Err(format!(
             "ship: {base} {when} and the rebase onto it \
