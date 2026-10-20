@@ -193,7 +193,7 @@ impl FetchFixture {
         let install = js_sys::Function::new_with_args(
             "manifest, color, mask",
             "const original = window.fetch;
-             window.fetch = async path => new Response(
+             window.fetch = async path => path.includes('/buildings/') ? new Response(null, {status:404}) : new Response(
                  path.endsWith('manifest.json') ? manifest :
                  path.endsWith('color.png') ? color : mask);
              return original;",
@@ -269,7 +269,7 @@ async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded(
         let fetch = FetchFixture::install(&value);
         let loaded = load().await;
         drop(fetch);
-        let (art, pixels) = loaded.expect("minimal pack must initialise");
+        let (art, pixels, _) = loaded.expect("minimal pack must initialise");
         assert_eq!(art.walking.len(), 50);
         assert_eq!(art.terrain[2].len(), 100, "base fallback remains available");
         for slot in [4, 11] {
@@ -298,7 +298,7 @@ async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded(
 }
 
 #[wasm_bindgen_test]
-async fn full_catalog_packs_1474_terrain_frames_and_895_objects_in_their_domains() {
+async fn full_catalog_packs_1474_terrain_frames_and_780_objects_in_their_domains() {
     let sources = REQUIRED_RENDER_SOURCES
         .iter()
         .chain(&OPTIONAL_RESOURCE_SOURCES)
@@ -314,7 +314,7 @@ async fn full_catalog_packs_1474_terrain_frames_and_895_objects_in_their_domains
     let fetch = FetchFixture::install(&value);
     let loaded = load().await;
     drop(fetch);
-    let (_, pixels) = loaded.expect("full catalog must initialise");
+    let (_, pixels, _) = loaded.expect("full catalog must initialise");
     let (terrain, objects) = pixels.split_at(2 * GAME_ATLAS_PAGE_BYTES);
     let count = |pixels: &[u8], color: [u8; 4]| {
         pixels
@@ -328,6 +328,6 @@ async fn full_catalog_packs_1474_terrain_frames_and_895_objects_in_their_domains
         0,
         "marsh belongs on terrain pages"
     );
-    assert_eq!(count(objects, [120, 120, 120, 255]), 895);
+    assert_eq!(count(objects, [120, 120, 120, 255]), 780);
     assert_eq!(count(terrain, [120, 120, 120, 255]), 0);
 }

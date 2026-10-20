@@ -1,6 +1,7 @@
 use crate::ship::compare::bookmarks::Bookmarks;
 
 mod bookmarks;
+mod build;
 mod capture;
 mod packages;
 mod pixels;

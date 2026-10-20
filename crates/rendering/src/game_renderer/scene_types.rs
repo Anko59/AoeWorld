@@ -10,6 +10,7 @@ pub struct SceneCamera {
 }
 
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
+#[repr(u8)]
 pub enum SceneUnitKind {
     #[default]
     Scout,
@@ -23,6 +24,77 @@ pub enum SceneUnitKind {
     VillagerMiningStone,
     VillagerCarryingStone,
     TownCenter,
+    VillagerBuilding,
+    BuildingTownCenter,
+    House,
+    LumberCamp,
+    MiningCamp,
+    Mill,
+    Farm,
+    Barracks,
+    PalisadeWall,
+    Outpost,
+    Foundation1x1,
+    Foundation2x2,
+    Foundation3x3,
+    Foundation4x4,
+    RubbleTownCenter,
+    RubbleHouse,
+    RubbleLumberCamp,
+    RubbleMiningCamp,
+    RubbleMill,
+    RubbleFarm,
+    RubbleBarracks,
+    RubblePalisadeWall,
+    RubbleOutpost,
+}
+
+impl SceneUnitKind {
+    /// The typed building roles are contiguous in the atlas's semantic order.
+    pub fn building(slot: u8) -> Self {
+        use SceneUnitKind::*;
+        [
+            BuildingTownCenter,
+            House,
+            LumberCamp,
+            MiningCamp,
+            Mill,
+            Farm,
+            Barracks,
+            PalisadeWall,
+            Outpost,
+            Foundation1x1,
+            Foundation2x2,
+            Foundation3x3,
+            Foundation4x4,
+            RubbleTownCenter,
+            RubbleHouse,
+            RubbleLumberCamp,
+            RubbleMiningCamp,
+            RubbleMill,
+            RubbleFarm,
+            RubbleBarracks,
+            RubblePalisadeWall,
+            RubbleOutpost,
+        ][usize::from(slot.min(21))]
+    }
+    pub(super) fn building_slot(self) -> Option<u8> {
+        (self as u8).checked_sub(Self::BuildingTownCenter as u8)
+    }
+    pub(super) fn building_side(self) -> Option<f64> {
+        if self == Self::TownCenter {
+            return Some(4.0);
+        }
+        let slot = self.building_slot()?;
+        Some(if (9..=12).contains(&slot) {
+            f64::from(slot - 8)
+        } else {
+            f64::from(
+                [4, 2, 2, 2, 2, 3, 3, 1, 1]
+                    [usize::from(if slot >= 13 { slot - 13 } else { slot }).min(8)],
+            )
+        })
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -31,6 +103,7 @@ pub struct SceneUnit {
     pub id: EntityId,
     pub position: [f64; 2],
     pub moving: bool,
+    /// Unit direction, or construction stage/wall variant for a building.
     pub facing: u8,
     pub selected: bool,
     pub elevation_meters: f64,

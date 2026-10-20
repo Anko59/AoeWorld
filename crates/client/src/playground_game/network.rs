@@ -122,6 +122,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 }
                 client.units = resident;
                 client.village.players = players;
+                client.village.rubble.retain(|(_, until)| *until > tick.0);
                 client.village.buildings = buildings;
                 client.village.tick = tick.0;
                 if !client.village.focused {
@@ -160,6 +161,24 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 for player in changed_players {
                     client.village.players.retain(|p| p.player != player.player);
                     client.village.players.push(player);
+                }
+                let expiry = tick.0.saturating_add(u64::from(client.config.tick_hz) * 3);
+                let destroyed: Vec<_> = client
+                    .village
+                    .buildings
+                    .iter()
+                    .filter(|b| {
+                        building_removals.contains(&b.id)
+                            && (b.kind != aoe_protocol::BuildingKind::Farm
+                                || b.food_remaining.is_some_and(|food| food > 0))
+                    })
+                    .cloned()
+                    .collect();
+                client.village.rubble.retain(|(_, until)| *until > tick.0);
+                for b in destroyed {
+                    if client.village.rubble.len() < aoe_protocol::MAX_ECONOMY_BUILDINGS {
+                        client.village.rubble.push((b, expiry));
+                    }
                 }
                 client.village.buildings = buildings;
                 for id in removals {

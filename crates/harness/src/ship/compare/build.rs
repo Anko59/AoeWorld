@@ -71,14 +71,21 @@ pub(crate) fn docker_tools(
     Ok(())
 }
 
-/// The wasm client into `web/pkg` and the release server into `target/release`
-/// of `target`, as `make build-wasm` and `make dev` do.
-pub(crate) fn build_app(tree: &Path, target: &Path, cargo_home: &Path) -> Result<()> {
-    fs::create_dir_all(target)?;
-    let wasm = target.join("wasm32-unknown-unknown/wasm-release/aoe_client.wasm");
-    let wasm = wasm.display().to_string();
-    for args in [
-        &[
+/// Build both current web bundles in order: bind gameplay before the diagnostics
+/// feature build overwrites Cargo's output. Shared by compare, dev-server and
+/// the focused browser prerequisites; Make's build-wasm uses the same steps.
+/// Older revisions, such as a comparison's merge base, predate the
+/// diagnostics feature; `diagnostics` is false for them and only the gameplay
+/// bundle is built.
+pub(crate) fn web_commands(wasm: &str, diagnostics: bool) -> Vec<Vec<&str>> {
+    let bundles: &[_] = if diagnostics {
+        &[("web/pkg", false), ("web/diagnostics-pkg", true)]
+    } else {
+        &[("web/pkg", false)]
+    };
+    let mut commands = Vec::with_capacity(4);
+    for &(output, diagnostics) in bundles {
+        let mut build = vec![
             "cargo",
             "build",
             "--locked",
@@ -88,30 +95,58 @@ pub(crate) fn build_app(tree: &Path, target: &Path, cargo_home: &Path) -> Result
             "wasm32-unknown-unknown",
             "-p",
             "aoe-client",
-        ][..],
-        &[
+        ];
+        if diagnostics {
+            build.extend(["--features", "diagnostics"]);
+        }
+        commands.push(build);
+        commands.push(vec![
             "wasm-bindgen",
             "--target",
             "web",
             "--out-dir",
-            "web/pkg",
+            output,
             "--out-name",
             "aoe_client",
-            &wasm,
-        ][..],
-        &[
+            wasm,
+        ]);
+    }
+    commands
+}
+
+/// The gameplay and diagnostics bundles, and the release server, as Make builds them.
+pub(crate) fn build_app(tree: &Path, target: &Path, cargo_home: &Path) -> Result<()> {
+    fs::create_dir_all(target)?;
+    let wasm = target.join("wasm32-unknown-unknown/wasm-release/aoe_client.wasm");
+    let wasm = wasm.display().to_string();
+    let commands = web_commands(&wasm, has_diagnostics_feature(tree))
+        .into_iter()
+        .chain([vec![
             "cargo",
             "build",
             "--locked",
             "--release",
             "-p",
             "aoe-server",
-        ][..],
-    ] {
+        ]]);
+    for args in commands {
         eprintln!("compare: {} (in {})", args[..2].join(" "), tree.display());
-        docker_tools(tree, target, cargo_home, args)?;
+        docker_tools(tree, target, cargo_home, &args)?;
     }
     Ok(())
+}
+
+/// Whether `tree`'s client crate declares the `diagnostics` feature.
+pub(crate) fn has_diagnostics_feature(tree: &Path) -> bool {
+    fs::read_to_string(tree.join("crates/client/Cargo.toml"))
+        .ok()
+        .and_then(|text| text.parse::<toml::Table>().ok())
+        .is_some_and(|manifest| {
+            manifest
+                .get("features")
+                .and_then(toml::Value::as_table)
+                .is_some_and(|features| features.contains_key("diagnostics"))
+        })
 }
 
 /// The working tree as it is now, built into its own `target/`.

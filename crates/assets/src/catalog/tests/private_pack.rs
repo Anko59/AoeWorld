@@ -18,8 +18,8 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     }
     let mut extents = Vec::new();
     let mut counts = [0_usize; 2];
-    // Match the production loader's semantic index order exactly, including
-    // optional terrain after resources; domain placement must not regroup it.
+    // Conservative full-prefix proof in production semantic order. The client
+    // omits unused idle cells and adds the separately checked DE building subset.
     for source in REQUIRED_RENDER_SOURCES
         .iter()
         .chain(&OPTIONAL_RESOURCE_SOURCES)

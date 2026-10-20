@@ -28,6 +28,7 @@ fn synthetic_art() -> GameArt {
         anchor: [16.0, 48.0],
     };
     GameArt {
+        buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
         walking: vec![frame; 80],

@@ -11,7 +11,7 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
             } else {
                 &art.standing
             },
-            10,
+            if unit.moving { 10 } else { 1 },
         )
     } else {
         let group = match unit.kind {
@@ -24,12 +24,24 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
             SceneUnitKind::VillagerMiningStone => 8,
             _ => usize::from(unit.moving),
         };
-        (&art.village[group], 15)
+        (
+            if unit.kind == SceneUnitKind::VillagerBuilding {
+                &art.buildings[22]
+            } else {
+                &art.village[group]
+            },
+            if group == 0 && unit.kind != SceneUnitKind::VillagerBuilding {
+                1
+            } else {
+                15
+            },
+        )
     };
     let animated = unit.moving
         || matches!(
             unit.kind,
-            SceneUnitKind::VillagerChopping
+            SceneUnitKind::VillagerBuilding
+                | SceneUnitKind::VillagerChopping
                 | SceneUnitKind::VillagerForaging
                 | SceneUnitKind::VillagerMiningGold
                 | SceneUnitKind::VillagerMiningStone
@@ -42,7 +54,8 @@ pub(super) fn marker(
     camera: SceneCamera,
     emit: &mut impl FnMut((Sprite, GameFrame, f64, u64)),
 ) {
-    let building = unit.kind == SceneUnitKind::TownCenter;
+    let side = unit.kind.building_side();
+    let building = side.is_some();
     let frame = GameFrame {
         atlas: crate::AtlasAddress {
             page: 2,
@@ -54,11 +67,21 @@ pub(super) fn marker(
             ],
         },
         size: if building {
-            [120.0, 60.0]
+            [
+                side.unwrap_or(1.0) as f32 * 30.0,
+                side.unwrap_or(1.0) as f32 * 15.0,
+            ]
         } else {
             [14.0, 32.0]
         },
-        anchor: if building { [60.0, 30.0] } else { [7.0, 30.0] },
+        anchor: if building {
+            [
+                side.unwrap_or(1.0) as f32 * 15.0,
+                side.unwrap_or(1.0) as f32 * 7.5,
+            ]
+        } else {
+            [7.0, 30.0]
+        },
     };
     if let Some(mut sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
         sprite.color = if building {
@@ -107,3 +130,50 @@ pub(super) fn town_center(
 
 #[cfg(test)]
 mod tests;
+
+/// Native anchors and player/shadow planes are shared by all backends.
+pub(super) fn building(
+    art: &GameArt,
+    unit: SceneUnit,
+    camera: SceneCamera,
+    animation: usize,
+    emit: &mut impl FnMut((Sprite, GameFrame, f64, u64)),
+) {
+    let Some(art_slot) = unit.kind.building_slot() else {
+        return;
+    };
+    if art_slot == 5 {
+        return;
+    } // Farm is ground.
+    let frames = art
+        .buildings
+        .get(usize::from(art_slot))
+        .map_or(&[][..], |frames| frames.as_slice());
+    if frames.is_empty() || (art_slot == 4 && frames.len() != 44) {
+        marker(unit, camera, emit);
+        return;
+    }
+    let index = if (9..=12).contains(&art_slot) {
+        usize::from(unit.facing).min(frames.len() - 1)
+    } else if art_slot == 7 {
+        usize::from(unit.facing) % frames.len()
+    } else {
+        unit.id.0 as usize % frames.len()
+    };
+    let (indices, count) = if art_slot == 4 {
+        ([0, 1 + animation % 43], 2)
+    } else {
+        ([index, 0], 1)
+    };
+    for index in indices.into_iter().take(count) {
+        let frame = world_frame(frames[index]);
+        if let Some(sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
+            emit((
+                sprite,
+                scaled(frame, camera.zoom as f32),
+                object_depth(WorldObject::Unit(unit)),
+                u64::from(unit.id.0),
+            ));
+        }
+    }
+}

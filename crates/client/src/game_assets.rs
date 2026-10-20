@@ -7,12 +7,17 @@ use aoe_assets::catalog::{
         OPTIONAL_TERRAIN as OPTIONAL_TERRAIN_SOURCES, REQUIRED as REQUIRED_RENDER_SOURCES,
     },
 };
+#[path = "game_assets/buildings.rs"]
+mod buildings;
 #[path = "game_assets/manifest.rs"]
 mod manifest;
 use aoe_rendering::{
     AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_SIDE, GameArt, GameFrame,
     TerrainTopology,
 };
+#[cfg(test)]
+#[path = "game_assets/tests/buildings.rs"]
+mod building_tests;
 #[path = "game_assets/placement.rs"]
 mod placement;
 #[cfg(test)]
@@ -42,7 +47,13 @@ async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
 }
 
 async fn page(name: &str) -> Result<Vec<u8>, JsValue> {
-    if name.contains('/') || name.contains('\\') || !name.ends_with(".png") {
+    if name
+        .strip_prefix("buildings/")
+        .unwrap_or(name)
+        .contains('/')
+        || name.contains('\\')
+        || !name.ends_with(".png")
+    {
         return Err(JsValue::from_str("Invalid atlas page name"));
     }
     let bytes = fetch(&format!("/asset-pack/{name}")).await?;
@@ -51,6 +62,12 @@ async fn page(name: &str) -> Result<Vec<u8>, JsValue> {
 
 fn error(e: impl std::fmt::Display) -> JsValue {
     JsValue::from_str(&e.to_string())
+}
+
+// Both the base pack and DE overlay share one JSON parser instantiation.
+#[inline(never)]
+fn decode_manifest(bytes: &[u8]) -> Result<Manifest, JsValue> {
+    serde_json::from_slice(bytes).map_err(error)
 }
 
 // Startup-only lists are bounded by reviewed catalogue frame counts (`MAX_REVIEWED_FRAMES`).
@@ -72,6 +89,7 @@ fn sort_indices(
     }
 }
 
+#[inline(never)]
 fn source_frames(manifest: &Manifest, source: &str, count: u32) -> Option<Vec<usize>> {
     if count as usize > MAX_SELECTED_FRAMES {
         return None;
@@ -101,8 +119,21 @@ fn source_frames(manifest: &Manifest, source: &str, count: u32) -> Option<Vec<us
         .then_some(frames)
 }
 
+#[inline(never)]
 fn source_present(manifest: &Manifest, source: &str) -> bool {
     manifest.frames.iter().any(|frame| frame.source == source)
+}
+
+// Idle actors already display only the first cell of each facing row. Drop
+// unused cells after validating the original prefix; walking/work rows stay full.
+#[inline(never)]
+fn compact_standing(frames: Vec<usize>, role: AssetRole) -> Vec<usize> {
+    let step = match role {
+        AssetRole::CavalryStanding => 10,
+        AssetRole::VillagerStanding => 15,
+        _ => return frames,
+    };
+    frames.into_iter().step_by(step).collect()
 }
 
 const TERRAIN_ROLES: [AssetRole; 12] = [
@@ -166,9 +197,25 @@ fn fill_groups(
     }
 }
 
-pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
+#[wasm_bindgen::prelude::wasm_bindgen(
+    inline_js = "export function atlas_budget(count) { document.getElementById('playground')?.setAttribute('data-atlas-frames',String(count)); } export function selected_team_colour() { const c={blue:[65,145,245],red:[245,65,65],green:[50,190,65],yellow:[245,220,40],cyan:[40,220,220],purple:[175,65,220],grey:[160,160,160],orange:[245,145,40]};return new Uint8Array(c[document.getElementById('playground')?.dataset.playerColour]??c.blue); }"
+)]
+extern "C" {
+    fn atlas_budget(count: usize);
+    fn selected_team_colour() -> Vec<u8>;
+}
+
+pub(crate) fn team_colour() -> [u8; 3] {
+    let colour = selected_team_colour();
+    [colour[0], colour[1], colour[2]]
+}
+
+#[inline(never)]
+pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
+    let team = team_colour();
     let bytes = fetch("/asset-pack/manifest.json").await?;
-    let manifest: Manifest = serde_json::from_slice(&bytes).map_err(error)?;
+    let mut manifest = decode_manifest(&bytes)?;
+    buildings::overlay(&mut manifest).await?;
     // The DTO owns its used strings; release raw JSON before PNG decode awaits.
     drop(bytes);
     if manifest.version != 1 {
@@ -198,6 +245,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
                 }
                 continue;
             };
+            let frames = compact_standing(frames, selection.role);
             if frames.len() > MAX_SELECTED_FRAMES - selected.len() {
                 return Err(JsValue::from_str("Too many selected frames"));
             }
@@ -225,6 +273,8 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             ranges[selection.role as usize] = Some(start..selected.len());
         }
     }
+    let building_ranges = buildings::select(&manifest, &mut selected, &mut domains)?;
+    buildings::crop_farm(&mut manifest, &selected, &building_ranges)?;
     // Validate count, source bounds, and all extents before pixel allocation.
     let placements = placement::plan(&manifest, &selected, &domains)?;
     drop(domains);
@@ -262,7 +312,14 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             let source = page(name).await?;
             for &semantic in group {
                 let frame = &manifest.frames[selected[semantic]];
-                placement::copy_plane(frame, placements[semantic], plane, &source, &mut pixels)?;
+                placement::copy_plane(
+                    frame,
+                    placements[semantic],
+                    plane,
+                    &source,
+                    &mut pixels,
+                    team,
+                )?;
             }
         }
         start = end;
@@ -304,12 +361,18 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
         &records,
     );
 
+    atlas_budget(selected.len());
     Ok((
         GameArt {
             walking: group(AssetRole::CavalryWalking),
             standing: group(AssetRole::CavalryStanding),
             village,
             town_center,
+            buildings: std::array::from_fn(|i| {
+                building_ranges[i]
+                    .as_ref()
+                    .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
+            }),
             grass: terrain[0].clone(),
             terrain,
             terrain_topology,
@@ -334,5 +397,6 @@ pub async fn load() -> Result<(GameArt, Vec<u8>), JsValue> {
             },
         },
         pixels,
+        team,
     ))
 }

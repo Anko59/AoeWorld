@@ -22,6 +22,7 @@ fn frame(size: [f32; 2], anchor: [f32; 2]) -> GameFrame {
 /// Hotspots as in the reviewed pack: a gold pile's is in its middle.
 fn art() -> GameArt {
     GameArt {
+        buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
         walking: vec![frame([40.0, 77.0], [23.0, 60.0]); 50],

@@ -52,6 +52,7 @@ pub(in super::super) fn double_click(client: &mut Client, unit: EntityId) {
 /// The resource under the pointer, unless a nearer cliff face hides it. The
 /// same frontmost-surface test as `passable` keeps gather feedback and orders
 /// from reaching a resource behind an occluding cliff.
+#[inline(never)]
 pub(in super::super) fn resource(
     client: &Client,
     point: ScreenPoint,

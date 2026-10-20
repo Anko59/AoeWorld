@@ -174,8 +174,17 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let mut client = down.borrow_mut();
         let _ = client.canvas.focus();
         let target = point(&client, &event);
+        if event.button() == 2 && client.village.placement.is_some() {
+            super::village::construction::cancel(&mut client);
+            return;
+        }
         if event.button() == 2 {
             send_order(&mut client, target);
+            return;
+        }
+        if event.button() == 0 && client.village.placement.is_some() {
+            let _ = client.canvas.set_pointer_capture(event.pointer_id());
+            super::village::construction::place(&mut client, target, false);
             return;
         }
         if event.button() == 0 && client.village.move_cursor {
@@ -234,6 +243,22 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let onup = Closure::<dyn FnMut(PointerEvent)>::new(move |event: PointerEvent| {
         let mut client = released.borrow_mut();
         let target = point(&client, &event);
+        if event.type_() == "pointercancel" {
+            client.drag = None;
+            super::village::construction::cancel(&mut client);
+            return;
+        }
+        if event.button() != 0 {
+            client.drag = None;
+            let _ = client.canvas.release_pointer_capture(event.pointer_id());
+            return;
+        }
+        if client.village.placement.is_some() {
+            client.drag = None;
+            super::village::construction::place(&mut client, target, true);
+            let _ = client.canvas.release_pointer_capture(event.pointer_id());
+            return;
+        }
         if let Some(drag) = client.drag.take() {
             let moved = (drag.current.x - drag.start.x).abs() > 4.0
                 || (drag.current.y - drag.start.y).abs() > 4.0;
@@ -309,7 +334,11 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let mut client = keyed.borrow_mut();
         match action {
             1 => {
-                client.selected = Default::default();
+                if client.village.placement.is_some() {
+                    super::village::construction::cancel(&mut client);
+                } else {
+                    client.selected = Default::default();
+                }
                 client.village.move_cursor = false;
                 client.drag = None;
             }

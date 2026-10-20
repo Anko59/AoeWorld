@@ -28,7 +28,7 @@ fn render(planes: &Planes) -> Vec<u8> {
             let a = u32::from(s[3]);
             GROUND.map(|v| (u32::from(v) * (255 - a) / 255) as u8)
         };
-        let blended = blend_player([base[0], base[1], base[2], 255], p[0], p[3]);
+        let blended = blend_player([base[0], base[1], base[2], 255], p[0], p[3], [65, 145, 245]);
         rgb.extend_from_slice(&blended[..3]);
     }
     rgb

@@ -97,10 +97,11 @@ fn direct_scene_has_expected_content_order_and_ties_in_72_bounded_cases() {
     let mut digests = Vec::new();
     for mode in 0..6 {
         let mut art = GameArt {
+            buildings: Default::default(),
             village: Default::default(),
             town_center: Default::default(),
             walking: base.walking.clone(),
-            standing: base.standing.clone(),
+            standing: base.standing.iter().step_by(10).copied().collect(),
             grass: base.grass.clone(),
             terrain: base.terrain.clone(),
             terrain_topology: base.terrain_topology,

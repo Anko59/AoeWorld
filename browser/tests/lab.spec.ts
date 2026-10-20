@@ -62,7 +62,7 @@ test("native and browser replay hashes agree", async ({ page }) => {
   const native = (await response.json()) as { hash: string };
   const wasm = await page.evaluate(async () => {
     const module = (await import(
-      new URL("/pkg/aoe_client.js", location.href).href
+      new URL("/diagnostics-pkg/aoe_client.js", location.href).href
     )) as {
       replay_hash(scenario: string, ticks: number): string;
     };
@@ -104,7 +104,7 @@ test("hotspot camera churn retains bounded browser timing and resources", async 
     const read = () =>
       page.evaluate(async () => {
         const module = (await import(
-          new URL("/pkg/aoe_client.js", location.href).href
+          new URL("/diagnostics-pkg/aoe_client.js", location.href).href
         )) as {
           performance_snapshot(): unknown;
           reset_performance_samples(): void;
@@ -133,7 +133,7 @@ test("hotspot camera churn retains bounded browser timing and resources", async 
       });
     await page.evaluate(async () => {
       const module = (await import(
-        new URL("/pkg/aoe_client.js", location.href).href
+        new URL("/diagnostics-pkg/aoe_client.js", location.href).href
       )) as { reset_performance_samples(): void };
       module.reset_performance_samples();
     });

@@ -152,6 +152,10 @@ pub(super) fn emit_world_sprite_frames(
             continue;
         };
         let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
+        if unit.kind.building_slot().is_some() {
+            village::building(art, unit, camera, animation, &mut emit);
+            continue;
+        }
         if unit.kind == crate::SceneUnitKind::TownCenter {
             village::town_center(art, unit, camera, &mut emit);
             continue;
@@ -234,7 +238,7 @@ fn object_depth(object: WorldObject) -> f64 {
     // The native Town Center reaches 64 source pixels below its anchor, farther
     // than a tree/unit. Its front foundation must clear its own flat footprint.
     let clearance = match object {
-        WorldObject::Unit(unit) if unit.kind == crate::SceneUnitKind::TownCenter => 3.0,
+        WorldObject::Unit(unit) if unit.kind.building_side().is_some() => 3.0,
         _ => GROUND_CLEARANCE,
     };
     surface_depth([position[0], position[1], object.elevation_meters()]) + clearance
@@ -419,6 +423,19 @@ fn sprite_direction(facing: u8) -> (usize, bool) {
 }
 
 pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
+    if let Some(slot) = unit.kind.building_slot() {
+        return slot == 4
+            && art.buildings[4].len() == 44
+            && art.buildings[4].iter().any(|frame| {
+                sprite_screen_bounds(
+                    world_frame(*frame),
+                    unit.position,
+                    unit.elevation_meters,
+                    camera,
+                )
+                .is_some()
+            });
+    }
     if unit.kind == crate::SceneUnitKind::TownCenter {
         return false;
     }

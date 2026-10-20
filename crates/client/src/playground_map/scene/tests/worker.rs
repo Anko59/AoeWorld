@@ -23,12 +23,11 @@ fn villager(task: UnitTask, gathering: Option<ResourceKind>) -> GameplayUnitStat
     }
 }
 
-// The catalog has no farmer or builder art: a farmer uses the foraging
-// (food-gathering) art, and a builder the plain villager.
+// The trial lacks a farmer: use foraging; construction uses dat builder 1496.
 #[wasm_bindgen_test]
-fn farmers_use_the_foraging_art_and_builders_the_plain_villager() {
+fn farmers_use_foraging_and_builders_use_the_dat_task_art() {
     let farmer = villager(UnitTask::Farming, Some(ResourceKind::Food));
     assert_eq!(worker_kind(&farmer), SceneUnitKind::VillagerForaging);
     let builder = villager(UnitTask::Building, None);
-    assert_eq!(worker_kind(&builder), SceneUnitKind::Villager);
+    assert_eq!(worker_kind(&builder), SceneUnitKind::VillagerBuilding);
 }

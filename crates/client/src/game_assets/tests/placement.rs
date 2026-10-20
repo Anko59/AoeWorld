@@ -339,6 +339,7 @@ fn cliff_palette_keeps_relief_and_alpha_with_a_neutral_warm_stone_colour() {
             Plane::Color,
             &source,
             &mut pixels,
+            [65, 145, 245],
         )
         .unwrap();
         let actual = &pixels[to..to + 4];
@@ -359,6 +360,7 @@ fn cliff_palette_keeps_relief_and_alpha_with_a_neutral_warm_stone_colour() {
         Plane::Color,
         &source,
         &mut pixels,
+        [65, 145, 245],
     )
     .unwrap();
     assert_eq!(&pixels[to..to + 4], &[190, 115, 35, 255]);

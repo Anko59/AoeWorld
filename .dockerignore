@@ -11,3 +11,5 @@ fuzz/target
 fuzz/artifacts
 fuzz/coverage
 .env
+
+web/diagnostics-pkg

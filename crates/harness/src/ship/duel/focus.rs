@@ -12,6 +12,9 @@ use std::{
     time::Duration,
 };
 
+#[cfg(test)]
+#[path = "tests/focus_build.rs"]
+mod build_tests;
 mod playwright;
 mod report;
 pub(in crate::ship) use playwright::browser_results;
@@ -315,43 +318,30 @@ fn package_compile_error(line: &str, packages: &[String]) -> bool {
 }
 
 fn browser_build(root: &Path) -> git::Result<()> {
-    for (step, program, args) in [
-        (
-            "server-build",
-            "cargo",
-            vec!["build", "--locked", "--release", "-p", "aoe-server"],
-        ),
-        (
-            "wasm-build",
-            "cargo",
-            vec![
-                "build",
-                "--locked",
-                "--profile",
-                "wasm-release",
-                "--target",
-                "wasm32-unknown-unknown",
-                "-p",
-                "aoe-client",
-            ],
-        ),
-        (
-            "wasm-bindgen",
-            "wasm-bindgen",
-            vec![
-                "--target",
-                "web",
-                "--out-dir",
-                "web/pkg",
-                "--out-name",
-                "aoe_client",
-                "target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm",
-            ],
-        ),
-    ] {
+    let web = crate::ship::compare::build::web_commands(
+        "target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm",
+        crate::ship::compare::build::has_diagnostics_feature(root),
+    );
+    let commands = [vec![
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-p",
+        "aoe-server",
+    ]]
+    .into_iter()
+    .chain(web);
+    for args in commands {
+        let program = args[0];
+        let step = if program == "cargo" {
+            "build"
+        } else {
+            "wasm-bindgen"
+        };
         let mut command = Command::new(program);
         command
-            .args(args)
+            .args(&args[1..])
             .current_dir(root)
             .env_remove("CARGO_TARGET_DIR");
         let captured =

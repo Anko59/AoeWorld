@@ -210,6 +210,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.status = error;
             }
         }
+        village::building_panel::preview(&client);
         if time - client.village.last_hud >= 250.0 {
             client.village.last_hud = time;
             status::update(&client);

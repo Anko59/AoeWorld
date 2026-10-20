@@ -163,23 +163,71 @@ pub(in super::super) fn units(
             }
         })
         .collect::<Vec<_>>();
+    let walls: Vec<_> = client
+        .village
+        .buildings
+        .iter()
+        .filter(|b| b.kind == aoe_protocol::BuildingKind::PalisadeWall)
+        .map(|b| (b.footprint.min.x, b.footprint.min.y))
+        .collect();
     for building in &client.village.buildings {
         let position = super::super::village::building_center(building);
         let slot = units.partition_point(|unit| unit.id < building.id);
         units.insert(
             slot,
             aoe_rendering::SceneUnit {
-                kind: aoe_rendering::SceneUnitKind::TownCenter,
+                kind: if building.kind == aoe_protocol::BuildingKind::TownCenter
+                    && building.progress_permille == 1000
+                {
+                    aoe_rendering::SceneUnitKind::TownCenter
+                } else {
+                    aoe_rendering::SceneUnitKind::building(crate::building_ui::sprite_slot(
+                        building.kind,
+                        building.progress_permille,
+                        false,
+                    ) as u8)
+                },
                 id: building.id,
                 position,
                 moving: false,
-                facing: 0,
+                facing: if building.progress_permille < 1000 {
+                    (u32::from(building.progress_permille) * 3 / 1000) as u8
+                } else if building.kind == aoe_protocol::BuildingKind::PalisadeWall {
+                    crate::building_ui::wall_frame(building.footprint.min, |t| {
+                        walls.contains(&(t.x, t.y))
+                    })
+                } else {
+                    0
+                },
                 selected: client.selected.building_id == Some(building.id),
                 elevation_meters: scene
                     .height(position)
                     .unwrap_or_else(|| elevation_at_world(client, position)),
             },
         );
+    }
+    for (building, expiry) in &client.village.rubble {
+        if *expiry <= client.village.tick {
+            continue;
+        }
+        let position = super::super::village::building_center(building);
+        let unit = aoe_rendering::SceneUnit {
+            kind: aoe_rendering::SceneUnitKind::building(crate::building_ui::sprite_slot(
+                building.kind,
+                1000,
+                true,
+            ) as u8),
+            id: building.id,
+            position,
+            moving: false,
+            facing: 0,
+            selected: false,
+            elevation_meters: scene
+                .height(position)
+                .unwrap_or_else(|| elevation_at_world(client, position)),
+        };
+        let slot = units.partition_point(|u| u.id < building.id);
+        units.insert(slot, unit);
     }
     units
 }
@@ -192,6 +240,7 @@ fn worker_kind(unit: &aoe_protocol::GameplayUnitState) -> aoe_rendering::SceneUn
     }
     match (unit.task, unit.gathering, unit.carried) {
         // The catalog has no farmer art: farming draws the foraging pose.
+        (UnitTask::Building, _, _) if !unit.moving => Art::VillagerBuilding,
         (UnitTask::Farming, _, _) => Art::VillagerForaging,
         (UnitTask::Gathering, Some(kind), _) => match kind {
             ResourceKind::Food => Art::VillagerForaging,

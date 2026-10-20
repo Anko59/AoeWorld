@@ -37,6 +37,7 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
         surface: SceneTerrainSurface::flat(800.0),
     }];
     let art = GameArt {
+        buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
         walking: Vec::new(),

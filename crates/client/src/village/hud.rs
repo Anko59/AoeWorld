@@ -63,7 +63,11 @@ pub(in super::super) fn update(client: &Client) {
         }
         values.extend_from_slice(&[
             f64::from(unit.id.0),
-            flag(unit.kind == UnitKind::Villager),
+            match unit.kind {
+                UnitKind::Scout => 0.0,
+                UnitKind::Villager => 1.0,
+                UnitKind::Militia => 11.0,
+            },
             x,
             y,
             flag(selected),
@@ -76,7 +80,7 @@ pub(in super::super) fn update(client: &Client) {
         let [x, y] = screen(client, building_center(building));
         values.extend_from_slice(&[
             f64::from(building.id.0),
-            2.0,
+            2.0 + building.kind as u8 as f64,
             x,
             y,
             flag(client.selected.building_id == Some(building.id)),
@@ -102,6 +106,7 @@ pub(in super::super) fn update(client: &Client) {
     }
     let details = super::presentation::values(client);
     village_update(&values, map::feedback::connection_label(client), &details);
+    super::building_panel::update(client);
 }
 
 pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
@@ -129,6 +134,7 @@ pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsVal
             callback.forget();
         }
     }
+    super::building_panel::install(shared)?;
     Ok(())
 }
 

@@ -16,3 +16,8 @@
 .PHONY: \
   assets-import-de \
   assets-dat-table
+
+# Formats browser tooling with the pinned formatter.
+.PHONY: browser-format
+browser-format: browser-deps
+	@$(BROWSER_RUN) npm exec -- prettier --write .

@@ -2,7 +2,7 @@
 mod web;
 
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen::prelude::wasm_bindgen]
+#[cfg_attr(feature = "diagnostics", wasm_bindgen::prelude::wasm_bindgen)]
 pub fn replay_hash(scenario: &str, ticks: u32) -> Result<String, wasm_bindgen::JsValue> {
     if ticks > 64 {
         return Err(wasm_bindgen::JsValue::from_str("ticks must be <= 64"));
@@ -16,17 +16,21 @@ pub fn replay_hash(scenario: &str, ticks: u32) -> Result<String, wasm_bindgen::J
     Ok(world.canonical_hash_hex())
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]
 mod playground;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]
 mod game_assets;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]
 mod png_page;
 
 pub mod resource_state;
 
-#[cfg(any(target_arch = "wasm32", test))]
+#[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
 #[path = "playground_map/requests.rs"]
 mod chunk_requests;
+
+#[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]
+#[path = "building_ui/mod.rs"]
+pub mod building_ui;

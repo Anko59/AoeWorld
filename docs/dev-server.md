@@ -28,8 +28,10 @@ each build), `presets/<fingerprint>/` (prepared maps), `logs/`, `state.json`
 and `lock`. `make dev-server` fetches `origin/dev` (best effort), builds the tip
 in the tool image when its tree is missing, and starts the *play* server on
 `127.0.0.1:8091` (`AOE_DEV_SERVER_PORT`). An advisory lock serialises builds and
-starts, so a second session waits and then finds the server current. The server
-runs detached from the command that started it; `/health` reports the revision
+starts, so a second session waits and then finds the server current. The build
+produces both `web/pkg` (gameplay) and `web/diagnostics-pkg` (diagnostics),
+using the same Rust build steps as compare and focused browser checks. The
+server runs detached from the command that started it; `/health` reports the revision
 (`AOE_BUILD_SHA`), which is what "healthy at the expected revision" means. The
 asset pack and geodata cache come from the invoking checkout, else the main
 checkout (`local-assets/packs`, `.cache/geodata`).
