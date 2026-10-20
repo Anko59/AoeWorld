@@ -117,7 +117,7 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 #building-preview .valid { fill:#42ca6744; stroke:#80ef8b; }
 #building-preview .invalid { fill:#dc443c55; stroke:#ff746b; }
 #scene[data-order-mode="build"] { cursor:crosshair; }
-#command-grid.building-menu-open { grid-template-columns:repeat(3,1fr); }
+#command-grid.building-menu-open { grid-template-columns:repeat(4,1fr); }
 #command-grid button small { display:block; font-size:10px; line-height:1.1; }
 #command-grid.building-menu-open .empty-command { display:none; }
 #building-panel { font-size:12px; }

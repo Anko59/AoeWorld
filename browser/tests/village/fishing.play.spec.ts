@@ -102,6 +102,21 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   await page.mouse.click(buildActor.x, buildActor.y);
   await page.locator("#build-menu").click();
   await expect(page.locator("#build-dock")).toContainText("150 wood");
+  const dockButton = page.locator("#build-dock");
+  const buttonBounds = await dockButton.boundingBox();
+  if (!buttonBounds) throw new Error("Dock button missing");
+  expect(buttonBounds.y + buttonBounds.height).toBeLessThanOrEqual(704);
+  const camera = () =>
+    page
+      .locator("#minimap")
+      .evaluate((node) => [
+        node.getAttribute("data-camera-x"),
+        node.getAttribute("data-camera-y"),
+      ]);
+  const before = await camera();
+  await dockButton.hover();
+  await page.waitForTimeout(300);
+  expect(await camera()).toEqual(before);
   await page.locator("#build-dock").click();
   await frame(page, scene.dock);
   const site = await point(page, scene.dock);
