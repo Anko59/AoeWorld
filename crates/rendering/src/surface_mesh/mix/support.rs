@@ -5,12 +5,13 @@ use super::*;
 pub(crate) const FULL: u32 = 1 << 30;
 const EMPTY: u8 = 15;
 
-// Water-side 5 and forest-bed 6 never occur as ground observations. Reuse
-// those nibbles for the two scene materials above 14, preserving empty 15.
+// Water-side 5/11 and forest-bed 6 never occur as land observations. Reuse
+// those nibbles for scene materials above 14, preserving empty 15.
 fn code(material: u8) -> u8 {
     match material {
         15 => 5,
         16 => 6,
+        17 => 11,
         other => other.min(EMPTY),
     }
 }
@@ -19,6 +20,7 @@ pub(crate) fn material(code: u8) -> u8 {
     match code {
         5 => 15,
         6 => 16,
+        11 => 17,
         other => other,
     }
 }

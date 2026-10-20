@@ -68,6 +68,8 @@ pub struct GraphicRef {
     pub angles: u16,
     pub frame_rate: f32,
     pub in_pack: Option<bool>,
+    pub layer: u8,
+    pub deltas: Vec<super::GraphicDelta>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -107,6 +109,9 @@ pub struct Table {
     pub report: super::Report,
     pub rows: Vec<Row>,
     pub checks: Vec<Check>,
+    pub buildings: Vec<super::BuildingComposition>,
+    pub building_records: Vec<(i32, super::Building)>,
+    pub terrains: Vec<super::Terrain>,
 }
 
 /// SLP resource ids of a classic DRS archive (graphics.drs).
@@ -133,6 +138,8 @@ fn from_graphic(role: &str, graphic: &Graphic, pack: Option<&BTreeSet<i32>>) -> 
         angles: graphic.angle_count,
         frame_rate: graphic.frame_rate,
         in_pack: pack.map(|set| set.contains(&graphic.slp_id)),
+        layer: graphic.layer,
+        deltas: graphic.deltas.clone(),
     }
 }
 
@@ -152,7 +159,6 @@ fn unit_graphics(file: &DatFile, unit: &Unit, pack: Option<&BTreeSet<i32>>) -> V
         unit.construction_graphic
             .map(|c| ("construction".into(), c.into())),
     );
-    wanted.extend(unit.snow_graphic.map(|s| ("snow".into(), s.into())));
     const SLOTS: [&str; 4] = ["moving", "proceeding", "working", "carrying"];
     for task in &unit.tasks {
         for (slot, graphic) in task.graphics.iter().enumerate() {
@@ -208,9 +214,7 @@ fn row(file: &DatFile, cache: &Cache, label: &str, id: i32, pack: Option<&BTreeS
         };
     };
     let graphics = cache.get(&id).cloned().unwrap_or_default();
-    // Completeness covers gameplay graphics only; the snow variant is listed
-    // but not required (docs/assets/game-data.md).
-    let needed: Vec<&GraphicRef> = graphics.iter().filter(|g| g.role != "snow").collect();
+    let needed: Vec<&GraphicRef> = graphics.iter().collect();
     let present = needed.iter().filter(|g| g.in_pack == Some(true)).count();
     let pack_state = match pack {
         None => "unchecked",
@@ -368,6 +372,13 @@ pub fn build(file: &DatFile, pack: Option<&BTreeSet<i32>>) -> Table {
         ),
         version: file.version.clone(),
         report: file.report.clone(),
+        buildings: super::table_details::compositions(file, pack),
+        building_records: file
+            .units
+            .iter()
+            .filter_map(|u| u.building.clone().map(|b| (u.id, b)))
+            .collect(),
+        terrains: file.terrains.clone(),
         rows,
         checks: CHECKS
             .iter()
@@ -401,6 +412,7 @@ pub fn markdown(table: &Table) -> String {
         }
         out.push('\n');
     }
+    super::table_details::markdown(table, &mut out);
     out.push_str("## Cross-checks\n\n");
     for c in &table.checks {
         let _ = writeln!(

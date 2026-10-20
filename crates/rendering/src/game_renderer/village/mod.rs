@@ -127,24 +127,59 @@ pub(super) fn marker(
     }
 }
 
-pub(super) fn town_center(
+pub(super) fn building(
     art: &GameArt,
     unit: SceneUnit,
     camera: SceneCamera,
+    animation: usize,
     emit: &mut impl FnMut((Sprite, GameFrame, f64, u64)),
 ) {
-    if art.town_center.iter().any(|group| group.len() != 1) {
-        marker(unit, camera, emit);
+    let Some(building) = art
+        .compositions
+        .iter()
+        .find(|b| Some(b.unit_id) == unit.kind.building_id())
+    else {
+        sprite_building(art, unit, camera, animation, emit);
+        return;
+    };
+    let parts = if unit.kind.is_foundation() {
+        &building.construction
+    } else {
+        &building.parts
+    };
+    if parts.is_empty() {
+        if unit.kind == SceneUnitKind::Farm
+            && building.foundation_material == Some(17)
+            && !art.foundation.0.is_empty()
+        {
+            return; // The native farm terrain is the complete visual building.
+        }
+        sprite_building(art, unit, camera, animation, emit);
         return;
     }
-    // Rear wings sit behind the central balcony, then the front supports.
-    // The right roof already includes its front column: its native hotspot
-    // needs only half the left roof's vertical attachment. The single front
-    // left and rear right posts meet their eaves at +24/-24 source pixels.
-    // Never rotate or mirror these sunlit parts; all share one ground origin.
-    for part in [7, 3, 5, 1, 4, 0, 2, 6] {
-        let mut native = art.town_center[part][0];
-        native.anchor[1] -= [0.0, 48.0, 24.0, 0.0, 24.0, 0.0, -24.0, 0.0][part];
+    // Import order is shadow layer, then isometric annex depth, preserving
+    // stand/delta order within each unit. No rotation or mirroring is applied.
+    for part in parts {
+        let mut native = part.frame;
+        if !part.animation.is_empty() {
+            let angles = usize::from(part.angles).max(1);
+            let count = part.animation.len() / angles;
+            let angle = if unit.kind.is_foundation() || unit.kind == SceneUnitKind::PalisadeWall {
+                usize::from(unit.facing).min(angles - 1)
+            } else {
+                0
+            };
+            let index = if unit.kind.is_foundation() || unit.kind == SceneUnitKind::PalisadeWall {
+                0
+            } else if part.frame_rate > 0.0 {
+                (animation as f64 * 0.1 / f64::from(part.frame_rate) + 1e-5) as usize % count
+            } else {
+                unit.id.0 as usize % count
+            };
+            native = part.animation[angle * count + index];
+        }
+        native.anchor[0] -= part.offset[0];
+        native.anchor[1] -= part.offset[1];
         let frame = world_frame(native);
         if let Some(sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
             emit((
@@ -161,7 +196,7 @@ pub(super) fn town_center(
 mod tests;
 
 /// Native anchors and player/shadow planes are shared by all backends.
-pub(super) fn building(
+pub(super) fn sprite_building(
     art: &GameArt,
     unit: SceneUnit,
     camera: SceneCamera,
@@ -169,6 +204,7 @@ pub(super) fn building(
     emit: &mut impl FnMut((Sprite, GameFrame, f64, u64)),
 ) {
     let Some(art_slot) = unit.kind.building_slot() else {
+        marker(unit, camera, emit);
         return;
     };
     if art_slot == 5 {
@@ -206,3 +242,9 @@ pub(super) fn building(
         }
     }
 }
+#[cfg(test)]
+#[path = "tests/composition.rs"]
+mod composition_tests;
+#[cfg(test)]
+#[path = "tests/foundations.rs"]
+mod foundation_tests;

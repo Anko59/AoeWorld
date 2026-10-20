@@ -4,14 +4,14 @@
 use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
-#[path = "tests/minification/fixture.rs"]
+#[path = "fixture.rs"]
 pub(crate) mod fixture;
 
-#[path = "tests/minification/canvas.rs"]
+#[path = "canvas.rs"]
 mod canvas_pixels;
 
-#[path = "tests/minification/webgl.rs"]
+#[path = "webgl.rs"]
 mod webgl_pixels;
 
-#[path = "tests/minification/terrain.rs"]
+#[path = "terrain.rs"]
 pub(crate) mod terrain_pixels;

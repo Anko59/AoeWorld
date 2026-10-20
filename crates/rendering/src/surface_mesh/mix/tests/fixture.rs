@@ -28,7 +28,7 @@ const COLORS: [[u8; 4]; 9] = [
 /// Columns of scene material, west to east: the last one continues eastwards.
 /// Case 5 is a forest (material 6, full floor) against sand; case 6 has three
 /// materials meeting within one tile column.
-const STRIPS: [&[u8]; 9] = [
+const STRIPS: [&[u8]; 10] = [
     &[0, 3],
     &[2, 4],
     &[7, 1],
@@ -38,6 +38,7 @@ const STRIPS: [&[u8]; 9] = [
     &[2, 3, 0],
     &[4, 7],
     &[7, 8],
+    &[0, 17],
 ];
 pub(crate) const CASES: usize = STRIPS.len();
 pub(crate) const PROBES: [[u32; 2]; 10] = [
@@ -74,7 +75,8 @@ pub(crate) fn art() -> GameArt {
         buildings: Default::default(),
         village: Default::default(),
         fishing: Default::default(),
-        town_center: Default::default(),
+        compositions: Vec::new(),
+        foundation: (vec![frame(2)], None),
         walking: Vec::new(),
         standing: Vec::new(),
         grass: terrain[0].clone(),
@@ -227,7 +229,7 @@ fn color(material: u8) -> [f32; 4] {
         13 => 1,
         14 | 15 => 0,
         16 => 3,
-        7 | 9 => 2,
+        7 | 9 | 17 => 2,
         8 => 5,
         6 => 0,
         material => usize::from(material),

@@ -8,30 +8,33 @@ use aoe_assets::catalog::{
     },
 };
 #[cfg(test)]
-#[path = "game_assets/tests/actors.rs"]
+#[path = "tests/actors.rs"]
 mod actor_tests;
-#[path = "game_assets/actors.rs"]
 mod actors;
-#[path = "game_assets/buildings.rs"]
+mod building_sprites;
 mod buildings;
-#[path = "game_assets/fishing.rs"]
 mod fishing;
-#[path = "game_assets/manifest.rs"]
+#[path = "manifest.rs"]
 mod manifest;
 use aoe_rendering::{
     AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_SIDE, GameArt, GameFrame,
     TerrainTopology,
 };
 #[cfg(test)]
-#[path = "game_assets/tests/buildings.rs"]
-mod building_tests;
-#[cfg(test)]
-#[path = "game_assets/tests/fishing.rs"]
+#[path = "tests/fishing.rs"]
 mod fishing_tests;
-#[path = "game_assets/placement.rs"]
-mod placement;
 #[cfg(test)]
-#[path = "game_assets/tests/selection.rs"]
+#[path = "tests/building_sprites.rs"]
+mod building_sprite_tests;
+#[cfg(test)]
+#[path = "tests/buildings.rs"]
+mod building_tests;
+#[path = "placement.rs"]
+mod placement;
+#[path = "recipes.rs"]
+mod recipes;
+#[cfg(test)]
+#[path = "tests/selection.rs"]
 mod selection_tests;
 use js_sys::Uint8Array;
 use manifest::Manifest;
@@ -39,7 +42,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::TownCenterShadow as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::VillagerMiningStone as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
@@ -225,12 +228,17 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
     let team = team_colour();
     let bytes = fetch("/asset-pack/manifest.json").await?;
     let mut manifest = decode_manifest(&bytes)?;
-    buildings::overlay(&mut manifest).await?;
+    building_sprites::overlay(&mut manifest).await?;
     // The DTO owns its used strings; release raw JSON before PNG decode awaits.
     drop(bytes);
     if manifest.version != 1 {
         return Err(JsValue::from_str("Unsupported asset pack version"));
     }
+    manifest.buildings =
+        recipes::decode(&manifest.building_data, &manifest.frames).map_err(error)?;
+    manifest
+        .buildings
+        .retain(|b| aoe_assets::catalog::GAMEPLAY_BUILDING_IDS.contains(&b.unit_id));
     let mut selected = Vec::new();
     let mut domains = Vec::new();
     let mut terrain_topology = [None; 12];
@@ -284,9 +292,10 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
         }
     }
     let actor_ranges = actors::select(&manifest, &mut selected, &mut domains)?;
-    let building_ranges = buildings::select(&manifest, &mut selected, &mut domains)?;
+    buildings::select(&manifest, &mut selected, &mut domains)?;
+    let building_ranges = building_sprites::select(&manifest, &mut selected, &mut domains)?;
+    building_sprites::crop_farm(&mut manifest, &selected, &building_ranges)?;
     let fishing_ranges = fishing::select(&manifest, &mut selected, &mut domains)?;
-    buildings::crop_farm(&mut manifest, &selected, &building_ranges)?;
     // Validate count, source bounds, and all extents before pixel allocation.
     let placements = placement::plan(&manifest, &selected, &domains)?;
     drop(domains);
@@ -356,22 +365,8 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
         &ranges,
         &records,
     );
-    let mut town_center: [Vec<GameFrame>; 8] = Default::default();
-    fill_groups(
-        &mut town_center,
-        &[
-            AssetRole::TownCenterMain,
-            AssetRole::TownCenterRoofLeft,
-            AssetRole::TownCenterSupportLeft,
-            AssetRole::TownCenterSupportsLeft,
-            AssetRole::TownCenterRoofRight,
-            AssetRole::TownCenterSupportsRight,
-            AssetRole::TownCenterSupportRight,
-            AssetRole::TownCenterShadow,
-        ],
-        &ranges,
-        &records,
-    );
+    let buildings = buildings::resolve(&manifest, &selected, &records);
+    let foundation = buildings::foundation(&manifest, &selected, &records)?;
 
     atlas_budget(selected.len());
     Ok((
@@ -392,12 +387,13 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
             walking: group(AssetRole::CavalryWalking),
             standing: group(AssetRole::CavalryStanding),
             village,
-            town_center,
+            compositions: buildings,
             buildings: std::array::from_fn(|i| {
                 building_ranges[i]
                     .as_ref()
                     .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
             }),
+            foundation,
             grass: terrain[0].clone(),
             terrain,
             terrain_topology,

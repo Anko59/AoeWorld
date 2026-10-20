@@ -392,7 +392,7 @@ fn tile_key(position: [f64; 2]) -> [i32; 2] {
 fn surface_color(sample: SceneTerrain) -> [f32; 3] {
     let mut color = match sample.material {
         1 => [0.56, 0.48, 0.28],
-        2 => [0.48, 0.30, 0.18],
+        2 | 17 => [0.48, 0.30, 0.18],
         3 => [0.74, 0.66, 0.42],
         4 => [0.40, 0.40, 0.40],
         5 => [0.22, 0.46, 0.66],

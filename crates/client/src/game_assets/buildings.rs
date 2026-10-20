@@ -1,199 +1,210 @@
-//! Bounded building subset from trial and optional DE overlay packs.
+//! Resolve bounded, local DAT building recipes into the shared runtime atlas.
+use super::manifest::{BuildingComposition, BuildingPart};
 use super::*;
 
-/// Optional overlay is served from a private pack link made by assets-import-de.
-#[inline(never)]
-pub(super) async fn overlay(manifest: &mut Manifest) -> Result<(), JsValue> {
-    let response: Response = JsFuture::from(
-        web_sys::window()
-            .ok_or("No window")?
-            .fetch_with_str("/asset-pack/buildings/manifest.json"),
-    )
-    .await?
-    .dyn_into()?;
-    if response.status() == 404 {
-        return Ok(());
-    }
-    if !response.ok() {
-        return Err(JsValue::from_str("Building pack unavailable"));
-    }
-    let bytes = Uint8Array::new(&JsFuture::from(response.array_buffer()?).await?).to_vec();
-    let mut extra = decode_manifest(&bytes)?;
-    if extra.version != 1
-        || extra.pages.len() > 256
-        || extra.frames.len() > 25000
-        || manifest.pages.len() + extra.pages.len() > u16::MAX as usize
-    {
-        return Err(JsValue::from_str("Invalid building pack"));
-    }
-    let offset = manifest.pages.len() as u16;
-    for page in &mut extra.pages {
-        for name in [&mut page.color, &mut page.player, &mut page.shadow] {
-            if name.contains('/') || name.contains('\\') {
-                return Err(JsValue::from_str("Invalid building page"));
-            }
-            *name = format!("buildings/{name}");
-        }
-    }
-    for frame in &mut extra.frames {
-        if usize::from(frame.page) >= extra.pages.len() {
-            return Err(JsValue::from_str("Invalid building page index"));
-        }
-        frame.page += offset;
-    }
-    manifest.pages.extend(extra.pages);
-    manifest.frames.extend(extra.frames);
-    Ok(())
-}
-
-#[inline(never)]
 pub(super) fn select(
     manifest: &Manifest,
     selected: &mut Vec<usize>,
     domains: &mut Vec<AtlasDomain>,
-) -> Result<[Option<std::ops::Range<usize>>; 26], JsValue> {
-    // Slots match building_ui::sprite_slot. Slot 22 is the builder's five rows.
-    let mut ranges = std::array::from_fn(|_| None);
-    let stems = [
-        "",
-        "b_dark_house_age1",
-        "b_west_lumber_camp_age2",
-        "b_west_mining_camp_age2",
-        "b_dark_mill_age1",
-        "",
-        "b_dark_barracks_age1",
-        "b_dark_wall_palisade",
-        "b_dark_outpost_age1",
-    ];
-    for slot in 0..26 {
-        let (source, count, step) = match slot {
-            0 | 4 => continue, // Multipart trial Town Center and Mill.
-            1..=8 => {
-                if slot == 5 {
-                    ("de/g_fm1.dds".to_string(), 1, 1)
-                } else {
-                    (
-                        format!("de/{}_x1.sld", stems[slot]),
-                        if slot == 1 {
-                            3
-                        } else if slot == 7 {
-                            5
-                        } else {
-                            1
-                        },
-                        1,
-                    )
+) -> Result<(), JsValue> {
+    if manifest.buildings.len() > 32 {
+        return Err(error("too many building recipes"));
+    }
+    for (slot, building) in manifest.buildings.iter().enumerate() {
+        if manifest.buildings[..slot]
+            .iter()
+            .any(|b| b.unit_id == building.unit_id)
+            || building.parts.len() > 256
+            || building.construction.len() > 256
+            || building
+                .footprint
+                .iter()
+                .any(|v| !v.is_finite() || *v <= 0.0 || *v > 128.0)
+        {
+            return Err(error("invalid building recipe"));
+        }
+        if material(building) == Some(17) {
+            let slp = building
+                .foundation_slp
+                .ok_or_else(|| error("missing foundation SLP"))?;
+            let [columns, rows] = building.foundation_size;
+            let count = u32::from(columns) * u32::from(rows);
+            if columns == 0 || rows == 0 || count as usize > MAX_SELECTED_FRAMES {
+                return Err(error("invalid foundation topology"));
+            }
+            let source = format!("terrain.drs:[32, 112, 108, 115]:{slp}");
+            let frames = source_frames(manifest, &source, count)
+                .ok_or_else(|| error("missing DAT foundation terrain"))?;
+            for index in frames {
+                if !selected.contains(&index) {
+                    if selected.len() == MAX_SELECTED_FRAMES {
+                        return Err(error("too many foundation frames"));
+                    }
+                    selected.push(index);
+                    domains.push(AtlasDomain::Terrain);
                 }
             }
-            9..=12 => (
-                format!("de/b_misc_foundation_{}x{}_x1.sld", slot - 8, slot - 8),
-                3,
-                1,
-            ),
-            13..=21 => {
-                let kind = slot - 13;
-                let stem = if kind == 0 {
-                    "b_dark_town_center_age1"
-                } else if kind == 5 || kind == 7 {
-                    "b_misc"
-                } else {
-                    stems[kind]
-                };
-                (
-                    if stem == "b_misc" {
-                        "de/b_misc_rubble_x1.sld".to_string()
-                    } else {
-                        format!("de/{stem}_rubble_x1.sld")
-                    },
-                    1,
-                    1,
-                )
-            }
-            22 => ("graphics.drs:[32, 112, 108, 115]:1496".to_string(), 75, 1),
-            23 => ("de/b_dark_dock_age1_x1.sld".to_string(), 1, 1),
-            24 => ("de/b_misc_foundation_dock_x1.sld".to_string(), 3, 1),
-            _ => ("de/b_misc_rubble_x1.sld".to_string(), 1, 1),
-        };
-        let (source, count, step) = if !source_present(manifest, &source) {
-            let trial = match slot {
-                1 => Some((2223, 3, 1)),
-                6 => Some((2683, 1, 1)),
-                7 => Some((4534, 45, 9)),
-                8 => Some((4330, 1, 1)),
-                23 => Some((376, 1, 1)),
-                24 => Some((4397, 3, 1)),
-                9..=12 => Some((236 + slot as u32 - 9, 3, 1)),
-                _ => None,
-            };
-            trial.map_or((source.clone(), count, step), |(id, count, step)| {
-                (
-                    format!("graphics.drs:[32, 112, 108, 115]:{id}"),
-                    count,
-                    step,
-                )
-            })
-        } else {
-            (source, count, step)
-        };
-        let Some(frames) = source_frames(manifest, &source, count) else {
-            if source_present(manifest, &source) {
-                return Err(JsValue::from_str(&format!(
-                    "Corrupt building art ({source})"
-                )));
-            }
-            continue;
-        };
-        let start = selected.len();
-        for index in frames.into_iter().step_by(step) {
-            selected.push(index);
-            domains.push(if slot == 5 {
-                AtlasDomain::Terrain
-            } else {
-                AtlasDomain::Objects
-            });
         }
-        ranges[slot] = Some(start..selected.len());
-    }
-    // The dat table's Mill is its static body plus a separate 43-frame sail
-    // sequence. Keeping those native parts avoids repeating the body texture.
-    let body = "graphics.drs:[32, 112, 108, 115]:3483";
-    let sails = "graphics.drs:[32, 112, 108, 115]:3482";
-    if source_present(manifest, body) || source_present(manifest, sails) {
-        let mut frames = source_frames(manifest, body, 1).ok_or("Invalid Mill body")?;
-        frames.extend(source_frames(manifest, sails, 43).ok_or("Invalid Mill sails")?);
-        let start = selected.len();
-        for frame in frames {
-            selected.push(frame);
-            domains.push(AtlasDomain::Objects);
-        }
-        ranges[4] = Some(start..selected.len());
-    }
-    Ok(ranges)
-}
-
-/// A farm needs a local patch of the ploughed sheet, not its entire 1024² area.
-/// Validate the original rectangle before selecting the 256² runtime window.
-#[inline(never)]
-pub(super) fn crop_farm(
-    manifest: &mut Manifest,
-    selected: &[usize],
-    ranges: &[Option<std::ops::Range<usize>>; 26],
-) -> Result<(), JsValue> {
-    if let Some(range) = &ranges[5] {
-        for semantic in range.clone() {
-            let frame = &mut manifest.frames[selected[semantic]];
-            let page = manifest
-                .pages
-                .get(usize::from(frame.page))
-                .ok_or("Invalid farm page")?;
-            if u32::from(frame.x) + u32::from(frame.width) > u32::from(page.width)
-                || u32::from(frame.y) + u32::from(frame.height) > u32::from(page.height)
+        for part in building.parts.iter().chain(&building.construction) {
+            if part.frames == 0
+                || part.angles == 0
+                || u32::from(part.frames) * u32::from(part.angles) > 256
+                || !part.frame_rate.is_finite()
+                || part.frame_rate < 0.0
             {
-                return Err(JsValue::from_str("Invalid farm source bounds"));
+                return Err(error("invalid building animation"));
             }
-            frame.width = frame.width.min(256);
-            frame.height = frame.height.min(256);
+            if part
+                .misplacement
+                .iter()
+                .any(|v| !v.is_finite() || v.abs() > 128.0)
+                || part.offset.iter().any(|v| v.unsigned_abs() > 32768)
+            {
+                return Err(error("invalid building part offset"));
+            }
+            let Some(record) = part.record else {
+                continue;
+            };
+            let source = &manifest.frames[record].source;
+            let count = u32::from(part.frames) * u32::from(part.angles);
+            let Some(frames) = source_frames(manifest, source, count) else {
+                return Err(error(format!("corrupt building art ({source})")));
+            };
+            // A standing palisade displays one damage frame per native angle.
+            // Its connectivity selects the angle; these frames do not animate.
+            let step = if building.unit_id == 72 {
+                usize::from(part.frames)
+            } else {
+                1
+            };
+            for index in frames.into_iter().step_by(step) {
+                if !selected.contains(&index) {
+                    if selected.len() == MAX_SELECTED_FRAMES {
+                        return Err(error("too many selected building frames"));
+                    }
+                    selected.push(index);
+                    domains.push(AtlasDomain::Objects);
+                }
+            }
         }
     }
     Ok(())
+}
+
+fn parts(
+    parts: &[BuildingPart],
+    manifest: &Manifest,
+    selected: &[usize],
+    records: &[GameFrame],
+) -> Vec<aoe_rendering::BuildingPart> {
+    let mut out = Vec::new();
+    if parts.iter().any(|p| p.primary && p.record.is_none()) {
+        return out;
+    }
+    for part in parts {
+        let Some(record) = part.record else {
+            continue;
+        };
+        let source = &manifest.frames[record].source;
+        let Some(slot) = selected.iter().position(|&i| i == record) else {
+            // An absent trial resource is explicit: no partial assemblies and
+            // no unrelated sprite substituted for the missing roof or camp.
+            return Vec::new();
+        };
+        // Genie uses NE/SE tile axes; screen Y points down. The client's
+        // world axes differ, so project these native coordinates directly.
+        let [ne, se] = part.misplacement;
+        out.push(aoe_rendering::BuildingPart {
+            frame: records[slot],
+            angles: part.angles,
+            animation: if u32::from(part.frames) * u32::from(part.angles) > 1 {
+                (0..u32::from(part.frames) * u32::from(part.angles))
+                    .filter_map(|number| {
+                        selected
+                            .iter()
+                            .position(|&i| {
+                                manifest.frames[i].source == *source
+                                    && manifest.frames[i].frame == number
+                            })
+                            .map(|slot| records[slot])
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
+            frame_rate: part.frame_rate,
+            offset: [
+                part.offset[0] as f32 + (ne + se) * 48.0,
+                part.offset[1] as f32 + (se - ne) * 24.0,
+            ],
+            depth: se - ne,
+        });
+    }
+    out
+}
+
+fn material(building: &BuildingComposition) -> Option<u8> {
+    let slp = building.foundation_slp?;
+    for (slot, role) in TERRAIN_ROLES.iter().enumerate() {
+        if REQUIRED_RENDER_SOURCES
+            .iter()
+            .chain(OPTIONAL_TERRAIN_SOURCES.iter())
+            .any(|s| s.role == *role && s.id as i32 == slp)
+        {
+            return Some([0, 1, 2, 3, 4, 5, 6, 13, 14, 15, 16, 7][slot]);
+        }
+    }
+    Some(17)
+}
+
+pub(super) fn foundation(
+    manifest: &Manifest,
+    selected: &[usize],
+    records: &[GameFrame],
+) -> Result<(Vec<GameFrame>, Option<TerrainTopology>), JsValue> {
+    let mut result = (Vec::new(), None);
+    let mut slp = None;
+    for building in manifest
+        .buildings
+        .iter()
+        .filter(|b| material(b) == Some(17))
+    {
+        let id = building.foundation_slp;
+        if slp.is_some() && slp != id {
+            return Err(error("multiple additional foundation sheets"));
+        }
+        if slp == id {
+            continue;
+        }
+        slp = id;
+        let source = format!("terrain.drs:[32, 112, 108, 115]:{}", id.unwrap_or_default());
+        let [columns, rows] = building.foundation_size;
+        for number in 0..u32::from(columns) * u32::from(rows) {
+            if let Some(slot) = selected.iter().position(|&i| {
+                manifest.frames[i].source == source && manifest.frames[i].frame == number
+            }) {
+                result.0.push(records[slot]);
+            }
+        }
+        result.1 = Some(TerrainTopology::PeriodicXMajorReversedY { columns, rows });
+    }
+    Ok(result)
+}
+
+pub(super) fn resolve(
+    manifest: &Manifest,
+    selected: &[usize],
+    records: &[GameFrame],
+) -> Vec<aoe_rendering::BuildingArt> {
+    manifest
+        .buildings
+        .iter()
+        .map(|b| aoe_rendering::BuildingArt {
+            unit_id: b.unit_id,
+            footprint: b.footprint,
+            foundation_material: material(b),
+            parts: parts(&b.parts, manifest, selected, records),
+            construction: parts(&b.construction, manifest, selected, records),
+        })
+        .collect()
 }

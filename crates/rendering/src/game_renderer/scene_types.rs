@@ -101,6 +101,15 @@ pub enum SceneUnitKind {
     Dock,
     FoundationDock,
     RubbleDock,
+    ConstructionTownCenter,
+    ConstructionHouse,
+    ConstructionLumberCamp,
+    ConstructionMiningCamp,
+    ConstructionMill,
+    ConstructionFarm,
+    ConstructionBarracks,
+    ConstructionPalisadeWall,
+    ConstructionOutpost,
 }
 
 impl SceneUnitKind {
@@ -203,34 +212,47 @@ impl SceneUnitKind {
         ][usize::from(slot.min(21))]
     }
     pub(super) fn building_slot(self) -> Option<u8> {
-        match self {
-            Self::BuildingTownCenter => Some(0),
-            Self::House => Some(1),
-            Self::LumberCamp => Some(2),
-            Self::MiningCamp => Some(3),
-            Self::Mill => Some(4),
-            Self::Farm => Some(5),
-            Self::Barracks => Some(6),
-            Self::PalisadeWall => Some(7),
-            Self::Outpost => Some(8),
-            Self::Foundation1x1 => Some(9),
-            Self::Foundation2x2 => Some(10),
-            Self::Foundation3x3 => Some(11),
-            Self::Foundation4x4 => Some(12),
-            Self::RubbleTownCenter => Some(13),
-            Self::RubbleHouse => Some(14),
-            Self::RubbleLumberCamp => Some(15),
-            Self::RubbleMiningCamp => Some(16),
-            Self::RubbleMill => Some(17),
-            Self::RubbleFarm => Some(18),
-            Self::RubbleBarracks => Some(19),
-            Self::RubblePalisadeWall => Some(20),
-            Self::RubbleOutpost => Some(21),
-            Self::Dock => Some(23),
-            Self::FoundationDock => Some(24),
-            Self::RubbleDock => Some(25),
-            _ => None,
+        if self.is_foundation() {
+            return Some(match self {
+                Self::ConstructionTownCenter => 12,
+                Self::ConstructionFarm | Self::ConstructionBarracks => 11,
+                Self::ConstructionPalisadeWall | Self::ConstructionOutpost => 9,
+                _ => 10,
+            });
         }
+        (self as u8)
+            .checked_sub(Self::BuildingTownCenter as u8)
+            .filter(|s| *s <= 21)
+    }
+    pub fn foundation(id: i16) -> Self {
+        use SceneUnitKind::*;
+        match id {
+            109 => ConstructionTownCenter,
+            70 => ConstructionHouse,
+            562 => ConstructionLumberCamp,
+            584 => ConstructionMiningCamp,
+            68 => ConstructionMill,
+            50 => ConstructionFarm,
+            12 => ConstructionBarracks,
+            72 => ConstructionPalisadeWall,
+            _ => ConstructionOutpost,
+        }
+    }
+    pub(super) fn is_foundation(self) -> bool {
+        self as u8 >= Self::ConstructionTownCenter as u8
+    }
+    pub fn building_id(self) -> Option<i32> {
+        if self == Self::TownCenter {
+            return Some(109);
+        }
+        let slot = if self.is_foundation() {
+            self as u8 - Self::ConstructionTownCenter as u8
+        } else {
+            self.building_slot()?
+        };
+        [109, 70, 562, 584, 68, 50, 12, 72, 598]
+            .get(usize::from(slot))
+            .copied()
     }
     pub(super) fn building_side(self) -> Option<f64> {
         if self == Self::TownCenter {

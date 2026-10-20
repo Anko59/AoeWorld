@@ -406,6 +406,7 @@ void main() {
                 previous = threshold;
                 if (weight <= 0.0) continue;
                 material = material == 5u ? 15u : (material == 6u ? 16u : material);
+                material = material == 11u ? 17u : material;
                 header = sheet(material);
             } else { weight = vWeights.z; header = vRect2; material = (vPages.z >> 8u) & 255u; }
         } else {

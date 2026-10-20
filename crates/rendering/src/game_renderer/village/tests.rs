@@ -57,7 +57,7 @@ fn fishing_poses_use_native_facing_rows() {
     assert_ne!(frame_at(1), frame_at(13));
 }
 
-fn art() -> GameArt {
+pub(super) fn art() -> GameArt {
     let frame = |number| GameFrame {
         atlas: crate::AtlasAddress {
             page: 2,
@@ -76,7 +76,23 @@ fn art() -> GameArt {
                 .collect()
         }),
         fishing: Default::default(),
-        town_center: std::array::from_fn(|group| vec![frame(500 + group)]),
+        compositions: vec![crate::BuildingArt {
+            unit_id: 109,
+            footprint: [4.0; 2],
+            foundation_material: Some(2),
+            parts: (0..8)
+                .map(|group| crate::BuildingPart {
+                    frame: frame(500 + group),
+                    animation: Vec::new(),
+                    angles: 1,
+                    frame_rate: 0.0,
+                    offset: [group as f32 * 3.0, group as f32 * -5.0],
+                    depth: 0.0,
+                })
+                .collect(),
+            construction: Vec::new(),
+        }],
+        foundation: Default::default(),
         walking: vec![frame(900); 50],
         standing: vec![frame(901); 5],
         grass: Vec::new(),
@@ -89,7 +105,7 @@ fn art() -> GameArt {
         scenery: Default::default(),
     }
 }
-fn camera() -> SceneCamera {
+pub(super) fn camera() -> SceneCamera {
     SceneCamera {
         center: [0.5; 2],
         zoom: 1.0,
@@ -97,7 +113,7 @@ fn camera() -> SceneCamera {
         focus_elevation_meters: 0.0,
     }
 }
-fn unit(kind: SceneUnitKind) -> SceneUnit {
+pub(super) fn unit(kind: SceneUnitKind) -> SceneUnit {
     SceneUnit {
         kind,
         id: EntityId(2),
@@ -181,19 +197,19 @@ fn town_center_composes_eight_native_parts_or_one_fallback_marker() {
     let u = unit(SceneUnitKind::TownCenter);
     let frames = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 0);
     assert_eq!(frames.len(), 8);
-    assert_eq!(frames[0].1.atlas.uv[0], 507.0 / 4096.0);
+    assert_eq!(frames[0].1.atlas.uv[0], 500.0 / 4096.0);
     let main = frames
         .iter()
         .find(|f| f.1.atlas.uv[0] == 500.0 / 4096.0)
         .unwrap();
-    for (source, offset) in [(501.0, 48.0), (504.0, 24.0)] {
+    for (source, offset) in [(501.0, -5.0), (504.0, -20.0)] {
         let roof = frames
             .iter()
             .find(|f| f.1.atlas.uv[0] == source / 4096.0)
             .unwrap();
         assert!((main.1.anchor[1] - roof.1.anchor[1] - offset * 4.0 / 3.0).abs() < 0.001);
     }
-    art.town_center[1].clear();
+    art.compositions[0].parts.clear();
     let frames = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 0);
     assert_eq!(frames.len(), 1);
 }
@@ -201,8 +217,8 @@ fn town_center_composes_eight_native_parts_or_one_fallback_marker() {
 #[wasm_bindgen_test]
 fn native_town_center_front_overhang_clears_its_flat_footprint() {
     let mut art = art();
-    art.town_center[0][0].size = [195.0, 200.0];
-    art.town_center[0][0].anchor = [103.0, 136.0];
+    art.compositions[0].parts[0].frame.size = [195.0, 200.0];
+    art.compositions[0].parts[0].frame.anchor = [103.0, 136.0];
     let unit = unit(SceneUnitKind::TownCenter);
     let frames = super::super::world_sprite_frames(&art, &[], &[], &[unit], camera(), 0);
     let (_, frame, depth, _) = frames
@@ -219,7 +235,7 @@ fn native_town_center_front_overhang_clears_its_flat_footprint() {
 }
 
 #[wasm_bindgen_test]
-fn town_center_roofs_use_individual_attachments_and_sit_behind_the_main_structure() {
+fn town_center_preserves_the_pack_order_for_overlapping_native_parts() {
     let art = art();
     let frames = super::super::world_sprite_frames(
         &art,
@@ -229,21 +245,10 @@ fn town_center_roofs_use_individual_attachments_and_sit_behind_the_main_structur
         camera(),
         0,
     );
-    let index = |source| {
-        frames
-            .iter()
-            .position(|f| f.1.atlas.uv[0] == source as f32 / 4096.0)
-            .unwrap()
-    };
-    let main = index(500);
-    for (source, offset) in [(501, 48.0), (504, 24.0), (502, 24.0), (506, -24.0)] {
-        let roof = index(source);
+    for (index, part) in art.compositions[0].parts.iter().enumerate() {
+        assert_eq!(frames[index].1.atlas, part.frame.atlas);
         assert!(
-            !matches!(source, 501 | 504) || roof < main,
-            "main balcony must occlude its roof attachments"
-        );
-        assert!(
-            (frames[main].1.anchor[1] - frames[roof].1.anchor[1] - offset * 4.0 / 3.0).abs()
+            (frames[index].1.anchor[1] - (part.frame.anchor[1] - part.offset[1]) * 4.0 / 3.0).abs()
                 < 0.001
         );
     }

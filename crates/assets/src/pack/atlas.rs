@@ -181,6 +181,7 @@ pub(crate) fn write_pack(
     output_root: &Path,
     hash: String,
     sprites: &[SpriteRef],
+    buildings: Vec<crate::dat::BuildingComposition>,
     mut render: impl FnMut(usize, usize) -> Result<Planes, Error>,
 ) -> Result<PathBuf, Error> {
     fs::create_dir_all(output_root)?;
@@ -228,11 +229,13 @@ pub(crate) fn write_pack(
         }
         pages.push(save_page(&temporary, pages.len(), page)?);
         let manifest = Manifest {
+            building_data: super::recipes::encode(&buildings, &frames)?,
             version: 1,
             converter: env!("CARGO_PKG_VERSION").to_owned(),
             input_hash: hash,
             pages,
             frames,
+            buildings,
         };
         fs::write(
             temporary.join("manifest.json"),

@@ -260,6 +260,8 @@ export async function gameAssets(
     version: 1,
     converter: "test fixture",
     input_hash: "fixture",
+    buildings: [],
+    building_data: "00",
     frames,
     pages: [
       {

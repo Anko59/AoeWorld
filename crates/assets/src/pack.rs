@@ -33,6 +33,8 @@ pub struct Manifest {
     pub input_hash: String,
     pub pages: Vec<AtlasPage>,
     pub frames: Vec<FrameRecord>,
+    pub buildings: Vec<crate::dat::BuildingComposition>,
+    pub building_data: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -148,6 +150,7 @@ pub fn inspect(root: &Path) -> Result<Inventory, Error> {
 
 fn collect(inputs: &[Input]) -> Result<(Palette, Vec<SpriteSource>, String), Error> {
     let mut hasher = blake3::Hasher::new();
+    hasher.update(b"AoK DAT building graphics, angles, indexed recipes and foundation topology\0");
     let mut palette_data = None;
     let mut sprites = Vec::new();
     let mut ids = BTreeSet::new();
@@ -247,7 +250,30 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
             frames: sprite.frames.len(),
         })
         .collect();
-    write_pack(&output_root, hash, &refs, |sprite, frame| {
+    let mut buildings = match inputs
+        .iter()
+        .find(|f| f.name.eq_ignore_ascii_case("empires2.dat"))
+    {
+        Some(input) => {
+            let dat = crate::dat::decode(&input.bytes)?;
+            if let Some(reason) = &dat.report.stopped {
+                return Err(invalid("composition", 0, reason));
+            }
+            crate::dat::table::DARK_AGE
+                .iter()
+                .filter(|(_, id)| *id != 618)
+                .filter(|(_, id)| dat.unit(*id).is_some_and(|u| u.building.is_some()))
+                .map(|(_, id)| dat.building_composition(*id))
+                .collect::<Result<Vec<_>, _>>()?
+        }
+        None => Vec::new(),
+    };
+    for building in &mut buildings {
+        for part in building.parts.iter_mut().chain(&mut building.construction) {
+            part.available = sprites.iter().any(|s| s.id == part.source);
+        }
+    }
+    write_pack(&output_root, hash, &refs, buildings, |sprite, frame| {
         Planes::from_slp(&sprites[sprite].frames[frame], &palette)
     })
 }
@@ -255,6 +281,8 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
 pub(crate) mod atlas;
 mod player;
 pub use player::blend_player;
+pub mod composite;
+pub mod recipes;
 mod verify;
 pub use verify::{parse_manifest, verify};
 
