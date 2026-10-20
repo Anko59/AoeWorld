@@ -38,7 +38,7 @@ jobs:
         env:
           AOE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: make ci-select
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: ci-selection
           path: reports/gates/selection.json
@@ -73,7 +73,7 @@ jobs:
       - uses: ./.github/actions/docker-setup
       - run: make coverage
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: { name: native-coverage-report, path: reports/coverage/, retention-days: 7, if-no-files-found: ignore }
 
   browser:
@@ -88,7 +88,7 @@ jobs:
       - run: make browser-check
       - run: make test-wasm
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: browser-diagnostics
           path: |
@@ -97,7 +97,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: { name: wasm-browser-report, path: reports/wasm/, retention-days: 7, if-no-files-found: ignore }
 
   e2e:
@@ -123,7 +123,7 @@ jobs:
           # CPU-bound, and three servers per shard timed out heavy specs (#457).
           AOE_E2E_WORKERS: '1'
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: e2e-${{ matrix.shard }}-diagnostics
           path: |
@@ -145,7 +145,7 @@ jobs:
       - run: make perf-ci
       - run: make perf-pressure
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: { name: performance-report, path: reports/perf/, retention-days: 30, if-no-files-found: ignore }
 
   perf-comment:
@@ -178,7 +178,7 @@ jobs:
       - uses: ./.github/actions/docker-setup
       - run: make fuzz-smoke
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: { name: parser-fuzz-smoke, path: "reports/fuzz/\nfuzz/artifacts/", retention-days: 7, if-no-files-found: ignore }
 
   # Post-merge tier: runs on pushes to dev/main and nightly; PRs and feature-branch dispatches select like PRs and skip it.
@@ -344,7 +344,7 @@ jobs:
           --notes "Immutable AoeWorld Harness Lab build from verified dev source."
           --prerelease
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: dev-release-diagnostics
           path: reports/release/
@@ -431,7 +431,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: make release-smoke-published
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-candidate-diagnostics
           path: reports/release/
@@ -491,7 +491,7 @@ jobs:
           gh release edit "build-${{ steps.source.outputs.source_sha }}"
           --prerelease=false --latest
       - if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: main-promotion-diagnostics
           path: reports/release/
