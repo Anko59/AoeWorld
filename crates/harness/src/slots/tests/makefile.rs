@@ -29,9 +29,31 @@ pub(super) fn make_files(root: &Path) -> Vec<(String, String)> {
         .into_iter()
         .map(|name| {
             let text = fs::read_to_string(root.join(&name)).expect(&name);
-            (name, text)
+            (name, joined_continuations(&text))
         })
         .collect()
+}
+
+/// The text with every `\` continuation joined into one line, as make reads it, so a list
+/// written one item per line is audited like the single line it means.
+pub(super) fn joined_continuations(text: &str) -> String {
+    let mut out = String::new();
+    let mut continuing = false;
+    for line in text.lines() {
+        let body = if continuing { line.trim_start() } else { line };
+        continuing = body.ends_with('\\');
+        out.push_str(body.strip_suffix('\\').map_or(body, str::trim_end));
+        out.push(if continuing { ' ' } else { '\n' });
+    }
+    out
+}
+
+#[test]
+fn a_list_continued_over_lines_reads_as_one_definition() {
+    let text = "SLOT_ENV := \\\n  -e A \\\n  -e B\nother:\n\t@echo hi\n";
+    let joined = joined_continuations(text);
+    assert_eq!(joined, "SLOT_ENV := -e A -e B\nother:\n\t@echo hi\n");
+    assert_eq!(assigned(joined.lines().next().unwrap()), Some("SLOT_ENV"));
 }
 
 /// The variable a definition line assigns (`NAME :=`, `NAME =`, `NAME ?=`, `override NAME =`).
@@ -386,6 +408,17 @@ fn help_lines_close_their_single_quoted_echo() {
                 number + 1
             );
         }
+    }
+}
+
+#[test]
+fn red_checkout_keeps_the_selected_rehearsal_repository_and_revisions() {
+    let files = make_files(&repository());
+    let definitions = definitions(&files);
+    let wrapper = definitions.get("SLOT_RUN").unwrap();
+    let (provided, _) = environment_read(&[wrapper.as_str()], &definitions);
+    for name in ["HARNESS_RED_ROOT", "HARNESS_RED_BASE", "HARNESS_RED_HEAD"] {
+        assert!(provided.contains(name), "red-checkout drops {name}");
     }
 }
 

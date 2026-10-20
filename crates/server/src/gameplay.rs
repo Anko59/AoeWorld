@@ -65,13 +65,13 @@ struct Subscription {
     region: TileRect,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct PendingCommand {
     sequence: u64,
     action: PendingAction,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum PendingAction {
     Move {
         entity_id: EntityId,
@@ -91,6 +91,27 @@ enum PendingAction {
     Train {
         building_id: EntityId,
         kind: aoe_protocol::UnitKind,
+    },
+    Build {
+        builder_ids: Vec<EntityId>,
+        kind: aoe_protocol::BuildingKind,
+        origin: aoe_core::TileCoord,
+    },
+    BuildWall {
+        builder_ids: Vec<EntityId>,
+        from: aoe_core::TileCoord,
+        to: aoe_core::TileCoord,
+    },
+    Construct {
+        builder_ids: Vec<EntityId>,
+        building_id: EntityId,
+    },
+    CancelConstruction {
+        building_id: EntityId,
+    },
+    Farm {
+        entity_id: EntityId,
+        farm_id: EntityId,
     },
 }
 

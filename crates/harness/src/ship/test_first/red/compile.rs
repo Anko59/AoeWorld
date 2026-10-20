@@ -1,5 +1,5 @@
 //! A changed Rust test that does not compile because it calls an API the PR adds is red.
-use super::{git, is_test};
+use super::{git, is_test, javascript};
 use crate::ship::duel::focus::CheckReport;
 use std::{collections::BTreeSet, path::Path};
 
@@ -18,6 +18,7 @@ pub(super) fn missing(
     root: &Path,
     base: &str,
     head: &str,
+    red_tree: &Path,
     paths: &[String],
     report: &CheckReport,
 ) -> git::Result<Vec<String>> {
@@ -27,7 +28,7 @@ pub(super) fn missing(
                 .into(),
         );
     }
-    let added = added_identifiers(root, base, head)?;
+    let added = added_identifiers(root, base, head, false)?;
     let refuse = |code: Option<&str>, path: &str| {
         format!(
             "red: build error {} at {path} is not a changed test calling an API the PR adds",
@@ -37,12 +38,17 @@ pub(super) fn missing(
     if let Some(outside) = report
         .compile_errors
         .iter()
-        .find(|e| !paths.contains(&e.path))
+        .find(|e| !javascript::is_js(e) && !paths.contains(&e.path))
     {
         return Err(refuse(outside.code.as_deref(), &outside.path));
     }
+    let js_missing = javascript::missing(root, base, head, red_tree, paths, report)?;
     let mut missing = BTreeSet::new();
-    for error in &report.compile_errors {
+    for error in report
+        .compile_errors
+        .iter()
+        .filter(|e| !javascript::is_js(e))
+    {
         if error.code.as_deref().is_some_and(|c| MISSING.contains(&c)) {
             missing.extend(
                 error
@@ -53,6 +59,13 @@ pub(super) fn missing(
             );
         }
     }
+    // A JavaScript miss cannot justify unrelated Rust compiler errors.
+    if missing.is_empty()
+        && let Some(first) = report.compile_errors.iter().find(|e| !javascript::is_js(e))
+    {
+        return Err(refuse(first.code.as_deref(), &first.path));
+    }
+    missing.extend(js_missing);
     if missing.is_empty() {
         let first = &report.compile_errors[0];
         return Err(refuse(first.code.as_deref(), &first.path));
@@ -68,7 +81,12 @@ fn last_segment(item: &str) -> &str {
 }
 
 /// Identifiers on lines the PR adds to files that are not tests.
-fn added_identifiers(root: &Path, base: &str, head: &str) -> git::Result<BTreeSet<String>> {
+pub(super) fn added_identifiers(
+    root: &Path,
+    base: &str,
+    head: &str,
+    dollar_names: bool,
+) -> git::Result<BTreeSet<String>> {
     let patch = git::git_raw(root, &["diff", "-U0", "--no-renames", base, head])?;
     let mut identifiers = BTreeSet::new();
     let mut product = false;
@@ -80,7 +98,9 @@ fn added_identifiers(root: &Path, base: &str, head: &str) -> git::Result<BTreeSe
         } else if product && let Some(added) = line.strip_prefix('+') {
             identifiers.extend(
                 added
-                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .split(|c: char| {
+                        !(c.is_alphanumeric() || c == '_' || (dollar_names && c == '$'))
+                    })
                     .filter(|word| !word.is_empty())
                     .map(str::to_owned),
             );
@@ -94,11 +114,19 @@ fn added_identifiers(root: &Path, base: &str, head: &str) -> git::Result<BTreeSe
 pub(super) fn ran(
     green_tree: &Path,
     base_tree: &Path,
+    paths: &[String],
     red: &CheckReport,
     green: &CheckReport,
 ) -> git::Result<Vec<String>> {
-    let files: BTreeSet<&str> = red.compile_errors.iter().map(|e| e.path.as_str()).collect();
-    let mut ran = BTreeSet::new();
+    let files: BTreeSet<&str> = red
+        .compile_errors
+        .iter()
+        .filter(|e| !javascript::is_js(e))
+        .map(|e| e.path.as_str())
+        .collect();
+    let mut ran: BTreeSet<_> = javascript::ran(green_tree, base_tree, paths, red, green)?
+        .into_iter()
+        .collect();
     for file in files {
         let mut found = false;
         for name in green.tests.iter().filter(|n| !green.failed.contains(n)) {

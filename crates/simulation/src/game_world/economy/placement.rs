@@ -1,8 +1,7 @@
 use super::{
-    BuildingKind, EconomyError, GameBuilding, MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS,
-    PlayerEconomy, Stockpile, VILLAGE_RULES,
+    BuildingKind, ConstructionState, EconomyError, GameBuilding, MAX_ECONOMY_BUILDINGS,
+    MAX_ECONOMY_PLAYERS, MAX_POPULATION, PlayerEconomy, Stockpile, VILLAGE_RULES,
 };
-use crate::game_world::combat::building_combat;
 use crate::{GameWorld, GameWorldError, Terrain, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
 use std::collections::{BTreeSet, VecDeque};
@@ -25,6 +24,16 @@ impl GameWorld {
             || self
                 .units()
                 .any(|unit| footprint.contains(unit.position.tile_floor()))
+        {
+            return Err(EconomyError::InvalidFootprint);
+        }
+        // Farms are walked on, so they are not in `blocked_tiles`. This scan
+        // runs per placement command, never per tick.
+        if self
+            .economy
+            .buildings
+            .values()
+            .any(|building| rects_overlap(building.footprint, footprint))
         {
             return Err(EconomyError::InvalidFootprint);
         }
@@ -69,18 +78,35 @@ impl GameWorld {
             TileCoord::new(origin.x.saturating_add(side), origin.y.saturating_add(side)),
         );
         self.validate_footprint(footprint)?;
+        self.insert_building(player, BuildingKind::TownCenter, footprint, true)
+    }
+
+    /// Create a building (or foundation) after its footprint was validated.
+    /// Nothing is charged here; the caller owns the cost.
+    pub(super) fn insert_building(
+        &mut self,
+        player: PlayerId,
+        kind: BuildingKind,
+        footprint: TileRect,
+        complete: bool,
+    ) -> Result<EntityId, EconomyError> {
         if self.next_entity_id > u64::from(u32::MAX) {
             return Err(GameWorldError::EntityIdExhausted.into());
         }
-        if let Terrain::Map { overlay, .. } = &mut self.terrain {
+        let rules = kind.rules();
+        if rules.blocks
+            && let Terrain::Map { overlay, .. } = &mut self.terrain
+        {
             overlay
                 .add_footprint(footprint)
                 .map_err(|_| EconomyError::Capacity)?;
         }
         let id = self.allocate_entity_id()?;
-        for y in footprint.min.y..footprint.max.y {
-            for x in footprint.min.x..footprint.max.x {
-                self.economy.blocked_tiles.insert(TileCoord::new(x, y));
+        if rules.blocks {
+            for y in footprint.min.y..footprint.max.y {
+                for x in footprint.min.x..footprint.max.x {
+                    self.economy.blocked_tiles.insert(TileCoord::new(x, y));
+                }
             }
         }
         let population_used = self
@@ -88,30 +114,76 @@ impl GameWorld {
             .filter(|unit| unit.player == player)
             .count()
             .min(u16::MAX as usize) as u16;
-        let state = self.economy.players.entry(player).or_insert(PlayerEconomy {
+        self.economy.players.entry(player).or_insert(PlayerEconomy {
             player,
             stockpile: Stockpile::default(),
             population_used,
             population_cap: 0,
         });
-        state.population_cap = state
-            .population_cap
-            .saturating_add(VILLAGE_RULES.population_support);
+        let work_total = u64::from(rules.build_seconds)
+            * u64::from(self.config.tick_hz)
+            * super::buildings::BUILD_WORK_PER_BASE_TICK;
         self.economy.buildings.insert(
             id,
             GameBuilding {
                 id,
                 player,
-                kind: BuildingKind::TownCenter,
+                kind,
                 footprint,
                 training_queue: VecDeque::new(),
-                hp: building_combat(BuildingKind::TownCenter).hp,
-                max_hp: building_combat(BuildingKind::TownCenter).hp,
                 last_hit: None,
+                state: if complete {
+                    ConstructionState::Complete
+                } else {
+                    ConstructionState::UnderConstruction
+                },
+                work_done: if complete { work_total } else { 0 },
+                work_total,
+                hp: if complete { rules.max_hp } else { 1 },
+                max_hp: rules.max_hp,
+                los: rules.los,
+                food_remaining: (kind == BuildingKind::Farm).then_some(rules.food),
             },
         );
-        self.resource_collision_changed();
+        self.refresh_population_cap(player);
+        if rules.blocks {
+            self.resource_collision_changed();
+        }
         Ok(id)
+    }
+
+    /// Housing: the supporting completed buildings, capped at 200.
+    pub(super) fn refresh_population_cap(&mut self, player: PlayerId) {
+        let cap = self
+            .economy
+            .buildings
+            .values()
+            .filter(|building| building.player == player && building.is_complete())
+            .map(|building| u32::from(building.kind.rules().population_support))
+            .sum::<u32>()
+            .min(u32::from(MAX_POPULATION)) as u16;
+        if let Some(state) = self.economy.players.get_mut(&player) {
+            state.population_cap = cap;
+        }
+    }
+
+    /// Delete a building and its collision (cancelled foundation, spent farm).
+    pub(crate) fn remove_building(&mut self, id: EntityId) {
+        let Some(building) = self.economy.buildings.remove(&id) else {
+            return;
+        };
+        if building.kind.rules().blocks {
+            for y in building.footprint.min.y..building.footprint.max.y {
+                for x in building.footprint.min.x..building.footprint.max.x {
+                    self.economy.blocked_tiles.remove(&TileCoord::new(x, y));
+                }
+            }
+            if let Terrain::Map { overlay, .. } = &mut self.terrain {
+                overlay.remove_footprint(building.footprint);
+            }
+            self.resource_collision_changed();
+        }
+        self.refresh_population_cap(building.player);
     }
 
     /// Bounded local placement around the certified start, favoring inland
@@ -291,4 +363,16 @@ pub(crate) fn perimeter(rect: TileRect) -> Vec<TileCoord> {
         }
     }
     tiles
+}
+
+pub(crate) fn rects_overlap(a: TileRect, b: TileRect) -> bool {
+    a.min.x < b.max.x && b.min.x < a.max.x && a.min.y < b.max.y && b.min.y < a.max.y
+}
+/// Is `tile` in the one-tile ring around `rect`, corners included?
+pub(crate) fn adjacent(rect: TileRect, tile: TileCoord) -> bool {
+    tile.x >= rect.min.x - 1
+        && tile.x <= rect.max.x
+        && tile.y >= rect.min.y - 1
+        && tile.y <= rect.max.y
+        && !rect.contains(tile)
 }

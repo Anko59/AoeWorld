@@ -1,6 +1,6 @@
 //! Execute the current judge inside the existing Docker image; capture its own
 //! result pipe. Never import check.json, scope.json or agent-provided evidence.
-use super::git;
+use super::{git, progress};
 use crate::{
     process::{Cancellation, CaptureExit, capture_command},
     ship::duel::{
@@ -70,6 +70,7 @@ pub(crate) fn execute(options: &Options) -> git::Result<()> {
         &cache,
         &retention,
         &wasm::run_suites,
+        true,
     )?;
     println!(
         "{PREFIX}{}",
@@ -153,11 +154,11 @@ pub(super) fn run(root: &Path, snapshot: &Path, paths: &[String]) -> git::Result
         .arg("--snapshot")
         .arg(snapshot)
         .args(paths);
-    // This includes builds and Playwright. A deadline/cancellation never counts red.
+    // A deadline/cancellation never counts red; each trusted step owns its budget.
     let cancellation = Cancellation::default();
     let _signals =
         crate::gates::runner::signals::Signals::new(&cancellation).map_err(|e| e.to_string())?;
-    let captured = capture_command(command, Duration::from_secs(1800), &cancellation);
+    let captured = progress::capture(command, &cancellation)?;
     if !matches!(captured.exit, CaptureExit::Success) {
         return Err(format!(
             "red runner unavailable: {:?}\n{}\n{}",

@@ -4,12 +4,14 @@ mod red;
 mod red_carry;
 mod red_carry_cli;
 mod red_findings;
+mod red_js;
+mod red_js_findings;
 mod red_mounts;
 mod red_pr;
 
 use super::{Kind, build_keys, exemption, report, summary, test_marker};
 use crate::ship::{
-    git, ship,
+    Options, git, ship,
     tests::{fixture, offline, run},
 };
 use std::{fs, path::Path};
@@ -266,7 +268,11 @@ fn ship_refuses_untested_product_and_keeps_the_ordering_report() {
     write(&root, "crates/sim/build.rs", "fn main() {}\n");
     run(&root, &["add", "-A"]);
     run(&root, &["commit", "-q", "-m", "untested product"]);
-    let error = ship(&root, &offline()).unwrap_err().to_string();
+    let blocking = Options {
+        red_blocking: true,
+        ..offline()
+    };
+    let error = ship(&root, &blocking).unwrap_err().to_string();
     assert!(error.contains("missing matching red record"), "{error}");
     let base = git::git(&root, &["rev-parse", "origin/dev"]).unwrap();
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
@@ -276,4 +282,22 @@ fn ship_refuses_untested_product_and_keeps_the_ordering_report() {
         "{text}"
     );
     assert!(text.contains("crates/sim/build.rs"), "{text}");
+}
+
+#[test]
+fn red_is_advisory_unless_blocking_is_asked_for() {
+    let (_temp, root) = fixture("true");
+    write(&root, "crates/sim/src/lib.rs", "pub fn f() {}\n");
+    run(&root, &["add", "-A"]);
+    run(&root, &["commit", "-q", "-m", "untested product"]);
+    let base = git::git(&root, &["rev-parse", "origin/dev"]).unwrap();
+    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
+    let advisory = super::red::check(&root, &base, &head, false).unwrap();
+    assert!(advisory.contains("ADVISORY"), "{advisory}");
+    assert!(
+        advisory.contains("missing matching red record"),
+        "{advisory}"
+    );
+    assert!(super::red::check(&root, &base, &head, true).is_err());
+    ship(&root, &offline()).expect("a missing red record does not stop the ship this week");
 }

@@ -55,6 +55,11 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
                     Ok(GameplayClientMessage::CancelTrainingOrder { sequence, building_id }) => service.queue_cancel_training(session_id, sequence, building_id).await,
                     Ok(GameplayClientMessage::TrainOrder { sequence, building_id, kind }) => service.queue_train(session_id, sequence, building_id, kind).await,
                     Ok(GameplayClientMessage::AttackOrder { sequence, entity_id, target_id }) => service.queue_attack(session_id, sequence, entity_id, target_id).await,
+                    Ok(GameplayClientMessage::BuildOrder { sequence, builder_ids, kind, origin }) => service.queue_build(session_id, sequence, builder_ids, kind, origin).await,
+                    Ok(GameplayClientMessage::BuildWallOrder { sequence, builder_ids, from, to }) => service.queue_build_wall(session_id, sequence, builder_ids, from, to).await,
+                    Ok(GameplayClientMessage::CancelConstructionOrder { sequence, building_id }) => service.queue_cancel_construction(session_id, sequence, building_id).await,
+                    Ok(GameplayClientMessage::ConstructOrder { sequence, builder_ids, building_id }) => service.queue_construct(session_id, sequence, builder_ids, building_id).await,
+                    Ok(GameplayClientMessage::FarmOrder { sequence, entity_id, farm_id }) => service.queue_farm(session_id, sequence, entity_id, farm_id).await,
                     Ok(GameplayClientMessage::Resync { revision }) => service.resync(session_id, revision).await,
                     Ok(GameplayClientMessage::Hello { .. }) | Err(_) => {
                         let _ = send_socket(&mut sink, GameplayServerMessage::Error { code: 400, message: "invalid gameplay request".to_owned() }).await;

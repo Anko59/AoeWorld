@@ -51,7 +51,7 @@ pub(in super::super) fn update(client: &Client) {
         let resource = unit.carried.map(|load| load.kind).or(unit.gathering);
         if unit.player == owner
             && unit.kind == UnitKind::Villager
-            && matches!(unit.task, UnitTask::Gathering | UnitTask::Returning)
+            && counts_as_gatherer(unit.task)
             && let Some(kind) = resource_kind(client, unit.id)
         {
             values[6 + match kind {
@@ -130,4 +130,12 @@ pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsVal
         }
     }
     Ok(())
+}
+
+/// Villagers working a resource, including farmers standing on a farm.
+pub(super) fn counts_as_gatherer(task: UnitTask) -> bool {
+    matches!(
+        task,
+        UnitTask::Gathering | UnitTask::Returning | UnitTask::Farming
+    )
 }

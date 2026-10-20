@@ -68,7 +68,7 @@ fn the_combat_table_is_ordered_by_kind_and_holds_the_dark_age_values() {
         (training.cost.food, training.cost.gold, training.seconds),
         (60, 20, 21)
     );
-    assert_eq!(BUILDING_COMBAT[0].hp, 2400);
+    assert_eq!(crate::BUILDING_RULES[0].max_hp, 2400);
 }
 
 #[test]

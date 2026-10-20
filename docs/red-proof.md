@@ -1,5 +1,9 @@
 # Test-first red proof
 
+**Advisory since 2026-10-19 (speed week):** `make ship` prints and records a missing or
+invalid red record in the review facts instead of refusing; `AOE_RED_BLOCKING=1` restores
+the refusal. `make red` and the carry-over work unchanged.
+
 Product changes require tests that fail without them. At the final commit run
 `make red`, then `make ship`. The red runner uses the same protected judge launcher as ship.
 Before the command exists on `origin/dev`, `make red-checkout` explicitly builds
@@ -18,8 +22,8 @@ looks only at the merge base with the selected base and at HEAD.
   changes over it (product code exactly as before the PR, except the `mod`
   lines below) and runs the selected
   packages/specs in that snapshot. It is red when at least one changed test
-  fails by name, or when the changed Rust test target fails to compile because
-  a test names an item the PR adds (see below).
+  fails by name, or when a changed Rust test target or Playwright spec cannot
+  compile/load because it names an item the PR adds (see below).
 - **Mount lines**: a Rust test file is compiled only where a `mod` item loads it,
   and that item usually lives in a product file. For each changed Rust test file
   that `head` mounts from a product file the merge base does not declare it in,
@@ -45,6 +49,8 @@ looks only at the merge base with the selected base and at HEAD.
   stack, because only a test that ran can fail by name and green shows what ran.
   The duel's own green keeps its exemption for ignored and cfg-gated tests.
 
+## Compile-red
+
 A Rust test that calls an API the PR adds cannot compile at the merge base. That
 is accepted as red only when every compiler error is located in a changed test
 file and at least one is a "cannot find" kind
@@ -55,6 +61,30 @@ errors on values built from the missing items); each such file still needs a tes
 that runs and passes at HEAD. The record names the missing items. An error
 outside the changed tests, a build with no such miss, a truncated build log, a
 timeout, a cancellation or a nameless crash is not red.
+
+Playwright collection/load errors count only when every error belongs to a
+changed spec or a changed helper statically imported by a selected spec
+(including transitive relative imports and `.js`/`.mjs`/`.cjs` specifiers resolving
+to `.ts`/`.mts`/`.cts` helpers). The fresh JSON report's top-level and
+suite errors must identify a missing module (`Cannot find module`,
+`Failed to load url`, `ERR_MODULE_NOT_FOUND`, or a missing `copyfile` source),
+or an export (`does not provide an export named`). Each missing module must
+exist at HEAD and not at the merge base; each missing export must occur on a
+line the PR adds to non-test code. The record's `missing` names those paths or
+exports. An accompanying `No tests found` collection summary is accepted only
+with explained load errors. Unknown errors, errors outside that scope, missing
+or truncated JSON, deadlines and runner failures remain unavailable/refused.
+Playwright's `<anonymous>` ESM eval location needs a named source/importer in
+the message or stack. A real file location remains authoritative, including
+when it points outside the changed scope.
+At green, every affected spec must have at least one changed test that ran and
+passed; helper failures require this of each importing spec. Passing evidence
+requires Playwright's `expected` outcome, `expectedStatus: passed`, and a final
+result with `status: passed`. Expected failures (`test.fail()`), fixme, skipped,
+filtered or unobserved tests cannot earn proof. These test names are recorded
+in `ran`, as for Rust.
+
+## Runs and records
 
 Rust packages, WASM suites and exact Playwright spec filters reuse the duel's
 focused tooling. Each exported snapshot uses separate Cargo build output and
@@ -68,9 +98,17 @@ from a fresh export with its own cold Cargo target: sharing one target between t
 is unsafe because archived timestamps can make Cargo reuse another tree's test binary
 (the reason for the separate outputs above). Measured once on a small crate
 (`crates/core`, 6 CPUs per container): all three runs took 19 s. Large packages are
-unmeasured, and a run past the deadline below is "red runner unavailable", never a record.
-Each red or green Docker run, including its builds, has a 30-minute deadline;
-Playwright retains its 20-minute suite and per-test bounds. Checks run serially
+unmeasured. A step past its deadline is unavailable, never a red record.
+The runner prints each step live, including its budget and elapsed time. Each
+Cargo build, native check and WASM check has its own one-hour budget; browser
+dependencies retain their one-hour budget. Runner startup, fixture/server
+readiness and Playwright collection each get 60 seconds, WASM binding gets
+120 seconds, and server shutdown and result assembly each get 30 seconds.
+Collection runs first with `--list`, since imports can hang before any test
+timeout starts. Playwright execution keeps its 40-minute suite bound and
+configured per-test timeouts. These independent step budgets replace the
+competing 30-minute total that could kill a valid cold build plus browser run.
+A stalled step is named in the deadline diagnostic. Checks run serially
 under one heavy slot (not the ship lock). Output remains bounded by the focused
 runner's 16 MiB total / 1 MiB line JSON limits.
 

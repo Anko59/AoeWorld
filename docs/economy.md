@@ -55,15 +55,14 @@ A deposit or a new order clears the trip's failed choices. Changing resource
 kind discards the carried load; a plain Move cancels the job while keeping the
 load.
 
-Train commands require an owned Town Center, enough food, a free population
+Train commands require an owned, completed building that trains the unit, enough food, a free population
 slot and space in its bounded queue. Acceptance pays the food and reserves the
 population slot; population used continues to count living units. Only the
 front entry advances. A completed entry waits for a free passable perimeter
 tile and does not pay again. New villagers use the shared entity allocator.
 Cancelling the active training entry refunds its food and releases its reserved
-population slot; cancelling an empty queue cannot create resources. No houses,
-additional building commands, death, rally points or saved village
-state are introduced here.
+population slot; cancelling an empty queue cannot create resources. Death, rally
+points and saved village state are not part of the economy.
 
 Gameplay protocol 2 is the only current wire. Gather, Train and CancelTraining share Move's
 bounded per-session/global command queue, sequencing and role checks. Snapshot
@@ -86,6 +85,62 @@ placement/collision, replay, wire fixtures/bounds and service lifecycle. The
 headless test records its observed deposits and training in
 `.cache/economy/headless.log` for the local narrated demonstration.
 Synthetic evidence does not qualify finished RTS performance or hardware.
+
+## Dark Age buildings
+
+Every building value lives in one table,
+[`BUILDING_RULES`](../crates/simulation/src/game_world/economy/buildings.rs)
+(cost, build seconds, hit points, size, line of sight, housing, accepted
+resources, trainable units, requirement). Fix a number there and the rules,
+tests and wire follow. Values are Age of Empires II: Definitive Edition's.
+
+| Building | Cost | Time | HP | Size | Role |
+|---|---|---|---|---|---|
+| House | 25 wood | 25 s | 550 | 2x2 | +5 population |
+| Lumber Camp | 100 wood | 35 s | 600 | 2x2 | wood drop-off |
+| Mining Camp | 100 wood | 35 s | 600 | 2x2 | gold and stone drop-off |
+| Mill | 100 wood | 35 s | 600 | 2x2 | food drop-off |
+| Farm | 60 wood | 15 s | 480 | 3x3 | 175 food, needs a Mill, walked on |
+| Barracks | 175 wood | 50 s | 1200 | 3x3 | training queue (no unit kind yet) |
+| Palisade Wall | 2 wood a tile | 6 s a tile | 250 | 1x1 | blocks movement |
+| Outpost | 25 wood, 5 stone | 15 s | 500 | 1x1 | line of sight 10 |
+
+Build and BuildWall orders name villagers and a tile. The server validates the
+footprint (inside the map, passable, free of resources, units and buildings),
+the owner, the requirement and the cost, then charges the cost and creates a
+foundation (`ConstructionState::UnderConstruction`, hp 1 growing with progress).
+A foundation blocks movement like the finished building (a farm never does).
+Builders walk to a tile beside it; each tick the foundation gains `builders + 2`
+of `3 x base seconds x tick rate` work, the AoE II rule `base x 3 / (n + 2)`: one
+builder takes the base time, three take three fifths of it. Builders stop on
+completion; beside a new camp or mill they gather the nearest matching resource,
+the builder of a farm farms it, and a palisade builder continues to unfinished
+segments within eight tiles (the nearest four are tried). A Move order
+abandons construction; `ConstructOrder` sends villagers back to an unfinished
+foundation the player owns, at no charge. Cancelling a
+foundation refunds the cost in proportion to the work not yet done (all of it
+before any progress). One palisade order lays at most 64 segments, all or none.
+
+Population support is the sum over a player's completed housing buildings
+(Town Center 5, House 5), capped at 200. Training needs a completed building
+whose table lists the unit (`trainable_units`); the Barracks lists none until the
+combat track adds the Militia. A returning villager walks to the nearest completed
+owned building that accepts its load (`nearest_dropoff`).
+
+A farm holds 175 food from placement, but only a completed one can be worked,
+by one villager standing on it (`UnitTask::Farming`, food rate as gathering). It
+returns each 10-food load to the nearest food drop-off, and when the 175th
+unit is delivered the farm building is removed (a removal on the wire). A farm
+with no food left is also removed when its farmer is ordered away (Move, build,
+farm or gather) before delivering; a farm with food left stays workable.
+Per-tick cost is bounded by builders and gatherers (at most 80 each) and the
+building count (at most 256); placement and completion alone scan buildings.
+
+Wire: `BuildOrder`, `BuildWallOrder`, `ConstructOrder`, `CancelConstructionOrder` and
+`FarmOrder`;
+each building state carries `construction`, `progress_permille`, `hp`, `max_hp`,
+`los` and `food_remaining`; `UnitTask` gains `Building` and `Farming`. Hit
+points are authoritative state for the combat track to change.
 
 Start activation also surveys the whole map on a bounded coarse lattice,
 ranking connected sampled lowlands before elevation and centre distance.

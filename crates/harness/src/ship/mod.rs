@@ -144,6 +144,10 @@ pub(crate) struct Options {
     /// The ship lock, let go during the review and taken again for the push.
     #[arg(skip)]
     pub(crate) lock: lock::Handoff,
+    /// Refuse a product change without a red record (`AOE_RED_BLOCKING=1`). Off since
+    /// 2026-10-19 (speed week): a missing record is reported in the facts, not fatal.
+    #[arg(skip)]
+    pub(crate) red_blocking: bool,
 }
 
 impl Default for Options {
@@ -164,6 +168,7 @@ impl Default for Options {
             video: None,
             slots: Box::default(),
             lock: lock::Handoff::default(),
+            red_blocking: false,
         }
     }
 }
@@ -185,6 +190,7 @@ pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Resul
                 .body_file
                 .or_else(|| env("SHIP_BODY").map(PathBuf::from));
             options.force |= env("SHIP_FORCE").as_deref() == Some("1");
+            options.red_blocking = env("AOE_RED_BLOCKING").as_deref() == Some("1");
             if let Some(base) = env("SHIP_BASE") {
                 options.base = base;
             }
@@ -313,7 +319,7 @@ pub(crate) fn ship_with(
     );
     eprint!(
         "{}",
-        test_first::red::require(root, &merge_base, &subject.head)?
+        test_first::red::check(root, &merge_base, &subject.head, options.red_blocking)?
     );
     let options = &Options {
         no_fetch: true,
@@ -361,7 +367,16 @@ pub(crate) fn ship_with(
         None => (evidence, review, None, None),
     };
     if rebased_again {
-        test_first::red::require(root, &evidence.merge_base, &evidence.head)?;
+        // Print the decision for the rebased head: a catch-up can invalidate an earlier PASS.
+        eprint!(
+            "ship: after the catch-up rebase\n{}",
+            test_first::red::check(
+                root,
+                &evidence.merge_base,
+                &evidence.head,
+                options.red_blocking,
+            )?
+        );
     }
     let lease = if evidence.head != started_head && lease.is_none() {
         recheck::lease(root, options, &git::subject(root)?, &started_head)?

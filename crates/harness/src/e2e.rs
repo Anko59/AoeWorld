@@ -1,7 +1,8 @@
 //! Disposable browser stack, with an isolated port and cleanup on every return path.
-use crate::process;
+use crate::{process, ship::test_first::red::progress};
 mod command;
 mod country;
+mod discovery;
 mod filter;
 mod landscape;
 mod matrix;
@@ -189,6 +190,7 @@ fn run_specs(
             None => root.join(aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY),
         };
     let workers = servers::worker_count(coverage.as_deref(), !specs.is_empty())?;
+    progress::start("servers-up");
     let mut server = servers::Fleet::start(&root, &binary, &existing_maps, workers)?;
     let fixture_hash = server.hash.clone();
     let address = server.addresses[0];
@@ -208,26 +210,64 @@ fn run_specs(
         let worker_cancellation = cancellation.clone();
         let (sender, receiver) = mpsc::channel();
         scope.spawn(move || {
-            let report_path = match report {
-                Some(path) => path.to_path_buf(),
-                None => match shard {
-                    Some(shard) => std::path::PathBuf::from(format!(
-                        "reports/e2e/playwright-shard-{}-of-{}.json",
-                        shard.index, shard.count
-                    )),
-                    None => std::path::PathBuf::from("reports/e2e/playwright.json"),
-                },
+            let result = if specs.is_empty() {
+                // The whole suite: a quarantined failure may be re-run (gates/flaky.json).
+                progress::start("playwright-run");
+                let report_path = match report {
+                    Some(path) => path.to_path_buf(),
+                    None => match shard {
+                        Some(shard) => std::path::PathBuf::from(format!(
+                            "reports/e2e/playwright-shard-{}-of-{}.json",
+                            shard.index, shard.count
+                        )),
+                        None => std::path::PathBuf::from("reports/e2e/playwright.json"),
+                    },
+                };
+                let journal = report_path.with_extension("quarantine.jsonl");
+                quarantine::run(
+                    &args,
+                    &report_path,
+                    &journal,
+                    run_deadline,
+                    &worker_cancellation,
+                    enable_quarantine,
+                )
+                .map_err(|error| error.to_string())
+            } else {
+                // Focused runs (red, duel) never use the quarantine. Stream reporter stdout
+                // into the same bounded retention used for nextest.
+                (|| {
+                    let report = report.ok_or("focused Playwright report path missing")?;
+                    progress::start("playwright-discovery");
+                    let mut listing = Command::new("docker");
+                    listing.args(&args).arg("--list");
+                    discovery::run(
+                        listing,
+                        &report.with_extension("discovery.json"),
+                        Duration::from_secs(60),
+                        &worker_cancellation,
+                    )
+                    .map_err(|e| e.to_string())?;
+                    progress::start("playwright-run");
+                    let mut retained = crate::ship::JsonOutput::create(report, "Playwright")
+                        .map_err(|e| e.to_string())?;
+                    let mut command = Command::new("docker");
+                    command.args(&args);
+                    let captured = process::capture_command_retaining_stdout(
+                        command,
+                        run_deadline,
+                        &worker_cancellation,
+                        &mut retained,
+                    );
+                    match captured.exit {
+                        process::CaptureExit::Success => Ok(()),
+                        other => Err(format!(
+                            "focused Playwright check unavailable: {other:?}\n{}",
+                            stderr_tail(&captured.stderr)
+                        )),
+                    }
+                })()
             };
-            let journal = report_path.with_extension("quarantine.jsonl");
-            let result = quarantine::run(
-                &args,
-                &report_path,
-                &journal,
-                run_deadline,
-                &worker_cancellation,
-                enable_quarantine,
-            )
-            .map_err(|error| error.to_string());
             let _ = sender.send(result);
         });
         loop {
@@ -246,6 +286,7 @@ fn run_specs(
         }
     });
     // Always stop the server; focused failure reports remain available to the driver.
+    progress::start("server-shutdown");
     server.shutdown()?;
     browser_result.map_err(|error| stale::annotate(error, &existing_maps))?;
     if !specs.is_empty() {
@@ -319,6 +360,12 @@ fn renderer_evidence(
         evidence.push(value);
     }
     Ok(serde_json::Value::Array(evidence))
+}
+
+fn stderr_tail(stderr: &[u8]) -> String {
+    let text = String::from_utf8_lossy(stderr);
+    let lines: Vec<_> = text.lines().rev().take(40).collect();
+    lines.into_iter().rev().collect::<Vec<_>>().join("\n")
 }
 
 fn server_binary(coverage: Option<&str>) -> Result<&'static str, &'static str> {

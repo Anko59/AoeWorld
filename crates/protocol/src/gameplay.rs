@@ -1,4 +1,4 @@
-use aoe_core::{EntityId, PlayerId, Tick, TileRect, WorldPosition};
+use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect, WorldPosition};
 use serde::{
     Deserialize, Deserializer, Serialize,
     de::{SeqAccess, Visitor},
@@ -86,6 +86,43 @@ pub enum ClientMessage {
         entity_id: EntityId,
         target_id: EntityId,
     },
+    /// Place a foundation of `kind` with its top-left tile at `origin` and send
+    /// the named villagers to build it. The cost is paid on acceptance. Use
+    /// `BuildWallOrder` for palisades.
+    BuildOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "economy::bounded_builders")]
+        builder_ids: Vec<EntityId>,
+        kind: BuildingKind,
+        origin: TileCoord,
+    },
+    /// Lay palisade segments on the line from `from` to `to`, both included.
+    BuildWallOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "economy::bounded_builders")]
+        builder_ids: Vec<EntityId>,
+        from: TileCoord,
+        to: TileCoord,
+    },
+    /// Cancel a foundation; the cost is refunded for the work not yet done.
+    CancelConstructionOrder {
+        sequence: u64,
+        building_id: EntityId,
+    },
+    /// Send a villager to work a completed farm (one farmer per farm).
+    FarmOrder {
+        sequence: u64,
+        entity_id: EntityId,
+        farm_id: EntityId,
+    },
+    /// Send villagers to finish an unfinished foundation the player owns;
+    /// nothing is charged.
+    ConstructOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "economy::bounded_builders")]
+        builder_ids: Vec<EntityId>,
+        building_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -109,6 +146,12 @@ pub enum CommandResult {
     /// The attack target is unknown, already dead, or the sender's own.
     RejectedInvalidTarget,
     RejectedInsufficientResources,
+    RejectedNotBuildable,
+    RejectedRequirementMissing,
+    RejectedInvalidPlacement,
+    RejectedUnderConstruction,
+    RejectedAlreadyComplete,
+    RejectedFarmUnavailable,
 }
 
 /// Immutable physical properties of the active geographic map. The package

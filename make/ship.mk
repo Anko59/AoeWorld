@@ -29,7 +29,37 @@ red-checkout-steps:
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
 	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' red
 
-.PHONY: load-status duel duel-check ship ship-status describe-check review review-floor level-floor level-stats review-calibrate review-pr issue next nightly-triage metric-regressions ledger usage carry-review update-prs metrics video-probe ship-tools showcase showcase-check showcase-session compare dev-server dev-server-status dev-server-stop
+.PHONY: \
+  load-status \
+  duel \
+  duel-check \
+  ship \
+  ship-status \
+  describe-check \
+  review \
+  review-floor \
+  level-floor \
+  level-stats \
+  review-calibrate \
+  review-pr \
+  issue \
+  next \
+  nightly-triage \
+  metric-regressions \
+  ledger \
+  usage \
+  carry-review \
+  update-prs \
+  metrics \
+  video-probe \
+  ship-tools \
+  showcase \
+  showcase-check \
+  showcase-session \
+  compare \
+  dev-server \
+  dev-server-status \
+  dev-server-stop
 SHIP_TOOLS_IMAGE := aoeworld/ship-tools:5.1.9
 duel:
 	@.agents/hooks/harness.sh exec duel

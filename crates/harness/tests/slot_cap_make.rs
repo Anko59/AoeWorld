@@ -21,6 +21,7 @@ fn snapshot() -> tempfile::TempDir {
             include_str!("../../../make/qualification.mk"),
         ),
         ("make/heavy.mk", include_str!("../../../make/heavy.mk")),
+        ("make/phony.mk", include_str!("../../../make/phony.mk")),
     ] {
         fs::write(dir.path().join(name), text).unwrap();
     }

@@ -84,7 +84,8 @@ fn green_requires_red_failures_or_all_build_blocked_test_definitions_to_pass() {
     let browser_paths = vec!["browser/tests/play.spec.ts".into()];
     let output = root.join("playwright.json");
     for (status, expected) in [("skipped", false), ("expected", true)] {
-        fs::write(&output, format!(r#"{{"errors":[],"suites":[{{"specs":[{{"file":"play.spec.ts","line":1,"title":"works","tests":[{{"projectName":"canvas","status":"{status}"}}]}}]}}]}}"#)).unwrap();
+        let actual = if expected { "passed" } else { "skipped" };
+        fs::write(&output, format!(r#"{{"errors":[],"suites":[{{"specs":[{{"file":"play.spec.ts","line":1,"title":"works","tests":[{{"projectName":"canvas","status":"{status}","expectedStatus":"passed","results":[{{"status":"{actual}"}}]}}]}}]}}]}}"#)).unwrap();
         let browser = focus::browser_results(&output).unwrap();
         assert_eq!(
             super::green::validate(root, &browser_paths, None, &build_red, &browser).is_ok(),
@@ -316,7 +317,7 @@ fn untouched_detection_keeps_changed_tests_and_helpers_out_of_the_exemption() {
 fn browser_results_include_each_project_and_ignore_line_numbers_in_failure_identity() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("report.json");
-    fs::write(&path, r#"{"errors":[],"suites":[{"title":"play.spec.ts","file":"play.spec.ts","specs":[{"file":"play.spec.ts","line":10,"title":"works","ok":true,"tests":[{"projectName":"webgpu","status":"expected"},{"projectName":"canvas","status":"unexpected"}]}]}]}"#).unwrap();
+    fs::write(&path, r#"{"errors":[],"suites":[{"title":"play.spec.ts","file":"play.spec.ts","specs":[{"file":"play.spec.ts","line":10,"title":"works","ok":true,"tests":[{"projectName":"webgpu","status":"expected","expectedStatus":"passed","results":[{"status":"passed"}]},{"projectName":"canvas","status":"unexpected"}]}]}]}"#).unwrap();
     let report = focus::browser_results(&path).unwrap();
     assert_eq!(
         report.tests,
@@ -484,4 +485,10 @@ fn only_a_normal_playwright_test_failure_can_supply_red_evidence() {
         );
     }
     assert!(focus::browser_exit(&Err("test server exited during browser run".into())).is_err());
+}
+
+#[test]
+fn discovery_failure_cannot_supply_red_evidence() {
+    let checked = Err("playwright-discovery unavailable: Failed(Some(1))".into());
+    assert!(focus::browser_exit(&checked).is_err());
 }

@@ -347,10 +347,9 @@ fn the_push_names_the_evidenced_commit_for_the_pre_push_hook() {
     // into the container, and falls back to the full preflight.
     let makefile =
         std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Makefile")).unwrap();
-    let run = makefile
-        .lines()
-        .find(|line| line.starts_with("DOCKER_RUN :="))
-        .unwrap();
+    // The definition is a list continued over lines, one flag per line.
+    let run = makefile.split("\nDOCKER_RUN :=").nth(1).unwrap();
+    let run = run.split("\nGEODATA_PATHS").next().unwrap();
     assert!(run.contains("-e AOE_SHIP_EVIDENCE"), "{run}");
     let recipe = &makefile[makefile.find("\npre-push:").unwrap()..];
     let recipe = &recipe[..=recipe[1..].find("\n\n").unwrap()];

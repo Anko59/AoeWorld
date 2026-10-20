@@ -16,13 +16,15 @@ impl GameWorld {
         self.economy.depletions.clear();
         let mut changed = self.advance_movement();
         if self.economy.gatherers.is_empty()
-            && self.economy.buildings.is_empty()
             && self.combat.is_idle()
+            && self.economy.builders.is_empty()
+            && self.economy.buildings.is_empty()
         {
             self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
             return changed;
         }
         self.advance_combat(&mut changed);
+        self.advance_construction(&mut changed);
         self.advance_gathering(sink, &mut changed);
         self.advance_training(&mut changed);
         self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;

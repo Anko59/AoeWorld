@@ -75,10 +75,7 @@ fn source_builder_alone_applies_effective_index() {
             .any(|(name, value)| name == "GIT_INDEX_FILE" && value.is_some())
     );
     let make = include_str!("../../../../../../Makefile");
-    assert!(
-        make.lines()
-            .find(|line| line.starts_with("DOCKER_RUN :="))
-            .unwrap()
-            .contains("-e GIT_INDEX_FILE")
-    );
+    let definition = make.split("\nDOCKER_RUN :=").nth(1).unwrap();
+    let definition = definition.split("\n\n").next().unwrap();
+    assert!(definition.contains("-e GIT_INDEX_FILE"), "{definition}");
 }

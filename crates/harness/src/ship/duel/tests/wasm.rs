@@ -62,7 +62,8 @@ fn disk_hygiene_wasm_logs_survive_snapshot_cleanup_without_retaining_builds() {
             "test shore_is_wet ... ok\n",
         )])
     };
-    let report = super::focus::run_retained(root, &scope, &cache, &retention, &runner).unwrap();
+    let report =
+        super::focus::run_retained(root, &scope, &cache, &retention, &runner, false).unwrap();
     assert!(report.passed);
     let source = root.to_owned();
     drop(snapshot);
