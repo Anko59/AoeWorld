@@ -9,6 +9,12 @@ fn focused_browser_build_generates_the_diagnostics_bundle() {
     }
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
+    fs::create_dir_all(root.join("crates/client")).unwrap();
+    fs::write(
+        root.join("crates/client/Cargo.toml"),
+        "[package]\nname = \"aoe-client\"\n[features]\ndiagnostics = []\n",
+    )
+    .unwrap();
     for program in ["cargo", "wasm-bindgen"] {
         let path = root.join(program);
         fs::write(&path, "#!/bin/sh\nprintf '%s %s\\n' \"$0\" \"$*\" >> \"$AOE_FOCUSED_BUILD_FIXTURE/commands\"\n").unwrap();

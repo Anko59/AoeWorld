@@ -320,6 +320,7 @@ fn package_compile_error(line: &str, packages: &[String]) -> bool {
 fn browser_build(root: &Path) -> git::Result<()> {
     let web = crate::ship::compare::build::web_commands(
         "target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm",
+        crate::ship::compare::build::has_diagnostics_feature(root),
     );
     let commands = [vec![
         "cargo",
