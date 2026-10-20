@@ -1,6 +1,6 @@
 use aoe_assets::{
     catalog::{
-        packing::{AtlasDomain, FrameExtent, pack_frames},
+        packing::{AtlasDomain, FrameExtent, PAGE_SIDE, pack_frames},
         runtime,
     },
     pack::Manifest,
@@ -11,14 +11,40 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let manifest: Manifest = serde_json::from_slice(&fs::read(path.join("manifest.json"))?)?;
     let mut selected = BTreeSet::new();
     let mut extents = Vec::new();
-    let mut add = |source: String, count: u32, domain| -> Result<(), Box<dyn std::error::Error>> {
-        for number in 0..count {
-            let frame = manifest
-                .frames
+    let mut add = |source: String,
+                   count: u32,
+                   step: usize,
+                   domain|
+     -> Result<(), Box<dyn std::error::Error>> {
+        let mut frames = manifest
+            .frames
+            .iter()
+            .filter(|f| f.source == source && f.frame < count)
+            .collect::<Vec<_>>();
+        frames.sort_by_key(|f| f.frame);
+        if count == 0
+            || step == 0
+            || frames.len() != count as usize
+            || frames
                 .iter()
-                .find(|f| f.source == source && f.frame == number)
-                .ok_or_else(|| format!("missing {source} frame {number}"))?;
-            if selected.insert((source.clone(), number)) {
+                .enumerate()
+                .any(|(number, f)| f.frame != number as u32)
+        {
+            return Err(format!("missing or duplicate {source} frame prefix").into());
+        }
+        for frame in frames.into_iter().step_by(step) {
+            let page = manifest
+                .pages
+                .get(usize::from(frame.page))
+                .ok_or("missing source page")?;
+            if page.width != PAGE_SIDE
+                || page.height != PAGE_SIDE
+                || u32::from(frame.x) + u32::from(frame.width) > u32::from(page.width)
+                || u32::from(frame.y) + u32::from(frame.height) > u32::from(page.height)
+            {
+                return Err(format!("invalid {source} source rectangle").into());
+            }
+            if selected.insert((source.clone(), frame.frame)) {
                 extents.push(FrameExtent {
                     domain,
                     width: frame.width,
@@ -41,6 +67,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             add(
                 identity,
                 source.frames,
+                1,
                 if source.terrain_topology.is_some() {
                     AtlasDomain::Terrain
                 } else {
@@ -63,6 +90,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             add(
                 format!("terrain.drs:[32, 112, 108, 115]:{slp}"),
                 u32::from(building.foundation_size[0]) * u32::from(building.foundation_size[1]),
+                1,
                 AtlasDomain::Terrain,
             )?;
         }
@@ -74,8 +102,9 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         {
             add(
                 part.source.clone(),
-                if part.frame_rate > 0.0 {
-                    u32::from(part.frames)
+                u32::from(part.frames) * u32::from(part.angles),
+                if building.unit_id == 72 {
+                    usize::from(part.frames)
                 } else {
                     1
                 },

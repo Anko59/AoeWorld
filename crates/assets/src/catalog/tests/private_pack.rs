@@ -85,18 +85,22 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     }
     // Match the loader's DAT additions after the static catalog, including
     // every native animation frame. Shared sources are packed only once.
-    for part in manifest
+    for (unit_id, part) in manifest
         .buildings
         .iter()
         .filter(|b| super::GAMEPLAY_BUILDING_IDS.contains(&b.unit_id))
-        .flat_map(|b| b.parts.iter().chain(&b.construction))
-        .filter(|p| p.available)
+        .flat_map(|b| {
+            b.parts
+                .iter()
+                .chain(&b.construction)
+                .map(move |p| (b.unit_id, p))
+        })
+        .filter(|(_, p)| p.available)
     {
-        let wanted = if part.frame_rate > 0.0 {
-            u32::from(part.frames)
-        } else {
-            1
-        };
+        let wanted = u32::from(part.frames) * u32::from(part.angles);
+        if part.frames == 0 || part.angles == 0 || wanted > 256 {
+            return Err("invalid DAT building frame layout".into());
+        }
         let mut frames = manifest
             .frames
             .iter()
@@ -108,13 +112,22 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         {
             return Err("incomplete DAT building source".into());
         }
-        for frame in frames {
+        // The loader retains one damage frame per Palisade angle. Every other
+        // recipe retains its complete frame/angle prefix, including static art.
+        let step = if unit_id == 72 {
+            usize::from(part.frames)
+        } else {
+            1
+        };
+        for frame in frames.into_iter().step_by(step) {
             if selected.insert((frame.source.clone(), frame.frame)) {
                 let page = manifest
                     .pages
                     .get(usize::from(frame.page))
                     .ok_or("missing building page")?;
-                if u32::from(frame.x) + u32::from(frame.width) > u32::from(page.width)
+                if page.width != PAGE_SIDE
+                    || page.height != PAGE_SIDE
+                    || u32::from(frame.x) + u32::from(frame.width) > u32::from(page.width)
                     || u32::from(frame.y) + u32::from(frame.height) > u32::from(page.height)
                 {
                     return Err("invalid building source rectangle".into());
@@ -226,6 +239,28 @@ fn original_manifest_all_reviewed_frames_fit_fixed_atlas() -> Result<(), Box<dyn
 
 #[test]
 fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
+    let mut manifest = synthetic_manifest();
+    assert_eq!(prove(&manifest).unwrap(), (1474, 3590));
+    let saved = manifest.frames[0].clone();
+    manifest.frames[0].frame = 1;
+    assert!(prove(&manifest).is_err());
+    manifest.frames[0] = saved.clone();
+    manifest.frames[0].width = 0;
+    assert!(prove(&manifest).is_err());
+    manifest.frames[0] = saved.clone();
+    manifest.frames[0].width = 2045;
+    assert!(prove(&manifest).is_err());
+    manifest.frames[0] = saved.clone();
+    manifest.frames[0].page = u16::MAX;
+    assert!(prove(&manifest).is_err());
+    manifest.frames[0] = saved;
+    manifest.frames[0].x = PAGE_SIDE;
+    assert!(prove(&manifest).is_err());
+    manifest.frames.pop();
+    assert!(prove(&manifest).is_err());
+}
+
+fn synthetic_manifest() -> Manifest {
     let page = crate::pack::AtlasPage {
         color: "fixture.png".into(),
         color_hash: String::new(),
@@ -268,22 +303,52 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
             });
         }
     }
-    assert_eq!(prove(&manifest).unwrap(), (1474, 3590));
-    let saved = manifest.frames[0].clone();
-    manifest.frames[0].frame = 1;
-    assert!(prove(&manifest).is_err());
-    manifest.frames[0] = saved.clone();
-    manifest.frames[0].width = 0;
-    assert!(prove(&manifest).is_err());
-    manifest.frames[0] = saved.clone();
-    manifest.frames[0].width = 2045;
-    assert!(prove(&manifest).is_err());
-    manifest.frames[0] = saved.clone();
-    manifest.frames[0].page = u16::MAX;
-    assert!(prove(&manifest).is_err());
-    manifest.frames[0] = saved;
-    manifest.frames[0].x = PAGE_SIDE;
-    assert!(prove(&manifest).is_err());
-    manifest.frames.pop();
-    assert!(prove(&manifest).is_err());
+    manifest
+}
+
+#[test]
+fn private_proof_covers_house_variants_and_all_construction_angles() {
+    let mut manifest = synthetic_manifest();
+    let part = |slp, frames, angles| crate::dat::BuildingPart {
+        graphic_id: slp,
+        slp_id: slp,
+        source: format!("fixture:{slp}"),
+        available: true,
+        frames,
+        angles,
+        primary: true,
+        frame_rate: 0.0,
+        offset: [0; 2],
+        misplacement: [0.0; 2],
+        layer: 20,
+    };
+    manifest.buildings.push(crate::dat::BuildingComposition {
+        unit_id: 70,
+        footprint: [2.0; 2],
+        foundation_terrain: 2,
+        foundation_slp: None,
+        foundation_size: [0; 2],
+        parts: vec![part(2223, 3, 1)],
+        construction: (236..=239).map(|slp| part(slp, 1, 3)).collect(),
+    });
+    for slp in [2223, 236, 237, 238, 239] {
+        for frame in 0..3 {
+            let mut record = manifest.frames[0].clone();
+            record.source = format!("fixture:{slp}");
+            record.frame = frame;
+            manifest.frames.push(record);
+        }
+    }
+    assert_eq!(prove(&manifest).unwrap(), (1474, 3590 + 15));
+    for index in manifest.frames.len() - 15..manifest.frames.len() {
+        let mut bad = manifest.clone();
+        bad.frames.remove(index);
+        assert!(prove(&bad).is_err(), "missing record {index}");
+        let mut bad = manifest.clone();
+        bad.frames.push(bad.frames[index].clone());
+        assert!(prove(&bad).is_err(), "duplicate record {index}");
+        let mut bad = manifest.clone();
+        bad.frames[index].x = PAGE_SIDE;
+        assert!(prove(&bad).is_err(), "invalid rectangle {index}");
+    }
 }

@@ -3,6 +3,9 @@ use super::*;
 use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
 
 #[cfg(test)]
+#[path = "scene/tests/cache.rs"]
+mod cache_tests;
+#[cfg(test)]
 #[path = "scene/tests/review.rs"]
 mod review_tests;
 #[cfg(test)]
@@ -21,18 +24,17 @@ pub(crate) struct PreparedScene {
 }
 
 pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
+    if let Some(scene) = client.terrain_scene.borrow().as_ref()
+        && scene.camera == client.camera
+    {
+        return scene.clone();
+    }
     let foundations = client
         .village
         .buildings
         .iter()
         .map(|b| (building_kind(b), super::super::village::building_center(b)))
         .collect::<Vec<_>>();
-    if let Some(scene) = client.terrain_scene.borrow().as_ref()
-        && scene.camera == client.camera
-        && scene.foundations == foundations
-    {
-        return scene.clone();
-    }
     let mut terrain = scene_terrain(client);
     let units = client
         .village
@@ -55,6 +57,27 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
     let scene = Rc::new(scene);
     *client.terrain_scene.borrow_mut() = Some(scene.clone());
     scene
+}
+
+/// Building updates are the only foundation mutations. Compare the cached key
+/// here once per update, without allocating it again for each ground projection.
+pub(in super::super) fn replace_buildings(
+    client: &mut Client,
+    buildings: Vec<aoe_protocol::GameplayBuildingState>,
+) {
+    let changed = client
+        .terrain_scene
+        .get_mut()
+        .as_ref()
+        .is_some_and(|scene| {
+            !scene.foundations.iter().copied().eq(buildings
+                .iter()
+                .map(|b| (building_kind(b), super::super::village::building_center(b))))
+        });
+    if changed {
+        client.terrain_scene.get_mut().take();
+    }
+    client.village.buildings = buildings;
 }
 
 impl PreparedScene {
@@ -318,6 +341,8 @@ pub(in super::super) fn units(
 }
 
 fn building_kind(building: &aoe_protocol::GameplayBuildingState) -> aoe_rendering::SceneUnitKind {
+    #[cfg(test)]
+    cache_tests::KEY_ENTRIES.with(|count| count.set(count.get() + 1));
     use aoe_protocol::{BuildingKind as Kind, ConstructionState};
     use aoe_rendering::SceneUnitKind as Art;
     let kind = match building.kind {
