@@ -88,10 +88,11 @@ product is selected. Construction progress chooses a native angle; palisade
 connectivity chooses its orientation. Static House variants follow entity id,
 while Mill sails use the native frame duration.
 Indices remove repeated strings from browser startup without changing offsets,
-draw order or animation. Only the nine buildings in the current gameplay
-protocol occupy the live atlas; the Dock recipe remains in the pack/table for
-offline composition, without reserving its 60 wake animation frames in a match
-that cannot contain a Dock. The reader bounds the bytes/counts and rejects
+draw order or animation. The ten buildings in the current gameplay protocol,
+including Dock and its native wake animation, occupy the live atlas. Foundation
+terrain and its apron paint land samples only; water keeps its authored sheet
+and surface metadata beneath completed Docks and construction sites.
+The reader bounds the bytes/counts and rejects
 truncation, trailing bytes and invalid frame indices. Regenerate packs after a
 format change; there is no compatibility reader.
 

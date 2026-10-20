@@ -21,14 +21,14 @@ use aoe_rendering::{
     TerrainTopology,
 };
 #[cfg(test)]
-#[path = "tests/fishing.rs"]
-mod fishing_tests;
-#[cfg(test)]
 #[path = "tests/building_sprites.rs"]
 mod building_sprite_tests;
 #[cfg(test)]
 #[path = "tests/buildings.rs"]
 mod building_tests;
+#[cfg(test)]
+#[path = "tests/fishing.rs"]
+mod fishing_tests;
 #[path = "placement.rs"]
 mod placement;
 #[path = "recipes.rs"]

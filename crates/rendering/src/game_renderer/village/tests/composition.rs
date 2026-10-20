@@ -18,7 +18,7 @@ fn remembered_town_center_keeps_every_dat_part_and_native_anchor_in_fog() {
         })
         .collect::<Vec<_>>();
     assert_eq!(before.len(), art.compositions[0].parts.len());
-    super::super::fog::shade_objects(&mut layers, &art, &[], &units, &|_| 0.45);
+    super::super::fog::shade_objects(&mut layers, &art, &[], &units, 0, &|_| 0.45);
     for (layer, (sprite, frame, depth, id)) in layers.iter().zip(before) {
         let super::super::WorldLayer::Sprite(shaded, after_frame, after_depth, after_id) = layer
         else {
@@ -136,17 +136,19 @@ fn construction_stages_follow_dat_offsets_and_keep_the_building_identity() {
 
 #[wasm_bindgen_test]
 fn actor_and_building_tags_keep_their_selections_disjoint() {
-    for slot in 0..46 {
+    for slot in 0..50 {
         let actor = SceneUnitKind::actor(slot);
         assert_eq!(actor.actor_slot(), Some(usize::from(slot)));
         assert_eq!(actor.building_slot(), None);
         assert_eq!(actor.building_id(), None);
         assert!(!actor.is_foundation());
     }
-    for id in [109, 70, 562, 584, 68, 50, 12, 72, 598] {
+    for id in [109, 70, 562, 584, 68, 50, 12, 72, 598, 45] {
         let foundation = SceneUnitKind::foundation(id);
         assert_eq!(foundation.actor_slot(), None);
         assert_eq!(foundation.building_id(), Some(i32::from(id)));
         assert!(foundation.is_foundation());
     }
+    assert_eq!(SceneUnitKind::Dock.building_id(), Some(45));
+    assert_eq!(SceneUnitKind::RubbleDock.building_id(), None);
 }

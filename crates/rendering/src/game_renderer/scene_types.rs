@@ -99,7 +99,6 @@ pub enum SceneUnitKind {
     FishingShipWorking,
     VillagerFishing,
     Dock,
-    FoundationDock,
     RubbleDock,
     ConstructionTownCenter,
     ConstructionHouse,
@@ -110,6 +109,7 @@ pub enum SceneUnitKind {
     ConstructionBarracks,
     ConstructionPalisadeWall,
     ConstructionOutpost,
+    FoundationDock,
 }
 
 impl SceneUnitKind {
@@ -212,6 +212,12 @@ impl SceneUnitKind {
         ][usize::from(slot.min(21))]
     }
     pub(super) fn building_slot(self) -> Option<u8> {
+        match self {
+            Self::Dock => return Some(23),
+            Self::FoundationDock => return Some(24),
+            Self::RubbleDock => return Some(25),
+            _ => {}
+        }
         if self.is_foundation() {
             return Some(match self {
                 Self::ConstructionTownCenter => 12,
@@ -235,6 +241,7 @@ impl SceneUnitKind {
             50 => ConstructionFarm,
             12 => ConstructionBarracks,
             72 => ConstructionPalisadeWall,
+            45 => FoundationDock,
             _ => ConstructionOutpost,
         }
     }
@@ -242,6 +249,9 @@ impl SceneUnitKind {
         self as u8 >= Self::ConstructionTownCenter as u8
     }
     pub fn building_id(self) -> Option<i32> {
+        if matches!(self, Self::Dock | Self::FoundationDock) {
+            return Some(45);
+        }
         if self == Self::TownCenter {
             return Some(109);
         }

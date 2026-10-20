@@ -7,6 +7,72 @@ thread_local! {
 }
 
 #[wasm_bindgen_test]
+fn dock_foundations_and_aprons_paint_land_without_changing_water() {
+    let mut art = crate::surface_mesh::mix::fixture::art();
+    art.compositions.push(crate::BuildingArt {
+        unit_id: 45,
+        footprint: [3.0; 2],
+        foundation_material: None,
+        parts: Vec::new(),
+        construction: Vec::new(),
+    });
+    // The trial Dock has no dedicated sheet; also cover DAT-selected terrain.
+    for foundation in [None, Some(13)] {
+        art.compositions.last_mut().unwrap().foundation_material = foundation;
+        for kind in [SceneUnitKind::Dock, SceneUnitKind::foundation(45)] {
+            for x in [0.5, 2.5] {
+                // footprint, then apron
+                for (water, material) in [
+                    (0, 0),
+                    (0, 5),
+                    (0, 10),
+                    (1, 5),
+                    (2, 5),
+                    (3, 10),
+                    (4, 5),
+                    (5, 5),
+                ] {
+                    let surface = SceneTerrainSurface {
+                        water,
+                        ..SceneTerrainSurface::flat(0.0)
+                    };
+                    let appearance = Some(SceneTerrainAppearance {
+                        canopy_strength: 700,
+                        floor_strength: 800,
+                        palette: 2,
+                        exposure: 0,
+                        height_band: 0,
+                    });
+                    let mut tiles = [SceneTerrain {
+                        position: [x, 0.5],
+                        material,
+                        elevation_meters: 0.0,
+                        surface,
+                        appearance,
+                    }];
+                    apply_building_foundations(&mut tiles, &art, &[test_unit(kind)]);
+                    if water == 0 && material == 0 {
+                        assert_eq!(
+                            tiles[0].material,
+                            foundation.unwrap_or(2),
+                            "land {kind:?} at {x}"
+                        );
+                        assert_eq!(tiles[0].appearance.unwrap().floor_strength, 0);
+                    } else {
+                        assert_eq!(
+                            tiles[0].material, material,
+                            "water {water}, {kind:?} at {x}"
+                        );
+                        assert_eq!(tiles[0].appearance, appearance);
+                    }
+                    assert_eq!(tiles[0].surface, surface);
+                }
+            }
+        }
+    }
+}
+
+#[wasm_bindgen_test]
 fn native_farm_without_de_art_keeps_its_imported_crop_sheet() {
     let mut art = crate::surface_mesh::mix::fixture::art();
     art.compositions.push(crate::BuildingArt {

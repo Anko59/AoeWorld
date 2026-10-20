@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { activatePackage } from "../start/package.js";
@@ -108,7 +109,7 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   test.setTimeout(420_000);
   const scene = JSON.parse(
     await readFile("../.cache/fishing/scene.json", "utf8"),
-  ) as { hash: string; dock: Tile; shore: Tile; deep: Tile };
+  ) as { hash: string; dock: Tile; shore: Tile; deep: Tile; start: Tile };
   expect((await request.post("/maps/reset")).status()).toBe(204);
   const art = await gameAssets(page);
   const shot = async (name: string) => {
@@ -207,6 +208,66 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   await expect(page.locator("#building-status")).toContainText("Complete", {
     timeout: 100_000,
   });
+  if (art === "local AoE II pack") {
+    await frame(
+      page,
+      {
+        x: (scene.start.x + scene.dock.x + 1.5) / 2,
+        y: (scene.start.y + scene.dock.y + 1.5) / 2,
+      },
+      0.45,
+    );
+    await expect(page.locator("#scene")).toHaveAttribute(
+      "data-village-art",
+      "native",
+    );
+    const visible = await actors(page);
+    for (const kind of ["TownCenter", "Dock"]) {
+      expect(
+        visible.some(
+          (a) =>
+            a.kind === kind && a.x > 0 && a.x < 1280 && a.y > 0 && a.y < 600,
+        ),
+      ).toBe(true);
+    }
+    const served = await request.get("/pkg/aoe_client_bg.wasm");
+    expect(served.ok()).toBe(true);
+    const sha256 = (bytes: Buffer) =>
+      createHash("sha256").update(bytes).digest("hex");
+    const bundleSha256 = sha256(await served.body());
+    expect(bundleSha256).toBe(
+      sha256(await readFile("../web/pkg/aoe_client_bg.wasm")),
+    );
+    await mkdir("../.cache/tc-shots", { recursive: true });
+    const screenshot = await page.screenshot({
+      path: "../.cache/tc-shots/final-dock.png",
+    });
+    await writeFile(
+      "../.cache/tc-shots/final-dock.json",
+      JSON.stringify(
+        {
+          health: await (await request.get("/health")).json(),
+          bundleSha256,
+          screenshotSha256: sha256(screenshot),
+          scenario: scene,
+          actors: visible,
+          renderer: await page
+            .locator("#playground")
+            .getAttribute("data-renderer"),
+          camera: await page
+            .locator("#minimap")
+            .evaluate((map) =>
+              ["data-camera-x", "data-camera-y", "data-zoom"].map((key) =>
+                map.getAttribute(key),
+              ),
+            ),
+        },
+        null,
+        2,
+      ),
+    );
+    await frame(page, scene.dock);
+  }
   await expect(page.locator("#train-villager")).toHaveAttribute(
     "aria-label",
     /Fishing Ship/,
