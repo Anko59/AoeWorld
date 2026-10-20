@@ -165,6 +165,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
         anchor: [0.0; 2],
     };
     let mut art = crate::GameArt {
+        buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
         walking: Vec::new(),

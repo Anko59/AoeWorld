@@ -108,6 +108,8 @@ perf-wasm-size-steps:
 	@mkdir -p reports/perf
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) wasm-opt -Oz --strip-debug web/pkg/aoe_client_bg.wasm -o reports/perf/optimized.wasm
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) gzip -n -9 -c reports/perf/optimized.wasm > reports/perf/optimized.wasm.gz
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) wasm-opt -Oz --strip-debug web/diagnostics-pkg/aoe_client_bg.wasm -o reports/perf/diagnostics-optimized.wasm
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) gzip -n -9 -c reports/perf/diagnostics-optimized.wasm > reports/perf/diagnostics-optimized.wasm.gz
 
 # The local ship's cap check (preflight): measure (perf-wasm-size), then compare with baselines/perf/wasm.json
 # under the gate's own rule. It measures in its own gate snapshot: each gate runs in a separate checkout, so it
@@ -122,6 +124,8 @@ build-wasm: slot-bootstrap
 build-wasm-steps:
 	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client
 	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
+	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client --features diagnostics
+	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/diagnostics-pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
 
 test-e2e: disk-precheck slot-bootstrap
 	@$(MAKE) --no-print-directory build-wasm browser-deps orchestrator-tools

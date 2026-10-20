@@ -42,6 +42,7 @@ fn canvas_zero_backing_size_does_not_advance_presentation() {
         canvas,
     };
     let art = GameArt {
+        buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
         walking: Vec::new(),

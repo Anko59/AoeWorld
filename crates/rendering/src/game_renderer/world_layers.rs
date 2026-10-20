@@ -10,8 +10,14 @@ pub(super) fn direct_world_layers(
     animation: usize,
 ) -> Vec<WorldLayer> {
     let ground = ground::BuildingGround::new(units);
-    let surfaces = surfaces.into_iter().map(|mut face| {
+    let compatibility = if terrain.is_empty() {
+        ground.compatibility_farms(camera)
+    } else {
+        Vec::new()
+    };
+    let surfaces = surfaces.into_iter().chain(compatibility).map(|mut face| {
         ground.apply(&mut face);
+        ground.farm(&mut face, art);
         face
     });
     // Reserve the ordinary shadow/body pairs and the extra Town Center pieces.
@@ -74,14 +80,14 @@ fn ordered_world_layers_with(
     entries.extend(surfaces.map(WorldLayer::Surface));
     for unit in units.iter().filter(|unit| unit.selected) {
         entries.extend(
-            (if unit.kind == SceneUnitKind::TownCenter {
+            (if let Some(side) = unit.kind.building_side() {
                 game_grid::selection_ellipse(
                     camera,
                     unit.position,
                     unit.elevation_meters,
                     [
-                        2.0 * aoe_core::ISO_TILE_WIDTH,
-                        2.0 * aoe_core::ISO_TILE_HEIGHT,
+                        side / 2.0 * aoe_core::ISO_TILE_WIDTH,
+                        side / 2.0 * aoe_core::ISO_TILE_HEIGHT,
                     ],
                 )
             } else {

@@ -58,13 +58,22 @@ fn invalid_output_path_is_rejected() {
 
 #[test]
 fn player_blending_preserves_partial_alpha_and_opaque_trial_shades() {
-    assert_eq!(blend_player([200, 0, 200, 0], 7, 119), [65, 145, 245, 119]);
     assert_eq!(
-        blend_player([117, 120, 115, 128], 7, 119),
+        blend_player([200, 0, 200, 0], 7, 119, [65, 145, 245]),
+        [65, 145, 245, 119]
+    );
+    assert_eq!(
+        blend_player([117, 120, 115, 128], 7, 119, [65, 145, 245]),
         [84, 136, 198, 187]
     );
-    assert_eq!(blend_player([99, 99, 99, 99], 7, 1), [99, 99, 100, 100]);
-    assert_eq!(blend_player([12, 34, 56, 78], 7, 0), [12, 34, 56, 78]);
+    assert_eq!(
+        blend_player([99, 99, 99, 99], 7, 1, [65, 145, 245]),
+        [99, 99, 100, 100]
+    );
+    assert_eq!(
+        blend_player([12, 34, 56, 78], 7, 0, [65, 145, 245]),
+        [12, 34, 56, 78]
+    );
     for (ramp, expected) in [
         [42, 94, 159, 255],
         [45, 101, 171, 255],
@@ -80,10 +89,26 @@ fn player_blending_preserves_partial_alpha_and_opaque_trial_shades() {
     {
         for base in [[0; 4], [117, 120, 115, 255]] {
             assert_eq!(
-                blend_player(base, ramp as u8, 255),
+                blend_player(base, ramp as u8, 255, [65, 145, 245]),
                 expected,
                 "trial ramp {ramp}"
             );
         }
     }
+}
+
+#[test]
+fn team_colour_replaces_the_ramp_without_losing_mask_coverage() {
+    assert_eq!(
+        blend_player([0, 0, 0, 0], 7, 255, [240, 50, 40]),
+        [240, 50, 40, 255]
+    );
+    assert_eq!(
+        blend_player([0, 0, 0, 0], 7, 128, [240, 50, 40]),
+        [240, 50, 40, 128]
+    );
+    assert_eq!(
+        blend_player([20, 40, 60, 255], 7, 0, [240, 50, 40]),
+        [20, 40, 60, 255]
+    );
 }

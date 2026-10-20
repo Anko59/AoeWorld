@@ -12,12 +12,16 @@ fn art() -> GameArt {
         anchor: [12.0, 40.0],
     };
     GameArt {
+        buildings: Default::default(),
         village: std::array::from_fn(|group| {
-            (0..75).map(|index| frame(group * 100 + index)).collect()
+            (0..75)
+                .step_by(if group == 0 { 15 } else { 1 })
+                .map(|index| frame(group * 100 + index))
+                .collect()
         }),
         town_center: std::array::from_fn(|group| vec![frame(500 + group)]),
         walking: vec![frame(900); 50],
-        standing: vec![frame(901); 50],
+        standing: vec![frame(901); 5],
         grass: Vec::new(),
         terrain: Default::default(),
         terrain_topology: [None; 12],
@@ -234,4 +238,96 @@ fn building_ground_is_darkened_on_the_shared_surface_without_extra_layers() {
         changed > 0,
         "a building must wear the terrain below and around its footprint"
     );
+}
+
+#[wasm_bindgen_test]
+fn construction_stages_and_finished_building_select_native_frames() {
+    assert_eq!(
+        std::mem::size_of::<SceneUnit>(),
+        32,
+        "building roles preserve the frame unit layout budget"
+    );
+    let mut art = art();
+    let mut stages = Vec::new();
+    for i in 0..3 {
+        let mut frame = art.village[0][0];
+        frame.atlas.uv[0] = 0.1 + i as f32 * 0.1;
+        stages.push(frame);
+    }
+    art.buildings[10] = stages;
+    art.buildings[1] = vec![art.village[1][0]];
+    for (progress, slot, expected) in [
+        (0_u16, 10, 0.1),
+        (500, 10, 0.2),
+        (999, 10, 0.3),
+        (1000, 1, art.village[1][0].atlas.uv[0]),
+    ] {
+        let mut u = unit(SceneUnitKind::building(slot));
+        u.facing = (u32::from(progress) * 3 / 1000).min(2) as u8;
+        let mut emitted = Vec::new();
+        building(&art, u, camera(), 0, &mut |entry| emitted.push(entry));
+        assert_eq!(emitted.len(), 1);
+        assert!((emitted[0].1.atlas.uv[0] - expected).abs() < 0.0001);
+        assert_eq!(u.kind.building_side(), Some(2.0));
+    }
+    let mut emitted = Vec::new();
+    building(
+        &art,
+        unit(SceneUnitKind::building(5)),
+        camera(),
+        0,
+        &mut |entry| emitted.push(entry),
+    );
+    assert!(emitted.is_empty(), "a farm is ground, not a billboard");
+}
+
+#[wasm_bindgen_test]
+fn farm_has_textured_ground_even_before_map_chunks_arrive() {
+    let mut art = art();
+    art.buildings[5] = vec![art.village[0][0]];
+    let farm = unit(SceneUnitKind::building(5));
+    let layers = crate::game_renderer::world_layers::direct_world_layers(
+        std::iter::empty(),
+        &art,
+        &[],
+        &[],
+        &[farm],
+        camera(),
+        0,
+    );
+    assert!(
+        layers
+            .iter()
+            .any(|l| matches!(l,WorldLayer::Surface(t) if t.texture_uv.is_some()))
+    );
+    assert!(
+        !layers
+            .iter()
+            .any(|l| matches!(l, WorldLayer::Sprite(_, _, _, _))),
+        "farm texture belongs to ground triangles"
+    );
+}
+
+#[wasm_bindgen_test]
+fn layered_mill_composes_static_body_and_every_sail_frame_and_culls_animation() {
+    let mut art = art();
+    art.buildings[4] = (0..44)
+        .map(|i| {
+            let mut f = art.village[0][0];
+            f.atlas.uv[0] = i as f32 / 4096.0;
+            f
+        })
+        .collect();
+    let mill = unit(SceneUnitKind::Mill);
+    for tick in 0..86 {
+        let mut emitted = Vec::new();
+        building(&art, mill, camera(), tick, &mut |entry| emitted.push(entry));
+        assert_eq!(emitted.len(), 2);
+        assert_eq!(emitted[0].1.atlas.uv[0], 0.0);
+        assert_eq!(emitted[1].1.atlas.uv[0], (1 + tick % 43) as f32 / 4096.0);
+    }
+    assert!(crate::scene_unit_animates(&art, mill, camera()));
+    let mut offscreen = mill;
+    offscreen.position = [1000.0; 2];
+    assert!(!crate::scene_unit_animates(&art, offscreen, camera()));
 }

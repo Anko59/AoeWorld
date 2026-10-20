@@ -82,7 +82,19 @@ pub(crate) fn comparison_at(
 /// the comparison `perf-ci` makes in CI (same cap), so `make ship` fails on an
 /// overage before CI does.
 pub fn check() -> Result<(), Box<dyn Error>> {
-    verdict(&comparison()?)
+    check_at(Path::new("."))
+}
+
+fn check_at(root: &Path) -> Result<(), Box<dyn Error>> {
+    let baseline = root.join("baselines/perf/wasm.json");
+    for artifact in ["optimized.wasm.gz", "diagnostics-optimized.wasm.gz"] {
+        println!("{artifact}:");
+        verdict(&comparison_at(
+            &baseline,
+            &root.join("reports/perf").join(artifact),
+        )?)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn verdict(result: &Comparison) -> Result<(), Box<dyn Error>> {
@@ -102,59 +114,6 @@ pub(crate) fn verdict(result: &Comparison) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[path = "perf_size/tests.rs"]
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn size_baseline_rejects_wrong_identity_and_five_percent_regression() {
-        let baseline = proposal(100);
-        assert_eq!(
-            compare_observed(baseline, 105)
-                .expect("at threshold")
-                .verdict,
-            Verdict::Pass
-        );
-        assert_eq!(
-            compare_observed(proposal(100), 106)
-                .expect("over threshold")
-                .verdict,
-            Verdict::Regression
-        );
-        let mut incompatible = proposal(100);
-        incompatible.binaryen = "other".to_owned();
-        assert!(compare_observed(incompatible, 100).is_err());
-    }
-
-    #[test]
-    fn size_artifact_must_exist_and_proposal_never_changes_baseline() {
-        let temp = tempfile::tempdir().expect("directory");
-        let artifact = temp.path().join("optimized.wasm.gz");
-        let baseline = temp.path().join("baseline.json");
-        let proposed = temp.path().join("proposal/wasm.json");
-        assert!(observed_at(&artifact).is_err());
-        fs::write(&artifact, []).expect("empty artifact");
-        assert!(observed_at(&artifact).is_err());
-        fs::write(&artifact, [7u8; 105]).expect("artifact");
-        fs::write(&baseline, serde_json::to_vec(&proposal(100)).expect("JSON")).expect("baseline");
-        propose_at(&artifact, &proposed).expect("proposal");
-        assert_eq!(
-            comparison_at(&baseline, &artifact)
-                .expect("comparison")
-                .verdict,
-            Verdict::Pass
-        );
-        assert_eq!(
-            serde_json::from_slice::<Baseline>(&fs::read(&proposed).expect("proposal"))
-                .expect("JSON")
-                .optimized_gzip_bytes,
-            105
-        );
-        assert_eq!(
-            serde_json::from_slice::<Baseline>(&fs::read(&baseline).expect("baseline"))
-                .expect("JSON")
-                .optimized_gzip_bytes,
-            100
-        );
-    }
-}
+mod tests;

@@ -104,6 +104,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
         canvas,
         renderer,
         art: GameArt {
+            buildings: Default::default(),
             village: Default::default(),
             town_center: Default::default(),
             walking: Vec::new(),

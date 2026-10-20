@@ -234,6 +234,7 @@ pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> ScreenPoint {
     )
 }
 
+#[inline(never)]
 pub(super) fn world_at_screen(client: &Client, screen: ScreenPoint) -> Option<[f64; 2]> {
     if client.map_content_hash.is_none() {
         return world_at_screen_with_height(client.camera, screen, |_, _| Some(0.0));

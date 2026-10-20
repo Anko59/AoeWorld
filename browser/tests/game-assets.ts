@@ -279,5 +279,9 @@ export async function gameAssets(
       });
     }
   });
+  // A synthetic base must not inherit an installed private DE overlay.
+  await page.route("**/asset-pack/buildings/**", (route) =>
+    route.fulfill({ status: 404, body: "No fixture building overlay" }),
+  );
   return "generated CI fixtures";
 }

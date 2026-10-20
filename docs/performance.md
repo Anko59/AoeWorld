@@ -78,7 +78,12 @@ The browser bundle uses the `wasm-release` Cargo profile: size-oriented
 optimization, full link-time optimization, and one code generation unit.
 `make build-wasm` produces this profile before binding the browser module;
 native server and benchmark builds retain their existing profiles. Browser
-E2E checks exercise the resulting shipped bundle.
+E2E checks exercise the resulting shipped bundle. The gameplay bundle is
+`web/pkg`; the diagnostics app uses `web/diagnostics-pkg`, including its replay
+verification kernel. Both are built by `make build-wasm`, and `make perf-wasm-cap`
+requires both optimized gzip artifacts to fit the same unchanged baseline cap.
+`make perf-wasm-functions` writes per-function Binaryen metrics under `.cache/`
+for diagnosing size growth; it does not change the baseline.
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot

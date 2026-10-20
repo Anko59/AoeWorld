@@ -51,6 +51,7 @@ help:
 	@echo '  make test-assets-de  Test real DE house decoding and player masks (DE_DIR, read-only)'
 	@echo '  make assets-verify   Verify all ignored local packs'
 	@echo '  make assets-dat-table  Decode empires2.dat into local-assets/dat-table (unit to sprite ids)'
+	@echo '  make browser-format  Format browser tooling with the pinned formatter'
 	@echo '  make browser-check   Typecheck, lint, and format-check browser tooling'
 	@echo '  make dev-server      Build and keep one dev server tracking origin/dev, with preset maps (-status, -stop; docs/dev-server.md)'
 	@echo '  make compare         Screenshot bookmarked cameras on the build before and after the change (docs/showcase.md)'

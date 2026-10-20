@@ -75,6 +75,7 @@ pub(super) fn copy_plane(
     plane: Plane,
     source: &[u8],
     pixels: &mut [u8],
+    team: [u8; 3],
 ) -> Result<(), JsValue> {
     let side = GAME_ATLAS_SIDE as usize;
     if source.len() != GAME_ATLAS_PAGE_BYTES
@@ -121,6 +122,7 @@ pub(super) fn copy_plane(
                         [pixels[to], pixels[to + 1], pixels[to + 2], pixels[to + 3]],
                         value[0],
                         value[3],
+                        team,
                     );
                 }
                 Plane::Shadow if pixels[to + 3] == 0 => {}
@@ -142,9 +144,9 @@ pub(super) fn copy(
     shadow: &[u8],
     pixels: &mut [u8],
 ) -> Result<(), JsValue> {
-    copy_plane(frame, placed, Plane::Color, color, pixels)?;
-    copy_plane(frame, placed, Plane::Player, player, pixels)?;
-    copy_plane(frame, placed, Plane::Shadow, shadow, pixels)
+    copy_plane(frame, placed, Plane::Color, color, pixels, [65, 145, 245])?;
+    copy_plane(frame, placed, Plane::Player, player, pixels, [65, 145, 245])?;
+    copy_plane(frame, placed, Plane::Shadow, shadow, pixels, [65, 145, 245])
 }
 
 #[cfg(test)]

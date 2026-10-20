@@ -101,7 +101,8 @@ a present incomplete group remains a pack error. The native metadata packing
 proof now covers all 2,369 selected frames in the same three pages.
 Yellow wildflower 2561 and tan reed 4584 dressing are omitted because their
 silhouettes read as gold and deadwood. Footprint wear modulates existing terrain
-colors without additional faces. Other animal and building art remains unreviewed. A missing
+colors without additional faces. Other animal art remains unreviewed. [Dark Age building art](assets/buildings.md)
+describes the optional DE overlay and construction stages. A missing
 required terrain group prevents local-pack startup with a clear error, while a
 missing optional resource group does not turn unrelated frames into a
 substitute. Optional absence is distinct from present incomplete/duplicate frames,

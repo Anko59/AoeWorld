@@ -45,7 +45,16 @@ pub(in super::super) fn train(client: &mut Client, cancel: bool) {
             Message::TrainOrder {
                 sequence,
                 building_id: id,
-                kind: UnitKind::Villager,
+                kind: client.village.buildings.iter().find(|b| b.id == id).map_or(
+                    UnitKind::Villager,
+                    |b| {
+                        if b.kind == aoe_protocol::BuildingKind::Barracks {
+                            UnitKind::Militia
+                        } else {
+                            UnitKind::Villager
+                        }
+                    },
+                ),
             }
         },
     );
@@ -70,6 +79,9 @@ pub(in super::super) fn stop(client: &mut Client) {
 
 pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
     if client.role != Some(GameplayRole::Controller) {
+        return;
+    }
+    if super::construction::interact(client, point) {
         return;
     }
     let resource = super::picking::resource(client, point);
@@ -136,7 +148,7 @@ pub(in super::super) fn focus_town_center(client: &mut Client, select: bool) {
         .village
         .buildings
         .iter()
-        .find(|b| b.player == owner(client))
+        .find(|b| b.player == owner(client) && b.kind == aoe_protocol::BuildingKind::TownCenter)
         .map(|b| (b.id, super::building_center(b)))
     {
         map::center_on_world(client, position);

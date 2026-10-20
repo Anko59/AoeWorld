@@ -1,3 +1,4 @@
+import { initBuildings, buildingKinds, buildingNames } from '/interface/buildings.js';
 import { updateDetails } from '/interface/details.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
@@ -9,6 +10,7 @@ const show = (id,visible) => { byId(id).hidden = !visible; };
 const attribute = (node,name,value) => { if (node.getAttribute(name) !== value) node.setAttribute(name,value); };
 
 export function initInterface() {
+  initBuildings();
   const scene = () => byId('scene');
   const menu = byId('game-menu');
   const grid = byId('command-grid');
@@ -43,10 +45,11 @@ export function initInterface() {
     text('connection',state.status);
     byId('game-notice').classList.toggle('connected',state.status==='connected');
     const selected=state.selected, count=selected.length, first=selected[0];
-    const building=count===1 && first.kind==='TownCenter';
+    const building=count===1 && buildingKinds.includes(first.kind);
     const units=count>0 && !building;
     attribute(byId('selection'),'data-count',String(count));
     attribute(byId('selection'),'data-kind',first?.kind ?? '');
+    attribute(byId('selection'),'data-villagers',String(selected.some(unit=>unit.kind==='Villager')));
     show('selection-empty',count===0); show('selection-content',count>0);
     show('train-villager',building); show('move-units',units); show('stop-units',units);
     for (const id of ['train-villager','move-units','stop-units','cancel-training']) byId(id).disabled=state.observer;
@@ -58,7 +61,7 @@ export function initInterface() {
     if (first) {
       const groupName=selected.every(unit=>unit.kind===first.kind)?`${first.name}s`:'units';
       text('selection-name',count>1?`${count} ${groupName} selected`:first.name);
-      text('selection-task',count===1?`${first.task}${first.resource && first.task==='Gathering'?' '+first.resource:''}`:'Right-click to give this group an order');
+      text('selection-task',count===1?building?(state.queue.length?'Training':'Building'): `${first.task}${first.resource && first.task==='Gathering'?' '+first.resource:''}`:'Right-click to give this group an order');
       text('selection-load',count===1 && first.amount?`Carrying ${first.amount}/10 ${first.resource}`:building?'Resource drop-off · supports 5 population':'');
       const signature=selected.map(unit=>`${unit.id}:${unit.kind}`).join(',');
       if (signature!==previousSelection) {
@@ -88,8 +91,8 @@ export function initInterface() {
     }
   };
   window.aoeInterface = { details: updateDetails, numeric(values,status) {
-    const kinds=['Scout','Villager','TownCenter'], names=['Scout','Villager','Town Center'];
-    const tasks=['Idle','Moving','Gathering','Carrying','Returning to Town Center','Ready to train','Training Villager'];
+    const kinds=['Scout','Villager',...buildingKinds,'Militia'], names=['Scout','Villager',...buildingNames,'Militia'];
+    const tasks=['Idle','Moving','Gathering','Carrying','Returning to Town Center','Attacking','Dying','Building','Farming','Hunting','Shepherding'];
     const resources=['food','wood','gold','stone',''];
     const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],observer:values[11]===1,art:values[12]===1,status,actors:[],selected:[],queue:[],resources:[]};
     let at=16;
@@ -101,5 +104,6 @@ export function initInterface() {
     for (let index=0;index<values[14];index++,at+=2) state.queue.push([values[at],values[at+1]]);
     for (let index=0;index<values[15];index++,at+=4) state.resources.push({kind:values[at],x:values[at+1],y:values[at+2],distance:values[at+3]});
     update(state);
+    window.aoeBuildings?.refresh();
   }};
 }

@@ -3,6 +3,8 @@ use super::Client;
 use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{GameplayBuildingState, GameplayPlayerState, ResourceKind};
 
+pub(super) mod building_panel;
+pub(super) mod construction;
 pub(super) mod hud;
 pub(super) mod orders;
 pub(super) mod picking;
@@ -17,8 +19,12 @@ pub(crate) struct Village {
     pub last_hud: f64,
     pub move_cursor: bool,
     pub focused: bool,
+    pub placement: Option<aoe_protocol::BuildingKind>,
+    pub wall_start: Option<aoe_core::TileCoord>,
+    pub rubble: Vec<(GameplayBuildingState, u64)>,
 }
 
+#[inline(never)]
 pub(super) fn owner(client: &Client) -> PlayerId {
     client
         .primary
@@ -28,8 +34,8 @@ pub(super) fn owner(client: &Client) -> PlayerId {
 
 pub(super) fn building_center(building: &GameplayBuildingState) -> [f64; 2] {
     [
-        f64::from(building.footprint.min.x) + 2.0,
-        f64::from(building.footprint.min.y) + 2.0,
+        f64::from(building.footprint.min.x + building.footprint.max.x) / 2.0,
+        f64::from(building.footprint.min.y + building.footprint.max.y) / 2.0,
     ]
 }
 

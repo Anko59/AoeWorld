@@ -1,5 +1,9 @@
 //! `aoe-harness assets`: inspect, import and verify the local asset packs.
 mod dat_table;
+mod overlay;
+#[path = "tests/overlay.rs"]
+#[cfg(test)]
+mod overlay_tests;
 
 use clap::Subcommand;
 use std::path::{Path, PathBuf};
@@ -22,6 +26,7 @@ pub(crate) enum AssetCommand {
     /// Imports the Dark Age buildings from a Definitive Edition install.
     ImportDe {
         install: PathBuf,
+        base: Option<PathBuf>,
     },
 }
 
@@ -49,8 +54,11 @@ pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error
             let input = input.unwrap_or_else(|| PathBuf::from("local-assets/trial/Data"));
             dat_table::run(&input, Path::new("local-assets/dat-table"))?;
         }
-        AssetCommand::ImportDe { install } => {
+        AssetCommand::ImportDe { install, base } => {
             let report = aoe_assets::de::import(&install, Path::new("local-assets/packs"))?;
+            if let Some(base) = base {
+                overlay::attach(&base, &report.pack)?;
+            }
             println!("{}", report.pack.display());
             for entry in &report.entries {
                 let first = &entry.frames[0];
