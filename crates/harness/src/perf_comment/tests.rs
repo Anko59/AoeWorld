@@ -171,7 +171,7 @@ fn timing_rows_come_from_devs_own_band() {
     assert!(!comment.contains("max response backlog |"));
     // The band is described, and unchanged instruction counts say why the
     // shown timing differences mean nothing.
-    assert!(comment.contains("across its last 5 successful runs"));
+    assert!(comment.contains("across its last 5 runs whose `target-performance` job passed"));
     assert!(comment.contains("widened by 25% of that range"));
     assert!(
         comment.contains(
@@ -223,7 +223,9 @@ fn fewer_than_three_dev_reports_hide_all_timings_with_the_note() {
     // says why. The instruction line still holds: the measured paths did not
     // change, whatever the hidden timings did.
     assert!(!comment.contains("timing, noisy runner"));
-    assert!(comment.contains("No timing rows: only 2 successful `dev` runs"));
+    assert!(
+        comment.contains("No timing rows: only 2 `dev` runs whose `target-performance` job passed")
+    );
     assert!(comment.contains("needs at least 3"));
     assert!(
         comment.contains(
@@ -335,7 +337,9 @@ fn missing_dev_report_says_so_instead_of_failing() {
         wasm: None,
         noise: &noise,
     });
-    assert!(comment.contains("dev` run uploaded a `performance-report`"));
+    assert!(comment.contains(
+        "dev` run whose `target-performance` job passed uploaded a `performance-report`"
+    ));
     assert!(comment.contains("| Optimized WASM raw (bytes) | — | 10 | — | deterministic |"));
     // Without dev values nothing can move beyond the band: no timing rows.
     assert!(!comment.contains("timing, noisy runner"));
@@ -343,7 +347,9 @@ fn missing_dev_report_says_so_instead_of_failing() {
         comment
             .contains("| Optimized WASM gzip (bytes) | — | 10 | — | deterministic; cap unknown |")
     );
-    assert!(comment.contains("No timing rows: only 0 successful `dev` runs"));
+    assert!(
+        comment.contains("No timing rows: only 0 `dev` runs whose `target-performance` job passed")
+    );
 }
 
 #[test]
