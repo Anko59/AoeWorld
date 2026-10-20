@@ -146,12 +146,15 @@ It shows the optimized WASM size as `baseline …, cap …` (the cap is the size
 gate's own comparison threshold applied to `baselines/perf/wasm.json`) and the
 pinned kernels' instruction counts as deterministic rows. Tick and
 protocol-pressure timings appear only when the PR value falls outside the band
-`dev` itself spans across its last successful runs — their `[min, max]` widened
-by the factor in `crates/harness/src/perf_comment/noise.json` (25% of the range
-over up to 5 runs); with fewer than 3 such runs no timing rows show at all. The
-CI job durations of the run close the table. The comment never gates a merge,
-and it does not measure real frame rate: CI renders in software and the 1080p
-check is dedicated-hardware qualification only.
+`dev` itself spans across its latest runs whose `target-performance` job passed
+and which have a `performance-report` artifact — their `[min, max]` widened by
+the factor in `crates/harness/src/perf_comment/noise.json` (25% of the range
+over up to 5 runs); with fewer than 3 such runs no timing rows show at all.
+The search pages through at most 50 recent `dev` push runs of `ci.yml`, stopping
+once enough reports are found. Cancelled or failed runs qualify when their
+performance job passed. The CI job durations of the run close the table. The
+comment never gates a merge, and it does not measure real frame rate: CI renders
+in software and the 1080p check is dedicated-hardware qualification only.
 
 `AOE_MAP_SAMPLES=15 make map-perf` benchmarks a fixed synthetic chunk in release
 mode; adding `AOE_MAP_PACKAGE=/path/to/hash.json` selects its prepared center

@@ -10,8 +10,8 @@ const NOISE_FILE: &str = "crates/harness/src/perf_comment/noise.json";
 /// dev's own variance, and a fixed band would flag pure runner noise.
 const MIN_DEV_REPORTS: usize = 3;
 
-/// What `dev` itself varies, from `noise.json`: how many successful dev runs
-/// the band is drawn from and by how much of their range it widens.
+/// What `dev` itself varies, from `noise.json`: how many dev runs with passed
+/// performance jobs the band is drawn from and how much their range widens.
 #[derive(Deserialize)]
 pub(crate) struct Noise {
     widening_percent: u64,
@@ -288,7 +288,7 @@ fn job_rows(jobs: &[super::Job]) -> String {
 }
 
 /// Everything one comment is built from. `devs` are the dev reports of the
-/// latest successful dev runs, newest first.
+/// latest dev runs whose performance job passed, newest first.
 pub(crate) struct Input<'a> {
     pub(crate) repository: &'a str,
     pub(crate) run: u64,
@@ -316,7 +316,7 @@ pub(crate) fn comment(input: Input<'_>) -> String {
     match (pr, dev_run) {
         (Some(pr), Some(dev_run)) => text.push_str(&format!(
             "The `target-performance` job of [run {run}](https://github.com/{repository}/actions/runs/{run}) \
-measured revision `{}` against the latest successful `dev` run [\
+measured revision `{}` against the latest `dev` run whose `target-performance` job passed [\
 {dev_run}](https://github.com/{repository}/actions/runs/{dev_run}) (revision `{}`).\n\n",
             pr.revision,
             devs.first()
@@ -325,7 +325,7 @@ measured revision `{}` against the latest successful `dev` run [\
         )),
         (Some(_), None) => text.push_str(&format!(
             "The `target-performance` job of [run {run}](https://github.com/{repository}/actions/runs/{run}) \
-measured revision `{}`, but no recent successful `dev` run uploaded a `performance-report` \
+measured revision `{}`, but no recent `dev` run whose `target-performance` job passed uploaded a `performance-report` \
 artifact: `dev` values are missing below and only this pull request's absolute numbers show.\n\n",
             pr.map(|pr| pr.revision.as_str()).unwrap_or("unknown"),
         )),
@@ -357,15 +357,15 @@ nothing was measured for this pull request.\n\n"
         text.push_str(&if devs.len() >= MIN_DEV_REPORTS {
             format!(
                 "Timing rows appear only when this PR's value lies outside the band spanned by \
-`dev` itself across its last {} successful runs — their [min, max] widened by {}% of that \
+`dev` itself across its last {} runs whose `target-performance` job passed — their [min, max] widened by {}% of that \
 range (`{NOISE_FILE}`); tick times and protocol latencies vary with scheduling on shared runners.\n\n",
                 devs.len(),
                 noise.widening_percent(),
             )
         } else {
             format!(
-                "No timing rows: only {} successful `dev` run{} with a `performance-report` \
-artifact found, and comparing against dev's own variance needs at least {MIN_DEV_REPORTS}. \
+                "No timing rows: only {} `dev` run{} whose `target-performance` job passed and which have a \
+`performance-report` artifact found, and comparing against dev's own variance needs at least {MIN_DEV_REPORTS}. \
 A fixed band would flag pure runner noise.\n\n",
                 devs.len(),
                 if devs.len() == 1 { "" } else { "s" },

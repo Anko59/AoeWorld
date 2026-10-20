@@ -4,10 +4,10 @@
 //! baseline or threshold is read from it or changed by it.
 //!
 //! `make perf-comment` runs this after that job on pull requests. It reads
-//! the run's `performance-report` artifact and the latest one from a
-//! successful `dev` run, renders one compact table, and creates or rewrites
-//! the marked pull request comment. `PERF_COMMENT_PRINT=1` prints the body
-//! instead of posting (local checks).
+//! the run's `performance-report` artifact and the latest one from a `dev`
+//! run whose `target-performance` job passed, renders one compact table, and
+//! creates or rewrites the marked pull request comment. `PERF_COMMENT_PRINT=1`
+//! prints the body instead of posting (local checks).
 mod render;
 mod reports;
 #[cfg(test)]
@@ -35,7 +35,8 @@ fn gh_text(root: &Path, args: &[&str]) -> Result<String> {
 const WORKFLOW: &str = "ci.yml";
 const DEV_BRANCH: &str = "dev";
 /// The dev runs tried before giving up: cancelled runs crowd the list.
-const DEV_RUN_CANDIDATES: usize = 30;
+const DEV_RUN_CANDIDATES: usize = 50;
+const DEV_RUN_PAGE_SIZE: usize = 10;
 const ARTIFACT: &str = "performance-report";
 
 fn env_number(name: &str) -> Result<Option<u64>> {
@@ -82,44 +83,55 @@ fn report_of(root: &Path, repo: &str, run: u64, scratch: &Path) -> Option<Report
     reports::read(&dir).ok()
 }
 
-/// The successful `dev` runs of the CI workflow that uploaded the artifact,
-/// newest first, at most `limit` of them. Missing or expired artifacts fall
-/// through to earlier runs; cancelled runs crowd the list.
+#[derive(Deserialize)]
+struct DevRunsJson {
+    workflow_runs: Vec<DevRunJson>,
+}
+
+#[derive(Deserialize)]
+struct DevRunJson {
+    id: u64,
+}
+
+/// The `dev` push runs whose performance job passed and uploaded the artifact,
+/// newest first, at most `limit` of them. The run's overall conclusion is
+/// irrelevant. Missing or expired artifacts fall through to earlier runs.
 fn dev_reports(
     root: &Path,
     repo: &str,
     scratch: &Path,
     limit: usize,
 ) -> Result<Vec<(u64, Report)>> {
-    let ids = gh_text(
-        root,
-        &[
-            "run",
-            "list",
-            "--repo",
-            repo,
-            "--branch",
-            DEV_BRANCH,
-            "--workflow",
-            WORKFLOW,
-            "--limit",
-            &DEV_RUN_CANDIDATES.to_string(),
-            "--json",
-            "databaseId,conclusion",
-            "--jq",
-            ".[] | select(.conclusion == \"success\") | .databaseId",
-        ],
-    )?;
     let mut reports = Vec::new();
-    for id in ids.lines() {
+    for page in 1..=DEV_RUN_CANDIDATES.div_ceil(DEV_RUN_PAGE_SIZE) {
         if reports.len() >= limit {
             break;
         }
-        let Ok(run) = id.trim().parse::<u64>() else {
-            continue;
-        };
-        if let Some(report) = report_of(root, repo, run, scratch) {
-            reports.push((run, report));
+        let text = gh_text(
+            root,
+            &[
+                "api",
+                &format!(
+                    "repos/{repo}/actions/workflows/{WORKFLOW}/runs?branch={DEV_BRANCH}&event=push&per_page={DEV_RUN_PAGE_SIZE}&page={page}"
+                ),
+            ],
+        )?;
+        let runs: DevRunsJson =
+            serde_json::from_str(&text).map_err(|error| format!("dev runs: {error}"))?;
+        let last_page = runs.workflow_runs.len() < DEV_RUN_PAGE_SIZE;
+        for run in runs.workflow_runs {
+            if jobs(root, repo, run.id)?.iter().any(|job| {
+                job.name == "target-performance" && job.conclusion.as_deref() == Some("success")
+            }) && let Some(report) = report_of(root, repo, run.id, scratch)
+            {
+                reports.push((run.id, report));
+                if reports.len() >= limit {
+                    return Ok(reports);
+                }
+            }
+        }
+        if last_page {
+            break;
         }
     }
     Ok(reports)
