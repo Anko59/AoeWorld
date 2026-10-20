@@ -42,6 +42,10 @@ pub(super) fn native_kind(kind: UnitKind) -> aoe_simulation::UnitKind {
         UnitKind::Scout => aoe_simulation::UnitKind::Scout,
         UnitKind::Militia => aoe_simulation::UnitKind::Militia,
         UnitKind::FishingShip => aoe_simulation::UnitKind::FishingShip,
+        UnitKind::Archer => aoe_simulation::UnitKind::Archer,
+        UnitKind::Skirmisher => aoe_simulation::UnitKind::Skirmisher,
+        UnitKind::Spearman => aoe_simulation::UnitKind::Spearman,
+        UnitKind::ManAtArms => aoe_simulation::UnitKind::ManAtArms,
     }
 }
 pub(super) fn native_tech(tech: Tech) -> aoe_simulation::Tech {
@@ -54,6 +58,12 @@ pub(super) fn native_tech(tech: Tech) -> aoe_simulation::Tech {
         Tech::StoneMining => aoe_simulation::Tech::StoneMining,
         Tech::Wheelbarrow => aoe_simulation::Tech::Wheelbarrow,
         Tech::FeudalAge => aoe_simulation::Tech::FeudalAge,
+        Tech::ManAtArms => aoe_simulation::Tech::ManAtArms,
+        Tech::Forging => aoe_simulation::Tech::Forging,
+        Tech::ScaleMailArmor => aoe_simulation::Tech::ScaleMailArmor,
+        Tech::ScaleBardingArmor => aoe_simulation::Tech::ScaleBardingArmor,
+        Tech::Fletching => aoe_simulation::Tech::Fletching,
+        Tech::PaddedArcherArmor => aoe_simulation::Tech::PaddedArcherArmor,
     }
 }
 fn wire_tech(tech: aoe_simulation::Tech) -> Tech {
@@ -66,6 +76,12 @@ fn wire_tech(tech: aoe_simulation::Tech) -> Tech {
         aoe_simulation::Tech::StoneMining => Tech::StoneMining,
         aoe_simulation::Tech::Wheelbarrow => Tech::Wheelbarrow,
         aoe_simulation::Tech::FeudalAge => Tech::FeudalAge,
+        aoe_simulation::Tech::ManAtArms => Tech::ManAtArms,
+        aoe_simulation::Tech::Forging => Tech::Forging,
+        aoe_simulation::Tech::ScaleMailArmor => Tech::ScaleMailArmor,
+        aoe_simulation::Tech::ScaleBardingArmor => Tech::ScaleBardingArmor,
+        aoe_simulation::Tech::Fletching => Tech::Fletching,
+        aoe_simulation::Tech::PaddedArcherArmor => Tech::PaddedArcherArmor,
     }
 }
 pub(super) fn native_building(kind: BuildingKind) -> aoe_simulation::BuildingKind {
@@ -116,6 +132,10 @@ fn wire_kind(kind: aoe_simulation::UnitKind) -> UnitKind {
         aoe_simulation::UnitKind::Scout => UnitKind::Scout,
         aoe_simulation::UnitKind::Militia => UnitKind::Militia,
         aoe_simulation::UnitKind::FishingShip => UnitKind::FishingShip,
+        aoe_simulation::UnitKind::Archer => UnitKind::Archer,
+        aoe_simulation::UnitKind::Skirmisher => UnitKind::Skirmisher,
+        aoe_simulation::UnitKind::Spearman => UnitKind::Spearman,
+        aoe_simulation::UnitKind::ManAtArms => UnitKind::ManAtArms,
     }
 }
 fn wire_hit(hit: aoe_simulation::HitRecord) -> HitState {
@@ -216,6 +236,7 @@ pub(super) fn buildings(
                         aoe_simulation::Age::Feudal => aoe_protocol::Age::Feudal,
                     },
                     id: state.id,
+                    gate_open: state.gate_open,
                     player: state.player,
                     kind: wire_building(state.kind),
                     footprint: state.footprint,

@@ -35,6 +35,7 @@ fn building() -> GameplayBuildingState {
             total_ticks: 500,
         }],
         last_hit: None,
+        gate_open: false,
         age: aoe_protocol::Age::Dark,
     }
 }
@@ -151,7 +152,7 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
             kind: UnitKind::FishingShip
         }
     );
-    assert!(decode_gameplay_client(&[5, 9, 3, 4]).is_err());
+    assert!(decode_gameplay_client(&[5, 9, 3, 8]).is_err());
     assert!(decode_gameplay_client(&[4, 9, 3]).is_err());
     // A build order may name at most MAX_BUILD_GROUP villagers.
     let crowd = GameplayClientMessage::BuildOrder {
@@ -172,7 +173,7 @@ fn full_economy_snapshot_and_delta_roundtrip() {
         vec![
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 25, 25, 0, 0, 0, 0,
             0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232,
-            7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0, 0
+            7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0, 0, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);

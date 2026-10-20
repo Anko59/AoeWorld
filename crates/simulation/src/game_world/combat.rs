@@ -12,11 +12,15 @@ use std::collections::{BTreeMap, BTreeSet};
 mod cost;
 mod hash;
 mod lifecycle;
+pub(crate) mod military;
+mod projectiles;
 mod table;
 mod tick;
 mod towers;
 
 pub(crate) use hash::hash_hit;
+pub use military::researched_stats;
+pub use projectiles::{Projectile, ProjectileKind};
 pub use table::{
     BUILDING_COMBAT, BuildingAttack, BuildingCombat, DamageKind, UNIT_COMBAT, UnitCombat, UnitCost,
     UnitTraining, building_combat, damage_dealt, unit_combat,
@@ -53,6 +57,8 @@ pub(crate) struct Attacker {
 
 #[derive(Debug, Default)]
 pub(crate) struct Combat {
+    pub(crate) projectiles: BTreeMap<u64, Projectile>,
+    pub(crate) next_projectile: u64,
     pub(crate) tower_ready: BTreeMap<EntityId, u64>,
     pub(crate) attackers: BTreeMap<EntityId, Attacker>,
     /// `(tick at which the body is removed, unit)` in death order.
@@ -62,7 +68,10 @@ pub(crate) struct Combat {
 
 impl Combat {
     pub(crate) fn is_idle(&self) -> bool {
-        self.attackers.is_empty() && self.dying.is_empty() && self.tower_ready.is_empty()
+        self.attackers.is_empty()
+            && self.dying.is_empty()
+            && self.tower_ready.is_empty()
+            && self.projectiles.is_empty()
     }
 }
 
@@ -92,12 +101,21 @@ impl GameWorld {
         }
         let goal = self
             .attack_goal(target, player)
-            .filter(|_| id != target)
+            .filter(|_| {
+                id != target
+                    && (unit_combat(unit.kind).attack_kind != DamageKind::Pierce
+                        || self.target_visible_to(player, target))
+            })
             .ok_or(EconomyError::InvalidTarget)?;
         let Some(&index) = self.lookup.get(&id) else {
             return Err(EconomyError::UnknownEntity);
         };
-        if goal.distance_squared(unit.position) <= MELEE_RANGE_SUBUNITS * MELEE_RANGE_SUBUNITS {
+        let range = i64::from(
+            self.unit_stats(id)
+                .ok_or(EconomyError::UnknownEntity)?
+                .range,
+        ) * MELEE_RANGE_SUBUNITS;
+        if goal.distance_squared(unit.position) <= range * range {
             self.stop_movement(index);
         } else if let Some(destination) = self.attack_destination(unit.position, &goal) {
             self.issue_task_move(id, destination)?;

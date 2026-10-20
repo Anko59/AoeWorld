@@ -5,6 +5,17 @@ use aoe_protocol::{AnimalKind, AnimalState, AnimalTask, GameplayUnitState, UnitK
 
 pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> Pose {
     use Pose::*;
+    if let Some(poses) = military_poses(u.kind) {
+        return if u.hp == 0 {
+            poses[3]
+        } else if u.moving {
+            poses[1]
+        } else if u.task == UnitTask::Attacking {
+            poses[2]
+        } else {
+            poses[0]
+        };
+    }
     if u.kind == UnitKind::FishingShip {
         return if u.moving {
             FishingShipWalk
@@ -20,13 +31,13 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     if u.hp == 0 {
         return match u.kind {
             UnitKind::Militia => MilitiaDie,
-            UnitKind::Scout => ScoutDie,
             UnitKind::FishingShip => unreachable!(),
             UnitKind::Villager => match u.death_hunt {
                 Some(AnimalKind::Sheep) => ShepherdDie,
                 Some(_) => HunterDie,
                 None => VillagerDie,
             },
+            _ => unreachable!(),
         };
     }
     if u.kind == UnitKind::Militia {
@@ -37,9 +48,6 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
         } else {
             MilitiaStand
         };
-    }
-    if u.kind == UnitKind::Scout {
-        return ScoutAttack;
     }
     if u.hunt_target.is_some() && u.task == UnitTask::Returning {
         return HunterCarry;
@@ -79,6 +87,23 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
         };
     }
     VillagerAttack
+}
+
+fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
+    use Pose::*;
+    Some(match kind {
+        UnitKind::Archer => [ArcherStand, ArcherWalk, ArcherAttack, ArcherDie],
+        UnitKind::Skirmisher => [
+            SkirmisherStand,
+            SkirmisherWalk,
+            SkirmisherAttack,
+            SkirmisherDie,
+        ],
+        UnitKind::Spearman => [SpearmanStand, SpearmanWalk, SpearmanAttack, SpearmanDie],
+        UnitKind::ManAtArms => [ManAtArmsStand, ManAtArmsWalk, ManAtArmsAttack, ManAtArmsDie],
+        UnitKind::Scout => [ScoutStand, ScoutWalk, ScoutAttack, ScoutDie],
+        _ => return None,
+    })
 }
 
 pub(crate) fn animal_pose(a: &AnimalState) -> Pose {
@@ -144,6 +169,10 @@ fn decay_pair(pose: Pose) -> Option<(Pose, Pose)> {
     use Pose::*;
     [
         (MilitiaDie, MilitiaDecay),
+        (ArcherDie, ArcherDecay),
+        (SkirmisherDie, SkirmisherDecay),
+        (SpearmanDie, SpearmanDecay),
+        (ManAtArmsDie, ManAtArmsDecay),
         (VillagerDie, VillagerDecay),
         (SheepDie, SheepDecay),
         (DeerDie, DeerDecay),
@@ -195,7 +224,8 @@ pub(crate) fn packed_frame(
             });
         (elapsed.saturating_sub(delay) / millis).min(stride - 1) as u8
     } else {
-        (time.max(0.0) as u64 / millis % stride) as u8
+        ((time.max(0.0) as u64 % (u64::from(source.stride) * u64::from(source.millis))) / millis)
+            .min(stride - 1) as u8
     };
     (facing % 8) | (phase << 3)
 }

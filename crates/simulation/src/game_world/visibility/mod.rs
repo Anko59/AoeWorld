@@ -253,8 +253,6 @@ impl GameWorld {
     pub(crate) fn update_unit_vision(&mut self, id: EntityId) {
         let observer = self.unit(id).filter(|u| u.hp > 0).map(|u| {
             let los = match u.kind {
-                UnitKind::Villager | UnitKind::Militia => 4,
-                UnitKind::FishingShip => 5,
                 UnitKind::Scout => {
                     if self.has_researched(u.player, super::Tech::FeudalAge) {
                         6
@@ -262,6 +260,9 @@ impl GameWorld {
                         4
                     }
                 }
+                _ => self
+                    .unit_stats(u.id)
+                    .map_or(super::unit_combat(u.kind).los, |s| s.los),
             };
             (u.player, u.position.tile_floor(), los)
         });

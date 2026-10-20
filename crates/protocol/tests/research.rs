@@ -33,6 +33,7 @@ fn center(research: Option<ResearchState>) -> GameplayBuildingState {
         food_remaining: None,
         training_queue: vec![],
         last_hit: None,
+        gate_open: false,
         age: aoe_protocol::Age::Dark,
         research,
     }
@@ -100,7 +101,7 @@ fn research_orders_have_current_golden_wire_and_round_trip() {
         assert_eq!(decode_gameplay_client(&bytes).unwrap(), message);
     }
     // An unknown technology is not a message.
-    assert!(decode_gameplay_client(&[13, 7, 1, 8]).is_err());
+    assert!(decode_gameplay_client(&[13, 7, 1, 14]).is_err());
 }
 
 #[test]
@@ -119,7 +120,7 @@ fn research_state_has_current_golden_wire_and_round_trips() {
 
 const GOLDEN_TICK: &[u8] = &[
     2, 2, 9, 0, 0, 1, 0, 0, 0, 0, 0, 4, 5, 1, 5, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18,
-    224, 18, 8, 0, 0, 1, 0, 125, 244, 3, 0, 0, 0,
+    224, 18, 8, 0, 0, 1, 0, 125, 244, 3, 0, 0, 0, 0,
 ];
 
 #[test]

@@ -4,16 +4,27 @@ use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileCoord};
 
 impl GameWorld {
     pub(crate) fn movement_speed(&self, kind: UnitKind, player: aoe_core::PlayerId) -> (u64, u64) {
+        if kind == UnitKind::Scout && self.player_economy(player).is_none() {
+            return (
+                self.config.move_speed_subunits_per_tick as u64,
+                self.config.move_speed_subunits_per_tick_denominator,
+            );
+        }
         if kind == UnitKind::FishingShip {
             return (
                 126 * FIXED_SUBUNITS_PER_TILE as u64,
                 100 * u64::from(self.config.tick_hz),
             );
         }
-        if let Some(tenths) = crate::game_world::combat::unit_combat(kind).speed_tenths {
+        let stats = super::super::combat::military::researched_stats(
+            kind,
+            self.is_feudal(player),
+            self.player_economy(player).map_or(0, |p| p.researched),
+        );
+        if let Some(hundredths) = stats.speed_hundredths {
             (
-                u64::from(tenths) * FIXED_SUBUNITS_PER_TILE as u64,
-                10 * u64::from(self.config.tick_hz),
+                u64::from(hundredths) * FIXED_SUBUNITS_PER_TILE as u64,
+                100 * u64::from(self.config.tick_hz),
             )
         } else if kind == UnitKind::Scout {
             (

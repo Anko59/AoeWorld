@@ -4,6 +4,7 @@ import { gameAssets } from "../game-assets.js";
 import { centerVillage } from "./fixtures/resources.js";
 import { workerFixture } from "./fixtures/worker.js";
 import { forceCanvas } from "../rendering/backends.js";
+import "./military/attack.js";
 
 type Actor = { kind: string; x: number; y: number };
 async function actors(page: Page): Promise<Actor[]> {

@@ -218,6 +218,20 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     }
                 }
             }
+            Ok(GameplayServerMessage::Projectiles {
+                revision,
+                tick,
+                projectiles,
+            }) => {
+                if revision == client.revision && tick.0 >= client.village.projectile_tick {
+                    let _ = client
+                        .canvas
+                        .set_attribute("data-projectiles", &projectiles.len().to_string());
+                    client.village.projectile_tick = tick.0;
+                    client.village.projectiles = projectiles;
+                    client.rendered_frame.clear();
+                }
+            }
             Ok(GameplayServerMessage::WildlifeState {
                 revision,
                 tick,

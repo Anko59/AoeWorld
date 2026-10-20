@@ -109,7 +109,7 @@ impl GameWorld {
             .fold(0, u8::saturating_add)
     }
 
-    pub(super) fn complete_research(
+    pub(in crate::game_world) fn complete_research(
         &mut self,
         player: PlayerId,
         tech: Tech,
@@ -120,6 +120,30 @@ impl GameWorld {
         };
         state.researched |= tech.bit();
         match tech.rules().effect {
+            TechEffect::Military => {
+                if tech == Tech::Fletching {
+                    for b in self.economy.buildings.values_mut().filter(|b| {
+                        b.player == player
+                            && matches!(
+                                b.kind,
+                                crate::BuildingKind::TownCenter | crate::BuildingKind::WatchTower
+                            )
+                    }) {
+                        b.los += 1;
+                    }
+                }
+            }
+            TechEffect::UpgradeMilitia => {
+                for stored in &mut self.units {
+                    let u = &mut stored.state;
+                    if u.player == player && u.kind == UnitKind::Militia && u.hp > 0 {
+                        u.kind = UnitKind::ManAtArms;
+                        u.hp += 5;
+                        u.max_hp += 5;
+                        changed.push(*u);
+                    }
+                }
+            }
             TechEffect::GatherRate { .. }
             | TechEffect::FarmFood(_)
             | TechEffect::VillagerEconomy { .. } => {}
@@ -165,7 +189,7 @@ impl GameWorld {
                 }
             }
         }
-        if matches!(tech, Tech::TownWatch | Tech::FeudalAge) {
+        if matches!(tech, Tech::TownWatch | Tech::FeudalAge | Tech::Fletching) {
             let ids = self
                 .buildings()
                 .filter(|b| b.player == player)
@@ -175,10 +199,16 @@ impl GameWorld {
                 self.update_building_vision(id);
             }
         }
-        if tech == Tech::FeudalAge {
+        if matches!(tech, Tech::FeudalAge | Tech::Fletching) {
             let ids = self
                 .units()
-                .filter(|u| u.player == player && u.kind == UnitKind::Scout)
+                .filter(|u| {
+                    u.player == player
+                        && matches!(
+                            u.kind,
+                            UnitKind::Scout | UnitKind::Archer | UnitKind::Skirmisher
+                        )
+                })
                 .map(|u| u.id)
                 .collect::<Vec<_>>();
             for id in ids {

@@ -51,7 +51,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     let mut selected = std::collections::BTreeSet::new();
     let mut counts = [0_usize; 2];
     // Validate complete prefixes, then pack the client's actual selection:
-    // one cell per idle facing and the existing fisherman sampling step.
+    // compact idle facings and the sampled native actor/projectile cells.
     // Neutral/owned palette copies still occupy separate semantic entries.
     for (identity, count, domain, step) in reviewed_sources() {
         let mut frames = manifest
@@ -68,6 +68,18 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         {
             return Err(format!("missing or duplicate reviewed prefix: {identity}"));
         }
+        let actor = super::units::SPRITES
+            .iter()
+            .find(|s| s.manifest_source() == identity);
+        let drawn = actor.map(|source| {
+            (0..5)
+                .flat_map(|row| {
+                    (0..usize::from(source.stride))
+                        .step_by(usize::from(source.sample_step()))
+                        .map(move |phase| source.source_frame(row, phase) as u32)
+                })
+                .collect::<std::collections::BTreeSet<_>>()
+        });
         for (number, frame) in frames.into_iter().enumerate() {
             let page = manifest
                 .pages
@@ -80,7 +92,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             {
                 return Err("invalid source rectangle".into());
             }
-            if number % step == 0 {
+            if drawn.as_ref().map_or(number % step == 0, |cells| cells.contains(&frame.frame)) {
                 selected.insert((frame.source.clone(), frame.frame));
                 counts[usize::from(domain == AtlasDomain::Objects)] += 1;
                 extents.push(FrameExtent {
@@ -91,8 +103,14 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             }
         }
     }
-    // 45 cavalry idle + 70 villager idle + 70 fisherman cells are not drawn.
-    if extents.len() != MAX_REVIEWED_FRAMES as usize + 2695 - 185 || counts != [1474, 3397] {
+    let actor_count = super::units::SPRITES
+        .iter()
+        .map(|s| s.selected_frames())
+        .sum::<usize>();
+    // 45 cavalry idle and 70 villager idle cells are not drawn.
+    if extents.len() != MAX_REVIEWED_FRAMES as usize + actor_count - 115
+        || counts != [1474, 895 + actor_count - 115]
+    {
         return Err("incomplete semantic selection".into());
     }
     // Match the loader's DAT additions after the static catalog, including
@@ -253,7 +271,7 @@ fn original_manifest_all_reviewed_frames_fit_fixed_atlas() -> Result<(), Box<dyn
 #[test]
 fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
-    assert_eq!(prove(&manifest).unwrap(), (1474, 3397));
+    assert_eq!(prove(&manifest).unwrap(), (1474, 895 + actor_frames() - 115));
     let saved = manifest.frames[0].clone();
     manifest.frames[0].frame = 1;
     assert!(prove(&manifest).is_err());
@@ -363,7 +381,7 @@ fn full_catalog_with_native_mill_dock_and_farm_fits_runtime_budget() {
             }
         }
     }
-    assert_eq!(prove(&manifest).unwrap(), (1510, 3471));
+    assert_eq!(prove(&manifest).unwrap(), (1510, 895 + actor_frames() - 115 + 74));
 }
 
 #[test]
@@ -399,7 +417,7 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
             manifest.frames.push(record);
         }
     }
-    assert_eq!(prove(&manifest).unwrap(), (1474, 3397 + 15));
+    assert_eq!(prove(&manifest).unwrap(), (1474, 895 + actor_frames() - 115 + 15));
     for index in manifest.frames.len() - 15..manifest.frames.len() {
         let mut bad = manifest.clone();
         bad.frames.remove(index);
@@ -411,4 +429,8 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
         bad.frames[index].x = PAGE_SIDE;
         assert!(prove(&bad).is_err(), "invalid rectangle {index}");
     }
+}
+
+fn actor_frames() -> usize {
+    super::units::SPRITES.iter().map(|s| s.selected_frames()).sum()
 }

@@ -176,7 +176,7 @@ for (const backend of ["webgpu", "webgl2", "canvas2d"] as const) {
     });
     expect(units).toHaveLength(4);
     expect(new Set(units).size).toBe(4);
-    // This pack deliberately omits village art. The scout keeps its native
+    // This pack deliberately omits villager art. The scout keeps its native
     // scale, while each villager has the exact semantic fallback dimensions.
     const riders = units.filter(
       (unit) => unit.bottom - unit.top + 1 > ART.anchorY,

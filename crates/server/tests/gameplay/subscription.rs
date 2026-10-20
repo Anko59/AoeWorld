@@ -28,6 +28,11 @@ fn classify(message: &GameplayServerMessage, expected_code: u16) -> Result<bool,
         {
             Ok(false)
         }
+        GameplayServerMessage::Projectiles {
+            revision: 1,
+            projectiles,
+            ..
+        } if projectiles.is_empty() => Ok(false),
         GameplayServerMessage::Tick {
             revision: 1,
             changed_units,

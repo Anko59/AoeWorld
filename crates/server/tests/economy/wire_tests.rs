@@ -174,7 +174,7 @@ async fn a_full_outgoing_queue_disconnects_instead_of_losing_economy_changes() {
 #[tokio::test]
 async fn full_subscription_frames_disconnect_when_an_economy_delta_cannot_be_sent() {
     let service = GameplayService::new(Seed(1));
-    let (tx, mut rx) = mpsc::channel(3);
+    let (tx, mut rx) = mpsc::channel(4);
     let (id, _) = service.register(None, tx).await;
     let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
     service.subscribe(id, 1, region).await;
@@ -192,7 +192,7 @@ async fn full_subscription_frames_disconnect_when_an_economy_delta_cannot_be_sen
         .await;
     service.tick().await;
     let queued = drain(&mut rx);
-    assert_eq!(queued.len(), 3);
+    assert_eq!(queued.len(), 4);
     assert!(matches!(
         queued[0],
         GameplayServerMessage::Snapshot { revision: 2, .. }
@@ -202,6 +202,9 @@ async fn full_subscription_frames_disconnect_when_an_economy_delta_cannot_be_sen
         GameplayServerMessage::WildlifeState { revision: 2, .. }
     ));
     assert!(matches!(&queued[2], GameplayServerMessage::FogState(state) if state.revision == 2));
+    assert!(
+        matches!(&queued[3], GameplayServerMessage::Projectiles {revision:2,projectiles,..} if projectiles.is_empty())
+    );
     assert!(
         rx.is_closed(),
         "failed economy delivery requires an authoritative reset"

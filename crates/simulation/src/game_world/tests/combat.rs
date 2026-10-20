@@ -3,6 +3,8 @@ use super::*;
 use crate::{BUILDING_COMBAT, DamageKind, EconomyError, UNIT_COMBAT, UnitTask, damage_dealt};
 
 mod buildings;
+mod military;
+mod research_tests;
 mod scale;
 
 pub(super) fn at(x: i32, y: i32) -> WorldPosition {
@@ -55,7 +57,7 @@ fn the_combat_table_is_ordered_by_kind_and_holds_the_dark_age_values() {
     for (index, row) in BUILDING_COMBAT.iter().enumerate() {
         assert_eq!(row.kind as usize, index);
     }
-    let [villager, scout, militia, fishing_ship] = UNIT_COMBAT;
+    let [villager, scout, militia, fishing_ship, ..] = UNIT_COMBAT;
     assert_eq!(
         (
             fishing_ship.hp,
@@ -75,7 +77,7 @@ fn the_combat_table_is_ordered_by_kind_and_holds_the_dark_age_values() {
     let training = militia.training.unwrap();
     assert_eq!(
         (training.cost.food, training.cost.gold, training.seconds),
-        (60, 20, 21)
+        (50, 20, 21)
     );
     assert_eq!(crate::BUILDING_RULES[0].max_hp, 2400);
 }

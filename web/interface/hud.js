@@ -56,12 +56,12 @@ export function initInterface() {
     const actions=building?1:units?2:0;
     empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
     text('command-context',count>1?`${count} units`:first?.name ?? 'Select a unit');
-    text('command-hint',building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: hunt, attack, gather or move':first.kind==='FishingShip'?'Right-click: fish or move':['Militia','Scout'].includes(first.kind)?'Right-click: attack or move':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag to select a group');
+    text('command-hint',building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: hunt, attack, gather or move':first.kind==='FishingShip'?'Right-click: fish or move':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms'].includes(first.kind)?'Right-click: attack or move':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag to select a group');
     show('observer-label',state.observer);
     show('unit-hp',count===1 && !building); show('unit-combat',count===1 && !building);
     if (first) {
       text('unit-hp',`${first.hp} / ${first.maxHp} HP`);
-      text('unit-combat',`Attack ${first.attack} · Armour ${first.melee} / ${first.pierce}`);
+      text('unit-combat',`Attack ${first.attack} · Armour ${first.melee} / ${first.pierce} · Range ${first.range}`);
       const groupName=selected.every(unit=>unit.kind===first.kind)?`${first.name}s`:'units';
       text('selection-name',count>1?`${count} ${groupName} selected`:first.name);
       text('selection-task',count===1?building?(state.queue.length?'Training':'Building'): `${first.task}${first.resource && first.task==='Gathering'?' '+first.resource:''}`:'Right-click to give this group an order');
@@ -95,15 +95,15 @@ export function initInterface() {
     }
   };
   window.aoeInterface = { details: updateDetails, numeric(values,status) {
-    const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf'], names=['Scout','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf'];
+    const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','ManAtArms'], names=['Scout Cavalry','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','Man-at-Arms'];
     const tasks=['Idle','Moving','Gathering','Carrying','Returning to drop-off','Attacking','Dying','Building','Farming','Hunting','Shepherding','Fishing','Idle','Fleeing','Attacking','Dying','Carcass'];
     const resources=['food','wood','gold','stone',''];
     const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],observer:values[11]===1,art:values[12]===1,status,actors:[],selected:[],queue:[],resources:[]};
     let at=16;
-    for (let index=0;index<values[13];index++,at+=15) {
-      const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity]=values.subarray(at,at+15);
+    for (let index=0;index<values[13];index++,at+=16) {
+      const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity,range]=values.subarray(at,at+16);
       state.actors.push({id,kind:kinds[kind],x,y,selected:!!selected,hp,maxHp,head,task:tasks[task],load:kind===1 && amount?[resources[resource],amount]:null});
-      if (selected) state.selected.push({id,kind:kinds[kind],name:names[kind],task:tasks[task],resource:resources[resource],amount,hp,maxHp,attack,melee,pierce,capacity});
+      if (selected) state.selected.push({id,kind:kinds[kind],name:names[kind],task:tasks[task],resource:resources[resource],amount,hp,maxHp,attack,melee,pierce,capacity,range});
     }
     for (let index=0;index<values[14];index++,at+=2) state.queue.push([values[at],values[at+1]]);
     for (let index=0;index<values[15];index++,at+=4) state.resources.push({kind:values[at],x:values[at+1],y:values[at+2],distance:values[at+3]});

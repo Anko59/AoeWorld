@@ -285,6 +285,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         research: None,
         last_hit: None,
         age: Age::Dark,
+        gate_open: false,
     });
     let rendered = |client: &Client| {
         units(client, &scene)
@@ -296,4 +297,89 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
     assert_eq!(rendered(&client), aoe_rendering::SceneUnitKind::House);
     client.village.buildings[0].age = Age::Feudal;
     assert_eq!(rendered(&client), aoe_rendering::SceneUnitKind::FeudalHouse);
+}
+
+#[wasm_bindgen_test]
+async fn authoritative_gate_stays_open_when_the_holding_enemy_is_not_resident() {
+    use aoe_core::{TileCoord, TileRect};
+    use aoe_protocol::{Age, BuildingKind, ConstructionState, GameplayBuildingState};
+    let scene = contact_scene();
+    let mut client = client(&scene).await;
+    client.units.clear(); // The unit keeping this gate open has left our sight.
+    client.village.buildings.push(GameplayBuildingState {
+        id: EntityId(2),
+        player: PlayerId(1),
+        kind: BuildingKind::PalisadeGate,
+        footprint: TileRect::new(TileCoord::new(281, 603), TileCoord::new(285, 604)),
+        construction: ConstructionState::Complete,
+        progress_permille: 1000,
+        hp: 400,
+        max_hp: 400,
+        los: 6,
+        food_remaining: None,
+        training_queue: vec![],
+        research: None,
+        last_hit: None,
+        age: Age::Feudal,
+        gate_open: true,
+    });
+    for _ in 0..20 {
+        let gate = units(&client, &scene)
+            .into_iter()
+            .find(|u| u.id == EntityId(2))
+            .unwrap();
+        assert_eq!(gate.kind, aoe_rendering::SceneUnitKind::OpenPalisadeGate);
+    }
+    assert_eq!(client.village.gate_art.borrow().updates(), 1);
+    client.village.buildings[0].gate_open = false;
+    assert_eq!(
+        units(&client, &scene)[0].kind,
+        aoe_rendering::SceneUnitKind::PalisadeGate
+    );
+    assert_eq!(client.village.gate_art.borrow().updates(), 2);
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn projectile_scene_uses_native_arrow_and_javelin_and_current_fog() {
+    use aoe_core::{Tick, TileCoord, TileRect};
+    use aoe_protocol::{FogState, ProjectileKind, ProjectileState};
+    let scene = contact_scene();
+    let mut client = client(&scene).await;
+    client.units.clear();
+    client.village.tick = 15;
+    let region = TileRect::new(TileCoord::new(281, 602), TileCoord::new(286, 606));
+    let fog = |state| FogState {
+        revision: 1,
+        tick: Tick(15),
+        region,
+        disabled: false,
+        tiles: vec![state; 20],
+        overview: vec![],
+    };
+    assert!(client.fog.apply(fog(2)));
+    for kind in [ProjectileKind::Arrow, ProjectileKind::Javelin] {
+        client.village.projectiles = vec![ProjectileState {
+            id: 1,
+            from: WorldPosition::from_tile_center(TileCoord::new(282, 603)).unwrap(),
+            to: WorldPosition::from_tile_center(TileCoord::new(284, 603)).unwrap(),
+            launched: Tick(10),
+            impact: Tick(20),
+            kind,
+        }];
+        let rendered = units(&client, &scene);
+        assert_eq!(rendered.len(), 1);
+        assert_eq!(rendered[0].position, [283.5, 603.5]);
+        assert_eq!(
+            rendered[0].kind,
+            if kind == ProjectileKind::Arrow {
+                aoe_rendering::SceneUnitKind::Arrow
+            } else {
+                aoe_rendering::SceneUnitKind::Javelin
+            }
+        );
+    }
+    assert!(client.fog.apply(fog(1)));
+    assert!(units(&client, &scene).is_empty());
+    client.canvas.remove();
 }

@@ -1,6 +1,8 @@
 //! One projected terrain snapshot shared by rendering, contacts and picking.
 use super::*;
 use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
+#[path = "scene/projectiles.rs"]
+mod projectiles;
 
 #[cfg(test)]
 #[path = "scene/tests/cache.rs"]
@@ -209,8 +211,7 @@ pub(in super::super) fn units(
             let position = client.presentation.position(*unit);
             let mut kind = worker_kind(unit);
             let mut facing = unit.facing;
-            if unit.kind == aoe_protocol::UnitKind::Militia
-                || unit.kind == aoe_protocol::UnitKind::FishingShip
+            if unit.kind != aoe_protocol::UnitKind::Villager
                 || (unit.task == aoe_protocol::UnitTask::Fishing && !unit.moving)
                 || unit.hp == 0
                 || matches!(
@@ -289,20 +290,35 @@ pub(in super::super) fn units(
         .map(|b| (b.footprint.min.x, b.footprint.min.y))
         .collect();
     for building in &client.village.buildings {
-        let gate_open = building.kind == aoe_protocol::BuildingKind::PalisadeGate
-            && building.progress_permille == 1000
-            && client.units.values().any(|u| {
-                let at = u.position.tile_floor();
-                let r = building.footprint;
-                u.hp > 0
-                    && ((u.player == building.player
-                        && at.x >= r.min.x - 2
-                        && at.y >= r.min.y - 2
-                        && at.x < r.max.x + 2
-                        && at.y < r.max.y + 2)
-                        || r.contains(at))
-            });
         let position = super::super::village::building_center(building);
+        let gate_open = if building.kind == aoe_protocol::BuildingKind::PalisadeGate {
+            let p = client.camera.world_to_screen_at_height(
+                position,
+                scene
+                    .height(position)
+                    .unwrap_or_else(|| elevation_at_world(client, position)),
+            );
+            let visible = p.x >= -256.0
+                && p.y >= -256.0
+                && p.x <= f64::from(client.canvas.width()) + 256.0
+                && p.y <= f64::from(client.canvas.height()) + 256.0;
+            if !visible {
+                continue;
+            }
+            client
+                .village
+                .gate_art
+                .borrow_mut()
+                .observe(
+                    building.id,
+                    building.gate_open,
+                    building.progress_permille,
+                    visible,
+                )
+                .is_some()
+        } else {
+            false
+        };
         let slot = units.partition_point(|unit| unit.id < building.id);
         units.insert(
             slot,
@@ -354,6 +370,7 @@ pub(in super::super) fn units(
         let slot = units.partition_point(|u| u.id < building.id);
         units.insert(slot, unit);
     }
+    projectiles::append(client, scene, &mut units);
     units
 }
 

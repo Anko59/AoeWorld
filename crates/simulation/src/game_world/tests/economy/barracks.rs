@@ -9,7 +9,7 @@ fn a_barracks_trains_a_militia_end_to_end() {
     set_stock(&mut world, 500, 500, 100, 0);
     assert_eq!(
         trainable_units(BuildingKind::Barracks),
-        &[UnitKind::Militia]
+        &[UnitKind::Militia, UnitKind::Spearman, UnitKind::ManAtArms]
     );
     world
         .economy
@@ -47,10 +47,10 @@ fn a_barracks_trains_a_militia_end_to_end() {
     world
         .issue_train(PlayerId(0), barracks, UnitKind::Militia)
         .unwrap();
-    // 60 food and 20 gold, from the combat table.
+    // Licensed DE: 50 food and 20 gold, from the combat table.
     assert_eq!(
         stock(&world),
-        (before.0 - 60, before.1, before.2 - 20, before.3)
+        (before.0 - 50, before.1, before.2 - 20, before.3)
     );
     // Cancelling refunds exactly and queues nothing.
     world.issue_cancel_training(PlayerId(0), barracks).unwrap();

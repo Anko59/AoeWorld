@@ -3,7 +3,7 @@ use crate::{BuildingKind, GameUnit, GameWorld};
 use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileCoord, TileRect, WorldPosition};
 
 impl GameWorld {
-    pub(super) fn advance_towers(&mut self, changed: &mut Vec<GameUnit>) {
+    pub(super) fn advance_towers(&mut self, _changed: &mut Vec<GameUnit>) {
         // Only completed towers are registered; queries use the unit spatial
         // index, never an all-units scan per building. At most 256 towers.
         let towers: Vec<_> = self.combat.tower_ready.keys().copied().collect();
@@ -18,7 +18,7 @@ impl GameWorld {
             if self.combat.tower_ready[&id] > self.tick.0 {
                 continue;
             }
-            let Some(arrow) = super::building_combat(tower.kind).attack else {
+            let Some(arrow) = self.building_attack(tower.player, tower.kind) else {
                 continue;
             };
             let radius = i32::from(arrow.range);
@@ -56,7 +56,20 @@ impl GameWorld {
                         + (u64::from(arrow.period_centiseconds) * u64::from(self.config.tick_hz))
                             .div_ceil(100),
                 );
-                self.resolve_hit(id, target, arrow.attack, arrow.kind, changed);
+                let bonus = self.unit(target).map_or(0, |u| {
+                    if u.kind == crate::UnitKind::Spearman {
+                        2
+                    } else {
+                        0
+                    }
+                });
+                self.launch_projectile(
+                    id,
+                    target,
+                    arrow.attack,
+                    bonus,
+                    super::ProjectileKind::Arrow,
+                );
             }
         }
     }

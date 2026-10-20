@@ -2,6 +2,7 @@
 mod gameplay;
 pub use gameplay::FogState;
 pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
+pub use gameplay::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 
 use aoe_core::{EntityId, PlayerId, Position, Region, Tick};
 pub use gameplay::{

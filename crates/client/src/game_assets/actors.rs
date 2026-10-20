@@ -37,14 +37,14 @@ pub(super) fn select(
             ranges.push(None);
             continue;
         };
-        if frames.len() > MAX_SELECTED_FRAMES.saturating_sub(selected.len()) {
+        if source.selected_frames() > MAX_SELECTED_FRAMES.saturating_sub(selected.len()) {
             return Err(JsValue::from_str("Too many actor animation frames"));
         }
         let start = selected.len();
         for row in 0..5 {
             for phase in (0..usize::from(source.stride)).step_by(usize::from(source.sample_step()))
             {
-                selected.push(frames[row * usize::from(source.stride) + phase]);
+                selected.push(frames[source.source_frame(row, phase)]);
                 domains.push(AtlasDomain::Objects);
             }
         }
