@@ -173,7 +173,7 @@ pub(super) fn situation_with(
 /// A branch's open pull request: its URL and the branch it targets.
 #[derive(serde::Deserialize)]
 pub(super) struct OpenPr {
-    url: String,
+    pub(super) url: String,
     #[serde(rename = "baseRefName")]
     pub(super) base: String,
 }
@@ -272,8 +272,21 @@ pub(super) fn auto_merge_not_enabled(error: &str) -> bool {
 pub(super) fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<String> {
     let branch = evidence.branch.as_str();
     let repository = git::origin_repository(root)?;
-    let body = options.body_file.as_ref().map(|p| p.display().to_string());
     let existing = open_pull_request(root, &repository, branch)?;
+    upsert(root, evidence, options, existing, false)
+}
+
+/// Upsert a PR using the lookup made before the draft push, or the normal final lookup.
+pub(super) fn upsert(
+    root: &Path,
+    evidence: &Evidence,
+    options: &Options,
+    existing: Option<OpenPr>,
+    draft: bool,
+) -> Result<String> {
+    let branch = evidence.branch.as_str();
+    let repository = git::origin_repository(root)?;
+    let body = options.body_file.as_ref().map(|p| p.display().to_string());
     let url = match existing {
         Some(pr) => {
             let retarget = super::stack::retarget(Some(&pr.base), &options.base);
@@ -304,7 +317,10 @@ pub(super) fn pull_request(root: &Path, evidence: &Evidence, options: &Options) 
                     "a new pull request needs SHIP_TITLE and SHIP_BODY (a description file)".into(),
                 );
             };
-            let args = create_args(&repository, &options.base, branch, title, body);
+            let mut args = create_args(&repository, &options.base, branch, title, body);
+            if draft {
+                args.push("--draft".into());
+            }
             gh(root, &args.iter().map(String::as_str).collect::<Vec<_>>())?
         }
     };

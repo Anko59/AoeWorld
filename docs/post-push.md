@@ -1,6 +1,7 @@
 # After the push
 
-`make ship` pushes a reviewed commit and arms auto-merge. While the pull request
+`make ship` first pushes a draft into `dev` for CI alongside review. Approval
+posts the review status, marks it ready and arms auto-merge. While the pull request
 waits for CI, `dev` may move, and GitHub would merge the pull request untested
 against the new `dev` (four incidents in two days, #388). Three pieces close
 that window; the workflow `.github/workflows/post-push.yml` only decides when
@@ -41,7 +42,8 @@ event is `pull_request_target` so that the workflow and the harness come from
 none of its code runs. The command computes the head's own-patch identity against
 the current `dev` and the review policy fingerprint at `dev`, with the marker's
 tier. If both equal the marker's, it posts `harness/review` = success on the
-new head, "carried from <sha12>: patch and policy unchanged". Otherwise it posts
+new head, "carried from <sha12>: patch and policy unchanged". Draft PRs are skipped
+without a status or carry comment. Otherwise it posts
 nothing and writes one comment saying which: `patch changed`, `policy changed`
 or `no review marker`. A successful carry also comments on the updated head, so
 `make next` can show open PRs into dev with auto-merge armed whose latest carry

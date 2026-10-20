@@ -18,7 +18,10 @@ for arg in "$@"; do
 done
 case "$1" in
   --version) printf 'gh version 2.100.0\n' ;;
-  api) printf '%s' "$GH_LIST_JSON" ;;
+  api) case "$*" in
+    *'/actions/workflows/ci.yml/runs?'*) printf '{"workflow_runs":[]}' ;;
+    *) printf '%s' "$GH_LIST_JSON" ;;
+  esac ;;
   issue) case "$2" in
     create|edit)
       cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG"

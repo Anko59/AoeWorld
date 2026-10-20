@@ -42,11 +42,19 @@ agent policy refuses `$` in agent-set Make values.
    `<git common dir>/aoe-ship/evidence/<sha>.json` (`make ship-status` prints it).
    A new commit has no evidence, so evidence for one commit never stands in for
    another. The agent policy refuses every write into the Git common directory.
-6. **Reviews** the commit, with the ship lock still released (`ship: lock released for the gates and the review`, printed after the start-of-ship rebase; no heavy slot is held either) so the next ship runs meanwhile, with the tiered [adversarial review](review.md)
+6. **Starts CI alongside review** for reviewed pull requests into `dev`: after the
+   local gates pass, takes the lock, pushes the gated head, and opens a **draft**
+   with the validated title and body. An existing PR is disarmed (`gh pr merge
+   --disable-auto`) before conversion to draft (`gh pr ready --undo`), then its
+   title and body are updated. A draft never has auto-merge armed; this step posts
+   no `harness/review` status. The `draft-push` timeline stage records this work.
+   Stacked branches, review-ahead, `no_pr` and `no_review` retain their ordering.
+7. **Reviews** the commit, with the ship lock still released (`ship: lock released for the gates and the review`, printed after the start-of-ship rebase; no heavy slot is held either) so the next ship runs meanwhile, with the tiered [adversarial review](review.md)
    (`SHIP_TIER`, never below `make review-floor`; `SHIP_RUNTIME` picks the model
    family). A full review below 7/10 or with a blocking finding (confirmed major or critical, disputed
 critical), an incomplete review, or a closing review
-   with a blocking finding or an undecided carried finding pushes nothing.
+   with a blocking finding or an undecided carried finding leaves the PR a draft.
+   Its CI state is printed alongside the review score; fix, commit and reship.
    A branch gets one full blind review; a non-severe failure leads to up to
    three closing reviews of the fixes and carried findings. Severe findings
    or unresolved carried blockers end the budget early; when it is spent
@@ -69,7 +77,7 @@ critical), an incomplete review, or a closing review
    `review of <sha> reused (same patch)`.
    Reuse after a rebase for `make review-pr` is planned in issue #146
    ([review](review.md#pull-requests-the-harness-did-not-open)).
-7. **Re-checks the base** after queueing for the lock again, in the same first-come queue (`ship: lock reacquired for the push (waited Ns)`; a failed review exits without it): it fetches dev and the stacked parent again. A merged/closed
+8. **Re-checks the base** after queueing for the lock again, in the same first-come queue (`ship: lock reacquired for the push (waited Ns)`; a failed review exits without it): it fetches dev and the stacked parent again. A merged/closed
    parent or missing parent branch stops with restack instructions, keeping the passed review. If the base moved,
    only the branch's own commits are rebased (conflicts abort, restore the branch and name files); every static preflight gate runs on
    the result (`lint` compiles the workspace), up to 3 times if it moves again. A red gate stops with
@@ -79,18 +87,24 @@ critical), an incomplete review, or a closing review
    dev changed in <commits>") and the own patch is identical against each base (else "changed your
    patch"). The rebased head's evidence (cadence `recheck`) holds its static gates and a separate "full
    preflight passed on <old head> (base <old base>)". A rebased branch already on `origin` is pushed
-   with a lease on the starting commit or its GitHub dev merges ([details](post-push.md)), else the ship asks for `SHIP_FORCE=1`. **Then**, if
+   with a lease on the draft push head (otherwise the starting commit) or its GitHub dev merges ([details](post-push.md)), else the ship asks for `SHIP_FORCE=1`. **Then**, if
    the parent is ready, pushes exactly that commit to `origin` as the branch (`SHIP_FORCE=1` adds
    `--force-with-lease`, after a rebase). The pre-push hook runs `make pre-push`: it skips the preflight
    when `make ship`'s preflight evidence, or a rebased head's re-check record (static gates passed on
    it; full preflight on the recorded head, identical own patch), covers clean HEAD (`AOE_SHIP_EVIDENCE`), else runs `make preflight`.
    The push sets SSH keepalives unless `GIT_SSH_COMMAND` or `GIT_SSH` is set (#209: the hook can idle for minutes).
    Fetches and pushes retry once after 20s only on `Permission denied (publickey)`; persistent failure names `$SSH_AUTH_SOCK` and says the agent served no key: set `GIT_SSH_COMMAND='ssh -i <key> -o IdentitiesOnly=yes'`.
-8. **Creates or updates** the pull request against the base (`dev`) on
+9. **Updates** the pull request against the base (`dev`) on
    `origin`'s GitHub repository, found by head branch (never by a number),
-   with the review appended; posts the `harness/review` status and a review
-   marker comment and, into `dev` only, arms auto-merge ([after the push](post-push.md)).
-9. **Files the review's leftovers**: one issue per confirmed or disputed
+   with the review appended (creates it here for the unchanged stacked/no-review
+   paths); posts the marker and `harness/review`, marks the draft ready (`gh pr
+   ready`), then arms auto-merge into `dev` ([after the push](post-push.md)). Reads CI
+   for the pushed head once, without waiting, recording `ci-state`. Passed/running
+   CI succeeds; a missing run is pending, and unreadable CI is an explicit error.
+   Already failed jobs make ship exit non-zero with their names, run
+   URL and `gh run rerun <run> --failed`: review passed and auto-merge is armed,
+   but fix CI and reship. Every review outcome prints the score beside CI counts.
+10. **Files the review's leftovers**: one issue per confirmed or disputed
    critical or major finding; the minor and nit ones become a section of the
    standing issue `Review follow-ups` and a pull request comment
    ([issues](issues.md#review-follow-ups)). A follow-up that cannot be filed is

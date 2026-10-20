@@ -9,8 +9,9 @@ make review REVIEW_TIER=medium REVIEW_RUNTIME=claude REVIEW_TASK=<description fi
 target/debug/aoe-harness review --explain   # stored-review decision only, no review or approval write
 ```
 
-`make ship` runs the review of the exact commit after the gates and before
-anything is pushed.
+`make ship` runs the review of the exact commit after the gates. Into `dev`,
+it first pushes a draft PR so CI runs alongside review; approval marks it ready
+and arms auto-merge ([shipping](shipping.md)).
 
 `make review-floor` prints the lowest tier the change allows. The agent picks the
 tier (never below the floor) and says why in the description. A full review passes at
@@ -261,7 +262,8 @@ not a gate, and a case set this small shows large differences only.
   attempts, waiting 60s then 180s. Other process failures are not retried.
   Exhaustion is incomplete and says `rate-limited`: wait and ship again;
   nothing needs changing. The existing retry for an unreadable answer is separate.
-- **Fail:** nothing is pushed. Fix every confirmed finding without weakening a
+- **Fail:** into `dev`, the PR stays a draft with its CI state printed; other
+  paths publish nothing. Fix every confirmed finding without weakening a
   test or gate, commit, and ship again. File what you leave out of scope as an
   issue. The branch's review budget is below.
 

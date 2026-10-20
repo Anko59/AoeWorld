@@ -65,7 +65,10 @@ fn rehearse_merge(own_changes: bool) {
 case "$1 $2" in
   '--version ') echo 'gh version 2.100.0' ;;
   'pr list') printf '{"url":"https://github.com/project/checkout/pull/43","baseRefName":"dev"}' ;;
-  'api '*) printf '[]' ;;
+  'api '*) case "$*" in
+    *'/actions/workflows/ci.yml/runs?'*) printf '{"workflow_runs":[]}' ;;
+    *) printf '[]' ;;
+  esac ;;
 esac
 case " $* " in *' --body-file - '*) cat >/dev/null ;; esac
 "#,

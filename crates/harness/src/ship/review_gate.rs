@@ -1,5 +1,5 @@
 //! The review step of `make ship`: a passing adversarial review of the exact
-//! commit is required before anything is pushed. On success the review is
+//! commit is required before a draft is marked ready. On success the review is
 //! appended to the pull request description, a `harness/review` commit status
 //! is posted and GitHub auto-merge is armed, so GitHub merges once every
 //! required check passes. No agent runs a merge command itself.
@@ -277,6 +277,15 @@ fn publish_calls_onto(
 /// Post `harness/review` on the commit and, into dev, arm auto-merge on the
 /// pull request.
 pub(crate) fn publish(root: &Path, url: &str, report: &Report, base: &str) -> Result<()> {
+    publish_with(root, url, report, base, false)
+}
+
+/// Approve a ship draft: status first, ready second, auto-merge last.
+pub(super) fn publish_ready(root: &Path, url: &str, report: &Report, base: &str) -> Result<()> {
+    publish_with(root, url, report, base, true)
+}
+
+fn publish_with(root: &Path, url: &str, report: &Report, base: &str, ready: bool) -> Result<()> {
     let repository = git::origin_repository(root)?;
     // Both ship and review-pr publish here: every approval records the marker
     // before its status. Marker failure warns; only the later carry would fail.
@@ -285,8 +294,14 @@ pub(crate) fn publish(root: &Path, url: &str, report: &Report, base: &str) -> Re
             "review: the review marker was not written ({error}); a rebase will not carry the review"
         );
     }
-    for call in publish_calls_onto(&repository, url, report, base)? {
-        super::github::publish_call(root, &call)?;
+    for (index, call) in publish_calls_onto(&repository, url, report, base)?
+        .iter()
+        .enumerate()
+    {
+        super::github::publish_call(root, call)?;
+        if ready && index == 0 {
+            super::gh(root, &["pr", "ready", url, "--repo", &repository])?;
+        }
     }
     Ok(())
 }

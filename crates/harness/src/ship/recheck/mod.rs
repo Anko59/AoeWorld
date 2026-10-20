@@ -75,6 +75,8 @@ fn short(sha: &str) -> &str {
 /// Fetch the base again; `None` when nothing moved. A local parent cannot
 /// move under the ship. `review` is the review that just passed for
 /// `evidence.head`, carried over a rebase that leaves the patch unchanged.
+/// `started_head` is the draft-pushed head when CI started before review;
+/// otherwise it is the checkout's head at the start of ship.
 pub(super) fn before_push(
     root: &Path,
     evidence: &Evidence,
@@ -356,7 +358,8 @@ fn failure(options: &Options, failed: &GateResult, gained: &[String]) -> String 
 
 /// After a rebase of a branch already on the remote, the push overwrites it.
 /// Only the branch's own remote is ever lease-forced, and only from the
-/// commit this ship started from; any other remote tip needs `SHIP_FORCE`.
+/// draft-pushed head (otherwise the starting commit); any other remote tip
+/// needs `SHIP_FORCE`.
 pub(super) fn lease(
     root: &Path,
     options: &Options,
