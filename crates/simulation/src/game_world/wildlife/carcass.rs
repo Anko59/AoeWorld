@@ -35,6 +35,7 @@ impl GameWorld {
         let key = cell(a.state.position);
         self.wildlife.engaged.remove(&id);
         self.unindex_animal(id, key);
+        self.update_observer(id, None);
         self.wildlife.due.insert((
             self.tick.0.saturating_add(u64::from(self.config.tick_hz)),
             id,

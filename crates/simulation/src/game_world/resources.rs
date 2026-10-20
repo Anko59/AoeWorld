@@ -28,6 +28,8 @@ impl PreparedResourceDepletion<'_> {
         if self.depletion.became_nonblocking {
             self.world.resource_collision_changed();
         }
+        self.world
+            .record_observed_resource(self.depletion.id, self.depletion.remaining);
         self.depletion
     }
 }

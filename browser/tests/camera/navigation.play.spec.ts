@@ -5,6 +5,7 @@ import { gameAssets } from "../game-assets.js";
 import { activateSyntheticMap } from "../synthetic-map.js";
 import { forceCanvas } from "../rendering/backends.js";
 import { scoutCombat } from "../wire/combat.js";
+import { disabledFog } from "../wire/fog.js";
 
 async function position(page: Page): Promise<[number, number]> {
   return (await page.locator("#world-position").innerText())
@@ -54,6 +55,7 @@ async function wideWorld(page: Page) {
           if (byte < 128) break;
         }
       } else revision.push(0);
+      if (bytes[0] === 1) socket.send(disabledFog(revision));
       socket.send(
         Buffer.from([
           1,

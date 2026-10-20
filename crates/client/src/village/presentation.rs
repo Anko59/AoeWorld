@@ -95,6 +95,9 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
         values[2] = remaining;
     }
     for node in natural.chain(starting.iter()) {
+        if client.fog.state([node.tile.x, node.tile.y]) == 0 {
+            continue;
+        }
         if client.selected.resource_id == Some(node.id) {
             values[1] = node.kind as u8 as f64;
             values[2] = f64::from(client.resources.remaining(node.id, node.initial_amount));

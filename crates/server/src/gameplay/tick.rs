@@ -35,7 +35,9 @@ impl GameplayService {
             .await
             .iter()
             .filter_map(|(id, session)| {
-                session.subscription.map(|subscription| (*id, subscription))
+                session
+                    .subscription
+                    .map(|subscription| (*id, subscription, session.vision_revision))
             })
             .collect::<Vec<_>>();
         let mut world = self.world.clone().write_owned().await;
@@ -64,16 +66,28 @@ impl GameplayService {
             tracing::error!("gameplay tick worker failed");
             return;
         };
-        let players = super::economy::players(&world);
-        let buildings = super::economy::buildings(&world);
+        let player = super::fog::viewer(&world, self.primary_unit_id);
+        let players = super::economy::players(&world)
+            .into_iter()
+            .filter(|(id, _)| *id == player || world.fog_disabled())
+            .collect::<BTreeMap<_, _>>();
+        let buildings = super::economy::buildings(&world, player);
+        let vision_revision = world.vision_revision();
         let tick = world.tick();
         let mut updates = Vec::new();
         let mut wildlife_updates = Vec::new();
-        for (session_id, subscription) in subscriptions {
+        let mut fog_updates = Vec::new();
+        for (session_id, subscription, old_vision) in subscriptions {
+            if old_vision != Some(vision_revision) {
+                fog_updates.push((
+                    session_id,
+                    super::fog::state(&world, player, subscription.revision, subscription.region),
+                ));
+            }
             wildlife_updates.push((
                 session_id,
                 subscription.revision,
-                super::wildlife::animals(&world, subscription.region),
+                super::wildlife::animals(&world, subscription.region, player),
             ));
             let current =
                 super::economy::query_units(&world, subscription.region, self.primary_unit_id);
@@ -109,6 +123,26 @@ impl GameplayService {
         drop(world);
         let mut sessions = self.sessions.lock().await;
         let mut failed = BTreeSet::new();
+        for (id, fog) in fog_updates {
+            let Some(session) = sessions.get_mut(&id) else {
+                continue;
+            };
+            if session
+                .subscription
+                .is_none_or(|s| s.revision != fog.revision)
+            {
+                continue;
+            }
+            if session
+                .sender
+                .try_send(GameplayServerMessage::FogState(fog))
+                .is_err()
+            {
+                failed.insert(id);
+            } else {
+                session.vision_revision = Some(vision_revision);
+            }
+        }
         for (session_id, message) in acknowledgements {
             if let Some(session) = sessions.get_mut(&session_id) {
                 if let GameplayServerMessage::CommandAck { sequence, .. } = message {
@@ -130,6 +164,11 @@ impl GameplayService {
             let Some(session) = sessions.get_mut(&session_id) else {
                 continue;
             };
+            if let GameplayServerMessage::Tick { revision, .. } = &message
+                && session.subscription.is_none_or(|s| s.revision != *revision)
+            {
+                continue;
+            }
             if let GameplayServerMessage::Tick {
                 changed_units,
                 removals,

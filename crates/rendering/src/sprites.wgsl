@@ -24,6 +24,7 @@ struct VertexOutput {
     @location(9) @interpolate(flat) rect2: vec4<f32>,
     @location(10) @interpolate(flat) rect3: vec4<f32>,
     @location(11) shade: f32,
+    @location(12) fog: f32,
 };
 fn terrain_uv(mode: u32, corner: u32) -> vec2<f32> {
     switch mode {
@@ -74,15 +75,6 @@ fn sheet(material: u32) -> vec4<f32> {
     return vec4<f32>(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + b.y * 256.0, b.z + b.w * 256.0);
 }
 
-fn terrain_tint(kind: u32) -> vec3<f32> {
-    switch kind {
-        case 1u: { return vec3<f32>(0.92, 0.92, 0.92); }
-        case 2u: { return vec3<f32>(0.78, 0.78, 0.78); }
-        case 3u: { return vec3<f32>(0.72, 0.72, 0.72); }
-        default: { return vec3<f32>(1.0, 1.0, 1.0); }
-    }
-}
-
 @vertex
 fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> VertexOutput {
     let corners = array<vec2<f32>, 6>(
@@ -90,6 +82,7 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
     let sprite = sprites[instance];
     var out: VertexOutput;
+    out.fog = 1.0;
     out.pages = sprite.pages;
     out.rect = sprite.uv;
     out.rect2 = sprite.terrain_blend[0];
@@ -101,6 +94,8 @@ fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance
     if is_surface {
         let surface_points = array<vec2<f32>, 3>(sprite.position, sprite.radius, sprite.color.xy);
         let corner = min(vertex, 2u);
+        out.fog = fog_level(sprite.pages.z, corner);
+        out.pages.z = sprite.pages.z & 16777215u;
         out.clip = vec4<f32>(surface_points[corner], sprite.depths[corner], 1.0);
         if sprite.color.w == -2.0 {
             out.color = sprite.uv;
@@ -324,7 +319,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         if texel.a <= 0.0 { discard; }
         return texel * in.color;
     }
-    if in.solid == 2u { return vec4<f32>(in.color.rgb * (1.0 + in.shade * 0.04), in.color.a); }
+    if in.solid == 2u { return vec4<f32>(in.color.rgb * (1.0 + in.shade * 0.04) * in.fog, in.color.a); }
     let blend = (in.solid & 3u) == 3u;
     let landscape = (in.pages.w & 1u) != 0u;
     // #if mixing
@@ -462,7 +457,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let darken = vec3<f32>(0.20, 0.32, 0.38) * (f32((in.tint_kind / 32u) % 16u) / 15.0);
     // Slope shade: a signed four-bit code per vertex, interpolated, 4 % a step.
     let lit = 1.0 + in.shade * 0.04;
-    return vec4<f32>(worn.rgb * (vec3<f32>(1.0) - darken) * lit, worn.a);
+    return vec4<f32>(worn.rgb * (vec3<f32>(1.0) - darken) * lit * in.fog, worn.a);
 }
 
 fn shaded(texel: vec4<f32>, color: vec4<f32>, tint: u32, appearance: u32) -> vec4<f32> {

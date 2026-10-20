@@ -328,7 +328,9 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         GameplayServerMessage::Snapshot { revision: 1, .. }
     ));
     assert!(matches!(receive(&mut socket).await,
-        GameplayServerMessage::WildlifeState { revision: 1, animals, .. } if animals.is_empty()));
+        GameplayServerMessage::WildlifeState { revision: 1, animals, .. } if animals.iter().all(|a| a.owner == Some(aoe_core::PlayerId(0)))));
+    assert!(matches!(receive(&mut socket).await,
+        GameplayServerMessage::FogState(state) if state.revision == 1 && state.tiles == [0]));
     send(
         &mut socket,
         GameplayClientMessage::Subscribe {

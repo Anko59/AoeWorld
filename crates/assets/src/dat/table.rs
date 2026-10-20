@@ -69,6 +69,7 @@ pub struct Row {
     pub internal_name: Option<String>,
     pub kind: Option<u8>,
     pub hit_points: Option<i16>,
+    pub line_of_sight: Option<f32>,
     pub train_time: Option<i16>,
     pub cost: Vec<String>,
     pub attacks: Vec<(i16, i16)>,
@@ -186,6 +187,7 @@ fn row(file: &DatFile, cache: &Cache, label: &str, id: i32, pack: Option<&BTreeS
             internal_name: None,
             kind: None,
             hit_points: None,
+            line_of_sight: None,
             train_time: None,
             cost: Vec::new(),
             attacks: Vec::new(),
@@ -212,6 +214,7 @@ fn row(file: &DatFile, cache: &Cache, label: &str, id: i32, pack: Option<&BTreeS
         internal_name: Some(unit.name.clone()),
         kind: Some(unit.kind),
         hit_points: Some(unit.hit_points),
+        line_of_sight: Some(unit.line_of_sight),
         train_time: unit.train_time.filter(|t| *t > 0),
         cost: unit
             .costs
@@ -434,11 +437,12 @@ pub fn summary(table: &Table) -> String {
         };
         let _ = writeln!(
             out,
-            "{:<24} unit {:>3} {:<7} hp {:>4} pack {}",
+            "{:<24} unit {:>3} {:<7} hp {:>4} los {:>4} pack {}",
             row.label,
             row.unit,
             name,
             row.hit_points.unwrap_or(0),
+            row.line_of_sight.unwrap_or(0.0),
             row.pack
         );
         for g in row

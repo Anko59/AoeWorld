@@ -112,8 +112,10 @@ pub(in super::super) fn render_if_changed(
     }
 
     let result = {
-        let Client { renderer, art, .. } = client;
-        renderer.render_prepared_world(
+        let Client {
+            renderer, art, fog, ..
+        } = client;
+        renderer.render_prepared_world_with_fog(
             art,
             &scene.terrain,
             &scene.triangles,
@@ -122,6 +124,8 @@ pub(in super::super) fn render_if_changed(
             camera,
             animation,
             grid,
+            !fog.disabled(),
+            &|point| fog.brightness(point),
         )
     };
     if !result? {

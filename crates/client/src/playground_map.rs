@@ -159,6 +159,9 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
 
 pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
     let visible = resident_visible_tiles(client);
+    if client.map_content_hash.is_none() && !client.fog.disabled() {
+        return fog::uniform_ground(visible);
+    }
     let mut terrain = Vec::new();
     for chunk in client.terrain_chunks.values() {
         let (chunk_width, chunk_height) =
@@ -468,6 +471,8 @@ async fn fetch_chunk(
     Ok(chunk)
 }
 
+#[path = "playground_map/fog.rs"]
+pub(super) mod fog;
 #[cfg(test)]
 #[path = "playground_map_tests.rs"]
 mod tests;

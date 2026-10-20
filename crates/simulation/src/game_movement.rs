@@ -113,6 +113,7 @@ impl GameWorld {
                     break;
                 }
                 self.units[index].state.position = position;
+                self.update_unit_vision(id);
                 if self.units[index].bucket != ChunkCoord::from_position(position) {
                     self.move_bucket(index, ChunkCoord::from_position(position));
                 }

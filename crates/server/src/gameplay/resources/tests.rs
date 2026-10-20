@@ -257,6 +257,7 @@ async fn subscribers_receive_snapshot_delta_and_reconnect_snapshot() {
     )
     .unwrap()
     .unwrap();
+    service.set_fog_disabled(true).await;
     let (sender, mut receiver) = tokio::sync::mpsc::channel(8);
     let (id, welcome) = service.register(None, sender).await;
     let GameplayServerMessage::Welcome { resume_token, .. } = welcome else {

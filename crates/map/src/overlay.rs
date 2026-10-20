@@ -170,6 +170,11 @@ impl ResourceOverlay {
         self.revision
     }
 
+    /// Sparse mutable amount without resolving immutable terrain or pages.
+    pub fn changed_amount(&self, id: u64) -> Option<u16> {
+        self.remaining.get(&id).copied()
+    }
+
     pub fn remaining(&self, terrain: &MapChunkGenerator, id: u64) -> Option<u16> {
         self.resource_by_id_with_cancel(terrain, id, &|| false)
             .ok()

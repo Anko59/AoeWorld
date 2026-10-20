@@ -2,6 +2,7 @@ import type { Page, WebSocketRoute } from "@playwright/test";
 import { scoutCombat, villagerCombat } from "../wire/combat.js";
 import { darkAgeState, townCenterState } from "../wire/buildings.js";
 import { wildlifeState } from "../wire/wildlife.js";
+import { fogState } from "../wire/fog.js";
 
 function uint(value: number): number[] {
   const bytes: number[] = [];
@@ -104,6 +105,9 @@ export async function fiveVillagerFixture(
         ]),
       );
       socket.send(wildlifeState(uint(revision)));
+      socket.send(
+        fogState(uint, revision, snapshotTick(), [0, 0, 1, 1], [], [], true),
+      );
     });
   });
 }

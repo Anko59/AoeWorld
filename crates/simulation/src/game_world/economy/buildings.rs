@@ -13,7 +13,7 @@ pub struct BuildingRules {
     pub max_hp: u16,
     /// Square footprint side in tiles.
     pub side: i32,
-    /// Line of sight in tiles. Fog of war is not simulated yet; clients read it.
+    /// Authoritative circular line of sight in tiles.
     pub los: u8,
     /// Population housed once complete.
     pub population_support: u16,

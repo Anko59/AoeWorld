@@ -205,12 +205,30 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     );
                 }
             }
+            Ok(GameplayServerMessage::FogState(state)) => {
+                if client.surface_fixture || state.revision != client.revision {
+                    return;
+                }
+                super::map::fog::minimap(&client, &state);
+                let was_disabled = client.fog.disabled();
+                if client.fog.apply(state) {
+                    client.rendered_frame.clear();
+                    if was_disabled != client.fog.disabled() {
+                        client.terrain_scene.borrow_mut().take();
+                    }
+                }
+            }
             Ok(GameplayServerMessage::WildlifeState {
                 revision,
                 tick,
                 animals,
             }) => {
                 if revision == client.revision && tick.0 >= client.village.wildlife_tick {
+                    let _ = client.canvas.set_attribute("data-animals", &animals.len().to_string());
+                    let _ = client.canvas.set_attribute(
+                        "data-wolves",
+                        &animals.iter().filter(|a| a.kind == aoe_protocol::AnimalKind::Wolf).count().to_string(),
+                    );
                     client.village.wildlife_tick = tick.0;
                     client.village.animals = animals;
                     let Client {
@@ -303,6 +321,7 @@ fn reconnect(client: &mut Client, status: &str) {
 // The pieces of a connection's world that a new Welcome or a WorldReset drops.
 fn clear_world(client: &mut Client) {
     client.resources.clear();
+    client.fog.clear();
     if !client.surface_fixture {
         map::clear_terrain_cache(client);
     }

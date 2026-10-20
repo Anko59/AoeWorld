@@ -22,6 +22,7 @@ pub(in super::super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
         }))
         .filter(|(resource, _)| {
             client.resources.visible(resource.id)
+                && client.fog.state([resource.tile.x, resource.tile.y]) > 0
                 && resource.tile.x >= visible.min.x
                 && resource.tile.x < visible.max.x
                 && resource.tile.y >= visible.min.y
@@ -50,7 +51,9 @@ pub(in super::super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
         focus_elevation_meters: client.camera.focus_elevation_meters,
     };
     select_visible_resources(
-        resources.chain(decorations::scenery(&scene)),
+        resources
+            .chain(decorations::scenery(&scene))
+            .filter(|r| client.fog.state(r.position.map(|v| v.floor() as i32)) > 0),
         &client.art,
         camera,
     )

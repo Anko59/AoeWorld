@@ -160,7 +160,7 @@ export class AoeWebGl {
         this.atlasPixels = pixels;
     }
 
-    render(instances) {
+    render(instances, black) {
         if (this.restoreError) throw this.restoreError;
         if (!this.disposed && this.gl.isContextLost()) return false;
         this.check();
@@ -193,7 +193,7 @@ export class AoeWebGl {
         gl.blendEquation(gl.FUNC_ADD);
         gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.colorMask(true, true, true, true);
-        gl.clearColor(.16, .29, .14, 1);
+        gl.clearColor(...(black ? [0, 0, 0, 1] : [.16, .29, .14, 1]));
         gl.clearDepth(1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         const count = instances.byteLength / STRIDE;

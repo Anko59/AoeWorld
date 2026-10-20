@@ -254,7 +254,16 @@ pub(super) fn apply(
         PendingAction::Hunt {
             unit_ids,
             animal_id,
-        } => world.issue_hunt(player, &unit_ids, animal_id),
+        } => {
+            if !world.animal(animal_id).is_some_and(|a| {
+                a.owner == Some(player)
+                    || world.visibility(player, a.position.tile_floor())
+                        == aoe_simulation::TileVisibility::Visible
+            }) {
+                return CommandResult::RejectedInvalidTarget;
+            }
+            world.issue_hunt(player, &unit_ids, animal_id)
+        }
         PendingAction::Move {
             entity_id,
             destination,
@@ -287,7 +296,16 @@ pub(super) fn apply(
         PendingAction::Attack {
             entity_id,
             target_id,
-        } => world.issue_attack(player, entity_id, target_id),
+        } => {
+            let visible = world.unit_visible_to(player, target_id)
+                || world
+                    .building(target_id)
+                    .is_some_and(|b| world.building_visible_to(player, b.footprint));
+            if !visible {
+                return CommandResult::RejectedInvalidTarget;
+            }
+            world.issue_attack(player, entity_id, target_id)
+        }
         PendingAction::CancelTraining { building_id } => {
             world.issue_cancel_training(player, building_id)
         }

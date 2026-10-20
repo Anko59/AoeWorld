@@ -1,5 +1,5 @@
 //! This stationary fixture keeps its accepted revision-1 subscription after errors.
-//! Live ticks may precede a response; no other unsolicited message is permitted.
+//! Idle ticks, the black fog view and owned sheep can precede an error response.
 use super::{GameplayServerMessage, Socket, receive};
 use std::time::Duration;
 use tokio::time::{Instant, timeout_at};
@@ -11,6 +11,23 @@ const FRAME_BUDGET: usize = 64;
 fn classify(message: &GameplayServerMessage, expected_code: u16) -> Result<bool, String> {
     match message {
         GameplayServerMessage::Error { code, .. } if *code == expected_code => Ok(true),
+        GameplayServerMessage::FogState(state)
+            if state.revision == 1
+                && state.region == aoe_core::TileRect::from_xywh(0, 0, 1, 1)
+                && state.tiles == [0] =>
+        {
+            Ok(false)
+        }
+        GameplayServerMessage::WildlifeState {
+            revision: 1,
+            animals,
+            ..
+        } if animals
+            .iter()
+            .all(|a| a.owner == Some(aoe_core::PlayerId(0))) =>
+        {
+            Ok(false)
+        }
         GameplayServerMessage::Tick {
             revision: 1,
             changed_units,

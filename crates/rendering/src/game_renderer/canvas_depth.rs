@@ -6,7 +6,7 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 const BACKGROUND: [u8; 4] = [41, 74, 36, 255];
 #[path = "canvas_raster.rs"]
 mod raster;
-use raster::{raster_selection, raster_sprite, raster_surface};
+use raster::{raster_selection, raster_sprite};
 
 /// Reuses both the WASM-side raster buffers and the browser-owned ImageData
 /// backing array. A resize only wraps a new ImageData view around the retained
@@ -118,6 +118,7 @@ fn shrink_after_large_resize<T>(buffer: &mut Vec<T>, target_len: usize) {
 /// triangles as WebGPU into a persistent CPU color/depth buffer. This keeps
 /// overlap resolution per pixel without issuing one browser readback per
 /// primitive or relying on average painter depth.
+#[cfg(test)]
 pub(super) fn render_canvas_world(
     canvas: &HtmlCanvasElement,
     context: &CanvasRenderingContext2d,
@@ -126,6 +127,30 @@ pub(super) fn render_canvas_world(
     layers: &[WorldLayer],
     camera: SceneCamera,
     grid: bool,
+) -> Result<(), String> {
+    render_canvas_world_with_fog(
+        canvas,
+        context,
+        atlas,
+        presentation,
+        layers,
+        camera,
+        grid,
+        false,
+        &|_| 1.0,
+    )
+}
+
+pub(super) fn render_canvas_world_with_fog(
+    canvas: &HtmlCanvasElement,
+    context: &CanvasRenderingContext2d,
+    atlas: &[u8],
+    presentation: &mut CanvasPresentation,
+    layers: &[WorldLayer],
+    camera: SceneCamera,
+    grid: bool,
+    fog_active: bool,
+    light: &dyn Fn([f64; 2]) -> f32,
 ) -> Result<(), String> {
     let width = canvas.width();
     let height = canvas.height();
@@ -139,7 +164,11 @@ pub(super) fn render_canvas_world(
     let depth = &mut presentation.depth_buffer;
     color.resize(color_bytes, 0);
     for pixel in color.chunks_exact_mut(4) {
-        pixel.copy_from_slice(&BACKGROUND);
+        pixel.copy_from_slice(if fog_active {
+            &[0, 0, 0, 255]
+        } else {
+            &BACKGROUND
+        });
     }
     depth.resize(pixel_count, f64::NEG_INFINITY);
     depth.fill(f64::NEG_INFINITY);
@@ -152,13 +181,14 @@ pub(super) fn render_canvas_world(
         };
         match layer {
             WorldLayer::Surface(triangle) => {
-                raster_surface(
+                raster::raster_surface_with_fog(
                     triangle,
                     atlas,
                     [left, top, right, bottom],
                     width,
                     color,
                     depth,
+                    super::fog::vertices(triangle, light),
                 );
             }
             WorldLayer::Selection(sprite, layer_depth) => {
@@ -190,7 +220,7 @@ pub(super) fn render_canvas_world(
 
     presentation.present(context, width, height)?;
     if grid {
-        game_grid::draw_grid(context, &super::grid_segments(layers, camera));
+        game_grid::draw_grid(context, &super::fog::grid_segments(layers, camera, light));
     }
     Ok(())
 }

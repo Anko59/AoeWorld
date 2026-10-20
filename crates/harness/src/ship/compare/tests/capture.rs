@@ -156,7 +156,8 @@ fn the_side_environment_is_exactly_the_spectator_setup() {
         [
             "AOE_ASSET_PACK",
             "AOE_MAP_PACKAGE_DIRECTORY",
-            "AOE_OPEN_MAP_PACKAGE"
+            "AOE_OPEN_MAP_PACKAGE",
+            "AOE_FOG_DISABLED"
         ]
     );
 }

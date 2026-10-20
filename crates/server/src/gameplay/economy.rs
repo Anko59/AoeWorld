@@ -31,6 +31,8 @@ pub(super) fn query_units(
     }
     units.sort_unstable_by_key(|unit| unit.id);
     units.dedup_by_key(|unit| unit.id);
+    let player = super::fog::viewer(world, primary_id);
+    units.retain(|unit| world.unit_visible_to(player, unit.id));
     units
 }
 
@@ -171,9 +173,13 @@ pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerSta
         })
         .collect()
 }
-pub(super) fn buildings(world: &GameWorld) -> BTreeMap<EntityId, GameplayBuildingState> {
+pub(super) fn buildings(
+    world: &GameWorld,
+    player: PlayerId,
+) -> BTreeMap<EntityId, GameplayBuildingState> {
     world
-        .buildings()
+        .known_buildings(player)
+        .into_iter()
         .map(|state| {
             (
                 state.id,

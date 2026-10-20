@@ -14,6 +14,13 @@ pub struct Config {
 }
 
 impl Config {
+    /// Local scenario/debug switch, applied by the authority at world creation.
+    pub(crate) fn fog_disabled_from_env() -> bool {
+        env::var("AOE_FOG_DISABLED").is_ok_and(|value| value == "1")
+    }
+    pub(crate) fn fog_showcase_from_env() -> bool {
+        env::var("AOE_FOG_SHOWCASE").is_ok_and(|value| value == "1")
+    }
     pub const DEFAULT_MAP_PACKAGE_DIRECTORY: &'static str = "local-assets/map-packages";
     pub const DEFAULT_GEODATA_CACHE_DIRECTORY: &'static str = ".cache/geodata";
 

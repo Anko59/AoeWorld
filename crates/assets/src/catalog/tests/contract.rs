@@ -189,6 +189,10 @@ fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
             (AssetRole::TownCenterSupportsRight as usize, 4611, 1),
             (AssetRole::TownCenterSupportRight as usize, 4612, 1),
             (AssetRole::TownCenterShadow as usize, 889, 1),
+            (AssetRole::Sheep as usize, 3629, 1),
+            (AssetRole::Deer as usize, 342, 1),
+            (AssetRole::Boar as usize, 2557, 1),
+            (AssetRole::Wolf as usize, 1635, 1),
         ]
     );
 }

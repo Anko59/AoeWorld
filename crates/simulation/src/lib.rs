@@ -6,6 +6,7 @@ mod game_path;
 mod game_query;
 mod game_waypoints;
 mod game_world;
+pub use game_world::TileVisibility;
 mod movement_speed;
 mod navigation_cache;
 mod terrain;

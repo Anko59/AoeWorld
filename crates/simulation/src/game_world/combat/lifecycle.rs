@@ -64,6 +64,7 @@ impl GameWorld {
         state.death_hunt = death_hunt;
         state.task = UnitTask::Dying;
         state.attack_target = None;
+        self.update_observer(id, None);
         self.combat.attackers.remove(&id);
         self.stop_gathering(id);
         self.cancel_hunt(id);
@@ -109,6 +110,7 @@ impl GameWorld {
         self.stop_gathering(id);
         self.economy.builders.remove(&id);
         self.lookup.remove(&id);
+        self.update_observer(id, None);
         self.units.swap_remove(index);
         if let Some(moved) = self.units.get(index) {
             self.lookup.insert(moved.state.id, index);

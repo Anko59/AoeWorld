@@ -24,6 +24,7 @@ flat out vec4 vRect;
 flat out vec4 vRect2;
 flat out vec4 vRect3;
 out float vShade;
+out float vFog;
 const vec2 corners[6] = vec2[6](
     vec2(-1,-1), vec2(1,-1), vec2(1,1),
     vec2(-1,-1), vec2(1,1), vec2(-1,1));
@@ -62,8 +63,14 @@ void main() {
     vUv3 = vec2(0);
     vWeights = vec3(1,0,0);
     vShade = 0.0;
+    vFog = 1.0;
     if (color.w < 0.0) {
         uint corner = min(vertex, 2u);
+        if ((pages.z & 2147483648u) != 0u) {
+            const float levels[4] = float[4](0.0, 0.45, 0.725, 1.0);
+            vFog = levels[(pages.z >> (24u + corner * 2u)) & 3u];
+        }
+        vPages.z = pages.z & 16777215u;
         vec2 points[3] = vec2[3](positionRadius.xy, positionRadius.zw, color.xy);
         gl_Position = vec4(points[corner], 2.0 * depths[corner] - 1.0, 1);
         if (color.w == -2.0) {
@@ -149,6 +156,7 @@ flat in vec4 vRect;
 flat in vec4 vRect2;
 flat in vec4 vRect3;
 in float vShade;
+in float vFog;
 out vec4 result;
 vec4 boxAverage(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
     vec2 size = vec2(textureSize(atlas, 0).xy);
@@ -330,7 +338,7 @@ void main() {
         result = texel * vColor;
         return;
     }
-    if (vSolid == 2u) { result = vec4(vColor.rgb * (1.0 + vShade * .04), vColor.a); return; }
+    if (vSolid == 2u) { result = vec4(vColor.rgb * (1.0 + vShade * .04) * vFog, vColor.a); return; }
     bool blend = (vSolid & 3u) == 3u;
     bool landscape = (vPages.w & 1u) != 0u, mixing = groundMixing && vSolid >= 8u, junction = groundMixing && vSolid >= 24u;
     bool tiled = (vSolid & 4u) != 0u;
@@ -416,7 +424,7 @@ void main() {
     // vTint carries wear and slope shade above its five tint bits.
     vec4 worn = shaded(texel, vColor, vTint % 32u, vPages.w);
     float lit = 1.0 + vShade * .04;
-    result = vec4(worn.rgb * (vec3(1) - vec3(.20, .32, .38) * (float((vTint / 32u) % 16u) / 15.0)) * lit, worn.a);
+    result = vec4(worn.rgb * (vec3(1) - vec3(.20, .32, .38) * (float((vTint / 32u) % 16u) / 15.0)) * lit * vFog, worn.a);
 }`;
 
 // Registered directly with wasm-bindgen so both local modules are packaged.

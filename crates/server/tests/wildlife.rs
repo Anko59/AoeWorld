@@ -16,6 +16,7 @@ fn drain(rx: &mut mpsc::Receiver<GameplayServerMessage>) -> Vec<GameplayServerMe
 #[tokio::test]
 async fn wildlife_hunting_scenario_over_the_wire() {
     let service = GameplayService::new(Seed(1));
+    service.set_fog_disabled(true).await;
     let (tx, mut rx) = mpsc::channel(256);
     let (id, _) = service.register(None, tx).await;
     let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
@@ -163,6 +164,7 @@ async fn wildlife_hunting_scenario_over_the_wire() {
 #[tokio::test]
 async fn wildlife_subscription_replaces_the_region_and_failed_delivery_disconnects() {
     let service = GameplayService::new(Seed(1));
+    service.set_fog_disabled(true).await;
     let (tx, mut rx) = mpsc::channel(16);
     let (id, _) = service.register(None, tx).await;
     service

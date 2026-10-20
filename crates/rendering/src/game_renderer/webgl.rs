@@ -22,7 +22,7 @@ extern "C" {
     #[wasm_bindgen(method, catch)]
     fn resize(this: &GlBridge, width: u32, height: u32) -> Result<(), JsValue>;
     #[wasm_bindgen(method, catch)]
-    fn render(this: &GlBridge, instances: &[u8]) -> Result<bool, JsValue>;
+    fn render(this: &GlBridge, instances: &[u8], black: bool) -> Result<bool, JsValue>;
     #[wasm_bindgen(method)]
     fn dispose(this: &GlBridge);
 }
@@ -64,6 +64,14 @@ impl WebGlRenderer {
     /// Pass fresh world depths, not instances normalized by an earlier call.
     /// False means no frame was submitted (zero backing size or lost context).
     pub(super) fn render(&mut self, sprites: &mut [Sprite]) -> Result<bool, String> {
+        self.render_with_clear(sprites, false)
+    }
+
+    pub(super) fn render_with_clear(
+        &mut self,
+        sprites: &mut [Sprite],
+        black: bool,
+    ) -> Result<bool, String> {
         sprites
             .len()
             .checked_mul(INSTANCE_BYTES)
@@ -75,7 +83,7 @@ impl WebGlRenderer {
         // The bridge independently rejects oversized packets before allocating
         // exactly their byte length; no extra capacity or retained CPU packet.
         self.bridge
-            .render(bytemuck::cast_slice(sprites))
+            .render(bytemuck::cast_slice(sprites), black)
             .map_err(error)
     }
 }

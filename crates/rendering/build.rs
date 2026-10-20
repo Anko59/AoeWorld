@@ -2,7 +2,11 @@ use std::{env, error::Error, fs, path::PathBuf};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut template = String::new();
-    for path in ["src/sprites.wgsl", "src/web/sampling.wgsl"] {
+    for path in [
+        "src/sprites.wgsl",
+        "src/web/sampling.wgsl",
+        "src/web/lighting.wgsl",
+    ] {
         println!("cargo:rerun-if-changed={path}");
         template.push_str(&fs::read_to_string(path)?);
         template.push('\n');

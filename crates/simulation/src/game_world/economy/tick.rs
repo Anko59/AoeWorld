@@ -23,6 +23,9 @@ impl GameWorld {
             && self.wildlife.is_idle()
         {
             self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
+            if !changed.is_empty() {
+                self.remember_visible_buildings();
+            }
             return changed;
         }
         self.advance_combat(&mut changed);
@@ -30,6 +33,7 @@ impl GameWorld {
         self.advance_gathering(sink, &mut changed);
         self.advance_research(&mut changed);
         self.advance_training(&mut changed);
+        self.remember_visible_buildings();
         self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
         changed.sort_by_key(|unit| unit.id);
         changed.dedup_by_key(|unit| unit.id);

@@ -184,7 +184,11 @@ fn resource_unchecked(
             .values()
             .flat_map(|chunk| chunk.resources().map(|(node, _)| node))
             .chain(starting.iter())
-            .find(|node| node.tile == tile && client.resources.visible(node.id))
+            .find(|node| {
+                node.tile == tile
+                    && client.resources.visible(node.id)
+                    && client.fog.state([tile.x, tile.y]) > 0
+            })
         {
             let kind = match node.kind as u8 {
                 0 => ResourceKind::Food,

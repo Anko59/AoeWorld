@@ -16,6 +16,8 @@ mod hash;
 mod research;
 mod resources;
 mod spawning;
+#[path = "game_world/visibility/mod.rs"]
+mod visibility;
 mod wildlife;
 pub use combat::*;
 pub use economy::{
@@ -27,6 +29,7 @@ pub use facing::Facing;
 pub(crate) use facing::facing_for;
 pub use research::*;
 pub use resources::PreparedResourceDepletion;
+pub use visibility::TileVisibility;
 pub use wildlife::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -100,6 +103,7 @@ pub struct GameWorld {
     pub(crate) economy: economy::Economy,
     pub(crate) combat: combat::Combat,
     pub(crate) wildlife: wildlife::Wildlife,
+    pub(crate) vision: visibility::Vision,
     pub(crate) tick: Tick,
     pub(crate) units: Vec<StoredUnit>,
     pub(crate) lookup: BTreeMap<EntityId, usize>,
@@ -127,6 +131,7 @@ impl GameWorld {
             economy: economy::Economy::default(),
             combat: Default::default(),
             wildlife: Default::default(),
+            vision: Default::default(),
             units: Vec::new(),
             lookup: BTreeMap::new(),
             chunks: BTreeMap::new(),
@@ -173,6 +178,7 @@ impl GameWorld {
         extent_tiles: i32,
     ) -> Result<Self, GameWorldError> {
         let mut world = Self::new(config)?;
+        world.set_fog_disabled(true);
         let radius = i64::from(TILE_GROUND_RADIUS_SUBUNITS);
         let width = i64::from(config.world_width_subunits()?);
         let height = i64::from(config.world_height_subunits()?);
@@ -283,6 +289,7 @@ impl GameWorld {
         if depletion.became_nonblocking {
             self.resource_collision_changed();
         }
+        self.record_observed_resource(depletion.id, depletion.remaining);
         Ok(depletion)
     }
 

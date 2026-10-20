@@ -16,13 +16,26 @@ mod mixing;
 mod selection;
 pub(super) use selection::raster_selection;
 
-pub(super) fn raster_surface(
+#[cfg(test)]
+pub(crate) fn raster_surface(
     triangle: &ProjectedSurfaceTriangle,
     atlas: &[u8],
     bounds: [u32; 4],
     width: u32,
     color: &mut [u8],
     depth: &mut [f64],
+) {
+    raster_surface_with_fog(triangle, atlas, bounds, width, color, depth, [1.0; 3]);
+}
+
+pub(super) fn raster_surface_with_fog(
+    triangle: &ProjectedSurfaceTriangle,
+    atlas: &[u8],
+    bounds: [u32; 4],
+    width: u32,
+    color: &mut [u8],
+    depth: &mut [f64],
+    fog: [f32; 3],
 ) {
     let texture = triangle.texture_uv;
     if texture.is_some() && !valid_atlas(atlas) {
@@ -205,7 +218,15 @@ pub(super) fn raster_surface(
             let vertex_shade = weights[0] * f64::from(shade[0])
                 + weights[1] * f64::from(shade[1])
                 + weights[2] * f64::from(shade[2]);
-            let source = relief::shade_sample(unlit, vertex_shade as f32);
+            let mut source = relief::shade_sample(unlit, vertex_shade as f32);
+            let factor = weights
+                .iter()
+                .zip(fog)
+                .map(|(w, f)| *w * f64::from(f))
+                .sum::<f64>();
+            for c in &mut source[..3] {
+                *c = (f64::from(*c) * factor).round() as u8;
+            }
             write_fragment(x, y, width, fragment_depth, source, color, depth);
             first += plane.x[0];
             second += plane.x[1];

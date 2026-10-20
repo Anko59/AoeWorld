@@ -219,9 +219,10 @@ four tiles at 1.0 tile/second, versus villagers' 0.8. Boar retaliate against
 the last villager to hit them and stop chasing beyond eight tiles of home.
 Wolves acquire villagers within six tiles. Movement is fixed point and tests
 terrain, diagonal crossings and building collision; animals do not block tiles.
-Animal sight uses distance, like current unit/building sight, without fog or
-occlusion. Hunt targets are explicit; combat AttackOrder targets live units,
-buildings and animals. Owned sheep accept MoveOrder for herding.
+Animal acquisition uses distance without occlusion. Its `sight_tiles` is an AI
+range, separate from the unit's fog `los_tiles`. Hunt targets are explicit;
+combat AttackOrder targets live units, buildings and animals. Owned sheep
+accept MoveOrder for herding.
 
 The map generator has no animal hooks. Village initialization therefore places
 a deterministic local kit of eight sheep, two boar, four deer and one wolf, searching
@@ -242,5 +243,8 @@ set for the subscription region at its revision and tick; it replaces the
 previous set, including removals on panning. Subscribe/resync always sends it;
 ticks send it when that set changes. `HuntOrder` and worker task variants are
 appended, preserving existing enum indexes and golden fixtures. The headless
-wire scenario writes `.cache/wildlife/scenario.log`. This work adds no client
-controls or animal rendering; the client accepts the wildlife frame.
+wire scenario writes `.cache/wildlife/scenario.log`. The client draws optional
+native standing animal cells. Hunt controls and animal animations remain absent.
+
+Fog is authoritative player knowledge; see [fog of war](fog-of-war.md) for
+storage, observation rules, wire bounds and source values.

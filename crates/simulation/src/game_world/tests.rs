@@ -2,6 +2,9 @@ use super::*;
 use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
 use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, ResourceOverlay};
 
+mod visibility;
+mod visibility_resources;
+
 fn world() -> GameWorld {
     GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap()
 }

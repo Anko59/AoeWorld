@@ -3,6 +3,24 @@ use super::*;
 use crate::game_renderer::filter_fixture as fixture;
 
 #[wasm_bindgen_test]
+async fn webgpu_ground_shows_black_explored_and_visible_fog() {
+    let mut renderer = surface_renderer_with_atlas(&fixture::atlas()).await;
+    let (faces, probe, _) = fixture::case(1);
+    for (light, expected) in [(0.0, 0), (0.45, 115), (1.0, 255)] {
+        let mut packet = crate::web::surface_instance(&faces[1], [128.0; 2], 0.0);
+        crate::game_renderer::fog::surface_packet(&mut packet, [light; 3]);
+        renderer
+            .render_world_layers(&[], &[packet], [0.0, 0.0, 0.0, 1.0])
+            .unwrap();
+        assert_pixel(
+            read_pixel(&renderer, 1, probe).await,
+            [expected, expected, expected, 255],
+        );
+    }
+    renderer.device.destroy();
+}
+
+#[wasm_bindgen_test]
 async fn webgpu_terrain_filter_attenuates_checker_preserves_coverage_depth_and_rects() {
     let mut renderer = surface_renderer_with_atlas(&fixture::atlas()).await;
     for index in 0..fixture::CASES {
