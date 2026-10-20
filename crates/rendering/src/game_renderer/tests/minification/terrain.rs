@@ -18,6 +18,7 @@ pub(crate) fn scene(zoom: f64) -> (SceneCamera, Vec<Quad>, Vec<u8>) {
         actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
+        fishing: Default::default(),
         town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),

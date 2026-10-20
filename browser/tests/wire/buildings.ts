@@ -13,3 +13,5 @@ function fragment(name: string): number[] {
 export const townCenterState = fragment("town-center.hex");
 // After population_cap: age (Dark), researched (empty bitset).
 export const darkAgeState = fragment("player.hex");
+export const dockState = fragment("dock.hex");
+export const fishingShipState = fragment("fishing-ship.hex");

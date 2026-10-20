@@ -6,7 +6,7 @@ import {
   frameResource,
   freshHud,
   resourceTargets,
-} from "./resources.js";
+} from "./fixtures/resources.js";
 
 // An opt-in local recording aid. Ordinary browser gates never need a dev server.
 test("prepare a live berry worker for the narrated village recording", async ({

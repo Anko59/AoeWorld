@@ -45,7 +45,7 @@ pub struct UnitCombat {
 }
 
 /// Indexed by `UnitKind as usize`; a test pins the order.
-pub const UNIT_COMBAT: [UnitCombat; 3] = [
+pub const UNIT_COMBAT: [UnitCombat; 4] = [
     UnitCombat {
         kind: UnitKind::Villager,
         hp: 25,
@@ -87,6 +87,26 @@ pub const UNIT_COMBAT: [UnitCombat; 3] = [
             seconds: 21,
         }),
     },
+    UnitCombat {
+        kind: UnitKind::FishingShip,
+        // Current DE naval balance: update 169123; sources in docs/fishing.md.
+        hp: 50,
+        attack: 0,
+        attack_kind: DamageKind::Melee,
+        melee_armour: 1,
+        pierce_armour: 1,
+        attack_period_centiseconds: 200,
+        speed_tenths: None,
+        training: Some(UnitTraining {
+            cost: UnitCost {
+                food: 0,
+                wood: 75,
+                gold: 0,
+                stone: 0,
+            },
+            seconds: 40,
+        }),
+    },
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -110,7 +130,7 @@ const fn armour(kind: BuildingKind, melee_armour: i16, pierce_armour: u16) -> Bu
 /// House -2 melee: official AoE II DE update 56005:
 /// https://www.ageofempires.com/news/aoeii_de_update_56005/
 /// Farm and Outpost really have 0/0; these are not placeholders.
-pub const BUILDING_COMBAT: [BuildingCombat; 9] = [
+pub const BUILDING_COMBAT: [BuildingCombat; 10] = [
     armour(BuildingKind::TownCenter, 3, 5),
     armour(BuildingKind::House, -2, 7),
     armour(BuildingKind::LumberCamp, 0, 7),
@@ -120,6 +140,7 @@ pub const BUILDING_COMBAT: [BuildingCombat; 9] = [
     armour(BuildingKind::Barracks, 0, 7),
     armour(BuildingKind::PalisadeWall, 2, 5),
     armour(BuildingKind::Outpost, 0, 0),
+    armour(BuildingKind::Dock, 0, 7),
 ];
 
 pub const fn unit_combat(kind: UnitKind) -> &'static UnitCombat {

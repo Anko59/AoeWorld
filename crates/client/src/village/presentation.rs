@@ -4,7 +4,7 @@ use crate::playground::game::map;
 use crate::resource_state::ResourceStateCache;
 use aoe_core::{ScreenPoint, TileCoord};
 use aoe_protocol::UnitKind;
-pub(super) fn values(client: &Client) -> Vec<f64> {
+pub(in super::super) fn values(client: &Client) -> Vec<f64> {
     let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
     let owner = owner(client);
     let mut values = vec![0.0; 9];
@@ -34,7 +34,7 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
         client
             .units
             .get(id)
-            .filter(|u| u.kind == UnitKind::Villager)
+            .filter(|u| matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip))
             .map(|u| u.position.as_tiles())
     });
     let villager = focus.is_some();
@@ -99,7 +99,7 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
             continue;
         }
         if client.selected.resource_id == Some(node.id) {
-            values[1] = node.kind as u8 as f64;
+            values[1] = resource_selection_kind(node.object, node.kind);
             values[2] = f64::from(client.resources.remaining(node.id, node.initial_amount));
         }
         if !client.resources.visible(node.id) {
@@ -150,6 +150,18 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
     values
 }
 
+/// HUD tags distinguish food objects without changing their stockpile kind.
+pub(super) fn resource_selection_kind(
+    object: aoe_map::ObjectKind,
+    kind: aoe_map::ResourceKind,
+) -> f64 {
+    match object {
+        aoe_map::ObjectKind::ShoreFish => 4.0,
+        aoe_map::ObjectKind::DeepFish => 5.0,
+        _ => kind as u8 as f64,
+    }
+}
+
 /// Kind and authoritative remaining amount of a selected starting-kit resource,
 /// including one at zero that the overlay list no longer yields.
 pub(super) fn starting_selection(id: u64, resources: &ResourceStateCache) -> Option<(f64, f64)> {
@@ -171,8 +183,27 @@ fn passable(client: &Client, point: ScreenPoint) -> bool {
         return false;
     };
     let tile = TileCoord::new(p[0].floor() as i32, p[1].floor() as i32);
-    let ground = map::terrain_tile(client, tile.x, tile.y)
-        .map_or(client.map_content_hash.is_none(), |t| t.passable);
+    let terrain = map::terrain_tile(client, tile.x, tile.y);
+    // Orders are accepted independently per unit: a mixed selection can move
+    // wherever at least one living owned unit's domain permits it.
+    let ground = client.selected.units.iter().any(|id| {
+        client.units.get(id).is_some_and(|u| {
+            u.player == owner(client)
+                && u.hp > 0
+                && if u.kind == UnitKind::FishingShip {
+                    terrain.is_some_and(|t| {
+                        matches!(
+                            t.water,
+                            aoe_map::WaterKind::Ocean
+                                | aoe_map::WaterKind::Lake
+                                | aoe_map::WaterKind::River
+                        ) && t.material != aoe_map::GroundMaterial::Ford
+                    })
+                } else {
+                    terrain.map_or(client.map_content_hash.is_none(), |t| t.passable)
+                }
+        })
+    });
     let resource = map::feedback::blocker_at(client, tile).is_some();
     let building = client.village.buildings.iter().any(|b| {
         tile.x >= b.footprint.min.x

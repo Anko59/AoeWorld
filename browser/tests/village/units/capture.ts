@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
-import { centerVillage, freshHud } from "../resources.js";
+import { centerVillage, freshHud } from "../fixtures/resources.js";
 
 type Actor = {
   id: number;

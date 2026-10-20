@@ -7,6 +7,8 @@ use wasm_bindgen_test::wasm_bindgen_test;
 
 #[path = "budget.rs"]
 mod budget;
+#[path = "fishing.rs"]
+mod fishing;
 #[path = "fixture.rs"]
 mod fixture;
 
@@ -107,6 +109,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
             actors: Vec::new(),
             buildings: Default::default(),
             village: Default::default(),
+            fishing: Default::default(),
             town_center: Default::default(),
             walking: Vec::new(),
             standing: Vec::new(),

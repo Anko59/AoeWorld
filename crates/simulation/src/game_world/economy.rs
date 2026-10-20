@@ -7,6 +7,8 @@ mod buildings;
 mod construction;
 mod dropoff;
 mod farm;
+#[path = "economy/fishing/mod.rs"]
+mod fishing;
 mod gathering;
 mod hash;
 mod movement;
@@ -35,6 +37,7 @@ pub enum UnitKind {
     Villager,
     Scout,
     Militia,
+    FishingShip,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -48,6 +51,7 @@ pub enum BuildingKind {
     Barracks,
     PalisadeWall,
     Outpost,
+    Dock,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -71,6 +75,7 @@ pub enum UnitTask {
     Farming,
     Hunting,
     Shepherding,
+    Fishing,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CarriedResource {
@@ -255,6 +260,7 @@ pub(crate) struct GatherTask {
     farm: Option<EntityId>,
     /// Set for a wildlife carcass rather than a map node or farm.
     pub(crate) animal: Option<EntityId>,
+    fish: Option<aoe_map::ObjectKind>,
     tile: TileCoord,
     kind: ResourceKind,
     phase: GatherPhase,

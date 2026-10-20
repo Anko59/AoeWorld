@@ -125,9 +125,12 @@ impl GameWorld {
             {
                 continue;
             }
-            let spawn = perimeter(footprint)
-                .into_iter()
-                .find(|tile| self.tile_free(*tile));
+            let spawn = perimeter(footprint).into_iter().find(|tile| {
+                self.unit_tile_passable(kind, *tile, &|| false)
+                    .unwrap_or(false)
+                    && !self.economy.blocked_tiles.contains(tile)
+                    && !self.units().any(|u| u.position.tile_floor() == *tile)
+            });
             let Some(tile) = spawn else {
                 continue;
             };

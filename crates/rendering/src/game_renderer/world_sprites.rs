@@ -2,10 +2,13 @@ use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
+#[path = "village/fish.rs"]
+mod fish;
 #[path = "scenery.rs"]
 mod scenery;
 #[path = "village/mod.rs"]
 mod village;
+pub use fish::scene_resource_animation_frame;
 
 #[path = "village/bounds.rs"]
 mod bounds;
@@ -25,6 +28,17 @@ pub fn scene_resource_presentation(
     art: &GameArt,
     resource: SceneResource,
 ) -> Option<(GameFrame, Option<GameFrame>)> {
+    resource_presentation_at(art, resource, 0)
+}
+
+pub(super) fn resource_presentation_at(
+    art: &GameArt,
+    resource: SceneResource,
+    animation: usize,
+) -> Option<(GameFrame, Option<GameFrame>)> {
+    if resource.kind == 0 && matches!(resource.visual_family, 5 | 6) {
+        return fish::frame(art, resource, animation).map(|f| (f, None));
+    }
     if resource.kind >= SceneResource::CLIFF {
         return scenery::frame(art, resource).map(|frame| (frame, None));
     }
@@ -108,7 +122,7 @@ pub(super) fn emit_world_sprite_frames(
     let objects = resources
         .iter()
         .filter_map(|resource| {
-            scene_resource_presentation(art, *resource).map(|(frame, shadow)| {
+            resource_presentation_at(art, *resource, animation).map(|(frame, shadow)| {
                 WorldObject::Resource(*resource, world_frame(frame), shadow.map(world_frame))
             })
         })
@@ -168,63 +182,75 @@ pub(super) fn emit_world_sprite_frames(
             village::marker(unit, camera, &mut emit);
             continue;
         };
-        let (_, flipped) = sprite_direction(unit.facing);
+        let (direction, flipped) = sprite_direction(unit.facing);
         let phase = if unit.kind.actor_slot().is_some() {
             usize::from(unit.facing >> 3).min(stride - 1)
         } else if animated {
-            animation % stride
+            let clock = if unit.kind == crate::SceneUnitKind::VillagerFishing {
+                animation / 8
+            } else {
+                animation
+            };
+            clock % stride
         } else {
             0
         };
         let (index, _) = actor_frame_index(unit.facing, stride, phase);
         let frame = world_frame(frames[index]);
-        let scale = camera.zoom as f32;
-        let width = f64::from(frame.size[0]) * camera.zoom;
-        let height = f64::from(frame.size[1]) * camera.zoom;
-        if screen.x + width < 0.0
-            || screen.y + height < 0.0
-            || screen.x - width > camera.viewport[0]
-            || screen.y - height > camera.viewport[1]
-        {
-            continue;
-        }
-        let mut uv = frame.atlas.uv;
-        if flipped {
-            uv[0] += uv[2];
-            uv[2] = -uv[2];
-        }
-        let x = screen.x
-            - if flipped {
-                width - f64::from(frame.anchor[0]) * camera.zoom
-            } else {
-                f64::from(frame.anchor[0]) * camera.zoom
+        // The DAT's fishing task is the net delta over the standing hull.
+        let net = (unit.kind == crate::SceneUnitKind::FishingShipWorking)
+            .then(|| art.fishing[9].get(direction).copied())
+            .flatten()
+            .map(world_frame);
+        for frame in std::iter::once(frame).chain(net) {
+            let scale = camera.zoom as f32;
+            let width = f64::from(frame.size[0]) * camera.zoom;
+            let height = f64::from(frame.size[1]) * camera.zoom;
+            if screen.x + width < 0.0
+                || screen.y + height < 0.0
+                || screen.x - width > camera.viewport[0]
+                || screen.y - height > camera.viewport[1]
+            {
+                continue;
+            }
+            let mut uv = frame.atlas.uv;
+            if flipped {
+                uv[0] += uv[2];
+                uv[2] = -uv[2];
+            }
+            let x = screen.x
+                - if flipped {
+                    width - f64::from(frame.anchor[0]) * camera.zoom
+                } else {
+                    f64::from(frame.anchor[0]) * camera.zoom
+                };
+            let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
+            let sprite = Sprite {
+                position: [
+                    ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
+                    (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
+                ],
+                radius: [
+                    (width / camera.viewport[0]) as f32,
+                    (height / camera.viewport[1]) as f32,
+                ],
+                color: [1.0; 4],
+                uv,
+                depths: [0.0; 4],
+                terrain_blend: [[0.0; 4]; 2],
+                pages: [frame.atlas.page, 0, 0, 0],
             };
-        let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
-        let sprite = Sprite {
-            position: [
-                ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
-                (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
-            ],
-            radius: [
-                (width / camera.viewport[0]) as f32,
-                (height / camera.viewport[1]) as f32,
-            ],
-            color: [1.0; 4],
-            uv,
-            depths: [0.0; 4],
-            terrain_blend: [[0.0; 4]; 2],
-            pages: [frame.atlas.page, 0, 0, 0],
-        };
-        let mut scaled_frame = frame;
-        scaled_frame.size = scaled_frame.size.map(|value| value * scale);
-        scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
-        let depth = object_depth(object);
-        if let Some((shadow, shadow_frame)) =
-            alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
-        {
-            emit((shadow, shadow_frame, depth, object.stable_id()));
+            let mut scaled_frame = frame;
+            scaled_frame.size = scaled_frame.size.map(|value| value * scale);
+            scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
+            let depth = object_depth(object);
+            if let Some((shadow, shadow_frame)) =
+                alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
+            {
+                emit((shadow, shadow_frame, depth, object.stable_id()));
+            }
+            emit((sprite, scaled_frame, depth, object.stable_id()));
         }
-        emit((sprite, scaled_frame, depth, object.stable_id()));
     }
 }
 
@@ -243,6 +269,11 @@ fn world_frame(frame: GameFrame) -> GameFrame {
 /// overhang is 43 pixels. One shared offset keeps objects ordered among
 /// themselves, and a one-level rise in front (two units) still hides them.
 const GROUND_CLEARANCE: f64 = 1.5;
+
+/// The rendered body depth, including clearance below the native hotspot.
+pub fn scene_unit_depth(unit: SceneUnit) -> f64 {
+    object_depth(WorldObject::Unit(unit))
+}
 
 fn object_depth(object: WorldObject) -> f64 {
     let position = object.position();

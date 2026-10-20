@@ -5,9 +5,20 @@ use aoe_protocol::ResourceKind;
 use aoe_rendering::{SceneCamera, resource_sprite_bounds, scene_resource_frame};
 
 /// Shared pointer target for orders and cursor feedback, frontmost first.
-pub(super) fn actor(client: &Client, point: ScreenPoint) -> Option<(EntityId, bool, bool)> {
-    let terrain_depth = map::surface_depth_at_screen(client, point);
+pub(in super::super) fn actor(
+    client: &Client,
+    point: ScreenPoint,
+) -> Option<(EntityId, bool, bool)> {
+    target(client, point, false)
+}
+
+pub(in super::super) fn unit(client: &Client, point: ScreenPoint) -> Option<EntityId> {
+    target(client, point, true).map(|(id, _, _)| id)
+}
+
+fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(EntityId, bool, bool)> {
     let scene = map::scene::prepare(client);
+    let terrain_depth = aoe_rendering::surface_depth_at(&scene.triangles, point);
     let rendered = map::scene::units(client, &scene);
     let camera = SceneCamera {
         center: client.camera.center,
@@ -27,6 +38,7 @@ pub(super) fn actor(client: &Client, point: ScreenPoint) -> Option<(EntityId, bo
         .village
         .animals
         .iter()
+        .filter(|_| !units_only)
         .filter(|a| a.hp > 0 || a.food_remaining > 0)
         .map(|a| (a.id, true, false, a.position.as_tiles()));
     units
@@ -51,12 +63,10 @@ pub(super) fn actor(client: &Client, point: ScreenPoint) -> Option<(EntityId, bo
                     )
                 })
                 .unwrap_or(fallback);
-            let depth = world[0]
-                + world[1]
-                + 2.0
-                    * map::scene::prepare(client)
-                        .height(world)
-                        .unwrap_or_else(|| map::elevation_at_world(client, world));
+            let depth = rendered
+                .binary_search_by_key(&id, |unit| unit.id)
+                .ok()
+                .map(|index| aoe_rendering::scene_unit_depth(rendered[index]))?;
             (crate::unit_visuals::actor_hit(
                 bounds,
                 [screen.x, screen.y],

@@ -254,6 +254,7 @@ impl GameWorld {
         let observer = self.unit(id).filter(|u| u.hp > 0).map(|u| {
             let los = match u.kind {
                 UnitKind::Villager | UnitKind::Militia => 4,
+                UnitKind::FishingShip => 5,
                 UnitKind::Scout => {
                     if self.has_researched(u.player, super::Tech::FeudalAge) {
                         6

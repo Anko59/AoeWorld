@@ -182,7 +182,7 @@ pub(super) fn building(
         marker(unit, camera, emit);
         return;
     }
-    let index = if (9..=12).contains(&art_slot) {
+    let index = if (9..=12).contains(&art_slot) || art_slot == 24 {
         usize::from(unit.facing).min(frames.len() - 1)
     } else if art_slot == 7 {
         usize::from(unit.facing) % frames.len()

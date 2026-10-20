@@ -1,4 +1,22 @@
 use super::super::presentation::starting_selection;
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn selected_fish_have_resource_labels_separate_from_berry_bushes() {
+    use super::super::presentation::resource_selection_kind;
+    use aoe_map::{ObjectKind, ResourceKind};
+    assert_eq!(
+        resource_selection_kind(ObjectKind::ShoreFish, ResourceKind::Food),
+        4.0
+    );
+    assert_eq!(
+        resource_selection_kind(ObjectKind::DeepFish, ResourceKind::Food),
+        5.0
+    );
+    assert_eq!(
+        resource_selection_kind(ObjectKind::ForageBush, ResourceKind::Food),
+        0.0
+    );
+}
 use crate::resource_state::ResourceStateCache;
 use aoe_core::TileCoord;
 use aoe_map::{ResourceKind, ResourceNode};

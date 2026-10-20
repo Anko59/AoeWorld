@@ -3,6 +3,21 @@ use aoe_core::{Seed, TileCoord, WorldConfig};
 
 mod fog;
 
+#[test]
+fn fishing_appends_wire_discriminants_and_round_trips_orders() {
+    assert_eq!(postcard::to_allocvec(&UnitKind::FishingShip).unwrap(), [3]);
+    assert_eq!(postcard::to_allocvec(&BuildingKind::Dock).unwrap(), [9]);
+    assert_eq!(postcard::to_allocvec(&UnitTask::Fishing).unwrap(), [11]);
+    let order = ClientMessage::TrainOrder {
+        sequence: 1,
+        building_id: EntityId(2),
+        kind: UnitKind::FishingShip,
+    };
+    let bytes = encode_client(&order).unwrap();
+    assert_eq!(bytes, [5, 1, 2, 3]);
+    assert_eq!(decode_client(&bytes).unwrap(), order);
+}
+
 fn region() -> TileRect {
     TileRect::new(TileCoord::new(0, 0), TileCoord::new(8, 8))
 }

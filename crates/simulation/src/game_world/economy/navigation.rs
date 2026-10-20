@@ -73,7 +73,16 @@ impl GameWorld {
         planner: &mut RoutePlanner,
         budget: u32,
         cancelled: &dyn Fn() -> bool,
+        kind: crate::UnitKind,
     ) -> RoutePlannerPoll {
+        if kind == crate::UnitKind::FishingShip {
+            return planner.poll(
+                &super::fishing::navigation::NavalNavigation(self),
+                &ResourceOverlay::default(),
+                budget,
+                cancelled,
+            );
+        }
         match &self.terrain {
             Terrain::Map { generator, overlay } => {
                 planner.poll(generator, overlay, budget, cancelled)
@@ -95,7 +104,17 @@ impl GameWorld {
         planner: &mut RoutePlanner,
         budget: u32,
         cancelled: &dyn Fn() -> bool,
+        kind: crate::UnitKind,
     ) {
+        if kind == crate::UnitKind::FishingShip {
+            planner.plan_ahead(
+                &super::fishing::navigation::NavalNavigation(self),
+                &ResourceOverlay::default(),
+                budget,
+                cancelled,
+            );
+            return;
+        }
         match &self.terrain {
             Terrain::Map { generator, overlay } => {
                 planner.plan_ahead(generator, overlay, budget, cancelled)

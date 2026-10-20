@@ -98,6 +98,7 @@ pub(in super::super) fn update(client: &Client) {
             UnitKind::Villager => aoe_simulation::UnitKind::Villager,
             UnitKind::Scout => aoe_simulation::UnitKind::Scout,
             UnitKind::Militia => aoe_simulation::UnitKind::Militia,
+            UnitKind::FishingShip => aoe_simulation::UnitKind::FishingShip,
         };
         let stats = aoe_simulation::unit_combat(native);
         let loom = client
@@ -112,7 +113,8 @@ pub(in super::super) fn update(client: &Client) {
             match unit.kind {
                 UnitKind::Scout => 0.0,
                 UnitKind::Villager => 1.0,
-                UnitKind::Militia => 11.0,
+                UnitKind::Militia => 12.0,
+                UnitKind::FishingShip => 13.0,
             },
             x,
             y,
@@ -154,10 +156,10 @@ pub(in super::super) fn update(client: &Client) {
     for animal in &client.village.animals {
         let [x, y] = screen(client, animal.position.as_tiles());
         let (kind, hp, attack) = match animal.kind {
-            aoe_protocol::AnimalKind::Sheep => (12.0, 7, 0),
-            aoe_protocol::AnimalKind::Deer => (13.0, 5, 0),
-            aoe_protocol::AnimalKind::Boar => (14.0, 75, 7),
-            aoe_protocol::AnimalKind::Wolf => (15.0, 25, 3),
+            aoe_protocol::AnimalKind::Sheep => (14.0, 7, 0),
+            aoe_protocol::AnimalKind::Deer => (15.0, 5, 0),
+            aoe_protocol::AnimalKind::Boar => (16.0, 75, 7),
+            aoe_protocol::AnimalKind::Wolf => (17.0, 25, 3),
         };
         values.extend_from_slice(&[
             f64::from(animal.id.0),
@@ -165,7 +167,7 @@ pub(in super::super) fn update(client: &Client) {
             x,
             y,
             flag(client.selected.units.contains(&animal.id)),
-            11.0 + animal.task as u8 as f64,
+            12.0 + animal.task as u8 as f64,
             0.0,
             f64::from(animal.food_remaining),
             f64::from(animal.hp),
@@ -225,6 +227,6 @@ pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsVal
 pub(super) fn counts_as_gatherer(task: UnitTask) -> bool {
     matches!(
         task,
-        UnitTask::Gathering | UnitTask::Returning | UnitTask::Farming
+        UnitTask::Gathering | UnitTask::Returning | UnitTask::Farming | UnitTask::Fishing
     )
 }

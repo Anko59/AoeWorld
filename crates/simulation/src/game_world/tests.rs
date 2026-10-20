@@ -267,7 +267,11 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
     assert!(!world.terrain().passable(resource.tile, config));
     assert!(
         world
-            .next_map_route(TileCoord::new(0, 0), TileCoord::new(0, 0))
+            .next_map_route(
+                TileCoord::new(0, 0),
+                TileCoord::new(0, 0),
+                crate::UnitKind::Scout
+            )
             .is_some()
     );
     assert_eq!(world.navigation_cache.entry_count(), 1);

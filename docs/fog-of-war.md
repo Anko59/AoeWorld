@@ -66,6 +66,7 @@ Its Gaia records corroborate these requested base values:
 | Villager | 83 / 293 | 4 |
 | Militia | 74 | 4 |
 | Scout Cavalry, Dark Age | 448 | 4 |
+| Fishing Ship | 13 | 5 |
 | Town Center | 109 / 618 | 8 |
 | Sheep | 594 | 3 |
 | Deer | 65 | 2 |
@@ -77,6 +78,9 @@ The scout's four-tile base is also documented by
 Town Watch's +4 comes from the existing technology table and the requested DE
 rules. The requested Militia base remains four. AI acquisition distances stay
 separate from animal LOS. Building LOS continues to use `BUILDING_RULES`.
+Docks use the current DE eight-tile value documented in [fishing](fishing.md).
+Fish use resource memory, including their last observed amounts in explored
+fog; enemy Fishing Ships follow the same current-sight filtering as land units.
 
 `AOE_FOG_DISABLED=1` is an authority-side debug/showcase switch. Synthetic
 population workloads and Compare's owned terrain viewers explicitly disable

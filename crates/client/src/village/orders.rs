@@ -50,6 +50,8 @@ pub(in super::super) fn train(client: &mut Client, cancel: bool) {
                     |b| {
                         if b.kind == aoe_protocol::BuildingKind::Barracks {
                             UnitKind::Militia
+                        } else if b.kind == aoe_protocol::BuildingKind::Dock {
+                            UnitKind::FishingShip
                         } else {
                             UnitKind::Villager
                         }
@@ -140,10 +142,10 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
         && enemy.is_none()
         && !client.village.move_cursor
         && client.selected.units.iter().any(|id| {
-            client
-                .units
-                .get(id)
-                .is_some_and(|u| u.kind == UnitKind::Villager && u.player == owner(client))
+            client.units.get(id).is_some_and(|u| {
+                matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip)
+                    && u.player == owner(client)
+            })
         });
     for id in client.selected.units.clone() {
         let Some(unit) = client

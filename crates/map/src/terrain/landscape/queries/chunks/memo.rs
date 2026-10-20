@@ -238,6 +238,8 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
     }
 }
 
+#[path = "memo/fishing.rs"]
+mod fishing;
 #[path = "memo/shore.rs"]
 mod shore;
 pub(super) use shore::Shore;

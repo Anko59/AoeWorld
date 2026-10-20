@@ -82,13 +82,26 @@ pub(super) fn origin(client: &Client, point: ScreenPoint) -> Option<TileCoord> {
 
 #[inline(never)]
 pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> bool {
-    building_ui::footprint_valid(
+    let (mut land, mut water) = (false, false);
+    let valid = building_ui::footprint_valid(
         kind,
         origin,
         [client.config.width_tiles, client.config.height_tiles],
         |tile| {
-            let ground = map::terrain_tile(client, tile.x, tile.y)
-                .map_or(client.map_content_hash.is_none(), |t| t.passable);
+            let ground = map::terrain_tile(client, tile.x, tile.y).map_or(
+                client.map_content_hash.is_none() && kind != BuildingKind::Dock,
+                |t| {
+                    let wet = matches!(
+                        t.water,
+                        aoe_map::WaterKind::Lake
+                            | aoe_map::WaterKind::Ocean
+                            | aoe_map::WaterKind::River
+                    ) && t.material != aoe_map::GroundMaterial::Ford;
+                    water |= wet;
+                    land |= t.passable && t.water == aoe_map::WaterKind::None;
+                    t.passable || (kind == BuildingKind::Dock && wet)
+                },
+            );
             ground
                 && map::feedback::blocker_at(client, tile).is_none()
                 && !client
@@ -102,7 +115,8 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
                         && tile.y < b.footprint.max.y
                 })
         },
-    )
+    );
+    valid && (kind != BuildingKind::Dock || land && water)
 }
 
 #[inline(never)]

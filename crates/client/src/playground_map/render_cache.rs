@@ -5,7 +5,7 @@ use std::rc::Rc;
 struct RenderedFrame<S> {
     scene: Rc<S>,
     units: Vec<SceneUnit>,
-    resources: Vec<SceneResource>,
+    resources: Vec<(SceneResource, Option<usize>)>,
     grid: bool,
     animation: Option<usize>,
 }
@@ -50,7 +50,16 @@ impl<S> RenderFrameCache<S> {
             || previous.units.iter().copied().ne(units
                 .iter()
                 .map(|unit| aoe_rendering::scene_unit_render_key(art, *unit, camera)))
-            || previous.resources.as_slice() != resources
+            || previous
+                .resources
+                .iter()
+                .copied()
+                .ne(resources.iter().map(|r| {
+                    (
+                        *r,
+                        aoe_rendering::scene_resource_animation_frame(art, *r, animation, camera),
+                    )
+                }))
             || previous.grid != grid
             || previous.animation != moving_animation(art, units, animation, camera)
     }
@@ -71,7 +80,15 @@ impl<S> RenderFrameCache<S> {
                 .iter()
                 .map(|unit| aoe_rendering::scene_unit_render_key(art, *unit, camera))
                 .collect(),
-            resources: resources.to_vec(),
+            resources: resources
+                .iter()
+                .map(|r| {
+                    (
+                        *r,
+                        aoe_rendering::scene_resource_animation_frame(art, *r, animation, camera),
+                    )
+                })
+                .collect(),
             grid,
             animation: moving_animation(art, units, animation, camera),
         });

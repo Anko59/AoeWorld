@@ -18,6 +18,8 @@ enum Command {
         command: assets::AssetCommand,
     },
     Doctor,
+    /// Prepare the bounded synthetic coast used by fishing captures.
+    FishingScenario,
     DiskPrecheck,
     /// Stop the harness containers that a host suspend left running.
     Recover,

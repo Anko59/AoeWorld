@@ -74,35 +74,20 @@ impl GameWorld {
                 };
                 let previous_tile = current_position.tile_floor();
                 let tile = position.tile_floor();
-                let terrain_ok = match self
-                    .terrain
-                    .passable_with_cancel(tile, self.config, &|| false)
-                    .and_then(|passable| {
-                        if !passable {
-                            Ok(false)
-                        } else if tile != previous_tile {
-                            self.terrain.crossable_with_cancel(
-                                previous_tile,
-                                tile,
-                                self.config,
-                                &|| false,
-                            )
-                        } else {
-                            Ok(true)
+                let terrain_ok =
+                    match self.unit_step_clear(self.units[index].state.kind, previous_tile, tile) {
+                        Ok(terrain_ok) => terrain_ok,
+                        Err(error) => {
+                            self.clear_planner(index);
+                            self.units[index].state.moving = false;
+                            self.units[index].state.planning = false;
+                            self.units[index].order = None;
+                            self.units[index].last_movement_error =
+                                Some(GameWorldError::Environment(error));
+                            finished = true;
+                            break;
                         }
-                    }) {
-                    Ok(terrain_ok) => terrain_ok,
-                    Err(error) => {
-                        self.clear_planner(index);
-                        self.units[index].state.moving = false;
-                        self.units[index].state.planning = false;
-                        self.units[index].order = None;
-                        self.units[index].last_movement_error =
-                            Some(GameWorldError::Environment(error));
-                        finished = true;
-                        break;
-                    }
-                };
+                    };
                 if !terrain_ok || !self.building_step_clear(previous_tile, tile) {
                     self.clear_planner(index);
                     self.units[index].state.moving = false;
@@ -232,12 +217,15 @@ impl GameWorld {
         &mut self,
         origin: aoe_core::TileCoord,
         destination: aoe_core::TileCoord,
+        kind: crate::UnitKind,
     ) -> Option<MapRoutePlan> {
         if !self.has_route_navigation() {
             return None;
         }
         let budget = self.planning_budget.min(MAX_ROUTE_WORK_PER_ORDER);
-        if let Some((outcome, work)) = self.navigation_cache.get(origin, destination, budget) {
+        if kind != crate::UnitKind::FishingShip
+            && let Some((outcome, work)) = self.navigation_cache.get(origin, destination, budget)
+        {
             self.planning_budget -= work;
             return Some(MapRoutePlan::Outcome(outcome));
         }
@@ -251,14 +239,16 @@ impl GameWorld {
         if budget == 0 {
             return Some(MapRoutePlan::Pending(Some(planner)));
         }
-        let result = self.poll_world_route_planner(&mut planner, budget, &|| false);
+        let result = self.poll_world_route_planner(&mut planner, budget, &|| false, kind);
         // Orders issued later in this tick plan from what this one left.
         self.refund_unused_planning(budget, 0, &planner);
         let work = planner.work();
         let cached = |world: &mut Self, outcome: MovementOutcome| {
-            world
-                .navigation_cache
-                .insert(origin, destination, work, outcome.clone());
+            if kind != crate::UnitKind::FishingShip {
+                world
+                    .navigation_cache
+                    .insert(origin, destination, work, outcome.clone());
+            }
             Some(MapRoutePlan::Outcome(outcome))
         };
         match result {
@@ -310,7 +300,12 @@ impl GameWorld {
             )
         });
         let work_before = planner.work();
-        let result = self.poll_world_route_planner(&mut planner, budget, &|| false);
+        let result = self.poll_world_route_planner(
+            &mut planner,
+            budget,
+            &|| false,
+            self.units[index].state.kind,
+        );
         self.refund_unused_planning(budget, work_before, &planner);
         match result {
             RoutePlannerPoll::Path(path) => {
@@ -372,7 +367,12 @@ impl GameWorld {
             return;
         };
         let work_before = planner.work();
-        self.plan_world_route_ahead(&mut planner, budget, &|| false);
+        self.plan_world_route_ahead(
+            &mut planner,
+            budget,
+            &|| false,
+            self.units[index].state.kind,
+        );
         self.refund_unused_planning(budget, work_before, &planner);
         self.store_planner(index, Some(planner));
     }

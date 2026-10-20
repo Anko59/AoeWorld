@@ -87,6 +87,7 @@ fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
         actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
+        fishing: Default::default(),
         town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),

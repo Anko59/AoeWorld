@@ -55,7 +55,16 @@ fn the_combat_table_is_ordered_by_kind_and_holds_the_dark_age_values() {
     for (index, row) in BUILDING_COMBAT.iter().enumerate() {
         assert_eq!(row.kind as usize, index);
     }
-    let [villager, scout, militia] = UNIT_COMBAT;
+    let [villager, scout, militia, fishing_ship] = UNIT_COMBAT;
+    assert_eq!(
+        (
+            fishing_ship.hp,
+            fishing_ship.attack,
+            fishing_ship.melee_armour,
+            fishing_ship.pierce_armour
+        ),
+        (50, 0, 1, 1)
+    );
     assert_eq!((villager.hp, villager.attack), (25, 3));
     assert_eq!((scout.hp, scout.attack, scout.pierce_armour), (45, 3, 2));
     assert_eq!(

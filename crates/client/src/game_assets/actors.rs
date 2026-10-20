@@ -10,6 +10,7 @@ pub(super) fn colour(
     if ranges
         .iter()
         .skip(Pose::NeutralSheepStand as usize)
+        .take(4)
         .flatten()
         .any(|r| r.contains(&semantic))
     {
@@ -40,8 +41,13 @@ pub(super) fn select(
             return Err(JsValue::from_str("Too many actor animation frames"));
         }
         let start = selected.len();
-        domains.extend(std::iter::repeat_n(AtlasDomain::Objects, frames.len()));
-        selected.extend(frames);
+        for row in 0..5 {
+            for phase in (0..usize::from(source.stride)).step_by(usize::from(source.sample_step()))
+            {
+                selected.push(frames[row * usize::from(source.stride) + phase]);
+                domains.push(AtlasDomain::Objects);
+            }
+        }
         ranges.push(Some(start..selected.len()));
     }
     Ok(ranges)

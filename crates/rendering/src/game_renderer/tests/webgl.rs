@@ -45,6 +45,7 @@ fn canvas_zero_backing_size_does_not_advance_presentation() {
         actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
+        fishing: Default::default(),
         town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),

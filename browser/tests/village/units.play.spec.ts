@@ -1,7 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
-import { centerVillage, freshHud } from "./resources.js";
+import { centerVillage, freshHud } from "./fixtures/resources.js";
 import { readFile } from "node:fs/promises";
 import { captureUnits } from "./units/capture.js";
 

@@ -57,7 +57,15 @@ fn art_selection_distinguishes_every_kind_and_construction_stage() {
             B::Barracks,
             B::PalisadeWall,
             B::Outpost,
+            B::Dock,
         ][rule.kind as usize];
+        if kind == B::Dock {
+            assert_eq!(sprite_slot(kind, 1000, false), 23);
+            assert_eq!(sprite_slot(kind, 0, false), 24);
+            assert_eq!(sprite_slot(kind, 999, false), 24);
+            assert_eq!(sprite_slot(kind, 1000, true), 25);
+            continue;
+        }
         assert_eq!(sprite_slot(kind, 1000, false), rule.kind as usize);
         assert_eq!(
             sprite_slot(kind, 0, false),

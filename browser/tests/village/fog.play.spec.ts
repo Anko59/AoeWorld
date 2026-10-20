@@ -4,7 +4,7 @@ import { PNG } from "pngjs";
 import { fogState } from "../wire/fog.js";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
-import { centerVillage, freshHud } from "./resources.js";
+import { centerVillage, freshHud } from "./fixtures/resources.js";
 
 function blackGround(bytes: Buffer): number {
   const image = PNG.sync.read(bytes);

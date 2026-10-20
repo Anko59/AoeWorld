@@ -3,6 +3,7 @@ use super::*;
 mod base_sampling;
 mod elevation_interpolation;
 mod field_local_axes;
+mod fishing;
 mod golden;
 mod historical_field_axis;
 mod lake_outline;
@@ -307,9 +308,15 @@ fn every_resource_has_an_unoccupied_adjacent_gathering_tile() {
             TileCoord::new(node.tile.x, node.tile.y + 1),
         ];
         assert!(neighbors.into_iter().any(|neighbor| {
-            terrain
-                .tile_at(neighbor)
-                .is_some_and(|sample| sample.passable && terrain.object_at(neighbor).is_none())
+            terrain.tile_at(neighbor).is_some_and(|sample| {
+                let accessible = if node.object == ObjectKind::DeepFish {
+                    matches!(sample.water, WaterKind::Lake | WaterKind::Ocean)
+                        && sample.material != GroundMaterial::Ford
+                } else {
+                    sample.passable
+                };
+                accessible && terrain.object_at(neighbor).is_none()
+            })
         }));
     }
     assert!(examined > 0);

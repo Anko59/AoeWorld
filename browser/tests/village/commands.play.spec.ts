@@ -3,7 +3,11 @@ import { activateSyntheticMap } from "../synthetic-map.js";
 import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
-import { centerVillage, frameResource, scoutVillage } from "./resources.js";
+import {
+  centerVillage,
+  frameResource,
+  scoutVillage,
+} from "./fixtures/resources.js";
 
 test("villager resource cursors, live resource selection, grid and own minimap markers", async ({
   page,

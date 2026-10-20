@@ -161,6 +161,8 @@ pub(in super::super) fn units(
             let mut kind = worker_kind(unit);
             let mut facing = unit.facing;
             if unit.kind == aoe_protocol::UnitKind::Militia
+                || unit.kind == aoe_protocol::UnitKind::FishingShip
+                || (unit.task == aoe_protocol::UnitTask::Fishing && !unit.moving)
                 || unit.hp == 0
                 || matches!(
                     unit.task,
@@ -305,7 +307,15 @@ fn worker_kind(unit: &aoe_protocol::GameplayUnitState) -> aoe_rendering::SceneUn
     if unit.kind == UnitKind::Scout {
         return Art::Scout;
     }
+    if unit.kind == UnitKind::FishingShip {
+        return if unit.task == UnitTask::Fishing {
+            Art::FishingShipWorking
+        } else {
+            Art::FishingShip
+        };
+    }
     match (unit.task, unit.gathering, unit.carried) {
+        (UnitTask::Fishing, _, _) if !unit.moving => Art::VillagerFishing,
         // The catalog has no farmer art: farming draws the foraging pose.
         (UnitTask::Building, _, _) if !unit.moving => Art::VillagerBuilding,
         (UnitTask::Farming, _, _) => Art::VillagerForaging,

@@ -83,6 +83,7 @@ fn art() -> GameArt {
         actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
+        fishing: Default::default(),
         town_center: Default::default(),
         walking: vec![frame([40.0, 77.0], [23.0, 60.0]); 50],
         standing: vec![frame([40.0, 77.0], [23.0, 60.0]); 50],

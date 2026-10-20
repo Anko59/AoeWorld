@@ -4,7 +4,7 @@ mod command;
 mod country;
 mod discovery;
 mod filter;
-mod landscape;
+pub(crate) mod landscape;
 mod matrix;
 mod quarantine;
 mod servers;

@@ -19,6 +19,7 @@ pub enum UnitKind {
     Villager,
     Scout,
     Militia,
+    FishingShip,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum BuildingKind {
@@ -31,6 +32,7 @@ pub enum BuildingKind {
     Barracks,
     PalisadeWall,
     Outpost,
+    Dock,
 }
 impl BuildingKind {
     /// Footprint side in tiles; the single wire-level size table.
@@ -38,7 +40,7 @@ impl BuildingKind {
         match self {
             Self::TownCenter => 4,
             Self::House | Self::LumberCamp | Self::MiningCamp | Self::Mill => 2,
-            Self::Farm | Self::Barracks => 3,
+            Self::Farm | Self::Barracks | Self::Dock => 3,
             Self::PalisadeWall | Self::Outpost => 1,
         }
     }
@@ -85,6 +87,7 @@ pub enum UnitTask {
     Farming,
     Hunting,
     Shepherding,
+    Fishing,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ResourceKind {
@@ -202,6 +205,7 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                         (building.kind, entry.kind),
                         (BuildingKind::TownCenter, UnitKind::Villager)
                             | (BuildingKind::Barracks, UnitKind::Militia)
+                            | (BuildingKind::Dock, UnitKind::FishingShip)
                     ) && entry.total_ticks > 0
                         && entry.progress_ticks <= entry.total_ticks
                 })
@@ -228,12 +232,23 @@ pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
                         .carried
                         .is_none_or(|load| load.kind == ResourceKind::Food)
                     && unit.gathering.is_none_or(|kind| kind == ResourceKind::Food)))
-            && unit
-                .gathering
-                .is_none_or(|_| unit.kind == UnitKind::Villager)
-            && unit.carried.is_none_or(|load| {
-                unit.kind == UnitKind::Villager && load.amount > 0 && load.amount <= 10
+            && unit.gathering.is_none_or(|kind| {
+                unit.kind == UnitKind::Villager
+                    || (unit.kind == UnitKind::FishingShip && kind == ResourceKind::Food)
             })
+            && unit.carried.is_none_or(|load| {
+                load.amount > 0
+                    && match unit.kind {
+                        UnitKind::Villager => load.amount <= 10,
+                        UnitKind::FishingShip => {
+                            load.kind == ResourceKind::Food && load.amount <= 15
+                        }
+                        _ => false,
+                    }
+            })
+            && (unit.task != UnitTask::Fishing
+                || matches!(unit.kind, UnitKind::Villager | UnitKind::FishingShip)
+                    && unit.gathering == Some(ResourceKind::Food))
     })
 }
 

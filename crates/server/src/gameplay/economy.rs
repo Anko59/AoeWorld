@@ -41,6 +41,7 @@ pub(super) fn native_kind(kind: UnitKind) -> aoe_simulation::UnitKind {
         UnitKind::Villager => aoe_simulation::UnitKind::Villager,
         UnitKind::Scout => aoe_simulation::UnitKind::Scout,
         UnitKind::Militia => aoe_simulation::UnitKind::Militia,
+        UnitKind::FishingShip => aoe_simulation::UnitKind::FishingShip,
     }
 }
 pub(super) fn native_tech(tech: Tech) -> aoe_simulation::Tech {
@@ -69,6 +70,7 @@ pub(super) fn native_building(kind: BuildingKind) -> aoe_simulation::BuildingKin
         BuildingKind::Barracks => N::Barracks,
         BuildingKind::PalisadeWall => N::PalisadeWall,
         BuildingKind::Outpost => N::Outpost,
+        BuildingKind::Dock => N::Dock,
     }
 }
 fn wire_building(kind: aoe_simulation::BuildingKind) -> BuildingKind {
@@ -83,6 +85,7 @@ fn wire_building(kind: aoe_simulation::BuildingKind) -> BuildingKind {
         N::Barracks => BuildingKind::Barracks,
         N::PalisadeWall => BuildingKind::PalisadeWall,
         N::Outpost => BuildingKind::Outpost,
+        N::Dock => BuildingKind::Dock,
     }
 }
 fn wire_kind(kind: aoe_simulation::UnitKind) -> UnitKind {
@@ -90,6 +93,7 @@ fn wire_kind(kind: aoe_simulation::UnitKind) -> UnitKind {
         aoe_simulation::UnitKind::Villager => UnitKind::Villager,
         aoe_simulation::UnitKind::Scout => UnitKind::Scout,
         aoe_simulation::UnitKind::Militia => UnitKind::Militia,
+        aoe_simulation::UnitKind::FishingShip => UnitKind::FishingShip,
     }
 }
 fn wire_hit(hit: aoe_simulation::HitRecord) -> HitState {
@@ -127,6 +131,7 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
             aoe_simulation::UnitTask::Dying => UnitTask::Dying,
             aoe_simulation::UnitTask::Hunting => UnitTask::Hunting,
             aoe_simulation::UnitTask::Shepherding => UnitTask::Shepherding,
+            aoe_simulation::UnitTask::Fishing => UnitTask::Fishing,
         },
         gathering: world.gathering_kind(unit.id).map(wire_resource),
         hp: unit.hp,

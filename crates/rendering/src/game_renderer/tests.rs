@@ -8,7 +8,6 @@ use crate::{
 };
 use aoe_core::{EntityId, ScreenPoint};
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
-
 wasm_bindgen_test_configure!(run_in_browser);
 
 #[path = "tests/grid.rs"]
@@ -31,6 +30,7 @@ fn synthetic_art() -> GameArt {
         actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
+        fishing: Default::default(),
         town_center: Default::default(),
         walking: vec![frame; 80],
         standing: vec![frame; 80],

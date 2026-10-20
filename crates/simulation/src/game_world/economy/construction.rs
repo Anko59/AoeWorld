@@ -125,7 +125,7 @@ impl GameWorld {
             origin,
             TileCoord::new(origin.x.saturating_add(side), origin.y.saturating_add(side)),
         );
-        self.validate_footprint(footprint)?;
+        self.validate_building_placement(kind, origin)?;
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
         if !self.assign_builders(&builders, |_| id) {

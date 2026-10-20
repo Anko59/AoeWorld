@@ -169,7 +169,10 @@ impl MapChunkGenerator {
         let reserved = shared_reservations(position)?;
         // Large-forest glades and trails stay free of blocking resources.
         let open = sample.density.opening != crate::landscape_patches::Opening::None;
-        let node = if !reserved.route && !reserved.start && !open {
+        let fish = memo.fish(position, terrain)?;
+        let node = if fish.is_some() {
+            fish
+        } else if !reserved.route && !reserved.start && !open {
             // Resource candidates use the source/base biome. Forage also
             // needs the final ground after snow-line and shore composition.
             memo.resource(position, base)?.filter(|node| {
@@ -181,7 +184,11 @@ impl MapChunkGenerator {
         let resource = if let Some(node) = node {
             Some(LandscapeResource {
                 node,
-                visual_family: ResourceVisualFamily::Generic,
+                visual_family: match node.object {
+                    ObjectKind::ShoreFish => ResourceVisualFamily::ShoreFish,
+                    ObjectKind::DeepFish => ResourceVisualFamily::DeepFish,
+                    _ => ResourceVisualFamily::Generic,
+                },
             })
         } else if sample.density.tree {
             let visual_family = families::source_tree_family(

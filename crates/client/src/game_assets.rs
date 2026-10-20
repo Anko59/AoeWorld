@@ -14,6 +14,8 @@ mod actor_tests;
 mod actors;
 #[path = "game_assets/buildings.rs"]
 mod buildings;
+#[path = "game_assets/fishing.rs"]
+mod fishing;
 #[path = "game_assets/manifest.rs"]
 mod manifest;
 use aoe_rendering::{
@@ -23,6 +25,9 @@ use aoe_rendering::{
 #[cfg(test)]
 #[path = "game_assets/tests/buildings.rs"]
 mod building_tests;
+#[cfg(test)]
+#[path = "game_assets/tests/fishing.rs"]
+mod fishing_tests;
 #[path = "game_assets/placement.rs"]
 mod placement;
 #[cfg(test)]
@@ -280,6 +285,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
     }
     let actor_ranges = actors::select(&manifest, &mut selected, &mut domains)?;
     let building_ranges = buildings::select(&manifest, &mut selected, &mut domains)?;
+    let fishing_ranges = fishing::select(&manifest, &mut selected, &mut domains)?;
     buildings::crop_farm(&mut manifest, &selected, &building_ranges)?;
     // Validate count, source bounds, and all extents before pixel allocation.
     let placements = placement::plan(&manifest, &selected, &domains)?;
@@ -378,6 +384,11 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
                         .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
                 })
                 .collect(),
+            fishing: std::array::from_fn(|i| {
+                fishing_ranges[i]
+                    .as_ref()
+                    .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
+            }),
             walking: group(AssetRole::CavalryWalking),
             standing: group(AssetRole::CavalryStanding),
             village,

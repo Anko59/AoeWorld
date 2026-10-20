@@ -85,6 +85,9 @@ impl GameWorld {
         if unit.player != player {
             return Err(EconomyError::NotOwner);
         }
+        if unit_combat(unit.kind).attack == 0 {
+            return Err(EconomyError::WrongUnitKind);
+        }
         let goal = self
             .attack_goal(target, player)
             .filter(|_| id != target)

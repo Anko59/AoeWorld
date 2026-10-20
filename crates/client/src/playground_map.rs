@@ -246,14 +246,6 @@ pub(super) fn world_at_screen(client: &Client, screen: ScreenPoint) -> Option<[f
     pick_surface_point(&scene.triangles, screen)
 }
 
-pub(super) fn surface_depth_at_screen(client: &Client, screen: ScreenPoint) -> Option<f64> {
-    if client.map_content_hash.is_none() {
-        return None;
-    }
-    let scene = scene::prepare(client);
-    aoe_rendering::surface_depth_at(&scene.triangles, screen)
-}
-
 fn world_at_screen_with_height(
     camera: Camera,
     screen: ScreenPoint,
