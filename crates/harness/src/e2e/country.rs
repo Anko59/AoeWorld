@@ -331,7 +331,7 @@ pub(super) fn run(directory: &Path, hash: &str) -> Result<()> {
         format!("{}:{}", root.display(), root.display()),
         "-w".into(),
         root.join("browser").display().to_string(),
-        "aoeworld/browser-tools:1.63.0".into(),
+        "aoeworld/browser-tools:1.64.0".into(),
         "xvfb-run".into(),
         "-a".into(),
         "npx".into(),

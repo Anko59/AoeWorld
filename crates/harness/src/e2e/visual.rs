@@ -169,7 +169,7 @@ fn run_browser(root: &Path, address: SocketAddr, inputs: &Path) -> Result<()> {
         format!("{}:{}", root.display(), root.display()),
         "-w".to_owned(),
         root.join("browser").display().to_string(),
-        "aoeworld/browser-tools:1.63.0".to_owned(),
+        "aoeworld/browser-tools:1.64.0".to_owned(),
         "xvfb-run".to_owned(),
         "-a".to_owned(),
         "npm".to_owned(),
