@@ -84,7 +84,7 @@ fn make_checks_disk_before_any_requested_gate_takes_a_slot() {
         let text = String::from_utf8_lossy(&output.stdout);
         assert!(output.status.success(), "{target}: {output:?}");
         let check = text
-            .find("aoe-harness disk-precheck")
+            .find("/debug/aoe-harness' disk-precheck")
             .expect("host pre-check");
         let slot = text.find("aoe-harness slot ").expect("gate slot");
         assert!(check < slot, "{target}: {text}");
@@ -213,3 +213,31 @@ fn ci_selection_manifest_and_aggregate_execute_through_cli() {
     );
 }
 mod wasm_cli;
+
+#[test]
+fn the_host_disk_check_runs_the_binary_from_the_selected_target_cache() {
+    // Reviewers' trigger: an external HARNESS_TARGET_CACHE builds the harness there, so the
+    // host check must run that binary, not the checkout's target/debug/aoe-harness.
+    let output = Command::new("make")
+        .args([
+            "--dry-run",
+            "disk-precheck",
+            "HARNESS_TARGET_CACHE=/mnt/cache/aoe-target",
+        ])
+        .current_dir(root())
+        .env_remove("MAKEFLAGS")
+        .env_remove("MFLAGS")
+        .env_remove("GNUMAKEFLAGS")
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "{output:?}");
+    let line = text
+        .lines()
+        .find(|line| line.contains("disk-precheck") && line.contains("aoe-harness"))
+        .expect("the host check line");
+    assert!(
+        line.contains("/mnt/cache/aoe-target/debug/aoe-harness"),
+        "{line}"
+    );
+}

@@ -64,7 +64,7 @@ slot-bootstrap: orchestrator-tools
 export AOE_DISK_FLOOR_GIB
 .PHONY: disk-precheck
 disk-precheck: slot-bootstrap
-	@env $(call MOUNT_QUOTE,HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)) $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) target/debug/aoe-harness disk-precheck
+	@env $(call MOUNT_QUOTE,HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)) $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) '$(HARNESS_TARGET_CACHE)/debug/aoe-harness' disk-precheck
 
 # Check on the host before prerequisites can take a slot, including with make -j.
 preflight: disk-precheck
