@@ -166,7 +166,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
     };
     let mut art = crate::GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

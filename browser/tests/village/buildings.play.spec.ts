@@ -176,7 +176,7 @@ test("villager build menu places a House and watches authoritative completion", 
   await expect(page.locator("#selection-task")).toHaveText("Farming");
   await expect(page.locator("#workers-food")).toHaveText("1");
   await selectWorker(0);
-  await page.locator("#build-menu").click();
+  await page.locator("#build-military-menu").click();
   await page.locator("#build-palisade-wall").click();
   await page.mouse.move(1000, 210);
   await page.mouse.down();

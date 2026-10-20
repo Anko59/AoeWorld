@@ -19,7 +19,7 @@ scans or allocates the map. The 256x256 strategic overview is also sparse.
 Resource observation probes five possible overlay identities per revealed tile,
 without fetching terrain pages. Depletion updates only players currently seeing
 that tile. Resource memory is bounded by the overlay's existing 65,536 entries.
-Buildings retain their last observed state until revisited; an unseen
+Buildings retain their last observed state and age variant until revisited; an unseen
 destruction stays remembered. Owned building destruction is known immediately.
 The existing building count bounds building-state refresh work each tick.
 
@@ -41,8 +41,8 @@ and neutral animals. Owned units remain known offscreen. Buildings in fog use
 the simulation's remembered snapshots; resource amounts never advance unseen.
 Immutable geographic terrain remains accessible through the map service.
 
-`FogState` is appended at server enum index 9, preserving every existing index
-and field layout. It contains a complete row-major view of the subscription
+`FogState` is appended at server enum index 9, preserving every existing enum index. Building state appends its observed age; current goldens pin
+the complete layout. It contains a complete row-major view of the subscription
 (at most 512x512 bytes) and at most 65,536 sparse strategic pixels. Both decode
 bounds and tile values are validated. Subscription revisions reject stale views;
 failed delivery disconnects. The browser encoder and Rust pin the same

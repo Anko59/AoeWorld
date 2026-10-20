@@ -33,19 +33,55 @@ pub enum BuildingKind {
     PalisadeWall,
     Outpost,
     Dock,
+    ArcheryRange,
+    Stable,
+    Blacksmith,
+    Market,
+    WatchTower,
+    PalisadeGate,
 }
 impl BuildingKind {
+    pub const ALL: [Self; 16] = [
+        Self::TownCenter,
+        Self::House,
+        Self::LumberCamp,
+        Self::MiningCamp,
+        Self::Mill,
+        Self::Farm,
+        Self::Barracks,
+        Self::PalisadeWall,
+        Self::Outpost,
+        Self::Dock,
+        Self::ArcheryRange,
+        Self::Stable,
+        Self::Blacksmith,
+        Self::Market,
+        Self::WatchTower,
+        Self::PalisadeGate,
+    ];
     /// Footprint side in tiles; the single wire-level size table.
     pub const fn side(self) -> i32 {
         match self {
-            Self::TownCenter => 4,
+            Self::TownCenter | Self::Market | Self::PalisadeGate => 4,
             Self::House | Self::LumberCamp | Self::MiningCamp | Self::Mill => 2,
-            Self::Farm | Self::Barracks | Self::Dock => 3,
-            Self::PalisadeWall | Self::Outpost => 1,
+            Self::Farm
+            | Self::Barracks
+            | Self::Dock
+            | Self::ArcheryRange
+            | Self::Stable
+            | Self::Blacksmith => 3,
+            Self::PalisadeWall | Self::Outpost | Self::WatchTower => 1,
+        }
+    }
+    pub const fn depth(self) -> i32 {
+        if matches!(self, Self::PalisadeGate) {
+            1
+        } else {
+            self.side()
         }
     }
 }
-/// The player's age. The Feudal Age unlocks nothing beyond this field yet.
+/// The player's age; Feudal gates buildings and economy research.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Age {
     Dark,
@@ -57,9 +93,33 @@ pub enum Tech {
     Loom,
     TownWatch,
     FeudalAge,
+    DoubleBitAxe,
+    HorseCollar,
+    GoldMining,
+    StoneMining,
+    Wheelbarrow,
 }
 impl Tech {
-    pub const ALL: [Tech; 3] = [Tech::Loom, Tech::TownWatch, Tech::FeudalAge];
+    pub const ALL: [Tech; 8] = [
+        Tech::Loom,
+        Tech::TownWatch,
+        Tech::FeudalAge,
+        Tech::DoubleBitAxe,
+        Tech::HorseCollar,
+        Tech::GoldMining,
+        Tech::StoneMining,
+        Tech::Wheelbarrow,
+    ];
+    pub const fn building(self) -> BuildingKind {
+        match self {
+            Self::Loom | Self::TownWatch | Self::FeudalAge | Self::Wheelbarrow => {
+                BuildingKind::TownCenter
+            }
+            Self::DoubleBitAxe => BuildingKind::LumberCamp,
+            Self::HorseCollar => BuildingKind::Mill,
+            Self::GoldMining | Self::StoneMining => BuildingKind::MiningCamp,
+        }
+    }
     pub const fn bit(self) -> u32 {
         1 << self as u8
     }
@@ -159,11 +219,14 @@ pub struct GameplayBuildingState {
     pub research: Option<ResearchState>,
     /// A building at 0 HP is destroyed and reported in `building_removals`.
     pub last_hit: Option<HitState>,
+    /// Age at the last observation; fog memory must not use the owner's live age.
+    pub age: Age,
 }
 
 fn valid_research(player: &GameplayPlayerState) -> bool {
     let known = Tech::ALL.iter().fold(0, |bits, tech| bits | tech.bit());
     player.researched & !known == 0
+        && (player.age == Age::Feudal || player.researched & !Tech::Loom.bit() == 0)
         && (player.age == Age::Feudal) == (player.researched & Tech::FeudalAge.bit() != 0)
 }
 pub(super) fn valid_players(players: &[GameplayPlayerState]) -> bool {
@@ -183,7 +246,7 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                 && building.footprint.min.y >= 0
                 && building.hp > 0
                 && building.footprint.width() == building.kind.side()
-                && building.footprint.height() == building.kind.side()
+                && building.footprint.height() == building.kind.depth()
                 && building.progress_permille <= 1000
                 && (building.construction == ConstructionState::Complete)
                     == (building.progress_permille == 1000)
@@ -193,7 +256,7 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                 && (building.construction == ConstructionState::Complete
                     || building.training_queue.is_empty())
                 && building.research.is_none_or(|research| {
-                    building.kind == BuildingKind::TownCenter
+                    building.kind == research.tech.building()
                         && building.construction == ConstructionState::Complete
                         && building.training_queue.is_empty()
                         && research.total_ticks > 0
@@ -239,7 +302,7 @@ pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
             && unit.carried.is_none_or(|load| {
                 load.amount > 0
                     && match unit.kind {
-                        UnitKind::Villager => load.amount <= 10,
+                        UnitKind::Villager => load.amount <= 13,
                         UnitKind::FishingShip => {
                             load.kind == ResourceKind::Food && load.amount <= 15
                         }

@@ -35,6 +35,7 @@ fn building() -> GameplayBuildingState {
             total_ticks: 500,
         }],
         last_hit: None,
+        age: aoe_protocol::Age::Dark,
     }
 }
 fn unit() -> GameplayUnitState {
@@ -171,7 +172,7 @@ fn full_economy_snapshot_and_delta_roundtrip() {
         vec![
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 25, 25, 0, 0, 0, 0,
             0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232,
-            7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0
+            7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);
@@ -251,7 +252,7 @@ fn oversized_players_buildings_and_training_queues_fail_encode_and_decode() {
 #[test]
 fn invalid_load_progress_footprint_and_population_are_rejected() {
     let mut load = unit();
-    load.carried.as_mut().unwrap().amount = 11;
+    load.carried.as_mut().unwrap().amount = 14;
     let mut progress = building();
     progress.training_queue[0].progress_ticks = 501;
     let mut footprint = building();

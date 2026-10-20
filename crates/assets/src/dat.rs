@@ -7,6 +7,7 @@
 //! that anchor. Only the first civilisation (Gaia, the default unit
 //! set) is decoded. Every count is bounded before allocation and the report
 //! names where each stage began, so a layout drift is visible, not silent.
+pub mod de_survey;
 mod reader;
 mod sections;
 pub mod table;

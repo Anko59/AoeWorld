@@ -4,7 +4,7 @@ use aoe_map::{CompactChunk, MAP_SCHEMA_VERSION, MapEstimate, MapPackage, MapRequ
 use aoe_protocol::ResumeToken;
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
 };
 use serde::Serialize;
@@ -346,8 +346,26 @@ fn preview_coordinate(tiles_per_side: u64, sample: u16) -> Result<i32, String> {
     i32::try_from(coordinate).map_err(|_| "preview coordinate exceeded map bounds".to_owned())
 }
 
-pub(super) async fn reset(State(state): State<AppState>) -> StatusCode {
-    *state.gameplay.write().await = GameplayService::new(state.diagnostic_scenario.seed);
+#[derive(serde::Deserialize)]
+pub(super) struct ResetOptions {
+    scenario: Option<String>,
+}
+
+pub(super) async fn reset(
+    State(state): State<AppState>,
+    Query(options): Query<ResetOptions>,
+) -> StatusCode {
+    let service = match options.scenario.as_deref() {
+        None => GameplayService::new(state.diagnostic_scenario.seed),
+        Some("feudal-economy") => {
+            match GameplayService::feudal_demo(state.diagnostic_scenario.seed) {
+                Ok(service) => service,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        }
+        Some(_) => return StatusCode::BAD_REQUEST,
+    };
+    *state.gameplay.write().await = service;
     state.generation.fetch_add(1, Ordering::SeqCst);
     StatusCode::NO_CONTENT
 }

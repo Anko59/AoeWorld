@@ -154,6 +154,11 @@ impl GameplayService {
     pub async fn set_fog_disabled(&self, disabled: bool) {
         self.world.write().await.set_fog_disabled(disabled);
     }
+    /// Local Feudal showcase setup; the ordinary command and wire paths apply.
+    pub fn feudal_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::feudal_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
     pub fn new(seed: Seed) -> Self {
         let (world, primary_unit_id) = GameWorld::default_with_village(seed);
         Self::from_world(world, primary_unit_id, None, None)

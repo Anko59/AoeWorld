@@ -101,6 +101,26 @@ pub enum SceneUnitKind {
     Dock,
     FoundationDock,
     RubbleDock,
+    BuilderAtlas,
+    ArcheryRange,
+    Stable,
+    Blacksmith,
+    Market,
+    WatchTower,
+    PalisadeGate,
+    RubbleArcheryRange,
+    RubbleStable,
+    RubbleBlacksmith,
+    RubbleMarket,
+    RubbleWatchTower,
+    RubblePalisadeGate,
+    FeudalTownCenter,
+    FeudalHouse,
+    FeudalMill,
+    FeudalBarracks,
+    OpenPalisadeGate,
+    GateFoundation,
+    FeudalDock,
 }
 
 impl SceneUnitKind {
@@ -170,12 +190,8 @@ impl SceneUnitKind {
             .map(usize::from)
     }
 
-    /// The typed building roles are contiguous in the atlas's semantic order.
+    /// Map building roles to the atlas's semantic order.
     pub fn building(slot: u8) -> Self {
-        if slot >= 23 {
-            return [Self::Dock, Self::FoundationDock, Self::RubbleDock]
-                [usize::from(slot - 23).min(2)];
-        }
         use SceneUnitKind::*;
         [
             BuildingTownCenter,
@@ -200,7 +216,30 @@ impl SceneUnitKind {
             RubbleBarracks,
             RubblePalisadeWall,
             RubbleOutpost,
-        ][usize::from(slot.min(21))]
+            BuilderAtlas,
+            Dock,
+            FoundationDock,
+            RubbleDock,
+            ArcheryRange,
+            Stable,
+            Blacksmith,
+            Market,
+            WatchTower,
+            PalisadeGate,
+            RubbleArcheryRange,
+            RubbleStable,
+            RubbleBlacksmith,
+            RubbleMarket,
+            RubbleWatchTower,
+            RubblePalisadeGate,
+            FeudalTownCenter,
+            FeudalHouse,
+            FeudalMill,
+            FeudalBarracks,
+            OpenPalisadeGate,
+            GateFoundation,
+            FeudalDock,
+        ][usize::from(slot.min(44))]
     }
     pub(super) fn building_slot(self) -> Option<u8> {
         match self {
@@ -229,6 +268,26 @@ impl SceneUnitKind {
             Self::Dock => Some(23),
             Self::FoundationDock => Some(24),
             Self::RubbleDock => Some(25),
+            Self::BuilderAtlas => Some(22),
+            Self::ArcheryRange => Some(26),
+            Self::Stable => Some(27),
+            Self::Blacksmith => Some(28),
+            Self::Market => Some(29),
+            Self::WatchTower => Some(30),
+            Self::PalisadeGate => Some(31),
+            Self::RubbleArcheryRange => Some(32),
+            Self::RubbleStable => Some(33),
+            Self::RubbleBlacksmith => Some(34),
+            Self::RubbleMarket => Some(35),
+            Self::RubbleWatchTower => Some(36),
+            Self::RubblePalisadeGate => Some(37),
+            Self::FeudalTownCenter => Some(38),
+            Self::FeudalHouse => Some(39),
+            Self::FeudalMill => Some(40),
+            Self::FeudalBarracks => Some(41),
+            Self::OpenPalisadeGate => Some(42),
+            Self::GateFoundation => Some(43),
+            Self::FeudalDock => Some(44),
             _ => None,
         }
     }
@@ -237,16 +296,11 @@ impl SceneUnitKind {
             return Some(4.0);
         }
         let slot = self.building_slot()?;
-        if slot >= 23 {
-            return Some(3.0);
-        }
-        Some(if (9..=12).contains(&slot) {
-            f64::from(slot - 8)
-        } else {
-            f64::from(
-                [4, 2, 2, 2, 2, 3, 3, 1, 1]
-                    [usize::from(if slot >= 13 { slot - 13 } else { slot }).min(8)],
-            )
+        Some(match slot {
+            0 | 12 | 13 | 29 | 31 | 35 | 37 | 38 | 42 | 43 => 4.0,
+            1..=4 | 10 | 14..=17 | 39 | 40 => 2.0,
+            5 | 6 | 11 | 18 | 19 | 23..=28 | 32..=34 | 41 | 44 => 3.0,
+            _ => 1.0,
         })
     }
 }

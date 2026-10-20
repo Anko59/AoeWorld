@@ -81,7 +81,7 @@ fn frame(size: [f32; 2], anchor: [f32; 2]) -> GameFrame {
 fn art() -> GameArt {
     GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

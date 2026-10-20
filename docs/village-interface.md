@@ -53,8 +53,12 @@ Grid remains available through its minimap button and G. Selection ellipses use
 a continuous constant-pixel stroke across all renderers and zoom levels.
 
 
-Select villagers and press B to open the building menu. It lists each Dark Age
-building with a hotkey, cost and availability. Farms require a completed Mill.
+Select villagers and press B for economic buildings or V for military buildings.
+The DE grid keys are House Q, Mill W, Mining Camp E, Lumber Camp R, Farm A,
+Blacksmith S and Market D; military keys are Barracks Q, Range W, Stable E,
+Outpost A, Palisade S, Tower F and Palisade Gate X. Costs and availability are
+visible; Feudal entries are grey with a "requires Feudal Age" tooltip in Dark
+Age. Farms require a completed Mill.
 Choose a building and click a green footprint to place it. Drag a palisade
 line from its first to last tile (or click its two endpoints); red previews
 are refused locally. Escape or
@@ -64,6 +68,8 @@ or a completed Farm to assign its first selected villager as farmer.
 Building selection shows hit points, construction and queue progress, Farm
 food, and research. Q trains a Villager at the Town Center or Militia at the
 Barracks. Town Center buttons research Loom, Town Watch and Feudal Age, with
-costs and prerequisites enforced by the server. Construction and research can
+costs and prerequisites enforced by the server. Camps and the Mill offer the
+[Feudal economy technologies](economy/feudal.md), and the Town Center adds
+Wheelbarrow. Construction and research can
 be cancelled from the panel. Building art is described in
 [Dark Age building art](assets/buildings.md).

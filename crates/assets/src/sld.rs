@@ -298,10 +298,11 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<Frame>, Error> {
     if count > MAX_FRAMES {
         return Err(invalid(FORMAT, 6, "too many frames"));
     }
-    if usize::from(u16_at(bytes, 10, FORMAT)?) != HEADER {
+    let header = usize::from(u16_at(bytes, 10, FORMAT)?);
+    if ![14, HEADER].contains(&header) {
         return Err(invalid(FORMAT, 10, "unexpected header size"));
     }
-    let mut pos = HEADER;
+    let mut pos = header;
     let mut budget = MAX_TOTAL_PIXELS;
     let mut frames: Vec<Frame> = Vec::with_capacity(count.min(256));
     for _ in 0..count {
@@ -360,7 +361,7 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<Frame>, Error> {
             }
             decoded[bit] = found;
             pos = next;
-            pos += (4 - (pos - HEADER) % 4) % 4;
+            pos += (4 - (pos - header) % 4) % 4;
         }
         let [main, shadow, _, _, player] = decoded;
         frames.push(Frame {

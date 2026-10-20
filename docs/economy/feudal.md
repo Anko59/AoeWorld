@@ -1,0 +1,130 @@
+# Feudal buildings and economy
+
+The owner asked: "if you have time you can continue with the fog of war,
+fishing and the feudal age". This change is the economy/building part of Feudal;
+military rosters, Blacksmith upgrades and fishing remain separate work.
+Feudal buildings integrate with the authoritative fog of war.
+
+## Sources and reproduction
+
+`make assets-dat-table-de` reads the owner's licensed install, mounted read-only,
+at `resources/_common/dat/empires2_x2_p1.dat`. The measured layout is **VER 8.9**.
+It writes ignored `local-assets/dat-table/feudal-de.json`, with the compressed
+file's BLAKE3, record offsets, costs, collision radii, armour classes, research
+locations, build-button slots, prerequisites and raw effect commands. No original data is committed.
+The bounded survey implements the public
+[Genie unit layout](https://github.com/SiegeEngineers/genieutils-py/blob/master/src/genieutils/unit.py).
+It is a focused survey, not a complete DE dat decoder; other versions fail.
+
+The independent
+[DE dat extraction](https://github.com/SiegeEngineers/aoe2techtree/blob/master/data/data.json)
+and the install's `resources/_common/dat/CivTechTrees/*.json` cross-check names
+and availability. The licensed local version wins where extracted versions
+differ: this install has an **850-HP, 35-wood** Watch Tower.
+
+`make assets-dat-table` separately decodes the trial's VER 5.7 sprite families.
+It now lists the Feudal units as well; Palisade Gate is explicitly absent there.
+
+## Buildings
+
+Times are game seconds for one builder; footprints are tiles. Armour is
+melee/pierce. The simulation's common construction, placement, ownership,
+refund and collision rules apply to all entries.
+
+| Building (DE unit) | Wood/stone | Seconds | HP | Footprint | LOS | Armour |
+| --- | --- | --- | --- | --- | --- | --- |
+| Archery Range (87) | 175/0 | 50 | 1500 | 3×3 | 6 | 1/8 |
+| Stable (101) | 175/0 | 50 | 1500 | 3×3 | 6 | 1/8 |
+| Blacksmith (105, upgraded from 103) | 150/0 | 40 | 1800 | 3×3 | 6 | 1/8 |
+| Market (84) | 175/0 | 60 | 1800 | 4×4 | 6 | 1/8 |
+| Watch Tower (79) | 35/125 | 80 | 850 | 1×1 | 10 | 1/7 |
+| Palisade Gate (792), Dark/Feudal | 30/0 | 30 | 240/400 | 4×1 | 6 | 0/0 |
+
+The first five require Feudal. Range and Stable also require a completed
+Barracks; Market requires a completed Mill. Their queues contain no new units.
+The Watch Tower is built directly: DE's tree links it to Outpost, but it does
+not upgrade an existing Outpost. An ungarrisoned tower deals 5 pierce damage,
+at range 1–8, every 2 seconds, through the existing combat hit/death path.
+It queries visible enemy units through the spatial index, with canonical target ties.
+
+Palisade Gate is available in **Dark Age** (the installed tech tree says age 1).
+DE effect 293 scales its HP by 1.66667 at Feudal, giving 400 integer HP.
+The current command supports its 4×1 orientation. It opens for nearby owned
+units and remains open while any unit occupies it; other rotations and locking
+are not implemented. Long-distance route planning still sees a closed gate as
+blocked until a friendly unit approaches it.
+
+**Market trading is deferred.** There are no buy/sell buttons, trade commands,
+prices, fee calculations or trade carts in this change.
+
+The economic (B) and military (V) pages use the install's **definitive**
+bindings in `resources/_common/dat/hotkeys.json`: Range W, Stable E,
+Blacksmith S, Market D, Watch Tower F and Palisade Gate X. Build-button
+indices in the dat provide a second cross-check.
+
+## Technologies
+
+Every listed technology requires Feudal, pays once on queueing and uses the
+existing research cancellation, uniqueness and completion machinery.
+
+| Tech (DE id/effect) | Building | Food/wood | Seconds | Effect |
+| --- | --- | --- | --- | --- |
+| Double-Bit Axe (202/195) | Lumber Camp | 100/50 | 25 | wood work rate ×1.20 |
+| Horse Collar (14/14) | Mill | 75/75 | 20 | newly placed farms +75 food (175→250) |
+| Gold Mining (55/55) | Mining Camp | 100/75 | 30 | gold work rate ×1.15 |
+| Stone Mining (278/278) | Mining Camp | 100/75 | 30 | stone work rate ×1.15 |
+| Wheelbarrow (213/200) | Town Center | 175/50 | 75 | speed ×1.10; carry limit ×1.2695 |
+
+These are the actual effect multipliers in this install. Integer carrying uses
+the ceiling of the fractional limit: 10→13. Speed changes 0.8→0.88 tiles/s;
+gathering credits retain the exact fractional rates rather than rounding them
+to whole hundredths. Existing and future villagers use the researched effects.
+Horse Collar does not replenish existing farms. Town Watch is now correctly
+age-gated too; Loom stays available in Dark Age.
+
+## Age-up and art
+
+Feudal upgrades existing and future House HP to 750, camp/Mill HP to 800 and
+Barracks HP to 1500, with the upgraded LOS and armour from their DE records.
+Damage is preserved; foundations gain only the HP earned by their work so far.
+
+Each building carries its observed age for art selection. Remembered buildings
+retain the variant last seen until revisited; an unseen age-up does not change it. Trial SLPs: Range **24**, Stable
+**1009**, Market **2278**, Tower **2655**, House **2235**, Barracks **133**,
+Mill body/sails **741/737**. The Mill uses these layered parts even with
+a DE overlay: retaining 91 copies of the full DE body exceeds the fixed Objects
+atlas page. Present DE sources are still validated before that choice.
+The new building textures use one atlas texel per two source pixels. Native
+world sizes and hotspots stay unchanged; magnified views have coarser texels.
+Dark Age textures retain their current sampling.
+This keeps the fixed four-page/67,108,864-byte atlas from the unit-animation base, without raising a budget. Blacksmith's **2263** is absent from the trial.
+Feudal camp SLPs **3503/3491** are absent too; DE has no separate Dark camp art,
+so the West European age-2 camps already used in Dark Age remain the same art.
+
+`make assets-import-de AOE_ASSET_PACK=local-assets/packs/<trial-pack>` imports
+the missing art and refreshes the generated local `buildings` overlay pointer.
+It keeps both packs; it replaces no regular file. `make assets-verify` accepts
+`AOE_ASSET_PACK` to verify one pack. The Feudal DE stems are
+`b_west_{archery_range,stable,blacksmith,market,tower,house,mill,barracks,town_center,dock}_age2_x1.sld`.
+The trial DAT's Feudal Dock is unit 133 (`DOCK2`); its West European
+standing family `DOCK2NNW`, SLP 388, is present in the trial pack and supplies
+the fallback when the optional DE age-2 Dock is absent.
+The gate uses `b_dark_gate_palisade_se_{closed,open,constr,rubble}_x1.sld`.
+
+DE graphic ids: Range 12, Stable 513, Blacksmith 53, Market 2268, Tower 4202,
+Gate 8208; Feudal TC 3253, House 2209, Mill 368, Barracks 93, camps 3118/3133.
+The DE Town Center standing SLD contains the complete building. PR #518's
+general dat-driven delta/annex composition is not in this checkout; this change
+uses the current renderer, with data-driven age choices. General trial TC/gate
+composition and additional gate orientations remain follow-up work. A fully
+illustrated Feudal view needs the DE overlay for the TC, Blacksmith and Gate.
+
+## Local demo
+
+`POST /maps/reset?scenario=feudal-economy` is an explicit development setup:
+Dark Age, 10,000 of each resource, a completed Mill, Lumber Camp and Barracks.
+The game's one-Hz clock runs under the server's ordinary 20-Hz ticker (20×).
+Advance, build and research through the ordinary UI. `/maps/reset` restores the
+normal game; an unknown scenario returns 400 without replacing it.
+The village e2e and server scenario use this path and the real command codec.
+It is synthetic functional evidence, not finished RTS performance qualification.

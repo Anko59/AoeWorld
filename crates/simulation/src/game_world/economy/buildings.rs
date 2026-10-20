@@ -1,7 +1,7 @@
 //! The single building data table: costs, times, hit points, sizes and roles.
-//! Values are Age of Empires II: Definitive Edition's Dark Age as recalled; fix
-//! a number here and every rule follows. Times are seconds for one builder.
+//! Values and data provenance: docs/economy.md. Times are seconds for one builder.
 use super::{BuildingKind, Stockpile, UnitKind};
+use crate::Age;
 use aoe_map::ResourceKind;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -11,8 +11,10 @@ pub struct BuildingRules {
     pub cost: Stockpile,
     pub build_seconds: u32,
     pub max_hp: u16,
-    /// Square footprint side in tiles.
+    /// Footprint width in tiles.
     pub side: i32,
+    /// Footprint depth; only the fixed-orientation gate is rectangular.
+    pub depth: i32,
     /// Authoritative circular line of sight in tiles.
     pub los: u8,
     /// Population housed once complete.
@@ -29,6 +31,7 @@ pub struct BuildingRules {
     pub blocks: bool,
     /// Food a farm holds when complete.
     pub food: u16,
+    pub age: Age,
 }
 
 const fn cost(food: u32, wood: u32, gold: u32, stone: u32) -> Stockpile {
@@ -46,13 +49,14 @@ const VILLAGERS: &[UnitKind] = &[UnitKind::Villager];
 const MILITIA: &[UnitKind] = &[UnitKind::Militia];
 
 /// Canonical order of `BuildingKind`.
-pub const BUILDING_RULES: [BuildingRules; 10] = [
+pub const BUILDING_RULES: [BuildingRules; 16] = [
     BuildingRules {
         kind: BuildingKind::TownCenter,
         cost: cost(0, 275, 0, 100),
         build_seconds: 150,
         max_hp: 2400,
         side: 4,
+        depth: 4,
         los: 8,
         population_support: 5,
         accepts: ALL,
@@ -61,6 +65,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         buildable: false,
         blocks: true,
         food: 0,
+        age: Age::Dark,
     },
     BuildingRules {
         kind: BuildingKind::House,
@@ -68,6 +73,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         build_seconds: 25,
         max_hp: 550,
         side: 2,
+        depth: 2,
         los: 2,
         population_support: 5,
         accepts: NONE,
@@ -76,6 +82,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         buildable: true,
         blocks: true,
         food: 0,
+        age: Age::Dark,
     },
     BuildingRules {
         kind: BuildingKind::LumberCamp,
@@ -83,6 +90,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         build_seconds: 35,
         max_hp: 600,
         side: 2,
+        depth: 2,
         los: 4,
         population_support: 0,
         accepts: [false, true, false, false],
@@ -91,6 +99,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         buildable: true,
         blocks: true,
         food: 0,
+        age: Age::Dark,
     },
     BuildingRules {
         kind: BuildingKind::MiningCamp,
@@ -98,6 +107,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         build_seconds: 35,
         max_hp: 600,
         side: 2,
+        depth: 2,
         los: 4,
         population_support: 0,
         accepts: [false, false, true, true],
@@ -106,6 +116,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         buildable: true,
         blocks: true,
         food: 0,
+        age: Age::Dark,
     },
     BuildingRules {
         kind: BuildingKind::Mill,
@@ -113,6 +124,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         build_seconds: 35,
         max_hp: 600,
         side: 2,
+        depth: 2,
         los: 4,
         population_support: 0,
         accepts: [true, false, false, false],
@@ -121,6 +133,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         buildable: true,
         blocks: true,
         food: 0,
+        age: Age::Dark,
     },
     BuildingRules {
         kind: BuildingKind::Farm,
@@ -128,6 +141,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         build_seconds: 15,
         max_hp: 480,
         side: 3,
+        depth: 3,
         los: 2,
         population_support: 0,
         accepts: NONE,
@@ -136,6 +150,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         buildable: true,
         blocks: false,
         food: 175,
+        age: Age::Dark,
     },
     BuildingRules {
         kind: BuildingKind::Barracks,
@@ -143,6 +158,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         build_seconds: 50,
         max_hp: 1200,
         side: 3,
+        depth: 3,
         los: 5,
         population_support: 0,
         accepts: NONE,
@@ -151,6 +167,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         buildable: true,
         blocks: true,
         food: 0,
+        age: Age::Dark,
     },
     BuildingRules {
         kind: BuildingKind::PalisadeWall,
@@ -158,6 +175,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         build_seconds: 6,
         max_hp: 250,
         side: 1,
+        depth: 1,
         los: 2,
         population_support: 0,
         accepts: NONE,
@@ -166,6 +184,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         buildable: true,
         blocks: true,
         food: 0,
+        age: Age::Dark,
     },
     BuildingRules {
         kind: BuildingKind::Outpost,
@@ -173,6 +192,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         build_seconds: 15,
         max_hp: 500,
         side: 1,
+        depth: 1,
         los: 10,
         population_support: 0,
         accepts: NONE,
@@ -181,6 +201,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         buildable: true,
         blocks: true,
         food: 0,
+        age: Age::Dark,
     },
     BuildingRules {
         kind: BuildingKind::Dock,
@@ -188,6 +209,7 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         build_seconds: 35,
         max_hp: 1800,
         side: 3,
+        depth: 3,
         los: 8,
         population_support: 0,
         accepts: [true, false, false, false],
@@ -196,6 +218,109 @@ pub const BUILDING_RULES: [BuildingRules; 10] = [
         buildable: true,
         blocks: true,
         food: 0,
+        age: Age::Dark,
+    },
+    BuildingRules {
+        kind: BuildingKind::ArcheryRange,
+        cost: cost(0, 175, 0, 0),
+        build_seconds: 50,
+        max_hp: 1500,
+        side: 3,
+        depth: 3,
+        los: 6,
+        population_support: 0,
+        accepts: NONE,
+        trainable: NO_UNITS,
+        requires: Some(BuildingKind::Barracks),
+        buildable: true,
+        blocks: true,
+        food: 0,
+        age: Age::Feudal,
+    },
+    BuildingRules {
+        kind: BuildingKind::Stable,
+        cost: cost(0, 175, 0, 0),
+        build_seconds: 50,
+        max_hp: 1500,
+        side: 3,
+        depth: 3,
+        los: 6,
+        population_support: 0,
+        accepts: NONE,
+        trainable: NO_UNITS,
+        requires: Some(BuildingKind::Barracks),
+        buildable: true,
+        blocks: true,
+        food: 0,
+        age: Age::Feudal,
+    },
+    BuildingRules {
+        kind: BuildingKind::Blacksmith,
+        cost: cost(0, 150, 0, 0),
+        build_seconds: 40,
+        max_hp: 1800,
+        side: 3,
+        depth: 3,
+        los: 6,
+        population_support: 0,
+        accepts: NONE,
+        trainable: NO_UNITS,
+        requires: None,
+        buildable: true,
+        blocks: true,
+        food: 0,
+        age: Age::Feudal,
+    },
+    BuildingRules {
+        kind: BuildingKind::Market,
+        cost: cost(0, 175, 0, 0),
+        build_seconds: 60,
+        max_hp: 1800,
+        side: 4,
+        depth: 4,
+        los: 6,
+        population_support: 0,
+        accepts: NONE,
+        trainable: NO_UNITS,
+        requires: Some(BuildingKind::Mill),
+        buildable: true,
+        blocks: true,
+        food: 0,
+        age: Age::Feudal,
+    },
+    BuildingRules {
+        kind: BuildingKind::WatchTower,
+        cost: cost(0, 35, 0, 125),
+        build_seconds: 80,
+        max_hp: 850,
+        side: 1,
+        depth: 1,
+        los: 10,
+        population_support: 0,
+        accepts: NONE,
+        trainable: NO_UNITS,
+        requires: None,
+        buildable: true,
+        blocks: true,
+        food: 0,
+        age: Age::Feudal,
+    },
+    BuildingRules {
+        kind: BuildingKind::PalisadeGate,
+        cost: cost(0, 30, 0, 0),
+        build_seconds: 30,
+        max_hp: 240,
+        side: 4,
+        depth: 1,
+        los: 6,
+        population_support: 0,
+        accepts: NONE,
+        trainable: NO_UNITS,
+        requires: None,
+        buildable: true,
+        blocks: true,
+        food: 0,
+        age: Age::Dark,
     },
 ];
 
@@ -207,6 +332,21 @@ pub const BUILD_WORK_PER_BASE_TICK: u64 = 3;
 pub const MAX_WALL_SEGMENTS: usize = 64;
 
 impl BuildingKind {
+    /// DE's upgraded unit records, plus the automatic palisade HP effect 293.
+    pub fn age_stats(self, age: Age) -> (u16, u8) {
+        if age == Age::Feudal {
+            use BuildingKind::*;
+            match self {
+                House => (750, 2),
+                LumberCamp | MiningCamp | Mill => (800, 6),
+                Barracks => (1500, 6),
+                PalisadeGate => (400, 6),
+                _ => (self.rules().max_hp, self.rules().los),
+            }
+        } else {
+            (self.rules().max_hp, self.rules().los)
+        }
+    }
     pub fn rules(self) -> &'static BuildingRules {
         &BUILDING_RULES[self as usize]
     }

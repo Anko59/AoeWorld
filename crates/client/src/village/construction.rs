@@ -52,7 +52,7 @@ pub(super) fn enabled(client: &Client, kind: BuildingKind, count: u32) -> bool {
                 .get(id)
                 .is_some_and(|u| u.player == owner(client) && u.kind == UnitKind::Villager)
         })
-        && building_ui::build_enabled(kind, p.stockpile, completed(client))
+        && building_ui::build_enabled(kind, p.stockpile, completed(client), p.age)
         && building_ui::affordable(p.stockpile, cost)
 }
 

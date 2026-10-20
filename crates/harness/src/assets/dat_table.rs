@@ -4,6 +4,21 @@ use std::collections::BTreeSet;
 use std::io::ErrorKind;
 use std::path::Path;
 
+pub(super) fn de(path: &Path, output: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    if std::fs::metadata(path)?.len() > 64 * 1024 * 1024 {
+        return Err("DE dat exceeds 64 MiB compressed".into());
+    }
+    let survey = dat::de_survey::decode(&std::fs::read(path)?)?;
+    std::fs::create_dir_all(output)?;
+    let json = serde_json::to_string_pretty(&survey)?;
+    std::fs::write(output.join("feudal-de.json"), &json)?;
+    println!(
+        "{json}\nwrote {}/feudal-de.json (LOCAL ONLY)",
+        output.display()
+    );
+    Ok(())
+}
+
 /// SLP ids of `graphics.drs`; only a missing file means "no pack to compare".
 fn pack_ids(input: &Path) -> Result<Option<BTreeSet<i32>>, Box<dyn std::error::Error>> {
     match std::fs::read(input.join("graphics.drs")) {

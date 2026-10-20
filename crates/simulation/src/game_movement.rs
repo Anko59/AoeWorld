@@ -55,7 +55,8 @@ impl GameWorld {
                 continue;
             };
             self.units[index].state.previous_position = self.units[index].state.position;
-            let (speed, denominator) = self.movement_speed(self.units[index].state.kind);
+            let unit = self.units[index].state;
+            let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
             let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
             order.speed_carry = 0;
             let mut current_position = self.units[index].state.position;

@@ -471,9 +471,8 @@ pub fn actor_frame_index(facing: u8, stride: usize, phase: usize) -> (usize, boo
 
 pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
     if let Some(slot) = unit.kind.building_slot() {
-        return slot == 4
-            && art.buildings[4].len() == 44
-            && art.buildings[4].iter().any(|frame| {
+        return (slot == 4 && art.buildings[4].len() == 44 || slot == 40)
+            && art.buildings[usize::from(slot)].iter().any(|frame| {
                 sprite_screen_bounds(
                     world_frame(*frame),
                     unit.position,

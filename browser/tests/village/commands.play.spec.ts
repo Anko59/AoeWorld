@@ -1,4 +1,4 @@
-import { fiveVillagerFixture } from "./fixture.js";
+import { fiveVillagerFixture } from "./fixtures/village.js";
 import { activateSyntheticMap } from "../synthetic-map.js";
 import { expect } from "@playwright/test";
 import { test } from "../../server.js";

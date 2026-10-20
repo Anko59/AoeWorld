@@ -2,7 +2,7 @@ use super::overlay::attach_in;
 use std::fs;
 
 #[test]
-fn private_overlay_is_idempotent_and_never_replaces_an_occupied_path() {
+fn private_overlay_refreshes_generated_links_and_never_replaces_an_occupied_file() {
     let root = tempfile::tempdir().unwrap();
     let packs = root.path();
     let base = packs.join("trial");
@@ -15,7 +15,12 @@ fn private_overlay_is_idempotent_and_never_replaces_an_occupied_path() {
     attach_in(packs, &base, &de).unwrap();
     attach_in(packs, &base, &de).unwrap();
     assert_eq!(base.join("buildings").canonicalize().unwrap(), de);
-    assert!(attach_in(packs, &base, &other).is_err());
+    attach_in(packs, &base, &other).unwrap();
+    assert_eq!(base.join("buildings").canonicalize().unwrap(), other);
+    assert!(
+        de.join("manifest.json").is_file(),
+        "refresh preserves the previous pack"
+    );
     assert!(attach_in(packs, &base, &base).is_err());
     fs::write(other.join("buildings"), "keep").unwrap();
     assert!(attach_in(packs, &other, &de).is_err());

@@ -38,7 +38,7 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
     }];
     let art = GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

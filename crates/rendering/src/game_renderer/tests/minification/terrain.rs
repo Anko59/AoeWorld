@@ -16,7 +16,7 @@ pub(crate) fn scene(zoom: f64) -> (SceneCamera, Vec<Quad>, Vec<u8>) {
     };
     let art = GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

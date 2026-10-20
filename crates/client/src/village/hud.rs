@@ -26,7 +26,7 @@ fn screen(client: &Client, position: [f64; 2]) -> [f64; 2] {
 pub(in super::super) fn update(client: &Client) {
     let owner = owner(client);
     // Header: four stockpiles, used/cap, four worker counts, clock, observing,
-    // native-art flag, then actor/queue/resource counts. Actor records are fourteen
+    // native-art flag, then actor/queue/resource counts. Actor records are fifteen
     // numbers. Decode immediately in JS; never retain a view of WASM memory.
     let scene = map::scene::prepare(client);
     let camera = aoe_rendering::SceneCamera {
@@ -113,8 +113,8 @@ pub(in super::super) fn update(client: &Client) {
             match unit.kind {
                 UnitKind::Scout => 0.0,
                 UnitKind::Villager => 1.0,
-                UnitKind::Militia => 12.0,
-                UnitKind::FishingShip => 13.0,
+                UnitKind::Militia => 2.0 + aoe_protocol::BuildingKind::ALL.len() as f64,
+                UnitKind::FishingShip => 3.0 + aoe_protocol::BuildingKind::ALL.len() as f64,
             },
             x,
             y,
@@ -128,6 +128,18 @@ pub(in super::super) fn update(client: &Client) {
             f64::from(stats.melee_armour) + if loom { 1.0 } else { 0.0 },
             f64::from(stats.pierce_armour) + if loom { 2.0 } else { 0.0 },
             head(unit.id, y),
+            f64::from(if unit.kind == UnitKind::FishingShip {
+                15
+            } else {
+                aoe_simulation::villager_capacity(
+                    client
+                        .village
+                        .players
+                        .iter()
+                        .find(|p| p.player == unit.player)
+                        .map_or(0, |p| p.researched),
+                )
+            }),
         ]);
     }
     for building in &client.village.buildings {
@@ -151,15 +163,24 @@ pub(in super::super) fn update(client: &Client) {
             0.0,
             0.0,
             y,
+            0.0,
         ]);
     }
     for animal in &client.village.animals {
         let [x, y] = screen(client, animal.position.as_tiles());
         let (kind, hp, attack) = match animal.kind {
-            aoe_protocol::AnimalKind::Sheep => (14.0, 7, 0),
-            aoe_protocol::AnimalKind::Deer => (15.0, 5, 0),
-            aoe_protocol::AnimalKind::Boar => (16.0, 75, 7),
-            aoe_protocol::AnimalKind::Wolf => (17.0, 25, 3),
+            aoe_protocol::AnimalKind::Sheep => {
+                (4.0 + aoe_protocol::BuildingKind::ALL.len() as f64, 7, 0)
+            }
+            aoe_protocol::AnimalKind::Deer => {
+                (5.0 + aoe_protocol::BuildingKind::ALL.len() as f64, 5, 0)
+            }
+            aoe_protocol::AnimalKind::Boar => {
+                (6.0 + aoe_protocol::BuildingKind::ALL.len() as f64, 75, 7)
+            }
+            aoe_protocol::AnimalKind::Wolf => {
+                (7.0 + aoe_protocol::BuildingKind::ALL.len() as f64, 25, 3)
+            }
         };
         values.extend_from_slice(&[
             f64::from(animal.id.0),
@@ -176,6 +197,7 @@ pub(in super::super) fn update(client: &Client) {
             0.0,
             0.0,
             head(animal.id, y),
+            0.0,
         ]);
     }
     if let Some(building) = client

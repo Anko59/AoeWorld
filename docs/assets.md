@@ -144,3 +144,8 @@ a heavy slot, mounts `DE_DIR` read-only at `/de-install`, and sets `AOE_DE_DIR`
 inside the test container. It fails if the install is missing or no tests match.
 Setting `AOE_DE_DIR` on the host for `make test-unit` does not forward it or mount
 the install; ordinary unit tests use synthetic fixtures and skip real-file checks.
+
+The overlay also includes [Feudal building and age-up art](economy/feudal.md).
+The Stable uses the measured 14-byte SLD header; other selected SLDs use 16.
+`make assets-dat-table-de` surveys licensed DE numeric rules into ignored local
+output, separately from the trial sprite table.

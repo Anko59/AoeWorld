@@ -1,9 +1,9 @@
-//! The single combat data table. Every Dark Age combat number lives here so a
-//! wrong value is corrected in one place. Values are Age of Empires II:
-//! Definitive Edition as recalled by the owner's brief, not verified in game.
+//! The single combat data table. Dark Age unit rules retain their original
+//! source; Feudal building armour and Watch Tower attacks are verified against
+//! local DE VER 8.9. See docs/economy/feudal.md for the extraction and ids.
 use super::super::{BuildingKind, UnitKind};
 
-/// Which armour class reduces a hit. Only melee is used by the current units.
+/// Which armour class reduces a hit: melee units or Watch Tower arrows.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DamageKind {
     Melee,
@@ -110,10 +110,20 @@ pub const UNIT_COMBAT: [UnitCombat; 4] = [
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BuildingAttack {
+    pub attack: u16,
+    pub kind: DamageKind,
+    pub min_range: u8,
+    pub range: u8,
+    pub period_centiseconds: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BuildingCombat {
     pub kind: BuildingKind,
     pub melee_armour: i16,
     pub pierce_armour: u16,
+    pub attack: Option<BuildingAttack>,
 }
 
 const fn armour(kind: BuildingKind, melee_armour: i16, pierce_armour: u16) -> BuildingCombat {
@@ -121,6 +131,7 @@ const fn armour(kind: BuildingKind, melee_armour: i16, pierce_armour: u16) -> Bu
         kind,
         melee_armour,
         pierce_armour,
+        attack: None,
     }
 }
 
@@ -130,7 +141,7 @@ const fn armour(kind: BuildingKind, melee_armour: i16, pierce_armour: u16) -> Bu
 /// House -2 melee: official AoE II DE update 56005:
 /// https://www.ageofempires.com/news/aoeii_de_update_56005/
 /// Farm and Outpost really have 0/0; these are not placeholders.
-pub const BUILDING_COMBAT: [BuildingCombat; 10] = [
+pub const BUILDING_COMBAT: [BuildingCombat; 16] = [
     armour(BuildingKind::TownCenter, 3, 5),
     armour(BuildingKind::House, -2, 7),
     armour(BuildingKind::LumberCamp, 0, 7),
@@ -141,7 +152,41 @@ pub const BUILDING_COMBAT: [BuildingCombat; 10] = [
     armour(BuildingKind::PalisadeWall, 2, 5),
     armour(BuildingKind::Outpost, 0, 0),
     armour(BuildingKind::Dock, 0, 7),
+    armour(BuildingKind::ArcheryRange, 1, 8),
+    armour(BuildingKind::Stable, 1, 8),
+    armour(BuildingKind::Blacksmith, 1, 8),
+    armour(BuildingKind::Market, 1, 8),
+    BuildingCombat {
+        attack: Some(BuildingAttack {
+            attack: 5,
+            kind: DamageKind::Pierce,
+            min_range: 1,
+            range: 8,
+            period_centiseconds: 200,
+        }),
+        ..armour(BuildingKind::WatchTower, 1, 7)
+    },
+    armour(BuildingKind::PalisadeGate, 0, 0),
 ];
+
+pub(crate) fn age_armour(kind: BuildingKind, feudal: bool) -> BuildingCombat {
+    let mut stats = *building_combat(kind);
+    if feudal
+        && matches!(
+            kind,
+            BuildingKind::TownCenter
+                | BuildingKind::House
+                | BuildingKind::LumberCamp
+                | BuildingKind::MiningCamp
+                | BuildingKind::Mill
+                | BuildingKind::Barracks
+        )
+    {
+        stats.melee_armour += 1;
+        stats.pierce_armour += 1;
+    }
+    stats
+}
 
 pub const fn unit_combat(kind: UnitKind) -> &'static UnitCombat {
     &UNIT_COMBAT[kind as usize]

@@ -176,7 +176,7 @@ each building carries its `research` (tech, progress, total ticks).
 | Tech | Building | Cost | Time | Effect |
 |---|---|---|---|---|
 | Loom | Town Center | 50 gold | 25 s | villagers +15 HP, +1 melee and +2 pierce armour |
-| Town Watch | Town Center | 75 food | 25 s | building line of sight +4 (`los`) |
+| Town Watch | Town Center | 75 food | 25 s | requires Feudal; building line of sight +4 (`los`) |
 | Feudal Age | Town Center | 500 food | 130 s | age becomes Feudal; needs 2 completed types of Barracks, Mill, Lumber Camp, Mining Camp |
 
 `ResearchOrder { building_id, tech }` pays the cost at once and occupies the
@@ -188,8 +188,8 @@ refunds the whole cost. Houses, walls and outposts never count for the Feudal
 Age; Docks count alongside the other economic and military buildings. Loom raises `max_hp` and
 `hp` together, so a damaged villager keeps the damage taken; new villagers
 start with it, and `GameWorld::unit_armour` adds it to the combat table's armour.
-Town Watch raises `los` of existing and later buildings. Feudal unlocks nothing
-beyond the age field. Work per tick is bounded by the building count.
+Town Watch raises `los` of existing and later buildings. Feudal unlocks the buildings and economy technologies described in
+[Feudal economy](economy/feudal.md). Work per tick is bounded by the building count.
 
 Dark Age building melee/pierce armour from AoE II DE: House -2/7; Mill,
 Lumber Camp, Mining Camp and Barracks 0/7; Palisade Wall 2/5; Outpost and
@@ -251,3 +251,8 @@ storage, observation rules, wire bounds and source values.
 Dark Age [fishing](fishing.md) adds shore/deep fish, the Dock and naval Fishing
 Ships. The local DAT sources, rates, bounded water routing, append-only wire
 values and reproducible coast scenario are documented there.
+
+## Feudal economy and buildings
+
+[Feudal rules and sources](economy/feudal.md) lists the DE building stats,
+economy research, age gating, age-up art, the accelerated local demo and limits.

@@ -187,6 +187,7 @@ pub enum CommandResult {
     RejectedAlreadyResearched,
     RejectedResearchBusy,
     RejectedTechRequirement,
+    RejectedRequiresFeudalAge,
 }
 
 /// Immutable physical properties of the active geographic map. The package

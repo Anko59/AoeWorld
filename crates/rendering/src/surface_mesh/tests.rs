@@ -31,7 +31,7 @@ wasm_bindgen_test_configure!(run_in_browser);
 fn test_art(frame: GameFrame) -> GameArt {
     GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

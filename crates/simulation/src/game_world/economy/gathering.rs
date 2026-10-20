@@ -209,10 +209,11 @@ impl GameWorld {
         } else {
             UnitTask::Moving
         };
-        let keep =
-            self.units[index].state.carried.is_none_or(|load| {
-                load.amount != Self::gather_capacity(self.units[index].state.kind)
-            }) || self.begin_return(id, &mut task);
+        let keep = self.units[index]
+            .state
+            .carried
+            .is_none_or(|load| load.amount < self.gather_capacity(&self.units[index].state))
+            || self.begin_return(id, &mut task);
         if keep {
             self.economy.gatherers.insert(id, task);
         } else {
@@ -374,9 +375,10 @@ impl GameWorld {
             return false;
         };
         if remaining == 0
-            || self.units[index].state.carried.is_some_and(|load| {
-                load.amount >= Self::gather_capacity(self.units[index].state.kind)
-            })
+            || self.units[index]
+                .state
+                .carried
+                .is_some_and(|load| load.amount >= self.gather_capacity(&self.units[index].state))
         {
             if self.units[index].state.carried.is_some() {
                 return self.begin_return(id, task);
@@ -386,22 +388,21 @@ impl GameWorld {
         if self.tick.0 < task.retry_tick {
             return true;
         }
-        // DE update 169123 reduced both ship fish rates by 15%. Retain
-        // ten-thousandths for 0.49 * 0.85 = 0.4165, without rounding drift.
-        let (rate, precision) = match (task.fish, self.units[index].state.kind) {
-            (Some(aoe_map::ObjectKind::DeepFish), UnitKind::FishingShip) => (4165, 10_000),
-            (Some(aoe_map::ObjectKind::ShoreFish), UnitKind::FishingShip) => (2380, 10_000),
-            (Some(_), _) => (43, 100),
-            _ => (
-                task.animal.and_then(|id| self.animal(id)).map_or(
-                    VILLAGE_RULES.gather_hundredths_per_second[task.kind as usize],
-                    |a| a.kind.rules().gather_hundredths,
-                ),
-                100,
+        // Fish rates use current DE naval balance, independent of land technologies.
+        let rate = match (task.fish, self.units[index].state.kind) {
+            (Some(aoe_map::ObjectKind::DeepFish), UnitKind::FishingShip) => 4165,
+            (Some(aoe_map::ObjectKind::ShoreFish), UnitKind::FishingShip) => 2380,
+            (Some(_), _) => 4300,
+            _ => task.animal.and_then(|id| self.animal(id)).map_or_else(
+                || {
+                    self.gather_rate(self.units[index].state.player, task.kind)
+                        .0
+                },
+                |a| u32::from(a.kind.rules().gather_hundredths) * 100,
             ),
         };
         task.credits += u64::from(rate);
-        let threshold = u64::from(self.config.tick_hz) * precision;
+        let threshold = u64::from(self.config.tick_hz) * 10_000;
         if task.credits < threshold {
             return true;
         }
@@ -424,7 +425,7 @@ impl GameWorld {
                 kind: task.kind,
                 amount,
             });
-            if amount == Self::gather_capacity(self.units[index].state.kind) || left == 0 {
+            if amount >= self.gather_capacity(&self.units[index].state) || left == 0 {
                 return self.begin_return(id, task);
             }
             return true;
@@ -450,8 +451,7 @@ impl GameWorld {
                 amount,
             });
             self.economy.depletions.push(depletion);
-            if amount == Self::gather_capacity(self.units[index].state.kind)
-                || depletion.remaining == 0
+            if amount >= self.gather_capacity(&self.units[index].state) || depletion.remaining == 0
             {
                 return self.begin_return(id, task);
             }

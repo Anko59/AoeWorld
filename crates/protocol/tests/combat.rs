@@ -47,6 +47,7 @@ fn center(hp: u16) -> GameplayBuildingState {
         hp,
         max_hp: 2400,
         last_hit: None,
+        age: aoe_protocol::Age::Dark,
     }
 }
 

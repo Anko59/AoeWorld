@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { mkdir, writeFile } from "node:fs/promises";
-import { fiveVillagerFixture } from "./fixture.js";
+import { fiveVillagerFixture } from "./fixtures/village.js";
 import {
   centerVillage,
   frameResource,

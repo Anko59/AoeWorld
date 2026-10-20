@@ -19,7 +19,7 @@ fn villager_hp(units: &[aoe_protocol::GameplayUnitState]) -> Vec<(u16, u16)> {
 }
 
 #[tokio::test]
-async fn the_town_center_researches_loom_and_town_watch_over_the_wire() {
+async fn the_town_center_researches_loom_and_gates_town_watch_over_the_wire() {
     let service = GameplayService::new(Seed(1));
     let (tx, mut rx) = mpsc::channel(256);
     let (id, _) = service.register(None, tx).await;
@@ -157,13 +157,17 @@ async fn the_town_center_researches_loom_and_town_watch_over_the_wire() {
             let n = send("Town Watch");
             service.queue_research(id, n, center, Tech::TownWatch).await;
         }
-        if stage == 2 && researched & 0b11 == 0b11 {
+        if stage == 2 && rejected.iter().any(|(label, _)| *label == "Town Watch") {
             break;
         }
     }
-    assert_eq!(researched, 0b11, "Loom and Town Watch finished");
-    assert_eq!((gold, food), (50, 125), "Loom 50 gold, Town Watch 75 food");
-    assert_eq!(los, 12, "Town Watch adds four to the town center sight");
+    assert_eq!(researched, 0b1, "Loom finished; Town Watch needs Feudal");
+    assert_eq!(
+        (gold, food),
+        (50, 200),
+        "Loom paid once; refused Town Watch costs nothing"
+    );
+    assert_eq!(los, 8, "Town Watch was refused before Feudal");
     assert_eq!(age, Age::Dark, "the Feudal Age was never reachable");
     assert!(
         hp.iter().any(|&(now, max)| max == 40 && now == 40),
@@ -184,6 +188,7 @@ async fn the_town_center_researches_loom_and_town_watch_over_the_wire() {
                 "Loom again, now researched",
                 CommandResult::RejectedAlreadyResearched
             ),
+            ("Town Watch", CommandResult::RejectedRequiresFeudalAge),
         ]
     );
     log.push(format!(

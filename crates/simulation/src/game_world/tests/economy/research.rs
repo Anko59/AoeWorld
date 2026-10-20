@@ -11,6 +11,12 @@ fn at(x: i32, y: i32) -> TileCoord {
     TileCoord::new(x, y)
 }
 
+fn feudal(world: &mut GameWorld) {
+    let p = world.economy.players.get_mut(&PlayerId(0)).unwrap();
+    p.age = Age::Feudal;
+    p.researched |= Tech::FeudalAge.bit();
+}
+
 fn rich(world: &mut GameWorld) {
     set_stock(world, 1000, 1000, 1000, 1000);
     world
@@ -43,9 +49,11 @@ fn research(world: &mut GameWorld, center: EntityId, tech: Tech) -> Result<(), E
 fn the_tech_table_is_ordered_and_holds_the_dark_age_values() {
     for (index, rules) in TECH_RULES.iter().enumerate() {
         assert_eq!(rules.tech as usize, index);
-        assert_eq!(rules.building, BuildingKind::TownCenter);
+        if index < 3 {
+            assert_eq!(rules.building, BuildingKind::TownCenter);
+        }
     }
-    let [loom, watch, feudal] = TECH_RULES;
+    let [loom, watch, feudal, ..] = TECH_RULES;
     let paid = |c: crate::Stockpile| (c.food, c.wood, c.gold, c.stone);
     assert_eq!((paid(loom.cost), loom.seconds), ((0, 0, 50, 0), 25));
     assert_eq!((paid(watch.cost), watch.seconds), ((75, 0, 0, 0), 25));
@@ -89,6 +97,7 @@ fn loom_raises_hit_points_and_armour_of_existing_damaged_and_new_villagers() {
 #[test]
 fn research_without_the_resources_is_refused_and_changes_nothing() {
     let (mut world, _, center) = village();
+    feudal(&mut world);
     set_stock(&mut world, 74, 500, 49, 0);
     let before = world.canonical_hash();
     for tech in [Tech::Loom, Tech::TownWatch] {
@@ -118,6 +127,7 @@ fn research_blocked_by_busy(world: &mut GameWorld, center: EntityId) {
 #[test]
 fn town_watch_adds_four_to_the_line_of_sight_of_every_building() {
     let (mut world, _, center) = village();
+    feudal(&mut world);
     rich(&mut world);
     let house = built(&mut world, BuildingKind::House, at(80, 80));
     assert_eq!(world.building(center).unwrap().los, 8);
@@ -200,6 +210,7 @@ fn cancelling_research_refunds_the_whole_cost_and_frees_the_queue() {
 #[test]
 fn a_technology_is_researched_once_and_one_at_a_time_per_player() {
     let (mut world, _, center) = village();
+    feudal(&mut world);
     rich(&mut world);
     let second = world.place_town_center(PlayerId(0), at(120, 60)).unwrap();
     research(&mut world, center, Tech::Loom).unwrap();
@@ -223,7 +234,7 @@ fn a_technology_is_researched_once_and_one_at_a_time_per_player() {
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
     assert_eq!(
-        research(&mut world, center, Tech::FeudalAge),
+        research(&mut world, center, Tech::Wheelbarrow),
         Err(EconomyError::ResearchBusy)
     );
 }
@@ -260,6 +271,7 @@ fn research_replays_deterministically() {
     let run = || {
         let (mut world, _, center) = village();
         rich(&mut world);
+        feudal(&mut world);
         let hurt = villager_at(&mut world, 70, 70);
         world.units[world.lookup[&hurt]].state.hp = 7;
         research(&mut world, center, Tech::Loom).unwrap();

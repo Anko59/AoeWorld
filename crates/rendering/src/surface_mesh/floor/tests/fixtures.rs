@@ -81,7 +81,7 @@ pub(crate) fn forest_faces(
     };
     let art = crate::GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

@@ -25,6 +25,9 @@ pub(crate) enum AssetCommand {
     /// Decode empires2.dat into a local-only name to sprite table.
     DatTable {
         input: Option<PathBuf>,
+        /// Numeric Feudal survey of a licensed DE VER 8.9 dat file.
+        #[arg(long)]
+        de: Option<PathBuf>,
     },
     /// Imports the Dark Age buildings from a Definitive Edition install.
     ImportDe {
@@ -53,7 +56,10 @@ pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error
                 aoe_assets::pack::import(&input, Path::new("local-assets/packs"))?.display()
             );
         }
-        AssetCommand::DatTable { input } => {
+        AssetCommand::DatTable { input, de } => {
+            if let Some(path) = de {
+                return dat_table::de(&path, Path::new("local-assets/dat-table"));
+            }
             let input = input.unwrap_or_else(|| PathBuf::from("local-assets/trial/Data"));
             dat_table::run(&input, Path::new("local-assets/dat-table"))?;
         }

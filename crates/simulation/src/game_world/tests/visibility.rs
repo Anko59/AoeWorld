@@ -64,8 +64,18 @@ fn remembered_building_keeps_last_seen_state_until_revisited() {
     );
     let id = remembered[0].id;
     w.economy.buildings.get_mut(&id).unwrap().hp -= 100;
+    w.economy.buildings.get_mut(&id).unwrap().age = crate::Age::Feudal;
+    let owner = w.economy.players.get_mut(&PlayerId(1)).unwrap();
+    owner.age = crate::Age::Feudal;
+    owner.researched |= Tech::FeudalAge.bit();
     w.advance();
     assert_eq!(w.known_buildings(PlayerId(0))[0].hp, remembered[0].hp);
+    assert_eq!(w.known_buildings(PlayerId(0))[0].age, crate::Age::Dark);
+    w.issue_move(scout, at(64, 64)).unwrap();
+    for _ in 0..700 {
+        w.advance();
+    }
+    assert_eq!(w.known_buildings(PlayerId(0))[0].age, crate::Age::Feudal);
 }
 
 #[test]
@@ -80,6 +90,9 @@ fn town_watch_increases_reveal_by_four_tiles() {
         (building.footprint.min.y + building.footprint.max.y) / 2,
     );
     assert_eq!(w.visibility(PlayerId(0), tile), TileVisibility::Unexplored);
+    let owner = w.economy.players.get_mut(&PlayerId(0)).unwrap();
+    owner.age = crate::Age::Feudal;
+    owner.researched |= Tech::FeudalAge.bit();
     w.issue_research(PlayerId(0), center, Tech::TownWatch)
         .unwrap();
     for _ in 0..500 {

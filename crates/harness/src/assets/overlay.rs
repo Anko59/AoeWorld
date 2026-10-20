@@ -24,10 +24,13 @@ pub(super) fn attach_in(
     let link = base.join("buildings");
     match std::fs::symlink_metadata(&link) {
         Ok(meta) if meta.file_type().is_symlink() => {
-            if link.canonicalize()? == de {
+            if link.canonicalize().is_ok_and(|current| current == de) {
                 return Ok(());
             }
-            return Err("building overlay already points to another pack".into());
+            // The generated pointer is the current overlay, including after
+            // an import changes its content hash. Only this local link is
+            // replaced; neither the old target nor an occupied file is touched.
+            std::fs::remove_file(&link)?;
         }
         Ok(_) => return Err("building overlay path is already occupied".into()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
