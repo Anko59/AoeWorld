@@ -63,6 +63,8 @@ impl GameWorld {
             self.economy.builders.remove(&id);
             let index = self.lookup[&id];
             self.stop_movement(index);
+            // A new hunt plans its own route; an earlier failure must not end it.
+            self.units[index].last_movement_error = None;
             if self.units[index]
                 .state
                 .carried
