@@ -40,7 +40,7 @@ fn decode_hex(hex: &str) -> Result<Vec<u8>> {
         return Err("invalid or oversized captured gameplay frame".into());
     }
     let mut bytes = Vec::with_capacity(hex.len() / 2);
-    for pair in hex.as_bytes().chunks_exact(2) {
+    for pair in hex.as_bytes().as_chunks::<2>().0 {
         let digit = |byte: u8| (byte as char).to_digit(16).map(|value| value as u8);
         let high = digit(pair[0]).ok_or("invalid captured frame hex")?;
         let low = digit(pair[1]).ok_or("invalid captured frame hex")?;

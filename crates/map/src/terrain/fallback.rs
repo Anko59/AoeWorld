@@ -19,9 +19,11 @@ impl MapChunkGenerator {
     /// moves water.
     pub(super) fn shoreline_key(&self) -> u64 {
         self.geography_key
-            .chunks_exact(8)
+            .as_chunks::<8>()
+            .0
+            .iter()
             .fold(0x73_686f_7265_6c69, |key, part| {
-                mix64(key ^ u64::from_le_bytes(part.try_into().unwrap_or([0; 8])))
+                mix64(key ^ u64::from_le_bytes(*part))
             })
     }
 

@@ -151,7 +151,7 @@ fn verify_files(
         || !valid_image(&published.browser_image, &format!("{registry}-browser"))
         || published.protocol_version != aoe_protocol::VERSION
         || published.asset_pack_version != 1
-        || !published.rustc.starts_with("rustc 1.93.1 ")
+        || !published.rustc.starts_with("rustc 1.99.1 ")
     {
         return Err("published release identity or format is incompatible".into());
     }

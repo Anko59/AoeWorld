@@ -24,7 +24,7 @@ fn observed_at(path: &Path) -> Result<u64, Box<dyn Error>> {
 fn proposal(size: u64) -> Baseline {
     Baseline {
         version: 1,
-        toolchain: "rustc 1.93.1".into(),
+        toolchain: "rustc 1.99.1".into(),
         wasm_bindgen: "0.2.128".into(),
         binaryen: "108".into(),
         gzip: "1.12 -n -9".into(),
@@ -49,7 +49,7 @@ fn propose_at(input: &Path, output: &Path) -> Result<(), Box<dyn Error>> {
 
 fn compare_observed(baseline: Baseline, size: u64) -> Result<Comparison, Box<dyn Error>> {
     if baseline.version != 1
-        || baseline.toolchain != "rustc 1.93.1"
+        || baseline.toolchain != "rustc 1.99.1"
         || baseline.wasm_bindgen != "0.2.128"
         || baseline.binaryen != "108"
         || baseline.gzip != "1.12 -n -9"

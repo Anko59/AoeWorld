@@ -82,7 +82,7 @@ pub(super) fn results(runs: &[SuiteRun]) -> git::Result<CheckReport> {
         };
         let attributed = |mut panics: Vec<Panic>| {
             for panic in &mut panics {
-                panic.test = panic.test.as_deref().map(&qualify);
+                panic.test = panic.test.as_deref().map(qualify);
             }
             panics
         };

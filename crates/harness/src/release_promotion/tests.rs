@@ -77,7 +77,7 @@ fn fixture(directory: &Path, source: &str, tree: &str, registry: &str) -> Publis
         bundle_archive_hash: file_hash(b"fixture archive"),
         protocol_version: aoe_protocol::VERSION,
         asset_pack_version: 1,
-        rustc: "rustc 1.93.1 (fixture)".into(),
+        rustc: "rustc 1.99.1 (fixture)".into(),
         e2e_report_hash: file_hash(&e2e_bytes).trim_start_matches("blake3:").into(),
         perf_report_hash: file_hash(&perf_bytes).trim_start_matches("blake3:").into(),
         sbom_hashes: release_publish::sbom_hashes(directory).expect("SBOM hashes"),

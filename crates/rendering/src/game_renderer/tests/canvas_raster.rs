@@ -34,7 +34,7 @@ fn canvas_integer_alpha_preserves_all_source_target_and_alpha_bytes() {
 fn canvas_texel_coordinates_preserve_floor_clamp_for_ieee_values() {
     let side = GAME_ATLAS_SIDE as usize;
     let mut pixels = vec![0; crate::GAME_ATLAS_BYTES];
-    for (index, texel) in pixels.chunks_exact_mut(4).enumerate() {
+    for (index, texel) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         let (x, y) = (index % side, index / side);
         texel.copy_from_slice(&[x as u8, (x >> 8) as u8, y as u8, (y >> 8) as u8]);
     }

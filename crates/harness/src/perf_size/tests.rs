@@ -3,6 +3,7 @@ use super::*;
 #[test]
 fn size_baseline_rejects_wrong_identity_and_five_percent_regression() {
     let baseline = proposal(100);
+    assert_eq!(baseline.toolchain, "rustc 1.99.1");
     assert_eq!(
         compare_observed(baseline, 105)
             .expect("at threshold")

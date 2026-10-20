@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "toolchain": "rustc 1.93.1",
+  "toolchain": "rustc 1.99.1",
   "gungraun": "0.19.4",
   "valgrind": "3.19.0",
   "allow_aslr": true,
   "smoke_workload_hash": "c068a47ebd635279753bfe7d8b630de70a1164e3ec1c92139c1c56d6c323ad56",
   "instructions": {
-    "instructions::assets::palette_decode": 238987,
+    "instructions::assets::palette_decode": 243938,
     "instructions::protocol::snapshot_encode": 207527,
-    "instructions::simulation::advance": 683783,
-    "instructions::simulation::viewport_query": 284813
+    "instructions::simulation::advance": 712509,
+    "instructions::simulation::viewport_query": 257593
   },
   "allocation_bytes": {
     "instructions::assets::palette_decode": 17152,

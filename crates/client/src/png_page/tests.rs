@@ -192,7 +192,12 @@ fn filters_zero_through_four_reconstruct_rgba_rows() {
         flate2::read::ZlibDecoder::new(compressed.as_slice())
             .read_to_end(&mut scanlines)
             .unwrap();
-        let filter_bytes: Vec<_> = scanlines.chunks_exact(13).map(|row| row[0]).collect();
+        let filter_bytes: Vec<_> = scanlines
+            .as_chunks::<13>()
+            .0
+            .iter()
+            .map(|row| row[0])
+            .collect();
         assert_eq!(filter_bytes, vec![filter as u8; 5], "filter {filter:?}");
         assert_eq!(reconstruct(&scanlines, 3, 5, false).unwrap(), pixels);
     }

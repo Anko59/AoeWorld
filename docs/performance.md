@@ -117,6 +117,26 @@ pull request branch):
 | #519 | Fog of war: explored, fogged and visible tiles | +2.35% |
 | #520 | Fishing: fish, the Dock and Fishing Ships | about +7 KB |
 
+On 2026-10-20, the same source tree measured 287584 B with Rust 1.93.1 and
+284927 B with Rust 1.99.1 (-0.924%), so the WASM baseline stays at 287702 B;
+only its toolchain identity changes. Diagnostics measured 84358 B and 83308 B,
+respectively, and retain the shared gameplay cap.
+
+The instruction baselines below were re-taken for the toolchain change, same tree,
+using `make perf-instructions` with Gungraun 0.19.4 and Valgrind 3.19.0:
+
+| Kernel | Rust 1.93.1 instructions | Rust 1.99.1 instructions | Baseline action |
+|---|---|---|---|
+| Palette decode | 238987 | 243938 | Re-taken (+2.07%) |
+| Snapshot encode | 207518 | 206498 | Kept at 207527 (within 1%) |
+| Simulation advance | 675830 | 712509 | Re-taken (+5.43%) |
+| Viewport query | 269812 | 257593 | Re-taken (-4.53%) |
+
+All four allocation byte/count pairs were unchanged: palette 17152/257,
+snapshot 16376/11, advance 0/0, and viewport 54024/84. Workload identities,
+tool versions, and the 5% regression threshold stay unchanged. These are
+deterministic kernel measurements, not gameplay timing qualification.
+
 The next queued client work, DAT building composition (#518, about +3.1 KB) and the Feudal
 economy (about +0.77%), fits under the new cap. A baseline moves only in its own reviewed
 change, with the reason recorded here. These measured deterministic comparisons pass

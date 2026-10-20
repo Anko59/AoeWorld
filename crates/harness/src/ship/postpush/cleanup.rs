@@ -13,13 +13,14 @@ pub(in crate::ship) fn after_publication(
     }
     // Only incremental output: `.cache/harness/snapshots` may hold the snapshot of a check
     // another run of this checkout is still using; each run removes its own snapshots.
-    let mut freed = 0;
-    for relative in ["target/debug/incremental"] {
-        match disk::remove(root, Path::new(relative)) {
-            Ok(bytes) => freed += bytes,
-            Err(error) => eprintln!("ship: could not clean {relative}: {error}"),
+    let relative = "target/debug/incremental";
+    let freed = match disk::remove(root, Path::new(relative)) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("ship: could not clean {relative}: {error}");
+            0
         }
-    }
+    };
     eprintln!("ship: freed {freed} bytes of rebuildable output");
     Ok(())
 }

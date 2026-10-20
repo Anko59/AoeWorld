@@ -209,7 +209,7 @@ fn layer(
     };
     let mut pixels = vec![[0u8; 4]; pixel_count];
     let mut ordinal = 0usize;
-    for pair in command_bytes.chunks_exact(2) {
+    for pair in command_bytes.as_chunks::<2>().0 {
         let (skip, draw) = (usize::from(pair[0]), usize::from(pair[1]));
         if ordinal + skip + draw > blocks {
             return Err(invalid(FORMAT, start, "commands exceed layer blocks"));

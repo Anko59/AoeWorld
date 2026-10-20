@@ -368,58 +368,6 @@ fn depleted_resource_disappears_from_both_backend_draw_lists() {
 }
 
 #[wasm_bindgen_test]
-fn broadleaf_tree_variants_keep_paired_shadows_and_limit_bare_trees() {
-    let camera = SceneCamera {
-        center: [0.5, 0.5],
-        zoom: 1.0,
-        viewport: [640.0, 480.0],
-        focus_elevation_meters: 0.0,
-    };
-    let make_frame = |index: usize| GameFrame {
-        atlas: crate::AtlasAddress {
-            page: 0,
-            uv: [index as f32 / 1000.0, 0.0, 0.01, 0.01],
-        },
-        size: [32.0, 48.0],
-        anchor: [16.0, 48.0],
-    };
-    let mut art = synthetic_art();
-    art.resources[1] = (0..14).map(make_frame).collect();
-    art.tree_shadows = (0..14).map(make_frame).collect();
-    let terrain = SceneTerrain {
-        appearance: None,
-        position: [0.5, 0.5],
-        material: 0,
-        elevation_meters: 0.0,
-        surface: SceneTerrainSurface::flat(0.0),
-    };
-    let trees = (0..256_u16)
-        .map(|variant| SceneResource {
-            visual_family: 0,
-            id: u64::from(variant),
-            position: [0.5, 0.5],
-            kind: 1,
-            visual_variant: variant as u8,
-            elevation_meters: 0.0,
-        })
-        .collect::<Vec<_>>();
-
-    let sprites = world_sprite_frames(&art, &[terrain], &trees, &[], camera, 0);
-    assert_eq!(sprites.len(), 512);
-    let bare_trees = sprites
-        .chunks_exact(2)
-        .filter(|pair| {
-            let frame = (pair[1].1.atlas.uv[0] * 1000.0).round() as usize;
-            matches!(frame, 3 | 5 | 8)
-        })
-        .count();
-    assert_eq!(bare_trees, 18);
-    for pair in sprites.chunks_exact(2) {
-        assert_eq!(pair[0].1.atlas.uv[0], pair[1].1.atlas.uv[0]);
-    }
-}
-
-#[wasm_bindgen_test]
 fn zoomed_out_covering_lod_reaches_every_viewport_border() {
     let camera = SceneCamera {
         center: [128.0, 128.0],

@@ -49,7 +49,7 @@ fn fixture(root: &Path, revision: &str, tree: &str) {
         "bundle_archive_hash": hash(b"synthetic bundle"),
         "protocol_version": aoe_protocol::VERSION,
         "asset_pack_version": 1,
-        "rustc": "rustc 1.93.1 (fixture)",
+        "rustc": "rustc 1.99.1 (fixture)",
         "e2e_report_hash": hash(&e2e).trim_start_matches("blake3:"),
         "perf_report_hash": hash(&perf).trim_start_matches("blake3:"),
         "sbom_hashes": sboms,

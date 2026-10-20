@@ -10,7 +10,7 @@ fn environment() -> Environment {
         kernel: "fixture-kernel".into(),
         browser: "Chromium".into(),
         browser_version: "fixture-browser".into(),
-        rustc: "rustc 1.93.1".into(),
+        rustc: "rustc 1.99.1".into(),
         container_digests: BTreeMap::from([(
             "runtime".into(),
             format!("sha256:{}", "a".repeat(64)),

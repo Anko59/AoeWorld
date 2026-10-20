@@ -406,9 +406,9 @@ pub(super) fn images(
     // Record after execution: make may have rebuilt mutable tags. These observed
     // current IDs cannot prove which ID a hostile gate actually ran (bootstrap).
     for (name, version) in [
-        ("rust-tools", "1.93.1"),
+        ("rust-tools", "1.99.1"),
         ("browser-tools", "1.64.0"),
-        ("orchestrator", "1.93.1"),
+        ("orchestrator", "1.99.1"),
         ("analysis", "0.19.4"),
         ("policy", "0.20.2"),
         ("coverage", "0.9.1"),
