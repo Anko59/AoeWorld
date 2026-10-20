@@ -21,6 +21,7 @@ struct Request {
     mode: String,
     package: Option<PathBuf>,
     url: Option<String>,
+    base: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,7 +33,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return packing::check(request.package.ok_or("package required")?);
     }
     if request.mode == "servers" {
-        return servers::run(request.package.ok_or("asset pack required")?);
+        return servers::run(
+            request.package.ok_or("asset pack required")?,
+            request.base.as_deref(),
+        );
     }
     if request.mode == "maps" {
         return maps(request.package.ok_or("package required")?);

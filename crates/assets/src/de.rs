@@ -22,6 +22,7 @@ mod preview;
 mod select;
 mod table;
 
+pub use preview::reference;
 pub use select::{FARM_TEXTURES, Item, SELECTION};
 
 const MAX_SLD: u64 = 64 * 1024 * 1024;

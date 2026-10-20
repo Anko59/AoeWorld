@@ -10,6 +10,10 @@ export DE_DIR
 assets-import-de:
 	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets import-de /de-install $(if $(AOE_ASSET_PACK),$(call MOUNT_QUOTE,$(AOE_ASSET_PACK)))
 
+.PHONY: assets-de-reference
+assets-de-reference:
+	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets de-reference /de-install .cache/tc-shots
+
 assets-verify:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets verify $(if $(AOE_ASSET_PACK),$(call MOUNT_QUOTE,$(AOE_ASSET_PACK)))
 

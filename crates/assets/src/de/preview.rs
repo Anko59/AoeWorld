@@ -12,6 +12,103 @@ const COLUMNS: usize = 4;
 const MAX_CELLS: usize = 12;
 const PAD: usize = 6;
 
+/// Decode the complete DE Town Center at native x1 scale, beside the trial
+/// composite. Both use a 96x48 source tile and the same (256,256) ground origin.
+/// These licensed proof pixels must remain below the ignored cache directory.
+pub fn reference(install: &Path, output: &Path) -> Result<(), Error> {
+    if !output.starts_with(".cache")
+        || output
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+    {
+        return Err(crate::invalid(
+            "DE reference",
+            0,
+            "output must stay below .cache",
+        ));
+    }
+    let source = install
+        .join(super::GRAPHICS)
+        .join("b_dark_town_center_age1_x1.sld");
+    let frames = crate::sld::parse(&super::read_bounded(&source)?)?;
+    let frame = frames
+        .first()
+        .ok_or_else(|| crate::invalid("DE reference", 0, "empty sprite"))?;
+    let planes = compose::planes(frame);
+    let (w, h) = (512usize, 384usize);
+    let mut rgb = vec![128; w * h * 3];
+    for y in 0..i32::from(planes.height) {
+        for x in 0..i32::from(planes.width) {
+            let (dx, dy) = (256 - planes.hotspot_x + x, 256 - planes.hotspot_y + y);
+            if dx < 0 || dy < 0 || dx >= w as i32 || dy >= h as i32 {
+                continue;
+            }
+            let at = (y as usize * usize::from(planes.width) + x as usize) * 4;
+            let to = (dy as usize * w + dx as usize) * 3;
+            let c = &planes.color[at..at + 4];
+            let p = &planes.player[at..at + 4];
+            let color = blend_player([c[0], c[1], c[2], c[3]], p[0], p[3], [65, 145, 245]);
+            let shadow = u32::from(planes.shadow[at + 3]);
+            for channel in 0..3 {
+                let ground = 128 * (255 - shadow) / 255;
+                rgb[to + channel] = ((u32::from(color[channel]) * u32::from(color[3])
+                    + ground * u32::from(255 - color[3])
+                    + 127)
+                    / 255) as u8;
+            }
+        }
+    }
+    fs::create_dir_all(output)?;
+    save(&output.join("reference-de.png"), w as u32, h as u32, &rgb)?;
+    let mut decoder = png::Decoder::new(fs::File::open(output.join("tc-composite.png"))?);
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info()?;
+    if reader.info().width != w as u32 || reader.info().height != h as u32 {
+        return Err(crate::invalid(
+            "DE reference",
+            0,
+            "expected native 512x384 composite",
+        ));
+    }
+    let mut pixels = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut pixels)?;
+    if info.width != w as u32
+        || info.height != h as u32
+        || !matches!(info.color_type, png::ColorType::Rgb | png::ColorType::Rgba)
+    {
+        return Err(crate::invalid(
+            "DE reference",
+            0,
+            "expected native 512x384 composite",
+        ));
+    }
+    let channels = if info.color_type == png::ColorType::Rgb {
+        3
+    } else {
+        4
+    };
+    let mut pair = vec![128; w * 2 * h * 3];
+    for y in 0..h {
+        pair[y * w * 6..y * w * 6 + w * 3].copy_from_slice(&rgb[y * w * 3..(y + 1) * w * 3]);
+        for x in 0..w {
+            let at = (y * w + x) * channels;
+            let to = (y * w * 2 + w + x) * 3;
+            pair[to..to + 3].copy_from_slice(&pixels[at..at + 3]);
+        }
+    }
+    save(
+        &output.join("orientation-check.png"),
+        (w * 2) as u32,
+        h as u32,
+        &pair,
+    )?;
+    println!(
+        "DE reference: {}x{}, anchor ({},{}); left DE / right trial; 96x48 source tiles",
+        planes.width, planes.height, planes.hotspot_x, planes.hotspot_y
+    );
+    Ok(())
+}
+
 /// Blends player colour over the body, with shadow on exposed ground, using
 /// the client's player-plane composition. Returns RGB.
 fn render(planes: &Planes) -> Vec<u8> {

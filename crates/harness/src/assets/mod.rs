@@ -31,6 +31,11 @@ pub(crate) enum AssetCommand {
         install: PathBuf,
         base: Option<PathBuf>,
     },
+    /// Local complete-DE versus trial native-scale composition evidence.
+    DeReference {
+        install: PathBuf,
+        output: PathBuf,
+    },
     /// Local native-scale proof of a pack building recipe (no public pixels).
     BuildingPreview {
         pack: PathBuf,
@@ -44,6 +49,9 @@ pub(crate) enum AssetCommand {
 
 pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error>> {
     match command {
+        AssetCommand::DeReference { install, output } => {
+            aoe_assets::de::reference(&install, &output)?;
+        }
         AssetCommand::Inspect { input } => {
             let input = input.unwrap_or_else(|| PathBuf::from("local-assets/trial"));
             println!(
