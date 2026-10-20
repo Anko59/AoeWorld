@@ -40,6 +40,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         return Err("unsupported or oversized manifest".into());
     }
     let mut extents = Vec::new();
+    let mut selected = std::collections::BTreeSet::new();
     let mut counts = [0_usize; 2];
     // Conservative full-prefix proof in production semantic order. The client
     // omits unused idle cells and adds the separately checked DE building subset.
@@ -60,6 +61,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         }
         counts[usize::from(domain == AtlasDomain::Objects)] += frames.len();
         for frame in frames {
+            selected.insert((frame.source.clone(), frame.frame));
             let page = manifest
                 .pages
                 .get(usize::from(frame.page))
@@ -80,6 +82,85 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     }
     if extents.len() != MAX_REVIEWED_FRAMES as usize + 2695 || counts != [1474, 3590] {
         return Err("incomplete semantic selection".into());
+    }
+    // Match the loader's DAT additions after the static catalog, including
+    // every native animation frame. Shared sources are packed only once.
+    for part in manifest
+        .buildings
+        .iter()
+        .filter(|b| super::GAMEPLAY_BUILDING_IDS.contains(&b.unit_id))
+        .flat_map(|b| b.parts.iter().chain(&b.construction))
+        .filter(|p| p.available)
+    {
+        let wanted = if part.frame_rate > 0.0 {
+            u32::from(part.frames)
+        } else {
+            1
+        };
+        let mut frames = manifest
+            .frames
+            .iter()
+            .filter(|f| f.source == part.source && f.frame < wanted)
+            .collect::<Vec<_>>();
+        frames.sort_by_key(|f| f.frame);
+        if frames.len() != wanted as usize
+            || frames.iter().enumerate().any(|(i, f)| f.frame != i as u32)
+        {
+            return Err("incomplete DAT building source".into());
+        }
+        for frame in frames {
+            if selected.insert((frame.source.clone(), frame.frame)) {
+                let page = manifest
+                    .pages
+                    .get(usize::from(frame.page))
+                    .ok_or("missing building page")?;
+                if u32::from(frame.x) + u32::from(frame.width) > u32::from(page.width)
+                    || u32::from(frame.y) + u32::from(frame.height) > u32::from(page.height)
+                {
+                    return Err("invalid building source rectangle".into());
+                }
+                extents.push(FrameExtent {
+                    domain: AtlasDomain::Objects,
+                    width: frame.width,
+                    height: frame.height,
+                });
+                counts[1] += 1;
+            }
+        }
+    }
+    for building in manifest
+        .buildings
+        .iter()
+        .filter(|b| super::GAMEPLAY_BUILDING_IDS.contains(&b.unit_id))
+    {
+        let Some(slp) = building.foundation_slp else {
+            continue;
+        };
+        if REQUIRED_RENDER_SOURCES
+            .iter()
+            .chain(&OPTIONAL_TERRAIN_SOURCES)
+            .any(|s| s.id as i32 == slp)
+        {
+            continue;
+        }
+        let source = format!("terrain.drs:[32, 112, 108, 115]:{slp}");
+        let [columns, rows] = building.foundation_size;
+        let count = u32::from(columns) * u32::from(rows);
+        for number in 0..count {
+            let frame = manifest
+                .frames
+                .iter()
+                .find(|f| f.source == source && f.frame == number)
+                .ok_or("missing DAT foundation frame")?;
+            if selected.insert((frame.source.clone(), frame.frame)) {
+                extents.push(FrameExtent {
+                    domain: AtlasDomain::Terrain,
+                    width: frame.width,
+                    height: frame.height,
+                });
+                counts[0] += 1;
+            }
+        }
     }
     let placements = pack_frames(&extents).map_err(|error| error.to_string())?;
     if placements.len() != extents.len() {
@@ -163,6 +244,8 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
         input_hash: "synthetic-not-original-proof".into(),
         pages: vec![page],
         frames: Vec::new(),
+        buildings: Vec::new(),
+        building_data: "00".into(),
     };
     for (identity, count, _) in reviewed_sources() {
         // Neutral sheep reuse each owned source with another runtime palette.

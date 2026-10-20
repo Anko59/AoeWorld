@@ -8,9 +8,16 @@
 //! set) is decoded. Every count is bounded before allocation and the report
 //! names where each stage began, so a layout drift is visible, not silent.
 pub mod de_survey;
+mod building;
+mod composition;
 mod reader;
 mod sections;
+mod terrain;
+pub use building::{Annex, Building};
+pub use composition::{BuildingComposition, BuildingPart};
+pub use terrain::Terrain;
 pub mod table;
+mod table_details;
 #[cfg(test)]
 mod tests;
 mod units;
@@ -26,6 +33,7 @@ const MAX_INFLATED: u64 = 64 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Graphic {
+    pub byte_offset: usize,
     pub id: i32,
     pub name: String,
     pub file_name: String,
@@ -34,7 +42,16 @@ pub struct Graphic {
     pub angle_count: u16,
     pub frame_rate: f32,
     pub replay_delay: f32,
-    pub delta_graphics: Vec<i16>,
+    pub layer: u8,
+    pub deltas: Vec<GraphicDelta>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct GraphicDelta {
+    pub graphic_id: i16,
+    pub offset_x: i16,
+    pub offset_y: i16,
+    pub display_angle: i16,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -72,6 +89,9 @@ pub struct Unit {
     pub resource_storage: [(i16, f32); 3],
     pub work_rate: Option<f32>,
     pub standing: [i16; 2],
+    /// Full collision footprint in tiles (the file stores half extents).
+    pub footprint: [f32; 2],
+    pub building: Option<Building>,
     pub dying: i16,
     pub dead_unit: i16,
     pub speed: Option<f32>,
@@ -83,7 +103,6 @@ pub struct Unit {
     pub train_time: Option<i16>,
     pub train_location: Option<i16>,
     pub construction_graphic: Option<i16>,
-    pub snow_graphic: Option<i16>,
     pub tasks: Vec<Task>,
 }
 
@@ -108,6 +127,7 @@ pub struct Report {
 pub struct DatFile {
     pub version: String,
     pub graphics: Vec<Graphic>,
+    pub terrains: Vec<Terrain>,
     pub units: Vec<Unit>,
     pub report: Report,
     #[serde(skip)]
@@ -150,11 +170,13 @@ pub fn parse(bytes: &[u8]) -> Result<DatFile, Error> {
     let sounds = sections::skip_to_graphics(&mut r)?;
     let graphics_offset = r.pos;
     let graphics = sections::graphics(&mut r)?;
+    let graphics_end = r.pos;
+    let terrains = terrain::decode(&mut r)?;
     let mut report = Report {
         inflated_bytes: bytes.len(),
         sounds,
         graphics_offset,
-        graphics_end: r.pos,
+        graphics_end,
         ..Report::default()
     };
     let units = match units::decode(bytes, r.pos, &mut report) {
@@ -173,6 +195,7 @@ pub fn parse(bytes: &[u8]) -> Result<DatFile, Error> {
     Ok(DatFile {
         version,
         graphics,
+        terrains,
         units,
         report,
         graphic_index,

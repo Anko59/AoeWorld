@@ -14,8 +14,9 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
 #[path = "game_renderer/fog.rs"]
 pub(crate) mod fog;
-#[path = "game_renderer/ground.rs"]
+#[path = "game_renderer/ground/mod.rs"]
 mod ground;
+pub use ground::apply_building_foundations;
 #[path = "game_renderer/world_layers.rs"]
 mod world_layers;
 #[path = "game_renderer/world_sprites.rs"]
@@ -79,7 +80,7 @@ mod tests;
 mod canvas_depth_tests;
 
 #[cfg(test)]
-#[path = "game_renderer/minification_tests.rs"]
+#[path = "game_renderer/tests/minification/mod.rs"]
 pub(crate) mod minification_tests;
 
 #[cfg(test)]

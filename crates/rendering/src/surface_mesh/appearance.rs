@@ -270,11 +270,14 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
 }
 
 /// Frames and topology: terrain groups 0–11, grass fallback 12,
-/// and optional water depth sheets 13–15.
+/// optional water depth sheets 13–15, and the DAT foundation sheet 16.
 pub(crate) fn terrain_group(
     art: &GameArt,
     material: u8,
 ) -> Option<(usize, &[GameFrame], Option<crate::TerrainTopology>)> {
+    if material == 17 && !art.foundation.0.is_empty() {
+        return Some((16, &art.foundation.0, art.foundation.1));
+    }
     // Snow and rock own distinct native sheets; ice is an optional water sheet.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
     // Water classes: the light shallow sheet is terrain group 5; medium,

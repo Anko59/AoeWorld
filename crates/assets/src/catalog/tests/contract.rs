@@ -181,14 +181,6 @@ fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
             (AssetRole::VillagerMiningGold as usize, 1545, 75),
             (AssetRole::VillagerCarryingOre as usize, 1552, 75),
             (AssetRole::VillagerMiningStone as usize, 1560, 75),
-            (AssetRole::TownCenterMain as usize, 891, 1),
-            (AssetRole::TownCenterRoofLeft as usize, 3594, 1),
-            (AssetRole::TownCenterSupportLeft as usize, 3595, 1),
-            (AssetRole::TownCenterSupportsLeft as usize, 3596, 1),
-            (AssetRole::TownCenterRoofRight as usize, 4610, 1),
-            (AssetRole::TownCenterSupportsRight as usize, 4611, 1),
-            (AssetRole::TownCenterSupportRight as usize, 4612, 1),
-            (AssetRole::TownCenterShadow as usize, 889, 1),
         ]
     );
 }
@@ -219,21 +211,8 @@ fn every_reviewed_terrain_source_loads_its_complete_periodic_texture_grid() {
 }
 
 #[test]
-fn village_art_is_optional_and_uses_reviewed_directional_prefixes_and_town_center_parts() {
-    for (id, count) in [
-        (1479, 75),
-        (1484, 75),
-        (1535, 75),
-        (1536, 75),
-        (891, 1),
-        (3594, 1),
-        (3595, 1),
-        (3596, 1),
-        (4610, 1),
-        (4611, 1),
-        (4612, 1),
-        (889, 1),
-    ] {
+fn village_art_is_optional_and_uses_reviewed_directional_prefixes() {
+    for (id, count) in [(1479, 75), (1484, 75), (1535, 75), (1536, 75)] {
         let source = OPTIONAL_RESOURCE_SOURCES
             .iter()
             .find(|source| source.id == id)

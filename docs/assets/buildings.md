@@ -14,14 +14,18 @@ working animation rows remain complete. This frees atlas space without
 removing displayed animation frames. An absent overlay permits
 semantic building markers; corrupt present sources fail startup.
 
-Standing buildings use x1 DE House, Barracks, Outpost and Palisade art,
-plus the West European Lumber and Mining Camps (DE has no Dark Age camp).
-Town Center retains its reviewed multipart trial art. The Mill composes its
+Standing buildings use the trial DAT composition whenever its primary stand
+is available, with native deltas, annex positions and foundation terrain.
+The optional x1 DE overlay supplies missing main bodies, including the West
+European Lumber and Mining Camps (DE has no Dark Age camp). It also supplies
+rubble and Farm ground texturing. The Mill composes its
 trial body (3483) with all 43 native sail frames (3482), preserving animation
 without duplicating the body in the atlas. Native anchors and player
 and shadow planes are preserved; player ramps use the selected banner colour. House variants are stable by entity id.
 Off-screen Mills do not invalidate frames for animation. Generic
-1x1 through 4x4 foundations select one of three stages with authoritative
+1x1 through 4x4 supplemental foundations retain their three stages; when DAT
+construction art is present, its frame/angle layout and offsets instead select
+the stages with authoritative
 `progress_permille`. Removed foundations and buildings retain the relevant rubble for three game
 seconds; exhausted Farms with no food left leave none.
 
@@ -33,6 +37,9 @@ local empires2.dat table's male builder proceeding task. The trial lacks the
 farmer sequence: farmers use the forager art, as the explicit fallback.
 
 Construction and Farm behavior, costs, prerequisites, training and research
-remain server-owned. Placement previews use resident terrain and resources,
+remain server-owned. Dirt is painted over every building footprint before
+terrain tessellation, including construction sites and buildings absent from
+the trial art; DAT footprints and foundation materials take priority.
+Placement previews use resident terrain and resources,
 unit positions and building footprints; unloaded map tiles are invalid.
 Server refusals still decide races and reachability.

@@ -29,7 +29,7 @@ fn bounded_role_ranges_preserve_reference_lookup_absence_and_replacement() {
         );
     }
     assert!(ranges[AssetRole::Rock as usize].is_some());
-    assert_eq!(ROLE_SLOTS, 48);
+    assert_eq!(ROLE_SLOTS, 40);
     assert!(ranges[AssetRole::TreeConifer as usize].is_some());
     assert!(ranges[AssetRole::TreePalm as usize].is_some());
 }
@@ -168,10 +168,10 @@ fn startup_index_sort_matches_std_at_catalogue_bound() {
 }
 
 // Exercise the real asynchronous loader with generated PNGs, never original art.
-struct FetchFixture(JsValue);
+pub(super) struct FetchFixture(JsValue);
 
 impl FetchFixture {
-    fn install(value: &serde_json::Value) -> Self {
+    pub(super) fn install(value: &serde_json::Value) -> Self {
         let mut pixels = vec![0; GAME_ATLAS_PAGE_BYTES];
         pixels[..4].copy_from_slice(&[80, 90, 100, 255]);
         pixels[8..12].copy_from_slice(&[120, 120, 120, 255]);
@@ -217,7 +217,9 @@ impl Drop for FetchFixture {
     }
 }
 
-fn pack_fixture(sources: impl IntoIterator<Item = (String, u32, bool)>) -> serde_json::Value {
+pub(super) fn pack_fixture(
+    sources: impl IntoIterator<Item = (String, u32, bool)>,
+) -> serde_json::Value {
     let mut value = manifest::fixture();
     let template = value["frames"][0].clone();
     value["pages"][0]["color"] = "color.png".into();
@@ -298,7 +300,7 @@ async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded(
 }
 
 #[wasm_bindgen_test]
-async fn full_catalog_packs_1474_terrain_frames_and_780_objects_in_their_domains() {
+async fn full_catalog_packs_1474_terrain_frames_and_772_objects_in_their_domains() {
     let sources = REQUIRED_RENDER_SOURCES
         .iter()
         .chain(&OPTIONAL_RESOURCE_SOURCES)
@@ -330,6 +332,6 @@ async fn full_catalog_packs_1474_terrain_frames_and_780_objects_in_their_domains
         0,
         "marsh belongs on terrain pages"
     );
-    assert_eq!(count(objects, [120, 120, 120, 255]), 780);
+    assert_eq!(count(objects, [120, 120, 120, 255]), 772);
     assert_eq!(count(terrain, [120, 120, 120, 255]), 0);
 }

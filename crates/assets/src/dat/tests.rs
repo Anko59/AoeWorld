@@ -7,6 +7,7 @@ use std::io::Write;
 mod corpse_tests;
 #[path = "tests/fishing.rs"]
 mod fishing_tests;
+mod composition;
 
 fn le16(out: &mut Vec<u8>, value: i16) {
     out.extend_from_slice(&value.to_le_bytes());
@@ -117,9 +118,13 @@ fn unit(out: &mut Vec<u8>, spec: &Spec) {
         out.extend_from_slice(&[0; 43]);
     }
     if spec.kind == 80 {
+        let building_start = out.len();
         le16(out, spec.construction);
-        le16(out, 0);
-        out.extend_from_slice(&[0; 76]);
+        out.resize(building_start + 80, 0);
+        for slot in 0..4 {
+            out[building_start + 15 + slot * 10..building_start + 17 + slot * 10]
+                .copy_from_slice(&(-1i16).to_le_bytes());
+        }
     }
 }
 
@@ -162,6 +167,20 @@ fn fixture_with(terrain_filler: usize, slot: usize) -> Vec<u8> {
     graphic(&mut out, 2, "HOUS1NNG", 2223, 3, 1, &[]);
     graphic(&mut out, 3, "HOUS1N0G", 2221, 1, 1, &[2]);
     graphic(&mut out, 4, "VMBAS_FN", 1479, 15, 8, &[]);
+    // AoK terrain block: 24-byte map header, 19 six-byte tile sizes,
+    // two-byte alignment, then 32 terrain records of 416 bytes.
+    out.extend_from_slice(&[0; 140]);
+    for id in 0..32 {
+        let start = out.len();
+        out.extend_from_slice(&[1, 0]);
+        padded(&mut out, "Synthetic", 13);
+        padded(&mut out, "SYNTH", 13);
+        out.extend_from_slice(&(15000i32 + id).to_le_bytes());
+        out.resize(start + 416, 0);
+        out[start + 192..start + 194].copy_from_slice(&(-1i16).to_le_bytes());
+        out[start + 194..start + 196].copy_from_slice(&10i16.to_le_bytes());
+        out[start + 196..start + 198].copy_from_slice(&10i16.to_le_bytes());
+    }
     out.extend_from_slice(&vec![0xAA; terrain_filler]);
     out.extend_from_slice(&u32::try_from(slots).unwrap().to_le_bytes()); // unit headers
     out.push(1);
@@ -226,7 +245,7 @@ fn fixture_decodes_graphics_units_and_tasks() {
         (hous.slp_id, hous.frame_count, hous.angle_count),
         (2223, 3, 1)
     );
-    assert_eq!(file.graphic(3).unwrap().delta_graphics, [2]);
+    assert_eq!(file.graphic(3).unwrap().deltas[0].graphic_id, 2);
     assert_eq!(file.report.stopped, None);
     assert_eq!(file.report.civilisation_name.as_deref(), Some("Gaia"));
     assert_eq!((file.report.unit_slots, file.report.units_parsed), (3, 2));
@@ -235,10 +254,7 @@ fn fixture_decodes_graphics_units_and_tasks() {
         (house.kind, house.name.as_str(), house.standing[0]),
         (80, "HOUS", 2)
     );
-    assert_eq!(
-        (house.construction_graphic, house.snow_graphic),
-        (Some(4), Some(0))
-    );
+    assert_eq!(house.construction_graphic, Some(4));
     let villager = file.unit(2).unwrap();
     assert_eq!(villager.walking, Some([4, -1]));
     assert_eq!(villager.attack_graphic, Some(3));
@@ -356,11 +372,11 @@ fn inflation_is_bounded() {
 /// Runs only where the ignored original trial data exists (skips otherwise).
 #[test]
 fn real_trial_file_matches_the_reviewed_ids() {
-    let path = std::path::Path::new("../../local-assets/trial/Data/empires2.dat");
-    let Ok(bytes) = std::fs::read(path) else {
-        eprintln!("no local trial data; real-file check skipped");
+    let Ok(path) = std::env::var("AOE_TRIAL_DAT") else {
+        eprintln!("AOE_TRIAL_DAT unset; real-file check skipped");
         return;
     };
+    let bytes = std::fs::read(path).expect("AOE_TRIAL_DAT must name the trial file");
     let file = decode(&bytes).unwrap();
     assert_eq!(file.version, "VER 5.7");
     assert_eq!(file.report.stopped, None);
@@ -461,7 +477,7 @@ fn missing_unit_headers_are_a_stop_reason_not_silence() {
 }
 
 #[test]
-fn snow_variants_do_not_make_a_unit_partial() {
+fn missing_gameplay_graphics_make_a_unit_partial() {
     let mut file = parse(&fixture_with(0, 83)).unwrap();
     let pack: std::collections::BTreeSet<i32> = [1479].into();
     let pack_of = |f: &DatFile| {
@@ -471,12 +487,7 @@ fn snow_variants_do_not_make_a_unit_partial() {
     };
     file.units[1].attack_graphic = Some(4);
     assert_eq!(pack_of(&file).0, "complete");
-    // Graphic 3 is SLP 2221, absent from the pack: listed, but not required.
-    file.units[1].snow_graphic = Some(3);
-    let (state, listed) = pack_of(&file);
-    assert_eq!(state, "complete");
-    assert!(listed >= 4, "the snow graphic stays in the listing");
-    // The same graphic as a gameplay role does make it partial.
+    // Graphic 3 is SLP 2221, absent from this synthetic pack.
     file.units[1].attack_graphic = Some(3);
     assert_eq!(pack_of(&file).0, "partial");
 }

@@ -22,3 +22,21 @@ fishing-scenario:
 .PHONY: assets-dat-table-de
 assets-dat-table-de:
 	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets dat-table --de /de-install/resources/_common/dat/empires2_x2_p1.dat
+.PHONY: assets-building-preview
+
+BUILDING_PREVIEW_OUT ?= .cache/tc-shots/tc-composite.png
+assets-building-preview:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets building-preview '$(AOE_ASSET_PACK)' '$(BUILDING_PREVIEW_OUT)' $(if $(BUILDING_PREVIEW_RECIPE),--recipe '$(BUILDING_PREVIEW_RECIPE)')
+
+.PHONY: building-proof building-proof-run building-proof-build building-proof-build-steps
+building-proof: building-proof-build
+
+# Repeat local protocol preparation with the already-built proof tool.
+building-proof building-proof-run:
+	@$(subst docker run,docker run --network host,$(DOCKER_RUN)) target/debug/examples/building-proof '$(BUILDING_PROOF_REQUEST)'
+
+building-proof-build: slot-bootstrap
+	@$(SLOT_RUN) building-proof-build -- make --no-print-directory building-proof-build-steps
+
+building-proof-build-steps:
+	@$(DOCKER_RUN) cargo build --locked -p aoe-harness --example building-proof

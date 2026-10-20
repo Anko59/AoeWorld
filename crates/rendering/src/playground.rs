@@ -54,7 +54,9 @@ pub struct GameArt {
     /// Shore fish and naval working art.
     pub fishing: [Vec<GameFrame>; 12],
     pub village: [Vec<GameFrame>; 9],
-    pub town_center: [Vec<GameFrame>; 8],
+    pub compositions: Vec<BuildingArt>,
+    /// Additional DAT foundation sheet, resolved from its terrain directory.
+    pub foundation: (Vec<GameFrame>, Option<TerrainTopology>),
     pub walking: Vec<GameFrame>,
     pub standing: Vec<GameFrame>,
     pub grass: Vec<GameFrame>,
@@ -80,6 +82,26 @@ pub struct GameArt {
     /// Optional raw conifer and palm prefixes; empty alone means unavailable.
     pub tree_families: [Vec<GameFrame>; 2],
     pub scenery: SceneryArt,
+}
+
+/// A DAT recipe resolved into the shared runtime atlas. Offsets are native
+/// source pixels, with the annex's tile displacement projected once at load.
+#[derive(Clone)]
+pub struct BuildingPart {
+    pub frame: GameFrame,
+    pub animation: Vec<GameFrame>,
+    pub angles: u16,
+    pub frame_rate: f32,
+    pub offset: [f32; 2],
+    pub depth: f32,
+}
+
+pub struct BuildingArt {
+    pub unit_id: i32,
+    pub footprint: [f32; 2],
+    pub foundation_material: Option<u8>,
+    pub parts: Vec<BuildingPart>,
+    pub construction: Vec<BuildingPart>,
 }
 
 impl Renderer {

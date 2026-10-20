@@ -1,207 +1,164 @@
+use super::selection_tests::{FetchFixture, pack_fixture};
 use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
-fn manifest_with(source: &str, count: u32) -> Manifest {
-    let mut value = manifest::fixture();
-    let frame = value["frames"][0].clone();
-    value["frames"] = serde_json::Value::Array(
-        (0..count)
-            .map(|i| {
-                let mut f = frame.clone();
-                f["source"] = source.into();
-                f["frame"] = i.into();
-                f
-            })
-            .collect(),
-    );
-    serde_json::from_value(value).unwrap()
+fn compile(value: &mut serde_json::Value) {
+    let buildings: Vec<aoe_assets::dat::BuildingComposition> =
+        serde_json::from_value(value["buildings"].clone()).unwrap();
+    let frames: Vec<aoe_assets::pack::FrameRecord> =
+        serde_json::from_value(value["frames"].clone()).unwrap();
+    value["building_data"] = aoe_assets::pack::recipes::encode(&buildings, &frames)
+        .unwrap()
+        .into();
 }
 
 #[wasm_bindgen_test]
-fn feudal_native_art_is_selected_and_partial_present_sources_are_refused() {
-    for (slot, stem, count) in [
-        (26, "archery_range", 1),
-        (27, "stable", 90),
-        (28, "blacksmith", 1),
-        (44, "dock", 1),
-        (29, "market", 1),
-        (30, "tower", 1),
-        (39, "house", 3),
-        (41, "barracks", 1),
-    ] {
-        let source = format!("de/b_west_{stem}_age2_x1.sld");
-        let manifest = manifest_with(&source, count);
-        let ranges = buildings::select(&manifest, &mut Vec::new(), &mut Vec::new()).unwrap();
-        assert_eq!(ranges[slot], Some(0..if slot == 39 { 3 } else { 1 }));
+async fn non_gameplay_buildings_do_not_allocate_the_gameplay_atlas() {
+    let mut value = pack_fixture(
+        REQUIRED_RENDER_SOURCES
+            .iter()
+            .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some())),
+    );
+    // Dock exists in the DAT table, but the gameplay protocol has no Dock.
+    value["buildings"] = serde_json::json!([{"unit_id":45,"footprint":[3.0,3.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"parts":[{"graphic_id":1,"slp_id":99999,"source":"absent.slp","available":false,"frames":0,"angles":1,"primary":true,"frame_rate":0.0,"offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"construction":[]}]);
+    compile(&mut value);
+    let fetch = FetchFixture::install(&value);
+    let (art, _, _) = load().await.expect("only gameplay recipes are resident");
+    drop(fetch);
+    assert!(art.compositions.is_empty());
+}
+
+#[wasm_bindgen_test]
+async fn building_metadata_selects_new_frames_and_keeps_offsets_foundation_and_order() {
+    let source = "graphics.drs:[32, 112, 108, 115]:90000".to_owned();
+    let sources = REQUIRED_RENDER_SOURCES
+        .iter()
+        .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
+        .chain([(source.clone(), 1, false)]);
+    let mut value = pack_fixture(sources);
+    value["buildings"] = serde_json::json!([{
+        "unit_id":109, "footprint":[4.0,4.0], "foundation_terrain":27,
+        "foundation_slp":15000, "foundation_size":[10,10], "parts":[{
+            "graphic_id":10,"slp_id":90000,"source":source,
+            "available":true,"frames":1,"angles":1,"primary":true,"frame_rate":0.0,"offset":[-17,29],"misplacement":[1.0,-0.5],"layer":20
+        }], "construction":[]
+    }]);
+    for (slp, material) in [(15000, 2), (15006, 13)] {
+        value["buildings"][0]["foundation_slp"] = slp.into();
+        compile(&mut value);
+        let fetch = FetchFixture::install(&value);
+        let (art, _, _) = load().await.expect("DAT-only source loads");
+        drop(fetch);
+        assert_eq!(art.compositions.len(), 1);
+        assert_eq!(art.compositions[0].unit_id, 109);
+        assert_eq!(art.compositions[0].foundation_material, Some(material));
+        assert_eq!(art.compositions[0].parts[0].offset, [7.0, -7.0]);
+        assert_eq!(art.compositions[0].parts[0].depth, -1.5);
     }
-    let mut bad = manifest_with("de/b_west_archery_range_age2_x1.sld", 1);
-    bad.frames[0].frame = 1;
-    assert!(buildings::select(&bad, &mut Vec::new(), &mut Vec::new()).is_err());
-}
-
-#[wasm_bindgen_test]
-fn trial_feudal_art_is_used_without_an_overlay_and_native_mill_parts_stay_separate() {
-    for (slot, id, count) in [
-        (26, 24, 1),
-        (27, 1009, 1),
-        (29, 2278, 1),
-        (30, 2655, 1),
-        (39, 2235, 3),
-        (41, 133, 1),
-        (44, 388, 1),
-    ] {
-        let manifest = manifest_with(&format!("graphics.drs:[32, 112, 108, 115]:{id}"), count);
-        let ranges = buildings::select(&manifest, &mut Vec::new(), &mut Vec::new()).unwrap();
-        assert!(ranges[slot].is_some());
-    }
-    let mut manifest = manifest_with("graphics.drs:[32, 112, 108, 115]:741", 1);
-    manifest
-        .frames
-        .extend(manifest_with("graphics.drs:[32, 112, 108, 115]:737", 8).frames);
-    let ranges = buildings::select(&manifest, &mut Vec::new(), &mut Vec::new()).unwrap();
-    assert_eq!(ranges[40], Some(0..9));
-    let bad = manifest_with("de/b_west_mill_age2_x1.sld", 90);
-    assert!(buildings::select(&bad, &mut Vec::new(), &mut Vec::new()).is_err());
-}
-
-#[wasm_bindgen_test]
-fn building_selection_preserves_trial_fallback_and_rejects_incomplete_builder_rows() {
-    let manifest = manifest_with("graphics.drs:[32, 112, 108, 115]:2223", 3);
-    let (mut selected, mut domains) = (Vec::new(), Vec::new());
-    let groups = buildings::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(groups[1], Some(0..3));
-    assert_eq!(selected, vec![0, 1, 2]);
-    assert!(domains.iter().all(|d| *d == AtlasDomain::Objects));
-    let bad = manifest_with("graphics.drs:[32, 112, 108, 115]:1496", 74);
-    assert!(buildings::select(&bad, &mut Vec::new(), &mut Vec::new()).is_err());
-}
-
-#[wasm_bindgen_test]
-fn layered_trial_mill_keeps_its_body_and_all_native_sail_frames() {
-    let mut manifest = manifest_with("graphics.drs:[32, 112, 108, 115]:3483", 1);
-    manifest
-        .frames
-        .extend(manifest_with("graphics.drs:[32, 112, 108, 115]:3482", 43).frames);
-    manifest
-        .frames
-        .extend(manifest_with("de/b_dark_mill_age1_x1.sld", 181).frames);
-    let (mut selected, mut domains) = (Vec::new(), Vec::new());
-    let groups = buildings::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(groups[4], Some(0..44));
-    assert_eq!(selected, (0..44).collect::<Vec<_>>());
-    assert!(domains.iter().all(|d| *d == AtlasDomain::Objects));
-    manifest.frames.remove(43);
-    assert!(buildings::select(&manifest, &mut Vec::new(), &mut Vec::new()).is_err());
-}
-
-#[wasm_bindgen_test]
-fn farm_uses_a_bounded_texture_window_without_hiding_invalid_source_bounds() {
-    let mut manifest = manifest_with("de/g_fm1.dds", 1);
-    manifest.frames[0].width = 1024;
-    manifest.frames[0].height = 1024;
-    let (mut selected, mut domains) = (Vec::new(), Vec::new());
-    let groups = buildings::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(domains, vec![AtlasDomain::Terrain]);
-    buildings::crop_farm(&mut manifest, &selected, &groups).unwrap();
-    assert_eq!(
-        (manifest.frames[0].width, manifest.frames[0].height),
-        (256, 256)
+    value["buildings"][0]["parts"][0]["offset"] = serde_json::json!([i32::MIN, 0]);
+    compile(&mut value);
+    let fetch = FetchFixture::install(&value);
+    assert!(
+        load()
+            .await
+            .err()
+            .unwrap()
+            .as_string()
+            .unwrap()
+            .contains("invalid building part offset")
     );
-    manifest.frames[0].x = 1900;
-    manifest.frames[0].width = 1024;
-    assert!(buildings::crop_farm(&mut manifest, &selected, &groups).is_err());
+    drop(fetch);
 }
 
 #[wasm_bindgen_test]
-fn standing_compaction_keeps_exactly_the_native_frame_already_drawn_per_facing() {
-    let manifest = manifest_with("graphics.drs:[32, 112, 108, 115]:3004", 50);
-    let frames = source_frames(&manifest, "graphics.drs:[32, 112, 108, 115]:3004", 50).unwrap();
-    assert_eq!(
-        compact_standing(frames, AssetRole::CavalryStanding),
-        vec![0, 10, 20, 30, 40]
+async fn farm_foundation_loads_the_dat_sheet_in_the_terrain_domain() {
+    let source = "terrain.drs:[32, 112, 108, 115]:15004".to_owned();
+    let sources = REQUIRED_RENDER_SOURCES
+        .iter()
+        .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
+        .chain([(source.clone(), 100, true)]);
+    let mut value = pack_fixture(sources);
+    value["buildings"] = serde_json::json!([{"unit_id":50,"footprint":[3.0,3.0],"foundation_terrain":7,"foundation_slp":15004,"foundation_size":[10,10],"parts":[],"construction":[]}]);
+    compile(&mut value);
+    let fetch = FetchFixture::install(&value);
+    let (art, _, _) = load().await.expect("DAT foundation sheet");
+    drop(fetch);
+    assert_eq!(art.compositions[0].foundation_material, Some(17));
+    assert_eq!(art.foundation.0.len(), 100);
+    assert!(art.foundation.0.iter().all(|f| f.atlas.page < 2));
+}
+
+#[wasm_bindgen_test]
+async fn dat_variants_and_construction_angles_survive_runtime_selection() {
+    let source = "graphics.drs:[32, 112, 108, 115]:90000".to_owned();
+    let extra = "de/b_misc_foundation_2x2_x1.sld".to_owned();
+    let mut value = pack_fixture(
+        REQUIRED_RENDER_SOURCES
+            .iter()
+            .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
+            .chain([(source.clone(), 3, false), (extra, 3, false)]),
     );
-    assert_eq!(
-        compact_standing((0..75).collect(), AssetRole::VillagerStanding),
-        vec![0, 15, 30, 45, 60]
-    );
-    assert_eq!(
-        compact_standing((0..50).collect(), AssetRole::CavalryWalking),
-        (0..50).collect::<Vec<_>>()
+    let part = serde_json::json!({"graphic_id":1,"slp_id":90000,"source":source,"available":true,"frames":1,"angles":3,"primary":true,"frame_rate":2.0,"offset":[-9,11],"misplacement":[0.0,0.0],"layer":20});
+    value["buildings"] = serde_json::json!([{"unit_id":70,"footprint":[2.0,2.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"parts":[part.clone()],"construction":[part]}]);
+    value["buildings"][0]["parts"][0]["frames"] = 3.into();
+    value["buildings"][0]["parts"][0]["angles"] = 1.into();
+    value["buildings"][0]["parts"][0]["frame_rate"] = 0.into();
+    compile(&mut value);
+    let fetch = FetchFixture::install(&value);
+    let (art, _, _) = load().await.expect("all source angles and variants load");
+    drop(fetch);
+    assert_eq!(art.compositions[0].parts[0].animation.len(), 3);
+    assert_eq!(art.compositions[0].construction[0].animation.len(), 3);
+    assert_eq!(art.compositions[0].construction[0].angles, 3);
+    assert!(art.buildings[1].is_empty(), "DAT House owns completed art");
+    assert!(
+        art.buildings[10].is_empty(),
+        "DAT construction owns its native stages"
     );
 }
 
 #[wasm_bindgen_test]
-fn layered_feudal_mill_avoids_repeating_the_body_in_the_fixed_object_atlas() {
-    let mut manifest = manifest_with("de/b_west_mill_age2_x1.sld", 91);
-    for frame in &mut manifest.frames {
-        frame.width = 320;
-        frame.height = 280;
-    }
-    manifest
-        .frames
-        .extend(manifest_with("graphics.drs:[32, 112, 108, 115]:741", 1).frames);
-    manifest
-        .frames
-        .extend(manifest_with("graphics.drs:[32, 112, 108, 115]:737", 8).frames);
-    let (mut selected, mut domains) = (Vec::new(), Vec::new());
-    let groups = buildings::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(groups[40], Some(0..9));
-    assert_eq!(selected, (91..100).collect::<Vec<_>>());
-    placement::plan(&manifest, &selected, &domains).unwrap();
-    // A present DE source remains validated even when the trial parts win.
-    manifest.frames.remove(90);
-    assert!(buildings::select(&manifest, &mut Vec::new(), &mut Vec::new()).is_err());
-}
-
-#[wasm_bindgen_test]
-fn feudal_texture_sampling_preserves_native_geometry_and_source_bounds() {
-    let mut manifest = manifest_with("de/b_west_blacksmith_age2_x1.sld", 1);
-    let frame = &mut manifest.frames[0];
-    frame.width = 5;
-    frame.height = 3;
-    frame.anchor_x = 4;
-    frame.anchor_y = 2;
-    let placed = placement::plan(&manifest, &[0], &[AtlasDomain::Objects]).unwrap()[0];
-    assert_eq!((placed.width, placed.height), (3, 2));
-    let native = placement::record(&manifest.frames[0], placed);
-    assert_eq!(native.size, [5., 3.]);
-    assert_eq!(native.anchor, [4., 2.]);
-    let mut source = vec![0; GAME_ATLAS_PAGE_BYTES];
-    for row in 0..3 {
-        for col in 0..5 {
-            let at = (row * GAME_ATLAS_SIDE as usize + col) * 4;
-            source[at..at + 4].copy_from_slice(&[row as u8, col as u8, 71, 255]);
+async fn native_wall_keeps_one_displayed_frame_per_connectivity_angle() {
+    let source = "graphics.drs:[32, 112, 108, 115]:90000".to_owned();
+    let mut value = pack_fixture(
+        REQUIRED_RENDER_SOURCES
+            .iter()
+            .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
+            .chain([(source.clone(), 45, false)]),
+    );
+    value["buildings"] = serde_json::json!([{
+        "unit_id":72,"footprint":[1.0,1.0],"foundation_terrain":-1,
+        "foundation_slp":null,"foundation_size":[0,0],"construction":[],
+        "parts":[{"graphic_id":1,"slp_id":90000,"source":source,"available":true,
+            "frames":9,"angles":5,"primary":true,"frame_rate":0.2,
+            "offset":[-3,7],"misplacement":[0.0,0.0],"layer":20}]
+    }]);
+    for frame in value["frames"].as_array_mut().unwrap() {
+        if frame["source"] == source {
+            frame["width"] = (frame["frame"].as_u64().unwrap() + 1).into();
         }
     }
-    let mut pixels = vec![0; GAME_ATLAS_BYTES];
-    placement::copy_plane(
-        &manifest.frames[0],
-        placed,
-        placement::Plane::Color,
-        &source,
-        &mut pixels,
-        [0; 3],
-    )
-    .unwrap();
-    for row in 0..2 {
-        for col in 0..3 {
-            let at = ((usize::from(placed.y) + row) * GAME_ATLAS_SIDE as usize
-                + usize::from(placed.x)
-                + col)
-                * 4
-                + usize::from(placed.page) * GAME_ATLAS_PAGE_BYTES;
-            assert_eq!(
-                &pixels[at..at + 4],
-                &[(row * 2) as u8, (col * 2) as u8, 71, 255]
-            );
-        }
-    }
-    manifest.frames[0].x = 2046;
-    assert!(placement::plan(&manifest, &[0], &[AtlasDomain::Objects]).is_err());
-    let dark = manifest_with("de/b_dark_house_age1_x1.sld", 3);
-    let p = placement::plan(&dark, &[0], &[AtlasDomain::Objects]).unwrap()[0];
+    compile(&mut value);
+    let fetch = FetchFixture::install(&value);
+    let (art, _, _) = load().await.expect("native wall orientations load");
+    drop(fetch);
+    let part = &art.compositions[0].parts[0];
+    assert_eq!(part.angles, 5);
     assert_eq!(
-        (p.width, p.height),
-        (dark.frames[0].width, dark.frames[0].height)
+        part.animation.len(),
+        5,
+        "unused damage frames are not resident"
+    );
+    assert_eq!(
+        part.animation
+            .iter()
+            .map(|frame| frame.size[0])
+            .collect::<Vec<_>>(),
+        [1.0, 10.0, 19.0, 28.0, 37.0]
+    );
+    assert_eq!(part.offset, [-3.0, 7.0]);
+    assert!(
+        art.buildings[7].is_empty(),
+        "native wall replaces supplemental art"
     );
 }

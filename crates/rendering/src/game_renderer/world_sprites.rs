@@ -170,12 +170,8 @@ pub(super) fn emit_world_sprite_frames(
             continue;
         };
         let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
-        if unit.kind.building_slot().is_some() {
+        if unit.kind.building_side().is_some() {
             village::building(art, unit, camera, animation, &mut emit);
-            continue;
-        }
-        if unit.kind == crate::SceneUnitKind::TownCenter {
-            village::town_center(art, unit, camera, &mut emit);
             continue;
         }
         let Some((frames, stride, animated)) = village::frames(art, unit) else {
@@ -470,11 +466,12 @@ pub fn actor_frame_index(facing: u8, stride: usize, phase: usize) -> (usize, boo
 }
 
 pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
-    if let Some(slot) = unit.kind.building_slot() {
-        return (slot == 4 && art.buildings[4].len() == 44 || slot == 40)
-            && art.buildings[usize::from(slot)].iter().any(|frame| {
+    if unit.kind == crate::SceneUnitKind::Mill && !art.compositions.iter().any(|b| b.unit_id == 68)
+    {
+        return art.buildings[4].len() == 44
+            && art.buildings[4].iter().any(|f| {
                 sprite_screen_bounds(
-                    world_frame(*frame),
+                    world_frame(*f),
                     unit.position,
                     unit.elevation_meters,
                     camera,
@@ -482,8 +479,32 @@ pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneC
                 .is_some()
             });
     }
-    if unit.kind == crate::SceneUnitKind::TownCenter {
+    if unit.kind.is_foundation() || unit.kind == crate::SceneUnitKind::PalisadeWall {
         return false;
+    }
+    if unit.kind.building_id().is_some() {
+        return art
+            .compositions
+            .iter()
+            .find(|b| Some(b.unit_id) == unit.kind.building_id())
+            .is_some_and(|b| {
+                let parts = if unit.kind.is_foundation() {
+                    &b.construction
+                } else {
+                    &b.parts
+                };
+                parts.iter().any(|p| {
+                    p.frame_rate > 0.0
+                        && p.animation.len() > 1
+                        && scene_sprite(
+                            world_frame(p.frame),
+                            unit.position,
+                            unit.elevation_meters,
+                            camera,
+                        )
+                        .is_some()
+                })
+            });
     }
     let Some((frames, stride, true)) = village::frames(art, unit) else {
         return false;

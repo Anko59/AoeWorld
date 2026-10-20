@@ -1,7 +1,7 @@
 //! Visually reviewed in the private pack; no original pixels are embedded.
 use super::{AssetRole, SpriteSource};
 
-pub(super) const SOURCES: [SpriteSource; 17] = [
+pub(super) const SOURCES: [SpriteSource; 9] = [
     village(
         AssetRole::VillagerStanding,
         1479,
@@ -55,54 +55,6 @@ pub(super) const SOURCES: [SpriteSource; 17] = [
         1560,
         75,
         "male stone miner swinging a pick: five facing rows of fifteen frames",
-    ),
-    village(
-        AssetRole::TownCenterMain,
-        891,
-        1,
-        "Dark Age town center main structure",
-    ),
-    village(
-        AssetRole::TownCenterRoofLeft,
-        3594,
-        1,
-        "Dark Age town center left roof; native anchor with 48-pixel lower attachment",
-    ),
-    village(
-        AssetRole::TownCenterSupportLeft,
-        3595,
-        1,
-        "Dark Age town center left front support; 24-pixel lower attachment",
-    ),
-    village(
-        AssetRole::TownCenterSupportsLeft,
-        3596,
-        1,
-        "Dark Age town center left supports",
-    ),
-    village(
-        AssetRole::TownCenterRoofRight,
-        4610,
-        1,
-        "Dark Age town center right roof and front column; native anchor with 24-pixel lower attachment",
-    ),
-    village(
-        AssetRole::TownCenterSupportsRight,
-        4611,
-        1,
-        "Dark Age town center right supports",
-    ),
-    village(
-        AssetRole::TownCenterSupportRight,
-        4612,
-        1,
-        "Dark Age town center rear right support; 24-pixel upper attachment",
-    ),
-    village(
-        AssetRole::TownCenterShadow,
-        889,
-        1,
-        "Dark Age town center paired ground shadow",
     ),
 ];
 

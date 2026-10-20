@@ -5,6 +5,40 @@ pub(super) struct BuildingGround {
     centers: Vec<[f64; 2]>,
     farms: Vec<[f64; 2]>,
 }
+/// Paint the DAT's foundation material before tessellation. The ordinary
+/// world-anchored terrain mixer then owns the border in all three backends.
+pub fn apply_building_foundations(
+    terrain: &mut [SceneTerrain],
+    art: &GameArt,
+    units: &[SceneUnit],
+) {
+    for unit in units {
+        let Some(id) = unit.kind.building_id() else {
+            continue;
+        };
+        let building = art.compositions.iter().find(|b| b.unit_id == id);
+        let side = unit.kind.building_side().unwrap_or(1.0) as f32;
+        let footprint = building.map_or([side; 2], |b| b.footprint);
+        let material = if unit.kind.is_foundation() && id == 50 {
+            art.compositions
+                .iter()
+                .find(|b| b.unit_id == 109)
+                .and_then(|b| b.foundation_material)
+                .unwrap_or(2)
+        } else {
+            building.and_then(|b| b.foundation_material).unwrap_or(2)
+        };
+        for tile in terrain.iter_mut() {
+            if (0..2).all(|axis| {
+                tile.position[axis] >= unit.position[axis] - f64::from(footprint[axis]) / 2.0
+                    && tile.position[axis] < unit.position[axis] + f64::from(footprint[axis]) / 2.0
+            }) {
+                tile.material = material;
+                tile.appearance = None;
+            }
+        }
+    }
+}
 
 impl BuildingGround {
     pub(super) fn new(units: &[SceneUnit], camera: SceneCamera) -> Self {
@@ -102,7 +136,6 @@ impl BuildingGround {
 }
 
 #[cfg(test)]
-#[path = "ground_tests.rs"]
 mod tests;
 
 /// Replace the ground inside completed farms with the DE ploughed texture.
