@@ -19,6 +19,7 @@ async fn subscription_and_ticks_never_disclose_an_unseen_wolf_or_enemy() {
         .await;
     service.queue_hunt(id, 1, vec![villager], wolf).await;
     service.queue_attack(id, 2, scout, enemy).await;
+    service.queue_attack(id, 3, scout, wolf).await;
     service.tick().await;
     let mut checked = 0;
     let mut refused = 0;
@@ -44,7 +45,36 @@ async fn subscription_and_ticks_never_disclose_an_unseen_wolf_or_enemy() {
         }
     }
     assert!(checked >= 3);
-    assert_eq!(refused, 2, "guessed hidden identities cannot be targeted");
+    assert_eq!(refused, 3, "guessed hidden identities cannot be targeted");
+}
+
+#[tokio::test]
+async fn attack_orders_accept_a_visible_animal() {
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let scout = world.spawn_unit(PlayerId(0), at(20, 20)).unwrap();
+    let wolf = world.spawn_animal(AnimalKind::Wolf, at(22, 20)).unwrap();
+    let service = GameplayService::from_world(world, scout, None, None);
+    let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+    let (id, _) = service.register(None, tx).await;
+    service
+        .subscribe(id, 1, TileRect::from_xywh(0, 0, 128, 128))
+        .await;
+    service.queue_attack(id, 1, scout, wolf).await;
+    service.tick().await;
+    let mut accepted = false;
+    while let Ok(message) = rx.try_recv() {
+        if let GameplayServerMessage::CommandAck {
+            sequence: 1,
+            result,
+            ..
+        } = message
+        {
+            assert_eq!(result, aoe_protocol::CommandResult::Accepted);
+            accepted = true;
+        }
+    }
+    assert!(accepted, "a visible animal attack must be acknowledged");
 }
 
 #[tokio::test]

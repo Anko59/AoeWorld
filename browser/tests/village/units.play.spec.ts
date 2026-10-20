@@ -157,6 +157,20 @@ test("train Militia, attack a sheep, and hunt and butcher a deer through right-c
   await expect
     .poll(async () => (await actors(page)).find((a) => a.id === sheep.id)?.task)
     .toBe("Carcass");
+  // The deer herd begins outside Town Center LOS. Keep the scout approaching
+  // while its first visible deer is selected for the villager's hunt order.
+  await click(page, "Scout");
+  await page.locator("#move-units").click();
+  await page.mouse.click(180, 360, { button: "right" });
+  await expect
+    .poll(
+      async () =>
+        (await actors(page)).some((a) => a.kind === "Deer" && a.hp > 0),
+      {
+        timeout: 25_000,
+      },
+    )
+    .toBe(true);
   await click(page, "Villager");
   await expect(page.locator("#selection-name")).toHaveText("Villager");
   const deer = await click(page, "Deer", "right");

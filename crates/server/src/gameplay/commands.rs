@@ -298,6 +298,11 @@ pub(super) fn apply(
             target_id,
         } => {
             let visible = world.unit_visible_to(player, target_id)
+                || world.animal(target_id).is_some_and(|animal| {
+                    animal.owner == Some(player)
+                        || world.visibility(player, animal.position.tile_floor())
+                            == aoe_simulation::TileVisibility::Visible
+                })
                 || world
                     .building(target_id)
                     .is_some_and(|b| world.building_visible_to(player, b.footprint));

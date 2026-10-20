@@ -116,4 +116,22 @@ test("the scout explores black ground and leaves persistent fog behind", async (
     await scene.screenshot({ path: "../.cache/fog-shots/scout-explored.png" }),
   );
   expect(after).toBeLessThan(before - 1000);
+
+  // A new connection and a fresh subscription must restore the same memory.
+  // Keep the camera fixed so these counts cover exactly the same tile region.
+  await page.reload();
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(scene).toHaveAttribute("data-fog-disabled", "false");
+  await expect.poll(() => count("explored")).toBe(explored);
+  await expect
+    .poll(async () => (await count("explored")) - (await count("visible")))
+    .toBeGreaterThan(40);
+  await page.evaluate(({ x, y }) => {
+    location.hash = `x=${x + 256}&y=${y}&zoom=.35`;
+  }, camera);
+  await expect.poll(() => count("explored")).toBe(0);
+  await page.evaluate(({ x, y }) => {
+    location.hash = `x=${x + 10}&y=${y}&zoom=.35`;
+  }, camera);
+  await expect.poll(() => count("explored")).toBe(explored);
 });

@@ -4,6 +4,7 @@ import { gameAssets } from "./game-assets.js";
 import { denyWebGl } from "./rendering/backends.js";
 import { syntheticTerrainCoverage } from "./surface-evidence.js";
 import { PNG } from "pngjs";
+import { freshHud } from "./village/resources.js";
 import {
   bluePixels,
   assetTerrainColorVariety,
@@ -78,11 +79,38 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   if (!box) throw new Error("Missing map");
 
   if (evidence === "generated CI fixtures") {
+    await freshHud(page);
+    const town = await canvas.evaluate((element) =>
+      (
+        JSON.parse(element.getAttribute("data-actors") ?? "[]") as {
+          kind: string;
+          x: number;
+          y: number;
+        }[]
+      ).find((actor) => actor.kind === "TownCenter"),
+    );
+    if (!town) throw new Error("Starting Town Center missing");
+    // At normal zoom this ground northeast of the Town Center is fully within
+    // its eight-tile LOS and clear of buildings, actors and their shadows.
+    // Exact source colors belong on unoccluded, revealed ground; the far view
+    // below also contains correctly black unexplored terrain.
+    expect(
+      syntheticTerrainCoverage(image, {
+        left: Math.floor(town.x + 220),
+        right: Math.floor(town.x + 340),
+        top: Math.floor(town.y - 220),
+        bottom: Math.floor(town.y - 140),
+      }),
+    ).toBeGreaterThan(0.85);
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.wheel(0, 5_000);
     await page.waitForTimeout(100);
+    expect(await bluePixels(canvas)).toBeGreaterThan(10);
     const zoomed = PNG.sync.read(await canvas.screenshot());
-    expect(syntheticTerrainCoverage(zoomed)).toBeGreaterThan(0.85);
+    const unexplored = (96 * zoomed.width + 64) * 4;
+    expect([...zoomed.data.subarray(unexplored, unexplored + 3)]).toEqual([
+      0, 0, 0,
+    ]);
   }
 
   await canvas.hover({

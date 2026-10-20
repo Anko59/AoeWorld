@@ -1,8 +1,8 @@
-import { darkAgeState } from "../wire/buildings.js";
+import { darkAgeState } from "../../wire/buildings.js";
 import type { Page } from "@playwright/test";
-import { scoutCombat, villagerCombat } from "../wire/combat.js";
-import { wildlifeState } from "../wire/wildlife.js";
-import { disabledFog } from "../wire/fog.js";
+import { scoutCombat, villagerCombat } from "../../wire/combat.js";
+import { wildlifeState } from "../../wire/wildlife.js";
+import { disabledFog } from "../../wire/fog.js";
 function uint(value: number): number[] {
   const bytes: number[] = [];
   do {

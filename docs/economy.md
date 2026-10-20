@@ -243,8 +243,8 @@ set for the subscription region at its revision and tick; it replaces the
 previous set, including removals on panning. Subscribe/resync always sends it;
 ticks send it when that set changes. `HuntOrder` and worker task variants are
 appended, preserving existing enum indexes and golden fixtures. The headless
-wire scenario writes `.cache/wildlife/scenario.log`. The client draws optional
-native standing animal cells. Hunt controls and animal animations remain absent.
+wire scenario writes `.cache/wildlife/scenario.log`. The client uses the current
+[native unit and wildlife animations](assets/units.md) for combat and hunting.
 
 Fog is authoritative player knowledge; see [fog of war](fog-of-war.md) for
 storage, observation rules, wire bounds and source values.

@@ -224,10 +224,16 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 animals,
             }) => {
                 if revision == client.revision && tick.0 >= client.village.wildlife_tick {
-                    let _ = client.canvas.set_attribute("data-animals", &animals.len().to_string());
+                    let _ = client
+                        .canvas
+                        .set_attribute("data-animals", &animals.len().to_string());
                     let _ = client.canvas.set_attribute(
                         "data-wolves",
-                        &animals.iter().filter(|a| a.kind == aoe_protocol::AnimalKind::Wolf).count().to_string(),
+                        &animals
+                            .iter()
+                            .filter(|a| a.kind == aoe_protocol::AnimalKind::Wolf)
+                            .count()
+                            .to_string(),
                     );
                     client.village.wildlife_tick = tick.0;
                     client.village.animals = animals;

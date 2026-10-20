@@ -77,16 +77,19 @@ function colorPixels(
   return count;
 }
 
-export function syntheticTerrainCoverage(image: PNG) {
+export function syntheticTerrainCoverage(
+  image: PNG,
+  region: { left: number; top: number; right: number; bottom: number },
+) {
   const expected = [
     syntheticSurfaceColors.grass,
     syntheticSurfaceColors.grassAccent,
   ];
   let covered = 0;
   let samples = 0;
-  // The HTML top bar and bottom frame cover the canvas; measure the visible world.
-  for (let y = 54 + 8; y < image.height - 208 - 8; y += 8) {
-    for (let x = 8; x < image.width - 8; x += 8) {
+  // Measure a known revealed ground region, excluding its boundary pixels.
+  for (let y = region.top + 8; y < region.bottom - 8; y += 8) {
+    for (let x = region.left + 8; x < region.right - 8; x += 8) {
       const offset = (y * image.width + x) * 4;
       samples += 1;
       if (
