@@ -1,7 +1,6 @@
 //! Fog shares ground geometry and the 112-byte GPU packet. Its spare high
 //! atlas-page byte carries three 2-bit vertex levels and a presence bit.
 use super::*;
-use std::collections::BTreeMap;
 
 const LEVELS: [f32; 4] = [0.0, 0.45, 0.725, 1.0];
 
@@ -38,15 +37,17 @@ pub(super) fn shade_objects(
     animation: usize,
     light: &dyn Fn([f64; 2]) -> f32,
 ) {
-    // One key type shares the map machinery while keeping unit IDs disjoint
-    // from resource frames, even when their numeric IDs collide.
-    let mut levels = BTreeMap::new();
+    let mut levels = FogFactors::default();
     for r in resources {
         if let Some((body, shadow)) = world_sprites::resource_presentation_at(art, *r, animation) {
-            levels.insert(frame_key(r.id, body), light(r.position));
-            if let Some(shadow) = shadow {
-                levels.insert(frame_key(r.id, shadow), light(r.position));
-            }
+            let slot = levels.index(r.id);
+            levels.resources.push(ResourceFactor {
+                body: frame_key(body),
+                shadow: shadow.map(frame_key),
+                light: light(r.position),
+                next: levels.entries[slot].resource,
+            });
+            levels.entries[slot].resource = levels.resources.len();
         }
     }
     for u in units {
@@ -64,15 +65,12 @@ pub(super) fn shade_objects(
                 }
             }
         }
-        levels.insert((u64::from(u.id.0), None), factor);
+        let slot = levels.index(u64::from(u.id.0));
+        levels.entries[slot].unit = factor;
     }
     for layer in layers {
         if let WorldLayer::Sprite(sprite, frame, _, id) = layer {
-            let factor = levels
-                .get(&frame_key(*id, *frame))
-                .or_else(|| levels.get(&(*id, None)))
-                .copied()
-                .unwrap_or(1.0);
+            let factor = levels.light(*id, *frame);
             for c in &mut sprite.color[..3] {
                 *c *= factor;
             }
@@ -80,13 +78,62 @@ pub(super) fn shade_objects(
     }
 }
 
-type ObjectKey = (u64, Option<(u32, [u32; 4])>);
+type FrameKey = (u32, [u32; 4]);
+fn frame_key(frame: GameFrame) -> FrameKey {
+    (frame.atlas.page, frame.atlas.uv.map(f32::to_bits))
+}
 
-fn frame_key(id: u64, frame: GameFrame) -> ObjectKey {
-    (
-        id,
-        Some((frame.atlas.page, frame.atlas.uv.map(f32::to_bits))),
-    )
+// Reuse the existing non-generic integer-pair index rather than instantiating
+// two BTreeMap implementations in WASM. Split IDs losslessly into two words.
+// All storage is temporary and bounded by displayed resources + units. Each
+// resource has one paired-frame record; duplicate IDs form a newest-first chain
+// so frame-specific last writes retain their original precedence.
+#[derive(Default)]
+struct FogFactors {
+    keys: crate::WorldKeyIndex,
+    entries: Vec<Factor>,
+    resources: Vec<ResourceFactor>,
+}
+struct Factor {
+    unit: f32,
+    resource: usize,
+}
+struct ResourceFactor {
+    body: FrameKey,
+    shadow: Option<FrameKey>,
+    light: f32,
+    next: usize,
+}
+fn id_key(id: u64) -> [i32; 2] {
+    [id as i32, (id >> 32) as i32]
+}
+impl FogFactors {
+    fn index(&mut self, id: u64) -> usize {
+        let slot = self.keys.entry(id_key(id));
+        if slot == self.entries.len() {
+            self.entries.push(Factor {
+                unit: 1.0,
+                resource: 0,
+            });
+        }
+        slot
+    }
+    fn light(&self, id: u64, frame: GameFrame) -> f32 {
+        let Some(slot) = self.keys.get(id_key(id)) else {
+            return 1.0;
+        };
+        let entry = &self.entries[slot];
+        let key = frame_key(frame);
+        let mut next = entry.resource;
+        while next != 0 {
+            let resource = &self.resources[next - 1];
+            if resource.body == key || resource.shadow == Some(key) {
+                return resource.light;
+            }
+            next = resource.next;
+        }
+        entry.unit
+    }
 }
 
 pub(super) fn grid_segments(

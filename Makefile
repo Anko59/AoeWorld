@@ -342,6 +342,11 @@ test-geographic-visuals-steps:
 dev: build-wasm orchestrator-tools dev-build
 	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev start
 
+.PHONY: dev-start
+# Restart a build already made by `make dev`; does not compile the game.
+dev-start: orchestrator-tools
+	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev start
+
 down: orchestrator-tools
 	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev down
 

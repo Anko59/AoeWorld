@@ -15,5 +15,8 @@ endpoint and client diagnostics show the checkout commit; a modified tree adds
 container. Containers are named per checkout, so two worktrees can each run a
 server on their own port, and `make down` stops only its own. Changing the
 port of a running server needs `make down` first.
+After `make dev` has built the checkout, `make dev-start` starts those existing
+artifacts in the same checkout-scoped container. Use it after `make down` to
+change scenario settings without rebuilding; source changes still need `make dev`.
 Set `AOE_ASSET_PACK=local-assets/packs/<pack-hash>` for `make dev` to enable the
 game and the imported sprite viewer described in [assets](assets.md).

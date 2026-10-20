@@ -396,3 +396,14 @@ heights agree with the closer level. The rectangular index is bounded to at
 most 24,576 slots; at most two top and four closing-edge triangles are counted
 per visible cell. Larger views retain the existing coarse fallback. This does
 not qualify dedicated hardware or finished RTS performance.
+
+Fog object lookup shares the existing integer-pair index, splitting each full
+64-bit identity into two words. Parallel temporary values replace two additional
+BTreeMap specializations in the WASM bundle. Resource body/shadow keys retain
+bit-exact atlas coordinates and newest matching updates take priority over unit
+IDs. Storage covers displayed resources and units only: at most one index/value
+per unique ID and one paired-frame record per resource, with geometrically
+growing vector capacity and index slots as additional real memory. This is a
+code-size change, not a blanket RAM reduction. The browser regression measures
+8,192 paired resources plus 1,024 units and checks all 17,408 shaded layers;
+synthetic timings do not qualify source-map cadence or dedicated hardware.
