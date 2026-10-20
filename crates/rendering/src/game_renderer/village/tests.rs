@@ -68,7 +68,7 @@ fn art() -> GameArt {
     };
     GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: std::array::from_fn(|group| {
             (0..75)
                 .step_by(if group == 0 { 15 } else { 1 })
@@ -410,4 +410,18 @@ fn layered_mill_composes_static_body_and_every_sail_frame_and_culls_animation() 
     let mut offscreen = mill;
     offscreen.position = [1000.0; 2];
     assert!(!crate::scene_unit_animates(&art, offscreen, camera()));
+}
+
+#[wasm_bindgen_test]
+fn feudal_building_roles_and_actor_groups_do_not_overlap() {
+    for slot in 0..=44 {
+        let kind = SceneUnitKind::building(slot);
+        assert_eq!(kind.building_slot(), Some(slot));
+        assert_eq!(kind.actor_slot(), None);
+    }
+    for slot in 0..50 {
+        let kind = SceneUnitKind::actor(slot);
+        assert_eq!(kind.actor_slot(), Some(usize::from(slot)));
+        assert_eq!(kind.building_slot(), None);
+    }
 }

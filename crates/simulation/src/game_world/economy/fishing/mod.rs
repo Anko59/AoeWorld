@@ -47,7 +47,10 @@ impl GameWorld {
         let side = kind.rules().side;
         let footprint = TileRect::new(
             origin,
-            TileCoord::new(origin.x.saturating_add(side), origin.y.saturating_add(side)),
+            TileCoord::new(
+                origin.x.saturating_add(side),
+                origin.y.saturating_add(kind.rules().depth),
+            ),
         );
         if kind != BuildingKind::Dock {
             return self.validate_footprint(footprint);
@@ -119,11 +122,11 @@ impl GameWorld {
             && node.is_none_or(|n| !overlay.blocks_node(n)))
     }
 
-    pub(crate) fn gather_capacity(kind: UnitKind) -> u16 {
-        if kind == UnitKind::FishingShip {
+    pub(crate) fn gather_capacity(&self, unit: &crate::GameUnit) -> u16 {
+        if unit.kind == UnitKind::FishingShip {
             15
         } else {
-            super::VILLAGE_RULES.villager_capacity
+            self.villager_capacity(unit.player)
         }
     }
 

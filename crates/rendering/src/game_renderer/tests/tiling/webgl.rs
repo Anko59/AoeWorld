@@ -37,7 +37,7 @@ fn native_cliff_wall_uses_opaque_rock_above_the_source_silhouette_notch() {
     };
     let art = GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

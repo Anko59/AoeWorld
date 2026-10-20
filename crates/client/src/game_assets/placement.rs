@@ -31,8 +31,8 @@ pub(super) fn plan(
         }
         extents[semantic] = FrameExtent {
             domain,
-            width: frame.width,
-            height: frame.height,
+            width: frame.width.div_ceil(buildings::pixel_step(&frame.source)),
+            height: frame.height.div_ceil(buildings::pixel_step(&frame.source)),
         };
     }
     pack_frames(&extents[..selected.len()]).map_err(error)
@@ -78,11 +78,12 @@ pub(super) fn copy_plane(
     team: [u8; 3],
 ) -> Result<(), JsValue> {
     let side = GAME_ATLAS_SIDE as usize;
+    let step = buildings::pixel_step(&frame.source);
     if source.len() != GAME_ATLAS_PAGE_BYTES
         || pixels.len() != GAME_ATLAS_BYTES
         || usize::from(placed.page) >= GAME_ATLAS_BYTES / GAME_ATLAS_PAGE_BYTES
-        || placed.width != frame.width
-        || placed.height != frame.height
+        || placed.width != frame.width.div_ceil(step)
+        || placed.height != frame.height.div_ceil(step)
         || usize::from(frame.x) + usize::from(frame.width) > side
         || usize::from(frame.y) + usize::from(frame.height) > side
         || usize::from(placed.x) + usize::from(placed.width) > side
@@ -91,9 +92,12 @@ pub(super) fn copy_plane(
         return Err(JsValue::from_str("Invalid atlas copy bounds"));
     }
     let base = usize::from(placed.page) * GAME_ATLAS_PAGE_BYTES;
-    for row in 0..usize::from(frame.height) {
-        for col in 0..usize::from(frame.width) {
-            let from = ((usize::from(frame.y) + row) * side + usize::from(frame.x) + col) * 4;
+    for row in 0..usize::from(placed.height) {
+        for col in 0..usize::from(placed.width) {
+            let from = ((usize::from(frame.y) + row * usize::from(step)) * side
+                + usize::from(frame.x)
+                + col * usize::from(step))
+                * 4;
             let to =
                 base + ((usize::from(placed.y) + row) * side + usize::from(placed.x) + col) * 4;
             let mut value = [

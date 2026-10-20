@@ -95,6 +95,8 @@ pub(super) fn world_sprite_frames(
     result
 }
 
+// Share the emission walk across backend callbacks instead of specializing it
+// for every sink. The borrowed callback adds no allocation or scene copy.
 pub(super) fn emit_world_sprite_frames(
     art: &GameArt,
     terrain: &[SceneTerrain],
@@ -103,6 +105,18 @@ pub(super) fn emit_world_sprite_frames(
     camera: SceneCamera,
     animation: usize,
     mut emit: impl FnMut((Sprite, GameFrame, f64, u64)),
+) {
+    emit_world_sprite_frames_shared(art, terrain, resources, units, camera, animation, &mut emit);
+}
+
+fn emit_world_sprite_frames_shared(
+    art: &GameArt,
+    terrain: &[SceneTerrain],
+    resources: &[SceneResource],
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    animation: usize,
+    mut emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
 ) {
     if terrain.is_empty() {
         // Keep the bounded diagnostic terrain-frame helper, without collecting another
@@ -471,9 +485,8 @@ pub fn actor_frame_index(facing: u8, stride: usize, phase: usize) -> (usize, boo
 
 pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
     if let Some(slot) = unit.kind.building_slot() {
-        return slot == 4
-            && art.buildings[4].len() == 44
-            && art.buildings[4].iter().any(|frame| {
+        return (slot == 4 && art.buildings[4].len() == 44 || slot == 40)
+            && art.buildings[usize::from(slot)].iter().any(|frame| {
                 sprite_screen_bounds(
                     world_frame(*frame),
                     unit.position,

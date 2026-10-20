@@ -1,6 +1,10 @@
-import { darkAgeState } from "../../wire/buildings.js";
+import { darkAgeState, wheelbarrowAgeState } from "../../wire/buildings.js";
 import type { Page } from "@playwright/test";
-import { scoutCombat, villagerCombat } from "../../wire/combat.js";
+import {
+  scoutCombat,
+  villagerCombat,
+  militiaCombat,
+} from "../../wire/combat.js";
 import { wildlifeState } from "../../wire/wildlife.js";
 import { disabledFog } from "../../wire/fog.js";
 function uint(value: number): number[] {
@@ -13,7 +17,7 @@ function uint(value: number): number[] {
   return bytes;
 }
 /** Authoritative tasks independent of camera terrain and retained inventory. */
-export async function workerFixture(page: Page) {
+export async function workerFixture(page: Page, feudal = false) {
   await page.routeWebSocket("**/game/ws", (socket) => {
     socket.onMessage((message) => {
       const bytes =
@@ -60,7 +64,11 @@ export async function workerFixture(page: Page) {
         task,
         ...load,
         ...(task === 2 ? [1, 2] : [0]),
-        ...(kind === 1 ? scoutCombat : villagerCombat),
+        ...(kind === 1
+          ? scoutCombat
+          : kind === 2
+            ? militiaCombat
+            : villagerCombat),
       ];
       socket.send(
         Buffer.from([
@@ -68,9 +76,9 @@ export async function workerFixture(page: Page) {
           ...revision,
           0,
           3,
-          ...unit(0, 8192.5, 8192.5, 1, 0, [0]),
+          ...unit(0, 8192.5, 8192.5, feudal ? 2 : 1, 0, [0]),
           ...unit(2, 12000.5, 12000.5, 0, 2, [0]),
-          ...unit(3, 8193.5, 8192.5, 0, 3, [1, 1, 3]),
+          ...unit(3, 8193.5, 8192.5, 0, 3, [1, 1, feudal ? 13 : 3]),
           1,
           0,
           ...uint(200),
@@ -79,7 +87,7 @@ export async function workerFixture(page: Page) {
           ...uint(200),
           3,
           5,
-          ...darkAgeState,
+          ...(feudal ? wheelbarrowAgeState : darkAgeState),
           0,
         ]),
       );

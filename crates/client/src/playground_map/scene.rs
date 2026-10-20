@@ -84,7 +84,7 @@ impl PreparedScene {
     /// Query the ground contact surface, including its current LOD. Cosmetic
     /// cliff rims never change eligible ground's source contact coordinates.
     /// Spatial buckets avoid scanning the full mesh for every tree or unit.
-    pub(crate) fn height(&self, world: [f64; 2]) -> Option<f64> {
+        pub(crate) fn height(&self, world: [f64; 2]) -> Option<f64> {
         let key = [
             bucket(world[0], self.bucket_width),
             bucket(world[1], self.bucket_width),
@@ -241,19 +241,37 @@ pub(in super::super) fn units(
         .collect();
     for building in &client.village.buildings {
         let position = super::super::village::building_center(building);
+        let age = building.age;
+        let gate_open = building.kind == aoe_protocol::BuildingKind::PalisadeGate
+            && building.progress_permille == 1000
+            && client.units.values().any(|u| {
+                let at = u.position.tile_floor();
+                let r = building.footprint;
+                u.hp > 0
+                    && ((u.player == building.player
+                        && at.x >= r.min.x - 2
+                        && at.y >= r.min.y - 2
+                        && at.x < r.max.x + 2
+                        && at.y < r.max.y + 2)
+                        || r.contains(at))
+            });
         let slot = units.partition_point(|unit| unit.id < building.id);
         units.insert(
             slot,
             aoe_rendering::SceneUnit {
                 kind: if building.kind == aoe_protocol::BuildingKind::TownCenter
                     && building.progress_permille == 1000
+                    && age == aoe_protocol::Age::Dark
                 {
                     aoe_rendering::SceneUnitKind::TownCenter
+                } else if gate_open {
+                    aoe_rendering::SceneUnitKind::building(42)
                 } else {
-                    aoe_rendering::SceneUnitKind::building(crate::building_ui::sprite_slot(
+                    aoe_rendering::SceneUnitKind::building(crate::building_ui::age_sprite_slot(
                         building.kind,
                         building.progress_permille,
                         false,
+                        age,
                     ) as u8)
                 },
                 id: building.id,

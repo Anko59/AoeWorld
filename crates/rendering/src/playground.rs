@@ -50,8 +50,8 @@ pub struct SceneryArt {
 pub struct GameArt {
     pub actors: Vec<Vec<GameFrame>>,
     /// Nine standing kinds, four foundation sizes, nine rubble kinds, builder.
-    pub buildings: [Vec<GameFrame>; 26],
-    /// Shore fish, six deep species, ship idle/move/work, fisherman work/carry.
+    pub buildings: [Vec<GameFrame>; 45],
+    /// Shore fish and naval working art.
     pub fishing: [Vec<GameFrame>; 12],
     pub village: [Vec<GameFrame>; 9],
     pub town_center: [Vec<GameFrame>; 8],

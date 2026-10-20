@@ -30,6 +30,7 @@ impl GameWorld {
         }
         self.advance_combat(&mut changed);
         self.advance_construction(&mut changed);
+        self.advance_gates();
         self.advance_gathering(sink, &mut changed);
         self.advance_research(&mut changed);
         self.advance_training(&mut changed);

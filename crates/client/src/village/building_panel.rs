@@ -21,8 +21,12 @@ pub(super) fn update(client: &Client) {
         .iter()
         .find(|p| p.player == owner(client));
     // age, selected kind, hp, max hp, construction, food, research kind/progress,
-    // research availability, nine build availability entries, trained kind.
-    let mut v = vec![0.0, -1.0, 0.0, 0.0, 1000.0, -1.0, -1.0, 0.0, 0.0, 0.0, 0.0];
+    // research availability, build availability entries, trained kind.
+    let mut v = vec![0.0; 8 + Tech::ALL.len()];
+    v[1] = -1.0;
+    v[4] = 1000.0;
+    v[5] = -1.0;
+    v[6] = -1.0;
     if let Some(p) = player {
         v[0] = p.age as u8 as f64;
     }
@@ -44,6 +48,10 @@ pub(super) fn update(client: &Client) {
         for (i, r) in aoe_simulation::TECH_RULES.iter().enumerate() {
             let requirement = match r.requires {
                 aoe_simulation::TechRequirement::None => true,
+                aoe_simulation::TechRequirement::Age(age) => {
+                    age == aoe_simulation::Age::Dark
+                        || player.is_some_and(|p| p.age == aoe_protocol::Age::Feudal)
+                }
                 aoe_simulation::TechRequirement::BuildingKinds { count, kinds } => {
                     kinds
                         .iter()
@@ -52,7 +60,8 @@ pub(super) fn update(client: &Client) {
                         >= count
                 }
             };
-            let enabled = b.player == owner(client)
+            let enabled = r.building as u8 == b.kind as u8
+                && b.player == owner(client)
                 && b.construction == ConstructionState::Complete
                 && b.training_queue.is_empty()
                 && b.research.is_none()
@@ -132,21 +141,7 @@ pub(super) fn update(client: &Client) {
     buildings_update(&v);
 }
 
-pub(super) const KINDS: [aoe_protocol::BuildingKind; 10] = {
-    use aoe_protocol::BuildingKind::*;
-    [
-        TownCenter,
-        House,
-        LumberCamp,
-        MiningCamp,
-        Mill,
-        Farm,
-        Barracks,
-        PalisadeWall,
-        Outpost,
-        Dock,
-    ]
-};
+pub(super) const KINDS: [aoe_protocol::BuildingKind; 16] = aoe_protocol::BuildingKind::ALL;
 
 #[inline(never)]
 pub(in super::super) fn preview(client: &Client) {
@@ -162,7 +157,12 @@ pub(in super::super) fn preview(client: &Client) {
         let side = f64::from(kind.side());
         let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
         for t in tiles {
-            for (dx, dy) in [(0.0, 0.0), (side, 0.0), (side, side), (0.0, side)] {
+            for (dx, dy) in [
+                (0.0, 0.0),
+                (side, 0.0),
+                (side, f64::from(kind.depth())),
+                (0.0, f64::from(kind.depth())),
+            ] {
                 let p = map::screen_position(client, [f64::from(t.x) + dx, f64::from(t.y) + dy]);
                 v.extend_from_slice(&[p.x * scale, p.y * scale]);
             }
@@ -183,9 +183,20 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         "build-palisade-wall",
         "build-outpost",
         "build-dock",
+        "build-archery-range",
+        "build-stable",
+        "build-blacksmith",
+        "build-market",
+        "build-watch-tower",
+        "build-palisade-gate",
         "research-loom",
         "research-town-watch",
         "research-feudal-age",
+        "research-double-bit-axe",
+        "research-horse-collar",
+        "research-gold-mining",
+        "research-stone-mining",
+        "research-wheelbarrow",
         "cancel-construction",
         "cancel-research",
     ]
@@ -198,7 +209,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let target = shared.clone();
         let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
             let mut client = target.borrow_mut();
-            if i < 9 {
+            if i < 15 {
                 construction::arm(&mut client, KINDS[i + 1]);
                 return;
             }
@@ -207,12 +218,12 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             };
             let sequence = client.next_sequence;
             let message = match i {
-                9..=11 => Message::ResearchOrder {
+                15..=22 => Message::ResearchOrder {
                     sequence,
                     building_id,
-                    tech: [Tech::Loom, Tech::TownWatch, Tech::FeudalAge][i - 9],
+                    tech: Tech::ALL[i - 15],
                 },
-                12 => Message::CancelConstructionOrder {
+                23 => Message::CancelConstructionOrder {
                     sequence,
                     building_id,
                 },

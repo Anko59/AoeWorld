@@ -49,6 +49,11 @@ fn browser_unit_combat_fragments_match_the_current_codec() {
             50,
             include_str!("../../../browser/tests/wire/fishing-ship.hex"),
         ),
+        (
+            UnitKind::Militia,
+            40,
+            include_str!("../../../browser/tests/wire/militia.hex"),
+        ),
     ] {
         let unit = GameplayUnitState {
             id: EntityId(7),
@@ -89,6 +94,7 @@ fn browser_building_combat_fragment_matches_the_current_codec() {
         hp: 2400,
         max_hp: 2400,
         last_hit: None,
+        age: aoe_protocol::Age::Dark,
         construction: ConstructionState::Complete,
         progress_permille: 1000,
         los: 8,
@@ -108,6 +114,7 @@ fn browser_dock_fragment_matches_current_codec() {
         id: EntityId(1),
         player: PlayerId(0),
         kind: BuildingKind::Dock,
+        age: aoe_protocol::Age::Dark,
         footprint: TileRect::new(TileCoord::new(5, 5), TileCoord::new(8, 8)),
         training_queue: vec![],
         hp: 1800,
@@ -156,6 +163,7 @@ fn snapshot() -> GameplayServerMessage {
             research: None,
             training_queue: vec![],
             last_hit: None,
+            age: aoe_protocol::Age::Dark,
         }],
     }
 }
@@ -192,6 +200,33 @@ fn browser_building_fixture_matches_current_decoder() {
         decode_gameplay_server(&browser_bytes()).unwrap(),
         snapshot()
     );
+}
+
+#[test]
+fn browser_feudal_player_fragment_matches_the_current_codec() {
+    let mut message = snapshot();
+    let GameplayServerMessage::Snapshot { players, .. } = &mut message else {
+        unreachable!()
+    };
+    players[0].age = aoe_protocol::Age::Feudal;
+    players[0].researched = aoe_protocol::Tech::FeudalAge.bit();
+    for wheelbarrow in [false, true] {
+        let mut message = message.clone();
+        if wheelbarrow {
+            let GameplayServerMessage::Snapshot { players, .. } = &mut message else {
+                unreachable!()
+            };
+            players[0].researched |= aoe_protocol::Tech::Wheelbarrow.bit();
+        }
+        let mut expected = browser_bytes();
+        let fragment = hex(if wheelbarrow {
+            include_str!("../../../browser/tests/wire/wheelbarrow-player.hex")
+        } else {
+            include_str!("../../../browser/tests/wire/feudal-player.hex")
+        });
+        expected.splice(15..17, fragment);
+        assert_wire(message, expected);
+    }
 }
 
 #[test]

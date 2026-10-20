@@ -14,3 +14,5 @@ function fragment(name: string): number[] {
 
 export const villagerCombat = fragment("villager");
 export const scoutCombat = fragment("scout");
+
+export const militiaCombat = fragment("militia");

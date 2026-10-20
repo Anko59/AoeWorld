@@ -62,7 +62,7 @@ pub(crate) fn atlas() -> Vec<u8> {
 pub(crate) fn art(depth: bool) -> GameArt {
     GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

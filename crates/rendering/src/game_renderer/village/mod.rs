@@ -182,15 +182,17 @@ pub(super) fn building(
         marker(unit, camera, emit);
         return;
     }
-    let index = if (9..=12).contains(&art_slot) || art_slot == 24 {
+    let index = if (9..=12).contains(&art_slot) || art_slot == 43 || art_slot == 24 {
         usize::from(unit.facing).min(frames.len() - 1)
+    } else if art_slot == 40 {
+        animation % frames.len()
     } else if art_slot == 7 {
         usize::from(unit.facing) % frames.len()
     } else {
         unit.id.0 as usize % frames.len()
     };
-    let (indices, count) = if art_slot == 4 {
-        ([0, 1 + animation % 43], 2)
+    let (indices, count) = if art_slot == 4 || (art_slot == 40 && frames.len() == 9) {
+        ([0, 1 + animation % (frames.len() - 1)], 2)
     } else {
         ([index, 0], 1)
     };

@@ -5,10 +5,14 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 mod buildings;
 mod construction;
+#[path = "economy/construction/demo.rs"]
+mod demo;
 mod dropoff;
 mod farm;
 #[path = "economy/fishing/mod.rs"]
 mod fishing;
+#[path = "economy/construction/gates.rs"]
+mod gates;
 mod gathering;
 mod hash;
 mod movement;
@@ -52,6 +56,12 @@ pub enum BuildingKind {
     PalisadeWall,
     Outpost,
     Dock,
+    ArcheryRange,
+    Stable,
+    Blacksmith,
+    Market,
+    WatchTower,
+    PalisadeGate,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -119,6 +129,8 @@ pub struct TrainingEntry {
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GameBuilding {
+    /// Age of this building, retained in player observations.
+    pub age: crate::Age,
     pub id: EntityId,
     pub player: PlayerId,
     pub kind: BuildingKind,
@@ -231,6 +243,8 @@ pub enum EconomyError {
     FarmUnavailable,
     #[error("bounded village state is full")]
     Capacity,
+    #[error("requires Feudal Age")]
+    RequiresFeudalAge,
     #[error("player already has a starting village")]
     AlreadyStarted,
     #[error("village movement failed: {0}")]
@@ -242,6 +256,7 @@ pub(crate) struct Economy {
     pub(crate) players: BTreeMap<PlayerId, PlayerEconomy>,
     pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
     pub(crate) blocked_tiles: BTreeSet<TileCoord>,
+    pub(crate) open_gates: BTreeSet<EntityId>,
     pub(crate) gatherers: BTreeMap<EntityId, GatherTask>,
     pub(crate) builders: BTreeMap<EntityId, BuildTask>,
     pub(crate) depletions: Vec<aoe_map::Depletion>,

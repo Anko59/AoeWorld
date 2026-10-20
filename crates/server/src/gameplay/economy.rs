@@ -48,6 +48,11 @@ pub(super) fn native_tech(tech: Tech) -> aoe_simulation::Tech {
     match tech {
         Tech::Loom => aoe_simulation::Tech::Loom,
         Tech::TownWatch => aoe_simulation::Tech::TownWatch,
+        Tech::DoubleBitAxe => aoe_simulation::Tech::DoubleBitAxe,
+        Tech::HorseCollar => aoe_simulation::Tech::HorseCollar,
+        Tech::GoldMining => aoe_simulation::Tech::GoldMining,
+        Tech::StoneMining => aoe_simulation::Tech::StoneMining,
+        Tech::Wheelbarrow => aoe_simulation::Tech::Wheelbarrow,
         Tech::FeudalAge => aoe_simulation::Tech::FeudalAge,
     }
 }
@@ -55,6 +60,11 @@ fn wire_tech(tech: aoe_simulation::Tech) -> Tech {
     match tech {
         aoe_simulation::Tech::Loom => Tech::Loom,
         aoe_simulation::Tech::TownWatch => Tech::TownWatch,
+        aoe_simulation::Tech::DoubleBitAxe => Tech::DoubleBitAxe,
+        aoe_simulation::Tech::HorseCollar => Tech::HorseCollar,
+        aoe_simulation::Tech::GoldMining => Tech::GoldMining,
+        aoe_simulation::Tech::StoneMining => Tech::StoneMining,
+        aoe_simulation::Tech::Wheelbarrow => Tech::Wheelbarrow,
         aoe_simulation::Tech::FeudalAge => Tech::FeudalAge,
     }
 }
@@ -69,6 +79,12 @@ pub(super) fn native_building(kind: BuildingKind) -> aoe_simulation::BuildingKin
         BuildingKind::Farm => N::Farm,
         BuildingKind::Barracks => N::Barracks,
         BuildingKind::PalisadeWall => N::PalisadeWall,
+        BuildingKind::ArcheryRange => N::ArcheryRange,
+        BuildingKind::Stable => N::Stable,
+        BuildingKind::Blacksmith => N::Blacksmith,
+        BuildingKind::Market => N::Market,
+        BuildingKind::WatchTower => N::WatchTower,
+        BuildingKind::PalisadeGate => N::PalisadeGate,
         BuildingKind::Outpost => N::Outpost,
         BuildingKind::Dock => N::Dock,
     }
@@ -84,6 +100,12 @@ fn wire_building(kind: aoe_simulation::BuildingKind) -> BuildingKind {
         N::Farm => BuildingKind::Farm,
         N::Barracks => BuildingKind::Barracks,
         N::PalisadeWall => BuildingKind::PalisadeWall,
+        N::ArcheryRange => BuildingKind::ArcheryRange,
+        N::Stable => BuildingKind::Stable,
+        N::Blacksmith => BuildingKind::Blacksmith,
+        N::Market => BuildingKind::Market,
+        N::WatchTower => BuildingKind::WatchTower,
+        N::PalisadeGate => BuildingKind::PalisadeGate,
         N::Outpost => BuildingKind::Outpost,
         N::Dock => BuildingKind::Dock,
     }
@@ -189,6 +211,10 @@ pub(super) fn buildings(
             (
                 state.id,
                 GameplayBuildingState {
+                    age: match state.age {
+                        aoe_simulation::Age::Dark => aoe_protocol::Age::Dark,
+                        aoe_simulation::Age::Feudal => aoe_protocol::Age::Feudal,
+                    },
                     id: state.id,
                     player: state.player,
                     kind: wire_building(state.kind),

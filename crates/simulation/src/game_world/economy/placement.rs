@@ -95,6 +95,10 @@ impl GameWorld {
             return Err(GameWorldError::EntityIdExhausted.into());
         }
         let rules = kind.rules();
+        let age = self
+            .player_economy(player)
+            .map_or(crate::Age::Dark, |p| p.age);
+        let (max_hp, los) = kind.age_stats(age);
         if rules.blocks
             && let Terrain::Map { overlay, .. } = &mut self.terrain
         {
@@ -129,6 +133,7 @@ impl GameWorld {
         self.economy.buildings.insert(
             id,
             GameBuilding {
+                age,
                 id,
                 player,
                 kind,
@@ -142,11 +147,11 @@ impl GameWorld {
                 },
                 work_done: if complete { work_total } else { 0 },
                 work_total,
-                hp: if complete { rules.max_hp } else { 1 },
-                max_hp: rules.max_hp,
-                los: rules.los.saturating_add(self.researched_los_bonus(player)),
+                hp: if complete { max_hp } else { 1 },
+                max_hp,
+                los: los.saturating_add(self.researched_los_bonus(player)),
                 research: None,
-                food_remaining: (kind == BuildingKind::Farm).then_some(rules.food),
+                food_remaining: (kind == BuildingKind::Farm).then(|| self.farm_food(player)),
             },
         );
         self.refresh_population_cap(player);
@@ -191,6 +196,8 @@ impl GameWorld {
             }
             self.resource_collision_changed();
         }
+        self.economy.open_gates.remove(&id);
+        self.combat.tower_ready.remove(&id);
         self.refresh_population_cap(building.player);
         if self.update_observer(id, None) {
             self.remember_visible_buildings();

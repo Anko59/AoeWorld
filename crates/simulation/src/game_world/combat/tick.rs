@@ -1,7 +1,5 @@
 //! Per-tick attack resolution for units that hold an attack order.
-use super::{
-    Attacker, HitRecord, MELEE_RANGE_SUBUNITS, building_combat, damage_dealt, unit_combat,
-};
+use super::{Attacker, HitRecord, MELEE_RANGE_SUBUNITS, damage_dealt, unit_combat};
 use crate::game_world::{
     economy::placement::{perimeter, position},
     facing_for,
@@ -96,6 +94,7 @@ impl GameWorld {
         for id in ids {
             self.step_attacker(id, now, changed);
         }
+        self.advance_towers(changed);
     }
 
     fn step_attacker(&mut self, id: EntityId, now: u64, changed: &mut Vec<GameUnit>) {
@@ -221,6 +220,24 @@ impl GameWorld {
             return;
         };
         let stats = *unit_combat(self.units[attacker_index].state.kind);
+        self.resolve_hit(
+            attacker_id,
+            target,
+            stats.attack,
+            stats.attack_kind,
+            changed,
+        );
+    }
+
+    /// Both melee and tower arrows share armour, death and retaliation logic.
+    pub(super) fn resolve_hit(
+        &mut self,
+        attacker_id: EntityId,
+        target: EntityId,
+        attack: u16,
+        kind: super::DamageKind,
+        changed: &mut Vec<GameUnit>,
+    ) {
         let hit = HitRecord {
             attacker: attacker_id,
             tick: Tick(self.tick.0),
@@ -229,7 +246,7 @@ impl GameWorld {
         if let Some(&victim_index) = self.lookup.get(&target) {
             let (melee, pierce) = self.unit_armour(target).unwrap_or_default();
             let victim = &mut self.units[victim_index].state;
-            let damage = damage_dealt(stats.attack, stats.attack_kind, melee, pierce);
+            let damage = damage_dealt(attack, kind, melee, pierce);
             victim.hp = victim.hp.saturating_sub(damage);
             victim.last_hit = Some(hit);
             let (hp, victim_id) = (victim.hp, victim.id);
@@ -241,17 +258,15 @@ impl GameWorld {
             }
             changed.push(self.units[victim_index].state);
         } else if self.animal(target).is_some() {
-            if self.strike_animal(target, attacker_id, stats.attack) {
+            if self.strike_animal(target, attacker_id, attack) {
                 self.end_attack(attacker_id, changed);
             }
-        } else if let Some(building) = self.economy.buildings.get_mut(&target) {
-            let armour = building_combat(building.kind);
-            let damage = damage_dealt(
-                stats.attack,
-                stats.attack_kind,
-                armour.melee_armour,
-                armour.pierce_armour,
-            );
+        } else if let Some(building) = self.building(target) {
+            let armour = super::table::age_armour(building.kind, self.is_feudal(building.player));
+            let Some(building) = self.economy.buildings.get_mut(&target) else {
+                return;
+            };
+            let damage = damage_dealt(attack, kind, armour.melee_armour, armour.pierce_armour);
             building.hp = building.hp.saturating_sub(damage);
             building.last_hit = Some(hit);
             if building.hp == 0 {

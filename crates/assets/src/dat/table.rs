@@ -41,6 +41,10 @@ pub const DARK_AGE: &[(&str, i32)] = &[
     ("Stone mine", 102),
 ];
 
+#[path = "feudal.rs"]
+mod feudal;
+pub use feudal::FEUDAL;
+
 /// Villager variants share an internal-name stem; the suffix names the job.
 const JOBS: &[(&str, &str)] = &[
     ("BAS", "base"),
@@ -340,6 +344,7 @@ pub fn build(file: &DatFile, pack: Option<&BTreeSet<i32>>) -> Table {
         .collect();
     let mut rows: Vec<Row> = DARK_AGE
         .iter()
+        .chain(FEUDAL.iter())
         .map(|(label, id)| row(file, &cache, label, *id, pack))
         .collect();
     for unit in file.units.iter().filter(|u| u.kind == 70) {

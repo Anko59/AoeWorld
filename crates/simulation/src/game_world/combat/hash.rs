@@ -15,6 +15,11 @@ pub(crate) fn hash_hit(hash: &mut blake3::Hasher, hit: Option<HitRecord>) {
 
 impl Combat {
     pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
+        hash.update(&(self.tower_ready.len() as u64).to_le_bytes());
+        for (id, ready) in &self.tower_ready {
+            hash.update(&id.0.to_le_bytes());
+            hash.update(&ready.to_le_bytes());
+        }
         hash.update(&(self.attackers.len() as u64).to_le_bytes());
         for (id, attacker) in &self.attackers {
             hash.update(&id.0.to_le_bytes());

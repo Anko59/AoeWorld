@@ -93,6 +93,16 @@ fn decodes_blocks_layers_anchors_and_skip_reuse() {
 }
 
 #[test]
+fn fourteen_byte_de_header_preserves_frames_layers_and_alignment() {
+    let original = fixture();
+    let expected = parse(&original).unwrap();
+    let mut compact = original;
+    compact[10..12].copy_from_slice(&14_u16.to_le_bytes());
+    compact.drain(14..16);
+    assert_eq!(parse(&compact).unwrap(), expected);
+}
+
+#[test]
 fn rgb565_replicates_low_bits_for_endpoints_and_interpolants() {
     for (word, expected) in [
         (0xF800u16, [255, 0, 0, 255]),

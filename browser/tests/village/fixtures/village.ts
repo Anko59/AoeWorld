@@ -1,12 +1,13 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
-import { scoutCombat, villagerCombat } from "../wire/combat.js";
+import { scoutCombat, villagerCombat } from "../../wire/combat.js";
 import {
   darkAgeState,
+  feudalAgeState,
   townCenterState,
   fishingShipState,
-} from "../wire/buildings.js";
-import { wildlifeState } from "../wire/wildlife.js";
-import { fogState } from "../wire/fog.js";
+} from "../../wire/buildings.js";
+import { wildlifeState } from "../../wire/wildlife.js";
+import { fogState } from "../../wire/fog.js";
 
 function uint(value: number): number[] {
   const bytes: number[] = [];
@@ -23,6 +24,7 @@ export async function fiveVillagerFixture(
   page: Page,
   observe?: (bytes: Buffer, socket: WebSocketRoute) => void,
   snapshotTick: () => number = () => 0,
+  feudal = false,
 ) {
   await page.routeWebSocket("**/game/ws", (socket) => {
     socket.onMessage((message) => {
@@ -100,7 +102,7 @@ export async function fiveVillagerFixture(
           ...uint(200),
           6,
           10,
-          ...darkAgeState,
+          ...(feudal ? feudalAgeState : darkAgeState),
           1,
           1,
           0,

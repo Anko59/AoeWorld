@@ -3,8 +3,9 @@ import { createHash } from "node:crypto";
 import { PNG } from "pngjs";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
-import { fiveVillagerFixture } from "./fixture.js";
+import { fiveVillagerFixture } from "./fixtures/village.js";
 import { freshHud } from "./fixtures/resources.js";
+import { darkAgeState } from "../wire/buildings.js";
 
 function uint(value: number): number[] {
   const bytes: number[] = [];
@@ -76,6 +77,7 @@ test("rubble survives camera resubscription until its original game tick expiry"
     0,
     0,
     0,
+    ...darkAgeState.slice(0, 1), // Observed age, from the codec-pinned Age fragment.
   ];
   send(1, [1, ...house], [0]);
   await expect

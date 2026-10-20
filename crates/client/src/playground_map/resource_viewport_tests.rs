@@ -87,7 +87,7 @@ fn native_species_resource_state_depletion_precedes_actual_viewport_selection() 
 fn resource_art(frame: GameFrame) -> GameArt {
     GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

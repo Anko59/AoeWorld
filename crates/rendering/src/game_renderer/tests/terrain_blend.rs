@@ -194,7 +194,7 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
     };
     let art = GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),
@@ -316,7 +316,7 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
     };
     let art = GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

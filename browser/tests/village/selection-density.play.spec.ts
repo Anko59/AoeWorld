@@ -1,7 +1,7 @@
 import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
-import { fiveVillagerFixture } from "./fixture.js";
+import { fiveVillagerFixture } from "./fixtures/village.js";
 import { freshHud } from "./fixtures/resources.js";
 
 test.use({

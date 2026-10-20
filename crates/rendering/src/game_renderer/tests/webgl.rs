@@ -43,7 +43,7 @@ fn canvas_zero_backing_size_does_not_advance_presentation() {
     };
     let art = GameArt {
         actors: Vec::new(),
-        buildings: Default::default(),
+        buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
         town_center: Default::default(),

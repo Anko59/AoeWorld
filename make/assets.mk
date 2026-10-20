@@ -19,3 +19,6 @@ assets-dat-table:
 .PHONY: fishing-scenario
 fishing-scenario:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- fishing-scenario
+.PHONY: assets-dat-table-de
+assets-dat-table-de:
+	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets dat-table --de /de-install/resources/_common/dat/empires2_x2_p1.dat

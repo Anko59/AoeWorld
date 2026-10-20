@@ -77,6 +77,9 @@ impl GameWorld {
         if !rules.buildable {
             return Err(EconomyError::NotBuildable);
         }
+        if rules.age == crate::Age::Feudal && !self.is_feudal(player) {
+            return Err(EconomyError::RequiresFeudalAge);
+        }
         if let Some(required) = rules.requires
             && !self.buildings().any(|building| {
                 building.player == player && building.kind == required && building.is_complete()
@@ -123,7 +126,10 @@ impl GameWorld {
         let side = kind.rules().side;
         let footprint = TileRect::new(
             origin,
-            TileCoord::new(origin.x.saturating_add(side), origin.y.saturating_add(side)),
+            TileCoord::new(
+                origin.x.saturating_add(side),
+                origin.y.saturating_add(kind.rules().depth),
+            ),
         );
         self.validate_building_placement(kind, origin)?;
         let id = self.insert_building(player, kind, footprint, false)?;
@@ -354,6 +360,9 @@ impl GameWorld {
         }
         building.state = ConstructionState::Complete;
         let (kind, player, footprint) = (building.kind, building.player, building.footprint);
+        if kind == BuildingKind::WatchTower {
+            self.combat.tower_ready.insert(id, 0);
+        }
         self.refresh_population_cap(player);
         let finished = self
             .economy

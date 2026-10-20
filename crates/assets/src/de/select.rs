@@ -242,4 +242,119 @@ pub const SELECTION: &[Item] = &[
         role: "rubble_alternative",
         stem: "b_misc_rubble_alternative",
     },
+    Item {
+        building: "archery_range",
+        role: "standing",
+        stem: "b_west_archery_range_age2",
+    },
+    Item {
+        building: "archery_range",
+        role: "rubble",
+        stem: "b_west_archery_range_age2_rubble",
+    },
+    Item {
+        building: "stable",
+        role: "standing",
+        stem: "b_west_stable_age2",
+    },
+    Item {
+        building: "stable",
+        role: "rubble",
+        stem: "b_west_stable_age2_rubble",
+    },
+    Item {
+        building: "blacksmith",
+        role: "standing",
+        stem: "b_west_blacksmith_age2",
+    },
+    Item {
+        building: "blacksmith",
+        role: "rubble",
+        stem: "b_west_blacksmith_age2_rubble",
+    },
+    Item {
+        building: "market",
+        role: "standing",
+        stem: "b_west_market_age2",
+    },
+    Item {
+        building: "market",
+        role: "rubble",
+        stem: "b_west_market_age2_rubble",
+    },
+    Item {
+        building: "watch_tower",
+        role: "standing",
+        stem: "b_west_tower_age2",
+    },
+    Item {
+        building: "watch_tower",
+        role: "rubble",
+        stem: "b_west_tower_age2_rubble",
+    },
+    Item {
+        building: "feudal_dock",
+        role: "standing",
+        stem: "b_west_dock_age2",
+    },
+    Item {
+        building: "feudal_house",
+        role: "standing",
+        stem: "b_west_house_age2",
+    },
+    Item {
+        building: "feudal_house",
+        role: "rubble",
+        stem: "b_west_house_age2_rubble",
+    },
+    Item {
+        building: "feudal_mill",
+        role: "standing",
+        stem: "b_west_mill_age2",
+    },
+    Item {
+        building: "feudal_mill",
+        role: "rubble",
+        stem: "b_west_mill_age2_rubble",
+    },
+    Item {
+        building: "feudal_barracks",
+        role: "standing",
+        stem: "b_west_barracks_age2",
+    },
+    Item {
+        building: "feudal_barracks",
+        role: "rubble",
+        stem: "b_west_barracks_age2_rubble",
+    },
+    Item {
+        building: "feudal_town_center",
+        role: "standing",
+        stem: "b_west_town_center_age2",
+    },
+    Item {
+        building: "feudal_town_center",
+        role: "rubble",
+        stem: "b_west_town_center_age2_rubble",
+    },
+    Item {
+        building: "palisade_gate",
+        role: "standing",
+        stem: "b_dark_gate_palisade_se_closed",
+    },
+    Item {
+        building: "palisade_gate",
+        role: "open",
+        stem: "b_dark_gate_palisade_se_open",
+    },
+    Item {
+        building: "palisade_gate",
+        role: "rubble",
+        stem: "b_dark_gate_palisade_se_rubble",
+    },
+    Item {
+        building: "palisade_gate",
+        role: "foundation",
+        stem: "b_dark_gate_palisade_se_constr",
+    },
 ];

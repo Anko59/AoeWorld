@@ -107,7 +107,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
         renderer,
         art: GameArt {
             actors: Vec::new(),
-            buildings: Default::default(),
+            buildings: std::array::from_fn(|_| Vec::new()),
             village: Default::default(),
             fishing: Default::default(),
             town_center: Default::default(),
@@ -250,4 +250,49 @@ async fn every_authoritative_resource_task_has_work_and_carry_art() {
             aoe_rendering::SceneUnitKind::Villager
         );
     }
+}
+
+#[wasm_bindgen_test]
+async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() {
+    use aoe_core::{TileCoord, TileRect};
+    use aoe_protocol::{
+        Age, BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState,
+        Stockpile, Tech,
+    };
+    let scene = contact_scene();
+    let mut client = client(&scene).await;
+    client.village.players.push(GameplayPlayerState {
+        player: PlayerId(2),
+        stockpile: Stockpile::default(),
+        population_used: 0,
+        population_cap: 5,
+        age: Age::Feudal,
+        researched: Tech::FeudalAge.bit(),
+    });
+    client.village.buildings.push(GameplayBuildingState {
+        id: EntityId(2),
+        player: PlayerId(2),
+        kind: BuildingKind::House,
+        footprint: TileRect::new(TileCoord::new(282, 603), TileCoord::new(284, 605)),
+        construction: ConstructionState::Complete,
+        progress_permille: 1000,
+        hp: 550,
+        max_hp: 550,
+        los: 4,
+        food_remaining: None,
+        training_queue: vec![],
+        research: None,
+        last_hit: None,
+        age: Age::Dark,
+    });
+    let rendered = |client: &Client| {
+        units(client, &scene)
+            .into_iter()
+            .find(|u| u.id == EntityId(2))
+            .unwrap()
+            .kind
+    };
+    assert_eq!(rendered(&client), aoe_rendering::SceneUnitKind::House);
+    client.village.buildings[0].age = Age::Feudal;
+    assert_eq!(rendered(&client), aoe_rendering::SceneUnitKind::FeudalHouse);
 }

@@ -1,9 +1,9 @@
 //! The single technology data table, in the manner of `BUILDING_RULES`. Fix a
 //! number or a requirement here and the rules, the tests and the wire follow.
-//! Values are Age of Empires II: Definitive Edition's Dark Age.
+//! Values and data provenance: docs/economy.md.
 use super::super::{BuildingKind, Stockpile};
 
-/// The player's age. The Feudal Age unlocks nothing beyond this field yet.
+/// The player's age, used by building and technology requirements.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Age {
@@ -19,6 +19,11 @@ pub enum Tech {
     Loom,
     TownWatch,
     FeudalAge,
+    DoubleBitAxe,
+    HorseCollar,
+    GoldMining,
+    StoneMining,
+    Wheelbarrow,
 }
 
 /// What a finished technology changes.
@@ -33,11 +38,21 @@ pub enum TechEffect {
     /// Every building of the player, existing and future.
     BuildingLos(u8),
     AgeUp(Age),
+    GatherRate {
+        resource: aoe_map::ResourceKind,
+        percent: u16,
+    },
+    FarmFood(u16),
+    VillagerEconomy {
+        capacity_permyriad: u32,
+        speed_percent: u16,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TechRequirement {
     None,
+    Age(Age),
     /// At least `count` distinct kinds from `kinds`, each completed at least once.
     BuildingKinds {
         count: usize,
@@ -76,7 +91,7 @@ pub const FEUDAL_BUILDINGS: &[BuildingKind] = &[
 ];
 
 /// Indexed by `Tech as usize`; a test pins the order.
-pub const TECH_RULES: [TechRules; 3] = [
+pub const TECH_RULES: [TechRules; 8] = [
     TechRules {
         tech: Tech::Loom,
         building: BuildingKind::TownCenter,
@@ -94,7 +109,7 @@ pub const TECH_RULES: [TechRules; 3] = [
         building: BuildingKind::TownCenter,
         cost: cost(75, 0, 0, 0),
         seconds: 25,
-        requires: TechRequirement::None,
+        requires: TechRequirement::Age(Age::Feudal),
         effect: TechEffect::BuildingLos(4),
     },
     TechRules {
@@ -107,6 +122,58 @@ pub const TECH_RULES: [TechRules; 3] = [
             kinds: FEUDAL_BUILDINGS,
         },
         effect: TechEffect::AgeUp(Age::Feudal),
+    },
+    TechRules {
+        tech: Tech::DoubleBitAxe,
+        building: BuildingKind::LumberCamp,
+        cost: cost(100, 50, 0, 0),
+        seconds: 25,
+        requires: TechRequirement::Age(Age::Feudal),
+        effect: TechEffect::GatherRate {
+            resource: aoe_map::ResourceKind::Wood,
+            percent: 120,
+        },
+    },
+    TechRules {
+        tech: Tech::HorseCollar,
+        building: BuildingKind::Mill,
+        cost: cost(75, 75, 0, 0),
+        seconds: 20,
+        requires: TechRequirement::Age(Age::Feudal),
+        effect: TechEffect::FarmFood(75),
+    },
+    TechRules {
+        tech: Tech::GoldMining,
+        building: BuildingKind::MiningCamp,
+        cost: cost(100, 75, 0, 0),
+        seconds: 30,
+        requires: TechRequirement::Age(Age::Feudal),
+        effect: TechEffect::GatherRate {
+            resource: aoe_map::ResourceKind::Gold,
+            percent: 115,
+        },
+    },
+    TechRules {
+        tech: Tech::StoneMining,
+        building: BuildingKind::MiningCamp,
+        cost: cost(100, 75, 0, 0),
+        seconds: 30,
+        requires: TechRequirement::Age(Age::Feudal),
+        effect: TechEffect::GatherRate {
+            resource: aoe_map::ResourceKind::Stone,
+            percent: 115,
+        },
+    },
+    TechRules {
+        tech: Tech::Wheelbarrow,
+        building: BuildingKind::TownCenter,
+        cost: cost(175, 50, 0, 0),
+        seconds: 75,
+        requires: TechRequirement::Age(Age::Feudal),
+        effect: TechEffect::VillagerEconomy {
+            capacity_permyriad: 12695,
+            speed_percent: 110,
+        },
     },
 ];
 

@@ -32,6 +32,7 @@ fn building() -> GameplayBuildingState {
         research: None,
         training_queue: vec![],
         last_hit: None,
+        age: aoe_protocol::Age::Dark,
     }
 }
 

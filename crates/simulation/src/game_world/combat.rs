@@ -14,11 +14,12 @@ mod hash;
 mod lifecycle;
 mod table;
 mod tick;
+mod towers;
 
 pub(crate) use hash::hash_hit;
 pub use table::{
-    BUILDING_COMBAT, BuildingCombat, DamageKind, UNIT_COMBAT, UnitCombat, UnitCost, UnitTraining,
-    building_combat, damage_dealt, unit_combat,
+    BUILDING_COMBAT, BuildingAttack, BuildingCombat, DamageKind, UNIT_COMBAT, UnitCombat, UnitCost,
+    UnitTraining, building_combat, damage_dealt, unit_combat,
 };
 
 /// A melee attacker reaches targets within one tile (centre to edge).
@@ -52,6 +53,7 @@ pub(crate) struct Attacker {
 
 #[derive(Debug, Default)]
 pub(crate) struct Combat {
+    pub(crate) tower_ready: BTreeMap<EntityId, u64>,
     pub(crate) attackers: BTreeMap<EntityId, Attacker>,
     /// `(tick at which the body is removed, unit)` in death order.
     pub(crate) dying: BTreeSet<(u64, EntityId)>,
@@ -60,7 +62,7 @@ pub(crate) struct Combat {
 
 impl Combat {
     pub(crate) fn is_idle(&self) -> bool {
-        self.attackers.is_empty() && self.dying.is_empty()
+        self.attackers.is_empty() && self.dying.is_empty() && self.tower_ready.is_empty()
     }
 }
 

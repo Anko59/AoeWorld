@@ -18,11 +18,15 @@ impl Economy {
             hash.update(&[player.age as u8]);
             hash.update(&player.researched.to_le_bytes());
         }
+        hash.update(&(self.open_gates.len() as u64).to_le_bytes());
+        for id in &self.open_gates {
+            hash.update(&id.0.to_le_bytes());
+        }
         hash.update(&(self.buildings.len() as u64).to_le_bytes());
         for building in self.buildings.values() {
             hash.update(&building.id.0.to_le_bytes());
             hash.update(&building.player.0.to_le_bytes());
-            hash.update(&[building.kind as u8]);
+            hash.update(&[building.kind as u8, building.age as u8]);
             for coord in [
                 building.footprint.min.x,
                 building.footprint.min.y,

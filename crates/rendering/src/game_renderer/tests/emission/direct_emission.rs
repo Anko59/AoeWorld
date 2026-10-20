@@ -98,7 +98,7 @@ fn direct_scene_has_expected_content_order_and_ties_in_72_bounded_cases() {
     for mode in 0..6 {
         let mut art = GameArt {
             actors: Vec::new(),
-            buildings: Default::default(),
+            buildings: std::array::from_fn(|_| Vec::new()),
             village: Default::default(),
             fishing: Default::default(),
             town_center: Default::default(),

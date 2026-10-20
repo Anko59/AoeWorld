@@ -51,7 +51,7 @@ pub(super) fn select(
     manifest: &Manifest,
     selected: &mut Vec<usize>,
     domains: &mut Vec<AtlasDomain>,
-) -> Result<[Option<std::ops::Range<usize>>; 26], JsValue> {
+) -> Result<[Option<std::ops::Range<usize>>; 45], JsValue> {
     // Slots match building_ui::sprite_slot. Slot 22 is the builder's five rows.
     let mut ranges = std::array::from_fn(|_| None);
     let stems = [
@@ -168,6 +168,91 @@ pub(super) fn select(
         }
         ranges[4] = Some(start..selected.len());
     }
+    // Feudal families and newly constructible buildings. A present source
+    // must have contiguous frames; absent optional art retains the marker.
+    for (slot, stem, count) in [
+        (26, "b_west_archery_range_age2", 1),
+        (27, "b_west_stable_age2", 90),
+        (28, "b_west_blacksmith_age2", 1),
+        (29, "b_west_market_age2", 1),
+        (30, "b_west_tower_age2", 1),
+        (31, "b_dark_gate_palisade_se_closed", 1),
+        (32, "b_west_archery_range_age2_rubble", 1),
+        (33, "b_west_stable_age2_rubble", 1),
+        (34, "b_west_blacksmith_age2_rubble", 1),
+        (35, "b_west_market_age2_rubble", 1),
+        (36, "b_west_tower_age2_rubble", 1),
+        (37, "b_dark_gate_palisade_se_rubble", 1),
+        (38, "b_west_town_center_age2", 1),
+        (39, "b_west_house_age2", 3),
+        (40, "b_west_mill_age2", 91),
+        (41, "b_west_barracks_age2", 1),
+        (42, "b_dark_gate_palisade_se_open", 1),
+        (43, "b_dark_gate_palisade_se_constr", 3),
+        (44, "b_west_dock_age2", 1),
+    ] {
+        let mut source = format!("de/{stem}_x1.sld");
+        let mut count = count;
+        if !source_present(manifest, &source) {
+            let fallback = match slot {
+                26 => Some((24, 1)),
+                27 => Some((1009, 1)),
+                29 => Some((2278, 1)),
+                30 => Some((2655, 1)),
+                39 => Some((2235, 3)),
+                41 => Some((133, 1)),
+                44 => Some((388, 1)),
+                _ => None,
+            };
+            let Some((id, frames)) = fallback else {
+                continue;
+            };
+            source = format!("graphics.drs:[32, 112, 108, 115]:{id}");
+            count = frames;
+            if !source_present(manifest, &source) {
+                continue;
+            }
+        }
+        let frames = source_frames(manifest, &source, count)
+            .ok_or_else(|| JsValue::from_str(&format!("Corrupt building art ({source})")))?;
+        // Prefer the dat's separate trial body/sails when available. Repeating
+        // the full DE Mill body in 91 frames overflows the fixed Objects page.
+        // The DE prefix was still validated above, so corruption is not hidden.
+        if slot == 40
+            && (source_present(manifest, "graphics.drs:[32, 112, 108, 115]:741")
+                || source_present(manifest, "graphics.drs:[32, 112, 108, 115]:737"))
+        {
+            continue;
+        }
+        let start = selected.len();
+        // Only the Mill animates. Other sources can contain native destruction
+        // or damage frames; select the standing pose deterministically.
+        for frame in frames.into_iter().take(if slot == 40 || slot == 39 {
+            count as usize
+        } else if slot == 43 {
+            3
+        } else {
+            1
+        }) {
+            selected.push(frame);
+            domains.push(AtlasDomain::Objects);
+        }
+        ranges[slot] = Some(start..selected.len());
+    }
+    if ranges[40].is_none() {
+        let body = "graphics.drs:[32, 112, 108, 115]:741";
+        let sails = "graphics.drs:[32, 112, 108, 115]:737";
+        if source_present(manifest, body) || source_present(manifest, sails) {
+            let mut frames = source_frames(manifest, body, 1).ok_or("Invalid Feudal Mill body")?;
+            frames.extend(source_frames(manifest, sails, 8).ok_or("Invalid Feudal Mill sails")?);
+            let start = selected.len();
+            for frame in frames {
+                selected.push(frame);
+                domains.push(AtlasDomain::Objects);
+            }
+            ranges[40] = Some(start..selected.len());
+        }
+    }
     Ok(ranges)
 }
 
@@ -177,7 +262,7 @@ pub(super) fn select(
 pub(super) fn crop_farm(
     manifest: &mut Manifest,
     selected: &[usize],
-    ranges: &[Option<std::ops::Range<usize>>; 26],
+    ranges: &[Option<std::ops::Range<usize>>; 45],
 ) -> Result<(), JsValue> {
     if let Some(range) = &ranges[5] {
         for semantic in range.clone() {
@@ -196,4 +281,44 @@ pub(super) fn crop_farm(
         }
     }
     Ok(())
+}
+
+/// Compact new building textures to fit the fixed atlas. Rendering retains
+/// native world sizes and hotspots; magnified views have coarser texels.
+pub(super) fn pixel_step(source: &str) -> u16 {
+    let de = [
+        "archery_range",
+        "stable",
+        "blacksmith",
+        "market",
+        "tower",
+        "town_center",
+        "house",
+        "mill",
+        "barracks",
+        "dock",
+    ]
+    .iter()
+    .any(|kind| {
+        source
+            .strip_prefix("de/b_west_")
+            .and_then(|s| s.strip_prefix(kind))
+            .is_some_and(|s| s == "_age2_x1.sld" || s == "_age2_rubble_x1.sld")
+    });
+    let trial = matches!(
+        source,
+        "graphics.drs:[32, 112, 108, 115]:24"
+            | "graphics.drs:[32, 112, 108, 115]:1009"
+            | "graphics.drs:[32, 112, 108, 115]:2278"
+            | "graphics.drs:[32, 112, 108, 115]:2655"
+            | "graphics.drs:[32, 112, 108, 115]:2235"
+            | "graphics.drs:[32, 112, 108, 115]:133"
+            | "graphics.drs:[32, 112, 108, 115]:741"
+            | "graphics.drs:[32, 112, 108, 115]:737"
+    );
+    if de || trial || source.starts_with("de/b_dark_gate_palisade_se_") {
+        2
+    } else {
+        1
+    }
 }

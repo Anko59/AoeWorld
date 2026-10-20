@@ -105,7 +105,7 @@ test("train Militia, attack a sheep, and hunt and butcher a deer through right-c
   });
   await centerVillage(page);
   await click(page, "Villager");
-  await page.locator("#build-menu").click();
+  await page.locator("#build-military-menu").click();
   await page.locator("#build-barracks").click();
   let placed = false;
   for (const [x, y] of [

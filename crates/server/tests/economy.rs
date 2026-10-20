@@ -1,3 +1,5 @@
+#[path = "economy/feudal.rs"]
+mod feudal;
 #[path = "economy/techs.rs"]
 mod techs;
 use aoe_core::{PlayerId, Seed, TileCoord, TileRect};

@@ -3,7 +3,7 @@ use crate::{GameWorld, UnitKind};
 use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileCoord};
 
 impl GameWorld {
-    pub(crate) fn movement_speed(&self, kind: UnitKind) -> (u64, u64) {
+    pub(crate) fn movement_speed(&self, kind: UnitKind, player: aoe_core::PlayerId) -> (u64, u64) {
         if kind == UnitKind::FishingShip {
             return (
                 126 * FIXED_SUBUNITS_PER_TILE as u64,
@@ -22,9 +22,12 @@ impl GameWorld {
             )
         } else {
             (
-                u64::from(VILLAGE_RULES.villager_speed_numerator) * FIXED_SUBUNITS_PER_TILE as u64,
+                u64::from(VILLAGE_RULES.villager_speed_numerator)
+                    * FIXED_SUBUNITS_PER_TILE as u64
+                    * u64::from(self.villager_economy_percent(player).1),
                 u64::from(VILLAGE_RULES.villager_speed_denominator)
-                    * u64::from(self.config.tick_hz),
+                    * u64::from(self.config.tick_hz)
+                    * 100,
             )
         }
     }

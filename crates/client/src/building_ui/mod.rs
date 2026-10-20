@@ -26,9 +26,15 @@ pub fn affordable(have: Stockpile, need: Stockpile) -> bool {
 }
 
 #[inline(never)]
-pub fn build_enabled(kind: BuildingKind, stock: Stockpile, completed: u16) -> bool {
+pub fn build_enabled(
+    kind: BuildingKind,
+    stock: Stockpile,
+    completed: u16,
+    age: aoe_protocol::Age,
+) -> bool {
     let r = rules(kind);
     r.buildable
+        && (r.age == aoe_simulation::Age::Dark || age == aoe_protocol::Age::Feudal)
         && affordable(stock, self::stock(r.cost))
         && r.requires.is_none_or(|k| completed & (1 << k as u8) != 0)
 }
@@ -44,11 +50,11 @@ pub fn footprint_valid(
     if origin.x < 0
         || origin.y < 0
         || i64::from(origin.x) + i64::from(side) > i64::from(bounds[0])
-        || i64::from(origin.y) + i64::from(side) > i64::from(bounds[1])
+        || i64::from(origin.y) + i64::from(rules(kind).depth) > i64::from(bounds[1])
     {
         return false;
     }
-    (origin.y..origin.y + side)
+    (origin.y..origin.y + rules(kind).depth)
         .all(|y| (origin.x..origin.x + side).all(|x| free(TileCoord::new(x, y))))
 }
 
@@ -64,12 +70,22 @@ pub fn sprite_slot(kind: BuildingKind, progress: u16, rubble: bool) -> usize {
             23
         };
     }
-    if rubble {
-        13 + kind as usize
+    if kind == BuildingKind::PalisadeGate && progress < 1000 && !rubble {
+        43
+    } else if rubble {
+        if kind as usize <= 8 {
+            13 + kind as usize
+        } else {
+            22 + kind as usize
+        }
     } else if progress < 1000 {
         9 + rules(kind).side as usize - 1
     } else {
-        kind as usize
+        if kind as usize <= 8 {
+            kind as usize
+        } else {
+            16 + kind as usize
+        }
     }
 }
 
@@ -126,4 +142,21 @@ pub fn wall_frame(at: TileCoord, mut occupied: impl FnMut(TileCoord) -> bool) ->
         }
     }
     frame.unwrap_or(2)
+}
+
+/// Age choices share the dat's architectural families; camps already use age2
+/// art in Dark Age because DE has no age1 camp sprites.
+#[inline(never)]
+pub fn age_sprite_slot(
+    kind: BuildingKind,
+    progress: u16,
+    rubble: bool,
+    age: aoe_protocol::Age,
+) -> usize {
+    const FEUDAL: [u8; 16] = [38, 39, 2, 3, 40, 5, 41, 7, 8, 44, 26, 27, 28, 29, 30, 31];
+    if progress == 1000 && !rubble && age == aoe_protocol::Age::Feudal {
+        usize::from(FEUDAL[kind as usize])
+    } else {
+        sprite_slot(kind, progress, rubble)
+    }
 }

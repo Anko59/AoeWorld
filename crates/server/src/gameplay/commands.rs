@@ -374,6 +374,7 @@ pub(super) fn apply(
         Err(E::NotResearchable) => CommandResult::RejectedNotResearchable,
         Err(E::AlreadyResearched) => CommandResult::RejectedAlreadyResearched,
         Err(E::ResearchBusy) => CommandResult::RejectedResearchBusy,
+        Err(E::RequiresFeudalAge) => CommandResult::RejectedRequiresFeudalAge,
         Err(E::TechRequirementMissing) => CommandResult::RejectedTechRequirement,
         Err(E::Capacity) => CommandResult::RejectedQueueFull,
         Err(E::Movement(W::Unreachable)) => CommandResult::RejectedUnreachable,

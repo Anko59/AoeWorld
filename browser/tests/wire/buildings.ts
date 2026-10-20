@@ -9,9 +9,14 @@ function fragment(name: string): number[] {
 }
 
 // After footprint: construction, progress, hp, max_hp, los, food_remaining,
-// training_queue, research, last_hit (complete, healthy and idle).
+// training_queue, research, last_hit, observed age (complete, healthy and idle).
 export const townCenterState = fragment("town-center.hex");
 // After population_cap: age (Dark), researched (empty bitset).
 export const darkAgeState = fragment("player.hex");
 export const dockState = fragment("dock.hex");
 export const fishingShipState = fragment("fishing-ship.hex");
+// Feudal Age researched, every other technology still available.
+export const feudalAgeState = fragment("feudal-player.hex");
+
+// Feudal Age and Wheelbarrow researched; carry capacity is 13.
+export const wheelbarrowAgeState = fragment("wheelbarrow-player.hex");

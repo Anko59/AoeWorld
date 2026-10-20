@@ -8,6 +8,7 @@ use aoe_core::{EntityId, PlayerId};
 mod effects;
 mod table;
 
+pub use effects::villager_capacity;
 pub use table::{Age, FEUDAL_BUILDINGS, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules};
 
 /// The technology a building is researching, in game ticks.
@@ -51,6 +52,9 @@ impl GameWorld {
         }
         if self.has_researched(player, tech) {
             return Err(EconomyError::AlreadyResearched);
+        }
+        if rules.requires == TechRequirement::Age(Age::Feudal) && !self.is_feudal(player) {
+            return Err(EconomyError::RequiresFeudalAge);
         }
         let busy = site.research.is_some() || !site.training_queue.is_empty();
         let duplicate = self
@@ -125,6 +129,8 @@ impl GameWorld {
     fn requirement_met(&self, player: PlayerId, requirement: TechRequirement) -> bool {
         match requirement {
             TechRequirement::None => true,
+            TechRequirement::Age(Age::Dark) => true,
+            TechRequirement::Age(Age::Feudal) => self.is_feudal(player),
             TechRequirement::BuildingKinds { count, kinds } => {
                 kinds
                     .iter()
