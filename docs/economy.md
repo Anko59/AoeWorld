@@ -194,3 +194,54 @@ beyond the age field. Work per tick is bounded by the building count.
 Dark Age building melee/pierce armour from AoE II DE: House -2/7; Mill,
 Lumber Camp, Mining Camp and Barracks 0/7; Palisade Wall 2/5; Outpost and
 Farm 0/0. Town Center remains 3/5. Negative melee armour increases damage.
+## Wildlife and hunting
+
+`WILDLIFE_RULES` in `game_world/wildlife/table.rs` is the animal data table:
+sheep 7 HP / 100 food, deer 5 / 140, boar 75 / 340 / 7 attack,
+wolf 25 HP / 3 attack / no food. Shepherds gather at 0.33 food/second;
+hunters at 0.41, compared with foragers' 0.31. These are the DE values used
+by this implementation; no original game assets are needed.
+
+`HuntOrder { unit_ids, animal_id }` assigns owned living villagers. Hunting
+uses the existing villager's **melee** attack (3 damage, two-second period),
+the permitted simplification of the ranged hunting attack. A new command
+replaces the hunt. Death cancels the worker's job. Dead animals keep a body
+for one second, then remain carcasses. Hunters automatically gather their
+food and deliver ten-food loads through the normal reachable food drop-off
+selection: owned completed Town Centers or Mills only. Sheep use Shepherding;
+other animals use Hunting. Unattended carcasses decay at 0.25 food/second
+(sheep/deer) or 0.40 (boar). A worker assigned to the carcass, including its
+return trip, keeps it attended; decay resumes when the last job is cancelled.
+
+Neutral sheep convert within two tiles to the nearest living unit's player;
+ties use player then entity id. Owned sheep stay owned. Deer flee within
+four tiles at 1.0 tile/second, versus villagers' 0.8. Boar retaliate against
+the last villager to hit them and stop chasing beyond eight tiles of home.
+Wolves acquire villagers within six tiles. Movement is fixed point and tests
+terrain, diagonal crossings and building collision; animals do not block tiles.
+Animal sight uses distance, like current unit/building sight, without fog or
+occlusion. Hunt targets are explicit; combat AttackOrder still targets units
+and buildings.
+
+The map generator has no animal hooks. Village initialization therefore places
+a deterministic local kit of eight sheep, two boar and four deer, searching
+bounded local rings for free passable tiles. Constrained starts may omit an
+animal if no tile fits. Wolves are supported by the simulation spawn API but
+are not placed in the starting kit.
+
+Live animals occupy an eight-tile spatial index. Each tick probes a fixed
+neighborhood around living units and advances only candidate animals and
+active chases/flights (including target cleanup), plus bounded hunt jobs (80).
+Distant idle animals add no tick work, verified
+with equal counters for 10 and 1,000 distant sheep. Carcass lifecycle/decay uses
+an ordered due-time index, so only due carcasses are visited. Storage is capped
+at 4,096 animals. Replay hashes include animal state, cooldowns, fractional
+movement/decay, due times and hunt jobs.
+
+The appended `WildlifeState` wire variant carries the complete, bounded animal
+set for the subscription region at its revision and tick; it replaces the
+previous set, including removals on panning. Subscribe/resync always sends it;
+ticks send it when that set changes. `HuntOrder` and worker task variants are
+appended, preserving existing enum indexes and golden fixtures. The headless
+wire scenario writes `.cache/wildlife/scenario.log`. This work adds no client
+controls or animal rendering; the client accepts the wildlife frame.

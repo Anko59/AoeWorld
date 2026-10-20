@@ -83,6 +83,8 @@ pub enum UnitTask {
     Building,
     /// Standing on a farm and working it.
     Farming,
+    Hunting,
+    Shepherding,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ResourceKind {
@@ -213,6 +215,12 @@ pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
             && unit.hp <= unit.max_hp
             && (unit.hp == 0) == (unit.task == UnitTask::Dying)
             && (unit.hp > 0 || unit.attack_target.is_none())
+            && (!matches!(unit.task, UnitTask::Hunting | UnitTask::Shepherding)
+                || (unit.kind == UnitKind::Villager
+                    && unit
+                        .carried
+                        .is_none_or(|load| load.kind == ResourceKind::Food)
+                    && unit.gathering.is_none_or(|kind| kind == ResourceKind::Food)))
             && unit
                 .gathering
                 .is_none_or(|_| unit.kind == UnitKind::Villager)
@@ -222,7 +230,7 @@ pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
     })
 }
 
-fn bounded<'de, D: Deserializer<'de>, T: Deserialize<'de>, const LIMIT: usize>(
+pub(super) fn bounded<'de, D: Deserializer<'de>, T: Deserialize<'de>, const LIMIT: usize>(
     deserializer: D,
 ) -> Result<Vec<T>, D::Error> {
     struct Items<T, const N: usize>(std::marker::PhantomData<T>);

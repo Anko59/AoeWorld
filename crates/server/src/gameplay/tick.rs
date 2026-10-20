@@ -68,7 +68,13 @@ impl GameplayService {
         let buildings = super::economy::buildings(&world);
         let tick = world.tick();
         let mut updates = Vec::new();
+        let mut wildlife_updates = Vec::new();
         for (session_id, subscription) in subscriptions {
+            wildlife_updates.push((
+                session_id,
+                subscription.revision,
+                super::wildlife::animals(&world, subscription.region),
+            ));
             let current =
                 super::economy::query_units(&world, subscription.region, self.primary_unit_id);
             if current.len() > MAX_SUBSCRIBED_UNITS {
@@ -172,6 +178,31 @@ impl GameplayService {
                 session.resident_players = players.clone();
                 session.resident_buildings = buildings.clone();
                 session.resident = current;
+            }
+        }
+        for (session_id, revision, animals) in wildlife_updates {
+            if failed.contains(&session_id) {
+                continue;
+            }
+            let Some(session) = sessions.get_mut(&session_id) else {
+                continue;
+            };
+            // A concurrent subscription supersedes work collected for an old
+            // revision; never overwrite its fresh residents with an old set.
+            if session.subscription.is_none_or(|s| s.revision != revision) {
+                continue;
+            }
+            if session.resident_animals != animals {
+                let message = GameplayServerMessage::WildlifeState {
+                    revision,
+                    tick,
+                    animals: animals.clone(),
+                };
+                if session.sender.try_send(message).is_err() {
+                    failed.insert(session_id);
+                } else {
+                    session.resident_animals = animals;
+                }
             }
         }
         drop(sessions);

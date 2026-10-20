@@ -473,6 +473,7 @@ mod combat;
 mod far_orders;
 mod physical_movement;
 mod routes;
+mod wildlife;
 
 pub(crate) mod economy;
 

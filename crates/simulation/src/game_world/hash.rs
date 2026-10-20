@@ -50,6 +50,7 @@ impl GameWorld {
         hash.update(&self.next_entity_id.to_le_bytes());
         self.economy.update_hash(&mut hash);
         self.combat.update_hash(&mut hash);
+        self.wildlife.update_hash(&mut hash);
         for unit in &self.units {
             hash.update(&unit.state.id.0.to_le_bytes());
             hash.update(&unit.state.player.0.to_le_bytes());
