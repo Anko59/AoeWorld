@@ -46,6 +46,14 @@ test("reach Feudal, build a Blacksmith and research Double-Bit Axe", async ({
   await centerVillage(page);
   await select(page, "Villager");
   await page.locator("#build-menu").click();
+  await expect(page.locator("#build-dock")).toBeEnabled();
+  await expect(page.locator("#build-dock kbd")).toHaveText("T");
+  const commands = page.locator("#command-grid button:visible");
+  for (const command of await commands.all()) {
+    const bounds = await command.boundingBox();
+    if (!bounds) throw new Error("Visible build command has no bounds");
+    expect(bounds.y + bounds.height).toBeLessThanOrEqual(704);
+  }
   await expect(page.locator("#build-blacksmith")).toBeDisabled();
   await expect(page.locator("#build-blacksmith")).toHaveAttribute(
     "title",
@@ -139,4 +147,7 @@ test("Feudal HUD preserves Militia identity and shows Wheelbarrow's thirteen-res
   if (!worker) throw new Error("Visible loaded worker missing");
   await page.mouse.click(worker.x, worker.y);
   await expect(page.locator("#selection-load")).toContainText("13/13 wood");
+  await select(page, "FishingShip");
+  await expect(page.locator("#selection-name")).toHaveText("Fishing Ship");
+  await expect(page.locator("#selection-load")).toContainText("15/15 food");
 });

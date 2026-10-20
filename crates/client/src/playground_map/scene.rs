@@ -84,7 +84,7 @@ impl PreparedScene {
     /// Query the ground contact surface, including its current LOD. Cosmetic
     /// cliff rims never change eligible ground's source contact coordinates.
     /// Spatial buckets avoid scanning the full mesh for every tree or unit.
-        pub(crate) fn height(&self, world: [f64; 2]) -> Option<f64> {
+    pub(crate) fn height(&self, world: [f64; 2]) -> Option<f64> {
         let key = [
             bucket(world[0], self.bucket_width),
             bucket(world[1], self.bucket_width),

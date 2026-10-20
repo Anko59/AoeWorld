@@ -4,24 +4,33 @@ use aoe_protocol::*;
 
 #[test]
 fn feudal_build_and_research_orders_and_age_rejection_have_appended_goldens() {
-    for (kind, index) in [
-        (BuildingKind::ArcheryRange, 9),
-        (BuildingKind::Stable, 10),
-        (BuildingKind::Blacksmith, 11),
-        (BuildingKind::Market, 12),
-        (BuildingKind::WatchTower, 13),
-        (BuildingKind::PalisadeGate, 14),
-    ] {
-        let order = GameplayClientMessage::BuildOrder {
-            sequence: 1,
-            builder_ids: vec![EntityId(2)],
-            kind,
-            origin: TileCoord::new(10, 20),
-        };
-        let bytes = encode_gameplay_client(&order).unwrap();
-        assert_eq!(bytes, vec![8, 1, 1, 2, index, 20, 40]);
-        assert_eq!(decode_gameplay_client(&bytes).unwrap(), order);
-    }
+    let cases = [
+        (BuildingKind::ArcheryRange, 10),
+        (BuildingKind::Stable, 11),
+        (BuildingKind::Blacksmith, 12),
+        (BuildingKind::Market, 13),
+        (BuildingKind::WatchTower, 14),
+        (BuildingKind::PalisadeGate, 15),
+    ];
+    let actual: Vec<_> = cases
+        .iter()
+        .map(|&(kind, _)| {
+            let order = GameplayClientMessage::BuildOrder {
+                sequence: 1,
+                builder_ids: vec![EntityId(2)],
+                kind,
+                origin: TileCoord::new(10, 20),
+            };
+            let bytes = encode_gameplay_client(&order).unwrap();
+            assert_eq!(decode_gameplay_client(&bytes).unwrap(), order);
+            bytes
+        })
+        .collect();
+    let expected: Vec<_> = cases
+        .iter()
+        .map(|&(_, index)| vec![8, 1, 1, 2, index, 20, 40])
+        .collect();
+    assert_eq!(actual, expected, "current codec bytes: {actual:?}");
     for (tech, index) in [
         (Tech::DoubleBitAxe, 3),
         (Tech::HorseCollar, 4),

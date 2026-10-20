@@ -1,4 +1,8 @@
-import { darkAgeState, wheelbarrowAgeState } from "../../wire/buildings.js";
+import {
+  darkAgeState,
+  wheelbarrowAgeState,
+  fishingShipState,
+} from "../../wire/buildings.js";
 import type { Page } from "@playwright/test";
 import {
   scoutCombat,
@@ -66,26 +70,29 @@ export async function workerFixture(page: Page, feudal = false) {
         ...(task === 2 ? [1, 2] : [0]),
         ...(kind === 1
           ? scoutCombat
-          : kind === 2
-            ? militiaCombat
-            : villagerCombat),
+          : kind === 3
+            ? fishingShipState
+            : kind === 2
+              ? militiaCombat
+              : villagerCombat),
       ];
       socket.send(
         Buffer.from([
           1,
           ...revision,
           0,
-          3,
+          feudal ? 4 : 3,
           ...unit(0, 8192.5, 8192.5, feudal ? 2 : 1, 0, [0]),
           ...unit(2, 12000.5, 12000.5, 0, 2, [0]),
           ...unit(3, 8193.5, 8192.5, 0, 3, [1, 1, feudal ? 13 : 3]),
+          ...(feudal ? unit(4, 8190.5, 8194.5, 3, 3, [1, 0, 15]) : []),
           1,
           0,
           ...uint(200),
           ...uint(200),
           100,
           ...uint(200),
-          3,
+          feudal ? 4 : 3,
           5,
           ...(feudal ? wheelbarrowAgeState : darkAgeState),
           0,

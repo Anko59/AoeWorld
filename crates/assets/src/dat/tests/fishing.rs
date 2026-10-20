@@ -24,7 +24,11 @@ fn real_trial_fishing_values_include_five_tile_ship_los() {
     let dock = file.unit(133).unwrap();
     assert_eq!(dock.name, "DOCK2");
     assert!(table::build(&file, None).rows.iter().any(|row| {
-        row.unit == 133 && row.family.iter().any(|art| art.name == "DOCK2NNW" && art.slp == 388)
+        row.unit == 133
+            && row
+                .family
+                .iter()
+                .any(|art| art.name == "DOCK2NNW" && art.slp == 388)
     }));
     for (id, amount) in [
         (53, 200.0),

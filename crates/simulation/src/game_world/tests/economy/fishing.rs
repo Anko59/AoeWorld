@@ -80,6 +80,45 @@ fn build_dock(world: &mut GameWorld, origin: TileCoord) -> EntityId {
 }
 
 #[test]
+fn feudal_age_and_wheelbarrow_preserve_naval_capacity_speed_and_dock_training() {
+    let mut world = coast();
+    world
+        .place_town_center(PlayerId(0), TileCoord::new(10, 10))
+        .unwrap();
+    let origin = site(&world);
+    let dock = build_dock(&mut world, origin);
+    world
+        .issue_train(PlayerId(0), dock, UnitKind::FishingShip)
+        .unwrap();
+    advance(&mut world, 41 * 20);
+    let ship = world
+        .units()
+        .find(|u| u.kind == UnitKind::FishingShip)
+        .unwrap();
+    let villager = world
+        .units()
+        .find(|u| u.kind == UnitKind::Villager)
+        .unwrap();
+    let ship_speed = world.movement_speed(ship.kind, ship.player);
+    let villager_speed = world.movement_speed(villager.kind, villager.player);
+    let player = world.economy.players.get_mut(&PlayerId(0)).unwrap();
+    player.age = crate::Age::Feudal;
+    player.researched = crate::Tech::FeudalAge.bit() | crate::Tech::Wheelbarrow.bit();
+    assert_eq!(world.gather_capacity(&ship), 15);
+    assert_eq!(world.gather_capacity(&villager), 13);
+    assert_eq!(world.movement_speed(ship.kind, ship.player), ship_speed);
+    assert_ne!(
+        world.movement_speed(villager.kind, villager.player),
+        villager_speed
+    );
+    assert!(
+        world
+            .issue_train(PlayerId(0), dock, UnitKind::FishingShip)
+            .is_ok()
+    );
+}
+
+#[test]
 fn dock_and_fishing_ship_reveal_their_los_and_enemy_ships_hide_after_sight_leaves() {
     use crate::TileVisibility::{Explored, Unexplored, Visible};
     let mut world = coast();
