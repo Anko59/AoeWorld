@@ -107,10 +107,23 @@ starting resources and builds a House, Mill, Barracks and Farm through those
 same orders. `servers` serves the already-built
 comparison apps on 18086/18087 and initializes their villages through gameplay;
 it stops after 30 minutes or when `.cache/tc-shots/stop-proof-servers` exists.
+Its optional `base` request selects an already-built comparison revision,
+defaulting to `origin/dev`. Both villages include House, Mill, Barracks and Farm.
 This is needed for building comparisons because spectator-only map captures
 do not create a player or a starting Town Center.
 After the tool has been built, `make building-proof-run` repeats its local
 protocol preparation without rebuilding; it accepts the same request file.
+
+For animated villages, the opt-in `tests/proofs/building-village.spec.ts`
+browser proof reads `.cache/tc-shots/capture-request.json` with `url`, optional
+`before`, and the Town Center's `x`/`y`. It requires all five completed building
+kinds in the wide view, native art, loaded terrain and the correct backend,
+then captures the wide view and two close-ups at the read-back cameras after
+a newly presented frame. Outputs are `village-{before,after}2.png`,
+`tc-close-{before,after}2.png` and `barracks-close-{before,after}2.png` under
+`.cache/tc-shots/`. This captures actual animation; it does not claim the
+unchanged-frame verdict of `make compare`, which cannot settle a visible
+continuously animated Mill. Keep that refusal explicit in the local report.
 
 ## Findings on the trial (Gaia, 5,024 graphics, 720 units)
 
@@ -130,7 +143,9 @@ protocol preparation without rebuilding; it accepts the same request file.
   trial `graphics.drs`; the table's `pack` column says which. The composition
   section also inventories every delta and annex resource separately.
 - TC terrain 27 resolves to SLP 15006 (grass/dirt), used across its 4×4
-  footprint with the ordinary terrain border blend. Construction sites use
+  footprint plus a one-tile margin with the ordinary terrain border blend.
+  The margin is a renderer choice; the decoded building tail has no such field.
+  Construction sites use
   the same foundation. SLP 890 is referenced on layer 10 but absent; the eight
   available TC sprites render without it, matching the trial's inventory.
 

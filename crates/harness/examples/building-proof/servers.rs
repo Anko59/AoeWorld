@@ -17,15 +17,22 @@ impl Drop for Children {
     }
 }
 
-pub fn run(pack: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run(pack: PathBuf, base_revision: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::current_dir()?;
     let output = Command::new("git")
-        .args(["rev-parse", "origin/dev"])
+        .args([
+            "rev-parse",
+            "--verify",
+            &format!("{}^{{commit}}", base_revision.unwrap_or("origin/dev")),
+        ])
         .output()?;
     if !output.status.success() {
         return Err("cannot resolve comparison base".into());
     }
     let revision = String::from_utf8(output.stdout)?;
+    if revision.trim().len() != 40 || !revision.trim().bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err("invalid comparison revision".into());
+    }
     let base = root
         .join(".cache/compare/base")
         .join(revision.trim())
@@ -97,8 +104,8 @@ pub fn run(pack: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         }
         tokio::runtime::Runtime::new()?.block_on(async {
             tokio::time::timeout(
-                Duration::from_secs(180),
-                village(&format!("http://127.0.0.1:{port}/"), true, false),
+                Duration::from_secs(900),
+                village(&format!("http://127.0.0.1:{port}/"), true, true),
             )
             .await
         })??;
