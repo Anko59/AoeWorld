@@ -416,3 +416,7 @@ fn dangling_output_symlink_is_replaced_without_writing_its_missing_target() {
 #[cfg(target_os = "linux")]
 #[path = "runner_cli/load.rs"]
 mod load;
+
+#[cfg(target_os = "linux")]
+#[path = "runner_cli/suspend.rs"]
+mod suspend;

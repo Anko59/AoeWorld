@@ -24,6 +24,9 @@ fn holder(root: &Path, branch: &str) -> Holder {
         command: "make ship".into(),
         started: 1_791_900_000,
         returning: false,
+        pid: 0,
+        pid_started: None,
+        gap: None,
     }
 }
 

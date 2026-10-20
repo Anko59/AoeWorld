@@ -55,7 +55,8 @@ pub(crate) fn stop_all(
 
 /// Stop every harness container that a host suspend interrupted; returns what was stopped.
 pub(crate) fn stop_interrupted() -> Result<Vec<(String, u64)>, Box<dyn Error>> {
-    let now = suspend::read()?.gap();
+    // The real clock: a simulated suspend must never remove a container a real run started.
+    let now = suspend::read_real()?.gap();
     let label = format!("label={}", suspend::LABEL);
     let listing = docker(&["ps", "-a", "--filter", &label, "--format", FORMAT])?;
     let stale = interrupted(&listing, now);
