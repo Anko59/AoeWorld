@@ -1,6 +1,6 @@
 use aoe_assets::{
     catalog::{
-        packing::{AtlasDomain, FrameExtent, PAGE_SIDE, pack_frames},
+        packing::{ATLAS_BYTES, AtlasDomain, FrameExtent, PAGE_COUNT, PAGE_SIDE, pack_frames},
         runtime,
     },
     pack::Manifest,
@@ -14,7 +14,8 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let mut add = |source: String,
                    count: u32,
                    step: usize,
-                   domain|
+                   domain,
+                   actor_copy: bool|
      -> Result<(), Box<dyn std::error::Error>> {
         let mut frames = manifest
             .frames
@@ -44,7 +45,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             {
                 return Err(format!("invalid {source} source rectangle").into());
             }
-            if selected.insert((source.clone(), frame.frame)) {
+            if selected.insert((source.clone(), frame.frame)) || actor_copy {
                 extents.push(FrameExtent {
                     domain,
                     width: frame.width,
@@ -73,7 +74,16 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     AtlasDomain::Objects
                 },
+                false,
             )?;
+        }
+    }
+    // The loader packs every actor group separately: neutral sheep need their
+    // own grey player ramp even when their source is shared with owned sheep.
+    for source in aoe_assets::catalog::units::SPRITES {
+        let identity = source.manifest_source();
+        if manifest.frames.iter().any(|f| f.source == identity) {
+            add(identity, source.frames(), 1, AtlasDomain::Objects, true)?;
         }
     }
     for building in manifest
@@ -92,6 +102,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 u32::from(building.foundation_size[0]) * u32::from(building.foundation_size[1]),
                 1,
                 AtlasDomain::Terrain,
+                false,
             )?;
         }
         for part in building
@@ -109,6 +120,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                     1
                 },
                 AtlasDomain::Objects,
+                false,
             )?;
         }
     }
@@ -165,7 +177,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     }
     let placements = pack_frames(&extents)?;
     println!(
-        "packed {} frames in the fixed three-page atlas",
+        "packed {} frames in {PAGE_COUNT} pages ({ATLAS_BYTES} bytes)",
         placements.len()
     );
     Ok(())

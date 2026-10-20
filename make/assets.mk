@@ -44,3 +44,10 @@ building-proof-build: slot-bootstrap
 
 building-proof-build-steps:
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness --example building-proof
+
+.PHONY: test-assets-pack test-assets-pack-steps
+test-assets-pack: slot-bootstrap
+	@$(SLOT_RUN) test-assets-pack -- make --no-print-directory test-assets-pack-steps
+
+test-assets-pack-steps:
+	@$(subst $(TOOL_IMAGE),-e $(call MOUNT_QUOTE,AOE_REVIEWED_PACK_MANIFEST=$(ROOT)/$(AOE_ASSET_PACK)/manifest.json) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo nextest run --locked -p aoe-assets --run-ignored only --no-tests fail --success-output immediate -E 'test(original_manifest_all_reviewed_frames_fit_fixed_atlas)'

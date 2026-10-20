@@ -37,9 +37,13 @@ fn terrain_records_resolve_foundation_art_without_a_guessed_terrain_id() {
 #[test]
 fn aok_building_section_has_no_snow_graphic_and_keeps_annex_tiles() {
     let mut bytes = fixture(0);
+    let name = bytes.windows(5).position(|w| w == b"HOUS\0").unwrap();
+    let unit_start = name - (146 + 2 * 5 + 6);
+    bytes[unit_start + 27..unit_start + 31].copy_from_slice(&1.5f32.to_le_bytes());
+    bytes[unit_start + 31..unit_start + 35].copy_from_slice(&2.0f32.to_le_bytes());
+    bytes[unit_start + 43..unit_start + 45].copy_from_slice(&2i16.to_le_bytes());
     // The first unit ends immediately before the villager. Its last 80 bytes
     // are a deliberately non-symmetric synthetic AoK building record.
-    let name = bytes.windows(5).position(|w| w == b"HOUS\0").unwrap();
     let start = name + 5 + 4 + 4 + 37 + 20 + 1 + 6 + 6 + 56 + 65;
     let b = &mut bytes[start..start + 80];
     b[2] = 3;
@@ -62,7 +66,12 @@ fn aok_building_section_has_no_snow_graphic_and_keeps_annex_tiles() {
     b[55..57].copy_from_slice(&42i16.to_le_bytes());
     let file = parse(&bytes).unwrap();
     assert_eq!(file.report.stopped, None);
-    let building = file.unit(0).unwrap().building.as_ref().unwrap();
+    let unit = file.unit(0).unwrap();
+    assert_eq!(unit.footprint, [3.0, 4.0]);
+    assert_eq!(unit.dead_unit, 2);
+    assert_eq!(unit.dying, 7);
+    assert_eq!(unit.attack_graphic, Some(-1));
+    let building = unit.building.as_ref().unwrap();
     assert_eq!(
         (
             building.adjacent_mode,

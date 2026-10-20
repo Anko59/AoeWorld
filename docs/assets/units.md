@@ -33,7 +33,7 @@ there is no unrelated sprite substitution. Every listed source is present in
 the local trial, so no DE unit import is needed. Sheep do not attack in this
 simulation; the absent trial sheep attack 3623 is not selected.
 
-The actor selection has 2,540 frames, alongside the base catalogue's 2,369
+The actor selection has 2,540 frames, alongside the base catalogue's 2,361
 full-prefix frames and the bounded building subset. The runtime validates at
 most 5,120 selected frames before pixel allocation. Terrain keeps pages 0–1;
 objects use pages 2–3 of four 2048-square RGBA pages (64 MiB). All backends

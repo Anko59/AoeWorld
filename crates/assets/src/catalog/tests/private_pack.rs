@@ -80,7 +80,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             });
         }
     }
-    if extents.len() != MAX_REVIEWED_FRAMES as usize + 2695 || counts != [1474, 3590] {
+    if extents.len() != MAX_REVIEWED_FRAMES as usize + 2695 || counts != [1474, 3582] {
         return Err("incomplete semantic selection".into());
     }
     // Match the loader's DAT additions after the static catalog, including
@@ -240,7 +240,7 @@ fn original_manifest_all_reviewed_frames_fit_fixed_atlas() -> Result<(), Box<dyn
 #[test]
 fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
-    assert_eq!(prove(&manifest).unwrap(), (1474, 3590));
+    assert_eq!(prove(&manifest).unwrap(), (1474, 3582));
     let saved = manifest.frames[0].clone();
     manifest.frames[0].frame = 1;
     assert!(prove(&manifest).is_err());
@@ -339,7 +339,7 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
             manifest.frames.push(record);
         }
     }
-    assert_eq!(prove(&manifest).unwrap(), (1474, 3590 + 15));
+    assert_eq!(prove(&manifest).unwrap(), (1474, 3582 + 15));
     for index in manifest.frames.len() - 15..manifest.frames.len() {
         let mut bad = manifest.clone();
         bad.frames.remove(index);

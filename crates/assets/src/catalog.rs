@@ -15,7 +15,7 @@ mod village;
 pub use topology::TerrainFrameTopology;
 
 /// Reviewed selection ceiling, not an increase to the fixed four-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 2_369;
+pub const MAX_REVIEWED_FRAMES: u32 = 2_361;
 
 /// Buildings represented by the current gameplay protocol. Other DAT recipes
 /// remain available to offline tools without occupying the live match atlas.

@@ -76,3 +76,35 @@ fn building_proof_checks_every_static_variant_and_construction_angle() {
         assert!(check(&bad).is_err(), "duplicate runtime frame {index}");
     }
 }
+
+#[test]
+fn building_proof_includes_present_actor_animations() {
+    let mut manifest = fixture();
+    let source = aoe_assets::catalog::units::SPRITES[0];
+    for frame in 0..source.frames() {
+        let mut record = manifest.frames[0].clone();
+        record.source = source.manifest_source();
+        record.frame = frame;
+        manifest.frames.push(record);
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let check = |manifest: &Manifest| {
+        std::fs::write(
+            directory.path().join("manifest.json"),
+            serde_json::to_vec(manifest).unwrap(),
+        )
+        .unwrap();
+        packing::check(directory.path().to_path_buf())
+    };
+    assert!(check(&manifest).is_ok());
+    manifest.frames.last_mut().unwrap().width = 2045;
+    assert!(
+        check(&manifest).is_err(),
+        "actor must occupy the shared atlas"
+    );
+    manifest.frames.pop();
+    assert!(
+        check(&manifest).is_err(),
+        "present incomplete actor must fail"
+    );
+}
