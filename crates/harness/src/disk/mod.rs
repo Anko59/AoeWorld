@@ -1,5 +1,9 @@
-//! Size and remove disposable output without following symlinks.
+//! Disk admission, and disposable output sizing/cleanup without following symlinks.
 use std::{fs, io, path::Path};
+pub(crate) mod precheck;
+
+#[cfg(test)]
+mod tests;
 
 /// File bytes, excluding symlink destinations. Missing output occupies no bytes.
 pub(crate) fn bytes(path: &Path) -> io::Result<u64> {

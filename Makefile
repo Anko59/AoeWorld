@@ -27,7 +27,7 @@ HARNESS_CARGO_CACHE ?= $(GIT_COMMON)/aoe-cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
 # Expose the cache at its host path too: harness commands start sibling containers.
 CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo) $(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(HARNESS_CARGO_CACHE))) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
-HEAVY_ENV := -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e GITHUB_ACTIONS -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
+HEAVY_ENV := -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e GITHUB_ACTIONS -e CI -e AOE_DISK_FLOOR_GIB -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
 # The CPUs each slot gives its containers: gates/heavy.json cores shared among its slots. The
 # harness that holds the slot computes the count and exports it as AOE_SLOT_CPUS beside
 # AOE_HEAVY_SLOT; make only expands that variable, so there is no host binary to find. A container
@@ -235,7 +235,7 @@ lint:
 deny: policy-tools
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(POLICY_IMAGE) cargo run --locked -p aoe-harness -- deny
 
-test-unit: orchestrator-tools slot-bootstrap
+test-unit: disk-precheck orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-unit -- make --no-print-directory test-unit-steps
 
 .PHONY: test-harness gates-docs gate-plan scope-check gate-run
@@ -259,7 +259,7 @@ harness-evidence-path-check:
 harness-gate-run-path-check: harness-evidence-path-check
 	@$(if $(strip $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL)),true,$(error gate-run requires a resolvable local Unix Docker socket))
 
-test-wasm: browser-tools orchestrator-tools slot-bootstrap
+test-wasm: disk-precheck browser-tools orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-wasm -- make --no-print-directory test-wasm-steps
 
 coverage-check:
@@ -296,14 +296,12 @@ qa-serve:
 pre-commit:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- pre-commit
 
-preflight: deny build-wasm
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight
-
-# The two halves of preflight: CI's static job runs them as parallel legs.
-preflight-checks: deny build-wasm
+# CI's static job runs these two halves as parallel legs.
+preflight-checks: disk-precheck
+	@$(MAKE) --no-print-directory deny build-wasm
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight --part checks
 
-preflight-unit:
+preflight-unit: disk-precheck
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight --part unit
 
 # The pre-push hook: skip the preflight `make ship` just passed at this exact

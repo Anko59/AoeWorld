@@ -18,6 +18,7 @@ enum Command {
         command: assets::AssetCommand,
     },
     Doctor,
+    DiskPrecheck,
     /// Stop the harness containers that a host suspend left running.
     Recover,
     Dev {

@@ -15,6 +15,11 @@ pub(super) fn run(
     gate: &str,
     slots: &slots::SlotEnv,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let admitted = match &command {
+        Command::Slot { gate, .. } => gate.as_str(),
+        _ => gate,
+    };
+    crate::disk::precheck::before_command(admitted, slots.ci)?;
     // The agent hook takes no slot: a broken registry must not stop it judging edits.
     let _slot = match command {
         Command::Agents(_) => None,
@@ -22,6 +27,7 @@ pub(super) fn run(
     };
     match command {
         Command::Assets { command } => assets::run(command)?,
+        Command::DiskPrecheck => (),
         Command::Doctor => {
             for tool in ["git", "cargo", "rustc"] {
                 process::run(tool, &["--version"], Duration::from_secs(10))?;
