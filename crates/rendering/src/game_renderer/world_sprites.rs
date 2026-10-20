@@ -9,7 +9,7 @@ mod village;
 
 #[path = "village/bounds.rs"]
 mod bounds;
-pub use bounds::scene_unit_bounds;
+pub use bounds::{scene_unit_bounds, scene_unit_render_key};
 
 /// Fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
@@ -458,14 +458,5 @@ pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneC
     let Some((frames, stride, true)) = village::frames(art, unit) else {
         return false;
     };
-    let (direction, flipped) = sprite_direction(unit.facing);
-    frames[direction * stride..(direction + 1) * stride]
-        .iter()
-        .any(|frame| {
-            let mut frame = world_frame(*frame);
-            if flipped {
-                frame.anchor[0] = frame.size[0] - frame.anchor[0];
-            }
-            sprite_screen_bounds(frame, unit.position, unit.elevation_meters, camera).is_some()
-        })
+    bounds::frames_visible(frames, stride, unit, camera)
 }

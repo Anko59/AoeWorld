@@ -3,6 +3,42 @@ use crate::{GameWorld, UnitTask};
 use aoe_core::EntityId;
 
 impl GameWorld {
+    /// Cancel an owned actor's orders at its exact authoritative position.
+    pub fn issue_stop(
+        &mut self,
+        player: aoe_core::PlayerId,
+        id: EntityId,
+    ) -> Result<(), crate::EconomyError> {
+        if self.animal(id).is_some() {
+            return self.stop_sheep(player, id);
+        }
+        let index = *self
+            .lookup
+            .get(&id)
+            .ok_or(crate::EconomyError::UnknownEntity)?;
+        let unit = self.units[index].state;
+        if unit.hp == 0 {
+            return Err(crate::EconomyError::InvalidTarget);
+        }
+        if unit.player != player {
+            return Err(crate::EconomyError::NotOwner);
+        }
+        self.stop_movement(index);
+        if let Ok(slot) = self.active_movers.binary_search(&id) {
+            self.active_movers.remove(slot);
+        }
+        self.stop_gathering(id);
+        self.cancel_attack(id);
+        self.economy.builders.remove(&id);
+        self.units[index].last_movement_error = None;
+        self.units[index].state.task = if unit.carried.is_some() {
+            UnitTask::Carrying
+        } else {
+            UnitTask::Idle
+        };
+        Ok(())
+    }
+
     /// Drops the unit's route and order without touching its task.
     pub(crate) fn stop_movement(&mut self, index: usize) {
         self.clear_planner(index);

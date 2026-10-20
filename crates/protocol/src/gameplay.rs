@@ -147,6 +147,11 @@ pub enum ClientMessage {
         unit_ids: Vec<EntityId>,
         animal_id: EntityId,
     },
+    /// Halt an owned unit or sheep at its authoritative position.
+    StopOrder {
+        sequence: u64,
+        entity_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

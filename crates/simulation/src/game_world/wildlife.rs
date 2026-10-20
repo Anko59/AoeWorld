@@ -98,6 +98,29 @@ fn radius(tiles: i64) -> i64 {
 }
 
 impl GameWorld {
+    pub(crate) fn stop_sheep(
+        &mut self,
+        player: PlayerId,
+        id: EntityId,
+    ) -> Result<(), EconomyError> {
+        let animal = self
+            .wildlife
+            .animals
+            .get_mut(&id)
+            .ok_or(EconomyError::UnknownEntity)?;
+        if animal.state.kind != AnimalKind::Sheep || animal.state.hp == 0 {
+            return Err(EconomyError::InvalidTarget);
+        }
+        if animal.state.owner != Some(player) {
+            return Err(EconomyError::NotOwner);
+        }
+        animal.herd = None;
+        animal.speed_carry = 0;
+        animal.state.moving = false;
+        self.wildlife.engaged.remove(&id);
+        Ok(())
+    }
+
     pub fn issue_herd(
         &mut self,
         player: PlayerId,

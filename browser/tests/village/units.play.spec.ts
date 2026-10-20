@@ -18,6 +18,55 @@ const actors = async (page: Page): Promise<Actor[]> =>
     (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
   ) as Actor[];
 
+test("an owned sheep stops herding when Stop is pressed", async ({
+  page,
+  request,
+}) => {
+  expect((await request.post("/maps/reset")).status()).toBe(204);
+  await gameAssets(page);
+  await page.goto("/?play=1#zoom=.45");
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await centerVillage(page);
+  await freshHud(page);
+  const neutral = (await actors(page)).find(
+    (a) => a.kind === "Sheep" && a.hp > 0,
+  );
+  if (!neutral) throw new Error("Sheep missing from the authoritative HUD");
+  const scout = await click(page, "Scout");
+  await page.locator("#move-units").click();
+  await page.mouse.click(neutral.x, neutral.y, { button: "right" });
+  await expect
+    .poll(async () => {
+      const current = (await actors(page)).find((a) => a.id === scout.id);
+      return current
+        ? Math.hypot(current.x - neutral.x, current.y - neutral.y)
+        : Infinity;
+    })
+    .toBeLessThan(3);
+  const sheep = await click(page, "Sheep");
+  await expect(page.locator("#selection-name")).toHaveText("Sheep");
+  await expect(page.locator("#stop-units")).toBeVisible();
+  const destination = { x: sheep.x + 180, y: sheep.y - 40 };
+  await page.mouse.click(destination.x, destination.y, { button: "right" });
+  await expect
+    .poll(async () => {
+      const current = (await actors(page)).find((a) => a.id === sheep.id);
+      return current ? Math.hypot(current.x - sheep.x, current.y - sheep.y) : 0;
+    })
+    .toBeGreaterThan(3);
+  await page.locator("#stop-units").click();
+  await freshHud(page);
+  await freshHud(page);
+  const stopped = (await actors(page)).find((a) => a.id === sheep.id);
+  if (!stopped) throw new Error("Selected sheep missing after Stop");
+  for (let refresh = 0; refresh < 6; refresh++) await freshHud(page);
+  const later = (await actors(page)).find((a) => a.id === sheep.id);
+  expect(later && [later.x, later.y]).toEqual([stopped.x, stopped.y]);
+  expect(
+    Math.hypot(stopped.x - destination.x, stopped.y - destination.y),
+  ).toBeGreaterThan(20);
+});
+
 test("private native gameplay captures and prepares the units showcase", async ({
   page,
 }) => {

@@ -62,15 +62,23 @@ pub(in super::super) fn train(client: &mut Client, cancel: bool) {
 
 pub(in super::super) fn stop(client: &mut Client) {
     for id in client.selected.units.clone() {
-        if let Some(unit) = client.units.get(&id).filter(|u| u.player == owner(client)) {
-            let destination = unit.position;
+        let owned = client
+            .units
+            .get(&id)
+            .is_some_and(|u| u.player == owner(client) && u.hp > 0)
+            || client.village.animals.iter().any(|a| {
+                a.id == id
+                    && a.kind == aoe_protocol::AnimalKind::Sheep
+                    && a.hp > 0
+                    && a.owner == Some(owner(client))
+            });
+        if owned {
             let sequence = client.next_sequence;
             send(
                 client,
-                Message::MoveOrder {
+                Message::StopOrder {
                     sequence,
                     entity_id: id,
-                    destination,
                 },
             );
         }

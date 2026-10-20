@@ -130,3 +130,33 @@ fn neutral_sheep_and_owned_sheep_select_separate_player_planes() {
     sheep.owner = Some(PlayerId(0));
     assert_eq!(animal_pose(&sheep), Pose::SheepStand);
 }
+
+#[wasm_bindgen_test]
+fn moving_hunt_jobs_keep_hunter_or_shepherd_walk_even_with_the_moving_task() {
+    use crate::unit_visuals::{Pose, unit_pose};
+    use aoe_protocol::{AnimalKind, AnimalState, AnimalTask};
+    let mut worker = villager(UnitTask::Moving, None);
+    worker.moving = true;
+    worker.hunt_target = Some(EntityId(9));
+    for (kind, expected) in [
+        (AnimalKind::Deer, Pose::HunterWalk),
+        (AnimalKind::Boar, Pose::HunterWalk),
+        (AnimalKind::Sheep, Pose::ShepherdWalk),
+    ] {
+        let animal = AnimalState {
+            id: EntityId(9),
+            kind,
+            owner: None,
+            hp: 1,
+            position: worker.position,
+            task: AnimalTask::Idle,
+            food_remaining: 100,
+            target: None,
+            facing: 0,
+            moving: false,
+            death_tick: None,
+        };
+        assert_eq!(unit_pose(&worker, Some(&animal)), expected, "{kind:?}");
+    }
+    assert_eq!(unit_pose(&worker, None), Pose::HunterWalk);
+}

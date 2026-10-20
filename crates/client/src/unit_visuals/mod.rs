@@ -31,6 +31,13 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     if u.hunt_target.is_some() && u.task == UnitTask::Returning {
         return HunterCarry;
     }
+    if u.hunt_target.is_some() && u.task == UnitTask::Moving {
+        return if animal.is_some_and(|a| a.kind == AnimalKind::Sheep) {
+            ShepherdWalk
+        } else {
+            HunterWalk
+        };
+    }
     if u.hunt_target.is_some() && u.task == UnitTask::Gathering {
         return if !u.moving {
             Butcher

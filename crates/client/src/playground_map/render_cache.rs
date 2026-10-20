@@ -47,7 +47,9 @@ impl<S> RenderFrameCache<S> {
             return true;
         };
         !Rc::ptr_eq(&previous.scene, scene)
-            || previous.units.as_slice() != units
+            || previous.units.iter().copied().ne(units
+                .iter()
+                .map(|unit| aoe_rendering::scene_unit_render_key(art, *unit, camera)))
             || previous.resources.as_slice() != resources
             || previous.grid != grid
             || previous.animation != moving_animation(art, units, animation, camera)
@@ -65,7 +67,10 @@ impl<S> RenderFrameCache<S> {
     ) {
         self.previous = Some(RenderedFrame {
             scene: scene.clone(),
-            units: units.to_vec(),
+            units: units
+                .iter()
+                .map(|unit| aoe_rendering::scene_unit_render_key(art, *unit, camera))
+                .collect(),
             resources: resources.to_vec(),
             grid,
             animation: moving_animation(art, units, animation, camera),
