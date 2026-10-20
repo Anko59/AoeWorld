@@ -40,3 +40,14 @@ fn creator_fallback_preview_fixture_has_no_passable_tiles_at_valid_minimum_size(
         }
     }
 }
+
+#[test]
+fn a_filtered_test_e2e_run_uses_the_quarantine_and_only_the_duel_check_does_not() {
+    use super::Mode;
+    let selected = vec!["tests/memory.shared-surfaces.spec.ts".to_owned()];
+    // `make test-e2e AOE_E2E_SPECS=…` (closing-review F5/F6) and the whole suite.
+    assert_eq!(Mode::of(&selected, true), Mode::Quarantined);
+    assert_eq!(Mode::of(&[], true), Mode::Quarantined);
+    // The focused duel check.
+    assert_eq!(Mode::of(&selected, false), Mode::Focused);
+}

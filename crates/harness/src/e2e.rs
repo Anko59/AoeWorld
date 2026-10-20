@@ -210,8 +210,10 @@ fn run_specs(
         let worker_cancellation = cancellation.clone();
         let (sender, receiver) = mpsc::channel();
         scope.spawn(move || {
-            let result = if specs.is_empty() {
-                // The whole suite: a quarantined failure may be re-run (gates/flaky.json).
+            // `make test-e2e`, whole or filtered (AOE_E2E_SPECS), uses the quarantine; only the
+            // focused duel check runs without it.
+            let result = if Mode::of(specs, enable_quarantine) == Mode::Quarantined {
+                // A quarantined failure may be re-run (gates/flaky.json).
                 progress::start("playwright-run");
                 let report_path = match report {
                     Some(path) => path.to_path_buf(),
@@ -234,7 +236,7 @@ fn run_specs(
                 )
                 .map_err(|error| error.to_string())
             } else {
-                // Focused runs (red, duel) never use the quarantine. Stream reporter stdout
+                // The focused duel check never uses the quarantine. Stream reporter stdout
                 // into the same bounded retention used for nextest.
                 (|| {
                     let report = report.ok_or("focused Playwright report path missing")?;
@@ -360,6 +362,25 @@ fn renderer_evidence(
         evidence.push(value);
     }
     Ok(serde_json::Value::Array(evidence))
+}
+
+/// How the browser container runs: through the flaky quarantine, or as the bounded focused
+/// duel check. Which specs were selected does not decide it: a filtered `make test-e2e`
+/// (AOE_E2E_SPECS) names specs and still uses the quarantine.
+#[derive(Debug, PartialEq, Eq)]
+enum Mode {
+    Quarantined,
+    Focused,
+}
+
+impl Mode {
+    fn of(_specs: &[String], enable_quarantine: bool) -> Self {
+        if enable_quarantine {
+            Self::Quarantined
+        } else {
+            Self::Focused
+        }
+    }
 }
 
 fn stderr_tail(stderr: &[u8]) -> String {
