@@ -41,14 +41,12 @@ use std::{
     path::{Path, PathBuf},
     time::Duration,
 };
-
 #[derive(Parser)]
 #[command(name = "aoe-harness", about = "AoeWorld development harness")]
 struct Args {
     #[command(subcommand)]
     command: Command,
 }
-
 #[derive(Subcommand)]
 enum Command {
     Assets {
@@ -56,6 +54,7 @@ enum Command {
         command: assets::AssetCommand,
     },
     Doctor,
+    DiskPrecheck,
     /// Stop the harness containers that a host suspend left running.
     Recover,
     Dev {
@@ -220,12 +219,12 @@ enum DevCommand {
     Status,
     Logs,
 }
-
 fn run(
     command: Command,
     gate: &str,
     slots: &slots::SlotEnv,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    disk::precheck::before_command(&command, gate, slots.ci)?;
     // The agent hook takes no slot: a broken registry must not stop it judging edits.
     let _slot = match command {
         Command::Agents(_) => None,
@@ -233,6 +232,7 @@ fn run(
     };
     match command {
         Command::Assets { command } => assets::run(command)?,
+        Command::DiskPrecheck => (),
         Command::Doctor => {
             for tool in ["git", "cargo", "rustc"] {
                 process::run(tool, &["--version"], Duration::from_secs(10))?;

@@ -13,6 +13,22 @@ See the [documented Chromium compositor failure and working flag set](https://gi
 
 ## Harness disk use
 
+Local `make ship`, `make test-e2e`, `make test-wasm`, `make test-unit` and
+`make preflight` refuse before taking a heavy slot when either the worktree's
+target filesystem or the shared `<git common dir>/aoe-cargo` filesystem has
+less than 15 GiB available. `AOE_DISK_FLOOR_GIB` sets a whole-GiB floor;
+`0` disables it. CI (`CI` or `GITHUB_ACTIONS` nonempty) skips the check.
+The refusal gives available bytes, the floor, and the five largest `target/`
+directories from `git worktree list`, largest first, with file-byte sizes.
+Remove disposable output only after verifying no run uses it, then retry.
+`make disk-precheck` checks without starting a gate. Its bounded command
+bootstrap still needs enough disk to build the checking binary on a cold start.
+This is an admission check; other processes can consume disk afterward.
+
+Showcase videos are required for player-visible changes. All of `browser/`
+is test/QA infrastructure (specs, fixtures, reporters and Playwright config),
+so changes there alone do not require one. Player-facing `web/` code still does.
+
 Hook builds retain two judge revisions and clean their shared Cargo target
 under `build.lock`: incremental output first, then `cargo clean` above 2 GiB.
 After a ship pushes and arms
