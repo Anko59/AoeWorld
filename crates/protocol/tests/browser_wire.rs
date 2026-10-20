@@ -44,6 +44,11 @@ fn browser_unit_combat_fragments_match_the_current_codec() {
             45,
             include_str!("../../../browser/tests/wire/scout.hex"),
         ),
+        (
+            UnitKind::FishingShip,
+            50,
+            include_str!("../../../browser/tests/wire/fishing-ship.hex"),
+        ),
     ] {
         let unit = GameplayUnitState {
             id: EntityId(7),
@@ -94,6 +99,28 @@ fn browser_building_combat_fragment_matches_the_current_codec() {
     expected.extend(hex(include_str!(
         "../../../browser/tests/wire/town-center.hex"
     )));
+    assert_wire(combat_snapshot(vec![], vec![building]), expected);
+}
+
+#[test]
+fn browser_dock_fragment_matches_current_codec() {
+    let building = GameplayBuildingState {
+        id: EntityId(1),
+        player: PlayerId(0),
+        kind: BuildingKind::Dock,
+        footprint: TileRect::new(TileCoord::new(5, 5), TileCoord::new(8, 8)),
+        training_queue: vec![],
+        hp: 1800,
+        max_hp: 1800,
+        last_hit: None,
+        construction: ConstructionState::Complete,
+        progress_permille: 1000,
+        los: 8,
+        food_remaining: None,
+        research: None,
+    };
+    let mut expected = vec![1, 1, 0, 0, 0, 1, 1, 0, 9, 10, 10, 16, 16];
+    expected.extend(hex(include_str!("../../../browser/tests/wire/dock.hex")));
     assert_wire(combat_snapshot(vec![], vec![building]), expected);
 }
 

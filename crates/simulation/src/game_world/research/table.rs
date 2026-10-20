@@ -68,6 +68,7 @@ const fn cost(food: u32, wood: u32, gold: u32, stone: u32) -> Stockpile {
 /// Dark Age buildings that count towards the Feudal Age. Houses, walls and
 /// outposts do not. There is no Dock building kind yet, so none is listed.
 pub const FEUDAL_BUILDINGS: &[BuildingKind] = &[
+    BuildingKind::Dock,
     BuildingKind::Barracks,
     BuildingKind::Mill,
     BuildingKind::LumberCamp,

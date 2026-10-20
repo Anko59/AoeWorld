@@ -170,6 +170,8 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
 
 #[path = "economy/construction.rs"]
 mod construction;
+#[path = "economy/fishing.rs"]
+mod fishing;
 #[path = "economy/wire_tests.rs"]
 mod wire_tests;
 

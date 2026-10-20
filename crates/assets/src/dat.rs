@@ -46,6 +46,7 @@ pub struct Task {
     pub terrain: i16,
     pub resource_in: i16,
     pub resource_out: i16,
+    pub work_values: [f32; 3],
     /// Moving, proceeding, working, carrying (graphic ids, -1 when absent).
     pub graphics: [i16; 4],
 }
@@ -65,6 +66,10 @@ pub struct Unit {
     pub name: String,
     pub hit_points: i16,
     pub line_of_sight: f32,
+    pub collision_size: [f32; 2],
+    pub resource_capacity: i16,
+    pub resource_storage: [(i16, f32); 3],
+    pub work_rate: Option<f32>,
     pub standing: [i16; 2],
     pub dying: i16,
     pub dead_unit: i16,

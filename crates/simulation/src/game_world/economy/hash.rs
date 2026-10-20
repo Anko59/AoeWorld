@@ -64,6 +64,7 @@ impl Economy {
         for (id, task) in &self.gatherers {
             hash.update(&id.0.to_le_bytes());
             hash.update(&task.node.to_le_bytes());
+            hash.update(&[task.fish.map_or(u8::MAX, |fish| fish as u8)]);
             hash.update(&task.farm.map_or(u32::MAX, |farm| farm.0).to_le_bytes());
             hash.update(
                 &task

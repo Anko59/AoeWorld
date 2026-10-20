@@ -218,6 +218,21 @@ export async function gameAssets(
     ["graphics", 435, 4],
     ["graphics", 4652, 14],
     ["graphics", 2296, 14],
+    ...[
+      [3549, 34],
+      [1910, 49],
+      [1911, 49],
+      [1912, 49],
+      [1913, 49],
+      [420, 30],
+      [444, 5],
+      [449, 5],
+      [446, 5],
+      [3575, 140],
+      [3980, 75],
+      [376, 1],
+      [4397, 3],
+    ].map(([id, count]) => ["graphics", id, count]),
   ].flatMap(([archive, id, count]) => {
     const source = terrainSources.get(Number(id));
     return Array.from({ length: Number(count) }, (_, frame) => ({

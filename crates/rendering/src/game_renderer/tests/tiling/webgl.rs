@@ -39,6 +39,7 @@ fn native_cliff_wall_uses_opaque_rock_above_the_source_silhouette_notch() {
         actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
+        fishing: Default::default(),
         town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),

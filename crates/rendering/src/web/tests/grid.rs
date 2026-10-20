@@ -40,6 +40,7 @@ async fn webgpu_live_source_grid_has_pixels_and_toggle_off_removes_them() {
         actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
+        fishing: Default::default(),
         town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),

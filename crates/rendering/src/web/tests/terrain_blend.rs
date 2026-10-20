@@ -168,6 +168,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
         actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
+        fishing: Default::default(),
         town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),

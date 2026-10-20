@@ -79,8 +79,8 @@ fn trees_require_a_family_and_other_resources_are_generic() {
     }
     for (offset, value) in [
         (resource + 16, 4),
-        (resource + 17, 5),
-        (resource + 21, 5),
+        (resource + 17, 7),
+        (resource + 21, 7),
         (decoration + 8, 5),
     ] {
         let mut bad = bytes.clone();

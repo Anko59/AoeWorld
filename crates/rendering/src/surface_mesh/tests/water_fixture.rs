@@ -64,6 +64,7 @@ pub(crate) fn art(depth: bool) -> GameArt {
         actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
+        fishing: Default::default(),
         town_center: Default::default(),
         walking: Vec::new(),
         standing: Vec::new(),

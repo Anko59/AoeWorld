@@ -123,6 +123,7 @@ pub(crate) fn movement_label(passable: bool, blocker: Option<ObjectKind>) -> &'s
         Some(ObjectKind::GoldDeposit) => "gold deposit, blocked",
         Some(ObjectKind::StoneDeposit) => "stone deposit, blocked",
         Some(ObjectKind::Decoration) => "resource, blocked",
+        Some(ObjectKind::ShoreFish | ObjectKind::DeepFish) => "fish",
         None if passable => "passable",
         None => "blocked",
     }
@@ -162,6 +163,9 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
             Some(ObjectKind::GoldDeposit) => "Cannot move there: a gold deposit is in the way.",
             Some(ObjectKind::StoneDeposit) => "Cannot move there: a stone deposit is in the way.",
             Some(ObjectKind::Decoration) => "Cannot move there: a resource is in the way.",
+            Some(ObjectKind::ShoreFish | ObjectKind::DeepFish) => {
+                "Select a Fishing Ship or shore fisherman to fish."
+            }
             None => "Cannot move there: the destination is blocked or outside the map.",
         },
         RejectedUnreachable => "Cannot move there: no reachable route was found.",

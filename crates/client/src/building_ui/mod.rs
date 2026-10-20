@@ -55,6 +55,15 @@ pub fn footprint_valid(
 /// Standing kinds, four foundation sizes, then rubble kinds.
 #[inline(never)]
 pub fn sprite_slot(kind: BuildingKind, progress: u16, rubble: bool) -> usize {
+    if kind == BuildingKind::Dock {
+        return if rubble {
+            25
+        } else if progress < 1000 {
+            24
+        } else {
+            23
+        };
+    }
     if rubble {
         13 + kind as usize
     } else if progress < 1000 {

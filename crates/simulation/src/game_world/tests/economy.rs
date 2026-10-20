@@ -7,6 +7,7 @@ use aoe_map::{ResourceKind, ResourceNode};
 mod buildings;
 mod construction;
 mod farming;
+mod fishing;
 pub(crate) mod fixture;
 mod gathering;
 mod rejections;

@@ -49,8 +49,7 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition);
         }
         let passable = self
-            .terrain
-            .passable_with_cancel(position.tile_floor(), self.config, &|| false)
+            .unit_tile_passable(kind, position.tile_floor(), &|| false)
             .map_err(GameWorldError::Environment)?;
         if !passable || self.economy.blocked_tiles.contains(&position.tile_floor()) {
             return Err(GameWorldError::InvalidPosition);

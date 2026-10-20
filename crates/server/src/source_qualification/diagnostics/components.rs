@@ -293,6 +293,8 @@ fn blocker_reason(
             ObjectKind::GoldDeposit => "gold_object",
             ObjectKind::StoneDeposit => "stone_object",
             ObjectKind::Decoration => "decoration_object",
+            ObjectKind::ShoreFish => "shore_fish",
+            ObjectKind::DeepFish => "deep_fish",
         });
     }
     if destination.water != WaterKind::None {

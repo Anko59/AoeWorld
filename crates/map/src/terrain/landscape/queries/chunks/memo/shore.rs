@@ -69,7 +69,10 @@ impl<const N: usize, const W: usize> Memo<'_, N, W> {
     }
 
     /// Shaped physical water kind; `None` outside the map.
-    fn water(&self, position: TileCoord) -> Result<Option<WaterKind>, EnvironmentPageError> {
+    pub(super) fn water(
+        &self,
+        position: TileCoord,
+    ) -> Result<Option<WaterKind>, EnvironmentPageError> {
         if (self.cancelled)() {
             return Err(EnvironmentPageError::Cancelled);
         }

@@ -1,6 +1,10 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
 import { scoutCombat, villagerCombat } from "../wire/combat.js";
-import { darkAgeState, townCenterState } from "../wire/buildings.js";
+import {
+  darkAgeState,
+  townCenterState,
+  fishingShipState,
+} from "../wire/buildings.js";
 import { wildlifeState } from "../wire/wildlife.js";
 import { fogState } from "../wire/fog.js";
 
@@ -63,7 +67,11 @@ export async function fiveVillagerFixture(
         0,
         0,
         0,
-        ...(kind === 1 ? scoutCombat : villagerCombat),
+        ...(kind === 3
+          ? fishingShipState
+          : kind === 1
+            ? scoutCombat
+            : villagerCombat),
       ];
       const units = [
         unit(0, 8195.5, 8190.5, 1),

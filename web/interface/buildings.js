@@ -1,12 +1,13 @@
 // DOM presentation for authoritative Rust building state and footprint previews.
 const byId = id => document.getElementById(id);
-export const buildingKinds = ['TownCenter','House','LumberCamp','MiningCamp','Mill','Farm','Barracks','PalisadeWall','Outpost'];
-export const buildingNames = ['Town Center','House','Lumber Camp','Mining Camp','Mill','Farm','Barracks','Palisade Wall','Outpost'];
+export const buildingKinds = ['TownCenter','House','LumberCamp','MiningCamp','Mill','Farm','Barracks','PalisadeWall','Outpost','Dock'];
+export const buildingNames = ['Town Center','House','Lumber Camp','Mining Camp','Mill','Farm','Barracks','Palisade Wall','Outpost','Dock'];
 const commands = [
   ['house','House','Q','25 wood'], ['lumber-camp','Lumber Camp','E','100 wood'],
   ['mining-camp','Mining Camp','R','100 wood'], ['mill','Mill','W','100 wood'],
   ['farm','Farm','S','60 wood · needs Mill'], ['barracks','Barracks','A','175 wood'],
   ['palisade-wall','Palisade Wall','D','2 wood / tile'], ['outpost','Outpost','F','25 wood · 5 stone'],
+  ['dock','Dock','T','150 wood · needs a coast'],
 ];
 export function initBuildings() {
   const grid = byId('command-grid');
@@ -55,16 +56,16 @@ export function initBuildings() {
       panel.hidden=!selected;
       techs.forEach((b,i)=>{b.hidden=kind!==0;b.disabled=v[8+i]!==1||byId('observer-label').hidden===false;});
       const train=byId('train-villager');
-      if(selected){train.hidden=![0,6].includes(kind)||v[4]<1000;train.disabled=v[20]!==1||!byId('observer-label').hidden;train.setAttribute('aria-label',kind===6?'Train Militia, 60 food, 20 gold, Q':'Train Villager, 50 food, Q');train.title=train.getAttribute('aria-label');train.querySelector('.cost').textContent=kind===6?'60 F · 20 G':'50';}
-      progressLabels.innerHTML=Array.from({length:v[21]??0},(_,i)=>{const at=22+i*3;return `<span style="left:${v[at]}px;top:${v[at+1]}px">${Math.floor(v[at+2]/10)}%<progress max="1000" value="${v[at+2]}"></progress></span>`;}).join('');
-      if(selected){byId('command-hint').textContent=v[4]<1000?'Right-click this foundation with villagers to resume construction':kind===0?'Q: train a villager · research below':kind===6?'Q: train Militia · 60 food, 20 gold':kind===5?'Right-click this Farm with a villager to work it':'Select villagers to gather or build';byId('selection-task').textContent=v[4]<1000?'Under construction':v[6]>=0?'Researching':v[19]===0&&byId('training').hidden===false?'Training Villager':kind===6&&byId('training').hidden===false?'Training Militia':'Ready';byId('selection-load').textContent=['Resource drop-off · supports 5 population','Supports 5 population','Wood drop-off','Gold and stone drop-off','Food drop-off','Food production','Trains Militia','Blocks movement','Scouts the surrounding area'][kind];}
+      if(selected){train.hidden=![0,6,9].includes(kind)||v[4]<1000;train.disabled=v[21]!==1||!byId('observer-label').hidden;train.setAttribute('aria-label',kind===9?'Train Fishing Ship, 75 wood, Q':kind===6?'Train Militia, 60 food, 20 gold, Q':'Train Villager, 50 food, Q');train.title=train.getAttribute('aria-label');train.querySelector('.cost').textContent=kind===9?'75 W':kind===6?'60 F · 20 G':'50';}
+      progressLabels.innerHTML=Array.from({length:v[22]??0},(_,i)=>{const at=23+i*3;return `<span style="left:${v[at]}px;top:${v[at+1]}px">${Math.floor(v[at+2]/10)}%<progress max="1000" value="${v[at+2]}"></progress></span>`;}).join('');
+      if(selected){byId('command-hint').textContent=v[4]<1000?'Right-click this foundation with villagers to resume construction':kind===0?'Q: train a villager · research below':kind===9?'Q: train a Fishing Ship · 75 wood':kind===6?'Q: train Militia · 60 food, 20 gold':kind===5?'Right-click this Farm with a villager to work it':'Select villagers to gather or build';byId('selection-task').textContent=v[4]<1000?'Under construction':v[6]>=0?'Researching':v[20]===0&&byId('training').hidden===false?'Training Villager':kind===9&&byId('training').hidden===false?'Training Fishing Ship':kind===6&&byId('training').hidden===false?'Training Militia':'Ready';byId('selection-load').textContent=['Resource drop-off · supports 5 population','Supports 5 population','Wood drop-off','Gold and stone drop-off','Food drop-off','Food production','Trains Militia','Blocks movement','Scouts the surrounding area','Fish drop-off · trains Fishing Ships'][kind];}
       byId('building-hp').textContent=`${v[2]} / ${v[3]} HP`;
       byId('building-status').textContent=v[4]<1000?`Constructing · ${Math.floor(v[4]/10)}%`:v[5]>=0?`Complete · ${v[5]} food remaining`:'Complete';
       byId('construction-progress').hidden=v[4]>=1000;byId('construction-progress').value=v[4];
       byId('cancel-construction').hidden=!selected||v[4]>=1000;
       byId('cancel-research').hidden=v[6]<0;
       byId('research-status').textContent=v[6]<0?'':`${research[v[6]].split(' · ')[0]} · ${Math.floor(v[7]*100)}%`;
-      if(kind===6&&byId('training-label').textContent.includes('Villager'))byId('training-label').textContent=byId('training-label').textContent.replace('Villager','Militia');
+      if([6,9].includes(kind)&&byId('training-label').textContent.includes('Villager'))byId('training-label').textContent=byId('training-label').textContent.replace('Villager',kind===9?'Fishing Ship':'Militia');
       menu();
     },
     preview(v) {

@@ -49,6 +49,20 @@ fn picking_uses_only_successfully_presented_positions_until_reset() {
 }
 
 #[wasm_bindgen_test]
+fn stationary_fish_keep_the_animation_clock_live() {
+    let scene = Rc::new(());
+    let fish = SceneResource {
+        kind: 0,
+        visual_family: 5,
+        ..resource(9)
+    };
+    let mut cache = RenderFrameCache::default();
+    cache.record_success(&scene, &art(), &[], &[fish], false, 0, camera());
+    assert!(!cache.needs_render(&scene, &art(), &[], &[fish], false, 0, camera()));
+    assert!(cache.needs_render(&scene, &art(), &[], &[fish], false, 3, camera()));
+}
+
+#[wasm_bindgen_test]
 fn unchanged_static_frame_ignores_animation_clock() {
     let scene = Rc::new(());
     let units = [unit([1.0, 2.0], false, false)];
@@ -134,6 +148,7 @@ fn art() -> aoe_rendering::GameArt {
         actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
+        fishing: Default::default(),
         town_center: Default::default(),
         walking: vec![frame; 50],
         standing: vec![frame; 50],

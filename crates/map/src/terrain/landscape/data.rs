@@ -71,6 +71,8 @@ pub enum ResourceVisualFamily {
     Conifer,
     DryScrub,
     Tropical,
+    ShoreFish,
+    DeepFish,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

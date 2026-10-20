@@ -299,11 +299,15 @@ fn every_documented_terrain_enum_maps_and_every_out_of_range_value_fails() {
     assert_eq!(surface_kind(4), Err(CompactChunkError::InvalidEnum));
     assert_eq!(diagonal(2), Err(CompactChunkError::InvalidEnum));
     assert_eq!(resource_kind(4), Err(CompactChunkError::InvalidEnum));
-    assert_eq!(object_kind(5), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(object_kind(5), Ok(ObjectKind::ShoreFish));
+    assert_eq!(object_kind(6), Ok(ObjectKind::DeepFish));
+    assert_eq!(object_kind(7), Err(CompactChunkError::InvalidEnum));
     assert_eq!(palette_from(6), Err(CompactChunkError::InvalidEnum));
     assert_eq!(exposure_from(3), Err(CompactChunkError::InvalidEnum));
     assert_eq!(height_from(5), Err(CompactChunkError::InvalidEnum));
-    assert_eq!(resource_family_from(5), Err(CompactChunkError::InvalidEnum));
+    assert_eq!(resource_family_from(5), Ok(ResourceVisualFamily::ShoreFish));
+    assert_eq!(resource_family_from(6), Ok(ResourceVisualFamily::DeepFish));
+    assert_eq!(resource_family_from(7), Err(CompactChunkError::InvalidEnum));
     assert_eq!(decoration_from(5), Err(CompactChunkError::InvalidEnum));
 }
 

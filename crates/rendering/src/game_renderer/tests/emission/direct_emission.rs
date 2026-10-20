@@ -100,6 +100,7 @@ fn direct_scene_has_expected_content_order_and_ties_in_72_bounded_cases() {
             actors: Vec::new(),
             buildings: Default::default(),
             village: Default::default(),
+            fishing: Default::default(),
             town_center: Default::default(),
             walking: base.walking.clone(),
             standing: base.standing.iter().step_by(10).copied().collect(),

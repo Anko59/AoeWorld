@@ -27,6 +27,13 @@ pub(super) fn run(
     };
     match command {
         Command::Assets { command } => assets::run(command)?,
+        Command::FishingScenario => {
+            let hash = e2e::landscape::fishing::prepare(
+                Path::new("."),
+                Path::new(".cache/fishing/map-packages"),
+            )?;
+            println!("{hash}");
+        }
         Command::DiskPrecheck => (),
         Command::Doctor => {
             for tool in ["git", "cargo", "rustc"] {

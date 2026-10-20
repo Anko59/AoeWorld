@@ -305,7 +305,15 @@ fn worker_kind(unit: &aoe_protocol::GameplayUnitState) -> aoe_rendering::SceneUn
     if unit.kind == UnitKind::Scout {
         return Art::Scout;
     }
+    if unit.kind == UnitKind::FishingShip {
+        return if unit.task == UnitTask::Fishing {
+            Art::FishingShipWorking
+        } else {
+            Art::FishingShip
+        };
+    }
     match (unit.task, unit.gathering, unit.carried) {
+        (UnitTask::Fishing, _, _) => Art::VillagerFishing,
         // The catalog has no farmer art: farming draws the foraging pose.
         (UnitTask::Building, _, _) if !unit.moving => Art::VillagerBuilding,
         (UnitTask::Farming, _, _) => Art::VillagerForaging,

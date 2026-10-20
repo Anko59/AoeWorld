@@ -46,7 +46,7 @@ const VILLAGERS: &[UnitKind] = &[UnitKind::Villager];
 const MILITIA: &[UnitKind] = &[UnitKind::Militia];
 
 /// Canonical order of `BuildingKind`.
-pub const BUILDING_RULES: [BuildingRules; 9] = [
+pub const BUILDING_RULES: [BuildingRules; 10] = [
     BuildingRules {
         kind: BuildingKind::TownCenter,
         cost: cost(0, 275, 0, 100),
@@ -177,6 +177,21 @@ pub const BUILDING_RULES: [BuildingRules; 9] = [
         population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
+        requires: None,
+        buildable: true,
+        blocks: true,
+        food: 0,
+    },
+    BuildingRules {
+        kind: BuildingKind::Dock,
+        cost: cost(0, 150, 0, 0),
+        build_seconds: 35,
+        max_hp: 1800,
+        side: 3,
+        los: 8,
+        population_support: 0,
+        accepts: [true, false, false, false],
+        trainable: &[UnitKind::FishingShip],
         requires: None,
         buildable: true,
         blocks: true,

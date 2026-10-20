@@ -106,6 +106,8 @@ pub enum ObjectKind {
     GoldDeposit,
     StoneDeposit,
     Decoration,
+    ShoreFish,
+    DeepFish,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

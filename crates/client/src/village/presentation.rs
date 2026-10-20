@@ -34,7 +34,7 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
         client
             .units
             .get(id)
-            .filter(|u| u.kind == UnitKind::Villager)
+            .filter(|u| matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip))
             .map(|u| u.position.as_tiles())
     });
     let villager = focus.is_some();

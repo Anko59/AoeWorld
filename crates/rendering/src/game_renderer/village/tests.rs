@@ -2,6 +2,60 @@ use super::*;
 use aoe_core::EntityId;
 use wasm_bindgen_test::wasm_bindgen_test;
 
+#[wasm_bindgen_test]
+fn fish_sprites_animate_at_their_sampled_native_period() {
+    let mut art = art();
+    let fish = SceneResource {
+        id: 0,
+        position: [0.5; 2],
+        kind: 0,
+        visual_variant: 0,
+        visual_family: 5,
+        elevation_meters: 0.0,
+    };
+    art.fishing[0] = art.village[1][..17].to_vec();
+    art.fishing[1] = art.village[1][..7].to_vec();
+    for (family, period) in [(5, 3), (6, 9)] {
+        let resource = SceneResource {
+            visual_family: family,
+            ..fish
+        };
+        let frame_at = |clock| {
+            world_sprite_frames(&art, &[], &[resource], &[], camera(), clock)
+                .last()
+                .unwrap()
+                .1
+                .atlas
+        };
+        assert_eq!(frame_at(0), frame_at(period - 1));
+        assert_ne!(frame_at(0), frame_at(period));
+    }
+}
+
+#[wasm_bindgen_test]
+fn fishing_poses_use_native_facing_rows() {
+    let mut art = art();
+    art.fishing[7] = vec![art.walking[0]; 5];
+    art.fishing[10] = art.village[1][..35].to_vec();
+    let ship = unit(SceneUnitKind::FishingShipWorking);
+    assert_eq!(frames(&art, ship).unwrap().1, 1);
+    let fisher = unit(SceneUnitKind::VillagerFishing);
+    assert_eq!(frames(&art, fisher).unwrap().1, 7);
+    let frame_at = |clock| {
+        world_sprite_frames(&art, &[], &[], &[fisher], camera(), clock)
+            .last()
+            .unwrap()
+            .1
+            .atlas
+    };
+    assert_eq!(
+        frame_at(0),
+        frame_at(7),
+        "four skipped 200 ms native frames take 800 ms"
+    );
+    assert_ne!(frame_at(0), frame_at(8));
+}
+
 fn art() -> GameArt {
     let frame = |number| GameFrame {
         atlas: crate::AtlasAddress {
@@ -20,6 +74,7 @@ fn art() -> GameArt {
                 .map(|index| frame(group * 100 + index))
                 .collect()
         }),
+        fishing: Default::default(),
         town_center: std::array::from_fn(|group| vec![frame(500 + group)]),
         walking: vec![frame(900); 50],
         standing: vec![frame(901); 5],

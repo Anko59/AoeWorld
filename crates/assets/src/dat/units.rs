@@ -154,7 +154,8 @@ fn task(r: &mut Reader) -> Result<Task, Error> {
     r.skip(2)?; // multiplier
     let resource_out = r.i16()?;
     r.skip(2)?; // unused resource
-    r.skip(26)?; // work values, range, targeting flags, gather type
+    let work_values = [r.f32()?, r.f32()?, r.f32()?];
+    r.skip(14)?; // range, targeting flags, gather type
     let mut graphics = [0i16; 4];
     for slot in &mut graphics {
         *slot = r.i16()?;
@@ -170,6 +171,7 @@ fn task(r: &mut Reader) -> Result<Task, Error> {
         terrain,
         resource_in,
         resource_out,
+        work_values,
         graphics,
     })
 }
@@ -195,8 +197,18 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
     r.skip(3)?; // undead graphic, death mode
     let hit_points = r.i16()?;
     let line_of_sight = r.f32()?;
-    r.pos = start + 43; // capacity, collision radii and creation/damage sounds
+    r.skip(1)?;
+    let collision_size = [r.f32()?, r.f32()?];
+    r.pos = start + 43;
     let dead_unit = r.i16()?;
+    r.pos = start + 75;
+    let resource_capacity = r.i16()?;
+    r.pos = start + 124;
+    let mut resource_storage = [(0, 0.0); 3];
+    for storage in &mut resource_storage {
+        *storage = (r.i16()?, r.f32()?);
+        r.skip(1)?;
+    }
     r.pos = start + DAMAGE_COUNT_AT;
     let sprites = usize::from(r.u8()?);
     r.bounded(sprites, MAX_DAMAGE_SPRITES, "damage sprites")?;
@@ -209,6 +221,10 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         name,
         hit_points,
         line_of_sight,
+        collision_size,
+        resource_capacity,
+        resource_storage,
+        work_rate: None,
         standing,
         dying,
         dead_unit,
@@ -232,7 +248,9 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         r.skip(33)?; // rotation, tracking, turn angles
     }
     if kind >= 40 {
-        r.skip(20)?; // search radius, work rate, drop sites, sounds
+        r.skip(6)?; // default task and search radius
+        out.work_rate = Some(r.f32()?);
+        r.skip(10)?; // drop sites, sounds
     }
     if kind >= 50 {
         r.skip(1)?; // default armour

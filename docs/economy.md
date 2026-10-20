@@ -185,7 +185,7 @@ training queue and no research; a building researching refuses training. A
 technology is researched once, and a player runs one research of it at a time
 (a second Town Center is refused the same tech meanwhile). `CancelResearch`
 refunds the whole cost. Houses, walls and outposts never count for the Feudal
-Age; there is no Dock building yet, so none is listed. Loom raises `max_hp` and
+Age; Docks count alongside the other economic and military buildings. Loom raises `max_hp` and
 `hp` together, so a damaged villager keeps the damage taken; new villagers
 start with it, and `GameWorld::unit_armour` adds it to the combat table's armour.
 Town Watch raises `los` of existing and later buildings. Feudal unlocks nothing
@@ -248,3 +248,6 @@ wire scenario writes `.cache/wildlife/scenario.log`. The client uses the current
 
 Fog is authoritative player knowledge; see [fog of war](fog-of-war.md) for
 storage, observation rules, wire bounds and source values.
+Dark Age [fishing](fishing.md) adds shore/deep fish, the Dock and naval Fishing
+Ships. The local DAT sources, rates, bounded water routing, append-only wire
+values and reproducible coast scenario are documented there.

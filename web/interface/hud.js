@@ -95,8 +95,8 @@ export function initInterface() {
     }
   };
   window.aoeInterface = { details: updateDetails, numeric(values,status) {
-    const kinds=['Scout','Villager',...buildingKinds,'Militia','Sheep','Deer','Boar','Wolf'], names=['Scout','Villager',...buildingNames,'Militia','Sheep','Deer','Boar','Wolf'];
-    const tasks=['Idle','Moving','Gathering','Carrying','Returning to Town Center','Attacking','Dying','Building','Farming','Hunting','Shepherding','Idle','Fleeing','Attacking','Dying','Carcass'];
+    const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf'], names=['Scout','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf'];
+    const tasks=['Idle','Moving','Gathering','Carrying','Returning to drop-off','Attacking','Dying','Building','Farming','Hunting','Shepherding','Fishing','Idle','Fleeing','Attacking','Dying','Carcass'];
     const resources=['food','wood','gold','stone',''];
     const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],observer:values[11]===1,art:values[12]===1,status,actors:[],selected:[],queue:[],resources:[]};
     let at=16;

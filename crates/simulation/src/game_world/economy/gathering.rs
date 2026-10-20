@@ -58,6 +58,7 @@ impl GameWorld {
         self.begin_gather(id, 0, a.position.tile_floor(), ResourceKind::Food, None)?;
         if let Some(task) = self.economy.gatherers.get_mut(&id) {
             task.animal = Some(animal);
+            task.fish = None;
         }
         Ok(())
     }
@@ -131,7 +132,7 @@ impl GameWorld {
         if unit.player != player {
             return Err(EconomyError::NotOwner);
         }
-        if unit.kind != UnitKind::Villager {
+        if !matches!(unit.kind, UnitKind::Villager | UnitKind::FishingShip) {
             return Err(EconomyError::WrongUnitKind);
         }
         if !self.economy.gatherers.contains_key(&id)
@@ -147,6 +148,15 @@ impl GameWorld {
             .map_err(GameWorldError::Environment)?
             .filter(|node| overlay.blocks_node(*node))
             .ok_or(EconomyError::InvalidResource)?;
+        if (unit.kind == UnitKind::FishingShip
+            && !matches!(
+                node.object,
+                aoe_map::ObjectKind::ShoreFish | aoe_map::ObjectKind::DeepFish
+            ))
+            || (unit.kind == UnitKind::Villager && node.object == aoe_map::ObjectKind::DeepFish)
+        {
+            return Err(EconomyError::InvalidResource);
+        }
         // A refused order leaves the unit's current job alone.
         self.begin_gather(id, node.id, node.tile, node.kind, None)?;
         self.economy.builders.remove(&id);
@@ -180,6 +190,11 @@ impl GameWorld {
             node,
             farm,
             animal: None,
+            fish: if farm.is_none() {
+                self.fish_object(node)
+            } else {
+                None
+            },
             tile,
             kind,
             phase: GatherPhase::Approaching,
@@ -194,11 +209,10 @@ impl GameWorld {
         } else {
             UnitTask::Moving
         };
-        let keep = self.units[index]
-            .state
-            .carried
-            .is_none_or(|load| load.amount != VILLAGE_RULES.villager_capacity)
-            || self.begin_return(id, &mut task);
+        let keep =
+            self.units[index].state.carried.is_none_or(|load| {
+                load.amount != Self::gather_capacity(self.units[index].state.kind)
+            }) || self.begin_return(id, &mut task);
         if keep {
             self.economy.gatherers.insert(id, task);
         } else {
@@ -222,7 +236,11 @@ impl GameWorld {
             target,
             TileCoord::new(target.x + 1, target.y + 1),
         ));
-        candidates.retain(|tile| self.tile_passable(*tile));
+        candidates.retain(|tile| {
+            self.unit_tile_passable(unit.kind, *tile, &|| false)
+                .unwrap_or(false)
+                && !self.economy.blocked_tiles.contains(tile)
+        });
         candidates.sort_by_key(|tile| {
             (
                 distance_squared(unit.position.tile_floor(), *tile),
@@ -327,7 +345,18 @@ impl GameWorld {
             return self.resume_resource(id, task);
         }
         task.phase = GatherPhase::Gathering;
-        self.units[index].state.task = if task.farm.is_some() {
+        if task.fish.is_some() {
+            let unit = &mut self.units[index].state;
+            let from = unit.position.tile_floor();
+            unit.facing = crate::game_world::facing_for(
+                i64::from(task.tile.x - from.x),
+                i64::from(task.tile.y - from.y),
+                unit.facing,
+            );
+        }
+        self.units[index].state.task = if task.fish.is_some() {
+            UnitTask::Fishing
+        } else if task.farm.is_some() {
             UnitTask::Farming
         } else if let Some(animal) = task.animal {
             if self
@@ -345,10 +374,9 @@ impl GameWorld {
             return false;
         };
         if remaining == 0
-            || self.units[index]
-                .state
-                .carried
-                .is_some_and(|load| load.amount >= VILLAGE_RULES.villager_capacity)
+            || self.units[index].state.carried.is_some_and(|load| {
+                load.amount >= Self::gather_capacity(self.units[index].state.kind)
+            })
         {
             if self.units[index].state.carried.is_some() {
                 return self.begin_return(id, task);
@@ -358,11 +386,22 @@ impl GameWorld {
         if self.tick.0 < task.retry_tick {
             return true;
         }
-        task.credits += u64::from(task.animal.and_then(|id| self.animal(id)).map_or(
-            VILLAGE_RULES.gather_hundredths_per_second[task.kind as usize],
-            |a| a.kind.rules().gather_hundredths,
-        ));
-        let threshold = u64::from(self.config.tick_hz) * 100;
+        // DE update 169123 reduced both ship fish rates by 15%. Retain
+        // ten-thousandths for 0.49 * 0.85 = 0.4165, without rounding drift.
+        let (rate, precision) = match (task.fish, self.units[index].state.kind) {
+            (Some(aoe_map::ObjectKind::DeepFish), UnitKind::FishingShip) => (4165, 10_000),
+            (Some(aoe_map::ObjectKind::ShoreFish), UnitKind::FishingShip) => (2380, 10_000),
+            (Some(_), _) => (43, 100),
+            _ => (
+                task.animal.and_then(|id| self.animal(id)).map_or(
+                    VILLAGE_RULES.gather_hundredths_per_second[task.kind as usize],
+                    |a| a.kind.rules().gather_hundredths,
+                ),
+                100,
+            ),
+        };
+        task.credits += u64::from(rate);
+        let threshold = u64::from(self.config.tick_hz) * precision;
         if task.credits < threshold {
             return true;
         }
@@ -385,7 +424,7 @@ impl GameWorld {
                 kind: task.kind,
                 amount,
             });
-            if amount == VILLAGE_RULES.villager_capacity || left == 0 {
+            if amount == Self::gather_capacity(self.units[index].state.kind) || left == 0 {
                 return self.begin_return(id, task);
             }
             return true;
@@ -411,7 +450,9 @@ impl GameWorld {
                 amount,
             });
             self.economy.depletions.push(depletion);
-            if amount == VILLAGE_RULES.villager_capacity || depletion.remaining == 0 {
+            if amount == Self::gather_capacity(self.units[index].state.kind)
+                || depletion.remaining == 0
+            {
                 return self.begin_return(id, task);
             }
         }

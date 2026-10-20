@@ -8,6 +8,17 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
         let stride = frames.len() / 5;
         return (stride > 0 && frames.len() == stride * 5).then_some((frames, stride, false));
     }
+    let fishing = match unit.kind {
+        SceneUnitKind::FishingShip => Some((if unit.moving { 8 } else { 7 }, 1, false)),
+        SceneUnitKind::FishingShipWorking => Some((7, 1, false)),
+        SceneUnitKind::VillagerFishing => Some((10, 7, true)),
+        SceneUnitKind::VillagerCarryingFish => Some((11, 1, false)),
+        _ => None,
+    };
+    if let Some((slot, stride, animated)) = fishing {
+        let frames = &art.fishing[slot];
+        return (frames.len() == stride * 5).then_some((frames.as_slice(), stride, animated));
+    }
     let scout = unit.kind == SceneUnitKind::Scout;
     let (frames, stride): (&[GameFrame], usize) = if scout {
         (
@@ -182,7 +193,7 @@ pub(super) fn building(
         marker(unit, camera, emit);
         return;
     }
-    let index = if (9..=12).contains(&art_slot) {
+    let index = if (9..=12).contains(&art_slot) || art_slot == 24 {
         usize::from(unit.facing).min(frames.len() - 1)
     } else if art_slot == 7 {
         usize::from(unit.facing) % frames.len()

@@ -94,6 +94,13 @@ pub enum SceneUnitKind {
     NeutralSheepWalk,
     NeutralSheepDie,
     NeutralSheepDecay,
+    Dock,
+    FoundationDock,
+    RubbleDock,
+    FishingShip,
+    FishingShipWorking,
+    VillagerFishing,
+    VillagerCarryingFish,
 }
 
 impl SceneUnitKind {
@@ -155,11 +162,16 @@ impl SceneUnitKind {
     pub(super) fn actor_slot(self) -> Option<usize> {
         (self as u8)
             .checked_sub(Self::MilitiaStand as u8)
+            .filter(|index| *index < 46)
             .map(usize::from)
     }
 
     /// The typed building roles are contiguous in the atlas's semantic order.
     pub fn building(slot: u8) -> Self {
+        if slot >= 23 {
+            return [Self::Dock, Self::FoundationDock, Self::RubbleDock]
+                [usize::from(slot - 23).min(2)];
+        }
         use SceneUnitKind::*;
         [
             BuildingTownCenter,
@@ -210,6 +222,9 @@ impl SceneUnitKind {
             Self::RubbleBarracks => Some(19),
             Self::RubblePalisadeWall => Some(20),
             Self::RubbleOutpost => Some(21),
+            Self::Dock => Some(23),
+            Self::FoundationDock => Some(24),
+            Self::RubbleDock => Some(25),
             _ => None,
         }
     }
@@ -218,6 +233,9 @@ impl SceneUnitKind {
             return Some(4.0);
         }
         let slot = self.building_slot()?;
+        if slot >= 23 {
+            return Some(3.0);
+        }
         Some(if (9..=12).contains(&slot) {
             f64::from(slot - 8)
         } else {

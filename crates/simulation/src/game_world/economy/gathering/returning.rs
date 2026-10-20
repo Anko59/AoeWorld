@@ -9,7 +9,16 @@ impl GameWorld {
         let from = unit.position.tile_floor();
         // Buildings come from the shared drop-off rule; only the failed or
         // blocked perimeter tiles of each are skipped.
-        let order = self.dropoff_order(unit.player, from, task.kind);
+        let mut order = self.dropoff_order(unit.player, from, task.kind);
+        order.retain(|id| {
+            self.building(*id).is_some_and(|b| {
+                if unit.kind == UnitKind::FishingShip {
+                    b.kind == super::super::BuildingKind::Dock
+                } else {
+                    b.kind != super::super::BuildingKind::Dock || task.fish.is_some()
+                }
+            })
+        });
         let has_dropoff = !order.is_empty();
         let mut candidates = Vec::new();
         for building in order {
@@ -17,7 +26,12 @@ impl GameWorld {
                 continue;
             };
             let mut tiles = perimeter(footprint);
-            tiles.retain(|tile| self.tile_passable(*tile) && !task.failed_dropoffs.contains(tile));
+            tiles.retain(|tile| {
+                self.unit_tile_passable(unit.kind, *tile, &|| false)
+                    .unwrap_or(false)
+                    && !self.economy.blocked_tiles.contains(tile)
+                    && !task.failed_dropoffs.contains(tile)
+            });
             tiles.sort_by_key(|tile| (distance_squared(from, *tile), tile.y, tile.x));
             candidates.extend(tiles.into_iter().map(|tile| (building, tile)));
         }
@@ -83,16 +97,21 @@ impl GameWorld {
             return false;
         }
         if self.resource_remaining(task.node) == Some(0) {
-            let Some(next) = self.nearest_resource(
-                task.tile,
-                task.kind,
-                VILLAGE_RULES.replacement_radius_tiles,
-                Some(task.node),
-            ) else {
+            let Some(next) = (if task.fish.is_some() {
+                self.nearest_fish(id, task.tile, task.node)
+            } else {
+                self.nearest_resource(
+                    task.tile,
+                    task.kind,
+                    VILLAGE_RULES.replacement_radius_tiles,
+                    Some(task.node),
+                )
+            }) else {
                 return false;
             };
             task.node = next.id;
             task.tile = next.tile;
+            task.fish = self.fish_object(next.id);
         }
         self.restart_approach(id, task)
     }

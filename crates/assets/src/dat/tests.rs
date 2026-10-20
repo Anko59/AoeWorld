@@ -3,6 +3,9 @@ use super::*;
 use flate2::{Compression, write::DeflateEncoder};
 use std::io::Write;
 
+#[path = "corpse_tests.rs"]
+mod corpse_tests;
+
 fn le16(out: &mut Vec<u8>, value: i16) {
     out.extend_from_slice(&value.to_le_bytes());
 }
@@ -66,6 +69,11 @@ fn unit(out: &mut Vec<u8>, spec: &Spec) {
     out.extend_from_slice(&4.0f32.to_le_bytes());
     out.resize(start + 145, 0);
     out[start + 43..start + 45].copy_from_slice(&(-1i16).to_le_bytes());
+    out[start + 27..start + 31].copy_from_slice(&1.5f32.to_le_bytes());
+    out[start + 31..start + 35].copy_from_slice(&1.5f32.to_le_bytes());
+    out[start + 75..start + 77].copy_from_slice(&15i16.to_le_bytes());
+    out[start + 124..start + 126].copy_from_slice(&0i16.to_le_bytes());
+    out[start + 126..start + 130].copy_from_slice(&225f32.to_le_bytes());
     out.push(spec.sprites);
     out.extend_from_slice(&vec![0; usize::from(spec.sprites) * 5 + 6]);
     padded(out, spec.name, spec.name.len() + 1);
@@ -79,7 +87,10 @@ fn unit(out: &mut Vec<u8>, spec: &Spec) {
         out.extend_from_slice(&[0; 33]);
     }
     if spec.kind >= 40 {
-        out.extend_from_slice(&[0; 20]);
+        out.extend_from_slice(&[0; 2]);
+        out.extend_from_slice(&4f32.to_le_bytes());
+        out.extend_from_slice(&0.49f32.to_le_bytes());
+        out.extend_from_slice(&[0; 10]);
     }
     if spec.kind >= 50 {
         out.push(0);
@@ -236,6 +247,10 @@ fn fixture_decodes_graphics_units_and_tasks() {
     );
     assert_eq!(villager.train_time, Some(25));
     assert_eq!(villager.costs[0].amount, 50);
+    assert_eq!(villager.collision_size, [1.5, 1.5]);
+    assert_eq!(villager.resource_capacity, 15);
+    assert_eq!(villager.resource_storage[0], (0, 225.0));
+    assert_eq!(villager.work_rate, Some(0.49));
     assert!(villager.tasks.is_empty());
     assert_eq!(file.unit(0).unwrap().tasks.len(), 2);
     assert_eq!(file.unit(0).unwrap().tasks[0].graphics, [-1, 4, -1, 3]);
@@ -248,23 +263,6 @@ fn headers_are_found_whatever_filler_precedes_them() {
         assert_eq!(file.report.stopped, None, "filler {filler}");
         assert_eq!(file.unit(0).unwrap().tasks.len(), 2, "filler {filler}");
     }
-}
-
-#[test]
-fn corpse_art_follows_the_unit_dead_reference_instead_of_an_adjacent_slp_guess() {
-    let mut file = parse(&fixture_with(0, 83)).unwrap();
-    file.units
-        .iter_mut()
-        .find(|u| u.id == 83)
-        .unwrap()
-        .dead_unit = 0;
-    let table = table::build(&file, None);
-    let row = table.rows.iter().find(|r| r.unit == 83).unwrap();
-    assert!(
-        row.graphics
-            .iter()
-            .any(|g| g.role == "decay" && g.slp == 2223)
-    );
 }
 
 #[test]
@@ -371,6 +369,28 @@ fn real_trial_file_matches_the_reviewed_ids() {
     );
     let slp = |id: i16| file.graphic(id.into()).unwrap().slp_id;
     let villager = file.unit(83).unwrap();
+    let ship = file.unit(13).unwrap();
+    assert_eq!(
+        (
+            ship.work_rate,
+            ship.resource_capacity,
+            ship.train_time,
+            ship.train_location
+        ),
+        (Some(0.28), 15, Some(40), Some(45))
+    );
+    assert_eq!(ship.tasks[0].work_values[0], 1.75);
+    assert_eq!(file.unit(56).unwrap().work_rate, Some(0.43));
+    for (id, amount) in [
+        (53, 200.0),
+        (69, 200.0),
+        (455, 225.0),
+        (456, 225.0),
+        (457, 225.0),
+        (458, 225.0),
+    ] {
+        assert_eq!(file.unit(id).unwrap().resource_storage[0], (17, amount));
+    }
     assert_eq!(slp(villager.standing[0]), 1479);
     assert_eq!(slp(villager.walking.unwrap()[0]), 1484);
     // The catalog's cavalry 3004/3008 is Light Cavalry art; Scout Cavalry is SCOUT_*.

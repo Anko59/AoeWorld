@@ -104,6 +104,8 @@ pub(super) fn object_kind(value: u8) -> Result<ObjectKind, CompactChunkError> {
         2 => Ok(ObjectKind::GoldDeposit),
         3 => Ok(ObjectKind::StoneDeposit),
         4 => Ok(ObjectKind::Decoration),
+        5 => Ok(ObjectKind::ShoreFish),
+        6 => Ok(ObjectKind::DeepFish),
         _ => Err(CompactChunkError::InvalidEnum),
     }
 }
@@ -232,6 +234,8 @@ pub(super) fn resource_family_from(value: u8) -> Result<ResourceVisualFamily, Co
         2 => Ok(ResourceVisualFamily::Conifer),
         3 => Ok(ResourceVisualFamily::DryScrub),
         4 => Ok(ResourceVisualFamily::Tropical),
+        5 => Ok(ResourceVisualFamily::ShoreFish),
+        6 => Ok(ResourceVisualFamily::DeepFish),
         _ => Err(CompactChunkError::InvalidEnum),
     }
 }

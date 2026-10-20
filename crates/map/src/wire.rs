@@ -339,7 +339,30 @@ fn validate(chunk: &LandscapeChunk) -> Result<(), CompactChunkError> {
         resource_cells[index] = true;
         let node = resource.node;
         let tree = node.kind == ResourceKind::Wood && node.object == ObjectKind::Tree;
-        if tree == (resource.visual_family == ResourceVisualFamily::Generic) {
+        let valid = match node.object {
+            ObjectKind::ShoreFish => {
+                node.kind == ResourceKind::Food
+                    && resource.visual_family == ResourceVisualFamily::ShoreFish
+            }
+            ObjectKind::DeepFish => {
+                node.kind == ResourceKind::Food
+                    && resource.visual_family == ResourceVisualFamily::DeepFish
+            }
+            _ => {
+                if tree {
+                    matches!(
+                        resource.visual_family,
+                        ResourceVisualFamily::Broadleaf
+                            | ResourceVisualFamily::Conifer
+                            | ResourceVisualFamily::DryScrub
+                            | ResourceVisualFamily::Tropical
+                    )
+                } else {
+                    resource.visual_family == ResourceVisualFamily::Generic
+                }
+            }
+        };
+        if !valid {
             return Err(CompactChunkError::InvalidLandscape);
         }
     }

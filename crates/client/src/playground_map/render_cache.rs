@@ -52,7 +52,13 @@ impl<S> RenderFrameCache<S> {
                 .map(|unit| aoe_rendering::scene_unit_render_key(art, *unit, camera)))
             || previous.resources.as_slice() != resources
             || previous.grid != grid
-            || previous.animation != moving_animation(art, units, animation, camera)
+            || previous.animation
+                != moving_animation(art, units, animation, camera).or_else(|| {
+                    resources
+                        .iter()
+                        .any(|r| matches!(r.visual_family, 5 | 6))
+                        .then_some(animation)
+                })
     }
 
     fn record_success(
@@ -73,7 +79,12 @@ impl<S> RenderFrameCache<S> {
                 .collect(),
             resources: resources.to_vec(),
             grid,
-            animation: moving_animation(art, units, animation, camera),
+            animation: moving_animation(art, units, animation, camera).or_else(|| {
+                resources
+                    .iter()
+                    .any(|r| matches!(r.visual_family, 5 | 6))
+                    .then_some(animation)
+            }),
         });
     }
 }

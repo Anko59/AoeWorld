@@ -142,7 +142,15 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
         assert_eq!(encode_gameplay_client(&message).unwrap(), bytes);
         assert_eq!(decode_gameplay_client(&bytes).unwrap(), message);
     }
-    assert!(decode_gameplay_client(&[5, 9, 3, 3]).is_err());
+    assert_eq!(
+        decode_gameplay_client(&[5, 9, 3, 3]).unwrap(),
+        GameplayClientMessage::TrainOrder {
+            sequence: 9,
+            building_id: EntityId(3),
+            kind: UnitKind::FishingShip
+        }
+    );
+    assert!(decode_gameplay_client(&[5, 9, 3, 4]).is_err());
     assert!(decode_gameplay_client(&[4, 9, 3]).is_err());
     // A build order may name at most MAX_BUILD_GROUP villagers.
     let crowd = GameplayClientMessage::BuildOrder {

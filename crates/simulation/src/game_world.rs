@@ -324,9 +324,9 @@ impl GameWorld {
             return Err(GameWorldError::UnknownEntity);
         }
         let destination = self.config.snap_ground_position(destination);
+        let kind = self.units[index].state.kind;
         let passable = self
-            .terrain
-            .passable_with_cancel(destination.tile_floor(), self.config, &|| false)
+            .unit_tile_passable(kind, destination.tile_floor(), &|| false)
             .map_err(GameWorldError::Environment)?;
         if !passable
             || self
@@ -349,7 +349,7 @@ impl GameWorld {
         }
         let target_tile = destination.tile_floor();
         let (waypoint, route, planner, planning) =
-            match self.next_map_route(origin.tile_floor(), target_tile) {
+            match self.next_map_route(origin.tile_floor(), target_tile, kind) {
                 Some(MapRoutePlan::Outcome(MovementOutcome::Path(path))) => {
                     let (waypoint, route) = route_waypoint(path.tiles, origin, destination)?;
                     (waypoint, route, None, false)

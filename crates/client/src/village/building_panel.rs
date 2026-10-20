@@ -21,7 +21,7 @@ pub(super) fn update(client: &Client) {
         .iter()
         .find(|p| p.player == owner(client));
     // age, selected kind, hp, max hp, construction, food, research kind/progress,
-    // research availability, eight build availability entries, trained kind.
+    // research availability, nine build availability entries, trained kind.
     let mut v = vec![0.0, -1.0, 0.0, 0.0, 1000.0, -1.0, -1.0, 0.0, 0.0, 0.0, 0.0];
     if let Some(p) = player {
         v[0] = p.age as u8 as f64;
@@ -83,9 +83,15 @@ pub(super) fn update(client: &Client) {
                 ..Default::default()
             }
         } else {
-            let c = aoe_simulation::GameWorld::unit_training(aoe_simulation::UnitKind::Militia)
-                .map(|t| t.cost)
-                .unwrap_or_default();
+            let c = aoe_simulation::GameWorld::unit_training(
+                if b.kind == aoe_protocol::BuildingKind::Dock {
+                    aoe_simulation::UnitKind::FishingShip
+                } else {
+                    aoe_simulation::UnitKind::Militia
+                },
+            )
+            .map(|t| t.cost)
+            .unwrap_or_default();
             aoe_protocol::Stockpile {
                 food: c.food,
                 wood: c.wood,
@@ -126,7 +132,7 @@ pub(super) fn update(client: &Client) {
     buildings_update(&v);
 }
 
-pub(super) const KINDS: [aoe_protocol::BuildingKind; 9] = {
+pub(super) const KINDS: [aoe_protocol::BuildingKind; 10] = {
     use aoe_protocol::BuildingKind::*;
     [
         TownCenter,
@@ -138,6 +144,7 @@ pub(super) const KINDS: [aoe_protocol::BuildingKind; 9] = {
         Barracks,
         PalisadeWall,
         Outpost,
+        Dock,
     ]
 };
 
@@ -175,6 +182,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         "build-barracks",
         "build-palisade-wall",
         "build-outpost",
+        "build-dock",
         "research-loom",
         "research-town-watch",
         "research-feudal-age",
@@ -190,7 +198,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let target = shared.clone();
         let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
             let mut client = target.borrow_mut();
-            if i < 8 {
+            if i < 9 {
                 construction::arm(&mut client, KINDS[i + 1]);
                 return;
             }
@@ -199,12 +207,12 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             };
             let sequence = client.next_sequence;
             let message = match i {
-                8..=10 => Message::ResearchOrder {
+                9..=11 => Message::ResearchOrder {
                     sequence,
                     building_id,
-                    tech: [Tech::Loom, Tech::TownWatch, Tech::FeudalAge][i - 8],
+                    tech: [Tech::Loom, Tech::TownWatch, Tech::FeudalAge][i - 9],
                 },
-                11 => Message::CancelConstructionOrder {
+                12 => Message::CancelConstructionOrder {
                     sequence,
                     building_id,
                 },

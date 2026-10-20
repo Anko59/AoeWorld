@@ -11,6 +11,7 @@ use aoe_map::{
 };
 use std::{fs, io::Write, path::Path};
 
+pub(crate) mod fishing;
 #[cfg(test)]
 mod tests;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -116,6 +117,7 @@ pub(super) fn prepare(root: &Path, existing: Option<&Path>) -> Result<Fixture> {
     if let Some(existing) = existing {
         include_existing(existing, directory.path())?;
     }
+    fishing::prepare(root, directory.path())?;
     let fields = fields()?;
     let hash = fields.package.content_hash_hex();
     let page_root = directory.path().join("pages").join(&hash);

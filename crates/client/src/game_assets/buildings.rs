@@ -51,7 +51,7 @@ pub(super) fn select(
     manifest: &Manifest,
     selected: &mut Vec<usize>,
     domains: &mut Vec<AtlasDomain>,
-) -> Result<[Option<std::ops::Range<usize>>; 23], JsValue> {
+) -> Result<[Option<std::ops::Range<usize>>; 26], JsValue> {
     // Slots match building_ui::sprite_slot. Slot 22 is the builder's five rows.
     let mut ranges = std::array::from_fn(|_| None);
     let stems = [
@@ -65,7 +65,7 @@ pub(super) fn select(
         "b_dark_wall_palisade",
         "b_dark_outpost_age1",
     ];
-    for slot in 0..23 {
+    for slot in 0..26 {
         let (source, count, step) = match slot {
             0 | 4 => continue, // Multipart trial Town Center and Mill.
             1..=8 => {
@@ -109,7 +109,10 @@ pub(super) fn select(
                     1,
                 )
             }
-            _ => ("graphics.drs:[32, 112, 108, 115]:1496".to_string(), 75, 1),
+            22 => ("graphics.drs:[32, 112, 108, 115]:1496".to_string(), 75, 1),
+            23 => ("de/b_dark_dock_age1_x1.sld".to_string(), 1, 1),
+            24 => ("de/b_misc_foundation_dock_x1.sld".to_string(), 3, 1),
+            _ => ("de/b_misc_rubble_x1.sld".to_string(), 1, 1),
         };
         let (source, count, step) = if !source_present(manifest, &source) {
             let trial = match slot {
@@ -117,6 +120,8 @@ pub(super) fn select(
                 6 => Some((2683, 1, 1)),
                 7 => Some((4534, 45, 9)),
                 8 => Some((4330, 1, 1)),
+                23 => Some((376, 1, 1)),
+                24 => Some((4397, 3, 1)),
                 9..=12 => Some((236 + slot as u32 - 9, 3, 1)),
                 _ => None,
             };
@@ -172,7 +177,7 @@ pub(super) fn select(
 pub(super) fn crop_farm(
     manifest: &mut Manifest,
     selected: &[usize],
-    ranges: &[Option<std::ops::Range<usize>>; 23],
+    ranges: &[Option<std::ops::Range<usize>>; 26],
 ) -> Result<(), JsValue> {
     if let Some(range) = &ranges[5] {
         for semantic in range.clone() {

@@ -9,6 +9,7 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
         return match u.kind {
             UnitKind::Militia => MilitiaDie,
             UnitKind::Scout => ScoutDie,
+            UnitKind::FishingShip => ScoutDie,
             UnitKind::Villager => match u.death_hunt {
                 Some(AnimalKind::Sheep) => ShepherdDie,
                 Some(_) => HunterDie,
@@ -206,7 +207,7 @@ pub(crate) fn click_order(
         ClickOrder::Hunt
     } else if animal || enemy {
         ClickOrder::Attack
-    } else if resource && kind == UnitKind::Villager {
+    } else if resource && matches!(kind, UnitKind::Villager | UnitKind::FishingShip) {
         ClickOrder::Gather
     } else {
         ClickOrder::Move
