@@ -9,7 +9,7 @@ pub(super) fn direct_world_layers(
     camera: SceneCamera,
     animation: usize,
 ) -> Vec<WorldLayer> {
-    let ground = ground::BuildingGround::new(units);
+    let ground = ground::BuildingGround::new(units, camera);
     let compatibility = if terrain.is_empty() {
         ground.compatibility_farms(camera)
     } else {

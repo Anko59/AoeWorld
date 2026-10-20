@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 import { scoutCombat, villagerCombat } from "../wire/combat.js";
 import { darkAgeState, townCenterState } from "../wire/buildings.js";
 import { wildlifeState } from "../wire/wildlife.js";
@@ -14,11 +14,16 @@ function uint(value: number): number[] {
 }
 
 /** Presentation fixture only: five villagers exceed the current starting cap. */
-export async function fiveVillagerFixture(page: Page) {
+export async function fiveVillagerFixture(
+  page: Page,
+  observe?: (bytes: Buffer, socket: WebSocketRoute) => void,
+  snapshotTick: () => number = () => 0,
+) {
   await page.routeWebSocket("**/game/ws", (socket) => {
     socket.onMessage((message) => {
       const bytes =
         typeof message === "string" ? Buffer.from(message) : message;
+      observe?.(bytes, socket);
       if (bytes[0] === 0) {
         socket.send(
           Buffer.from([
@@ -75,7 +80,7 @@ export async function fiveVillagerFixture(page: Page) {
         Buffer.from([
           1,
           ...uint(revision),
-          0,
+          ...uint(snapshotTick()),
           6,
           ...units,
           1,

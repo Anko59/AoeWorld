@@ -248,7 +248,13 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             super::village::construction::cancel(&mut client);
             return;
         }
+        if event.button() != 0 {
+            client.drag = None;
+            let _ = client.canvas.release_pointer_capture(event.pointer_id());
+            return;
+        }
         if client.village.placement.is_some() {
+            client.drag = None;
             super::village::construction::place(&mut client, target, true);
             let _ = client.canvas.release_pointer_capture(event.pointer_id());
             return;

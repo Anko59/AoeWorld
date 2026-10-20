@@ -122,7 +122,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 }
                 client.units = resident;
                 client.village.players = players;
-                client.village.rubble.clear();
+                client.village.rubble.retain(|(_, until)| *until > tick.0);
                 client.village.buildings = buildings;
                 client.village.tick = tick.0;
                 if !client.village.focused {

@@ -11,11 +11,13 @@ test("villager build menu places a House and watches authoritative completion", 
   test.setTimeout(210_000);
   expect((await request.post("/maps/reset")).status()).toBe(204);
   const assets = await gameAssets(page);
-  if (assets === "local AoE II pack") {
-    expect(
-      (await request.get("/asset-pack/buildings/manifest.json")).ok(),
-    ).toBeTruthy();
-  }
+  // A supported trial pack must exercise the full flow even without DE art.
+  await page.route("**/asset-pack/buildings/**", (route) =>
+    route.fulfill({
+      status: 404,
+      body: "Trial pack without optional DE overlay",
+    }),
+  );
   await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 60_000,

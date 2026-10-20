@@ -1,5 +1,8 @@
 //! `aoe-harness assets`: inspect, import and verify the local asset packs.
 mod dat_table;
+#[path = "tests/makefile.rs"]
+#[cfg(test)]
+mod makefile_tests;
 mod overlay;
 #[path = "tests/overlay.rs"]
 #[cfg(test)]

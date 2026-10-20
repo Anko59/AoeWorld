@@ -7,16 +7,35 @@ pub(super) struct BuildingGround {
 }
 
 impl BuildingGround {
-    pub(super) fn new(units: &[SceneUnit]) -> Self {
+    pub(super) fn new(units: &[SceneUnit], camera: SceneCamera) -> Self {
         let mut centers = Vec::new();
         for unit in units {
             if unit.kind == SceneUnitKind::TownCenter {
                 centers.push(unit.position);
             }
         }
+        let projection = Camera {
+            center: camera.center,
+            zoom: camera.zoom,
+            viewport: camera.viewport,
+            focus_elevation_meters: camera.focus_elevation_meters,
+        };
+        let extent = [
+            1.5 * aoe_core::ISO_TILE_WIDTH * camera.zoom,
+            1.5 * aoe_core::ISO_TILE_HEIGHT * camera.zoom,
+        ];
         let farms = units
             .iter()
             .filter(|u| u.kind == SceneUnitKind::Farm)
+            // Cull once per redraw, before every terrain triangle tests candidates.
+            // Include the full projected 3x3 footprint, even with its center offscreen.
+            .filter(|u| {
+                let p = projection.world_to_screen_at_height(u.position, u.elevation_meters);
+                p.x + extent[0] >= 0.0
+                    && p.y + extent[1] >= 0.0
+                    && p.x - extent[0] <= camera.viewport[0]
+                    && p.y - extent[1] <= camera.viewport[1]
+            })
             .map(|u| u.position)
             .collect();
         Self { centers, farms }
@@ -81,6 +100,10 @@ impl BuildingGround {
         face.set_wear((strength * f32::from(crate::surface_mesh::WEAR_LEVELS)).round() as u8);
     }
 }
+
+#[cfg(test)]
+#[path = "ground_tests.rs"]
+mod tests;
 
 /// Replace the ground inside completed farms with the DE ploughed texture.
 fn farm(face: &mut ProjectedSurfaceTriangle, farms: &[[f64; 2]], art: &GameArt) {
