@@ -56,10 +56,41 @@ fn stationary_fish_keep_the_animation_clock_live() {
         visual_family: 5,
         ..resource(9)
     };
-    let mut cache = RenderFrameCache::default();
-    cache.record_success(&scene, &art(), &[], &[fish], false, 0, camera());
-    assert!(!cache.needs_render(&scene, &art(), &[], &[fish], false, 0, camera()));
-    assert!(cache.needs_render(&scene, &art(), &[], &[fish], false, 3, camera()));
+    let mut art = art();
+    for (family, period, count) in [(5, 3, 17), (6, 9, 7)] {
+        let fish = SceneResource {
+            visual_family: family,
+            ..fish
+        };
+        art.fishing[usize::from(family == 6)] = vec![art.walking[0]; count];
+        let mut cache = RenderFrameCache::default();
+        cache.record_success(&scene, &art, &[], &[fish], false, 0, camera());
+        for tick in 1..period {
+            assert!(!cache.needs_render(&scene, &art, &[], &[fish], false, tick, camera()));
+        }
+        assert!(cache.needs_render(&scene, &art, &[], &[fish], false, period, camera()));
+        assert!(!cache.needs_render(&scene, &art, &[], &[fish], false, period * count, camera()));
+    }
+}
+
+#[wasm_bindgen_test]
+fn missing_static_and_offscreen_fish_art_ignore_animation_ticks() {
+    let scene = Rc::new(());
+    for family in [5, 6] {
+        for (count, position) in [(0, [3.5, 4.5]), (1, [3.5, 4.5]), (7, [10000.0; 2])] {
+            let mut art = art();
+            art.fishing[usize::from(family == 6)] = vec![art.walking[0]; count];
+            let fish = SceneResource {
+                kind: 0,
+                visual_family: family,
+                position,
+                ..resource(9)
+            };
+            let mut cache = RenderFrameCache::default();
+            cache.record_success(&scene, &art, &[], &[fish], false, 0, camera());
+            assert!(!cache.needs_render(&scene, &art, &[], &[fish], false, 9, camera()));
+        }
+    }
 }
 
 #[wasm_bindgen_test]

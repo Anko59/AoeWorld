@@ -4,7 +4,7 @@ import { PNG } from "pngjs";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { fiveVillagerFixture } from "./fixture.js";
-import { freshHud } from "./resources.js";
+import { freshHud } from "./fixtures/resources.js";
 
 function uint(value: number): number[] {
   const bytes: number[] = [];

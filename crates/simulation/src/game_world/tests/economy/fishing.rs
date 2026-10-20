@@ -80,6 +80,86 @@ fn build_dock(world: &mut GameWorld, origin: TileCoord) -> EntityId {
 }
 
 #[test]
+fn dock_and_fishing_ship_reveal_their_los_and_enemy_ships_hide_after_sight_leaves() {
+    use crate::TileVisibility::{Explored, Unexplored, Visible};
+    let mut world = coast();
+    world
+        .place_town_center(PlayerId(0), TileCoord::new(10, 10))
+        .unwrap();
+    let origin = site(&world);
+    let dock = build_dock(&mut world, origin);
+    assert_eq!(world.building(dock).unwrap().los, 8);
+    let center = TileCoord::new(origin.x + 1, origin.y + 1);
+    assert_eq!(
+        world.visibility(PlayerId(0), TileCoord::new(center.x + 8, center.y)),
+        Visible
+    );
+    assert_eq!(
+        world.visibility(PlayerId(0), TileCoord::new(center.x + 9, center.y)),
+        Unexplored
+    );
+    let tile = TileCoord::new(origin.x + 30, origin.y + 20);
+    let at = WorldPosition::from_tile_center(tile).unwrap();
+    let own = world
+        .spawn_kind(PlayerId(0), UnitKind::FishingShip, at)
+        .unwrap();
+    let enemy = world
+        .spawn_kind(PlayerId(1), UnitKind::FishingShip, at)
+        .unwrap();
+    assert_eq!(
+        world.visibility(PlayerId(0), TileCoord::new(tile.x + 5, tile.y)),
+        Visible
+    );
+    assert_eq!(
+        world.visibility(PlayerId(0), TileCoord::new(tile.x + 6, tile.y)),
+        Unexplored
+    );
+    assert!(world.unit_visible_to(PlayerId(0), enemy));
+    world.kill_unit(world.lookup[&own]);
+    assert_eq!(world.visibility(PlayerId(0), tile), Explored);
+    assert!(!world.unit_visible_to(PlayerId(0), enemy));
+}
+
+#[test]
+fn fish_keep_the_last_observed_amount_in_explored_fog() {
+    use crate::TileVisibility;
+    let mut world = coast();
+    let crate::Terrain::Map { generator, .. } = world.terrain() else {
+        panic!()
+    };
+    let fish = (0..5)
+        .flat_map(|cy| (0..8).flat_map(move |cx| generator.chunk(cx, cy).unwrap().resources))
+        .find(|n| n.object == ObjectKind::DeepFish)
+        .unwrap();
+    let at = WorldPosition::from_tile_center(TileCoord::new(fish.tile.x + 1, fish.tile.y)).unwrap();
+    let ship = world
+        .spawn_kind(PlayerId(0), UnitKind::FishingShip, at)
+        .unwrap();
+    world.deplete_resource(fish.id, 1).unwrap();
+    assert_eq!(
+        world.known_resource_amounts(PlayerId(0)),
+        vec![(fish.id, fish.initial_amount - 1)]
+    );
+    world.kill_unit(world.lookup[&ship]);
+    assert_eq!(
+        world.visibility(PlayerId(0), fish.tile),
+        TileVisibility::Explored
+    );
+    world.deplete_resource(fish.id, 1).unwrap();
+    assert_eq!(
+        world.known_resource_amounts(PlayerId(0)),
+        vec![(fish.id, fish.initial_amount - 1)]
+    );
+    world
+        .spawn_kind(PlayerId(0), UnitKind::FishingShip, at)
+        .unwrap();
+    assert_eq!(
+        world.known_resource_amounts(PlayerId(0)),
+        vec![(fish.id, fish.initial_amount - 2)]
+    );
+}
+
+#[test]
 fn dock_rejects_inland_and_open_water_but_accepts_a_coast() {
     let mut world = coast();
     assert!(

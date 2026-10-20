@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
-import { centerVillage } from "./resources.js";
+import { centerVillage } from "./fixtures/resources.js";
 
 test("villager build menu places a House and watches authoritative completion", async ({
   page,

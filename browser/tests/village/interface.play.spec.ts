@@ -2,7 +2,11 @@ import { expect, type Page } from "@playwright/test";
 import { test } from "../../server.js";
 import { forceCanvas } from "../rendering/backends.js";
 import { gameAssets } from "../game-assets.js";
-import { centerVillage, frameResource, scoutVillage } from "./resources.js";
+import {
+  centerVillage,
+  frameResource,
+  scoutVillage,
+} from "./fixtures/resources.js";
 
 type Actor = { id: number; kind: string; x: number; y: number };
 async function actors(page: Page): Promise<Actor[]> {

@@ -4,7 +4,7 @@ import { PNG } from "pngjs";
 import { gameAssets } from "../game-assets.js";
 import { activateSyntheticMap } from "../synthetic-map.js";
 import { forceCanvas, forceWebGl } from "./backends.js";
-import { freshHud } from "../village/resources.js";
+import { freshHud } from "../village/fixtures/resources.js";
 
 // Fixture art is 25 by 45 pixels with its hotspot at (12, 42): three rows of
 // every sprite lie below the point where it stands.

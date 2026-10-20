@@ -3,7 +3,11 @@ import { mkdir, readFile } from "node:fs/promises";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { activatePackage } from "../start/package.js";
-import { centerVillage, frameResource } from "./resources.js";
+import {
+  centerVillage,
+  frameResource,
+  freshHud,
+} from "./fixtures/resources.js";
 
 type Tile = { x: number; y: number };
 type Actor = { id: number; kind: string; x: number; y: number };
@@ -31,6 +35,12 @@ async function frame(page: Page, tile: Tile, zoom = 0.55) {
       Number(await page.locator("#minimap").getAttribute("data-camera-x")),
     )
     .toBeCloseTo(tile.x, 1);
+  await expect
+    .poll(async () =>
+      Number(await page.locator("#minimap").getAttribute("data-zoom")),
+    )
+    .toBeCloseTo(zoom, 3);
+  await freshHud(page);
 }
 
 async function point(page: Page, tile: Tile) {
@@ -54,6 +64,41 @@ async function point(page: Page, tile: Tile) {
         ((dx + dy) * 32 * zoom * bounds.height) / element.height,
     };
   }, tile);
+}
+
+/** Reveal fish through the selected observer's real LOS before gathering. */
+async function revealFish(page: Page, tile: Tile, naval: boolean) {
+  await frame(page, tile, 0.75);
+  for (const [dx, dy] of [
+    [-1, 0],
+    [0, -1],
+    [0, 1],
+    [1, 0],
+    [-2, 0],
+    [-3, 0],
+  ] as const) {
+    const target = { x: tile.x + dx, y: tile.y + dy };
+    const at = await point(page, target);
+    await page.mouse.move(at.x, at.y);
+    await expect(page.locator("#tile-inspection")).toContainText(
+      `tile ${target.x}, ${target.y}:`,
+    );
+    await freshHud(page);
+    const eligible = naval
+      ? (await page.locator("#scene").getAttribute("data-command-cursor")) ===
+        "move"
+      : (await page.locator("#tile-inspection").textContent())?.endsWith(
+          " · passable",
+        );
+    if (!eligible) continue;
+    await page.mouse.click(at.x, at.y, { button: "right" });
+    await expect(page.locator("#unit-state")).not.toHaveText("unit idle");
+    await expect(page.locator("#unit-state")).toHaveText("unit idle", {
+      timeout: 60_000,
+    });
+    return;
+  }
+  throw new Error("No reachable approach beside the fish");
 }
 
 test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish food", async ({
@@ -87,6 +132,12 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
     scene.hash,
     { timeout: 30_000 },
   );
+  await centerVillage(page);
+  const scout = (await actors(page)).find((a) => a.kind === "Scout");
+  if (!scout) throw new Error("Scout missing");
+  await page.mouse.click(scout.x, scout.y);
+  await expect(page.locator("#selection-name")).toHaveText("Scout");
+  await revealFish(page, scene.shore, false);
   await frame(page, scene.shore, 1.0);
   await shot("shore-fish");
   const fish = await point(page, scene.shore);
@@ -98,8 +149,6 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   await expect(page.locator("#selection-name")).toHaveText("Shore fish");
   await expect(page.locator("#unit-health-bars .unit-hp-bar")).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await frame(page, scene.deep, 1.0);
-  await shot("deep-fish");
   await centerVillage(page);
   const workers = (await actors(page)).filter((a) => a.kind === "Villager");
   const woodcutter = workers[0],
@@ -176,6 +225,8 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   await page.mouse.click(ship.x, ship.y);
   await expect(page.locator("#selection-name")).toHaveText("Fishing Ship");
   await expect(page.locator("#unit-health-bars .unit-hp-bar")).toHaveCount(1);
+  await revealFish(page, scene.deep, true);
+  await shot("deep-fish");
   await frame(page, scene.deep, 0.75);
   const deep = await point(page, scene.deep);
   await page.mouse.click(deep.x, deep.y, { button: "right" });

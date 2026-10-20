@@ -4,7 +4,7 @@ import { gameAssets } from "./game-assets.js";
 import { denyWebGl } from "./rendering/backends.js";
 import { syntheticTerrainCoverage } from "./surface-evidence.js";
 import { PNG } from "pngjs";
-import { freshHud } from "./village/resources.js";
+import { freshHud } from "./village/fixtures/resources.js";
 import {
   bluePixels,
   assetTerrainColorVariety,

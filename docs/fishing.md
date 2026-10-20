@@ -18,6 +18,13 @@ caps with land units. Their water terrain adapter never reads or populates the
 land route cache. Diagonals cannot cut land corners. Land movement retains its
 existing terrain adapter and cache.
 
+Movement cursors use the selected owned living units' movement domains. A
+mixed land/naval selection shows move if any selected unit can enter the tile:
+the server accepts or rejects each unit's move independently. Ships use ocean,
+lake and river tiles except fords; land units retain land surface passability.
+Resources and building footprints block both domains. Cursor feedback describes
+the destination; the authoritative route planner still decides reachability.
+
 Villagers may gather shore fish; ships may gather both fish kinds. Fishing is
 an appended worker task. A full load returns to the nearest reachable eligible
 owned completed building, with the existing bounded perimeter fallback. Ships
@@ -47,7 +54,7 @@ and [Bird](https://github.com/Tapsa/genieutils/blob/master/src/dat/unit/Bird.cpp
 | DAT unit | Rules used | Sprite sources (trial SLP ids) |
 |---|---|---|
 | 45 Dock | 150 wood; 35 s; 1800 HP; radii 1.5×1.5 (3×3); trial LOS 6; armour 0/7 | 376 standing, 4397 foundation; optional DE `b_dark_dock_age1_x1.sld`, `b_misc_foundation_dock_x1.sld` |
-| 13 Fishing Ship | 75 wood; 40 s at unit 45; trial 60 HP; capacity 15; speed 1.26; trial armour 0/4 | 444 idle, 449 moving, 446 fishing; five native rows mirrored to eight facings |
+| 13 Fishing Ship | 75 wood; 40 s at unit 45; trial 60 HP; LOS 5; capacity 15; speed 1.26; trial armour 0/4 | 444 idle, 449 moving, 446 fishing; five native rows mirrored to eight facings |
 | 56 fisherman | work rate 0.43; capacity 10; shore fishing 0.43 food/s | 3575 working, 3980 carrying |
 | 69 shore fish | 200 food | 3549, 34 animation frames |
 | 53 Perch | 200 food | 420, 30 stored frames |
@@ -76,6 +83,11 @@ eight facings, mirrored rows and player colour. Fishermen sample every second
 Selected ships use native body bounds for picking and HP bars;
 flat water does not occlude hull pixels below their ground anchor. Fish remain
 neutral resource sprites, outside the unit-selection list.
+Fog remembers fish as resources, retaining last observed amounts and dimming
+every animation frame in explored tiles. Enemy ships require current sight.
+Fishing Ships reveal a five-tile disk (DAT unit 13); Docks reveal eight tiles
+using the DE rule above. Fish animation invalidates rendering only when the
+displayed sampled frame index changes for visible fish with animated art.
 Missing optional art remains missing; corrupt present sources fail startup.
 Dock foundations use their native shore foundation, without painting dirt over
 the water footprint.

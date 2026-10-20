@@ -35,18 +35,20 @@ pub(super) fn shade_objects(
     art: &GameArt,
     resources: &[SceneResource],
     units: &[SceneUnit],
+    animation: usize,
     light: &dyn Fn([f64; 2]) -> f32,
 ) {
-    let mut resources_by_frame = BTreeMap::new();
+    // One key type shares the map machinery while keeping unit IDs disjoint
+    // from resource frames, even when their numeric IDs collide.
+    let mut levels = BTreeMap::new();
     for r in resources {
-        if let Some((body, shadow)) = scene_resource_presentation(art, *r) {
-            resources_by_frame.insert(frame_key(r.id, body), light(r.position));
+        if let Some((body, shadow)) = world_sprites::resource_presentation_at(art, *r, animation) {
+            levels.insert(frame_key(r.id, body), light(r.position));
             if let Some(shadow) = shadow {
-                resources_by_frame.insert(frame_key(r.id, shadow), light(r.position));
+                levels.insert(frame_key(r.id, shadow), light(r.position));
             }
         }
     }
-    let mut levels = BTreeMap::new();
     for u in units {
         // Owned units are already inside their own LOS. Remembered enemy
         // buildings use their last position and the same fog illumination.
@@ -62,13 +64,13 @@ pub(super) fn shade_objects(
                 }
             }
         }
-        levels.insert(u64::from(u.id.0), factor);
+        levels.insert((u64::from(u.id.0), None), factor);
     }
     for layer in layers {
         if let WorldLayer::Sprite(sprite, frame, _, id) = layer {
-            let factor = resources_by_frame
+            let factor = levels
                 .get(&frame_key(*id, *frame))
-                .or_else(|| levels.get(id))
+                .or_else(|| levels.get(&(*id, None)))
                 .copied()
                 .unwrap_or(1.0);
             for c in &mut sprite.color[..3] {
@@ -78,8 +80,13 @@ pub(super) fn shade_objects(
     }
 }
 
-fn frame_key(id: u64, frame: GameFrame) -> (u64, u32, [u32; 4]) {
-    (id, frame.atlas.page, frame.atlas.uv.map(f32::to_bits))
+type ObjectKey = (u64, Option<(u32, [u32; 4])>);
+
+fn frame_key(id: u64, frame: GameFrame) -> ObjectKey {
+    (
+        id,
+        Some((frame.atlas.page, frame.atlas.uv.map(f32::to_bits))),
+    )
 }
 
 pub(super) fn grid_segments(

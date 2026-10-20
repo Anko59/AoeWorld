@@ -3,7 +3,11 @@ import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { fiveVillagerFixture } from "./fixture.js";
-import { centerVillage, frameResource, freshHud } from "./resources.js";
+import {
+  centerVillage,
+  frameResource,
+  freshHud,
+} from "./fixtures/resources.js";
 
 type Actor = { id: number; kind: string; x: number; y: number };
 async function clickActor(page: Page, kind: string, id?: number) {

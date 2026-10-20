@@ -5,6 +5,8 @@ use std::io::Write;
 
 #[path = "tests/corpse.rs"]
 mod corpse_tests;
+#[path = "tests/fishing.rs"]
+mod fishing_tests;
 
 fn le16(out: &mut Vec<u8>, value: i16) {
     out.extend_from_slice(&value.to_le_bytes());
@@ -369,28 +371,6 @@ fn real_trial_file_matches_the_reviewed_ids() {
     );
     let slp = |id: i16| file.graphic(id.into()).unwrap().slp_id;
     let villager = file.unit(83).unwrap();
-    let ship = file.unit(13).unwrap();
-    assert_eq!(
-        (
-            ship.work_rate,
-            ship.resource_capacity,
-            ship.train_time,
-            ship.train_location
-        ),
-        (Some(0.28), 15, Some(40), Some(45))
-    );
-    assert_eq!(ship.tasks[0].work_values[0], 1.75);
-    assert_eq!(file.unit(56).unwrap().work_rate, Some(0.43));
-    for (id, amount) in [
-        (53, 200.0),
-        (69, 200.0),
-        (455, 225.0),
-        (456, 225.0),
-        (457, 225.0),
-        (458, 225.0),
-    ] {
-        assert_eq!(file.unit(id).unwrap().resource_storage[0], (17, amount));
-    }
     assert_eq!(slp(villager.standing[0]), 1479);
     assert_eq!(slp(villager.walking.unwrap()[0]), 1484);
     // The catalog's cavalry 3004/3008 is Light Cavalry art; Scout Cavalry is SCOUT_*.

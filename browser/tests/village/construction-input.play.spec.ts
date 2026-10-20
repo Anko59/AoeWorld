@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { fiveVillagerFixture } from "./fixture.js";
-import { freshHud } from "./resources.js";
+import { freshHud } from "./fixtures/resources.js";
 
 for (const button of ["middle", "right"] as const) {
   test(`${button} release ends a placement pan without a build order`, async ({

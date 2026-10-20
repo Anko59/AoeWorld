@@ -1,6 +1,62 @@
 use super::*;
 use aoe_rendering::{AtlasAddress, GameFrame};
 
+#[wasm_bindgen_test]
+async fn movement_cursor_uses_selected_domains_and_accepts_any_in_mixed_selection() {
+    use aoe_map::{GroundMaterial, MapChunkGenerator, WaterKind};
+    use aoe_protocol::UnitKind;
+    let shared = ship_on_water().await;
+    let mut client = shared.borrow_mut();
+    let mut chunk = MapChunkGenerator::new([0; 32], 1, 1024)
+        .landscape_chunk_with_cancel(8, 18, &|| false)
+        .unwrap();
+    chunk.resources.clear();
+    chunk.decorations.clear();
+    for (water, material, land_passable) in [
+        (WaterKind::Ocean, GroundMaterial::DeepWater, false),
+        (WaterKind::None, GroundMaterial::TemperateGrass, true),
+        (WaterKind::River, GroundMaterial::Ford, true),
+    ] {
+        for cell in &mut chunk.tiles {
+            cell.terrain.water = water;
+            cell.terrain.material = material;
+            cell.terrain.passable = land_passable;
+            cell.terrain.game_height_level = 0;
+            cell.terrain.surface.corner_game_height_levels = [0; 4];
+            cell.terrain.surface.kind = aoe_map::SurfaceKind::Plateau;
+        }
+        let cached = super::super::super::CachedChunk::from(chunk.clone());
+        let terrain = cached
+            .scene_tiles()
+            .map(|(p, t, a)| super::super::super::terrain_scene_sample(p, t, a))
+            .collect();
+        *client.terrain_scene.borrow_mut() =
+            Some(Rc::new(PreparedScene::new(client.camera, terrain)));
+        client.terrain_chunks.insert((8, 18), cached);
+        client.pointer = Some(client.camera.world_to_screen([284.5, 603.5]));
+        let mut land = client.units[&EntityId(1)];
+        land.id = EntityId(2);
+        land.kind = UnitKind::Villager;
+        client.units.insert(land.id, land);
+        for (selection, expected) in [
+            (vec![EntityId(1)], if land_passable { 3.0 } else { 2.0 }),
+            (vec![EntityId(2)], if land_passable { 2.0 } else { 3.0 }),
+            (vec![EntityId(1), EntityId(2)], 2.0),
+        ] {
+            client.selected.units = selection;
+            for move_cursor in [false, true] {
+                client.village.move_cursor = move_cursor;
+                assert_eq!(
+                    crate::playground::game::village::presentation::values(&client)[3],
+                    expected,
+                    "{water:?} {material:?}, move mode {move_cursor}"
+                );
+            }
+        }
+    }
+    client.canvas.remove();
+}
+
 async fn ship_on_water() -> Rc<RefCell<Client>> {
     let scene = PreparedScene::new(
         Camera {
@@ -128,6 +184,17 @@ async fn clicking_fish_on_water_selects_a_resource_and_never_a_unit() {
     {
         let mut client = shared.borrow_mut();
         client.units.clear();
+        assert!(client.fog.apply(aoe_protocol::FogState {
+            revision: 1,
+            tick: aoe_core::Tick(0),
+            disabled: false,
+            region: aoe_core::TileRect::new(
+                aoe_core::TileCoord::new(280, 600),
+                aoe_core::TileCoord::new(288, 608)
+            ),
+            tiles: vec![2; 64],
+            overview: Vec::new(),
+        }));
         assert!(client.resources.apply(ResourceState {
             subscription_revision: 1,
             from_revision: None,

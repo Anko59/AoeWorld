@@ -2,10 +2,13 @@ use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
+#[path = "village/fish.rs"]
+mod fish;
 #[path = "scenery.rs"]
 mod scenery;
 #[path = "village/mod.rs"]
 mod village;
+pub use fish::scene_resource_animation_frame;
 
 #[path = "village/bounds.rs"]
 mod bounds;
@@ -28,23 +31,13 @@ pub fn scene_resource_presentation(
     resource_presentation_at(art, resource, 0)
 }
 
-fn resource_presentation_at(
+pub(super) fn resource_presentation_at(
     art: &GameArt,
     resource: SceneResource,
     animation: usize,
 ) -> Option<(GameFrame, Option<GameFrame>)> {
     if resource.kind == 0 && matches!(resource.visual_family, 5 | 6) {
-        let slot = if resource.visual_family == 5 {
-            0
-        } else {
-            1 + usize::from(resource.visual_variant % 5)
-        };
-        let frames = &art.fishing[slot];
-        let period = if slot == 0 { 3 } else { 9 };
-        return frames
-            .get((animation / period + resource.id as usize) % frames.len().max(1))
-            .copied()
-            .map(|f| (f, None));
+        return fish::frame(art, resource, animation).map(|f| (f, None));
     }
     if resource.kind >= SceneResource::CLIFF {
         return scenery::frame(art, resource).map(|frame| (frame, None));
