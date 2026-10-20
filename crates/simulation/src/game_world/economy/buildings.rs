@@ -19,7 +19,7 @@ pub struct BuildingRules {
     pub population_support: u16,
     /// Resources a villager may deposit here, Food/Wood/Gold/Stone order.
     pub accepts: [bool; 4],
-    /// Units its training queue accepts. Combat tracks slot new kinds in here.
+    /// Units its training queue accepts; the combat table owns Militia cost and time.
     pub trainable: &'static [UnitKind],
     /// A completed building of this kind of the same player must exist.
     pub requires: Option<BuildingKind>,
@@ -43,6 +43,7 @@ const NONE: [bool; 4] = [false; 4];
 const ALL: [bool; 4] = [true; 4];
 const NO_UNITS: &[UnitKind] = &[];
 const VILLAGERS: &[UnitKind] = &[UnitKind::Villager];
+const MILITIA: &[UnitKind] = &[UnitKind::Militia];
 
 /// Canonical order of `BuildingKind`.
 pub const BUILDING_RULES: [BuildingRules; 9] = [
@@ -145,8 +146,7 @@ pub const BUILDING_RULES: [BuildingRules; 9] = [
         los: 5,
         population_support: 0,
         accepts: NONE,
-        // The Militia unit kind of the combat track joins this list.
-        trainable: NO_UNITS,
+        trainable: MILITIA,
         requires: None,
         buildable: true,
         blocks: true,

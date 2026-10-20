@@ -151,6 +151,10 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
         RejectedInvalidPlacement => "Cannot build there: the site is blocked or outside the map.",
         RejectedUnderConstruction => "That building is still under construction.",
         RejectedAlreadyComplete => "That building is already complete.",
+        RejectedNotResearchable => "That building cannot research that technology.",
+        RejectedAlreadyResearched => "That technology is already researched.",
+        RejectedResearchBusy => "That research is already underway or the building is busy.",
+        RejectedTechRequirement => "That technology's requirements are not met.",
         RejectedFarmUnavailable => "That farm is exhausted or already being worked.",
         RejectedInvalidDestination => match blocker {
             Some(ObjectKind::Tree) => "Cannot move there: a tree is in the way.",

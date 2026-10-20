@@ -32,7 +32,7 @@ pub struct UnitCombat {
     pub hp: u16,
     pub attack: u16,
     pub attack_kind: DamageKind,
-    pub melee_armour: u16,
+    pub melee_armour: i16,
     pub pierce_armour: u16,
     /// Time between hits, in hundredths of a second.
     pub attack_period_centiseconds: u32,
@@ -92,11 +92,11 @@ pub const UNIT_COMBAT: [UnitCombat; 3] = [
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BuildingCombat {
     pub kind: BuildingKind,
-    pub melee_armour: u16,
+    pub melee_armour: i16,
     pub pierce_armour: u16,
 }
 
-const fn armour(kind: BuildingKind, melee_armour: u16, pierce_armour: u16) -> BuildingCombat {
+const fn armour(kind: BuildingKind, melee_armour: i16, pierce_armour: u16) -> BuildingCombat {
     BuildingCombat {
         kind,
         melee_armour,
@@ -105,16 +105,20 @@ const fn armour(kind: BuildingKind, melee_armour: u16, pierce_armour: u16) -> Bu
 }
 
 /// Indexed by `BuildingKind as usize`. `BUILDING_RULES` owns hit points.
-/// Only Town Center armour is specified; other kinds currently use 0/0.
+/// AoE II DE Dark Age armour, from the extracted game data:
+/// https://github.com/SiegeEngineers/aoe2techtree/blob/master/data/data.json
+/// House -2 melee: official AoE II DE update 56005:
+/// https://www.ageofempires.com/news/aoeii_de_update_56005/
+/// Farm and Outpost really have 0/0; these are not placeholders.
 pub const BUILDING_COMBAT: [BuildingCombat; 9] = [
     armour(BuildingKind::TownCenter, 3, 5),
-    armour(BuildingKind::House, 0, 0),
-    armour(BuildingKind::LumberCamp, 0, 0),
-    armour(BuildingKind::MiningCamp, 0, 0),
-    armour(BuildingKind::Mill, 0, 0),
+    armour(BuildingKind::House, -2, 7),
+    armour(BuildingKind::LumberCamp, 0, 7),
+    armour(BuildingKind::MiningCamp, 0, 7),
+    armour(BuildingKind::Mill, 0, 7),
     armour(BuildingKind::Farm, 0, 0),
-    armour(BuildingKind::Barracks, 0, 0),
-    armour(BuildingKind::PalisadeWall, 0, 0),
+    armour(BuildingKind::Barracks, 0, 7),
+    armour(BuildingKind::PalisadeWall, 2, 5),
     armour(BuildingKind::Outpost, 0, 0),
 ];
 
@@ -129,13 +133,19 @@ pub const fn building_combat(kind: BuildingKind) -> &'static BuildingCombat {
 pub const fn damage_dealt(
     attack: u16,
     kind: DamageKind,
-    melee_armour: u16,
+    melee_armour: i16,
     pierce_armour: u16,
 ) -> u16 {
     let armour = match kind {
-        DamageKind::Melee => melee_armour,
-        DamageKind::Pierce => pierce_armour,
+        DamageKind::Melee => melee_armour as i32,
+        DamageKind::Pierce => pierce_armour as i32,
     };
-    let damage = attack.saturating_sub(armour);
-    if damage == 0 { 1 } else { damage }
+    let damage = attack as i32 - armour;
+    if damage < 1 {
+        1
+    } else if damage > u16::MAX as i32 {
+        u16::MAX
+    } else {
+        damage as u16
+    }
 }

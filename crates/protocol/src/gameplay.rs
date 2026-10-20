@@ -123,6 +123,17 @@ pub enum ClientMessage {
         builder_ids: Vec<EntityId>,
         building_id: EntityId,
     },
+    /// Research `tech` at a completed building; the cost is paid on acceptance.
+    ResearchOrder {
+        sequence: u64,
+        building_id: EntityId,
+        tech: Tech,
+    },
+    /// Cancel the building's research and refund its full cost.
+    CancelResearch {
+        sequence: u64,
+        building_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -152,6 +163,10 @@ pub enum CommandResult {
     RejectedUnderConstruction,
     RejectedAlreadyComplete,
     RejectedFarmUnavailable,
+    RejectedNotResearchable,
+    RejectedAlreadyResearched,
+    RejectedResearchBusy,
+    RejectedTechRequirement,
 }
 
 /// Immutable physical properties of the active geographic map. The package

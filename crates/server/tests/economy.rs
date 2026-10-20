@@ -1,3 +1,5 @@
+#[path = "economy/techs.rs"]
+mod techs;
 use aoe_core::{PlayerId, Seed, TileCoord, TileRect};
 use aoe_map::{MapPackage, ResourceKind};
 use aoe_protocol::{CommandResult, GameplayServerMessage, UnitKind};

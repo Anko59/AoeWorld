@@ -26,7 +26,9 @@ impl GameWorld {
         if !super::trainable_units(building.kind).contains(&kind) {
             return Err(EconomyError::WrongUnitKind);
         }
-        if building.training_queue.len() >= VILLAGE_RULES.training_queue_limit {
+        if building.research.is_some()
+            || building.training_queue.len() >= VILLAGE_RULES.training_queue_limit
+        {
             return Err(EconomyError::TrainingQueueFull);
         }
         let state = self
@@ -42,19 +44,26 @@ impl GameWorld {
         if usize::from(state.population_used) + reserved >= usize::from(state.population_cap) {
             return Err(EconomyError::PopulationCap);
         }
-        if state.stockpile.food < VILLAGE_RULES.villager_food_cost {
-            return Err(EconomyError::InsufficientFood);
-        }
+        let seconds = if kind == UnitKind::Villager {
+            if state.stockpile.food < VILLAGE_RULES.villager_food_cost {
+                return Err(EconomyError::InsufficientFood);
+            }
+            if let Some(state) = self.economy.players.get_mut(&player) {
+                state.stockpile.food -= VILLAGE_RULES.villager_food_cost;
+            }
+            VILLAGE_RULES.villager_training_seconds
+        } else {
+            // Combat units pay the combat table's cost, all or nothing.
+            let training = Self::unit_training(kind).ok_or(EconomyError::WrongUnitKind)?;
+            self.pay_unit_cost(player, kind)?;
+            training.seconds
+        };
         // No fallible work follows these mutations.
-        if let Some(state) = self.economy.players.get_mut(&player) {
-            state.stockpile.food -= VILLAGE_RULES.villager_food_cost;
-        }
         if let Some(building) = self.economy.buildings.get_mut(&center) {
             building.training_queue.push_back(TrainingEntry {
                 kind,
                 progress_ticks: 0,
-                total_ticks: u64::from(self.config.tick_hz)
-                    * u64::from(VILLAGE_RULES.villager_training_seconds),
+                total_ticks: u64::from(self.config.tick_hz) * u64::from(seconds),
             });
         }
         Ok(())
@@ -75,13 +84,18 @@ impl GameWorld {
         if building.player != player {
             return Err(EconomyError::NotOwner);
         }
-        if building.training_queue.pop_front().is_some()
-            && let Some(state) = self.economy.players.get_mut(&player)
-        {
-            state.stockpile.food = state
-                .stockpile
-                .food
-                .saturating_add(VILLAGE_RULES.villager_food_cost);
+        let Some(entry) = building.training_queue.pop_front() else {
+            return Ok(());
+        };
+        if entry.kind == UnitKind::Villager {
+            if let Some(state) = self.economy.players.get_mut(&player) {
+                state.stockpile.food = state
+                    .stockpile
+                    .food
+                    .saturating_add(VILLAGE_RULES.villager_food_cost);
+            }
+        } else {
+            self.refund_unit_cost(player, entry.kind);
         }
         Ok(())
     }
@@ -95,6 +109,7 @@ impl GameWorld {
             let Some(entry) = building.training_queue.front_mut() else {
                 continue;
             };
+            let kind = entry.kind;
             entry.progress_ticks = entry
                 .progress_ticks
                 .saturating_add(1)
@@ -119,7 +134,11 @@ impl GameWorld {
             let Ok(position) = position(tile) else {
                 continue;
             };
-            if let Ok(unit) = self.spawn_villager(player, position) {
+            let spawned = match kind {
+                UnitKind::Militia => self.spawn_militia(player, position),
+                _ => self.spawn_kind(player, kind, position),
+            };
+            if let Ok(unit) = spawned {
                 if let Some(building) = self.economy.buildings.get_mut(&id) {
                     building.training_queue.pop_front();
                 }

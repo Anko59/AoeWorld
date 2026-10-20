@@ -13,6 +13,7 @@ mod combat;
 mod economy;
 mod facing;
 mod hash;
+mod research;
 mod resources;
 mod spawning;
 pub use combat::*;
@@ -23,6 +24,7 @@ pub use economy::{
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;
+pub use research::*;
 pub use resources::PreparedResourceDepletion;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

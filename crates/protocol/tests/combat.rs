@@ -40,6 +40,7 @@ fn center(hp: u16) -> GameplayBuildingState {
         progress_permille: 1000,
         los: 8,
         food_remaining: None,
+        research: None,
         hp,
         max_hp: 2400,
         last_hit: None,
@@ -108,6 +109,8 @@ fn combat_state_round_trips_for_units_and_buildings() {
             // A destroyed Town Center leaves population above a zero cap.
             population_used: 3,
             population_cap: 0,
+            age: aoe_protocol::Age::Dark,
+            researched: 0,
         }],
         buildings: vec![center(1)],
     };

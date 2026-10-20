@@ -55,12 +55,12 @@ A deposit or a new order clears the trip's failed choices. Changing resource
 kind discards the carried load; a plain Move cancels the job while keeping the
 load.
 
-Train commands require an owned, completed building that trains the unit, enough food, a free population
-slot and space in its bounded queue. Acceptance pays the food and reserves the
+Train commands require an owned, completed building that trains the unit, enough resources, a free population
+slot and space in its bounded queue. Acceptance pays the unit cost and reserves the
 population slot; population used continues to count living units. Only the
 front entry advances. A completed entry waits for a free passable perimeter
 tile and does not pay again. New villagers use the shared entity allocator.
-Cancelling the active training entry refunds its food and releases its reserved
+Cancelling the active training entry refunds its cost and releases its reserved
 population slot; cancelling an empty queue cannot create resources. Death, rally
 points and saved village state are not part of the economy.
 
@@ -123,8 +123,8 @@ before any progress). One palisade order lays at most 64 segments, all or none.
 
 Population support is the sum over a player's completed housing buildings
 (Town Center 5, House 5), capped at 200. Training needs a completed building
-whose table lists the unit (`trainable_units`); the Barracks lists none until the
-combat track adds the Militia. A returning villager walks to the nearest completed
+whose table lists the unit (`trainable_units`); the Barracks trains Militia
+(60 food, 20 gold, 21 s, from the combat table; cancelling refunds both). A returning villager walks to the nearest completed
 owned building that accepts its load (`nearest_dropoff`).
 
 A farm holds 175 food from placement, but only a completed one can be worked,
@@ -164,3 +164,33 @@ amount removes the sprite and collision, including after reconnect.
 
 Source river station intervals are not crossing evidence. Rendered river
 water is impassable; no bridge or ford is inferred from those intervals.
+
+## Technologies and ages
+
+Every technology lives in one table,
+[`TECH_RULES`](../crates/simulation/src/game_world/research/table.rs): the
+researching building, cost, seconds, requirement and effect. A player's `age`
+(Dark, Feudal) and `researched` bitset (`1 << tech`) are player state on the wire;
+each building carries its `research` (tech, progress, total ticks).
+
+| Tech | Building | Cost | Time | Effect |
+|---|---|---|---|---|
+| Loom | Town Center | 50 gold | 25 s | villagers +15 HP, +1 melee and +2 pierce armour |
+| Town Watch | Town Center | 75 food | 25 s | building line of sight +4 (`los`) |
+| Feudal Age | Town Center | 500 food | 130 s | age becomes Feudal; needs 2 completed types of Barracks, Mill, Lumber Camp, Mining Camp |
+
+`ResearchOrder { building_id, tech }` pays the cost at once and occupies the
+building: it must be complete, owned, able to research the tech, with an empty
+training queue and no research; a building researching refuses training. A
+technology is researched once, and a player runs one research of it at a time
+(a second Town Center is refused the same tech meanwhile). `CancelResearch`
+refunds the whole cost. Houses, walls and outposts never count for the Feudal
+Age; there is no Dock building yet, so none is listed. Loom raises `max_hp` and
+`hp` together, so a damaged villager keeps the damage taken; new villagers
+start with it, and `GameWorld::unit_armour` adds it to the combat table's armour.
+Town Watch raises `los` of existing and later buildings. Feudal unlocks nothing
+beyond the age field. Work per tick is bounded by the building count.
+
+Dark Age building melee/pierce armour from AoE II DE: House -2/7; Mill,
+Lumber Camp, Mining Camp and Barracks 0/7; Palisade Wall 2/5; Outpost and
+Farm 0/0. Town Center remains 3/5. Negative melee armour increases damage.
