@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { test } from "../../server.js";
 import { forceCanvas } from "../rendering/backends.js";
 import { gameAssets } from "../game-assets.js";
-import { centerVillage, frameResource } from "./resources.js";
+import { centerVillage, frameResource, scoutVillage } from "./resources.js";
 
 type Actor = { id: number; kind: string; x: number; y: number };
 async function actors(page: Page): Promise<Actor[]> {
@@ -96,6 +96,7 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
     location.hash = "zoom=0.5";
   });
   await centerVillage(page);
+  await scoutVillage(page, 5, 7);
   await clickActor(page, "Villager");
   await page.mouse.dblclick(
     ...(await page.locator("#scene").evaluate((canvas): [number, number] => {

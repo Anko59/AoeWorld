@@ -3,7 +3,7 @@ import { activateSyntheticMap } from "../synthetic-map.js";
 import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
-import { centerVillage, frameResource } from "./resources.js";
+import { centerVillage, frameResource, scoutVillage } from "./resources.js";
 
 test("villager resource cursors, live resource selection, grid and own minimap markers", async ({
   page,
@@ -33,6 +33,7 @@ test("villager resource cursors, live resource selection, grid and own minimap m
     location.hash = "zoom=0.5";
   });
   await centerVillage(page, true);
+  await scoutVillage(page, 5, 7);
   const actors = async () =>
     JSON.parse(
       (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
