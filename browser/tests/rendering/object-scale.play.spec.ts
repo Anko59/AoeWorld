@@ -144,8 +144,38 @@ for (const backend of ["webgpu", "webgl2", "canvas2d"] as const) {
     // The rows below the hotspot are drawn over the nearer ground, not cut.
     expect(tree.bottom + 1 - hotspot.y).toBeGreaterThan(2.5);
 
-    const units = await boxes(page, RIDER_COLOR);
+    const blue = await boxes(page, RIDER_COLOR);
+    // Owned sheep now correctly share the player's blue. Identify the original
+    // four units by their authoritative ground points, not every blue object.
+    const actors = JSON.parse(
+      (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
+    ) as { kind: string; x: number; y: number }[];
+    const playerUnits = actors.filter(
+      (actor) => actor.kind === "Scout" || actor.kind === "Villager",
+    );
+    expect(playerUnits.filter((actor) => actor.kind === "Scout")).toHaveLength(
+      1,
+    );
+    expect(
+      playerUnits.filter((actor) => actor.kind === "Villager"),
+    ).toHaveLength(3);
+    const units = playerUnits.map((actor) => {
+      const matches = blue.filter(
+        (box) =>
+          actor.x >= box.left &&
+          actor.x < box.right + 1 &&
+          actor.y >= box.top &&
+          actor.y < box.bottom + 1,
+      );
+      expect(matches, `${actor.kind} at (${actor.x}, ${actor.y})`).toHaveLength(
+        1,
+      );
+      const match = matches[0];
+      if (!match) throw new Error("Missing player unit sprite");
+      return match;
+    });
     expect(units).toHaveLength(4);
+    expect(new Set(units).size).toBe(4);
     // This pack deliberately omits village art. The scout keeps its native
     // scale, while each villager has the exact semantic fallback dimensions.
     const riders = units.filter(
