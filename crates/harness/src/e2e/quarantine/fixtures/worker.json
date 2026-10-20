@@ -1,0 +1,100 @@
+{
+  "config": {
+    "rootDir": "/checkout/browser/tests",
+    "metadata": {
+      "aoeQuarantine": {
+        "selected": [
+          "d77ef19a241c8947e290-9d712ff5ecc131b0c450"
+        ],
+        "status": "failed",
+        "results": {
+          "d77ef19a241c8947e290-9d712ff5ecc131b0c450": {
+            "errors": [
+              {
+                "message": "Error: worker process exited unexpectedly (code=null, signal=SIGKILL)"
+              }
+            ],
+            "steps": [
+              {
+                "category": "hook",
+                "error": null,
+                "steps": [
+                  {
+                    "category": "fixture",
+                    "error": null,
+                    "steps": []
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "suites": [
+    {
+      "title": "quarantine-review/fixture.spec.ts",
+      "file": "quarantine-review/fixture.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "unexpected worker exit",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [
+                {
+                  "type": "aoe-quarantine-id",
+                  "description": "d77ef19a241c8947e290-9d712ff5ecc131b0c450"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webgpu",
+              "projectName": "webgpu",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 0,
+                  "error": {
+                    "message": "Error: worker process exited unexpectedly (code=null, signal=SIGKILL)"
+                  },
+                  "errors": [
+                    {
+                      "message": "Error: worker process exited unexpectedly (code=null, signal=SIGKILL)"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-19T20:43:53.444Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "d77ef19a241c8947e290-9d712ff5ecc131b0c450",
+          "file": "quarantine-review/fixture.spec.ts",
+          "line": 5,
+          "column": 1
+        }
+      ],
+      "suites": []
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "expected": 0,
+    "unexpected": 1,
+    "skipped": 0,
+    "flaky": 0
+  },
+  "specs": []
+}

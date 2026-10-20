@@ -76,16 +76,17 @@ pub(super) fn docker_args(run: &Run) -> Result<Vec<String>, Box<dyn std::error::
         "-a".to_owned(),
         "npm".to_owned(),
     ]);
-    let focused = !run.specs.is_empty();
-    if focused {
-        args.push("--silent".to_owned());
-    }
-    args.extend(["run".to_owned(), "test:e2e".to_owned()]);
-    if focused {
-        args.extend(["--".to_owned(), "--reporter=json".to_owned()]);
+    args.extend([
+        "--silent".to_owned(),
+        "run".to_owned(),
+        "test:e2e".to_owned(),
+        "--".to_owned(),
+        super::quarantine::REPORTER.to_owned(),
+    ]);
+    if !run.specs.is_empty() {
         args.extend(run.specs.iter().cloned());
     } else if let Some(shard) = run.shard {
-        args.extend(["--".to_owned(), format!("--shard={shard}")]);
+        args.push(format!("--shard={shard}"));
     }
     Ok(args)
 }

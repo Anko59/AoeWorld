@@ -57,14 +57,32 @@ fn every_option_keeps_its_own_value_and_the_image_follows_them() {
 fn a_shard_reaches_playwright_after_the_npm_separator() {
     let shard = Some(Shard { index: 2, count: 3 });
     assert_eq!(
-        tail(&args(&[], shard), 5),
-        ["npm", "run", "test:e2e", "--", "--shard=2/3"]
+        tail(&args(&[], shard), 7),
+        [
+            "npm",
+            "--silent",
+            "run",
+            "test:e2e",
+            "--",
+            "--reporter=./quarantine-reporter.ts,json",
+            "--shard=2/3"
+        ]
     );
 }
 
 #[test]
 fn the_whole_suite_and_focused_runs_carry_no_shard() {
-    assert_eq!(tail(&args(&[], None), 3), ["npm", "run", "test:e2e"]);
+    assert_eq!(
+        tail(&args(&[], None), 6),
+        [
+            "npm",
+            "--silent",
+            "run",
+            "test:e2e",
+            "--",
+            "--reporter=./quarantine-reporter.ts,json"
+        ]
+    );
     let focused = args(
         &["tests/a.spec.ts".into()],
         Some(Shard { index: 1, count: 3 }),
@@ -78,7 +96,7 @@ fn the_whole_suite_and_focused_runs_carry_no_shard() {
             "run",
             "test:e2e",
             "--",
-            "--reporter=json",
+            "--reporter=./quarantine-reporter.ts,json",
             "tests/a.spec.ts"
         ]
     );
@@ -111,7 +129,7 @@ fn a_filtered_run_passes_its_resolved_specs_after_the_json_reporter() {
             "run",
             "test:e2e",
             "--",
-            "--reporter=json",
+            "--reporter=./quarantine-reporter.ts,json",
             "tests/village/selection-density.play.spec.ts"
         ]
     );

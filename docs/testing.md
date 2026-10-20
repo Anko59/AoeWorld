@@ -72,17 +72,54 @@ still caught per PR. Measured under load (12 cores, load 11-16):
 
 Tests above 20 s in the aoe-harness crate (review calibration, QA source and
 gate review) stay in `test-unit`: they are the only guard of the gate machinery.
+
+**Expiring flaky-test quarantine (#391).** [gates/flaky.json](../gates/flaky.json)
+is a strict array of `{test, gate, issue, added, reason}` entries. `gate` is
+`test-wasm` or `test-e2e`, `issue` is a tracking issue such as `#391`, and
+`added` is a UTC `YYYY-MM-DD` date. Unknown/missing fields, duplicate gate/test
+pairs, empty metadata, invalid dates and future dates fail validation.
+`make docs-check` and both browser gates reject entries older than 14 days:
+remove fixed entries or resolve the tracking issue before expiry.
+
+Nothing is skipped. After an ordinary completed failure, Rust retries only the
+named quarantined case, at most twice per gate run. A recovery prints
+`flaky: <test> passed on attempt N (quarantined, #391)`; three failures still
+fail the gate. Unlisted failures stay failed, even if another test recovers.
+WASM entries use the full runner name; E2E entries use the spec path relative
+to `browser/tests`, without `.spec.ts` (for example `memory.shared-surfaces`).
+E2E retries select one failed case by file, line, project and escaped title;
+Playwright's global retry count stays zero. The initial shard applies once,
+so retry selection cannot move a case into another shard. Filtered local
+`make test-e2e` runs use quarantine too; duel checks do not.
+The reporter supplies the selected test IDs, full-run status and raw step/error
+evidence. Every selected case must have a completed result; a runnable case
+reported as skipped fails the gate. Only assertion errors in `expect` steps
+outside setup/teardown qualify. Hook or fixture failures, worker exits, test
+timeouts, whole-run timeouts and interruptions fail without recovery.
+
+Each recovered pass appends one JSON object with `test`, `gate`, `issue` and
+`attempt` to the run's fresh JSON-lines report: `reports/wasm/quarantine.jsonl`,
+`reports/e2e/playwright.quarantine.jsonl`,
+`reports/e2e/playwright-shard-i-of-n.quarantine.jsonl`, or
+`reports/e2e/filtered.quarantine.jsonl`. These countable records survive a later
+failure in the same run; CI uploads them with the browser reports. E2E keeps
+the original Playwright JSON plus separate retry JSON files. Incomplete reports,
+compile errors, cancellations and runner failures do not earn quarantine retries.
+
 `make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
 Chromium through a disposable ChromeDriver container. On failure it retries the
 browser suites exactly once when at least one named failed test reports a runner
 WebGL context/graphics error (#391), even alongside value assertions or other test
 failures. The log names the tests with context errors; the second full run decides
-the gate. Only the existing narrow WebGL2 creation, lost-context, graphics,
+the gate. Each test keeps one two-retry quarantine allowance for the entire gate,
+including the whole-suite fallback. Exhausted quarantined failures fail immediately
+rather than obtaining more attempts through that fallback. Only the existing
+narrow WebGL2 creation, lost-context, graphics,
 shader, and link error messages qualify. Caught Rust panics include the runner's
 `JS exception that was thrown:` / `RuntimeError: unreachable` section; that is
-normal test failure detail. A pixel-only failure does not retry. Incomplete or
-unrecognized diagnostics, compile errors, non-1 exits, cancellation, and timeouts
+normal test failure detail. An unlisted pixel-only failure does not retry.
+Incomplete or unrecognized diagnostics, compile errors, non-1 exits, cancellation, and timeouts
 fail immediately. Complete failed-run stdout is kept
 under `reports/process/` for classification alongside the usual bounded excerpt;
 classification is limited to 8 MiB and requires a complete stderr tail. Native

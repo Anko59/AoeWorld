@@ -6,6 +6,7 @@ mod discovery;
 mod filter;
 mod landscape;
 mod matrix;
+mod quarantine;
 mod servers;
 mod shard;
 mod source;
@@ -136,7 +137,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     let shard = shard::Shard::from_env(coverage.as_deref())?;
     if specs.is_empty() {
-        return run_specs(&[], None, shard);
+        return run_specs(&[], None, shard, true);
     }
     if shard.is_some() {
         return Err("AOE_E2E_SPECS selects part of the suite; unset AOE_E2E_SHARD".into());
@@ -149,6 +150,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         &selected,
         Some(std::path::Path::new(filter::FILTERED_REPORT)),
         None,
+        true,
     )?;
     if let Some(report) = filter::expected_report(&selected) {
         filter::check_report(&root, report)?;
@@ -163,13 +165,14 @@ pub(crate) fn run_focused(
     if specs.is_empty() {
         return Err("no focused browser specs".into());
     }
-    run_specs(specs, Some(report), None)
+    run_specs(specs, Some(report), None, false)
 }
 
 fn run_specs(
     specs: &[String],
     report: Option<&std::path::Path>,
     shard: Option<shard::Shard>,
+    enable_quarantine: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::current_dir()?.canonicalize()?;
     // The browser specs write their evidence here; the harness makes the directory first.
@@ -201,23 +204,43 @@ fn run_specs(
         specs,
         shard,
     })?;
-    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let cancellation = process::Cancellation::default();
     let browser_result = thread::scope(|scope| -> Result<(), Box<dyn std::error::Error>> {
         let worker_cancellation = cancellation.clone();
         let (sender, receiver) = mpsc::channel();
         scope.spawn(move || {
-            let result = if specs.is_empty() {
-                process::run_cancellable("docker", &refs, run_deadline, &worker_cancellation)
-                    .map_err(|e| e.to_string())
+            // `make test-e2e`, whole or filtered (AOE_E2E_SPECS), uses the quarantine; only the
+            // focused duel check runs without it.
+            let result = if Mode::of(specs, enable_quarantine) == Mode::Quarantined {
+                // A quarantined failure may be re-run (gates/flaky.json).
+                let report_path = match report {
+                    Some(path) => path.to_path_buf(),
+                    None => match shard {
+                        Some(shard) => std::path::PathBuf::from(format!(
+                            "reports/e2e/playwright-shard-{}-of-{}.json",
+                            shard.index, shard.count
+                        )),
+                        None => std::path::PathBuf::from("reports/e2e/playwright.json"),
+                    },
+                };
+                let journal = report_path.with_extension("quarantine.jsonl");
+                quarantine::run(
+                    &args,
+                    &report_path,
+                    &journal,
+                    run_deadline,
+                    &worker_cancellation,
+                    enable_quarantine,
+                )
+                .map_err(|error| error.to_string())
             } else {
-                // Stream reporter stdout into the same bounded retention used for nextest.
-                // No unbounded Playwright report is written by the browser container.
+                // The focused duel check never uses the quarantine. Stream reporter stdout
+                // into the same bounded retention used for nextest.
                 (|| {
                     let report = report.ok_or("focused Playwright report path missing")?;
 
                     let mut listing = Command::new("docker");
-                    listing.args(&refs).arg("--list");
+                    listing.args(&args).arg("--list");
                     discovery::run(
                         listing,
                         &report.with_extension("discovery.json"),
@@ -229,7 +252,7 @@ fn run_specs(
                     let mut retained = crate::ship::JsonOutput::create(report, "Playwright")
                         .map_err(|e| e.to_string())?;
                     let mut command = Command::new("docker");
-                    command.args(&refs);
+                    command.args(&args);
                     let captured = process::capture_command_retaining_stdout(
                         command,
                         run_deadline,
@@ -337,6 +360,25 @@ fn renderer_evidence(
         evidence.push(value);
     }
     Ok(serde_json::Value::Array(evidence))
+}
+
+/// How the browser container runs: through the flaky quarantine, or as the bounded focused
+/// duel check. Which specs were selected does not decide it: a filtered `make test-e2e`
+/// (AOE_E2E_SPECS) names specs and still uses the quarantine.
+#[derive(Debug, PartialEq, Eq)]
+enum Mode {
+    Quarantined,
+    Focused,
+}
+
+impl Mode {
+    fn of(_specs: &[String], enable_quarantine: bool) -> Self {
+        if enable_quarantine {
+            Self::Quarantined
+        } else {
+            Self::Focused
+        }
+    }
 }
 
 fn stderr_tail(stderr: &[u8]) -> String {
