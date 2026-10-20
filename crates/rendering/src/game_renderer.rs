@@ -12,6 +12,8 @@ use aoe_core::Camera;
 use wasm_bindgen::{Clamped, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, ImageData};
 
+#[path = "game_renderer/fog.rs"]
+pub(crate) mod fog;
 #[path = "game_renderer/ground.rs"]
 mod ground;
 #[path = "game_renderer/world_layers.rs"]
@@ -45,7 +47,9 @@ pub fn resource_sprite_bounds(
 
 #[path = "game_renderer/canvas_depth.rs"]
 mod canvas_depth;
-use canvas_depth::{CanvasPresentation, render_canvas_world};
+#[cfg(test)]
+use canvas_depth::render_canvas_world;
+use canvas_depth::{CanvasPresentation, render_canvas_world_with_fog};
 #[path = "game_renderer/webgl.rs"]
 mod webgl;
 use webgl::WebGlRenderer;
@@ -295,12 +299,40 @@ impl GameRenderer {
         animation: usize,
         grid: bool,
     ) -> Result<bool, String> {
+        self.render_prepared_world_with_fog(
+            art,
+            terrain,
+            surfaces,
+            resources,
+            units,
+            camera,
+            animation,
+            grid,
+            false,
+            &|_| 1.0,
+        )
+    }
+
+    pub fn render_prepared_world_with_fog(
+        &mut self,
+        art: &GameArt,
+        terrain: &[SceneTerrain],
+        surfaces: &[ProjectedSurfaceTriangle],
+        resources: &[SceneResource],
+        units: &[SceneUnit],
+        camera: SceneCamera,
+        animation: usize,
+        grid: bool,
+        fog_active: bool,
+        light: &dyn Fn([f64; 2]) -> f32,
+    ) -> Result<bool, String> {
         let surfaces = surfaces.iter().copied().map(|mut triangle| {
             apply_terrain_textures(std::slice::from_mut(&mut triangle), art);
             triangle
         });
-        let layers =
+        let mut layers =
             direct_world_layers(surfaces, art, terrain, resources, units, camera, animation);
+        fog::shade_objects(&mut layers, art, resources, units, light);
         if matches!(self, Self::WebGpu(_) | Self::WebGl(_)) {
             let depth_origin = surface_depth([
                 camera.center[0],
@@ -311,7 +343,10 @@ impl GameRenderer {
                 .iter()
                 .map(|layer| match layer {
                     WorldLayer::Surface(triangle) => {
-                        crate::web::surface_instance(triangle, camera.viewport, depth_origin)
+                        let mut packet =
+                            crate::web::surface_instance(triangle, camera.viewport, depth_origin);
+                        fog::surface_packet(&mut packet, fog::vertices(triangle, light));
+                        packet
                     }
                     WorldLayer::Selection(sprite, depth) => {
                         let mut sprite = *sprite;
@@ -328,15 +363,22 @@ impl GameRenderer {
                 .collect::<Vec<_>>();
             if grid {
                 instances.extend(game_grid::grid_sprites(
-                    &grid_segments(&layers, camera),
+                    &fog::grid_segments(&layers, camera, light),
                     camera.viewport,
                 ));
             }
             return match self {
                 Self::WebGpu(renderer) => renderer
-                    .render_sprites_with_clear(&instances, [0.16, 0.29, 0.14, 1.0])
+                    .render_sprites_with_clear(
+                        &instances,
+                        if fog_active {
+                            [0.0, 0.0, 0.0, 1.0]
+                        } else {
+                            [0.16, 0.29, 0.14, 1.0]
+                        },
+                    )
                     .map(|counters| counters.did_present),
-                Self::WebGl(renderer) => renderer.render(&mut instances),
+                Self::WebGl(renderer) => renderer.render_with_clear(&mut instances, fog_active),
                 _ => unreachable!(),
             };
         }
@@ -351,7 +393,7 @@ impl GameRenderer {
                 if canvas.width() == 0 || canvas.height() == 0 {
                     return Ok(false);
                 }
-                render_canvas_world(
+                render_canvas_world_with_fog(
                     canvas,
                     context,
                     source_atlas,
@@ -359,22 +401,14 @@ impl GameRenderer {
                     &layers,
                     camera,
                     grid,
+                    fog_active,
+                    light,
                 )?;
                 Ok(true)
             }
             _ => unreachable!(),
         }
     }
-}
-
-fn grid_segments(layers: &[WorldLayer], camera: SceneCamera) -> Vec<[aoe_core::ScreenPoint; 2]> {
-    game_grid::grid_segments(
-        layers.iter().filter_map(|layer| match layer {
-            WorldLayer::Surface(triangle) => Some(triangle),
-            _ => None,
-        }),
-        camera.zoom,
-    )
 }
 
 fn legacy_page<'a>(

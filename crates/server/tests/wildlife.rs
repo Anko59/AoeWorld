@@ -16,6 +16,7 @@ fn drain(rx: &mut mpsc::Receiver<GameplayServerMessage>) -> Vec<GameplayServerMe
 #[tokio::test]
 async fn wildlife_hunting_scenario_over_the_wire() {
     let service = GameplayService::new(Seed(1));
+    service.set_fog_disabled(true).await;
     let (tx, mut rx) = mpsc::channel(256);
     let (id, _) = service.register(None, tx).await;
     let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
@@ -163,6 +164,7 @@ async fn wildlife_hunting_scenario_over_the_wire() {
 #[tokio::test]
 async fn wildlife_subscription_replaces_the_region_and_failed_delivery_disconnects() {
     let service = GameplayService::new(Seed(1));
+    service.set_fog_disabled(true).await;
     let (tx, mut rx) = mpsc::channel(16);
     let (id, _) = service.register(None, tx).await;
     service
@@ -218,22 +220,63 @@ async fn a_military_hit_publishes_a_valid_retaliating_predator_in_the_same_tick(
         let (session, _) = service.register(None, tx).await;
         let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
         service.subscribe(session, 1, region).await;
-        let target = drain(&mut rx)
-            .into_iter()
+        let initial = drain(&mut rx);
+        let center = initial
+            .iter()
             .find_map(|message| match message {
-                GameplayServerMessage::WildlifeState { animals, .. } => {
-                    animals.into_iter().find(|a| a.kind == kind)
-                }
+                GameplayServerMessage::Snapshot { buildings, .. } => buildings
+                    .iter()
+                    .find(|building| building.kind == BuildingKind::TownCenter)
+                    .map(|building| {
+                        TileCoord::new(
+                            (building.footprint.min.x + building.footprint.max.x) / 2,
+                            (building.footprint.min.y + building.footprint.max.y) / 2,
+                        )
+                    }),
                 _ => None,
             })
-            .unwrap();
+            .expect("starting Town Center");
+        let predator = |message| match message {
+            GameplayServerMessage::WildlifeState { animals, .. } => {
+                animals.into_iter().find(|a| a.kind == kind)
+            }
+            _ => None,
+        };
+        let mut target = initial.into_iter().find_map(predator);
+        // The starting predators are outside LOS. Discover their identities
+        // through real scout movement before issuing the combat order.
         service
-            .queue_attack(session, 1, EntityId(0), target.id)
+            .queue_move(
+                session,
+                1,
+                EntityId(0),
+                aoe_core::WorldPosition::from_tile_center(TileCoord::new(center.x + 20, center.y))
+                    .unwrap(),
+            )
+            .await;
+        for _ in 0..1000 {
+            if target.is_some() {
+                break;
+            }
+            service.tick().await;
+            target = drain(&mut rx).into_iter().find_map(predator);
+        }
+        let target = target.expect("scout must reveal the predator before attacking");
+        service
+            .queue_attack(session, 2, EntityId(0), target.id)
             .await;
         let mut hit = false;
         for _ in 0..2000 {
             service.tick().await;
             for message in drain(&mut rx) {
+                if let GameplayServerMessage::CommandAck {
+                    sequence: 2,
+                    result,
+                    ..
+                } = &message
+                {
+                    assert_eq!(*result, CommandResult::Accepted);
+                }
                 if let GameplayServerMessage::WildlifeState { animals, .. } = message
                     && let Some(animal) = animals
                         .iter()

@@ -6,9 +6,11 @@ use serde::{
 use std::{fmt, marker::PhantomData};
 
 pub(crate) mod economy;
+mod fog;
 mod resources;
 mod wildlife;
 pub use economy::*;
+pub use fog::FogState;
 pub use resources::{MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
@@ -260,6 +262,8 @@ pub enum ServerMessage {
         #[serde(deserialize_with = "wildlife::bounded_animals")]
         animals: Vec<AnimalState>,
     },
+    /// Appended variant: complete player view for one bounded subscription.
+    FogState(FogState),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -322,6 +326,11 @@ where
 
 fn validate_server(message: &ServerMessage) -> Result<(), Error> {
     wildlife::validate_server(message)?;
+    if let ServerMessage::FogState(state) = message
+        && !state.valid()
+    {
+        return Err(Error::InvalidEconomyState);
+    }
     match message {
         ServerMessage::ResourceState(state) if !state.valid() => Err(Error::InvalidResourceState),
         ServerMessage::Snapshot {

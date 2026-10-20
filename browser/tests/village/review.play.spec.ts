@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { fiveVillagerFixture } from "./fixture.js";
-import { workerFixture } from "./worker-fixture.js";
+import { workerFixture } from "./fixtures/worker.js";
 import { freshHud } from "./resources.js";
 
 for (const [edge, y] of [

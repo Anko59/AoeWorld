@@ -1,5 +1,6 @@
 // The strategic map is one bounded raster per map; it never requests detailed world chunks.
 import { MAX_MINIMAP_BYTES, decodeMinimap, minimapWorldPoint } from '/minimap.js';
+import { initFogMap } from '/navigation/fog.js';
 
 const MAX_NUMBER_TEXT = 64;
 
@@ -33,6 +34,7 @@ export function initNavigation() {
   const camera = document.getElementById('minimap-camera');
   const primary = document.getElementById('minimap-primary');
   const viewport = document.getElementById('minimap-viewport');
+  const fog = initFogMap(svg);
   const keys = new Set();
   const output = new Float64Array([0, 0, NaN, NaN]);
   let world = [1, 1];
@@ -151,6 +153,7 @@ export function initNavigation() {
       ? Array.from(hashBytes, byte => byte.toString(16).padStart(2, '0')).join('') : '';
     if (hash === mapHash) return;
     mapHash = hash;
+    fog(false, []);
     panel.dataset.mapHash = hash;
     rasterState('pending');
     stopPanning();
@@ -197,6 +200,7 @@ export function initNavigation() {
   }
 
   window.aoeNavigation = {
+    fog,
     overview: () => expanded,
     fragment: () => parseCameraFragment(location.hash),
     map: changeMap,

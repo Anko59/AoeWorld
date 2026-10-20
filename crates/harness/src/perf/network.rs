@@ -196,6 +196,12 @@ async fn gameplay_client(
         return Err("gameplay wildlife snapshot missing".into());
     }
     result.bytes += size as u64;
+    let (fog, size) = receive_gameplay(&mut socket).await?;
+    if !matches!(fog, GameplayServerMessage::FogState(state) if state.revision == 1 && state.tick == tick && state.disabled && state.region == tile_region)
+    {
+        return Err("gameplay fog scenario state missing".into());
+    }
+    result.bytes += size as u64;
     for _ in 0..2 {
         let (message, size) = receive_gameplay(&mut socket).await?;
         if !matches!(message, GameplayServerMessage::Tick { .. }) {

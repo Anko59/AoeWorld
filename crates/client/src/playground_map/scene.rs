@@ -145,9 +145,17 @@ pub(in super::super) fn units(
     client: &Client,
     scene: &PreparedScene,
 ) -> Vec<aoe_rendering::SceneUnit> {
+    let player = super::super::village::owner(client);
     let mut units = client
         .units
         .values()
+        .filter(|u| {
+            u.player == player
+                || client
+                    .fog
+                    .state([u.position.tile_floor().x, u.position.tile_floor().y])
+                    == 2
+        })
         .map(|unit| {
             let position = client.presentation.position(*unit);
             let mut kind = worker_kind(unit);

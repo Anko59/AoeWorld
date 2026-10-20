@@ -130,6 +130,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
         surface_fixture: false,
         focus_map_hash: None,
         resources: Default::default(),
+        fog: Default::default(),
         terrain_scene: RefCell::new(None),
         rendered_frame: Default::default(),
         terrain_chunks: BTreeMap::new(),

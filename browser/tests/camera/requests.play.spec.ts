@@ -78,6 +78,7 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
           if (byte < 128) break;
         }
       } else revision.push(0);
+      if (bytes[0] === 1) socket.send(disabledFog(revision));
       socket.send(
         Buffer.from([
           1,
@@ -179,3 +180,4 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
     release();
   }
 });
+import { disabledFog } from "../wire/fog.js";

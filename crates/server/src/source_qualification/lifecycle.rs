@@ -22,6 +22,8 @@ pub(super) async fn exercise_resource_lifecycle(
     state_directory: &Path,
     node: &ResourceNode,
 ) -> Result<LifecycleRun, SourceQualificationError> {
+    // This qualification observes the complete overlay across disk restart.
+    service.set_fog_disabled(true).await;
     let original_server = NetworkServer::start(service.clone()).await?;
     let (mut initial, welcome) = NetworkSession::open(original_server.address(), None).await?;
     let resume_token = controller_resume_token(&welcome, "initial registration")?;
@@ -82,6 +84,7 @@ pub(super) async fn exercise_resource_lifecycle(
         &|| false,
     )?
     .ok_or(SourceQualificationError::NoStart)?;
+    restarted.set_fog_disabled(true).await;
     if restarted.world_id() == original_world_id {
         return Err(lifecycle_mismatch("changed restart world id"));
     }

@@ -140,6 +140,7 @@ async function feedbackWorld(
       }
       if (bytes[0] === 1) {
         revision = readUnsigned(bytes).value;
+        socket.send(disabledFog(unsigned(revision)));
         socket.send(
           Buffer.from([
             1,
@@ -185,3 +186,4 @@ async function feedbackWorld(
     return route.fulfill({ json: syntheticChunk(x, y) });
   });
 }
+import { disabledFog } from "../wire/fog.js";

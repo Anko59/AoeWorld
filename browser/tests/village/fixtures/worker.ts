@@ -1,7 +1,8 @@
-import { darkAgeState } from "../wire/buildings.js";
+import { darkAgeState } from "../../wire/buildings.js";
 import type { Page } from "@playwright/test";
-import { scoutCombat, villagerCombat } from "../wire/combat.js";
-import { wildlifeState } from "../wire/wildlife.js";
+import { scoutCombat, villagerCombat } from "../../wire/combat.js";
+import { wildlifeState } from "../../wire/wildlife.js";
+import { disabledFog } from "../../wire/fog.js";
 function uint(value: number): number[] {
   const bytes: number[] = [];
   do {
@@ -83,6 +84,7 @@ export async function workerFixture(page: Page) {
         ]),
       );
       socket.send(wildlifeState(revision));
+      socket.send(disabledFog(revision));
     });
   });
 }

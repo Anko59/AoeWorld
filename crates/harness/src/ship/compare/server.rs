@@ -144,6 +144,7 @@ pub(crate) fn side_env(pack: &str, packages: &Path, open: &str) -> Vec<(&'static
         ),
         ("AOE_MAP_PACKAGE_DIRECTORY", packages.display().to_string()),
         ("AOE_OPEN_MAP_PACKAGE", open.to_owned()),
+        ("AOE_FOG_DISABLED", "1".to_owned()),
     ]
 }
 

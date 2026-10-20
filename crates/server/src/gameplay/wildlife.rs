@@ -3,10 +3,23 @@ use aoe_core::TileRect;
 use aoe_protocol::{AnimalKind, AnimalState, AnimalTask};
 use aoe_simulation::GameWorld;
 
-pub(super) fn animals(world: &GameWorld, region: TileRect) -> Vec<AnimalState> {
+#[path = "wildlife/tests.rs"]
+#[cfg(test)]
+mod tests;
+
+pub(super) fn animals(
+    world: &GameWorld,
+    region: TileRect,
+    player: aoe_core::PlayerId,
+) -> Vec<AnimalState> {
     world
         .animals()
-        .filter(|a| region.contains(a.position.tile_floor()))
+        .filter(|a| a.owner == Some(player) || region.contains(a.position.tile_floor()))
+        .filter(|a| {
+            a.owner == Some(player)
+                || world.visibility(player, a.position.tile_floor())
+                    == aoe_simulation::TileVisibility::Visible
+        })
         .map(|a| AnimalState {
             id: a.id,
             kind: match a.kind {

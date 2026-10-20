@@ -90,6 +90,7 @@ async function feedbackWorld(
       }
       if (bytes[0] === 1) {
         revision = readUnsigned(bytes).value;
+        socket.send(disabledFog(unsigned(revision)));
         socket.send(
           Buffer.from([
             1,
@@ -485,3 +486,4 @@ test("new terrain failure replaces an old rejection and recovery stays connected
     release();
   }
 });
+import { disabledFog } from "../wire/fog.js";

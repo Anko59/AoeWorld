@@ -99,6 +99,16 @@ impl GameWorld {
                 self.wildlife.cells.entry(new_cell).or_default().insert(id);
             }
             self.wildlife.animals.insert(id, a);
+            self.update_observer(
+                id,
+                a.state.owner.filter(|_| a.state.hp > 0).map(|p| {
+                    (
+                        p,
+                        a.state.position.tile_floor(),
+                        a.state.kind.rules().los_tiles,
+                    )
+                }),
+            );
         }
         self.advance_carcasses();
     }

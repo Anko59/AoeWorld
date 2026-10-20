@@ -2,6 +2,32 @@ use super::*;
 use crate::game_renderer::filter_fixture as fixture;
 
 #[wasm_bindgen_test]
+fn canvas_ground_shows_black_explored_and_visible_fog() {
+    let (canvas, context) = target_canvas().unwrap();
+    let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
+    let atlas = fixture::atlas();
+    let (faces, [x, y], _) = fixture::case(1);
+    for (light, expected) in [(0.0, 0), (0.45, 115), (1.0, 255)] {
+        canvas_depth::render_canvas_world_with_fog(
+            &canvas,
+            &context,
+            &atlas,
+            &mut presentation,
+            &[WorldLayer::Surface(faces[1])],
+            test_camera(),
+            false,
+            true,
+            &|_| light,
+        )
+        .unwrap();
+        assert_eq!(
+            pixel(&presentation.color_buffer, x, y),
+            [expected, expected, expected, 255]
+        );
+    }
+}
+
+#[wasm_bindgen_test]
 fn canvas_terrain_filter_attenuates_checker_preserves_coverage_depth_and_rects() {
     let (canvas, context) = target_canvas().expect("browser Canvas target");
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());

@@ -48,6 +48,46 @@ export async function resourceTargets(page: Page): Promise<Target[]> {
   ) as Target[];
 }
 
+/** Scout the synthetic forest before resource tests select its remembered nodes. */
+export async function scoutVillage(page: Page, dx: number, dy: number) {
+  await centerVillage(page);
+  const scout = (
+    JSON.parse(
+      (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
+    ) as {
+      kind: string;
+      x: number;
+      y: number;
+    }[]
+  ).find((actor) => actor.kind === "Scout");
+  if (!scout) throw new Error("Scout missing");
+  await page.mouse.click(scout.x, scout.y);
+  await expect(page.locator("#selection-name")).toContainText("Scout");
+  const camera = await page.locator("#minimap").evaluate((el) => ({
+    x: Number(el.getAttribute("data-camera-x")),
+    y: Number(el.getAttribute("data-camera-y")),
+  }));
+  await page.evaluate(
+    ({ x, y, dx, dy }) => {
+      location.hash = `x=${x + dx}&y=${y + dy}&zoom=.5`;
+    },
+    { ...camera, dx, dy },
+  );
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-camera-x",
+    String(camera.x + dx),
+  );
+  const size = page.viewportSize();
+  if (!size) throw new Error("Viewport missing");
+  await freshHud(page);
+  await page.mouse.click(size.width / 2, size.height / 2, { button: "right" });
+  await expect(page.locator("#unit-state")).not.toHaveText("unit idle");
+  await expect(page.locator("#unit-state")).toHaveText("unit idle", {
+    timeout: 25_000,
+  });
+  await centerVillage(page);
+}
+
 /** Start with the Town Center centered; keep the real villager order selected. */
 export async function frameResource(
   page: Page,

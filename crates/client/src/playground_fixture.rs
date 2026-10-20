@@ -52,6 +52,14 @@ pub fn activate_surface_fixture(content_hash: &str, chunk_json: &str) -> Result<
             // not send a geographic resource overlay for this client-only map.
             client.resources.clear();
             let subscription_revision = client.revision.max(1);
+            client.fog.apply(aoe_protocol::FogState {
+                revision: subscription_revision,
+                tick: aoe_core::Tick(0),
+                region: aoe_core::TileRect::from_xywh(0, 0, 1, 1),
+                disabled: true,
+                tiles: Vec::new(),
+                overview: Vec::new(),
+            });
             client.resources.apply(aoe_protocol::ResourceState {
                 subscription_revision,
                 from_revision: None,

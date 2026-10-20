@@ -20,6 +20,8 @@ use tokio::sync::{Mutex, RwLock, mpsc};
 mod commands;
 #[path = "gameplay/economy.rs"]
 mod economy;
+#[path = "gameplay/fog.rs"]
+mod fog;
 #[path = "gameplay/tick.rs"]
 mod tick;
 #[path = "gameplay/wildlife.rs"]
@@ -60,6 +62,9 @@ pub(super) struct Session {
     resident_players: BTreeMap<aoe_core::PlayerId, aoe_protocol::GameplayPlayerState>,
     resident_buildings: BTreeMap<EntityId, aoe_protocol::GameplayBuildingState>,
     resident_animals: Vec<aoe_protocol::AnimalState>,
+    vision_revision: Option<u64>,
+    resource_vision_revision: Option<u64>,
+    resident_resources: Vec<aoe_protocol::ResourceAmount>,
 }
 
 #[derive(Clone, Copy)]
@@ -145,6 +150,10 @@ pub(super) struct Ownership {
 }
 
 impl GameplayService {
+    /// Server-side scenario setup, never a gameplay client command.
+    pub async fn set_fog_disabled(&self, disabled: bool) {
+        self.world.write().await.set_fog_disabled(disabled);
+    }
     pub fn new(seed: Seed) -> Self {
         let (world, primary_unit_id) = GameWorld::default_with_village(seed);
         Self::from_world(world, primary_unit_id, None, None)
@@ -157,13 +166,15 @@ impl GameplayService {
         players: u16,
         extent_tiles: i32,
     ) -> Result<Self, GameWorldError> {
-        let world = GameWorld::with_population_in_extent(
+        let mut world = GameWorld::with_population_in_extent(
             config,
             count,
             hotspot_count,
             players,
             extent_tiles,
         )?;
+        // Synthetic population workloads explicitly observe the whole world.
+        world.set_fog_disabled(true);
         if !world.unit_exists(EntityId(0)) {
             return Err(GameWorldError::EntityIdExhausted);
         }
@@ -171,11 +182,17 @@ impl GameplayService {
     }
 
     pub(super) fn from_world(
-        world: GameWorld,
+        mut world: GameWorld,
         primary_unit_id: EntityId,
         map_content_hash: Option<[u8; 32]>,
         map_metadata: Option<MapMetadata>,
     ) -> Self {
+        if crate::Config::fog_disabled_from_env() {
+            world.set_fog_disabled(true);
+        }
+        if crate::Config::fog_showcase_from_env() {
+            fog::showcase_wolf(&mut world, primary_unit_id);
+        }
         let world_id = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -259,6 +276,9 @@ impl GameplayService {
                 resident_players: BTreeMap::new(),
                 resident_buildings: BTreeMap::new(),
                 resident_animals: Vec::new(),
+                vision_revision: None,
+                resource_vision_revision: None,
+                resident_resources: Vec::new(),
             },
         );
         let welcome = GameplayServerMessage::Welcome {
@@ -296,21 +316,54 @@ impl GameplayService {
             .await;
             return;
         }
-        let units = economy::query_units(&world, region, self.primary_unit_id);
-        if units.len() > MAX_SUBSCRIBED_UNITS {
-            drop(world);
-            self.send_to(
-                session_id,
-                GameplayServerMessage::Error {
-                    code: 413,
-                    message: "subscribed region exceeds gameplay entity limit".to_owned(),
-                },
-            )
-            .await;
+        // Admission precedes all view construction. Keep the session lock until
+        // publication so concurrent requests cannot pass the same revision.
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.get_mut(&session_id) else {
+            return;
+        };
+        let now = Instant::now();
+        while session
+            .subscription_times
+            .front()
+            .is_some_and(|time| now.duration_since(*time) >= Duration::from_secs(1))
+        {
+            session.subscription_times.pop_front();
+        }
+        if session.subscription_times.len() >= 10 {
+            let _ = session.sender.try_send(GameplayServerMessage::Error {
+                code: 429,
+                message: "subscription updates are rate limited".to_owned(),
+            });
             return;
         }
-        let players = economy::players(&world);
-        let buildings = economy::buildings(&world);
+        if session
+            .subscription
+            .is_some_and(|old| revision <= old.revision)
+        {
+            let _ = session.sender.try_send(GameplayServerMessage::Error {
+                code: 409,
+                message: "subscription revision is obsolete".to_owned(),
+            });
+            return;
+        }
+        // At most ten admitted views per second, each at most 512x512 tiles
+        // plus the fixed 256x256 overview, regardless of total map area.
+        session.subscription_times.push_back(now);
+        let units = economy::query_units(&world, region, self.primary_unit_id);
+        if units.len() > MAX_SUBSCRIBED_UNITS {
+            let _ = session.sender.try_send(GameplayServerMessage::Error {
+                code: 413,
+                message: "subscribed region exceeds gameplay entity limit".to_owned(),
+            });
+            return;
+        }
+        let player = fog::viewer(&world, self.primary_unit_id);
+        let players = economy::players(&world)
+            .into_iter()
+            .filter(|(id, _)| *id == player || world.fog_disabled())
+            .collect::<BTreeMap<_, _>>();
+        let buildings = economy::buildings(&world, player);
         let units = units
             .iter()
             .map(|unit| unit_state(&world, unit))
@@ -322,52 +375,26 @@ impl GameplayService {
             players: players.values().copied().collect(),
             buildings: buildings.values().cloned().collect(),
         };
-        let animals = wildlife::animals(&world, region);
+        let animals = wildlife::animals(&world, region, player);
+        let fog = GameplayServerMessage::FogState(fog::state(&world, player, revision, region));
+        let vision_revision = world.vision_revision();
         let wildlife = GameplayServerMessage::WildlifeState {
             revision,
             tick: world.tick(),
             animals: animals.clone(),
         };
-        drop(world);
-        let mut sessions = self.sessions.lock().await;
-        let mut failed = false;
-        if let Some(session) = sessions.get_mut(&session_id) {
-            let now = Instant::now();
-            while session
-                .subscription_times
-                .front()
-                .is_some_and(|time| now.duration_since(*time) >= Duration::from_secs(1))
-            {
-                session.subscription_times.pop_front();
-            }
-            if session.subscription_times.len() >= 10 {
-                let _ = session.sender.try_send(GameplayServerMessage::Error {
-                    code: 429,
-                    message: "subscription updates are rate limited".to_owned(),
-                });
-                return;
-            }
-            if session
-                .subscription
-                .is_some_and(|old| revision <= old.revision)
-            {
-                let _ = session.sender.try_send(GameplayServerMessage::Error {
-                    code: 409,
-                    message: "subscription revision is obsolete".to_owned(),
-                });
-                return;
-            }
-            session.subscription_times.push_back(now);
-            session.subscription = Some(Subscription { revision, region });
-            session.resource_revision = None;
-            session.resident = units.iter().copied().map(|unit| (unit.id, unit)).collect();
-            session.resident_players = players;
-            session.resident_buildings = buildings;
-            session.resident_animals = animals;
-            failed = session.sender.try_send(snapshot).is_err()
-                || session.sender.try_send(wildlife).is_err();
-        }
+        session.subscription = Some(Subscription { revision, region });
+        session.resource_revision = None;
+        session.resident = units.iter().copied().map(|unit| (unit.id, unit)).collect();
+        session.resident_players = players;
+        session.resident_buildings = buildings;
+        session.resident_animals = animals;
+        session.vision_revision = Some(vision_revision);
+        let failed = session.sender.try_send(snapshot).is_err()
+            || session.sender.try_send(wildlife).is_err()
+            || session.sender.try_send(fog).is_err();
         drop(sessions);
+        drop(world);
         if failed {
             self.disconnect(session_id).await;
         }

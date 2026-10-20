@@ -57,6 +57,13 @@ impl GameplayService {
         let Some(revision) = world.resource_revision() else {
             return;
         };
+        let vision_revision = world.vision_revision();
+        let player = super::super::fog::viewer(&world, self.primary_unit_id);
+        let known = world
+            .known_resource_amounts(player)
+            .into_iter()
+            .map(|(id, remaining)| ResourceAmount { id, remaining })
+            .collect::<Vec<_>>();
         let mut sessions = self.sessions.lock().await;
         let failed = {
             let journal = self
@@ -69,13 +76,48 @@ impl GameplayService {
                 let Some(subscription) = session.subscription else {
                     continue;
                 };
-                if session.resource_revision == Some(revision) {
+                if session.resource_revision == Some(revision)
+                    && session.resource_vision_revision == Some(vision_revision)
+                {
+                    continue;
+                }
+                if !world.fog_disabled()
+                    && session.resource_revision.is_some()
+                    && session.resident_resources == known
+                {
+                    // Keep the last delivered resource revision: a later delta
+                    // must still start at the revision the client received.
+                    session.resource_vision_revision = Some(vision_revision);
                     continue;
                 }
                 let delta = session
                     .resource_revision
                     .and_then(|from| journal.since(from, revision));
-                let state = if let Some(changes) = delta {
+                let state = if !world.fog_disabled() {
+                    let changes = known
+                        .iter()
+                        .filter(|c| {
+                            session
+                                .resident_resources
+                                .binary_search_by_key(&c.id, |old| old.id)
+                                .map_or(true, |i| session.resident_resources[i] != **c)
+                        })
+                        .copied()
+                        .collect::<Vec<_>>();
+                    let from_revision = session
+                        .resource_revision
+                        .filter(|from| *from < revision && !changes.is_empty());
+                    ResourceState {
+                        subscription_revision: subscription.revision,
+                        from_revision,
+                        revision,
+                        changes: if from_revision.is_some() {
+                            changes
+                        } else {
+                            known.clone()
+                        },
+                    }
+                } else if let Some(changes) = delta {
                     ResourceState {
                         subscription_revision: subscription.revision,
                         from_revision: session.resource_revision,
@@ -110,6 +152,8 @@ impl GameplayService {
                     .is_ok()
                 {
                     session.resource_revision = Some(revision);
+                    session.resource_vision_revision = Some(vision_revision);
+                    session.resident_resources = known.clone();
                 } else {
                     failed.push(*id);
                 }

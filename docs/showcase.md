@@ -146,6 +146,14 @@ SHOWCASE_BEFORE_URL=http://127.0.0.1:8082/ make showcase SHOWCASE_STORYBOARD=.ca
 
 ## Step library
 
+Fog is enabled in ordinary games. For terrain/art showcases that need the whole
+map, start the filmed server with `AOE_FOG_DISABLED=1 make dev DEV_PORT=8097`.
+This is a server scenario setting; camera links cannot reveal hidden entities.
+Compare's owned spectator servers explicitly disable fog for both sides.
+`AOE_FOG_SHOWCASE=1` instead leaves fog enabled and adds one idle wolf beyond
+the scout's starting LOS, using bounded passable-tile placement. It supports
+one-take scouting demonstrations without changing the ordinary wildlife kit.
+
 Browser steps can also be named game steps. Each drives the real client through
 the hooks its browser specs use (`web/start`, `H` and `#selection`, the
 camera fragment, `data-chunks-pending`), waits for its own readiness, and on a

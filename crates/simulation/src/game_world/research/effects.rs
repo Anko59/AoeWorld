@@ -72,5 +72,25 @@ impl GameWorld {
                 }
             }
         }
+        if tech == Tech::TownWatch {
+            let ids = self
+                .buildings()
+                .filter(|b| b.player == player)
+                .map(|b| b.id)
+                .collect::<Vec<_>>();
+            for id in ids {
+                self.update_building_vision(id);
+            }
+        }
+        if tech == Tech::FeudalAge {
+            let ids = self
+                .units()
+                .filter(|u| u.player == player && u.kind == UnitKind::Scout)
+                .map(|u| u.id)
+                .collect::<Vec<_>>();
+            for id in ids {
+                self.update_unit_vision(id);
+            }
+        }
     }
 }

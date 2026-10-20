@@ -437,6 +437,10 @@ fn a_matching_graphic_is_reported_as_a_match_and_a_wrong_role_is_not() {
     assert_eq!(status("Town Center (Dark Age main)").status, "mismatch");
     let row = table.rows.iter().find(|r| r.unit == 83).unwrap();
     assert_eq!(row.graphics[0].slp, 1479);
+    assert_eq!(
+        row.line_of_sight,
+        Some(file.unit(83).unwrap().line_of_sight)
+    );
 }
 
 #[test]

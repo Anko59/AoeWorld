@@ -1,6 +1,8 @@
 use super::*;
 use aoe_core::{Seed, TileCoord, WorldConfig};
 
+mod fog;
+
 fn region() -> TileRect {
     TileRect::new(TileCoord::new(0, 0), TileCoord::new(8, 8))
 }

@@ -46,6 +46,7 @@ pub(super) struct Client {
     pub surface_fixture: bool,
     pub focus_map_hash: Option<[u8; 32]>,
     pub resources: crate::resource_state::ResourceStateCache,
+    pub fog: crate::fog::Fog,
     pub terrain_scene: RefCell<Option<Rc<map::scene::PreparedScene>>>,
     pub rendered_frame: map::render_cache::RenderFrameCache<map::scene::PreparedScene>,
     pub terrain_chunks: BTreeMap<(i32, i32), CachedChunk>,
