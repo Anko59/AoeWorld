@@ -19,13 +19,41 @@ async fn non_gameplay_buildings_do_not_allocate_the_gameplay_atlas() {
             .iter()
             .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some())),
     );
-    // Dock exists in the DAT table, but the gameplay protocol has no Dock.
-    value["buildings"] = serde_json::json!([{"unit_id":45,"footprint":[3.0,3.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"parts":[{"graphic_id":1,"slp_id":99999,"source":"absent.slp","available":false,"frames":0,"angles":1,"primary":true,"frame_rate":0.0,"offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"construction":[]}]);
+    // An unused DAT building must not reserve live atlas space.
+    value["buildings"] = serde_json::json!([{"unit_id":999,"footprint":[3.0,3.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"parts":[{"graphic_id":1,"slp_id":99999,"source":"absent.slp","available":false,"frames":0,"angles":1,"primary":true,"frame_rate":0.0,"offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"construction":[]}]);
     compile(&mut value);
     let fetch = FetchFixture::install(&value);
     let (art, _, _) = load().await.expect("only gameplay recipes are resident");
     drop(fetch);
     assert!(art.compositions.is_empty());
+}
+
+#[wasm_bindgen_test]
+async fn dock_keeps_dat_composition_construction_and_foundation_metadata() {
+    let source = "graphics.drs:[32, 112, 108, 115]:90000".to_owned();
+    let mut value = pack_fixture(
+        REQUIRED_RENDER_SOURCES
+            .iter()
+            .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
+            .chain([(source.clone(), 3, false)]),
+    );
+    let part = serde_json::json!({"graphic_id":1,"slp_id":90000,"source":source,
+        "available":true,"frames":1,"angles":3,"primary":true,"frame_rate":0.0,
+        "offset":[-9,11],"misplacement":[0.0,0.0],"layer":20});
+    value["buildings"] = serde_json::json!([{"unit_id":45,"footprint":[3.0,3.0],
+        "foundation_terrain":27,"foundation_slp":15006,"foundation_size":[10,10],
+        "parts":[part.clone()],"construction":[part]}]);
+    compile(&mut value);
+    let fetch = FetchFixture::install(&value);
+    let (art, _, _) = load().await.expect("Dock is a live DAT building");
+    drop(fetch);
+    let dock = art.compositions.iter().find(|b| b.unit_id == 45).unwrap();
+    assert_eq!(dock.foundation_material, Some(13));
+    assert_eq!(dock.parts[0].offset, [-9.0, 11.0]);
+    assert_eq!(dock.construction[0].angles, 3);
+    assert_eq!(dock.construction[0].animation.len(), 3);
+    assert!(art.buildings[23].is_empty());
+    assert!(art.buildings[24].is_empty());
 }
 
 #[wasm_bindgen_test]

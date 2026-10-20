@@ -8,6 +8,27 @@ fn real_trial_fishing_values_include_five_tile_ship_los() {
         return;
     };
     let file = decode(&bytes).unwrap();
+    let dock = file.unit(45).unwrap();
+    assert_eq!(dock.collision_size.map(|r| r * 2.0), dock.footprint);
+    let composition = file.building_composition(45).unwrap();
+    assert_eq!(composition.footprint, [3.0; 2]);
+    assert_eq!(composition.foundation_terrain, -1);
+    assert_eq!(composition.foundation_slp, None);
+    assert_eq!(
+        composition
+            .parts
+            .iter()
+            .map(|p| (p.slp_id, p.frames))
+            .collect::<Vec<_>>(),
+        [(374, 1), (376, 1), (4518, 60)]
+    );
+    assert_eq!(
+        composition.foundation_terrain,
+        dock.building.as_ref().unwrap().foundation_terrain
+    );
+    assert!(!composition.parts.is_empty());
+    assert!(!composition.construction.is_empty());
+    eprintln!("trial Dock composition: {composition:?}");
     let ship = file.unit(13).unwrap();
     assert_eq!(ship.line_of_sight, 5.0);
     assert_eq!(

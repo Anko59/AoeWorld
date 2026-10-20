@@ -19,7 +19,7 @@ pub const MAX_REVIEWED_FRAMES: u32 = 2_361;
 
 /// Buildings represented by the current gameplay protocol. Other DAT recipes
 /// remain available to offline tools without occupying the live match atlas.
-pub const GAMEPLAY_BUILDING_IDS: [i32; 9] = [109, 70, 68, 562, 584, 50, 12, 72, 598];
+pub const GAMEPLAY_BUILDING_IDS: [i32; 10] = [109, 70, 68, 562, 584, 50, 12, 72, 598, 45];
 
 /// Paving and gravel are not mountain ground.
 pub const NATURAL_ROCK_FALLBACK: &str =

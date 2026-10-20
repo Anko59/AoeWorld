@@ -7,7 +7,8 @@ pub(super) struct BuildingGround {
 }
 /// Paint the DAT's foundation material plus a one-tile apron before tessellation.
 /// The decoded building record has no margin field. The ordinary world-anchored
-/// terrain mixer owns the apron border in all three backends.
+/// terrain mixer owns the apron border in all three backends. Water retains
+/// its own sheet beneath coastal buildings, including Dock construction sites.
 pub fn apply_building_foundations(
     terrain: &mut [SceneTerrain],
     art: &GameArt,
@@ -66,6 +67,9 @@ pub fn apply_building_foundations(
     // Visit each displayed sample once. The last footprint wins over every
     // apron, independent of unit order, so neighbouring dirt cannot erase crops.
     for tile in terrain {
+        if tile.surface.water != 0 || matches!(tile.material, 5 | 10) {
+            continue;
+        }
         let (mut footprint, mut apron) = (None, None);
         for foundation in &foundations {
             #[cfg(test)]

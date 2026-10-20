@@ -355,6 +355,7 @@ fn building_kind(building: &aoe_protocol::GameplayBuildingState) -> aoe_renderin
         Kind::Barracks => Art::Barracks,
         Kind::PalisadeWall => Art::PalisadeWall,
         Kind::Outpost => Art::Outpost,
+        Kind::Dock => Art::Dock,
     };
     if building.construction == ConstructionState::Complete {
         kind

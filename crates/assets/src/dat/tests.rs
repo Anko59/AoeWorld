@@ -3,11 +3,11 @@ use super::*;
 use flate2::{Compression, write::DeflateEncoder};
 use std::io::Write;
 
+mod composition;
 #[path = "tests/corpse.rs"]
 mod corpse_tests;
 #[path = "tests/fishing.rs"]
 mod fishing_tests;
-mod composition;
 
 fn le16(out: &mut Vec<u8>, value: i16) {
     out.extend_from_slice(&value.to_le_bytes());
