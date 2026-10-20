@@ -240,3 +240,94 @@ fn the_exhaustive_job_runs_after_merge_and_never_on_pull_requests() {
     let workflow = std::fs::read_to_string(root.join(".github/workflows/ci.yml")).unwrap();
     assert!(workflow.contains("run: make test-exhaustive"));
 }
+
+#[test]
+fn running_dev_builds_and_main_promotions_finish_while_prs_cancel() {
+    let workflow = workflow();
+    let concurrency = workflow
+        .split_once("\nconcurrency:\n")
+        .unwrap()
+        .1
+        .split_once("\njobs:\n")
+        .unwrap()
+        .0;
+    assert!(concurrency.contains("group: validation-${{ github.workflow }}-${{ github.ref }}"));
+    // PRs use refs/pull/<number>/merge, including release/* -> main PRs.
+    // Pushes only trigger for dev/main; a release/* dispatch still cancels.
+    assert!(concurrency.contains(
+        "cancel-in-progress: ${{ github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/main' }}"
+    ));
+    assert!(workflow.contains("branches: [dev, main]"));
+}
+
+#[test]
+fn dev_artifacts_reuses_required_evidence_and_only_builds_verifies_and_publishes() {
+    let workflow = workflow();
+    let dev = workflow_job(&workflow, "dev-artifacts");
+    assert!(dev.contains("needs: required"));
+    assert!(dev.contains("github.event_name == 'push' && github.ref == 'refs/heads/dev'"));
+    let commands: Vec<_> = dev
+        .lines()
+        .filter_map(|line| {
+            line.trim()
+                .strip_prefix("run: make ")
+                .or_else(|| line.trim().strip_prefix("- run: make "))
+        })
+        .collect();
+    assert_eq!(
+        commands,
+        [
+            "bootstrap",
+            "release-build",
+            "release-verify",
+            "release-publish"
+        ]
+    );
+
+    let coverage = workflow_job(&workflow, "native-coverage");
+    assert!(coverage.contains("run: make coverage"));
+    assert!(coverage.contains("name: native-coverage-report, path: reports/coverage/"));
+    let upload = coverage
+        .split_once("name: release-e2e-evidence,")
+        .unwrap()
+        .1;
+    assert!(upload.contains("path: reports/e2e/pass.json"));
+    assert!(upload.contains("if-no-files-found: error"));
+    assert!(coverage.contains("github.event_name == 'push' && github.ref == 'refs/heads/dev'"));
+    let performance = workflow_job(&workflow, "target-performance");
+    assert!(performance.contains("run: make perf-ci"));
+    assert!(performance.contains("name: performance-report, path: reports/perf/"));
+    assert_eq!(dev.matches("uses: actions/download-artifact@").count(), 2);
+    for (artifact, path) in [
+        ("release-e2e-evidence", "reports/e2e/"),
+        ("performance-report", "reports/perf/"),
+    ] {
+        let transfer = format!("name: {artifact}, path: {path}");
+        assert!(dev.find(&transfer).unwrap() < dev.find("run: make release-build").unwrap());
+    }
+    // download-artifact defaults to the current run/repository. No cross-run
+    // fallback may turn missing current evidence into a passing release.
+    for forbidden in [
+        "run-id:",
+        "repository:",
+        "github-token:",
+        "continue-on-error:",
+    ] {
+        assert!(!dev.contains(forbidden), "{forbidden}");
+    }
+    for output in [
+        "name: Server SBOM",
+        "name: Browser SBOM",
+        "name: Static bundle SBOM",
+        "name: Attest server provenance",
+        "name: Attest browser provenance",
+        "name: Attest server SBOM",
+        "name: Attest browser SBOM",
+        "name: Attest static bundle",
+        "name: Attest published manifest",
+        "gh release create",
+        "name: dev-release-diagnostics",
+    ] {
+        assert!(dev.contains(output), "{output}");
+    }
+}

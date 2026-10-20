@@ -21,9 +21,19 @@ the previous exact image IDs again as rollback. It creates and removes only its
 own Docker network and containers. No live service is changed.
 
 Local image IDs are content hashes on this Docker host; they are not published
-registry digests. On a verified `dev` push, the `dev-artifacts` job performs
-complete functional and target-scale verification, builds the local release
-once, generates SPDX SBOMs for both runtime images and the static bundle,
+registry digests. Running CI workflows on `dev` and `main` finish before the
+newest pending run starts; superseded pending runs are replaced. Pull requests,
+including release PRs, still cancel superseded runs; release branch pushes do
+not trigger CI, and release branch dispatches retain cancellation. On a `dev`
+push, `dev-artifacts` waits for the same run's `required` check, then downloads
+`release-e2e-evidence` (the complete, revision-bound `pass.json` already produced
+by `make coverage` in `native-coverage`) and `performance-report` (including
+`perf-ci`'s `ci.json`). It reuses those reports without repeating validation;
+`release-build` still rejects stale or failing evidence and dirty performance
+reports. Coverage remains uploaded by `native-coverage`; the artifact job's
+unused coverage and `perf-full` reruns are removed. Nightly still uploads
+`perf-full` output. The job builds and verifies the local release once,
+generates SPDX SBOMs for both runtime images and the static bundle,
 and runs `make release-publish`. The Rust publisher checks the local manifest,
 logs into GHCR with the job token, pushes the exact local images, captures
 registry digests, and writes `published.json`, `bundle.tar`, and checksums.
