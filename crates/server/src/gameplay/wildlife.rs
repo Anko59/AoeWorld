@@ -27,6 +27,9 @@ pub(super) fn animals(world: &GameWorld, region: TileRect) -> Vec<AnimalState> {
             },
             food_remaining: a.food_remaining,
             target: a.target,
+            facing: a.facing as u8,
+            moving: a.moving,
+            death_tick: a.death_tick,
         })
         .collect()
 }

@@ -4,16 +4,17 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 14;
+pub const VERSION: u8 = 15;
 
 pub mod candidates;
 pub mod packing;
 pub mod runtime;
 mod topology;
+pub mod units;
 mod village;
 pub use topology::TerrainFrameTopology;
 
-/// Reviewed selection ceiling, not an increase to the fixed three-page atlas.
+/// Reviewed selection ceiling, not an increase to the fixed four-page atlas.
 pub const MAX_REVIEWED_FRAMES: u32 = 2_369;
 
 /// Paving and gravel are not mountain ground.

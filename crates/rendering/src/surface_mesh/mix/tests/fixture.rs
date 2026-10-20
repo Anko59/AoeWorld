@@ -70,6 +70,7 @@ pub(crate) fn art() -> GameArt {
         terrain[group] = vec![frame(group)];
     }
     GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),

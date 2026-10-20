@@ -31,6 +31,9 @@ pub struct AnimalState {
     pub task: AnimalTask,
     pub food_remaining: u16,
     pub target: Option<EntityId>,
+    pub facing: u8,
+    pub moving: bool,
+    pub death_tick: Option<aoe_core::Tick>,
 }
 
 fn valid_animal(a: &AnimalState) -> bool {
@@ -41,6 +44,9 @@ fn valid_animal(a: &AnimalState) -> bool {
         AnimalKind::Wolf => (25, 0),
     };
     a.position.x >= 0
+        && a.facing < 8
+        && a.death_tick.is_none_or(|_| a.hp == 0)
+        && (a.hp > 0 || !a.moving)
         && a.position.y >= 0
         && a.hp <= hp
         && a.food_remaining <= food

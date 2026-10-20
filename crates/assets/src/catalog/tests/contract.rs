@@ -59,7 +59,7 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    assert_eq!(VERSION, 14);
+    assert_eq!(VERSION, 15);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);

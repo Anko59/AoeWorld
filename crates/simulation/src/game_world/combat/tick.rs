@@ -48,6 +48,9 @@ impl GameWorld {
         if let Some(unit) = self.unit(target) {
             return (unit.hp > 0 && unit.player != attacker).then_some(Goal::Unit(unit.position));
         }
+        if let Some(animal) = self.animal(target) {
+            return (animal.hp > 0).then_some(Goal::Unit(animal.position));
+        }
         self.economy
             .buildings
             .get(&target)
@@ -80,11 +83,11 @@ impl GameWorld {
     pub(crate) fn advance_combat(&mut self, changed: &mut Vec<GameUnit>) {
         self.combat.stats = Default::default();
         let now = self.tick.0;
-        while let Some(&(due, id)) = self.combat.dying.front() {
+        while let Some(&(due, id)) = self.combat.dying.first() {
             if due > now {
                 break;
             }
-            self.combat.dying.pop_front();
+            self.combat.dying.pop_first();
             self.remove_unit(id);
         }
         // Ids are snapshotted: a unit that starts retaliating this tick first
@@ -237,6 +240,10 @@ impl GameWorld {
                 self.begin_attack(victim_id, attacker_id);
             }
             changed.push(self.units[victim_index].state);
+        } else if self.animal(target).is_some() {
+            if self.strike_animal(target, attacker_id, stats.attack) {
+                self.end_attack(attacker_id, changed);
+            }
         } else if let Some(building) = self.economy.buildings.get_mut(&target) {
             let armour = building_combat(building.kind);
             let damage = damage_dealt(

@@ -70,6 +70,64 @@ async fn queue_move_rejects_unknown_and_non_controller_sessions_then_deduplicate
 }
 
 #[test]
+fn stop_command_applies_to_owned_sheep_and_preserves_typed_rejections() {
+    use aoe_core::{PlayerId, TileCoord};
+    use aoe_simulation::{AnimalKind, GameWorld};
+    let mut world = GameWorld::new(aoe_core::WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let at = |x| WorldPosition::from_tile_center(TileCoord::new(x, 100)).unwrap();
+    world.spawn_villager(PlayerId(0), at(100)).unwrap();
+    let sheep = world.spawn_animal(AnimalKind::Sheep, at(101)).unwrap();
+    world.advance();
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(0),
+            PendingAction::Move {
+                entity_id: sheep,
+                destination: at(110),
+            }
+        ),
+        CommandResult::Accepted
+    );
+    for _ in 0..7 {
+        world.advance();
+    }
+    let position = world.animal(sheep).unwrap().position;
+    assert!(world.animal(sheep).unwrap().moving);
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(1),
+            PendingAction::Stop { entity_id: sheep }
+        ),
+        CommandResult::RejectedNotOwner
+    );
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(0),
+            PendingAction::Stop {
+                entity_id: EntityId(u32::MAX)
+            }
+        ),
+        CommandResult::RejectedUnknownEntity
+    );
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(0),
+            PendingAction::Stop { entity_id: sheep }
+        ),
+        CommandResult::Accepted
+    );
+    for _ in 0..100 {
+        world.advance();
+    }
+    assert_eq!(world.animal(sheep).unwrap().position, position);
+    assert!(!world.animal(sheep).unwrap().moving);
+}
+
+#[test]
 fn attack_orders_apply_with_typed_rejections_and_reach_the_wire_state() {
     use aoe_core::PlayerId;
     use aoe_protocol::UnitTask;

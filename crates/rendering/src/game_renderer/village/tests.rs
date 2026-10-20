@@ -12,6 +12,7 @@ fn art() -> GameArt {
         anchor: [12.0, 40.0],
     };
     GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: std::array::from_fn(|group| {
             (0..75)
@@ -50,6 +51,29 @@ fn unit(kind: SceneUnitKind) -> SceneUnit {
         selected: false,
         elevation_meters: 0.0,
     }
+}
+
+#[wasm_bindgen_test]
+fn actor_picking_bounds_follow_the_native_body_and_mirrored_hotspot() {
+    let mut art = art();
+    art.actors = vec![vec![
+        GameFrame {
+            atlas: crate::AtlasAddress::WHITE,
+            size: [12.0, 18.0],
+            anchor: [2.0, 16.0]
+        };
+        5
+    ]];
+    let mut u = unit(SceneUnitKind::actor(0));
+    u.position = [0.0, 0.0];
+    let mut camera = camera();
+    camera.center = [0.0, 0.0];
+    let bounds = super::super::scene_unit_bounds(&art, u, camera, 0).unwrap();
+    let foot = camera.viewport[0] / 2.0;
+    assert!((bounds[0] - (foot - 2.0 * 4.0 / 3.0)).abs() < 0.001);
+    u.facing = 2;
+    let bounds = super::super::scene_unit_bounds(&art, u, camera, 0).unwrap();
+    assert!((bounds[0] - (foot - 10.0 * 4.0 / 3.0)).abs() < 0.001);
 }
 
 #[wasm_bindgen_test]

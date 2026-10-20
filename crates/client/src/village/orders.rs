@@ -62,15 +62,23 @@ pub(in super::super) fn train(client: &mut Client, cancel: bool) {
 
 pub(in super::super) fn stop(client: &mut Client) {
     for id in client.selected.units.clone() {
-        if let Some(unit) = client.units.get(&id).filter(|u| u.player == owner(client)) {
-            let destination = unit.position;
+        let owned = client
+            .units
+            .get(&id)
+            .is_some_and(|u| u.player == owner(client) && u.hp > 0)
+            || client.village.animals.iter().any(|a| {
+                a.id == id
+                    && a.kind == aoe_protocol::AnimalKind::Sheep
+                    && a.hp > 0
+                    && a.owner == Some(owner(client))
+            });
+        if owned {
             let sequence = client.next_sequence;
             send(
                 client,
-                Message::MoveOrder {
+                Message::StopOrder {
                     sequence,
                     entity_id: id,
-                    destination,
                 },
             );
         }
@@ -81,7 +89,13 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
     if client.role != Some(GameplayRole::Controller) {
         return;
     }
-    if super::construction::interact(client, point) {
+    let actor = super::picking::actor(client, point);
+    let enemy = actor
+        .filter(|a| a.2)
+        .map(|a| a.0)
+        .or_else(|| super::picking::enemy_building(client, point));
+    let animal = actor.filter(|a| a.1).map(|a| a.0);
+    if enemy.is_none() && animal.is_none() && super::construction::interact(client, point) {
         return;
     }
     let resource = super::picking::resource(client, point);
@@ -103,7 +117,27 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
         return;
     };
     let destination = client.config.snap_ground_position(destination);
+    for id in client.selected.units.clone() {
+        if client
+            .village
+            .animals
+            .iter()
+            .any(|a| a.id == id && a.hp > 0 && a.owner == Some(owner(client)))
+        {
+            let sequence = client.next_sequence;
+            send(
+                client,
+                Message::MoveOrder {
+                    sequence,
+                    entity_id: id,
+                    destination,
+                },
+            );
+        }
+    }
     let group_gathers = resource.is_some()
+        && animal.is_none()
+        && enemy.is_none()
         && !client.village.move_cursor
         && client.selected.units.iter().any(|id| {
             client
@@ -112,28 +146,46 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
                 .is_some_and(|u| u.kind == UnitKind::Villager && u.player == owner(client))
         });
     for id in client.selected.units.clone() {
-        let Some(unit) = client.units.get(&id).filter(|u| u.player == owner(client)) else {
+        let Some(unit) = client
+            .units
+            .get(&id)
+            .filter(|u| u.player == owner(client) && u.hp > 0)
+        else {
             continue;
         };
         if group_gathers && unit.kind == UnitKind::Scout {
             continue;
         }
         let sequence = client.next_sequence;
-        let message = if unit.kind == UnitKind::Villager
-            && !client.village.move_cursor
-            && let Some((resource_id, _)) = resource
-        {
-            Message::GatherOrder {
+        use crate::unit_visuals::{ClickOrder, click_order};
+        let choice = click_order(
+            unit.kind,
+            client.village.move_cursor,
+            animal.is_some(),
+            enemy.is_some(),
+            resource.is_some(),
+        );
+        let message = match (choice, animal.or(enemy), resource) {
+            (ClickOrder::Hunt, Some(target), _) => Message::HuntOrder {
+                sequence,
+                unit_ids: vec![id],
+                animal_id: target,
+            },
+            (ClickOrder::Attack, Some(target), _) => Message::AttackOrder {
+                sequence,
+                entity_id: id,
+                target_id: target,
+            },
+            (ClickOrder::Gather, _, Some((resource_id, _))) => Message::GatherOrder {
                 sequence,
                 entity_id: id,
                 resource_id,
-            }
-        } else {
-            Message::MoveOrder {
+            },
+            _ => Message::MoveOrder {
                 sequence,
                 entity_id: id,
                 destination,
-            }
+            },
         };
         send(client, message);
         let blocker = map::feedback::blocker_at(client, destination.tile_floor());

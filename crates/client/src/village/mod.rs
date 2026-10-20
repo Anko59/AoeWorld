@@ -22,6 +22,8 @@ pub(crate) struct Village {
     pub placement: Option<aoe_protocol::BuildingKind>,
     pub wall_start: Option<aoe_core::TileCoord>,
     pub rubble: Vec<(GameplayBuildingState, u64)>,
+    pub animals: Vec<aoe_protocol::AnimalState>,
+    pub wildlife_tick: u64,
 }
 
 #[inline(never)]

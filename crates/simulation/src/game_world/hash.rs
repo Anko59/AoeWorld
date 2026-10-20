@@ -76,6 +76,14 @@ impl GameWorld {
                     .to_le_bytes(),
             );
             super::combat::hash_hit(&mut hash, unit.state.last_hit);
+            hash.update(&[unit.state.death_hunt.map_or(u8::MAX, |k| k as u8)]);
+            hash.update(
+                &unit
+                    .state
+                    .death_tick
+                    .map_or(u64::MAX, |t| t.0)
+                    .to_le_bytes(),
+            );
             if let Some(load) = unit.state.carried {
                 hash.update(&[1, load.kind as u8]);
                 hash.update(&load.amount.to_le_bytes());

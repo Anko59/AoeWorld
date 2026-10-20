@@ -19,7 +19,7 @@ fn kill_scenario() -> (GameWorld, EntityId, [EntityId; 3]) {
 }
 
 #[test]
-fn death_frees_population_at_once_and_removes_the_body_after_a_second() {
+fn death_frees_population_at_once_and_removes_the_body_after_native_die_and_decay() {
     let (mut world, militia, [first, second, third]) = kill_scenario();
     assert_eq!(
         world.player_economy(PlayerId(1)).unwrap().population_used,
@@ -33,7 +33,7 @@ fn death_frees_population_at_once_and_removes_the_body_after_a_second() {
     );
     assert!(world.unit_exists(first));
     assert_eq!(world.unit_count(), 4);
-    advance(&mut world, 19);
+    advance(&mut world, 629);
     assert!(world.unit_exists(first));
     advance(&mut world, 1);
     assert!(!world.unit_exists(first));

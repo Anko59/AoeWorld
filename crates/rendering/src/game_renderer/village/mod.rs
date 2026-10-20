@@ -3,6 +3,11 @@ use super::*;
 use crate::SceneUnitKind;
 
 pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], usize, bool)> {
+    if let Some(index) = unit.kind.actor_slot() {
+        let frames = art.actors.get(index)?.as_slice();
+        let stride = frames.len() / 5;
+        return (stride > 0 && frames.len() == stride * 5).then_some((frames, stride, false));
+    }
     let scout = unit.kind == SceneUnitKind::Scout;
     let (frames, stride): (&[GameFrame], usize) = if scout {
         (
@@ -86,6 +91,30 @@ pub(super) fn marker(
     if let Some(mut sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
         sprite.color = if building {
             [0.72, 0.58, 0.35, 1.0]
+        } else if matches!(
+            unit.kind,
+            SceneUnitKind::NeutralSheepStand
+                | SceneUnitKind::NeutralSheepWalk
+                | SceneUnitKind::NeutralSheepDie
+                | SceneUnitKind::NeutralSheepDecay
+                | SceneUnitKind::DeerStand
+                | SceneUnitKind::DeerWalk
+                | SceneUnitKind::DeerDie
+                | SceneUnitKind::DeerDecay
+                | SceneUnitKind::BoarStand
+                | SceneUnitKind::BoarWalk
+                | SceneUnitKind::BoarAttack
+                | SceneUnitKind::BoarDie
+                | SceneUnitKind::BoarDecay
+                | SceneUnitKind::WolfStand
+                | SceneUnitKind::WolfWalk
+                | SceneUnitKind::WolfRun
+                | SceneUnitKind::WolfAttack
+                | SceneUnitKind::WolfDie
+                | SceneUnitKind::WolfDecay
+        ) {
+            // Missing native art must not make neutral wildlife look player-owned.
+            [0.75, 0.75, 0.75, 1.0]
         } else {
             [0.25, 0.57, 0.96, 1.0]
         };

@@ -42,10 +42,18 @@ test("villager build menu places a House and watches authoritative completion", 
   ).toBe(false);
   const worker = (await actors()).find((a) => a.kind === "Villager");
   if (!worker) throw new Error("Starting villager missing");
-  const selectWorker = async (nth: number) => {
+  const selectWorker = async (nth: number, boxed = false) => {
     const worker = (await actors()).filter((a) => a.kind === "Villager")[nth];
     if (!worker) throw new Error("Builder missing");
-    await page.mouse.click(worker.x, worker.y);
+    if (boxed) {
+      // A stationary farmer can share ground with a foreground sheep.
+      await page.mouse.move(worker.x - 6, worker.y - 6);
+      await page.mouse.down();
+      await page.mouse.move(worker.x + 6, worker.y + 6, { steps: 3 });
+      await page.mouse.up();
+    } else {
+      await page.mouse.click(worker.x, worker.y);
+    }
     await expect(page.locator("#selection-name")).toHaveText("Villager");
   };
   await page.mouse.click(worker.x, worker.y);
@@ -57,10 +65,10 @@ test("villager build menu places a House and watches authoritative completion", 
     await page.locator("#playground").getAttribute("data-atlas-frames"),
   );
   expect(frameCount).toBeGreaterThan(0);
-  expect(frameCount).toBeLessThanOrEqual(2560);
+  expect(frameCount).toBeLessThanOrEqual(5120);
   await writeFile(
     "../.cache/client-shots/atlas.json",
-    JSON.stringify({ assets, frameCount, pages: 3, atlasBytes: 50331648 }),
+    JSON.stringify({ assets, frameCount, pages: 4, atlasBytes: 67108864 }),
   );
   await page.screenshot({ path: "../.cache/client-shots/build-menu.png" });
   await page.locator("#build-house").click();
@@ -145,7 +153,12 @@ test("villager build menu places a House and watches authoritative completion", 
       .toBe(true);
     const foundation = (await actors()).find((a) => a.kind === kind);
     if (!foundation) throw new Error(`${kind} missing`);
-    await page.mouse.click(foundation.x, foundation.y);
+    // Wildlife now occupies the map: this Farm's center has a sheep on it.
+    // Select its unobstructed ground, rather than the foreground animal.
+    await page.mouse.click(
+      foundation.x,
+      foundation.y + (kind === "Farm" ? 32 : 0),
+    );
     await expect(page.locator("#selection-name")).toHaveText(kind);
     await expect(page.locator("#building-status")).toContainText("Complete", {
       timeout: 70_000,
@@ -154,12 +167,13 @@ test("villager build menu places a House and watches authoritative completion", 
   await expect(page.locator("#workers-food")).toHaveText("1", {
     timeout: 15_000,
   });
-  await selectWorker(1);
+  await selectWorker(1, true);
   await page.locator("#stop-units").click();
   await expect(page.locator("#workers-food")).toHaveText("0");
   const farm = (await actors()).find((a) => a.kind === "Farm");
   if (!farm) throw new Error("Completed Farm missing");
-  await page.mouse.click(farm.x, farm.y, { button: "right" });
+  await page.mouse.click(farm.x, farm.y + 32, { button: "right" });
+  await expect(page.locator("#selection-task")).toHaveText("Farming");
   await expect(page.locator("#workers-food")).toHaveText("1");
   await selectWorker(0);
   await page.locator("#build-menu").click();

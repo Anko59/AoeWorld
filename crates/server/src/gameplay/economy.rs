@@ -131,6 +131,14 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
         max_hp: unit.max_hp,
         attack_target: unit.attack_target,
         last_hit: unit.last_hit.map(wire_hit),
+        death_tick: unit.death_tick,
+        hunt_target: world.hunting_target(unit.id),
+        death_hunt: unit.death_hunt.map(|kind| match kind {
+            aoe_simulation::AnimalKind::Sheep => aoe_protocol::AnimalKind::Sheep,
+            aoe_simulation::AnimalKind::Deer => aoe_protocol::AnimalKind::Deer,
+            aoe_simulation::AnimalKind::Boar => aoe_protocol::AnimalKind::Boar,
+            aoe_simulation::AnimalKind::Wolf => aoe_protocol::AnimalKind::Wolf,
+        }),
         carried: unit.carried.map(|load| CarriedResource {
             kind: wire_resource(load.kind),
             amount: load.amount,

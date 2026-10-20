@@ -7,6 +7,11 @@ use aoe_assets::catalog::{
         OPTIONAL_TERRAIN as OPTIONAL_TERRAIN_SOURCES, REQUIRED as REQUIRED_RENDER_SOURCES,
     },
 };
+#[cfg(test)]
+#[path = "game_assets/tests/actors.rs"]
+mod actor_tests;
+#[path = "game_assets/actors.rs"]
+mod actors;
 #[path = "game_assets/buildings.rs"]
 mod buildings;
 #[path = "game_assets/manifest.rs"]
@@ -273,6 +278,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
             ranges[selection.role as usize] = Some(start..selected.len());
         }
     }
+    let actor_ranges = actors::select(&manifest, &mut selected, &mut domains)?;
     let building_ranges = buildings::select(&manifest, &mut selected, &mut domains)?;
     buildings::crop_farm(&mut manifest, &selected, &building_ranges)?;
     // Validate count, source bounds, and all extents before pixel allocation.
@@ -318,7 +324,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
                     plane,
                     &source,
                     &mut pixels,
-                    team,
+                    actors::colour(&actor_ranges, semantic, team),
                 )?;
             }
         }
@@ -364,6 +370,14 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
     atlas_budget(selected.len());
     Ok((
         GameArt {
+            actors: actor_ranges
+                .iter()
+                .map(|range| {
+                    range
+                        .as_ref()
+                        .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
+                })
+                .collect(),
             walking: group(AssetRole::CavalryWalking),
             standing: group(AssetRole::CavalryStanding),
             village,

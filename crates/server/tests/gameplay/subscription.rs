@@ -82,6 +82,9 @@ fn subscription_response_classification_rejects_changed_revision_or_nonstationar
         max_hp: 25,
         attack_target: None,
         last_hit: None,
+        death_tick: None,
+        hunt_target: None,
+        death_hunt: None,
     };
     let messages = [
         GameplayServerMessage::Tick {

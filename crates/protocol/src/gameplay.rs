@@ -47,6 +47,11 @@ pub struct UnitState {
     /// The unit or building this unit is attacking or walking to attack.
     pub attack_target: Option<EntityId>,
     pub last_hit: Option<HitState>,
+    /// Authoritative start of death; retained through corpse decay.
+    pub death_tick: Option<Tick>,
+    /// Hunting or carcass job, independent of military attack orders.
+    pub hunt_target: Option<EntityId>,
+    pub death_hunt: Option<AnimalKind>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -141,6 +146,11 @@ pub enum ClientMessage {
         #[serde(deserialize_with = "economy::bounded_builders")]
         unit_ids: Vec<EntityId>,
         animal_id: EntityId,
+    },
+    /// Halt an owned unit or sheep at its authoritative position.
+    StopOrder {
+        sequence: u64,
+        entity_id: EntityId,
     },
 }
 

@@ -132,9 +132,14 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     }
                 }
                 let Client {
-                    units, selected, ..
+                    units,
+                    selected,
+                    village,
+                    ..
                 } = &mut *client;
-                selected.units.retain(|id| units.contains_key(id));
+                selected.units.retain(|id| {
+                    units.contains_key(id) || village.animals.iter().any(|a| a.id == *id)
+                });
             }
             Ok(GameplayServerMessage::Snapshot { .. }) => {}
             Ok(GameplayServerMessage::Tick {
@@ -200,8 +205,25 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     );
                 }
             }
-            // Animal rendering and hunt controls are a separate UI task.
-            Ok(GameplayServerMessage::WildlifeState { .. }) => {}
+            Ok(GameplayServerMessage::WildlifeState {
+                revision,
+                tick,
+                animals,
+            }) => {
+                if revision == client.revision && tick.0 >= client.village.wildlife_tick {
+                    client.village.wildlife_tick = tick.0;
+                    client.village.animals = animals;
+                    let Client {
+                        units,
+                        selected,
+                        village,
+                        ..
+                    } = &mut *client;
+                    selected.units.retain(|id| {
+                        units.contains_key(id) || village.animals.iter().any(|a| a.id == *id)
+                    });
+                }
+            }
             Ok(GameplayServerMessage::RoleChange {
                 role, resume_token, ..
             }) => {

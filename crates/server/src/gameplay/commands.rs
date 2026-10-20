@@ -7,6 +7,11 @@ use aoe_protocol::{CommandResult, GameplayRole, GameplayServerMessage};
 use std::time::Instant;
 
 impl GameplayService {
+    pub async fn queue_stop(&self, session_id: u64, sequence: u64, entity_id: EntityId) {
+        self.queue_command(session_id, sequence, PendingAction::Stop { entity_id })
+            .await;
+    }
+
     pub async fn queue_hunt(
         &self,
         session_id: u64,
@@ -245,6 +250,7 @@ pub(super) fn apply(
     action: PendingAction,
 ) -> CommandResult {
     let result = match action {
+        PendingAction::Stop { entity_id } => world.issue_stop(player, entity_id),
         PendingAction::Hunt {
             unit_ids,
             animal_id,
@@ -253,6 +259,13 @@ pub(super) fn apply(
             entity_id,
             destination,
         } => {
+            if world.animal(entity_id).is_some() {
+                return match world.issue_herd(player, entity_id, destination) {
+                    Ok(()) => CommandResult::Accepted,
+                    Err(aoe_simulation::EconomyError::NotOwner) => CommandResult::RejectedNotOwner,
+                    Err(_) => CommandResult::RejectedInvalidDestination,
+                };
+            }
             let Some(unit) = world.unit(entity_id) else {
                 return CommandResult::RejectedUnknownEntity;
             };

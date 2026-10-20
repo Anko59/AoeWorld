@@ -26,13 +26,46 @@ fn screen(client: &Client, position: [f64; 2]) -> [f64; 2] {
 pub(in super::super) fn update(client: &Client) {
     let owner = owner(client);
     // Header: four stockpiles, used/cap, four worker counts, clock, observing,
-    // native-art flag, then actor/queue/resource counts. Actor records are eight
+    // native-art flag, then actor/queue/resource counts. Actor records are fourteen
     // numbers. Decode immediately in JS; never retain a view of WASM memory.
+    let scene = map::scene::prepare(client);
+    let camera = aoe_rendering::SceneCamera {
+        center: client.camera.center,
+        zoom: client.camera.zoom,
+        viewport: client.camera.viewport,
+        focus_elevation_meters: client.camera.focus_elevation_meters,
+    };
+    let heads = map::scene::units(client, &scene)
+        .into_iter()
+        .filter(|u| u.selected)
+        .filter_map(|u| {
+            aoe_rendering::scene_unit_bounds(
+                &client.art,
+                u,
+                camera,
+                (client.last_frame / 100.0) as usize,
+            )
+            .map(|bounds| {
+                (
+                    u.id,
+                    (bounds[1] - 5.0) * f64::from(client.canvas.client_height())
+                        / f64::from(client.canvas.height()),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let head = |id, y| {
+        heads
+            .iter()
+            .find(|(key, _)| *key == id)
+            .map_or(y - 42.0 * client.camera.zoom, |(_, top)| *top)
+    };
     let mut values = vec![0.0; 16];
     values[10] = (client.village.tick / u64::from(client.config.tick_hz.max(1))) as f64;
     values[11] = flag(client.role != Some(GameplayRole::Controller));
     values[12] = flag(!client.art.village[0].is_empty());
-    values[13] = (client.units.len() + client.village.buildings.len()) as f64;
+    values[13] =
+        (client.units.len() + client.village.buildings.len() + client.village.animals.len()) as f64;
     if let Some(player) = client.village.players.iter().find(|p| p.player == owner) {
         let s = player.stockpile;
         values[..6].copy_from_slice(&[
@@ -61,6 +94,19 @@ pub(in super::super) fn update(client: &Client) {
                 ResourceKind::Stone => 3,
             }] += 1.0;
         }
+        let native = match unit.kind {
+            UnitKind::Villager => aoe_simulation::UnitKind::Villager,
+            UnitKind::Scout => aoe_simulation::UnitKind::Scout,
+            UnitKind::Militia => aoe_simulation::UnitKind::Militia,
+        };
+        let stats = aoe_simulation::unit_combat(native);
+        let loom = client
+            .village
+            .players
+            .iter()
+            .find(|p| p.player == unit.player)
+            .is_some_and(|p| p.researched & 1 != 0)
+            && unit.kind == UnitKind::Villager;
         values.extend_from_slice(&[
             f64::from(unit.id.0),
             match unit.kind {
@@ -74,6 +120,12 @@ pub(in super::super) fn update(client: &Client) {
             unit.task as u8 as f64,
             resource.map_or(4.0, |kind| kind as u8 as f64),
             f64::from(unit.carried.map_or(0, |load| load.amount)),
+            f64::from(unit.hp),
+            f64::from(unit.max_hp),
+            f64::from(stats.attack),
+            f64::from(stats.melee_armour) + if loom { 1.0 } else { 0.0 },
+            f64::from(stats.pierce_armour) + if loom { 2.0 } else { 0.0 },
+            head(unit.id, y),
         ]);
     }
     for building in &client.village.buildings {
@@ -91,6 +143,37 @@ pub(in super::super) fn update(client: &Client) {
             },
             4.0,
             0.0,
+            f64::from(building.hp),
+            f64::from(building.max_hp),
+            0.0,
+            0.0,
+            0.0,
+            y,
+        ]);
+    }
+    for animal in &client.village.animals {
+        let [x, y] = screen(client, animal.position.as_tiles());
+        let (kind, hp, attack) = match animal.kind {
+            aoe_protocol::AnimalKind::Sheep => (12.0, 7, 0),
+            aoe_protocol::AnimalKind::Deer => (13.0, 5, 0),
+            aoe_protocol::AnimalKind::Boar => (14.0, 75, 7),
+            aoe_protocol::AnimalKind::Wolf => (15.0, 25, 3),
+        };
+        values.extend_from_slice(&[
+            f64::from(animal.id.0),
+            kind,
+            x,
+            y,
+            flag(client.selected.units.contains(&animal.id)),
+            11.0 + animal.task as u8 as f64,
+            0.0,
+            f64::from(animal.food_remaining),
+            f64::from(animal.hp),
+            f64::from(hp),
+            f64::from(attack),
+            0.0,
+            0.0,
+            head(animal.id, y),
         ]);
     }
     if let Some(building) = client

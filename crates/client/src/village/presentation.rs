@@ -61,6 +61,24 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
     } else {
         0.0
     };
+    if !client.village.move_cursor
+        && client.selected.units.iter().any(|id| {
+            client
+                .units
+                .get(id)
+                .is_some_and(|u| u.hp > 0 && u.player == owner)
+        })
+        && let Some(point) = client.pointer
+    {
+        let actor = super::picking::actor(client, point);
+        if actor.is_some_and(|a| a.1) {
+            values[3] = if villager { 5.0 } else { 4.0 };
+        } else if actor.is_some_and(|a| a.2)
+            || super::picking::enemy_building(client, point).is_some()
+        {
+            values[3] = 4.0;
+        }
+    }
     // Starting-kit nodes live in the resource overlay, not in terrain chunks.
     let starting: Vec<_> = client.resources.starting_nodes().collect();
     let natural = client

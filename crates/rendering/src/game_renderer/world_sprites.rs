@@ -7,6 +7,10 @@ mod scenery;
 #[path = "village/mod.rs"]
 mod village;
 
+#[path = "village/bounds.rs"]
+mod bounds;
+pub use bounds::{scene_unit_bounds, scene_unit_render_key};
+
 /// Fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
     if resource.kind == 1 && resource.visual_family != 0 && count >= 14 {
@@ -164,9 +168,16 @@ pub(super) fn emit_world_sprite_frames(
             village::marker(unit, camera, &mut emit);
             continue;
         };
-        let (direction, flipped) = sprite_direction(unit.facing);
-        let frame =
-            world_frame(frames[direction * stride + if animated { animation % stride } else { 0 }]);
+        let (_, flipped) = sprite_direction(unit.facing);
+        let phase = if unit.kind.actor_slot().is_some() {
+            usize::from(unit.facing >> 3).min(stride - 1)
+        } else if animated {
+            animation % stride
+        } else {
+            0
+        };
+        let (index, _) = actor_frame_index(unit.facing, stride, phase);
+        let frame = world_frame(frames[index]);
         let scale = camera.zoom as f32;
         let width = f64::from(frame.size[0]) * camera.zoom;
         let height = f64::from(frame.size[1]) * camera.zoom;
@@ -422,6 +433,11 @@ fn sprite_direction(facing: u8) -> (usize, bool) {
     (row, matches!(facing, 1..=3))
 }
 
+pub fn actor_frame_index(facing: u8, stride: usize, phase: usize) -> (usize, bool) {
+    let (direction, mirrored) = sprite_direction(facing);
+    (direction * stride + phase % stride.max(1), mirrored)
+}
+
 pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
     if let Some(slot) = unit.kind.building_slot() {
         return slot == 4
@@ -442,14 +458,5 @@ pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneC
     let Some((frames, stride, true)) = village::frames(art, unit) else {
         return false;
     };
-    let (direction, flipped) = sprite_direction(unit.facing);
-    frames[direction * stride..(direction + 1) * stride]
-        .iter()
-        .any(|frame| {
-            let mut frame = world_frame(*frame);
-            if flipped {
-                frame.anchor[0] = frame.size[0] - frame.anchor[0];
-            }
-            sprite_screen_bounds(frame, unit.position, unit.elevation_meters, camera).is_some()
-        })
+    bounds::frames_visible(frames, stride, unit, camera)
 }

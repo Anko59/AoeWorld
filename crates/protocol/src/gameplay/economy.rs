@@ -213,6 +213,13 @@ pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
         unit.facing < 8
             && unit.max_hp > 0
             && unit.hp <= unit.max_hp
+            && unit.death_tick.is_none_or(|_| unit.hp == 0)
+            && unit
+                .death_hunt
+                .is_none_or(|_| unit.hp == 0 && unit.kind == UnitKind::Villager)
+            && unit
+                .hunt_target
+                .is_none_or(|id| unit.kind == UnitKind::Villager && id != unit.id)
             && (unit.hp == 0) == (unit.task == UnitTask::Dying)
             && (unit.hp > 0 || unit.attack_target.is_none())
             && (!matches!(unit.task, UnitTask::Hunting | UnitTask::Shepherding)

@@ -36,6 +36,7 @@ fn native_cliff_wall_uses_opaque_rock_above_the_source_silhouette_notch() {
         anchor: [153.0, 80.0],
     };
     let art = GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),

@@ -5,6 +5,40 @@ use aoe_protocol::{
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn right_click_prioritizes_hunt_and_enemy_attack_before_gather_or_move() {
+    use crate::unit_visuals::{ClickOrder, click_order};
+    use aoe_protocol::UnitKind::*;
+    assert_eq!(
+        click_order(Villager, false, true, false, true),
+        ClickOrder::Hunt
+    );
+    assert_eq!(
+        click_order(Militia, false, true, false, true),
+        ClickOrder::Attack
+    );
+    assert_eq!(
+        click_order(Scout, false, false, true, true),
+        ClickOrder::Attack
+    );
+    assert_eq!(
+        click_order(Villager, false, false, true, true),
+        ClickOrder::Attack
+    );
+    assert_eq!(
+        click_order(Villager, false, false, false, true),
+        ClickOrder::Gather
+    );
+    assert_eq!(
+        click_order(Militia, false, false, false, true),
+        ClickOrder::Move
+    );
+    assert_eq!(
+        click_order(Villager, true, true, true, true),
+        ClickOrder::Move
+    );
+}
+
+#[wasm_bindgen_test]
 fn gather_and_train_encode_the_selected_actor_and_sequence() {
     for message in [
         GameplayClientMessage::GatherOrder {
@@ -37,4 +71,15 @@ fn economy_refusals_explain_food_population_ownership_and_exhaustion() {
     ] {
         assert!(order_message(result, None).contains(words));
     }
+}
+
+#[wasm_bindgen_test]
+fn actor_hotspots_outside_native_pixels_remain_pickable_without_a_large_ground_hitbox() {
+    use crate::unit_visuals::actor_hit;
+    let bounds = [90.0, 160.0, 110.0, 190.0];
+    let foot = [100.0, 200.0];
+    assert!(actor_hit(bounds, foot, [100.0, 175.0], 1.0));
+    assert!(actor_hit(bounds, foot, foot, 1.0));
+    assert!(!actor_hit(bounds, foot, [106.0, 200.0], 1.0));
+    assert!(!actor_hit(bounds, foot, [100.0, 206.0], 1.0));
 }

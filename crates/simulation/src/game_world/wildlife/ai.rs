@@ -44,12 +44,27 @@ impl GameWorld {
                 continue;
             };
             self.wildlife.stats.animal_steps += 1;
+            a.state.moving = false;
             let old_cell = cell(a.state.position);
             let nearest = nearest.and_then(|u| self.unit(u.id)).filter(|u| u.hp > 0);
             match a.state.kind {
                 AnimalKind::Sheep => {
                     if a.state.owner.is_none() {
                         a.state.owner = nearest.map(|u| u.player);
+                    }
+                    if let Some(destination) = a.herd {
+                        let from = a.state.position;
+                        if from != destination {
+                            self.move_animal(
+                                &mut a,
+                                i64::from(destination.x) - i64::from(from.x),
+                                i64::from(destination.y) - i64::from(from.y),
+                            );
+                        }
+                        if a.state.position == destination || !a.state.moving {
+                            a.herd = None;
+                            a.state.moving = false;
+                        }
                     }
                 }
                 AnimalKind::Deer => {
@@ -74,7 +89,7 @@ impl GameWorld {
                 AnimalKind::Boar => self.animal_attack(&mut a, changed),
             }
             let new_cell = cell(a.state.position);
-            if a.state.target.is_some() || a.state.task == AnimalTask::Fleeing {
+            if a.state.target.is_some() || a.state.task == AnimalTask::Fleeing || a.herd.is_some() {
                 self.wildlife.engaged.insert(id);
             } else {
                 self.wildlife.engaged.remove(&id);
@@ -102,6 +117,11 @@ impl GameWorld {
             return;
         };
         a.state.task = AnimalTask::Attacking;
+        a.state.facing = crate::game_world::facing_for(
+            i64::from(target.position.x) - i64::from(a.state.position.x),
+            i64::from(target.position.y) - i64::from(a.state.position.y),
+            a.state.facing,
+        );
         if distance(a.state.position, target.position) > radius(1) {
             self.move_animal(
                 a,
@@ -133,6 +153,7 @@ impl GameWorld {
     }
 
     fn move_animal(&self, a: &mut StoredAnimal, dx: i64, dy: i64) {
+        a.state.facing = crate::game_world::facing_for(dx, dy, a.state.facing);
         let numerator =
             u64::from(a.state.kind.rules().speed_hundredths) * FIXED_SUBUNITS_PER_TILE as u64;
         let denominator = 100 * u64::from(self.config.tick_hz);
@@ -168,6 +189,7 @@ impl GameWorld {
             }
             a.state.position = next;
         }
+        a.state.moving = a.state.position != from;
     }
 
     pub(super) fn unindex_animal(&mut self, id: EntityId, key: (i32, i32)) {

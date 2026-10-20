@@ -52,9 +52,11 @@ are not qualified as a seamless periodic sheet. Metadata-free material 6 selecti
 Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
 grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
-The periodic groups retain all 100 frames. Catalog v14 selects at most 2,369 frames:
-1,474 terrain and 895 objects including village art and cliff faces 226. Runtime packing remains three 2048² RGBA pages/48 MiB,
-terrain on pages 0/1 and objects on page 2, with a 2560-entry frame metadata cap.
+The periodic groups retain all 100 frames. Catalog v15's base selects 2,369 frames:
+1,474 terrain and 895 objects including village art and cliff faces 226. The
+[unit and wildlife selection](assets/units.md) adds 2,540 frames. Runtime packing
+uses four 2048² RGBA pages/64 MiB, terrain on pages 0/1 and objects on pages 2/3,
+with a 5,120-entry frame metadata cap.
 Counts alone do not prove fit; private full-manifest packing must be verified.
 It preserves raw signed frame anchors, player color and imported shadow masks;
 broadleaf 4652 uses only its paired shadow-only frames from 2296. Cavalry and non-tree resource
@@ -64,7 +66,7 @@ viewport and subsamples it to a bounded sprite budget.
 
 The [landscape inventory](assets/landscape.md) records reviewed subsets and
 unpromoted candidates separately. Species promotion does not expand the existing
-three-page runtime atlas allocation.
+runtime atlas allocation.
 
 The Age of Kings trial lacks the new mountain sheets. Snow 15026 is present
 in the Conquerors trial; the HD rock sheet is available as `DLC_ROCK.slp` in
@@ -98,10 +100,11 @@ and paired shadow 889. Roofs draw behind the core with left/right attachments
 preserved; player masks use the current blue ramp. These are reviewed metadata,
 not committed pixels. Missing village groups draw simple semantic markers;
 a present incomplete group remains a pack error. The native metadata packing
-proof now covers all 2,369 selected frames in the same three pages.
+proof covers the full base and actor prefixes in the four-page atlas.
 Yellow wildflower 2561 and tan reed 4584 dressing are omitted because their
 silhouettes read as gold and deadwood. Footprint wear modulates existing terrain
-colors without additional faces. Other animal art remains unreviewed. [Dark Age building art](assets/buildings.md)
+colors without additional faces. [Unit and wildlife art](assets/units.md) records
+combat, hunting and death animations. [Dark Age building art](assets/buildings.md)
 describes the optional DE overlay and construction stages. A missing
 required terrain group prevents local-pack startup with a clear error, while a
 missing optional resource group does not turn unrelated frames into a

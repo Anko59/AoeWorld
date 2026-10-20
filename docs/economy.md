@@ -203,8 +203,8 @@ hunters at 0.41, compared with foragers' 0.31. These are the DE values used
 by this implementation; no original game assets are needed.
 
 `HuntOrder { unit_ids, animal_id }` assigns owned living villagers. Hunting
-uses the existing villager's **melee** attack (3 damage, two-second period),
-the permitted simplification of the ranged hunting attack. A new command
+uses 3 damage with a two-second period, at one tile for sheep and four tiles
+for bow hunting. A new command
 replaces the hunt. Death cancels the worker's job. Dead animals keep a body
 for one second, then remain carcasses. Hunters automatically gather their
 food and deliver ten-food loads through the normal reachable food drop-off
@@ -220,14 +220,13 @@ the last villager to hit them and stop chasing beyond eight tiles of home.
 Wolves acquire villagers within six tiles. Movement is fixed point and tests
 terrain, diagonal crossings and building collision; animals do not block tiles.
 Animal sight uses distance, like current unit/building sight, without fog or
-occlusion. Hunt targets are explicit; combat AttackOrder still targets units
-and buildings.
+occlusion. Hunt targets are explicit; combat AttackOrder targets live units,
+buildings and animals. Owned sheep accept MoveOrder for herding.
 
 The map generator has no animal hooks. Village initialization therefore places
-a deterministic local kit of eight sheep, two boar and four deer, searching
+a deterministic local kit of eight sheep, two boar, four deer and one wolf, searching
 bounded local rings for free passable tiles. Constrained starts may omit an
-animal if no tile fits. Wolves are supported by the simulation spawn API but
-are not placed in the starting kit.
+animal if no tile fits.
 
 Live animals occupy an eight-tile spatial index. Each tick probes a fixed
 neighborhood around living units and advances only candidate animals and

@@ -28,6 +28,7 @@ fn synthetic_art() -> GameArt {
         anchor: [16.0, 48.0],
     };
     GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
@@ -43,7 +44,6 @@ fn synthetic_art() -> GameArt {
         water_depth: Default::default(),
     }
 }
-
 #[wasm_bindgen_test]
 fn frontmost_surface_depth_includes_elevation_and_cliff_faces() {
     let camera = SceneCamera {

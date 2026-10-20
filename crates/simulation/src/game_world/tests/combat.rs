@@ -83,6 +83,47 @@ fn spawned_units_start_at_full_hit_points_without_a_target() {
 }
 
 #[test]
+fn military_attack_orders_can_kill_wildlife_and_death_has_authoritative_timing() {
+    let mut w = world();
+    let militia = w.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
+    let sheep = w
+        .spawn_animal(crate::AnimalKind::Sheep, at(101, 100))
+        .unwrap();
+    w.issue_attack(PlayerId(0), militia, sheep).unwrap();
+    ticks_until(&mut w, 100, |w| w.animal(sheep).unwrap().hp == 0);
+    let dead = w.animal(sheep).unwrap();
+    assert_eq!(dead.death_tick, Some(w.tick()));
+    assert!(!dead.moving);
+    let (mut w, militia, victim) = duel();
+    w.issue_attack(PlayerId(0), militia, victim).unwrap();
+    ticks_until(&mut w, 500, |w| w.unit(victim).unwrap().hp == 0);
+    let died = w.tick();
+    assert_eq!(w.unit(victim).unwrap().death_tick, Some(died));
+    advance(&mut w, 40);
+    assert!(
+        w.unit(victim).is_some(),
+        "the corpse survives the die animation"
+    );
+    advance(&mut w, crate::CORPSE_SECONDS * 20);
+    assert!(w.unit(victim).is_none());
+}
+
+#[test]
+fn corpses_expire_by_due_tick_when_native_die_durations_differ() {
+    let mut w = world();
+    let scout = w.spawn_unit(PlayerId(0), at(100, 100)).unwrap();
+    let militia = w.spawn_militia(PlayerId(0), at(101, 100)).unwrap();
+    w.kill_unit(w.lookup[&scout]);
+    w.advance();
+    w.kill_unit(w.lookup[&militia]);
+    advance(&mut w, 620);
+    assert!(w.unit(militia).is_none());
+    assert!(w.unit(scout).is_some());
+    advance(&mut w, 17);
+    assert!(w.unit(scout).is_none());
+}
+
+#[test]
 fn a_militia_kills_a_villager_in_seven_hits_two_seconds_apart() {
     let (mut world, militia, villager) = duel();
     world.issue_attack(PlayerId(0), militia, villager).unwrap();

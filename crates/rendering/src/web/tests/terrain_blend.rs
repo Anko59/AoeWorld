@@ -165,6 +165,7 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
         anchor: [0.0; 2],
     };
     let mut art = crate::GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
@@ -224,6 +225,7 @@ pub(super) async fn surface_renderer() -> Renderer {
     atlas[page_bytes..page_bytes + 4].copy_from_slice(&[0, 255, 0, 255]);
     atlas[page_bytes * 2..page_bytes * 2 + 12]
         .copy_from_slice(&[0, 0, 255, 255, 255, 255, 0, 255, 0, 0, 0, 128]);
+    atlas[page_bytes * 3..page_bytes * 3 + 4].copy_from_slice(&[255, 0, 255, 255]);
     surface_renderer_with_atlas(&atlas).await
 }
 

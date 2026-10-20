@@ -4,7 +4,100 @@ use aoe_core::{EntityId, ScreenPoint};
 use aoe_protocol::ResourceKind;
 use aoe_rendering::{SceneCamera, resource_sprite_bounds, scene_resource_frame};
 
+/// Shared pointer target for orders and cursor feedback, frontmost first.
+pub(super) fn actor(client: &Client, point: ScreenPoint) -> Option<(EntityId, bool, bool)> {
+    let terrain_depth = map::surface_depth_at_screen(client, point);
+    let scene = map::scene::prepare(client);
+    let rendered = map::scene::units(client, &scene);
+    let camera = SceneCamera {
+        center: client.camera.center,
+        zoom: client.camera.zoom,
+        viewport: client.camera.viewport,
+        focus_elevation_meters: client.camera.focus_elevation_meters,
+    };
+    let units = client.units.values().filter(|u| u.hp > 0).map(|u| {
+        (
+            u.id,
+            false,
+            u.player != owner(client),
+            position_at(client, u.id),
+        )
+    });
+    let animals = client
+        .village
+        .animals
+        .iter()
+        .filter(|a| a.hp > 0 || a.food_remaining > 0)
+        .map(|a| (a.id, true, false, a.position.as_tiles()));
+    units
+        .chain(animals)
+        .filter_map(|(id, animal, enemy, world)| {
+            let screen = map::screen_position(client, world);
+            let fallback = [
+                screen.x - 7.0 * client.camera.zoom,
+                screen.y - 30.0 * client.camera.zoom,
+                screen.x + 7.0 * client.camera.zoom,
+                screen.y + 2.0 * client.camera.zoom,
+            ];
+            let bounds = rendered
+                .binary_search_by_key(&id, |u| u.id)
+                .ok()
+                .and_then(|index| {
+                    aoe_rendering::scene_unit_bounds(
+                        &client.art,
+                        rendered[index],
+                        camera,
+                        (client.last_frame / 100.0) as usize,
+                    )
+                })
+                .unwrap_or(fallback);
+            let depth = world[0]
+                + world[1]
+                + 2.0
+                    * map::scene::prepare(client)
+                        .height(world)
+                        .unwrap_or_else(|| map::elevation_at_world(client, world));
+            (crate::unit_visuals::actor_hit(
+                bounds,
+                [screen.x, screen.y],
+                [point.x, point.y],
+                client.camera.zoom,
+            ) && terrain_depth.is_none_or(|surface| surface <= depth + 1e-6))
+            .then_some((depth, id, animal, enemy))
+        })
+        .max_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+        .map(|(_, id, a, e)| (id, a, e))
+}
+
+pub(super) fn enemy_building(client: &Client, point: ScreenPoint) -> Option<EntityId> {
+    let world = map::world_at_screen(client, point)?;
+    client
+        .village
+        .buildings
+        .iter()
+        .find(|b| {
+            b.player != owner(client)
+                && world[0] >= f64::from(b.footprint.min.x)
+                && world[0] < f64::from(b.footprint.max.x)
+                && world[1] >= f64::from(b.footprint.min.y)
+                && world[1] < f64::from(b.footprint.max.y)
+        })
+        .map(|b| b.id)
+}
+
 pub(in super::super) fn click(client: &mut Client, point: ScreenPoint, unit: Option<EntityId>) {
+    if let Some((id, true, _)) = actor(client, point) {
+        // A ground carcass must not hide a living unit standing on it.
+        let living = client
+            .village
+            .animals
+            .iter()
+            .any(|a| a.id == id && a.hp > 0);
+        if living || unit.is_none() {
+            client.selected.units(vec![id]);
+            return;
+        }
+    }
     if let Some(id) = unit {
         client.selected.units(vec![id]);
         return;

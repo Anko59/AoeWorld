@@ -76,6 +76,9 @@ struct PendingCommand {
 
 #[derive(Clone)]
 enum PendingAction {
+    Stop {
+        entity_id: EntityId,
+    },
     Hunt {
         unit_ids: Vec<EntityId>,
         animal_id: EntityId,

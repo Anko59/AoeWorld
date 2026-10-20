@@ -8,6 +8,64 @@ use wasm_bindgen_test::wasm_bindgen_test;
 /// The original art is drawn for a 96 by 48 pixel tile; this world's is 128 by 64.
 const WORLD: f64 = 128.0 / 96.0;
 
+#[wasm_bindgen_test]
+fn missing_wildlife_art_keeps_neutral_animals_distinct_from_player_unit_markers() {
+    use crate::SceneUnitKind::*;
+    for kind in [
+        NeutralSheepStand,
+        NeutralSheepWalk,
+        NeutralSheepDie,
+        NeutralSheepDecay,
+        DeerStand,
+        DeerWalk,
+        DeerDie,
+        DeerDecay,
+        BoarStand,
+        BoarWalk,
+        BoarAttack,
+        BoarDie,
+        BoarDecay,
+        WolfStand,
+        WolfWalk,
+        WolfRun,
+        WolfAttack,
+        WolfDie,
+        WolfDecay,
+        SheepStand,
+        SheepWalk,
+        SheepDie,
+        SheepDecay,
+        Villager,
+        MilitiaStand,
+    ] {
+        let unit = SceneUnit {
+            kind,
+            id: EntityId(7),
+            position: [10.5; 2],
+            moving: false,
+            facing: 0,
+            selected: false,
+            elevation_meters: 0.0,
+        };
+        let drawn = world_sprite_frames(&art(), &ground(), &[], &[unit], camera(1.0), 0);
+        assert_eq!(drawn.len(), 1, "{kind:?}");
+        let player = matches!(
+            kind,
+            SheepStand | SheepWalk | SheepDie | SheepDecay | Villager | MilitiaStand
+        );
+        assert_eq!(
+            drawn[0].0.color,
+            if player {
+                [0.25, 0.57, 0.96, 1.0]
+            } else {
+                [0.75, 0.75, 0.75, 1.0]
+            },
+            "{kind:?}",
+        );
+        near(rect(&drawn[0].0), [249.0, 226.0, 263.0, 258.0]);
+    }
+}
+
 fn frame(size: [f32; 2], anchor: [f32; 2]) -> GameFrame {
     GameFrame {
         atlas: crate::AtlasAddress {
@@ -22,6 +80,7 @@ fn frame(size: [f32; 2], anchor: [f32; 2]) -> GameFrame {
 /// Hotspots as in the reviewed pack: a gold pile's is in its middle.
 fn art() -> GameArt {
     GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
@@ -201,7 +260,7 @@ fn objects_share_one_clearance_that_covers_the_art_below_a_hotspot() {
     let mut renderer = GameRenderer::Canvas {
         canvas: canvas.clone(),
         context: context.clone(),
-        atlas: [None, None, None],
+        atlas: [None, None, None, None],
         // White art over flat-coloured ground.
         source_atlas: vec![255; crate::GAME_ATLAS_BYTES],
         presentation: CanvasPresentation::new(512, 512),
@@ -236,7 +295,7 @@ fn canvas_draws_a_whole_pile_over_its_tile() {
     let mut renderer = GameRenderer::Canvas {
         canvas: canvas.clone(),
         context: context.clone(),
-        atlas: [None, None, None],
+        atlas: [None, None, None, None],
         // White art over flat-coloured ground.
         source_atlas: vec![255; crate::GAME_ATLAS_BYTES],
         presentation: CanvasPresentation::new(512, 512),

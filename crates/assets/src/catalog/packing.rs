@@ -1,4 +1,4 @@
-//! Pure, bounded startup placement for the three-page gameplay atlas.
+//! Pure, bounded startup placement for the four-page gameplay atlas.
 //!
 //! This module allocates only owned placement metadata, never pixel storage.
 //! The caller owns exactly `ATLAS_BYTES` RGBA8 bytes in page-major order and
@@ -9,17 +9,17 @@
 use std::fmt;
 
 pub const PAGE_SIDE: u16 = 2048;
-pub const PAGE_COUNT: usize = 3;
+pub const PAGE_COUNT: usize = 4;
 pub const PAGE_BYTES: usize = PAGE_SIDE as usize * PAGE_SIDE as usize * 4;
-pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 50,331,648 bytes.
-pub const MAX_SELECTED_FRAMES: usize = 2560;
+pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 67,108,864 bytes.
+pub const MAX_SELECTED_FRAMES: usize = 5120;
 pub const MAX_FRAME_EXTENT: u16 = PAGE_SIDE - 4;
 // Rows and columns 0–1 stay unallocated on every page. The renderer stores its
 // terrain frame directory in rows 0–1 of page 0; never place frames there.
 const START: u16 = 2;
 const GAP: u16 = 1;
 
-/// Terrain owns pages 0–1. All units, resources, objects and shadows own page 2.
+/// Terrain owns pages 0–1. All units, resources, objects and shadows own pages 2–3.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AtlasDomain {
     Terrain,
@@ -113,7 +113,7 @@ fn pack_with_allocator(
 ) -> Result<Vec<Placement>, PackingError> {
     validate(frames)?;
     let mut placements = allocate(frames.len());
-    // Fixed 4 KiB index scratch: bounded startup-only insertion sort, avoiding
+    // Fixed 10 KiB index scratch: bounded startup-only insertion sort, avoiding
     // generic quicksort's WASM code size and a second heap allocation.
     let mut indices = [0_u16; MAX_SELECTED_FRAMES];
     for index in 0..frames.len() {
@@ -130,7 +130,7 @@ fn pack_with_allocator(
         let frame = frames[index];
         let pages = match frame.domain {
             AtlasDomain::Terrain => 0..2,
-            AtlasDomain::Objects => 2..3,
+            AtlasDomain::Objects => 2..4,
         };
         let mut placed = false;
         for page in pages {

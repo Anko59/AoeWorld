@@ -84,6 +84,7 @@ fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
         anchor: [0.0; 2],
     };
     let mut art = GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),

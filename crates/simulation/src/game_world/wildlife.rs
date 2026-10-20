@@ -35,6 +35,9 @@ pub struct GameAnimal {
     pub task: AnimalTask,
     pub food_remaining: u16,
     pub target: Option<EntityId>,
+    pub facing: crate::Facing,
+    pub moving: bool,
+    pub death_tick: Option<aoe_core::Tick>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -44,6 +47,7 @@ struct StoredAnimal {
     cooldown: u32,
     speed_carry: u64,
     decay_carry: u64,
+    herd: Option<WorldPosition>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -94,6 +98,64 @@ fn radius(tiles: i64) -> i64 {
 }
 
 impl GameWorld {
+    pub(crate) fn stop_sheep(
+        &mut self,
+        player: PlayerId,
+        id: EntityId,
+    ) -> Result<(), EconomyError> {
+        let animal = self
+            .wildlife
+            .animals
+            .get_mut(&id)
+            .ok_or(EconomyError::UnknownEntity)?;
+        if animal.state.kind != AnimalKind::Sheep || animal.state.hp == 0 {
+            return Err(EconomyError::InvalidTarget);
+        }
+        if animal.state.owner != Some(player) {
+            return Err(EconomyError::NotOwner);
+        }
+        animal.herd = None;
+        animal.speed_carry = 0;
+        animal.state.moving = false;
+        self.wildlife.engaged.remove(&id);
+        Ok(())
+    }
+
+    pub fn issue_herd(
+        &mut self,
+        player: PlayerId,
+        id: EntityId,
+        destination: WorldPosition,
+    ) -> Result<(), EconomyError> {
+        let a = self.animal(id).ok_or(EconomyError::UnknownEntity)?;
+        if a.kind != AnimalKind::Sheep || a.hp == 0 {
+            return Err(EconomyError::InvalidTarget);
+        }
+        if a.owner != Some(player) {
+            return Err(EconomyError::NotOwner);
+        }
+        if !self.config.valid_ground_position(destination)
+            || !self.tile_passable(destination.tile_floor())
+        {
+            return Err(EconomyError::InvalidTarget);
+        }
+        let destination = self.config.snap_ground_position(destination);
+        let animal = self
+            .wildlife
+            .animals
+            .get_mut(&id)
+            .ok_or(EconomyError::UnknownEntity)?;
+        animal.herd = Some(destination);
+        self.wildlife.engaged.insert(id);
+        Ok(())
+    }
+    pub fn hunting_target(&self, id: EntityId) -> Option<EntityId> {
+        self.wildlife
+            .hunts
+            .get(&id)
+            .map(|job| job.animal)
+            .or_else(|| self.economy.gatherers.get(&id).and_then(|job| job.animal))
+    }
     pub fn animals(&self) -> impl Iterator<Item = &GameAnimal> {
         self.wildlife.animals.values().map(|a| &a.state)
     }

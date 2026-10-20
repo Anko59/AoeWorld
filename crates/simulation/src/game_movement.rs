@@ -205,6 +205,7 @@ impl GameWorld {
             }
             self.plan_route_ahead(index, &mut planner_allowance);
             if !self.economy.gatherers.contains_key(&id)
+                && self.hunting_target(id).is_none()
                 && !self.combat.attackers.contains_key(&id)
                 && !self.economy.builders.contains_key(&id)
             {

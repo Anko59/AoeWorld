@@ -131,6 +131,7 @@ fn art() -> aoe_rendering::GameArt {
         anchor: [12.0, 40.0],
     };
     aoe_rendering::GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
@@ -190,4 +191,60 @@ fn camera() -> SceneCamera {
         viewport: [1280.0, 720.0],
         focus_elevation_meters: 0.0,
     }
+}
+
+#[wasm_bindgen_test]
+fn actor_phase_does_not_invalidate_without_visible_animated_art() {
+    let scene = Rc::new(());
+    let mut actor = unit([1.0, 2.0], false, false);
+    actor.kind = aoe_rendering::SceneUnitKind::actor(0);
+    let mut art = art();
+    for frames in [vec![], vec![art.walking[0]; 5], vec![art.walking[0]; 10]] {
+        art.actors = vec![frames];
+        for position in [[1.0, 2.0], [10000.0, 10000.0]] {
+            actor.position = position;
+            actor.facing = 2;
+            let mut cache = RenderFrameCache::default();
+            cache.record_success(&scene, &art, &[actor], &[], false, 0, camera());
+            actor.facing = 2 | (1 << 3);
+            let visible_animation = art.actors[0].len() == 10 && position == [1.0, 2.0];
+            assert_eq!(
+                cache.needs_render(&scene, &art, &[actor], &[], false, 1, camera()),
+                visible_animation,
+                "frames={}, position={position:?}",
+                art.actors[0].len()
+            );
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn visible_actor_phase_and_offscreen_actor_state_still_invalidate() {
+    let scene = Rc::new(());
+    let mut actor = unit([10000.0, 10000.0], false, false);
+    actor.kind = aoe_rendering::SceneUnitKind::actor(0);
+    let mut art = art();
+    art.actors = vec![vec![art.walking[0]; 10]];
+    let mut cache = RenderFrameCache::default();
+    cache.record_success(&scene, &art, &[actor], &[], false, 0, camera());
+    actor.facing = 3;
+    assert!(cache.needs_render(&scene, &art, &[actor], &[], false, 0, camera()));
+    actor.position = [1.0, 2.0];
+    cache.record_success(&scene, &art, &[actor], &[], false, 0, camera());
+    assert!(!cache.needs_render(&scene, &art, &[actor], &[], false, 1, camera()));
+    actor.facing |= 1 << 3;
+    assert!(cache.needs_render(&scene, &art, &[actor], &[], false, 1, camera()));
+}
+
+#[wasm_bindgen_test]
+fn offscreen_actor_phase_does_not_invalidate_even_with_real_frames() {
+    let scene = Rc::new(());
+    let mut actor = unit([10000.0, 10000.0], false, false);
+    actor.kind = aoe_rendering::SceneUnitKind::actor(0);
+    let mut art = art();
+    art.actors = vec![vec![art.walking[0]; 10]];
+    let mut cache = RenderFrameCache::default();
+    cache.record_success(&scene, &art, &[actor], &[], false, 0, camera());
+    actor.facing |= 1 << 3;
+    assert!(!cache.needs_render(&scene, &art, &[actor], &[], false, 1, camera()));
 }

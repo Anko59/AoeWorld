@@ -9,9 +9,14 @@ import { freshHud } from "./resources.js";
 test("five-villager presentation fixture supports box and double click selection at both viewport sizes", async ({
   page,
 }, info) => {
+  // Start at the first audited size, avoiding an extra native atlas redraw.
+  await page.setViewportSize({ width: 1440, height: 900 });
   await gameAssets(page);
   await fiveVillagerFixture(page);
   await page.goto("/?play=1");
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 30_000,
+  });
   await expect(page.locator("#population")).toHaveText("6/10");
   for (const [width, height] of [
     [1440, 900],
@@ -59,6 +64,9 @@ test("selection ellipse remains visible through the complete zoom range", async 
   if (info.project.name === "canvas") await forceCanvas(page);
   await fiveVillagerFixture(page);
   await page.goto("/?play=1");
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 30_000,
+  });
   await expect(page.locator("#population")).toHaveText("6/10");
   for (const zoom of [0.25, 0.5, 0.75, 1, 1.5, 2, 3]) {
     await page.evaluate((zoom) => {

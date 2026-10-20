@@ -3,6 +3,42 @@ use crate::{GameWorld, UnitTask};
 use aoe_core::EntityId;
 
 impl GameWorld {
+    /// Cancel an owned actor's orders at its exact authoritative position.
+    pub fn issue_stop(
+        &mut self,
+        player: aoe_core::PlayerId,
+        id: EntityId,
+    ) -> Result<(), crate::EconomyError> {
+        if self.animal(id).is_some() {
+            return self.stop_sheep(player, id);
+        }
+        let index = *self
+            .lookup
+            .get(&id)
+            .ok_or(crate::EconomyError::UnknownEntity)?;
+        let unit = self.units[index].state;
+        if unit.hp == 0 {
+            return Err(crate::EconomyError::InvalidTarget);
+        }
+        if unit.player != player {
+            return Err(crate::EconomyError::NotOwner);
+        }
+        self.stop_movement(index);
+        if let Ok(slot) = self.active_movers.binary_search(&id) {
+            self.active_movers.remove(slot);
+        }
+        self.stop_gathering(id);
+        self.cancel_attack(id);
+        self.economy.builders.remove(&id);
+        self.units[index].last_movement_error = None;
+        self.units[index].state.task = if unit.carried.is_some() {
+            UnitTask::Carrying
+        } else {
+            UnitTask::Idle
+        };
+        Ok(())
+    }
+
     /// Drops the unit's route and order without touching its task.
     pub(crate) fn stop_movement(&mut self, index: usize) {
         self.clear_planner(index);
@@ -13,26 +49,38 @@ impl GameWorld {
         unit.state.planning = false;
     }
 
-    /// Population is freed now; the body stays for `DYING_SECONDS` at 0 HP.
+    /// Population is freed now; native death playback precedes thirty seconds of corpse decay.
     pub(crate) fn kill_unit(&mut self, index: usize) {
         self.stop_movement(index);
         let id = self.units[index].state.id;
         let player = self.units[index].state.player;
+        let death_hunt = self
+            .hunting_target(id)
+            .and_then(|target| self.animal(target))
+            .map(|a| a.kind);
         let state = &mut self.units[index].state;
         state.hp = 0;
+        state.death_tick = Some(self.tick);
+        state.death_hunt = death_hunt;
         state.task = UnitTask::Dying;
         state.attack_target = None;
         self.combat.attackers.remove(&id);
         self.stop_gathering(id);
+        self.cancel_hunt(id);
         self.economy.builders.remove(&id);
         if let Some(economy) = self.economy.players.get_mut(&player) {
             economy.population_used = economy.population_used.saturating_sub(1);
         }
-        let due = self
-            .tick
-            .0
-            .saturating_add(u64::from(self.config.tick_hz) * u64::from(super::DYING_SECONDS));
-        self.combat.dying.push_back((due, id));
+        let die_millis = match self.units[index].state.kind {
+            crate::UnitKind::Villager => 1500_u64,
+            crate::UnitKind::Scout => 1900,
+            crate::UnitKind::Militia => 1000,
+        };
+        let die_ticks = (u64::from(self.config.tick_hz) * die_millis).div_ceil(1000);
+        let due = self.tick.0.saturating_add(
+            die_ticks + u64::from(self.config.tick_hz) * u64::from(super::CORPSE_SECONDS),
+        );
+        self.combat.dying.insert((due, id));
     }
 
     /// Removes a unit from every index. Its slot is filled by the last unit.

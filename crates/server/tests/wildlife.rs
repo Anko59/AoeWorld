@@ -172,7 +172,7 @@ async fn wildlife_subscription_replaces_the_region_and_failed_delivery_disconnec
             TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384)),
         )
         .await;
-    assert!(drain(&mut rx).iter().any(|m| matches!(m, GameplayServerMessage::WildlifeState { revision: 1, animals, .. } if animals.len() == 14)));
+    assert!(drain(&mut rx).iter().any(|m| matches!(m, GameplayServerMessage::WildlifeState { revision: 1, animals, .. } if animals.len() == 15)));
     service
         .subscribe(
             id,
@@ -208,4 +208,46 @@ async fn wildlife_subscription_replaces_the_region_and_failed_delivery_disconnec
         .queue_hunt(id, 1, vec![EntityId(2)], EntityId(5))
         .await;
     service.tick().await;
+}
+
+#[tokio::test]
+async fn a_military_hit_publishes_a_valid_retaliating_predator_in_the_same_tick() {
+    for kind in [AnimalKind::Wolf, AnimalKind::Boar] {
+        let service = GameplayService::new(Seed(1));
+        let (tx, mut rx) = mpsc::channel(256);
+        let (session, _) = service.register(None, tx).await;
+        let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
+        service.subscribe(session, 1, region).await;
+        let target = drain(&mut rx)
+            .into_iter()
+            .find_map(|message| match message {
+                GameplayServerMessage::WildlifeState { animals, .. } => {
+                    animals.into_iter().find(|a| a.kind == kind)
+                }
+                _ => None,
+            })
+            .unwrap();
+        service
+            .queue_attack(session, 1, EntityId(0), target.id)
+            .await;
+        let mut hit = false;
+        for _ in 0..2000 {
+            service.tick().await;
+            for message in drain(&mut rx) {
+                if let GameplayServerMessage::WildlifeState { animals, .. } = message
+                    && let Some(animal) = animals
+                        .iter()
+                        .find(|a| a.id == target.id && a.hp < target.hp)
+                {
+                    assert_eq!(animal.task, AnimalTask::Attacking);
+                    assert_eq!(animal.target, Some(EntityId(0)));
+                    hit = true;
+                }
+            }
+            if hit {
+                break;
+            }
+        }
+        assert!(hit, "military attack never reached {kind:?}");
+    }
 }

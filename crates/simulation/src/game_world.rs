@@ -45,6 +45,8 @@ pub struct GameUnit {
     pub max_hp: u16,
     pub attack_target: Option<EntityId>,
     pub last_hit: Option<HitRecord>,
+    pub death_tick: Option<Tick>,
+    pub death_hunt: Option<AnimalKind>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MovementOrder {

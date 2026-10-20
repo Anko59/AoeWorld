@@ -12,6 +12,29 @@ use std::io::Read;
 
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 
+fn reviewed_sources() -> impl Iterator<Item = (String, u32, AtlasDomain)> {
+    REQUIRED_RENDER_SOURCES
+        .iter()
+        .chain(&OPTIONAL_RESOURCE_SOURCES)
+        .chain(&OPTIONAL_TERRAIN_SOURCES)
+        .map(|s| {
+            (
+                s.manifest_source(),
+                s.frames,
+                if s.terrain_topology.is_some() {
+                    AtlasDomain::Terrain
+                } else {
+                    AtlasDomain::Objects
+                },
+            )
+        })
+        .chain(
+            super::units::SPRITES
+                .iter()
+                .map(|s| (s.manifest_source(), s.frames(), AtlasDomain::Objects)),
+        )
+}
+
 fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     if manifest.version != 1 || manifest.frames.len() > 25_000 || manifest.pages.len() > 256 {
         return Err("unsupported or oversized manifest".into());
@@ -20,19 +43,14 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     let mut counts = [0_usize; 2];
     // Conservative full-prefix proof in production semantic order. The client
     // omits unused idle cells and adds the separately checked DE building subset.
-    for source in REQUIRED_RENDER_SOURCES
-        .iter()
-        .chain(&OPTIONAL_RESOURCE_SOURCES)
-        .chain(&OPTIONAL_TERRAIN_SOURCES)
-    {
-        let identity = source.manifest_source();
+    for (identity, count, domain) in reviewed_sources() {
         let mut frames = manifest
             .frames
             .iter()
-            .filter(|frame| frame.source == identity && frame.frame < source.frames)
+            .filter(|frame| frame.source == identity && frame.frame < count)
             .collect::<Vec<_>>();
         frames.sort_unstable_by_key(|frame| frame.frame);
-        if frames.len() != source.frames as usize
+        if frames.len() != count as usize
             || frames
                 .iter()
                 .enumerate()
@@ -40,11 +58,6 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         {
             return Err(format!("missing or duplicate reviewed prefix: {identity}"));
         }
-        let domain = if source.terrain_topology.is_some() {
-            AtlasDomain::Terrain
-        } else {
-            AtlasDomain::Objects
-        };
         counts[usize::from(domain == AtlasDomain::Objects)] += frames.len();
         for frame in frames {
             let page = manifest
@@ -65,7 +78,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             });
         }
     }
-    if extents.len() != MAX_REVIEWED_FRAMES as usize || counts != [1474, 895] {
+    if extents.len() != MAX_REVIEWED_FRAMES as usize + 2540 || counts != [1474, 3435] {
         return Err("incomplete semantic selection".into());
     }
     let placements = pack_frames(&extents).map_err(|error| error.to_string())?;
@@ -75,7 +88,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     for (index, (frame, placed)) in extents.iter().zip(&placements).enumerate() {
         let correct_domain = match frame.domain {
             AtlasDomain::Terrain => placed.page < 2,
-            AtlasDomain::Objects => placed.page == 2,
+            AtlasDomain::Objects => (2..4).contains(&placed.page),
         };
         if !correct_domain
             || placed.width != frame.width
@@ -98,7 +111,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             }
         }
     }
-    if MAX_SELECTED_FRAMES != 2560 || PAGE_COUNT != 3 || ATLAS_BYTES != 50_331_648 {
+    if MAX_SELECTED_FRAMES != 5120 || PAGE_COUNT != 4 || ATLAS_BYTES != 67_108_864 {
         return Err("physical budget changed".into());
     }
     Ok((counts[0], counts[1]))
@@ -151,14 +164,15 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
         pages: vec![page],
         frames: Vec::new(),
     };
-    for source in REQUIRED_RENDER_SOURCES
-        .iter()
-        .chain(&OPTIONAL_RESOURCE_SOURCES)
-        .chain(&OPTIONAL_TERRAIN_SOURCES)
-    {
-        for frame in 0..source.frames {
+    for (identity, count, _) in reviewed_sources() {
+        // Neutral sheep reuse each owned source with another runtime palette.
+        // A source manifest contains those frames once.
+        if manifest.frames.iter().any(|f| f.source == identity) {
+            continue;
+        }
+        for frame in 0..count {
             manifest.frames.push(crate::pack::FrameRecord {
-                source: source.manifest_source(),
+                source: identity.clone(),
                 source_hash: String::new(),
                 frame,
                 page: 0,
@@ -171,7 +185,7 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
             });
         }
     }
-    assert_eq!(prove(&manifest).unwrap(), (1474, 895));
+    assert_eq!(prove(&manifest).unwrap(), (1474, 3435));
     let saved = manifest.frames[0].clone();
     manifest.frames[0].frame = 1;
     assert!(prove(&manifest).is_err());

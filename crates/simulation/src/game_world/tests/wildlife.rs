@@ -39,6 +39,21 @@ fn sheep_converts_to_nearest_living_player_with_id_tiebreak() {
 }
 
 #[test]
+fn only_the_owner_can_herd_a_living_sheep_and_its_walk_stops_at_destination() {
+    let mut w = world();
+    w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
+    let sheep = w.spawn_animal(AnimalKind::Sheep, at(101, 100)).unwrap();
+    w.advance();
+    assert!(w.issue_herd(PlayerId(1), sheep, at(102, 100)).is_err());
+    w.issue_herd(PlayerId(0), sheep, at(103, 100)).unwrap();
+    w.advance();
+    assert!(w.animal(sheep).unwrap().moving);
+    run(&mut w, 100);
+    assert_eq!(w.animal(sheep).unwrap().position, at(103, 100));
+    assert!(!w.animal(sheep).unwrap().moving);
+}
+
+#[test]
 fn shepherd_slaughters_sheep_and_delivers_all_100_food() {
     let mut w = world();
     w.place_town_center(PlayerId(0), TileCoord::new(95, 95))
@@ -48,8 +63,10 @@ fn shepherd_slaughters_sheep_and_delivers_all_100_food() {
     w.advance();
     w.issue_hunt(PlayerId(0), &[worker], sheep).unwrap();
     run(&mut w, 20 * 450);
-    assert_eq!(w.animal(sheep).unwrap().food_remaining, 0);
-    assert_eq!(w.animal(sheep).unwrap().task, AnimalTask::Carcass);
+    assert!(
+        w.animal(sheep).is_none(),
+        "the harvested carcass disappears after its decay time"
+    );
     assert_eq!(w.player_economy(PlayerId(0)).unwrap().stockpile.food, 100);
     assert_eq!(w.unit(worker).unwrap().carried, None);
 }
@@ -63,6 +80,34 @@ fn deer_flees_nearby_units_faster_than_a_villager() {
     let a = w.animal(deer).unwrap();
     assert_eq!(a.task, AnimalTask::Fleeing);
     assert_eq!(a.position.x - at(102, 100).x, FIXED_SUBUNITS_PER_TILE);
+}
+
+#[test]
+fn hunters_and_shepherds_keep_their_profession_while_walking_to_distant_animals() {
+    for (kind, task) in [
+        (AnimalKind::Deer, UnitTask::Hunting),
+        (AnimalKind::Sheep, UnitTask::Shepherding),
+    ] {
+        let mut w = world();
+        let worker = w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
+        let animal = w.spawn_animal(kind, at(108, 100)).unwrap();
+        w.issue_hunt(PlayerId(0), &[worker], animal).unwrap();
+        run(&mut w, 2);
+        let hunter = w.unit(worker).unwrap();
+        assert!(hunter.moving);
+        assert_eq!(hunter.task, task);
+    }
+}
+
+#[test]
+fn a_bow_hunter_can_kill_a_deer_in_open_ground() {
+    let mut w = world();
+    let worker = w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
+    let deer = w.spawn_animal(AnimalKind::Deer, at(108, 100)).unwrap();
+    w.issue_hunt(PlayerId(0), &[worker], deer).unwrap();
+    run(&mut w, 20 * 30);
+    assert_eq!(w.animal(deer).unwrap().hp, 0);
+    assert!(w.unit(worker).unwrap().position.x < at(120, 100).x);
 }
 
 #[test]
@@ -262,11 +307,7 @@ fn unattended_carcass_decays_even_after_all_units_are_removed() {
     }
     w.remove_unit(v);
     run(&mut w, 20 * 500);
-    let a = w.animal(sheep).unwrap();
-    assert_eq!(
-        (a.hp, a.food_remaining, a.task),
-        (0, 0, AnimalTask::Carcass)
-    );
+    assert!(w.animal(sheep).is_none());
 }
 
 #[test]

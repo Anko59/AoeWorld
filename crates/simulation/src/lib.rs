@@ -18,12 +18,13 @@ use aoe_scenario::Scenario;
 pub use game_query::GameQueryStats;
 pub use game_world::{
     Age, BUILDING_COMBAT, BUILDING_RULES, BuildingCombat, BuildingKind, BuildingRules,
-    CarriedResource, CombatStats, ConstructionState, DamageKind, EconomyError, FEUDAL_BUILDINGS,
-    Facing, GameBuilding, GameUnit, GameWorld, GameWorldError, HitRecord, MAX_BUILD_GROUP,
-    MAX_POPULATION, MAX_WALL_SEGMENTS, MovementOrder, PlayerEconomy, PreparedResourceDepletion,
-    ResearchEntry, Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules,
-    TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining,
-    VILLAGE_RULES, VillageRules, building_combat, damage_dealt, trainable_units, unit_combat,
+    CORPSE_SECONDS, CarriedResource, CombatStats, ConstructionState, DYING_SECONDS, DamageKind,
+    EconomyError, FEUDAL_BUILDINGS, Facing, GameBuilding, GameUnit, GameWorld, GameWorldError,
+    HitRecord, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, MovementOrder, PlayerEconomy,
+    PreparedResourceDepletion, ResearchEntry, Stockpile, TECH_RULES, Tech, TechEffect,
+    TechRequirement, TechRules, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind,
+    UnitTask, UnitTraining, VILLAGE_RULES, VillageRules, building_combat, damage_dealt,
+    trainable_units, unit_combat,
 };
 pub use game_world::{
     AnimalKind, AnimalTask, GameAnimal, MAX_ANIMALS, MAX_HUNTERS, WILDLIFE_RULES, WildlifeRules,

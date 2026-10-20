@@ -26,9 +26,9 @@ fn reject_before_allocation(frames: &[FrameExtent], error: PackingError) {
 
 #[test]
 fn fixed_payload_and_explicit_white_address() {
-    assert_eq!((PAGE_COUNT, PAGE_SIDE), (3, 2048));
+    assert_eq!((PAGE_COUNT, PAGE_SIDE), (4, 2048));
     assert_eq!(PAGE_BYTES, 16_777_216);
-    assert_eq!(ATLAS_BYTES, 50_331_648);
+    assert_eq!(ATLAS_BYTES, 67_108_864);
     assert_eq!(
         WHITE_TEXEL,
         Placement {
@@ -43,24 +43,31 @@ fn fixed_payload_and_explicit_white_address() {
 }
 
 #[test]
-fn count_limit_distinguishes_2560_allocation_from_2561_rejection() {
+fn complete_actor_animation_sets_can_use_two_object_pages() {
+    let placed = pack_frames(&[object(2044, 2044), object(2044, 2044)]).unwrap();
+    assert_eq!(placed.iter().map(|p| p.page).collect::<Vec<_>>(), [2, 3]);
+    assert!(pack_frames(&[object(2044, 2044); 3]).is_err());
+}
+
+#[test]
+fn count_limit_distinguishes_the_full_animation_budget_from_one_excess_frame() {
     let calls = Cell::new(0);
     let frames = vec![terrain(1, 1); MAX_SELECTED_FRAMES];
     let placements = pack_with_allocator(&frames, |count| {
         calls.set(calls.get() + 1);
-        assert_eq!(count, 2560);
+        assert_eq!(count, MAX_SELECTED_FRAMES);
         vec![Placement::default(); count]
     })
     .unwrap();
     assert_eq!(calls.get(), 1);
-    assert_eq!(placements.len(), 2560);
+    assert_eq!(placements.len(), MAX_SELECTED_FRAMES);
     assert!(placements.iter().all(|p| p.page == 0));
     let excess = vec![terrain(1, 1); MAX_SELECTED_FRAMES + 1];
     reject_before_allocation(
         &excess,
         PackingError::TooManyFrames {
-            count: 2561,
-            limit: 2560,
+            count: MAX_SELECTED_FRAMES + 1,
+            limit: MAX_SELECTED_FRAMES,
         },
     );
 }
@@ -131,9 +138,9 @@ fn terrain_spills_to_one_but_never_borrows_two() {
 #[test]
 fn object_domain_overflows_while_both_terrain_pages_are_empty() {
     assert_eq!(
-        pack_frames(&[object(2044, 2044), object(1, 1)]),
+        pack_frames(&[object(2044, 2044), object(2044, 2044), object(1, 1)]),
         Err(PackingError::DomainOverflow {
-            index: 1,
+            index: 2,
             domain: AtlasDomain::Objects
         })
     );

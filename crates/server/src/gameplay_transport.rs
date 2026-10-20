@@ -51,6 +51,7 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
                 match decode_gameplay_client(&bytes) {
                     Ok(GameplayClientMessage::Subscribe { revision, region }) => service.subscribe(session_id, revision, region).await,
                     Ok(GameplayClientMessage::MoveOrder { sequence, entity_id, destination }) => service.queue_move(session_id, sequence, entity_id, destination).await,
+                    Ok(GameplayClientMessage::StopOrder { sequence, entity_id }) => service.queue_stop(session_id, sequence, entity_id).await,
                     Ok(GameplayClientMessage::GatherOrder { sequence, entity_id, resource_id }) => service.queue_gather(session_id, sequence, entity_id, resource_id).await,
                     Ok(GameplayClientMessage::CancelTrainingOrder { sequence, building_id }) => service.queue_cancel_training(session_id, sequence, building_id).await,
                     Ok(GameplayClientMessage::TrainOrder { sequence, building_id, kind }) => service.queue_train(session_id, sequence, building_id, kind).await,
