@@ -62,6 +62,7 @@ pub(super) struct Session {
     resident_players: BTreeMap<aoe_core::PlayerId, aoe_protocol::GameplayPlayerState>,
     resident_buildings: BTreeMap<EntityId, aoe_protocol::GameplayBuildingState>,
     resident_animals: Vec<aoe_protocol::AnimalState>,
+    resident_projectiles: Vec<aoe_protocol::ProjectileState>,
     vision_revision: Option<u64>,
     resource_vision_revision: Option<u64>,
     resident_resources: Vec<aoe_protocol::ResourceAmount>,
@@ -150,6 +151,10 @@ pub(super) struct Ownership {
 }
 
 impl GameplayService {
+    pub fn military_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::military_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
     /// Server-side scenario setup, never a gameplay client command.
     pub async fn set_fog_disabled(&self, disabled: bool) {
         self.world.write().await.set_fog_disabled(disabled);
@@ -281,6 +286,7 @@ impl GameplayService {
                 resident_players: BTreeMap::new(),
                 resident_buildings: BTreeMap::new(),
                 resident_animals: Vec::new(),
+                resident_projectiles: Vec::new(),
                 vision_revision: None,
                 resource_vision_revision: None,
                 resident_resources: Vec::new(),
@@ -381,6 +387,12 @@ impl GameplayService {
             buildings: buildings.values().cloned().collect(),
         };
         let animals = wildlife::animals(&world, region, player);
+        let projectiles = wildlife::projectiles(&world, region, player);
+        let projectile_message = GameplayServerMessage::Projectiles {
+            revision,
+            tick: world.tick(),
+            projectiles: projectiles.clone(),
+        };
         let fog = GameplayServerMessage::FogState(fog::state(&world, player, revision, region));
         let vision_revision = world.vision_revision();
         let wildlife = GameplayServerMessage::WildlifeState {
@@ -394,10 +406,12 @@ impl GameplayService {
         session.resident_players = players;
         session.resident_buildings = buildings;
         session.resident_animals = animals;
+        session.resident_projectiles = projectiles;
         session.vision_revision = Some(vision_revision);
         let failed = session.sender.try_send(snapshot).is_err()
             || session.sender.try_send(wildlife).is_err()
-            || session.sender.try_send(fog).is_err();
+            || session.sender.try_send(fog).is_err()
+            || session.sender.try_send(projectile_message).is_err();
         drop(sessions);
         drop(world);
         if failed {

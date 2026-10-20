@@ -136,7 +136,7 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
     actors::select(&manifest, &mut selected, &mut domains).unwrap();
     buildings::select(&manifest, &mut selected, &mut domains).unwrap();
     fishing::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(selected.len(), 5093);
+    assert_eq!(selected.len(), 4628);
     assert!(selected.len() <= MAX_SELECTED_FRAMES);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)

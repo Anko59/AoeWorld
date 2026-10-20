@@ -24,6 +24,9 @@ pub(crate) struct Village {
     pub rubble: Vec<(GameplayBuildingState, u64)>,
     pub animals: Vec<aoe_protocol::AnimalState>,
     pub wildlife_tick: u64,
+    pub projectiles: Vec<aoe_protocol::ProjectileState>,
+    pub projectile_tick: u64,
+    pub gate_art: std::cell::RefCell<crate::building_ui::GateArt>,
 }
 
 #[inline(never)]

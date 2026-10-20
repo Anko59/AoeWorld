@@ -29,7 +29,7 @@ impl Goal {
         };
         (x - cx) * (x - cx) + (y - cy) * (y - cy)
     }
-    fn centre(&self) -> WorldPosition {
+    pub(super) fn centre(&self) -> WorldPosition {
         match *self {
             Goal::Unit(at) => at,
             Goal::Building(rect) => WorldPosition::new(
@@ -80,6 +80,7 @@ impl GameWorld {
 
     pub(crate) fn advance_combat(&mut self, changed: &mut Vec<GameUnit>) {
         self.combat.stats = Default::default();
+        self.advance_projectiles(changed);
         let now = self.tick.0;
         while let Some(&(due, id)) = self.combat.dying.first() {
             if due > now {
@@ -111,8 +112,22 @@ impl GameWorld {
             self.end_attack(id, changed);
             return;
         };
-        if goal.distance_squared(before.position) > MELEE_RANGE_SUBUNITS * MELEE_RANGE_SUBUNITS {
+        if unit_combat(before.kind).attack_kind == super::DamageKind::Pierce
+            && !self.target_visible_to(before.player, attacker.target)
+        {
+            self.end_attack(id, changed);
+            return;
+        }
+        let stats = self.unit_stats(id).unwrap_or(*unit_combat(before.kind));
+        let range = i64::from(stats.range) * MELEE_RANGE_SUBUNITS;
+        let distance = goal.distance_squared(before.position);
+        if distance > range * range {
             self.approach(id, index, attacker, goal, now, changed);
+            return;
+        }
+        let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
+        if distance < min * min {
+            self.stop_movement(index);
             return;
         }
         if self.units[index].order.is_some() || before.moving || before.planning {
@@ -219,11 +234,26 @@ impl GameWorld {
         let Some(&attacker_index) = self.lookup.get(&attacker_id) else {
             return;
         };
-        let stats = *unit_combat(self.units[attacker_index].state.kind);
+        let stats = self
+            .unit_stats(attacker_id)
+            .unwrap_or(*unit_combat(self.units[attacker_index].state.kind));
+        let bonus = self
+            .unit(target)
+            .map_or(0, |u| super::military::class_bonus(stats.kind, u.kind));
+        if stats.attack_kind == super::DamageKind::Pierce {
+            let kind = if stats.kind == crate::UnitKind::Skirmisher {
+                super::ProjectileKind::Javelin
+            } else {
+                super::ProjectileKind::Arrow
+            };
+            self.launch_projectile(attacker_id, target, stats.attack, bonus, kind);
+            return;
+        }
         self.resolve_hit(
             attacker_id,
             target,
             stats.attack,
+            bonus,
             stats.attack_kind,
             changed,
         );
@@ -235,6 +265,7 @@ impl GameWorld {
         attacker_id: EntityId,
         target: EntityId,
         attack: u16,
+        bonus: u16,
         kind: super::DamageKind,
         changed: &mut Vec<GameUnit>,
     ) {
@@ -244,22 +275,25 @@ impl GameWorld {
         };
         self.combat.stats.hits += 1;
         if let Some(&victim_index) = self.lookup.get(&target) {
+            if self.units[victim_index].state.hp == 0 {
+                return;
+            }
             let (melee, pierce) = self.unit_armour(target).unwrap_or_default();
             let victim = &mut self.units[victim_index].state;
-            let damage = damage_dealt(attack, kind, melee, pierce);
+            let damage = super::table::damage_with_bonus(attack, kind, melee, pierce, bonus);
             victim.hp = victim.hp.saturating_sub(damage);
             victim.last_hit = Some(hit);
             let (hp, victim_id) = (victim.hp, victim.id);
             if hp == 0 {
                 self.kill_unit(victim_index);
-                self.end_attack(attacker_id, changed);
+                self.finish_target_attack(attacker_id, target, changed);
             } else if self.can_retaliate(victim_index) {
                 self.begin_attack(victim_id, attacker_id);
             }
             changed.push(self.units[victim_index].state);
         } else if self.animal(target).is_some() {
             if self.strike_animal(target, attacker_id, attack) {
-                self.end_attack(attacker_id, changed);
+                self.finish_target_attack(attacker_id, target, changed);
             }
         } else if let Some(building) = self.building(target) {
             let armour = super::table::age_armour(building.kind, self.is_feudal(building.player));
@@ -271,8 +305,24 @@ impl GameWorld {
             building.last_hit = Some(hit);
             if building.hp == 0 {
                 self.destroy_building(target);
-                self.end_attack(attacker_id, changed);
+                self.finish_target_attack(attacker_id, target, changed);
             }
+        }
+    }
+
+    fn finish_target_attack(
+        &mut self,
+        attacker: EntityId,
+        target: EntityId,
+        changed: &mut Vec<GameUnit>,
+    ) {
+        if self
+            .combat
+            .attackers
+            .get(&attacker)
+            .is_some_and(|a| a.target == target)
+        {
+            self.end_attack(attacker, changed);
         }
     }
 

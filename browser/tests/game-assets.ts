@@ -232,6 +232,10 @@ export async function gameAssets(
       [3980, 75],
       [376, 1],
       [4397, 3],
+      // Scout Cavalry now uses its own dat stand/walk rows, rather than the
+      // old generic mounted-unit sheet. Keep scale/anchor fixtures current.
+      [2085, 50],
+      [2089, 50],
     ].map(([id, count]) => ["graphics", id, count]),
   ].flatMap(([archive, id, count]) => {
     const source = terrainSources.get(Number(id));

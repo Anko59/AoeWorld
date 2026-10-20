@@ -202,6 +202,12 @@ async fn gameplay_client(
         return Err("gameplay fog scenario state missing".into());
     }
     result.bytes += size as u64;
+    let (projectiles, size) = receive_gameplay(&mut socket).await?;
+    if !matches!(projectiles, GameplayServerMessage::Projectiles {revision:1,tick:at,projectiles} if at == tick && projectiles.is_empty())
+    {
+        return Err("gameplay projectile snapshot missing".into());
+    }
+    result.bytes += size as u64;
     for _ in 0..2 {
         let (message, size) = receive_gameplay(&mut socket).await?;
         if !matches!(message, GameplayServerMessage::Tick { .. }) {

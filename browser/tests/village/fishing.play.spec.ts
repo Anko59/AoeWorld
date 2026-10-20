@@ -136,7 +136,7 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   const scout = (await actors(page)).find((a) => a.kind === "Scout");
   if (!scout) throw new Error("Scout missing");
   await page.mouse.click(scout.x, scout.y);
-  await expect(page.locator("#selection-name")).toHaveText("Scout");
+  await expect(page.locator("#selection-name")).toHaveText("Scout Cavalry");
   await revealFish(page, scene.shore, false);
   await frame(page, scene.shore, 1.0);
   await shot("shore-fish");

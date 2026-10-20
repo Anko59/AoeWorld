@@ -24,11 +24,14 @@ export function initBuildings() {
     button.title=`${name} · ${cost} · ${key}`; button.setAttribute('aria-label',button.title);
     button.innerHTML=`<span>${name}</span><kbd>${key}</kbd><small>${cost}</small>`; grid.append(button); return button;
   });
-  const research=['Loom · 50 gold','Town Watch · 75 food','Feudal Age · 500 food','Double-Bit Axe · 100 food · 50 wood','Horse Collar · 75 food · 75 wood','Gold Mining · 100 food · 75 wood','Stone Mining · 100 food · 75 wood','Wheelbarrow · 175 food · 50 wood'];
-  const sites=[0,0,0,2,4,3,3,0];
+  const research=['Loom · 50 gold','Town Watch · 75 food','Feudal Age · 500 food','Double-Bit Axe · 100 food · 50 wood','Horse Collar · 75 food · 75 wood','Gold Mining · 100 food · 75 wood','Stone Mining · 100 food · 75 wood','Wheelbarrow · 175 food · 50 wood','Man-at-Arms · 100 food · 40 gold','Forging · 150 food','Scale Mail Armor · 100 food','Scale Barding Armor · 150 food','Fletching · 100 food · 50 gold','Padded Archer Armor · 100 food'];
+  const sites=[0,0,0,2,4,3,3,0,6,12,12,12,12,12];
   const buildStart=8+research.length, trainKind=buildStart+commands.length, trainEnabled=trainKind+1, foundationCount=trainKind+2;
-  const techs=['loom','town-watch','feudal-age','double-bit-axe','horse-collar','gold-mining','stone-mining','wheelbarrow'].map((id,i)=>{
+  const techs=['loom','town-watch','feudal-age','double-bit-axe','horse-collar','gold-mining','stone-mining','wheelbarrow','man-at-arms','forging','scale-mail-armor','scale-barding-armor','fletching','padded-archer-armor'].map((id,i)=>{
     const button=document.createElement('button'); button.id=`research-${id}`;button.className="research-command";button.hidden=true;button.textContent=research[i];grid.append(button);return button;
+  });
+  const militaryTrain=[['archer','Archer','25 wood · 45 gold',10,4],['skirmisher','Skirmisher','25 food · 35 wood',10,5],['spearman','Spearman','35 food · 25 wood',6,6],['scout','Scout Cavalry','80 food',11,1]].map(([id,name,cost,site,kind])=>{
+    const button=document.createElement('button');button.id=`train-${id}`;button.hidden=true;button.textContent=`${name} · ${cost}`;button.title=`Train ${name} · ${cost}`;button.setAttribute('aria-label',button.title);grid.append(button);return {button,site,kind};
   });
   const panel=document.createElement('div');panel.id='building-panel';panel.hidden=true;
   panel.innerHTML='<b id="building-hp"></b><div id="building-status"></div><progress id="construction-progress" max="1000"></progress><div id="research-status"></div><button id="cancel-construction" hidden>Cancel construction</button><button id="cancel-research" hidden>Cancel research</button>';
@@ -63,19 +66,23 @@ export function initBuildings() {
       state=Array.from(v);menu();
       byId('age').textContent=v[0]===1?'II  Feudal Age':'I  Dark Age';
       const kind=v[1],selected=kind>=0;
+      const availability=foundationCount+1+(v[foundationCount]??0)*3;
+      militaryTrain.forEach(({button,site,kind:unit})=>{button.hidden=kind!==site||v[4]<1000;button.disabled=v[availability+unit]!==1||!byId('observer-label').hidden;});
       panel.hidden=!selected;
       techs.forEach((b,i)=>{b.hidden=kind!==sites[i];b.disabled=v[8+i]!==1||byId('observer-label').hidden===false;b.title=research[i]+(v[0]===0&&(i===1||i>=3)?' · requires Feudal Age':'');});
       const train=byId('train-villager');
-      if(selected){train.hidden=![0,6,9].includes(kind)||v[4]<1000;train.disabled=v[trainEnabled]!==1||!byId('observer-label').hidden;train.setAttribute('aria-label',kind===9?'Train Fishing Ship, 75 wood, Q':kind===6?'Train Militia, 60 food, 20 gold, Q':'Train Villager, 50 food, Q');train.title=train.getAttribute('aria-label');train.querySelector('.cost').textContent=kind===9?'75 W':kind===6?'60 F · 20 G':'50';}
+      const infantry=v[availability+8]===1?'Man-at-Arms':'Militia';
+      const unitNames=['Villager','Scout Cavalry','Militia','Fishing Ship','Archer','Skirmisher','Spearman','Man-at-Arms'];
+      if(selected){train.hidden=![0,6,9].includes(kind)||v[4]<1000;train.disabled=v[trainEnabled]!==1||!byId('observer-label').hidden;train.setAttribute('aria-label',kind===9?'Train Fishing Ship, 75 wood, Q':kind===6?`Train ${infantry}, 50 food, 20 gold, Q`:'Train Villager, 50 food, Q');train.title=train.getAttribute('aria-label');train.querySelector('.cost').textContent=kind===9?'75 W':kind===6?'50 F · 20 G':'50';}
       progressLabels.innerHTML=Array.from({length:v[foundationCount]??0},(_,i)=>{const at=foundationCount+1+i*3;return `<span style="left:${v[at]}px;top:${v[at+1]}px">${Math.floor(v[at+2]/10)}%<progress max="1000" value="${v[at+2]}"></progress></span>`;}).join('');
-      if(selected){byId('command-hint').textContent=v[4]<1000?'Right-click this foundation with villagers to resume construction':kind===0?'Q: train a villager · research below':kind===9?'Q: train a Fishing Ship · 75 wood':kind===6?'Q: train Militia · 60 food, 20 gold':kind===5?'Right-click this Farm with a villager to work it':'Select villagers to gather or build';byId('selection-task').textContent=v[4]<1000?'Under construction':v[6]>=0?'Researching':v[trainKind]===0&&byId('training').hidden===false?'Training Villager':kind===9&&byId('training').hidden===false?'Training Fishing Ship':kind===6&&byId('training').hidden===false?'Training Militia':'Ready';byId('selection-load').textContent=['Resource drop-off · supports 5 population','Supports 5 population','Wood drop-off','Gold and stone drop-off','Food drop-off','Food production','Trains Militia','Blocks movement','Scouts the surrounding area','Fish drop-off · trains Fishing Ships','Feudal military building · units follow later','Feudal military building · units follow later','Feudal blacksmith · upgrades follow later','Market · trading follows later','Arrow defence · 5 pierce attack · range 1–8','Opens for nearby friendly units'][kind];}
+      if(selected){byId('command-hint').textContent=v[4]<1000?'Right-click this foundation with villagers to resume construction':kind===0?'Q: train a villager · research below':kind===9?'Q: train a Fishing Ship · 75 wood':kind===6?`Q: train ${infantry} · 50 food, 20 gold`:kind===5?'Right-click this Farm with a villager to work it':[10,11].includes(kind)?'Train military units below':kind===12?'Research equipment for your army':'Select villagers to gather or build';byId('selection-task').textContent=v[4]<1000?'Under construction':v[6]>=0?'Researching':byId('training').hidden===false?`Training ${unitNames[v[trainKind]]}`:'Ready';byId('selection-load').textContent=['Resource drop-off · supports 5 population','Supports 5 population','Wood drop-off','Gold and stone drop-off','Food drop-off','Food production','Trains infantry','Blocks movement','Scouts the surrounding area','Fish drop-off · trains Fishing Ships','Trains Archers and Skirmishers','Trains Scout Cavalry','Upgrades infantry, cavalry and archers','Market · trading follows later','Arrow defence · 5 pierce attack · range 1–8','Opens for nearby friendly units'][kind];}
       byId('building-hp').textContent=`${v[2]} / ${v[3]} HP`;
       byId('building-status').textContent=v[4]<1000?`Constructing · ${Math.floor(v[4]/10)}%`:v[5]>=0?`Complete · ${v[5]} food remaining`:'Complete';
       byId('construction-progress').hidden=v[4]>=1000;byId('construction-progress').value=v[4];
       byId('cancel-construction').hidden=!selected||v[4]>=1000;
       byId('cancel-research').hidden=v[6]<0;
       byId('research-status').textContent=v[6]<0?'':`${research[v[6]].split(' · ')[0]} · ${Math.floor(v[7]*100)}%`;
-      if([6,9].includes(kind)&&byId('training-label').textContent.includes('Villager'))byId('training-label').textContent=byId('training-label').textContent.replace('Villager',kind===9?'Fishing Ship':'Militia');
+      if(selected&&!byId('training').hidden)byId('training-label').textContent=byId('training-label').textContent.replace(/Training .+? ·/,`Training ${unitNames[v[trainKind]]} ·`);
       menu();
     },
     preview(v) {

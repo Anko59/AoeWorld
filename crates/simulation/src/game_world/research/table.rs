@@ -24,11 +24,19 @@ pub enum Tech {
     GoldMining,
     StoneMining,
     Wheelbarrow,
+    ManAtArms,
+    Forging,
+    ScaleMailArmor,
+    ScaleBardingArmor,
+    Fletching,
+    PaddedArcherArmor,
 }
 
 /// What a finished technology changes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TechEffect {
+    Military,
+    UpgradeMilitia,
     /// Every villager of the player, existing and future.
     VillagerBonus {
         hp: u16,
@@ -91,7 +99,7 @@ pub const FEUDAL_BUILDINGS: &[BuildingKind] = &[
 ];
 
 /// Indexed by `Tech as usize`; a test pins the order.
-pub const TECH_RULES: [TechRules; 8] = [
+pub const TECH_RULES: [TechRules; 14] = [
     TechRules {
         tech: Tech::Loom,
         building: BuildingKind::TownCenter,
@@ -175,7 +183,31 @@ pub const TECH_RULES: [TechRules; 8] = [
             speed_percent: 110,
         },
     },
+    TechRules {
+        tech: Tech::ManAtArms,
+        building: BuildingKind::Barracks,
+        cost: cost(100, 0, 40, 0),
+        seconds: 40,
+        requires: TechRequirement::Age(Age::Feudal),
+        effect: TechEffect::UpgradeMilitia,
+    },
+    military(Tech::Forging, 150, 0, 50),
+    military(Tech::ScaleMailArmor, 100, 0, 40),
+    military(Tech::ScaleBardingArmor, 150, 0, 45),
+    military(Tech::Fletching, 100, 50, 30),
+    military(Tech::PaddedArcherArmor, 100, 0, 40),
 ];
+
+const fn military(tech: Tech, food: u32, gold: u32, seconds: u32) -> TechRules {
+    TechRules {
+        tech,
+        building: BuildingKind::Blacksmith,
+        cost: cost(food, 0, gold, 0),
+        seconds,
+        requires: TechRequirement::Age(Age::Feudal),
+        effect: TechEffect::Military,
+    }
+}
 
 impl Tech {
     pub const fn rules(self) -> &'static TechRules {

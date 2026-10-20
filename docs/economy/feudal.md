@@ -2,7 +2,8 @@
 
 The owner asked: "if you have time you can continue with the fog of war,
 fishing and the feudal age". This change is the economy/building part of Feudal;
-military rosters, Blacksmith upgrades and fishing remain separate work.
+The [military roster and Blacksmith](../military.md) and [fishing](../fishing.md)
+extend these shared buildings and queues.
 Feudal buildings integrate with the authoritative fog of war.
 
 ## Sources and reproduction
@@ -41,7 +42,8 @@ refund and collision rules apply to all entries.
 | Palisade Gate (792), Dark/Feudal | 30/0 | 30 | 240/400 | 4×1 | 6 | 0/0 |
 
 The first five require Feudal. Range and Stable also require a completed
-Barracks; Market requires a completed Mill. Their queues contain no new units.
+Barracks; Market requires a completed Mill. Their queues use the
+[Feudal military roster](../military.md).
 The Watch Tower is built directly: DE's tree links it to Outpost, but it does
 not upgrade an existing Outpost. An ungarrisoned tower deals 5 pierce damage,
 at range 1–8, every 2 seconds, through the existing combat hit/death path.

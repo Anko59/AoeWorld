@@ -4,6 +4,35 @@ use aoe_protocol::BuildingKind as B;
 use aoe_protocol::Stockpile;
 
 #[wasm_bindgen_test::wasm_bindgen_test]
+fn gate_art_uses_authoritative_state_without_any_resident_unit_input() {
+    assert_eq!(gate_sprite_slot(true, 1000), Some(42));
+    assert_eq!(gate_sprite_slot(false, 1000), None);
+    assert_eq!(gate_sprite_slot(true, 500), None);
+}
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn unchanged_gate_art_needs_no_recomputation_and_hidden_gates_are_skipped() {
+    let mut cache = GateArt::default();
+    assert_eq!(
+        cache.observe(aoe_core::EntityId(7), true, 1000, true),
+        Some(42)
+    );
+    assert_eq!(cache.updates(), 1);
+    for _ in 0..1000 {
+        assert_eq!(
+            cache.observe(aoe_core::EntityId(7), true, 1000, true),
+            Some(42)
+        );
+    }
+    assert_eq!(cache.updates(), 1);
+    assert_eq!(
+        cache.observe(aoe_core::EntityId(8), false, 1000, false),
+        None
+    );
+    assert_eq!(cache.updates(), 1);
+}
+
+#[wasm_bindgen_test::wasm_bindgen_test]
 fn feudal_menu_gates_and_art_follow_the_owning_players_age() {
     use aoe_protocol::Age;
     let stock = Stockpile {

@@ -3,6 +3,48 @@ use aoe_core::TileCoord;
 use aoe_protocol::BuildingKind;
 use aoe_protocol::Stockpile;
 
+pub fn gate_sprite_slot(open: bool, progress: u16) -> Option<u8> {
+    (open && progress == 1000).then_some(42)
+}
+
+/// Only visible gates with changed authoritative art inputs are recomputed.
+#[derive(Default)]
+pub(crate) struct GateArt {
+    entries: std::collections::BTreeMap<aoe_core::EntityId, (bool, u16, Option<u8>)>,
+    updates: u64,
+}
+impl GateArt {
+    pub fn observe(
+        &mut self,
+        id: aoe_core::EntityId,
+        open: bool,
+        progress: u16,
+        visible: bool,
+    ) -> Option<u8> {
+        if !visible {
+            return None;
+        }
+        if let Some(&(old_open, old_progress, slot)) = self.entries.get(&id)
+            && (old_open, old_progress) == (open, progress)
+        {
+            return slot;
+        }
+        if self.entries.len() == aoe_protocol::MAX_ECONOMY_BUILDINGS
+            && !self.entries.contains_key(&id)
+        {
+            self.entries.clear();
+        }
+        let slot = gate_sprite_slot(open, progress);
+        self.entries.insert(id, (open, progress, slot));
+        self.updates += 1;
+        slot
+    }
+    #[cfg(test)]
+    pub fn updates(&self) -> u64 {
+        self.updates
+    }
+}
+
 #[inline(never)]
 pub fn rules(kind: BuildingKind) -> &'static aoe_simulation::BuildingRules {
     &aoe_simulation::BUILDING_RULES[kind as usize]

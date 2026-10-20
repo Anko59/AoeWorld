@@ -231,6 +231,7 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         speed: None,
         walking: None,
         attack_graphic: None,
+        projectile_unit: None,
         attacks: Vec::new(),
         armours: Vec::new(),
         costs: Vec::new(),
@@ -256,7 +257,9 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         r.skip(1)?; // default armour
         out.attacks = pairs(r)?;
         out.armours = pairs(r)?;
-        r.skip(COMBAT_TAIL - 14)?;
+        r.skip(14)?;
+        out.projectile_unit = Some(r.i16()?);
+        r.skip(COMBAT_TAIL - 30)?;
         out.attack_graphic = Some(r.i16()?);
         r.skip(12)?;
     }

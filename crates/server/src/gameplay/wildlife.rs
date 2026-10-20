@@ -3,6 +3,38 @@ use aoe_core::TileRect;
 use aoe_protocol::{AnimalKind, AnimalState, AnimalTask};
 use aoe_simulation::GameWorld;
 
+pub(super) fn projectiles(
+    world: &GameWorld,
+    region: TileRect,
+    player: aoe_core::PlayerId,
+) -> Vec<aoe_protocol::ProjectileState> {
+    world
+        .visible_projectiles(player)
+        .filter(|p| region.contains(p.position(world.tick()).tile_floor()))
+        .map(|p| {
+            // Reveal only the visible remainder: endpoints in black/fog must not
+            // disclose an unseen firing position or target.
+            let position = p.position(world.tick());
+            let visible = |at: aoe_core::WorldPosition| {
+                world.visibility(player, at.tile_floor()) == aoe_simulation::TileVisibility::Visible
+            };
+            aoe_protocol::ProjectileState {
+                id: p.id,
+                from: position,
+                to: if visible(p.to) { p.to } else { position },
+                launched: world.tick(),
+                impact: p.impact,
+                kind: match p.kind {
+                    aoe_simulation::ProjectileKind::Arrow => aoe_protocol::ProjectileKind::Arrow,
+                    aoe_simulation::ProjectileKind::Javelin => {
+                        aoe_protocol::ProjectileKind::Javelin
+                    }
+                },
+            }
+        })
+        .collect()
+}
+
 #[path = "wildlife/tests.rs"]
 #[cfg(test)]
 mod tests;

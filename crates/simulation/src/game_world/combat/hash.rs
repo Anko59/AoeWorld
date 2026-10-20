@@ -15,6 +15,23 @@ pub(crate) fn hash_hit(hash: &mut blake3::Hasher, hit: Option<HitRecord>) {
 
 impl Combat {
     pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
+        hash.update(&self.next_projectile.to_le_bytes());
+        hash.update(&(self.projectiles.len() as u64).to_le_bytes());
+        for p in self.projectiles.values() {
+            for v in [p.id, p.launched.0, p.impact.0] {
+                hash.update(&v.to_le_bytes());
+            }
+            hash.update(&p.player.0.to_le_bytes());
+            for v in [p.attacker.0, p.target.0] {
+                hash.update(&v.to_le_bytes());
+            }
+            for v in [p.from.x, p.from.y, p.to.x, p.to.y] {
+                hash.update(&v.to_le_bytes());
+            }
+            hash.update(&[p.kind as u8]);
+            hash.update(&p.attack.to_le_bytes());
+            hash.update(&p.bonus.to_le_bytes());
+        }
         hash.update(&(self.tower_ready.len() as u64).to_le_bytes());
         for (id, ready) in &self.tower_ready {
             hash.update(&id.0.to_le_bytes());

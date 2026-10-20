@@ -49,7 +49,14 @@ pub(in super::super) fn train(client: &mut Client, cancel: bool) {
                     UnitKind::Villager,
                     |b| {
                         if b.kind == aoe_protocol::BuildingKind::Barracks {
-                            UnitKind::Militia
+                            if client.village.players.iter().any(|p| {
+                                p.player == owner(client)
+                                    && p.researched & aoe_protocol::Tech::ManAtArms.bit() != 0
+                            }) {
+                                UnitKind::ManAtArms
+                            } else {
+                                UnitKind::Militia
+                            }
                         } else if b.kind == aoe_protocol::BuildingKind::Dock {
                             UnitKind::FishingShip
                         } else {
@@ -58,6 +65,21 @@ pub(in super::super) fn train(client: &mut Client, cancel: bool) {
                     },
                 ),
             }
+        },
+    );
+}
+
+pub(super) fn train_kind(client: &mut Client, kind: UnitKind) {
+    let Some(building_id) = client.selected.building_id else {
+        return;
+    };
+    let sequence = client.next_sequence;
+    send(
+        client,
+        Message::TrainOrder {
+            sequence,
+            building_id,
+            kind,
         },
     );
 }

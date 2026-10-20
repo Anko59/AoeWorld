@@ -121,12 +121,36 @@ pub enum SceneUnitKind {
     OpenPalisadeGate,
     GateFoundation,
     FeudalDock,
+    ArcherStand,
+    ArcherWalk,
+    ArcherAttack,
+    ArcherDie,
+    ArcherDecay,
+    SkirmisherStand,
+    SkirmisherWalk,
+    SkirmisherAttack,
+    SkirmisherDie,
+    SkirmisherDecay,
+    SpearmanStand,
+    SpearmanWalk,
+    SpearmanAttack,
+    SpearmanDie,
+    SpearmanDecay,
+    ManAtArmsStand,
+    ManAtArmsWalk,
+    ManAtArmsAttack,
+    ManAtArmsDie,
+    ManAtArmsDecay,
+    ScoutStand,
+    ScoutWalk,
+    Arrow,
+    Javelin,
 }
 
 impl SceneUnitKind {
     /// Flat tags keep the scene DTO at 32 bytes, including actor animations.
     pub fn actor(index: u8) -> Self {
-        const ACTORS: [SceneUnitKind; 50] = [
+        const ACTORS: [SceneUnitKind; 74] = [
             SceneUnitKind::MilitiaStand,
             SceneUnitKind::MilitiaWalk,
             SceneUnitKind::MilitiaAttack,
@@ -177,6 +201,30 @@ impl SceneUnitKind {
             SceneUnitKind::FishingShipMoving,
             SceneUnitKind::FishingShipWorking,
             SceneUnitKind::VillagerFishing,
+            SceneUnitKind::ArcherStand,
+            SceneUnitKind::ArcherWalk,
+            SceneUnitKind::ArcherAttack,
+            SceneUnitKind::ArcherDie,
+            SceneUnitKind::ArcherDecay,
+            SceneUnitKind::SkirmisherStand,
+            SceneUnitKind::SkirmisherWalk,
+            SceneUnitKind::SkirmisherAttack,
+            SceneUnitKind::SkirmisherDie,
+            SceneUnitKind::SkirmisherDecay,
+            SceneUnitKind::SpearmanStand,
+            SceneUnitKind::SpearmanWalk,
+            SceneUnitKind::SpearmanAttack,
+            SceneUnitKind::SpearmanDie,
+            SceneUnitKind::SpearmanDecay,
+            SceneUnitKind::ManAtArmsStand,
+            SceneUnitKind::ManAtArmsWalk,
+            SceneUnitKind::ManAtArmsAttack,
+            SceneUnitKind::ManAtArmsDie,
+            SceneUnitKind::ManAtArmsDecay,
+            SceneUnitKind::ScoutStand,
+            SceneUnitKind::ScoutWalk,
+            SceneUnitKind::Arrow,
+            SceneUnitKind::Javelin,
         ];
         ACTORS
             .get(usize::from(index))
@@ -184,6 +232,9 @@ impl SceneUnitKind {
             .unwrap_or(Self::Scout)
     }
     pub(super) fn actor_slot(self) -> Option<usize> {
+        if (Self::ArcherStand as u8..=Self::Javelin as u8).contains(&(self as u8)) {
+            return Some(50 + (self as usize - Self::ArcherStand as usize));
+        }
         (self as u8)
             .checked_sub(Self::MilitiaStand as u8)
             .filter(|index| *index < 50)

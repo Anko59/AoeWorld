@@ -46,7 +46,7 @@ const NONE: [bool; 4] = [false; 4];
 const ALL: [bool; 4] = [true; 4];
 const NO_UNITS: &[UnitKind] = &[];
 const VILLAGERS: &[UnitKind] = &[UnitKind::Villager];
-const MILITIA: &[UnitKind] = &[UnitKind::Militia];
+const MILITIA: &[UnitKind] = &[UnitKind::Militia, UnitKind::Spearman, UnitKind::ManAtArms];
 
 /// Canonical order of `BuildingKind`.
 pub const BUILDING_RULES: [BuildingRules; 16] = [
@@ -230,7 +230,7 @@ pub const BUILDING_RULES: [BuildingRules; 16] = [
         los: 6,
         population_support: 0,
         accepts: NONE,
-        trainable: NO_UNITS,
+        trainable: &[UnitKind::Archer, UnitKind::Skirmisher],
         requires: Some(BuildingKind::Barracks),
         buildable: true,
         blocks: true,
@@ -247,7 +247,7 @@ pub const BUILDING_RULES: [BuildingRules; 16] = [
         los: 6,
         population_support: 0,
         accepts: NONE,
-        trainable: NO_UNITS,
+        trainable: &[UnitKind::Scout],
         requires: Some(BuildingKind::Barracks),
         buildable: true,
         blocks: true,

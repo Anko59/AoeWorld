@@ -18,7 +18,13 @@ impl Vision {
             for b in player.remembered.values() {
                 hash.update(&b.id.0.to_le_bytes());
                 hash.update(&b.player.0.to_le_bytes());
-                hash.update(&[b.kind as u8, b.state as u8, b.los, b.age as u8]);
+                hash.update(&[
+                    b.kind as u8,
+                    b.state as u8,
+                    b.los,
+                    b.age as u8,
+                    u8::from(b.gate_open),
+                ]);
                 for c in [
                     b.footprint.min.x,
                     b.footprint.min.y,

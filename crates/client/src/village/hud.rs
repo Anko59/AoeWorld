@@ -94,13 +94,17 @@ pub(in super::super) fn update(client: &Client) {
                 ResourceKind::Stone => 3,
             }] += 1.0;
         }
-        let native = match unit.kind {
-            UnitKind::Villager => aoe_simulation::UnitKind::Villager,
-            UnitKind::Scout => aoe_simulation::UnitKind::Scout,
-            UnitKind::Militia => aoe_simulation::UnitKind::Militia,
-            UnitKind::FishingShip => aoe_simulation::UnitKind::FishingShip,
-        };
-        let stats = aoe_simulation::unit_combat(native);
+        let native = aoe_simulation::UNIT_COMBAT[unit.kind as usize].kind;
+        let p = client
+            .village
+            .players
+            .iter()
+            .find(|p| p.player == unit.player);
+        let stats = aoe_simulation::researched_stats(
+            native,
+            p.is_some_and(|p| p.age == aoe_protocol::Age::Feudal),
+            p.map_or(0, |p| p.researched),
+        );
         let loom = client
             .village
             .players
@@ -115,6 +119,7 @@ pub(in super::super) fn update(client: &Client) {
                 UnitKind::Villager => 1.0,
                 UnitKind::Militia => 2.0 + aoe_protocol::BuildingKind::ALL.len() as f64,
                 UnitKind::FishingShip => 3.0 + aoe_protocol::BuildingKind::ALL.len() as f64,
+                _ => 24.0 + (unit.kind as u8 - UnitKind::Archer as u8) as f64,
             },
             x,
             y,
@@ -140,6 +145,7 @@ pub(in super::super) fn update(client: &Client) {
                         .map_or(0, |p| p.researched),
                 )
             }),
+            f64::from(stats.range),
         ]);
     }
     for building in &client.village.buildings {
@@ -163,6 +169,7 @@ pub(in super::super) fn update(client: &Client) {
             0.0,
             0.0,
             y,
+            0.0,
             0.0,
         ]);
     }
@@ -197,6 +204,7 @@ pub(in super::super) fn update(client: &Client) {
             0.0,
             0.0,
             head(animal.id, y),
+            0.0,
             0.0,
         ]);
     }

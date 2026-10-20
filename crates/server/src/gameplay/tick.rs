@@ -76,8 +76,14 @@ impl GameplayService {
         let tick = world.tick();
         let mut updates = Vec::new();
         let mut wildlife_updates = Vec::new();
+        let mut projectile_updates = Vec::new();
         let mut fog_updates = Vec::new();
         for (session_id, subscription, old_vision) in subscriptions {
+            projectile_updates.push((
+                session_id,
+                subscription.revision,
+                super::wildlife::projectiles(&world, subscription.region, player),
+            ));
             if old_vision != Some(vision_revision) {
                 fog_updates.push((
                     session_id,
@@ -245,6 +251,30 @@ impl GameplayService {
             }
         }
         drop(sessions);
+        for (session_id, revision, projectiles) in projectile_updates {
+            let mut sessions = self.sessions.lock().await;
+            let Some(s) = sessions.get_mut(&session_id) else {
+                continue;
+            };
+            if failed.contains(&session_id) || s.subscription.is_none_or(|v| v.revision != revision)
+            {
+                continue;
+            }
+            if s.resident_projectiles != projectiles {
+                if s.sender
+                    .try_send(GameplayServerMessage::Projectiles {
+                        revision,
+                        tick,
+                        projectiles: projectiles.clone(),
+                    })
+                    .is_err()
+                {
+                    failed.insert(session_id);
+                } else {
+                    s.resident_projectiles = projectiles;
+                }
+            }
+        }
         for id in failed {
             self.disconnect(id).await;
         }

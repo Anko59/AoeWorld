@@ -5,6 +5,9 @@
 use super::reader::Reader;
 use crate::Error;
 use serde::Serialize;
+#[path = "de_military.rs"]
+mod military;
+pub use military::ProjectileSource;
 
 const BUILDINGS: &[(i16, i32, &str)] = &[
     (87, 5128, "ARRG"),
@@ -37,6 +40,20 @@ const TECHS: &[(i16, i32)] = &[
     (213, 7211),
     (101, 7101),
     (8, 7008),
+    (222, 7230),
+    (67, 7067),
+    (74, 7074),
+    (81, 7081),
+    (199, 7172),
+    (211, 7208),
+];
+const SOLDIERS: &[(i16, i32)] = &[
+    (4, 5083),
+    (7, 5088),
+    (93, 5078),
+    (74, 5079),
+    (75, 5080),
+    (448, 5326),
 ];
 
 #[derive(Debug, Serialize)]
@@ -48,6 +65,8 @@ pub struct Building {
     pub los: f32,
     pub collision: [f32; 2],
     pub graphic: i16,
+    pub speed: f32,
+    pub projectile: i16,
     pub attacks: Vec<(i16, i16)>,
     pub armours: Vec<(i16, i16)>,
     pub range: f32,
@@ -81,6 +100,8 @@ pub struct Survey {
     pub source_hash: String,
     pub inflated_bytes: usize,
     pub buildings: Vec<Building>,
+    pub soldiers: Vec<Building>,
+    pub projectiles: Vec<ProjectileSource>,
     pub technologies: Vec<Technology>,
     pub effects: Vec<(i16, Effect)>,
 }
@@ -104,7 +125,7 @@ fn pairs(r: &mut Reader) -> Result<Vec<(i16, i16)>, Error> {
 
 pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Result<Building, Error> {
     let mut r = Reader::new(bytes, at);
-    if r.u8()? != 80 || r.i16()? != id {
+    if !matches!(r.u8()?, 70 | 80) || r.i16()? != id {
         return Err(r.fail("wrong building identity"));
     }
     r.skip(10)?;
@@ -128,7 +149,11 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
     if r.i16()? != id || r.i16()? < 0 {
         return Err(r.fail("building copy/base id disagrees"));
     }
-    r.skip(4 + 41 + 10)?; // speed, dead-fish, bird's task/search/work header
+    let speed = r.f32()?;
+    if !speed.is_finite() || speed < 0. {
+        return Err(r.fail("invalid speed"));
+    }
+    r.skip(41 + 10)?; // dead-fish, bird's task/search/work header
     let drops = count(&mut r, 64, "drop sites")?;
     r.skip(drops * 2 + 14)?;
     let tasks = count(&mut r, 256, "tasks")?;
@@ -140,7 +165,8 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
     let range = r.f32()?;
     r.skip(4)?;
     let reload = r.f32()?;
-    r.skip(20)?;
+    let projectile = r.i16()?;
+    r.skip(18)?;
     let min_range = r.f32()?;
     r.skip(38)?;
     let cost = (0..3)
@@ -174,6 +200,8 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
         los,
         collision,
         graphic,
+        speed,
+        projectile,
         attacks,
         armours,
         range,
@@ -275,6 +303,19 @@ pub fn survey(bytes: &[u8]) -> Result<Survey, Error> {
         .iter()
         .map(|&(id, lang)| technology(bytes, id, lang))
         .collect::<Result<Vec<_>, _>>()?;
+    let soldiers = SOLDIERS
+        .iter()
+        .map(|&(id, language)| {
+            let mut signature = vec![70];
+            signature.extend_from_slice(&id.to_le_bytes());
+            signature.extend_from_slice(&language.to_le_bytes());
+            let at = bytes
+                .windows(signature.len())
+                .position(|b| b == signature)
+                .ok_or_else(|| crate::invalid("DE survey", 0, format!("soldier {id} not found")))?;
+            unit_record(bytes, at, id, "")
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
     // Effects are a contiguous debug-name/count/command table. Locate the
     // longest structurally valid chain before the first unit, then require its
     // preceding count to agree exactly. Graphic debug strings cannot qualify.
@@ -332,17 +373,21 @@ pub fn survey(bytes: &[u8]) -> Result<Survey, Error> {
         .collect::<Result<Vec<_>, Error>>()?;
     for (id, &at) in rows.iter().enumerate() {
         let e = effect(bytes, at)?.0;
-        if e.name.to_ascii_lowercase().contains("palisade")
+        if e.name.to_ascii_lowercase().contains("scout")
+            || e.name.to_ascii_lowercase().contains("palisade")
             || e.name.to_ascii_lowercase().contains("gate hp")
         {
             effects.push((id as i16, e));
         }
     }
+    let projectiles = military::projectiles(bytes, &soldiers, &buildings)?;
     Ok(Survey {
         version: "VER 8.9".into(),
         source_hash: String::new(),
         inflated_bytes: bytes.len(),
         buildings,
+        soldiers,
+        projectiles,
         technologies,
         effects,
     })

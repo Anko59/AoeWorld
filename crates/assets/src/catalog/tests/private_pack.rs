@@ -41,8 +41,8 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     }
     let mut extents = Vec::new();
     let mut counts = [0_usize; 2];
-    // Conservative full-prefix proof in production semantic order. The client
-    // omits unused idle cells and adds the separately checked DE building subset.
+    // Validate every source prefix, then pack precisely the actor cells the
+    // runtime draws; unused animation cells must not consume the fixed atlas.
     for (identity, count, domain) in reviewed_sources() {
         let mut frames = manifest
             .frames
@@ -57,6 +57,19 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
                 .any(|(index, frame)| frame.frame != index as u32)
         {
             return Err(format!("missing or duplicate reviewed prefix: {identity}"));
+        }
+        if let Some(source) = super::units::SPRITES
+            .iter()
+            .find(|s| s.manifest_source() == identity)
+        {
+            let drawn = (0..5)
+                .flat_map(|row| {
+                    (0..usize::from(source.stride))
+                        .step_by(usize::from(source.sample_step()))
+                        .map(move |phase| source.source_frame(row, phase) as u32)
+                })
+                .collect::<std::collections::BTreeSet<_>>();
+            frames.retain(|frame| drawn.contains(&frame.frame));
         }
         counts[usize::from(domain == AtlasDomain::Objects)] += frames.len();
         for frame in frames {
@@ -78,7 +91,13 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             });
         }
     }
-    if extents.len() != MAX_REVIEWED_FRAMES as usize + 2695 || counts != [1474, 3590] {
+    let actor_count = super::units::SPRITES
+        .iter()
+        .map(|s| s.selected_frames())
+        .sum::<usize>();
+    if extents.len() != MAX_REVIEWED_FRAMES as usize + actor_count
+        || counts != [1474, 895 + actor_count]
+    {
         return Err("incomplete semantic selection".into());
     }
     let placements = pack_frames(&extents).map_err(|error| error.to_string())?;
@@ -185,7 +204,16 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
             });
         }
     }
-    assert_eq!(prove(&manifest).unwrap(), (1474, 3590));
+    assert_eq!(
+        prove(&manifest).unwrap(),
+        (
+            1474,
+            895 + super::units::SPRITES
+                .iter()
+                .map(|s| s.selected_frames())
+                .sum::<usize>()
+        )
+    );
     let saved = manifest.frames[0].clone();
     manifest.frames[0].frame = 1;
     assert!(prove(&manifest).is_err());

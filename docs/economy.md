@@ -4,7 +4,8 @@ The authoritative rules live in
 [`VILLAGE_RULES`](../crates/simulation/src/game_world/economy.rs).
 It is the current gameplay table for starting resources, villagers, footprint,
 population support, villager movement/carrying/gathering and training.
-The scout retains the existing world's configured movement speed.
+Village Scout Cavalry uses DE age-dependent speed; population-only diagnostics
+retain their configured movement speed.
 
 Map activation first runs the existing certified start search, then performs
 bounded local placement for the Town Center and free perimeter spawn tiles.
@@ -101,7 +102,7 @@ tests and wire follow. Values are Age of Empires II: Definitive Edition's.
 | Mining Camp | 100 wood | 35 s | 600 | 2x2 | gold and stone drop-off |
 | Mill | 100 wood | 35 s | 600 | 2x2 | food drop-off |
 | Farm | 60 wood | 15 s | 480 | 3x3 | 175 food, needs a Mill, walked on |
-| Barracks | 175 wood | 50 s | 1200 | 3x3 | training queue (no unit kind yet) |
+| Barracks | 175 wood | 50 s | 1200 | 3x3 | infantry training queue |
 | Palisade Wall | 2 wood a tile | 6 s a tile | 250 | 1x1 | blocks movement |
 | Outpost | 25 wood, 5 stone | 15 s | 500 | 1x1 | line of sight 10 |
 
@@ -124,7 +125,7 @@ before any progress). One palisade order lays at most 64 segments, all or none.
 Population support is the sum over a player's completed housing buildings
 (Town Center 5, House 5), capped at 200. Training needs a completed building
 whose table lists the unit (`trainable_units`); the Barracks trains Militia
-(60 food, 20 gold, 21 s, from the combat table; cancelling refunds both). A returning villager walks to the nearest completed
+(50 food, 20 gold, 21 s, measured in the licensed DE dat; cancelling refunds both). A returning villager walks to the nearest completed
 owned building that accepts its load (`nearest_dropoff`).
 
 A farm holds 175 food from placement, but only a completed one can be worked,
@@ -256,3 +257,5 @@ values and reproducible coast scenario are documented there.
 
 [Feudal rules and sources](economy/feudal.md) lists the DE building stats,
 economy research, age gating, age-up art, the accelerated local demo and limits.
+The [Feudal military](military.md) adds rosters, attack classes, delayed ranged
+hits, Blacksmith equipment and native unit/projectile art.

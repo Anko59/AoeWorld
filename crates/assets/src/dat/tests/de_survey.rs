@@ -30,7 +30,8 @@ fn unit(id: i16, language: i32, name: &str) -> Vec<u8> {
     out.extend_from_slice(&8_f32.to_le_bytes());
     out.extend_from_slice(&[0; 4]);
     out.extend_from_slice(&2_f32.to_le_bytes());
-    out.extend_from_slice(&[0; 20]);
+    out.extend_from_slice(&(-1_i16).to_le_bytes());
+    out.extend_from_slice(&[0; 18]);
     out.extend_from_slice(&1_f32.to_le_bytes());
     out.extend_from_slice(&[0; 38]);
     for (kind, amount, enabled) in [(1_i16, 42_i16, 1_i16), (-1, 0, 0), (-1, 0, 0)] {
@@ -87,8 +88,19 @@ fn fixture() -> Vec<u8> {
             },
         ));
     }
-    for (i, &(_, language)) in TECHS.iter().enumerate() {
-        out.extend(tech(language, i as i16));
+    for (i, &(id, language)) in TECHS.iter().enumerate() {
+        let mut row = tech(language, i as i16);
+        if id == 222 {
+            let location = 55 + 4 + "synthetic research".len() + 1 + 2;
+            row[location..location + 2].copy_from_slice(&12_i16.to_le_bytes());
+            row[location + 2..location + 4].copy_from_slice(&40_i16.to_le_bytes());
+        }
+        out.extend(row);
+    }
+    for &(id, language) in SOLDIERS {
+        let mut row = unit(id, language, "synthetic soldier");
+        row[0] = 70;
+        out.extend(row);
     }
     out
 }
@@ -172,4 +184,34 @@ fn de_record_reads_fixed_stats_and_bounds_every_variable_count() {
     bytes.extend_from_slice(&[0; 4 + 41 + 10]);
     bytes.extend_from_slice(&1000_u16.to_le_bytes()); // drop sites
     assert!(unit_record(&bytes, 0, 87, "fixture").is_err());
+}
+
+#[test]
+fn soldier_record_reads_speed_projectile_and_rejects_nonfinite_speed() {
+    let mut bytes = unit(4, 5004, "ARCHR");
+    bytes[0] = 70;
+    let name_end = 180 + 4 + 5 + 4;
+    bytes[name_end..name_end + 4].copy_from_slice(&0.96_f32.to_le_bytes());
+    let row = unit_record(&bytes, 0, 4, "ARCHR").unwrap();
+    assert_eq!(row.speed, 0.96);
+    assert_eq!(row.projectile, -1);
+    bytes[name_end..name_end + 4].copy_from_slice(&f32::NAN.to_le_bytes());
+    assert!(unit_record(&bytes, 0, 4, "ARCHR").is_err());
+}
+
+#[test]
+fn moving_projectile_header_validates_identity_speed_and_every_truncation() {
+    let mut bytes = unit(363, 0, "MRARC");
+    bytes[0] = 60;
+    let speed = 180 + 4 + 5 + 4;
+    bytes[speed..speed + 4].copy_from_slice(&7_f32.to_le_bytes());
+    assert_eq!(
+        military::projectile_record(&bytes, 0, 363).unwrap().speed,
+        7.0
+    );
+    for n in 0..speed + 4 {
+        assert!(military::projectile_record(&bytes[..n], 0, 363).is_err());
+    }
+    bytes[speed..speed + 4].copy_from_slice(&f32::INFINITY.to_le_bytes());
+    assert!(military::projectile_record(&bytes, 0, 363).is_err());
 }

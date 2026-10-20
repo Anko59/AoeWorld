@@ -1,5 +1,10 @@
 /// Feudal gameplay and age-up families. An absent trial unit is explicit.
 pub const FEUDAL: &[(&str, i32)] = &[
+    ("Skirmisher", 7),
+    ("Spearman", 93),
+    ("Man-at-Arms", 75),
+    ("Arrow", 363),
+    ("Javelin", 365),
     ("Archery Range", 87),
     ("Stable", 101),
     ("Blacksmith", 103),
