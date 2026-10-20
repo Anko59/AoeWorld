@@ -90,7 +90,7 @@ impl Worker {
             ])
             .arg(root.join("browser"))
             .args([
-                "aoeworld/browser-tools:1.63.0",
+                "aoeworld/browser-tools:1.64.0",
                 "xvfb-run",
                 "-a",
                 "node",

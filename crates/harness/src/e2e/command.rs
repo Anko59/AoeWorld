@@ -71,7 +71,7 @@ pub(super) fn docker_args(run: &Run) -> Result<Vec<String>, Box<dyn std::error::
         dependencies,
         "-w".to_owned(),
         root.join("browser").display().to_string(),
-        "aoeworld/browser-tools:1.63.0".to_owned(),
+        "aoeworld/browser-tools:1.64.0".to_owned(),
         "xvfb-run".to_owned(),
         "-a".to_owned(),
         "npm".to_owned(),

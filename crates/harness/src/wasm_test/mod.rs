@@ -79,7 +79,7 @@ fn start_driver(port: u16) -> Result<Driver> {
         "HOME=/tmp",
         "--tmpfs",
         "/tmp:rw,nosuid,size=256m",
-        "aoeworld/browser-tools:1.63.0",
+        "aoeworld/browser-tools:1.64.0",
         "chromedriver",
         &port_arg,
         "--allowed-ips=127.0.0.1",

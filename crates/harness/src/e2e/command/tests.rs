@@ -49,7 +49,7 @@ fn every_option_keeps_its_own_value_and_the_image_follows_them() {
         .iter()
         .position(|arg| arg == "xvfb-run")
         .expect("the command");
-    assert_eq!(args[image - 1], "aoeworld/browser-tools:1.63.0", "{args:?}");
+    assert_eq!(args[image - 1], "aoeworld/browser-tools:1.64.0", "{args:?}");
     assert_eq!(args[image - 3], "-w", "{args:?}");
 }
 

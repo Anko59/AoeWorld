@@ -407,7 +407,7 @@ pub(super) fn images(
     // current IDs cannot prove which ID a hostile gate actually ran (bootstrap).
     for (name, version) in [
         ("rust-tools", "1.93.1"),
-        ("browser-tools", "1.63.0"),
+        ("browser-tools", "1.64.0"),
         ("orchestrator", "1.93.1"),
         ("analysis", "0.19.4"),
         ("policy", "0.20.2"),

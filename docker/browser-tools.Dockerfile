@@ -1,8 +1,8 @@
-FROM mcr.microsoft.com/playwright@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+FROM mcr.microsoft.com/playwright@sha256:06a9939e57531807f8d5fd76ce44b53165ffb7d7501d87ab10e285c20b1e971f
 RUN curl --fail --location --silent --show-error \
-      https://storage.googleapis.com/chrome-for-testing-public/153.0.8010.12/linux64/chromedriver-linux64.zip \
+      https://storage.googleapis.com/chrome-for-testing-public/156.0.8078.4/linux64/chromedriver-linux64.zip \
       --output /tmp/chromedriver.zip \
-    && echo 'b7d5f7c120f7827f3538b416e08b82418eb702f18b680c183f0411c8d7f2df69  /tmp/chromedriver.zip' | sha256sum --check \
+    && echo 'ae36d1b2391e6852594d7dd1be963f818ca05f117cfc5fdcb41c33f3074afa8b  /tmp/chromedriver.zip' | sha256sum --check \
     && python3 -c "import zipfile; z=zipfile.ZipFile('/tmp/chromedriver.zip'); open('/usr/local/bin/chromedriver','wb').write(z.read('chromedriver-linux64/chromedriver'))" \
     && chmod 755 /usr/local/bin/chromedriver \
     && rm /tmp/chromedriver.zip
