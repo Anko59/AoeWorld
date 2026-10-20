@@ -65,7 +65,14 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
     await readFile("../.cache/fishing/scene.json", "utf8"),
   ) as { hash: string; dock: Tile; shore: Tile; deep: Tile };
   expect((await request.post("/maps/reset")).status()).toBe(204);
-  await gameAssets(page);
+  const art = await gameAssets(page);
+  const shot = async (name: string) => {
+    await mkdir("../.cache/fish-shots", { recursive: true });
+    const prefix = art === "local AoE II pack" ? "native-" : "";
+    await page.screenshot({
+      path: `../.cache/fish-shots/${prefix}${name}.png`,
+    });
+  };
   await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 60_000,
@@ -80,6 +87,19 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
     scene.hash,
     { timeout: 30_000 },
   );
+  await frame(page, scene.shore, 1.0);
+  await shot("shore-fish");
+  const fish = await point(page, scene.shore);
+  await page.mouse.click(fish.x, fish.y);
+  await expect(page.locator("#selection")).toHaveAttribute(
+    "data-kind",
+    "Resource",
+  );
+  await expect(page.locator("#selection-name")).toHaveText("Shore fish");
+  await expect(page.locator("#unit-health-bars .unit-hp-bar")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await frame(page, scene.deep, 1.0);
+  await shot("deep-fish");
   await centerVillage(page);
   const workers = (await actors(page)).filter((a) => a.kind === "Villager");
   const woodcutter = workers[0],
@@ -125,8 +145,7 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
     "data-placement-valid",
     "true",
   );
-  await mkdir("../.cache/fish-shots", { recursive: true });
-  await page.screenshot({ path: "../.cache/fish-shots/dock-preview.png" });
+  await shot("dock-preview");
   await page.mouse.click(site.x, site.y);
   await expect
     .poll(async () => (await actors(page)).some((a) => a.kind === "Dock"))
@@ -135,7 +154,7 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   if (!dock) throw new Error("Dock missing");
   await page.mouse.click(dock.x, dock.y);
   await expect(page.locator("#selection-name")).toHaveText("Dock");
-  await page.screenshot({ path: "../.cache/fish-shots/dock-building.png" });
+  await shot("dock-building");
   await expect(page.locator("#building-status")).toContainText("Complete", {
     timeout: 100_000,
   });
@@ -145,7 +164,7 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   );
   await page.locator("#train-villager").click();
   await expect(page.locator("#training-label")).toContainText("Fishing Ship");
-  await page.screenshot({ path: "../.cache/fish-shots/dock-training.png" });
+  await shot("dock-training");
   await expect
     .poll(
       async () => (await actors(page)).some((a) => a.kind === "FishingShip"),
@@ -155,13 +174,19 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   const ship = (await actors(page)).find((a) => a.kind === "FishingShip");
   if (!ship) throw new Error("Fishing Ship missing");
   await page.mouse.click(ship.x, ship.y);
+  await expect(page.locator("#selection-name")).toHaveText("Fishing Ship");
+  await expect(page.locator("#unit-health-bars .unit-hp-bar")).toHaveCount(1);
   await frame(page, scene.deep, 0.75);
   const deep = await point(page, scene.deep);
   await page.mouse.click(deep.x, deep.y, { button: "right" });
   await expect(page.locator("#selection-task")).toHaveText("Fishing", {
     timeout: 60_000,
   });
-  await page.screenshot({ path: "../.cache/fish-shots/deep-fishing.png" });
+  await expect(page.locator("#command-hint")).toHaveText(
+    "Right-click: fish or move",
+  );
+  await expect(page.locator("#selection-load")).toContainText("/15 food");
+  await shot("deep-fishing");
   const initial = Number(await page.locator("#stockpile-food").textContent());
   await expect
     .poll(
@@ -170,7 +195,7 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
     )
     .toBeGreaterThanOrEqual(initial + 15);
   await frame(page, scene.dock);
-  await page.screenshot({ path: "../.cache/fish-shots/ship-return.png" });
+  await shot("ship-return");
   await centerVillage(page);
   const shoreFisher = (await actors(page)).find((a) => a.id === fisher.id);
   if (!shoreFisher) throw new Error("Fisher missing");
@@ -181,5 +206,5 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   await expect(page.locator("#selection-task")).toHaveText("Fishing", {
     timeout: 100_000,
   });
-  await page.screenshot({ path: "../.cache/fish-shots/shore-fisher.png" });
+  await shot("shore-fisher");
 });

@@ -7,6 +7,8 @@ use wasm_bindgen_test::wasm_bindgen_test;
 
 #[path = "budget.rs"]
 mod budget;
+#[path = "fishing.rs"]
+mod fishing;
 #[path = "fixture.rs"]
 mod fixture;
 

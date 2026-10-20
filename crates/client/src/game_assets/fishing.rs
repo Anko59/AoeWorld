@@ -15,11 +15,11 @@ pub(super) fn select(
         (1913, 49, 49, 7, 1),
         (420, 30, 30, 5, 1),
         (0, 0, 0, 1, 0),
-        (444, 5, 1, 1, 5),
-        (449, 5, 1, 1, 5),
+        (0, 0, 0, 1, 0),
+        (0, 0, 0, 1, 0),
         (446, 5, 1, 1, 5),
-        (3575, 140, 28, 4, 5),
-        (3980, 75, 15, 15, 5),
+        (0, 0, 0, 1, 0),
+        (0, 0, 0, 1, 0),
     ];
     let mut ranges = std::array::from_fn(|_| None);
     for (slot, (id, count, stride, step, rows)) in sources.into_iter().enumerate() {

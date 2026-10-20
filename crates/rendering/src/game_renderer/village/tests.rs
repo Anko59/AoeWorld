@@ -35,25 +35,26 @@ fn fish_sprites_animate_at_their_sampled_native_period() {
 #[wasm_bindgen_test]
 fn fishing_poses_use_native_facing_rows() {
     let mut art = art();
-    art.fishing[7] = vec![art.walking[0]; 5];
-    art.fishing[10] = art.village[1][..35].to_vec();
+    art.actors = vec![Vec::new(); 50];
+    art.actors[48] = vec![art.walking[0]; 5];
+    art.actors[49] = (0..70).map(|i| art.village[1][i % 75]).collect();
     let ship = unit(SceneUnitKind::FishingShipWorking);
     assert_eq!(frames(&art, ship).unwrap().1, 1);
     let fisher = unit(SceneUnitKind::VillagerFishing);
-    assert_eq!(frames(&art, fisher).unwrap().1, 7);
-    let frame_at = |clock| {
-        world_sprite_frames(&art, &[], &[], &[fisher], camera(), clock)
+    assert_eq!(frames(&art, fisher).unwrap().1, 14);
+    let frame_at = |phase: u8| {
+        let fisher = SceneUnit {
+            facing: phase << 3,
+            ..fisher
+        };
+        world_sprite_frames(&art, &[], &[], &[fisher], camera(), 0)
             .last()
             .unwrap()
             .1
             .atlas
     };
-    assert_eq!(
-        frame_at(0),
-        frame_at(7),
-        "four skipped 200 ms native frames take 800 ms"
-    );
-    assert_ne!(frame_at(0), frame_at(8));
+    assert_ne!(frame_at(0), frame_at(1));
+    assert_ne!(frame_at(1), frame_at(13));
 }
 
 fn art() -> GameArt {

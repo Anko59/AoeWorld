@@ -3,7 +3,7 @@ use super::*;
 use flate2::{Compression, write::DeflateEncoder};
 use std::io::Write;
 
-#[path = "corpse_tests.rs"]
+#[path = "tests/corpse.rs"]
 mod corpse_tests;
 
 fn le16(out: &mut Vec<u8>, value: i16) {

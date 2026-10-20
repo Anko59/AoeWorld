@@ -30,7 +30,8 @@ use world_sprites::world_sprite_frames;
 #[path = "game_renderer/tests/emission/direct_emission.rs"]
 mod direct_emission_tests;
 pub use world_sprites::{
-    scene_resource_frame, scene_resource_presentation, scene_unit_bounds, scene_unit_render_key,
+    scene_resource_frame, scene_resource_presentation, scene_unit_bounds, scene_unit_depth,
+    scene_unit_render_key,
 };
 pub fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
     world_sprites::scene_unit_animates(art, unit, camera)

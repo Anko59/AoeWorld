@@ -49,6 +49,10 @@ pub enum Pose {
     NeutralSheepWalk,
     NeutralSheepDie,
     NeutralSheepDecay,
+    FishingShipStand,
+    FishingShipWalk,
+    FishingShipWork,
+    FisherWork,
 }
 
 #[derive(Clone, Copy)]
@@ -59,6 +63,10 @@ pub struct ActorSource {
     pub millis: u16,
 }
 impl ActorSource {
+    /// Bound the fisherman atlas rows while retaining their native loop duration.
+    pub const fn sample_step(self) -> u8 {
+        if self.id == 3575 { 2 } else { 1 }
+    }
     pub const fn frames(self) -> u32 {
         self.stride as u32 * 5
     }
@@ -70,7 +78,7 @@ const fn sprite(id: u32, stride: u8, millis: u16) -> ActorSource {
     ActorSource { id, stride, millis }
 }
 
-pub const SPRITES: [ActorSource; 46] = [
+pub const SPRITES: [ActorSource; 50] = [
     sprite(993, 6, 1000),
     sprite(997, 12, 70),
     sprite(987, 10, 100),
@@ -117,6 +125,10 @@ pub const SPRITES: [ActorSource; 46] = [
     sprite(3634, 16, 50),
     sprite(3626, 13, 100),
     sprite(3631, 5, 6000),
+    sprite(444, 1, 200),
+    sprite(449, 1, 200),
+    sprite(444, 1, 200),
+    sprite(3575, 28, 200),
 ];
 
 #[cfg(test)]

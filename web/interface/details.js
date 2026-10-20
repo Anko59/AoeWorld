@@ -1,8 +1,8 @@
 // Presentation only; authoritative values and the simulation's movement rule
 // arrive with the four-Hz HUD update. No canvas frame loop or terrain guesses.
 const byId = id => document.getElementById(id);
-const kinds = ['Berry bush', 'Tree', 'Gold deposit', 'Stone deposit'];
-const icons = ['food', 'wood', 'gold', 'stone'];
+const kinds = ['Berry bush', 'Tree', 'Gold deposit', 'Stone deposit', 'Shore fish', 'Deep fish'];
+const icons = ['food', 'wood', 'gold', 'stone', 'food', 'food'];
 const svg = name => `<svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#${name}"></use></svg>`;
 let markers = '';
 export function updateDetails(values) {

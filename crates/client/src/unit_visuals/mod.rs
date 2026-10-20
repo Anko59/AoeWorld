@@ -5,11 +5,23 @@ use aoe_protocol::{AnimalKind, AnimalState, AnimalTask, GameplayUnitState, UnitK
 
 pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> Pose {
     use Pose::*;
+    if u.kind == UnitKind::FishingShip {
+        return if u.moving {
+            FishingShipWalk
+        } else if u.task == UnitTask::Fishing {
+            FishingShipWork
+        } else {
+            FishingShipStand
+        };
+    }
+    if u.task == UnitTask::Fishing && !u.moving {
+        return FisherWork;
+    }
     if u.hp == 0 {
         return match u.kind {
             UnitKind::Militia => MilitiaDie,
             UnitKind::Scout => ScoutDie,
-            UnitKind::FishingShip => ScoutDie,
+            UnitKind::FishingShip => unreachable!(),
             UnitKind::Villager => match u.death_hunt {
                 Some(AnimalKind::Sheep) => ShepherdDie,
                 Some(_) => HunterDie,
@@ -170,6 +182,8 @@ pub(crate) fn packed_frame(
     hz: u32,
 ) -> u8 {
     let source = SPRITES[pose as usize];
+    let millis = u64::from(source.millis) * u64::from(source.sample_step());
+    let stride = u64::from(source.stride.div_ceil(source.sample_step()));
     let phase = if let Some(died) = death {
         // The same native frame duration governs looping and one-shot playback.
         let elapsed = tick.saturating_sub(died.0).saturating_mul(1000) / u64::from(hz.max(1));
@@ -179,10 +193,9 @@ pub(crate) fn packed_frame(
                 let s = SPRITES[die as usize];
                 u64::from(s.millis) * u64::from(s.stride)
             });
-        (elapsed.saturating_sub(delay) / u64::from(source.millis)).min(u64::from(source.stride - 1))
-            as u8
+        (elapsed.saturating_sub(delay) / millis).min(stride - 1) as u8
     } else {
-        (time.max(0.0) as u64 / u64::from(source.millis) % u64::from(source.stride)) as u8
+        (time.max(0.0) as u64 / millis % stride) as u8
     };
     (facing % 8) | (phase << 3)
 }

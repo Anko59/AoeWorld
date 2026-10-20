@@ -66,10 +66,16 @@ rounding drift; speed uses integer 126/100. Fishing Ships have no attack.
 The extracted DE unit 45 supplies the implemented Dock LOS 8. This task does
 not implement the naval update's Dock garrison/arrows or whaling mechanics.
 
-The loader keeps bounded sampled fish/fisherman animation rows in the existing
-three-page atlas and retains the complete source frame validation. Ship idle,
+The loader keeps bounded sampled fish and fisherman animation rows
+in the fixed four-page atlas and retains complete source validation. Ship idle,
 move and fishing graphics each have one native frame per facing. Fish animate
 independently of moving units, including while the camera is stationary.
+Ships and fishermen use the shared native actor path, including packed phase,
+eight facings, mirrored rows and player colour. Fishermen sample every second
+200 ms native work frame, preserving the loop duration within the fixed atlas.
+Selected ships use native body bounds for picking and HP bars;
+flat water does not occlude hull pixels below their ground anchor. Fish remain
+neutral resource sprites, outside the unit-selection list.
 Missing optional art remains missing; corrupt present sources fail startup.
 Dock foundations use their native shore foundation, without painting dirt over
 the water footprint.

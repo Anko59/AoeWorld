@@ -76,6 +76,7 @@ impl GameWorld {
             crate::UnitKind::Villager => 1500_u64,
             crate::UnitKind::Scout => 1900,
             crate::UnitKind::Militia => 1000,
+            crate::UnitKind::FishingShip => 0,
         };
         let die_ticks = (u64::from(self.config.tick_hz) * die_millis).div_ceil(1000);
         let due = self.tick.0.saturating_add(

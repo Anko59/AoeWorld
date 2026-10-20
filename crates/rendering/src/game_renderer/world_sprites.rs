@@ -277,6 +277,11 @@ fn world_frame(frame: GameFrame) -> GameFrame {
 /// themselves, and a one-level rise in front (two units) still hides them.
 const GROUND_CLEARANCE: f64 = 1.5;
 
+/// The rendered body depth, including clearance below the native hotspot.
+pub fn scene_unit_depth(unit: SceneUnit) -> f64 {
+    object_depth(WorldObject::Unit(unit))
+}
+
 fn object_depth(object: WorldObject) -> f64 {
     let position = object.position();
     // The native Town Center reaches 64 source pixels below its anchor, farther

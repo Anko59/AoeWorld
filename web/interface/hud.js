@@ -56,7 +56,7 @@ export function initInterface() {
     const actions=building?1:units?2:0;
     empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
     text('command-context',count>1?`${count} units`:first?.name ?? 'Select a unit');
-    text('command-hint',building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: hunt, attack, gather or move':['Militia','Scout'].includes(first.kind)?'Right-click: attack or move':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag to select a group');
+    text('command-hint',building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: hunt, attack, gather or move':first.kind==='FishingShip'?'Right-click: fish or move':['Militia','Scout'].includes(first.kind)?'Right-click: attack or move':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag to select a group');
     show('observer-label',state.observer);
     show('unit-hp',count===1 && !building); show('unit-combat',count===1 && !building);
     if (first) {
@@ -65,7 +65,7 @@ export function initInterface() {
       const groupName=selected.every(unit=>unit.kind===first.kind)?`${first.name}s`:'units';
       text('selection-name',count>1?`${count} ${groupName} selected`:first.name);
       text('selection-task',count===1?building?(state.queue.length?'Training':'Building'): `${first.task}${first.resource && first.task==='Gathering'?' '+first.resource:''}`:'Right-click to give this group an order');
-      text('selection-load',['Sheep','Deer','Boar','Wolf'].includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/10 ${first.resource}`:building?'Resource drop-off · supports 5 population':'');
+      text('selection-load',['Sheep','Deer','Boar','Wolf'].includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/${first.kind==='FishingShip'?15:10} ${first.resource}`:building?'Resource drop-off · supports 5 population':'');
       const signature=selected.map(unit=>`${unit.id}:${unit.kind}`).join(',');
       if (signature!==previousSelection) {
         byId('selection-portrait').innerHTML=icon(symbol(first.kind));

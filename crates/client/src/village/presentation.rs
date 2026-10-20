@@ -99,7 +99,7 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
             continue;
         }
         if client.selected.resource_id == Some(node.id) {
-            values[1] = node.kind as u8 as f64;
+            values[1] = resource_selection_kind(node.object, node.kind);
             values[2] = f64::from(client.resources.remaining(node.id, node.initial_amount));
         }
         if !client.resources.visible(node.id) {
@@ -148,6 +148,18 @@ pub(super) fn values(client: &Client) -> Vec<f64> {
         }
     }
     values
+}
+
+/// HUD tags distinguish food objects without changing their stockpile kind.
+pub(super) fn resource_selection_kind(
+    object: aoe_map::ObjectKind,
+    kind: aoe_map::ResourceKind,
+) -> f64 {
+    match object {
+        aoe_map::ObjectKind::ShoreFish => 4.0,
+        aoe_map::ObjectKind::DeepFish => 5.0,
+        _ => kind as u8 as f64,
+    }
 }
 
 /// Kind and authoritative remaining amount of a selected starting-kit resource,

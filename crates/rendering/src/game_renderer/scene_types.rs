@@ -94,19 +94,19 @@ pub enum SceneUnitKind {
     NeutralSheepWalk,
     NeutralSheepDie,
     NeutralSheepDecay,
+    FishingShip,
+    FishingShipMoving,
+    FishingShipWorking,
+    VillagerFishing,
     Dock,
     FoundationDock,
     RubbleDock,
-    FishingShip,
-    FishingShipWorking,
-    VillagerFishing,
-    VillagerCarryingFish,
 }
 
 impl SceneUnitKind {
     /// Flat tags keep the scene DTO at 32 bytes, including actor animations.
     pub fn actor(index: u8) -> Self {
-        const ACTORS: [SceneUnitKind; 46] = [
+        const ACTORS: [SceneUnitKind; 50] = [
             SceneUnitKind::MilitiaStand,
             SceneUnitKind::MilitiaWalk,
             SceneUnitKind::MilitiaAttack,
@@ -153,6 +153,10 @@ impl SceneUnitKind {
             SceneUnitKind::NeutralSheepWalk,
             SceneUnitKind::NeutralSheepDie,
             SceneUnitKind::NeutralSheepDecay,
+            SceneUnitKind::FishingShip,
+            SceneUnitKind::FishingShipMoving,
+            SceneUnitKind::FishingShipWorking,
+            SceneUnitKind::VillagerFishing,
         ];
         ACTORS
             .get(usize::from(index))
@@ -162,7 +166,7 @@ impl SceneUnitKind {
     pub(super) fn actor_slot(self) -> Option<usize> {
         (self as u8)
             .checked_sub(Self::MilitiaStand as u8)
-            .filter(|index| *index < 46)
+            .filter(|index| *index < 50)
             .map(usize::from)
     }
 

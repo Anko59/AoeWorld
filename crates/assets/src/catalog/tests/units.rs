@@ -19,6 +19,10 @@ fn actor_animation_metadata_uses_dat_rows_and_individual_frame_durations() {
         (Pose::DeerWalk, 348, 15, 50),
         (Pose::BoarAttack, 2555, 17, 95),
         (Pose::WolfAttack, 1629, 20, 85),
+        (Pose::FishingShipStand, 444, 1, 200),
+        (Pose::FishingShipWalk, 449, 1, 200),
+        (Pose::FishingShipWork, 444, 1, 200),
+        (Pose::FisherWork, 3575, 28, 200),
     ] {
         let source = SPRITES[pose as usize];
         assert_eq!(
