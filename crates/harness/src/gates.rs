@@ -285,6 +285,18 @@ fn check_selection(
     results: &str,
     expected: &Selection,
 ) -> Result<(), Box<dyn Error>> {
+    // A failed or cancelled `select` leaves no manifest: say so instead of a JSON parse error.
+    let job_results: BTreeMap<String, String> = serde_json::from_str(results)?;
+    if let Some(select) = job_results
+        .get("select")
+        .filter(|r| r.as_str() != "success")
+    {
+        return Err(format!(
+            "the select job ended `{select}`, so nothing was validated; re-run the failed jobs \
+             (`gh run rerun <run> --failed`) and read the select log"
+        )
+        .into());
+    }
     let actual: Selection = serde_json::from_str(manifest)?;
     if &actual != expected {
         return Err(
