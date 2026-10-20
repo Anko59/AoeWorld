@@ -5,7 +5,7 @@ const terrainSourceColors = {
   grass: [70, 120, 55],
   ramp: [215, 72, 45],
   dirt: [166, 92, 48],
-  cliff: [92, 82, 105],
+  paving: [250, 0, 250],
   water: [32, 104, 210],
   medium: [18, 60, 150],
   shore: [218, 185, 92],
@@ -15,7 +15,7 @@ const terrainSourceAccents = {
   grass: [42, 82, 38],
   ramp: [170, 34, 22],
   dirt: [115, 54, 30],
-  cliff: [44, 42, 64],
+  paving: [160, 0, 160],
   water: [80, 160, 220],
   medium: [46, 96, 176],
   shore: [164, 119, 54],
@@ -35,12 +35,15 @@ const naturalRock = (source: readonly number[], shade: number) => {
 };
 
 // Keep unused 15018 paving art in the atlas as an adversarial source sentinel.
-// These are forbidden rendered colors, deliberately outside the positive palette.
+// Zero-green magenta cannot collide with legitimate dirt/water blends: every
+// real fixture terrain color has green >= 20% of both red and blue. The old
+// muted purple sentinel collided with the new foundation's shoreline blend.
+// Keep the same pixel tolerance and world ROI in every negative assertion.
 export const syntheticPavedRockColors = [
-  tint(terrainSourceColors.cliff, 0.78),
-  tint(terrainSourceAccents.cliff, 0.78),
-  tint(terrainSourceColors.cliff, 0.72),
-  tint(terrainSourceAccents.cliff, 0.72),
+  tint(terrainSourceColors.paving, 0.78),
+  tint(terrainSourceAccents.paving, 0.78),
+  tint(terrainSourceColors.paving, 0.72),
+  tint(terrainSourceAccents.paving, 0.72),
 ] as const;
 
 export const syntheticSurfaceColors = {
@@ -131,8 +134,8 @@ const terrainSources = new Map<number, TerrainSource>([
       y: 0,
       width: 25,
       height: 45,
-      base: terrainSourceColors.cliff,
-      accent: terrainSourceAccents.cliff,
+      base: terrainSourceColors.paving,
+      accent: terrainSourceAccents.paving,
       frameCount: 100,
       tiled: true,
     },

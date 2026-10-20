@@ -2,6 +2,20 @@
 mod packing;
 use aoe_assets::{catalog::runtime, pack::Manifest};
 
+#[test]
+fn building_proof_dock_sampling_preserves_loop_and_static_construction() {
+    assert_eq!(runtime::building_frame_step(45, 60, 1, 0.15), 2);
+    for (unit, frames, angles, rate) in [
+        (68, 43, 1, 0.2),
+        (45, 1, 1, 0.0),
+        (45, 1, 3, 2.0),
+        (45, 60, 1, 0.3),
+        (45, 59, 1, 0.15),
+    ] {
+        assert_eq!(runtime::building_frame_step(unit, frames, angles, rate), 1);
+    }
+}
+
 fn fixture() -> Manifest {
     let mut value = serde_json::json!({
         "version":1, "converter":"synthetic", "input_hash":"synthetic",

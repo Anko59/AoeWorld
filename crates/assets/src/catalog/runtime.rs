@@ -49,6 +49,25 @@ pub const OPTIONAL_RESOURCES: [RuntimeSpriteSource; OPTIONAL_RESOURCE_SOURCES.le
 pub const OPTIONAL_TERRAIN: [RuntimeSpriteSource; OPTIONAL_TERRAIN_SOURCES.len()] =
     project(OPTIONAL_TERRAIN_SOURCES);
 
+/// Keep standing wall damage cells and sample the ambient Dock wake. The
+/// 60-cell, 150ms native wake keeps its nine-second loop at 30 cells, 300ms.
+/// Static art, construction angles and the 200ms Mill sails stay complete.
+pub fn building_frame_step(unit_id: i32, frames: u16, angles: u16, seconds: f32) -> usize {
+    if unit_id == 72 && frames > 0 {
+        usize::from(frames)
+    } else if unit_id == 45
+        && angles == 1
+        && frames > 1
+        && frames.is_multiple_of(2)
+        && seconds > 0.0
+        && seconds < 0.2
+    {
+        2
+    } else {
+        1
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

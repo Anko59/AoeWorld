@@ -12,7 +12,7 @@ use std::io::Read;
 
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 
-fn reviewed_sources() -> impl Iterator<Item = (String, u32, AtlasDomain)> {
+fn reviewed_sources() -> impl Iterator<Item = (String, u32, AtlasDomain, usize)> {
     REQUIRED_RENDER_SOURCES
         .iter()
         .chain(&OPTIONAL_RESOURCE_SOURCES)
@@ -26,13 +26,21 @@ fn reviewed_sources() -> impl Iterator<Item = (String, u32, AtlasDomain)> {
                 } else {
                     AtlasDomain::Objects
                 },
+                match s.role {
+                    super::AssetRole::CavalryStanding => 10,
+                    super::AssetRole::VillagerStanding => 15,
+                    _ => 1,
+                },
             )
         })
-        .chain(
-            super::units::SPRITES
-                .iter()
-                .map(|s| (s.manifest_source(), s.frames(), AtlasDomain::Objects)),
-        )
+        .chain(super::units::SPRITES.iter().map(|s| {
+            (
+                s.manifest_source(),
+                s.frames(),
+                AtlasDomain::Objects,
+                usize::from(s.sample_step()),
+            )
+        }))
 }
 
 fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
@@ -42,9 +50,10 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     let mut extents = Vec::new();
     let mut selected = std::collections::BTreeSet::new();
     let mut counts = [0_usize; 2];
-    // Conservative full-prefix proof in production semantic order. The client
-    // omits unused idle cells and adds the separately checked DE building subset.
-    for (identity, count, domain) in reviewed_sources() {
+    // Validate complete prefixes, then pack the client's actual selection:
+    // one cell per idle facing and the existing fisherman sampling step.
+    // Neutral/owned palette copies still occupy separate semantic entries.
+    for (identity, count, domain, step) in reviewed_sources() {
         let mut frames = manifest
             .frames
             .iter()
@@ -59,9 +68,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         {
             return Err(format!("missing or duplicate reviewed prefix: {identity}"));
         }
-        counts[usize::from(domain == AtlasDomain::Objects)] += frames.len();
-        for frame in frames {
-            selected.insert((frame.source.clone(), frame.frame));
+        for (number, frame) in frames.into_iter().enumerate() {
             let page = manifest
                 .pages
                 .get(usize::from(frame.page))
@@ -73,18 +80,23 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             {
                 return Err("invalid source rectangle".into());
             }
-            extents.push(FrameExtent {
-                domain,
-                width: frame.width,
-                height: frame.height,
-            });
+            if number % step == 0 {
+                selected.insert((frame.source.clone(), frame.frame));
+                counts[usize::from(domain == AtlasDomain::Objects)] += 1;
+                extents.push(FrameExtent {
+                    domain,
+                    width: frame.width,
+                    height: frame.height,
+                });
+            }
         }
     }
-    if extents.len() != MAX_REVIEWED_FRAMES as usize + 2695 || counts != [1474, 3582] {
+    // 45 cavalry idle + 70 villager idle + 70 fisherman cells are not drawn.
+    if extents.len() != MAX_REVIEWED_FRAMES as usize + 2695 - 185 || counts != [1474, 3397] {
         return Err("incomplete semantic selection".into());
     }
     // Match the loader's DAT additions after the static catalog, including
-    // every native animation frame. Shared sources are packed only once.
+    // the native wake sampling. Shared sources are packed only once.
     for (unit_id, part) in manifest
         .buildings
         .iter()
@@ -113,12 +125,9 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             return Err("incomplete DAT building source".into());
         }
         // The loader retains one damage frame per Palisade angle. Every other
-        // recipe retains its complete frame/angle prefix, including static art.
-        let step = if unit_id == 72 {
-            usize::from(part.frames)
-        } else {
-            1
-        };
+        // recipe uses the shared runtime selection, including wake sampling.
+        let step =
+            super::runtime::building_frame_step(unit_id, part.frames, part.angles, part.frame_rate);
         for frame in frames.into_iter().step_by(step) {
             if selected.insert((frame.source.clone(), frame.frame)) {
                 let page = manifest
@@ -240,7 +249,7 @@ fn original_manifest_all_reviewed_frames_fit_fixed_atlas() -> Result<(), Box<dyn
 #[test]
 fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
-    assert_eq!(prove(&manifest).unwrap(), (1474, 3582));
+    assert_eq!(prove(&manifest).unwrap(), (1474, 3397));
     let saved = manifest.frames[0].clone();
     manifest.frames[0].frame = 1;
     assert!(prove(&manifest).is_err());
@@ -282,7 +291,7 @@ fn synthetic_manifest() -> Manifest {
         buildings: Vec::new(),
         building_data: "00".into(),
     };
-    for (identity, count, _) in reviewed_sources() {
+    for (identity, count, _, _) in reviewed_sources() {
         // Neutral sheep reuse each owned source with another runtime palette.
         // A source manifest contains those frames once.
         if manifest.frames.iter().any(|f| f.source == identity) {
@@ -304,6 +313,53 @@ fn synthetic_manifest() -> Manifest {
         }
     }
     manifest
+}
+
+#[test]
+fn full_catalog_with_native_mill_dock_and_farm_fits_runtime_budget() {
+    let mut manifest = synthetic_manifest();
+    // Independent metadata fixture: disjoint native Mill body/sails, Dock wake
+    // and Farm terrain. Do not manufacture original pixels for this proof.
+    for (unit_id, count, terrain) in [(68, 44, false), (45, 60, false), (50, 36, true)] {
+        let source = format!("fixture:{unit_id}");
+        for frame in 0..count {
+            let mut record = manifest.frames[0].clone();
+            record.source = source.clone();
+            record.frame = frame;
+            manifest.frames.push(record);
+        }
+        manifest.buildings.push(crate::dat::BuildingComposition {
+            unit_id,
+            footprint: [3.0; 2],
+            foundation_terrain: 0,
+            foundation_slp: terrain.then_some(unit_id),
+            foundation_size: if terrain { [6, 6] } else { [0, 0] },
+            parts: if terrain {
+                Vec::new()
+            } else {
+                vec![crate::dat::BuildingPart {
+                    graphic_id: unit_id,
+                    slp_id: unit_id,
+                    source,
+                    available: true,
+                    frames: count as u16,
+                    angles: 1,
+                    primary: true,
+                    frame_rate: 0.15,
+                    offset: [0; 2],
+                    misplacement: [0.0; 2],
+                    layer: 20,
+                }]
+            },
+            construction: Vec::new(),
+        });
+        if terrain {
+            for frame in manifest.frames.iter_mut().rev().take(count as usize) {
+                frame.source = format!("terrain.drs:[32, 112, 108, 115]:{unit_id}");
+            }
+        }
+    }
+    assert_eq!(prove(&manifest).unwrap(), (1510, 3471));
 }
 
 #[test]
@@ -339,7 +395,7 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
             manifest.frames.push(record);
         }
     }
-    assert_eq!(prove(&manifest).unwrap(), (1474, 3582 + 15));
+    assert_eq!(prove(&manifest).unwrap(), (1474, 3397 + 15));
     for index in manifest.frames.len() - 15..manifest.frames.len() {
         let mut bad = manifest.clone();
         bad.frames.remove(index);

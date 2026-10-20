@@ -68,7 +68,11 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             add(
                 identity,
                 source.frames,
-                1,
+                match source.role {
+                    aoe_assets::catalog::AssetRole::CavalryStanding => 10,
+                    aoe_assets::catalog::AssetRole::VillagerStanding => 15,
+                    _ => 1,
+                },
                 if source.terrain_topology.is_some() {
                     AtlasDomain::Terrain
                 } else {
@@ -83,7 +87,13 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     for source in aoe_assets::catalog::units::SPRITES {
         let identity = source.manifest_source();
         if manifest.frames.iter().any(|f| f.source == identity) {
-            add(identity, source.frames(), 1, AtlasDomain::Objects, true)?;
+            add(
+                identity,
+                source.frames(),
+                usize::from(source.sample_step()),
+                AtlasDomain::Objects,
+                true,
+            )?;
         }
     }
     for building in manifest
@@ -114,11 +124,12 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             add(
                 part.source.clone(),
                 u32::from(part.frames) * u32::from(part.angles),
-                if building.unit_id == 72 {
-                    usize::from(part.frames)
-                } else {
-                    1
-                },
+                runtime::building_frame_step(
+                    building.unit_id,
+                    part.frames,
+                    part.angles,
+                    part.frame_rate,
+                ),
                 AtlasDomain::Objects,
                 false,
             )?;

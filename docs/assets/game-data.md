@@ -84,7 +84,7 @@ unit i32, footprint 2×f32, foundation SLP i32 (-1 absent), sheet dimensions
 each part is frame-zero manifest index u32 (`u32::MAX` absent), frame count
 u16, angle count u16, primary-stand flag u8 (0/1), frame duration f32,
 pixel offset 2×i32 and tile displacement 2×f32. The full bounded frame/angle
-product is selected. Construction progress chooses a native angle; palisade
+prefix is validated. Construction progress chooses a native angle; palisade
 connectivity chooses its orientation. Static House variants follow entity id,
 while Mill sails use the native frame duration.
 Indices remove repeated strings from browser startup without changing offsets,
@@ -92,6 +92,15 @@ draw order or animation. The ten buildings in the current gameplay protocol,
 including Dock and its native wake animation, occupy the live atlas. Foundation
 terrain and its apron paint land samples only; water keeps its authored sheet
 and surface metadata beneath completed Docks and construction sites.
+The packing proofs validate full source prefixes before applying the client's
+existing idle and fisherman selections: 5/50 Cavalry Standing cells, 5/75
+Villager Standing cells, and 70/140 fisherman cells. This removes 185 unused
+entries from the complete catalog proof. The Dock's native 60-cell wake at
+150ms per cell is sampled at every second cell: 30 cells at 300ms retain the
+nine-second loop. Static Dock art and all construction angles stay complete,
+as do the 43 Mill sail cells and the Farm terrain sheet. The limits remain
+5,120 selected entries and four
+2048-square RGBA8 pages (67,108,864 bytes, or 64 MiB).
 The reader bounds the bytes/counts and rejects
 truncation, trailing bytes and invalid frame indices. Regenerate packs after a
 format change; there is no compatibility reader.
@@ -117,11 +126,20 @@ protocol preparation without rebuilding; it accepts the same request file.
 
 For animated villages, the opt-in `tests/proofs/building-village.spec.ts`
 browser proof reads `.cache/tc-shots/capture-request.json` with `url`, optional
-`before`, and the Town Center's `x`/`y`. It requires all five completed building
+`fog`, the required `revision`, and the Town Center's `x`/`y`. Set `revision`
+to the exact `build` string returned by that server's `/health` endpoint,
+including `-dirty` when present; the proof also compares the served WASM bytes
+with this checkout. For example, replace the revision below with that build:
+
+```json
+{"url":"http://127.0.0.1:18089/","x":498,"y":3005,"revision":"<exact /health build>","fog":false}
+```
+
+It requires all five completed building
 kinds in the wide view, native art, loaded terrain and the correct backend,
-then captures the wide view and two close-ups at the read-back cameras after
-a newly presented frame. Outputs are `village-{before,after}2.png`,
-`tc-close-{before,after}2.png` and `barracks-close-{before,after}2.png` under
+then captures the wide view and a Town Center close-up at the read-back camera after
+a newly presented frame. Outputs are `final-village.png`,
+`final-tc-close.png` and, with `fog: true`, `final-fog.png` under
 `.cache/tc-shots/`. This captures actual animation; it does not claim the
 unchanged-frame verdict of `make compare`, which cannot settle a visible
 continuously animated Mill. Keep that refusal explicit in the local report.

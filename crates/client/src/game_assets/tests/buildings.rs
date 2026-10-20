@@ -57,6 +57,50 @@ async fn dock_keeps_dat_composition_construction_and_foundation_metadata() {
 }
 
 #[wasm_bindgen_test]
+async fn dock_wake_sampling_preserves_nine_second_loop_and_validates_omitted_cells() {
+    let source = "graphics.drs:[32, 112, 108, 115]:4518".to_owned();
+    let mut value = pack_fixture(
+        REQUIRED_RENDER_SOURCES
+            .iter()
+            .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
+            .chain([(source.clone(), 60, false)]),
+    );
+    for record in value["frames"].as_array_mut().unwrap() {
+        if record["source"] == source {
+            record["anchor_x"] = record["frame"].clone();
+        }
+    }
+    value["buildings"] = serde_json::json!([{"unit_id":45,"footprint":[3.0,3.0],
+        "foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],
+        "parts":[{"graphic_id":4411,"slp_id":4518,"source":source,"available":true,
+            "frames":60,"angles":1,"primary":true,"frame_rate":0.15,
+            "offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"construction":[]}]);
+    compile(&mut value);
+    let fetch = FetchFixture::install(&value);
+    let (art, _, _) = load().await.unwrap();
+    drop(fetch);
+    let wake = &art.compositions[0].parts[0];
+    assert_eq!(wake.animation.len(), 30);
+    assert_eq!(wake.frame_rate, 0.30);
+    assert_eq!(wake.frame_rate * wake.animation.len() as f32, 9.0);
+    assert_eq!(
+        wake.animation
+            .iter()
+            .map(|f| f.anchor[0] as u32)
+            .collect::<Vec<_>>(),
+        (0..60).step_by(2).collect::<Vec<_>>()
+    );
+    // Odd cells are omitted from the atlas, but the imported prefix stays whole.
+    value["frames"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|f| !(f["source"] == source && f["frame"] == 59));
+    let fetch = FetchFixture::install(&value);
+    assert!(load().await.is_err());
+    drop(fetch);
+}
+
+#[wasm_bindgen_test]
 async fn building_metadata_selects_new_frames_and_keeps_offsets_foundation_and_order() {
     let source = "graphics.drs:[32, 112, 108, 115]:90000".to_owned();
     let sources = REQUIRED_RENDER_SOURCES

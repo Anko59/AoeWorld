@@ -72,11 +72,12 @@ pub(super) fn select(
             };
             // A standing palisade displays one damage frame per native angle.
             // Its connectivity selects the angle; these frames do not animate.
-            let step = if building.unit_id == 72 {
-                usize::from(part.frames)
-            } else {
-                1
-            };
+            let step = aoe_assets::catalog::runtime::building_frame_step(
+                building.unit_id,
+                part.frames,
+                part.angles,
+                part.frame_rate,
+            );
             for index in frames.into_iter().step_by(step) {
                 if !selected.contains(&index) {
                     if selected.len() == MAX_SELECTED_FRAMES {
@@ -92,6 +93,7 @@ pub(super) fn select(
 }
 
 fn parts(
+    unit_id: i32,
     parts: &[BuildingPart],
     manifest: &Manifest,
     selected: &[usize],
@@ -114,11 +116,18 @@ fn parts(
         // Genie uses NE/SE tile axes; screen Y points down. The client's
         // world axes differ, so project these native coordinates directly.
         let [ne, se] = part.misplacement;
+        let step = aoe_assets::catalog::runtime::building_frame_step(
+            unit_id,
+            part.frames,
+            part.angles,
+            part.frame_rate,
+        );
         out.push(aoe_rendering::BuildingPart {
             frame: records[slot],
             angles: part.angles,
             animation: if u32::from(part.frames) * u32::from(part.angles) > 1 {
                 (0..u32::from(part.frames) * u32::from(part.angles))
+                    .step_by(step)
                     .filter_map(|number| {
                         selected
                             .iter()
@@ -132,7 +141,7 @@ fn parts(
             } else {
                 Vec::new()
             },
-            frame_rate: part.frame_rate,
+            frame_rate: part.frame_rate * if unit_id == 72 { 1.0 } else { step as f32 },
             offset: [
                 part.offset[0] as f32 + (ne + se) * 48.0,
                 part.offset[1] as f32 + (se - ne) * 24.0,
@@ -203,8 +212,8 @@ pub(super) fn resolve(
             unit_id: b.unit_id,
             footprint: b.footprint,
             foundation_material: material(b),
-            parts: parts(&b.parts, manifest, selected, records),
-            construction: parts(&b.construction, manifest, selected, records),
+            parts: parts(b.unit_id, &b.parts, manifest, selected, records),
+            construction: parts(b.unit_id, &b.construction, manifest, selected, records),
         })
         .collect()
 }

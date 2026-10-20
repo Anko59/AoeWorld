@@ -12,6 +12,8 @@ use std::{fs, path::PathBuf, time::Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 #[path = "building-proof/fog.rs"]
 mod fog;
+#[path = "building-proof/maps.rs"]
+mod maps;
 #[path = "building-proof/packing.rs"]
 mod packing;
 #[path = "building-proof/servers.rs"]
@@ -76,63 +78,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn maps(package: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-    let bytes = fs::read(&package)?;
-    let source: Value = serde_json::from_slice(&bytes)?;
-    let directory = PathBuf::from(".cache/tc-shots/maps");
-    fs::create_dir_all(&directory)?;
-    fs::write(
-        directory.join(package.file_name().ok_or("package name")?),
-        bytes,
-    )?;
-    let pages = package
-        .parent()
-        .ok_or("package directory")?
-        .join("pages")
-        .canonicalize()?;
-    let target = directory.join("pages");
-    if fs::symlink_metadata(&target).is_ok_and(|m| m.file_type().is_symlink()) {
-        fs::remove_file(&target)?;
-    }
-    copy_pages(&pages, &target)?;
-    let request = &source["request"];
-    let center = source["estimate"]["tiles_per_side"]
-        .as_f64()
-        .ok_or("tiles_per_side")?
-        / 2.0;
-    let marks = json!({"maps":{"village":{
-        "center_latitude_e7":request["center_latitude_e7"],
-        "center_longitude_e7":request["center_longitude_e7"],
-        "requested_side_meters":request["requested_side_meters"]
-    }}, "bookmarks":[
-        {"name":"tc-default","map":"village","x":center,"y":center,"zoom":1,"renderer":"webgl2"},
-        {"name":"tc-close","map":"village","x":center,"y":center,"zoom":2,"renderer":"webgl2"}
-    ]});
-    fs::write(
-        ".cache/tc-shots/bookmarks.json",
-        serde_json::to_vec_pretty(&marks)?,
-    )?;
-    println!("prepared one unambiguous local map and camera bookmarks at {center},{center}");
-    Ok(())
-}
-
-fn copy_pages(
-    source: &std::path::Path,
-    target: &std::path::Path,
-) -> Result<(), Box<dyn std::error::Error>> {
-    fs::create_dir_all(target)?;
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let destination = target.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_pages(&entry.path(), &destination)?;
-        } else if entry.file_type()?.is_file()
-            && !destination.exists()
-            && fs::hard_link(entry.path(), &destination).is_err()
-        {
-            fs::copy(entry.path(), destination)?;
-        }
-    }
-    Ok(())
+    maps::prepare(
+        package,
+        std::path::Path::new(".cache/tc-shots/maps"),
+        std::path::Path::new(".cache/tc-shots/bookmarks.json"),
+    )
 }
 
 fn record(buildings: &[GameplayBuildingState]) -> Result<(), Box<dyn std::error::Error>> {
