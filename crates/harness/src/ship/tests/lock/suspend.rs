@@ -318,8 +318,11 @@ fn the_gap_is_read_when_the_lock_is_taken_not_when_the_waiter_queued() {
     second.expect("ACQUIRED");
     let line = second.seen.iter().find(|l| l.starts_with("GAP ")).unwrap();
     let gap: u64 = line["GAP ".len()..].parse().unwrap();
+    // The boot clock is read a moment before the monotonic one, so on a host that never
+    // slept (a CI runner) the simulated 300 s reads as 299.99… and floors to 299. Before the
+    // suspend the gap is near 0, so this still separates "read at take" from "read at queue".
     assert!(
-        gap >= 300,
+        gap >= 299,
         "the record has the gap before the suspend: {gap}"
     );
 }
