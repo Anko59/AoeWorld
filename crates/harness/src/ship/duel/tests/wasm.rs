@@ -42,19 +42,16 @@ const WASM_TEST: &str =
     "use wasm_bindgen_test::wasm_bindgen_test;\n#[wasm_bindgen_test]\nfn shore_is_wet() {}\n";
 
 #[test]
-fn disk_hygiene_wasm_logs_survive_snapshot_cleanup_without_retaining_builds() {
+fn wasm_logs_survive_baseline_checkout_cleanup() {
     let temp = tempfile::tempdir().unwrap();
     let snapshot = tempfile::tempdir_in(temp.path()).unwrap();
     let root = snapshot.path();
     let paths = rendering(root, WASM_TEST);
     let scope = Scope::from_paths(root, &paths).unwrap();
-    let cache = root.join(".cache/duel");
-    let retention = temp.path().join("output");
-    let runner = |root: &Path, _: &[String], target: Option<&Path>| {
-        let target = target
-            .map(Path::to_owned)
-            .unwrap_or_else(|| root.join("target"));
-        write(&target, "object", "compiled output");
+    let cache = temp.path().join(".cache/duel");
+    let runner = |_: &Path, _: &[String], target: Option<&Path>| {
+        let target = target.expect("baseline builds use a separate target");
+        write(target, "object", "compiled output");
         Ok(vec![run(
             "aoe-rendering",
             "lib",
@@ -62,15 +59,15 @@ fn disk_hygiene_wasm_logs_survive_snapshot_cleanup_without_retaining_builds() {
             "test shore_is_wet ... ok\n",
         )])
     };
-    let report =
-        super::focus::run_retained(root, &scope, &cache, &retention, &runner, false).unwrap();
+    let report = super::focus::run_scope(root, &scope, &cache, &runner).unwrap();
     assert!(report.passed);
     let source = root.to_owned();
     drop(snapshot);
-    assert!(!source.exists(), "build output is disposable");
-    let logs: Vec<_> = fs::read_dir(&retention)
+    assert!(!source.exists(), "baseline checkout is disposable");
+    let logs: Vec<_> = fs::read_dir(&cache)
         .unwrap()
         .map(|entry| entry.unwrap().path().join("wasm.log"))
+        .filter(|path| path.is_file())
         .collect();
     assert_eq!(logs.len(), 1);
     assert!(
@@ -397,76 +394,4 @@ fn green_after_a_panic_only_red_still_requires_the_testers_tests_to_run_and_pass
             .unwrap_err()
             .contains("did not run")
     );
-}
-#[test]
-fn red_proof_accepts_real_wasm_named_assertion_output() {
-    use crate::ship::{git, test_first::red, tests::run};
-    let temp = tempfile::tempdir().unwrap();
-    let root = temp.path();
-    run(root, &["init", "-q", "-b", "feature"]);
-    let path = "crates/rendering/src/game_renderer/tests/webgl.rs";
-    for (path, text) in [
-        (
-            "crates/rendering/Cargo.toml",
-            "[package]\nname = 'aoe-rendering'\nversion = '0.1.0'\n",
-        ),
-        ("crates/rendering/src/lib.rs", "mod game_renderer;\n"),
-        (
-            "crates/rendering/src/game_renderer/mod.rs",
-            "#[path = \"tests/webgl.rs\"] mod webgl_tests;\n",
-        ),
-        (path, "// no tests yet\n"),
-    ] {
-        fs::create_dir_all(root.join(path).parent().unwrap()).unwrap();
-        fs::write(root.join(path), text).unwrap();
-    }
-    run(root, &["add", "-A"]);
-    run(root, &["commit", "-qm", "base"]);
-    let base = git::git(root, &["rev-parse", "HEAD"]).unwrap();
-    let function = "webgl_solid_surface_mode_does_not_sample_empty_atlas_or_degenerate_quad";
-    fs::write(
-        root.join(path),
-        format!("#[wasm_bindgen_test]\nfn {function}() {{ assert!(false); }}\n"),
-    )
-    .unwrap();
-    run(root, &["add", "-A"]);
-    run(root, &["commit", "-qm", "tests"]);
-    fs::create_dir(root.join("web")).unwrap();
-    fs::write(root.join("web/index.html"), "fixed").unwrap();
-    run(root, &["add", "-A"]);
-    run(root, &["commit", "-qm", "fix"]);
-    let head = git::git(root, &["rev-parse", "HEAD"]).unwrap();
-    let name = format!("aoe-rendering$game_renderer::webgl_tests::{function}");
-    let fixture = include_str!("../../../wasm_test/tests/fixtures/pixel-38603174196.txt");
-    let record = red::run_with(root, &base, &head, &mut |snapshot, _| {
-        if snapshot.join("web/index.html").exists() {
-            Ok(CheckReport {
-                passed: true,
-                tests: vec![name.clone()],
-                ..Default::default()
-            })
-        } else if fs::read_to_string(snapshot.join(path))
-            .unwrap()
-            .contains(function)
-        {
-            let report = wasm::results(&[SuiteRun {
-                package: "aoe-rendering",
-                binary: "lib",
-                exit: CaptureExit::Failed(Some(1)),
-                output: fixture.into(),
-            }])
-            .unwrap();
-            assert_eq!(report.failed.as_slice(), std::slice::from_ref(&name));
-            assert!(!report.panics.is_empty());
-            assert!(report.panics.iter().all(|p| p.test.as_ref() == Some(&name)));
-            Ok(report)
-        } else {
-            Ok(CheckReport {
-                passed: true,
-                ..Default::default()
-            })
-        }
-    })
-    .unwrap();
-    assert_eq!(record.failed, [name]);
 }

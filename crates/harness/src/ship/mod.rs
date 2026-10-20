@@ -42,10 +42,6 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 #[derive(clap::Subcommand)]
 pub(crate) enum Commands {
-    /// Prove changed Rust/browser tests fail before implementation and pass at HEAD.
-    Red(test_first::red::Options),
-    /// Internal runner: emit a fresh focused result from an exported snapshot.
-    RedRun(test_first::red::runner::Options),
     /// Run tester red then implementer green and commit each step (DUEL_*).
     Duel,
     /// Run only tester-changed Cargo packages and browser spec files in Docker.
@@ -144,10 +140,6 @@ pub(crate) struct Options {
     /// The ship lock, let go during the review and taken again for the push.
     #[arg(skip)]
     pub(crate) lock: lock::Handoff,
-    /// Refuse a product change without a red record (`AOE_RED_BLOCKING=1`). Off since
-    /// 2026-10-19 (speed week): a missing record is reported in the facts, not fatal.
-    #[arg(skip)]
-    pub(crate) red_blocking: bool,
 }
 
 impl Default for Options {
@@ -168,7 +160,6 @@ impl Default for Options {
             video: None,
             slots: Box::default(),
             lock: lock::Handoff::default(),
-            red_blocking: false,
         }
     }
 }
@@ -176,8 +167,6 @@ impl Default for Options {
 pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Result<()> {
     let root = PathBuf::from(git::git(Path::new("."), &["rev-parse", "--show-toplevel"])?);
     match command {
-        Commands::Red(options) => test_first::red::execute(&options, slots).map_err(Into::into),
-        Commands::RedRun(options) => test_first::red::runner::execute(&options).map_err(Into::into),
         Commands::Duel => duel::execute(&root).map_err(Into::into),
         Commands::DuelCheck => duel::stages::native(&root).map_err(Into::into),
         Commands::DuelBrowserCheck => duel::stages::browser(&root).map_err(Into::into),
@@ -190,7 +179,6 @@ pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Resul
                 .body_file
                 .or_else(|| env("SHIP_BODY").map(PathBuf::from));
             options.force |= env("SHIP_FORCE").as_deref() == Some("1");
-            options.red_blocking = env("AOE_RED_BLOCKING").as_deref() == Some("1");
             if let Some(base) = env("SHIP_BASE") {
                 options.base = base;
             }
@@ -315,11 +303,7 @@ pub(crate) fn ship_with(
     let merge_base = git::git(root, &["merge-base", &base, &subject.head])?;
     eprint!(
         "ship: test-first report\n{}",
-        test_first::history_summary(root, &merge_base, &subject.head)
-    );
-    eprint!(
-        "{}",
-        test_first::red::check(root, &merge_base, &subject.head, options.red_blocking)?
+        test_first::summary(root, &merge_base, &subject.head)
     );
     let options = &Options {
         no_fetch: true,
@@ -360,24 +344,10 @@ pub(crate) fn ship_with(
     let rebased = crate::timeline::stage(root, "recheck", serde_json::json!({}), || {
         recheck::before_push(root, &evidence, review.as_ref(), options, &started_head)
     })?;
-    // The red decision was made for the identities above; only a catch-up rebase changes them.
-    let rebased_again = rebased.is_some();
     let (evidence, review, lease, _recheck_anchor) = match rebased {
         Some(r) => (r.evidence, r.review, r.lease, Some(r._anchor)),
         None => (evidence, review, None, None),
     };
-    if rebased_again {
-        // Print the decision for the rebased head: a catch-up can invalidate an earlier PASS.
-        eprint!(
-            "ship: after the catch-up rebase\n{}",
-            test_first::red::check(
-                root,
-                &evidence.merge_base,
-                &evidence.head,
-                options.red_blocking,
-            )?
-        );
-    }
     let lease = if evidence.head != started_head && lease.is_none() {
         recheck::lease(root, options, &git::subject(root)?, &started_head)?
     } else {

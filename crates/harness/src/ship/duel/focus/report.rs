@@ -1,5 +1,4 @@
 //! The check report the duel saves as `check.json`, and the one way two reports are combined.
-use super::compile::CompileError;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -29,9 +28,6 @@ pub(crate) struct CheckReport {
     /// Panics of a failed run (a panic in a shared helper aborts the runner without a `FAIL` line).
     #[serde(default)]
     pub(crate) panics: Vec<Panic>,
-    /// The compiler errors of a build that failed; none when its output was cut short.
-    #[serde(default)]
-    pub(crate) compile_errors: Vec<CompileError>,
 }
 
 impl CheckReport {
@@ -47,7 +43,6 @@ impl CheckReport {
             untouched,
             locations,
             panics,
-            compile_errors,
         } = other;
         self.passed &= passed;
         self.build_failed |= build_failed;
@@ -57,7 +52,6 @@ impl CheckReport {
         self.untouched.extend(untouched);
         self.locations.extend(locations);
         self.panics.extend(panics);
-        self.compile_errors.extend(compile_errors);
     }
 
     /// The failing names, then each panic's location and assertion: what a failed check tells its reader.

@@ -240,6 +240,6 @@ pub(super) fn render(data: &Data, prs: &[Pr], since: f64, until: f64) -> String 
             ));
         }
     }
-    out.push_str("\nLimits: historical red/lock/push waits are unavailable; evidence/reviews may have overwritten attempts.\nGate/queue/load/CI and ship totals overlap; never sum them. CI uses startedAt..updatedAt, approximately completion.\nSee docs/timeline.md for pairing, query bounds and historical coverage.\n");
+    out.push_str("\nLimits: historical lock/push waits are unavailable; evidence/reviews may have overwritten attempts.\nGate/queue/load/CI and ship totals overlap; never sum them. CI uses startedAt..updatedAt, approximately completion.\nSee docs/timeline.md for pairing, query bounds and historical coverage.\n");
     out
 }
