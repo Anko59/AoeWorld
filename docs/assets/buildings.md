@@ -6,11 +6,11 @@ ignored `buildings` link. `DE_DIR` defaults to the owner's Steam installation.
 Start `make dev DEV_PORT=8092 AOE_ASSET_PACK=local-assets/packs/<trial-hash>`.
 Neither the install, packs, link nor captures belong in Git or container images.
 
-The client loads the trial pack and this optional overlay into the same three
-2048-square runtime pages. The unchanged 2560-frame ceiling and allocation
-remain enforced by the shared packing planner. Idle actors retain only the
-first native frame per facing (the only frame previously drawn); walking and
-working animation rows remain complete. This frees atlas space without
+The client loads the trial pack and this optional overlay into the same four
+2048-square runtime pages as units and wildlife. The 5120-frame ceiling and allocation
+remain enforced by the shared packing planner. Only the base scout and villager
+idle rows retain the first native frame per facing (the only frame previously
+drawn); additional actor standing, walking, working and combat rows remain complete. This frees atlas space without
 removing displayed animation frames. An absent overlay permits
 semantic building markers; corrupt present sources fail startup.
 

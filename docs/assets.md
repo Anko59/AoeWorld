@@ -53,14 +53,16 @@ are not qualified as a seamless periodic sheet. Metadata-free material 6 selecti
 Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
 grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
-The periodic groups retain all 100 frames. Catalog v15's base selects 2,369 frames:
-1,474 terrain and 895 objects including village art and cliff faces 226. The
+The periodic groups retain all 100 frames. Catalog v15's base selects 2,361 static frames:
+1,474 terrain and 887 objects including village art and cliff faces 226. The
 [unit and wildlife selection](assets/units.md) adds 2,540 frames. DAT building
 recipes add their selected native frames, including animated Mill layers,
 static House variants and construction/wall angles. Runtime packing uses four
 2048² RGBA pages/64 MiB, terrain on pages 0/1 and objects on pages 2/3,
 with a 5,120-entry frame metadata cap.
-Counts alone do not prove fit; private full-manifest packing must be verified.
+Counts alone do not prove fit. Run `make test-assets-pack AOE_ASSET_PACK=local-assets/packs/<hash>`
+for the private full-catalog packing proof, including actor prefixes and DAT buildings.
+It requires every reviewed optional source, including the separate rock and snow sheets.
 It preserves raw signed frame anchors, player color and imported shadow masks;
 broadleaf 4652 uses only its paired shadow-only frames from 2296. Cavalry and non-tree resource
 frames without imported shadows use a fixed-direction fallback silhouette

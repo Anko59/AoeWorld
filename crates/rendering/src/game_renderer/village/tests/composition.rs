@@ -101,3 +101,20 @@ fn construction_stages_follow_dat_offsets_and_keep_the_building_identity() {
     assert!((frames[0].1.anchor[0] - (expected.anchor[0] + 19.0) * scale).abs() < 0.001);
     assert_eq!(house.kind.building_id(), Some(70));
 }
+
+#[wasm_bindgen_test]
+fn actor_and_building_tags_keep_their_selections_disjoint() {
+    for slot in 0..46 {
+        let actor = SceneUnitKind::actor(slot);
+        assert_eq!(actor.actor_slot(), Some(usize::from(slot)));
+        assert_eq!(actor.building_slot(), None);
+        assert_eq!(actor.building_id(), None);
+        assert!(!actor.is_foundation());
+    }
+    for id in [109, 70, 562, 584, 68, 50, 12, 72, 598] {
+        let foundation = SceneUnitKind::foundation(id);
+        assert_eq!(foundation.actor_slot(), None);
+        assert_eq!(foundation.building_id(), Some(i32::from(id)));
+        assert!(foundation.is_foundation());
+    }
+}
