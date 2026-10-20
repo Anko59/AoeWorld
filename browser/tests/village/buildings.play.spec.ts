@@ -42,10 +42,18 @@ test("villager build menu places a House and watches authoritative completion", 
   ).toBe(false);
   const worker = (await actors()).find((a) => a.kind === "Villager");
   if (!worker) throw new Error("Starting villager missing");
-  const selectWorker = async (nth: number) => {
+  const selectWorker = async (nth: number, boxed = false) => {
     const worker = (await actors()).filter((a) => a.kind === "Villager")[nth];
     if (!worker) throw new Error("Builder missing");
-    await page.mouse.click(worker.x, worker.y);
+    if (boxed) {
+      // A stationary farmer can share ground with a foreground sheep.
+      await page.mouse.move(worker.x - 6, worker.y - 6);
+      await page.mouse.down();
+      await page.mouse.move(worker.x + 6, worker.y + 6, { steps: 3 });
+      await page.mouse.up();
+    } else {
+      await page.mouse.click(worker.x, worker.y);
+    }
     await expect(page.locator("#selection-name")).toHaveText("Villager");
   };
   await page.mouse.click(worker.x, worker.y);
@@ -159,7 +167,7 @@ test("villager build menu places a House and watches authoritative completion", 
   await expect(page.locator("#workers-food")).toHaveText("1", {
     timeout: 15_000,
   });
-  await selectWorker(1);
+  await selectWorker(1, true);
   await page.locator("#stop-units").click();
   await expect(page.locator("#workers-food")).toHaveText("0");
   const farm = (await actors()).find((a) => a.kind === "Farm");
