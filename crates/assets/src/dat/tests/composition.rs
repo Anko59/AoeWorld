@@ -198,6 +198,22 @@ fn real_trial_composition_matches_raw_records_and_resolves_tc_annex_graphics() {
         eprintln!("graphic {id}: {g:?}");
     }
     let composition = file.building_composition(109).unwrap();
+    // Every wing attachment has its own single-frame, single-angle SLP.
+    // In particular, 4610 belongs to annex 620, not to the head or annex 619.
+    for (unit, stand, body, attachment, displacement) in [
+        (109, 3241, 3596, 4612, [0.0, 0.0]),
+        (619, 3240, 3595, 4611, [-0.5, 0.5]),
+        (620, 3239, 3594, 4610, [-1.0, 1.0]),
+    ] {
+        assert_eq!(file.unit(unit).unwrap().standing[0], stand);
+        let selected = composition
+            .parts
+            .iter()
+            .filter(|p| p.misplacement == displacement && p.layer == 20)
+            .map(|p| (p.slp_id, p.frames, p.angles))
+            .collect::<Vec<_>>();
+        assert_eq!(selected, [(body, 1, 1), (attachment, 1, 1)]);
+    }
     assert_eq!(composition.foundation_slp, Some(15006));
     assert_eq!(
         composition
@@ -209,10 +225,23 @@ fn real_trial_composition_matches_raw_records_and_resolves_tc_annex_graphics() {
     );
     assert!(composition.parts.iter().all(|p| p.offset == [0, 0]));
     assert!(composition.parts.iter().any(|p| p.slp_id == 891));
-    let pack = table::slp_ids(
-        &std::fs::read(std::path::Path::new(&path).with_file_name("graphics.drs")).unwrap(),
-    )
-    .unwrap();
+    let archive =
+        std::fs::read(std::path::Path::new(&path).with_file_name("graphics.drs")).unwrap();
+    let pack = table::slp_ids(&archive).unwrap();
+    let entries = crate::drs::parse(&archive).unwrap();
+    for id in [3594, 3595, 3596, 4610, 4611, 4612] {
+        let entry = entries
+            .iter()
+            .find(|e| e.id == id && e.kind == *b" pls")
+            .unwrap();
+        let frames = crate::slp::parse(entry.data).unwrap();
+        assert_eq!(frames.len(), 1, "SLP {id} has no alternate facing");
+        let f = &frames[0];
+        eprintln!(
+            "SLP {id}: {}x{}, anchor ({},{})",
+            f.width, f.height, f.hotspot_x, f.hotspot_y
+        );
+    }
     assert!(!pack.contains(&890));
     assert_eq!(
         composition
