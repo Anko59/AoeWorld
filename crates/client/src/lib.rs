@@ -25,6 +25,9 @@ mod game_assets;
 #[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]
 mod png_page;
 
+#[cfg(all(target_arch = "wasm32", not(feature = "diagnostics")))]
+mod unit_visuals;
+
 pub mod resource_state;
 
 #[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]

@@ -67,6 +67,7 @@ pub struct Unit {
     pub line_of_sight: f32,
     pub standing: [i16; 2],
     pub dying: i16,
+    pub dead_unit: i16,
     pub speed: Option<f32>,
     pub walking: Option<[i16; 2]>,
     pub attack_graphic: Option<i16>,

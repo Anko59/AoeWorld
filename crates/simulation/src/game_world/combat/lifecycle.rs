@@ -13,26 +13,38 @@ impl GameWorld {
         unit.state.planning = false;
     }
 
-    /// Population is freed now; the body stays for `DYING_SECONDS` at 0 HP.
+    /// Population is freed now; native death playback precedes thirty seconds of corpse decay.
     pub(crate) fn kill_unit(&mut self, index: usize) {
         self.stop_movement(index);
         let id = self.units[index].state.id;
         let player = self.units[index].state.player;
+        let death_hunt = self
+            .hunting_target(id)
+            .and_then(|target| self.animal(target))
+            .map(|a| a.kind);
         let state = &mut self.units[index].state;
         state.hp = 0;
+        state.death_tick = Some(self.tick);
+        state.death_hunt = death_hunt;
         state.task = UnitTask::Dying;
         state.attack_target = None;
         self.combat.attackers.remove(&id);
         self.stop_gathering(id);
+        self.cancel_hunt(id);
         self.economy.builders.remove(&id);
         if let Some(economy) = self.economy.players.get_mut(&player) {
             economy.population_used = economy.population_used.saturating_sub(1);
         }
-        let due = self
-            .tick
-            .0
-            .saturating_add(u64::from(self.config.tick_hz) * u64::from(super::DYING_SECONDS));
-        self.combat.dying.push_back((due, id));
+        let die_millis = match self.units[index].state.kind {
+            crate::UnitKind::Villager => 1500_u64,
+            crate::UnitKind::Scout => 1900,
+            crate::UnitKind::Militia => 1000,
+        };
+        let die_ticks = (u64::from(self.config.tick_hz) * die_millis).div_ceil(1000);
+        let due = self.tick.0.saturating_add(
+            die_ticks + u64::from(self.config.tick_hz) * u64::from(super::CORPSE_SECONDS),
+        );
+        self.combat.dying.insert((due, id));
     }
 
     /// Removes a unit from every index. Its slot is filled by the last unit.

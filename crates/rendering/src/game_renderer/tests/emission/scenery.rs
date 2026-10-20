@@ -16,6 +16,7 @@ fn art() -> GameArt {
         })
         .collect();
     GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),

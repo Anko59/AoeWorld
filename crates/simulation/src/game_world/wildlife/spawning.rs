@@ -27,11 +27,15 @@ impl GameWorld {
                     task: AnimalTask::Idle,
                     food_remaining: kind.rules().food,
                     target: None,
+                    facing: crate::Facing::South,
+                    moving: false,
+                    death_tick: None,
                 },
                 home: at,
                 cooldown: 0,
                 speed_carry: 0,
                 decay_carry: 0,
+                herd: None,
             },
         );
         self.wildlife.cells.entry(cell(at)).or_default().insert(id);
@@ -46,6 +50,7 @@ impl GameWorld {
             (AnimalKind::Sheep, 8, (-4, 0)),
             (AnimalKind::Boar, 2, (9, 3)),
             (AnimalKind::Deer, 4, (-8, 8)),
+            (AnimalKind::Wolf, 1, (16, 0)),
         ] {
             for _ in 0..count {
                 let mut chosen = None;

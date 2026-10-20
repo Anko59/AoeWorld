@@ -135,6 +135,10 @@ fn unit_graphics(file: &DatFile, unit: &Unit, pack: Option<&BTreeSet<i32>>) -> V
     wanted.extend(unit.walking.map(|w| ("walk".into(), w[0].into())));
     wanted.extend(unit.attack_graphic.map(|a| ("attack".into(), a.into())));
     wanted.extend(
+        file.unit(unit.dead_unit.into())
+            .map(|dead| ("decay".into(), i32::from(dead.standing[0]))),
+    );
+    wanted.extend(
         unit.construction_graphic
             .map(|c| ("construction".into(), c.into())),
     );

@@ -3,6 +3,11 @@ use super::*;
 use crate::SceneUnitKind;
 
 pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], usize, bool)> {
+    if let Some(index) = unit.kind.actor_slot() {
+        let frames = art.actors.get(index)?.as_slice();
+        let stride = frames.len() / 5;
+        return (stride > 0 && frames.len() == stride * 5).then_some((frames, stride, false));
+    }
     let scout = unit.kind == SceneUnitKind::Scout;
     let (frames, stride): (&[GameFrame], usize) = if scout {
         (

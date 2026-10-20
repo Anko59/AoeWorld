@@ -48,6 +48,7 @@ pub struct SceneryArt {
 }
 
 pub struct GameArt {
+    pub actors: Vec<Vec<GameFrame>>,
     /// Nine standing kinds, four foundation sizes, nine rubble kinds, builder.
     pub buildings: [Vec<GameFrame>; 23],
     pub village: [Vec<GameFrame>; 9],

@@ -3,11 +3,33 @@ use crate::GameWorld;
 use aoe_core::EntityId;
 
 impl GameWorld {
+    pub(crate) fn strike_animal(&mut self, id: EntityId, attacker: EntityId, damage: u16) -> bool {
+        let Some(a) = self.wildlife.animals.get_mut(&id) else {
+            return true;
+        };
+        a.state.hp = a.state.hp.saturating_sub(damage.max(1));
+        if a.state.hp == 0 {
+            self.kill_animal(id);
+            true
+        } else {
+            if matches!(
+                a.state.kind,
+                super::AnimalKind::Wolf | super::AnimalKind::Boar
+            ) {
+                a.state.target = Some(attacker);
+                a.state.task = AnimalTask::Attacking;
+                self.wildlife.engaged.insert(id);
+            }
+            false
+        }
+    }
     pub(super) fn kill_animal(&mut self, id: EntityId) {
         let Some(a) = self.wildlife.animals.get_mut(&id) else {
             return;
         };
         a.state.hp = 0;
+        a.state.moving = false;
+        a.state.death_tick = Some(self.tick);
         a.state.task = AnimalTask::Dead;
         a.state.target = None;
         let key = cell(a.state.position);
@@ -42,10 +64,18 @@ impl GameWorld {
                 a.decay_carry %= 100;
                 a.state.food_remaining -= lost;
             }
-            if a.state.food_remaining > 0 {
+            let expiry = a.state.death_tick.map_or(due, |tick| {
+                tick.0.saturating_add(
+                    u64::from(self.config.tick_hz)
+                        * u64::from(crate::CORPSE_SECONDS + crate::DYING_SECONDS),
+                )
+            });
+            if a.state.food_remaining > 0 || due < expiry {
                 self.wildlife
                     .due
                     .insert((due.saturating_add(u64::from(self.config.tick_hz)), id));
+            } else {
+                self.wildlife.animals.remove(&id);
             }
         }
     }

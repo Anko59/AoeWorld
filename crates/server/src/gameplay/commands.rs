@@ -253,6 +253,13 @@ pub(super) fn apply(
             entity_id,
             destination,
         } => {
+            if world.animal(entity_id).is_some() {
+                return match world.issue_herd(player, entity_id, destination) {
+                    Ok(()) => CommandResult::Accepted,
+                    Err(aoe_simulation::EconomyError::NotOwner) => CommandResult::RejectedNotOwner,
+                    Err(_) => CommandResult::RejectedInvalidDestination,
+                };
+            }
             let Some(unit) = world.unit(entity_id) else {
                 return CommandResult::RejectedUnknownEntity;
             };

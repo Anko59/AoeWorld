@@ -104,6 +104,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
         canvas,
         renderer,
         art: GameArt {
+            actors: Vec::new(),
             buildings: Default::default(),
             village: Default::default(),
             town_center: Default::default(),
@@ -160,6 +161,9 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
                 max_hp: 25,
                 attack_target: None,
                 last_hit: None,
+                death_tick: None,
+                hunt_target: None,
+                death_hunt: None,
             },
         )]),
         presentation: Default::default(),

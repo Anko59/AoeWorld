@@ -77,6 +77,7 @@ pub(crate) fn art() -> GameArt {
     });
     terrain_topology[2] = Some(TerrainTopology::CoordinateStableAccents);
     GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),

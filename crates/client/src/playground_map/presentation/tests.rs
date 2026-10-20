@@ -18,6 +18,9 @@ fn state(x: i32, moving: bool) -> GameplayUnitState {
         max_hp: 25,
         attack_target: None,
         last_hit: None,
+        death_tick: None,
+        hunt_target: None,
+        death_hunt: None,
     }
 }
 

@@ -40,6 +40,9 @@ test("a stopped villager retains its load without counting as a wood worker", as
   await gameAssets(page);
   await workerFixture(page);
   await page.goto("/?play=1");
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 30_000,
+  });
   await expect(page.locator("#population")).toHaveText("3/5");
   await expect(page.locator("#workers-wood")).toHaveText("0");
   const worker = await page.locator("#scene").evaluate((canvas) =>
@@ -62,6 +65,9 @@ test("reconnecting preserves an offscreen zero-load gold worker without terrain 
   await gameAssets(page);
   await workerFixture(page);
   await page.goto("/?play=1");
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 30_000,
+  });
   await expect(page.locator("#population")).toHaveText("3/5");
   await expect(page.locator("#workers-gold")).toHaveText("1");
   await page.reload();
@@ -75,6 +81,9 @@ test("Escape disarms Move before the next selection click", async ({
   await gameAssets(page);
   await fiveVillagerFixture(page);
   await page.goto("/?play=1");
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 30_000,
+  });
   await expect(page.locator("#population")).toHaveText("6/10");
   const worker = await page.locator("#scene").evaluate((canvas) =>
     (

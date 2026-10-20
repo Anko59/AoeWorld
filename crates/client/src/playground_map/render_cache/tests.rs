@@ -131,6 +131,7 @@ fn art() -> aoe_rendering::GameArt {
         anchor: [12.0, 40.0],
     };
     aoe_rendering::GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),

@@ -209,7 +209,7 @@ fn canvas_live_source_grid_has_pixels_and_toggle_off_removes_them() {
     let mut renderer = GameRenderer::Canvas {
         canvas: canvas.clone(),
         context: context.clone(),
-        atlas: [None, None, None],
+        atlas: [None, None, None, None],
         source_atlas: Vec::new(),
         presentation: CanvasPresentation::new(128, 128),
     };

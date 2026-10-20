@@ -19,7 +19,7 @@ export function updateDetails(values) {
     byId('selected-icons').replaceChildren();
     byId('command-context').textContent = kinds[values[1]];
   }
-  const cursor = ['', 'gather', 'move', 'forbidden'][values[3]];
+  const cursor = ['', 'gather', 'move', 'forbidden', 'attack', 'hunt'][values[3]];
   byId('scene').dataset.commandCursor = cursor;
   const highlight = byId('resource-highlight');
   const highlighted = cursor === 'gather' && values[8] > 0;

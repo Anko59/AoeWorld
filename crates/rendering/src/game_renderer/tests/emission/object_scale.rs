@@ -22,6 +22,7 @@ fn frame(size: [f32; 2], anchor: [f32; 2]) -> GameFrame {
 /// Hotspots as in the reviewed pack: a gold pile's is in its middle.
 fn art() -> GameArt {
     GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
@@ -201,7 +202,7 @@ fn objects_share_one_clearance_that_covers_the_art_below_a_hotspot() {
     let mut renderer = GameRenderer::Canvas {
         canvas: canvas.clone(),
         context: context.clone(),
-        atlas: [None, None, None],
+        atlas: [None, None, None, None],
         // White art over flat-coloured ground.
         source_atlas: vec![255; crate::GAME_ATLAS_BYTES],
         presentation: CanvasPresentation::new(512, 512),
@@ -236,7 +237,7 @@ fn canvas_draws_a_whole_pile_over_its_tile() {
     let mut renderer = GameRenderer::Canvas {
         canvas: canvas.clone(),
         context: context.clone(),
-        atlas: [None, None, None],
+        atlas: [None, None, None, None],
         // White art over flat-coloured ground.
         source_atlas: vec![255; crate::GAME_ATLAS_BYTES],
         presentation: CanvasPresentation::new(512, 512),

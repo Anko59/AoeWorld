@@ -2,9 +2,14 @@ use super::*;
 
 fn page_atlas() -> Vec<u8> {
     let mut pixels = atlas(&[]);
-    for (page, color) in [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]]
-        .iter()
-        .enumerate()
+    for (page, color) in [
+        [255, 0, 0, 255],
+        [0, 255, 0, 255],
+        [0, 0, 255, 255],
+        [255, 0, 255, 255],
+    ]
+    .iter()
+    .enumerate()
     {
         let start = page * crate::GAME_ATLAS_PAGE_BYTES;
         pixels[start..start + 4].copy_from_slice(color);
@@ -15,7 +20,7 @@ fn page_atlas() -> Vec<u8> {
 #[wasm_bindgen_test]
 fn equal_uv_pages_keep_depth_ties_alpha_and_cross_page_blend() {
     let (canvas, mut renderer) = target(&page_atlas());
-    for page in 0..3 {
+    for page in 0..4 {
         let mut body = sprite(0.0, 1.0);
         body.pages[0] = page;
         render(&mut renderer, &mut [body]);
@@ -23,14 +28,20 @@ fn equal_uv_pages_keep_depth_ties_alpha_and_cross_page_blend() {
             &canvas,
             64,
             64,
-            [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]][page as usize],
+            [
+                [255, 0, 0, 255],
+                [0, 255, 0, 255],
+                [0, 0, 255, 255],
+                [255, 0, 255, 255],
+            ][page as usize],
         );
     }
-    let mut bodies = [sprite(0.0, 8.0); 3];
+    let mut bodies = [sprite(0.0, 8.0); 4];
     bodies[1].pages[0] = 1;
     bodies[2].pages[0] = 2;
+    bodies[3].pages[0] = 3;
     render(&mut renderer, &mut bodies);
-    assert_pixel(&canvas, 64, 64, [0, 0, 255, 255]);
+    assert_pixel(&canvas, 64, 64, [255, 0, 255, 255]);
     bodies.reverse();
     render(&mut renderer, &mut bodies);
     assert_pixel(&canvas, 64, 64, [255, 0, 0, 255]);
@@ -83,7 +94,7 @@ export function restrict_array_limits(canvas, layers) {
 }
 export function restore_owned_pages(bridge, fail) {
     const source = bridge.atlasPixels;
-    if (source.byteLength !== 50331648) throw new Error('restoration owner size');
+    if (source.byteLength !== 67108864) throw new Error('restoration owner size');
     if (fail) bridge.initialize = () => { throw new Error('injected restoration error'); };
     bridge.onRestored();
     if (bridge.atlasPixels !== source) throw new Error('restoration cloned source');

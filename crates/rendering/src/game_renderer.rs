@@ -27,10 +27,11 @@ use world_sprites::world_sprite_frames;
 #[cfg(test)]
 #[path = "game_renderer/tests/emission/direct_emission.rs"]
 mod direct_emission_tests;
-pub use world_sprites::{scene_resource_frame, scene_resource_presentation};
+pub use world_sprites::{scene_resource_frame, scene_resource_presentation, scene_unit_bounds};
 pub fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
     world_sprites::scene_unit_animates(art, unit, camera)
 }
+pub use world_sprites::actor_frame_index;
 
 pub fn resource_sprite_bounds(
     resource: SceneResource,
@@ -84,7 +85,7 @@ pub enum GameRenderer {
     Canvas {
         canvas: HtmlCanvasElement,
         context: CanvasRenderingContext2d,
-        atlas: [Option<HtmlCanvasElement>; 3],
+        atlas: [Option<HtmlCanvasElement>; 4],
         source_atlas: Vec<u8>,
         presentation: CanvasPresentation,
     },
@@ -150,7 +151,7 @@ impl GameRenderer {
             Self::Canvas {
                 canvas: replacement.clone(),
                 context: main_context,
-                atlas: [None, None, None],
+                atlas: [None, None, None, None],
                 source_atlas: Vec::new(),
                 presentation: CanvasPresentation::new(replacement.width(), replacement.height()),
             },
@@ -183,7 +184,7 @@ impl GameRenderer {
                 if pixels.len() != crate::GAME_ATLAS_BYTES {
                     return Err("Invalid game atlas size".into());
                 }
-                *atlas = [None, None, None];
+                *atlas = [None, None, None, None];
                 *source_atlas = pixels;
                 Ok(())
             }
@@ -376,7 +377,7 @@ fn grid_segments(layers: &[WorldLayer], camera: SceneCamera) -> Vec<[aoe_core::S
 
 fn legacy_page<'a>(
     canvas: &HtmlCanvasElement,
-    pages: &'a mut [Option<HtmlCanvasElement>; 3],
+    pages: &'a mut [Option<HtmlCanvasElement>; 4],
     pixels: &[u8],
     page: u32,
 ) -> Result<&'a HtmlCanvasElement, String> {

@@ -57,10 +57,10 @@ test("villager build menu places a House and watches authoritative completion", 
     await page.locator("#playground").getAttribute("data-atlas-frames"),
   );
   expect(frameCount).toBeGreaterThan(0);
-  expect(frameCount).toBeLessThanOrEqual(2560);
+  expect(frameCount).toBeLessThanOrEqual(5120);
   await writeFile(
     "../.cache/client-shots/atlas.json",
-    JSON.stringify({ assets, frameCount, pages: 3, atlasBytes: 50331648 }),
+    JSON.stringify({ assets, frameCount, pages: 4, atlasBytes: 67108864 }),
   );
   await page.screenshot({ path: "../.cache/client-shots/build-menu.png" });
   await page.locator("#build-house").click();
@@ -145,7 +145,12 @@ test("villager build menu places a House and watches authoritative completion", 
       .toBe(true);
     const foundation = (await actors()).find((a) => a.kind === kind);
     if (!foundation) throw new Error(`${kind} missing`);
-    await page.mouse.click(foundation.x, foundation.y);
+    // Wildlife now occupies the map: this Farm's center has a sheep on it.
+    // Select its unobstructed ground, rather than the foreground animal.
+    await page.mouse.click(
+      foundation.x,
+      foundation.y + (kind === "Farm" ? 32 : 0),
+    );
     await expect(page.locator("#selection-name")).toHaveText(kind);
     await expect(page.locator("#building-status")).toContainText("Complete", {
       timeout: 70_000,
@@ -159,7 +164,8 @@ test("villager build menu places a House and watches authoritative completion", 
   await expect(page.locator("#workers-food")).toHaveText("0");
   const farm = (await actors()).find((a) => a.kind === "Farm");
   if (!farm) throw new Error("Completed Farm missing");
-  await page.mouse.click(farm.x, farm.y, { button: "right" });
+  await page.mouse.click(farm.x, farm.y + 32, { button: "right" });
+  await expect(page.locator("#selection-task")).toHaveText("Farming");
   await expect(page.locator("#workers-food")).toHaveText("1");
   await selectWorker(0);
   await page.locator("#build-menu").click();

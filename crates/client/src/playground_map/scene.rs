@@ -150,19 +150,78 @@ pub(in super::super) fn units(
         .values()
         .map(|unit| {
             let position = client.presentation.position(*unit);
+            let mut kind = worker_kind(unit);
+            let mut facing = unit.facing;
+            if unit.kind == aoe_protocol::UnitKind::Militia
+                || unit.hp == 0
+                || matches!(
+                    unit.task,
+                    aoe_protocol::UnitTask::Hunting | aoe_protocol::UnitTask::Shepherding
+                )
+                || (unit.task == aoe_protocol::UnitTask::Attacking && !unit.moving)
+                || unit.hunt_target.is_some()
+            {
+                let animal = unit
+                    .hunt_target
+                    .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
+                let pose = crate::unit_visuals::lifecycle_pose(
+                    crate::unit_visuals::unit_pose(unit, animal),
+                    unit.death_tick,
+                    client.village.tick,
+                    client.config.tick_hz,
+                );
+                kind = aoe_rendering::SceneUnitKind::actor(pose as u8);
+                facing = crate::unit_visuals::packed_frame(
+                    pose,
+                    facing,
+                    client.last_frame,
+                    unit.death_tick,
+                    client.village.tick,
+                    client.config.tick_hz,
+                );
+            }
             aoe_rendering::SceneUnit {
-                kind: worker_kind(unit),
+                kind,
                 id: unit.id,
                 position,
                 moving: unit.moving || position != unit.position.as_tiles(),
-                facing: unit.facing,
-                selected: client.selected.units.contains(&unit.id),
+                facing,
+                selected: unit.hp > 0 && client.selected.units.contains(&unit.id),
                 elevation_meters: scene
                     .height(position)
                     .unwrap_or_else(|| elevation_at_world(client, position)),
             }
         })
         .collect::<Vec<_>>();
+    for animal in &client.village.animals {
+        let position = animal.position.as_tiles();
+        let pose = crate::unit_visuals::lifecycle_pose(
+            crate::unit_visuals::animal_pose(animal),
+            animal.death_tick,
+            client.village.tick.max(client.village.wildlife_tick),
+            client.config.tick_hz,
+        );
+        let unit = aoe_rendering::SceneUnit {
+            kind: aoe_rendering::SceneUnitKind::actor(pose as u8),
+            id: animal.id,
+            position,
+            moving: animal.moving,
+            facing: crate::unit_visuals::packed_frame(
+                pose,
+                animal.facing,
+                client.last_frame,
+                animal.death_tick,
+                client.village.tick.max(client.village.wildlife_tick),
+                client.config.tick_hz,
+            ),
+            selected: client.selected.units.contains(&animal.id) && animal.hp > 0,
+            elevation_meters: scene
+                .height(position)
+                .unwrap_or_else(|| elevation_at_world(client, position)),
+        };
+        let slot = units.partition_point(|u| u.id < animal.id);
+        units.insert(slot, unit);
+    }
     let walls: Vec<_> = client
         .village
         .buildings

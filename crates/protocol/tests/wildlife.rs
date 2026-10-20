@@ -11,6 +11,9 @@ fn animal() -> AnimalState {
         task: AnimalTask::Idle,
         food_remaining: 100,
         target: None,
+        facing: 0,
+        moving: false,
+        death_tick: None,
     }
 }
 
@@ -32,10 +35,31 @@ fn wildlife_wire_golden_and_roundtrip() {
     let bytes = encode_gameplay_server(&state).unwrap();
     assert_eq!(
         bytes,
-        vec![8, 1, 2, 1, 7, 0, 1, 0, 7, 128, 16, 128, 32, 0, 100, 0],
+        vec![
+            8, 1, 2, 1, 7, 0, 1, 0, 7, 128, 16, 128, 32, 0, 100, 0, 0, 0, 0
+        ],
         "WildlifeState bytes: {bytes:?}"
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), state);
+    let carcass = GameplayServerMessage::WildlifeState {
+        revision: 1,
+        tick: Tick(2),
+        animals: vec![AnimalState {
+            hp: 0,
+            task: AnimalTask::Carcass,
+            facing: 3,
+            death_tick: Some(Tick(1)),
+            ..animal()
+        }],
+    };
+    let bytes = encode_gameplay_server(&carcass).unwrap();
+    assert_eq!(
+        bytes,
+        vec![
+            8, 1, 2, 1, 7, 0, 1, 0, 0, 128, 16, 128, 32, 4, 100, 0, 3, 0, 1, 1
+        ]
+    );
+    assert_eq!(decode_gameplay_server(&bytes).unwrap(), carcass);
 }
 
 #[test]
@@ -161,6 +185,9 @@ fn hunting_tasks_require_villagers_and_food_loads() {
         max_hp: 25,
         attack_target: None,
         last_hit: None,
+        death_tick: None,
+        hunt_target: None,
+        death_hunt: None,
     };
     for invalid in [
         GameplayUnitState {

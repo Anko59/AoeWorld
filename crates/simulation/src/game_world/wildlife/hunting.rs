@@ -132,7 +132,8 @@ impl GameWorld {
             return self.begin_carcass_gather(id, job.animal).is_err();
         }
         let index = self.lookup[&id];
-        if distance(u.position, a.position) > radius(1) {
+        let reach = if a.kind == AnimalKind::Sheep { 1 } else { 4 };
+        if distance(u.position, a.position) > radius(reach) {
             if self.movement_order(id).is_none() && self.movement_failure(id).is_some() {
                 return false;
             }

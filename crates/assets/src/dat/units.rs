@@ -195,6 +195,8 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
     r.skip(3)?; // undead graphic, death mode
     let hit_points = r.i16()?;
     let line_of_sight = r.f32()?;
+    r.pos = start + 43; // capacity, collision radii and creation/damage sounds
+    let dead_unit = r.i16()?;
     r.pos = start + DAMAGE_COUNT_AT;
     let sprites = usize::from(r.u8()?);
     r.bounded(sprites, MAX_DAMAGE_SPRITES, "damage sprites")?;
@@ -209,6 +211,7 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         line_of_sight,
         standing,
         dying,
+        dead_unit,
         speed: None,
         walking: None,
         attack_graphic: None,

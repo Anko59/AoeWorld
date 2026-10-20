@@ -76,6 +76,8 @@ impl GameWorld {
                 max_hp: unit_combat(kind).hp + self.researched_hp_bonus(player, kind),
                 attack_target: None,
                 last_hit: None,
+                death_tick: None,
+                death_hunt: None,
             },
             order: None,
             bucket,

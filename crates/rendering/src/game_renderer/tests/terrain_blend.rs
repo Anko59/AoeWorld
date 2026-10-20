@@ -193,6 +193,7 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
         anchor: [0.0; 2],
     };
     let art = GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
@@ -261,9 +262,14 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
 
 fn blend_atlas() -> Vec<u8> {
     let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
-    for (page, texel) in [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]]
-        .iter()
-        .enumerate()
+    for (page, texel) in [
+        [255, 0, 0, 255],
+        [0, 255, 0, 255],
+        [0, 0, 255, 255],
+        [255, 0, 255, 255],
+    ]
+    .iter()
+    .enumerate()
     {
         let start = page * crate::GAME_ATLAS_PAGE_BYTES;
         atlas[start..start + 4].copy_from_slice(texel);
@@ -303,11 +309,12 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
     let mut renderer = GameRenderer::Canvas {
         canvas: canvas.clone(),
         context,
-        atlas: [None, None, None],
+        atlas: [None, None, None, None],
         source_atlas: Vec::new(),
         presentation: CanvasPresentation::new(128, 128),
     };
     let art = GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),
@@ -344,7 +351,17 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
         [0, 255, 0, 255]
     );
     assert!(atlas[0].is_none() && atlas[1].is_some() && atlas[2].is_none());
-    assert!(legacy_page(&canvas, atlas, source_atlas, 3).is_err());
+    let page = legacy_page(&canvas, atlas, source_atlas, 3).unwrap();
+    assert_eq!(
+        super::context(page)
+            .unwrap()
+            .get_image_data(0.0, 0.0, 1.0, 1.0)
+            .unwrap()
+            .data()
+            .0,
+        [255, 0, 255, 255]
+    );
+    assert!(legacy_page(&canvas, atlas, source_atlas, 4).is_err());
 }
 
 fn assert_blended(pixel: &[u8]) {

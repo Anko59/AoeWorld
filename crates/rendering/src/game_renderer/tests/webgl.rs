@@ -36,12 +36,13 @@ fn canvas_zero_backing_size_does_not_advance_presentation() {
     canvas.set_height(128);
     let mut renderer = GameRenderer::Canvas {
         context: context(&canvas).unwrap(),
-        atlas: [None, None, None],
+        atlas: [None, None, None, None],
         presentation: CanvasPresentation::new(0, 128),
         source_atlas: Vec::new(),
         canvas,
     };
     let art = GameArt {
+        actors: Vec::new(),
         buildings: Default::default(),
         village: Default::default(),
         town_center: Default::default(),

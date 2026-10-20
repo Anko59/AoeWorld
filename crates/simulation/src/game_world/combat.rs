@@ -7,7 +7,7 @@
 //! ordered to attack or is hit while idle (retaliation).
 use super::{EconomyError, GameUnit, GameWorld, UnitTask};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, Tick};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet};
 
 mod cost;
 mod hash;
@@ -25,6 +25,8 @@ pub use table::{
 pub const MELEE_RANGE_SUBUNITS: i64 = FIXED_SUBUNITS_PER_TILE as i64;
 /// A dead unit stays visible, at 0 HP, so a client can play a death animation.
 pub const DYING_SECONDS: u32 = 1;
+/// Corpse residency after the die animation. Shared by wire consumers.
+pub const CORPSE_SECONDS: u32 = 30;
 /// An approaching attacker re-plans its route at most this often.
 pub const REPATH_SECONDS: u32 = 1;
 
@@ -52,7 +54,7 @@ pub(crate) struct Attacker {
 pub(crate) struct Combat {
     pub(crate) attackers: BTreeMap<EntityId, Attacker>,
     /// `(tick at which the body is removed, unit)` in death order.
-    pub(crate) dying: VecDeque<(u64, EntityId)>,
+    pub(crate) dying: BTreeSet<(u64, EntityId)>,
     pub(crate) stats: CombatStats,
 }
 

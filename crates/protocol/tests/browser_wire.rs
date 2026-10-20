@@ -60,6 +60,9 @@ fn browser_unit_combat_fragments_match_the_current_codec() {
             max_hp: hp,
             attack_target: None,
             last_hit: None,
+            death_tick: None,
+            hunt_target: None,
+            death_hunt: None,
         };
         let mut expected = vec![
             1, 1, 0, 1, 7, 1, 128, 32, 128, 64, 0, 0, 2, kind as u8, 0, 0, 0,
@@ -178,6 +181,9 @@ fn browser_wildlife_fixture_matches_the_current_codec() {
             task: aoe_protocol::AnimalTask::Idle,
             food_remaining: 100,
             target: None,
+            facing: 0,
+            moving: false,
+            death_tick: None,
         }],
     };
     let mut expected = vec![8, 172, 2, 0, 1];

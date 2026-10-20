@@ -47,9 +47,117 @@ pub enum SceneUnitKind {
     RubbleBarracks,
     RubblePalisadeWall,
     RubbleOutpost,
+    /// Native actor group; facing packs the direction and selected frame.
+    MilitiaStand,
+    MilitiaWalk,
+    MilitiaAttack,
+    MilitiaDie,
+    VillagerAttack,
+    VillagerDie,
+    HunterStand,
+    HunterWalk,
+    HunterAttack,
+    Butcher,
+    HunterCarry,
+    ShepherdStand,
+    ShepherdWalk,
+    ShepherdWork,
+    SheepStand,
+    SheepWalk,
+    SheepDie,
+    DeerStand,
+    DeerWalk,
+    DeerDie,
+    BoarStand,
+    BoarWalk,
+    BoarAttack,
+    BoarDie,
+    WolfStand,
+    WolfWalk,
+    WolfRun,
+    WolfAttack,
+    WolfDie,
+    ScoutAttack,
+    ScoutDie,
+    MilitiaDecay,
+    VillagerDecay,
+    SheepDecay,
+    DeerDecay,
+    BoarDecay,
+    WolfDecay,
+    ScoutDecay,
+    HunterDie,
+    HunterDecay,
+    ShepherdDie,
+    ShepherdDecay,
+    NeutralSheepStand,
+    NeutralSheepWalk,
+    NeutralSheepDie,
+    NeutralSheepDecay,
 }
 
 impl SceneUnitKind {
+    /// Flat tags keep the scene DTO at 32 bytes, including actor animations.
+    pub fn actor(index: u8) -> Self {
+        const ACTORS: [SceneUnitKind; 46] = [
+            SceneUnitKind::MilitiaStand,
+            SceneUnitKind::MilitiaWalk,
+            SceneUnitKind::MilitiaAttack,
+            SceneUnitKind::MilitiaDie,
+            SceneUnitKind::VillagerAttack,
+            SceneUnitKind::VillagerDie,
+            SceneUnitKind::HunterStand,
+            SceneUnitKind::HunterWalk,
+            SceneUnitKind::HunterAttack,
+            SceneUnitKind::Butcher,
+            SceneUnitKind::HunterCarry,
+            SceneUnitKind::ShepherdStand,
+            SceneUnitKind::ShepherdWalk,
+            SceneUnitKind::ShepherdWork,
+            SceneUnitKind::SheepStand,
+            SceneUnitKind::SheepWalk,
+            SceneUnitKind::SheepDie,
+            SceneUnitKind::DeerStand,
+            SceneUnitKind::DeerWalk,
+            SceneUnitKind::DeerDie,
+            SceneUnitKind::BoarStand,
+            SceneUnitKind::BoarWalk,
+            SceneUnitKind::BoarAttack,
+            SceneUnitKind::BoarDie,
+            SceneUnitKind::WolfStand,
+            SceneUnitKind::WolfWalk,
+            SceneUnitKind::WolfRun,
+            SceneUnitKind::WolfAttack,
+            SceneUnitKind::WolfDie,
+            SceneUnitKind::ScoutAttack,
+            SceneUnitKind::ScoutDie,
+            SceneUnitKind::MilitiaDecay,
+            SceneUnitKind::VillagerDecay,
+            SceneUnitKind::SheepDecay,
+            SceneUnitKind::DeerDecay,
+            SceneUnitKind::BoarDecay,
+            SceneUnitKind::WolfDecay,
+            SceneUnitKind::ScoutDecay,
+            SceneUnitKind::HunterDie,
+            SceneUnitKind::HunterDecay,
+            SceneUnitKind::ShepherdDie,
+            SceneUnitKind::ShepherdDecay,
+            SceneUnitKind::NeutralSheepStand,
+            SceneUnitKind::NeutralSheepWalk,
+            SceneUnitKind::NeutralSheepDie,
+            SceneUnitKind::NeutralSheepDecay,
+        ];
+        ACTORS
+            .get(usize::from(index))
+            .copied()
+            .unwrap_or(Self::Scout)
+    }
+    pub(super) fn actor_slot(self) -> Option<usize> {
+        (self as u8)
+            .checked_sub(Self::MilitiaStand as u8)
+            .map(usize::from)
+    }
+
     /// The typed building roles are contiguous in the atlas's semantic order.
     pub fn building(slot: u8) -> Self {
         use SceneUnitKind::*;
@@ -79,7 +187,31 @@ impl SceneUnitKind {
         ][usize::from(slot.min(21))]
     }
     pub(super) fn building_slot(self) -> Option<u8> {
-        (self as u8).checked_sub(Self::BuildingTownCenter as u8)
+        match self {
+            Self::BuildingTownCenter => Some(0),
+            Self::House => Some(1),
+            Self::LumberCamp => Some(2),
+            Self::MiningCamp => Some(3),
+            Self::Mill => Some(4),
+            Self::Farm => Some(5),
+            Self::Barracks => Some(6),
+            Self::PalisadeWall => Some(7),
+            Self::Outpost => Some(8),
+            Self::Foundation1x1 => Some(9),
+            Self::Foundation2x2 => Some(10),
+            Self::Foundation3x3 => Some(11),
+            Self::Foundation4x4 => Some(12),
+            Self::RubbleTownCenter => Some(13),
+            Self::RubbleHouse => Some(14),
+            Self::RubbleLumberCamp => Some(15),
+            Self::RubbleMiningCamp => Some(16),
+            Self::RubbleMill => Some(17),
+            Self::RubbleFarm => Some(18),
+            Self::RubbleBarracks => Some(19),
+            Self::RubblePalisadeWall => Some(20),
+            Self::RubbleOutpost => Some(21),
+            _ => None,
+        }
     }
     pub(super) fn building_side(self) -> Option<f64> {
         if self == Self::TownCenter {

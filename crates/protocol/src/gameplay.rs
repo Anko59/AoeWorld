@@ -47,6 +47,11 @@ pub struct UnitState {
     /// The unit or building this unit is attacking or walking to attack.
     pub attack_target: Option<EntityId>,
     pub last_hit: Option<HitState>,
+    /// Authoritative start of death; retained through corpse decay.
+    pub death_tick: Option<Tick>,
+    /// Hunting or carcass job, independent of military attack orders.
+    pub hunt_target: Option<EntityId>,
+    pub death_hunt: Option<AnimalKind>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -7,6 +7,8 @@ impl Wildlife {
             let s = a.state;
             hash.update(&s.id.0.to_le_bytes());
             hash.update(&[s.kind as u8, s.task as u8]);
+            hash.update(&[s.facing as u8, s.moving as u8]);
+            hash.update(&s.death_tick.map_or(u64::MAX, |t| t.0).to_le_bytes());
             hash.update(&s.owner.map_or(u32::MAX, |p| u32::from(p.0)).to_le_bytes());
             hash.update(
                 &s.target
@@ -23,6 +25,8 @@ impl Wildlife {
             hash.update(&a.cooldown.to_le_bytes());
             hash.update(&a.speed_carry.to_le_bytes());
             hash.update(&a.decay_carry.to_le_bytes());
+            hash.update(&a.herd.map_or(i32::MIN, |p| p.x).to_le_bytes());
+            hash.update(&a.herd.map_or(i32::MIN, |p| p.y).to_le_bytes());
         }
         hash.update(&(self.hunts.len() as u64).to_le_bytes());
         for (id, job) in &self.hunts {

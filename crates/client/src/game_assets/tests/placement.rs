@@ -10,8 +10,18 @@ fn count_and_source_bounds_are_checked_before_destination_allocation() {
     let manifest = fixture();
     let selected = vec![0; MAX_SELECTED_FRAMES];
     let domains = vec![AtlasDomain::Terrain; MAX_SELECTED_FRAMES];
-    assert_eq!(plan(&manifest, &selected, &domains).unwrap().len(), 2560);
-    assert!(plan(&manifest, &vec![0; 2561], &vec![AtlasDomain::Terrain; 2561]).is_err());
+    assert_eq!(
+        plan(&manifest, &selected, &domains).unwrap().len(),
+        MAX_SELECTED_FRAMES
+    );
+    assert!(
+        plan(
+            &manifest,
+            &vec![0; MAX_SELECTED_FRAMES + 1],
+            &vec![AtlasDomain::Terrain; MAX_SELECTED_FRAMES + 1]
+        )
+        .is_err()
+    );
     assert!(plan(&manifest, &[1], &[AtlasDomain::Objects]).is_err());
     let mut manifest = manifest;
     manifest.frames[0].page = u16::MAX;
@@ -110,7 +120,7 @@ fn native_tree_family_rectangles_preserve_outside_and_negative_anchors() {
 }
 
 #[wasm_bindgen_test]
-fn equal_uv_on_three_pages_copy_masks_alpha_and_keep_source_ids_separate() {
+fn equal_uv_on_four_pages_copy_masks_alpha_and_keep_source_ids_separate() {
     let mut manifest = fixture();
     let frame = &mut manifest.frames[0];
     // This ID is deliberately unrelated to runtime page 0/1/2: copying only
@@ -126,7 +136,7 @@ fn equal_uv_on_three_pages_copy_masks_alpha_and_keep_source_ids_separate() {
     color[4..8].copy_from_slice(&[99, 99, 99, 99]);
     shadow[8..12].copy_from_slice(&[1, 2, 3, 80]);
     let mut addresses = Vec::new();
-    for page in 0..3 {
+    for page in 0..4 {
         color[..4].copy_from_slice(&[page as u8 + 10, 20, 30, 120]);
         let placed = Placement {
             page,
@@ -154,7 +164,7 @@ fn equal_uv_on_three_pages_copy_masks_alpha_and_keep_source_ids_separate() {
             .all(|pair| pair[0].uv == pair[1].uv && pair[0].page != pair[1].page)
     );
     let bad = Placement {
-        page: 3,
+        page: 4,
         x: 2,
         y: 2,
         width: 3,
