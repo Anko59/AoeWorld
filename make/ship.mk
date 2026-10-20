@@ -2,7 +2,7 @@
 # preflight gates at the exact commit, evidence, push, pull request. It runs the
 # same judge as the agent hooks: built from origin/dev, or (labelled
 # non-authoritative) from this checkout's committed HEAD while bootstrapping;
-# never from uncommitted edits. `ship`, `duel` and `red` share one machine-wide lock
+# never from uncommitted edits. `ship` and `duel` share one machine-wide lock
 # (SHIP_LOCK_WAIT_MINUTES bounds the wait). SHIP_TITLE, SHIP_BODY, SHIP_FORCE and SHIP_BASE reach it
 # through the environment only; they are never pasted into shell text.
 # PR is the public Make argument; REVIEW_PR is the process environment value
@@ -16,19 +16,6 @@ export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL
 export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_LOCK_WAIT_MINUTES SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS CARRY_PR UPDATE_MAX_PRS METRICS_REV
 export COMPARE_ASSET_PACK COMPARE_BOOKMARKS COMPARE_VIEWS COMPARE_BEFORE COMPARE_AFTER COMPARE_BEFORE_PACKAGES COMPARE_AFTER_PACKAGES COMPARE_BASE COMPARE_OUT COMPARE_VIEW_TIMEOUT_SECONDS COMPARE_BUDGET_MINUTES
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
-export HARNESS_RED_ROOT HARNESS_RED_BASE HARNESS_RED_HEAD
-.PHONY: red red-checkout red-checkout-steps
-red:
-	@.agents/hooks/harness.sh exec red
-
-# Explicit branch runner for developing the command before it exists on dev.
-red-checkout: slot-bootstrap
-	@$(SLOT_RUN) red-checkout -- make --no-print-directory red-checkout-steps
-
-red-checkout-steps:
-	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
-	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' red
-
 .PHONY: \
   load-status \
   duel \

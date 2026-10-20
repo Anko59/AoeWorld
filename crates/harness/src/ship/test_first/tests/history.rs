@@ -25,7 +25,7 @@ fn advance_dev(root: &Path) -> String {
             ),
             (".cargo/config.toml", "[build]\n"),
         ],
-        "dev implementation and tests\n\nHarness-Test-First: exempt — dev reason",
+        "dev implementation and tests",
     );
     let dev = sha(root, "HEAD");
     run(root, &["update-ref", "refs/remotes/origin/dev", &dev]);
@@ -88,7 +88,6 @@ fn a_github_merge_of_dev_cannot_turn_a_docs_pr_into_product_work() {
             "incoming dev build files are not the PR's: {:?}",
             report.build
         );
-        assert!(report.exemption.is_none());
         assert!(!report.applicable());
         assert!(report.markdown().contains("not applicable"));
         assert!(
@@ -101,7 +100,7 @@ fn a_github_merge_of_dev_cannot_turn_a_docs_pr_into_product_work() {
 }
 
 #[test]
-fn only_own_tests_inline_changes_and_exemptions_precede_the_own_implementation() {
+fn only_own_tests_and_inline_changes_precede_the_own_implementation() {
     let (temp, base) = repo();
     let root = temp.path();
     commit(
@@ -110,7 +109,7 @@ fn only_own_tests_inline_changes_and_exemptions_precede_the_own_implementation()
             (LIB, OWN),
             ("crates/sim/tests/own.rs", "#[test]\nfn own_external() {}\n"),
         ],
-        "own tests\n\nHarness-Test-First: exempt — own reason",
+        "own tests",
     );
     let tests = sha(root, "HEAD");
     let dev = advance_dev(root);
@@ -139,7 +138,6 @@ fn only_own_tests_inline_changes_and_exemptions_precede_the_own_implementation()
         );
         assert_eq!(report.inline, [LIB]);
         assert!(report.build.is_empty());
-        assert_eq!(report.exemption, Some((tests.clone(), "own reason".into())));
     }
 }
 
@@ -228,7 +226,6 @@ fn a_dev_merge_adding_its_own_product_requires_tests() {
     assert_eq!(report.tests_before, 0);
     assert!(report.build.is_empty());
     assert!(report.inline.is_empty());
-    assert!(report.exemption.is_none());
     assert!(
         report
             .markdown()

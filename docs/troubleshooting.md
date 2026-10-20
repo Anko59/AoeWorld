@@ -15,9 +15,7 @@ See the [documented Chromium compositor failure and working flag set](https://gi
 
 Hook builds retain two judge revisions and clean their shared Cargo target
 under `build.lock`: incremental output first, then `cargo clean` above 2 GiB.
-Each red invocation owns a private export/build directory, removed on success,
-failure or runner cancellation; its record and bounded logs remain. Concurrent
-reds never clean each other's active builds. After a ship pushes and arms
+After a ship pushes and arms
 auto-merge into dev, it removes this worktree's `target/debug/incremental` (not the
 snapshots, which a concurrent check may still use) and prints the file bytes freed. Failed ships retain
 their builds; a later reship recompiles. A killed process or filesystem error

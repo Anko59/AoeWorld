@@ -1,4 +1,4 @@
-//! One `make ship`, `make duel` or `make red` at a time (docs/shipping.md).
+//! One `make ship` or `make duel` at a time (docs/shipping.md).
 //! The lock is an OS advisory lock (`flock`) on `<git common dir>/aoe-ship/ship.lock`,
 //! which every worktree and checkout of the repository shares. The kernel drops it
 //! when the holder exits however it exits, so a dead holder never leaves a stale

@@ -231,7 +231,7 @@ fn only_ship_and_duel_ask_for_the_lock() {
     assert_eq!(
         users,
         ["ship/check/mod.rs", "ship/duel/mod.rs"],
-        "only ship and duel acquire the ship lock; make red takes only a heavy slot"
+        "only ship and duel acquire the ship lock"
     );
 }
 

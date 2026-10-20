@@ -1,15 +1,8 @@
-//! The test-first report (docs/shipping.md#test-first), read from Git alone:
-//! how the commits of a product-code pull request order tests and product
-//! code, how many test functions came before the first product commit,
-//! which product files carry inline `#[cfg(test)]` changes, which
-//! build-time files changed, and any `Harness-Test-First: exempt —
-//! <reason>` trailer. Reviewers and the description get the history alongside
-//! the required harness-owned red/green record for product changes.
+//! Non-blocking test-first ordering facts read from Git history for review and description.
 mod history;
 pub(crate) mod inline;
 #[cfg(test)]
 mod inline_tests;
-pub(crate) mod red;
 #[cfg(test)]
 mod tests;
 
@@ -18,8 +11,6 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
 };
-
-const TRAILER: &str = "Harness-Test-First";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
@@ -75,8 +66,6 @@ pub(crate) struct Report {
     /// Product files whose `#[cfg(test)]` items changed.
     pub(crate) inline: Vec<String>,
     pub(crate) build: Vec<String>,
-    /// The commit and reason of the latest exemption trailer.
-    pub(crate) exemption: Option<(String, String)>,
 }
 
 /// Under the product crates: `crates/` except `crates/harness/`.
@@ -102,13 +91,6 @@ pub(crate) fn test_marker(line: &str) -> bool {
         .collect();
     let last = path.rsplit("::").next().unwrap_or_default();
     last.contains("test") && !last.starts_with("cfg")
-}
-
-/// The reason in an `exempt — <reason>` trailer value.
-pub(crate) fn exemption(value: &str) -> Option<String> {
-    let rest = value.trim().strip_prefix("exempt")?;
-    let reason = rest.trim_start_matches([' ', '—', '–', '-', ':']).trim();
-    (rest.starts_with([' ', '—', '–', '-', ':']) && !reason.is_empty()).then(|| reason.to_owned())
 }
 
 /// Build scripts by name, Cargo and nextest configuration, the toolchain.
@@ -342,7 +324,6 @@ pub(crate) fn report(root: &Path, base: &str, head: &str) -> git::Result<Report>
         tests_before: 0,
         inline: Vec::new(),
         build: build_files(root, base, head, &context)?,
-        exemption: None,
     };
     for commit in &list {
         let sha = commit.sha.as_str();
@@ -365,11 +346,6 @@ pub(crate) fn report(root: &Path, base: &str, head: &str) -> git::Result<Report>
             if !report.inline.contains(&path) {
                 report.inline.push(path);
             }
-        }
-        let format = format!("--format=%(trailers:key={TRAILER},valueonly,unfold)");
-        let values = git::git(root, &["show", "-s", &format, sha])?;
-        if let Some(reason) = values.lines().find_map(exemption) {
-            report.exemption = Some((sha.to_owned(), reason));
         }
     }
     report.build.retain(|path| own_build.contains(path));
@@ -418,14 +394,8 @@ impl Report {
         } else {
             "none (no product commit)".to_owned()
         };
-        let exemption = self
-            .exemption
-            .as_ref()
-            .map_or("none".to_owned(), |(sha, why)| {
-                format!("`{}`: {why}", short(sha))
-            });
         format!(
-            "- test-first commits, oldest first: {}\n- `#[test]` functions added before the first product commit: {tests_before}\n- inline `#[cfg(test)]` changes in product files (the rule is tests in test files): {}\n- build-time files changed: {}\n- test-first exemption: {exemption}\n",
+            "- test-first commits, oldest first: {}\n- `#[test]` functions added before the first product commit: {tests_before}\n- inline `#[cfg(test)]` changes in product files (the rule is tests in test files): {}\n- build-time files changed: {}\n",
             commits.join(", "),
             list(&self.inline),
             list(&self.build),
@@ -434,19 +404,9 @@ impl Report {
 }
 
 /// The commit-history report as Markdown; an unreadable history is reported, never fatal.
-pub(crate) fn history_summary(root: &Path, base: &str, head: &str) -> String {
+pub(crate) fn summary(root: &Path, base: &str, head: &str) -> String {
     report(root, base, head).map_or_else(
         |error| format!("- test-first report unavailable: {error}\n"),
         |report| report.markdown(),
     )
-}
-
-/// The history report followed by the red decision, for the review facts and the description.
-pub(crate) fn summary(root: &Path, base: &str, head: &str) -> String {
-    let mut text = history_summary(root, base, head);
-    text.push_str(
-        &red::require(root, base, head)
-            .unwrap_or_else(|error| format!("- test-first red: {error}\n")),
-    );
-    text
 }

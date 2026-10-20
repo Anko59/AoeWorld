@@ -1,17 +1,9 @@
 mod history;
 mod history_cli;
-mod red;
-mod red_carry;
-mod red_carry_cli;
-mod red_findings;
-mod red_js;
-mod red_js_findings;
-mod red_mounts;
-mod red_pr;
 
-use super::{Kind, build_keys, exemption, report, summary, test_marker};
+use super::{Kind, build_keys, report, summary, test_marker};
 use crate::ship::{
-    Options, git, ship,
+    git, ship,
     tests::{fixture, offline, run},
 };
 use std::{fs, path::Path};
@@ -77,7 +69,7 @@ fn commits_are_classified_and_tests_before_the_product_counted() {
     );
     // `#[cfg(test)]` is no test function; the mixed commit came too late.
     assert_eq!(report.tests_before, 2);
-    assert!(report.applicable() && report.build.is_empty() && report.exemption.is_none());
+    assert!(report.applicable() && report.build.is_empty());
     let text = report.markdown();
     for line in [
         "tests-only, ",
@@ -86,7 +78,6 @@ fn commits_are_classified_and_tests_before_the_product_counted() {
         " mixed\n",
         "before the first product commit: 2\n",
         "build-time files changed: none\n",
-        "test-first exemption: none\n",
     ] {
         assert!(text.contains(line), "{line}: {text}");
     }
@@ -191,26 +182,6 @@ fn harness_docs_and_ci_changes_are_not_applicable() {
 }
 
 #[test]
-fn the_exemption_trailer_is_reported() {
-    let (temp, base) = repo();
-    let root = temp.path();
-    commit(
-        root,
-        &[("crates/sim/src/lib.rs", "pub fn g() {}\n")],
-        "rename\n\nHarness-Test-First: exempt — pure rename",
-    );
-    let report = report(root, &base, "HEAD").unwrap();
-    let head = git::git(root, &["rev-parse", "HEAD"]).unwrap();
-    assert_eq!(report.exemption, Some((head, "pure rename".to_owned())));
-    assert!(report.markdown().contains(": pure rename\n"));
-    assert_eq!(exemption("exempt: docs"), Some("docs".to_owned()));
-    assert_eq!(exemption("exempt - x"), Some("x".to_owned()));
-    for refused in ["exempt", "exempt —  ", "exemptx", "required"] {
-        assert_eq!(exemption(refused), None, "{refused}");
-    }
-}
-
-#[test]
 fn test_markers_are_attributes_naming_a_test() {
     for marker in [
         "#[test]",
@@ -249,11 +220,10 @@ fn the_report_reaches_the_review_facts() {
         &[("crates/sim/src/lib.rs", "pub fn f() { 1; }\n")],
         "impl",
     );
+    let expected = report(root, &base, "HEAD").unwrap().markdown();
+    assert_eq!(summary(root, &base, "HEAD"), expected);
     let facts = crate::review::facts(root, &base).unwrap();
-    assert!(
-        facts.contains("- test-first commits, oldest first: `"),
-        "{facts}"
-    );
+    assert!(facts.contains(&expected), "{facts}");
     assert!(
         facts.contains("before the first product commit: 0\n"),
         "{facts}"
@@ -261,19 +231,14 @@ fn the_report_reaches_the_review_facts() {
 }
 
 #[test]
-fn ship_refuses_untested_product_and_keeps_the_ordering_report() {
+fn ship_accepts_untested_product_and_keeps_the_ordering_report() {
     let (_temp, root) = fixture("true");
-    // Product code with no test before it, a build script and no exemption.
+    // Product code with no test before it and a build script.
     write(&root, "crates/sim/src/lib.rs", "pub fn f() {}\n");
     write(&root, "crates/sim/build.rs", "fn main() {}\n");
     run(&root, &["add", "-A"]);
     run(&root, &["commit", "-q", "-m", "untested product"]);
-    let blocking = Options {
-        red_blocking: true,
-        ..offline()
-    };
-    let error = ship(&root, &blocking).unwrap_err().to_string();
-    assert!(error.contains("missing matching red record"), "{error}");
+    ship(&root, &offline()).expect("product changes reach the gates without proof");
     let base = git::git(&root, &["rev-parse", "origin/dev"]).unwrap();
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     let text = summary(&root, &base, &head);
@@ -282,22 +247,4 @@ fn ship_refuses_untested_product_and_keeps_the_ordering_report() {
         "{text}"
     );
     assert!(text.contains("crates/sim/build.rs"), "{text}");
-}
-
-#[test]
-fn red_is_advisory_unless_blocking_is_asked_for() {
-    let (_temp, root) = fixture("true");
-    write(&root, "crates/sim/src/lib.rs", "pub fn f() {}\n");
-    run(&root, &["add", "-A"]);
-    run(&root, &["commit", "-q", "-m", "untested product"]);
-    let base = git::git(&root, &["rev-parse", "origin/dev"]).unwrap();
-    let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
-    let advisory = super::red::check(&root, &base, &head, false).unwrap();
-    assert!(advisory.contains("ADVISORY"), "{advisory}");
-    assert!(
-        advisory.contains("missing matching red record"),
-        "{advisory}"
-    );
-    assert!(super::red::check(&root, &base, &head, true).is_err());
-    ship(&root, &offline()).expect("a missing red record does not stop the ship this week");
 }
