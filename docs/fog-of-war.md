@@ -84,5 +84,6 @@ fog; enemy Fishing Ships follow the same current-sight filtering as land units.
 
 `AOE_FOG_DISABLED=1` is an authority-side debug/showcase switch. Synthetic
 population workloads and Compare's owned terrain viewers explicitly disable
-fog. `AOE_FOG_SHOWCASE=1` adds a bounded, initially unseen wolf for filming;
-ordinary skirmish starts retain their existing animal kit.
+fog. `AOE_FOG_SHOWCASE=1` adds a bounded, initially unseen wolf and enemy Town
+Center for scouting and building-memory filming. Ordinary skirmish starts
+retain their existing kit.

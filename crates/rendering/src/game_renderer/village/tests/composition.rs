@@ -3,6 +3,38 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn remembered_town_center_keeps_every_dat_part_and_native_anchor_in_fog() {
+    let art = art();
+    let units = [unit(SceneUnitKind::TownCenter)];
+    let mut layers =
+        super::super::direct_world_layers(Vec::new(), &art, &[], &[], &units, camera(), 0);
+    let before = layers
+        .iter()
+        .map(|layer| match layer {
+            super::super::WorldLayer::Sprite(sprite, frame, depth, id) => {
+                (*sprite, *frame, *depth, *id)
+            }
+            _ => panic!("only DAT parts expected"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(before.len(), art.compositions[0].parts.len());
+    super::super::fog::shade_objects(&mut layers, &art, &[], &units, &|_| 0.45);
+    for (layer, (sprite, frame, depth, id)) in layers.iter().zip(before) {
+        let super::super::WorldLayer::Sprite(shaded, after_frame, after_depth, after_id) = layer
+        else {
+            panic!("DAT part lost in fog");
+        };
+        assert_eq!(after_frame.atlas, frame.atlas);
+        assert_eq!(after_frame.anchor, frame.anchor);
+        assert_eq!(after_frame.size, frame.size);
+        assert_eq!(*after_depth, depth);
+        assert_eq!(*after_id, id);
+        assert_eq!(shaded.uv, sprite.uv);
+        assert_eq!(shaded.color[..3], [0, 1, 2].map(|i| sprite.color[i] * 0.45));
+    }
+}
+
+#[wasm_bindgen_test]
 fn building_parts_use_pack_order_signed_pixels_and_annex_depth_without_mirroring() {
     let mut art = art();
     let frame = art.compositions[0].parts[0].frame;

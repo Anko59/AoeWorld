@@ -10,6 +10,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{fs, path::PathBuf, time::Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
+#[path = "building-proof/fog.rs"]
+mod fog;
 #[path = "building-proof/packing.rs"]
 mod packing;
 #[path = "building-proof/servers.rs"]
@@ -49,8 +51,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         return Err("use an explicit loopback HTTP port other than 8080/8081".into());
     }
-    if !matches!(request.mode.as_str(), "camera" | "house" | "village") {
+    if !matches!(
+        request.mode.as_str(),
+        "camera" | "house" | "village" | "fog"
+    ) {
         return Err("unknown proof mode".into());
+    }
+    if request.mode == "fog" {
+        return tokio::runtime::Runtime::new()?.block_on(async {
+            tokio::time::timeout(Duration::from_secs(180), fog::prepare(url.as_str())).await?
+        });
     }
     tokio::runtime::Runtime::new()?.block_on(async {
         tokio::time::timeout(

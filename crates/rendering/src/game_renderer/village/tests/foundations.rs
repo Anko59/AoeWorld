@@ -3,6 +3,44 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn explored_foundations_keep_dirt_and_crop_materials_before_fog_shading() {
+    let mut art = art();
+    art.compositions.push(crate::BuildingArt {
+        unit_id: 50,
+        footprint: [3.0; 2],
+        foundation_material: Some(17),
+        parts: Vec::new(),
+        construction: Vec::new(),
+    });
+    for (kind, expected) in [(SceneUnitKind::TownCenter, 2), (SceneUnitKind::Farm, 17)] {
+        let mut terrain = vec![SceneTerrain {
+            position: [0.5; 2],
+            material: 0,
+            elevation_meters: 0.0,
+            surface: SceneTerrainSurface::flat(0.0),
+            appearance: None,
+        }];
+        crate::apply_building_foundations(&mut terrain, &art, &[unit(kind)]);
+        assert_eq!(terrain[0].material, expected);
+        for triangle in crate::projected_surface_triangles(&terrain, camera()) {
+            let vertices = super::super::fog::vertices(&triangle, &|_| 0.45);
+            assert_eq!(vertices, [0.45; 3]);
+            // The fog flag occupies the high byte, preserving material/page data.
+            let (mut packet, _) = super::super::filter_fixture::sprite();
+            packet.pages = [1, 2, 0x0011_0200, 7];
+            let before = packet.pages;
+            super::super::fog::surface_packet(&mut packet, vertices);
+            assert_eq!(packet.pages[2] & 0x00ff_ffff, before[2]);
+            assert_ne!(packet.pages[2] >> 24, 0);
+            assert_eq!(
+                [packet.pages[0], packet.pages[1], packet.pages[3]],
+                [1, 2, 7]
+            );
+        }
+    }
+}
+
+#[wasm_bindgen_test]
 fn foundations_extend_one_tile_and_retain_the_landscape_mixer() {
     let art = art();
     for kind in [SceneUnitKind::TownCenter, SceneUnitKind::foundation(109)] {

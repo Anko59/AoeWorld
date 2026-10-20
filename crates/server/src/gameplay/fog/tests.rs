@@ -8,6 +8,51 @@ thread_local! {
     static WORK: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
 }
 
+#[test]
+fn showcase_enemy_building_starts_unexplored_and_can_be_remembered() {
+    let (mut world, scout) = GameWorld::default_with_village(Seed(7));
+    super::showcase_enemies(&mut world, scout);
+    let enemy = world
+        .buildings()
+        .find(|b| b.player == PlayerId(1))
+        .expect("fog showcase needs a real enemy building for memory capture")
+        .clone();
+    assert_eq!(
+        world.visibility(PlayerId(0), enemy.footprint.min),
+        TileVisibility::Unexplored
+    );
+    let home = world.unit(scout).unwrap().position;
+    let at = WorldPosition::from_tile_center(TileCoord::new(
+        enemy.footprint.min.x - 2,
+        enemy.footprint.min.y,
+    ))
+    .unwrap();
+    world.issue_move(scout, at).unwrap();
+    for _ in 0..1200 {
+        world.advance();
+    }
+    assert!(
+        world
+            .known_buildings(PlayerId(0))
+            .iter()
+            .any(|b| b.id == enemy.id)
+    );
+    world.issue_move(scout, home).unwrap();
+    for _ in 0..1200 {
+        world.advance();
+    }
+    assert_eq!(
+        world.visibility(PlayerId(0), enemy.footprint.min),
+        TileVisibility::Explored
+    );
+    assert!(
+        world
+            .known_buildings(PlayerId(0))
+            .iter()
+            .any(|b| b.id == enemy.id)
+    );
+}
+
 pub(super) fn record_state(region: TileRect) {
     WORK.with(|work| {
         let (calls, tiles) = work.get();
