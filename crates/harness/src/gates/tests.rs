@@ -354,3 +354,20 @@ fn the_aggregate_requires_the_e2e_job_and_all_its_shards_to_succeed() {
     );
     assert!(!docs.jobs["e2e"]);
 }
+
+#[test]
+fn a_failed_select_job_is_named_not_reported_as_a_parse_error() {
+    let expected = selection("a".repeat(40), None, Vec::new());
+    for result in ["failure", "cancelled"] {
+        let results = serde_json::json!({"select": result}).to_string();
+        // A failed select publishes no manifest: an empty string, as in run 39346082654.
+        let error = check_selection("", &results, &expected)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(&format!("select job ended `{result}`")),
+            "{error}"
+        );
+        assert!(!error.contains("EOF while parsing"), "{error}");
+    }
+}

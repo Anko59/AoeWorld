@@ -23,8 +23,8 @@ checkout and external Git metadata, and defaulted to `$ROOT/target`.
 those paths. Today the Cargo cache defaults to `<git common dir>/aoe-cargo`,
 used as `CARGO_HOME` and mounted read-write at its host path and the former
 `$ROOT/.cache/cargo` location in Make containers. Registry archives,
-sources, index and Git dependencies are shared across worktrees, gate snapshots,
-red trees and harness builds. Concurrent Cargo processes safely share this home:
+sources, index and Git dependencies are shared across worktrees, gate snapshots
+and harness builds. Concurrent Cargo processes safely share this home:
 Cargo takes its own cache locks. Compiler targets remain per worktree.
 `HARNESS_CARGO_CACHE` can explicitly select another cache.
 

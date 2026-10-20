@@ -284,6 +284,7 @@ impl GameWorld {
             TileRect::new(origin, TileCoord::new(origin.x + side, origin.y + side)),
             scout_tile,
         )?;
+        self.initialize_wildlife(TileCoord::new(origin.x + side / 2, origin.y + side / 2));
         Ok(scout)
     }
     fn village_spawns(&self, footprint: TileRect, scout: Option<TileCoord>) -> Vec<TileCoord> {

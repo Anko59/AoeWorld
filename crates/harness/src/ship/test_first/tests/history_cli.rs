@@ -89,7 +89,6 @@ case " $* " in *' --body-file - '*) cat >/dev/null ;; esac
             "PATH",
             format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
         )
-        .env("AOE_RED_BLOCKING", "1")
         .env_remove("AOE_JUDGE_REV")
         .env_remove("SHIP_BASE")
         .env_remove("SHIP_VIDEO")
@@ -98,7 +97,11 @@ case " $* " in *' --body-file - '*) cat >/dev/null ;; esac
         .unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(output.status.success(), !own_changes, "{stdout}\n{stderr}");
+    assert!(output.status.success(), "{stdout}\n{stderr}");
+    assert!(
+        stderr.contains("review: reusing the passing low review of this commit"),
+        "{stderr}"
+    );
     if own_changes {
         assert!(stderr.contains("merge (product)"), "{stderr}");
         assert!(
@@ -110,26 +113,16 @@ case " $* " in *' --body-file - '*) cat >/dev/null ;; esac
             "{stderr}"
         );
         assert!(!stderr.contains("test-first: not applicable"), "{stderr}");
-        assert!(stderr.contains("missing matching red record"), "{stderr}");
-        assert!(
-            git::git(
-                &root,
-                &["rev-parse", "--verify", "refs/remotes/origin/feature"]
-            )
-            .is_err()
-        );
     } else {
         assert!(stderr.contains("test-first: not applicable"), "{stderr}");
         assert!(!stderr.contains("merge (product)"), "{stderr}");
     }
-    if !own_changes {
-        assert_eq!(
-            git::git(&root, &["rev-parse", "refs/remotes/origin/feature"]).unwrap(),
-            head
-        );
-    }
+    assert_eq!(
+        git::git(&root, &["rev-parse", "refs/remotes/origin/feature"]).unwrap(),
+        head
+    );
     let assertion = if own_changes {
-        "merge-added product and build counted; zero tests before product; shipping refused without red"
+        "merge-added product and build counted; zero tests before product; review accepted and local remote updated"
     } else {
         "incoming dev product and its merge excluded; docs-only PR stays not applicable"
     };

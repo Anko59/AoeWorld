@@ -15,9 +15,7 @@ See the [documented Chromium compositor failure and working flag set](https://gi
 
 Hook builds retain two judge revisions and clean their shared Cargo target
 under `build.lock`: incremental output first, then `cargo clean` above 2 GiB.
-Each red invocation owns a private export/build directory, removed on success,
-failure or runner cancellation; its record and bounded logs remain. Concurrent
-reds never clean each other's active builds. After a ship pushes and arms
+After a ship pushes and arms
 auto-merge into dev, it removes this worktree's `target/debug/incremental` (not the
 snapshots, which a concurrent check may still use) and prints the file bytes freed. Failed ships retain
 their builds; a later reship recompiles. A killed process or filesystem error
@@ -36,9 +34,11 @@ The child receives its start gap in `AOE_HARNESS_BOOT_GAP`.
 - **Gates run by `aoe-harness gates`** retry once. Their harness containers are
   stopped first, because killing the `docker run` client does not stop the
   container. A second suspend is the gate's result, reported as a monitor error.
-- **Ship gates and duel steps** do not retry. An interrupted one fails and its
-  process group is killed; containers it started are labelled (below) and
-  `make recover` can stop them.
+- **Ship gates** (`make ship`) get one suspend retry per gate, including when the
+  interrupted attempt followed an overloaded timeout. If stopping interrupted containers
+  fails, the gate is unavailable, names the containers, and starts no retry. **Duel steps** do not retry: an
+  interrupted one fails and its process group is killed; containers it started are
+  labelled (below) and `make recover` can stop them.
 - **Containers** started by the harness carry the label
   `aoe.harness-boot-gap=<seconds>`, the gap when they started. These are the e2e
   browser run, the wasm driver, and the `DOCKER_RUN` and `SLOT_RUN` recipes under
@@ -47,11 +47,17 @@ The child receives its start gap in `AOE_HARNESS_BOOT_GAP`.
   Plain `docker run` recipes without the label (for example `GEODATA_RUN`,
   `BROWSER_RUN` and `SOURCE_QUAL_RUN`) are not found by `make recover`.
 
-**Not yet automatic:** a ship lock held across a suspend is not taken over.
-The lock is an OS file lock, so waiters keep waiting while the holder process
-exists, even when it was frozen by the suspend. To recover, run `make ship-status`,
-which names the holder, and kill that process. The waiters then take the lock.
+**The ship lock.** The lock is an OS file lock, so waiters keep waiting while the holder
+process exists, even when a suspend froze it. The holder records the boot-time gap when it
+takes the lock. While supervising a child, the holder compares the current gap with its last
+lock record on every poll, and refreshes that record when the difference exceeds 60 s.
+This includes several short sleeps across different children. A waiter ends a holder only when
+the record's gap moved by more than 60 s since it was written and the same record still
+reads that way at the next poll (one second later), by killing the recorded pid if its
+start time matches. It prints `ship: taking over from the stale lock holder <branch> in
+<worktree> (pid N): ...`. A holder that runs no supervised child across a suspend is ended.
 
 Limits: detection needs Linux; elsewhere the clocks are not read and nothing is
-judged interrupted. The tests inject clock readings and do not suspend a real
-machine, so the timing of a real resume is not verified.
+judged interrupted. The tests inject clock readings, or write seconds into the file named by
+`AOE_HARNESS_SIMULATED_GAP_FILE` (added to the boot clock only in test builds; production
+ignores it); they do not suspend a real machine, so the timing of a real resume is not verified.

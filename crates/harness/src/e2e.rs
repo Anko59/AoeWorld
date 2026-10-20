@@ -1,5 +1,5 @@
 //! Disposable browser stack, with an isolated port and cleanup on every return path.
-use crate::{process, ship::test_first::red::progress};
+use crate::process;
 mod command;
 mod country;
 mod discovery;
@@ -190,12 +190,11 @@ fn run_specs(
             None => root.join(aoe_server::Config::DEFAULT_MAP_PACKAGE_DIRECTORY),
         };
     let workers = servers::worker_count(coverage.as_deref(), !specs.is_empty())?;
-    progress::start("servers-up");
+
     let mut server = servers::Fleet::start(&root, &binary, &existing_maps, workers)?;
     let fixture_hash = server.hash.clone();
     let address = server.addresses[0];
-    let name = std::env::var("AOE_RED_BROWSER_CONTAINER")
-        .unwrap_or_else(|_| command::container_name(std::process::id(), address.port(), shard));
+    let name = command::container_name(std::process::id(), address.port(), shard);
     let _cleanup = BrowserContainer(name.clone());
     let args = command::docker_args(&command::Run {
         root: &root,
@@ -214,7 +213,6 @@ fn run_specs(
             // focused duel check runs without it.
             let result = if Mode::of(specs, enable_quarantine) == Mode::Quarantined {
                 // A quarantined failure may be re-run (gates/flaky.json).
-                progress::start("playwright-run");
                 let report_path = match report {
                     Some(path) => path.to_path_buf(),
                     None => match shard {
@@ -240,7 +238,7 @@ fn run_specs(
                 // into the same bounded retention used for nextest.
                 (|| {
                     let report = report.ok_or("focused Playwright report path missing")?;
-                    progress::start("playwright-discovery");
+
                     let mut listing = Command::new("docker");
                     listing.args(&args).arg("--list");
                     discovery::run(
@@ -250,7 +248,7 @@ fn run_specs(
                         &worker_cancellation,
                     )
                     .map_err(|e| e.to_string())?;
-                    progress::start("playwright-run");
+
                     let mut retained = crate::ship::JsonOutput::create(report, "Playwright")
                         .map_err(|e| e.to_string())?;
                     let mut command = Command::new("docker");
@@ -288,7 +286,7 @@ fn run_specs(
         }
     });
     // Always stop the server; focused failure reports remain available to the driver.
-    progress::start("server-shutdown");
+
     server.shutdown()?;
     browser_result.map_err(|error| stale::annotate(error, &existing_maps))?;
     if !specs.is_empty() {

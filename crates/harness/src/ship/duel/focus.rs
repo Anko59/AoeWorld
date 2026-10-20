@@ -2,7 +2,7 @@
 use super::{browser, output, runner, tree};
 use crate::{
     process::{Cancellation, CaptureExit, capture_command, capture_command_retaining_stdout},
-    ship::{git, test_first::red::progress},
+    ship::git,
 };
 use std::{
     fs,
@@ -12,12 +12,9 @@ use std::{
     time::Duration,
 };
 
-mod compile;
 mod playwright;
 mod report;
-pub(crate) use compile::CompileError;
 pub(in crate::ship) use playwright::browser_results;
-pub(in crate::ship) use playwright::browser_results_red;
 pub(crate) use report::{CheckReport, Panic};
 
 pub(crate) use super::scope::Scope;
@@ -167,24 +164,12 @@ pub(super) fn run_scope(
     cache: &Path,
     wasm_runner: super::wasm::Runner,
 ) -> git::Result<CheckReport> {
-    run_retained(root, scope, cache, cache, wasm_runner, false)
-}
-
-pub(in crate::ship) fn run_retained(
-    root: &Path,
-    scope: &Scope,
-    cache: &Path,
-    retention: &Path,
-    wasm_runner: super::wasm::Runner,
-    compile_red: bool,
-) -> git::Result<CheckReport> {
     let mut report = CheckReport {
         passed: true,
         ..Default::default()
     };
     if !scope.packages.is_empty() {
-        progress::start("native-tests");
-        let log = output::run_directory(retention)
+        let log = output::run_directory(cache)
             .map_err(|e| e.to_string())?
             .join("nextest.jsonl");
         println!("Retained nextest output: {}", log.display());
@@ -227,10 +212,6 @@ pub(in crate::ship) fn run_retained(
             {
                 report.passed = false;
                 report.build_failed = true;
-                if !captured.truncated {
-                    report.compile_errors =
-                        compile::errors(&String::from_utf8_lossy(&captured.stderr));
-                }
                 report.failed.push(format!(
                     "package build failed: {}\n{}",
                     scope.packages.join(", "),
@@ -247,11 +228,11 @@ pub(in crate::ship) fn run_retained(
         }
     }
     if !scope.specs.is_empty() {
-        let report_path = output::run_directory(retention)
+        let report_path = output::run_directory(cache)
             .map_err(|e| e.to_string())?
             .join("playwright.json");
         println!("Retained Playwright output: {}", report_path.display());
-        progress::start("browser-dependencies");
+
         browser::dependencies(root, cache)?;
         browser_build(root)?;
         let previous = std::env::current_dir().map_err(|e| e.to_string())?;
@@ -263,12 +244,7 @@ pub(in crate::ship) fn run_retained(
             .collect();
         let checked = crate::e2e::run_focused(&filters, &report_path).map_err(|e| e.to_string());
         std::env::set_current_dir(previous).map_err(|e| e.to_string())?;
-        let parsed = if compile_red {
-            browser_results_red(&report_path, root)
-        } else {
-            browser_results(&report_path)
-        };
-        let browser = match parsed {
+        let browser = match browser_results(&report_path) {
             Ok(browser) => browser,
             Err(read) => return Err(missing_report(&report_path, checked, read)),
         };
@@ -285,20 +261,12 @@ pub(in crate::ship) fn run_retained(
         }
     }
     if !scope.wasm.is_empty() {
-        progress::start("wasm-tests");
-        report.merge(super::wasm::check(
-            root,
-            &scope.wasm,
-            cache,
-            retention,
-            wasm_runner,
-        )?);
+        report.merge(super::wasm::check(root, &scope.wasm, cache, wasm_runner)?);
     }
     report.tests.sort();
     report.tests.dedup();
     report.failed.sort();
     report.failed.dedup();
-    progress::start("runner-result");
     Ok(report)
 }
 
@@ -381,7 +349,6 @@ fn browser_build(root: &Path) -> git::Result<()> {
             ],
         ),
     ] {
-        progress::start(step);
         let mut command = Command::new(program);
         command
             .args(args)

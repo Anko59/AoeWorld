@@ -1,4 +1,5 @@
 SHELL := /bin/sh
+.DEFAULT_GOAL := help
 ROOT := $(abspath .)
 UID := $(shell id -u)
 GID := $(shell id -g)
@@ -148,92 +149,6 @@ $(if $(strip $(HARNESS_EVIDENCE_REAL)),,$(error HARNESS_EVIDENCE_DIR must resolv
 endef
 
 
-help:
-	@echo 'AoeWorld'
-	@echo '  make bootstrap       Build the pinned Rust tools image and install hooks'
-	@echo '  make timeline        Report PR delivery stages (last 7 days)'
-	@echo '  make doctor          Check toolchain availability'
-	@echo '  make recover         Stop harness containers a host suspend left running'
-	@echo '  make fmt-check       Check Rust formatting without changing files'
-	@echo '  make fmt             Format Rust files'
-	@echo '  make test-placement  Reject additions to inline Rust tests'
-	@echo '  make structure-check Check tracked file and directory limits'
-	@echo '  make architecture-check Check crate boundaries and source rules'
-	@echo '  make docs-check      Check gate table and local documentation links'
-	@echo '  make lint            Run strict Clippy'
-	@echo '  make deny            Audit Cargo advisories, licenses, bans, and sources'
-	@echo '  make cargo-fetch     Fetch locked dependencies online into the shared cache'
-	@echo '  make test-unit       Run native tests (except the post-merge tiers)'
-	@echo '  make test-source-qualification  Run the slow source-qualification tests test-unit excludes'
-	@echo '  make test-exhaustive  Run the 16-seed sweeps and full-axis geodata round-trips test-unit excludes'
-	@echo '  make load-status     Show the heavy slot holders and queue'
-	@echo '  make ledger          Which model did what with measured results (docs/models.md)'
-	@echo '  make usage           What is left of each provider, and the last 7 days of the ledger'
-	@echo '  make geodata-bootstrap Acquire the configured overview source stack'
-	@echo '  make geodata-verify  Verify cached overview inputs without network access'
-	@echo '  AOE_MAP_REQUEST=... make map-estimate  Estimate a map request'
-	@echo '  AOE_MAP_REQUEST=... AOE_MAP_PACKAGE=... make map-generate  Create a self-contained package'
-	@echo '  AOE_MAP_REQUEST=... AOE_MAP_PACKAGE=... make map-generate-detailed  Create a bounded public DEM package'
-	@echo '  AOE_MAP_PACKAGE=... make map-verify  Verify a generated package'
-	@echo '  AOE_SOURCE_QUAL_PACKAGE_DIRECTORY=... AOE_SOURCE_QUAL_CONTENT_HASH=... make map-source-qualify  Qualify the 50,000-tile, 1:1 source-backed 100km case'
-	@echo '  Optional scale references: AOE_SOURCE_QUAL_512_*, AOE_SOURCE_QUAL_16384_*, AOE_SOURCE_QUAL_262144_*'
-	@echo '  make map-source-scale-qualify  Sample verified source packages at the configured scale axes without running movement'
-	@echo '  make map-test        Run deterministic map-model tests'
-	@echo '  AOE_MAP_REQUEST=... make map-perf  Sample synthetic map-generation work'
-	@echo '  make duel DUEL_TASK=<file>  Run tester red then implementer green (docs/shipping.md)'
-	@echo '  make red             Prove the changed tests of the PR red on the merge base and green at HEAD'
-	@echo '  make coverage        Check native production-line coverage floors'
-	@echo '  .agents/hooks/harness.sh build  Build the agent hook judge (docs/agent-runtimes.md)'
-	@echo '  make pre-commit      Local static gate'
-	@echo '  make preflight       Static gate plus native tests'
-	@echo '  make preflight-checks / preflight-unit  The two halves of preflight (CI runs them in parallel)'
-	@echo '  make ci-select       Emit revision-bound selected CI jobs'
-	@echo '  make ci-dispatch-status Report a dispatch aggregate as a commit status'
-	@echo '  make ci-check        Validate selection manifest and job outcomes'
-	@echo '  make build           Build workspace'
-	@echo '  make build-wasm      Build and bind the Rust/WebGPU client'
-	@echo '  make dev             Start checkout-scoped lab on localhost:8080 (DEV_PORT)'
-	@echo '  make down            Stop this checkout’s lab'
-	@echo '  make status          Show this checkout’s lab status'
-	@echo '  make logs            Show recent lab logs'
-	@echo '  make assets-inspect  Inspect ignored local-assets/trial'
-	@echo '  make assets-import   Import ignored local-assets/trial'
-	@echo '  make assets-import-de  Import Dark Age buildings from a Definitive Edition install (DE_DIR)'
-	@echo '  make test-assets-de  Test real DE house decoding and player masks (DE_DIR, read-only)'
-	@echo '  make assets-verify   Verify all ignored local packs'
-	@echo '  make assets-dat-table  Decode empires2.dat into local-assets/dat-table (unit to sprite ids)'
-	@echo '  make browser-check   Typecheck, lint, and format-check browser tooling'
-	@echo '  make dev-server      Build and keep one dev server tracking origin/dev, with preset maps (-status, -stop; docs/dev-server.md)'
-	@echo '  make compare         Screenshot bookmarked cameras on the build before and after the change (docs/showcase.md)'
-	@echo '  make test-e2e        Launch a disposable server and pinned Chromium'
-	@echo '  AOE_POLISH_SOURCE_URL=... AOE_POLISH_SOURCE_HASH=... make test-memory-source  Qualify an activated real-pack source map route'
-	@echo '  AOE_GEODATA_CACHE=... make test-creator-source  Qualify overview and detailed source maps across restart'
-	@echo '  AOE_GEODATA_CACHE=... make test-geographic-matrix  Prepare and verify fixed overview regions'
-	@echo '  make test-geographic-visuals  Capture water and Alpine packages on WebGPU and Canvas'
-	@echo '  make test-geographic-visuals-unit  Test page evidence and package-directory config'
-	@echo '  make test-wasm       Execute wasm-bindgen tests in pinned Chromium'
-	@echo '  make fuzz-smoke      Run bounded parser fuzzing with pinned nightly Rust'
-	@echo '  make fuzz-nightly    Run longer parser fuzzing campaigns'
-	@echo '  make mutation-nightly  Check critical gate and comparator mutations'
-	@echo '  make perf-smoke      Run synthetic smoke workload with real protocol clients'
-	@echo '  make perf-ci         Run target workloads and required comparisons'
-	@echo '  make perf-full       Add population and sparse-world scaling workloads'
-	@echo '  make perf-pressure   Schedule independent network offers and camera changes'
-	@echo '  make perf-stress     Characterize explicit beyond-target overload'
-	@echo '  make perf-hardware-check  Check dedicated-machine environment and timing samples'
-	@echo '  make perf-soak-10    Repeat target network lifecycle for 10 minutes'
-	@echo '  make perf-soak-30    Repeat target network lifecycle for 30 minutes'
-	@echo '  make perf-instructions Run pinned Gungraun/Callgrind kernels'
-	@echo '  make perf-timing    Collect informational Criterion microbenchmarks'
-	@echo '  make perf-baseline-propose Write a reviewable baseline proposal'
-	@echo '  make perf-comment   Post the informational CI performance comment on a pull request'
-	@echo '  make qa-validate     Validate reports/qa/session.json'
-	@echo '  make qa-serve        Serve restricted MCP browser tools on stdio'
-	@echo '  make release-build  Build local runtime images from clean dev with evidence'
-	@echo '  AOE_RELEASE_MANIFEST=... make release-verify  Verify a local release'
-	@echo '  AOE_RELEASE_CANDIDATE=... AOE_RELEASE_PREVIOUS=... make release-rehearse'
-	@echo '  make repo-policy-check  Audit GitHub branch and merge settings'
-
 .cache/cargo:
 	@mkdir -p .cache/cargo
 
@@ -281,7 +196,7 @@ doctor:
 recover:
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- recover
 
-include make/agents.mk make/ship.mk make/qualification.mk make/heavy.mk make/phony.mk
+include make/agents.mk make/ship.mk make/qualification.mk make/heavy.mk make/phony.mk make/help.mk make/assets.mk make/geodata.mk make/release.mk
 
 structure-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- structure-check
@@ -343,17 +258,6 @@ harness-evidence-path-check:
 
 harness-gate-run-path-check: harness-evidence-path-check
 	@$(if $(strip $(HARNESS_ACTIVE_DOCKER_SOCKET_REAL)),true,$(error gate-run requires a resolvable local Unix Docker socket))
-
-geodata-bootstrap:
-	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- bootstrap
-
-geodata-verify:
-	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- verify
-
-map-estimate:
-	@$(GEODATA_RUN) cargo run --locked -p aoe-geodata --bin aoe-map-worker -- map-estimate
-
-.PHONY: geodata-test
 
 test-wasm: browser-tools orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-wasm -- make --no-print-directory test-wasm-steps
@@ -448,49 +352,6 @@ status: orchestrator-tools
 
 logs: orchestrator-tools
 	@$(DEV_ORCH_RUN) cargo run --locked -p aoe-harness -- dev logs
-
-assets-inspect:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets inspect
-
-assets-import:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets import
-
-# The owner's licensed install is mounted read-only; the pack, previews and table go to local-assets/.
-DE_DIR ?= $(HOME)/.steam/steam/steamapps/common/AoE2DE
-export DE_DIR
-assets-import-de:
-	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets import-de /de-install
-
-assets-verify:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets verify
-
-assets-dat-table:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets dat-table
-
-
-release-publish: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e GITHUB_REPOSITORY -e GITHUB_SHA -e GITHUB_REF -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-publish
-
-release-source-check: tools
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_RELEASE_BRANCH -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-source-check
-
-release-main-source-check: tools
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- release-main-source-check
-
-release-verify-published: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e AOE_RELEASE_SOURCE_SHA -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN -e GITHUB_OUTPUT $(GITHUB_OUTPUT_MOUNT) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-verify-published
-
-release-rehearse-published: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e AOE_PREVIOUS_MANIFEST -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-rehearse-published
-
-release-smoke-published: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e DOCKER_CONFIG=/tmp/aoeworld-docker-auth -e AOE_RELEASE_BRANCH -e GITHUB_REPOSITORY -e GITHUB_ACTOR -e GITHUB_TOKEN $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-smoke-published
-
-release-verify: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_RELEASE_MANIFEST $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-verify
-
-release-rehearse: orchestrator-tools
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_RELEASE_CANDIDATE -e AOE_RELEASE_PREVIOUS $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-rehearse
 
 repo-policy-check:
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GITHUB_TOKEN $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) cargo run --locked -p aoe-harness -- repo-policy-check

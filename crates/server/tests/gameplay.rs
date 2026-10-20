@@ -327,6 +327,8 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         receive(&mut socket).await,
         GameplayServerMessage::Snapshot { revision: 1, .. }
     ));
+    assert!(matches!(receive(&mut socket).await,
+        GameplayServerMessage::WildlifeState { revision: 1, animals, .. } if animals.is_empty()));
     send(
         &mut socket,
         GameplayClientMessage::Subscribe {

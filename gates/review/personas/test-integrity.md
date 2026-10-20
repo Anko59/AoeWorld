@@ -11,5 +11,5 @@ registry or the test runner; new behaviour with no test that would fail if the
 change were reverted. Any confirmed weakening is `critical`; behaviour that is
 merely untested is `minor` or `major` by how much it could hide.
 Read the test-first report in the facts: product code with no test added
-before it, tests only after it, a build-time change or an exemption whose
-reason does not hold is a finding, graded by what it could hide.
+before it, tests only after it or a build-time change warrant checking whether
+the tests cover the change. Grade missing coverage by what it could hide.

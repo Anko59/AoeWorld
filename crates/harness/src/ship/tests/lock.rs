@@ -19,6 +19,9 @@ fn holder(branch: &str) -> Holder {
         command: "make ship".into(),
         started: 1_791_900_000,
         returning: false,
+        pid: 0,
+        pid_started: None,
+        gap: None,
     }
 }
 
@@ -231,7 +234,7 @@ fn only_ship_and_duel_ask_for_the_lock() {
     assert_eq!(
         users,
         ["ship/check/mod.rs", "ship/duel/mod.rs"],
-        "only ship and duel acquire the ship lock; make red takes only a heavy slot"
+        "only ship and duel acquire the ship lock"
     );
 }
 
@@ -400,3 +403,4 @@ fn a_zero_wait_with_a_queue_ahead_names_the_running_ship_and_leaves_nothing() {
 }
 
 mod priority;
+mod suspend;

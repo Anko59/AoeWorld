@@ -175,12 +175,26 @@ async fn gameplay_client(
     )
     .await?;
     let (snapshot, size) = receive_gameplay(&mut socket).await?;
-    let GameplayServerMessage::Snapshot { units, .. } = snapshot else {
+    let GameplayServerMessage::Snapshot {
+        units,
+        tick,
+        revision: 1,
+        ..
+    } = snapshot
+    else {
         return Err("gameplay snapshot missing".into());
     };
     result.snapshots = 1;
     result.replicated = units.len() as u64;
     result.visible = units.len();
+    result.bytes += size as u64;
+    // Population workloads have no animals, but every subscription still
+    // receives the complete current wildlife set before its first tick.
+    let (wildlife, size) = receive_gameplay(&mut socket).await?;
+    if !matches!(wildlife, GameplayServerMessage::WildlifeState { revision: 1, tick: at, animals } if at == tick && animals.is_empty())
+    {
+        return Err("gameplay wildlife snapshot missing".into());
+    }
     result.bytes += size as u64;
     for _ in 0..2 {
         let (message, size) = receive_gameplay(&mut socket).await?;

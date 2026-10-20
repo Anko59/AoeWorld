@@ -33,8 +33,7 @@ agent policy refuses `$` in agent-set Make values.
    `refs/remotes/origin/<base>` (`dev`, or a published `SHIP_BASE`). For an
    unpublished stacked parent it explicitly selects `refs/heads/<parent>`.
    The chosen commit is pinned for gates and review; tags cannot shadow it (see [stacked pull requests](#stacked-pull-requests)).
-3. **Requires** a matching harness-owned red record for product changes (or a
-   declared exemption), then **runs** the registry's `preflight` gates at that exact commit, as written in
+3. **Runs** the registry's `preflight` gates at that exact commit, as written in
    `gates/registry.json`, with their budgets. Docker gates are UNAVAILABLE when
    Docker is down, which makes the run INCOMPLETE, never PASS.
 4. **Checks** that HEAD, the tree and the branch did not move while the gates
@@ -97,9 +96,6 @@ critical), an incomplete review, or a closing review
    ([issues](issues.md#review-follow-ups)). A follow-up that cannot be filed is
    reported and does not fail the ship.
 
-A rebased product head needs a new red record before publication. If the final
-catch-up rewrites the head, rerun `make red` and `make ship` for those identities.
-
 ## One ship at a time
 
 Sessions share one machine, so `make ship` and `make duel` take a machine-wide
@@ -109,7 +105,8 @@ frees it. The file also names the holder (worktree, branch, command, start time)
 
 Waiters are served in arrival order, except that a ship back from its review (`make ship`
 queues again for the push) goes before every plain waiter, in arrival order among such ships.
-Priority only picks who is admitted next; the holder is never interrupted. Each waiter keeps an
+Priority only picks who is admitted next. A holder is interrupted only when a host suspend froze
+it: a waiter then says `taking over` ([troubleshooting](troubleshooting.md)). Each waiter keeps an
 OS lock on a ticket in `aoe-ship/ship.lock.queue/` (arrival time, pid, counter; a returning
 ship's ticket is marked) while it waits and runs, and takes the main lock only when no ticket
 ahead of it in that order is still locked. A ticket whose lock can be taken belongs to a dead
@@ -123,8 +120,8 @@ and the queue in admission order without waiting. Read-only commands (`review-fl
 `showcase-check`, `ship-status`…) never take the lock. Never wait for another ship by scanning
 processes: a `pgrep -f` loop matches its own command line and waits on itself forever. `make
 ship` holds the lock for the start-of-ship rebase and for the re-check and push, not for the
-gates or the review (heavy slots serialize the heavy work, and evidence is keyed by commit);
-`make red` takes only a heavy slot. Ctrl-C while unlocked leaves no ticket.
+gates or the review (heavy slots serialize the heavy work, and evidence is keyed by commit).
+Ctrl-C while unlocked leaves no ticket.
 
 ## Stacked pull requests
 
@@ -455,24 +452,13 @@ A pre-commit that stages only test files runs clippy without test targets, so
 red tests that name code not written yet can be committed first; the next
 commit and every preflight check all targets.
 
-`make red` proves the PR as a whole, however its commits are split: it lays only
-the PR's test-file changes over the merge base and runs the changed Rust tests
-and Playwright specs there, then runs them at HEAD. At least one changed test
-must fail by name on the old product code (or a changed Rust test must fail to
-compile because it calls an API the PR adds, named in the record), and the
-changed tests must pass at HEAD. A failure already present at the merge base
-never counts. The harness writes the record itself under the protected Git
-common directory, keyed to the exact base, head and changed test set. `make
-ship` refuses product/build changes without it, including when a rebase changes
-those identities. Run `make red` again after a rebase.
+The review facts and PR description include a non-blocking Git-history summary:
+commit ordering, test functions added before the first product commit, inline-test
+changes and build-time inputs. Review checks whether the tests cover the change;
+CI runs all required test suites.
 
 Product scope includes `crates/` except the harness, `web/` and `browser/`.
-Harness, gates, docs and CI alone remain not applicable. A declared
-`Harness-Test-First: exempt — <docs/config/pure refactor reason>` trailer allows
-shipping and is reported for the review personas to judge. Test ordering,
-inline-test changes, build-time inputs, exemptions and failing names appear in
-the review facts and PR description. See [red proof](red-proof.md) for commands,
-budgets, storage, browser selection and the subagent threat model.
+Harness, gates, docs and CI alone remain not applicable to the ordering summary.
 
 ## Delivery time
 See [delivery timeline](timeline.md) for `make timeline`, stage journals and historical limits.

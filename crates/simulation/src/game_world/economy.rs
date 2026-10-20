@@ -69,6 +69,8 @@ pub enum UnitTask {
     Dying,
     Building,
     Farming,
+    Hunting,
+    Shepherding,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CarriedResource {
@@ -251,6 +253,8 @@ pub(crate) struct GatherTask {
     node: u64,
     /// Set for a farmer: the farm building worked instead of a map node.
     farm: Option<EntityId>,
+    /// Set for a wildlife carcass rather than a map node or farm.
+    pub(crate) animal: Option<EntityId>,
     tile: TileCoord,
     kind: ResourceKind,
     phase: GatherPhase,

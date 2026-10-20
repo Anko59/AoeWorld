@@ -41,8 +41,8 @@ fn event(t: f64, stage: &str, event: &str, run: &str, head: &str) -> Entry {
 #[test]
 fn journal_appends_and_failed_writes_never_fail_work() {
     let root = repository();
-    mark(root.path(), "red", "start", json!({"base":"fixture"}));
-    mark(root.path(), "red", "end", json!({"ok":false}));
+    mark(root.path(), "gates", "start", json!({"base":"fixture"}));
+    mark(root.path(), "gates", "end", json!({"ok":false}));
     let path = root
         .path()
         .join(".git/aoe-ship/timeline/topic/nested.jsonl");
@@ -73,10 +73,10 @@ fn pairing_isolates_runs_retries_and_rebases_and_ignores_incomplete() {
         event(2., "rebase", "start", "b", "other"),
         event(5., "rebase", "end", "a", "new"),
         event(6., "rebase", "end", "b", "other"),
-        event(7., "red", "end", "a", "new"),
-        event(8., "red", "start", "a", "new"),
-        event(9., "red", "start", "a", "new"),
-        event(12., "red", "end", "a", "new"),
+        event(7., "gates", "end", "a", "new"),
+        event(8., "gates", "start", "a", "new"),
+        event(9., "gates", "start", "a", "new"),
+        event(12., "gates", "end", "a", "new"),
         event(13., "push", "start", "a", "new"),
     ]);
     assert_eq!(unpaired, 3);
@@ -229,8 +229,8 @@ fn window_joins_retained_final_push_before_filtering_completed_intervals() {
     let (samples, _) = pair(vec![
         event(22. * 3600., "push", "start", "a", "final"),
         event(23. * 3600., "push", "end", "a", "final"),
-        event(57. * 3600., "red", "start", "a", "final"),
-        event(58. * 3600., "red", "end", "a", "final"),
+        event(57. * 3600., "gates", "start", "a", "final"),
+        event(58. * 3600., "gates", "end", "a", "final"),
     ]);
     let data = history::Data {
         samples,
@@ -257,7 +257,7 @@ fn window_joins_retained_final_push_before_filtering_completed_intervals() {
             .split("Local stages not joined")
             .nth(1)
             .unwrap()
-            .contains("red 3600.0s"),
+            .contains("gates 3600.0s"),
         "{text}"
     );
     assert!(!report::render(&data, &prs, 59. * 3600., 60. * 3600.).contains("push-to-merge |"));

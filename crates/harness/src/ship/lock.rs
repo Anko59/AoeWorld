@@ -1,4 +1,4 @@
-//! One `make ship`, `make duel` or `make red` at a time (docs/shipping.md).
+//! One `make ship` or `make duel` at a time (docs/shipping.md).
 //! The lock is an OS advisory lock (`flock`) on `<git common dir>/aoe-ship/ship.lock`,
 //! which every worktree and checkout of the repository shares. The kernel drops it
 //! when the holder exits however it exits, so a dead holder never leaves a stale
@@ -10,10 +10,13 @@
 //! Tickets are removed on release and on drop.
 use super::{Result, git};
 mod handoff;
+mod stale;
+use crate::process::suspend;
 use crate::slots::queue::{self, Ticket, read_json, write_json};
 pub(crate) use handoff::Handoff;
 use nix::fcntl::{Flock, FlockArg};
 use serde::{Deserialize, Serialize};
+pub(crate) use stale::refresh_held;
 use std::{
     fs::{self, File, OpenOptions},
     path::{Path, PathBuf},
@@ -25,7 +28,7 @@ const DEFAULT_WAIT_MINUTES: u64 = 120;
 const POLL: Duration = Duration::from_secs(1);
 const REPORT_EVERY: Duration = Duration::from_secs(300);
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct Holder {
     pub(crate) worktree: String,
     pub(crate) branch: String,
@@ -35,6 +38,35 @@ pub(crate) struct Holder {
     /// admitted before every plain waiter (see [`Handoff::reacquire`]).
     #[serde(default)]
     pub(crate) returning: bool,
+    /// The process that holds the lock, set when the lock is taken. With `pid_started` (its
+    /// start time, `/proc/<pid>/stat`) it names one process; a waiter signals no other.
+    #[serde(default)]
+    pub(crate) pid: u32,
+    #[serde(default)]
+    pub(crate) pid_started: Option<u64>,
+    /// The boot-time gap in whole seconds when the lock was taken, or when the holder last
+    /// recovered from a suspend (see `process::suspend` and `refresh_held`).
+    #[serde(default)]
+    pub(crate) gap: Option<u64>,
+}
+
+/// The same ship: the gap changes while it holds the lock, so it is not compared.
+impl PartialEq for Holder {
+    fn eq(&self, other: &Self) -> bool {
+        (
+            &self.worktree,
+            &self.branch,
+            &self.command,
+            self.started,
+            self.returning,
+        ) == (
+            &other.worktree,
+            &other.branch,
+            &other.command,
+            other.started,
+            other.returning,
+        ) && (self.pid, self.pid_started) == (other.pid, other.pid_started)
+    }
 }
 
 impl Holder {
@@ -53,6 +85,16 @@ impl Holder {
 pub(crate) struct ShipLock {
     _flock: Flock<File>,
     _ticket: Ticket<Holder>,
+    path: PathBuf,
+}
+
+impl Drop for ShipLock {
+    fn drop(&mut self) {
+        // A released lock names no holder, so a record left in the file belongs to a holder
+        // that died without releasing.
+        let _ = self._flock.set_len(0);
+        stale::untrack(&self.path);
+    }
 }
 
 fn queue_dir(lock_path: &Path) -> PathBuf {
@@ -102,6 +144,9 @@ fn acquire_as(root: &Path, command: &str, returning: bool) -> Result<ShipLock> {
             command: command.into(),
             started: now(),
             returning,
+            pid: 0,
+            pid_started: None,
+            gap: None,
         };
         acquire_at(
             &path(root)?,
@@ -123,23 +168,41 @@ pub(crate) fn acquire_at(
     say: &mut dyn FnMut(&str),
 ) -> Result<ShipLock> {
     let started = Instant::now();
+    let mut holder = holder.clone();
+    holder.pid = std::process::id();
+    holder.pid_started = stale::process_started(holder.pid);
+    let holder = &holder;
     let ticket = Ticket::enter(&queue_dir(path), holder)?;
+    // The holder the last poll found frozen. A holder that recovers from a suspend records
+    // the new gap within a poll of the capture loop, but the waiter may look in between: it
+    // ends a holder only when the same record still reads stale on the next poll.
+    let mut suspect: Option<Holder> = None;
     let mut announced = false;
     let mut last_position = 0;
     let mut last_report = started;
     loop {
+        // The holder's own ticket is ahead of every waiter, so it is judged before the queue.
+        if frozen(path, &mut suspect, say) {
+            thread::sleep(poll);
+            continue;
+        }
         let ahead = ticket.ahead_ranked(holder.rank(), Holder::rank)?;
         if ahead.is_empty() {
             let file = open(path)?;
             match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
                 Ok(mut flock) => {
-                    write_json(&mut flock, holder)?;
+                    // The gap is read now, with the lock, not when this waiter queued.
+                    let mut record = holder.clone();
+                    record.gap = stale::gap_now(&suspend::read);
+                    write_json(&mut flock, &record)?;
+                    stale::track(path, record.gap);
                     if announced {
                         say("ship: the lock is free; starting");
                     }
                     return Ok(ShipLock {
                         _flock: flock,
                         _ticket: ticket,
+                        path: path.to_path_buf(),
                     });
                 }
                 Err((_, nix::errno::Errno::EWOULDBLOCK)) => {}
@@ -192,6 +255,33 @@ pub(crate) fn acquire_at(
     }
 }
 
+/// Whether this poll ended the holder because a suspend froze it (see `stale`). `suspect` is
+/// the holder the previous poll found stale: only the same record, stale twice, is ended.
+fn frozen(path: &Path, suspect: &mut Option<Holder>, say: &mut dyn FnMut(&str)) -> bool {
+    let live = read_json::<Holder>(path).filter(|live| live.pid != std::process::id());
+    let reason = live
+        .as_ref()
+        .and_then(|live| stale::stale(live, &suspend::read));
+    let (Some(live), Some(reason)) = (live, reason) else {
+        *suspect = None;
+        return false;
+    };
+    let confirmed = suspect
+        .as_ref()
+        .is_some_and(|seen| seen.pid == live.pid && seen.gap == live.gap);
+    if confirmed && stale::end(&live) {
+        say(&format!(
+            "ship: taking over from the stale lock holder {} (pid {}): {reason}",
+            live.describe(),
+            live.pid
+        ));
+        *suspect = None;
+        return true;
+    }
+    *suspect = Some(live);
+    false
+}
+
 /// Who holds the lock now, or `None` when it is free. Never waits and never keeps it.
 pub(crate) fn status(path: &Path) -> Result<Option<Holder>> {
     if !path.exists() {
@@ -222,6 +312,9 @@ fn unknown() -> Holder {
         command: "unknown".into(),
         started: 0,
         returning: false,
+        pid: 0,
+        pid_started: None,
+        gap: None,
     }
 }
 

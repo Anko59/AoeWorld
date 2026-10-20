@@ -398,27 +398,17 @@ fn the_e2e_variables_the_harness_reads_reach_both_containers() {
 /// string and the shell fails with "Unterminated quoted string". Every echo must close its quote.
 #[test]
 fn help_lines_close_their_single_quoted_echo() {
-    let text = fs::read_to_string(repository().join("Makefile")).expect("Makefile");
-    for (number, line) in text.lines().enumerate() {
-        if let Some(echoed) = line.trim_start().strip_prefix("@echo '") {
-            let echoed = echoed.trim_end();
-            assert!(
-                echoed.ends_with('\'') && !echoed[..echoed.len() - 1].contains('\''),
-                "Makefile:{}: an apostrophe inside a single-quoted echo breaks `make help`: {line}",
-                number + 1
-            );
+    for (name, text) in make_files(&repository()) {
+        for (number, line) in text.lines().enumerate() {
+            if let Some(echoed) = line.trim_start().strip_prefix("@echo '") {
+                let echoed = echoed.trim_end();
+                assert!(
+                    echoed.ends_with('\'') && !echoed[..echoed.len() - 1].contains('\''),
+                    "{name}:{}: an apostrophe inside a single-quoted echo breaks `make help`: {line}",
+                    number + 1
+                );
+            }
         }
-    }
-}
-
-#[test]
-fn red_checkout_keeps_the_selected_rehearsal_repository_and_revisions() {
-    let files = make_files(&repository());
-    let definitions = definitions(&files);
-    let wrapper = definitions.get("SLOT_RUN").unwrap();
-    let (provided, _) = environment_read(&[wrapper.as_str()], &definitions);
-    for name in ["HARNESS_RED_ROOT", "HARNESS_RED_BASE", "HARNESS_RED_HEAD"] {
-        assert!(provided.contains(name), "red-checkout drops {name}");
     }
 }
 
