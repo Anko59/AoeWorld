@@ -28,12 +28,12 @@ pub(crate) struct GateResult {
     pub(crate) summary: String,
     /// The last 40 lines of output when the gate did not pass.
     pub(crate) tail: String,
-    /// Every run, only when a timeout on an overloaded machine was retried (then two).
+    /// Every run when retried, or when an overload retry's load wait was refused.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) attempts: Vec<Attempt>,
 }
 
-/// One run of a gate that was retried after its deadline expired on an overloaded machine.
+/// One run of a gate that needed a suspend or overload retry.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct Attempt {
     pub(crate) seconds: f32,
@@ -60,7 +60,7 @@ impl Attempt {
 }
 
 /// What a local gate that times out on an overloaded machine gets: one more run after the load
-/// falls. CI never retries, and nothing else is retried.
+/// falls. CI never retries an overloaded timeout. Suspend recovery is separate.
 pub(crate) struct Retry {
     /// False in CI.
     local: bool,
@@ -93,7 +93,7 @@ impl Retry {
 }
 
 impl Retry {
-    /// No retry and no load wait: for the agent stop check, which must answer at once.
+    /// No overload retry or load wait: for the agent stop check, which must answer at once.
     pub(crate) fn never() -> Self {
         Self::new(false, Box::new(load::read), Box::new(|| Ok(())))
     }
@@ -243,32 +243,54 @@ fn run_one(
             };
         }
     };
-    let first = run_once(root, gate, &slot, select, &retry.load, observe);
-    if !(retry.local && first.overloaded) {
-        return first.result;
-    }
-    // The same budget again, once the load has fallen; a refused wait keeps the first timeout.
-    let earlier = first.attempt;
-    let mut result = first.result;
-    let waited = if observe {
-        crate::timeline::stage(
-            root,
-            "load-wait",
-            serde_json::json!({"gate":gate.id,"retry":true}),
-            || (retry.wait)(),
-        )
-    } else {
-        (retry.wait)()
-    };
-    if let Err(reason) = waited {
-        result.summary = format!("{}; not retried: {reason}", result.summary);
-        result.attempts = vec![earlier];
+    let mut suspend_retried = false;
+    let mut overload_retried = false;
+    let mut attempts = Vec::new();
+    loop {
+        let run = run_once(root, gate, &slot, select, &retry.load, observe);
+        attempts.push(run.attempt);
+        let mut result = run.result;
+        if let Some(at) = run.suspended.filter(|_| !suspend_retried) {
+            if let Err(error) = crate::process::suspend::containers::stop_interrupted() {
+                result.verdict = GateVerdict::Unavailable;
+                result.summary = format!(
+                    "interrupted by a host suspend at {at}; could not stop interrupted containers: {error}"
+                );
+                result.attempts = attempts;
+                return result;
+            }
+            eprintln!(
+                "{}: interrupted by a host suspend at {at}; retrying once",
+                gate.id
+            );
+            suspend_retried = true;
+            continue;
+        }
+        if retry.local && run.overloaded && !overload_retried {
+            overload_retried = true;
+            // The same budget again once the load falls; a refused wait keeps the timeout.
+            let waited = if observe {
+                crate::timeline::stage(
+                    root,
+                    "load-wait",
+                    serde_json::json!({"gate":gate.id,"retry":true}),
+                    || (retry.wait)(),
+                )
+            } else {
+                (retry.wait)()
+            };
+            match waited {
+                Ok(()) => continue,
+                Err(reason) => {
+                    result.summary = format!("{}; not retried: {reason}", result.summary);
+                }
+            }
+        }
+        if attempts.len() > 1 || overload_retried {
+            result.attempts = attempts;
+        }
         return result;
     }
-    let later = run_once(root, gate, &slot, select, &retry.load, observe);
-    let mut result = later.result;
-    result.attempts = vec![earlier, later.attempt];
-    result
 }
 
 /// One run of a gate's command under its budget.
@@ -277,6 +299,8 @@ struct Run {
     attempt: Attempt,
     /// The load at the deadline said the machine was overloaded (only ever set on a timeout).
     overloaded: bool,
+    /// The wall time a host suspend interrupted this run.
+    suspended: Option<String>,
 }
 
 fn run_once(
@@ -323,8 +347,15 @@ fn run_once(
         .trim();
     let passed = matches!(captured.exit, CaptureExit::Success);
     let timed_out = matches!(captured.exit, CaptureExit::Deadline);
+    let suspended = match &captured.exit {
+        CaptureExit::Suspended { at } => Some(at.clone()),
+        _ => None,
+    };
     let load = if timed_out { reader() } else { None };
     let mut summary: String = last.chars().take(120).collect();
+    if let Some(at) = &suspended {
+        summary = format!("interrupted by a host suspend at {at}; {summary}");
+    }
     if timed_out {
         summary = over_budget(gate.budget_s, &summary, &|| load);
     }
@@ -356,6 +387,7 @@ fn run_once(
             load: load.as_ref().map(load::Load::note).unwrap_or_default(),
         },
         overloaded: load.is_some_and(|load| load.overloaded()),
+        suspended,
     }
 }
 

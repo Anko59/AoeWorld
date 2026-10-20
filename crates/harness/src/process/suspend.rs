@@ -37,8 +37,32 @@ impl Reading {
 /// Where readings come from: [`read`] in production, an injected sequence in tests.
 pub(crate) type Clock<'a> = dyn Fn() -> io::Result<Reading> + 'a;
 
-#[cfg(target_os = "linux")]
+/// Names a file holding whole seconds that test builds add to the boot clock. Production
+/// builds do not compile this override, even when the variable is set in their environment.
+#[cfg(test)]
+pub(crate) const SIMULATED_GAP_FILE: &str = "AOE_HARNESS_SIMULATED_GAP_FILE";
+
+#[cfg(test)]
+fn simulated_gap() -> Duration {
+    std::env::var_os(SIMULATED_GAP_FILE)
+        .and_then(|file| std::fs::read_to_string(file).ok())
+        .and_then(|text| text.trim().parse().ok())
+        .map_or(Duration::ZERO, Duration::from_secs)
+}
+
+/// The process clocks. Only test builds can add a simulated suspend.
 pub(crate) fn read() -> io::Result<Reading> {
+    let reading = read_real()?;
+    #[cfg(test)]
+    let reading = Reading {
+        boot: reading.boot + simulated_gap(),
+        ..reading
+    };
+    Ok(reading)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn read_real() -> io::Result<Reading> {
     use nix::time::{ClockId, clock_gettime};
     let span = |clock| -> io::Result<Duration> {
         let time = clock_gettime(clock).map_err(io::Error::from)?;
@@ -54,7 +78,7 @@ pub(crate) fn read() -> io::Result<Reading> {
 }
 
 #[cfg(not(target_os = "linux"))]
-pub(crate) fn read() -> io::Result<Reading> {
+pub(crate) fn read_real() -> io::Result<Reading> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "suspend detection needs CLOCK_BOOTTIME (Linux)",
