@@ -13,17 +13,31 @@ pub fn apply_building_foundations(
     art: &GameArt,
     units: &[SceneUnit],
 ) {
-    // Aprons first, footprints second: a neighbouring building's apron must
-    // never overwrite the Farm's actual crop terrain, regardless of unit order.
-    for margin in [1.0, 0.0] {
-        for unit in units {
-            let Some(id) = unit.kind.building_id() else {
-                continue;
-            };
+    if terrain.is_empty() || units.is_empty() {
+        return;
+    }
+    // Compute the displayed sample bounds once, rather than scanning samples
+    // for each distant building. Bounds include apron reach and half-open edges.
+    let (mut min, mut max) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for tile in terrain.iter() {
+        for axis in 0..2 {
+            min[axis] = min[axis].min(tile.position[axis]);
+            max[axis] = max[axis].max(tile.position[axis]);
+        }
+    }
+    let foundations = units
+        .iter()
+        .filter_map(|unit| {
+            let id = unit.kind.building_id()?;
             let building = art.compositions.iter().find(|b| b.unit_id == id);
             let side = unit.kind.building_side().unwrap_or(1.0) as f32;
             let footprint = building.map_or([side; 2], |b| b.footprint);
-            let material = if id == 50 && (unit.kind.is_foundation() || margin > 0.0) {
+            let lower = [0, 1].map(|axis| unit.position[axis] - f64::from(footprint[axis]) / 2.0);
+            let upper = [0, 1].map(|axis| unit.position[axis] + f64::from(footprint[axis]) / 2.0);
+            if (0..2).any(|axis| upper[axis] + 1.0 <= min[axis] || lower[axis] - 1.0 > max[axis]) {
+                return None;
+            }
+            let dirt = if id == 50 {
                 art.compositions
                     .iter()
                     .find(|b| b.unit_id == 109)
@@ -32,31 +46,67 @@ pub fn apply_building_foundations(
             } else {
                 building.and_then(|b| b.foundation_material).unwrap_or(2)
             };
-            for tile in terrain.iter_mut() {
-                if (0..2).all(|axis| {
-                    tile.position[axis]
-                        >= unit.position[axis] - f64::from(footprint[axis]) / 2.0 - margin
-                        && tile.position[axis]
-                            < unit.position[axis] + f64::from(footprint[axis]) / 2.0 + margin
-                }) {
-                    tile.material = material;
-                    // Missing metadata is not an observation to the landscape
-                    // mixer. Keep the map palette/lighting, clear only vegetation.
-                    tile.appearance = if id == 50 && !unit.kind.is_foundation() && margin == 0.0 {
-                        // Completed crops use their own per-triangle UVs. They
-                        // must not inherit the ground mixer's tiled mode; the
-                        // surrounding dirt apron still uses landscape mixing.
-                        None
-                    } else {
-                        tile.appearance.map(|appearance| SceneTerrainAppearance {
-                            canopy_strength: 0,
-                            floor_strength: 0,
-                            ..appearance
-                        })
-                    };
-                }
+            let crops = id == 50 && !unit.kind.is_foundation();
+            Some(Foundation {
+                lower,
+                upper,
+                apron: dirt,
+                material: if crops {
+                    building.and_then(|b| b.foundation_material).unwrap_or(2)
+                } else {
+                    dirt
+                },
+                crops,
+            })
+        })
+        .collect::<Vec<_>>();
+    if foundations.is_empty() {
+        return;
+    }
+    // Visit each displayed sample once. The last footprint wins over every
+    // apron, independent of unit order, so neighbouring dirt cannot erase crops.
+    for tile in terrain {
+        let (mut footprint, mut apron) = (None, None);
+        for foundation in &foundations {
+            #[cfg(test)]
+            tests::SAMPLE_VISITS.with(|count| count.set(count.get() + 1));
+            if foundation.contains(tile.position, 0.0) {
+                footprint = Some((foundation.material, foundation.crops));
+            } else if foundation.contains(tile.position, 1.0) {
+                apron = Some((foundation.apron, false));
             }
         }
+        if let Some((material, crops)) = footprint.or(apron) {
+            tile.material = material;
+            // Crops keep per-triangle UVs; apron dirt participates in ordinary
+            // landscape mixing with vegetation cleared and lighting preserved.
+            tile.appearance = if crops {
+                None
+            } else {
+                tile.appearance.map(|appearance| SceneTerrainAppearance {
+                    canopy_strength: 0,
+                    floor_strength: 0,
+                    ..appearance
+                })
+            };
+        }
+    }
+}
+
+struct Foundation {
+    lower: [f64; 2],
+    upper: [f64; 2],
+    material: u8,
+    apron: u8,
+    crops: bool,
+}
+
+impl Foundation {
+    fn contains(&self, position: [f64; 2], margin: f64) -> bool {
+        (0..2).all(|axis| {
+            position[axis] >= self.lower[axis] - margin
+                && position[axis] < self.upper[axis] + margin
+        })
     }
 }
 
@@ -174,6 +224,9 @@ fn farm(face: &mut ProjectedSurfaceTriangle, farms: &[[f64; 2]], art: &GameArt) 
         return;
     };
     let Some(frame) = art.buildings[5].first() else {
+        if !art.foundation.0.is_empty() {
+            return; // Prepared ground owns the native crop sheet and its borders.
+        }
         face.texture_uv = None;
         face.texture_materials = None;
         face.texture_blend = None;

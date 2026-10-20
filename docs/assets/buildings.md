@@ -18,7 +18,7 @@ Standing buildings use the trial DAT composition whenever its primary stand
 is available, with native deltas, annex positions and foundation terrain.
 The optional x1 DE overlay supplies missing main bodies, including the West
 European Lumber and Mining Camps (DE has no Dark Age camp). It also supplies
-rubble and Farm ground texturing. The Mill composes its
+rubble and optional Farm ground texturing. The Mill composes its
 trial body (3483) with all 43 native sail frames (3482), preserving animation
 without duplicating the body in the atlas. Native anchors and player
 and shadow planes are preserved; player ramps use the selected banner colour. House variants are stable by entity id.
@@ -29,9 +29,10 @@ the stages with authoritative
 `progress_permille`. Removed foundations and buildings retain the relevant rubble for three game
 seconds; exhausted Farms with no food left leave none.
 
-Farms sample a bounded 256-square region of `de/g_fm1.dds`, a ploughed ground
-texture applied to their footprint's
-terrain triangles, rather than a billboard. They remain walked on. Builders
+Without the DE overlay, completed Farms retain the imported native ploughed
+sheet (SLP 15004) on their footprint's terrain triangles. The optional overlay
+replaces it with a bounded 256-square region of `de/g_fm1.dds`. Neither path
+uses a billboard; Farms remain walked on. Builders
 use trial task sprite 1496 (five facing rows of fifteen frames), from the
 local empires2.dat table's male builder proceeding task. The trial lacks the
 farmer sequence: farmers use the forager art, as the explicit fallback.
@@ -42,8 +43,12 @@ including construction sites and buildings absent from the trial art. The
 decoded AoK building tail declares the footprint and foundation terrain but no
 margin; one tile is a presentation choice, not a measured original-engine rule.
 DAT footprints and foundation materials take priority. Farm margins use dirt;
-completed crop terrain stays inside its footprint. Aprons are painted before
-footprints so neighbours cannot erase crops. Completed crops keep their custom
+completed crop terrain stays inside its footprint. The renderer computes displayed
+terrain bounds once and rejects distant buildings before painting. One scan gives
+footprints priority over every apron, so neighbours cannot erase crops.
+The prepared scene retains its foundation key; building updates check it once,
+while unchanged per-actor and preview projections reuse the scene directly.
+Completed crops keep their custom
 triangle UV mapping rather than inheriting the terrain mixer's tiled mode.
 Foundation dirt tiles retain landscape
 appearance metadata with canopy and litter cleared. Clearing that metadata
