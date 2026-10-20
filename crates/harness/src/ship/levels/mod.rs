@@ -37,12 +37,12 @@ const VISIBLE: &[&str] = &[
     "crates/assets/",
     "crates/scenario/",
     "web/",
-    "browser/",
 ];
 
 impl Change {
     /// Whether a player would see the change: a non-test file under [`VISIBLE`]. Only then
     /// does a PR need a showcase video; harness, protocol, server and tooling changes do not.
+    /// All of `browser/` is test/QA tooling, including reporters, config and fixtures.
     pub(crate) fn visible(&self) -> bool {
         self.parts.iter().any(|part| {
             VISIBLE.iter().any(|prefix| part.path.starts_with(prefix))

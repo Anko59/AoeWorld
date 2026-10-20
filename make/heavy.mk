@@ -61,6 +61,16 @@ SLOT_BOOTSTRAP = docker run --rm --init $(HEAVY_ENV) --memory=2g --memory-swap=2
 slot-bootstrap: orchestrator-tools
 	@flock '$(GIT_COMMON)/aoe-slot-bootstrap.lock' $(SLOT_BOOTSTRAP)
 
+export AOE_DISK_FLOOR_GIB
+.PHONY: disk-precheck
+disk-precheck: slot-bootstrap
+	@env $(call MOUNT_QUOTE,HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)) $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) '$(HARNESS_TARGET_CACHE)/debug/aoe-harness' disk-precheck
+
+# Check on the host before prerequisites can take a slot, including with make -j.
+preflight: disk-precheck
+	@$(MAKE) --no-print-directory deny build-wasm
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight
+
 coverage: coverage-tools browser-deps orchestrator-tools build-wasm slot-bootstrap
 	@$(SLOT_RUN) coverage -- make --no-print-directory coverage-steps
 	@$(MAKE) --no-print-directory coverage-check
@@ -113,7 +123,8 @@ build-wasm-steps:
 	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client
 	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
 
-test-e2e: build-wasm browser-deps orchestrator-tools slot-bootstrap
+test-e2e: disk-precheck slot-bootstrap
+	@$(MAKE) --no-print-directory build-wasm browser-deps orchestrator-tools
 	@$(SLOT_RUN) test-e2e -- make --no-print-directory test-e2e-steps
 
 test-e2e-steps:
