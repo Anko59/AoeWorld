@@ -413,14 +413,17 @@ fn the_nearest_dropoff_depends_on_the_resource_kind() {
 }
 
 #[test]
-fn barracks_has_a_queue_but_trains_nothing_until_a_unit_kind_is_added() {
+fn barracks_accepts_only_militia_and_requires_completion() {
     let (mut world, _, _) = village();
     set_stock(&mut world, 500, 500, 0, 0);
     assert_eq!(
         trainable_units(BuildingKind::TownCenter),
         &[UnitKind::Villager]
     );
-    assert!(trainable_units(BuildingKind::Barracks).is_empty());
+    assert_eq!(
+        trainable_units(BuildingKind::Barracks),
+        &[UnitKind::Militia]
+    );
     let worker = villager_at(&mut world, 99, 100);
     let barracks = world
         .issue_build(PlayerId(0), &[worker], BuildingKind::Barracks, at(100, 100))

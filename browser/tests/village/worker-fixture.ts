@@ -1,3 +1,4 @@
+import { darkAgeState } from "../wire/buildings.js";
 import type { Page } from "@playwright/test";
 import { scoutCombat, villagerCombat } from "../wire/combat.js";
 function uint(value: number): number[] {
@@ -76,6 +77,7 @@ export async function workerFixture(page: Page) {
           ...uint(200),
           3,
           5,
+          ...darkAgeState,
           0,
         ]),
       );

@@ -119,6 +119,8 @@ impl GameWorld {
             stockpile: Stockpile::default(),
             population_used,
             population_cap: 0,
+            age: crate::Age::Dark,
+            researched: 0,
         });
         let work_total = u64::from(rules.build_seconds)
             * u64::from(self.config.tick_hz)
@@ -141,7 +143,8 @@ impl GameWorld {
                 work_total,
                 hp: if complete { rules.max_hp } else { 1 },
                 max_hp: rules.max_hp,
-                los: rules.los,
+                los: rules.los.saturating_add(self.researched_los_bonus(player)),
+                research: None,
                 food_remaining: (kind == BuildingKind::Farm).then_some(rules.food),
             },
         );

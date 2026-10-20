@@ -18,6 +18,7 @@ fn building(id: usize) -> GameplayBuildingState {
         max_hp: 2400,
         los: 8,
         food_remaining: None,
+        research: None,
         training_queue: vec![],
         last_hit: None,
     }

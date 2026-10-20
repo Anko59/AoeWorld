@@ -15,6 +15,8 @@ impl Economy {
             }
             hash.update(&player.population_used.to_le_bytes());
             hash.update(&player.population_cap.to_le_bytes());
+            hash.update(&[player.age as u8]);
+            hash.update(&player.researched.to_le_bytes());
         }
         hash.update(&(self.buildings.len() as u64).to_le_bytes());
         for building in self.buildings.values() {
@@ -43,6 +45,14 @@ impl Economy {
                     .map_or(u32::MAX, u32::from)
                     .to_le_bytes(),
             );
+            match building.research {
+                None => hash.update(&[0]),
+                Some(entry) => {
+                    hash.update(&[1, entry.tech as u8]);
+                    hash.update(&entry.progress_ticks.to_le_bytes());
+                    hash.update(&entry.total_ticks.to_le_bytes())
+                }
+            };
             hash.update(&(building.training_queue.len() as u64).to_le_bytes());
             for entry in &building.training_queue {
                 hash.update(&[entry.kind as u8]);

@@ -246,3 +246,29 @@ fn destroying_a_house_uses_its_armour_and_removes_only_its_housing() {
     assert!(world.tile_passable(TileCoord::new(100, 100)));
     assert_eq!(world.player_economy(PlayerId(1)).unwrap().population_cap, 5);
 }
+
+#[test]
+fn dark_age_building_armour_matches_aoe_ii_de() {
+    use crate::{BuildingKind::*, DamageKind, building_combat, damage_dealt};
+    for (kind, melee, pierce) in [
+        (TownCenter, 3, 5),
+        (House, -2, 7),
+        (LumberCamp, 0, 7),
+        (MiningCamp, 0, 7),
+        (Mill, 0, 7),
+        (Farm, 0, 0),
+        (Barracks, 0, 7),
+        (PalisadeWall, 2, 5),
+        (Outpost, 0, 0),
+    ] {
+        let armour = building_combat(kind);
+        assert_eq!(
+            (armour.melee_armour, armour.pierce_armour),
+            (melee, pierce),
+            "{kind:?}"
+        );
+    }
+    assert_eq!(damage_dealt(4, DamageKind::Melee, -2, 7), 6);
+    assert_eq!(damage_dealt(4, DamageKind::Melee, 2, 5), 2);
+    assert_eq!(damage_dealt(4, DamageKind::Pierce, -2, 7), 1);
+}

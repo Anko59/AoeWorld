@@ -43,6 +43,25 @@ impl BuildingKind {
         }
     }
 }
+/// The player's age. The Feudal Age unlocks nothing beyond this field yet.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum Age {
+    Dark,
+    Feudal,
+}
+/// A technology; bit `1 << tech as u8` of `GameplayPlayerState::researched`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum Tech {
+    Loom,
+    TownWatch,
+    FeudalAge,
+}
+impl Tech {
+    pub const ALL: [Tech; 3] = [Tech::Loom, Tech::TownWatch, Tech::FeudalAge];
+    pub const fn bit(self) -> u32 {
+        1 << self as u8
+    }
+}
 /// A foundation is built by villagers; only a complete building works.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ConstructionState {
@@ -90,6 +109,9 @@ pub struct GameplayPlayerState {
     pub stockpile: Stockpile,
     pub population_used: u16,
     pub population_cap: u16,
+    pub age: Age,
+    /// Bit `1 << tech as u8` is set once researched.
+    pub researched: u32,
 }
 /// The most recent damage taken. A client plays a hit reaction when `tick`
 /// is newer than the one it last saw, and a swing for `attacker`.
@@ -101,6 +123,13 @@ pub struct HitState {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TrainingState {
     pub kind: UnitKind,
+    pub progress_ticks: u64,
+    pub total_ticks: u64,
+}
+/// The technology a building is researching; it occupies the building's queue.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ResearchState {
+    pub tech: Tech,
     pub progress_ticks: u64,
     pub total_ticks: u64,
 }
@@ -122,12 +151,19 @@ pub struct GameplayBuildingState {
     pub food_remaining: Option<u16>,
     #[serde(deserialize_with = "bounded_training")]
     pub training_queue: Vec<TrainingState>,
+    pub research: Option<ResearchState>,
     /// A building at 0 HP is destroyed and reported in `building_removals`.
     pub last_hit: Option<HitState>,
 }
 
+fn valid_research(player: &GameplayPlayerState) -> bool {
+    let known = Tech::ALL.iter().fold(0, |bits, tech| bits | tech.bit());
+    player.researched & !known == 0
+        && (player.age == Age::Feudal) == (player.researched & Tech::FeudalAge.bit() != 0)
+}
 pub(super) fn valid_players(players: &[GameplayPlayerState]) -> bool {
     players.len() <= MAX_ECONOMY_PLAYERS
+        && players.iter().all(valid_research)
         && players
             .iter()
             .all(|player| player.population_cap <= MAX_POPULATION)
@@ -151,10 +187,20 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                 && (building.kind == BuildingKind::Farm) == building.food_remaining.is_some()
                 && (building.construction == ConstructionState::Complete
                     || building.training_queue.is_empty())
+                && building.research.is_none_or(|research| {
+                    building.kind == BuildingKind::TownCenter
+                        && building.construction == ConstructionState::Complete
+                        && building.training_queue.is_empty()
+                        && research.total_ticks > 0
+                        && research.progress_ticks <= research.total_ticks
+                })
                 && building.training_queue.len() <= MAX_TRAINING_QUEUE
                 && building.training_queue.iter().all(|entry| {
-                    entry.kind == UnitKind::Villager
-                        && entry.total_ticks > 0
+                    matches!(
+                        (building.kind, entry.kind),
+                        (BuildingKind::TownCenter, UnitKind::Villager)
+                            | (BuildingKind::Barracks, UnitKind::Militia)
+                    ) && entry.total_ticks > 0
                         && entry.progress_ticks <= entry.total_ticks
                 })
         })
