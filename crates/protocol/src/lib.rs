@@ -1,5 +1,6 @@
 //! Bounded, versioned binary WebSocket contract.
 mod gameplay;
+pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
 
 use aoe_core::{EntityId, PlayerId, Position, Region, Tick};
 pub use gameplay::{

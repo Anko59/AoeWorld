@@ -123,6 +123,8 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
             aoe_simulation::UnitTask::Farming => UnitTask::Farming,
             aoe_simulation::UnitTask::Attacking => UnitTask::Attacking,
             aoe_simulation::UnitTask::Dying => UnitTask::Dying,
+            aoe_simulation::UnitTask::Hunting => UnitTask::Hunting,
+            aoe_simulation::UnitTask::Shepherding => UnitTask::Shepherding,
         },
         gathering: world.gathering_kind(unit.id).map(wire_resource),
         hp: unit.hp,

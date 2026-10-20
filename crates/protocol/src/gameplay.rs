@@ -7,8 +7,10 @@ use std::{fmt, marker::PhantomData};
 
 pub(crate) mod economy;
 mod resources;
+mod wildlife;
 pub use economy::*;
 pub use resources::{MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
+pub use wildlife::*;
 
 pub const VERSION: u16 = 2;
 pub const MAX_MESSAGE: usize = 1_048_576;
@@ -134,6 +136,12 @@ pub enum ClientMessage {
         sequence: u64,
         building_id: EntityId,
     },
+    HuntOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "economy::bounded_builders")]
+        unit_ids: Vec<EntityId>,
+        animal_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -236,6 +244,12 @@ pub enum ServerMessage {
         code: u16,
         message: String,
     },
+    WildlifeState {
+        revision: u64,
+        tick: Tick,
+        #[serde(deserialize_with = "wildlife::bounded_animals")]
+        animals: Vec<AnimalState>,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -297,6 +311,7 @@ where
 }
 
 fn validate_server(message: &ServerMessage) -> Result<(), Error> {
+    wildlife::validate_server(message)?;
     match message {
         ServerMessage::ResourceState(state) if !state.valid() => Err(Error::InvalidResourceState),
         ServerMessage::Snapshot {
@@ -341,6 +356,7 @@ fn validate_server(message: &ServerMessage) -> Result<(), Error> {
 }
 
 pub fn encode_client(message: &ClientMessage) -> Result<Vec<u8>, Error> {
+    wildlife::validate_client(message)?;
     let bytes = postcard::to_allocvec(message)?;
     check_size(&bytes)?;
     Ok(bytes)
@@ -348,7 +364,9 @@ pub fn encode_client(message: &ClientMessage) -> Result<Vec<u8>, Error> {
 
 pub fn decode_client(bytes: &[u8]) -> Result<ClientMessage, Error> {
     check_size(bytes)?;
-    Ok(postcard::from_bytes(bytes)?)
+    let message = postcard::from_bytes(bytes)?;
+    wildlife::validate_client(&message)?;
+    Ok(message)
 }
 
 pub fn encode_server(message: &ServerMessage) -> Result<Vec<u8>, Error> {

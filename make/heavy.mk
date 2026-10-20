@@ -298,48 +298,6 @@ perf-soak-30: orchestrator-tools slot-bootstrap
 perf-soak-30-steps:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-soak-30
 
-map-generate: orchestrator-tools slot-bootstrap
-	@$(SLOT_RUN) map-generate -- make --no-print-directory map-generate-steps
-
-map-generate-steps:
-	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-generate
-
-map-generate-detailed: orchestrator-tools slot-bootstrap
-	@$(SLOT_RUN) map-generate-detailed -- make --no-print-directory map-generate-detailed-steps
-
-map-generate-detailed-steps:
-	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-generate-detailed
-
-map-verify: orchestrator-tools slot-bootstrap
-	@$(SLOT_RUN) map-verify -- make --no-print-directory map-verify-steps
-
-map-verify-steps:
-	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-verify
-
-map-perf: orchestrator-tools slot-bootstrap
-	@$(SLOT_RUN) map-perf -- make --no-print-directory map-perf-steps
-
-map-perf-steps:
-	@$(GEODATA_RUN) cargo run --release --locked -p aoe-geodata --bin aoe-map-worker -- map-perf
-
-map-source-qualify: orchestrator-tools slot-bootstrap
-	@$(SLOT_RUN) map-source-qualify -- make --no-print-directory map-source-qualify-steps
-
-map-source-qualify-steps:
-	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_GEOGRAPHIC_ARGS) $(SOURCE_QUAL_SCALE_ARGS)
-
-map-source-scale-qualify: orchestrator-tools slot-bootstrap
-	@$(SLOT_RUN) map-source-scale-qualify -- make --no-print-directory map-source-scale-qualify-steps
-
-map-source-scale-qualify-steps:
-	@$(SOURCE_QUAL_RUN) cargo run --release --locked -p aoe-harness -- source-qualify --scale-only --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' $(SOURCE_QUAL_SCALE_ARGS)
-
-release-build: orchestrator-tools slot-bootstrap
-	@$(SLOT_RUN) release-build -- make --no-print-directory release-build-steps
-
-release-build-steps:
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- release-build
-
 # Map, perf and fuzz targets, one per line so two branches adding different ones do not conflict.
 .PHONY: \
   geodata-bootstrap \

@@ -8,6 +8,8 @@ use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::{ResourceKind, ResourceNode, ResourceOverlay};
 use std::collections::BTreeMap;
 
+mod returning;
+
 #[cfg(test)]
 mod tests;
 
@@ -38,6 +40,27 @@ fn starting_history(
 }
 
 impl GameWorld {
+    /// Wildlife food uses exactly the normal return/drop-off state machine.
+    pub(crate) fn begin_carcass_gather(
+        &mut self,
+        id: EntityId,
+        animal: EntityId,
+    ) -> Result<(), EconomyError> {
+        if !self.economy.gatherers.contains_key(&id)
+            && self.economy.gatherers.len() >= MAX_GATHERERS
+        {
+            return Err(EconomyError::Capacity);
+        }
+        let a = self.animal(animal).ok_or(EconomyError::InvalidResource)?;
+        if a.hp > 0 || a.task != crate::AnimalTask::Carcass || a.food_remaining == 0 {
+            return Err(EconomyError::InvalidResource);
+        }
+        self.begin_gather(id, 0, a.position.tile_floor(), ResourceKind::Food, None)?;
+        if let Some(task) = self.economy.gatherers.get_mut(&id) {
+            task.animal = Some(animal);
+        }
+        Ok(())
+    }
     pub fn resource_remaining(&self, id: u64) -> Option<u16> {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return None;
@@ -140,6 +163,7 @@ impl GameWorld {
         farm: Option<EntityId>,
     ) -> Result<(), EconomyError> {
         self.approach_resource(id, tile)?;
+        self.cancel_hunt(id);
         self.cancel_attack(id);
         let previous_farm = self.economy.gatherers.get(&id).and_then(|task| task.farm);
         let Some(&index) = self.lookup.get(&id) else {
@@ -155,6 +179,7 @@ impl GameWorld {
         let mut task = GatherTask {
             node,
             farm,
+            animal: None,
             tile,
             kind,
             phase: GatherPhase::Approaching,
@@ -221,109 +246,6 @@ impl GameWorld {
             }
         }
         Err(failure.into())
-    }
-
-    fn begin_return(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
-        let Some(unit) = self.unit(id) else {
-            return false;
-        };
-        let from = unit.position.tile_floor();
-        // Buildings come from the shared drop-off rule; only the failed or
-        // blocked perimeter tiles of each are skipped.
-        let order = self.dropoff_order(unit.player, from, task.kind);
-        let has_dropoff = !order.is_empty();
-        let mut candidates = Vec::new();
-        for building in order {
-            let Some(footprint) = self.building(building).map(|b| b.footprint) else {
-                continue;
-            };
-            let mut tiles = perimeter(footprint);
-            tiles.retain(|tile| self.tile_passable(*tile) && !task.failed_dropoffs.contains(tile));
-            tiles.sort_by_key(|tile| (distance_squared(from, *tile), tile.y, tile.x));
-            candidates.extend(tiles.into_iter().map(|tile| (building, tile)));
-        }
-        for &(center, tile) in &candidates {
-            if let Ok(destination) = position(tile)
-                && self.issue_task_move(id, destination).is_ok()
-            {
-                task.phase = GatherPhase::Returning;
-                task.dropoff = Some(center);
-                task.return_target = Some(tile);
-                if let Some(&index) = self.lookup.get(&id) {
-                    self.units[index].state.task = UnitTask::Returning;
-                }
-                return true;
-            }
-            task.failed_dropoffs.insert(tile);
-            if self.planning_budget == 0 {
-                break;
-            }
-        }
-        task.phase = GatherPhase::WaitingDropoff;
-        task.dropoff = None;
-        task.return_target = None;
-        task.retry_tick = self.tick.0.saturating_add(u64::from(self.config.tick_hz));
-        if let Some(&index) = self.lookup.get(&id) {
-            self.clear_planner(index);
-            self.units[index].order = None;
-            self.units[index].route.clear();
-            self.units[index].state.moving = false;
-            self.units[index].state.planning = false;
-            self.units[index].state.task = UnitTask::Carrying;
-        }
-        // At most the owned centers' bounded perimeters are attempted once
-        // per trip. No center yet may appear later; exhausted choices end it.
-        !has_dropoff
-            || candidates
-                .iter()
-                .any(|(_, tile)| !task.failed_dropoffs.contains(tile))
-    }
-
-    fn task_remaining(&self, task: &GatherTask) -> Option<u16> {
-        match task.farm {
-            Some(farm) => self.farm_remaining(farm),
-            None => self.resource_remaining(task.node),
-        }
-    }
-
-    fn resume_resource(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
-        if let Some(farm) = task.farm {
-            // A spent farm is removed once its farmer has delivered; farms are
-            // not replaced by a neighbour because they are worked by choice.
-            if self.farm_remaining(farm).is_some_and(|food| food > 0) {
-                return self.restart_approach(id, task);
-            }
-            self.remove_building(farm);
-            return false;
-        }
-        if self.resource_remaining(task.node) == Some(0) {
-            let Some(next) = self.nearest_resource(
-                task.tile,
-                task.kind,
-                VILLAGE_RULES.replacement_radius_tiles,
-                Some(task.node),
-            ) else {
-                return false;
-            };
-            task.node = next.id;
-            task.tile = next.tile;
-        }
-        self.restart_approach(id, task)
-    }
-
-    fn restart_approach(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
-        if self.approach_resource(id, task.tile).is_err() {
-            return false;
-        }
-        task.phase = GatherPhase::Approaching;
-        task.dropoff = None;
-        task.return_target = None;
-        task.credits = 0;
-        task.retry_tick = 0;
-        if let Some(&index) = self.lookup.get(&id) {
-            self.units[index].state.task = UnitTask::Moving;
-        }
-        true
     }
 
     pub(super) fn advance_gathering(
@@ -407,6 +329,15 @@ impl GameWorld {
         task.phase = GatherPhase::Gathering;
         self.units[index].state.task = if task.farm.is_some() {
             UnitTask::Farming
+        } else if let Some(animal) = task.animal {
+            if self
+                .animal(animal)
+                .is_some_and(|a| a.kind == crate::AnimalKind::Sheep)
+            {
+                UnitTask::Shepherding
+            } else {
+                UnitTask::Hunting
+            }
         } else {
             UnitTask::Gathering
         };
@@ -427,14 +358,24 @@ impl GameWorld {
         if self.tick.0 < task.retry_tick {
             return true;
         }
-        task.credits += u64::from(VILLAGE_RULES.gather_hundredths_per_second[task.kind as usize]);
+        task.credits += u64::from(task.animal.and_then(|id| self.animal(id)).map_or(
+            VILLAGE_RULES.gather_hundredths_per_second[task.kind as usize],
+            |a| a.kind.rules().gather_hundredths,
+        ));
         let threshold = u64::from(self.config.tick_hz) * 100;
         if task.credits < threshold {
             return true;
         }
         task.credits -= threshold;
-        if let Some(farm) = task.farm {
-            let left = self.deplete_farm(farm).unwrap_or(0);
+        if task.farm.is_some() || task.animal.is_some() {
+            let left = if let Some(animal) = task.animal {
+                self.deplete_carcass(animal)
+            } else {
+                task.farm.and_then(|farm| self.deplete_farm(farm))
+            };
+            let Some(left) = left else {
+                return false;
+            };
             let amount = self.units[index]
                 .state
                 .carried

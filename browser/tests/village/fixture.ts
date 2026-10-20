@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { scoutCombat, villagerCombat } from "../wire/combat.js";
 import { darkAgeState, townCenterState } from "../wire/buildings.js";
+import { wildlifeState } from "../wire/wildlife.js";
 
 function uint(value: number): number[] {
   const bytes: number[] = [];
@@ -97,6 +98,7 @@ export async function fiveVillagerFixture(page: Page) {
           ...townCenterState,
         ]),
       );
+      socket.send(wildlifeState(uint(revision)));
     });
   });
 }

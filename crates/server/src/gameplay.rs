@@ -22,6 +22,8 @@ mod commands;
 mod economy;
 #[path = "gameplay/tick.rs"]
 mod tick;
+#[path = "gameplay/wildlife.rs"]
+mod wildlife;
 use economy::unit_state;
 #[path = "gameplay/resources.rs"]
 mod resources;
@@ -57,6 +59,7 @@ pub(super) struct Session {
     resource_revision: Option<u64>,
     resident_players: BTreeMap<aoe_core::PlayerId, aoe_protocol::GameplayPlayerState>,
     resident_buildings: BTreeMap<EntityId, aoe_protocol::GameplayBuildingState>,
+    resident_animals: Vec<aoe_protocol::AnimalState>,
 }
 
 #[derive(Clone, Copy)]
@@ -73,6 +76,10 @@ struct PendingCommand {
 
 #[derive(Clone)]
 enum PendingAction {
+    Hunt {
+        unit_ids: Vec<EntityId>,
+        animal_id: EntityId,
+    },
     Move {
         entity_id: EntityId,
         destination: WorldPosition,
@@ -248,6 +255,7 @@ impl GameplayService {
                 resource_revision: None,
                 resident_players: BTreeMap::new(),
                 resident_buildings: BTreeMap::new(),
+                resident_animals: Vec::new(),
             },
         );
         let welcome = GameplayServerMessage::Welcome {
@@ -311,6 +319,12 @@ impl GameplayService {
             players: players.values().copied().collect(),
             buildings: buildings.values().cloned().collect(),
         };
+        let animals = wildlife::animals(&world, region);
+        let wildlife = GameplayServerMessage::WildlifeState {
+            revision,
+            tick: world.tick(),
+            animals: animals.clone(),
+        };
         drop(world);
         let mut sessions = self.sessions.lock().await;
         let mut failed = false;
@@ -346,7 +360,9 @@ impl GameplayService {
             session.resident = units.iter().copied().map(|unit| (unit.id, unit)).collect();
             session.resident_players = players;
             session.resident_buildings = buildings;
-            failed = session.sender.try_send(snapshot).is_err();
+            session.resident_animals = animals;
+            failed = session.sender.try_send(snapshot).is_err()
+                || session.sender.try_send(wildlife).is_err();
         }
         drop(sessions);
         if failed {

@@ -156,17 +156,53 @@ async fn a_full_outgoing_queue_disconnects_instead_of_losing_economy_changes() {
     let GameplayServerMessage::Snapshot { buildings, .. } = rx.try_recv().unwrap() else {
         panic!("snapshot")
     };
-    service.subscribe(id, 2, region).await; // Fill the bounded outgoing queue.
+    // The second subscription frame (wildlife) already overflows this same
+    // one-slot queue. Reconnect is required before accepting any economy work.
+    assert!(rx.is_closed());
+    service.subscribe(id, 2, region).await;
     service
         .queue_train(id, 1, buildings[0].id, UnitKind::Villager)
         .await;
     service.tick().await;
-    assert!(matches!(
-        rx.try_recv(),
-        Ok(GameplayServerMessage::Snapshot { revision: 2, .. })
-    ));
+    assert!(rx.try_recv().is_err());
     assert!(
         rx.is_closed(),
         "a dropped delta must require reconnect and an authoritative reset"
+    );
+}
+
+#[tokio::test]
+async fn full_subscription_pair_disconnects_when_an_economy_delta_cannot_be_sent() {
+    let service = GameplayService::new(Seed(1));
+    let (tx, mut rx) = mpsc::channel(2);
+    let (id, _) = service.register(None, tx).await;
+    let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
+    service.subscribe(id, 1, region).await;
+    let initial = drain(&mut rx);
+    let GameplayServerMessage::Snapshot { buildings, .. } = &initial[0] else {
+        panic!("snapshot");
+    };
+    assert!(matches!(
+        initial[1],
+        GameplayServerMessage::WildlifeState { revision: 1, .. }
+    ));
+    service.subscribe(id, 2, region).await;
+    service
+        .queue_train(id, 1, buildings[0].id, UnitKind::Villager)
+        .await;
+    service.tick().await;
+    let queued = drain(&mut rx);
+    assert_eq!(queued.len(), 2);
+    assert!(matches!(
+        queued[0],
+        GameplayServerMessage::Snapshot { revision: 2, .. }
+    ));
+    assert!(matches!(
+        queued[1],
+        GameplayServerMessage::WildlifeState { revision: 2, .. }
+    ));
+    assert!(
+        rx.is_closed(),
+        "failed economy delivery requires an authoritative reset"
     );
 }

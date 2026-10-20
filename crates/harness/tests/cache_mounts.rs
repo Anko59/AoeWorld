@@ -177,7 +177,7 @@ fn workspace_named(prefix: &str) -> tempfile::TempDir {
         include_str!("../../../Makefile"),
     )
     .unwrap();
-    // The Makefile includes its agent-runtime targets from make/.
+    // Copy every included Make file so the fixture exercises the real recipes.
     fs::create_dir(workspace.path().join("make")).unwrap();
     for included in [
         ("make/agents.mk", include_str!("../../../make/agents.mk")),
@@ -188,6 +188,10 @@ fn workspace_named(prefix: &str) -> tempfile::TempDir {
         ),
         ("make/heavy.mk", include_str!("../../../make/heavy.mk")),
         ("make/phony.mk", include_str!("../../../make/phony.mk")),
+        ("make/help.mk", include_str!("../../../make/help.mk")),
+        ("make/assets.mk", include_str!("../../../make/assets.mk")),
+        ("make/geodata.mk", include_str!("../../../make/geodata.mk")),
+        ("make/release.mk", include_str!("../../../make/release.mk")),
     ] {
         fs::write(workspace.path().join(included.0), included.1).unwrap();
     }

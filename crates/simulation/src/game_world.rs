@@ -16,6 +16,7 @@ mod hash;
 mod research;
 mod resources;
 mod spawning;
+mod wildlife;
 pub use combat::*;
 pub use economy::{
     BUILDING_RULES, BuildingKind, BuildingRules, CarriedResource, ConstructionState, EconomyError,
@@ -26,6 +27,7 @@ pub use facing::Facing;
 pub(crate) use facing::facing_for;
 pub use research::*;
 pub use resources::PreparedResourceDepletion;
+pub use wildlife::*;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GameUnit {
@@ -95,6 +97,7 @@ pub struct GameWorld {
     pub(crate) next_entity_id: u64,
     pub(crate) economy: economy::Economy,
     pub(crate) combat: combat::Combat,
+    pub(crate) wildlife: wildlife::Wildlife,
     pub(crate) tick: Tick,
     pub(crate) units: Vec<StoredUnit>,
     pub(crate) lookup: BTreeMap<EntityId, usize>,
@@ -121,6 +124,7 @@ impl GameWorld {
             next_entity_id: 0,
             economy: economy::Economy::default(),
             combat: Default::default(),
+            wildlife: Default::default(),
             units: Vec::new(),
             lookup: BTreeMap::new(),
             chunks: BTreeMap::new(),

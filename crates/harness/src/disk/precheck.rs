@@ -5,12 +5,9 @@ use std::path::{Path, PathBuf};
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub(super) const GIB: u64 = 1024 * 1024 * 1024;
 
-/// Direct commands and Make's slot wrapper share the same admission policy.
-pub(crate) fn before_command(command: &crate::Command, gate: &str, ci: bool) -> Result<()> {
-    let gate = match command {
-        crate::Command::Slot { gate, .. } => gate.as_str(),
-        _ => gate,
-    };
+/// Direct commands and Make's slot wrapper share the same admission policy: `gate` is the
+/// command's gate, or for `slot` the gate it runs.
+pub(crate) fn before_command(gate: &str, ci: bool) -> Result<()> {
     if matches!(
         gate,
         "disk-precheck" | "ship" | "test-unit" | "test-wasm" | "test-e2e" | "preflight"

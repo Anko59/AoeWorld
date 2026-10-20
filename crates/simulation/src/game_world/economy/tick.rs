@@ -15,10 +15,12 @@ impl GameWorld {
         // undrained history would grow storage without a transport obligation.
         self.economy.depletions.clear();
         let mut changed = self.advance_movement();
+        self.advance_wildlife(&mut changed);
         if self.economy.gatherers.is_empty()
             && self.combat.is_idle()
             && self.economy.builders.is_empty()
             && self.economy.buildings.is_empty()
+            && self.wildlife.is_idle()
         {
             self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
             return changed;

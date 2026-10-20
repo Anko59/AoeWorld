@@ -7,6 +7,26 @@ use aoe_protocol::{CommandResult, GameplayRole, GameplayServerMessage};
 use std::time::Instant;
 
 impl GameplayService {
+    pub async fn queue_hunt(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        mut unit_ids: Vec<EntityId>,
+        animal_id: EntityId,
+    ) {
+        // Keep one excess id so the simulation rejects oversized typed calls,
+        // while preserving the shared authority, sequence and queue checks.
+        unit_ids.truncate(aoe_protocol::MAX_BUILD_GROUP + 1);
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::Hunt {
+                unit_ids,
+                animal_id,
+            },
+        )
+        .await;
+    }
     pub async fn queue_move(
         &self,
         session_id: u64,
@@ -225,6 +245,10 @@ pub(super) fn apply(
     action: PendingAction,
 ) -> CommandResult {
     let result = match action {
+        PendingAction::Hunt {
+            unit_ids,
+            animal_id,
+        } => world.issue_hunt(player, &unit_ids, animal_id),
         PendingAction::Move {
             entity_id,
             destination,
