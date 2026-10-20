@@ -106,7 +106,19 @@ shorelines (#349), play feedback (#361) and connected cliff walls (#370) put `de
 the cap, so every pull request failed the comparison. It was re-taken on 2026-10-17 at
 274135 B, measured on `dev` 3428ce55: the client batch of HUD (#434), setup-only maps (#451),
 visuals (#452) and village controls (#459) left `dev` 625 B under the cap, so the next client
-change would fail. A baseline moves only in its own reviewed
+change would fail. It was re-taken on 2026-10-20 at 287702 B, measured on `dev` 33e7ede0
+after the Dark Age client batch left `dev` 139 B under the cap (growth measured on each
+pull request branch):
+
+| Pull request | Change | Growth |
+|---|---|---|
+| #516 | Building menu, placement, construction and building panels | about +5 KB |
+| #517 | Militia, villager combat and wildlife animations | about +5 KB |
+| #519 | Fog of war: explored, fogged and visible tiles | +2.35% |
+| #520 | Fishing: fish, the Dock and Fishing Ships | about +7 KB |
+
+The next queued client work, DAT building composition (#518, about +3.1 KB) and the Feudal
+economy (about +0.77%), fits under the new cap. A baseline moves only in its own reviewed
 change, with the reason recorded here. These measured deterministic comparisons pass
 locally. Encoded network bytes and tick durations are informational because
 they vary with scheduling. The dedicated hardware environment and
