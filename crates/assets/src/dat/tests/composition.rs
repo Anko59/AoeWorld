@@ -283,3 +283,42 @@ fn cyclic_graphic_deltas_and_missing_annexes_fail_explicitly() {
             .contains("missing annex")
     );
 }
+
+#[test]
+fn annex_age_family_is_selected_before_its_own_delta_offsets() {
+    let mut file = parse(&fixture(0)).unwrap();
+    file.units[0].standing[0] = 3;
+    file.units[0].building.as_mut().unwrap().annexes[0] = Annex {
+        unit_id: 2,
+        misplacement: [-1.0, 0.5],
+    };
+    file.graphics.iter_mut().find(|g| g.id == 3).unwrap().name = "RTWC2N4W".into();
+    file.graphics.iter_mut().find(|g| g.id == 4).unwrap().name = "RTWC1N3G".into();
+    let mut alternate = file.graphic(4).unwrap().clone();
+    alternate.id = 100;
+    alternate.name = "RTWC2N3W".into();
+    alternate.slp_id = 90000;
+    alternate.deltas = vec![GraphicDelta {
+        graphic_id: 2,
+        offset_x: -17,
+        offset_y: 29,
+        display_angle: 0,
+    }];
+    file.graphic_index.insert(100, file.graphics.len());
+    file.graphics.push(alternate);
+    let composition = file.building_composition(0).unwrap();
+    assert!(!composition.parts.iter().any(|p| p.graphic_id == 4));
+    let annex = composition
+        .parts
+        .iter()
+        .find(|p| p.graphic_id == 100)
+        .unwrap();
+    assert_eq!(annex.slp_id, 90000);
+    assert_eq!(annex.misplacement, [-1.0, 0.5]);
+    assert!(
+        composition
+            .parts
+            .iter()
+            .any(|p| p.graphic_id == 2 && p.offset == [-17, 29] && p.misplacement == [-1.0, 0.5])
+    );
+}

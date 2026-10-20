@@ -261,6 +261,7 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
             }
             crate::dat::table::DARK_AGE
                 .iter()
+                .chain(crate::dat::table::FEUDAL)
                 .filter(|(_, id)| *id != 618)
                 .filter(|(_, id)| dat.unit(*id).is_some_and(|u| u.building.is_some()))
                 .map(|(_, id)| dat.building_composition(*id))
@@ -273,6 +274,10 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
             part.available = sprites.iter().any(|s| s.id == part.source);
         }
     }
+    let mut identity = blake3::Hasher::new();
+    identity.update(hash.as_bytes());
+    identity.update(&serde_json::to_vec(&buildings)?);
+    let hash = identity.finalize().to_hex().to_string();
     write_pack(&output_root, hash, &refs, buildings, |sprite, frame| {
         Planes::from_slp(&sprites[sprite].frames[frame], &palette)
     })

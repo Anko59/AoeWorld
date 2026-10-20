@@ -421,10 +421,15 @@ pub fn actor_frame_index(facing: u8, stride: usize, phase: usize) -> (usize, boo
 }
 
 pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
-    if unit.kind == crate::SceneUnitKind::Mill && !art.compositions.iter().any(|b| b.unit_id == 68)
+    if let Some(slot @ (4 | 40)) = unit.kind.building_slot()
+        && !art
+            .compositions
+            .iter()
+            .any(|b| Some(b.unit_id) == unit.kind.building_id() && !b.parts.is_empty())
     {
-        return art.buildings[4].len() == 44
-            && art.buildings[4].iter().any(|f| {
+        let frames = &art.buildings[usize::from(slot)];
+        return (slot == 40 || frames.len() == 44)
+            && frames.iter().any(|f| {
                 sprite_screen_bounds(
                     world_frame(*f),
                     unit.position,

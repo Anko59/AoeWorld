@@ -31,8 +31,12 @@ pub(super) fn plan(
         }
         extents[semantic] = FrameExtent {
             domain,
-            width: frame.width.div_ceil(buildings::pixel_step(&frame.source)),
-            height: frame.height.div_ceil(buildings::pixel_step(&frame.source)),
+            width: frame
+                .width
+                .div_ceil(aoe_assets::catalog::buildings::pixel_step(&frame.source)),
+            height: frame
+                .height
+                .div_ceil(aoe_assets::catalog::buildings::pixel_step(&frame.source)),
         };
     }
     pack_frames(&extents[..selected.len()]).map_err(error)
@@ -78,7 +82,7 @@ pub(super) fn copy_plane(
     team: [u8; 3],
 ) -> Result<(), JsValue> {
     let side = GAME_ATLAS_SIDE as usize;
-    let step = buildings::pixel_step(&frame.source);
+    let step = aoe_assets::catalog::buildings::pixel_step(&frame.source);
     if source.len() != GAME_ATLAS_PAGE_BYTES
         || pixels.len() != GAME_ATLAS_BYTES
         || usize::from(placed.page) >= GAME_ATLAS_BYTES / GAME_ATLAS_PAGE_BYTES

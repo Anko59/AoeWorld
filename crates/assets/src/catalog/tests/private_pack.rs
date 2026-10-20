@@ -143,8 +143,12 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
                 }
                 extents.push(FrameExtent {
                     domain: AtlasDomain::Objects,
-                    width: frame.width,
-                    height: frame.height,
+                    width: frame
+                        .width
+                        .div_ceil(super::buildings::pixel_step(&frame.source)),
+                    height: frame
+                        .height
+                        .div_ceil(super::buildings::pixel_step(&frame.source)),
                 });
                 counts[1] += 1;
             }

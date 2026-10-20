@@ -44,7 +44,6 @@ pub const DARK_AGE: &[(&str, i32)] = &[
 #[path = "feudal.rs"]
 mod feudal;
 pub use feudal::FEUDAL;
-
 /// Villager variants share an internal-name stem; the suffix names the job.
 const JOBS: &[(&str, &str)] = &[
     ("BAS", "base"),

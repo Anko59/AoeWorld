@@ -298,3 +298,82 @@ fn test_unit(kind: SceneUnitKind) -> SceneUnit {
         facing: 0,
     }
 }
+
+#[wasm_bindgen_test]
+fn feudal_buildings_paint_native_foundations_and_aprons_only_on_land() {
+    for (slot, id) in [
+        (26, 87),
+        (27, 101),
+        (28, 103),
+        (29, 84),
+        (30, 79),
+        (31, 792),
+        (44, 133),
+    ] {
+        let mut art = crate::surface_mesh::mix::fixture::art();
+        art.compositions.push(crate::BuildingArt {
+            unit_id: id,
+            footprint: if id == 792 { [4.0, 1.0] } else { [3.0; 2] },
+            foundation_material: None,
+            parts: Vec::new(),
+            construction: Vec::new(),
+        });
+        // The trial Dock has no dedicated sheet; also cover DAT-selected terrain.
+        for foundation in [None, Some(13)] {
+            art.compositions.last_mut().unwrap().foundation_material = foundation;
+            for kind in [
+                SceneUnitKind::building(slot),
+                SceneUnitKind::foundation(id as i16),
+            ] {
+                for x in [0.5, 2.5] {
+                    // footprint, then apron
+                    for (water, material) in [
+                        (0, 0),
+                        (0, 5),
+                        (0, 10),
+                        (1, 5),
+                        (2, 5),
+                        (3, 10),
+                        (4, 5),
+                        (5, 5),
+                    ] {
+                        let surface = SceneTerrainSurface {
+                            water,
+                            ..SceneTerrainSurface::flat(0.0)
+                        };
+                        let appearance = Some(SceneTerrainAppearance {
+                            canopy_strength: 700,
+                            floor_strength: 800,
+                            palette: 2,
+                            exposure: 0,
+                            height_band: 0,
+                        });
+                        let mut tiles = [SceneTerrain {
+                            position: [x, 0.5],
+                            material,
+                            elevation_meters: 0.0,
+                            surface,
+                            appearance,
+                        }];
+                        apply_building_foundations(&mut tiles, &art, &[test_unit(kind)]);
+                        if water == 0 && material == 0 {
+                            assert_eq!(
+                                tiles[0].material,
+                                foundation.unwrap_or(2),
+                                "land {kind:?} at {x}"
+                            );
+                            assert_eq!(tiles[0].appearance.unwrap().floor_strength, 0);
+                        } else {
+                            assert_eq!(
+                                tiles[0].material, material,
+                                "water {water}, {kind:?} at {x}"
+                            );
+                            assert_eq!(tiles[0].appearance, appearance);
+                        }
+                        assert_eq!(tiles[0].surface, surface);
+                    }
+                }
+            }
+        }
+    }
+}

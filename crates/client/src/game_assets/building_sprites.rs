@@ -51,139 +51,43 @@ pub(super) fn select(
     manifest: &Manifest,
     selected: &mut Vec<usize>,
     domains: &mut Vec<AtlasDomain>,
-) -> Result<[Option<std::ops::Range<usize>>; 26], JsValue> {
-    // Slots match building_ui::sprite_slot. Slot 22 is the builder's five rows.
-    let mut ranges = std::array::from_fn(|_| None);
-    let stems = [
-        "",
-        "b_dark_house_age1",
-        "b_west_lumber_camp_age2",
-        "b_west_mining_camp_age2",
-        "b_dark_mill_age1",
-        "",
-        "b_dark_barracks_age1",
-        "b_dark_wall_palisade",
-        "b_dark_outpost_age1",
-    ];
-    for slot in 0..26 {
-        if (slot == 23 && native(manifest, 45))
-            || (slot == 24
-                && manifest
-                    .buildings
-                    .iter()
-                    .any(|b| b.unit_id == 45 && b.construction.iter().any(|p| p.record.is_some())))
-        {
-            continue;
-        }
-        if (9..=12).contains(&slot) && native_stages(manifest, (slot - 8) as f32) {
-            continue;
-        }
-        if slot < 9 && slot != 5 && native(manifest, [109, 70, 562, 584, 68, 50, 12, 72, 598][slot])
-        {
-            continue;
-        }
-        let (source, count, step) = match slot {
-            0 | 4 => continue, // Multipart trial Town Center and Mill.
-            1..=8 => {
-                if slot == 5 {
-                    ("de/g_fm1.dds".to_string(), 1, 1)
-                } else {
-                    (
-                        format!("de/{}_x1.sld", stems[slot]),
-                        if slot == 1 {
-                            3
-                        } else if slot == 7 {
-                            5
-                        } else {
-                            1
-                        },
-                        1,
-                    )
-                }
-            }
-            9..=12 => (
-                format!("de/b_misc_foundation_{}x{}_x1.sld", slot - 8, slot - 8),
-                3,
-                1,
-            ),
-            13..=21 => {
-                let kind = slot - 13;
-                let stem = if kind == 0 {
-                    "b_dark_town_center_age1"
-                } else if kind == 5 || kind == 7 {
-                    "b_misc"
-                } else {
-                    stems[kind]
-                };
-                (
-                    if stem == "b_misc" {
-                        "de/b_misc_rubble_x1.sld".to_string()
-                    } else {
-                        format!("de/{stem}_rubble_x1.sld")
-                    },
-                    1,
-                    1,
-                )
-            }
-            22 => ("graphics.drs:[32, 112, 108, 115]:1496".to_string(), 75, 1),
-            23 => ("de/b_dark_dock_age1_x1.sld".to_string(), 1, 1),
-            24 => ("de/b_misc_foundation_dock_x1.sld".to_string(), 3, 1),
-            _ => ("de/b_misc_rubble_x1.sld".to_string(), 1, 1),
-        };
-        let (source, count, step) = if !source_present(manifest, &source) {
-            let trial = match slot {
-                1 => Some((2223, 3, 1)),
-                6 => Some((2683, 1, 1)),
-                7 => Some((4534, 45, 9)),
-                8 => Some((4330, 1, 1)),
-                23 => Some((376, 1, 1)),
-                24 => Some((4397, 3, 1)),
-                9..=12 => Some((236 + slot as u32 - 9, 3, 1)),
-                _ => None,
-            };
-            trial.map_or((source.clone(), count, step), |(id, count, step)| {
-                (
-                    format!("graphics.drs:[32, 112, 108, 115]:{id}"),
-                    count,
-                    step,
-                )
-            })
-        } else {
-            (source, count, step)
-        };
-        let Some(frames) = source_frames(manifest, &source, count) else {
-            if source_present(manifest, &source) {
-                return Err(JsValue::from_str(&format!(
-                    "Corrupt building art ({source})"
-                )));
+) -> Result<[Option<std::ops::Range<usize>>; 45], JsValue> {
+    let mut ranges: [Option<std::ops::Range<usize>>; 45] = std::array::from_fn(|_| None);
+    let plan = aoe_assets::catalog::buildings::supplemental(
+        |source| source_present(manifest, source),
+        |id| native(manifest, id),
+        |side| native_stages(manifest, side),
+        |id| {
+            manifest
+                .buildings
+                .iter()
+                .any(|b| b.unit_id == id && b.construction.iter().any(|p| p.record.is_some()))
+        },
+    );
+    for item in plan {
+        let Some(frames) = source_frames(manifest, &item.source, item.frames) else {
+            if item.required || source_present(manifest, &item.source) {
+                return Err(error(format!("Corrupt building art ({})", item.source)));
             }
             continue;
         };
+        if !item.resident {
+            continue;
+        }
         let start = selected.len();
-        for index in frames.into_iter().step_by(step) {
+        for index in frames.into_iter().step_by(item.step).take(item.take) {
             selected.push(index);
-            domains.push(if slot == 5 {
+            domains.push(if item.slot == 5 {
                 AtlasDomain::Terrain
             } else {
                 AtlasDomain::Objects
             });
         }
-        ranges[slot] = Some(start..selected.len());
-    }
-    // The dat table's Mill is its static body plus a separate 43-frame sail
-    // sequence. Keeping those native parts avoids repeating the body texture.
-    let body = "graphics.drs:[32, 112, 108, 115]:3483";
-    let sails = "graphics.drs:[32, 112, 108, 115]:3482";
-    if !native(manifest, 68) && (source_present(manifest, body) || source_present(manifest, sails))
-    {
-        let mut frames = source_frames(manifest, body, 1).ok_or("Invalid Mill body")?;
-        frames.extend(source_frames(manifest, sails, 43).ok_or("Invalid Mill sails")?);
-        let start = selected.len();
-        for frame in frames {
-            selected.push(frame);
-            domains.push(AtlasDomain::Objects);
+        if let Some(range) = &mut ranges[item.slot] {
+            range.end = selected.len();
+        } else {
+            ranges[item.slot] = Some(start..selected.len());
         }
-        ranges[4] = Some(start..selected.len());
     }
     Ok(ranges)
 }
@@ -194,7 +98,7 @@ pub(super) fn select(
 pub(super) fn crop_farm(
     manifest: &mut Manifest,
     selected: &[usize],
-    ranges: &[Option<std::ops::Range<usize>>; 26],
+    ranges: &[Option<std::ops::Range<usize>>; 45],
 ) -> Result<(), JsValue> {
     if let Some(range) = &ranges[5] {
         for semantic in range.clone() {
@@ -215,11 +119,11 @@ pub(super) fn crop_farm(
     Ok(())
 }
 
-fn native(manifest: &Manifest, id: i32) -> bool {
+pub(super) fn native(manifest: &Manifest, id: i32) -> bool {
     manifest
         .buildings
         .iter()
-        .any(|b| b.unit_id == id && b.parts.iter().any(|p| p.primary && p.record.is_some()))
+        .any(|b| b.unit_id == id && b.parts.iter().any(|p| p.record.is_some()))
 }
 
 fn native_stages(manifest: &Manifest, side: f32) -> bool {

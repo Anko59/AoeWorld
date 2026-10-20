@@ -96,10 +96,13 @@ a DE overlay: retaining 91 copies of the full DE body exceeds the fixed Objects
 atlas page. Present DE sources are still validated before that choice.
 The new building textures use one atlas texel per two source pixels. Native
 world sizes and hotspots stay unchanged; magnified views have coarser texels.
-Dark Age textures retain their current sampling.
+Standing Dark Age bodies retain their sampling. Shared construction and
+ambient layers use half-resolution texels in both ages while retaining native
+geometry, anchors and animation loops.
 This keeps the fixed four-page/67,108,864-byte atlas from the unit-animation base, without raising a budget. Blacksmith's **2263** is absent from the trial.
-Feudal camp SLPs **3503/3491** are absent too; DE has no separate Dark camp art,
-so the West European age-2 camps already used in Dark Age remain the same art.
+Feudal camp parent SLPs **3503/3491** are absent too, but their native body
+deltas **3507/3495** are available. Both ages compose those DAT bodies; the
+optional DE overlay supplies art only when native layers are absent.
 
 `make assets-import-de AOE_ASSET_PACK=local-assets/packs/<trial-pack>` imports
 the missing art and refreshes the generated local `buildings` overlay pointer.
@@ -113,11 +116,13 @@ The gate uses `b_dark_gate_palisade_se_{closed,open,constr,rubble}_x1.sld`.
 
 DE graphic ids: Range 12, Stable 513, Blacksmith 53, Market 2268, Tower 4202,
 Gate 8208; Feudal TC 3253, House 2209, Mill 368, Barracks 93, camps 3118/3133.
-The DE Town Center standing SLD contains the complete building. PR #518's
-general dat-driven delta/annex composition is not in this checkout; this change
-uses the current renderer, with data-driven age choices. General trial TC/gate
-composition and additional gate orientations remain follow-up work. A fully
-illustrated Feudal view needs the DE overlay for the TC, Blacksmith and Gate.
+The DE Town Center standing SLD contains the complete building. Gameplay prefers
+DAT compositions for every available Dark and Feudal family, including the
+Feudal Town Center's age-specific annex graphics and the Dock's native body,
+shadow and wake. Missing ambient parent art does not hide available DAT deltas.
+The Palisade Gate is absent from the trial DAT and retains its DE overlay;
+additional gate orientations remain separate work. Foundations and one-tile
+aprons cover land only, including all Feudal buildings.
 
 ## Local demo
 

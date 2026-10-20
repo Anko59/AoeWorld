@@ -62,3 +62,39 @@ fn real_trial_fishing_values_include_five_tile_ship_los() {
         assert_eq!(file.unit(id).unwrap().resource_storage[0], (17, amount));
     }
 }
+
+#[test]
+fn gameplay_catalog_includes_all_available_feudal_composition_families() {
+    for (_, id) in table::FEUDAL {
+        assert!(
+            crate::catalog::GAMEPLAY_BUILDING_IDS.contains(id),
+            "missing Feudal DAT unit {id}"
+        );
+    }
+}
+
+#[test]
+fn real_trial_feudal_town_center_composes_feudal_annex_families() {
+    let Ok(bytes) = std::fs::read("../../local-assets/trial/Data/empires2.dat") else {
+        return;
+    };
+    let file = decode(&bytes).unwrap();
+    let composition = file.building_composition(71).unwrap();
+    let ids = composition
+        .parts
+        .iter()
+        .map(|p| p.slp_id)
+        .collect::<Vec<_>>();
+    for slp in [903, 3608, 4624, 3604, 4620, 3600, 4616] {
+        assert!(
+            ids.contains(&slp),
+            "missing Feudal annex SLP {slp}: {ids:?}"
+        );
+    }
+    for slp in [891, 3595, 4611, 3594, 4610] {
+        assert!(
+            !ids.contains(&slp),
+            "Dark annex leaked into Feudal composition: {slp}"
+        );
+    }
+}

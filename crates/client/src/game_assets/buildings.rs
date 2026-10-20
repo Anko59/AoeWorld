@@ -14,6 +14,7 @@ pub(super) fn select(
         if manifest.buildings[..slot]
             .iter()
             .any(|b| b.unit_id == building.unit_id)
+            || building.parts.iter().filter(|p| p.primary).count() > 1
             || building.parts.len() > 256
             || building.construction.len() > 256
             || building
@@ -100,9 +101,6 @@ fn parts(
     records: &[GameFrame],
 ) -> Vec<aoe_rendering::BuildingPart> {
     let mut out = Vec::new();
-    if parts.iter().any(|p| p.primary && p.record.is_none()) {
-        return out;
-    }
     for part in parts {
         let Some(record) = part.record else {
             continue;

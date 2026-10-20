@@ -234,3 +234,64 @@ async fn native_wall_keeps_one_displayed_frame_per_connectivity_angle() {
         "native wall replaces supplemental art"
     );
 }
+
+#[wasm_bindgen_test]
+async fn absent_feudal_ambient_parent_keeps_available_dat_body_and_deltas() {
+    let source = "graphics.drs:[32, 112, 108, 115]:90000".to_owned();
+    let mut value = pack_fixture(
+        REQUIRED_RENDER_SOURCES
+            .iter()
+            .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
+            .chain([(source.clone(), 1, false)]),
+    );
+    let part = serde_json::json!({"graphic_id":228,"slp_id":90000,"source":source,
+        "available":true,"frames":1,"angles":1,"primary":false,"frame_rate":0.0,
+        "offset":[-13,9],"misplacement":[0.0,0.0],"layer":20});
+    let mut missing = part.clone();
+    missing["source"] = "absent-parent".into();
+    missing["available"] = false.into();
+    missing["primary"] = true.into();
+    value["buildings"] = serde_json::json!([{"unit_id":133,"footprint":[3.0,3.0],
+        "foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],
+        "parts":[missing,part],"construction":[]}]);
+    compile(&mut value);
+    let fetch = FetchFixture::install(&value);
+    let (art, _, _) = load()
+        .await
+        .expect("available DAT bodies survive absent ambient art");
+    drop(fetch);
+    let dock = art.compositions.iter().find(|b| b.unit_id == 133).unwrap();
+    assert_eq!(dock.parts.len(), 1);
+    assert_eq!(dock.parts[0].offset, [-13.0, 9.0]);
+    assert!(
+        art.buildings[44].is_empty(),
+        "a native body must not allocate a duplicate fallback"
+    );
+}
+
+#[wasm_bindgen_test]
+async fn native_dock_without_construction_keeps_the_optional_foundation() {
+    let source = "graphics.drs:[32, 112, 108, 115]:90000".to_owned();
+    let mut value = pack_fixture(
+        REQUIRED_RENDER_SOURCES
+            .iter()
+            .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
+            .chain([
+                (source.clone(), 1, false),
+                ("de/b_misc_foundation_dock_x1.sld".into(), 3, false),
+            ]),
+    );
+    value["buildings"] = serde_json::json!([{"unit_id":45,"footprint":[3.0,3.0],
+        "foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],
+        "parts":[{"graphic_id":1,"slp_id":90000,"source":source,"available":true,
+            "frames":1,"angles":1,"primary":true,"frame_rate":0.0,
+            "offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"construction":[]}]);
+    compile(&mut value);
+    let fetch = FetchFixture::install(&value);
+    let (art, _, _) = load()
+        .await
+        .expect("missing DAT construction retains optional art");
+    drop(fetch);
+    assert!(art.buildings[23].is_empty());
+    assert_eq!(art.buildings[24].len(), 3);
+}

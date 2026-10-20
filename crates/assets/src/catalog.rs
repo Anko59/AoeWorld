@@ -6,6 +6,7 @@
 /// Increment when the reviewed semantic mappings change.
 pub const VERSION: u8 = 15;
 
+pub mod buildings;
 pub mod candidates;
 pub mod packing;
 pub mod runtime;
@@ -19,7 +20,10 @@ pub const MAX_REVIEWED_FRAMES: u32 = 2_361;
 
 /// Buildings represented by the current gameplay protocol. Other DAT recipes
 /// remain available to offline tools without occupying the live match atlas.
-pub const GAMEPLAY_BUILDING_IDS: [i32; 10] = [109, 70, 68, 562, 584, 50, 12, 72, 598, 45];
+pub const GAMEPLAY_BUILDING_IDS: [i32; 23] = [
+    109, 70, 68, 562, 584, 50, 12, 72, 598, 45, 87, 101, 103, 84, 79, 792, 71, 463, 129, 563, 585,
+    498, 133,
+];
 
 /// Paving and gravel are not mountain ground.
 pub const NATURAL_ROCK_FALLBACK: &str =

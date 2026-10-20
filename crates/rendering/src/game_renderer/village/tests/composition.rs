@@ -136,6 +136,9 @@ fn construction_stages_follow_dat_offsets_and_keep_the_building_identity() {
 
 #[wasm_bindgen_test]
 fn actor_and_building_tags_keep_their_selections_disjoint() {
+    for slot in 0..45 {
+        assert_eq!(SceneUnitKind::building(slot).building_slot(), Some(slot));
+    }
     for slot in 0..50 {
         let actor = SceneUnitKind::actor(slot);
         assert_eq!(actor.actor_slot(), Some(usize::from(slot)));
@@ -151,4 +154,48 @@ fn actor_and_building_tags_keep_their_selections_disjoint() {
     }
     assert_eq!(SceneUnitKind::Dock.building_id(), Some(45));
     assert_eq!(SceneUnitKind::RubbleDock.building_id(), None);
+}
+
+#[wasm_bindgen_test]
+fn feudal_families_compose_the_selected_dat_unit_and_construction() {
+    for (slot, id) in [
+        (26, 87),
+        (27, 101),
+        (28, 103),
+        (29, 84),
+        (30, 79),
+        (38, 71),
+        (39, 463),
+        (40, 129),
+        (41, 498),
+        (44, 133),
+    ] {
+        let kind = SceneUnitKind::building(slot);
+        assert_eq!(kind.building_id(), Some(id));
+        let mut art = art();
+        art.compositions[0].unit_id = id;
+        let expected = art.compositions[0].parts.len();
+        let frames = super::super::world_sprite_frames(&art, &[], &[], &[unit(kind)], camera(), 0);
+        assert_eq!(
+            frames.len(),
+            expected,
+            "every DAT delta is emitted for {id}"
+        );
+        let foundation = SceneUnitKind::foundation(id as i16);
+        assert_eq!(foundation.building_id(), Some(id));
+        assert!(foundation.is_foundation());
+    }
+}
+
+#[wasm_bindgen_test]
+fn feudal_mill_fallback_animates_when_native_parts_are_absent() {
+    let mut art = art();
+    let frame = art.compositions[0].parts[0].frame;
+    art.compositions.clear();
+    art.buildings[40] = vec![frame; 2];
+    assert!(super::super::scene_unit_animates(
+        &art,
+        unit(SceneUnitKind::FeudalMill),
+        camera()
+    ));
 }

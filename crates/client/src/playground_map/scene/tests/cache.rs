@@ -23,6 +23,7 @@ async fn stationary_wall_corner_projections_reuse_the_prepared_foundation_key() 
         .map(|id| GameplayBuildingState {
             id: EntityId(id),
             player: PlayerId(1),
+            age: aoe_protocol::Age::Dark,
             kind: BuildingKind::House,
             footprint: TileRect::from_xywh(id as i32 * 4, 0, 2, 2),
             construction: ConstructionState::Complete,
@@ -80,4 +81,40 @@ async fn stationary_wall_corner_projections_reuse_the_prepared_foundation_key() 
         !Rc::ptr_eq(&moved, &prepare(&client)),
         "removal invalidates ground"
     );
+}
+
+#[wasm_bindgen_test]
+fn building_family_uses_its_observed_age_including_construction() {
+    for (kind, dark, feudal) in [
+        (BuildingKind::TownCenter, 109, 71),
+        (BuildingKind::House, 70, 463),
+        (BuildingKind::Mill, 68, 129),
+        (BuildingKind::LumberCamp, 562, 563),
+        (BuildingKind::MiningCamp, 584, 585),
+        (BuildingKind::Barracks, 12, 498),
+        (BuildingKind::Dock, 45, 133),
+    ] {
+        let mut building = GameplayBuildingState {
+            id: EntityId(1),
+            player: PlayerId(1),
+            age: aoe_protocol::Age::Dark,
+            kind,
+            footprint: TileRect::from_xywh(0, 0, 3, 3),
+            construction: ConstructionState::Complete,
+            progress_permille: 1000,
+            hp: 100,
+            max_hp: 100,
+            los: 4,
+            food_remaining: None,
+            research: None,
+            training_queue: Vec::new(),
+            last_hit: None,
+        };
+        assert_eq!(building_kind(&building).building_id(), Some(dark));
+        building.age = aoe_protocol::Age::Feudal;
+        assert_eq!(building_kind(&building).building_id(), Some(feudal));
+        building.construction = ConstructionState::UnderConstruction;
+        building.progress_permille = 100;
+        assert_eq!(building_kind(&building).building_id(), Some(feudal));
+    }
 }

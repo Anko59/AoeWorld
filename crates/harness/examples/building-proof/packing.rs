@@ -8,14 +8,36 @@ use aoe_assets::{
 use std::{collections::BTreeSet, fs, path::PathBuf};
 
 pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-    let manifest: Manifest = serde_json::from_slice(&fs::read(path.join("manifest.json"))?)?;
+    let mut manifest: Manifest = serde_json::from_slice(&fs::read(path.join("manifest.json"))?)?;
+    let overlay = path.join("buildings/manifest.json");
+    if overlay.is_file() {
+        let mut extra: Manifest = serde_json::from_slice(&fs::read(overlay)?)?;
+        if extra.version != 1
+            || extra.pages.len() > 256
+            || extra.frames.len() > 25000
+            || manifest.pages.len() + extra.pages.len() > u16::MAX as usize
+        {
+            return Err("invalid overlay manifest".into());
+        }
+        let offset = manifest.pages.len() as u16;
+        for frame in &mut extra.frames {
+            if usize::from(frame.page) >= extra.pages.len() {
+                return Err("invalid overlay frame page".into());
+            }
+            frame.page += offset;
+        }
+        manifest.pages.extend(extra.pages);
+        manifest.frames.extend(extra.frames);
+    }
     let mut selected = BTreeSet::new();
     let mut extents = Vec::new();
     let mut add = |source: String,
                    count: u32,
                    step: usize,
                    domain,
-                   actor_copy: bool|
+                   actor_copy: bool,
+                   take: usize,
+                   resident: bool|
      -> Result<(), Box<dyn std::error::Error>> {
         let mut frames = manifest
             .frames
@@ -33,7 +55,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         {
             return Err(format!("missing or duplicate {source} frame prefix").into());
         }
-        for frame in frames.into_iter().step_by(step) {
+        for frame in frames.into_iter().step_by(step).take(take) {
             let page = manifest
                 .pages
                 .get(usize::from(frame.page))
@@ -45,11 +67,21 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             {
                 return Err(format!("invalid {source} source rectangle").into());
             }
-            if selected.insert((source.clone(), frame.frame)) || actor_copy {
+            if resident && (selected.insert((source.clone(), frame.frame)) || actor_copy) {
                 extents.push(FrameExtent {
                     domain,
-                    width: frame.width,
-                    height: frame.height,
+                    width: (if source == "de/g_fm1.dds" {
+                        frame.width.min(256)
+                    } else {
+                        frame.width
+                    })
+                    .div_ceil(aoe_assets::catalog::buildings::pixel_step(&source)),
+                    height: (if source == "de/g_fm1.dds" {
+                        frame.height.min(256)
+                    } else {
+                        frame.height
+                    })
+                    .div_ceil(aoe_assets::catalog::buildings::pixel_step(&source)),
                 });
             }
         }
@@ -79,6 +111,8 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                     AtlasDomain::Objects
                 },
                 false,
+                usize::MAX,
+                true,
             )?;
         }
     }
@@ -92,6 +126,8 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 source.frames(),
                 usize::from(source.sample_step()),
                 AtlasDomain::Objects,
+                true,
+                usize::MAX,
                 true,
             )?;
         }
@@ -113,6 +149,8 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 1,
                 AtlasDomain::Terrain,
                 false,
+                usize::MAX,
+                true,
             )?;
         }
         for part in building
@@ -132,6 +170,70 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 ),
                 AtlasDomain::Objects,
                 false,
+                usize::MAX,
+                true,
+            )?;
+        }
+    }
+    let native = |id| {
+        manifest
+            .buildings
+            .iter()
+            .any(|b| b.unit_id == id && b.parts.iter().any(|p| p.available))
+    };
+    let stages = |side| {
+        let matching = manifest
+            .buildings
+            .iter()
+            .filter(|b| {
+                aoe_assets::catalog::GAMEPLAY_BUILDING_IDS.contains(&b.unit_id)
+                    && b.footprint == [side; 2]
+            })
+            .collect::<Vec<_>>();
+        !matching.is_empty()
+            && matching
+                .iter()
+                .all(|b| b.construction.iter().any(|p| p.available))
+    };
+    for item in aoe_assets::catalog::buildings::supplemental(
+        |source| manifest.frames.iter().any(|f| f.source == source),
+        native,
+        stages,
+        |id| {
+            manifest
+                .buildings
+                .iter()
+                .any(|b| b.unit_id == id && b.construction.iter().any(|p| p.available))
+        },
+    ) {
+        if !manifest.frames.iter().any(|f| f.source == item.source) && !item.required {
+            continue;
+        }
+        add(
+            item.source,
+            item.frames,
+            item.step,
+            if item.slot == 5 {
+                AtlasDomain::Terrain
+            } else {
+                AtlasDomain::Objects
+            },
+            true,
+            item.take,
+            item.resident,
+        )?;
+    }
+    for (_, id, frames, step) in runtime::FISHING {
+        let source = format!("graphics.drs:[32, 112, 108, 115]:{id}");
+        if manifest.frames.iter().any(|f| f.source == source) {
+            add(
+                source,
+                frames,
+                step,
+                AtlasDomain::Objects,
+                true,
+                usize::MAX,
+                true,
             )?;
         }
     }

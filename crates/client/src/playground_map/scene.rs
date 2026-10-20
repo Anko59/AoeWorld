@@ -289,12 +289,29 @@ pub(in super::super) fn units(
         .map(|b| (b.footprint.min.x, b.footprint.min.y))
         .collect();
     for building in &client.village.buildings {
+        let gate_open = building.kind == aoe_protocol::BuildingKind::PalisadeGate
+            && building.progress_permille == 1000
+            && client.units.values().any(|u| {
+                let at = u.position.tile_floor();
+                let r = building.footprint;
+                u.hp > 0
+                    && ((u.player == building.player
+                        && at.x >= r.min.x - 2
+                        && at.y >= r.min.y - 2
+                        && at.x < r.max.x + 2
+                        && at.y < r.max.y + 2)
+                        || r.contains(at))
+            });
         let position = super::super::village::building_center(building);
         let slot = units.partition_point(|unit| unit.id < building.id);
         units.insert(
             slot,
             aoe_rendering::SceneUnit {
-                kind: building_kind(building),
+                kind: if gate_open {
+                    aoe_rendering::SceneUnitKind::OpenPalisadeGate
+                } else {
+                    building_kind(building)
+                },
                 id: building.id,
                 position,
                 moving: false,
@@ -345,17 +362,16 @@ fn building_kind(building: &aoe_protocol::GameplayBuildingState) -> aoe_renderin
     cache_tests::KEY_ENTRIES.with(|count| count.set(count.get() + 1));
     use aoe_protocol::{BuildingKind as Kind, ConstructionState};
     use aoe_rendering::SceneUnitKind as Art;
-    let kind = match building.kind {
-        Kind::TownCenter => Art::TownCenter,
-        Kind::House => Art::House,
-        Kind::Mill => Art::Mill,
-        Kind::LumberCamp => Art::LumberCamp,
-        Kind::MiningCamp => Art::MiningCamp,
-        Kind::Farm => Art::Farm,
-        Kind::Barracks => Art::Barracks,
-        Kind::PalisadeWall => Art::PalisadeWall,
-        Kind::Outpost => Art::Outpost,
-        Kind::Dock => Art::Dock,
+    let kind = if building.kind == Kind::TownCenter && building.age == aoe_protocol::Age::Dark {
+        Art::TownCenter
+    } else if building.age == aoe_protocol::Age::Feudal && building.kind == Kind::LumberCamp {
+        Art::FeudalLumberCamp
+    } else if building.age == aoe_protocol::Age::Feudal && building.kind == Kind::MiningCamp {
+        Art::FeudalMiningCamp
+    } else {
+        Art::building(
+            crate::building_ui::age_sprite_slot(building.kind, 1000, false, building.age) as u8,
+        )
     };
     if building.construction == ConstructionState::Complete {
         kind

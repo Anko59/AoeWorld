@@ -50,18 +50,14 @@ impl DatFile {
                 .map(|a| (i32::from(a.unit_id), a.misplacement)),
         );
         units.sort_by(|a, b| (a.1[1] - a.1[0]).total_cmp(&(b.1[1] - b.1[0])));
+        let head_graphic = i32::from(unit.standing[0]);
         let mut parts = Vec::new();
         for (id, position) in units {
             let unit = self
                 .unit(id)
                 .ok_or_else(|| crate::invalid("composition", 0, format!("missing annex {id}")))?;
-            self.append_graphic(
-                i32::from(unit.standing[0]),
-                [0; 2],
-                position,
-                &mut Vec::new(),
-                &mut parts,
-            )?;
+            let graphic = self.annex_family(head_graphic, i32::from(unit.standing[0]));
+            self.append_graphic(graphic, [0; 2], position, &mut Vec::new(), &mut parts)?;
         }
         // Shadow layers precede all bodies. Stable sorting leaves every
         // same-layer stand/delta list and equal-depth annex in DAT order.
@@ -90,6 +86,37 @@ impl DatFile {
             parts,
             construction,
         })
+    }
+
+    /// Shared annex units keep their Dark Age IDs. Select their corresponding
+    /// age/architecture family before walking that graphic's own delta tree.
+    /// DAT family names share a stem, age digit and part suffix (RTWC2N3W).
+    fn annex_family(&self, head: i32, annex: i32) -> i32 {
+        let (Some(head), Some(part)) = (self.graphic(head), self.graphic(annex)) else {
+            return annex;
+        };
+        let Some(age) = head.name.bytes().position(|c| c.is_ascii_digit()) else {
+            return annex;
+        };
+        if !head.name.is_ascii()
+            || !part.name.is_ascii()
+            || head.name.len() <= age + 1
+            || part.name.len() <= age + 1
+            || !part.name.starts_with(&head.name[..age])
+            || !part.name.as_bytes()[age].is_ascii_digit()
+        {
+            return annex;
+        }
+        let family = format!(
+            "{}{}{}",
+            &head.name[..=age],
+            &part.name[age + 1..part.name.len() - 1],
+            &head.name[head.name.len() - 1..]
+        );
+        self.graphics
+            .iter()
+            .find(|g| g.name == family)
+            .map_or(annex, |g| g.id)
     }
 
     fn append_graphic(
