@@ -181,7 +181,7 @@ pub(super) fn decode_hex(hex: &str) -> Result<Vec<u8>, CompactChunkError> {
         return Err(CompactChunkError::InvalidHex);
     }
     let mut bytes = Vec::with_capacity(hex.len() / 2);
-    for pair in hex.as_bytes().chunks_exact(2) {
+    for pair in hex.as_bytes().as_chunks::<2>().0 {
         let high = hex_value(pair[0])?;
         let low = hex_value(pair[1])?;
         bytes.push(high << 4 | low);

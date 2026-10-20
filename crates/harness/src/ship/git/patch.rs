@@ -54,7 +54,7 @@ pub(super) fn identity(root: &Path, from: &str, to: &str) -> Result<Vec<u8>> {
         return Err("malformed raw diff metadata".into());
     }
     let mut files = Vec::new();
-    for pair in entries[..entries.len() - 1].chunks_exact(2) {
+    for pair in entries[..entries.len() - 1].as_chunks::<2>().0 {
         let header = pair[0].strip_prefix(b":").ok_or("malformed diff header")?;
         let fields: Vec<_> = header.split(|b| *b == b' ').collect();
         if fields.len() != 5 || pair[1].is_empty() {

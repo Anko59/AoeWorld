@@ -44,7 +44,7 @@ fn local_manifest() -> Manifest {
         bundle_hash: "bundle-hash".into(),
         protocol_version: aoe_protocol::VERSION,
         asset_pack_version: 1,
-        rustc: "rustc 1.93.1".into(),
+        rustc: "rustc 1.99.1".into(),
         e2e_report_hash: "e2e-hash".into(),
         perf_report_hash: "perf-hash".into(),
     }

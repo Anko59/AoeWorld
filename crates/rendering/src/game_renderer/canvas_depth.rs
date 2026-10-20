@@ -163,7 +163,7 @@ pub(super) fn render_canvas_world_with_fog(
     let color = &mut presentation.color_buffer;
     let depth = &mut presentation.depth_buffer;
     color.resize(color_bytes, 0);
-    for pixel in color.chunks_exact_mut(4) {
+    for pixel in color.as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(if fog_active {
             &[0, 0, 0, 255]
         } else {

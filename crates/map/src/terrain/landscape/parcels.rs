@@ -79,7 +79,7 @@ pub struct Parcels {
 impl Parcels {
     pub fn new(world_key: [u8; 32], seed: u64) -> Self {
         let mut key = mix(seed ^ 0x7061_7263_656c_7639);
-        for bytes in world_key.chunks_exact(8) {
+        for bytes in world_key.as_chunks::<8>().0 {
             key = mix(key
                 ^ u64::from_le_bytes([
                     bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],

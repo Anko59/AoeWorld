@@ -106,7 +106,7 @@ fn proposal(observed: &BTreeMap<String, Metrics>) -> Result<Baseline, Box<dyn Er
     }
     Ok(Baseline {
         version: 1,
-        toolchain: "rustc 1.93.1".into(),
+        toolchain: "rustc 1.99.1".into(),
         gungraun: "0.19.4".into(),
         valgrind: "3.19.0".into(),
         allow_aslr: true,
@@ -154,7 +154,7 @@ fn compare_observed(
     observed: BTreeMap<String, Metrics>,
 ) -> Result<Vec<Comparison>, Box<dyn Error>> {
     if baseline.version != 1
-        || baseline.toolchain != "rustc 1.93.1"
+        || baseline.toolchain != "rustc 1.99.1"
         || baseline.gungraun != "0.19.4"
         || baseline.valgrind != "3.19.0"
         || !baseline.allow_aslr

@@ -12,7 +12,7 @@ use std::{
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-pub(crate) const RUST_TOOLS_IMAGE: &str = "aoeworld/rust-tools:1.93.1";
+pub(crate) const RUST_TOOLS_IMAGE: &str = "aoeworld/rust-tools:1.99.1";
 
 /// The server's port inside its container; DEV_PORT chooses the host's.
 const CONTAINER_PORT: u16 = 8080;

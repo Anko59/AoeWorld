@@ -110,7 +110,7 @@ fn wasm_size_check_fails_over_the_perf_ci_cap_and_passes_at_it() {
     let artifact = dir.path().join("optimized.wasm.gz");
     std::fs::write(
         &baseline,
-        r#"{"version":1,"toolchain":"rustc 1.93.1","wasm_bindgen":"0.2.128","binaryen":"108","gzip":"1.12 -n -9","optimized_gzip_bytes":1000}"#,
+        r#"{"version":1,"toolchain":"rustc 1.99.1","wasm_bindgen":"0.2.128","binaryen":"108","gzip":"1.12 -n -9","optimized_gzip_bytes":1000}"#,
     )
     .unwrap();
     for (size, passes) in [(1050, true), (1051, false)] {

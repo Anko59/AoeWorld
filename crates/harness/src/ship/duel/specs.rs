@@ -154,11 +154,7 @@ fn calls(source: &str) -> Option<Vec<(String, Range<usize>)>> {
                     "(" => stack.push(")"),
                     "[" => stack.push("]"),
                     "{" => stack.push("}"),
-                    ")" | "]" | "}" => {
-                        if stack.pop()? != token.text {
-                            return None;
-                        }
-                    }
+                    ")" | "]" | "}" if stack.pop()? != token.text => return None,
                     _ => (),
                 }
             }

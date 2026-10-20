@@ -1,4 +1,4 @@
-FROM aoeworld/rust-tools:1.93.1
+FROM aoeworld/rust-tools:1.99.1
 ARG SOURCE_SHA
 WORKDIR /source
 COPY . .

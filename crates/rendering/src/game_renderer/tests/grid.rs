@@ -141,7 +141,7 @@ fn grid_thins_out_instead_of_filling_a_distant_view() {
     // The overlay is one translucent pixel wide, never an opaque fill.
     let sprites = game_grid::grid_sprites(&segments(&terrain, camera), camera.viewport);
     assert!(!sprites.is_empty());
-    for pair in sprites.chunks_exact(2) {
+    for pair in sprites.as_chunks::<2>().0 {
         assert_eq!(pair[0].color[3], -2.0);
         assert!(pair[0].uv[3] > 0.25 && pair[0].uv[3] < 0.75);
         let pixels = |clip: f32| f64::from(clip) * camera.viewport[1] / 2.0;

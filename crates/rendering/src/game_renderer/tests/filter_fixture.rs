@@ -3,7 +3,7 @@ use crate::surface_mesh::{ProjectedSurfaceTriangle, SurfacePoint};
 
 pub(crate) fn atlas() -> Vec<u8> {
     let mut bytes = vec![0; crate::GAME_ATLAS_BYTES];
-    for pixel in bytes[..crate::GAME_ATLAS_PAGE_BYTES].chunks_exact_mut(4) {
+    for pixel in bytes[..crate::GAME_ATLAS_PAGE_BYTES].as_chunks_mut::<4>().0 {
         pixel.copy_from_slice(&[255, 0, 0, 255]);
     }
     for (base, width) in [(0, 49), (64, 49), (128, 49), (256, 49), (384, 257)] {

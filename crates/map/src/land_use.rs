@@ -69,9 +69,9 @@ mod coverage_wire {
             return Err(D::Error::custom("historical coverage length is invalid"));
         }
         let mut cells = Vec::with_capacity(bytes.len() / 12);
-        for cell in bytes.chunks_exact(12) {
+        for cell in bytes.as_chunks::<12>().0 {
             let mut values = [0; 6];
-            for (index, pair) in cell.chunks_exact(2).enumerate() {
+            for (index, pair) in cell.as_chunks::<2>().0.iter().enumerate() {
                 let high = digit(pair[0])
                     .ok_or_else(|| D::Error::custom("historical coverage hex is invalid"))?;
                 let low = digit(pair[1])

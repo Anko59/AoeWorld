@@ -35,7 +35,7 @@ pub fn parse_bc1(bytes: &[u8]) -> Result<Texture, Error> {
     let blocks_wide = width / 4;
     let data = slice(bytes, HEADER, blocks_wide * (height / 4) * 8, FORMAT)?;
     let mut pixels = vec![[0u8; 4]; width * height];
-    for (ordinal, raw) in data.chunks_exact(8).enumerate() {
+    for (ordinal, raw) in data.as_chunks::<8>().0.iter().enumerate() {
         let mut block = [0u8; 8];
         block.copy_from_slice(raw);
         let (bx, by) = (ordinal % blocks_wide * 4, ordinal / blocks_wide * 4);

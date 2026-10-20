@@ -356,7 +356,7 @@ pub(crate) fn tint_atlas_pixels(pixels: &[u8], tint: u8) -> Option<Vec<u8>> {
         return None;
     }
     let mut tinted = pixels.to_vec();
-    for texel in tinted.chunks_exact_mut(4) {
+    for texel in tinted.as_chunks_mut::<4>().0 {
         match tint {
             1 | 2 | 3 => {
                 let factor = [0.92, 0.78, 0.72][usize::from(tint - 1)];

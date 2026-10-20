@@ -138,7 +138,7 @@ pub(super) fn section(sessions: &Path, now: u64) -> String {
     }
     let mut files = Vec::new();
     rollouts(sessions, &mut files);
-    files.sort_by(|a, b| b.0.cmp(&a.0));
+    files.sort_by_key(|file| std::cmp::Reverse(file.0));
     let lines = files
         .into_iter()
         .take(NEWEST_FILES)

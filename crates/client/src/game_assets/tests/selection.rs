@@ -318,8 +318,10 @@ async fn full_catalog_packs_1474_terrain_frames_and_780_objects_in_their_domains
     let (terrain, objects) = pixels.split_at(2 * GAME_ATLAS_PAGE_BYTES);
     let count = |pixels: &[u8], color: [u8; 4]| {
         pixels
-            .chunks_exact(4)
-            .filter(|pixel| *pixel == color)
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|pixel| **pixel == color)
             .count()
     };
     assert_eq!(count(terrain, [80, 90, 100, 255]), 1474);

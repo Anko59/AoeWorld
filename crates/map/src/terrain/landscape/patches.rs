@@ -137,7 +137,7 @@ pub struct Patches {
 impl Patches {
     pub fn new(world_key: [u8; 32], seed: u64) -> Self {
         let mut key = mix(seed ^ 0x7061_7463_682d_7639);
-        for part in world_key.chunks_exact(8) {
+        for part in world_key.as_chunks::<8>().0 {
             key = mix(key
                 ^ u64::from_le_bytes([
                     part[0], part[1], part[2], part[3], part[4], part[5], part[6], part[7],

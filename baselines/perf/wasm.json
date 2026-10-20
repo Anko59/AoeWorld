@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "toolchain": "rustc 1.93.1",
+  "toolchain": "rustc 1.99.1",
   "wasm_bindgen": "0.2.128",
   "binaryen": "108",
   "gzip": "1.12 -n -9",

@@ -441,7 +441,7 @@ fn pretinted_canvas_atlases_match_webgpu_rgb_formulas_and_preserve_alpha() {
     for tint in 0..=4_u8 {
         let tinted = tint_atlas_pixels(&source, tint).unwrap();
         assert_eq!(tinted.len(), source.len());
-        for (index, texel) in tinted.chunks_exact(4).enumerate() {
+        for (index, texel) in tinted.as_chunks::<4>().0.iter().enumerate() {
             let input = &source[index * 4..index * 4 + 4];
             for channel in 0..3 {
                 let expected = match tint {

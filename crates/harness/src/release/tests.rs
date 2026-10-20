@@ -36,7 +36,7 @@ impl Runtime for FakeRuntime {
             ("docker", ["image", "inspect", .., tag]) if tag.contains("/browser:") => {
                 Ok("sha256:browser".to_owned())
             }
-            ("rustc", ["--version"]) => Ok("rustc 1.93.1".to_owned()),
+            ("rustc", ["--version"]) => Ok("rustc 1.99.1".to_owned()),
             _ => Err(format!("unexpected output command: {program} {args:?}").into()),
         }
     }

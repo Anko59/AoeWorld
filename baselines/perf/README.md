@@ -1,5 +1,9 @@
 # Initial microbenchmark baseline
 
+The current toolchain is Rust 1.99.1. Its same-source measurements and baseline
+decisions are recorded in [performance evidence](../../docs/performance.md).
+The dated measurements below describe the original captures.
+
 The values in `micro.json` were captured on 2026-09-17 with the pinned
 Rust 1.93.1 analysis image, Gungraun 0.19.4, and Valgrind 3.19.0. ASLR stays
 enabled because the local Docker security profile forbids `setarch -R`.

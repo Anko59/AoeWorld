@@ -236,8 +236,10 @@ pub(super) fn target_page(
         }
     }
     let targets = east
-        .chunks_exact(4)
-        .zip(north.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(north.as_chunks::<4>().0.iter())
         .map(|(longitudes, latitudes)| HydeTargetAreaCell {
             polygon: longitudes
                 .iter()
