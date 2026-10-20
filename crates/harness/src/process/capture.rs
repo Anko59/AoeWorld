@@ -221,13 +221,14 @@ fn capture_once<W: Write>(
         duration: started.elapsed(),
     };
     let stopped = || {
+        // A lock's gap accumulates across captures, including short sleeps that do not
+        // interrupt this child. Refresh it against its own last record on every poll.
+        crate::ship::lock::refresh_held();
         if cancellation.cancelled() {
             Some(CaptureExit::Cancelled)
         } else if started.elapsed() >= deadline {
             Some(CaptureExit::Deadline)
         } else if watch.interrupted(clock) {
-            // First, so a ship that holds the lock is not ended as frozen while it recovers.
-            crate::ship::lock::refresh_held();
             Some(CaptureExit::Suspended {
                 at: suspend::wall_time(),
             })

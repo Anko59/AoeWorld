@@ -15,7 +15,7 @@ use crate::{
 };
 use std::{
     fs,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     sync::mpsc::{self, Receiver},
@@ -67,7 +67,7 @@ fn role() {
         .expect("the lock")
     };
     match role.as_str() {
-        "holder" => {
+        "holder" | "small-suspends" => {
             let _lock = take("holder", Duration::ZERO);
             println!("HELD");
             let gate: Gate = serde_json::from_value(serde_json::json!({
@@ -76,13 +76,22 @@ fn role() {
                 "budget_s": 60, "static": false, "heavy": false, "capabilities": [], "blocks": []
             }))
             .unwrap();
+            let mut first = gate.clone();
+            first.id = "first".into();
+            first.command = "echo run >> count; while [ ! -f next ]; do sleep 0.02; done".into();
+            let gates = if role == "small-suspends" {
+                vec![&first, &gate]
+            } else {
+                vec![&gate]
+            };
             let results = run_gates_retrying(
                 &dir,
-                &[&gate],
+                &gates,
                 &SlotEnv::default(),
                 crate::slots::hold,
                 &Retry::never(),
             );
+            assert!(results.iter().all(|r| r.verdict == GateVerdict::Pass));
             assert_eq!(
                 results[0].verdict,
                 GateVerdict::Pass,
@@ -113,11 +122,23 @@ struct Role {
 }
 
 fn start(role: &str, dir: &Path) -> Role {
+    use std::os::unix::fs::PermissionsExt;
+    let bin = dir.join("bin");
+    if role == "holder" || role == "small-suspends" {
+        fs::create_dir_all(&bin).unwrap();
+        // Recovery exercises the real Docker command path, against an empty fixture daemon.
+        fs::write(bin.join("docker"), "#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(bin.join("docker"), fs::Permissions::from_mode(0o755)).unwrap();
+    }
     let mut child = Command::new(std::env::current_exe().expect("test binary"))
         .args(["ship::tests::lock::suspend::role", "--exact", "--nocapture"])
         .env(ROLE, role)
         .env(DIRECTORY, dir)
         .env(SIMULATED_GAP_FILE, dir.join("gap"))
+        .env(
+            "PATH",
+            format!("{}:{}", bin.display(), std::env::var("PATH").unwrap()),
+        )
         .stdout(Stdio::piped())
         .spawn()
         .expect("spawn a role");
@@ -187,6 +208,40 @@ fn wait_for(what: &str, ready: impl Fn() -> bool) {
 
 fn suspend(dir: &Path) {
     fs::write(dir.join("gap"), "300").unwrap();
+}
+
+#[test]
+fn two_small_suspends_across_captures_do_not_end_a_recovering_holder() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("gap"), "0").unwrap();
+    let mut holder = start("small-suspends", dir.path());
+    holder.expect("HELD");
+    let mut waiter = start("waiter", dir.path());
+    waiter.expect("waiting for holder in /work/holder");
+    wait_for("gate A", || runs(dir.path()) == 1);
+    fs::write(dir.path().join("gap"), "40").unwrap();
+    fs::write(dir.path().join("next"), "").unwrap();
+    wait_for("gate B", || runs(dir.path()) == 2);
+    fs::write(dir.path().join("gap"), "80").unwrap();
+    assert!(
+        holder.finish().success(),
+        "healthy holder was killed: {:?}",
+        holder.seen
+    );
+    holder.expect_seen("RESULT PASS");
+    assert_eq!(
+        runs(dir.path()),
+        2,
+        "neither 40s suspend interrupts its capture"
+    );
+    waiter.expect("ACQUIRED");
+    assert!(waiter.finish().success());
+    assert!(
+        !waiter.seen.iter().any(|line| line.contains("taking over")),
+        "{:?}",
+        waiter.seen
+    );
+    writeln!(std::io::stdout(), "F1: two 40s sleeps across gates A/B; holder PASS, two gate runs, waiter acquired after release without takeover").unwrap();
 }
 
 #[test]

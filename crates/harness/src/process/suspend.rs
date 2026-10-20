@@ -37,11 +37,12 @@ impl Reading {
 /// Where readings come from: [`read`] in production, an injected sequence in tests.
 pub(crate) type Clock<'a> = dyn Fn() -> io::Result<Reading> + 'a;
 
-/// Names a file holding whole seconds that [`read`] adds to the boot clock: it simulates a
-/// host suspend in the real processes of a test (writing `300` is a five-minute suspend).
-/// Unset in production.
+/// Names a file holding whole seconds that test builds add to the boot clock. Production
+/// builds do not compile this override, even when the variable is set in their environment.
+#[cfg(test)]
 pub(crate) const SIMULATED_GAP_FILE: &str = "AOE_HARNESS_SIMULATED_GAP_FILE";
 
+#[cfg(test)]
 fn simulated_gap() -> Duration {
     std::env::var_os(SIMULATED_GAP_FILE)
         .and_then(|file| std::fs::read_to_string(file).ok())
@@ -49,10 +50,14 @@ fn simulated_gap() -> Duration {
         .map_or(Duration::ZERO, Duration::from_secs)
 }
 
-/// The clocks as [`Watch`] and the locks see them: [`read_real`] plus the simulated suspend.
+/// The process clocks. Only test builds can add a simulated suspend.
 pub(crate) fn read() -> io::Result<Reading> {
-    let mut reading = read_real()?;
-    reading.boot += simulated_gap();
+    let reading = read_real()?;
+    #[cfg(test)]
+    let reading = Reading {
+        boot: reading.boot + simulated_gap(),
+        ..reading
+    };
     Ok(reading)
 }
 

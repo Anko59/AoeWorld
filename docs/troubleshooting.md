@@ -34,7 +34,9 @@ The child receives its start gap in `AOE_HARNESS_BOOT_GAP`.
 - **Gates run by `aoe-harness gates`** retry once. Their harness containers are
   stopped first, because killing the `docker run` client does not stop the
   container. A second suspend is the gate's result, reported as a monitor error.
-- **Ship gates** (`make ship`) retry once the same way. **Duel steps** do not retry: an
+- **Ship gates** (`make ship`) get one suspend retry per gate, including when the
+  interrupted attempt followed an overloaded timeout. If stopping interrupted containers
+  fails, the gate is unavailable, names the containers, and starts no retry. **Duel steps** do not retry: an
   interrupted one fails and its process group is killed; containers it started are
   labelled (below) and `make recover` can stop them.
 - **Containers** started by the harness carry the label
@@ -47,8 +49,9 @@ The child receives its start gap in `AOE_HARNESS_BOOT_GAP`.
 
 **The ship lock.** The lock is an OS file lock, so waiters keep waiting while the holder
 process exists, even when a suspend froze it. The holder records the boot-time gap when it
-takes the lock, and every process that holds it records the new gap when a supervised child
-notices a suspend, before it retries or ends the child. A waiter ends a holder only when
+takes the lock. While supervising a child, the holder compares the current gap with its last
+lock record on every poll, and refreshes that record when the difference exceeds 60 s.
+This includes several short sleeps across different children. A waiter ends a holder only when
 the record's gap moved by more than 60 s since it was written and the same record still
 reads that way at the next poll (one second later), by killing the recorded pid if its
 start time matches. It prints `ship: taking over from the stale lock holder <branch> in
@@ -56,5 +59,5 @@ start time matches. It prints `ship: taking over from the stale lock holder <bra
 
 Limits: detection needs Linux; elsewhere the clocks are not read and nothing is
 judged interrupted. The tests inject clock readings, or write seconds into the file named by
-`AOE_HARNESS_SIMULATED_GAP_FILE` (added to the boot clock of every harness process that
-reads it); they do not suspend a real machine, so the timing of a real resume is not verified.
+`AOE_HARNESS_SIMULATED_GAP_FILE` (added to the boot clock only in test builds; production
+ignores it); they do not suspend a real machine, so the timing of a real resume is not verified.

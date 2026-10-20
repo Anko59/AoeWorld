@@ -195,7 +195,7 @@ pub(crate) fn acquire_at(
                     let mut record = holder.clone();
                     record.gap = stale::gap_now(&suspend::read);
                     write_json(&mut flock, &record)?;
-                    stale::track(path);
+                    stale::track(path, record.gap);
                     if announced {
                         say("ship: the lock is free; starting");
                     }

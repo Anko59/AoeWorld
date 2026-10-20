@@ -12,6 +12,8 @@ use std::{
     },
 };
 
+mod suspend;
+
 const OVERLOADED: Load = Load {
     one: 30.0,
     five: 25.0,

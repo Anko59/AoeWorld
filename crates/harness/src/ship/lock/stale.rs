@@ -18,19 +18,27 @@ use std::{
     time::Duration,
 };
 
-/// Lock files this process holds, so it can refresh them when it notices a suspend.
-static HELD: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+struct Held {
+    path: PathBuf,
+    gap: Option<u64>,
+}
 
-fn held() -> MutexGuard<'static, Vec<PathBuf>> {
+/// The last gap recorded in each lock, independent of any individual child capture.
+static HELD: Mutex<Vec<Held>> = Mutex::new(Vec::new());
+
+fn held() -> MutexGuard<'static, Vec<Held>> {
     HELD.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-pub(super) fn track(path: &Path) {
-    held().push(path.to_path_buf());
+pub(super) fn track(path: &Path, gap: Option<u64>) {
+    held().push(Held {
+        path: path.to_path_buf(),
+        gap,
+    });
 }
 
 pub(super) fn untrack(path: &Path) {
-    held().retain(|held| held != path);
+    held().retain(|held| held.path != path);
 }
 
 /// The boot-time gap in whole seconds, `None` where the clocks cannot be read.
@@ -38,31 +46,43 @@ pub(super) fn gap_now(clock: &Clock<'_>) -> Option<u64> {
     clock().ok().map(|reading| reading.gap().as_secs())
 }
 
-/// Called by the process that holds a ship lock when its supervised child was interrupted
-/// by a suspend, before it retries or ends the child: record the gap it now sees in every
-/// lock it holds, so that a recovering holder does not read as frozen. It reads the real
-/// clock, not the one a caller injected, so a simulated suspend never reaches a lock.
+/// Called on every capture poll, before deciding whether to interrupt the child. Several
+/// short sleeps across different captures can make a lock stale even though no individual
+/// child was interrupted. Compare with each lock's last recorded gap, not the child's.
+/// Read the process clock, independently of any clock injected into a capture.
 pub(crate) fn refresh_held() {
-    let paths = held().clone();
-    for path in &paths {
-        if let Err(error) = refresh_gap_at(path, &suspend::read) {
-            eprintln!(
+    let mut locks = held();
+    if locks.is_empty() {
+        return;
+    }
+    let Ok(reading) = suspend::read() else { return };
+    let now = reading.gap();
+    for lock in locks.iter_mut() {
+        if lock
+            .gap
+            .is_some_and(|gap| !suspend::moved(Duration::from_secs(gap), now))
+        {
+            continue;
+        }
+        match refresh_gap_at(&lock.path, now.as_secs()) {
+            Ok(()) => lock.gap = Some(now.as_secs()),
+            Err(error) => eprintln!(
                 "ship lock {}: could not record the suspend: {error}",
-                path.display()
-            );
+                lock.path.display()
+            ),
         }
     }
 }
 
 /// Rewrite the gap in the lock file's record, when this process is the holder it names.
-fn refresh_gap_at(path: &Path, clock: &Clock<'_>) -> super::Result<()> {
+fn refresh_gap_at(path: &Path, gap: u64) -> super::Result<()> {
     let Some(mut holder) = read_json::<Holder>(path) else {
         return Ok(());
     };
     if holder.pid != std::process::id() {
         return Ok(());
     }
-    holder.gap = gap_now(clock);
+    holder.gap = Some(gap);
     write_json(&mut open(path)?, &holder)
 }
 
