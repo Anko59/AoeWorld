@@ -316,17 +316,46 @@ impl GameplayService {
             .await;
             return;
         }
+        // Admission precedes all view construction. Keep the session lock until
+        // publication so concurrent requests cannot pass the same revision.
+        let mut sessions = self.sessions.lock().await;
+        let Some(session) = sessions.get_mut(&session_id) else {
+            return;
+        };
+        let now = Instant::now();
+        while session
+            .subscription_times
+            .front()
+            .is_some_and(|time| now.duration_since(*time) >= Duration::from_secs(1))
+        {
+            session.subscription_times.pop_front();
+        }
+        if session.subscription_times.len() >= 10 {
+            let _ = session.sender.try_send(GameplayServerMessage::Error {
+                code: 429,
+                message: "subscription updates are rate limited".to_owned(),
+            });
+            return;
+        }
+        if session
+            .subscription
+            .is_some_and(|old| revision <= old.revision)
+        {
+            let _ = session.sender.try_send(GameplayServerMessage::Error {
+                code: 409,
+                message: "subscription revision is obsolete".to_owned(),
+            });
+            return;
+        }
+        // At most ten admitted views per second, each at most 512x512 tiles
+        // plus the fixed 256x256 overview, regardless of total map area.
+        session.subscription_times.push_back(now);
         let units = economy::query_units(&world, region, self.primary_unit_id);
         if units.len() > MAX_SUBSCRIBED_UNITS {
-            drop(world);
-            self.send_to(
-                session_id,
-                GameplayServerMessage::Error {
-                    code: 413,
-                    message: "subscribed region exceeds gameplay entity limit".to_owned(),
-                },
-            )
-            .await;
+            let _ = session.sender.try_send(GameplayServerMessage::Error {
+                code: 413,
+                message: "subscribed region exceeds gameplay entity limit".to_owned(),
+            });
             return;
         }
         let player = fog::viewer(&world, self.primary_unit_id);
@@ -354,48 +383,18 @@ impl GameplayService {
             tick: world.tick(),
             animals: animals.clone(),
         };
-        drop(world);
-        let mut sessions = self.sessions.lock().await;
-        let mut failed = false;
-        if let Some(session) = sessions.get_mut(&session_id) {
-            let now = Instant::now();
-            while session
-                .subscription_times
-                .front()
-                .is_some_and(|time| now.duration_since(*time) >= Duration::from_secs(1))
-            {
-                session.subscription_times.pop_front();
-            }
-            if session.subscription_times.len() >= 10 {
-                let _ = session.sender.try_send(GameplayServerMessage::Error {
-                    code: 429,
-                    message: "subscription updates are rate limited".to_owned(),
-                });
-                return;
-            }
-            if session
-                .subscription
-                .is_some_and(|old| revision <= old.revision)
-            {
-                let _ = session.sender.try_send(GameplayServerMessage::Error {
-                    code: 409,
-                    message: "subscription revision is obsolete".to_owned(),
-                });
-                return;
-            }
-            session.subscription_times.push_back(now);
-            session.subscription = Some(Subscription { revision, region });
-            session.resource_revision = None;
-            session.resident = units.iter().copied().map(|unit| (unit.id, unit)).collect();
-            session.resident_players = players;
-            session.resident_buildings = buildings;
-            session.resident_animals = animals;
-            session.vision_revision = Some(vision_revision);
-            failed = session.sender.try_send(snapshot).is_err()
-                || session.sender.try_send(wildlife).is_err()
-                || session.sender.try_send(fog).is_err();
-        }
+        session.subscription = Some(Subscription { revision, region });
+        session.resource_revision = None;
+        session.resident = units.iter().copied().map(|unit| (unit.id, unit)).collect();
+        session.resident_players = players;
+        session.resident_buildings = buildings;
+        session.resident_animals = animals;
+        session.vision_revision = Some(vision_revision);
+        let failed = session.sender.try_send(snapshot).is_err()
+            || session.sender.try_send(wildlife).is_err()
+            || session.sender.try_send(fog).is_err();
         drop(sessions);
+        drop(world);
         if failed {
             self.disconnect(session_id).await;
         }

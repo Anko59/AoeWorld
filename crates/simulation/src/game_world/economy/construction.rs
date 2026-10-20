@@ -132,6 +132,8 @@ impl GameWorld {
             let _ = self.issue_cancel_construction(player, id);
             return Err(crate::GameWorldError::Unreachable.into());
         }
+        self.update_building_vision(id);
+        self.remember_visible_buildings();
         Ok(id)
     }
 

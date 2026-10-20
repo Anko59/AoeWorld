@@ -81,6 +81,15 @@ impl GameplayService {
                 {
                     continue;
                 }
+                if !world.fog_disabled()
+                    && session.resource_revision.is_some()
+                    && session.resident_resources == known
+                {
+                    // Keep the last delivered resource revision: a later delta
+                    // must still start at the revision the client received.
+                    session.resource_vision_revision = Some(vision_revision);
+                    continue;
+                }
                 let delta = session
                     .resource_revision
                     .and_then(|from| journal.since(from, revision));

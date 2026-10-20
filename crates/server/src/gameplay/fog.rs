@@ -32,6 +32,8 @@ pub(super) fn state(
     revision: u64,
     region: TileRect,
 ) -> FogState {
+    #[cfg(test)]
+    tests::record_state(region);
     let disabled = world.fog_disabled();
     let mut tiles = Vec::new();
     if !disabled {
@@ -59,3 +61,7 @@ pub(super) fn state(
         },
     }
 }
+
+#[path = "fog/tests.rs"]
+#[cfg(test)]
+mod tests;

@@ -82,7 +82,8 @@ impl GameWorld {
     }
 
     /// Create a building (or foundation) after its footprint was validated.
-    /// Nothing is charged here; the caller owns the cost.
+    /// Nothing is charged here; the caller owns the cost. Foundations reveal
+    /// only after the caller accepts their builder approaches.
     pub(super) fn insert_building(
         &mut self,
         player: PlayerId,
@@ -149,8 +150,10 @@ impl GameWorld {
             },
         );
         self.refresh_population_cap(player);
-        self.update_building_vision(id);
-        self.remember_visible_buildings();
+        if complete {
+            self.update_building_vision(id);
+            self.remember_visible_buildings();
+        }
         if rules.blocks {
             self.resource_collision_changed();
         }
@@ -189,8 +192,9 @@ impl GameWorld {
             self.resource_collision_changed();
         }
         self.refresh_population_cap(building.player);
-        self.update_observer(id, None);
-        self.remember_visible_buildings();
+        if self.update_observer(id, None) {
+            self.remember_visible_buildings();
+        }
     }
 
     /// Bounded local placement around the certified start, favoring inland

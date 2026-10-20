@@ -108,6 +108,10 @@ impl GameWorld {
             }
             return Err(crate::GameWorldError::Unreachable.into());
         }
+        for id in &ids {
+            self.update_building_vision(*id);
+        }
+        self.remember_visible_buildings();
         Ok(ids)
     }
 

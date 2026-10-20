@@ -47,6 +47,13 @@ fn address(tile: TileCoord) -> ((i32, i32), usize, u64) {
     )
 }
 
+/// Every strategic pixel intersecting the tile, including tiles wider than a
+/// pixel on supported small maps. Shared pixels retain reference counts.
+fn pixels(tile: i32, axis: i32) -> std::ops::Range<i64> {
+    let (tile, axis) = (i64::from(tile), i64::from(axis));
+    tile * 256 / axis..((tile + 1) * 256 + axis - 1) / axis
+}
+
 impl PlayerVision {
     fn state(&self, tile: TileCoord) -> TileVisibility {
         if self.visible.contains_key(&tile) {
@@ -79,21 +86,26 @@ impl Vision {
                     continue;
                 }
                 player.tile_work += 1;
-                let pixel = ((i64::from(tile.y) * 256 / i64::from(height)) * 256
-                    + i64::from(tile.x) * 256 / i64::from(width))
-                    as u16;
                 if add {
-                    *player.overview.entry(pixel).or_default() += 1;
                     *player.visible.entry(tile).or_default() += 1;
                     let (chunk, word, mask) = address(tile);
                     player.explored.entry(chunk).or_insert([0; 16])[word] |= mask;
                 } else if let Some(count) = player.visible.get_mut(&tile) {
-                    if let Some(total) = player.overview.get_mut(&pixel) {
-                        *total -= 1;
-                    }
                     *count -= 1;
                     if *count == 0 {
                         player.visible.remove(&tile);
+                    }
+                } else {
+                    continue;
+                }
+                for y in pixels(tile.y, height) {
+                    for x in pixels(tile.x, width) {
+                        let pixel = (y * 256 + x) as u16;
+                        if add {
+                            *player.overview.entry(pixel).or_default() += 1;
+                        } else if let Some(total) = player.overview.get_mut(&pixel) {
+                            *total -= 1;
+                        }
                     }
                 }
             }
@@ -208,9 +220,9 @@ impl GameWorld {
         &mut self,
         id: EntityId,
         observer: Option<(PlayerId, TileCoord, u8)>,
-    ) {
+    ) -> bool {
         if self.vision.disabled {
-            return;
+            return false;
         }
         let observer = observer.map(|(player, center, los)| Observer {
             player,
@@ -218,7 +230,7 @@ impl GameWorld {
             los,
         });
         if self.vision.observers.get(&id).copied() == observer {
-            return;
+            return false;
         }
         self.vision.revision += 1;
         if let Some(old) = self.vision.observers.remove(&id) {
@@ -235,6 +247,7 @@ impl GameWorld {
             self.vision.observers.insert(id, new);
             self.observe_resource_disk(new);
         }
+        true
     }
 
     pub(crate) fn update_unit_vision(&mut self, id: EntityId) {

@@ -179,3 +179,178 @@ fn moving_observer_tile_work_is_independent_of_idle_population() {
     assert!(work > 0 && work <= 2 * 2 * 81);
     assert_eq!(work, run(1000));
 }
+
+#[test]
+fn rejected_foundations_leave_all_visibility_and_memory_unchanged() {
+    use crate::{BuildingKind, EconomyError};
+    for wall_order in [false, true] {
+        let mut w = world();
+        w.initialize_village(PlayerId(0), TileCoord::new(20, 20))
+            .unwrap();
+        w.initialize_village(PlayerId(1), TileCoord::new(200, 200))
+            .unwrap();
+        let builder = w
+            .units()
+            .find(|u| u.player == PlayerId(0) && u.kind == UnitKind::Villager)
+            .unwrap()
+            .id;
+        let enemy_builder = w
+            .units()
+            .find(|u| u.player == PlayerId(1) && u.kind == UnitKind::Villager)
+            .unwrap()
+            .id;
+        for y in 99..=101 {
+            for x in 99..=101 {
+                if (x, y) != (100, 100) {
+                    w.issue_build(
+                        PlayerId(1),
+                        &[enemy_builder],
+                        BuildingKind::PalisadeWall,
+                        TileCoord::new(x, y),
+                    )
+                    .unwrap();
+                }
+            }
+        }
+        let vision_hash = |w: &GameWorld| {
+            let mut hash = blake3::Hasher::new();
+            w.vision.update_hash(&mut hash);
+            hash.finalize()
+        };
+        let before = vision_hash(&w);
+        let revision = w.vision_revision();
+        let storage = w.vision_storage(PlayerId(0));
+        let overview = w.vision_overview(PlayerId(0));
+        let stock = w.player_economy(PlayerId(0)).unwrap().stockpile;
+        let tile = TileCoord::new(100, 100);
+        assert_eq!(w.visibility(PlayerId(0), tile), TileVisibility::Unexplored);
+        assert!(
+            w.known_buildings(PlayerId(0))
+                .iter()
+                .all(|b| b.player == PlayerId(0))
+        );
+        let result = if wall_order {
+            w.issue_build_wall(PlayerId(0), &[builder], tile, tile)
+                .map(|_| ())
+        } else {
+            w.issue_build(PlayerId(0), &[builder], BuildingKind::Outpost, tile)
+                .map(|_| ())
+        };
+        assert_eq!(
+            result,
+            Err(EconomyError::Movement(GameWorldError::Unreachable))
+        );
+        assert_eq!(
+            vision_hash(&w),
+            before,
+            "rejected order changed exploration or memory"
+        );
+        assert_eq!(w.vision_revision(), revision);
+        assert_eq!(w.vision_storage(PlayerId(0)), storage);
+        assert_eq!(w.vision_overview(PlayerId(0)), overview);
+        assert_eq!(w.player_economy(PlayerId(0)).unwrap().stockpile, stock);
+    }
+}
+
+#[test]
+fn accepted_foundations_reveal_immediately_and_cancellation_keeps_exploration() {
+    use crate::BuildingKind;
+    for wall_order in [false, true] {
+        let mut w = world();
+        w.initialize_village(PlayerId(0), TileCoord::new(20, 20))
+            .unwrap();
+        let builder = w.units().find(|u| u.kind == UnitKind::Villager).unwrap().id;
+        let origin = TileCoord::new(100, 100);
+        let id = if wall_order {
+            w.issue_build_wall(PlayerId(0), &[builder], origin, origin)
+                .unwrap()[0]
+        } else {
+            w.issue_build(PlayerId(0), &[builder], BuildingKind::Outpost, origin)
+                .unwrap()
+        };
+        assert_eq!(w.visibility(PlayerId(0), origin), TileVisibility::Visible);
+        w.issue_cancel_construction(PlayerId(0), id).unwrap();
+        assert_eq!(w.visibility(PlayerId(0), origin), TileVisibility::Explored);
+        assert!(w.known_buildings(PlayerId(0)).iter().all(|b| b.id != id));
+    }
+}
+
+#[test]
+fn minimap_covers_every_pixel_of_small_explored_tiles_across_chunk_edges() {
+    for (width, height) in [(64, 64), (64, 96), (256, 256), (512, 512)] {
+        let mut w = GameWorld::new(WorldConfig::new(width, height, Seed(7)).unwrap()).unwrap();
+        let id = EntityId(999);
+        let player = PlayerId(0);
+        // Visit every tile through the same observer update used by movement.
+        for y in 0..height {
+            for x in 0..width {
+                w.update_observer(id, Some((player, TileCoord::new(x, y), 0)));
+            }
+        }
+        let overview = w
+            .vision_overview(player)
+            .into_iter()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(overview.len(), 256 * 256, "black gaps on {width}x{height}");
+        for y in [0, 31, 32, height - 1] {
+            for x in [0, 31, 32, width - 1] {
+                let tile = TileCoord::new(x, y);
+                w.update_observer(id, Some((player, tile, 0)));
+                let overview = w
+                    .vision_overview(player)
+                    .into_iter()
+                    .collect::<std::collections::BTreeMap<_, _>>();
+                let x0 = x * 256 / width;
+                let y0 = y * 256 / height;
+                let x1 = ((x + 1) * 256 + width - 1) / width;
+                let y1 = ((y + 1) * 256 + height - 1) / height;
+                for py in y0..y1 {
+                    for px in x0..x1 {
+                        assert_eq!(overview[&((py * 256 + px) as u16)], 2);
+                    }
+                }
+            }
+        }
+        w.update_observer(id, None);
+        assert!(
+            w.vision_overview(player)
+                .iter()
+                .all(|(_, state)| *state == 1)
+        );
+    }
+}
+
+#[test]
+fn minimap_reveals_only_the_observed_tile_pixels_and_counts_shared_pixels() {
+    let player = PlayerId(0);
+    for axis in [64, 512] {
+        let mut w = GameWorld::new(WorldConfig::new(axis, axis, Seed(7)).unwrap()).unwrap();
+        let first = EntityId(999);
+        let second = EntityId(1000);
+        w.update_observer(first, Some((player, TileCoord::new(32, 32), 0)));
+        let overview = w.vision_overview(player);
+        let pixels_per_axis = (256 / axis).max(1);
+        assert_eq!(overview.len(), (pixels_per_axis * pixels_per_axis) as usize);
+        assert!(overview.iter().all(|(pixel, state)| {
+            let x = i32::from(*pixel % 256);
+            let y = i32::from(*pixel / 256);
+            *state == 2
+                && (32 * 256 / axis..32 * 256 / axis + pixels_per_axis).contains(&x)
+                && (32 * 256 / axis..32 * 256 / axis + pixels_per_axis).contains(&y)
+        }));
+        let other_tile = if axis == 512 {
+            TileCoord::new(33, 33)
+        } else {
+            TileCoord::new(32, 32)
+        };
+        w.update_observer(second, Some((player, other_tile, 0)));
+        w.update_observer(first, None);
+        assert_eq!(w.vision_overview(player), overview);
+        w.update_observer(second, None);
+        assert!(
+            w.vision_overview(player)
+                .iter()
+                .all(|(_, state)| *state == 1)
+        );
+    }
+}
