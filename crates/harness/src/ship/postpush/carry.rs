@@ -74,6 +74,10 @@ pub(super) fn carry(root: &Path, number: u64) -> Result<()> {
         println!("carry-review: #{number} is not an open pull request into {BASE}; nothing to do");
         return Ok(());
     }
+    if pull["draft"].as_bool() == Some(true) {
+        println!("carry-review: #{number} is a draft; review status waits for approval");
+        return Ok(());
+    }
     let head = text("/head/sha").to_owned();
     // Data only: the objects are read by Git, no code of the pull request runs.
     if super::fetch(root, &format!("refs/pull/{number}/head"))? != head {

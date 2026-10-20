@@ -11,3 +11,5 @@ mod workflow;
 
 mod followups;
 mod norestart;
+
+mod ci_alongside;

@@ -29,9 +29,8 @@ pub(crate) mod test_first;
 mod tests;
 
 use evidence::{Evidence, Verdict};
-use git::publish::push;
 #[cfg(test)]
-use git::publish::{caller_chose_ssh, push_command, ssh_keepalive};
+use git::publish::{caller_chose_ssh, push, push_command, ssh_keepalive};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -328,10 +327,47 @@ pub(crate) fn ship_with(
             );
         }
     }
+    let early_draft =
+        !options.no_pr && !options.no_review && !options.review_ahead && options.base == "dev";
+    if early_draft {
+        postpush::draft::start(
+            root,
+            &evidence,
+            options,
+            body_text.as_deref().ok_or("no validated draft body")?,
+            &started_head,
+            push_tip.as_deref(),
+        )?;
+    }
+    // The next lease must expect the head the draft push wrote, including any
+    // rebase performed before the gates, rather than the original checkout.
+    let started_head = if early_draft {
+        evidence.head.clone()
+    } else {
+        started_head
+    };
+    let push_tip = if early_draft {
+        Some(evidence.head.clone())
+    } else {
+        push_tip
+    };
     let review = if options.no_review {
         None
     } else {
-        Some(review_gate::require(root, &evidence, options, reviewer)?)
+        let reviewed = match (early_draft, body_text.as_deref()) {
+            (true, Some(task)) => {
+                review_gate::require_task(root, &evidence, options, task, reviewer)
+            }
+            _ => review_gate::require(root, &evidence, options, reviewer),
+        };
+        match reviewed {
+            Ok(report) => Some(report),
+            Err(error) if early_draft => {
+                let grade = postpush::ci::recorded_grade(root, &evidence.branch, &evidence.head);
+                return postpush::ci::outcome(root, &evidence.head, grade, Err(error));
+            }
+            Err(error) => return Err(error),
+        }
     };
     if options.review_ahead {
         let report = review
@@ -340,105 +376,109 @@ pub(crate) fn ship_with(
         eprintln!("ship: {}", stack::ahead_message(&options.base, report));
         return Ok(evidence);
     }
-    options.lock.reacquire(root, "make ship")?;
-    let rebased = crate::timeline::stage(root, "recheck", serde_json::json!({}), || {
-        recheck::before_push(root, &evidence, review.as_ref(), options, &started_head)
-    })?;
-    let (evidence, review, lease, _recheck_anchor) = match rebased {
-        Some(r) => (r.evidence, r.review, r.lease, Some(r._anchor)),
-        None => (evidence, review, None, None),
-    };
-    let lease = if evidence.head != started_head && lease.is_none() {
-        recheck::lease(root, options, &git::subject(root)?, &started_head)?
-    } else {
-        lease
-    };
-    let expected = lease
-        .as_deref()
-        .or(options.force.then_some(push_tip.as_deref().unwrap_or("")));
-    let refreshed = match expected {
-        Some(tip) => git::lease::refresh(root, &evidence.branch, tip, &started_head),
-        None => git::lease::refresh_default(
-            root,
-            &evidence.branch,
-            &started_head,
-            &evidence.head,
-            push_tip.is_some(),
-        ),
-    }
-    .map_err(|error| format!("git push failed: {error}"))?;
-    crate::timeline::stage(root, "push", serde_json::json!({}), || {
-        push(root, &evidence, Some(&refreshed))
-    })?;
-    if !options.no_pr {
-        let mut options = options.clone();
-        if let (Some(report), Some(body_text)) = (&review, body_text.as_deref()) {
-            options.body_file = Some(github::description(
-                root, &evidence, &options, report, body_text,
-            )?);
-        }
-        let url = github::pull_request(root, &evidence, &options)?;
-        if let (Some(video), Some(body)) = (&options.video, &options.body_file) {
-            let repository = git::origin_repository(root)?;
-            let body = body.display().to_string();
-            let video = video.display().to_string();
-            gh(
+    let grade = review.as_ref().map(|report| report.grade);
+    let mut pushed_head = evidence.head.clone();
+    let published = (|| {
+        options.lock.reacquire(root, "make ship")?;
+        let rebased = crate::timeline::stage(root, "recheck", serde_json::json!({}), || {
+            recheck::before_push(root, &evidence, review.as_ref(), options, &started_head)
+        })?;
+        let (evidence, review, lease, _recheck_anchor) = match rebased {
+            Some(r) => (r.evidence, r.review, r.lease, Some(r._anchor)),
+            None => (evidence, review, None, None),
+        };
+        crate::timeline::stage(root, "push", serde_json::json!({}), || {
+            postpush::draft::push(
                 root,
-                &[
-                    "pr",
-                    "edit",
-                    &url,
-                    "--repo",
-                    &repository,
-                    "--body-file",
-                    &body,
-                    "--attach",
-                    &video,
-                ],
-            )?;
-            let remote_body = gh(
-                root,
-                &[
-                    "pr",
-                    "view",
-                    &url,
-                    "--repo",
-                    &repository,
-                    "--json",
-                    "body",
-                    "--jq",
-                    ".body",
-                ],
-            )?;
-            let submitted_body = fs::read_to_string(&body)?;
-            let body_with_video = describe::place_video_in_what(&submitted_body, &remote_body);
-            fs::write(&body, body_with_video)?;
-            gh(
-                root,
-                &[
-                    "pr",
-                    "edit",
-                    &url,
-                    "--repo",
-                    &repository,
-                    "--body-file",
-                    &body,
-                ],
-            )?;
-        }
-        if let Some(report) = &review {
-            let publish = || review_gate::publish(root, &url, report, &evidence.base_branch);
-            postpush::cleanup::after_publication(root, &evidence.base_branch, publish)?;
-            // The review passed: a leftover that cannot be filed is reported, not fatal.
-            for problem in issues::followups::file(root, &url, report) {
-                eprintln!(
-                    "ship: review follow-up not filed ({problem}); file it with `make issue`"
-                );
+                &evidence,
+                options,
+                &started_head,
+                push_tip.as_deref(),
+                lease,
+            )
+        })?;
+        pushed_head = evidence.head.clone();
+        if !options.no_pr {
+            let mut options = options.clone();
+            if let (Some(report), Some(body_text)) = (&review, body_text.as_deref()) {
+                options.body_file = Some(github::description(
+                    root, &evidence, &options, report, body_text,
+                )?);
             }
-            eprintln!("{}", stack::next_steps(options.parent.as_ref(), &url));
+            let url = github::pull_request(root, &evidence, &options)?;
+            if let (Some(video), Some(body)) = (&options.video, &options.body_file) {
+                let repository = git::origin_repository(root)?;
+                let body = body.display().to_string();
+                let video = video.display().to_string();
+                gh(
+                    root,
+                    &[
+                        "pr",
+                        "edit",
+                        &url,
+                        "--repo",
+                        &repository,
+                        "--body-file",
+                        &body,
+                        "--attach",
+                        &video,
+                    ],
+                )?;
+                let remote_body = gh(
+                    root,
+                    &[
+                        "pr",
+                        "view",
+                        &url,
+                        "--repo",
+                        &repository,
+                        "--json",
+                        "body",
+                        "--jq",
+                        ".body",
+                    ],
+                )?;
+                let submitted_body = fs::read_to_string(&body)?;
+                let body_with_video = describe::place_video_in_what(&submitted_body, &remote_body);
+                fs::write(&body, body_with_video)?;
+                gh(
+                    root,
+                    &[
+                        "pr",
+                        "edit",
+                        &url,
+                        "--repo",
+                        &repository,
+                        "--body-file",
+                        &body,
+                    ],
+                )?;
+            }
+            if let Some(report) = &review {
+                let publish = || {
+                    if early_draft {
+                        review_gate::publish_ready(root, &url, report, &evidence.base_branch)
+                    } else {
+                        review_gate::publish(root, &url, report, &evidence.base_branch)
+                    }
+                };
+                postpush::cleanup::after_publication(root, &evidence.base_branch, publish)?;
+                // The review passed: a leftover that cannot be filed is reported, not fatal.
+                for problem in issues::followups::file(root, &url, report) {
+                    eprintln!(
+                        "ship: review follow-up not filed ({problem}); file it with `make issue`"
+                    );
+                }
+                eprintln!("{}", stack::next_steps(options.parent.as_ref(), &url));
+            }
         }
+        Ok(evidence)
+    })();
+    if early_draft {
+        postpush::ci::outcome(root, &pushed_head, grade, published)
+    } else {
+        published
     }
-    Ok(evidence)
 }
 
 pub(crate) use github::gh;

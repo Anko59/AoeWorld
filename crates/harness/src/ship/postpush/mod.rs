@@ -8,7 +8,9 @@ use serde::Deserialize;
 use std::path::Path;
 
 pub(super) mod carry;
+pub(super) mod ci;
 pub(super) mod cleanup;
+pub(super) mod draft;
 pub(super) mod marker;
 mod replay;
 pub(super) mod reship;
