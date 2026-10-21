@@ -22,14 +22,9 @@ pub(in crate::ship) fn start(
         let repository = git::origin_repository(root)?;
         let existing = github::open_pull_request(root, &repository, &evidence.branch)?;
         if let Some(pr) = &existing {
-            let args = github::disable_auto_args(&pr.url, &repository);
-            match github::gh(root, &args.iter().map(String::as_str).collect::<Vec<_>>()) {
-                Err(error) if !github::auto_merge_not_enabled(&error.to_string()) => {
-                    return Err(error);
-                }
-                _ => {}
-            }
-            let draft = github::gh(
+            // One read: whether it is a draft and whether auto-merge is armed. A review-fix
+            // reship finds a draft with no auto-merge, which GitHub refuses to disable.
+            let state = github::gh(
                 root,
                 &[
                     "pr",
@@ -38,11 +33,24 @@ pub(in crate::ship) fn start(
                     "--repo",
                     &repository,
                     "--json",
-                    "isDraft",
+                    "isDraft,autoMergeRequest",
                     "--jq",
-                    ".isDraft",
+                    "\\(.isDraft) \\(.autoMergeRequest != null)",
                 ],
             )?;
+            let (draft, armed) = state
+                .trim()
+                .split_once(' ')
+                .unwrap_or((state.trim(), "true"));
+            if armed != "false" {
+                let args = github::disable_auto_args(&pr.url, &repository);
+                match github::gh(root, &args.iter().map(String::as_str).collect::<Vec<_>>()) {
+                    Err(error) if !github::auto_merge_not_enabled(&error.to_string()) => {
+                        return Err(error);
+                    }
+                    _ => {}
+                }
+            }
             if draft != "true" {
                 github::gh(
                     root,

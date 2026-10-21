@@ -11,7 +11,10 @@ case "$1 $2" in
   'pr list')
     case "$*" in *'--state merged'*) echo '[]'; exit 0 ;; esac
     if [ -f "$GH_DIR/existing" ]; then echo '{"url":"https://github.com/project/checkout/pull/1","baseRefName":"dev"}'; fi ;;
-  'pr view') [ -f "$GH_DIR/draft" ] && echo true || echo false ;;
+  'pr view')
+    d=false; [ -f "$GH_DIR/draft" ] && d=true
+    a=false; [ -f "$GH_DIR/auto" ] && a=true
+    echo "$d $a" ;;
   'pr create')
     case "$*" in *--draft*) touch "$GH_DIR/draft" ;; esac
     touch "$GH_DIR/existing"
@@ -23,7 +26,10 @@ case "$1 $2" in
     esac ;;
   'pr merge')
     case "$*" in
-      *--disable-auto*) rm -f "$GH_DIR/auto" ;;
+      *--disable-auto*)
+        # Like GitHub: refusing to disable an auto-merge that is not armed.
+        [ -f "$GH_DIR/auto" ] || { echo "GraphQL: Can't disable auto-merge for this pull request. (disablePullRequestAutoMerge)" >&2; exit 1; }
+        rm -f "$GH_DIR/auto" ;;
       *--auto*) [ ! -f "$GH_DIR/draft" ] || exit 13; touch "$GH_DIR/auto" ;;
     esac ;;
   'pr edit')
