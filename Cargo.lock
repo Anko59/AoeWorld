@@ -223,6 +223,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "aoe-sdk"
+version = "0.1.0"
+dependencies = [
+ "aoe-core",
+ "aoe-map",
+ "aoe-protocol",
+ "aoe-scenario",
+ "aoe-server",
+ "aoe-simulation",
+ "axum",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
 name = "aoe-server"
 version = "0.1.0"
 dependencies = [

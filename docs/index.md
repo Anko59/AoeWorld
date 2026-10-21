@@ -11,6 +11,7 @@
 - [Showcase videos](showcase.md)
 - [Shared dev server](dev-server.md)
 - [Architecture](architecture.md)
+- [AI SDK](ai-sdk.md)
 - [Local development](local-development.md)
 - [Testing](testing.md)
 - [Gate registry](gates.md)

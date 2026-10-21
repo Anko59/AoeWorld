@@ -1,0 +1,25 @@
+[package]
+name = "aoe-sdk"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Client SDK for AI players: the browser's wire protocol, a fog-filtered world model and a bot loop"
+
+[dependencies]
+aoe-core.workspace = true
+aoe-map.workspace = true
+aoe-protocol.workspace = true
+aoe-simulation.workspace = true
+futures-util = "0.3"
+serde.workspace = true
+serde_json = "1.0"
+thiserror.workspace = true
+tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "net", "sync", "time", "io-util"] }
+tokio-tungstenite = "0.29"
+
+[dev-dependencies]
+aoe-server = { path = "../server" }
+aoe-scenario.workspace = true
+axum = "0.8"
+tempfile = "3"
