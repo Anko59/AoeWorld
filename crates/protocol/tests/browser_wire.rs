@@ -150,6 +150,7 @@ fn snapshot() -> GameplayServerMessage {
             population_cap: 10,
             age: aoe_protocol::Age::Dark,
             researched: 0,
+            market_prices: aoe_protocol::MarketPrices::default(),
         }],
         buildings: vec![GameplayBuildingState {
             id: EntityId(1),
@@ -177,6 +178,9 @@ fn browser_bytes() -> Vec<u8> {
         1, 0, 200, 1, 200, 1, 100, 200, 1, 6, 10, // Player and stockpile.
     ];
     bytes.extend(hex(include_str!("../../../browser/tests/wire/player.hex")));
+    bytes.extend(hex(include_str!(
+        "../../../browser/tests/wire/market-prices.hex"
+    ))); // Market prices: 100 gold per 100 units each.
     bytes.extend([
         1, 1, 0, 0, // Building count, id, player, TownCenter.
         252, 127, 252, 127, 132, 128, 1, 132, 128, 1, // Footprint.
@@ -227,7 +231,7 @@ fn browser_feudal_player_fragment_matches_the_current_codec() {
         } else {
             include_str!("../../../browser/tests/wire/feudal-player.hex")
         });
-        expected.splice(15..17, fragment);
+        expected.splice(15..17, fragment); // Age and researched only.
         assert_wire(message, expected);
     }
 }

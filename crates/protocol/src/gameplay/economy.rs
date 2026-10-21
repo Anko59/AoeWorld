@@ -14,6 +14,45 @@ pub const MAX_BUILD_GROUP: usize = 32;
 pub const MAX_POPULATION: u16 = 200;
 pub const MAX_TRAINING_QUEUE: usize = 5;
 
+/// A Market commodity; wood, food and stone trade for gold.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum TradeResource {
+    Wood,
+    Food,
+    Stone,
+}
+impl TradeResource {
+    pub const ALL: [Self; 3] = [Self::Wood, Self::Food, Self::Stone];
+    /// The stockpile the commodity moves.
+    pub const fn kind(self) -> ResourceKind {
+        match self {
+            Self::Wood => ResourceKind::Wood,
+            Self::Food => ResourceKind::Food,
+            Self::Stone => ResourceKind::Stone,
+        }
+    }
+}
+/// DE clamps every Market price to this gold range.
+pub const MARKET_MIN_PRICE: u16 = 20;
+pub const MARKET_MAX_PRICE: u16 = 9999;
+/// A player's Market commodity prices, in gold per 100 units.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MarketPrices {
+    pub wood: u16,
+    pub food: u16,
+    pub stone: u16,
+}
+impl Default for MarketPrices {
+    /// DE starts every commodity at 100 gold per 100 units.
+    fn default() -> Self {
+        Self {
+            wood: 100,
+            food: 100,
+            stone: 100,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum UnitKind {
     Villager,
@@ -211,6 +250,8 @@ pub struct GameplayPlayerState {
     pub age: Age,
     /// Bit `1 << tech as u8` is set once researched.
     pub researched: u32,
+    /// The player's Market commodity prices, in gold per 100 units.
+    pub market_prices: MarketPrices,
 }
 /// The most recent damage taken. A client plays a hit reaction when `tick`
 /// is newer than the one it last saw, and a swing for `attacker`.
@@ -258,11 +299,17 @@ pub struct GameplayBuildingState {
     pub gate_open: bool,
 }
 
+fn valid_prices(prices: MarketPrices) -> bool {
+    [prices.wood, prices.food, prices.stone]
+        .iter()
+        .all(|price| (MARKET_MIN_PRICE..=MARKET_MAX_PRICE).contains(price))
+}
 fn valid_research(player: &GameplayPlayerState) -> bool {
     let known = Tech::ALL.iter().fold(0, |bits, tech| bits | tech.bit());
     player.researched & !known == 0
         && (player.age == Age::Feudal || player.researched & !Tech::Loom.bit() == 0)
         && (player.age == Age::Feudal) == (player.researched & Tech::FeudalAge.bit() != 0)
+        && valid_prices(player.market_prices)
 }
 pub(super) fn valid_players(players: &[GameplayPlayerState]) -> bool {
     players.len() <= MAX_ECONOMY_PLAYERS

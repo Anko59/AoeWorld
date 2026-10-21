@@ -15,6 +15,7 @@ mod fishing;
 mod gates;
 mod gathering;
 mod hash;
+mod market;
 mod movement;
 mod navigation;
 pub(crate) mod placement;
@@ -27,6 +28,7 @@ mod wall;
 pub use buildings::{
     BUILDING_RULES, BuildingRules, MAX_POPULATION, MAX_WALL_SEGMENTS, trainable_units,
 };
+pub use market::{MARKET_RULES, MarketPrices};
 
 pub const MAX_ECONOMY_PLAYERS: usize = 16;
 pub const MAX_ECONOMY_BUILDINGS: usize = 256;
@@ -124,6 +126,8 @@ pub struct PlayerEconomy {
     pub age: super::Age,
     /// Bit `1 << tech as u8` is set once researched.
     pub researched: u32,
+    /// The player's Market commodity prices, in gold per 100 units.
+    pub market_prices: MarketPrices,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TrainingEntry {
@@ -253,6 +257,8 @@ pub enum EconomyError {
     Capacity,
     #[error("requires Feudal Age")]
     RequiresFeudalAge,
+    #[error("trading needs a completed Market")]
+    NoMarket,
     #[error("player already has a starting village")]
     AlreadyStarted,
     #[error("village movement failed: {0}")]

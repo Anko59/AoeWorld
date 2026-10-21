@@ -191,6 +191,32 @@ impl GameplayService {
         let action = PendingAction::Farm { entity_id, farm_id };
         self.queue_command(session_id, sequence, action).await;
     }
+    pub async fn queue_market_buy(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        resource: aoe_protocol::TradeResource,
+    ) {
+        let action = PendingAction::MarketBuy {
+            building_id,
+            resource,
+        };
+        self.queue_command(session_id, sequence, action).await;
+    }
+    pub async fn queue_market_sell(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        resource: aoe_protocol::TradeResource,
+    ) {
+        let action = PendingAction::MarketSell {
+            building_id,
+            resource,
+        };
+        self.queue_command(session_id, sequence, action).await;
+    }
     async fn queue_command(&self, session_id: u64, sequence: u64, action: PendingAction) {
         let now = Instant::now();
         let current_tick = self.world.read().await.tick();
@@ -350,6 +376,14 @@ pub(super) fn apply(
         PendingAction::CancelResearch { building_id } => {
             world.issue_cancel_research(player, building_id)
         }
+        PendingAction::MarketBuy {
+            building_id,
+            resource,
+        } => world.issue_market_buy(player, building_id, super::economy::native_trade(resource)),
+        PendingAction::MarketSell {
+            building_id,
+            resource,
+        } => world.issue_market_sell(player, building_id, super::economy::native_trade(resource)),
     };
     use aoe_simulation::{EconomyError as E, GameWorldError as W};
     match result {
@@ -375,6 +409,7 @@ pub(super) fn apply(
         Err(E::AlreadyResearched) => CommandResult::RejectedAlreadyResearched,
         Err(E::ResearchBusy) => CommandResult::RejectedResearchBusy,
         Err(E::RequiresFeudalAge) => CommandResult::RejectedRequiresFeudalAge,
+        Err(E::NoMarket) => CommandResult::RejectedNoMarket,
         Err(E::TechRequirementMissing) => CommandResult::RejectedTechRequirement,
         Err(E::Capacity) => CommandResult::RejectedQueueFull,
         Err(E::NoAttackPosition | E::Movement(W::Unreachable)) => {

@@ -3,7 +3,7 @@ use aoe_core::{EntityId, PlayerId, TileRect};
 use aoe_protocol::{
     Age, BuildingKind, CarriedResource, ConstructionState, GameplayBuildingState,
     GameplayPlayerState, GameplayUnitState, HitState, MAX_SUBSCRIBED_UNITS, ResearchState,
-    ResourceKind, Stockpile, Tech, TrainingState, UnitKind, UnitTask,
+    ResourceKind, Stockpile, Tech, TradeResource, TrainingState, UnitKind, UnitTask,
 };
 use aoe_simulation::{GameUnit, GameWorld};
 use std::collections::BTreeMap;
@@ -194,6 +194,20 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
         }),
     }
 }
+pub(super) fn native_trade(resource: TradeResource) -> aoe_map::ResourceKind {
+    match resource {
+        TradeResource::Wood => aoe_map::ResourceKind::Wood,
+        TradeResource::Food => aoe_map::ResourceKind::Food,
+        TradeResource::Stone => aoe_map::ResourceKind::Stone,
+    }
+}
+fn wire_market_prices(prices: aoe_simulation::MarketPrices) -> aoe_protocol::MarketPrices {
+    aoe_protocol::MarketPrices {
+        wood: prices.wood,
+        food: prices.food,
+        stone: prices.stone,
+    }
+}
 pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerState> {
     world
         .players()
@@ -215,6 +229,7 @@ pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerSta
                         aoe_simulation::Age::Feudal => Age::Feudal,
                     },
                     researched: state.researched,
+                    market_prices: wire_market_prices(state.market_prices),
                 },
             )
         })

@@ -198,3 +198,30 @@ fn palisade_frames_follow_the_projected_line_and_junctions() {
     );
     assert_eq!(wall_frame(at, |_| false), 2);
 }
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn market_panel_enables_only_affordable_trades_at_a_completed_owned_market() {
+    use aoe_protocol::MarketPrices;
+    let prices = MarketPrices {
+        wood: 100,
+        food: 103,
+        stone: 90,
+    };
+    let have = Stockpile {
+        food: 99,
+        wood: 100,
+        gold: 130,
+        stone: 500,
+    };
+    // Buy costs price plus 30%: wood 130 is affordable, food 133 and stone 117
+    // (90 * 1.3) are judged against 130 gold: only food is not.
+    assert_eq!(
+        market_panel(true, prices, have),
+        [100.0, 103.0, 90.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+    );
+    // Not a completed owned Market: prices stay visible, every button is off.
+    assert_eq!(
+        market_panel(false, prices, have),
+        [100.0, 103.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    );
+}

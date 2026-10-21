@@ -260,7 +260,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
     use aoe_core::{TileCoord, TileRect};
     use aoe_protocol::{
         Age, BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState,
-        Stockpile, Tech,
+        MarketPrices, Stockpile, Tech,
     };
     let scene = contact_scene();
     let mut client = client(&scene).await;
@@ -271,6 +271,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         population_cap: 5,
         age: Age::Feudal,
         researched: Tech::FeudalAge.bit(),
+        market_prices: MarketPrices::default(),
     });
     client.village.buildings.push(GameplayBuildingState {
         id: EntityId(2),

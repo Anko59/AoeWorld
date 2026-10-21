@@ -325,6 +325,7 @@ fn worker_player(world: &mut GameWorld, researched: u32) {
             population_cap: 5,
             age: Age::Feudal,
             researched: researched | Tech::FeudalAge.bit(),
+            market_prices: crate::MarketPrices::default(),
         },
     );
 }

@@ -1,14 +1,14 @@
 import { expect, type Page } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { test } from "../../server.js";
-import { gameAssets } from "../game-assets.js";
-import { activatePackage } from "../start/package.js";
+import { test } from "../../../server.js";
+import { gameAssets } from "../../game-assets.js";
+import { activatePackage } from "../../start/package.js";
 import {
   centerVillage,
   frameResource,
   freshHud,
-} from "./fixtures/resources.js";
+} from "../fixtures/resources.js";
 
 type Tile = { x: number; y: number };
 type Actor = { id: number; kind: string; x: number; y: number };

@@ -12,6 +12,7 @@ mod farming;
 mod fishing;
 pub(crate) mod fixture;
 mod gathering;
+mod market;
 mod rejections;
 mod resource_collision;
 mod training;

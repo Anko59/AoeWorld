@@ -1,6 +1,6 @@
 use super::{
     BuildingKind, ConstructionState, EconomyError, GameBuilding, MAX_ECONOMY_BUILDINGS,
-    MAX_ECONOMY_PLAYERS, MAX_POPULATION, PlayerEconomy, Stockpile, VILLAGE_RULES,
+    MAX_ECONOMY_PLAYERS, MAX_POPULATION, MarketPrices, PlayerEconomy, Stockpile, VILLAGE_RULES,
 };
 use crate::{GameWorld, GameWorldError, Terrain, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
@@ -126,6 +126,7 @@ impl GameWorld {
             population_cap: 0,
             age: crate::Age::Dark,
             researched: 0,
+            market_prices: MarketPrices::default(),
         });
         let work_total = u64::from(rules.build_seconds)
             * u64::from(self.config.tick_hz)
