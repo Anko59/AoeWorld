@@ -1,4 +1,4 @@
-//! Pure, bounded startup placement for the four-page gameplay atlas.
+//! Pure, bounded startup placement for the five-page gameplay atlas.
 //!
 //! This module allocates only owned placement metadata, never pixel storage.
 //! The caller owns exactly `ATLAS_BYTES` RGBA8 bytes in page-major order and
@@ -9,9 +9,9 @@
 use std::fmt;
 
 pub const PAGE_SIDE: u16 = 2048;
-pub const PAGE_COUNT: usize = 4;
+pub const PAGE_COUNT: usize = 5;
 pub const PAGE_BYTES: usize = PAGE_SIDE as usize * PAGE_SIDE as usize * 4;
-pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 67,108,864 bytes.
+pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 83,886,080 bytes.
 pub const MAX_SELECTED_FRAMES: usize = 5120;
 pub const MAX_FRAME_EXTENT: u16 = PAGE_SIDE - 4;
 // Rows and columns 0–1 stay unallocated on every page. The renderer stores its
@@ -19,7 +19,7 @@ pub const MAX_FRAME_EXTENT: u16 = PAGE_SIDE - 4;
 const START: u16 = 2;
 const GAP: u16 = 1;
 
-/// Terrain owns pages 0–1. All units, resources, objects and shadows own pages 2–3.
+/// Terrain owns pages 0–1. All units, resources, objects and shadows own pages 2–4.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AtlasDomain {
     Terrain,
@@ -130,7 +130,7 @@ fn pack_with_allocator(
         let frame = frames[index];
         let pages = match frame.domain {
             AtlasDomain::Terrain => 0..2,
-            AtlasDomain::Objects => 2..4,
+            AtlasDomain::Objects => 2..5,
         };
         let mut placed = false;
         for page in pages {

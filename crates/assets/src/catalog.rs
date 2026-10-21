@@ -15,7 +15,7 @@ pub mod units;
 mod village;
 pub use topology::TerrainFrameTopology;
 
-/// Reviewed selection ceiling, not an increase to the fixed four-page atlas.
+/// Reviewed selection ceiling, not an increase to the fixed five-page atlas.
 pub const MAX_REVIEWED_FRAMES: u32 = 2_361;
 
 /// Buildings represented by the current gameplay protocol. Other DAT recipes

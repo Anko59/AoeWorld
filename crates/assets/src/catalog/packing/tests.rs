@@ -26,9 +26,9 @@ fn reject_before_allocation(frames: &[FrameExtent], error: PackingError) {
 
 #[test]
 fn fixed_payload_and_explicit_white_address() {
-    assert_eq!((PAGE_COUNT, PAGE_SIDE), (4, 2048));
+    assert_eq!((PAGE_COUNT, PAGE_SIDE), (5, 2048));
     assert_eq!(PAGE_BYTES, 16_777_216);
-    assert_eq!(ATLAS_BYTES, 67_108_864);
+    assert_eq!(ATLAS_BYTES, 83_886_080);
     assert_eq!(
         WHITE_TEXEL,
         Placement {
@@ -43,10 +43,10 @@ fn fixed_payload_and_explicit_white_address() {
 }
 
 #[test]
-fn complete_actor_animation_sets_can_use_two_object_pages() {
-    let placed = pack_frames(&[object(2044, 2044), object(2044, 2044)]).unwrap();
-    assert_eq!(placed.iter().map(|p| p.page).collect::<Vec<_>>(), [2, 3]);
-    assert!(pack_frames(&[object(2044, 2044); 3]).is_err());
+fn complete_actor_animation_sets_can_use_three_object_pages() {
+    let placed = pack_frames(&[object(2044, 2044); 3]).unwrap();
+    assert_eq!(placed.iter().map(|p| p.page).collect::<Vec<_>>(), [2, 3, 4]);
+    assert!(pack_frames(&[object(2044, 2044); 4]).is_err());
 }
 
 #[test]
@@ -138,9 +138,14 @@ fn terrain_spills_to_one_but_never_borrows_two() {
 #[test]
 fn object_domain_overflows_while_both_terrain_pages_are_empty() {
     assert_eq!(
-        pack_frames(&[object(2044, 2044), object(2044, 2044), object(1, 1)]),
+        pack_frames(&[
+            object(2044, 2044),
+            object(2044, 2044),
+            object(2044, 2044),
+            object(1, 1)
+        ]),
         Err(PackingError::DomainOverflow {
-            index: 2,
+            index: 3,
             domain: AtlasDomain::Objects
         })
     );

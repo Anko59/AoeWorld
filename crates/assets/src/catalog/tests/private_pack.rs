@@ -167,12 +167,8 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
                 }
                 extents.push(FrameExtent {
                     domain: AtlasDomain::Objects,
-                    width: frame
-                        .width
-                        .div_ceil(super::buildings::pixel_step(&frame.source)),
-                    height: frame
-                        .height
-                        .div_ceil(super::buildings::pixel_step(&frame.source)),
+                    width: frame.width,
+                    height: frame.height,
                 });
                 counts[1] += 1;
             }
@@ -243,7 +239,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             }
         }
     }
-    if MAX_SELECTED_FRAMES != 5120 || PAGE_COUNT != 4 || ATLAS_BYTES != 67_108_864 {
+    if MAX_SELECTED_FRAMES != 5120 || PAGE_COUNT != 5 || ATLAS_BYTES != 83_886_080 {
         return Err("physical budget changed".into());
     }
     Ok((counts[0], counts[1]))

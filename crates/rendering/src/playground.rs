@@ -114,7 +114,7 @@ impl Renderer {
         if limits.max_texture_dimension_2d < side
             || limits.max_texture_array_layers < GAME_ATLAS_PAGES
         {
-            return Err("WebGPU cannot support the bounded three-page atlas".into());
+            return Err("WebGPU cannot support the bounded five-page atlas".into());
         }
         let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("local AoE II game atlas"),

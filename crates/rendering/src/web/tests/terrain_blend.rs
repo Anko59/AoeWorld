@@ -228,6 +228,7 @@ pub(super) async fn surface_renderer() -> Renderer {
     atlas[page_bytes * 2..page_bytes * 2 + 12]
         .copy_from_slice(&[0, 0, 255, 255, 255, 255, 0, 255, 0, 0, 0, 128]);
     atlas[page_bytes * 3..page_bytes * 3 + 4].copy_from_slice(&[255, 0, 255, 255]);
+    atlas[page_bytes * 4..page_bytes * 4 + 4].copy_from_slice(&[255, 128, 0, 255]);
     surface_renderer_with_atlas(&atlas).await
 }
 
