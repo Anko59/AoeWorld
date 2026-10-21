@@ -74,7 +74,7 @@ The extracted DE unit 45 supplies the implemented Dock LOS 8. This task does
 not implement the naval update's Dock garrison/arrows or whaling mechanics.
 
 The loader keeps bounded sampled fish and fisherman animation rows
-in the fixed four-page atlas and retains complete source validation. Ship idle,
+in the fixed five-page atlas and retains complete source validation. Ship idle,
 move and fishing graphics each have one native frame per facing. Fish animate
 independently of moving units, including while the camera is stationary.
 Ships and fishermen use the shared native actor path, including packed phase,

@@ -64,6 +64,56 @@ original-catalog qualification remains unavailable on this trial: its optional
 rock 15033 and snow 15026 sheets are absent. Portable complete-catalog tests
 and this real available-source measurement are separate evidence.
 
+## Native building atlas
+
+Every building, construction and ambient source packs at full native resolution
+(one atlas texel per source pixel); the half-resolution policy is removed. Measured
+on 2026-10-21 with `make building-proof` on trial pack
+`80d86805bb0ae23d78d26bc64904b068337323d9d18a3d2b1098ecc11dccdc60` merged with its
+DE overlay (4,868 selected frames, 1,310 of them terrain). Run it on a pack
+directory without symlinked overlay targets (the container does not mount them;
+a missing overlay silently drops the `de/` sources and 22 frames).
+
+| Object-domain texels | Frames | Half resolution | Native |
+|---|---|---|---|
+| Buildings: DAT bodies | 167 | 1,074,659 | 2,556,865 |
+| Construction: DAT stages | 15 | 129,827 | 516,263 |
+| Construction: fallback foundations | 3 | 32,736 | 130,944 |
+| Rubble and Palisade Gate | 19 | 374,896 | 763,216 |
+| Feudal supplemental | 1 | 6,888 | 27,552 |
+| Dark supplemental and ambient | 77 | 135,687 | 135,687 |
+| Fishing | 56 | 79,144 | 79,144 |
+| Units | 2,448 | 3,729,060 | 3,729,060 |
+| Resources and other objects | 772 | 2,011,223 | 2,011,223 |
+| Object total | 3,558 | 7,508,584 | 9,884,418 |
+
+Terrain (its own domain) stays 6,226,430 texels in 1,310 frames. Two object pages
+hold 8,388,608 texels, so native resolution overflows them by 1,495,810 texels.
+Before the budget moved, the old four pages packed at 82.9, 67.1, 90.7 and 88.3%.
+
+Lossless reclaim was measured first (`make building-proof` prints it): tight
+bounding boxes over the colour, player and shadow planes of every selected frame
+remove 542,542 texels (17,196 from building bodies, 8,552 from construction
+stages), and sharing frames with identical content removes 149,155 more (138,387 in
+unit cells, whose team colour the runtime bakes differently per owner). No mirrored
+pairs exist. Even with all of it the object domain needs about 9.26M texels, above
+the 8.39M of two pages, and a packer that lets objects borrow the terrain pages'
+spare rows still overflowed in the browser (the real client selects 9,713,951
+object texels). So the budget moved: `PAGE_COUNT` 4 to 5, terrain keeps pages 0-1
+and objects take pages 2-4. The packer, the 5,120-entry limit and the 2048 page
+side are unchanged. After the change: pages 2-4 pack at 90.6, 92.2 and 52.9%
+(9,884,418 of 12,582,912 texels, 2,698,494 free), terrain pages at 82.9 and 67.1%.
+
+Cost of the page: CPU atlas storage and GPU texture payload grow from 67,108,864
+to 83,886,080 bytes (+16,777,216 bytes, +25%; a 2048x2048x5 RGBA8 array texture
+and one 80 MiB WASM buffer). It is the texel payload only, not a measurement of
+driver overhead or dedicated VRAM. The download is unchanged: the source pages
+already held full-resolution texels and the old sampling skipped them. Start-up
+copies 2.4M more texels (about 9.5 MB); that was not timed separately. The WASM
+gzip cap and baseline are unchanged. The two ground sheets this trial lacks (rock
+15033, snow 15026, about 950,000 terrain texels) fit the terrain domain's 2,096,642
+spare texels by area; no pack with them was available to prove it.
+
 Dedicated machines can submit `reports/perf/hardware-environment.json` and
 `reports/perf/hardware-samples.json` to `make perf-hardware-check` (or pass
 `--environment`, `--samples`, and `--baseline` paths to the Rust CLI). The

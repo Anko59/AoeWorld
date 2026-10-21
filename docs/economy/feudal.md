@@ -117,12 +117,14 @@ retain the variant last seen until revisited; an unseen age-up does not change i
 Mill body/sails **741/737**. The Mill uses these layered parts even with
 a DE overlay: retaining 91 copies of the full DE body exceeds the fixed Objects
 atlas page. Present DE sources are still validated before that choice.
-The new building textures use one atlas texel per two source pixels. Native
-world sizes and hotspots stay unchanged; magnified views have coarser texels.
-Standing Dark Age bodies retain their sampling. Shared construction and
-ambient layers use half-resolution texels in both ages while retaining native
-geometry, anchors and animation loops.
-This keeps the fixed four-page/67,108,864-byte atlas from the unit-animation base, without raising a budget. Blacksmith's **2263** is absent from the trial.
+Every building, construction and ambient source packs at full native resolution:
+one atlas texel per source pixel, native world sizes, hotspots and animation
+loops. There is no half-resolution policy and no per-source sampling step. Native
+resolution needs 9,884,418 object texels, so the atlas grew from four to five
+2048-square RGBA8 pages (83,886,080 bytes, +16 MiB; terrain pages 0-1, objects
+pages 2-4). The numbers, the lossless reclaim that was measured first and the
+memory cost are in [performance](../performance.md#native-building-atlas).
+Blacksmith's **2263** is absent from the trial.
 Feudal camp parent SLPs **3503/3491** are absent too, but their native body
 deltas **3507/3495** are available. Both ages compose those DAT bodies; the
 optional DE overlay supplies art only when native layers are absent.

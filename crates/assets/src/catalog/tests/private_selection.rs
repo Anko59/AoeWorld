@@ -76,15 +76,14 @@ pub(super) fn append(
                 return Err("invalid supplemental rectangle".into());
             }
             let terrain = item.slot == 5;
-            let step = crate::catalog::buildings::pixel_step(&frame.source);
             extents.push(FrameExtent {
                 domain: if terrain {
                     AtlasDomain::Terrain
                 } else {
                     AtlasDomain::Objects
                 },
-                width: frame.width.div_ceil(step),
-                height: frame.height.div_ceil(step),
+                width: frame.width,
+                height: frame.height,
             });
             counts[usize::from(!terrain)] += 1;
         }

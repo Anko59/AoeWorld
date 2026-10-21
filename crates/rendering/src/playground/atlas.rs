@@ -1,7 +1,7 @@
 //! Scene addresses keep page selection attached to UVs across every backend.
 
 pub const GAME_ATLAS_SIDE: u32 = 2048;
-pub const GAME_ATLAS_PAGES: u32 = 4;
+pub const GAME_ATLAS_PAGES: u32 = 5;
 pub const GAME_ATLAS_PAGE_BYTES: usize = GAME_ATLAS_SIDE as usize * GAME_ATLAS_SIDE as usize * 4;
 pub const GAME_ATLAS_BYTES: usize = GAME_ATLAS_PAGE_BYTES * GAME_ATLAS_PAGES as usize;
 

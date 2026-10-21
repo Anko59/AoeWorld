@@ -68,7 +68,7 @@ test("villager build menu places a House and watches authoritative completion", 
   expect(frameCount).toBeLessThanOrEqual(5120);
   await writeFile(
     "../.cache/client-shots/atlas.json",
-    JSON.stringify({ assets, frameCount, pages: 4, atlasBytes: 67108864 }),
+    JSON.stringify({ assets, frameCount, pages: 5, atlasBytes: 83886080 }),
   );
   await page.screenshot({ path: "../.cache/client-shots/build-menu.png" });
   await page.locator("#build-house").click();

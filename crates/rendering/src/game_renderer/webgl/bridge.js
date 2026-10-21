@@ -2,7 +2,7 @@
 // module directly: no unregistered transitive shader/JS asset imports.
 const SIDE = 2048;
 const STRIDE = 112;
-const PAGES = 4;
+const PAGES = 5;
 const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_PIXELS = 4194304;
 

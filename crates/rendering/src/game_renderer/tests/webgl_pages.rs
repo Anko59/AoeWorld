@@ -94,7 +94,7 @@ export function restrict_array_limits(canvas, layers) {
 }
 export function restore_owned_pages(bridge, fail) {
     const source = bridge.atlasPixels;
-    if (source.byteLength !== 67108864) throw new Error('restoration owner size');
+    if (source.byteLength !== 83886080) throw new Error('restoration owner size');
     if (fail) bridge.initialize = () => { throw new Error('injected restoration error'); };
     bridge.onRestored();
     if (bridge.atlasPixels !== source) throw new Error('restoration cloned source');

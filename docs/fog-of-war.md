@@ -52,7 +52,7 @@ Ground illumination uses the existing surface mesh and interpolates shared
 vertex levels for soft edges. GPU fog uses the spare high atlas-page byte in
 the existing 112-byte packet; Canvas uses the same levels. Remembered buildings
 and resources are dimmed. The strategic map overlays the same three states.
-Fog shares the current four-page unit-animation atlas and existing WASM gzip gate.
+Fog shares the current five-page unit-animation atlas and existing WASM gzip gate.
 
 ## Values and sources
 

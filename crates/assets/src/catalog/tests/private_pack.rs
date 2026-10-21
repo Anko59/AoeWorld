@@ -167,12 +167,8 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
                 }
                 extents.push(FrameExtent {
                     domain: AtlasDomain::Objects,
-                    width: frame
-                        .width
-                        .div_ceil(super::buildings::pixel_step(&frame.source)),
-                    height: frame
-                        .height
-                        .div_ceil(super::buildings::pixel_step(&frame.source)),
+                    width: frame.width,
+                    height: frame.height,
                 });
                 counts[1] += 1;
             }
@@ -220,7 +216,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     for (index, (frame, placed)) in extents.iter().zip(&placements).enumerate() {
         let correct_domain = match frame.domain {
             AtlasDomain::Terrain => placed.page < 2,
-            AtlasDomain::Objects => (2..4).contains(&placed.page),
+            AtlasDomain::Objects => (2..5).contains(&placed.page),
         };
         if !correct_domain
             || placed.width != frame.width
@@ -243,7 +239,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             }
         }
     }
-    if MAX_SELECTED_FRAMES != 5120 || PAGE_COUNT != 4 || ATLAS_BYTES != 67_108_864 {
+    if MAX_SELECTED_FRAMES != 5120 || PAGE_COUNT != 5 || ATLAS_BYTES != 83_886_080 {
         return Err("physical budget changed".into());
     }
     Ok((counts[0], counts[1]))

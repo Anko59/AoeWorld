@@ -5,7 +5,7 @@ use wasm_bindgen_test::wasm_bindgen_test;
 fn equal_uvs_on_distinct_pages_remain_distinct_addresses() {
     let uv = [0.0, 0.0, 0.25, 0.5];
     assert_ne!(AtlasAddress::new(0, uv), AtlasAddress::new(1, uv));
-    assert_eq!(GAME_ATLAS_BYTES, 67_108_864);
+    assert_eq!(GAME_ATLAS_BYTES, 83_886_080);
     assert_eq!(AtlasAddress::WHITE.page, 2);
 }
 
