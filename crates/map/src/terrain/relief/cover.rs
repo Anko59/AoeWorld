@@ -47,6 +47,7 @@ impl MapChunkGenerator {
     /// one tile; north is toward smaller `y`.
     pub fn with_latitude(mut self, center_e7: i32, millimeters_per_tile: u64) -> Self {
         self.latitude = Some((center_e7, millimeters_per_tile));
+        self.point_memo = Default::default();
         self
     }
 

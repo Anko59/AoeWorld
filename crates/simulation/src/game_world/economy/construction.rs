@@ -1,7 +1,7 @@
 //! Placing foundations, villagers building them and finishing them.
 use super::{
-    BuildTask, BuildingKind, ConstructionState, EconomyError, MAX_BUILD_GROUP, MAX_BUILDERS,
-    MAX_ECONOMY_BUILDINGS, Stockpile, UnitKind, UnitTask,
+    BuildTask, BuildingKind, ConstructionState, EconomyError, MAX_BUILD_GROUP, Stockpile, UnitKind,
+    UnitTask,
     placement::{adjacent, distance_squared, perimeter, position},
 };
 use crate::{GameUnit, GameWorld};
@@ -61,7 +61,7 @@ impl GameWorld {
             .keys()
             .filter(|id| !ids.contains(id))
             .count();
-        if others + ids.len() > MAX_BUILDERS {
+        if others + ids.len() > self.economy.limits.builders {
             return Err(EconomyError::Capacity);
         }
         Ok(ids)
@@ -87,7 +87,7 @@ impl GameWorld {
         {
             return Err(EconomyError::RequirementMissing);
         }
-        if self.economy.buildings.len() + segments as usize > MAX_ECONOMY_BUILDINGS {
+        if self.economy.buildings.len() + segments as usize > self.economy.limits.buildings {
             return Err(EconomyError::Capacity);
         }
         let cost = scaled(rules.cost, segments);

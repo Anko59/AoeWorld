@@ -22,6 +22,7 @@ pub(crate) mod placement;
 mod start_site;
 mod starting_kit;
 mod tick;
+pub use tick::TickPhase;
 mod training;
 mod wall;
 
@@ -274,6 +275,32 @@ pub(crate) struct Economy {
     pub(crate) gatherers: BTreeMap<EntityId, GatherTask>,
     pub(crate) builders: BTreeMap<EntityId, BuildTask>,
     pub(crate) depletions: Vec<aoe_map::Depletion>,
+    pub(crate) limits: WorldLimits,
+}
+
+/// World-wide capacity limits. The default is the shipped village rules; only
+/// scale measurements replace it, through `GameWorld::set_limits`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WorldLimits {
+    pub players: usize,
+    pub buildings: usize,
+    pub gatherers: usize,
+    pub builders: usize,
+    pub hunters: usize,
+    pub animals: usize,
+}
+
+impl Default for WorldLimits {
+    fn default() -> Self {
+        Self {
+            players: MAX_ECONOMY_PLAYERS,
+            buildings: MAX_ECONOMY_BUILDINGS,
+            gatherers: MAX_GATHERERS,
+            builders: MAX_BUILDERS,
+            hunters: super::MAX_HUNTERS,
+            animals: super::MAX_ANIMALS,
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum GatherPhase {
@@ -308,6 +335,13 @@ pub(crate) struct BuildTask {
 }
 
 impl super::GameWorld {
+    pub fn limits(&self) -> WorldLimits {
+        self.economy.limits
+    }
+    /// Replace the capacity limits (scale measurements only).
+    pub fn set_limits(&mut self, limits: WorldLimits) {
+        self.economy.limits = limits;
+    }
     pub fn buildings(&self) -> impl Iterator<Item = &GameBuilding> {
         self.economy.buildings.values()
     }

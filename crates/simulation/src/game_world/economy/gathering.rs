@@ -1,6 +1,5 @@
 use super::{
-    CarriedResource, EconomyError, GatherPhase, GatherTask, MAX_GATHERERS, UnitKind, UnitTask,
-    VILLAGE_RULES,
+    CarriedResource, EconomyError, GatherPhase, GatherTask, UnitKind, UnitTask, VILLAGE_RULES,
     placement::{distance_squared, perimeter, position},
 };
 use crate::{GameUnit, GameWorld, GameWorldError, PreparedResourceDepletion, Terrain};
@@ -47,7 +46,7 @@ impl GameWorld {
         animal: EntityId,
     ) -> Result<(), EconomyError> {
         if !self.economy.gatherers.contains_key(&id)
-            && self.economy.gatherers.len() >= MAX_GATHERERS
+            && self.economy.gatherers.len() >= self.economy.limits.gatherers
         {
             return Err(EconomyError::Capacity);
         }
@@ -151,7 +150,7 @@ impl GameWorld {
             return Err(EconomyError::WrongUnitKind);
         }
         if !self.economy.gatherers.contains_key(&id)
-            && self.economy.gatherers.len() >= MAX_GATHERERS
+            && self.economy.gatherers.len() >= self.economy.limits.gatherers
         {
             return Err(EconomyError::Capacity);
         }

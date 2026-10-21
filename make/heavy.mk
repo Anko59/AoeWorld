@@ -31,6 +31,7 @@ SLOT_ENV := \
   -e AOE_MAP_HYDROLOGY_MODE \
   -e AOE_POLISH_SOURCE_URL \
   -e AOE_POLISH_SOURCE_HASH \
+  -e PERF_SCALE_ARGS \
   -e GIT_INDEX_FILE \
   -e RUST_TEST_THREADS \
   -e NEXTEST_TEST_THREADS \
@@ -101,6 +102,14 @@ perf-timing-steps:
 	@$(DOCKER_RUN) cargo bench --locked -p aoe-protocol --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
 	@$(DOCKER_RUN) cargo bench --locked -p aoe-assets --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-timing-report
+
+# Headless 100-player, 100,000-unit tick benchmark; PERF_SCALE_ARGS passes harness flags
+# (for example `PERF_SCALE_ARGS="--players 8 --ticks 100" make perf-scale`).
+perf-scale: tools slot-bootstrap
+	@$(SLOT_RUN) perf-scale -- make --no-print-directory perf-scale-steps
+
+perf-scale-steps:
+	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-scale $(PERF_SCALE_ARGS)
 
 perf-wasm-size: build-wasm analysis-tools slot-bootstrap
 	@$(SLOT_RUN) perf-wasm-size -- make --no-print-directory perf-wasm-size-steps
@@ -335,6 +344,7 @@ perf-soak-30-steps:
   perf-soak-30 \
   perf-instructions \
   perf-timing \
+  perf-scale \
   perf-wasm-size \
   perf-baseline-propose \
   perf-comment \
