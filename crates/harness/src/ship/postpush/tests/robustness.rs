@@ -147,7 +147,7 @@ fn lease_refresh_accepts_only_github_dev_merge_chains_and_still_detects_later_pu
             &["push", "-q", "origin", &format!("{tip}:feature")],
         );
         assert_eq!(
-            git::lease::refresh(&world.root, "feature", &start, &start).unwrap(),
+            git::lease::refresh(&world.root, "feature", &start, &start, &start).unwrap(),
             *tip
         );
     }
@@ -189,7 +189,7 @@ fn lease_refresh_accepts_only_github_dev_merge_chains_and_still_detects_later_pu
         );
         for expected in [&start[..], ""] {
             assert!(
-                git::lease::refresh(&world.root, "feature", expected, &start).is_err(),
+                git::lease::refresh(&world.root, "feature", expected, &start, &start).is_err(),
                 "{tip}"
             );
         }

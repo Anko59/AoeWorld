@@ -45,8 +45,9 @@ pub(in crate::ship) fn refresh(
     branch: &str,
     expected: &str,
     started: &str,
+    head: &str,
 ) -> Result<String> {
-    refresh_with(root, branch, expected, started, None)
+    refresh_with(root, branch, expected, started, head, false)
 }
 
 /// Without force, permit fast-forwards, updater merges, and our earlier patches.
@@ -62,7 +63,8 @@ pub(in crate::ship) fn refresh_default(
         branch,
         if existed { started } else { "" },
         started,
-        Some(head),
+        head,
+        true,
     )
 }
 
@@ -71,7 +73,8 @@ fn refresh_with(
     branch: &str,
     expected: &str,
     started: &str,
-    fast_forward: Option<&str>,
+    head: &str,
+    fast_forward: bool,
 ) -> Result<String> {
     let reference = format!("refs/heads/{branch}");
     if git(root, &["ls-remote", "origin", &reference])?.is_empty() {
@@ -93,9 +96,7 @@ fn refresh_with(
     if remote == expected || remote == started {
         return Ok(remote);
     }
-    if fast_forward
-        .is_some_and(|head| git(root, &["merge-base", "--is-ancestor", &remote, head]).is_ok())
-    {
+    if fast_forward && git(root, &["merge-base", "--is-ancestor", &remote, head]).is_ok() {
         return Ok(remote);
     }
     git(
@@ -117,7 +118,9 @@ fn refresh_with(
         );
         return Ok(remote);
     }
-    if super::own_push::earlier(root, &dev, &remote, fast_forward.unwrap_or("HEAD"))? {
+    // The checkout can advance while this ship waits for the lock. Only the
+    // evidenced commit being pushed may authorize replacing an earlier push.
+    if super::own_push::earlier(root, &dev, &remote, head)? {
         eprintln!("ship: origin/{branch} held an earlier push of the same patch; replacing it");
         return Ok(remote);
     }

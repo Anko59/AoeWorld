@@ -81,7 +81,9 @@ pub(in crate::ship) fn push(
     lease: Option<String>,
 ) -> Result<()> {
     let lease = if evidence.head != started && lease.is_none() {
-        recheck::lease(root, options, &git::subject(root)?, started)?
+        // Keep checkout validation separate from the immutable push target.
+        git::subject(root)?;
+        recheck::lease(root, options, &evidence.branch, &evidence.head, started)?
     } else {
         lease
     };
@@ -89,7 +91,7 @@ pub(in crate::ship) fn push(
         .as_deref()
         .or(options.force.then_some(tracking.unwrap_or("")));
     let refreshed = match expected {
-        Some(tip) => git::lease::refresh(root, &evidence.branch, tip, started),
+        Some(tip) => git::lease::refresh(root, &evidence.branch, tip, started, &evidence.head),
         None => git::lease::refresh_default(
             root,
             &evidence.branch,

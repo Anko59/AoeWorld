@@ -120,7 +120,10 @@ the ship's starting head are two-parent merges committed by `GitHub
 leases on the fetched head. A remote holding an earlier push of the same patch
 also becomes the lease base: compare stable per-commit patch IDs and authors
 against the current dev, in order, skipping GitHub merges of dev. The remote
-sequence must equal the local sequence or be its prefix. Extra, reordered,
+sequence must equal the evidenced push commit's sequence or be its prefix,
+including with `SHIP_FORCE=1`. The checkout's mutable HEAD never supplies this
+comparison: it may have advanced while this ship waited for the lock. A remote
+with more patches than the pushed commit refuses. Extra, reordered,
 modified or foreign-author commits refuse; empty commits without a patch ID
 are not inferred to be our own. Ship prints
 `ship: origin/<branch> held an earlier push of the same patch; replacing it`.

@@ -81,6 +81,39 @@ fn ownlease_refuses_foreign_modified_extra_and_reordered_remote_patches() {
 }
 
 #[test]
+fn ownlease_push_uses_evidence_even_when_the_checkout_advanced_after_a_rebase() {
+    for force in [true, false] {
+        for explicit in [false, true] {
+            let (_temp, root) = fixture("true");
+            let started = head(&root);
+            run(&root, &["push", "-q", "origin", "feature"]);
+            add(&root, "reviewed.txt");
+            let evidence = judge(&root, &offline()).unwrap();
+            add(&root, "newer.txt");
+            run(&root, &["push", "-q", "origin", "feature"]);
+            let newer = head(&root);
+            let error = crate::ship::postpush::draft::push(
+                &root,
+                &evidence,
+                &Options { force, ..offline() },
+                &started,
+                Some(&started),
+                explicit.then(|| started.clone()),
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(
+                error.contains("changed beyond the expected head")
+                    || error.contains("SHIP_FORCE=1"),
+                "force={force}, explicit={explicit}: {error}"
+            );
+            assert_eq!(remote_tip(&root, "feature"), newer);
+            assert_eq!(head(&root), newer);
+        }
+    }
+}
+
+#[test]
 fn ownlease_keeps_the_exact_lease_against_a_later_remote_writer() {
     let (temp, root) = fixture("true");
     run(&root, &["push", "-q", "origin", "feature"]);

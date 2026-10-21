@@ -392,9 +392,11 @@ fn missing_ci_run_is_pending_and_api_failure_preserves_review_failure() {
 
 #[test]
 fn ownlease_real_ship_cli_reports_queued_and_not_started_ci() {
-    for (runs, expected) in [
-        (None, "CI: queued (run 123)"),
-        (Some("{\"workflow_runs\":[]}"), "CI: not started yet"),
+    for (force, runs, expected) in [
+        ("0", None, "CI: queued (run 123)"),
+        ("1", None, "CI: queued (run 123)"),
+        ("0", Some("{\"workflow_runs\":[]}"), "CI: not started yet"),
+        ("1", Some("{\"workflow_runs\":[]}"), "CI: not started yet"),
     ] {
         let (mut world, options) = setup();
         world.answer("jobs", r#"[{"jobs":[]}]"#);
@@ -426,6 +428,7 @@ printf 'AOE-REVIEW-BEGIN\n%s\nAOE-REVIEW-END\n' "$answer"
             options.body_file.as_ref().unwrap().to_str().unwrap(),
         );
         world.set("SHIP_TITLE", options.title.as_ref().unwrap());
+        world.set("SHIP_FORCE", force);
         let output = world.cli("ship");
         let text = format!(
             "{}{}",
@@ -434,9 +437,10 @@ printf 'AOE-REVIEW-BEGIN\n%s\nAOE-REVIEW-END\n' "$answer"
         );
         assert!(output.status.success(), "{text}");
         assert!(
-            text.contains(
-                "ship: origin/feature held an earlier push of the same patch; replacing it"
-            ),
+            force == "1"
+                || text.contains(
+                    "ship: origin/feature held an earlier push of the same patch; replacing it"
+                ),
             "{text}"
         );
         assert!(
