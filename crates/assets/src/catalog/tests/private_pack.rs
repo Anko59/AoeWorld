@@ -12,6 +12,9 @@ use std::io::Read;
 
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 
+#[path = "private_selection.rs"]
+mod selection;
+
 fn reviewed_sources() -> impl Iterator<Item = (String, u32, AtlasDomain, usize)> {
     REQUIRED_RENDER_SOURCES
         .iter()
@@ -92,7 +95,10 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             {
                 return Err("invalid source rectangle".into());
             }
-            if drawn.as_ref().map_or(number % step == 0, |cells| cells.contains(&frame.frame)) {
+            if drawn
+                .as_ref()
+                .map_or(number % step == 0, |cells| cells.contains(&frame.frame))
+            {
                 selected.insert((frame.source.clone(), frame.frame));
                 counts[usize::from(domain == AtlasDomain::Objects)] += 1;
                 extents.push(FrameExtent {
@@ -109,7 +115,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         .sum::<usize>();
     // 45 cavalry idle and 70 villager idle cells are not drawn.
     if extents.len() != MAX_REVIEWED_FRAMES as usize + actor_count - 115
-        || counts != [1474, 895 + actor_count - 115]
+        || counts != [1474, 887 + actor_count - 115]
     {
         return Err("incomplete semantic selection".into());
     }
@@ -206,6 +212,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             }
         }
     }
+    selection::append(manifest, &mut extents, &mut counts)?;
     let placements = pack_frames(&extents).map_err(|error| error.to_string())?;
     if placements.len() != extents.len() {
         return Err("truncated placements".into());
@@ -248,13 +255,15 @@ fn original_manifest_all_reviewed_frames_fit_fixed_atlas() -> Result<(), Box<dyn
 {
     let path = std::env::var_os("AOE_REVIEWED_PACK_MANIFEST")
         .ok_or("AOE_REVIEWED_PACK_MANIFEST is required")?;
-    let file = std::fs::File::open(path)?;
+    let path = std::path::PathBuf::from(path);
+    let file = std::fs::File::open(&path)?;
     let mut bytes = Vec::new();
     file.take(MAX_MANIFEST_BYTES + 1).read_to_end(&mut bytes)?;
     if bytes.len() as u64 > MAX_MANIFEST_BYTES {
         return Err("manifest exceeds 32MiB".into());
     }
-    let manifest: Manifest = serde_json::from_slice(&bytes)?;
+    let mut manifest: Manifest = serde_json::from_slice(&bytes)?;
+    selection::overlay(&path, &mut manifest)?;
     let (terrain, objects) = prove(&manifest)?;
     eprintln!(
         "private metadata proof input={} selected={} terrain={} objects={} pages={} bytes={}",
@@ -271,7 +280,15 @@ fn original_manifest_all_reviewed_frames_fit_fixed_atlas() -> Result<(), Box<dyn
 #[test]
 fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
-    assert_eq!(prove(&manifest).unwrap(), (1474, 895 + actor_frames() - 115));
+    assert_eq!(
+        actor_frames(),
+        2160,
+        "military and projectile cells included"
+    );
+    assert_eq!(
+        prove(&manifest).unwrap(),
+        (1474, 887 + actor_frames() - 115)
+    );
     let saved = manifest.frames[0].clone();
     manifest.frames[0].frame = 1;
     assert!(prove(&manifest).is_err());
@@ -381,7 +398,10 @@ fn full_catalog_with_native_mill_dock_and_farm_fits_runtime_budget() {
             }
         }
     }
-    assert_eq!(prove(&manifest).unwrap(), (1510, 895 + actor_frames() - 115 + 74));
+    assert_eq!(
+        prove(&manifest).unwrap(),
+        (1510, 887 + actor_frames() - 115 + 74)
+    );
 }
 
 #[test]
@@ -417,7 +437,10 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
             manifest.frames.push(record);
         }
     }
-    assert_eq!(prove(&manifest).unwrap(), (1474, 895 + actor_frames() - 115 + 15));
+    assert_eq!(
+        prove(&manifest).unwrap(),
+        (1474, 887 + actor_frames() - 115 + 15)
+    );
     for index in manifest.frames.len() - 15..manifest.frames.len() {
         let mut bad = manifest.clone();
         bad.frames.remove(index);
@@ -432,5 +455,8 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
 }
 
 fn actor_frames() -> usize {
-    super::units::SPRITES.iter().map(|s| s.selected_frames()).sum()
+    super::units::SPRITES
+        .iter()
+        .map(|s| s.selected_frames())
+        .sum()
 }

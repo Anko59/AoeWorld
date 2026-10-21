@@ -9,11 +9,7 @@ pub fn scene_building_visible(
     animation: usize,
 ) -> bool {
     let mut visible = false;
-    if unit.kind == crate::SceneUnitKind::TownCenter {
-        village::town_center(art, unit, camera, &mut |_| visible = true);
-    } else {
-        village::building(art, unit, camera, animation, &mut |_| visible = true);
-    }
+    village::building(art, unit, camera, animation, &mut |_| visible = true);
     visible
 }
 
