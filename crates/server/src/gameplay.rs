@@ -136,6 +136,14 @@ enum PendingAction {
     CancelResearch {
         building_id: EntityId,
     },
+    MarketBuy {
+        building_id: EntityId,
+        resource: aoe_protocol::TradeResource,
+    },
+    MarketSell {
+        building_id: EntityId,
+        resource: aoe_protocol::TradeResource,
+    },
 }
 
 #[derive(Clone, Copy)]

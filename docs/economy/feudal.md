@@ -56,8 +56,29 @@ units and remains open while any unit occupies it; other rotations and locking
 are not implemented. Long-distance route planning still sees a closed gate as
 blocked until a friendly unit approaches it.
 
-**Market trading is deferred.** There are no buy/sell buttons, trade commands,
-prices, fee calculations or trade carts in this change.
+## Market trading
+
+A completed, owned Market sells and buys 100 units of wood, food or stone for
+gold at the player's own price. Each player starts every commodity at 100 gold
+per 100 units. **Buy** costs the price plus a 30% commission (100 -> 130 gold,
+integer floor) and raises that price by 3; **sell** pays the price minus 30%
+(100 -> 70) and lowers it by 3. Prices clamp to [20, 9999]. A trade needs the
+gold (buy) or 100 units (sell); a non-Market, unfinished or foreign building is
+refused, as are trades without enough resources; `RejectedNoMarket` is the wire
+reason for a building that is not a Market. Prices live in each
+`GameplayPlayerState` snapshot (append-only fields) and in the replay hash.
+Only trades move prices; there is no passive recovery, trade cart, tribute or
+Guilds fee reduction yet.
+
+**Constants and sources.** The Genie dat carries no trading fields: the
+`dat-table` survey in `local-assets/dat-table` and the SiegeEngineers
+extractions cited above contain no price, commission or step values. The
+values (100 base, 30% fee, step 3, floor 20, ceiling 9999) are DE's published
+Market rules as recorded on the Age of Empires II wiki Market page; they could
+not be cross-checked offline against the install, so treat the floor, ceiling
+and step as documented-but-unverified and re-check against a DE game before
+v1.0. They live in one table, `MARKET_RULES` (`economy/market/mod.rs`), mirrored
+by `MARKET_MIN_PRICE`/`MARKET_MAX_PRICE` for wire validation.
 
 The economic (B) and military (V) pages use the install's **definitive**
 bindings in `resources/_common/dat/hotkeys.json`: Range W, Stable E,

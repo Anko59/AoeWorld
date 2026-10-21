@@ -15,6 +15,7 @@ fn player() -> GameplayPlayerState {
         population_cap: 5,
         age: aoe_protocol::Age::Dark,
         researched: 0,
+        market_prices: aoe_protocol::MarketPrices::default(),
     }
 }
 fn building() -> GameplayBuildingState {

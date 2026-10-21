@@ -2,6 +2,7 @@ import type { Page, WebSocketRoute } from "@playwright/test";
 import { scoutCombat, villagerCombat } from "../../wire/combat.js";
 import {
   darkAgeState,
+  marketPrices,
   feudalAgeState,
   townCenterState,
   fishingShipState,
@@ -103,6 +104,7 @@ export async function fiveVillagerFixture(
           6,
           10,
           ...(feudal ? feudalAgeState : darkAgeState),
+          ...marketPrices,
           1,
           1,
           0,

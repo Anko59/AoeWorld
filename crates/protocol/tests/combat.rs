@@ -136,6 +136,7 @@ fn combat_state_round_trips_for_units_and_buildings() {
             population_cap: 0,
             age: aoe_protocol::Age::Dark,
             researched: 0,
+            market_prices: aoe_protocol::MarketPrices::default(),
         }],
         buildings: vec![center(1)],
     };

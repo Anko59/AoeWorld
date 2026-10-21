@@ -17,6 +17,7 @@ pub(super) fn feudal(w: &mut GameWorld) {
             population_cap: 200,
             age: Age::Feudal,
             researched: Tech::FeudalAge.bit(),
+            market_prices: crate::MarketPrices::default(),
         },
     );
 }

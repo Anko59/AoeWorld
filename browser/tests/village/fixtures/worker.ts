@@ -1,5 +1,6 @@
 import {
   darkAgeState,
+  marketPrices,
   wheelbarrowAgeState,
   fishingShipState,
 } from "../../wire/buildings.js";
@@ -95,6 +96,7 @@ export async function workerFixture(page: Page, feudal = false) {
           feudal ? 4 : 3,
           5,
           ...(feudal ? wheelbarrowAgeState : darkAgeState),
+          ...marketPrices,
           0,
         ]),
       );

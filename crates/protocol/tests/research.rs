@@ -3,7 +3,7 @@
 use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect};
 use aoe_protocol::{
     Age, BuildingKind, CommandResult, ConstructionState, GameplayBuildingState,
-    GameplayClientMessage, GameplayError, GameplayPlayerState, GameplayServerMessage,
+    GameplayClientMessage, GameplayError, GameplayPlayerState, GameplayServerMessage, MarketPrices,
     ResearchState, Stockpile, Tech, TrainingState, UnitKind, decode_gameplay_client,
     decode_gameplay_server, encode_gameplay_client, encode_gameplay_server,
 };
@@ -16,6 +16,7 @@ fn player(age: Age, researched: u32) -> GameplayPlayerState {
         population_cap: 5,
         age,
         researched,
+        market_prices: MarketPrices::default(),
     }
 }
 
@@ -119,8 +120,8 @@ fn research_state_has_current_golden_wire_and_round_trips() {
 }
 
 const GOLDEN_TICK: &[u8] = &[
-    2, 2, 9, 0, 0, 1, 0, 0, 0, 0, 0, 4, 5, 1, 5, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18,
-    224, 18, 8, 0, 0, 1, 0, 125, 244, 3, 0, 0, 0, 0,
+    2, 2, 9, 0, 0, 1, 0, 0, 0, 0, 0, 4, 5, 1, 5, 100, 100, 100, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232,
+    7, 224, 18, 224, 18, 8, 0, 0, 1, 0, 125, 244, 3, 0, 0, 0, 0,
 ];
 
 #[test]

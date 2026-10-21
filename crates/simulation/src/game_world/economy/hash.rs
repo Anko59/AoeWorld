@@ -17,6 +17,13 @@ impl Economy {
             hash.update(&player.population_cap.to_le_bytes());
             hash.update(&[player.age as u8]);
             hash.update(&player.researched.to_le_bytes());
+            for price in [
+                player.market_prices.wood,
+                player.market_prices.food,
+                player.market_prices.stone,
+            ] {
+                hash.update(&price.to_le_bytes());
+            }
         }
         hash.update(&(self.open_gates.len() as u64).to_le_bytes());
         for id in &self.open_gates {

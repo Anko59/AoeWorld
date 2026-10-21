@@ -21,12 +21,12 @@ pub use game_world::{
     Age, BUILDING_COMBAT, BUILDING_RULES, BuildingAttack, BuildingCombat, BuildingKind,
     BuildingRules, CORPSE_SECONDS, CarriedResource, CombatStats, ConstructionState, DYING_SECONDS,
     DamageKind, EconomyError, FEUDAL_BUILDINGS, Facing, GameBuilding, GameUnit, GameWorld,
-    GameWorldError, HitRecord, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, MovementOrder,
-    PlayerEconomy, PreparedResourceDepletion, Projectile, ProjectileKind, ResearchEntry, Stockpile,
-    TECH_RULES, Tech, TechEffect, TechRequirement, TechRules, TrainingEntry, UNIT_COMBAT,
-    UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VILLAGE_RULES, VillageRules,
-    building_combat, damage_dealt, researched_stats, trainable_units, unit_combat,
-    villager_capacity,
+    GameWorldError, HitRecord, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS,
+    MarketPrices, MovementOrder, PlayerEconomy, PreparedResourceDepletion, Projectile,
+    ProjectileKind, ResearchEntry, Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement,
+    TechRules, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining,
+    VILLAGE_RULES, VillageRules, building_combat, damage_dealt, researched_stats, trainable_units,
+    unit_combat, villager_capacity,
 };
 pub use game_world::{
     AnimalKind, AnimalTask, GameAnimal, MAX_ANIMALS, MAX_HUNTERS, WILDLIFE_RULES, WildlifeRules,

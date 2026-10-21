@@ -1,5 +1,7 @@
 #[path = "economy/feudal.rs"]
 mod feudal;
+#[path = "economy/market.rs"]
+mod market;
 #[path = "economy/military.rs"]
 mod military;
 #[path = "economy/techs.rs"]

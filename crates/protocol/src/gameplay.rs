@@ -156,6 +156,20 @@ pub enum ClientMessage {
         sequence: u64,
         entity_id: EntityId,
     },
+    /// Buy 100 units of a commodity for gold at a completed, owned Market;
+    /// the cost is the current price plus DE's 30% commission.
+    MarketBuy {
+        sequence: u64,
+        building_id: EntityId,
+        resource: TradeResource,
+    },
+    /// Sell 100 units of a commodity for gold at a completed, owned Market;
+    /// the payout is the current price minus DE's 30% commission.
+    MarketSell {
+        sequence: u64,
+        building_id: EntityId,
+        resource: TradeResource,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -190,6 +204,8 @@ pub enum CommandResult {
     RejectedResearchBusy,
     RejectedTechRequirement,
     RejectedRequiresFeudalAge,
+    /// Trading needs a completed Market owned by the player.
+    RejectedNoMarket,
 }
 
 /// Immutable physical properties of the active geographic map. The package

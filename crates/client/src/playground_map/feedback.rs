@@ -156,6 +156,7 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
         RejectedAlreadyResearched => "That technology is already researched.",
         RejectedResearchBusy => "That research is already underway or the building is busy.",
         RejectedRequiresFeudalAge => "Requires Feudal Age.",
+        RejectedNoMarket => "Trading needs a completed Market of yours.",
         RejectedTechRequirement => "That technology's requirements are not met.",
         RejectedFarmUnavailable => "That farm is exhausted or already being worked.",
         RejectedInvalidDestination => match blocker {

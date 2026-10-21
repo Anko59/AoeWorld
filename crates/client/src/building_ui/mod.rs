@@ -67,6 +67,34 @@ pub fn affordable(have: Stockpile, need: Stockpile) -> bool {
         && have.stone >= need.stone
 }
 
+/// Market trade panel numbers: three gold prices, then three buy and three
+/// sell enable flags for wood, food and stone. Buttons stay disabled unless
+/// the selected building is the owner's completed Market; the server decides.
+#[inline(never)]
+pub fn market_panel(
+    market_owned_complete: bool,
+    prices: aoe_protocol::MarketPrices,
+    have: Stockpile,
+) -> [f64; 9] {
+    let rules = aoe_simulation::MARKET_RULES;
+    let mut panel = [0.0; 9];
+    for (i, (resource, price)) in [
+        (have.wood, prices.wood),
+        (have.food, prices.food),
+        (have.stone, prices.stone),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        panel[i] = f64::from(price);
+        let buy = have.gold >= rules.buy_cost(price);
+        let sell = resource >= rules.trade_amount;
+        panel[3 + i] = f64::from(u8::from(market_owned_complete && buy));
+        panel[6 + i] = f64::from(u8::from(market_owned_complete && sell));
+    }
+    panel
+}
+
 #[inline(never)]
 pub fn build_enabled(
     kind: BuildingKind,

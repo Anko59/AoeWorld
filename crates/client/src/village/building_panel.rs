@@ -179,6 +179,15 @@ pub(super) fn update(client: &Client) {
     v.push(f64::from(u8::from(
         player.is_some_and(|p| p.researched & Tech::ManAtArms.bit() != 0),
     )));
+    let market = b.is_some_and(|b| {
+        b.kind == aoe_protocol::BuildingKind::Market
+            && b.player == owner(client)
+            && b.construction == ConstructionState::Complete
+    });
+    v.extend(match player {
+        Some(p) => building_ui::market_panel(market, p.market_prices, p.stockpile),
+        None => [0.0; 9],
+    });
     buildings_update(&v);
 }
 
@@ -296,6 +305,46 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let target = shared.clone();
         let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
             super::orders::train_kind(&mut target.borrow_mut(), kind);
+        });
+        button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
+        callback.forget();
+    }
+    for (i, id) in [
+        "market-buy-wood",
+        "market-buy-food",
+        "market-buy-stone",
+        "market-sell-wood",
+        "market-sell-food",
+        "market-sell-stone",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let Some(button) = shared.borrow().document.get_element_by_id(id) else {
+            continue;
+        };
+        let target = shared.clone();
+        let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
+            let mut client = target.borrow_mut();
+            let Some(building_id) = client.selected.building_id else {
+                return;
+            };
+            let sequence = client.next_sequence;
+            let resource = aoe_protocol::TradeResource::ALL[i % 3];
+            let message = if i < 3 {
+                Message::MarketBuy {
+                    sequence,
+                    building_id,
+                    resource,
+                }
+            } else {
+                Message::MarketSell {
+                    sequence,
+                    building_id,
+                    resource,
+                }
+            };
+            send(&mut client, message);
         });
         button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
         callback.forget();
