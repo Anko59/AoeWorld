@@ -71,6 +71,19 @@ visible. Wire positions describe only the visible remainder; unseen endpoints
 are redacted. Storage is capped at 4,096 live shots; ticks scan that bounded
 set and active attackers, never all unit pairs. Shots enter replay hashes.
 
+Out-of-range attacks search the attacker's reachable tiles for a firing position
+inside its researched maximum range and outside its minimum range. Melee uses
+the same search with one-tile reach. Water, occupied building footprints and
+uncrossable edges block movement, while targets on those tiles can still be hit
+from shore or an adjacent tile. Canonical integer search bounds expansions,
+visited tiles and retained frontier entries to 8,192 each. Rejection says no
+reachable attack position was found within that bounded search; it does not
+prove disconnection beyond the bound. Chasing retains the one-second repath
+cadence. The server reports the existing unreachable-route acknowledgement,
+so the client explains that no reachable route was found. `make perf-timing`
+includes 16 approach orders against a blocked Town Center footprint; hosted
+timings remain informational.
+
 ## Blacksmith
 
 All effects apply to existing and future units/buildings and use ordinary
@@ -120,8 +133,10 @@ browser `wire/*` pin one current protocol; no legacy decoder is retained.
 
 Gate art never scans resident units. A bounded cache recomputes visible gates
 only when authoritative open/construction inputs change, using prepared terrain
-height for culling. Regressions cover absent unseen holding units, unchanged
-gates and gates outside the viewport.
+height for culling. Visibility uses the renderer's selected sprite frames,
+native hotspots and projected bounds at the current zoom, including open gates
+and construction stages. Regressions cover absent unseen holding units,
+unchanged gates, zoom-three overlap and gates wholly outside the viewport.
 
 `POST /maps/reset?scenario=feudal-military` prepares a rich Feudal village with
 Range, Barracks, Stable, Blacksmith, housing and two enemy targets. Its five-Hz

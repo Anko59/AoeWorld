@@ -1,9 +1,6 @@
 //! Per-tick attack resolution for units that hold an attack order.
 use super::{Attacker, HitRecord, MELEE_RANGE_SUBUNITS, damage_dealt, unit_combat};
-use crate::game_world::{
-    economy::placement::{perimeter, position},
-    facing_for,
-};
+use crate::game_world::facing_for;
 use crate::{GameUnit, GameWorld, UnitTask};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, Tick, TileRect, WorldPosition};
 
@@ -54,28 +51,6 @@ impl GameWorld {
             .get(&target)
             .filter(|building| building.hp > 0 && building.player != attacker)
             .map(|building| Goal::Building(building.footprint))
-    }
-
-    /// Unit targets are approached directly; buildings through the nearest
-    /// walkable tile of their perimeter.
-    pub(crate) fn attack_destination(
-        &self,
-        from: WorldPosition,
-        goal: &Goal,
-    ) -> Option<WorldPosition> {
-        match *goal {
-            Goal::Unit(at) => Some(at),
-            Goal::Building(rect) => perimeter(rect)
-                .into_iter()
-                .filter(|tile| self.tile_passable(*tile))
-                .filter_map(|tile| {
-                    let at = position(tile).ok()?;
-                    let (dx, dy) = (i64::from(at.x - from.x), i64::from(at.y - from.y));
-                    Some((dx * dx + dy * dy, tile, at))
-                })
-                .min_by_key(|(distance, tile, _)| (*distance, tile.y, tile.x))
-                .map(|(_, _, at)| at),
-        }
     }
 
     pub(crate) fn advance_combat(&mut self, changed: &mut Vec<GameUnit>) {
@@ -167,13 +142,17 @@ impl GameWorld {
             self.end_attack(id, changed);
             return;
         }
-        // The perimeter search runs only when the repath timer has expired.
+        // The firing-position search runs only when the repath timer expires.
         if now >= attacker.repath_tick {
-            let destination = self.attack_destination(before.position, &goal);
+            let next_repath = now.saturating_add(self.repath_ticks());
+            if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                entry.repath_tick = next_repath;
+            }
+            let destination = self.attack_destination(id, &goal).ok().flatten();
             let stale = match (order, destination) {
                 (None, _) => true,
                 (Some(order), Some(at)) => order.target_tile != at.tile_floor(),
-                (Some(_), None) => false,
+                (Some(_), None) => true,
             };
             if stale {
                 self.repath_attacker(id, destination, now, changed);

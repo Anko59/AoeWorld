@@ -2,6 +2,7 @@
 use super::*;
 use crate::{BUILDING_COMBAT, DamageKind, EconomyError, UNIT_COMBAT, UnitTask, damage_dealt};
 
+mod approach;
 mod buildings;
 mod military;
 mod research_tests;

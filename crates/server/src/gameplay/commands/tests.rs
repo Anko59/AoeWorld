@@ -184,3 +184,33 @@ fn a_wall_order_at_the_coordinate_limit_is_rejected_as_invalid_placement() {
     );
     assert_eq!(result, CommandResult::RejectedInvalidPlacement);
 }
+
+#[test]
+fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
+    use aoe_core::{PlayerId, TileCoord, WorldConfig};
+    use aoe_simulation::GameWorld;
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let attacker = world.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
+    let target = world.spawn_villager(PlayerId(1), at(106, 100)).unwrap();
+    // Four non-overlapping footprints enclose all eight neighboring tiles.
+    // Their vision also keeps the target visible to the commanding player.
+    for (x, y) in [(96, 97), (100, 96), (101, 100), (97, 101)] {
+        world
+            .place_town_center(PlayerId(0), TileCoord::new(x, y))
+            .unwrap();
+    }
+    let before = world.canonical_hash();
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(0),
+            PendingAction::Attack {
+                entity_id: attacker,
+                target_id: target,
+            }
+        ),
+        CommandResult::RejectedUnreachable,
+    );
+    assert_eq!(world.canonical_hash(), before);
+}

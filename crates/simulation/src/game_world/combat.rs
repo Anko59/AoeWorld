@@ -9,6 +9,7 @@ use super::{EconomyError, GameUnit, GameWorld, UnitTask};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, Tick};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod approach;
 mod cost;
 mod hash;
 mod lifecycle;
@@ -81,7 +82,7 @@ impl GameWorld {
     }
 
     /// Order `id` to attack another player's unit or building. The unit walks
-    /// into melee range, then hits every attack period until the target is
+    /// into attack range, then hits every attack period until the target is
     /// gone. A plain move or gather order cancels the attack.
     pub fn issue_attack(
         &mut self,
@@ -117,10 +118,10 @@ impl GameWorld {
         ) * MELEE_RANGE_SUBUNITS;
         if goal.distance_squared(unit.position) <= range * range {
             self.stop_movement(index);
-        } else if let Some(destination) = self.attack_destination(unit.position, &goal) {
+        } else if let Some(destination) = self.attack_destination(id, &goal)? {
             self.issue_task_move(id, destination)?;
         } else {
-            return Err(EconomyError::InvalidTarget);
+            return Err(EconomyError::NoAttackPosition);
         }
         self.stop_gathering(id);
         self.economy.builders.remove(&id);

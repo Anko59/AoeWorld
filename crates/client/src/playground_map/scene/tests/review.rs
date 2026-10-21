@@ -11,6 +11,8 @@ mod budget;
 mod fishing;
 #[path = "fixture.rs"]
 mod fixture;
+#[path = "gates.rs"]
+mod gates;
 
 fn contact_scene() -> PreparedScene {
     let generator = fixture::plane(-432, -432);

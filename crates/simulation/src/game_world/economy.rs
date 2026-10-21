@@ -225,6 +225,8 @@ pub enum EconomyError {
     TrainingQueueFull,
     #[error("attack target is unknown, dead or belongs to the same player")]
     InvalidTarget,
+    #[error("no reachable attack position within the bounded search")]
+    NoAttackPosition,
     #[error("not enough resources")]
     InsufficientResources,
     #[error("town center footprint or spawn perimeter is unsuitable")]
