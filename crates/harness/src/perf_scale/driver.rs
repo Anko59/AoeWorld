@@ -27,6 +27,8 @@ pub(super) struct Driver {
     rate_millis_per_tick: u64,
     pub outcomes: Outcomes,
     pub issued: u64,
+    /// Drops attack orders (they would change outcome once far attacks succeed).
+    pub skip_attacks: bool,
 }
 
 impl Driver {
@@ -39,6 +41,7 @@ impl Driver {
             rate_millis_per_tick: (per_tick * 1000.0).round() as u64,
             outcomes: Outcomes::default(),
             issued: 0,
+            skip_attacks: false,
         }
     }
 
@@ -137,6 +140,9 @@ impl Driver {
     }
 
     fn attack(&mut self, world: &mut GameWorld, players: &[Player], index: usize) {
+        if self.skip_attacks {
+            return;
+        }
         let enemy = &players[(index + 1) % players.len()];
         if let Some(unit) = self.pick(&players[index].military) {
             let result = world.issue_attack(players[index].id, unit, enemy.town_center);

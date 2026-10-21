@@ -1,3 +1,10 @@
+//! Pins the replay hashes of a small, fixed scenario with movers, gathering,
+//! construction and short routes, so movement and terrain-cache changes prove
+//! they are behaviour-preserving. The values were computed before the chunk
+//! cache and the hierarchical planner existed, with `perf-scale --players 4
+//! --units-per-player 80 --side-tiles 2048 --fight-size 4 --skip-attacks
+//! --ticks 300 --fog-off-ticks 0 --hash-every 100 --server-ticks 0`
+//! (revision 7867e9a3).
 use super::*;
 
 fn smoke_options(out: PathBuf) -> Options {
@@ -14,6 +21,7 @@ fn smoke_options(out: PathBuf) -> Options {
         server_ticks: 3,
         subscribers: 4,
         idle_world: false,
+        skip_attacks: false,
         out,
     }
 }
@@ -63,4 +71,52 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
         1000.0 / f64::from(built.world.config().tick_hz)
     );
     assert_eq!(run.json()["tick_budget_ms"], run.budget_ms);
+const PINNED_HASHES: [(u64, &str); 3] = [
+    (
+        100,
+        "787698348b1a9a6d414b04acc7c8f3f38ce1644f87165ae9ca1dd0c5c66dea3f",
+    ),
+    (
+        200,
+        "55931e036a4170b1479ffdd779ed4c0f022104f675b7275388f1dec5ef64d9df",
+    ),
+    (
+        300,
+        "2500c5972dfe169f33b256089171530a5fcd0e5ab1f05bc049cf45d36e568291",
+    ),
+];
+
+#[test]
+fn small_scale_scenario_replays_to_the_pinned_hashes() {
+    let params = Params {
+        players: 4,
+        units_per_player: 80,
+        side_tiles: 2048,
+        seed: 1,
+        fight_pairs_size: 4,
+        idle: false,
+    };
+    let Built {
+        mut world,
+        mut players,
+        ..
+    } = world::build(&params).expect("scenario builds");
+    let mut driver = Driver::new(1, players.len(), 3.0, world.config().tick_hz);
+    driver.skip_attacks = true;
+    let run = run_ticks(&mut world, &mut players, &mut driver, 300, 100);
+    let hashes: Vec<(u64, String)> = run
+        .hashes
+        .iter()
+        .map(|entry| {
+            (
+                entry["tick"].as_u64().expect("tick"),
+                entry["blake3"].as_str().expect("hash").to_owned(),
+            )
+        })
+        .collect();
+    let pinned: Vec<(u64, String)> = PINNED_HASHES
+        .iter()
+        .map(|(tick, hash)| (*tick, (*hash).to_owned()))
+        .collect();
+    assert_eq!(hashes, pinned);
 }
