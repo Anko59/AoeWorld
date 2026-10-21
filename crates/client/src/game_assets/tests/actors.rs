@@ -38,3 +38,57 @@ fn sheep_neutral_and_owned_frames_share_sources_but_have_distinct_player_colours
     let bad: Manifest = serde_json::from_value(value).unwrap();
     assert!(actors::select(&bad, &mut Vec::new(), &mut Vec::new()).is_err());
 }
+
+#[wasm_bindgen_test]
+fn repeated_scout_cells_are_static_but_changed_pixels_and_hotspots_keep_the_loop() {
+    let source = SPRITES[Pose::ScoutStand as usize];
+    let mut value = manifest::fixture();
+    let template = value["frames"][0].clone();
+    value["frames"] = (0..source.frames())
+        .map(|frame| {
+            let mut cell = template.clone();
+            cell["source"] = source.manifest_source().into();
+            cell["frame"] = frame.into();
+            // Each facing has its own image; only phases within a facing repeat.
+            cell["x"] = (frame / u32::from(source.stride) * 10).into();
+            cell
+        })
+        .collect::<Vec<_>>()
+        .into();
+    let mut manifest: Manifest = serde_json::from_value(value).unwrap();
+    let resolve = |manifest: &Manifest| {
+        let (mut selected, mut domains) = (Vec::new(), Vec::new());
+        let ranges = actors::select(manifest, &mut selected, &mut domains).unwrap();
+        let places = placement::plan(manifest, &selected, &domains).unwrap();
+        let records = selected
+            .iter()
+            .zip(places)
+            .map(|(&index, placed)| placement::record(&manifest.frames[index], placed))
+            .collect::<Vec<_>>();
+        actors::resolve(manifest, &selected, &records, &ranges)
+    };
+    let frames = resolve(&manifest);
+    let scout = &frames[Pose::ScoutStand as usize];
+    assert_eq!(
+        scout.len(),
+        5,
+        "identical phases must not animate the world"
+    );
+    for pair in scout.windows(2) {
+        assert_ne!(pair[0].atlas.uv, pair[1].atlas.uv, "retain every facing");
+    }
+    let phase = source.source_frame(2, usize::from(source.sample_step()));
+    manifest.frames[phase].x += 1;
+    assert_eq!(
+        resolve(&manifest)[Pose::ScoutStand as usize].len(),
+        source.selected_frames(),
+        "one changed source cell preserves the native loop"
+    );
+    manifest.frames[phase].x -= 1;
+    manifest.frames[phase].anchor_x += 1;
+    assert_eq!(
+        resolve(&manifest)[Pose::ScoutStand as usize].len(),
+        source.selected_frames(),
+        "hotspot motion is visible animation even with identical pixels"
+    );
+}

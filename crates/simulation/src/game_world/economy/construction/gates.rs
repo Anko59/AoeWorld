@@ -47,6 +47,9 @@ impl GameWorld {
             } else {
                 self.economy.open_gates.remove(&id);
             }
+            if let Some(gate) = self.economy.buildings.get_mut(&id) {
+                gate.gate_open = open;
+            }
             self.resource_collision_changed();
         }
     }

@@ -1,6 +1,8 @@
 //! One projected terrain snapshot shared by rendering, contacts and picking.
 use super::*;
 use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
+#[path = "scene/projectiles.rs"]
+mod projectiles;
 
 #[cfg(test)]
 #[path = "scene/tests/cache.rs"]
@@ -209,8 +211,7 @@ pub(in super::super) fn units(
             let position = client.presentation.position(*unit);
             let mut kind = worker_kind(unit);
             let mut facing = unit.facing;
-            if unit.kind == aoe_protocol::UnitKind::Militia
-                || unit.kind == aoe_protocol::UnitKind::FishingShip
+            if unit.kind != aoe_protocol::UnitKind::Villager
                 || (unit.task == aoe_protocol::UnitTask::Fishing && !unit.moving)
                 || unit.hp == 0
                 || matches!(
@@ -289,47 +290,56 @@ pub(in super::super) fn units(
         .map(|b| (b.footprint.min.x, b.footprint.min.y))
         .collect();
     for building in &client.village.buildings {
-        let gate_open = building.kind == aoe_protocol::BuildingKind::PalisadeGate
-            && building.progress_permille == 1000
-            && client.units.values().any(|u| {
-                let at = u.position.tile_floor();
-                let r = building.footprint;
-                u.hp > 0
-                    && ((u.player == building.player
-                        && at.x >= r.min.x - 2
-                        && at.y >= r.min.y - 2
-                        && at.x < r.max.x + 2
-                        && at.y < r.max.y + 2)
-                        || r.contains(at))
-            });
         let position = super::super::village::building_center(building);
-        let slot = units.partition_point(|unit| unit.id < building.id);
-        units.insert(
-            slot,
-            aoe_rendering::SceneUnit {
-                kind: if gate_open {
-                    aoe_rendering::SceneUnitKind::OpenPalisadeGate
-                } else {
-                    building_kind(building)
-                },
-                id: building.id,
-                position,
-                moving: false,
-                facing: if building.progress_permille < 1000 {
-                    (u32::from(building.progress_permille) * 3 / 1000) as u8
-                } else if building.kind == aoe_protocol::BuildingKind::PalisadeWall {
-                    crate::building_ui::wall_frame(building.footprint.min, |t| {
-                        walls.contains(&(t.x, t.y))
-                    })
-                } else {
-                    0
-                },
-                selected: client.selected.building_id == Some(building.id),
-                elevation_meters: scene
-                    .height(position)
-                    .unwrap_or_else(|| elevation_at_world(client, position)),
+        let gate_open = building.kind == aoe_protocol::BuildingKind::PalisadeGate
+            && crate::building_ui::gate_sprite_slot(building.gate_open, building.progress_permille)
+                .is_some();
+        let unit = aoe_rendering::SceneUnit {
+            kind: if gate_open {
+                aoe_rendering::SceneUnitKind::OpenPalisadeGate
+            } else {
+                building_kind(building)
             },
-        );
+            id: building.id,
+            position,
+            moving: false,
+            facing: if building.progress_permille < 1000 {
+                (u32::from(building.progress_permille) * 3 / 1000) as u8
+            } else if building.kind == aoe_protocol::BuildingKind::PalisadeWall {
+                crate::building_ui::wall_frame(building.footprint.min, |t| {
+                    walls.contains(&(t.x, t.y))
+                })
+            } else {
+                0
+            },
+            selected: client.selected.building_id == Some(building.id),
+            elevation_meters: scene
+                .height(position)
+                .unwrap_or_else(|| elevation_at_world(client, position)),
+        };
+        if building.kind == aoe_protocol::BuildingKind::PalisadeGate {
+            if !aoe_rendering::scene_building_visible(
+                &client.art,
+                unit,
+                SceneCamera {
+                    center: client.camera.center,
+                    zoom: client.camera.zoom,
+                    viewport: client.camera.viewport,
+                    focus_elevation_meters: client.camera.focus_elevation_meters,
+                },
+                0,
+            ) {
+                continue;
+            }
+            client.village.gate_art.borrow_mut().observe(
+                building.id,
+                building.gate_open,
+                building.progress_permille,
+                true,
+            );
+        }
+        let slot = units.partition_point(|unit| unit.id < building.id);
+        units.insert(slot, unit);
     }
     for (building, expiry) in &client.village.rubble {
         if *expiry <= client.village.tick {
@@ -354,6 +364,7 @@ pub(in super::super) fn units(
         let slot = units.partition_point(|u| u.id < building.id);
         units.insert(slot, unit);
     }
+    projectiles::append(client, scene, &mut units);
     units
 }
 

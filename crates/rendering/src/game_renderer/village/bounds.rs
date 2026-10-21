@@ -1,5 +1,18 @@
 use super::*;
 
+/// Visibility from the same selected frames, native hotspots and zoomed bounds
+/// used by drawing, including the missing-art marker.
+pub fn scene_building_visible(
+    art: &GameArt,
+    unit: SceneUnit,
+    camera: SceneCamera,
+    animation: usize,
+) -> bool {
+    let mut visible = false;
+    village::building(art, unit, camera, animation, &mut |_| visible = true);
+    visible
+}
+
 /// The actual native body rectangle, shared by selection and order picking.
 pub fn scene_unit_bounds(
     art: &GameArt,

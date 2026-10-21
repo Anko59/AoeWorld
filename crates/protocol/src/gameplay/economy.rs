@@ -20,6 +20,22 @@ pub enum UnitKind {
     Scout,
     Militia,
     FishingShip,
+    Archer,
+    Skirmisher,
+    Spearman,
+    ManAtArms,
+}
+impl UnitKind {
+    pub const ALL: [Self; 8] = [
+        Self::Villager,
+        Self::Scout,
+        Self::Militia,
+        Self::FishingShip,
+        Self::Archer,
+        Self::Skirmisher,
+        Self::Spearman,
+        Self::ManAtArms,
+    ];
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum BuildingKind {
@@ -98,9 +114,15 @@ pub enum Tech {
     GoldMining,
     StoneMining,
     Wheelbarrow,
+    ManAtArms,
+    Forging,
+    ScaleMailArmor,
+    ScaleBardingArmor,
+    Fletching,
+    PaddedArcherArmor,
 }
 impl Tech {
-    pub const ALL: [Tech; 8] = [
+    pub const ALL: [Tech; 14] = [
         Tech::Loom,
         Tech::TownWatch,
         Tech::FeudalAge,
@@ -109,6 +131,12 @@ impl Tech {
         Tech::GoldMining,
         Tech::StoneMining,
         Tech::Wheelbarrow,
+        Tech::ManAtArms,
+        Tech::Forging,
+        Tech::ScaleMailArmor,
+        Tech::ScaleBardingArmor,
+        Tech::Fletching,
+        Tech::PaddedArcherArmor,
     ];
     pub const fn building(self) -> BuildingKind {
         match self {
@@ -118,6 +146,12 @@ impl Tech {
             Self::DoubleBitAxe => BuildingKind::LumberCamp,
             Self::HorseCollar => BuildingKind::Mill,
             Self::GoldMining | Self::StoneMining => BuildingKind::MiningCamp,
+            Self::ManAtArms => BuildingKind::Barracks,
+            Self::Forging
+            | Self::ScaleMailArmor
+            | Self::ScaleBardingArmor
+            | Self::Fletching
+            | Self::PaddedArcherArmor => BuildingKind::Blacksmith,
         }
     }
     pub const fn bit(self) -> u32 {
@@ -221,6 +255,7 @@ pub struct GameplayBuildingState {
     pub last_hit: Option<HitState>,
     /// Age at the last observation; fog memory must not use the owner's live age.
     pub age: Age,
+    pub gate_open: bool,
 }
 
 fn valid_research(player: &GameplayPlayerState) -> bool {
@@ -245,6 +280,9 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
             building.footprint.min.x >= 0
                 && building.footprint.min.y >= 0
                 && building.hp > 0
+                && (!building.gate_open
+                    || (building.kind == BuildingKind::PalisadeGate
+                        && building.construction == ConstructionState::Complete))
                 && building.footprint.width() == building.kind.side()
                 && building.footprint.height() == building.kind.depth()
                 && building.progress_permille <= 1000
@@ -268,6 +306,15 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                         (building.kind, entry.kind),
                         (BuildingKind::TownCenter, UnitKind::Villager)
                             | (BuildingKind::Barracks, UnitKind::Militia)
+                            | (
+                                BuildingKind::Barracks,
+                                UnitKind::Spearman | UnitKind::ManAtArms
+                            )
+                            | (
+                                BuildingKind::ArcheryRange,
+                                UnitKind::Archer | UnitKind::Skirmisher
+                            )
+                            | (BuildingKind::Stable, UnitKind::Scout)
                             | (BuildingKind::Dock, UnitKind::FishingShip)
                     ) && entry.total_ticks > 0
                         && entry.progress_ticks <= entry.total_ticks

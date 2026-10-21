@@ -157,6 +157,13 @@ fn moving_hunt_jobs_keep_hunter_or_shepherd_walk_even_with_the_moving_task() {
             death_tick: None,
         };
         assert_eq!(unit_pose(&worker, Some(&animal)), expected, "{kind:?}");
+        worker.task = if kind == AnimalKind::Sheep {
+            UnitTask::Shepherding
+        } else {
+            UnitTask::Hunting
+        };
+        assert_eq!(unit_pose(&worker, Some(&animal)), expected, "{kind:?}");
+        worker.task = UnitTask::Moving;
     }
     assert_eq!(unit_pose(&worker, None), Pose::HunterWalk);
 }

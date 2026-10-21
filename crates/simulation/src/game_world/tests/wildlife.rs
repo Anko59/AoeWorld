@@ -62,7 +62,13 @@ fn shepherd_slaughters_sheep_and_delivers_all_100_food() {
     let sheep = w.spawn_animal(AnimalKind::Sheep, at(101, 100)).unwrap();
     w.advance();
     w.issue_hunt(PlayerId(0), &[worker], sheep).unwrap();
-    run(&mut w, 20 * 450);
+    for _ in 0..20 * 450 {
+        w.advance();
+        let shepherd = w.unit(worker).unwrap();
+        if shepherd.moving && shepherd.carried.is_none() && w.hunting_target(worker).is_some() {
+            assert_eq!(shepherd.task, UnitTask::Shepherding);
+        }
+    }
     assert!(
         w.animal(sheep).is_none(),
         "the harvested carcass disappears after its decay time"
@@ -80,6 +86,43 @@ fn deer_flees_nearby_units_faster_than_a_villager() {
     let a = w.animal(deer).unwrap();
     assert_eq!(a.task, AnimalTask::Fleeing);
     assert_eq!(a.position.x - at(102, 100).x, FIXED_SUBUNITS_PER_TILE);
+}
+
+#[test]
+fn deer_six_tiles_away_keeps_hunting_task_in_approach_updates() {
+    let mut w = world();
+    let start = at(100, 100);
+    let worker = w.spawn_villager(PlayerId(0), start).unwrap();
+    let deer = w.spawn_animal(AnimalKind::Deer, at(106, 100)).unwrap();
+    w.issue_hunt(PlayerId(0), &[worker], deer).unwrap();
+    for _ in 0..20 {
+        let changed = w.advance();
+        let hunter = w.unit(worker).unwrap();
+        assert!(hunter.moving);
+        assert_eq!(hunter.task, UnitTask::Hunting);
+        assert_eq!(w.hunting_target(worker), Some(deer));
+        assert_eq!(changed.iter().find(|u| u.id == worker), Some(&hunter));
+    }
+    assert_ne!(w.unit(worker).unwrap().position, start);
+}
+
+#[test]
+fn hunters_keep_their_profession_when_distant_prey_becomes_a_carcass() {
+    for (kind, task) in [
+        (AnimalKind::Deer, UnitTask::Hunting),
+        (AnimalKind::Sheep, UnitTask::Shepherding),
+    ] {
+        let mut w = world();
+        let worker = w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
+        let animal = w.spawn_animal(kind, at(106, 100)).unwrap();
+        w.issue_hunt(PlayerId(0), &[worker], animal).unwrap();
+        assert!(w.strike_animal(animal, worker, 100));
+        run(&mut w, 22);
+        let hunter = w.unit(worker).unwrap();
+        assert!(hunter.moving);
+        assert_eq!(hunter.task, task, "{kind:?} carcass approach");
+        assert_eq!(w.hunting_target(worker), Some(animal));
+    }
 }
 
 #[test]

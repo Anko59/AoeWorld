@@ -377,7 +377,9 @@ pub(super) fn apply(
         Err(E::RequiresFeudalAge) => CommandResult::RejectedRequiresFeudalAge,
         Err(E::TechRequirementMissing) => CommandResult::RejectedTechRequirement,
         Err(E::Capacity) => CommandResult::RejectedQueueFull,
-        Err(E::Movement(W::Unreachable)) => CommandResult::RejectedUnreachable,
+        Err(E::NoAttackPosition | E::Movement(W::Unreachable)) => {
+            CommandResult::RejectedUnreachable
+        }
         Err(E::Movement(W::PathBudgetExceeded)) => CommandResult::RejectedPathBudgetExceeded,
         Err(E::Movement(W::Environment(_))) => CommandResult::RejectedResourceUnavailable,
         Err(_) => CommandResult::RejectedInvalidDestination,

@@ -53,6 +53,30 @@ pub enum Pose {
     FishingShipWalk,
     FishingShipWork,
     FisherWork,
+    ArcherStand,
+    ArcherWalk,
+    ArcherAttack,
+    ArcherDie,
+    ArcherDecay,
+    SkirmisherStand,
+    SkirmisherWalk,
+    SkirmisherAttack,
+    SkirmisherDie,
+    SkirmisherDecay,
+    SpearmanStand,
+    SpearmanWalk,
+    SpearmanAttack,
+    SpearmanDie,
+    SpearmanDecay,
+    ManAtArmsStand,
+    ManAtArmsWalk,
+    ManAtArmsAttack,
+    ManAtArmsDie,
+    ManAtArmsDecay,
+    ScoutStand,
+    ScoutWalk,
+    Arrow,
+    Javelin,
 }
 
 #[derive(Clone, Copy)]
@@ -65,10 +89,28 @@ pub struct ActorSource {
 impl ActorSource {
     /// Bound the fisherman atlas rows while retaining their native loop duration.
     pub const fn sample_step(self) -> u8 {
-        if self.id == 3575 { 2 } else { 1 }
+        if self.stride >= 8 && self.id != 990 {
+            2
+        } else {
+            1
+        }
     }
     pub const fn frames(self) -> u32 {
-        self.stride as u32 * 5
+        match self.id {
+            3799 => 176,
+            3820 => 170,
+            _ => self.stride as u32 * 5,
+        }
+    }
+    pub const fn selected_frames(self) -> usize {
+        self.stride.div_ceil(self.sample_step()) as usize * 5
+    }
+    pub const fn source_frame(self, row: usize, phase: usize) -> usize {
+        match self.id {
+            3799 => [0, 44, 88, 132, 165][row],
+            3820 => row * 40,
+            _ => row * self.stride as usize + phase,
+        }
     }
     pub fn manifest_source(self) -> String {
         format!("graphics.drs:[32, 112, 108, 115]:{}", self.id)
@@ -78,7 +120,7 @@ const fn sprite(id: u32, stride: u8, millis: u16) -> ActorSource {
     ActorSource { id, stride, millis }
 }
 
-pub const SPRITES: [ActorSource; 50] = [
+pub const SPRITES: [ActorSource; 74] = [
     sprite(993, 6, 1000),
     sprite(997, 12, 70),
     sprite(987, 10, 100),
@@ -129,6 +171,30 @@ pub const SPRITES: [ActorSource; 50] = [
     sprite(449, 1, 200),
     sprite(444, 1, 200),
     sprite(3575, 28, 200),
+    sprite(8, 10, 200),
+    sprite(12, 10, 70),
+    sprite(2, 10, 70),
+    sprite(5, 10, 100),
+    sprite(9, 5, 6000),
+    sprite(1650, 8, 1000),
+    sprite(1654, 10, 70),
+    sprite(1644, 12, 100),
+    sprite(1647, 10, 100),
+    sprite(1651, 5, 6000),
+    sprite(873, 9, 120),
+    sprite(877, 10, 70),
+    sprite(867, 10, 100),
+    sprite(870, 10, 100),
+    sprite(874, 5, 6000),
+    sprite(1044, 11, 250),
+    sprite(1048, 11, 85),
+    sprite(1038, 11, 160),
+    sprite(1041, 11, 100),
+    sprite(1045, 5, 6000),
+    sprite(2085, 10, 200),
+    sprite(2089, 10, 110),
+    sprite(3799, 1, 100),
+    sprite(3820, 1, 100),
 ];
 
 #[cfg(test)]

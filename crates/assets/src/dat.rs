@@ -97,6 +97,7 @@ pub struct Unit {
     pub speed: Option<f32>,
     pub walking: Option<[i16; 2]>,
     pub attack_graphic: Option<i16>,
+    pub projectile_unit: Option<i16>,
     pub attacks: Vec<(i16, i16)>,
     pub armours: Vec<(i16, i16)>,
     pub costs: Vec<Cost>,

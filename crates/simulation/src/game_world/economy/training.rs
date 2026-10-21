@@ -26,6 +26,20 @@ impl GameWorld {
         if !super::trainable_units(building.kind).contains(&kind) {
             return Err(EconomyError::WrongUnitKind);
         }
+        if matches!(
+            kind,
+            UnitKind::Archer
+                | UnitKind::Skirmisher
+                | UnitKind::Spearman
+                | UnitKind::Scout
+                | UnitKind::ManAtArms
+        ) && !self.is_feudal(player)
+        {
+            return Err(EconomyError::RequiresFeudalAge);
+        }
+        if kind == UnitKind::ManAtArms && !self.has_researched(player, crate::Tech::ManAtArms) {
+            return Err(EconomyError::TechRequirementMissing);
+        }
         if building.research.is_some()
             || building.training_queue.len() >= VILLAGE_RULES.training_queue_limit
         {

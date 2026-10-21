@@ -363,6 +363,12 @@ pub(super) async fn reset(
                 Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
             }
         }
+        Some("feudal-military") => {
+            match GameplayService::military_demo(state.diagnostic_scenario.seed) {
+                Ok(service) => service,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        }
         Some(_) => return StatusCode::BAD_REQUEST,
     };
     *state.gameplay.write().await = service;

@@ -126,7 +126,9 @@ impl GameWorld {
         task.credits = 0;
         task.retry_tick = 0;
         if let Some(&index) = self.lookup.get(&id) {
-            self.units[index].state.task = UnitTask::Moving;
+            self.units[index].state.task = task
+                .animal
+                .map_or(UnitTask::Moving, |animal| self.carcass_task(animal));
         }
         true
     }

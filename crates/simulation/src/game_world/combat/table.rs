@@ -36,16 +36,19 @@ pub struct UnitCombat {
     pub pierce_armour: u16,
     /// Time between hits, in hundredths of a second.
     pub attack_period_centiseconds: u32,
-    /// Walking speed in tenths of a tile per second. `None` keeps the speed
-    /// owned by `VILLAGE_RULES` (villager) or the world config (scout).
-    pub speed_tenths: Option<u32>,
+    /// Walking speed in hundredths of a tile per second. `None` keeps the speed
+    /// owned by `VILLAGE_RULES` (villager) or fishing rules.
+    pub speed_hundredths: Option<u32>,
+    pub range: u8,
+    pub min_range: u8,
+    pub los: u8,
     /// `None` for units not trained through this table (the villager uses
-    /// `VILLAGE_RULES`; the scout is a starting unit).
+    /// `VILLAGE_RULES`). Starting and Stable scouts share this table.
     pub training: Option<UnitTraining>,
 }
 
 /// Indexed by `UnitKind as usize`; a test pins the order.
-pub const UNIT_COMBAT: [UnitCombat; 4] = [
+pub const UNIT_COMBAT: [UnitCombat; 8] = [
     UnitCombat {
         kind: UnitKind::Villager,
         hp: 25,
@@ -54,7 +57,10 @@ pub const UNIT_COMBAT: [UnitCombat; 4] = [
         melee_armour: 0,
         pierce_armour: 0,
         attack_period_centiseconds: 200,
-        speed_tenths: None,
+        speed_hundredths: None,
+        range: 1,
+        min_range: 0,
+        los: 4,
         training: None,
     },
     UnitCombat {
@@ -65,8 +71,19 @@ pub const UNIT_COMBAT: [UnitCombat; 4] = [
         melee_armour: 0,
         pierce_armour: 2,
         attack_period_centiseconds: 200,
-        speed_tenths: None,
-        training: None,
+        speed_hundredths: Some(120),
+        range: 1,
+        min_range: 0,
+        los: 4,
+        training: Some(UnitTraining {
+            cost: UnitCost {
+                food: 80,
+                wood: 0,
+                gold: 0,
+                stone: 0,
+            },
+            seconds: 30,
+        }),
     },
     UnitCombat {
         kind: UnitKind::Militia,
@@ -76,10 +93,13 @@ pub const UNIT_COMBAT: [UnitCombat; 4] = [
         melee_armour: 0,
         pierce_armour: 1,
         attack_period_centiseconds: 200,
-        speed_tenths: Some(9),
+        speed_hundredths: Some(90),
+        range: 1,
+        min_range: 0,
+        los: 4,
         training: Some(UnitTraining {
             cost: UnitCost {
-                food: 60,
+                food: 50,
                 wood: 0,
                 gold: 20,
                 stone: 0,
@@ -96,7 +116,10 @@ pub const UNIT_COMBAT: [UnitCombat; 4] = [
         melee_armour: 1,
         pierce_armour: 1,
         attack_period_centiseconds: 200,
-        speed_tenths: None,
+        speed_hundredths: None,
+        range: 0,
+        min_range: 0,
+        los: 5,
         training: Some(UnitTraining {
             cost: UnitCost {
                 food: 0,
@@ -105,6 +128,94 @@ pub const UNIT_COMBAT: [UnitCombat; 4] = [
                 stone: 0,
             },
             seconds: 40,
+        }),
+    },
+    UnitCombat {
+        kind: UnitKind::Archer,
+        hp: 30,
+        attack: 4,
+        attack_kind: DamageKind::Pierce,
+        melee_armour: 0,
+        pierce_armour: 0,
+        range: 4,
+        min_range: 0,
+        los: 6,
+        attack_period_centiseconds: 200,
+        speed_hundredths: Some(96),
+        training: Some(UnitTraining {
+            cost: UnitCost {
+                food: 0,
+                wood: 25,
+                gold: 45,
+                stone: 0,
+            },
+            seconds: 35,
+        }),
+    },
+    UnitCombat {
+        kind: UnitKind::Skirmisher,
+        hp: 30,
+        attack: 2,
+        attack_kind: DamageKind::Pierce,
+        melee_armour: 0,
+        pierce_armour: 3,
+        range: 4,
+        min_range: 1,
+        los: 6,
+        attack_period_centiseconds: 300,
+        speed_hundredths: Some(96),
+        training: Some(UnitTraining {
+            cost: UnitCost {
+                food: 25,
+                wood: 35,
+                gold: 0,
+                stone: 0,
+            },
+            seconds: 26,
+        }),
+    },
+    UnitCombat {
+        kind: UnitKind::Spearman,
+        hp: 45,
+        attack: 3,
+        attack_kind: DamageKind::Melee,
+        melee_armour: 0,
+        pierce_armour: 0,
+        range: 1,
+        min_range: 0,
+        los: 4,
+        attack_period_centiseconds: 300,
+        speed_hundredths: Some(100),
+        training: Some(UnitTraining {
+            cost: UnitCost {
+                food: 35,
+                wood: 25,
+                gold: 0,
+                stone: 0,
+            },
+            seconds: 22,
+        }),
+    },
+    UnitCombat {
+        kind: UnitKind::ManAtArms,
+        hp: 45,
+        attack: 6,
+        attack_kind: DamageKind::Melee,
+        melee_armour: 0,
+        pierce_armour: 1,
+        range: 1,
+        min_range: 0,
+        los: 4,
+        attack_period_centiseconds: 200,
+        speed_hundredths: Some(96),
+        training: Some(UnitTraining {
+            cost: UnitCost {
+                food: 50,
+                wood: 0,
+                gold: 20,
+                stone: 0,
+            },
+            seconds: 21,
         }),
     },
 ];
@@ -202,11 +313,22 @@ pub const fn damage_dealt(
     melee_armour: i16,
     pierce_armour: u16,
 ) -> u16 {
+    damage_with_bonus(attack, kind, melee_armour, pierce_armour, 0)
+}
+
+pub(super) const fn damage_with_bonus(
+    attack: u16,
+    kind: DamageKind,
+    melee_armour: i16,
+    pierce_armour: u16,
+    bonus: u16,
+) -> u16 {
     let armour = match kind {
         DamageKind::Melee => melee_armour as i32,
         DamageKind::Pierce => pierce_armour as i32,
     };
-    let damage = attack as i32 - armour;
+    let base = attack as i32 - armour;
+    let damage = (if base > 0 { base } else { 0 }) + bonus as i32;
     if damage < 1 {
         1
     } else if damage > u16::MAX as i32 {

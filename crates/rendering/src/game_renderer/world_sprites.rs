@@ -12,7 +12,7 @@ pub use fish::scene_resource_animation_frame;
 
 #[path = "village/bounds.rs"]
 mod bounds;
-pub use bounds::{scene_unit_bounds, scene_unit_render_key};
+pub use bounds::{scene_building_visible, scene_unit_bounds, scene_unit_render_key};
 
 /// Fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {

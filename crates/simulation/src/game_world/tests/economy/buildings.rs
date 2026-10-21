@@ -422,7 +422,7 @@ fn barracks_accepts_only_militia_and_requires_completion() {
     );
     assert_eq!(
         trainable_units(BuildingKind::Barracks),
-        &[UnitKind::Militia]
+        &[UnitKind::Militia, UnitKind::Spearman, UnitKind::ManAtArms]
     );
     let worker = villager_at(&mut world, 99, 100);
     let barracks = world

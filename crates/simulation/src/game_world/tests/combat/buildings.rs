@@ -82,7 +82,7 @@ fn militia_cost_is_paid_all_or_nothing_and_refunded_on_cancel() {
     };
     let training = GameWorld::unit_training(UnitKind::Militia).unwrap();
     assert_eq!(training.seconds, 21);
-    set(&mut world, 59, 100);
+    set(&mut world, 49, 100);
     assert!(matches!(
         world.pay_unit_cost(PlayerId(0), UnitKind::Militia),
         Err(EconomyError::InsufficientFood)
@@ -99,7 +99,7 @@ fn militia_cost_is_paid_all_or_nothing_and_refunded_on_cancel() {
     set(&mut world, 100, 25);
     world.pay_unit_cost(PlayerId(0), UnitKind::Militia).unwrap();
     let stock = world.player_economy(PlayerId(0)).unwrap().stockpile;
-    assert_eq!((stock.food, stock.gold), (40, 5));
+    assert_eq!((stock.food, stock.gold), (50, 5));
     world.refund_unit_cost(PlayerId(0), UnitKind::Militia);
     let stock = world.player_economy(PlayerId(0)).unwrap().stockpile;
     assert_eq!((stock.food, stock.gold), (100, 25));

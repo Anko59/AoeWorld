@@ -145,75 +145,36 @@ pub enum SceneUnitKind {
     FeudalLumberCamp,
     FeudalMiningCamp,
     FoundationDock,
+    ArcherStand,
+    ArcherWalk,
+    ArcherAttack,
+    ArcherDie,
+    ArcherDecay,
+    SkirmisherStand,
+    SkirmisherWalk,
+    SkirmisherAttack,
+    SkirmisherDie,
+    SkirmisherDecay,
+    SpearmanStand,
+    SpearmanWalk,
+    SpearmanAttack,
+    SpearmanDie,
+    SpearmanDecay,
+    ManAtArmsStand,
+    ManAtArmsWalk,
+    ManAtArmsAttack,
+    ManAtArmsDie,
+    ManAtArmsDecay,
+    ScoutStand,
+    ScoutWalk,
+    Arrow,
+    Javelin,
 }
 
-impl SceneUnitKind {
-    /// Flat tags keep the scene DTO at 32 bytes, including actor animations.
-    pub fn actor(index: u8) -> Self {
-        const ACTORS: [SceneUnitKind; 50] = [
-            SceneUnitKind::MilitiaStand,
-            SceneUnitKind::MilitiaWalk,
-            SceneUnitKind::MilitiaAttack,
-            SceneUnitKind::MilitiaDie,
-            SceneUnitKind::VillagerAttack,
-            SceneUnitKind::VillagerDie,
-            SceneUnitKind::HunterStand,
-            SceneUnitKind::HunterWalk,
-            SceneUnitKind::HunterAttack,
-            SceneUnitKind::Butcher,
-            SceneUnitKind::HunterCarry,
-            SceneUnitKind::ShepherdStand,
-            SceneUnitKind::ShepherdWalk,
-            SceneUnitKind::ShepherdWork,
-            SceneUnitKind::SheepStand,
-            SceneUnitKind::SheepWalk,
-            SceneUnitKind::SheepDie,
-            SceneUnitKind::DeerStand,
-            SceneUnitKind::DeerWalk,
-            SceneUnitKind::DeerDie,
-            SceneUnitKind::BoarStand,
-            SceneUnitKind::BoarWalk,
-            SceneUnitKind::BoarAttack,
-            SceneUnitKind::BoarDie,
-            SceneUnitKind::WolfStand,
-            SceneUnitKind::WolfWalk,
-            SceneUnitKind::WolfRun,
-            SceneUnitKind::WolfAttack,
-            SceneUnitKind::WolfDie,
-            SceneUnitKind::ScoutAttack,
-            SceneUnitKind::ScoutDie,
-            SceneUnitKind::MilitiaDecay,
-            SceneUnitKind::VillagerDecay,
-            SceneUnitKind::SheepDecay,
-            SceneUnitKind::DeerDecay,
-            SceneUnitKind::BoarDecay,
-            SceneUnitKind::WolfDecay,
-            SceneUnitKind::ScoutDecay,
-            SceneUnitKind::HunterDie,
-            SceneUnitKind::HunterDecay,
-            SceneUnitKind::ShepherdDie,
-            SceneUnitKind::ShepherdDecay,
-            SceneUnitKind::NeutralSheepStand,
-            SceneUnitKind::NeutralSheepWalk,
-            SceneUnitKind::NeutralSheepDie,
-            SceneUnitKind::NeutralSheepDecay,
-            SceneUnitKind::FishingShip,
-            SceneUnitKind::FishingShipMoving,
-            SceneUnitKind::FishingShipWorking,
-            SceneUnitKind::VillagerFishing,
-        ];
-        ACTORS
-            .get(usize::from(index))
-            .copied()
-            .unwrap_or(Self::Scout)
-    }
-    pub(super) fn actor_slot(self) -> Option<usize> {
-        (self as u8)
-            .checked_sub(Self::MilitiaStand as u8)
-            .filter(|index| *index < 50)
-            .map(usize::from)
-    }
+#[path = "scene_actors.rs"]
+mod actors;
 
+impl SceneUnitKind {
     /// Map building roles to the atlas's semantic order.
     pub fn building(slot: u8) -> Self {
         use SceneUnitKind::*;

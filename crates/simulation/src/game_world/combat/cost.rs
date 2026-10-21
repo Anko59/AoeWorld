@@ -57,6 +57,11 @@ impl GameWorld {
         player: PlayerId,
         position: WorldPosition,
     ) -> Result<EntityId, crate::GameWorldError> {
-        self.spawn_kind(player, UnitKind::Militia, position)
+        let kind = if self.has_researched(player, crate::Tech::ManAtArms) {
+            UnitKind::ManAtArms
+        } else {
+            UnitKind::Militia
+        };
+        self.spawn_kind(player, kind, position)
     }
 }

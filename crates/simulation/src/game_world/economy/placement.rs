@@ -84,7 +84,7 @@ impl GameWorld {
     /// Create a building (or foundation) after its footprint was validated.
     /// Nothing is charged here; the caller owns the cost. Foundations reveal
     /// only after the caller accepts their builder approaches.
-    pub(super) fn insert_building(
+    pub(in crate::game_world) fn insert_building(
         &mut self,
         player: PlayerId,
         kind: BuildingKind,
@@ -149,8 +149,14 @@ impl GameWorld {
                 work_total,
                 hp: if complete { max_hp } else { 1 },
                 max_hp,
-                los: los.saturating_add(self.researched_los_bonus(player)),
+                los: los
+                    .saturating_add(self.researched_los_bonus(player))
+                    .saturating_add(u8::from(
+                        self.has_researched(player, crate::Tech::Fletching)
+                            && matches!(kind, BuildingKind::TownCenter | BuildingKind::WatchTower),
+                    )),
                 research: None,
+                gate_open: false,
                 food_remaining: (kind == BuildingKind::Farm).then(|| self.farm_food(player)),
             },
         );

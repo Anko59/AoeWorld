@@ -175,7 +175,7 @@ impl GameWorld {
     /// Melee and pierce armour of a living unit, technologies included.
     pub fn unit_armour(&self, id: EntityId) -> Option<(i16, u16)> {
         let unit = self.unit(id)?;
-        let base = super::unit_combat(unit.kind);
+        let base = self.unit_stats(id)?;
         let (_, melee, pierce) = self.villager_bonus(unit.player, unit.kind);
         Some((base.melee_armour + melee, base.pierce_armour + pierce))
     }

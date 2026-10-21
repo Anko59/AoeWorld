@@ -7,10 +7,12 @@ use std::{fmt, marker::PhantomData};
 
 pub(crate) mod economy;
 mod fog;
+mod projectiles;
 mod resources;
 mod wildlife;
 pub use economy::*;
 pub use fog::FogState;
+pub use projectiles::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
@@ -265,6 +267,12 @@ pub enum ServerMessage {
     },
     /// Appended variant: complete player view for one bounded subscription.
     FogState(FogState),
+    Projectiles {
+        revision: u64,
+        tick: Tick,
+        #[serde(deserialize_with = "projectiles::bounded_projectiles")]
+        projectiles: Vec<ProjectileState>,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -327,6 +335,15 @@ where
 
 fn validate_server(message: &ServerMessage) -> Result<(), Error> {
     wildlife::validate_server(message)?;
+    if let ServerMessage::Projectiles {
+        revision,
+        tick,
+        projectiles,
+    } = message
+        && (*revision == 0 || !projectiles::valid(projectiles, *tick))
+    {
+        return Err(Error::InvalidEconomyState);
+    }
     if let ServerMessage::FogState(state) = message
         && !state.valid()
     {

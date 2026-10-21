@@ -37,18 +37,56 @@ pub(super) fn select(
             ranges.push(None);
             continue;
         };
-        if frames.len() > MAX_SELECTED_FRAMES.saturating_sub(selected.len()) {
+        if source.selected_frames() > MAX_SELECTED_FRAMES.saturating_sub(selected.len()) {
             return Err(JsValue::from_str("Too many actor animation frames"));
         }
         let start = selected.len();
         for row in 0..5 {
             for phase in (0..usize::from(source.stride)).step_by(usize::from(source.sample_step()))
             {
-                selected.push(frames[row * usize::from(source.stride) + phase]);
+                selected.push(frames[source.source_frame(row, phase)]);
                 domains.push(AtlasDomain::Objects);
             }
         }
         ranges.push(Some(start..selected.len()));
     }
     Ok(ranges)
+}
+
+/// A loop whose source cells and hotspots never change is static in every
+/// facing. Keep one frame per row so its packed phase cannot dirty the scene.
+/// Resolve each pose separately: owned and neutral sheep use different colours.
+pub(super) fn resolve(
+    manifest: &Manifest,
+    selected: &[usize],
+    records: &[GameFrame],
+    ranges: &[Option<std::ops::Range<usize>>],
+) -> Vec<Vec<GameFrame>> {
+    ranges
+        .iter()
+        .map(|range| {
+            let Some(range) = range else {
+                return Vec::new();
+            };
+            let stride = range.len() / 5;
+            let cell = |index: usize| {
+                let f = &manifest.frames[selected[index]];
+                (
+                    &f.source, f.page, f.x, f.y, f.width, f.height, f.anchor_x, f.anchor_y,
+                )
+            };
+            if stride > 1
+                && (0..5).all(|row| {
+                    let start = range.start + row * stride;
+                    (1..stride).all(|phase| cell(start) == cell(start + phase))
+                })
+            {
+                (0..5)
+                    .map(|row| records[range.start + row * stride])
+                    .collect()
+            } else {
+                records[range.clone()].to_vec()
+            }
+        })
+        .collect()
 }

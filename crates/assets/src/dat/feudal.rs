@@ -1,4 +1,4 @@
-/// Feudal gameplay and age-up families. An absent trial unit is explicit.
+/// Feudal building and age-up families. An absent trial unit is explicit.
 pub const FEUDAL: &[(&str, i32)] = &[
     ("Archery Range", 87),
     ("Stable", 101),
@@ -13,4 +13,13 @@ pub const FEUDAL: &[(&str, i32)] = &[
     ("Mining Camp (Feudal)", 585),
     ("Barracks (Feudal)", 498),
     ("Dock (Feudal)", 133),
+];
+
+/// Military survey records are actors/projectiles, not building compositions.
+pub const FEUDAL_MILITARY: &[(&str, i32)] = &[
+    ("Skirmisher", 7),
+    ("Spearman", 93),
+    ("Man-at-Arms", 75),
+    ("Arrow", 363),
+    ("Javelin", 365),
 ];

@@ -42,6 +42,10 @@ pub enum UnitKind {
     Scout,
     Militia,
     FishingShip,
+    Archer,
+    Skirmisher,
+    Spearman,
+    ManAtArms,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -147,6 +151,8 @@ pub struct GameBuilding {
     /// Food left on a farm; `Some(0)` is an exhausted farm.
     pub food_remaining: Option<u16>,
     pub research: Option<super::ResearchEntry>,
+    /// Authoritative gate state, also retained in fog observations.
+    pub gate_open: bool,
 }
 impl GameBuilding {
     /// Construction progress in thousandths, 1000 once complete.
@@ -219,6 +225,8 @@ pub enum EconomyError {
     TrainingQueueFull,
     #[error("attack target is unknown, dead or belongs to the same player")]
     InvalidTarget,
+    #[error("no reachable attack position within the bounded search")]
+    NoAttackPosition,
     #[error("not enough resources")]
     InsufficientResources,
     #[error("town center footprint or spawn perimeter is unsuitable")]

@@ -138,6 +138,47 @@ pub(super) fn update(client: &Client) {
         let p = map::screen_position(client, super::building_center(b));
         v.extend_from_slice(&[p.x * scale, p.y * scale, f64::from(b.progress_permille)]);
     }
+    for kind in aoe_protocol::UnitKind::ALL {
+        let ready = b.is_some_and(|b| {
+            let native = aoe_simulation::UNIT_COMBAT[kind as usize].kind;
+            let r = building_ui::rules(b.kind);
+            let cost = aoe_simulation::GameWorld::unit_training(native).map(|t| t.cost);
+            b.player == owner(client)
+                && b.progress_permille == 1000
+                && b.research.is_none()
+                && b.training_queue.len() < aoe_protocol::MAX_TRAINING_QUEUE
+                && r.trainable.contains(&native)
+                && player.is_some_and(|p| {
+                    p.age == aoe_protocol::Age::Feudal
+                        && (kind != aoe_protocol::UnitKind::ManAtArms
+                            || p.researched & Tech::ManAtArms.bit() != 0)
+                        && cost.is_some_and(|c| {
+                            building_ui::affordable(
+                                p.stockpile,
+                                aoe_protocol::Stockpile {
+                                    food: c.food,
+                                    wood: c.wood,
+                                    gold: c.gold,
+                                    stone: c.stone,
+                                },
+                            )
+                        })
+                        && usize::from(p.population_used)
+                            + client
+                                .village
+                                .buildings
+                                .iter()
+                                .filter(|b| b.player == p.player)
+                                .map(|b| b.training_queue.len())
+                                .sum::<usize>()
+                            < usize::from(p.population_cap)
+                })
+        });
+        v.push(f64::from(u8::from(ready)));
+    }
+    v.push(f64::from(u8::from(
+        player.is_some_and(|p| p.researched & Tech::ManAtArms.bit() != 0),
+    )));
     buildings_update(&v);
 }
 
@@ -197,6 +238,12 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         "research-gold-mining",
         "research-stone-mining",
         "research-wheelbarrow",
+        "research-man-at-arms",
+        "research-forging",
+        "research-scale-mail-armor",
+        "research-scale-barding-armor",
+        "research-fletching",
+        "research-padded-archer-armor",
         "cancel-construction",
         "cancel-research",
     ]
@@ -218,12 +265,12 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             };
             let sequence = client.next_sequence;
             let message = match i {
-                15..=22 => Message::ResearchOrder {
+                15..=28 => Message::ResearchOrder {
                     sequence,
                     building_id,
                     tech: Tech::ALL[i - 15],
                 },
-                23 => Message::CancelConstructionOrder {
+                29 => Message::CancelConstructionOrder {
                     sequence,
                     building_id,
                 },
@@ -233,6 +280,22 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 },
             };
             send(&mut client, message);
+        });
+        button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
+        callback.forget();
+    }
+    for (id, kind) in [
+        ("train-archer", aoe_protocol::UnitKind::Archer),
+        ("train-skirmisher", aoe_protocol::UnitKind::Skirmisher),
+        ("train-spearman", aoe_protocol::UnitKind::Spearman),
+        ("train-scout", aoe_protocol::UnitKind::Scout),
+    ] {
+        let Some(button) = shared.borrow().document.get_element_by_id(id) else {
+            continue;
+        };
+        let target = shared.clone();
+        let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
+            super::orders::train_kind(&mut target.borrow_mut(), kind);
         });
         button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
         callback.forget();

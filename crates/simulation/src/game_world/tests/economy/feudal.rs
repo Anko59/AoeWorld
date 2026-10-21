@@ -70,7 +70,14 @@ fn feudal_buildings_are_age_gated_atomically_then_build_with_de_stats() {
         );
         let c = building_combat(kind);
         assert_eq!((c.melee_armour, c.pierce_armour), armour);
-        assert!(r.trainable.is_empty());
+        assert_eq!(
+            r.trainable,
+            match kind {
+                ArcheryRange => &[UnitKind::Archer, UnitKind::Skirmisher][..],
+                Stable => &[UnitKind::Scout][..],
+                _ => &[][..],
+            }
+        );
         let x = 130 + 10 * i as i32;
         let worker = villager_at(&mut world, x - 1, 100);
         let before = stock(&world);
@@ -248,12 +255,14 @@ fn watch_tower_shoots_enemies_with_pierce_armour_range_minimum_and_reload() {
         .unwrap();
     let friend = villager_at(&mut world, 132, 100);
     world.advance();
+    assert_eq!(world.unit(enemy).unwrap().hp, 40, "arrow must travel first");
+    advance(&mut world, 20);
     assert_eq!(world.unit(enemy).unwrap().hp, 36); // 5 pierce - 1 armour
     assert_eq!(world.unit(enemy).unwrap().last_hit.unwrap().attacker, tower);
     assert_eq!(world.unit(friend).unwrap().hp, 25);
-    advance(&mut world, 39);
+    advance(&mut world, 19);
     assert_eq!(world.unit(enemy).unwrap().hp, 36);
-    world.advance();
+    advance(&mut world, 21);
     assert_eq!(world.unit(enemy).unwrap().hp, 32);
     let too_close = world
         .spawn_militia(
@@ -453,6 +462,6 @@ fn watch_tower_does_not_acquire_an_enemy_outside_player_visibility() {
     advance(&mut world, 80);
     assert_eq!(world.unit(enemy).unwrap().hp, 40);
     world.update_building_vision(tower);
-    advance(&mut world, 1);
+    advance(&mut world, 16);
     assert!(world.unit(enemy).unwrap().hp < 40);
 }
