@@ -1,7 +1,6 @@
 use super::*;
 use std::cell::{Cell, RefCell};
 mod open_map;
-
 #[derive(Default)]
 struct FakeRuntime {
     calls: RefCell<Vec<Vec<String>>>,
@@ -139,8 +138,9 @@ fn development_lifecycle_uses_checkout_name_and_cleans_stale_container() {
     assert!(run.contains(&"AOE_SCENARIO=smoke".to_owned()));
     assert!(run.contains(&"AOE_BUILD_SHA=revision".to_owned()));
     assert!(run.contains(&"AOE_ASSET_PACK=local-assets/packs/example".to_owned()));
-    assert!(run.contains(&"AOE_FOG_DISABLED".to_owned()));
-    assert!(run.contains(&"AOE_FOG_SHOWCASE".to_owned()));
+    for forwarded in ["AOE_FOG_DISABLED", "AOE_FOG_SHOWCASE", "AOE_MATCH_TOKEN"] {
+        assert!(run.contains(&forwarded.to_owned()));
+    }
     assert!(run.contains(&format!(
             "AOE_MAP_WORKER={}",
             checkout

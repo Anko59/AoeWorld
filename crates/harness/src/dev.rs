@@ -320,6 +320,9 @@ fn start_with<R: Runtime>(
         "AOE_FOG_DISABLED",
         "-e",
         "AOE_FOG_SHOWCASE",
+        // Enables POST /match (docs/ai-sdk.md); unset, the endpoint refuses.
+        "-e",
+        "AOE_MATCH_TOKEN",
         "-e",
         &worker_env,
         "-e",
