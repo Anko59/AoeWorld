@@ -10,6 +10,10 @@ use serde::{Deserialize, Serialize};
 
 pub const CHUNK_SIZE: i32 = 64;
 pub const WORLD_LIMIT: i32 = 16_384;
+/// DE clamps every Market price (gold per 100 units) to this range; the
+/// simulation's trade rules and the protocol's price validation both read it.
+pub const MARKET_MIN_PRICE: u16 = 20;
+pub const MARKET_MAX_PRICE: u16 = 9999;
 
 #[derive(
     Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize,

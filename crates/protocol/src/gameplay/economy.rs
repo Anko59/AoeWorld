@@ -32,9 +32,7 @@ impl TradeResource {
         }
     }
 }
-/// DE clamps every Market price to this gold range.
-pub const MARKET_MIN_PRICE: u16 = 20;
-pub const MARKET_MAX_PRICE: u16 = 9999;
+pub use aoe_core::{MARKET_MAX_PRICE, MARKET_MIN_PRICE};
 /// A player's Market commodity prices, in gold per 100 units.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct MarketPrices {

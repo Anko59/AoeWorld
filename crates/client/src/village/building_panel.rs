@@ -186,7 +186,7 @@ pub(super) fn update(client: &Client) {
     });
     v.extend(match player {
         Some(p) => building_ui::market_panel(market, p.market_prices, p.stockpile),
-        None => [0.0; 9],
+        None => [0.0; 15],
     });
     buildings_update(&v);
 }

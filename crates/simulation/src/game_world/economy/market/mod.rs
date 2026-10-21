@@ -8,7 +8,7 @@
 //! moves the price 3 gold, and prices stay within [20, 9999].
 use super::{BuildingKind, EconomyError};
 use crate::GameWorld;
-use aoe_core::{EntityId, PlayerId};
+use aoe_core::{EntityId, MARKET_MAX_PRICE, MARKET_MIN_PRICE, PlayerId};
 use aoe_map::ResourceKind;
 
 /// The single current market rules table.
@@ -28,8 +28,8 @@ pub struct MarketRules {
 pub const MARKET_RULES: MarketRules = MarketRules {
     trade_amount: 100,
     base_price: 100,
-    min_price: 20,
-    max_price: 9999,
+    min_price: MARKET_MIN_PRICE,
+    max_price: MARKET_MAX_PRICE,
     commission_permyriad: 3000,
     price_step: 3,
 };
