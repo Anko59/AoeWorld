@@ -34,7 +34,7 @@ export function initBuildings() {
     const button=document.createElement('button');button.id=`train-${id}`;button.hidden=true;button.textContent=`${name} · ${cost}`;button.title=`Train ${name} · ${cost}`;button.setAttribute('aria-label',button.title);grid.append(button);return {button,site,kind};
   });
   const trades=['wood','food','stone'];
-  const tradeButtons=['buy','sell'].flatMap(side=>trades.map(res=>{const button=document.createElement('button');button.id=`market-${side}-${res}`;button.className='market-command';button.hidden=true;grid.append(button);return {button,side,res};}));
+  const tradeButtons=['buy','sell'].flatMap(side=>trades.map(res=>{const button=document.createElement('button');button.id=`market-${side}-${res}`;button.className='build-command market-command';button.hidden=true;grid.append(button);return {button,side,res};}));
   const panel=document.createElement('div');panel.id='building-panel';panel.hidden=true;
   panel.innerHTML='<b id="building-hp"></b><div id="building-status"></div><progress id="construction-progress" max="1000"></progress><div id="research-status"></div><div id="market-prices"></div><button id="cancel-construction" hidden>Cancel construction</button><button id="cancel-research" hidden>Cancel research</button>';
   byId('selection-content').insertBefore(panel,byId('training'));
@@ -72,7 +72,7 @@ export function initBuildings() {
       militaryTrain.forEach(({button,site,kind:unit})=>{button.hidden=kind!==site||v[4]<1000;button.disabled=v[availability+unit]!==1||!byId('observer-label').hidden;});
       panel.hidden=!selected;
       const market=availability+9;
-      tradeButtons.forEach(({button,side,res},i)=>{const price=v[market+i%3];const gold=side==='buy'?Math.floor(price*13/10):Math.floor(price*7/10);button.hidden=kind!==13||v[4]<1000;button.disabled=v[market+3+i]!==1||!byId('observer-label').hidden;button.textContent=`${side==='buy'?'Buy':'Sell'} 100 ${res} · ${gold} gold`;button.dataset.price=String(price);button.title=`${side==='buy'?'Buy':'Sell'} 100 ${res} for ${gold} gold (price ${price}, 30% commission)`;button.setAttribute('aria-label',button.title);});
+      tradeButtons.forEach(({button,side,res},i)=>{const price=v[market+i%3];const gold=side==='buy'?Math.floor(price*13/10):Math.floor(price*7/10);button.hidden=kind!==13||v[4]<1000;button.disabled=v[market+3+i]!==1||!byId('observer-label').hidden;const name=res[0].toUpperCase()+res.slice(1);button.innerHTML=`<span>${side==='buy'?'Buy':'Sell'} ${name}</span><small>${gold} gold</small>`;button.dataset.price=String(price);button.title=`${side==='buy'?'Buy':'Sell'} 100 ${res} for ${gold} gold (price ${price}, 30% commission)`;button.setAttribute('aria-label',button.title);});
       byId('market-prices')&&(byId('market-prices').textContent=kind===13&&v[4]>=1000?`Prices per 100: wood ${v[market]} · food ${v[market+1]} · stone ${v[market+2]} gold`:'');
       techs.forEach((b,i)=>{b.hidden=kind!==sites[i];b.disabled=v[8+i]!==1||byId('observer-label').hidden===false;b.title=research[i]+(v[0]===0&&(i===1||i>=3)?' · requires Feudal Age':'');});
       const train=byId('train-villager');
