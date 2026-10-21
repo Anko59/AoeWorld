@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Idle AI sessions still hear the clock this often (in ticks).
 const AI_HEARTBEAT_TICKS: u64 = 10;
 /// An AI's fog view is rebuilt at most this often (in ticks).
-const AI_FOG_TICKS: u64 = 10;
+const AI_FOG_TICKS: u64 = 20;
 
 /// A subscribed session's inputs to one tick, copied out of the session lock.
 struct View {
@@ -119,7 +119,7 @@ impl GameplayService {
                 subscription.revision,
                 super::wildlife::projectiles(&world, subscription.region, player),
             ));
-            // An AI gets a changed fog view at most twice a second.
+            // An AI gets a changed fog view at most once a second.
             if old_vision != Some(vision_revision) && (!ai || tick.0 % AI_FOG_TICKS == 0) {
                 fog_updates.push((
                     session_id,

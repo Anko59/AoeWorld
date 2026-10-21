@@ -109,6 +109,76 @@ impl Terrain {
     }
 }
 
+/// Tiles a village's connected walkable region must reach (4-connected): a
+/// few times the global search's 256, so a seat is never in a small pocket.
+const CERTIFIED_REGION_TILES: usize = 800;
+
+/// Certifies village sites one by one: a clear 5x5 area inside a connected
+/// walkable region of thousands of tiles. It lets a host seat several players
+/// without putting one in a walled pocket. Chunk passability is reused between
+/// calls; the exploration is bounded per call.
+pub struct StartCertifier<'a> {
+    cache: StartPassabilityCache<'a>,
+}
+
+impl StartCertifier<'_> {
+    pub fn certify(&mut self, tile: TileCoord) -> Result<bool, EnvironmentPageError> {
+        let cache = &mut self.cache;
+        let result = (|| {
+            if !clear_starting_area(cache, tile)? {
+                if tile.x == 250 {
+                    eprintln!("DBG not clear {tile:?}");
+                }
+                return Ok(false);
+            }
+            let mut visited = BTreeSet::from([tile]);
+            let mut pending = VecDeque::from([tile]);
+            while let Some(at) = pending.pop_front() {
+                if visited.len() >= CERTIFIED_REGION_TILES {
+                    return Ok(true);
+                }
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        let next = TileCoord::new(at.x + dx, at.y + dy);
+                        if (dx == 0 && dy == 0)
+                            || visited.contains(&next)
+                            || !cache.passable(next)?
+                        {
+                            continue;
+                        }
+                        if cache.terrain.crossable_with_cancel(
+                            at,
+                            next,
+                            cache.config,
+                            cache.cancelled,
+                        )? {
+                            visited.insert(next);
+                            pending.push_back(next);
+                        }
+                    }
+                }
+            }
+            Ok(false)
+        })();
+        match result {
+            Err(EnvironmentPageError::Cancelled) => Ok(false),
+            result => result,
+        }
+    }
+}
+
+impl Terrain {
+    pub fn start_certifier<'a>(
+        &'a self,
+        config: WorldConfig,
+        cancelled: &'a dyn Fn() -> bool,
+    ) -> StartCertifier<'a> {
+        StartCertifier {
+            cache: StartPassabilityCache::new(self, config, cancelled),
+        }
+    }
+}
+
 fn cancelled_work<T>(
     result: Result<T, EnvironmentPageError>,
 ) -> Result<Option<T>, EnvironmentPageError> {

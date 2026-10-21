@@ -17,6 +17,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 const SECRET: &str = "test-match-secret-0123456789";
 
 async fn server() -> SocketAddr {
+    let packages = tempfile::tempdir().unwrap().keep();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let state = AppState::new(
@@ -25,7 +26,7 @@ async fn server() -> SocketAddr {
             scenario: SMOKE,
             tick_hz: 20,
             asset_pack: None,
-            map_package_directory: None,
+            map_package_directory: Some(packages),
             open_map_package: None,
             map_worker: None,
             geodata_cache_directory: ".cache/geodata".into(),
@@ -163,4 +164,38 @@ async fn match_requests_are_validated() {
             "{status} {body}"
         );
     }
+}
+
+#[tokio::test]
+async fn a_flat_match_seats_many_players_apart_on_connected_ground() {
+    let address = server().await;
+    let slots = ["ai"; 8].join("\",\"");
+    let body = format!(r#"{{"flat":{{"tiles_per_side":300,"seed":2}},"slots":["{slots}"]}}"#);
+    let (status, body) = post(address, Some(SECRET), &body).await;
+    assert_eq!(status, 200, "{body}");
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(json["tiles_per_side"], 300);
+    let starts: Vec<(i64, i64)> = json["slots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|slot| {
+            let tile = &slot["start_tile"];
+            (tile[0].as_i64().unwrap(), tile[1].as_i64().unwrap())
+        })
+        .collect();
+    assert_eq!(starts.len(), 8);
+    for (i, a) in starts.iter().enumerate() {
+        for b in &starts[i + 1..] {
+            assert!((a.0 - b.0).abs().max((a.1 - b.1).abs()) >= 20, "{starts:?}");
+        }
+    }
+    // Missing storage or a bad size is a client error, not a crash.
+    let (status, _) = post(
+        address,
+        Some(SECRET),
+        r#"{"flat":{"tiles_per_side":10},"slots":["ai"]}"#,
+    )
+    .await;
+    assert_eq!(status, 400);
 }

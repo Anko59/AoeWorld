@@ -118,31 +118,64 @@ fn place_villages(
     let mut placed: Vec<TileCoord> = Vec::new();
     let mut scouts = Vec::new();
     for (index, ideal) in ideals.into_iter().enumerate() {
+        // Candidate tiles in widening rings, away from earlier villages.
+        let candidates: Vec<TileCoord> = (0..=reach)
+            .step_by(2)
+            .flat_map(|ring| ring_tiles(ideal, ring))
+            .filter(|tile| {
+                tile.x >= 4
+                    && tile.y >= 4
+                    && tile.x < side - 4
+                    && tile.y < side - 4
+                    && !placed.iter().any(|other| {
+                        (other.x - tile.x).abs().max((other.y - tile.y).abs()) < separation
+                    })
+            })
+            .collect();
         let mut found = None;
-        'search: for ring in (0..=reach).step_by(2) {
-            for tile in ring_tiles(ideal, ring) {
+        // Prefer ground connected to a large walkable region; terrain whose
+        // cliffs leave no such place (generated maps) falls back to any site
+        // a village fits on.
+        for require_region in [true, false] {
+            let mut next = 0;
+            // Certifying is costly: a quick look, then settle for any site.
+            let limit = if require_region { 48 } else { candidates.len() };
+            while found.is_none() && next < limit.min(candidates.len()) {
                 if cancelled() {
                     return Err(GameWorldError::StartSearchLimit.into());
                 }
-                if tile.x < 4
-                    || tile.y < 4
-                    || tile.x >= side - 4
-                    || tile.y >= side - 4
-                    || placed.iter().any(|other| {
-                        (other.x - tile.x).abs().max((other.y - tile.y).abs()) < separation
-                    })
-                {
-                    continue;
-                }
-                match world.initialize_village(PlayerId(index as u16), tile) {
-                    Ok(scout) => {
-                        found = Some((tile, scout));
-                        break 'search;
+                // Certify a few sites against the terrain, then try to settle one.
+                let batch = {
+                    let config = world.config();
+                    let mut certifier = world.terrain().start_certifier(config, cancelled);
+                    let mut batch = Vec::new();
+                    while next < limit.min(candidates.len()) && batch.len() < 3 {
+                        let tile = candidates[next];
+                        next += 1;
+                        if !require_region
+                            || certifier
+                                .certify(tile)
+                                .map_err(GameWorldError::Environment)?
+                        {
+                            batch.push(tile);
+                        }
                     }
-                    Err(EconomyError::InvalidFootprint) => {}
-                    Err(EconomyError::Movement(error)) => return Err(error.into()),
-                    Err(_) => return Err(MatchError::NoStart(index)),
+                    batch
+                };
+                for tile in batch {
+                    match world.initialize_village(PlayerId(index as u16), tile) {
+                        Ok(scout) => {
+                            found = Some((tile, scout));
+                            break;
+                        }
+                        Err(EconomyError::InvalidFootprint) => {}
+                        Err(EconomyError::Movement(error)) => return Err(error.into()),
+                        Err(_) => return Err(MatchError::NoStart(index)),
+                    }
                 }
+            }
+            if found.is_some() {
+                break;
             }
         }
         let (tile, scout) = found.ok_or(MatchError::NoStart(index))?;
@@ -183,6 +216,8 @@ pub(crate) enum SlotKind {
 pub(crate) struct MatchRequest {
     map_hash: Option<String>,
     map: Option<MapRequest>,
+    /// A flat synthetic ground (see `flat.rs`), the usual place for AI tests.
+    flat: Option<flat::FlatMap>,
     slots: Vec<SlotKind>,
 }
 
@@ -226,15 +261,35 @@ pub(crate) async fn start_match(
             "match hosting needs the AOE_MATCH_TOKEN secret".to_owned(),
         ));
     }
-    let package = match (&request.map_hash, request.map) {
-        (Some(hash), None) => state
+    let package = match (&request.map_hash, request.map, request.flat) {
+        (None, None, Some(flat)) => {
+            let directory = state.map_package_directory.clone().ok_or((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "a flat map needs a configured map package directory".to_owned(),
+            ))?;
+            tokio::task::spawn_blocking(move || {
+                let (package, pages) = flat::package(flat).map_err(|error| error.to_string())?;
+                map_store::persist_prepared(Some(&directory), &package, &pages, &[], &[], &[])
+                    .map_err(|error| error.to_string())?;
+                Ok::<_, String>(package)
+            })
+            .await
+            .map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "map task failed".to_owned(),
+                )
+            })?
+            .map_err(|error| (StatusCode::BAD_REQUEST, error))?
+        }
+        (Some(hash), None, None) => state
             .map_packages
             .read()
             .await
             .get(hash)
             .cloned()
             .ok_or((StatusCode::NOT_FOUND, "unknown map package".to_owned()))?,
-        (None, Some(map)) => {
+        (None, Some(map), None) => {
             let directory = state.map_package_directory.clone();
             tokio::task::spawn_blocking(move || {
                 let package = MapPackage::new(MAP_SCHEMA_VERSION, map, Vec::new())
@@ -255,7 +310,7 @@ pub(crate) async fn start_match(
         _ => {
             return Err((
                 StatusCode::BAD_REQUEST,
-                "give exactly one of map_hash and map".to_owned(),
+                "give exactly one of map_hash, map and flat".to_owned(),
             ));
         }
     };
@@ -318,6 +373,8 @@ pub(crate) async fn start_match(
         slots,
     }))
 }
+
+mod flat;
 
 #[path = "gameplay_match/tests.rs"]
 #[cfg(test)]
