@@ -107,6 +107,8 @@ the native loop duration. Death is one-shot. Source prefixes remain checked
 for truncation/duplicates. The combined synthetic native/DE selection pins
 **4,628** frames under the unchanged **5,120** cap, four 2048² pages/64 MiB.
 Real-pack packing/visual evidence is separate from this synthetic budget test.
+The local WebGPU capture packs **4,459** real-art frames into the same four
+pages; its metadata and screenshots stay under `.cache/military-shots/`.
 
 ## Wire, gates and demo
 

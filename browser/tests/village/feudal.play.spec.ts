@@ -4,7 +4,14 @@ import { gameAssets } from "../game-assets.js";
 import { centerVillage } from "./fixtures/resources.js";
 import { workerFixture } from "./fixtures/worker.js";
 import { forceCanvas } from "../rendering/backends.js";
-import "./military/attack.js";
+import { militaryAttack } from "./military/attack.js";
+
+test("train an Archer and a Spearman, research Fletching and attack", async ({
+  page,
+  request,
+}, info) => {
+  await militaryAttack(page, request, info);
+});
 
 type Actor = { kind: string; x: number; y: number };
 async function actors(page: Page): Promise<Actor[]> {

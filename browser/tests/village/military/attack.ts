@@ -1,5 +1,9 @@
-import { expect, type Page } from "@playwright/test";
-import { test } from "../../../server.js";
+import {
+  expect,
+  type Page,
+  type APIRequestContext,
+  type TestInfo,
+} from "@playwright/test";
 import { gameAssets } from "../../game-assets.js";
 import { centerVillage, freshHud } from "../fixtures/resources.js";
 import { forceCanvas } from "../../rendering/backends.js";
@@ -27,11 +31,12 @@ async function select(page: Page, kind: string) {
   await expect(page.locator("#selection")).toHaveAttribute("data-kind", kind);
 }
 
-test("train an Archer and a Spearman, research Fletching and attack", async ({
-  page,
-  request,
-}, info) => {
-  test.setTimeout(90_000);
+export async function militaryAttack(
+  page: Page,
+  request: APIRequestContext,
+  info: TestInfo,
+) {
+  info.setTimeout(90_000);
   if (info.project.name === "canvas") await forceCanvas(page);
   expect(
     (await request.post("/maps/reset?scenario=feudal-military")).status(),
@@ -84,4 +89,4 @@ test("train an Archer and a Spearman, research Fletching and attack", async ({
       { timeout: 20_000 },
     )
     .toBe(true);
-});
+}
