@@ -371,14 +371,7 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
     atlas_budget(selected.len());
     Ok((
         GameArt {
-            actors: actor_ranges
-                .iter()
-                .map(|range| {
-                    range
-                        .as_ref()
-                        .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
-                })
-                .collect(),
+            actors: actors::resolve(&manifest, &selected, &records, &actor_ranges),
             fishing: std::array::from_fn(|i| {
                 fishing_ranges[i]
                     .as_ref()
