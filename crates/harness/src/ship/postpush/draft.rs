@@ -34,15 +34,10 @@ pub(in crate::ship) fn start(
                     &repository,
                     "--json",
                     "isDraft,autoMergeRequest",
-                    "--jq",
-                    "\\(.isDraft) \\(.autoMergeRequest != null)",
                 ],
             )?;
-            let (draft, armed) = state
-                .trim()
-                .split_once(' ')
-                .unwrap_or((state.trim(), "true"));
-            if armed != "false" {
+            let state = PrState::parse(&state)?;
+            if state.armed() {
                 let args = github::disable_auto_args(&pr.url, &repository);
                 match github::gh(root, &args.iter().map(String::as_str).collect::<Vec<_>>()) {
                     Err(error) if !github::auto_merge_not_enabled(&error.to_string()) => {
@@ -51,7 +46,7 @@ pub(in crate::ship) fn start(
                     _ => {}
                 }
             }
-            if draft != "true" {
+            if !state.is_draft {
                 github::gh(
                     root,
                     &["pr", "ready", &pr.url, "--repo", &repository, "--undo"],
@@ -108,4 +103,27 @@ pub(in crate::ship) fn push(
     }
     .map_err(|error| format!("git push failed: {error}"))?;
     git::publish::push(root, evidence, Some(&refreshed))
+}
+
+/// `gh pr view --json isDraft,autoMergeRequest`, parsed here rather than with `--jq` so the
+/// exact shape GitHub returns is what the tests feed in.
+#[derive(serde::Deserialize, Debug, PartialEq, Eq)]
+pub(in crate::ship) struct PrState {
+    #[serde(rename = "isDraft")]
+    pub(in crate::ship) is_draft: bool,
+    #[serde(rename = "autoMergeRequest")]
+    auto_merge_request: Option<serde_json::Value>,
+}
+
+impl PrState {
+    pub(in crate::ship) fn parse(json: &str) -> crate::ship::Result<Self> {
+        serde_json::from_str(json).map_err(|error| {
+            format!("ship: unreadable pull request state ({error}): {json}").into()
+        })
+    }
+
+    /// Whether GitHub has an auto-merge armed for this pull request.
+    pub(in crate::ship) fn armed(&self) -> bool {
+        self.auto_merge_request.is_some()
+    }
 }

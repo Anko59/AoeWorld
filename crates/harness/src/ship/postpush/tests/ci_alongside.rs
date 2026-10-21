@@ -14,7 +14,9 @@ case "$1 $2" in
   'pr view')
     d=false; [ -f "$GH_DIR/draft" ] && d=true
     a=false; [ -f "$GH_DIR/auto" ] && a=true
-    echo "$d $a" ;;
+    case "$*" in *--jq*) echo "the draft state is parsed in Rust, never with --jq" >&2; exit 9 ;; esac
+    m=null; [ "$a" = true ] && m='{"enabledAt":"2026-10-21T00:00:00Z","mergeMethod":"SQUASH"}'
+    printf '{"isDraft":%s,"autoMergeRequest":%s}\n' "$d" "$m" ;;
   'pr create')
     case "$*" in *--draft*) touch "$GH_DIR/draft" ;; esac
     touch "$GH_DIR/existing"
@@ -393,5 +395,22 @@ fn missing_ci_run_is_pending_and_api_failure_preserves_review_failure() {
             && error.contains("review 7/10 · CI: unavailable")
             && error.contains("CI API denied"),
         "{error}"
+    );
+}
+
+#[test]
+fn pull_request_state_parses_githubs_json_for_drafts_and_armed_auto_merge() {
+    use crate::ship::postpush::draft::PrState;
+    // A failed review leaves exactly this: a draft with no auto-merge (#518, 2026-10-21).
+    let draft = PrState::parse(r#"{"isDraft":true,"autoMergeRequest":null}"#).unwrap();
+    assert!(draft.is_draft && !draft.armed());
+    let armed = PrState::parse(
+        r#"{"isDraft":false,"autoMergeRequest":{"enabledAt":"2026-10-21T00:00:00Z","mergeMethod":"SQUASH"}}"#,
+    )
+    .unwrap();
+    assert!(!armed.is_draft && armed.armed());
+    assert!(
+        PrState::parse("true false").is_err(),
+        "jq-style text is not accepted"
     );
 }
