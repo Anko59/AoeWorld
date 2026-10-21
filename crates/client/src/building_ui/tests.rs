@@ -214,14 +214,30 @@ fn market_panel_enables_only_affordable_trades_at_a_completed_owned_market() {
         stone: 500,
     };
     // Buy costs price plus 30%: wood 130 is affordable, food 133 and stone 117
-    // (90 * 1.3) are judged against 130 gold: only food is not.
+    // (90 * 1.3) are judged against 130 gold: only food is not. Sell pays
+    // price minus 30%: 70, 72 (103 * 0.7 floored) and 63.
     assert_eq!(
         market_panel(true, prices, have),
-        [100.0, 103.0, 90.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0]
+        [
+            100.0, 103.0, 90.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 130.0, 133.0, 117.0, 70.0, 72.0, 63.0
+        ]
     );
-    // Not a completed owned Market: prices stay visible, every button is off.
+    // Not a completed owned Market: prices and amounts stay visible, every
+    // button is off.
     assert_eq!(
         market_panel(false, prices, have),
-        [100.0, 103.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        [
+            100.0, 103.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 130.0, 133.0, 117.0, 70.0, 72.0, 63.0
+        ]
     );
+}
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn market_rules_and_protocol_share_one_price_clamp() {
+    let rules = aoe_simulation::MARKET_RULES;
+    assert_eq!(rules.min_price, aoe_protocol::MARKET_MIN_PRICE);
+    assert_eq!(rules.max_price, aoe_protocol::MARKET_MAX_PRICE);
+    // Trades clamp to the same range the protocol validates against.
+    assert_eq!(rules.lower(rules.min_price), aoe_protocol::MARKET_MIN_PRICE);
+    assert_eq!(rules.raise(rules.max_price), aoe_protocol::MARKET_MAX_PRICE);
 }

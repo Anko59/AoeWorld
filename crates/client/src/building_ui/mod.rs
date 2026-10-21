@@ -67,17 +67,20 @@ pub fn affordable(have: Stockpile, need: Stockpile) -> bool {
         && have.stone >= need.stone
 }
 
-/// Market trade panel numbers: three gold prices, then three buy and three
-/// sell enable flags for wood, food and stone. Buttons stay disabled unless
-/// the selected building is the owner's completed Market; the server decides.
+/// Market trade panel numbers for wood, food and stone, in groups of three:
+/// gold prices per 100 units, buy enable flags, sell enable flags, the gold a
+/// buy of 100 costs, and the gold a sell of 100 pays. Commission lives in
+/// `MarketRules`, so the client only displays these numbers. Buttons stay
+/// disabled unless the selected building is the owner's completed Market; the
+/// server decides.
 #[inline(never)]
 pub fn market_panel(
     market_owned_complete: bool,
     prices: aoe_protocol::MarketPrices,
     have: Stockpile,
-) -> [f64; 9] {
+) -> [f64; 15] {
     let rules = aoe_simulation::MARKET_RULES;
-    let mut panel = [0.0; 9];
+    let mut panel = [0.0; 15];
     for (i, (resource, price)) in [
         (have.wood, prices.wood),
         (have.food, prices.food),
@@ -86,11 +89,15 @@ pub fn market_panel(
     .into_iter()
     .enumerate()
     {
-        panel[i] = f64::from(price);
-        let buy = have.gold >= rules.buy_cost(price);
+        let buy_cost = rules.buy_cost(price);
+        let sell_proceeds = rules.sell_proceeds(price);
+        let buy = have.gold >= buy_cost;
         let sell = resource >= rules.trade_amount;
+        panel[i] = f64::from(price);
         panel[3 + i] = f64::from(u8::from(market_owned_complete && buy));
         panel[6 + i] = f64::from(u8::from(market_owned_complete && sell));
+        panel[9 + i] = f64::from(buy_cost);
+        panel[12 + i] = f64::from(sell_proceeds);
     }
     panel
 }
