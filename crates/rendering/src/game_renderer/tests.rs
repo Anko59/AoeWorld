@@ -16,7 +16,6 @@ mod grid;
 mod landscape;
 #[path = "tests/species.rs"]
 mod species;
-
 fn synthetic_art() -> GameArt {
     let frame = GameFrame {
         atlas: crate::AtlasAddress {
@@ -31,7 +30,8 @@ fn synthetic_art() -> GameArt {
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
-        town_center: Default::default(),
+        compositions: Vec::new(),
+        foundation: Default::default(),
         walking: vec![frame; 80],
         standing: vec![frame; 80],
         grass: vec![frame],

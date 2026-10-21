@@ -16,7 +16,6 @@ const DAMAGE_COUNT_AT: usize = 145;
 const DAMAGE_SPRITE_BYTES: usize = 5;
 const COMBAT_TAIL: usize = 56;
 const CREATABLE_BYTES: usize = 65;
-const BUILDING_BYTES: usize = 80;
 
 struct Anchor {
     offset: usize,
@@ -197,9 +196,10 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
     r.skip(3)?; // undead graphic, death mode
     let hit_points = r.i16()?;
     let line_of_sight = r.f32()?;
-    r.skip(1)?;
+    r.skip(1)?; // garrison capacity
     let collision_size = [r.f32()?, r.f32()?];
-    r.pos = start + 43;
+    let footprint = collision_size.map(|radius| radius * 2.0);
+    r.pos = start + 43; // remaining collision radius and creation/damage sounds
     let dead_unit = r.i16()?;
     r.pos = start + 75;
     let resource_capacity = r.i16()?;
@@ -226,6 +226,8 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         resource_storage,
         work_rate: None,
         standing,
+        footprint,
+        building: None,
         dying,
         dead_unit,
         speed: None,
@@ -237,7 +239,6 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         train_time: None,
         train_location: None,
         construction_graphic: None,
-        snow_graphic: None,
         tasks: Vec::new(),
     };
     if kind >= 20 {
@@ -276,9 +277,9 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         r.skip(CREATABLE_BYTES - 22)?;
     }
     if kind == 80 {
-        out.construction_graphic = Some(r.i16()?);
-        out.snow_graphic = Some(r.i16()?);
-        r.skip(BUILDING_BYTES - 4)?;
+        let building = super::building::decode(r)?;
+        out.construction_graphic = Some(building.construction_graphic);
+        out.building = Some(building);
     }
     Ok(out)
 }

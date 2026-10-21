@@ -57,6 +57,7 @@ function paletteClass(image: PNG, offset: number): number {
 function paletteCounts(image: PNG): number[] {
   const counts = colors.map(() => 0);
   const pavedCounts = syntheticPavedRockColors.map(() => 0);
+  const pavedPixels: { x: number; y: number; rgb: number[] }[] = [];
   for (let offset = 0; offset < image.data.length; offset += 4) {
     const index = paletteClass(image, offset);
     if (index >= 0) counts[index] = (counts[index] ?? 0) + 1;
@@ -74,11 +75,20 @@ function paletteCounts(image: PNG): number[] {
         )
       ) {
         pavedCounts[paved] = (pavedCounts[paved] ?? 0) + 1;
+        if (pavedPixels.length < 20)
+          pavedPixels.push({
+            x,
+            y,
+            rgb: [...image.data.subarray(offset, offset + 3)],
+          });
       }
     });
   }
   for (const count of pavedCounts) {
-    expect(count, "unused 15018 paving world pixels").toBe(0);
+    expect(
+      count,
+      `unused 15018 paving world pixels: ${JSON.stringify(pavedPixels)}`,
+    ).toBe(0);
   }
   return counts;
 }

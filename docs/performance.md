@@ -49,6 +49,21 @@ reused through camera churn and zoom. Browser timings are informational on
 shared hosts. The raw samples and browser identity are saved to ignored
 `reports/perf/browser.json` and uploaded as CI diagnostics.
 
+The native DAT atlas measurement on 2026-10-20 used trial pack
+`0389690a9b3ca887c53aa1afc6ee7f9247f1e63513d07582eaf0d4a56c8fd3a2`.
+After applying the client's existing idle/fisherman selections, its 4,859
+entries still overflowed the two object pages (7,968,239 object pixels).
+Sampling the 60-frame Dock wake at every second frame, with 300ms per retained
+frame, preserves its nine-second loop and saves 535,997 pixels. The measured
+result is 4,829 entries and 7,432,242 object pixels, packed by
+`make building-proof` into the unchanged four 2048-square RGBA8 pages:
+67,108,864 bytes (64 MiB). CPU atlas storage and GPU texture payload retain that
+same bound; this is not a measurement of driver overhead or dedicated VRAM.
+The 5,120-entry limit is unchanged. The strict `make test-assets-pack` full
+original-catalog qualification remains unavailable on this trial: its optional
+rock 15033 and snow 15026 sheets are absent. Portable complete-catalog tests
+and this real available-source measurement are separate evidence.
+
 Dedicated machines can submit `reports/perf/hardware-environment.json` and
 `reports/perf/hardware-samples.json` to `make perf-hardware-check` (or pass
 `--environment`, `--samples`, and `--baseline` paths to the Rust CLI). The

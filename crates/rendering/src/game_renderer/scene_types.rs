@@ -99,7 +99,6 @@ pub enum SceneUnitKind {
     FishingShipWorking,
     VillagerFishing,
     Dock,
-    FoundationDock,
     RubbleDock,
     BuilderAtlas,
     ArcheryRange,
@@ -121,6 +120,31 @@ pub enum SceneUnitKind {
     OpenPalisadeGate,
     GateFoundation,
     FeudalDock,
+    ConstructionTownCenter,
+    ConstructionHouse,
+    ConstructionLumberCamp,
+    ConstructionMiningCamp,
+    ConstructionMill,
+    ConstructionFarm,
+    ConstructionBarracks,
+    ConstructionPalisadeWall,
+    ConstructionOutpost,
+    ConstructionRange,
+    ConstructionStable,
+    ConstructionBlacksmith,
+    ConstructionMarket,
+    ConstructionTower,
+    ConstructionGate,
+    ConstructionFeudalTownCenter,
+    ConstructionFeudalHouse,
+    ConstructionFeudalMill,
+    ConstructionFeudalLumberCamp,
+    ConstructionFeudalMiningCamp,
+    ConstructionFeudalBarracks,
+    ConstructionFeudalDock,
+    FeudalLumberCamp,
+    FeudalMiningCamp,
+    FoundationDock,
 }
 
 impl SceneUnitKind {
@@ -243,53 +267,104 @@ impl SceneUnitKind {
     }
     pub(super) fn building_slot(self) -> Option<u8> {
         match self {
-            Self::BuildingTownCenter => Some(0),
-            Self::House => Some(1),
-            Self::LumberCamp => Some(2),
-            Self::MiningCamp => Some(3),
-            Self::Mill => Some(4),
-            Self::Farm => Some(5),
-            Self::Barracks => Some(6),
-            Self::PalisadeWall => Some(7),
-            Self::Outpost => Some(8),
-            Self::Foundation1x1 => Some(9),
-            Self::Foundation2x2 => Some(10),
-            Self::Foundation3x3 => Some(11),
-            Self::Foundation4x4 => Some(12),
-            Self::RubbleTownCenter => Some(13),
-            Self::RubbleHouse => Some(14),
-            Self::RubbleLumberCamp => Some(15),
-            Self::RubbleMiningCamp => Some(16),
-            Self::RubbleMill => Some(17),
-            Self::RubbleFarm => Some(18),
-            Self::RubbleBarracks => Some(19),
-            Self::RubblePalisadeWall => Some(20),
-            Self::RubbleOutpost => Some(21),
-            Self::Dock => Some(23),
-            Self::FoundationDock => Some(24),
-            Self::RubbleDock => Some(25),
-            Self::BuilderAtlas => Some(22),
-            Self::ArcheryRange => Some(26),
-            Self::Stable => Some(27),
-            Self::Blacksmith => Some(28),
-            Self::Market => Some(29),
-            Self::WatchTower => Some(30),
-            Self::PalisadeGate => Some(31),
-            Self::RubbleArcheryRange => Some(32),
-            Self::RubbleStable => Some(33),
-            Self::RubbleBlacksmith => Some(34),
-            Self::RubbleMarket => Some(35),
-            Self::RubbleWatchTower => Some(36),
-            Self::RubblePalisadeGate => Some(37),
-            Self::FeudalTownCenter => Some(38),
-            Self::FeudalHouse => Some(39),
-            Self::FeudalMill => Some(40),
-            Self::FeudalBarracks => Some(41),
-            Self::OpenPalisadeGate => Some(42),
-            Self::GateFoundation => Some(43),
-            Self::FeudalDock => Some(44),
-            _ => None,
+            Self::Dock => return Some(23),
+            Self::FoundationDock => return Some(24),
+            Self::RubbleDock => return Some(25),
+            Self::BuilderAtlas => return Some(22),
+            Self::FeudalLumberCamp => return Some(2),
+            Self::FeudalMiningCamp => return Some(3),
+            _ => {}
         }
+        if self.is_foundation() {
+            return Some(match self.building_id()? {
+                109 | 71 | 84 => 12,
+                50 | 12 | 87 | 101 | 103 | 498 => 11,
+                72 | 598 | 79 => 9,
+                792 => 43,
+                133 => 24,
+                _ => 10,
+            });
+        }
+        (self as u8)
+            .checked_sub(Self::BuildingTownCenter as u8)
+            .filter(|slot| *slot <= 21)
+            .or_else(|| {
+                (self as u8)
+                    .checked_sub(Self::ArcheryRange as u8)
+                    .filter(|slot| *slot <= 18)
+                    .map(|slot| slot + 26)
+            })
+    }
+
+    pub fn foundation(id: i16) -> Self {
+        use SceneUnitKind::*;
+        match id {
+            45 => FoundationDock,
+            109 => ConstructionTownCenter,
+            70 => ConstructionHouse,
+            562 => ConstructionLumberCamp,
+            584 => ConstructionMiningCamp,
+            68 => ConstructionMill,
+            50 => ConstructionFarm,
+            12 => ConstructionBarracks,
+            72 => ConstructionPalisadeWall,
+            87 => ConstructionRange,
+            101 => ConstructionStable,
+            103 => ConstructionBlacksmith,
+            84 => ConstructionMarket,
+            79 => ConstructionTower,
+            792 => ConstructionGate,
+            71 => ConstructionFeudalTownCenter,
+            463 => ConstructionFeudalHouse,
+            129 => ConstructionFeudalMill,
+            563 => ConstructionFeudalLumberCamp,
+            585 => ConstructionFeudalMiningCamp,
+            498 => ConstructionFeudalBarracks,
+            133 => ConstructionFeudalDock,
+            _ => ConstructionOutpost,
+        }
+    }
+    pub(super) fn is_foundation(self) -> bool {
+        self == Self::FoundationDock
+            || (Self::ConstructionTownCenter as u8..=Self::ConstructionFeudalDock as u8)
+                .contains(&(self as u8))
+    }
+    pub fn building_id(self) -> Option<i32> {
+        use SceneUnitKind::*;
+        if self.is_foundation() && self != FoundationDock {
+            return [
+                109, 70, 562, 584, 68, 50, 12, 72, 598, 87, 101, 103, 84, 79, 792, 71, 463, 129,
+                563, 585, 498, 133,
+            ]
+            .get((self as u8 - Self::ConstructionTownCenter as u8) as usize)
+            .copied();
+        }
+        Some(match self {
+            TownCenter | BuildingTownCenter => 109,
+            House => 70,
+            LumberCamp => 562,
+            MiningCamp => 584,
+            Mill => 68,
+            Farm => 50,
+            Barracks => 12,
+            PalisadeWall => 72,
+            Outpost => 598,
+            Dock | FoundationDock => 45,
+            ArcheryRange => 87,
+            Stable => 101,
+            Blacksmith => 103,
+            Market => 84,
+            WatchTower => 79,
+            PalisadeGate | OpenPalisadeGate | GateFoundation => 792,
+            FeudalTownCenter => 71,
+            FeudalHouse => 463,
+            FeudalMill => 129,
+            FeudalLumberCamp => 563,
+            FeudalMiningCamp => 585,
+            FeudalBarracks => 498,
+            FeudalDock => 133,
+            _ => return None,
+        })
     }
     pub(super) fn building_side(self) -> Option<f64> {
         if self == Self::TownCenter {

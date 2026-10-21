@@ -2,7 +2,7 @@
 //! colours, sounds and the graphics table. Sizes were measured on the trial's
 //! `VER 5.7` data; an unlisted version is rejected rather than guessed.
 use super::reader::{Reader, text};
-use super::{Graphic, SUPPORTED_VERSIONS};
+use super::{Graphic, GraphicDelta, SUPPORTED_VERSIONS};
 use crate::Error;
 
 const MAX_TERRAINS: usize = 512;
@@ -14,7 +14,6 @@ const MAX_GRAPHICS: usize = 32_768;
 const MAX_DELTAS: usize = 256;
 const MAX_ATTACK_ANGLES: usize = 64;
 const GRAPHIC_BYTES: usize = 78;
-const DELTA_BYTES: usize = 16;
 const SOUND_FILE_BYTES: usize = 23;
 const COLOUR_BYTES: usize = 36;
 /// One restriction: a float and a 16-byte pass-graphic record per terrain.
@@ -80,7 +79,8 @@ fn graphic(r: &mut Reader) -> Result<Graphic, Error> {
     let name = text(r.take(21)?);
     let file_name = text(r.take(13)?);
     let slp_id = r.i32()?;
-    r.skip(3)?; // loaded, old colour flag, layer
+    r.skip(2)?; // loaded, old colour flag
+    let layer = r.u8()?;
     r.skip(2)?; // player colour
     r.skip(1 + 8)?; // transparent selection, selection rectangle
     let deltas = usize::from(r.u16()?);
@@ -100,14 +100,25 @@ fn graphic(r: &mut Reader) -> Result<Graphic, Error> {
     }
     let mut delta_graphics = Vec::with_capacity(deltas);
     for _ in 0..deltas {
-        delta_graphics.push(r.i16()?);
-        r.skip(DELTA_BYTES - 2)?;
+        let graphic_id = r.i16()?;
+        r.skip(2 + 4)?; // padding, runtime sprite pointer
+        let offset_x = r.i16()?;
+        let offset_y = r.i16()?;
+        let display_angle = r.i16()?;
+        r.skip(2)?;
+        delta_graphics.push(GraphicDelta {
+            graphic_id,
+            offset_x,
+            offset_y,
+            display_angle,
+        });
     }
     if attack_sounds {
         let angles = r.bounded(usize::from(angle_count), MAX_ATTACK_ANGLES, "attack angles")?;
         r.skip(angles * 12)?;
     }
     Ok(Graphic {
+        byte_offset: start,
         id,
         name,
         file_name,
@@ -116,6 +127,7 @@ fn graphic(r: &mut Reader) -> Result<Graphic, Error> {
         angle_count,
         frame_rate,
         replay_delay,
-        delta_graphics,
+        layer,
+        deltas: delta_graphics,
     })
 }

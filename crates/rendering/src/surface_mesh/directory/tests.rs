@@ -27,6 +27,21 @@ fn directory_resolves_every_material_tile_to_the_cpu_selected_frame() {
 }
 
 #[wasm_bindgen_test]
+fn dat_foundation_sheet_uses_the_same_directory_phase_and_junction_code() {
+    let mut art = fixture::art();
+    art.foundation = (art.terrain[0].clone(), art.terrain_topology[0]);
+    let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
+    crate::write_terrain_directory(&art, &mut atlas).unwrap();
+    for tile in [[-13, 7], [0, 0], [5, -4], [20, 31]] {
+        assert_eq!(
+            fixture::frame(&atlas, 17, tile),
+            terrain_texture_frame(&art, 17, tile).map(|f| f.atlas)
+        );
+    }
+    assert_eq!(crate::surface_mesh::mix::support::material(11), 17);
+}
+
+#[wasm_bindgen_test]
 fn directory_refuses_occupied_reserved_rows_and_skips_art_without_terrain() {
     let mut art = fixture::art();
     let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];

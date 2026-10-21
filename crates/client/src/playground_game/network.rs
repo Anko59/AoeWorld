@@ -123,7 +123,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.units = resident;
                 client.village.players = players;
                 client.village.rubble.retain(|(_, until)| *until > tick.0);
-                client.village.buildings = buildings;
+                map::scene::replace_buildings(&mut client, buildings);
                 client.village.tick = tick.0;
                 if !client.village.focused {
                     client.village.focused = true;
@@ -185,7 +185,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                         client.village.rubble.push((b, expiry));
                     }
                 }
-                client.village.buildings = buildings;
+                map::scene::replace_buildings(&mut client, buildings);
                 for id in removals {
                     client.units.remove(&id);
                     client.selected.units.retain(|selected| *selected != id);
@@ -326,6 +326,7 @@ fn reconnect(client: &mut Client, status: &str) {
 
 // The pieces of a connection's world that a new Welcome or a WorldReset drops.
 fn clear_world(client: &mut Client) {
+    client.terrain_scene.get_mut().take();
     client.resources.clear();
     client.fog.clear();
     if !client.surface_fixture {

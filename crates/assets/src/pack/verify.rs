@@ -92,6 +92,53 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
             return Err(invalid("manifest", 0, "frame outside atlas"));
         }
     }
+    let mut unit_ids = BTreeSet::new();
+    for building in &manifest.buildings {
+        if building.foundation_slp.is_some()
+            && (building.foundation_size.contains(&0)
+                || u32::from(building.foundation_size[0]) * u32::from(building.foundation_size[1])
+                    > 2560)
+        {
+            return Err(invalid("manifest", 0, "invalid DAT foundation topology"));
+        }
+        if manifest.buildings.len() > 32
+            || !unit_ids.insert(building.unit_id)
+            || building
+                .footprint
+                .iter()
+                .any(|v| !v.is_finite() || *v <= 0.0 || *v > 128.0)
+            || building.parts.len() > 256
+            || building.construction.len() > 256
+        {
+            return Err(invalid("manifest", 0, "invalid building recipe"));
+        }
+        for part in building.parts.iter().chain(&building.construction) {
+            if part.frames == 0
+                || part.angles == 0
+                || u32::from(part.frames) * u32::from(part.angles) > 256
+                || !part.frame_rate.is_finite()
+                || part.frame_rate < 0.0
+            {
+                return Err(invalid("manifest", 0, "invalid building animation"));
+            }
+            if part.offset.iter().any(|v| v.unsigned_abs() > 32768)
+                || part
+                    .misplacement
+                    .iter()
+                    .any(|v| !v.is_finite() || v.abs() > 128.0)
+                || part.available
+                    != manifest
+                        .frames
+                        .iter()
+                        .any(|f| f.source == part.source && f.frame == 0)
+            {
+                return Err(invalid("manifest", 0, "invalid building part or inventory"));
+            }
+        }
+    }
+    if manifest.building_data != super::recipes::encode(&manifest.buildings, &manifest.frames)? {
+        return Err(invalid("manifest", 0, "compiled building recipe mismatch"));
+    }
     Ok(manifest)
 }
 
@@ -100,43 +147,4 @@ fn valid_hash(value: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn manifest_parser_checks_counts_paths_and_frame_bounds_before_file_access() {
-        let hash = "a".repeat(64);
-        let mut value = serde_json::json!({
-            "version":1,"converter":"test","input_hash":hash,
-            "pages":[{
-                "color":"color.png","color_hash":hash,
-                "player":"player.png","player_hash":hash,
-                "shadow":"shadow.png","shadow_hash":hash,
-                "outline":"outline.png","outline_hash":hash,
-                "width":1024,"height":1024
-            }],
-            "frames":[{
-                "source":"fixture","source_hash":hash,"frame":0,"page":0,
-                "x":0,"y":0,"width":1,"height":1,"anchor_x":0,"anchor_y":0
-            }]
-        });
-        let parse =
-            |value: &serde_json::Value| parse_manifest(&serde_json::to_vec(value).expect("JSON"));
-        assert_eq!(parse(&value).expect("valid manifest").frames.len(), 1);
-        value["frames"][0]["x"] = 1024.into();
-        assert!(parse(&value).is_err());
-        value["frames"][0]["x"] = 0.into();
-        value["pages"][0]["color"] = "../escape.png".into();
-        assert!(parse(&value).is_err());
-        value["pages"][0]["color"] = "color.png".into();
-        let duplicate = value["frames"][0].clone();
-        value["frames"]
-            .as_array_mut()
-            .expect("frames")
-            .push(duplicate);
-        assert!(parse(&value).is_err());
-        value["version"] = 2.into();
-        assert!(parse(&value).is_err());
-        assert!(parse_manifest(&vec![0u8; 16 * 1024 * 1024 + 1]).is_err());
-    }
-}
+mod tests;

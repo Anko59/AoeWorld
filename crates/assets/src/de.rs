@@ -22,6 +22,7 @@ mod preview;
 mod select;
 mod table;
 
+pub use preview::reference;
 pub use select::{FARM_TEXTURES, Item, SELECTION};
 
 const MAX_SLD: u64 = 64 * 1024 * 1024;
@@ -100,6 +101,7 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         ));
     }
     let mut hasher = blake3::Hasher::new();
+    hasher.update(b"pack indexed building startup data\0");
     hasher.update(CONVERSION.as_bytes());
     let mut loaded = Vec::new();
     let mut absent = Vec::new();
@@ -153,6 +155,7 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         &output_root,
         hasher.finalize().to_hex().to_string(),
         &refs,
+        Vec::new(),
         |sprite, frame| {
             if sprite < split {
                 Ok(compose::planes(&loaded[sprite].frames[frame]))

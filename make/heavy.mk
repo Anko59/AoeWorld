@@ -3,6 +3,7 @@
 # through `aoe-harness slot`; the registry decides whether the gate takes a slot. The steps read
 # the environment named in SLOT_ENV (the audit in slots/tests/makefile.rs checks the list).
 SLOT_ENV := \
+  -e BUILDING_PROOF_REQUEST \
   -e HOME \
   -e DE_DIR \
   -e HARNESS_TEST_FILTER \
@@ -159,6 +160,13 @@ test-assets-de: slot-bootstrap
 
 test-assets-de-steps:
 	@$(subst $(TOOL_IMAGE),-e AOE_DE_DIR=/de-install $(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo nextest run --locked -p aoe-assets --no-tests fail --success-output immediate -E 'test(real_house)'
+
+.PHONY: test-assets-dat test-assets-dat-steps
+test-assets-dat: slot-bootstrap
+	@$(SLOT_RUN) test-assets-dat -- make --no-print-directory test-assets-dat-steps
+
+test-assets-dat-steps:
+	@$(subst $(TOOL_IMAGE),-e AOE_TRIAL_DAT=$(ROOT)/local-assets/trial/Data/empires2.dat $(TOOL_IMAGE),$(DOCKER_RUN)) cargo nextest run --locked -p aoe-assets --no-tests fail --success-output immediate -E 'test(dat::)'
 
 test-source-qualification: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-source-qualification -- make --no-print-directory test-source-qualification-steps

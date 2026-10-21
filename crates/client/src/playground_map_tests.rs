@@ -50,7 +50,7 @@ fn ground_variety_sheets_have_their_own_scene_materials() {
     assert_eq!(terrain_material(GroundMaterial::Dirt), 2);
 }
 
-#[path = "playground_map/resource_viewport_tests.rs"]
+#[path = "playground_map/tests/resource_viewport_tests.rs"]
 mod resource_viewport;
 
 #[wasm_bindgen_test]

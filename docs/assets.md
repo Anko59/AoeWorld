@@ -53,12 +53,16 @@ are not qualified as a seamless periodic sheet. Metadata-free material 6 selecti
 Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
 grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
-The periodic groups retain all 100 frames. Catalog v15's base selects 2,369 frames:
-1,474 terrain and 895 objects including village art and cliff faces 226. The
-[unit and wildlife selection](assets/units.md) adds 2,540 frames. Runtime packing
-uses four 2048² RGBA pages/64 MiB, terrain on pages 0/1 and objects on pages 2/3,
+The periodic groups retain all 100 frames. Catalog v15's base selects 2,361 static frames:
+1,474 terrain and 887 objects including village art and cliff faces 226. The
+[unit and wildlife selection](assets/units.md) adds 2,540 frames. DAT building
+recipes add their selected native frames, including animated Mill layers,
+static House variants and construction/wall angles. Runtime packing uses four
+2048² RGBA pages/64 MiB, terrain on pages 0/1 and objects on pages 2/3,
 with a 5,120-entry frame metadata cap.
-Counts alone do not prove fit; private full-manifest packing must be verified.
+Counts alone do not prove fit. Run `make test-assets-pack AOE_ASSET_PACK=local-assets/packs/<hash>`
+for the private full-catalog packing proof, including actor prefixes and DAT buildings.
+It requires every reviewed optional source, including the separate rock and snow sheets.
 It preserves raw signed frame anchors, player color and imported shadow masks;
 broadleaf 4652 uses only its paired shadow-only frames from 2296. Cavalry and non-tree resource
 frames without imported shadows use a fixed-direction fallback silhouette
@@ -93,15 +97,18 @@ rows of fifteen frames.
 The same eight-direction mirror mapping as the scout uses the native anchors.
 Authoritative Gathering tasks select the resource tool even with a partial
 load; Returning tasks select their carried resource, while idle/moving tasks
-retain ordinary standing/walking art. The Dark Age Town Center composes
-main 891, left roof/supports 3594/3595/3596, right roof/supports 4610/4611/4612,
-and paired shadow 889. Roofs draw behind the core with left/right attachments
-48/24 source pixels down; the single front-left and rear-right posts attach
-24 pixels down/up to meet their eaves. Signed and outside anchors are
-preserved; player masks use the current blue ramp. These are reviewed metadata,
-not committed pixels. Missing village groups draw simple semantic markers;
+retain ordinary standing/walking art. Buildings use imported DAT recipes:
+stand graphics and ordered deltas, annex tile displacements, shadows,
+construction graphics, footprints and foundation terrain. The Town Center's
+head is unit 109; unit 618 is its main-building annex, not the whole recipe.
+Signed and outside anchors are preserved; player masks use the current blue
+ramp. The foundation material is painted into the shared terrain before
+tessellation, so ordinary terrain blending owns its edges in every backend.
+See [game data](assets/game-data.md) for measured layouts and local proof tools.
+These are metadata, not committed pixels. Missing village groups draw simple semantic markers;
 a present incomplete group remains a pack error. The native metadata packing
-proof covers the full base and actor prefixes in the four-page atlas.
+proof covers the full base and actor prefixes plus DAT building and foundation
+frames in the same four-page atlas.
 Yellow wildflower 2561 and tan reed 4584 dressing are omitted because their
 silhouettes read as gold and deadwood. Footprint wear modulates existing terrain
 colors without additional faces. [Unit and wildlife art](assets/units.md) records

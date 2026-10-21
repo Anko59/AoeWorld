@@ -32,9 +32,13 @@ test("authoritative isometric game renders, selects, orders, and survives reload
   testInfo.annotations.push({ type: "assets", description: evidence });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.goto("/?play=1");
+  // Measure grass around the primary unit inside its revealed ground. At the
+  // wider default view the native dirt apron and unexplored rim legitimately
+  // occupy most of the sampled region. Keep the coverage floors unchanged.
+  await page.goto("/?play=1#zoom=1.5");
   await waitForGame(page);
   await page.keyboard.press("Home");
+  await expect(page.locator("#minimap")).toHaveAttribute("data-zoom", "1.5");
   if (testInfo.project.name === "webgpu") {
     await expect(page.locator("#playground")).toHaveAttribute(
       "data-renderer",
@@ -90,16 +94,19 @@ test("authoritative isometric game renders, selects, orders, and survives reload
       ).find((actor) => actor.kind === "TownCenter"),
     );
     if (!town) throw new Error("Starting Town Center missing");
+    const cameraScale = Number(
+      await page.locator("#minimap").getAttribute("data-zoom"),
+    );
     // At normal zoom this ground northeast of the Town Center is fully within
     // its eight-tile LOS and clear of buildings, actors and their shadows.
     // Exact source colors belong on unoccluded, revealed ground; the far view
     // below also contains correctly black unexplored terrain.
     expect(
       syntheticTerrainCoverage(image, {
-        left: Math.floor(town.x + 220),
-        right: Math.floor(town.x + 340),
-        top: Math.floor(town.y - 220),
-        bottom: Math.floor(town.y - 140),
+        left: Math.floor(town.x + 220 * cameraScale),
+        right: Math.floor(town.x + 340 * cameraScale),
+        top: Math.floor(town.y - 220 * cameraScale),
+        bottom: Math.floor(town.y - 140 * cameraScale),
       }),
     ).toBeGreaterThan(0.85);
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

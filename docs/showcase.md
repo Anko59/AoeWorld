@@ -150,9 +150,11 @@ Fog is enabled in ordinary games. For terrain/art showcases that need the whole
 map, start the filmed server with `AOE_FOG_DISABLED=1 make dev DEV_PORT=8097`.
 This is a server scenario setting; camera links cannot reveal hidden entities.
 Compare's owned spectator servers explicitly disable fog for both sides.
-`AOE_FOG_SHOWCASE=1` instead leaves fog enabled and adds one idle wolf beyond
-the scout's starting LOS, using bounded passable-tile placement. It supports
-one-take scouting demonstrations without changing the ordinary wildlife kit.
+`AOE_FOG_SHOWCASE=1` instead leaves fog enabled and adds an idle wolf and a
+distant enemy Town Center beyond the scout's starting LOS, using bounded legal
+placement. This supports scouting and remembered DAT building captures; ordinary
+games retain their starting kit. The local `building-proof` tool's `fog` mode
+scouts both sides of that footprint and returns home through normal move orders.
 
 Browser steps can also be named game steps. Each drives the real client through
 the hooks its browser specs use (`web/start`, `H` and `#selection`, the

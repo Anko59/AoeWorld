@@ -1,8 +1,10 @@
 // Opt-in native-art evidence and a reproducible storyboard, driven by the UI.
 import { expect, type Page } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { test } from "../../../server.js";
-import { centerVillage } from "../fixtures/resources.js";
+import { test } from "../../server.js";
+import { createHash } from "node:crypto";
+import { forceWebGl } from "./backends.js";
+import { centerVillage } from "../village/fixtures/resources.js";
 
 type Actor = { kind: string; x: number; y: number };
 type Step = Record<string, unknown>;
@@ -17,12 +19,35 @@ test("capture the native Feudal economy and prepare the live showcase", async ({
   request,
 }) => {
   const config = await readFile("../.cache/feudal-capture.json", "utf8")
-    .then((s) => JSON.parse(s) as { url: string })
+    .then((s) => JSON.parse(s) as { url: string; revision: string })
     .catch(() => null);
   test.skip(!config, "Local Feudal capture was not requested");
-  if (!config || config.url !== "http://127.0.0.1:18086/")
-    throw new Error("Feudal capture must use this worktree's port 18086");
+  if (!config) return;
+  const origin = new URL(config.url);
+  expect(["localhost", "127.0.0.1"]).toContain(origin.hostname);
+  expect(["", "8080", "8081"]).not.toContain(origin.port);
   test.setTimeout(180_000);
+  const hash = (bytes: Buffer) =>
+    createHash("sha256").update(bytes).digest("hex");
+  const health = (await (await request.get(`${config.url}health`)).json()) as {
+    build: string;
+  };
+  expect(health.build).toBe(config.revision);
+  const manifest = await request.get(`${config.url}asset-pack/manifest.json`);
+  const overlay = await request.get(
+    `${config.url}asset-pack/buildings/manifest.json`,
+  );
+  expect(manifest.ok()).toBe(true);
+  expect(overlay.ok()).toBe(true);
+  const manifestHash = hash(await manifest.body());
+  const overlayHash = hash(await overlay.body());
+  const bundle = await request.get(`${config.url}pkg/aoe_client_bg.wasm`);
+  expect(bundle.ok()).toBe(true);
+  const bundleHash = hash(await bundle.body());
+  expect(bundleHash).toBe(
+    hash(await readFile("../web/pkg/aoe_client_bg.wasm")),
+  );
+  await forceWebGl(page);
   await page.setViewportSize({ width: 1280, height: 720 });
   expect(
     (
@@ -77,9 +102,52 @@ test("capture the native Feudal economy and prepare the live showcase", async ({
       },
     });
   };
-  await page.screenshot({
-    path: "../.cache/feudal-shots/rebased-dark-age.png",
-  });
+  const capture = async (name: string) => {
+    const png = await page.screenshot({
+      path: `../.cache/tc-shots/rb5-${name}.png`,
+    });
+    const scene = await page.locator("#scene").evaluate((canvas) => ({
+      actors: JSON.parse(canvas.getAttribute("data-actors") ?? "[]") as unknown,
+      pending: canvas.getAttribute("data-chunks-pending"),
+      failed: canvas.getAttribute("data-chunks-failed"),
+      atlasFrames: document
+        .getElementById("playground")
+        ?.getAttribute("data-atlas-frames"),
+      renderer: document
+        .getElementById("playground")
+        ?.getAttribute("data-renderer"),
+      age: document.getElementById("age")?.textContent,
+      map: document.getElementById("minimap")?.getAttribute("data-map-hash"),
+      camera: ["x", "y"].map((axis) =>
+        document.getElementById("minimap")?.getAttribute(`data-camera-${axis}`),
+      ),
+      zoom: document.getElementById("minimap")?.getAttribute("data-zoom"),
+    }));
+    expect(scene.pending).toBe("0");
+    expect(scene.failed).toBe("0");
+    await writeFile(
+      `../.cache/tc-shots/rb5-${name}.json`,
+      JSON.stringify(
+        {
+          origin: config.url,
+          health,
+          bundleSha256: bundleHash,
+          screenshotSha256: hash(png),
+          manifestSha256: manifestHash,
+          overlaySha256: overlayHash,
+          ...scene,
+        },
+        null,
+        2,
+      ),
+    );
+  };
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-chunks-pending",
+    "0",
+    { timeout: 60_000 },
+  );
+  await capture("dark");
   await click("#research-feudal-age");
   await wait('#age:text-is("II  Feudal Age")');
   await page.screenshot({ path: "../.cache/feudal-shots/rebased-age-up.png" });
@@ -87,13 +155,15 @@ test("capture the native Feudal economy and prepare the live showcase", async ({
   const locations: Array<readonly [number, number]> = [];
   for (const [id, kind] of [
     ["archery-range", "ArcheryRange"],
+    ["stable", "Stable"],
     ["blacksmith", "Blacksmith"],
     ["market", "Market"],
     ["watch-tower", "WatchTower"],
+    ["palisade-gate", "PalisadeGate"],
   ] as const) {
     await actor("Villager");
     await click(
-      id === "archery-range" || id === "watch-tower"
+      ["archery-range", "stable", "watch-tower", "palisade-gate"].includes(id)
         ? "#build-military-menu"
         : "#build-menu",
     );
@@ -108,6 +178,11 @@ test("capture the native Feudal economy and prepare the live showcase", async ({
       [820, 220],
       [400, 410],
       [800, 420],
+      [240, 270],
+      [1120, 340],
+      [540, 170],
+      [730, 470],
+      [320, 460],
     ] as const) {
       if (locations.some(([a, b]) => Math.abs(a - x) + Math.abs(b - y) < 80))
         continue;
@@ -146,9 +221,11 @@ test("capture the native Feudal economy and prepare the live showcase", async ({
   }
   await page.keyboard.press("Escape");
   steps.push({ key: "Escape" });
-  await page.screenshot({
-    path: "../.cache/feudal-shots/rebased-feudal-village.png",
-  });
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-chunks-pending",
+    "0",
+  );
+  await capture("feudal");
   expect(steps.length).toBeLessThanOrEqual(64);
   await writeFile(
     "../.cache/feudal-storyboard.json",

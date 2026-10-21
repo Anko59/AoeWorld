@@ -63,3 +63,11 @@ fn main() {
 #[cfg(test)]
 #[path = "gates/placement/main_tests.rs"]
 mod main_tests;
+
+#[cfg(test)]
+#[path = "../examples/building-proof/tests/packing.rs"]
+mod building_packing_tests;
+
+#[cfg(test)]
+#[path = "../examples/building-proof/tests/preparation.rs"]
+mod building_preparation_tests;

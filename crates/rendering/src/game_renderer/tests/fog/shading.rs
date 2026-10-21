@@ -12,7 +12,8 @@ fn resource_and_unit_identity_collision_cannot_change_their_fog_shading() {
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
-        town_center: Default::default(),
+        compositions: Default::default(),
+        foundation: Default::default(),
         walking: vec![unit_frame],
         standing: vec![unit_frame],
         grass: Vec::new(),
@@ -51,11 +52,11 @@ fn resource_and_unit_identity_collision_cannot_change_their_fog_shading() {
     let WorldLayer::Sprite(resource_sprite, _, _, _) = layers[0] else {
         panic!("resource");
     };
-    let WorldLayer::Sprite(unit, _, _, _) = layers[1] else {
+    let WorldLayer::Sprite(unit_sprite, _, _, _) = layers[1] else {
         panic!("unit");
     };
     assert_eq!(resource_sprite.color[..3], [0.45; 3]);
-    assert_eq!(unit.color[..3], [1.0; 3]);
+    assert_eq!(unit_sprite.color[..3], [1.0; 3]);
 
     // Fish remain remembered resources on every displayed animation frame.
     art.fishing[0] = vec![resource_frame, unit_frame];
@@ -70,4 +71,90 @@ fn resource_and_unit_identity_collision_cannot_change_their_fog_shading() {
         panic!("fish")
     };
     assert_eq!(fish.color[..3], [0.45; 3]);
+
+    // Full 64-bit resource identities, paired shadows and duplicate updates
+    // must retain the original frame-specific, last-write shading semantics.
+    let mut other = resource_frame;
+    other.atlas.uv[1] = 0.25;
+    let mut art = art;
+    art.resources[1] = vec![other];
+    art.tree_shadows = vec![resource_frame];
+    let resources = [
+        SceneResource {
+            id: 7,
+            kind: 1,
+            position: [5.5, 0.5],
+            ..resource
+        },
+        SceneResource {
+            id: 7 + (1_u64 << 32),
+            position: [5.5, 0.5],
+            ..resource
+        },
+        resource,
+    ];
+    let mut layers = [
+        WorldLayer::Sprite(sprite, other, 0.0, 7),
+        WorldLayer::Sprite(sprite, resource_frame, 0.0, 7),
+        WorldLayer::Sprite(sprite, resource_frame, 0.0, 7 + (1_u64 << 32)),
+        WorldLayer::Sprite(sprite, unit_frame, 0.0, 7),
+        WorldLayer::Sprite(sprite, unit_frame, 0.0, 999),
+    ];
+    shade_objects(&mut layers, &art, &resources, &[unit], 0, &|p| {
+        if p[0] < 1.0 { 0.45 } else { 1.0 }
+    });
+    for (layer, expected) in layers.iter().zip([1.0, 0.45, 1.0, 1.0, 1.0]) {
+        let WorldLayer::Sprite(sprite, _, _, _) = layer else {
+            panic!("sprite");
+        };
+        assert_eq!(sprite.color[..3], [expected; 3]);
+    }
+
+    let resources = (0..8192_u64)
+        .map(|i| SceneResource {
+            id: (i << 32) | 7,
+            kind: 1,
+            position: [if i % 2 == 0 { 0.5 } else { 5.5 }, 0.5],
+            ..resource
+        })
+        .collect::<Vec<_>>();
+    let units = (0..1024)
+        .map(|id| SceneUnit {
+            id: aoe_core::EntityId(id),
+            ..unit
+        })
+        .collect::<Vec<_>>();
+    let mut layers = resources
+        .iter()
+        .flat_map(|r| {
+            [other, resource_frame].map(|frame| WorldLayer::Sprite(sprite, frame, 0.0, r.id))
+        })
+        .chain(
+            units
+                .iter()
+                .map(|u| WorldLayer::Sprite(sprite, unit_frame, 0.0, u64::from(u.id.0))),
+        )
+        .collect::<Vec<_>>();
+    let started = js_sys::Date::now();
+    shade_objects(&mut layers, &art, &resources, &units, 0, &|p| {
+        if p[0] < 1.0 { 0.45 } else { 1.0 }
+    });
+    wasm_bindgen_test::console_log!(
+        "fog: 8192 paired resources + 1024 units, {} layers, {} ms; {}-byte factor, {}-byte resource record (temporary vectors/index have additional capacity)",
+        layers.len(),
+        js_sys::Date::now() - started,
+        std::mem::size_of::<Factor>(),
+        std::mem::size_of::<ResourceFactor>()
+    );
+    for (i, layer) in layers.iter().enumerate() {
+        let WorldLayer::Sprite(sprite, _, _, _) = layer else {
+            panic!("sprite");
+        };
+        let expected = if i < 16384 && i / 2 % 2 == 0 {
+            0.45
+        } else {
+            1.0
+        };
+        assert_eq!(sprite.color[..3], [expected; 3]);
+    }
 }

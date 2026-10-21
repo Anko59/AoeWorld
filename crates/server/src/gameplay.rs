@@ -196,7 +196,7 @@ impl GameplayService {
             world.set_fog_disabled(true);
         }
         if crate::Config::fog_showcase_from_env() {
-            fog::showcase_wolf(&mut world, primary_unit_id);
+            fog::showcase_enemies(&mut world, primary_unit_id);
         }
         let world_id = SystemTime::now()
             .duration_since(UNIX_EPOCH)

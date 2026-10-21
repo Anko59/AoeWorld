@@ -170,12 +170,8 @@ pub(super) fn emit_world_sprite_frames(
             continue;
         };
         let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
-        if unit.kind.building_slot().is_some() {
+        if unit.kind.building_side().is_some() {
             village::building(art, unit, camera, animation, &mut emit);
-            continue;
-        }
-        if unit.kind == crate::SceneUnitKind::TownCenter {
-            village::town_center(art, unit, camera, &mut emit);
             continue;
         }
         let Some((frames, stride, animated)) = village::frames(art, unit) else {
@@ -410,53 +406,8 @@ fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
 }
 
 #[cfg(test)]
-#[wasm_bindgen_test::wasm_bindgen_test]
-fn composed_layer_sort_matches_two_stable_sorts_on_exact_depth_and_id_ties() {
-    use bytemuck::Zeroable;
-    let frame = GameFrame {
-        atlas: crate::AtlasAddress {
-            page: 0,
-            uv: [0.0; 4],
-        },
-        size: [1.0; 2],
-        anchor: [0.0; 2],
-    };
-    let camera = SceneCamera {
-        center: [0.0; 2],
-        zoom: 1.0,
-        viewport: [128.0; 2],
-        focus_elevation_meters: 0.0,
-    };
-    let objects = (0..96)
-        .map(|index| {
-            let mut sprite = Sprite::zeroed();
-            sprite.color[0] = index as f32;
-            let depth = [0.0, -0.0, 4.0, -1.0, f64::INFINITY, f64::NEG_INFINITY][index % 6];
-            (sprite, frame, depth, (index % 4) as u64)
-        })
-        .collect::<Vec<_>>();
-    // Original object pre-sort, followed by the old stable layer depth sort.
-    let mut expected = objects.clone();
-    expected.sort_by(|left, right| left.2.total_cmp(&right.2).then(left.3.cmp(&right.3)));
-    expected.sort_by(|left, right| left.2.total_cmp(&right.2));
-    let actual = ordered_world_layers([], objects, &[], camera);
-    let actual = actual
-        .iter()
-        .map(|layer| {
-            let WorldLayer::Sprite(sprite, _, _, _) = layer else {
-                panic!("unexpected layer")
-            };
-            sprite.color[0]
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(
-        actual,
-        expected
-            .iter()
-            .map(|entry| entry.0.color[0])
-            .collect::<Vec<_>>()
-    );
-}
+#[path = "village/tests/layer_order.rs"]
+mod layer_order_tests;
 
 fn sprite_direction(facing: u8) -> (usize, bool) {
     let facing = facing % 8;
@@ -470,11 +421,17 @@ pub fn actor_frame_index(facing: u8, stride: usize, phase: usize) -> (usize, boo
 }
 
 pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
-    if let Some(slot) = unit.kind.building_slot() {
-        return (slot == 4 && art.buildings[4].len() == 44 || slot == 40)
-            && art.buildings[usize::from(slot)].iter().any(|frame| {
+    if let Some(slot @ (4 | 40)) = unit.kind.building_slot()
+        && !art
+            .compositions
+            .iter()
+            .any(|b| Some(b.unit_id) == unit.kind.building_id() && !b.parts.is_empty())
+    {
+        let frames = &art.buildings[usize::from(slot)];
+        return (slot == 40 || frames.len() == 44)
+            && frames.iter().any(|f| {
                 sprite_screen_bounds(
-                    world_frame(*frame),
+                    world_frame(*f),
                     unit.position,
                     unit.elevation_meters,
                     camera,
@@ -482,8 +439,32 @@ pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneC
                 .is_some()
             });
     }
-    if unit.kind == crate::SceneUnitKind::TownCenter {
+    if unit.kind.is_foundation() || unit.kind == crate::SceneUnitKind::PalisadeWall {
         return false;
+    }
+    if unit.kind.building_id().is_some() {
+        return art
+            .compositions
+            .iter()
+            .find(|b| Some(b.unit_id) == unit.kind.building_id())
+            .is_some_and(|b| {
+                let parts = if unit.kind.is_foundation() {
+                    &b.construction
+                } else {
+                    &b.parts
+                };
+                parts.iter().any(|p| {
+                    p.frame_rate > 0.0
+                        && p.animation.len() > 1
+                        && scene_sprite(
+                            world_frame(p.frame),
+                            unit.position,
+                            unit.elevation_meters,
+                            camera,
+                        )
+                        .is_some()
+                })
+            });
     }
     let Some((frames, stride, true)) = village::frames(art, unit) else {
         return false;

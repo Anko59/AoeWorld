@@ -34,16 +34,63 @@ pub(crate) enum AssetCommand {
         install: PathBuf,
         base: Option<PathBuf>,
     },
+    /// Local complete-DE versus trial native-scale composition evidence.
+    DeReference {
+        install: PathBuf,
+        output: PathBuf,
+    },
+    /// Local native-scale proof of a pack building recipe (no public pixels).
+    BuildingPreview {
+        pack: PathBuf,
+        output: PathBuf,
+        #[arg(long, default_value_t = 109)]
+        unit: i32,
+        #[arg(long)]
+        recipe: Option<PathBuf>,
+    },
 }
 
 pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error>> {
     match command {
+        AssetCommand::DeReference { install, output } => {
+            aoe_assets::de::reference(&install, &output)?;
+        }
         AssetCommand::Inspect { input } => {
             let input = input.unwrap_or_else(|| PathBuf::from("local-assets/trial"));
             println!(
                 "{}",
                 serde_json::to_string_pretty(&aoe_assets::pack::inspect(&input)?)?
             );
+        }
+        AssetCommand::BuildingPreview {
+            pack,
+            output,
+            unit,
+            recipe,
+        } => {
+            if !output.starts_with(".cache")
+                || output
+                    .components()
+                    .any(|c| c == std::path::Component::ParentDir)
+            {
+                return Err("building proof must stay below ignored .cache/".into());
+            }
+            let manifest = aoe_assets::pack::verify(&pack)?;
+            let custom;
+            let recipe = if let Some(path) = recipe {
+                custom = serde_json::from_slice::<aoe_assets::dat::BuildingComposition>(
+                    &std::fs::read(path)?,
+                )?;
+                &custom
+            } else {
+                manifest
+                    .buildings
+                    .iter()
+                    .find(|b| b.unit_id == unit)
+                    .ok_or("building recipe missing from pack")?
+            };
+            aoe_assets::pack::composite::render(&pack, &manifest, recipe, &output)?;
+            println!("wrote native-scale local composite {}", output.display());
         }
         AssetCommand::Import { input } => {
             let input = input.unwrap_or_else(|| {

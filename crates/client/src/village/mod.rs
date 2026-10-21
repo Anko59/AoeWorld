@@ -36,8 +36,8 @@ pub(super) fn owner(client: &Client) -> PlayerId {
 
 pub(super) fn building_center(building: &GameplayBuildingState) -> [f64; 2] {
     [
-        f64::from(building.footprint.min.x + building.footprint.max.x) / 2.0,
-        f64::from(building.footprint.min.y + building.footprint.max.y) / 2.0,
+        f64::from(building.footprint.min.x) + f64::from(building.footprint.width()) / 2.0,
+        f64::from(building.footprint.min.y) + f64::from(building.footprint.height()) / 2.0,
     ]
 }
 

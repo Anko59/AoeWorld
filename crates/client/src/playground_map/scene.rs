@@ -3,6 +3,9 @@ use super::*;
 use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
 
 #[cfg(test)]
+#[path = "scene/tests/cache.rs"]
+mod cache_tests;
+#[cfg(test)]
 #[path = "scene/tests/review.rs"]
 mod review_tests;
 #[cfg(test)]
@@ -11,6 +14,7 @@ mod worker_tests;
 
 pub(crate) struct PreparedScene {
     camera: Camera,
+    foundations: Vec<(aoe_rendering::SceneUnitKind, [f64; 2])>,
     pub terrain: Vec<SceneTerrain>,
     pub decorations: Vec<SceneDecoration>,
     pub triangles: Vec<ProjectedSurfaceTriangle>,
@@ -25,11 +29,55 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
     {
         return scene.clone();
     }
-    let mut scene = PreparedScene::new(client.camera, scene_terrain(client));
+    let foundations = client
+        .village
+        .buildings
+        .iter()
+        .map(|b| (building_kind(b), super::super::village::building_center(b)))
+        .collect::<Vec<_>>();
+    let mut terrain = scene_terrain(client);
+    let units = client
+        .village
+        .buildings
+        .iter()
+        .map(|building| aoe_rendering::SceneUnit {
+            kind: building_kind(building),
+            id: building.id,
+            position: super::super::village::building_center(building),
+            moving: false,
+            facing: 0,
+            selected: false,
+            elevation_meters: 0.0,
+        })
+        .collect::<Vec<_>>();
+    aoe_rendering::apply_building_foundations(&mut terrain, &client.art, &units);
+    let mut scene = PreparedScene::new(client.camera, terrain);
+    scene.foundations = foundations;
     scene.decorations = decorations::for_scene(client, &scene);
     let scene = Rc::new(scene);
     *client.terrain_scene.borrow_mut() = Some(scene.clone());
     scene
+}
+
+/// Building updates are the only foundation mutations. Compare the cached key
+/// here once per update, without allocating it again for each ground projection.
+pub(in super::super) fn replace_buildings(
+    client: &mut Client,
+    buildings: Vec<aoe_protocol::GameplayBuildingState>,
+) {
+    let changed = client
+        .terrain_scene
+        .get_mut()
+        .as_ref()
+        .is_some_and(|scene| {
+            !scene.foundations.iter().copied().eq(buildings
+                .iter()
+                .map(|b| (building_kind(b), super::super::village::building_center(b))))
+        });
+    if changed {
+        client.terrain_scene.get_mut().take();
+    }
+    client.village.buildings = buildings;
 }
 
 impl PreparedScene {
@@ -72,6 +120,7 @@ impl PreparedScene {
         );
         Self {
             camera,
+            foundations: Vec::new(),
             terrain,
             decorations: Vec::new(),
             triangles,
@@ -240,8 +289,6 @@ pub(in super::super) fn units(
         .map(|b| (b.footprint.min.x, b.footprint.min.y))
         .collect();
     for building in &client.village.buildings {
-        let position = super::super::village::building_center(building);
-        let age = building.age;
         let gate_open = building.kind == aoe_protocol::BuildingKind::PalisadeGate
             && building.progress_permille == 1000
             && client.units.values().any(|u| {
@@ -255,24 +302,15 @@ pub(in super::super) fn units(
                         && at.y < r.max.y + 2)
                         || r.contains(at))
             });
+        let position = super::super::village::building_center(building);
         let slot = units.partition_point(|unit| unit.id < building.id);
         units.insert(
             slot,
             aoe_rendering::SceneUnit {
-                kind: if building.kind == aoe_protocol::BuildingKind::TownCenter
-                    && building.progress_permille == 1000
-                    && age == aoe_protocol::Age::Dark
-                {
-                    aoe_rendering::SceneUnitKind::TownCenter
-                } else if gate_open {
-                    aoe_rendering::SceneUnitKind::building(42)
+                kind: if gate_open {
+                    aoe_rendering::SceneUnitKind::OpenPalisadeGate
                 } else {
-                    aoe_rendering::SceneUnitKind::building(crate::building_ui::age_sprite_slot(
-                        building.kind,
-                        building.progress_permille,
-                        false,
-                        age,
-                    ) as u8)
+                    building_kind(building)
                 },
                 id: building.id,
                 position,
@@ -317,6 +355,30 @@ pub(in super::super) fn units(
         units.insert(slot, unit);
     }
     units
+}
+
+fn building_kind(building: &aoe_protocol::GameplayBuildingState) -> aoe_rendering::SceneUnitKind {
+    #[cfg(test)]
+    cache_tests::KEY_ENTRIES.with(|count| count.set(count.get() + 1));
+    use aoe_protocol::{BuildingKind as Kind, ConstructionState};
+    use aoe_rendering::SceneUnitKind as Art;
+    let kind = if building.kind == Kind::TownCenter && building.age == aoe_protocol::Age::Dark {
+        Art::TownCenter
+    } else if building.age == aoe_protocol::Age::Feudal && building.kind == Kind::LumberCamp {
+        Art::FeudalLumberCamp
+    } else if building.age == aoe_protocol::Age::Feudal && building.kind == Kind::MiningCamp {
+        Art::FeudalMiningCamp
+    } else {
+        Art::building(
+            crate::building_ui::age_sprite_slot(building.kind, 1000, false, building.age) as u8,
+        )
+    };
+    if building.construction == ConstructionState::Complete {
+        kind
+    } else {
+        kind.building_id()
+            .map_or(kind, |id| Art::foundation(id as i16))
+    }
 }
 
 fn worker_kind(unit: &aoe_protocol::GameplayUnitState) -> aoe_rendering::SceneUnitKind {

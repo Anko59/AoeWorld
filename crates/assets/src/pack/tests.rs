@@ -2,6 +2,9 @@ use super::atlas::{PageData, save_page};
 use super::*;
 use crate::slp::Pixel;
 
+#[path = "tests/buildings.rs"]
+mod buildings;
+
 #[test]
 fn atlas_masks_and_verifier_reject_tampering() {
     let temp = tempfile::tempdir().unwrap();
@@ -27,6 +30,8 @@ fn atlas_masks_and_verifier_reject_tampering() {
         converter: "test".to_owned(),
         input_hash: "a".repeat(64),
         pages,
+        buildings: Vec::new(),
+        building_data: "00".into(),
         frames: vec![FrameRecord {
             source: "fixture.slp".to_owned(),
             source_hash: "b".repeat(64),
