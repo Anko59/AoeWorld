@@ -57,13 +57,7 @@ impl GameplayService {
         let Some(revision) = world.resource_revision() else {
             return;
         };
-        let vision_revision = world.vision_revision();
-        let player = super::super::fog::viewer(&world, self.primary_unit_id);
-        let known = world
-            .known_resource_amounts(player)
-            .into_iter()
-            .map(|(id, remaining)| ResourceAmount { id, remaining })
-            .collect::<Vec<_>>();
+        let mut known_by = BTreeMap::<aoe_core::PlayerId, Vec<ResourceAmount>>::new();
         let mut sessions = self.sessions.lock().await;
         let failed = {
             let journal = self
@@ -76,14 +70,22 @@ impl GameplayService {
                 let Some(subscription) = session.subscription else {
                     continue;
                 };
+                let vision_revision = world.player_vision_revision(session.viewer);
                 if session.resource_revision == Some(revision)
                     && session.resource_vision_revision == Some(vision_revision)
                 {
                     continue;
                 }
+                let known = known_by.entry(session.viewer).or_insert_with(|| {
+                    world
+                        .known_resource_amounts(session.viewer)
+                        .into_iter()
+                        .map(|(id, remaining)| ResourceAmount { id, remaining })
+                        .collect()
+                });
                 if !world.fog_disabled()
                     && session.resource_revision.is_some()
-                    && session.resident_resources == known
+                    && session.resident_resources == *known
                 {
                     // Keep the last delivered resource revision: a later delta
                     // must still start at the revision the client received.

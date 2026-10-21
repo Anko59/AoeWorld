@@ -21,6 +21,8 @@ struct PlayerVision {
     tile_work: u64,
     overview: BTreeMap<u16, u32>,
     resources: BTreeMap<u64, u16>,
+    /// Bumped whenever this player's own line of sight changes.
+    revision: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -75,6 +77,7 @@ impl PlayerVision {
 impl Vision {
     fn apply(&mut self, observer: Observer, add: bool, width: i32, height: i32) {
         let player = self.players.entry(observer.player).or_default();
+        player.revision += 1;
         let radius = i32::from(observer.los);
         for dy in -radius..=radius {
             for dx in -radius..=radius {
@@ -164,6 +167,15 @@ impl GameWorld {
     }
     pub fn vision_revision(&self) -> u64 {
         self.vision.revision
+    }
+    /// Changes only when `player`'s own sight changes, so a viewer can skip
+    /// rebuilding its fog view when other players move. With fog disabled it
+    /// follows the global revision.
+    pub fn player_vision_revision(&self, player: PlayerId) -> u64 {
+        if self.vision.disabled {
+            return self.vision.revision;
+        }
+        self.vision.players.get(&player).map_or(0, |v| v.revision)
     }
     pub fn vision_overview(&self, player: PlayerId) -> Vec<(u16, u8)> {
         self.vision.players.get(&player).map_or_else(Vec::new, |v| {

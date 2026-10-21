@@ -6,8 +6,8 @@ use serde::{
 };
 use std::fmt;
 
-pub const MAX_ECONOMY_PLAYERS: usize = 16;
-pub const MAX_ECONOMY_BUILDINGS: usize = 256;
+pub const MAX_ECONOMY_PLAYERS: usize = 128;
+pub const MAX_ECONOMY_BUILDINGS: usize = 4_096;
 /// Villagers one build order may name.
 pub const MAX_BUILD_GROUP: usize = 32;
 /// The population ceiling, however many houses stand.

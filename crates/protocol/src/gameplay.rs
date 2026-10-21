@@ -170,6 +170,14 @@ pub enum ClientMessage {
         building_id: EntityId,
         resource: TradeResource,
     },
+    /// Appended variant: authenticate for exactly one match slot with the
+    /// token issued at match creation. Unlike `Hello`, an unknown token is an
+    /// error, never a lobby join or a spectator seat, so an AI process can
+    /// never take a human's slot.
+    JoinSlot {
+        version: u16,
+        token: ResumeToken,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
