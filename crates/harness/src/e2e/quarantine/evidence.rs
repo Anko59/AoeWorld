@@ -32,7 +32,7 @@ impl<'a> Evidence<'a> {
         })
     }
 
-    pub(super) fn case(&mut self, test: &Value, unexpected: bool) -> Result<()> {
+    pub(super) fn case(&mut self, test: &Value, unexpected: bool, timed_out: bool) -> Result<()> {
         let annotations = test["annotations"]
             .as_array()
             .ok_or("missing test identity")?;
@@ -51,6 +51,13 @@ impl<'a> Evidence<'a> {
         let errors = result["errors"]
             .as_array()
             .ok_or("missing raw test errors")?;
+        if timed_out {
+            // A completed timeout is diagnostic evidence, never recovery evidence.
+            result["steps"]
+                .as_array()
+                .ok_or("missing Playwright step evidence")?;
+            return Ok(());
+        }
         let mut assertions = Vec::new();
         collect_steps(&result["steps"], &mut assertions, false)?;
         if unexpected

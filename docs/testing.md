@@ -87,8 +87,10 @@ named quarantined case, at most twice per gate run. A recovery prints
 fail the gate. Unlisted failures stay failed, even if another test recovers.
 WASM entries use the full runner name; E2E entries use the spec path relative
 to `browser/tests`, without `.spec.ts` (for example `memory.shared-surfaces`).
-E2E retries select one failed case by file, line, project and escaped title;
-Playwright's global retry count stays zero. The initial shard applies once,
+E2E retries select one failed case by file, line, column, project and escaped title.
+Case tracking, recovery and retry validation compare the file, line, column,
+project and title path as a list; flattened titles are for display and selection
+only. Playwright's global retry count stays zero. The initial shard applies once,
 so retry selection cannot move a case into another shard. Filtered local
 `make test-e2e` runs use quarantine too; duel checks do not.
 The reporter supplies the selected test IDs, full-run status and raw step/error
@@ -105,6 +107,16 @@ Each recovered pass appends one JSON object with `test`, `gate`, `issue` and
 failure in the same run; CI uploads them with the browser reports. E2E keeps
 the original Playwright JSON plus separate retry JSON files. Incomplete reports,
 compile errors, cancellations and runner failures do not earn quarantine retries.
+
+Completed E2E failures name each unresolved case's spec location, project and
+full title path, actual `failed` or `timedOut` status, duration in milliseconds,
+and first error line (up to 200 characters). Diagnostics show at most 40 cases,
+name the omitted count, and retain the report's expected/unexpected/skipped/flaky
+counts. A completed timeout never earns a quarantine retry. `interrupted` means
+a selected case lacks a final result, has status `interrupted`, or the report
+contains global errors; those diagnostics name the affected cases and global
+error lines too. A retry error retains unresolved initial-run failures alongside
+the retry diagnostics. Original JSON reports retain the complete evidence.
 
 `make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
