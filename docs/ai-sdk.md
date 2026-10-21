@@ -46,7 +46,7 @@ else. Every slot has a 192-bit token (48 hex digits) created with the match.
   Enemy buildings arrive as fog memory.
 * AI slots get a larger order budget (100 orders a second, burst 200 against a
   human's 10 and 20), no idle `Tick` messages (a heartbeat every half second
-  keeps the clock moving) and a fog view rebuilt at most twice a second.
+  keeps the clock moving) and a fog view rebuilt at most once a second.
   Tokens of AI slots never authorise server administration (map activation).
 
 ## Starting a match
@@ -120,7 +120,9 @@ client.run(on_tick, until_tick=20 * 60 * 10)   # ten game minutes
   remembered foreign buildings (`visible` says whether in sight), wildlife,
   explored resource nodes, the fog (`visibility(x, y)`), walkable tiles
   (`passable`) and a building-site finder. Nodes appear only on explored tiles:
-  scout. Resource amounts are the last ones seen.
+  scout. Exploration is remembered for the whole map from the server's 256x256
+  strategic overview (coarse) and tile-exactly inside the view window. Resource
+  amounts are the last ones seen.
 * **The view window.** The server describes foreign units, fog and wildlife only
   inside the slot's subscribed region; own units are always reported. The SDK
   moves a window (`view_size`, `view_padding`) over the slot's non-scout units
@@ -205,7 +207,42 @@ are in `config.py`. `python -m aoe_ai --help` lists the launcher modes.
   two bots on a local server; `crates/server/tests/slots.rs` and
   `match_http.rs` test slot isolation, per-slot fog and `POST /match`.
 
-Limits: the 100-player target is a capacity and design target; this document
-does not claim finished RTS performance at that scale. See
+## Scale: one human and 99 AIs
+
+Design: a compact binary protocol (postcard, no JSON on the hot path); an
+interest-limited view per connection (own units always, foreign units, fog and
+wildlife only in the bot's window); per-player vision revisions and per-viewer
+economy and building views built once per tick; idle `Tick` messages dropped
+for AI slots (a heartbeat every half second); AI fog views at most once a
+second; one Rust runtime with two network threads for every connection of a
+Python process; `Fleet.wait` serving all bots from one Python thread. Capacities
+are raised to match: 128 players, 4,096 buildings, 8,192 gatherers, 2,048
+builders and 2,048 hunters world-wide.
+
+Measured on the development machine (12 cores, shared with other work, release
+server, flat 900-tile map, `aoe-ai` bots at 2 decisions a second, one Python
+process):
+
+| | 30 AI + passive | 99 AI + 1 human slot, playing |
+| --- | --- | --- |
+| match creation (`POST /match`) | 28 s | 76-98 s |
+| all bots connected | under 1 s | 2.5-3.9 s |
+| server CPU for the sessions alone | 0.05 core, no missed ticks | |
+| 60 game seconds | | 91 s wall, server 1.0 core, Python 0.29 core |
+| errors, closed connections | | 0 |
+
+Reading it honestly: connecting and serving 100 slots is cheap (the networking
+layer is not the bottleneck: 30 connected passive clients cost 0.05 core), but
+with 99 AIs issuing orders the single-threaded simulation tick did not keep
+20 Hz here (619 missed deadlines in 1,200 ticks, 0.66x real time); that cost is
+movement planning and gathering, which the simulation-scale work owns. Match
+creation spends about a second per village on site certification. The run
+covers a young economy (about four villagers each), so it demonstrates
+capacity and connection handling, not finished RTS performance or dedicated
+hardware qualification. Ad hoc scripts produced the numbers; they are
+not a gate.
+
+Limits: capacities and design are for 100 players; larger matches need larger
+maps (about 40x40 tiles per player) and a faster simulation tick. See
 [architecture](architecture.md) for the server and [performance](performance.md)
-for what is measured.
+for what is gated.
