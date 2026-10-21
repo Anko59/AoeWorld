@@ -173,8 +173,15 @@ test("train Militia, attack a sheep, and hunt and butcher a deer through right-c
     .toBe(true);
   await click(page, "Villager");
   await expect(page.locator("#selection-name")).toHaveText("Villager");
-  await click(page, "Deer", "right");
-  await expect(page.locator("#selection-task")).toContainText("Hunting");
+  // Fleeing deer can leave the scout's line of sight, and fog then removes
+  // them from the HUD between a read and the click; retry the order until a
+  // visible deer takes it.
+  await expect(async () => {
+    await click(page, "Deer", "right");
+    await expect(page.locator("#selection-task")).toContainText("Hunting", {
+      timeout: 2_000,
+    });
+  }).toPass({ timeout: 25_000 });
   // Herd deer overlap on screen, so the right-click may pick a neighbour of
   // the deer the helper aimed at. Only this villager hunts, so any slain deer
   // is its kill.
