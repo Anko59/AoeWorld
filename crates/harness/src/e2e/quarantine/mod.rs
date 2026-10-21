@@ -9,16 +9,15 @@ use std::{error::Error, fs, path::Path, process::Command, time::Duration};
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 mod diagnostics;
 mod evidence;
+mod identity;
+use identity::Identity;
 
 pub(super) const REPORTER: &str = "--reporter=./quarantine-reporter.ts,json";
 
 #[derive(Debug, PartialEq)]
 struct Case {
     key: String,
-    file: String,
-    line: u64,
-    title: String,
-    project: String,
+    identity: Identity,
     status: String,
     passed: bool,
     actual: String,
@@ -38,14 +37,24 @@ fn escape(text: &str) -> String {
 impl Case {
     fn selector(&self) -> [String; 3] {
         [
-            format!("/^{}$/:{}", escape(&self.file), self.line),
-            format!("--project={}", self.project),
-            format!("--grep=/{}$/", escape(&self.title)),
+            format!(
+                "/^{}$/:{}:{}",
+                escape(&self.identity.file),
+                self.identity.line,
+                self.identity.column
+            ),
+            format!("--project={}", self.identity.project),
+            format!("--grep=/{}$/", escape(&self.identity.titles.join(" "))),
         ]
     }
 
     fn name(&self) -> String {
-        format!("{} [{}] {}", self.key, self.project, self.title)
+        format!(
+            "{} [{}] {}",
+            self.key,
+            self.identity.project,
+            self.identity.titles.join(" ")
+        )
     }
 }
 
@@ -117,11 +126,6 @@ fn collect(
             if file.starts_with('/') || file.split('/').any(|part| part == "..") {
                 return Err("invalid Playwright spec path".into());
             }
-            let line = spec
-                .get("line")
-                .and_then(Value::as_u64)
-                .filter(|line| *line > 0)
-                .ok_or("missing spec line")?;
             let mut titles = parents.to_vec();
             titles.push(string(spec, "title")?.to_owned());
             for test in spec
@@ -153,10 +157,7 @@ fn collect(
                 evidence.case(test, status == "unexpected", actual == "timedOut")?;
                 cases.push(Case {
                     key: key.to_owned(),
-                    file: root.join(file).to_string_lossy().into_owned(),
-                    line,
-                    title: titles.join(" "),
-                    project: string(test, "projectName")?.to_owned(),
+                    identity: Identity::parse(spec, test, &titles, root)?,
                     status: status.to_owned(),
                     passed: actual == "passed",
                     actual: actual.to_owned(),
@@ -292,7 +293,7 @@ fn resolve(
         )
         .into());
     }
-    let mut unresolved: Vec<_> = failed.iter().map(Case::name).collect();
+    let mut unresolved: Vec<_> = failed.iter().map(|case| case.identity.clone()).collect();
     for (index, case) in failed.iter().enumerate() {
         if case.actual == "timedOut" {
             continue;
@@ -313,7 +314,7 @@ fn resolve(
                 let [selected] = selected.as_slice() else {
                     return Err("Playwright rerun did not select exactly one case".into());
                 };
-                if selected.selector() != case.selector() {
+                if selected.identity != case.identity {
                     return Err("Playwright rerun selected a different case".into());
                 }
                 match (success, selected.status.as_str()) {
@@ -335,7 +336,7 @@ fn resolve(
             .into()
         })?;
         if recovered {
-            unresolved.retain(|name| name != &case.name());
+            unresolved.retain(|identity| identity != &case.identity);
         }
     }
     if !unresolved.is_empty() {
@@ -354,3 +355,7 @@ mod tests;
 #[cfg(test)]
 #[path = "tests/diagnostics.rs"]
 mod diagnostics_tests;
+
+#[cfg(test)]
+#[path = "tests/identity.rs"]
+mod identity_tests;

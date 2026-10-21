@@ -87,8 +87,10 @@ named quarantined case, at most twice per gate run. A recovery prints
 fail the gate. Unlisted failures stay failed, even if another test recovers.
 WASM entries use the full runner name; E2E entries use the spec path relative
 to `browser/tests`, without `.spec.ts` (for example `memory.shared-surfaces`).
-E2E retries select one failed case by file, line, project and escaped title;
-Playwright's global retry count stays zero. The initial shard applies once,
+E2E retries select one failed case by file, line, column, project and escaped title.
+Case tracking, recovery and retry validation compare the file, line, column,
+project and title path as a list; flattened titles are for display and selection
+only. Playwright's global retry count stays zero. The initial shard applies once,
 so retry selection cannot move a case into another shard. Filtered local
 `make test-e2e` runs use quarantine too; duel checks do not.
 The reporter supplies the selected test IDs, full-run status and raw step/error

@@ -2,8 +2,9 @@
 
 `ci-532-shard-3.json` is trimmed from PR #532's validation run 39540701382,
 `e2e-3-diagnostics/reports/e2e/playwright-shard-3-of-3.json`. It retains all
-59 selected IDs, test locations, titles, projects, final statuses, durations,
-error messages/stacks, assertion/hook step evidence, and original counts.
+59 selected IDs, test locations (including original columns), titles, projects,
+final statuses, durations, error messages/stacks, assertion/hook step evidence,
+and original counts.
 Attachments, stdout/stderr, source snippets, passing step trees, unrelated
 configuration and result timing fields are omitted. The file is generated JSON.
 

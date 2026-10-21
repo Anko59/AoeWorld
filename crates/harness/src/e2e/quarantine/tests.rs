@@ -9,7 +9,7 @@ pub(super) fn report() -> serde_json::Value {
         }}
     }}}, "errors":[], "suites":[{"title":"memory.shared-surfaces.spec.ts", "specs":[{
         "id":"case-a",
-        "title":"memory [bounded]", "file":"memory.shared-surfaces.spec.ts", "line":27,
+        "title":"memory [bounded]", "file":"memory.shared-surfaces.spec.ts", "line":27, "column":1,
         "tests":[{"annotations":[{"type":"aoe-quarantine-id","description":"case-a"}], "projectName":"webgpu", "status":"unexpected", "expectedStatus":"passed",
             "results":[{"status":"failed"}]}]
     }]}], "stats":{"expected":0,"unexpected":1,"flaky":0,"skipped":0}})
@@ -24,7 +24,7 @@ fn flaky_playwright_failure_selects_one_case_project_and_escaped_title() {
     assert_eq!(
         failures[0].selector(),
         [
-            "/^/checkout/browser/tests/memory\\.shared-surfaces\\.spec\\.ts$/:27",
+            "/^/checkout/browser/tests/memory\\.shared-surfaces\\.spec\\.ts$/:27:1",
             "--project=webgpu",
             "--grep=/memory \\[bounded\\]$/"
         ]
@@ -72,7 +72,7 @@ fn flaky_playwright_classifies_actual_sdk_assertion_setup_and_worker_reports() {
     let assertion = serde_json::from_str(include_str!("fixtures/assertion.json")).unwrap();
     let failed = failures(&assertion).unwrap();
     assert_eq!(failed.len(), 1);
-    assert_eq!(failed[0].title, "ordinary assertion failure");
+    assert_eq!(failed[0].identity.titles, ["ordinary assertion failure"]);
     for fixture in [
         include_str!("fixtures/setup.json"),
         include_str!("fixtures/worker.json"),
@@ -209,7 +209,7 @@ fn flaky_playwright_keeps_nested_tests_directory_in_the_quarantine_key() {
     let failed = failures(&value).unwrap();
     assert_eq!(failed[0].key, "tests/memory.shared-surfaces");
     assert_eq!(
-        failed[0].file,
+        failed[0].identity.file,
         "/checkout/browser/tests/tests/memory.shared-surfaces.spec.ts"
     );
 }

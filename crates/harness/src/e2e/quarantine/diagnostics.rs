@@ -1,13 +1,14 @@
 //! Diagnostics describe completed outcomes independently of quarantine eligibility.
-use super::Result;
+use super::{Identity, Result};
 use serde_json::Value;
 use std::collections::BTreeSet;
+use std::path::Path;
 
 const LIMIT: usize = 40;
 
 struct Entry {
     id: String,
-    retry_name: String,
+    identity: Option<Identity>,
     detail: String,
     gap: bool,
     problem: bool,
@@ -36,7 +37,7 @@ fn first_error(error: &Value) -> String {
     short
 }
 
-fn collect(suite: &Value, parents: &[String], entries: &mut Vec<Entry>) {
+fn collect(suite: &Value, parents: &[String], root: &Path, entries: &mut Vec<Entry>) {
     for spec in array(&suite["specs"]) {
         let mut titles = parents.to_vec();
         titles.push(text(spec, "title").to_owned());
@@ -69,14 +70,7 @@ fn collect(suite: &Value, parents: &[String], entries: &mut Vec<Entry>) {
             });
             entries.push(Entry {
                 id,
-                retry_name: format!(
-                    "{} [{}] {}",
-                    text(spec, "file")
-                        .strip_suffix(".spec.ts")
-                        .unwrap_or(text(spec, "file")),
-                    text(test, "projectName"),
-                    titles.join(" ")
-                ),
+                identity: Identity::parse(spec, test, &titles, root).ok(),
                 detail: format!(
                     "{name} | status={status} | duration={duration} | {}",
                     first_error(error.unwrap_or(&Value::Null))
@@ -92,7 +86,7 @@ fn collect(suite: &Value, parents: &[String], entries: &mut Vec<Entry>) {
         if !title.ends_with(".spec.ts") && !title.is_empty() {
             titles.push(title.to_owned());
         }
-        collect(child, &titles, entries);
+        collect(child, &titles, root, entries);
     }
 }
 
@@ -101,10 +95,11 @@ fn collect(suite: &Value, parents: &[String], entries: &mut Vec<Entry>) {
 pub(super) fn failure(
     value: &Value,
     reason: &str,
-    unresolved: Option<&[String]>,
+    unresolved: Option<&[Identity]>,
 ) -> Box<dyn std::error::Error> {
     let mut entries = Vec::new();
-    collect(value, &[], &mut entries);
+    let root = Path::new(text(&value["config"], "rootDir"));
+    collect(value, &[], root, &mut entries);
     let evidence = &value["config"]["metadata"]["aoeQuarantine"];
     let seen: BTreeSet<_> = entries.iter().map(|entry| entry.id.clone()).collect();
     for id in array(&evidence["selected"])
@@ -129,7 +124,7 @@ pub(super) fn failure(
         };
         entries.push(Entry {
             id: id.to_owned(),
-            retry_name: String::new(),
+            identity: None,
             detail: format!("{name} | status=missing final result"),
             gap: true,
             problem: true,
@@ -142,7 +137,13 @@ pub(super) fn failure(
     let problems: Vec<_> = entries
         .iter()
         .filter(|entry| {
-            entry.problem && unresolved.is_none_or(|names| names.contains(&entry.retry_name))
+            entry.problem
+                && unresolved.is_none_or(|identities| {
+                    entry
+                        .identity
+                        .as_ref()
+                        .is_none_or(|identity| identities.contains(identity))
+                })
         })
         .collect();
     lines.extend(
