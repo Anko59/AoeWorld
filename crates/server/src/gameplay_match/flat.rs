@@ -10,7 +10,7 @@ use aoe_map::{
 use serde::Deserialize;
 
 /// Tiles per side bounds of a flat map.
-const MIN_TILES: u32 = 64;
+const MIN_TILES: u32 = 128;
 const MAX_TILES: u32 = 4_096;
 
 #[derive(Clone, Copy, Debug, Deserialize)]

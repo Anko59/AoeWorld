@@ -61,11 +61,15 @@ the same value in `X-AoeWorld-Admin-Token`.
 
 Name the ground with exactly one of:
 
-* `"flat": {"tiles_per_side": 64..4096, "seed": n}` a flat synthetic ground: one
+* `"flat": {"tiles_per_side": 128..4096, "seed": n}` a flat synthetic ground: one
   elevation, so only trees, bushes and ore obstruct movement. This is the place
   to develop and test an AI (generated terrain without source data is rugged,
   and its cliffs wall off most village sites). Needs the server's map package
   directory (`AOE_MAP_PACKAGE_DIRECTORY`, default `local-assets/map-packages`).
+  Resources come from the procedural landscape, so they depend on the seed and
+  the size: flat maps have forests and a few berry bushes but no gold, stone or
+  game, and a map under about 300 tiles can have no trees at all. Check
+  `world.resources()` when choosing a seed.
 * `"map": {MapRequest}` a generated package (the browser's map creator
   request); `"map_hash": "<64 hex>"` a package the server already holds.
 
