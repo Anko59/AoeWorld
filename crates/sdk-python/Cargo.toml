@@ -1,0 +1,24 @@
+[package]
+name = "aoeworld-python"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.99.1"
+description = "Python bindings of the AoeWorld AI SDK (built with maturin)"
+publish = false
+
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+aoe-core = { path = "../core" }
+aoe-protocol = { path = "../protocol" }
+aoe-sdk = { path = "../sdk" }
+futures-util = "0.3"
+pyo3 = { version = "=0.25.1", features = ["extension-module", "abi3-py39"] }
+tokio = { version = "1.47", features = ["rt-multi-thread", "time", "sync"] }
+
+# The bindings need a Python toolchain, so they stay out of the main workspace
+# (and its gates); `make sdk-python` builds them.
+[workspace]

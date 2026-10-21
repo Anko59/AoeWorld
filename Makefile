@@ -11,6 +11,7 @@ POLICY_IMAGE := aoeworld/policy:0.20.2
 COVERAGE_IMAGE := aoeworld/coverage:0.9.1
 FUZZ_IMAGE := aoeworld/fuzz:nightly-2026-09-01-0.13.2
 MUTATION_IMAGE := aoeworld/mutation:27.1.0
+SDK_IMAGE := aoeworld/sdk-python:1.15.0
 # CI sets e.g. type=gha,version=2 to reuse BuildKit layers; empty keeps local builds unchanged.
 DOCKER_BUILD_CACHE ?=
 COMMA := ,
@@ -196,7 +197,7 @@ doctor:
 recover:
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- recover
 
-include make/agents.mk make/ship.mk make/qualification.mk make/heavy.mk make/phony.mk make/help.mk make/assets.mk make/geodata.mk make/release.mk
+include make/agents.mk make/ship.mk make/qualification.mk make/heavy.mk make/phony.mk make/help.mk make/assets.mk make/geodata.mk make/release.mk make/sdk.mk
 
 structure-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- structure-check

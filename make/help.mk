@@ -63,6 +63,8 @@ help:
 	@echo '  make test-geographic-visuals  Capture water and Alpine packages on WebGPU and Canvas'
 	@echo '  make test-geographic-visuals-unit  Test page evidence and package-directory config'
 	@echo '  make test-wasm       Execute wasm-bindgen tests in pinned Chromium'
+	@echo '  make sdk-python      Build the aoeworld Python wheel for the AI SDK (docs/ai-sdk.md)'
+	@echo '  make sdk-python-test Test the Python bindings and the example AI against a local server'
 	@echo '  make fuzz-smoke      Run bounded parser fuzzing with pinned nightly Rust'
 	@echo '  make fuzz-nightly    Run longer parser fuzzing campaigns'
 	@echo '  make mutation-nightly  Check critical gate and comparator mutations'
