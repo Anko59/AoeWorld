@@ -211,12 +211,13 @@ fn a_restack_is_pushed_with_lease_whatever_the_pull_request_targets() {
 }
 
 #[test]
-fn a_plain_dev_ship_is_never_forced_by_itself() {
+fn a_plain_dev_ship_never_overwrites_a_different_patch_by_itself() {
     let (_temp, root) = crate::ship::tests::fixture("true");
     let review = |root: &Path, tier, _, _: &str, _: &review::Plan| Ok(graded(root, tier, 9));
     crate::ship::ship_with(&root, &review_on(&root), &review).expect("first ship");
     let pushed = remote_feature(&root);
-    run(&root, &["commit", "-q", "--amend", "-m", "rewritten"]);
+    std::fs::write(root.join("README.md"), "rewritten patch\n").unwrap();
+    run(&root, &["commit", "-q", "-a", "--amend", "-m", "rewritten"]);
     let error = crate::ship::ship_with(&root, &review_on(&root), &review)
         .unwrap_err()
         .to_string();

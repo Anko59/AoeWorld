@@ -93,8 +93,11 @@ fn read(root: &Path, head: &str) -> Result<State> {
 impl State {
     fn summary(&self) -> String {
         let run = match &self.run {
+            Some(run) if self.passed == 0 && self.running == 0 && self.failed.is_empty() => {
+                return format!("CI: queued (run {})", run.id);
+            }
             Some(run) => format!("run {}", run.id),
-            None => "awaiting CI run for pushed head".into(),
+            None => return "CI: not started yet".into(),
         };
         format!(
             "CI: {} passed, {} running, {} failed ({run})",

@@ -358,8 +358,8 @@ fn failure(options: &Options, failed: &GateResult, gained: &[String]) -> String 
 
 /// After a rebase of a branch already on the remote, the push overwrites it.
 /// Only the branch's own remote is ever lease-forced, and only from the
-/// draft-pushed head (otherwise the starting commit); any other remote tip
-/// needs `SHIP_FORCE`.
+/// draft-pushed head (otherwise the starting commit), its GitHub dev merges,
+/// or an earlier push of the same ordered patches.
 pub(super) fn lease(
     root: &Path,
     options: &Options,
@@ -377,8 +377,8 @@ pub(super) fn lease(
     let Some(tip) = tip.split_whitespace().next() else {
         return Ok(None);
     };
-    // The updater may have merged dev while the gates/review were running.
-    // Fetch its objects and validate the same strict chain used immediately before push.
+    // The updater may have merged dev, or origin may hold our earlier push.
+    // Validate with the same rules used immediately before push.
     if tip != from_head
         && git::lease::refresh(root, &subject.branch, from_head, from_head)
             .is_ok_and(|head| head == tip)

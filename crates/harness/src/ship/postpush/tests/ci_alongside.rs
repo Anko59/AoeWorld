@@ -370,7 +370,7 @@ fn missing_ci_run_is_pending_and_api_failure_preserves_review_failure() {
     .unwrap_err()
     .to_string();
     assert!(
-        error.contains("awaiting CI run for pushed head") && error.contains("remains a draft"),
+        error.contains("CI: not started yet") && error.contains("remains a draft"),
         "{error}"
     );
     world.answer("ci-error", "");
@@ -388,4 +388,81 @@ fn missing_ci_run_is_pending_and_api_failure_preserves_review_failure() {
             && error.contains("CI API denied"),
         "{error}"
     );
+}
+
+#[test]
+fn ownlease_real_ship_cli_reports_queued_and_not_started_ci() {
+    for (runs, expected) in [
+        (None, "CI: queued (run 123)"),
+        (Some("{\"workflow_runs\":[]}"), "CI: not started yet"),
+    ] {
+        let (mut world, options) = setup();
+        world.answer("jobs", r#"[{"jobs":[]}]"#);
+        if let Some(runs) = runs {
+            world.answer("runs", runs);
+        }
+        // Origin holds two of our three commits on an older dev.
+        fs::write(world.root.join("second.txt"), "second\n").unwrap();
+        run(&world.root, &["add", "second.txt"]);
+        run(&world.root, &["commit", "-q", "-m", "second"]);
+        run(&world.root, &["push", "-q", "origin", "feature"]);
+        fs::write(world.root.join("third.txt"), "third\n").unwrap();
+        run(&world.root, &["add", "third.txt"]);
+        run(&world.root, &["commit", "-q", "-m", "third"]);
+        world.move_dev("dev-only.txt", "dev advanced\n");
+        world.rebase_onto_dev();
+        world.script(
+            "claude",
+            r#"#!/bin/sh
+case "$*" in
+  *'"grade":'*) answer='{"grade":10,"summary":"scripted review"}' ;;
+  *) answer='{"findings":[],"verdicts":[]}' ;;
+esac
+printf 'AOE-REVIEW-BEGIN\n%s\nAOE-REVIEW-END\n' "$answer"
+"#,
+        );
+        world.set(
+            "SHIP_BODY",
+            options.body_file.as_ref().unwrap().to_str().unwrap(),
+        );
+        world.set("SHIP_TITLE", options.title.as_ref().unwrap());
+        let output = world.cli("ship");
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.status.success(), "{text}");
+        assert!(
+            text.contains(
+                "ship: origin/feature held an earlier push of the same patch; replacing it"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("ship: review 10/10 · {expected}")),
+            "{text}"
+        );
+        assert_eq!(remote(&world), world.head());
+        assert!(has(&world, "auto") && !has(&world, "draft"));
+    }
+}
+
+#[test]
+fn a_failed_ci_workflow_without_jobs_is_still_a_failure() {
+    let (world, _) = setup();
+    world.answer("runs", &serde_json::json!({"workflow_runs":[{
+        "id":123, "head_sha":world.head(), "html_url":"https://github.com/project/checkout/actions/runs/123",
+        "conclusion":"failure"
+    }]}).to_string());
+    world.answer("jobs", r#"[{"jobs":[]}]"#);
+    let error = crate::ship::postpush::ci::outcome(&world.root, &world.head(), Some(10), Ok(()))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("CI: 0 passed, 0 running, 1 failed (run 123)"),
+        "{error}"
+    );
+    assert!(error.contains("CI workflow (failure)"), "{error}");
+    assert!(!error.contains("CI: queued"), "{error}");
 }

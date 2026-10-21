@@ -1,4 +1,4 @@
-//! Refresh a push lease only across the updater's GitHub merges of dev.
+//! Refresh a push lease across GitHub dev merges or our own earlier pushes.
 use super::{Result, git};
 use std::path::Path;
 
@@ -49,7 +49,7 @@ pub(in crate::ship) fn refresh(
     refresh_with(root, branch, expected, started, None)
 }
 
-/// Without force, permit normal fast-forwards and only the updater's divergent chain.
+/// Without force, permit fast-forwards, updater merges, and our earlier patches.
 pub(in crate::ship) fn refresh_default(
     root: &Path,
     branch: &str,
@@ -115,6 +115,10 @@ fn refresh_with(
             "ship: origin/{branch} gained only GitHub merges of dev; leasing on {}",
             &remote[..12]
         );
+        return Ok(remote);
+    }
+    if super::own_push::earlier(root, &dev, &remote, fast_forward.unwrap_or("HEAD"))? {
+        eprintln!("ship: origin/{branch} held an earlier push of the same patch; replacing it");
         return Ok(remote);
     }
     Err(format!(

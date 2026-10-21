@@ -117,12 +117,23 @@ still serves pushes made by `make ship`.
 Before every push, including without SHIP_FORCE and with an unchanged dev, ship fetches the branch again. If its only additions since
 the ship's starting head are two-parent merges committed by `GitHub
 <noreply@github.com>`, each with a dev second parent, it prints one line and
-leases on the fetched head. Other remote changes refuse the push; the lease
+leases on the fetched head. A remote holding an earlier push of the same patch
+also becomes the lease base: compare stable per-commit patch IDs and authors
+against the current dev, in order, skipping GitHub merges of dev. The remote
+sequence must equal the local sequence or be its prefix. Extra, reordered,
+modified or foreign-author commits refuse; empty commits without a patch ID
+are not inferred to be our own. Ship prints
+`ship: origin/<branch> held an earlier push of the same patch; replacing it`.
+Other remote changes refuse the push; the lease
 still rejects a push that races this final fetch. These validation fetches
 disable remote-tracking updates, so a refused attempt cannot authorize the
 same overwrite on an unchanged retry. Without force, ordinary fast-forwards
-remain allowed; other divergence still refuses. Updater output says
+remain allowed. Updater output says
 `updated (dev merged in)`.
+
+Ship's CI summary says `CI: queued (run N)` when a visible run has no jobs,
+and `CI: not started yet` when no run for the pushed head is visible. A failed
+workflow still reports failure even when its jobs are unavailable.
 
 ## What only GitHub can show
 
