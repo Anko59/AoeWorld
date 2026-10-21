@@ -11,7 +11,12 @@ case "$1 $2" in
   'pr list')
     case "$*" in *'--state merged'*) echo '[]'; exit 0 ;; esac
     if [ -f "$GH_DIR/existing" ]; then echo '{"url":"https://github.com/project/checkout/pull/1","baseRefName":"dev"}'; fi ;;
-  'pr view') [ -f "$GH_DIR/draft" ] && echo true || echo false ;;
+  'pr view')
+    d=false; [ -f "$GH_DIR/draft" ] && d=true
+    a=false; [ -f "$GH_DIR/auto" ] && a=true
+    case "$*" in *--jq*) echo "the draft state is parsed in Rust, never with --jq" >&2; exit 9 ;; esac
+    m=null; [ "$a" = true ] && m='{"enabledAt":"2026-10-21T00:00:00Z","mergeMethod":"SQUASH"}'
+    printf '{"isDraft":%s,"autoMergeRequest":%s}\n' "$d" "$m" ;;
   'pr create')
     case "$*" in *--draft*) touch "$GH_DIR/draft" ;; esac
     touch "$GH_DIR/existing"
@@ -23,7 +28,10 @@ case "$1 $2" in
     esac ;;
   'pr merge')
     case "$*" in
-      *--disable-auto*) rm -f "$GH_DIR/auto" ;;
+      *--disable-auto*)
+        # Like GitHub: refusing to disable an auto-merge that is not armed.
+        [ -f "$GH_DIR/auto" ] || { echo "GraphQL: Can't disable auto-merge for this pull request. (disablePullRequestAutoMerge)" >&2; exit 1; }
+        rm -f "$GH_DIR/auto" ;;
       *--auto*) [ ! -f "$GH_DIR/draft" ] || exit 13; touch "$GH_DIR/auto" ;;
     esac ;;
   'pr edit')
@@ -387,5 +395,22 @@ fn missing_ci_run_is_pending_and_api_failure_preserves_review_failure() {
             && error.contains("review 7/10 · CI: unavailable")
             && error.contains("CI API denied"),
         "{error}"
+    );
+}
+
+#[test]
+fn pull_request_state_parses_githubs_json_for_drafts_and_armed_auto_merge() {
+    use crate::ship::postpush::draft::PrState;
+    // A failed review leaves exactly this: a draft with no auto-merge (#518, 2026-10-21).
+    let draft = PrState::parse(r#"{"isDraft":true,"autoMergeRequest":null}"#).unwrap();
+    assert!(draft.is_draft && !draft.armed());
+    let armed = PrState::parse(
+        r#"{"isDraft":false,"autoMergeRequest":{"enabledAt":"2026-10-21T00:00:00Z","mergeMethod":"SQUASH"}}"#,
+    )
+    .unwrap();
+    assert!(!armed.is_draft && armed.armed());
+    assert!(
+        PrState::parse("true false").is_err(),
+        "jq-style text is not accepted"
     );
 }
