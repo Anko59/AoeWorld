@@ -173,13 +173,18 @@ test("train Militia, attack a sheep, and hunt and butcher a deer through right-c
     .toBe(true);
   await click(page, "Villager");
   await expect(page.locator("#selection-name")).toHaveText("Villager");
-  const deer = await click(page, "Deer", "right");
+  await click(page, "Deer", "right");
   await expect(page.locator("#selection-task")).toContainText("Hunting");
+  // Herd deer overlap on screen, so the right-click may pick a neighbour of
+  // the deer the helper aimed at. Only this villager hunts, so any slain deer
+  // is its kill.
   await expect
-    .poll(async () => (await actors(page)).find((a) => a.id === deer.id)?.hp, {
-      timeout: 70_000,
-    })
-    .toBe(0);
+    .poll(
+      async () =>
+        (await actors(page)).some((a) => a.kind === "Deer" && a.hp === 0),
+      { timeout: 70_000 },
+    )
+    .toBe(true);
   await expect(page.locator("#selection-task")).toContainText("Hunting");
   await expect(page.locator("#selection-load")).toContainText("food", {
     timeout: 15_000,
