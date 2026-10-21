@@ -57,8 +57,8 @@ The periodic groups retain all 100 frames. Catalog v15's base selects 2,361 stat
 1,474 terrain and 887 objects including village art and cliff faces 226. The
 [unit and wildlife selection](assets/units.md) adds 2,540 frames. DAT building
 recipes add their selected native frames, including animated Mill layers,
-static House variants and construction/wall angles. Runtime packing uses four
-2048² RGBA pages/64 MiB, terrain on pages 0/1 and objects on pages 2/3,
+static House variants and construction/wall angles. Runtime packing uses five
+2048² RGBA pages/80 MiB, terrain on pages 0–1 and objects on pages 2–4,
 with a 5,120-entry frame metadata cap.
 Counts alone do not prove fit. Run `make test-assets-pack AOE_ASSET_PACK=local-assets/packs/<hash>`
 for the private full-catalog packing proof, including actor prefixes and DAT buildings.
@@ -108,7 +108,7 @@ See [game data](assets/game-data.md) for measured layouts and local proof tools.
 These are metadata, not committed pixels. Missing village groups draw simple semantic markers;
 a present incomplete group remains a pack error. The native metadata packing
 proof covers the full base and actor prefixes plus DAT building and foundation
-frames in the same four-page atlas.
+frames in the same five-page atlas.
 Yellow wildflower 2561 and tan reed 4584 dressing are omitted because their
 silhouettes read as gold and deadwood. Footprint wear modulates existing terrain
 colors without additional faces. [Unit and wildlife art](assets/units.md) records

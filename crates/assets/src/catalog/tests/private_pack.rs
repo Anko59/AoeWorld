@@ -216,7 +216,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     for (index, (frame, placed)) in extents.iter().zip(&placements).enumerate() {
         let correct_domain = match frame.domain {
             AtlasDomain::Terrain => placed.page < 2,
-            AtlasDomain::Objects => (2..4).contains(&placed.page),
+            AtlasDomain::Objects => (2..5).contains(&placed.page),
         };
         if !correct_domain
             || placed.width != frame.width
