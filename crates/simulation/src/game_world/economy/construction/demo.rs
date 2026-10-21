@@ -40,8 +40,8 @@ impl GameWorld {
             )?;
         }
         for (kind, x, y) in [
-            (crate::UnitKind::Militia, 132, 123),
-            (crate::UnitKind::Scout, 125, 125),
+            (crate::UnitKind::Militia, 126, 136),
+            (crate::UnitKind::Scout, 128, 137),
         ] {
             world.spawn_kind(
                 PlayerId(1),

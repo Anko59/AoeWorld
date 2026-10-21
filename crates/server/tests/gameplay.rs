@@ -74,6 +74,32 @@ async fn receive(socket: &mut Socket) -> GameplayServerMessage {
     decode_gameplay_server(&bytes).unwrap()
 }
 
+async fn assert_command_ack(socket: &mut Socket, sequence: u64, expected: CommandResult) {
+    timeout(Duration::from_secs(2), async {
+        loop {
+            match receive(socket).await {
+                GameplayServerMessage::CommandAck {
+                    sequence: actual,
+                    result,
+                    ..
+                } => {
+                    assert_eq!((actual, result), (sequence, expected));
+                    break;
+                }
+                GameplayServerMessage::Tick { .. }
+                | GameplayServerMessage::WildlifeState { .. }
+                | GameplayServerMessage::FogState(_)
+                | GameplayServerMessage::Projectiles { .. } => {}
+                other => {
+                    panic!("unexpected frame while awaiting command acknowledgement: {other:?}")
+                }
+            }
+        }
+    })
+    .await
+    .expect("command acknowledgement within two seconds");
+}
+
 async fn open(address: SocketAddr, token: Option<ResumeToken>) -> (Socket, GameplayServerMessage) {
     let (mut socket, _) = connect_async(format!("ws://{address}/game/ws"))
         .await
@@ -185,6 +211,14 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
         panic!("controller snapshot")
     };
     assert!(units.iter().any(|unit| unit.id == primary_unit_id));
+    assert!(matches!(
+        receive(&mut controller).await,
+        GameplayServerMessage::WildlifeState { revision: 1, .. }
+    ));
+    assert!(matches!(receive(&mut controller).await,
+        GameplayServerMessage::FogState(state) if state.revision == 1));
+    assert!(matches!(receive(&mut controller).await,
+        GameplayServerMessage::Projectiles { revision: 1, projectiles, .. } if projectiles.is_empty()));
 
     let (mut spectator, welcome) = open(address, None).await;
     assert!(matches!(
@@ -220,20 +254,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
         },
     )
     .await;
-    let mut accepted = false;
-    for _ in 0..4 {
-        if matches!(
-            receive(&mut controller).await,
-            GameplayServerMessage::CommandAck {
-                result: CommandResult::Accepted,
-                ..
-            }
-        ) {
-            accepted = true;
-            break;
-        }
-    }
-    assert!(accepted);
+    assert_command_ack(&mut controller, 1, CommandResult::Accepted).await;
     send(
         &mut spectator,
         GameplayClientMessage::MoveOrder {
@@ -259,21 +280,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
         },
     )
     .await;
-    let mut unknown_entity = false;
-    for _ in 0..4 {
-        if matches!(
-            receive(&mut controller).await,
-            GameplayServerMessage::CommandAck {
-                sequence: 2,
-                result: CommandResult::RejectedUnknownEntity,
-                ..
-            }
-        ) {
-            unknown_entity = true;
-            break;
-        }
-    }
-    assert!(unknown_entity);
+    assert_command_ack(&mut controller, 2, CommandResult::RejectedUnknownEntity).await;
     send(
         &mut controller,
         GameplayClientMessage::MoveOrder {
@@ -283,21 +290,12 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
         },
     )
     .await;
-    let mut invalid_destination = false;
-    for _ in 0..4 {
-        if matches!(
-            receive(&mut controller).await,
-            GameplayServerMessage::CommandAck {
-                sequence: 3,
-                result: CommandResult::RejectedInvalidDestination,
-                ..
-            }
-        ) {
-            invalid_destination = true;
-            break;
-        }
-    }
-    assert!(invalid_destination);
+    assert_command_ack(
+        &mut controller,
+        3,
+        CommandResult::RejectedInvalidDestination,
+    )
+    .await;
     drop(controller);
     let (_replacement, welcome) = open(address, Some(token)).await;
     assert!(matches!(
@@ -331,6 +329,8 @@ async fn gameplay_rejects_obsolete_revisions_and_invalid_regions() {
         GameplayServerMessage::WildlifeState { revision: 1, animals, .. } if animals.iter().all(|a| a.owner == Some(aoe_core::PlayerId(0)))));
     assert!(matches!(receive(&mut socket).await,
         GameplayServerMessage::FogState(state) if state.revision == 1 && state.tiles == [0]));
+    assert!(matches!(receive(&mut socket).await,
+        GameplayServerMessage::Projectiles { revision: 1, projectiles, .. } if projectiles.is_empty()));
     send(
         &mut socket,
         GameplayClientMessage::Subscribe {
