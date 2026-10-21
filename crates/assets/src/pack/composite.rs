@@ -21,7 +21,7 @@ pub fn render(
 ) -> Result<(), Error> {
     let (width, height) = (512usize, 384usize);
     let mut pixels = vec![128; width * height * 4];
-    for p in pixels.chunks_exact_mut(4) {
+    for p in pixels.as_chunks_mut::<4>().0 {
         p[3] = 255;
     }
     for part in &recipe.parts {

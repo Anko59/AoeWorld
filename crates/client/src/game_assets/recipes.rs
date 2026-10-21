@@ -76,7 +76,9 @@ pub(super) fn decode(
     }
     let bytes = hex
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|b| Ok(nibble(b[0])? << 4 | nibble(b[1])?))
         .collect::<Result<Vec<_>, &'static str>>()?;
     let mut r = Reader { bytes, pos: 0 };
