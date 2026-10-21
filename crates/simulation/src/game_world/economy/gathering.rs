@@ -60,7 +60,22 @@ impl GameWorld {
             task.animal = Some(animal);
             task.fish = None;
         }
+        let index = self.lookup[&id];
+        if self.units[index].state.task == UnitTask::Moving {
+            self.units[index].state.task = self.carcass_task(animal);
+        }
         Ok(())
+    }
+
+    fn carcass_task(&self, animal: EntityId) -> UnitTask {
+        if self
+            .animal(animal)
+            .is_some_and(|a| a.kind == crate::AnimalKind::Sheep)
+        {
+            UnitTask::Shepherding
+        } else {
+            UnitTask::Hunting
+        }
     }
     pub fn resource_remaining(&self, id: u64) -> Option<u16> {
         let Terrain::Map { generator, overlay } = &self.terrain else {
@@ -360,14 +375,7 @@ impl GameWorld {
         } else if task.farm.is_some() {
             UnitTask::Farming
         } else if let Some(animal) = task.animal {
-            if self
-                .animal(animal)
-                .is_some_and(|a| a.kind == crate::AnimalKind::Sheep)
-            {
-                UnitTask::Shepherding
-            } else {
-                UnitTask::Hunting
-            }
+            self.carcass_task(animal)
         } else {
             UnitTask::Gathering
         };
