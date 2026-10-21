@@ -106,6 +106,16 @@ failure in the same run; CI uploads them with the browser reports. E2E keeps
 the original Playwright JSON plus separate retry JSON files. Incomplete reports,
 compile errors, cancellations and runner failures do not earn quarantine retries.
 
+Completed E2E failures name each unresolved case's spec location, project and
+full title path, actual `failed` or `timedOut` status, duration in milliseconds,
+and first error line (up to 200 characters). Diagnostics show at most 40 cases,
+name the omitted count, and retain the report's expected/unexpected/skipped/flaky
+counts. A completed timeout never earns a quarantine retry. `interrupted` means
+a selected case lacks a final result, has status `interrupted`, or the report
+contains global errors; those diagnostics name the affected cases and global
+error lines too. A retry error retains unresolved initial-run failures alongside
+the retry diagnostics. Original JSON reports retain the complete evidence.
+
 `make test-wasm` runs the client browser integration tests and the
 client and rendering library `wasm-bindgen-test` cases in pinned headless
 Chromium through a disposable ChromeDriver container. On failure it retries the

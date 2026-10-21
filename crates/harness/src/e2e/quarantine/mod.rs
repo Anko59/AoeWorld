@@ -7,6 +7,7 @@ use serde_json::Value;
 use std::{error::Error, fs, path::Path, process::Command, time::Duration};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
+mod diagnostics;
 mod evidence;
 
 pub(super) const REPORTER: &str = "--reporter=./quarantine-reporter.ts,json";
@@ -20,6 +21,7 @@ struct Case {
     project: String,
     status: String,
     passed: bool,
+    actual: String,
 }
 
 fn escape(text: &str) -> String {
@@ -141,13 +143,14 @@ fn collect(
                 let actual = string(result, "status")?;
                 let expected = string(test, "expectedStatus")?;
                 if !matches!(actual, "passed" | "failed" | "timedOut" | "skipped")
-                    || (status == "unexpected" && (expected != "passed" || actual != "failed"))
+                    || (status == "unexpected"
+                        && (expected != "passed" || !matches!(actual, "failed" | "timedOut")))
                     || (status == "expected" && actual != expected)
                     || (status == "skipped" && (actual != "skipped" || expected != "skipped"))
                 {
-                    return Err("inconsistent or interrupted Playwright test result".into());
+                    return Err("inconsistent Playwright test result".into());
                 }
-                evidence.case(test, status == "unexpected")?;
+                evidence.case(test, status == "unexpected", actual == "timedOut")?;
                 cases.push(Case {
                     key: key.to_owned(),
                     file: root.join(file).to_string_lossy().into_owned(),
@@ -156,6 +159,7 @@ fn collect(
                     project: string(test, "projectName")?.to_owned(),
                     status: status.to_owned(),
                     passed: actual == "passed",
+                    actual: actual.to_owned(),
                 });
             }
         }
@@ -259,25 +263,40 @@ fn resolve(
     mut run_attempt: impl FnMut(&[String], &Path) -> Result<(bool, Value)>,
 ) -> Result<()> {
     let (success, value) = run_attempt(args, report)?;
-    let failed = failures(&value)?;
-    check_exit(success, &value)?;
+    let failed = diagnostics::checked(&value, failures(&value))?;
+    diagnostics::checked(&value, check_exit(success, &value))?;
     if success {
         if !failed.is_empty() {
-            return Err("successful Playwright exit with failed tests".into());
+            return Err(diagnostics::failure(
+                &value,
+                "successful Playwright exit with failed tests",
+                None,
+            ));
         }
         println!("test-e2e: Playwright passed; report: {}", report.display());
         return Ok(());
     }
     if failed.is_empty() {
-        return Err("Playwright failed without complete named failures".into());
+        return Err(diagnostics::failure(
+            &value,
+            "no complete named failures",
+            None,
+        ));
     }
     // The duel's browser_exit recognizes this completed assertion-failure line.
     // Keep runner/cancellation errors distinct from ordinary red evidence.
     if policy.is_none() {
-        return Err("focused Playwright check unavailable: Failed(Some(1))".into());
+        return Err(format!(
+            "focused Playwright check unavailable: Failed(Some(1))\n{}",
+            diagnostics::failure(&value, "completed test failures", None)
+        )
+        .into());
     }
-    let mut unresolved = Vec::new();
+    let mut unresolved: Vec<_> = failed.iter().map(Case::name).collect();
     for (index, case) in failed.iter().enumerate() {
+        if case.actual == "timedOut" {
+            continue;
+        }
         let mut attempt_number = 1;
         let recovered = flaky::retry(
             policy.and_then(|policy| policy.find("test-e2e", &case.key)),
@@ -289,8 +308,8 @@ fn resolve(
                 let report =
                     report.with_extension(format!("retry-{}-{attempt_number}.json", index + 1));
                 let (success, value) = run_attempt(&retry_args(args, case)?, &report)?;
-                let selected = cases(&value)?;
-                check_exit(success, &value)?;
+                let selected = diagnostics::checked(&value, cases(&value))?;
+                diagnostics::checked(&value, check_exit(success, &value))?;
                 let [selected] = selected.as_slice() else {
                     return Err("Playwright rerun did not select exactly one case".into());
                 };
@@ -299,20 +318,39 @@ fn resolve(
                 }
                 match (success, selected.status.as_str()) {
                     (true, "expected") if selected.passed => Ok(true),
-                    (false, "unexpected") => Ok(false),
-                    _ => Err("Playwright rerun did not complete the selected case".into()),
+                    (false, "unexpected") if selected.actual == "failed" => Ok(false),
+                    _ => Err(diagnostics::failure(
+                        &value,
+                        "rerun did not complete a recoverable assertion",
+                        None,
+                    )),
                 }
             },
-        )?;
-        if !recovered {
-            unresolved.push(case.name());
+        )
+        .map_err(|error| -> Box<dyn Error> {
+            format!(
+                "{error}\n{}",
+                diagnostics::failure(&value, "initial run unresolved tests", Some(&unresolved))
+            )
+            .into()
+        })?;
+        if recovered {
+            unresolved.retain(|name| name != &case.name());
         }
     }
     if !unresolved.is_empty() {
-        return Err(format!("Playwright failed: {}", unresolved.join(", ")).into());
+        return Err(diagnostics::failure(
+            &value,
+            "unresolved tests",
+            Some(&unresolved),
+        ));
     }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/diagnostics.rs"]
+mod diagnostics_tests;

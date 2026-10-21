@@ -1,7 +1,7 @@
 use super::*;
 use serde_json::json;
 
-fn report() -> serde_json::Value {
+pub(super) fn report() -> serde_json::Value {
     json!({"config":{"rootDir":"/checkout/browser/tests", "metadata":{"aoeQuarantine":{
         "status":"failed", "selected":["case-a"], "results":{"case-a":{
             "errors":[{"message":"expect(received).toBe(expected)","stack":"assertion stack", "snippet":"source added by reporter"}],
@@ -91,7 +91,7 @@ fn flaky_playwright_expected_failures_and_skips_are_not_retried() {
     assert!(failures(&value).unwrap().is_empty());
 }
 
-fn successful_report() -> Value {
+pub(super) fn successful_report() -> Value {
     let mut value = report();
     value["stats"]["expected"] = json!(1);
     value["stats"]["unexpected"] = json!(0);
