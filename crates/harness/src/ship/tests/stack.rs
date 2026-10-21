@@ -194,5 +194,9 @@ fn moving_a_pull_request_off_dev_disables_its_auto_merge() {
         "gh pr merge: GraphQL: Auto-merge is not enabled for this pull request"
     ));
     assert!(auto_merge_not_enabled("auto merge is not enabled"));
+    // The real GraphQL refusal for a draft with no auto-merge (#518, 2026-10-21).
+    assert!(auto_merge_not_enabled(
+        "GraphQL: Can't disable auto-merge for this pull request. (disablePullRequestAutoMerge)"
+    ));
     assert!(!auto_merge_not_enabled("HTTP 502: bad gateway"));
 }

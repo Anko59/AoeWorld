@@ -266,7 +266,10 @@ pub(super) fn disable_auto_args(url: &str, repository: &str) -> Vec<String> {
 /// GitHub's refusal to disable an auto-merge that was never armed.
 pub(super) fn auto_merge_not_enabled(error: &str) -> bool {
     let error = error.to_ascii_lowercase();
-    error.contains("auto-merge is not enabled") || error.contains("auto merge is not enabled")
+    error.contains("auto-merge is not enabled")
+        || error.contains("auto merge is not enabled")
+        // GitHub's GraphQL refusal (disablePullRequestAutoMerge) for a PR with none armed.
+        || error.contains("can't disable auto-merge for this pull request")
 }
 
 pub(super) fn pull_request(root: &Path, evidence: &Evidence, options: &Options) -> Result<String> {

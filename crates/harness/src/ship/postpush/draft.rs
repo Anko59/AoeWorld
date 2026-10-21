@@ -22,14 +22,9 @@ pub(in crate::ship) fn start(
         let repository = git::origin_repository(root)?;
         let existing = github::open_pull_request(root, &repository, &evidence.branch)?;
         if let Some(pr) = &existing {
-            let args = github::disable_auto_args(&pr.url, &repository);
-            match github::gh(root, &args.iter().map(String::as_str).collect::<Vec<_>>()) {
-                Err(error) if !github::auto_merge_not_enabled(&error.to_string()) => {
-                    return Err(error);
-                }
-                _ => {}
-            }
-            let draft = github::gh(
+            // One read: whether it is a draft and whether auto-merge is armed. A review-fix
+            // reship finds a draft with no auto-merge, which GitHub refuses to disable.
+            let state = github::gh(
                 root,
                 &[
                     "pr",
@@ -38,12 +33,20 @@ pub(in crate::ship) fn start(
                     "--repo",
                     &repository,
                     "--json",
-                    "isDraft",
-                    "--jq",
-                    ".isDraft",
+                    "isDraft,autoMergeRequest",
                 ],
             )?;
-            if draft != "true" {
+            let state = PrState::parse(&state)?;
+            if state.armed() {
+                let args = github::disable_auto_args(&pr.url, &repository);
+                match github::gh(root, &args.iter().map(String::as_str).collect::<Vec<_>>()) {
+                    Err(error) if !github::auto_merge_not_enabled(&error.to_string()) => {
+                        return Err(error);
+                    }
+                    _ => {}
+                }
+            }
+            if !state.is_draft {
                 github::gh(
                     root,
                     &["pr", "ready", &pr.url, "--repo", &repository, "--undo"],
@@ -102,4 +105,27 @@ pub(in crate::ship) fn push(
     }
     .map_err(|error| format!("git push failed: {error}"))?;
     git::publish::push(root, evidence, Some(&refreshed))
+}
+
+/// `gh pr view --json isDraft,autoMergeRequest`, parsed here rather than with `--jq` so the
+/// exact shape GitHub returns is what the tests feed in.
+#[derive(serde::Deserialize, Debug, PartialEq, Eq)]
+pub(in crate::ship) struct PrState {
+    #[serde(rename = "isDraft")]
+    pub(in crate::ship) is_draft: bool,
+    #[serde(rename = "autoMergeRequest")]
+    auto_merge_request: Option<serde_json::Value>,
+}
+
+impl PrState {
+    pub(in crate::ship) fn parse(json: &str) -> crate::ship::Result<Self> {
+        serde_json::from_str(json).map_err(|error| {
+            format!("ship: unreadable pull request state ({error}): {json}").into()
+        })
+    }
+
+    /// Whether GitHub has an auto-merge armed for this pull request.
+    pub(in crate::ship) fn armed(&self) -> bool {
+        self.auto_merge_request.is_some()
+    }
 }

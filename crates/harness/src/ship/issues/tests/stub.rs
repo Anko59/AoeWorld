@@ -44,6 +44,8 @@ case "$1" in
     *) case " $* " in *" --body-file - "*) cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG" ;; esac ;;
   esac ;;
   pr) if [ "$2" = list ]; then printf '%s' "${GH_OPEN_PR-}"; fi
+    # Like GitHub for `pr view --json isDraft,autoMergeRequest`: a ready PR, nothing armed.
+    if [ "$2" = view ]; then printf '{"isDraft":false,"autoMergeRequest":null}\n'; fi
     case " $* " in *" --body-file - "*) cat >> "$GH_BODY_LOG"; printf -- '\n===\n' >> "$GH_BODY_LOG" ;; esac ;;
 esac
 "#;
