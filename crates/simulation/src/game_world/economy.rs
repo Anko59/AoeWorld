@@ -34,8 +34,8 @@ pub const MAX_ECONOMY_PLAYERS: usize = 128;
 pub const MAX_ECONOMY_BUILDINGS: usize = 4_096;
 /// Villagers one build order or one world may assign to construction.
 pub const MAX_BUILD_GROUP: usize = 32;
-pub const MAX_BUILDERS: usize = 80;
-pub const MAX_GATHERERS: usize = 80;
+pub const MAX_BUILDERS: usize = 2_048;
+pub const MAX_GATHERERS: usize = 8_192;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
