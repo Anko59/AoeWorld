@@ -48,6 +48,7 @@ fn the_committed_registry_marks_the_compiling_and_testing_gates_heavy() {
         "perf-wasm-cap",
         "perf-wasm-size",
         "release-build",
+        "sdk-python-test",
         "test-e2e",
         "test-exhaustive",
         "test-source-qualification",

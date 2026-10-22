@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -34,6 +35,13 @@ def main(argv: list[str] | None = None) -> int:
     match.add_argument("--tiles", type=int, default=500, help="map width in tiles (flat terrain)")
     match.add_argument("--seed", type=int, default=1)
 
+    arena = sub.add_parser("arena", help="seeded lockstep matches against an arena server; prints JSON")
+    arena.add_argument("--server-bin", required=True, help="the aoe-server binary")
+    arena.add_argument("--bots", type=int, default=2)
+    arena.add_argument("--minutes", type=float, default=30.0, help="game minutes per seed")
+    arena.add_argument("--tiles", type=int, default=300, help="map width in tiles (flat terrain)")
+    arena.add_argument("--seeds", default="1,2,3,4,5", help="comma-separated seeds, one match each")
+
     join = sub.add_parser("join", help="play one existing slot")
     join.add_argument("--url", default="http://127.0.0.1:8080")
     join.add_argument("--token", required=True, help="the slot's 48-digit token")
@@ -41,6 +49,16 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    if args.command == "arena":
+        from pathlib import Path
+
+        from .arena import run_seeds
+
+        root = Path(__file__).resolve().parents[2]
+        seeds = [int(seed) for seed in args.seeds.split(",") if seed]
+        results = run_seeds(Path(args.server_bin), root, seeds, args.bots, args.minutes, args.tiles)
+        print(json.dumps({"results": results}, indent=1))
+        return 1 if any(b["errors"] for r in results for b in r["bots"]) else 0
     if args.command == "match":
         if not args.admin_token:
             parser.error("--admin-token (or AOE_MATCH_TOKEN) is required to start a match")

@@ -105,7 +105,7 @@ where
 }
 
 /// Gives every human slot whose controller stayed away past the lease to the
-/// oldest spectator, under a fresh token; an empty slot stays claimable.
+/// oldest spectator, under a fresh token; an empty slot stays claimable under a fresh token.
 /// AI slots are never reassigned: only their token reaches them.
 pub(super) fn promote_expired(
     ownership: &mut Ownership,
@@ -128,12 +128,15 @@ pub(super) fn promote_expired(
             .filter(|(_, session)| session.role == GameplayRole::Spectator)
             .min_by_key(|(_, session)| session.connected_at)
             .map(|(id, _)| *id);
-        let Some(session_id) = next else {
-            ownership.slots[index].lease = None;
-            continue;
-        };
         let token = make_token(world_id, ownership.next_token);
         ownership.next_token = ownership.next_token.wrapping_add(1);
+        let Some(session_id) = next else {
+            // Nobody to promote: the seat opens, and the departed player's
+            // token must not open it again or hand it to the next claimant.
+            ownership.slots[index].lease = None;
+            ownership.slots[index].token = token;
+            continue;
+        };
         let slot = &mut ownership.slots[index];
         slot.token = token;
         slot.lease = Some(ControllerLease {

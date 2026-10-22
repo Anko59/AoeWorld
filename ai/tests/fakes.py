@@ -23,13 +23,14 @@ def unit(id, kind=UnitKind.VILLAGER, tile=(50, 50), task=UnitTask.IDLE, gatherin
     )
 
 
-def building(id, kind, tile=(50, 50), complete=True, queue=0, researching=None, mine=True, visible=True):
+def building(id, kind, tile=(50, 50), complete=True, queue=0, researching=None, mine=True, visible=True, hp=1000):
     w, h = aoeworld.building_size(kind)
     return NS(
         id=id, kind=kind, x=tile[0], y=tile[1], width=w, height=h,
         center=(tile[0] + w // 2, tile[1] + h // 2), complete=complete, queue_length=queue,
         researching=researching, idle=complete and queue == 0 and researching is None,
-        mine=mine, visible=visible, owner=0 if mine else 1,
+        mine=mine, visible=visible, owner=0 if mine else 1, hp=hp, max_hp=1000,
+        progress=0 if not complete else 1000,
     )
 
 
@@ -55,6 +56,7 @@ class FakeWorld:
                  enemy_buildings=(), tick=100, size=(300, 300)):
         self.tick = tick
         self.tick_hz = 20
+        self.me = 0
         self.map_size = size
         self.economy = eco or economy()
         self._units = list(units)

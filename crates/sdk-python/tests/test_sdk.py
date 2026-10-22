@@ -177,3 +177,34 @@ def test_a_fleet_drives_many_bots_from_one_thread(server, secret):
     finally:
         for client in clients:
             client.close()
+
+
+def test_a_closed_connection_is_reported_once_and_never_busy_spins_the_fleet(server, secret):
+    info = new_match(server, secret, ["ai"] * 2)
+    clients = [aoeworld.connect(server, slot.token, decision_hz=4) for slot in info.slots]
+    try:
+        fleet = aoeworld.Fleet(clients)
+        clients[0].close()
+        reports = []
+        deadline = time.time() + 20
+        while time.time() < deadline and not any(i == 0 and d is None for i, d in reports):
+            reports += fleet.wait(timeout=1.0)
+        assert [i for i, d in reports if d is None] == [0], reports
+        # Only the live bot is heard from now; a wait is never instant forever.
+        started = time.time()
+        later = []
+        for _ in range(8):
+            later += fleet.wait(timeout=0.25)
+        assert all(i == 1 and d is not None for i, d in later), later
+        clients[1].close()
+        reports = []
+        while time.time() < deadline and not reports:
+            reports = fleet.wait(timeout=1.0)
+        assert [(i, d) for i, d in reports] == [(1, None)]
+        idle = time.time()
+        for _ in range(4):
+            assert fleet.wait(timeout=0.25) == []
+        assert time.time() - idle >= 0.9, "waiting on a fully closed fleet must not spin"
+    finally:
+        for client in clients:
+            client.close()

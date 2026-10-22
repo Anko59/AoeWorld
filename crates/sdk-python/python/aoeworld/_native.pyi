@@ -297,6 +297,8 @@ class Client:
     @property
     def world(self) -> World: ...
     @property
+    def orders_sent(self) -> int: ...
+    @property
     def closed(self) -> bool: ...
     @property
     def close_reason(self) -> Optional[str]: ...
@@ -352,6 +354,7 @@ def connect(
     view_padding: int = 28,
     view_size: int = 128,
     fetch_terrain: bool = True,
+    orders_per_second: int = 90,
 ) -> Client: ...
 def start_match(
     url: str,

@@ -192,13 +192,13 @@ jobs:
     timeout-minutes: 60
     steps: [{uses: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'}, {uses: ./.github/actions/docker-setup}, {run: make test-source-qualification}]
 
-  # Post-merge tier: the 16-seed sweeps and full-axis geodata round-trips that test-unit runs on two seeds or reduced axes.
+  # Post-merge tier (100 min covers test-exhaustive's 30 and sdk-python-test's 60 budgeted): the 16-seed sweeps and full-axis geodata round-trips that test-unit runs on two seeds or reduced axes, and the Python SDK with a live bot game.
   exhaustive:
     needs: select
     if: ${{ needs.select.outputs.exhaustive == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps: [{uses: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'}, {uses: ./.github/actions/docker-setup}, {run: make test-exhaustive}]
+    timeout-minutes: 100
+    steps: [{uses: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'}, {uses: ./.github/actions/docker-setup}, {run: make test-exhaustive}, {run: make sdk-python-test}]
 
   required:
     permissions: { contents: read, statuses: write }

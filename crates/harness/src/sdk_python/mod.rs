@@ -29,12 +29,30 @@ const TEST_WHEELS: &str = "target/sdk-python/wheels";
 const SERVER: &str = "target/debug/aoe-server";
 const STEP_DEADLINE: Duration = Duration::from_secs(60 * 40);
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::Subcommand)]
+#[derive(Clone, Debug, Eq, PartialEq, clap::Subcommand)]
 pub(crate) enum Action {
     /// Build the release wheel into `target/wheels`.
     Build,
     /// Build a debug wheel and the server, then run pytest against a local server.
     Test,
+    /// Play seeded lockstep AI matches against an arena server and print JSON (`make ai-arena`).
+    Arena(ArenaArgs),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, clap::Args)]
+pub(crate) struct ArenaArgs {
+    /// Map width in tiles.
+    #[arg(long, default_value_t = 300)]
+    size: u32,
+    /// AI players per match.
+    #[arg(long, default_value_t = 2)]
+    bots: u32,
+    /// Game minutes per seed.
+    #[arg(long, default_value_t = 30)]
+    minutes: u32,
+    /// Comma-separated seeds, one match each.
+    #[arg(long, default_value = "1,2,3,4,5")]
+    seeds: String,
 }
 
 pub(crate) fn run(action: Action) -> Result<(), Box<dyn Error>> {
@@ -45,6 +63,7 @@ pub(crate) fn run(action: Action) -> Result<(), Box<dyn Error>> {
             println!("built {}", wheel.display());
         }
         Action::Test => test(&root)?,
+        Action::Arena(args) => arena(&root, &args)?,
     }
     Ok(())
 }
@@ -72,6 +91,74 @@ fn build_wheel(root: &Path, release: bool, out: &str) -> Result<PathBuf, Box<dyn
 }
 
 fn test(root: &Path) -> Result<(), Box<dyn Error>> {
+    let (server, python_path) = prepare(root)?;
+    for (tests, project) in TESTS {
+        let rootdir = Path::new(project)
+            .parent()
+            .map_or(".".into(), |p| p.to_string_lossy());
+        process::run_with_env(
+            "python3",
+            &[
+                "-m",
+                "pytest",
+                "-p",
+                "no:cacheprovider",
+                "--rootdir",
+                &rootdir,
+                "-c",
+                project,
+                tests,
+            ],
+            &[
+                ("PYTHONPATH", &python_path),
+                ("AOE_SERVER_BIN", &server.to_string_lossy()),
+                ("PYTHONDONTWRITEBYTECODE", "1"),
+            ],
+            STEP_DEADLINE,
+        )?;
+    }
+    Ok(())
+}
+
+/// The AI arena: one fresh server and match per seed, results as JSON on stdout.
+fn arena(root: &Path, args: &ArenaArgs) -> Result<(), Box<dyn Error>> {
+    if !args
+        .seeds
+        .split(',')
+        .all(|seed| seed.parse::<u32>().is_ok())
+    {
+        return Err("--seeds takes comma-separated numbers".into());
+    }
+    let (server, python_path) = prepare(root)?;
+    process::run_with_env(
+        "python3",
+        &[
+            "-m",
+            "aoe_ai",
+            "arena",
+            "--server-bin",
+            &server.to_string_lossy(),
+            "--bots",
+            &args.bots.to_string(),
+            "--minutes",
+            &args.minutes.to_string(),
+            "--tiles",
+            &args.size.to_string(),
+            "--seeds",
+            &args.seeds,
+        ],
+        &[
+            ("PYTHONPATH", &python_path),
+            ("PYTHONDONTWRITEBYTECODE", "1"),
+        ],
+        STEP_DEADLINE,
+    )?;
+    Ok(())
+}
+
+/// Builds the server and a debug wheel, installs the wheel into a fresh
+/// directory and returns the server path and the `PYTHONPATH` for the AI.
+fn prepare(root: &Path) -> Result<(PathBuf, String), Box<dyn Error>> {
     process::run(
         "cargo",
         &["build", "--locked", "-p", "aoe-server"],
@@ -100,32 +187,7 @@ fn test(root: &Path) -> Result<(), Box<dyn Error>> {
     let server = root.join(SERVER);
     // The wheel under test plus the example AI's sources, never an installed copy.
     let python_path = format!("{}:{}", site.display(), root.join(AI_SOURCE).display());
-    for (tests, project) in TESTS {
-        let rootdir = Path::new(project)
-            .parent()
-            .map_or(".".into(), |p| p.to_string_lossy());
-        process::run_with_env(
-            "python3",
-            &[
-                "-m",
-                "pytest",
-                "-p",
-                "no:cacheprovider",
-                "--rootdir",
-                &rootdir,
-                "-c",
-                project,
-                tests,
-            ],
-            &[
-                ("PYTHONPATH", &python_path),
-                ("AOE_SERVER_BIN", &server.to_string_lossy()),
-                ("PYTHONDONTWRITEBYTECODE", "1"),
-            ],
-            STEP_DEADLINE,
-        )?;
-    }
-    Ok(())
+    Ok((server, python_path))
 }
 
 /// The most recently written `aoeworld-*.whl` in `directory`.

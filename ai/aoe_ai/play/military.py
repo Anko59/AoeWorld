@@ -7,8 +7,8 @@ from typing import Any, Optional
 
 from aoeworld import BuildingKind, UnitKind, trainable, unit_cost
 
-from .context import Context
-from .geometry import Tile, clamp_tile, dist
+from ..context import Context
+from ..geometry import Tile, clamp_tile, dist
 
 TRAINERS = (BuildingKind.BARRACKS, BuildingKind.ARCHERY_RANGE)
 #: What stands in for a kind the age does not allow yet.
@@ -46,7 +46,7 @@ class MilitaryManager:
         return have
 
     def train(self, ctx: Context) -> None:
-        if len(ctx.villagers) < ctx.config.army_min_villagers:
+        if not ctx.feudal or len(ctx.villagers) < ctx.config.army_min_villagers:
             return
         mix = ctx.config.army_mix
         have = self.composition(ctx)
@@ -64,7 +64,7 @@ class MilitaryManager:
             ctx.order("train", building.id, choice)
             ctx.queued += 1
             have[UnitKind.SPEARMAN if choice == UnitKind.MILITIA else choice] += 1
-            ctx.memory.bump("army_queued")
+            ctx.board.bump("army_queued")
 
     def pick(self, ctx: Context, building: Any, have: dict, mix: dict) -> Optional[UnitKind]:
         options = []
@@ -83,7 +83,7 @@ class MilitaryManager:
 
     def allowed(self, ctx: Context, kind: UnitKind) -> Optional[UnitKind]:
         """`kind`, or a stand-in while the server has refused it for the age."""
-        blocked = ctx.memory.blocked_units
+        blocked = ctx.board.blocked_units
         if str(kind) not in blocked:
             return kind
         substitute = SUBSTITUTE.get(kind)
@@ -103,10 +103,16 @@ class MilitaryManager:
             home[0] + int(round((cx - home[0]) / d * offset)),
             home[1] + int(round((cy - home[1]) / d * offset)),
         )
+        # Walk the point off anything the server refused as a destination.
+        bad = ctx.board.bad_moves
+        for dx, dy in ((0, 0), (2, 0), (0, 2), (-2, 0), (0, -2), (3, 3), (-3, 3), (3, -3), (-3, -3), (5, 0), (0, 5), (-5, 0), (0, -5)):
+            candidate = clamp_tile((point[0] + dx, point[1] + dy), ctx.world.map_size)
+            if candidate not in bad:
+                return candidate
         return clamp_tile(point, ctx.world.map_size)
 
     def rally(self, ctx: Context) -> None:
-        if ctx.memory.attacking:
+        if ctx.board.attacking:
             return
         point = self.rally_point(ctx)
         sent = 0

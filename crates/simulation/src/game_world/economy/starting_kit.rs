@@ -27,11 +27,16 @@ impl GameWorld {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return Ok(());
         };
-        // A restored game already contains its original kit, including exhausted nodes.
-        if overlay.starting_nodes().next().is_some() {
+        let center = TileCoord::new(footprint.min.x + 2, footprint.min.y + 2);
+        // A restored game already contains this village's original kit,
+        // including exhausted nodes. Another village's kit does not count: a
+        // match seats many villages in one world.
+        if overlay
+            .starting_nodes()
+            .any(|node| distance_squared(node.tile, center) <= (REACH as u64).pow(2))
+        {
             return Ok(());
         }
-        let center = TileCoord::new(footprint.min.x + 2, footprint.min.y + 2);
         let exits: Vec<_> = perimeter(footprint)
             .into_iter()
             .filter(|t| self.tile_passable(*t))

@@ -114,7 +114,7 @@ impl Terrain {
 const CERTIFIED_REGION_TILES: usize = 800;
 
 /// Certifies village sites one by one: a clear 5x5 area inside a connected
-/// walkable region of thousands of tiles. It lets a host seat several players
+/// walkable region of `CERTIFIED_REGION_TILES` (800) tiles. It lets a host seat several players
 /// without putting one in a walled pocket. Chunk passability is reused between
 /// calls; the exploration is bounded per call.
 pub struct StartCertifier<'a> {
@@ -126,9 +126,6 @@ impl StartCertifier<'_> {
         let cache = &mut self.cache;
         let result = (|| {
             if !clear_starting_area(cache, tile)? {
-                if tile.x == 250 {
-                    eprintln!("DBG not clear {tile:?}");
-                }
                 return Ok(false);
             }
             let mut visited = BTreeSet::from([tile]);

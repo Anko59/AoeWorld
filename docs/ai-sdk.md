@@ -66,10 +66,10 @@ Name the ground with exactly one of:
   to develop and test an AI (generated terrain without source data is rugged,
   and its cliffs wall off most village sites). Needs the server's map package
   directory (`AOE_MAP_PACKAGE_DIRECTORY`, default `local-assets/map-packages`).
-  Resources come from the procedural landscape, so they depend on the seed and
-  the size: flat maps have forests and a few berry bushes but no gold, stone or
-  game, and a map under about 300 tiles can have no trees at all. Check
-  `world.resources()` when choosing a seed.
+  Natural resources come from the procedural landscape (forests, a few berry
+  bushes), but every village also gets the standard start (see below), so
+  each has gold, stone, sheep, deer and boar. A map under about 300 tiles can
+  have few trees besides the start's twelve.
 * `"map": {MapRequest}` a generated package (the browser's map creator
   request); `"map_hash": "<64 hex>"` a package the server already holds.
 
@@ -146,13 +146,13 @@ from the deltas the slot receives, so they cover exactly what it can see.
 ## Python API reference
 
 `aoeworld.connect(url, slot_token, decision_hz=2.0, view_padding=28, view_size=128,
-fetch_terrain=True) -> Client`; `aoeworld.start_match(url, admin_token, slots,
+fetch_terrain=True, orders_per_second=90) -> Client`; `aoeworld.start_match(url, admin_token, slots,
 tiles_per_side=500, seed=1, terrain="flat", map_hash=None) -> MatchInfo`. Exceptions: `AoeError`,
 `ConnectionClosed`, `Refused` (bad token, bad secret).
 
 `Client`: `wait_decision(timeout=None) -> Decision | None`, `run(on_tick,
 until_tick=None, max_decisions=None) -> RunSummary`, `world`, `closed`,
-`close_reason`, `close()`, and the orders `move(unit, x, y)`, `stop(unit)`,
+`close_reason`, `orders_sent`, `close()`, and the orders `move(unit, x, y)`, `stop(unit)`,
 `gather(unit, resource_id)`, `build(builders, kind, x, y)`, `build_wall(builders,
 x1, y1, x2, y2)`, `construct(builders, building)`, `cancel_construction(b)`,
 `farm(unit, farm)`, `train(building, kind)`, `cancel_training(b)`,
@@ -186,20 +186,104 @@ and the three cancels). `run_bot(&client, &mut bot, RunLimits)` runs a `Bot`
 ## The example AI (`ai/`)
 
 `aoe_ai.Brain` is the player; `Host` runs many in one process. Each decision it
-runs these in priority order, sharing one `Context` (the snapshot plus a spending
-budget) and a `BotMemory`:
+builds one `Context` (the snapshot, a spending budget, order helpers) and runs
+the managers in priority order, sharing one `Blackboard` (orders in flight and
+their verdicts, refused nodes and sites, planned buildings, scouting progress,
+attack state, counters):
 
 | Module | Job |
 | --- | --- |
-| `research.py` | Loom, the climb to Feudal Age (drains the Town Center queue first), then economy upgrades |
-| `combat.py` | defend the base, mass 14 units, attack the nearest known enemy building, retreat below 40% |
-| `economy.py` | villager production, resource shares (food, wood, gold, stone), hunting before foraging, farms once food nodes run out |
-| `constructor.py` | houses before the cap, lumber camps, mining camps and mills beside far resources, Barracks, Archery Range |
-| `military.py` | spearman : archer : skirmisher = 4 : 3 : 3, rally point |
-| `scouting.py` | widening rings, then a sweep of the far side of the map |
+| `play/buildorder.py` | the plan: stage (Dark, advance, Feudal), when to Loom and click Feudal Age, which buildings and upgrades come next |
+| `play/research.py` | executes it: Loom, saving 500 food and Feudal Age (the Town Center queue drains first), then the upgrades |
+| `play/economy.py` | villagers without pause, shares of food, wood, gold and stone, sheep then berries then deer and boar, farms when the land runs dry |
+| `play/constructor.py` | houses before the cap, Lumber Camp and Mill, camps beside far resources, Barracks, Archery Range, Blacksmith |
+| `play/military.py` | spearman : archer : skirmisher = 4 : 3 : 3 from Feudal Age on, rally point |
+| `play/scouting.py` | the starting area, then the circle round the map centre through home (far side first), then wider rings |
+| `play/combat.py` | defend the base (villagers next to raiders walk home when outnumbered), attack the nearest known enemy building at 12 units, retreat below 40% |
 
-It learns from refusals (a refused node or site is not tried again). Tunables
-are in `config.py`. `python -m aoe_ai --help` lists the launcher modes.
+The build order: villagers from the first second, a House before the cap, a
+Lumber Camp and a Mill at 8 villagers (they also satisfy the age's two-kinds
+rule), Loom at 10, and at 21 villagers with those standing it stops training
+villagers, saves 500 food and researches Feudal Age. While the age researches
+it raises the Barracks; in Feudal Age the Archery Range, the Blacksmith, Double-Bit
+Axe, Horse Collar (once farming), Wheelbarrow, Gold Mining and the Blacksmith
+upgrades, and an army from every Barracks and Range. No unit is trained in the
+Dark Age: its food belongs to villagers and the age.
+
+Robustness: every order is remembered until its verdict arrives; a refused
+node, animal or site is never tried again, a refused unit kind is substituted
+until the age changes, a villager that falls idle right after an order waits
+four seconds, and a hunted animal nobody finishes is dropped. Everything is
+read from the fog-filtered world: nothing is assumed about enemy positions
+beyond "villages are spread evenly over the map".
+Tunables are in `config.py`. `python -m aoe_ai --help` lists the launcher modes.
+
+### The standard start
+
+Every village of a match starts like the Arabia start of Age of Empires II:
+Town Center, 3 villagers and a scout, 8 sheep, 7 berry bushes, 7 gold and 5
+stone nodes, 12 trees (topped up beside the natural ones), 2 boar, 4 deer and a
+wolf, placed by the simulation's deterministic starting kit
+([economy](economy.md), [wildlife](economy.md#wildlife-and-hunting)). The
+official guide lists, per player, 8 herdables, 3 forests, 6 fruit bushes, 2
+aggressive and 4 wild hunt, 7 tiles of gold and 5 of stone
+(<https://ageofempires.com/learn-to-play/defending-your-empires-aoe2>). A bug
+gave only the first village of a match its kit (the guard looked for any
+starting node in the world); `gameplay_match` tests now check every village of
+several flat matches. These nodes are in no map chunk, so the SDK builds them
+from the resource feed's ids (`World.resources()`); before that fix bots never
+saw their berries and gold.
+
+### The AI arena
+
+`make ai-arena` plays seeded matches as fast as the machine allows
+(`ARENA_SIZE`, `ARENA_BOTS`, `ARENA_MINUTES`, `ARENA_SEEDS`; defaults 300 tiles,
+2 bots, 30 game minutes, seeds 1-5) and prints JSON: per seed and bot, the Feudal
+minute, villagers (and peak), army (and peak), attacks launched and landed,
+losses and kills. A server started with `AOE_ARENA=1` has no tick clock; the
+driver (`ai/aoe_ai/arena.py`) advances it with the admin-token call
+`POST /match/step {"ticks", "orders"}`. The bots are ordinary clients: same
+protocol, same SDK, same fog-filtered view, and `decision_hz` counts game
+seconds. The driver steps one decision period, waits until every bot has its
+decision, lets them decide, then steps again; the step waits for the orders the
+bots sent, and the real-time order budgets (server and client) are lifted. A
+seed repeats exactly in practice (same result twice on this machine); the
+exceptions are two benign races, a bot whose map window moved during a step (the
+driver then adds a tick) and wildlife updates reaching a bot within a few
+milliseconds of its poll. A game finishes in a fraction of its length, but the
+wall time still grows with the armies and the machine's load.
+
+### Measured arena play
+
+`ai/tests/test_full_game.py` plays seeds 1-5 on a 300-tile flat map, two bots, up
+to 30 game minutes, and requires per bot: Feudal Age, at least ten soldiers at
+once (`SOLDIERS`) and, per match, one landed blow (an enemy's health fell with
+our soldiers within 12 tiles). `sdk-python-test`, which blocks `ci` and
+`nightly`, runs it because all five seeds passed on the revision that
+introduced it (development machine, shared, so wall times only indicate):
+
+| seed | Feudal minute (bot 0 / 1) | army peak (0 / 1) | blows landed (0 / 1) | wall |
+| --- | --- | --- | --- | --- |
+| 1 | 12.5 / 12.4 | 50 / 60 | 1 / 65 | 880 s |
+| 2 | 12.1 / 12.0 | 66 / 47 | 95 / 0 | 1078 s |
+| 3 | 12.5 / 12.1 | 25 / 56 | 0 / 135 | 307 s |
+| 4 | 12.7 / 12.4 | 38 / 17 | 122 / 0 | 233 s |
+| 5 | 12.4 / 12.4 | 33 / 14 | 67 / 0 | 222 s |
+
+Full 30-minute games; the test stops a seed as soon as it is proven, and wall
+time grows with the armies and the machine's load (two arenas ran side by side
+here). The weakest bot of any seed peaked at 14 soldiers, so ten is met with a
+margin, but five seeds are a sample: if a later change breaks the gate, fix the
+AI or the threshold, and move the test to a non-blocking cadence rather than
+tolerating a flaky blocking gate. Reasons the earlier live runs showed thin
+armies: foundations whose builder was lost stayed unbuilt for ever (the Archery
+Range and second Barracks never stood; the AI now sends a villager to
+`construct` a foundation that stopped advancing), too much gold and too little
+food for a Feudal army (shares moved to food), and hunters held by animals they
+could never kill (now stood down after 40 s without progress). The Feudal time
+(about 12.5 minutes) is later than a good player's. Synthetic two-bot workloads
+on a flat map show neither finished RTS performance nor dedicated-hardware
+qualification.
 
 ## Tests and commands
 
