@@ -393,3 +393,92 @@ against the sequential build; `update_unit_vision` (a `BTreeMap` of observers) a
 `building_step_clear` are the remaining serial parts. (d) Spawn military in open ground in
 the benchmark so attack and move orders stop failing. (e) Chunk generation of 4.5 ms is
 the cold cost; a base-terrain-only fast path would cut it where trees are not needed.
+
+## Server fan-out (hot spots 9 and 10)
+
+What changed (`crates/server/src/gameplay/{tick,fanout,frame,deliver}.rs`):
+
+- The tick takes the building-memory change lists while it still holds the world
+  write guard, downgrades to a read guard and builds every session's view on worker
+  threads; delivery then diffs and sends under the session lock only. Before, all of
+  it ran under the write lock.
+- One `UnitFrame` per tick converts every unit once, in parallel parts. Gatherer and
+  hunter facts come from one sorted pass over the economy maps instead of a lookup
+  per unit. A session reads only the spatial chunks of its region plus its viewer's
+  presorted own units (those are skipped in the chunk scan), filters by its viewer's
+  fog and diffs against a sorted baseline in one merge. No per-session `BTreeSet`,
+  `BTreeMap` or scan of all units.
+- Buildings: the simulation's per-player memory (`remember_visible_buildings`) now
+  records which entries changed (and copies only those), and a viewer's building view
+  follows that list, so only changed buildings are compared. A full rebuild remains for
+  a new viewpoint and for fog switched on or off; with fog off the full view is built
+  once and shared.
+- Fog: `GameWorld::visibility_tiles` reads a region chunk by chunk and column by
+  column instead of 9,216 map lookups, and a rebuilt fog view equal to the one the
+  client holds (region, tiles, overview) is not sent again. AI sessions still rebuild at
+  most once a second and, between those, do no fog work at all.
+- Protocol, message order and client decoding are unchanged.
+
+Method: `PERF_SCALE_ARGS="--ticks 200 --fog-off-ticks 20 --server-ticks 40 --out
+reports/scale/after-fanout.json" make perf-scale`; the same arguments produced
+`before-fanout.json`. The server section now registers one session per seat (player 0
+a person, 99 AIs), each looking at a 96 x 96 view of its own base through its own fog.
+The service reports its own fan-out time per tick (`last_fanout_timing`), so the
+numbers below are the fan-out itself, not a difference of two noisy 400 ms ticks.
+Milliseconds, 100 sessions, 101,111 units, 40 ticks, fog on:
+
+| Phase | before (`7cf0301c`) p50 / p95 | after (`c239df8f`) p50 / p95 |
+|---|---|---|
+| Fan-out total | 125.8 / 128.1 | 10.7 / 13.7 |
+| per-viewer state | not separate | 0.07 / 0.10 |
+| shared unit frame | not separate | 7.1 / 8.7 |
+| per-session views | not separate | 1.6 / 3.1 |
+| view building (read world) | 117.3 / 119.7 | 8.8 / 11.4 (sum of the three above) |
+| delivery under the session lock | 8.5 / 8.6 | 1.9 / 2.2 |
+
+Fog off: fan-out 124.7 / 127.7 before, 19.3 / 21.6 after (delivery 10.1: the full
+building view is diffed against every session's baseline, it is not change-listed).
+The write lock is held for commands and `advance` only, not for the views.
+
+Repeats of the same code: 8.4 / 16.4 on a quieter machine, 11.5 / 12.7 before the
+frame was split into parallel parts (frame 7.6 serial) and 12.4 / 42.8 with the
+machine heavily loaded (`baseline_no_sessions_tick` p50 530 ms against 393 ms for
+the before run). The after run kept in `after-fanout.json` was taken at 1-minute
+load about 11 (no-session tick p50 560 ms), so it is a loaded-machine figure; the
+before run was quiet. Budget: 8 to 12 ms for 100 sessions is met at p50, p95 depends
+on what else the machine does.
+
+Bytes (steady state, mean per session, fog on): 796.5 B/s before, 380.5 B/s after;
+the busiest session (the person) 65.7 KB/s before, 28.7 KB/s after. Tick deltas
+(75,839 B in 1,236 messages) and wildlife (261 B) are byte-identical; the 9 fog
+views sent in 40 ticks (83.2 KB) were all repeats of an unchanged view and are no
+longer sent. The 27.7 KB/s of fog per session quoted above came from 100 spectators of
+one player whose vision moved every tick; with one session per seat most bases are
+idle in this synthetic world and fog changes seldom. Fog off is unchanged
+(3,673,607 B in 4,000 messages).
+
+Equivalence and secrecy (`gameplay/tick/tests.rs`): a five-seat match (gathering,
+building, training, wildlife, visitors in a neighbour's view, a moved and a resynced
+view) pins an FNV digest of every encoded message of every session. The digests were
+computed with the old fan-out and the new one reproduces them, except that a repeat
+of an unchanged fog view is left out of both sides before hashing. A second test
+checks, after every tick, that nothing about another player (units, buildings,
+players, animals, projectile endpoints) is sent unless the viewer sees it or
+remembers the building. `GameWorld::visibility_tiles`, the memory change list and
+the chunk candidate query have their own simulation tests.
+
+Limits:
+
+- Fog is still sent as a full tile array when its content changes. No delta or
+  compression was added, so a person whose units move all the time still receives
+  about 9 KB per changed tick. This avoided any protocol change; a delta message can
+  be appended later with goldens.
+- The unit frame is still O(U) per tick (7.1 of 10.7 ms): the simulation has no
+  per-unit dirty list, and commands change units outside `advance`, so every unit is
+  converted every tick. A simulation-side dirty list is the next step.
+- Idle AI sessions skip fog between their once-a-second views but still build their
+  unit view each tick: whether anything changed is only known by building it.
+- The fan-out is awaited inside `tick()`; it is off the write lock but not pipelined
+  with the next simulation step, so it still adds to the tick's wall time.
+- One run per configuration on a shared machine; synthetic workload, not finished RTS
+  content (see the limits above).
