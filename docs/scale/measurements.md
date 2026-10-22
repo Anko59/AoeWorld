@@ -251,6 +251,11 @@ stated.
     chunk bitsets, deltas (run-length encoded) only for changed chunks inside the
     viewport. Expected 20 to 50 times fewer bytes and CPU.
 
+## Gathering and collation
+
+Measured in [gathering.md](gathering.md): drop-off index, chunked resource
+search and dirty collation list (hot spots 7 and 8).
+
 ## Hard limits found in the code (independent of speed)
 
 - `MAX_ECONOMY_PLAYERS = 16` (`simulation/.../economy.rs:34`, wire cap

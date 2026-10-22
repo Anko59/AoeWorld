@@ -114,7 +114,7 @@ impl GameWorld {
         Ok(())
     }
 
-    pub(super) fn advance_training(&mut self, changed: &mut Vec<crate::GameUnit>) {
+    pub(super) fn advance_training(&mut self, changed: &mut Vec<EntityId>) {
         let centers = self.economy.buildings.keys().copied().collect::<Vec<_>>();
         for id in centers {
             let Some(building) = self.economy.buildings.get_mut(&id) else {
@@ -159,9 +159,7 @@ impl GameWorld {
                 if let Some(building) = self.economy.buildings.get_mut(&id) {
                     building.training_queue.pop_front();
                 }
-                if let Some(unit) = self.unit(unit) {
-                    changed.push(unit);
-                }
+                changed.push(unit);
             }
         }
     }

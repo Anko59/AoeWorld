@@ -1,5 +1,5 @@
 use super::{AnimalKind, AnimalTask, HuntJob, distance, radius};
-use crate::{EconomyError, GameUnit, GameWorld, UnitKind, UnitTask, unit_combat};
+use crate::{EconomyError, GameWorld, UnitKind, UnitTask, unit_combat};
 use aoe_core::{EntityId, PlayerId};
 
 impl GameWorld {
@@ -88,7 +88,7 @@ impl GameWorld {
         Ok(())
     }
 
-    pub(super) fn advance_hunters(&mut self, changed: &mut Vec<GameUnit>) {
+    pub(super) fn advance_hunters(&mut self, changed: &mut Vec<EntityId>) {
         let ids = self.wildlife.hunts.keys().copied().collect::<Vec<_>>();
         for id in ids {
             let Some(mut job) = self.wildlife.hunts.remove(&id) else {
@@ -113,7 +113,7 @@ impl GameWorld {
             if let Some(after) = self.unit(id)
                 && after != before
             {
-                changed.push(after);
+                changed.push(after.id);
             }
         }
     }

@@ -208,6 +208,19 @@ impl ResourceOverlay {
         id: u64,
         requested: u16,
     ) -> Result<Depletion, ResourceOverlayError> {
+        let depletion = self.plan_depletion(terrain, id, requested)?;
+        self.apply_depletion(&depletion);
+        Ok(depletion)
+    }
+
+    /// Validates a depletion without changing the overlay, so a caller can
+    /// decide whether to commit it without cloning the overlay first.
+    pub fn plan_depletion(
+        &self,
+        terrain: &MapChunkGenerator,
+        id: u64,
+        requested: u16,
+    ) -> Result<Depletion, ResourceOverlayError> {
         let node = self
             .resource_by_id_with_cancel(terrain, id, &|| false)?
             .ok_or(ResourceOverlayError::UnknownResource)?;
@@ -219,26 +232,32 @@ impl ResourceOverlay {
         let removed = previous.min(requested);
         let remaining = previous - removed;
         let became_nonblocking = previous > 0 && remaining == 0;
+        let mut revision = self.revision;
         if removed > 0 {
             if !self.remaining.contains_key(&id)
                 && self.remaining.len() >= MAX_RESOURCE_OVERLAY_CHANGES
             {
                 return Err(ResourceOverlayError::Capacity);
             }
-            let revision = self
-                .revision
+            revision = revision
                 .checked_add(1)
                 .ok_or(ResourceOverlayError::RevisionExhausted)?;
-            self.remaining.insert(id, remaining);
-            self.revision = revision;
         }
         Ok(Depletion {
             id,
             removed,
             remaining,
             became_nonblocking,
-            revision: self.revision,
+            revision,
         })
+    }
+
+    /// Applies a depletion returned by `plan_depletion` on this same overlay.
+    pub fn apply_depletion(&mut self, depletion: &Depletion) {
+        if depletion.removed > 0 {
+            self.remaining.insert(depletion.id, depletion.remaining);
+            self.revision = depletion.revision;
+        }
     }
 
     pub fn changed(&self) -> impl Iterator<Item = (u64, u16)> + '_ {

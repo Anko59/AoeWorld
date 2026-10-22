@@ -1,7 +1,7 @@
 //! Per-tick attack resolution for units that hold an attack order.
 use super::{Attacker, HitRecord, MELEE_RANGE_SUBUNITS, damage_dealt, unit_combat};
 use crate::game_world::facing_for;
-use crate::{GameUnit, GameWorld, UnitTask};
+use crate::{GameWorld, UnitTask};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, Tick, TileRect, WorldPosition};
 
 /// What an attacker is walking to and hitting.
@@ -53,7 +53,7 @@ impl GameWorld {
             .map(|building| Goal::Building(building.footprint))
     }
 
-    pub(crate) fn advance_combat(&mut self, changed: &mut Vec<GameUnit>) {
+    pub(crate) fn advance_combat(&mut self, changed: &mut Vec<EntityId>) {
         self.combat.stats = Default::default();
         self.advance_projectiles(changed);
         let now = self.tick.0;
@@ -73,7 +73,7 @@ impl GameWorld {
         self.advance_towers(changed);
     }
 
-    fn step_attacker(&mut self, id: EntityId, now: u64, changed: &mut Vec<GameUnit>) {
+    fn step_attacker(&mut self, id: EntityId, now: u64, changed: &mut Vec<EntityId>) {
         let (Some(&index), Some(attacker)) = (
             self.lookup.get(&id),
             self.combat.attackers.get(&id).copied(),
@@ -123,7 +123,7 @@ impl GameWorld {
         if let Some(&index) = self.lookup.get(&id)
             && self.units[index].state != before
         {
-            changed.push(self.units[index].state);
+            changed.push(self.units[index].state.id);
         }
     }
 
@@ -134,7 +134,7 @@ impl GameWorld {
         attacker: Attacker,
         goal: Goal,
         now: u64,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) {
         let before = self.units[index].state;
         let order = self.units[index].order;
@@ -163,7 +163,7 @@ impl GameWorld {
         }
         self.units[index].state.task = UnitTask::Attacking;
         if self.units[index].state != before {
-            changed.push(self.units[index].state);
+            changed.push(self.units[index].state.id);
         }
     }
 
@@ -172,7 +172,7 @@ impl GameWorld {
         id: EntityId,
         destination: Option<WorldPosition>,
         now: u64,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) {
         let Some(at) = destination else {
             self.end_attack(id, changed);
@@ -191,7 +191,7 @@ impl GameWorld {
     }
 
     /// Stops the attack: the target is gone, unreachable or friendly.
-    pub(crate) fn end_attack(&mut self, id: EntityId, changed: &mut Vec<GameUnit>) {
+    pub(crate) fn end_attack(&mut self, id: EntityId, changed: &mut Vec<EntityId>) {
         self.combat.attackers.remove(&id);
         let Some(&index) = self.lookup.get(&id) else {
             return;
@@ -206,10 +206,10 @@ impl GameWorld {
                 UnitTask::Idle
             };
         }
-        changed.push(self.units[index].state);
+        changed.push(self.units[index].state.id);
     }
 
-    fn strike(&mut self, attacker_id: EntityId, target: EntityId, changed: &mut Vec<GameUnit>) {
+    fn strike(&mut self, attacker_id: EntityId, target: EntityId, changed: &mut Vec<EntityId>) {
         let Some(&attacker_index) = self.lookup.get(&attacker_id) else {
             return;
         };
@@ -246,7 +246,7 @@ impl GameWorld {
         attack: u16,
         bonus: u16,
         kind: super::DamageKind,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) {
         let hit = HitRecord {
             attacker: attacker_id,
@@ -269,7 +269,7 @@ impl GameWorld {
             } else if self.can_retaliate(victim_index) {
                 self.begin_attack(victim_id, attacker_id);
             }
-            changed.push(self.units[victim_index].state);
+            changed.push(self.units[victim_index].state.id);
         } else if self.animal(target).is_some() {
             if self.strike_animal(target, attacker_id, attack) {
                 self.finish_target_attack(attacker_id, target, changed);
@@ -293,7 +293,7 @@ impl GameWorld {
         &mut self,
         attacker: EntityId,
         target: EntityId,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) {
         if self
             .combat

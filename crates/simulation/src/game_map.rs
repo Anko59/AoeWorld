@@ -5,8 +5,8 @@ use crate::{
 use aoe_core::{Seed, Tick, WorldConfig};
 use aoe_map::EnvironmentPageProvider;
 use aoe_map::{ElevationPage, HistoricalLandUsePage, MapPackage, PotentialBiomePage, WaterPage};
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex};
 
 impl GameWorld {
     pub fn from_map(package: MapPackage) -> Result<Self, GameWorldError> {
@@ -28,6 +28,7 @@ impl GameWorld {
             active_movers: Vec::new(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
             navigation_cache: NavigationCache::default(),
+            resource_chunks: Mutex::new(HashMap::new()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
@@ -66,6 +67,7 @@ impl GameWorld {
             active_movers: Vec::new(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
             navigation_cache: NavigationCache::default(),
+            resource_chunks: Mutex::new(HashMap::new()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
@@ -95,6 +97,7 @@ impl GameWorld {
             active_movers: Vec::new(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
             navigation_cache: NavigationCache::default(),
+            resource_chunks: Mutex::new(HashMap::new()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,

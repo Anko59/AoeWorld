@@ -1,7 +1,7 @@
 //! What a finished technology does to the world.
 use super::{TECH_RULES, Tech, TechEffect};
-use crate::{GameUnit, GameWorld, UnitKind};
-use aoe_core::PlayerId;
+use crate::{GameWorld, UnitKind};
+use aoe_core::{EntityId, PlayerId};
 
 /// Shared simulation/client presentation of the effects' integer carry limit.
 pub fn villager_capacity(researched: u32) -> u16 {
@@ -113,7 +113,7 @@ impl GameWorld {
         &mut self,
         player: PlayerId,
         tech: Tech,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) {
         let Some(state) = self.economy.players.get_mut(&player) else {
             return;
@@ -140,7 +140,7 @@ impl GameWorld {
                         u.kind = UnitKind::ManAtArms;
                         u.hp += 5;
                         u.max_hp += 5;
-                        changed.push(*u);
+                        changed.push(u.id);
                     }
                 }
             }
@@ -184,7 +184,7 @@ impl GameWorld {
                     if unit.player == player && unit.kind == UnitKind::Villager && unit.hp > 0 {
                         unit.max_hp = unit.max_hp.saturating_add(hp);
                         unit.hp = unit.hp.saturating_add(hp);
-                        changed.push(*unit);
+                        changed.push(unit.id);
                     }
                 }
             }

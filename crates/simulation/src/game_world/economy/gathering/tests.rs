@@ -1,5 +1,8 @@
+use super::super::VILLAGE_RULES;
+use super::chunks::{BLOCK_TILES, HISTORY_VISITS};
 use super::*;
 use aoe_core::{Seed, TileRect, WorldConfig, WorldPosition};
+use aoe_map::ResourceNode;
 
 use crate::game_world::tests::economy::fixture;
 
@@ -143,7 +146,7 @@ fn exhausted_return_choices_stop_searching_and_keep_the_load() {
 }
 
 #[test]
-fn replacement_search_checks_starting_history_once_per_search() {
+fn replacement_search_builds_each_touched_block_once_then_reuses_it() {
     let (mut world, node) = resource_mainland();
     let Terrain::Map { generator, overlay } = &mut world.terrain else {
         unreachable!()
@@ -174,18 +177,28 @@ fn replacement_search_checks_starting_history_once_per_search() {
     assert_eq!(history, 400, "fixture must place the full starting history");
 
     let radius = VILLAGE_RULES.replacement_radius_tiles;
-    let candidates = (-radius..=radius)
-        .flat_map(|dy| (-radius..=radius).map(move |dx| (dx, dy)))
-        .filter(|(dx, dy)| dx * dx + dy * dy <= radius * radius)
-        .count();
+    // The node itself is the exact match, so the search stops after the
+    // block that holds it and reads only that block's history.
+    let block = (
+        node.tile.x.div_euclid(BLOCK_TILES),
+        node.tile.y.div_euclid(BLOCK_TILES),
+    );
+    let span = TileCoord::new(block.0 * BLOCK_TILES, block.1 * BLOCK_TILES);
+    let until = TileCoord::new(span.x + BLOCK_TILES - 1, span.y + BLOCK_TILES - 1);
+    let within_touched_block = overlay.starting_nodes_in(span, until).count();
     HISTORY_VISITS.with(|visits| visits.set(0));
     let found = world.nearest_resource(node.tile, ResourceKind::Wood, radius, None);
-    let visits = HISTORY_VISITS.with(|visits| visits.get());
+    let cold = HISTORY_VISITS.with(|visits| visits.get());
     assert_eq!(found.map(|found| found.id), Some(node.id));
-    assert!(
-        visits <= candidates,
-        "one replacement search touched {visits} history entries for {candidates} candidate tiles"
+    assert_eq!(
+        cold, within_touched_block,
+        "a cold search reads the touched block's history once, not once per tile"
     );
+    HISTORY_VISITS.with(|visits| visits.set(0));
+    let again = world.nearest_resource(node.tile, ResourceKind::Wood, radius, None);
+    let warm = HISTORY_VISITS.with(|visits| visits.get());
+    assert_eq!(again.map(|found| found.id), Some(node.id));
+    assert_eq!(warm, 0, "a warm search reuses the built block lists");
 }
 
 #[test]

@@ -1,5 +1,5 @@
 //! Delayed hits with fixed launch/aim points. No collision or accuracy dice.
-use crate::{GameUnit, GameWorld};
+use crate::GameWorld;
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, Tick, WorldPosition};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -110,7 +110,7 @@ impl GameWorld {
             },
         );
     }
-    pub(super) fn advance_projectiles(&mut self, changed: &mut Vec<GameUnit>) {
+    pub(super) fn advance_projectiles(&mut self, changed: &mut Vec<EntityId>) {
         let due: Vec<_> = self
             .combat
             .projectiles

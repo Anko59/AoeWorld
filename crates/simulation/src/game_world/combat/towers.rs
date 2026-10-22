@@ -1,9 +1,9 @@
 //! Garrison-less Watch Tower arrows. DE unit 79: 5 pierce, range 1..8, 2 s.
-use crate::{BuildingKind, GameUnit, GameWorld};
-use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileCoord, TileRect, WorldPosition};
+use crate::{BuildingKind, GameWorld};
+use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, TileCoord, TileRect, WorldPosition};
 
 impl GameWorld {
-    pub(super) fn advance_towers(&mut self, _changed: &mut Vec<GameUnit>) {
+    pub(super) fn advance_towers(&mut self, _changed: &mut Vec<EntityId>) {
         // Only completed towers are registered; queries use the unit spatial
         // index, never an all-units scan per building. At most 256 towers.
         let towers: Vec<_> = self.combat.tower_ready.keys().copied().collect();
