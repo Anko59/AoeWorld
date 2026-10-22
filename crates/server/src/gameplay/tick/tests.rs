@@ -40,11 +40,15 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 
 /// Computed with the per-session fan-out before it was rebuilt; regenerate from
 /// the printed line only when the wire output changes on purpose.
+/// Sessions 1 and 3 were re-pinned when #553 gave every match village its own
+/// starting kit: their villages' animals now spawn at other tiles and owners.
+/// Byte-identical to unmodified origin/dev, and to the previous pin when
+/// starting_kit.rs and start_search.rs are taken from before #553.
 const PINNED: [(usize, u64); SEATS + 1] = [
     (407, 4780852846789625595),
-    (413, 5820668468973553449),
+    (409, 17207219187486702634),
     (51, 9022699601399011410),
-    (168, 10913971377557851011),
+    (168, 954570145533629443),
     (170, 9229010762936698779),
     (407, 1662405826965071658),
 ];
