@@ -91,6 +91,11 @@ pub(crate) struct Wildlife {
     stats: WildlifeStats,
 }
 impl Wildlife {
+    /// Ids that currently hold a hunt job.
+    pub(crate) fn hunter_ids(&self) -> impl Iterator<Item = &EntityId> {
+        self.hunts.keys()
+    }
+
     pub(crate) fn is_idle(&self) -> bool {
         self.animals.is_empty() && self.hunts.is_empty() && self.due.is_empty()
     }

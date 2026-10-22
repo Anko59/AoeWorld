@@ -5,13 +5,44 @@ use aoe_core::{EntityId, TileCoord, WorldPosition};
 use aoe_map::{DEFAULT_HIERARCHY_EXPANSIONS, HierarchicalOutcome};
 use std::{
     cmp::Reverse,
-    collections::{BTreeMap, BinaryHeap},
+    collections::{BTreeMap, BTreeSet, BinaryHeap},
 };
 
 /// Bounds both search work and retained frontier entries, independent of map size.
 const MAX_ATTACK_SEARCH_TILES: usize = 8_192;
 /// Targets within this many tiles are checked for reachability over chunk portals.
 const HIERARCHY_PROOF_TILES: i64 = 400;
+/// Candidate tiles proven over the portal graph per search, so a target in a
+/// sealed pocket costs a bounded number of abstract searches.
+const MAX_HIERARCHY_PROOFS: u32 = 16;
+const NEIGHBOURS: [(i32, i32); 8] = [
+    (0, -1),
+    (-1, 0),
+    (1, 0),
+    (0, 1),
+    (-1, -1),
+    (1, -1),
+    (-1, 1),
+    (1, 1),
+];
+/// Full searches for a unit that already needed the far fallback, per tick.
+pub(crate) const MAX_FAR_SEARCHES_PER_TICK: u32 = 4;
+/// A far firing tile is reused while the target keeps its tile and the
+/// attacker is farther than this: the local search could not meet it anyway.
+pub(crate) const FAR_REUSE_TILES: i64 = 64;
+
+/// The firing tile of a far search, valid for one target tile.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FarAttack {
+    pub(crate) centre: TileCoord,
+    pub(crate) destination: WorldPosition,
+}
+
+pub(crate) struct AttackSearch {
+    pub(crate) destination: Option<WorldPosition>,
+    /// The local search hit its cap and the far fallback decided.
+    pub(crate) far: bool,
+}
 
 impl GameWorld {
     /// Search outward from the attacker, prioritizing travel distance plus a
@@ -22,6 +53,14 @@ impl GameWorld {
         id: EntityId,
         goal: &Goal,
     ) -> Result<Option<WorldPosition>, GameWorldError> {
+        Ok(self.attack_search(id, goal)?.destination)
+    }
+
+    pub(crate) fn attack_search(
+        &self,
+        id: EntityId,
+        goal: &Goal,
+    ) -> Result<AttackSearch, GameWorldError> {
         let unit = self.unit(id).ok_or(GameWorldError::UnknownEntity)?;
         let stats = self.unit_stats(id).ok_or(GameWorldError::UnknownEntity)?;
         let range = i64::from(stats.range) * MELEE_RANGE_SUBUNITS;
@@ -54,7 +93,10 @@ impl GameWorld {
                 .map_err(|_| GameWorldError::InvalidPosition)?;
             let distance = goal.distance_squared(at);
             if distance <= range * range && distance >= min * min {
-                return Ok(Some(at));
+                return Ok(AttackSearch {
+                    destination: Some(at),
+                    far: false,
+                });
             }
             expanded += 1;
             if expanded >= MAX_ATTACK_SEARCH_TILES {
@@ -108,9 +150,15 @@ impl GameWorld {
         if capped {
             // The bounded local search ran out before it met the target: a
             // far target. Pick the firing tile at the target instead.
-            return self.far_attack_destination(unit.kind, origin, goal, range, min);
+            return Ok(AttackSearch {
+                destination: self.far_attack_destination(unit.kind, origin, goal, range, min)?,
+                far: true,
+            });
         }
-        Ok(None)
+        Ok(AttackSearch {
+            destination: None,
+            far: false,
+        })
     }
 
     /// Firing tile for a target beyond the local search: the nearest open tile
@@ -139,8 +187,11 @@ impl GameWorld {
         for dy in -radius..=radius {
             for dx in -radius..=radius {
                 let tile = TileCoord::new(centre.x + dx, centre.y + dy);
-                let at = WorldPosition::from_tile_center(tile)
-                    .map_err(|_| GameWorldError::InvalidPosition)?;
+                // The window may cross the west or north map edge, where a
+                // tile has no centre; such a tile is simply no candidate.
+                let Ok(at) = WorldPosition::from_tile_center(tile) else {
+                    continue;
+                };
                 let distance = goal.distance_squared(at);
                 if distance <= range * range && distance >= min * min {
                     candidates.push((distance, tile.y, tile.x, at));
@@ -152,25 +203,81 @@ impl GameWorld {
             .abs()
             .max((i64::from(origin.y) - i64::from(centre.y)).abs())
             <= HIERARCHY_PROOF_TILES;
-        for (_, y, x, at) in candidates {
-            let tile = TileCoord::new(x, y);
-            if self.economy.blocked_tiles.contains(&tile)
-                || !self
-                    .unit_step_clear(kind, tile, tile)
-                    .map_err(GameWorldError::Environment)?
-            {
-                continue;
-            }
-            if near
-                && kind != crate::UnitKind::FishingShip
-                && let Some(HierarchicalOutcome::Unreachable) =
+        let prove = near && kind != crate::UnitKind::FishingShip;
+        pick_firing_tile(
+            candidates,
+            prove,
+            |tile| {
+                Ok(!self.economy.blocked_tiles.contains(&tile)
+                    && self
+                        .unit_step_clear(kind, tile, tile)
+                        .map_err(GameWorldError::Environment)?)
+            },
+            |from, to| {
+                Ok(self.unit_step_clear(kind, from, to).unwrap_or(false)
+                    && self.unit_step_clear(kind, to, from).unwrap_or(false))
+            },
+            |tile| {
+                !matches!(
                     self.terrain
-                        .hierarchical_route(origin, tile, DEFAULT_HIERARCHY_EXPANSIONS)
-            {
-                continue;
-            }
-            return Ok(Some(at));
-        }
-        Ok(None)
+                        .hierarchical_route(origin, tile, DEFAULT_HIERARCHY_EXPANSIONS),
+                    Some(HierarchicalOutcome::Unreachable)
+                )
+            },
+        )
     }
 }
+
+/// The first candidate (in canonical order) that is open and, when `prove`,
+/// reachable. A tile proven unreachable condemns every candidate joined to it
+/// by clear steps through the candidate window without another proof, so an
+/// islet with dozens of firing tiles costs one proof, not dozens. Only
+/// `MAX_HIERARCHY_PROOFS` separate groups are proven per search; past that the
+/// next open candidate is taken unproven, as beyond `HIERARCHY_PROOF_TILES`:
+/// the walk plans its legs and a hopeless chase ends at the next repath, so
+/// the cap never rejects an order that has a reachable firing tile.
+fn pick_firing_tile(
+    candidates: Vec<(i64, i32, i32, WorldPosition)>,
+    prove: bool,
+    open: impl Fn(TileCoord) -> Result<bool, GameWorldError>,
+    linked: impl Fn(TileCoord, TileCoord) -> Result<bool, GameWorldError>,
+    reachable: impl Fn(TileCoord) -> bool,
+) -> Result<Option<WorldPosition>, GameWorldError> {
+    let mut usable = BTreeSet::new();
+    for &(_, y, x, _) in &candidates {
+        let tile = TileCoord::new(x, y);
+        if open(tile)? {
+            usable.insert(tile);
+        }
+    }
+    let mut condemned = BTreeSet::new();
+    let mut proofs = 0;
+    for (_, y, x, at) in candidates {
+        let tile = TileCoord::new(x, y);
+        if !usable.contains(&tile) || condemned.contains(&tile) {
+            continue;
+        }
+        if prove && proofs < MAX_HIERARCHY_PROOFS {
+            proofs += 1;
+            if !reachable(tile) {
+                let mut pending = vec![tile];
+                condemned.insert(tile);
+                while let Some(from) = pending.pop() {
+                    for (dx, dy) in NEIGHBOURS {
+                        let to = TileCoord::new(from.x + dx, from.y + dy);
+                        if usable.contains(&to) && !condemned.contains(&to) && linked(from, to)? {
+                            condemned.insert(to);
+                            pending.push(to);
+                        }
+                    }
+                }
+                continue;
+            }
+        }
+        return Ok(Some(at));
+    }
+    Ok(None)
+}
+
+#[cfg(test)]
+mod tests;

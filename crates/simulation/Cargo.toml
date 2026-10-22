@@ -12,6 +12,9 @@ aoe-scenario.workspace = true
 blake3 = "1.8"
 thiserror.workspace = true
 
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rayon = "1.12"
+
 [dev-dependencies]
 criterion = "=0.8.2"
 gungraun = "=0.19.4"

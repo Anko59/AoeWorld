@@ -275,6 +275,7 @@ dependencies = [
  "blake3",
  "criterion",
  "gungraun",
+ "rayon",
  "thiserror",
 ]
 

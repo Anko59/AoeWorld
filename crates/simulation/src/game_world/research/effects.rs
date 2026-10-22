@@ -9,6 +9,11 @@ pub fn villager_capacity(researched: u32) -> u16 {
     (base * villager_economy_modifiers(researched).0).div_ceil(10_000) as u16
 }
 
+/// Walking speed percent of villagers with these technologies.
+pub(crate) fn villager_speed_percent(researched: u32) -> u16 {
+    villager_economy_modifiers(researched).1
+}
+
 fn villager_economy_modifiers(researched: u32) -> (u32, u16) {
     TECH_RULES
         .iter()
@@ -34,10 +39,6 @@ impl GameWorld {
     /// Integer resources use the ceiling of DE's fractional carry limit.
     pub fn villager_capacity(&self, player: PlayerId) -> u16 {
         villager_capacity(self.player_economy(player).map_or(0, |p| p.researched))
-    }
-
-    pub(crate) fn villager_economy_percent(&self, player: PlayerId) -> (u32, u16) {
-        villager_economy_modifiers(self.player_economy(player).map_or(0, |p| p.researched))
     }
 
     /// Hundredths of a resource/second as an exact rational, avoiding rounding

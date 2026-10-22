@@ -490,3 +490,7 @@ Limits:
   with the next simulation step, so it still adds to the tick's wall time.
 - One run per configuration on a shared machine; synthetic workload, not finished RTS
   content (see the limits above).
+
+## Parallel movement
+
+The parallel movement measurements live in [parallel-movement.md](parallel-movement.md).

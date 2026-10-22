@@ -32,7 +32,16 @@ impl GameWorld {
         };
         let mut still_moving = Vec::with_capacity(movers.len());
         let mut changed = Vec::with_capacity(movers.len());
+        // Pure proposals in parallel, then the shared writes in rotation
+        // order; a proposal whose assumption fails runs the sequential path.
+        self.begin_vision_batch();
+        let mut proposals = self.propose_steps(&movers, start);
         for turn in 0..mover_count {
+            if let Some(step) = proposals[turn].take()
+                && self.apply_step(step, &mut still_moving, &mut changed)
+            {
+                continue;
+            }
             // The rotation by the planning cursor, without copying the list.
             let id = movers[(start + turn) % mover_count];
             let remaining_movers = mover_count.saturating_sub(turn).max(1);
@@ -205,6 +214,7 @@ impl GameWorld {
             }
             changed.push(self.units[index].state.id);
         }
+        self.flush_vision_batch();
         still_moving.sort_unstable();
         self.active_movers = still_moving;
         self.tick.0 = self.tick.0.saturating_add(1);
@@ -385,7 +395,7 @@ impl GameWorld {
             .min(MAX_ROUTE_WORK_PER_TICK);
     }
 
-    fn planner_capacity_exhausted(&self, index: usize) -> bool {
+    pub(crate) fn planner_capacity_exhausted(&self, index: usize) -> bool {
         let own_planner = usize::from(self.units[index].planner.is_some());
         let own_search = usize::from(
             self.units[index]

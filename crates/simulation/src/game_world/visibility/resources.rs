@@ -1,5 +1,4 @@
 use super::*;
-use crate::Terrain;
 use aoe_core::TileCoord;
 
 // Both natural and starting-node identities encode their immutable tile. This
@@ -9,6 +8,31 @@ fn resource_tile(id: u64) -> TileCoord {
         ((id >> 1) & 0x3_ffff) as i32,
         ((id >> 19) & 0x3_ffff) as i32,
     )
+}
+
+/// Probes only the tiles that just became visible, for one player's memory;
+/// amounts that change while a tile stays visible arrive through
+/// `record_observed_resource`.
+pub(super) fn observe_tiles(
+    overlay: &aoe_map::ResourceOverlay,
+    memory: &mut BTreeMap<u64, u16>,
+    tiles: &[TileCoord],
+) {
+    for tile in tiles {
+        let base = (tile.y as u64) << 19 | (tile.x as u64) << 1;
+        for prefix in [
+            0,
+            1 << 37,
+            (1 << 37) | (1 << 38),
+            (1 << 37) | (2 << 38),
+            (1 << 37) | (3 << 38),
+        ] {
+            let id = base | prefix;
+            if let Some(remaining) = overlay.changed_amount(id) {
+                memory.insert(id, remaining);
+            }
+        }
+    }
 }
 
 impl GameWorld {
@@ -29,33 +53,6 @@ impl GameWorld {
         for vision in self.vision.players.values_mut() {
             if vision.state(tile) == TileVisibility::Visible {
                 vision.resources.insert(id, remaining);
-            }
-        }
-    }
-
-    /// Probes only the tiles that just became visible; amounts that change
-    /// while a tile stays visible arrive through `record_observed_resource`.
-    pub(crate) fn observe_resource_tiles(&mut self, player: PlayerId, tiles: &[TileCoord]) {
-        let Terrain::Map { overlay, .. } = &self.terrain else {
-            return;
-        };
-        let Some(vision) = self.vision.players.get_mut(&player) else {
-            return;
-        };
-        let memory = &mut vision.resources;
-        for tile in tiles {
-            let base = (tile.y as u64) << 19 | (tile.x as u64) << 1;
-            for prefix in [
-                0,
-                1 << 37,
-                (1 << 37) | (1 << 38),
-                (1 << 37) | (2 << 38),
-                (1 << 37) | (3 << 38),
-            ] {
-                let id = base | prefix;
-                if let Some(remaining) = overlay.changed_amount(id) {
-                    memory.insert(id, remaining);
-                }
             }
         }
     }

@@ -1,7 +1,8 @@
 //! Sparse player knowledge. Sight spreads through full-disc updates when an
 //! observer appears, dies or changes LOS, and through disc-edge diffs when it
-//! merely moves. Building memory consumes the sight flips separately.
-use super::{GameBuilding, GameWorld, UnitKind};
+//! merely moves. Building memory consumes the sight flips separately. No
+//! allocation or iteration depends on map area.
+use super::{GameBuilding, GameUnit, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -22,17 +23,20 @@ struct Observer {
 #[derive(Default, Debug)]
 pub(crate) struct Vision {
     players: BTreeMap<PlayerId, PlayerVision>,
-    observers: BTreeMap<EntityId, Observer>,
+    observers: observers::Observers,
     /// Building footprint tiles, for sight-gain and sight-loss events.
     building_at_tile: HashMap<TileCoord, EntityId>,
     building_watchers: BTreeMap<EntityId, Watched>,
-    /// Scratch for disc-edge diffs; working memory, never hashed.
-    flags: Vec<bool>,
-    flips: Vec<(TileCoord, bool)>,
-    entered: Vec<TileCoord>,
     disabled: bool,
     revision: u64,
+    /// While a movement tick runs, observer changes queue here and apply per
+    /// player in parallel afterwards (see `batch.rs`).
+    batch: Option<Vec<change::Change>>,
 }
+
+mod batch;
+mod change;
+mod observers;
 
 #[path = "state.rs"]
 mod state;
@@ -41,124 +45,6 @@ use state::PlayerVision;
 #[path = "watchers.rs"]
 mod watchers;
 use watchers::Watched;
-
-impl Vision {
-    /// Full disc update: a fresh observer or one whose LOS changed.
-    fn apply(&mut self, observer: Observer, add: bool, width: i32, height: i32) {
-        let player = self.players.entry(observer.player).or_default();
-        player.revision += 1;
-        let radius = i32::from(observer.los);
-        let mut flips = std::mem::take(&mut self.flips);
-        flips.clear();
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                if dx * dx + dy * dy > radius * radius {
-                    continue;
-                }
-                let tile = TileCoord::new(observer.center.x + dx, observer.center.y + dy);
-                if tile.x < 0 || tile.y < 0 || tile.x >= width || tile.y >= height {
-                    continue;
-                }
-                player.tile_work += 1;
-                let flipped = if add {
-                    player.raise_visible(tile)
-                } else {
-                    player.lower_visible(tile)
-                };
-                if !flipped {
-                    continue;
-                }
-                if add {
-                    player.set_explored(tile);
-                }
-                player.touch_overview(tile, add, width, height);
-                flips.push((tile, add));
-            }
-        }
-        self.flips = flips;
-        let mut entered = std::mem::take(&mut self.entered);
-        entered.extend(
-            self.flips
-                .iter()
-                .filter(|(_, add)| *add)
-                .map(|(tile, _)| *tile),
-        );
-        self.entered = entered;
-        self.sight_flips(observer.player);
-    }
-
-    /// Disc-edge update: only the entering and leaving tiles of a moved
-    /// observer touch counters, exploration, overview and building memory.
-    /// Flag slots are offsets from the old center, so both discs share them.
-    fn apply_edge(&mut self, old: Observer, new: Observer, width: i32, height: i32) {
-        let radius = i32::from(old.los);
-        let span = (2 * radius + 1) as usize;
-        let mut flags = std::mem::take(&mut self.flags);
-        flags.clear();
-        flags.resize(span * span, false);
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                if dx * dx + dy * dy > radius * radius {
-                    continue;
-                }
-                let tile = TileCoord::new(old.center.x + dx, old.center.y + dy);
-                if tile.x >= 0 && tile.y >= 0 && tile.x < width && tile.y < height {
-                    flags[((dy + radius) as usize) * span + (dx + radius) as usize] = true;
-                }
-            }
-        }
-        let (shift_x, shift_y) = (new.center.x - old.center.x, new.center.y - old.center.y);
-        let player = self.players.entry(new.player).or_default();
-        player.revision += 1;
-        let mut flips = std::mem::take(&mut self.flips);
-        flips.clear();
-        let mut entered = std::mem::take(&mut self.entered);
-        entered.clear();
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                if dx * dx + dy * dy > radius * radius {
-                    continue;
-                }
-                let tile = TileCoord::new(new.center.x + dx, new.center.y + dy);
-                if tile.x < 0 || tile.y < 0 || tile.x >= width || tile.y >= height {
-                    continue;
-                }
-                // The same tile in old-disc coordinates.
-                let (ox, oy) = (shift_x + dx, shift_y + dy);
-                if ox.abs() <= radius
-                    && oy.abs() <= radius
-                    && flags[((oy + radius) as usize) * span + (ox + radius) as usize]
-                {
-                    flags[((oy + radius) as usize) * span + (ox + radius) as usize] = false;
-                    continue;
-                }
-                player.tile_work += 1;
-                if player.raise_visible(tile) {
-                    player.set_explored(tile);
-                    flips.push((tile, true));
-                    entered.push(tile);
-                    player.touch_overview(tile, true, width, height);
-                }
-            }
-        }
-        for (slot, leaving) in flags.iter().enumerate() {
-            if !leaving {
-                continue;
-            }
-            let (dy, dx) = ((slot / span) as i32 - radius, (slot % span) as i32 - radius);
-            let tile = TileCoord::new(old.center.x + dx, old.center.y + dy);
-            player.tile_work += 1;
-            if player.lower_visible(tile) {
-                flips.push((tile, false));
-                player.touch_overview(tile, false, width, height);
-            }
-        }
-        self.flags = flags;
-        self.flips = flips;
-        self.entered = entered;
-        self.sight_flips(new.player);
-    }
-}
 
 impl GameWorld {
     pub fn visibility(&self, player: PlayerId, tile: TileCoord) -> TileVisibility {
@@ -284,49 +170,89 @@ impl GameWorld {
             center,
             los,
         });
-        if self.vision.observers.get(&id).copied() == observer {
+        if self.vision.observers.get(&id) == observer {
             return false;
         }
         self.vision.revision += 1;
         let old = self.vision.observers.remove(&id);
-        let (width, height) = (self.config.width_tiles, self.config.height_tiles);
-        match (old, observer) {
+        let changes = match (old, observer) {
             (Some(old), Some(new)) if old.player == new.player && old.los == new.los => {
-                self.vision.apply_edge(old, new, width, height)
+                vec![change::Change::Edge { old, new }]
             }
-            (old, new) => {
-                if let Some(old) = old {
-                    self.vision.apply(old, false, width, height);
-                }
-                if let Some(new) = new {
-                    self.vision.apply(new, true, width, height);
-                }
-            }
+            (old, new) => old
+                .map(|observer| change::Change::Disc {
+                    observer,
+                    add: false,
+                })
+                .into_iter()
+                .chain(new.map(|observer| change::Change::Disc {
+                    observer,
+                    add: true,
+                }))
+                .collect(),
         };
-        let entered = std::mem::take(&mut self.vision.entered);
         if let Some(new) = observer {
             self.vision.observers.insert(id, new);
-            self.observe_resource_tiles(new.player, &entered);
         }
+        self.submit_vision_changes(changes);
         true
     }
 
-    pub(crate) fn update_unit_vision(&mut self, id: EntityId) {
-        let observer = self.unit(id).filter(|u| u.hp > 0).map(|u| {
-            let los = match u.kind {
-                UnitKind::Scout => {
-                    if self.has_researched(u.player, super::Tech::FeudalAge) {
-                        6
-                    } else {
-                        4
-                    }
+    /// What a unit currently observes: owner, tile and line of sight. Pure, so
+    /// the parallel movement proposal can compute it from a snapshot.
+    pub(crate) fn unit_observer(&self, u: &GameUnit) -> Option<(PlayerId, TileCoord, u8)> {
+        Self::unit_observer_with(u, self.player_economy(u.player))
+    }
+
+    /// `unit_observer` for an already fetched owner economy.
+    pub(crate) fn unit_observer_with(
+        u: &GameUnit,
+        economy: Option<super::PlayerEconomy>,
+    ) -> Option<(PlayerId, TileCoord, u8)> {
+        if u.hp == 0 {
+            return None;
+        }
+        let researched = economy.map_or(0, |p| p.researched);
+        let los = match u.kind {
+            UnitKind::Scout => {
+                if researched & super::Tech::FeudalAge.bit() != 0 {
+                    6
+                } else {
+                    4
                 }
-                _ => self
-                    .unit_stats(u.id)
-                    .map_or(super::unit_combat(u.kind).los, |s| s.los),
-            };
-            (u.player, u.position.tile_floor(), los)
+            }
+            _ => {
+                super::combat::military::researched_stats(
+                    u.kind,
+                    economy.is_some_and(|p| p.age == super::Age::Feudal),
+                    researched,
+                )
+                .los
+            }
+        };
+        Some((u.player, u.position.tile_floor(), los))
+    }
+
+    /// True when `update_unit_vision` would change the shared vision state for
+    /// a unit in this state; false means it is a no-op and may be skipped.
+    pub(crate) fn unit_vision_stale(
+        &self,
+        u: &GameUnit,
+        economy: Option<super::PlayerEconomy>,
+    ) -> bool {
+        if self.vision.disabled {
+            return false;
+        }
+        let observer = Self::unit_observer_with(u, economy).map(|(player, center, los)| Observer {
+            player,
+            center,
+            los,
         });
+        self.vision.observers.get(&u.id) != observer
+    }
+
+    pub(crate) fn update_unit_vision(&mut self, id: EntityId) {
+        let observer = self.unit(id).and_then(|u| self.unit_observer(&u));
         self.update_observer(id, observer);
     }
 

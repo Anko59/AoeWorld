@@ -9,14 +9,14 @@ use aoe_core::{
 use aoe_map::{Depletion, MovementOutcome, ResourceNode, ResourceOverlayError, RoutePlanner};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
-
 /// One chunk's shared candidate resource nodes.
 pub(crate) type ChunkNodes = Arc<Vec<ResourceNode>>;
-
 mod combat;
 mod economy;
 mod facing;
 mod hash;
+mod movement_step;
+mod parallel;
 mod research;
 mod resources;
 mod spawning;

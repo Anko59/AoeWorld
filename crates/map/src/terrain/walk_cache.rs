@@ -76,11 +76,36 @@ impl WalkChunk {
 }
 
 /// Per-generator derived caches, shared by clones.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(super) struct DerivedCaches {
+    /// Process-unique, so a thread's recent chunks can never serve another
+    /// generator, even one allocated at the same address.
+    id: u64,
     pub(super) point: std::sync::Mutex<super::point_memo::PointMemo>,
     pub(super) walk: std::sync::Mutex<WalkCache>,
     pub(super) portals: std::sync::Mutex<crate::navigation::PortalCache>,
+}
+
+impl Default for DerivedCaches {
+    fn default() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        Self {
+            id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            point: Default::default(),
+            walk: Default::default(),
+            portals: Default::default(),
+        }
+    }
+}
+
+type Recent = [Option<(u64, (i32, i32), Arc<WalkChunk>)>; RECENT_CHUNKS];
+/// Chunks each thread keeps beside the shared cache: parallel readers of
+/// neighbouring tiles then skip the lock and the shared reference count.
+const RECENT_CHUNKS: usize = 4;
+
+thread_local! {
+    static RECENT: std::cell::RefCell<(Recent, usize)> =
+        const { std::cell::RefCell::new(([const { None }; RECENT_CHUNKS], 0)) };
 }
 
 #[derive(Debug, Default)]
@@ -213,8 +238,31 @@ impl MapChunkGenerator {
             tile.x.div_euclid(CHUNK_TILES),
             tile.y.div_euclid(CHUNK_TILES),
         );
+        let id = self.derived.id;
+        let recent = RECENT.with(|recent| {
+            recent
+                .borrow()
+                .0
+                .iter()
+                .flatten()
+                .find_map(|(owner, at, chunk)| {
+                    (*owner == id && *at == key)
+                        .then(|| chunk.cell(tile).map_or(Lookup::OutOfMap, Lookup::Cell))
+                })
+        });
+        if let Some(found) = recent {
+            return Ok(found);
+        }
         Ok(match self.walk_chunk(key, cancelled)? {
-            Some(chunk) => chunk.cell(tile).map_or(Lookup::OutOfMap, Lookup::Cell),
+            Some(chunk) => {
+                let found = chunk.cell(tile).map_or(Lookup::OutOfMap, Lookup::Cell);
+                RECENT.with(|recent| {
+                    let (slots, next) = &mut *recent.borrow_mut();
+                    slots[*next] = Some((id, key, chunk));
+                    *next = (*next + 1) % RECENT_CHUNKS;
+                });
+                found
+            }
             None => Lookup::Slow,
         })
     }
@@ -269,6 +317,14 @@ impl MapChunkGenerator {
 
     pub(crate) fn portal_cache(&self) -> &std::sync::Mutex<crate::navigation::PortalCache> {
         &self.derived.portals
+    }
+
+    /// Bytes and chunks currently retained by the portal cache.
+    pub fn portal_cache_usage(&self) -> (usize, usize) {
+        self.derived
+            .portals
+            .lock()
+            .map_or((0, 0), |cache| (cache.retained_bytes(), cache.len()))
     }
 
     /// Bytes and chunks currently retained by the walk cache.
