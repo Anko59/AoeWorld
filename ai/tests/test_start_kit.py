@@ -23,7 +23,7 @@ class Surveyor:
     """A brain that only scouts around its Town Center and keeps what it saw."""
 
     config = type("C", (), {"decision_hz": 2.0})()
-    memory = type("M", (), {"stats": {}})()
+    board = type("M", (), {"stats": {}})()
 
     def __init__(self):
         self.nodes = {}

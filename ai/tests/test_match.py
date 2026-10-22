@@ -38,7 +38,7 @@ def test_a_host_survives_a_bot_that_raises(server, secret):
 
     class Broken:
         config = Config()
-        memory = type("M", (), {"stats": {}})()
+        board = type("M", (), {"stats": {}})()
 
         def decide(self, client, decision):
             raise RuntimeError("boom")
