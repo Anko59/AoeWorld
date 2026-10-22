@@ -155,11 +155,15 @@ def start_and_run(
     tiles_per_side: int = 500,
     seed: int = 1,
     config: Optional[Config] = None,
+    progress: Optional[Callable[[list[BotReport]], None]] = None,
 ) -> list[BotReport]:
     """Start a match (humans first, then AI slots) and run every AI in it."""
     slots = ["human"] * humans + ["ai"] * bots
     info = aoeworld.start_match(url, admin_token, slots, tiles_per_side=tiles_per_side, seed=seed)
     tokens = [slot.token for slot in info.slots if slot.kind == "ai"]
+    print(f"match {info.world_id}: {len(info.slots)} slots on {info.tiles_per_side}x{info.tiles_per_side} tiles", flush=True)
+    started = time.monotonic()
     host = Host(url, tokens, config)
+    print(f"{len(tokens)} bots connected in {time.monotonic() - started:.1f}s", flush=True)
     ticks = int(minutes * 60 * 20)
-    return host.run(until_tick=ticks)
+    return host.run(until_tick=ticks, progress=progress)

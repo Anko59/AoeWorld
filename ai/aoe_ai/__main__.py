@@ -52,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
             minutes=args.minutes,
             tiles_per_side=args.tiles,
             seed=args.seed,
+            progress=_print,
         )
     else:
         host = Host(args.url, [args.token], Config())
