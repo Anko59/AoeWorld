@@ -143,13 +143,20 @@ fn orders(world: &mut GameWorld, tick: u32, homes: &[TileCoord]) {
     }
 }
 
-/// Runs `ticks` ticks of the match with one session per seat plus a spectator.
-/// `observe` sees each session's new messages together with the world they
-/// were built from, before the next tick can change it.
-pub(super) async fn run(
-    ticks: u32,
-    observe: &mut dyn FnMut(&GameWorld, PlayerId, &[GameplayServerMessage]),
-) -> Vec<SessionLog> {
+/// A service with one session per seat plus a spectator, not yet ticked.
+pub(super) struct Fixture {
+    pub service: GameplayService,
+    pub ids: Vec<u64>,
+    pub receivers: Vec<mpsc::Receiver<GameplayServerMessage>>,
+    pub viewers: Vec<PlayerId>,
+    pub placed: Vec<TileCoord>,
+}
+
+pub(super) fn view_region(center: TileCoord) -> TileRect {
+    region(center)
+}
+
+pub(super) async fn start() -> Fixture {
     let mut world = GameWorld::from_map(package()).unwrap();
     let mut setups = Vec::new();
     let mut placed = Vec::new();
@@ -165,29 +172,53 @@ pub(super) async fn run(
     }
     let service = GameplayService::from_world_slots(world, setups, None, None);
     let infos = service.slot_infos().await;
-    let mut logs = Vec::new();
     let mut ids = Vec::new();
+    let mut viewers = Vec::new();
     let mut receivers = Vec::new();
     for (index, info) in infos.iter().enumerate() {
         let (sender, receiver) = mpsc::channel(8192);
         let (id, _) = service.join_slot(info.token, sender).await.unwrap();
         service.subscribe(id, 1, region(placed[index])).await;
-        logs.push(SessionLog {
-            viewer: info.player,
-            messages: Vec::new(),
-        });
+        viewers.push(info.player);
         ids.push(id);
         receivers.push(receiver);
     }
     let (sender, receiver) = mpsc::channel(8192);
     let (id, _) = service.register(None, sender).await;
     service.subscribe(id, 1, region(placed[1])).await;
-    logs.push(SessionLog {
-        viewer: infos[0].player,
-        messages: Vec::new(),
-    });
+    viewers.push(infos[0].player);
     ids.push(id);
     receivers.push(receiver);
+    Fixture {
+        service,
+        ids,
+        receivers,
+        viewers,
+        placed,
+    }
+}
+
+/// Runs `ticks` ticks of the match with one session per seat plus a spectator.
+/// `observe` sees each session's new messages together with the world they
+/// were built from, before the next tick can change it.
+pub(super) async fn run(
+    ticks: u32,
+    observe: &mut dyn FnMut(&GameWorld, PlayerId, &[GameplayServerMessage]),
+) -> Vec<SessionLog> {
+    let Fixture {
+        service,
+        ids,
+        mut receivers,
+        viewers,
+        placed,
+    } = start().await;
+    let mut logs = viewers
+        .iter()
+        .map(|viewer| SessionLog {
+            viewer: *viewer,
+            messages: Vec::new(),
+        })
+        .collect::<Vec<_>>();
     for tick in 0..ticks {
         {
             let mut world = service.world.write().await;

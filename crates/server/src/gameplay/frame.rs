@@ -257,6 +257,8 @@ impl UnitFrame {
             }
         }
         keys.sort_unstable();
+        // The primary unit may already be in the region scan.
+        keys.dedup();
         let mut slots = Vec::with_capacity(keys.len() + own.len());
         let (mut a, mut b) = (keys.iter().peekable(), own.iter().peekable());
         loop {

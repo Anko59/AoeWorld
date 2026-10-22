@@ -61,6 +61,11 @@ impl GameplayService {
             .flatten();
         let Some(built) = built else {
             tracing::error!("gameplay fan-out worker failed");
+            // The tick's building changes were taken and are lost: every
+            // session rebuilds its building baseline.
+            for session in self.sessions.lock().await.values_mut() {
+                session.rebuild_buildings = true;
+            }
             return;
         };
         let delivery_started = std::time::Instant::now();
@@ -90,6 +95,9 @@ fn view(session_id: u64, session: &Session) -> Option<View> {
     })
 }
 
+#[path = "tick/tests/rebuild.rs"]
+#[cfg(test)]
+mod rebuild;
 #[path = "tick/tests/scenario.rs"]
 #[cfg(test)]
 mod scenario;

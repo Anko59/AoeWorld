@@ -92,7 +92,7 @@ fn deliver_tick(
     viewer: &ViewerState,
     built: &Built,
     failed: &mut BTreeSet<u64>,
-) {
+) -> bool {
     let id = build.session_id;
     let Some(slots) = &build.units else {
         let _ = send(
@@ -104,14 +104,14 @@ fn deliver_tick(
             failed,
             id,
         );
-        return;
+        return false;
     };
     if session.viewer != build.viewer
         || session
             .subscription
             .is_none_or(|s| s.revision != build.revision)
     {
-        return;
+        return false;
     }
     let diff = diff_units(&session.resident, slots, built);
     let changed_players = viewer
@@ -161,7 +161,7 @@ fn deliver_tick(
         // Nothing to tell an AI: it keeps time from the heartbeat. Its
         // baseline already equals a full rebuild, so that is settled too.
         session.rebuild_buildings = false;
-        return;
+        return true;
     }
     let message = GameplayServerMessage::Tick {
         revision: build.revision,
@@ -173,7 +173,7 @@ fn deliver_tick(
         building_removals: building_removals.clone(),
     };
     if !send(session, message, failed, id) {
-        return;
+        return false;
     }
     patch_units(&mut session.resident, &diff, slots, built);
     if session.resident_players != viewer.players {
@@ -187,6 +187,7 @@ fn deliver_tick(
         session.resident_buildings.remove(&id);
     }
     session.rebuild_buildings = false;
+    true
 }
 
 /// Sends every session its messages for the tick, in the order a client has
@@ -198,6 +199,8 @@ pub(super) fn deliver(
     mut acknowledgements: BTreeMap<u64, Vec<GameplayServerMessage>>,
 ) -> BTreeSet<u64> {
     let mut failed = BTreeSet::new();
+    // Sessions that took this tick's building changes into their baseline.
+    let mut applied = BTreeSet::new();
     for build in &built.sessions {
         let id = build.session_id;
         let Some(session) = sessions.get_mut(&id) else {
@@ -237,8 +240,10 @@ pub(super) fn deliver(
         if failed.contains(&id) {
             continue;
         }
-        if let Some(viewer) = built.viewers.get(&build.viewer) {
-            deliver_tick(session, build, viewer, built, &mut failed);
+        if let Some(viewer) = built.viewers.get(&build.viewer)
+            && deliver_tick(session, build, viewer, built, &mut failed)
+        {
+            applied.insert(id);
         }
         if failed.contains(&id) || !current {
             continue;
@@ -266,6 +271,15 @@ pub(super) fn deliver(
             if send(session, message, &mut failed, id) {
                 session.resident_projectiles = build.projectiles.clone();
             }
+        }
+    }
+    // The tick's building changes were taken from the world once. A session
+    // that did not apply them (skipped, superseded by a subscription that
+    // raced the tick, or not even in this tick's views) rebuilds its building
+    // baseline from the full view on its next delivery.
+    for (id, session) in sessions.iter_mut() {
+        if !applied.contains(id) {
+            session.rebuild_buildings = true;
         }
     }
     // Sessions that were not subscribed still hear their acknowledgements.
