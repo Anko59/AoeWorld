@@ -25,7 +25,7 @@ mod terrain;
 mod world_key_index;
 #[cfg(target_arch = "wasm32")]
 pub use game_renderer::{
-    GameRenderer, SceneCamera, SceneDecoration, SceneResource, SceneTerrain,
+    AtlasUpload, GameRenderer, SceneCamera, SceneDecoration, SceneResource, SceneTerrain,
     SceneTerrainAppearance, SceneTerrainSurface, SceneUnit, SceneUnitKind, actor_frame_index,
     apply_building_foundations, resource_sprite_bounds, scene_building_visible,
     scene_resource_animation_frame, scene_resource_frame, scene_resource_presentation,
@@ -35,6 +35,7 @@ pub use game_renderer::{
 pub use surface_mesh::{
     ProjectedSurfaceTriangle, cliff_face_in_front, pick_surface_point, projected_surface_triangles,
     sample_surface_height, surface_depth_at, surface_hit_at, write_terrain_directory,
+    write_terrain_directory_page,
 };
 #[cfg(target_arch = "wasm32")]
 pub use world_key_index::WorldKeyIndex;

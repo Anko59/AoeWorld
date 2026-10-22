@@ -79,7 +79,7 @@ pub(super) fn copy_plane(
 ) -> Result<(), JsValue> {
     let side = GAME_ATLAS_SIDE as usize;
     if source.len() != GAME_ATLAS_PAGE_BYTES
-        || pixels.len() != GAME_ATLAS_BYTES
+        || (pixels.len() != GAME_ATLAS_BYTES && pixels.len() != GAME_ATLAS_PAGE_BYTES)
         || usize::from(placed.page) >= GAME_ATLAS_BYTES / GAME_ATLAS_PAGE_BYTES
         || placed.width != frame.width
         || placed.height != frame.height
@@ -90,7 +90,12 @@ pub(super) fn copy_plane(
     {
         return Err(JsValue::from_str("Invalid atlas copy bounds"));
     }
-    let base = usize::from(placed.page) * GAME_ATLAS_PAGE_BYTES;
+    // A one-page buffer is the streamed destination page, addressed from zero.
+    let base = if pixels.len() == GAME_ATLAS_PAGE_BYTES {
+        0
+    } else {
+        usize::from(placed.page) * GAME_ATLAS_PAGE_BYTES
+    };
     for row in 0..usize::from(placed.height) {
         for col in 0..usize::from(placed.width) {
             let from = ((usize::from(frame.y) + row) * side + usize::from(frame.x) + col) * 4;
