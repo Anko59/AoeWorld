@@ -165,7 +165,7 @@ impl GameWorld {
                 }
                 self.units[index].state.task = UnitTask::Attacking;
                 if self.units[index].state != before {
-                    changed.push(self.units[index].state);
+                    changed.push(self.units[index].state.id);
                 }
                 return;
             } else {

@@ -1,5 +1,7 @@
 //! Orders hundreds or thousands of tiles away must start on the tick they are
 //! issued and keep moving: planning is never a precondition for the first step.
+
+mod attack;
 use super::*;
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, FieldPyramid, PotentialBiomePage, PreparedEnvironment,

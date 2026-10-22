@@ -5,10 +5,10 @@
 //! sight; the shared watcher sets are then written in the same per-player
 //! order. Players touch disjoint memberships there, so the result equals the
 //! sequential replay for any number of threads.
+use super::PlayerVision;
 use super::change::{Change, Scratch};
 use super::resources::observe_tiles;
 use super::watchers::{Watch, WatchIndex};
-use super::PlayerVision;
 use crate::GameWorld;
 use crate::Terrain;
 use crate::game_world::parallel::par_each_mut;
@@ -32,12 +32,8 @@ impl Job {
     ) {
         for change in &self.changes {
             self.vision.apply_change(*change, size, &mut self.scratch);
-            self.vision.sight_events(
-                self.player,
-                &self.scratch.flips,
-                index,
-                &mut self.watches,
-            );
+            self.vision
+                .sight_events(self.player, &self.scratch.flips, index, &mut self.watches);
             if let Some(overlay) = overlay {
                 observe_tiles(overlay, &mut self.vision.resources, &self.scratch.entered);
             }

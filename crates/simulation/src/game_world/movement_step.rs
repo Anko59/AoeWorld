@@ -243,7 +243,7 @@ impl GameWorld {
         &mut self,
         step: FastStep,
         still_moving: &mut Vec<EntityId>,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) -> bool {
         let id = step.state.id;
         let Some(&index) = self.lookup.get(&id) else {
@@ -267,7 +267,7 @@ impl GameWorld {
         if step.keeps_moving {
             still_moving.push(id);
         }
-        changed.push(step.state);
+        changed.push(step.state.id);
         true
     }
 }

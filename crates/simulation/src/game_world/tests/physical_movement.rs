@@ -1,4 +1,6 @@
 use super::*;
+
+mod parallel;
 use aoe_map::{
     MapPackage, MapRequest, REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR,
     REFERENCE_WALK_METERS_PER_SECOND_NUMERATOR,

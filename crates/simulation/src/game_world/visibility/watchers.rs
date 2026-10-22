@@ -45,9 +45,7 @@ impl PlayerVision {
         out: &mut Vec<Watch>,
     ) {
         for (tile, seen) in flips {
-            if *seen
-                && let Some(ids) = self.ghost_tiles.get(tile).cloned()
-            {
+            if *seen && let Some(ids) = self.ghost_tiles.get(tile).cloned() {
                 for id in ids {
                     self.exorcise(id);
                 }

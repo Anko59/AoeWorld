@@ -3,8 +3,8 @@
 //! a disc-edge diff updates only the tiles entering and leaving a moved
 //! observer. Both leave their sight flips and newly visible tiles in a
 //! `Scratch` for the caller's building-watch and resource memory.
-use super::state::PlayerVision;
 use super::Observer;
+use super::state::PlayerVision;
 use aoe_core::{PlayerId, TileCoord};
 
 /// Working buffers reused across changes; never hashed.

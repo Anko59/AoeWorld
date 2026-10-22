@@ -1,6 +1,6 @@
 //! Far attack orders: edge targets, sealed pockets, and bounded repeat work.
-use super::far_orders::{WIDTH, center, wide_world};
 use super::*;
+use super::{WIDTH, center, wide_world};
 use crate::UnitKind;
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, FieldPyramid, PotentialBiomePage, PreparedEnvironment,
