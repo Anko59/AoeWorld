@@ -17,6 +17,8 @@ mod combat;
 mod economy;
 mod facing;
 mod hash;
+mod movement_step;
+mod parallel;
 mod research;
 mod resources;
 mod spawning;

@@ -2,10 +2,10 @@
 //! refreshes only for players currently seeing it. A destroyed building leaves
 //! memory at once for its owner and its watchers; for everyone else it stays as
 //! a ghost until a tile of its site is seen again.
-use super::Vision;
+use super::{PlayerVision, TileVisibility, Vision};
 use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 /// The players currently seeing a live building. The owner is always one of
 /// them, so owned destruction is known immediately.
@@ -16,53 +16,84 @@ pub(super) struct Watched {
     pub(super) watchers: BTreeSet<PlayerId>,
 }
 
-impl Vision {
-    /// Feeds sight gains and losses into the building watcher index. Gains
-    /// only watch; the memory refresh happens once per flush. Losses recheck
-    /// the whole footprint before a player stops watching.
-    pub(super) fn sight_flips(&mut self, player: PlayerId) {
-        let flips = std::mem::take(&mut self.flips);
-        for (tile, seen) in &flips {
+/// One building-watch event of a sight change. Applied to the shared index
+/// after the player's own tile work, in the order the events were produced.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Watch {
+    /// The player now sees a tile of the building.
+    Gain(EntityId),
+    /// The player lost sight of a tile of a building they do not own. The
+    /// watch ends when `hidden`: no tile of the footprint is visible any more.
+    Loss { building: EntityId, hidden: bool },
+}
+
+/// Read-only building lookups used while the players are processed.
+pub(super) struct WatchIndex<'a> {
+    pub(super) building_at_tile: &'a HashMap<TileCoord, EntityId>,
+    pub(super) watched: &'a BTreeMap<EntityId, Watched>,
+}
+
+impl PlayerVision {
+    /// The player-local half of a sight change, judged on the sight at its
+    /// end: ends the ghost memories of tiles seen again and collects the watch
+    /// events of the flips, in flip order.
+    pub(super) fn sight_events(
+        &mut self,
+        player: PlayerId,
+        flips: &[(TileCoord, bool)],
+        index: &WatchIndex,
+        out: &mut Vec<Watch>,
+    ) {
+        for (tile, seen) in flips {
             if *seen
-                && let Some(vision) = self.players.get_mut(&player)
-                && let Some(ids) = vision.ghost_tiles.get(tile).cloned()
+                && let Some(ids) = self.ghost_tiles.get(tile).cloned()
             {
                 for id in ids {
-                    vision.exorcise(id);
+                    self.exorcise(id);
                 }
             }
-            let Some(&building) = self.building_at_tile.get(tile) else {
+            let Some(&building) = index.building_at_tile.get(tile) else {
                 continue;
             };
             if *seen {
+                out.push(Watch::Gain(building));
+            } else if let Some(watched) = index.watched.get(&building)
+                && watched.owner != player
+            {
+                out.push(Watch::Loss {
+                    building,
+                    hidden: !self.any_visible(watched.footprint),
+                });
+            }
+        }
+    }
+
+    fn any_visible(&self, footprint: TileRect) -> bool {
+        (footprint.min.y..footprint.max.y).any(|y| {
+            (footprint.min.x..footprint.max.x)
+                .any(|x| self.state(TileCoord::new(x, y)) == TileVisibility::Visible)
+        })
+    }
+}
+
+impl Vision {
+    /// Applies one watch event of `player` to the shared index.
+    pub(super) fn apply_watch(&mut self, player: PlayerId, watch: Watch) {
+        match watch {
+            Watch::Gain(building) => {
                 if let Some(watched) = self.building_watchers.get_mut(&building) {
                     watched.watchers.insert(player);
                 }
-            } else {
-                let stop_watching = match self.building_watchers.get(&building) {
-                    Some(watched) => {
-                        watched.owner != player
-                            && watched.watchers.contains(&player)
-                            && !self.any_tile_visible(player, watched.footprint)
-                    }
-                    None => false,
-                };
-                if stop_watching && let Some(watched) = self.building_watchers.get_mut(&building) {
+            }
+            Watch::Loss { building, hidden } => {
+                if hidden
+                    && let Some(watched) = self.building_watchers.get_mut(&building)
+                    && watched.watchers.contains(&player)
+                {
                     watched.watchers.remove(&player);
                 }
             }
         }
-        self.flips = flips;
-    }
-
-    fn any_tile_visible(&self, player: PlayerId, footprint: TileRect) -> bool {
-        let Some(vision) = self.players.get(&player) else {
-            return false;
-        };
-        (footprint.min.y..footprint.max.y).any(|y| {
-            (footprint.min.x..footprint.max.x)
-                .any(|x| vision.state(TileCoord::new(x, y)) == super::TileVisibility::Visible)
-        })
     }
 }
 

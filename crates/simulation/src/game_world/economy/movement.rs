@@ -4,7 +4,16 @@ use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileCoord};
 
 impl GameWorld {
     pub(crate) fn movement_speed(&self, kind: UnitKind, player: aoe_core::PlayerId) -> (u64, u64) {
-        if kind == UnitKind::Scout && self.player_economy(player).is_none() {
+        self.movement_speed_with(kind, self.player_economy(player))
+    }
+
+    /// `movement_speed` for an already fetched owner economy.
+    pub(crate) fn movement_speed_with(
+        &self,
+        kind: UnitKind,
+        economy: Option<super::PlayerEconomy>,
+    ) -> (u64, u64) {
+        if kind == UnitKind::Scout && economy.is_none() {
             return (
                 self.config.move_speed_subunits_per_tick as u64,
                 self.config.move_speed_subunits_per_tick_denominator,
@@ -16,10 +25,11 @@ impl GameWorld {
                 100 * u64::from(self.config.tick_hz),
             );
         }
+        let researched = economy.map_or(0, |p| p.researched);
         let stats = super::super::combat::military::researched_stats(
             kind,
-            self.is_feudal(player),
-            self.player_economy(player).map_or(0, |p| p.researched),
+            economy.is_some_and(|p| p.age == crate::Age::Feudal),
+            researched,
         );
         if let Some(hundredths) = stats.speed_hundredths {
             (
@@ -35,7 +45,9 @@ impl GameWorld {
             (
                 u64::from(VILLAGE_RULES.villager_speed_numerator)
                     * FIXED_SUBUNITS_PER_TILE as u64
-                    * u64::from(self.villager_economy_percent(player).1),
+                    * u64::from(crate::game_world::research::villager_speed_percent(
+                        researched,
+                    )),
                 u64::from(VILLAGE_RULES.villager_speed_denominator)
                     * u64::from(self.config.tick_hz)
                     * 100,

@@ -9,6 +9,7 @@ mod effects;
 mod table;
 
 pub use effects::villager_capacity;
+pub(crate) use effects::villager_speed_percent;
 pub use table::{Age, FEUDAL_BUILDINGS, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules};
 
 /// The technology a building is researching, in game ticks.
