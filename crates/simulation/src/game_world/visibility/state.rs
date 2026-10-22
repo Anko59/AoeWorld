@@ -2,7 +2,7 @@
 //! the strategic overview. No allocation or iteration depends on map area.
 use super::TileVisibility;
 use aoe_core::{EntityId, TileCoord, TileRect};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Debug, Default)]
 pub(super) struct PlayerVision {
@@ -14,6 +14,9 @@ pub(super) struct PlayerVision {
     pub(super) visible: BTreeMap<(i32, i32), std::boxed::Box<[u32]>>,
     pub(super) visible_tiles: usize,
     pub(super) remembered: BTreeMap<aoe_core::EntityId, crate::GameBuilding>,
+    /// Buildings whose entry in `remembered` was added, changed or dropped
+    /// since a consumer last took the list. Never hashed.
+    pub(super) changed: BTreeSet<EntityId>,
     /// Remembered buildings that no longer exist, by footprint tile. Seeing
     /// any of those tiles again ends the memory. Derived; never hashed.
     pub(super) ghost_tiles: HashMap<TileCoord, Vec<EntityId>>,
@@ -130,7 +133,9 @@ impl PlayerVision {
 
     /// Forgets a ghost whose site was just seen.
     pub(super) fn exorcise(&mut self, id: EntityId) {
-        self.remembered.remove(&id);
+        if self.remembered.remove(&id).is_some() {
+            self.changed.insert(id);
+        }
         let Some(footprint) = self.ghost_sites.remove(&id) else {
             return;
         };

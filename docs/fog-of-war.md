@@ -37,7 +37,8 @@ delivery revisions and instrumentation counters do not enter the replay hash.
 Each slot's controller receives its own player's view; spectators see the first
 slot's. Simulation knowledge is independent per player, and each player has its
 own vision revision, so a viewer rebuilds its fog view only when its own sight
-changes.
+changes. A rebuilt view whose region, tiles and overview equal what the client
+already holds is not sent again (the client ignores the tick it was built at).
 Snapshots, ticks, reconnects and wildlife replacements exclude unseen opponents
 and neutral animals. Owned units remain known offscreen. Buildings in fog use
 the simulation's remembered snapshots; resource amounts never advance unseen.

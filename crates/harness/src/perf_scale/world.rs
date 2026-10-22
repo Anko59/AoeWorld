@@ -22,6 +22,8 @@ pub(super) struct Player {
     pub id: PlayerId,
     pub center: TileCoord,
     pub town_center: EntityId,
+    /// The seat's identity unit (the village's scout), its slot's primary unit.
+    pub primary: EntityId,
     pub villagers: Vec<EntityId>,
     pub military: Vec<EntityId>,
     pub nodes: Vec<(ResourceKind, u64)>,
@@ -101,12 +103,12 @@ pub(super) fn build(params: &Params) -> Result<Built, BoxError> {
         let mut placed = None;
         for step in 0..40 {
             let start = TileCoord::new(base.x + (step % 7) * 48 - 144, base.y + (step / 7) * 48);
-            if world.initialize_village(id, start).is_ok() {
-                placed = Some(start);
+            if let Ok(primary) = world.initialize_village(id, start) {
+                placed = Some((start, primary));
                 break;
             }
         }
-        let Some(start) = placed else {
+        let Some((start, primary)) = placed else {
             *notes.entry("villages_failed").or_default() += 1;
             continue;
         };
@@ -128,6 +130,7 @@ pub(super) fn build(params: &Params) -> Result<Built, BoxError> {
             id,
             center,
             town_center,
+            primary,
             villagers,
             military: Vec::new(),
             nodes: Vec::new(),

@@ -357,6 +357,16 @@ impl super::GameWorld {
     pub fn gathering_kind(&self, id: EntityId) -> Option<ResourceKind> {
         self.economy.gatherers.get(&id).map(|task| task.kind)
     }
+    /// Every gatherer in id order with its resource kind and the carcass it
+    /// works, if any; one pass instead of a lookup per unit.
+    pub fn gatherers(
+        &self,
+    ) -> impl Iterator<Item = (EntityId, ResourceKind, Option<EntityId>)> + '_ {
+        self.economy
+            .gatherers
+            .iter()
+            .map(|(id, task)| (*id, task.kind, task.animal))
+    }
     pub fn gather_target(&self, id: EntityId) -> Option<u64> {
         self.economy.gatherers.get(&id).map(|task| task.node)
     }

@@ -73,6 +73,8 @@ impl Session {
     pub(crate) fn change_viewer(&mut self, viewer: PlayerId) {
         self.viewer = viewer;
         self.resident.clear();
+        self.resident_fog = None;
+        self.rebuild_buildings = true;
         self.resident_players.clear();
         self.resident_buildings.clear();
         self.resident_animals.clear();
@@ -150,6 +152,7 @@ impl GameplayService {
             primary_unit_id,
             resource_directory: None,
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
+            fanout_probe: Arc::default(),
         }
     }
 
@@ -266,7 +269,9 @@ impl GameplayService {
                 last_command_refill: Instant::now(),
                 subscription_times: VecDeque::new(),
                 pending: VecDeque::new(),
-                resident: BTreeMap::new(),
+                resident: Vec::new(),
+                resident_fog: None,
+                rebuild_buildings: true,
                 resource_revision: None,
                 resident_players: BTreeMap::new(),
                 resident_buildings: BTreeMap::new(),

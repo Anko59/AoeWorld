@@ -151,6 +151,18 @@ fn wire_resource(kind: aoe_map::ResourceKind) -> ResourceKind {
     }
 }
 pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitState {
+    wire_unit(
+        unit,
+        world.gathering_kind(unit.id),
+        world.hunting_target(unit.id),
+    )
+}
+/// A unit as the wire sees it, given the two facts only the economy knows.
+pub(super) fn wire_unit(
+    unit: &GameUnit,
+    gathering: Option<aoe_map::ResourceKind>,
+    hunt_target: Option<EntityId>,
+) -> GameplayUnitState {
     GameplayUnitState {
         id: unit.id,
         player: unit.player,
@@ -173,13 +185,13 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
             aoe_simulation::UnitTask::Shepherding => UnitTask::Shepherding,
             aoe_simulation::UnitTask::Fishing => UnitTask::Fishing,
         },
-        gathering: world.gathering_kind(unit.id).map(wire_resource),
+        gathering: gathering.map(wire_resource),
         hp: unit.hp,
         max_hp: unit.max_hp,
         attack_target: unit.attack_target,
         last_hit: unit.last_hit.map(wire_hit),
         death_tick: unit.death_tick,
-        hunt_target: world.hunting_target(unit.id),
+        hunt_target,
         death_hunt: unit.death_hunt.map(|kind| match kind {
             aoe_simulation::AnimalKind::Sheep => aoe_protocol::AnimalKind::Sheep,
             aoe_simulation::AnimalKind::Deer => aoe_protocol::AnimalKind::Deer,
@@ -209,29 +221,32 @@ fn wire_market_prices(prices: aoe_simulation::MarketPrices) -> aoe_protocol::Mar
 pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerState> {
     world
         .players()
-        .map(|state| {
-            (
-                state.player,
-                GameplayPlayerState {
-                    player: state.player,
-                    stockpile: Stockpile {
-                        food: state.stockpile.food,
-                        wood: state.stockpile.wood,
-                        gold: state.stockpile.gold,
-                        stone: state.stockpile.stone,
-                    },
-                    population_used: state.population_used,
-                    population_cap: state.population_cap,
-                    age: match state.age {
-                        aoe_simulation::Age::Dark => Age::Dark,
-                        aoe_simulation::Age::Feudal => Age::Feudal,
-                    },
-                    researched: state.researched,
-                    market_prices: wire_market_prices(state.market_prices),
-                },
-            )
-        })
+        .map(|state| (state.player, player_state(&state)))
         .collect()
+}
+pub(super) fn player(world: &GameWorld, player: PlayerId) -> Option<GameplayPlayerState> {
+    world
+        .player_economy(player)
+        .map(|state| player_state(&state))
+}
+fn player_state(state: &aoe_simulation::PlayerEconomy) -> GameplayPlayerState {
+    GameplayPlayerState {
+        player: state.player,
+        stockpile: Stockpile {
+            food: state.stockpile.food,
+            wood: state.stockpile.wood,
+            gold: state.stockpile.gold,
+            stone: state.stockpile.stone,
+        },
+        population_used: state.population_used,
+        population_cap: state.population_cap,
+        age: match state.age {
+            aoe_simulation::Age::Dark => Age::Dark,
+            aoe_simulation::Age::Feudal => Age::Feudal,
+        },
+        researched: state.researched,
+        market_prices: wire_market_prices(state.market_prices),
+    }
 }
 pub(super) fn buildings(
     world: &GameWorld,
@@ -239,50 +254,48 @@ pub(super) fn buildings(
 ) -> BTreeMap<EntityId, GameplayBuildingState> {
     world
         .known_buildings(player)
-        .into_iter()
-        .map(|state| {
-            (
-                state.id,
-                GameplayBuildingState {
-                    age: match state.age {
-                        aoe_simulation::Age::Dark => aoe_protocol::Age::Dark,
-                        aoe_simulation::Age::Feudal => aoe_protocol::Age::Feudal,
-                    },
-                    id: state.id,
-                    gate_open: state.gate_open,
-                    player: state.player,
-                    kind: wire_building(state.kind),
-                    footprint: state.footprint,
-                    construction: match state.state {
-                        aoe_simulation::ConstructionState::UnderConstruction => {
-                            ConstructionState::UnderConstruction
-                        }
-                        aoe_simulation::ConstructionState::Complete => ConstructionState::Complete,
-                    },
-                    progress_permille: state.progress_permille(),
-                    hp: state.hp,
-                    max_hp: state.max_hp,
-                    los: state.los,
-                    food_remaining: state.food_remaining,
-                    last_hit: state.last_hit.map(wire_hit),
-                    research: state.research.map(|entry| ResearchState {
-                        tech: wire_tech(entry.tech),
-                        progress_ticks: entry.progress_ticks,
-                        total_ticks: entry.total_ticks,
-                    }),
-                    training_queue: state
-                        .training_queue
-                        .iter()
-                        .map(|entry| TrainingState {
-                            kind: wire_kind(entry.kind),
-                            progress_ticks: entry.progress_ticks,
-                            total_ticks: entry.total_ticks,
-                        })
-                        .collect(),
-                },
-            )
-        })
+        .iter()
+        .map(|state| (state.id, wire_building_state(state)))
         .collect()
+}
+pub(super) fn wire_building_state(state: &aoe_simulation::GameBuilding) -> GameplayBuildingState {
+    GameplayBuildingState {
+        age: match state.age {
+            aoe_simulation::Age::Dark => aoe_protocol::Age::Dark,
+            aoe_simulation::Age::Feudal => aoe_protocol::Age::Feudal,
+        },
+        id: state.id,
+        gate_open: state.gate_open,
+        player: state.player,
+        kind: wire_building(state.kind),
+        footprint: state.footprint,
+        construction: match state.state {
+            aoe_simulation::ConstructionState::UnderConstruction => {
+                ConstructionState::UnderConstruction
+            }
+            aoe_simulation::ConstructionState::Complete => ConstructionState::Complete,
+        },
+        progress_permille: state.progress_permille(),
+        hp: state.hp,
+        max_hp: state.max_hp,
+        los: state.los,
+        food_remaining: state.food_remaining,
+        last_hit: state.last_hit.map(wire_hit),
+        research: state.research.map(|entry| ResearchState {
+            tech: wire_tech(entry.tech),
+            progress_ticks: entry.progress_ticks,
+            total_ticks: entry.total_ticks,
+        }),
+        training_queue: state
+            .training_queue
+            .iter()
+            .map(|entry| TrainingState {
+                kind: wire_kind(entry.kind),
+                progress_ticks: entry.progress_ticks,
+                total_ticks: entry.total_ticks,
+            })
+            .collect(),
+    }
 }
 
 impl GameplayService {

@@ -3,7 +3,7 @@
 //! merely moves. Building memory consumes the sight flips separately.
 use super::{GameBuilding, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TileVisibility {
@@ -342,6 +342,77 @@ impl GameWorld {
             )
         });
         self.update_observer(id, observer);
+    }
+    /// What `player` remembers of a building: its last observation.
+    pub fn remembered_building(&self, player: PlayerId, id: EntityId) -> Option<&GameBuilding> {
+        self.vision.players.get(&player)?.remembered.get(&id)
+    }
+
+    /// Takes, per player, the buildings whose memory changed since the last
+    /// call, in id order. A consumer that tracks `remembered_building` per
+    /// player needs to look at no other building.
+    pub fn take_remembered_building_changes(&mut self) -> BTreeMap<PlayerId, BTreeSet<EntityId>> {
+        self.vision
+            .players
+            .iter_mut()
+            .filter(|(_, vision)| !vision.changed.is_empty())
+            .map(|(player, vision)| (*player, std::mem::take(&mut vision.changed)))
+            .collect()
+    }
+
+    /// `player`'s knowledge of every tile in `rect`, row-major: 0 unexplored,
+    /// 1 explored, 2 visible; the same answers as `visibility` per tile
+    /// without a map lookup per tile. A world with fog disabled sees all.
+    pub fn visibility_tiles(&self, player: PlayerId, rect: TileRect) -> Vec<u8> {
+        let width = rect.width().max(0) as usize;
+        let mut tiles = vec![0; width * rect.height().max(0) as usize];
+        let Some(vision) = self
+            .vision
+            .players
+            .get(&player)
+            .filter(|_| !tiles.is_empty())
+        else {
+            return tiles;
+        };
+        let (first, last) = (
+            (rect.min.x.div_euclid(32), rect.min.y.div_euclid(32)),
+            (
+                (rect.max.x - 1).div_euclid(32),
+                (rect.max.y - 1).div_euclid(32),
+            ),
+        );
+        for chunk_y in first.1..=last.1 {
+            for chunk_x in first.0..=last.0 {
+                let Some(bits) = vision.explored.get(&(chunk_x, chunk_y)) else {
+                    continue;
+                };
+                for y in rect.min.y.max(chunk_y * 32)..rect.max.y.min(chunk_y * 32 + 32) {
+                    for x in rect.min.x.max(chunk_x * 32)..rect.max.x.min(chunk_x * 32 + 32) {
+                        let bit = ((y - chunk_y * 32) * 32 + (x - chunk_x * 32)) as usize;
+                        if bits[bit / 64] & (1 << (bit % 64)) != 0 {
+                            tiles[(y - rect.min.y) as usize * width + (x - rect.min.x) as usize] =
+                                1;
+                        }
+                    }
+                }
+            }
+        }
+        for chunk_y in first.1..=last.1 {
+            for chunk_x in first.0..=last.0 {
+                let Some(counters) = vision.visible.get(&(chunk_x, chunk_y)) else {
+                    continue;
+                };
+                for y in rect.min.y.max(chunk_y * 32)..rect.max.y.min(chunk_y * 32 + 32) {
+                    for x in rect.min.x.max(chunk_x * 32)..rect.max.x.min(chunk_x * 32 + 32) {
+                        if counters[((y - chunk_y * 32) * 32 + (x - chunk_x * 32)) as usize] > 0 {
+                            tiles[(y - rect.min.y) as usize * width + (x - rect.min.x) as usize] =
+                                2;
+                        }
+                    }
+                }
+            }
+        }
+        tiles
     }
 }
 
