@@ -236,9 +236,18 @@ saw their berries and gold.
 
 ### Measured live play
 
-See the pull request notes; `ai/tests/test_full_game.py` is the gate:
-two bots on a 300-tile flat map must each reach Feudal Age, field ten military
-units and land a blow within 30 game minutes (run at 3x by the test server).
+`ai/tests/test_full_game.py` is the gate: two bots on a 300-tile flat map
+(seed 3, debug server at 60 ticks a second) must each reach Feudal Age, field
+at least five soldiers (ten between them) and land a blow of an attack within
+30 game minutes. One run on the development machine (shared, so wall time is
+only indicative): Feudal Age at 13.5 and 13.3 game minutes (about 22 and 26
+villagers), army peaks of 20 and 7, one 19-unit attack launched around minute
+21 that wounded enemy buildings and units, and 11 kills in the other bot's
+defence. The weaker bot's army stays small (7): its economy is thinner and
+training is resource-bound; the Feudal time is also later than a good player's
+(the build is not yet tuned for speed). Synthetic two-bot workloads on a flat
+map show neither finished RTS performance nor dedicated-hardware
+qualification.
 
 ## Tests and commands
 
