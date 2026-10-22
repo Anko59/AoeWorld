@@ -319,10 +319,16 @@ impl GameWorld {
         {
             self.spawn_villager(player, position(tile)?)?;
         }
-        self.initialize_starting_kit(
+        // The village already stands (Town Center, villagers): a kit that cannot
+        // be placed in full must not fail the start, or a host that retries
+        // another site would meet `AlreadyStarted` with a half-made village.
+        match self.initialize_starting_kit(
             TileRect::new(origin, TileCoord::new(origin.x + side, origin.y + side)),
             scout_tile,
-        )?;
+        ) {
+            Ok(()) | Err(EconomyError::InvalidFootprint) => {}
+            Err(error) => return Err(error),
+        }
         self.initialize_wildlife(TileCoord::new(origin.x + side / 2, origin.y + side / 2));
         self.remember_visible_resources();
         Ok(scout)

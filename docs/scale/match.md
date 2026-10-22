@@ -113,6 +113,7 @@ slot); the bot containers had none capped. Reports: `reports/scale/match/match-*
 | `france-real-seeded-after-fix` | the same run after rebasing onto dev with the movement 11x change (#552) and the session fix below, 10 min | 221 / 338 (max 15,988) | 2,248 of 2,259 (99.5%) | 90,291 (90,000 seeded) | 0.19 |
 | `france-real-seeded-final` | rebased again onto dev with the wildlife and fog-memory change (#554), 10 min, 1-minute load 5 to 14 | 189 / 277 (max 16,777) | 2,771 of 2,808 (98.7%) | 90,260 (90,000 seeded) | 0.23 |
 | `france-real-seeded-reviewed` | final code after the review fixes (acks never dropped, rejoin keeps commands, counters), 10 min, load 10 to 17 | 197 / 272 (max 16,240) | 2,727 of 2,732 (99.8%) | 90,260 (90,000 seeded) | 0.23 |
+| `france-real-seeded-fanout` | rebased onto dev with the shared-frame fan-out (#556), the arena AI (#553) and the session policy; load 11 to 20 | 120 / 222 (max 12,477) | 4,132 of 4,174 (99%) | 90,235 (90,000 seeded) | 0.35 |
 | `procedural-bots-only` | procedural France-centred 16,000 tiles, 100 slots, cap 1,000, no seeding, 4 bot hosts, 8 min | 27.1 / 39.8 (max 789) | 40 of 9,702 (0.4%) | 400 to 614 | 1.01 |
 | `browser-baseline` | 2 slots on a flat 500-tile map, idle economy, same browser | 0.13 / 0.41 | 0 | small | 1.0 |
 
@@ -148,6 +149,19 @@ Tick p50 197 ms, p95 272 ms, p99 311 ms; `advance` 35 / 54 ms; orders, views and
 and the server logged no dropped session. The bots connected 3.0 s after their hosts started and the measured
 window starts after that (match creation 104 s). Server 2.3 cores mean (8.9 max), 938 MiB; bots 0.4 cores.
 Browser: 2.6 fps around the village, 2.4 zoomed out (software WebGPU).
+
+**On dev's fan-out (`france-real-seeded-fanout`, revision 0c504af0 plus the placement and host-retry fixes below; 1-minute load 11 to 20).**
+Tick p50 120 ms, p95 222 ms, p99 316 ms; `advance` 107 / 178 ms; orders, views and fan-out
+**13.5 / 49.9 ms** (was 159 / 225: #556 removed the fan-out as the dominant cost). Game speed 0.35x
+(was 0.23x), 4,132 of 4,174 ticks missed. **Sessions: 0 dropped and rejoined, 0 permanently lost**, 0 errors,
+no dropped-session warning. The simulation step is now the whole gap: `advance` is 107 ms against the 50 ms budget
+(heavier than before because every village now gets a full starting kit, #553). Server 2.0 cores mean, 986 MiB;
+bots 1.0 core. Browser (software WebGPU, machine heavily loaded): 1.5 fps around the village, 1.8 zoomed out.
+Match creation 208 s (the full kit and the wider land search); bots connected 16 s after their hosts started, after the
+host learned to retry a join that times out against a busy server. Two fixes were needed to start 100 villages on
+this map with #553: placement could leave a village half made (the kit failed after the Town Center stood, the next
+site then met `AlreadyStarted`), so a kit that cannot be placed in full no longer fails the start; and the far-land
+fallback spreads its candidates instead of taking the nearest coast.
 
 **The session loss.** The server used to end a session whenever its outgoing queue (64 messages) was
 full at one of its sends, and to give up on a socket write after 500 ms. Which of the two reset the 84 bots
@@ -190,40 +204,40 @@ counts drops and rejoins explicitly.
 
 <!-- scale-match:latest -->
 
-## Latest run: france-real-seeded-reviewed
+## Latest run: france-real-seeded-fanout
 
-Revision `fdddd7d312a318222fcd99464784123ffd503ef8`, 100 players (1 human), 16000 x 16000 tiles (package), population cap 1000, 10.0 min of play, 8 Python host process(es).
+Revision `0c504af06aaaf078d0cd09924e5d0f7223dd3f65` (dirty tree), 100 players (1 human), 16000 x 16000 tiles (package), population cap 1000, 10.0 min of play, 8 Python host process(es).
 
 | | |
 |---|---|
-| tick total p50 / p95 / p99 / max (ms) | 197.2 / 271.7 / 311.3 / 16239.9 |
-| `advance` (simulation) p50 / p95 (ms) | 35.4 / 54.3 |
-| orders, views and fan-out p50 / p95 (ms) | 158.9 / 224.8 |
-| missed ticks (late start or over 50 ms) | 2727 of 2732 (99.8%) |
-| game speed (1.0 = real time) | 0.227 |
-| units at start / end / max | 90400 / 90260 / 90400 |
+| tick total p50 / p95 / p99 / max (ms) | 119.7 / 221.8 / 315.8 / 12477.4 |
+| `advance` (simulation) p50 / p95 (ms) | 106.8 / 178.4 |
+| orders, views and fan-out p50 / p95 (ms) | 13.5 / 49.9 |
+| missed ticks (late start or over 50 ms) | 4132 of 4174 (99.0%) |
+| game speed (1.0 = real time) | 0.347 |
+| units at start / end / max | 90400 / 90235 / 90400 |
 | of which seeded by `start_units` | 90000 |
-| orders applied per second (mean) | 1722.639 |
-| server CPU mean / max (cores), RSS max (MiB) | 2.314 / 8.884, 938 |
-| bots CPU mean / max (cores), memory max (MiB) | 0.395 / 0.769, 175.23 |
-| match creation / bots connected (s) | 103.546 / 3.004 |
+| orders applied per second (mean) | 1793.127 |
+| server CPU mean / max (cores), RSS max (MiB) | 2.02 / 9.077, 986 |
+| bots CPU mean / max (cores), memory max (MiB) | 1.001 / 1.505, 183.72 |
+| match creation / bots connected (s) | 208.4 / 16.24 |
 
-Bots at the end: 99 reporting, 79337 villagers, 9900 soldiers, 202 buildings, 0 errors, 25102 accepted and 1009315 rejected orders. Sessions: 0 dropped and rejoined (0 drops, 0 rejoins, 0.0 s away in all), 0 permanently lost.
+Bots at the end: 99 reporting, 79337 villagers, 9900 soldiers, 229 buildings, 0 errors, 70983 accepted and 1006958 rejected orders. Sessions: 0 dropped and rejoined (0 drops, 0 rejoins, 0.0 s away in all), 0 permanently lost.
 
-Browser: village 2.6 fps mean, frame p50 383.3 / p95 450.0 ms (314 frames); village_zoomed_out 2.4 fps mean, frame p50 400.0 / p95 483.3 ms (294 frames)
+Browser: village 1.5 fps mean, frame p50 650.0 / p95 899.9 ms (181 frames); village_zoomed_out 1.8 fps mean, frame p50 516.7 / p95 766.7 ms (212 frames)
 
 Per minute (tick p50 / p95 ms, missed, units at end):
 
 | min | p50 | p95 | missed | units |
 |---|---|---|---|---|
-| 1 | 167.6 | 604.0 | 249 | 90400 |
-| 2 | 231.0 | 279.1 | 249 | 90400 |
-| 3 | 220.1 | 274.3 | 249 | 90400 |
-| 4 | 219.1 | 280.8 | 249 | 90332 |
-| 5 | 212.2 | 279.8 | 249 | 90331 |
-| 6 | 201.7 | 276.8 | 249 | 90290 |
-| 7 | 139.7 | 192.5 | 249 | 90290 |
-| 8 | 146.3 | 202.6 | 249 | 90290 |
-| 9 | 193.1 | 285.7 | 249 | 90260 |
-| 10 | 162.3 | 238.0 | 249 | 90260 |
-| 11 | 149.1 | 219.8 | 237 | 90260 |
+| 1 | 72.0 | 141.1 | 338 | 90400 |
+| 2 | 102.1 | 147.5 | 380 | 90400 |
+| 3 | 163.3 | 245.2 | 380 | 90331 |
+| 4 | 166.0 | 275.9 | 380 | 90330 |
+| 5 | 150.2 | 263.7 | 380 | 90289 |
+| 6 | 155.5 | 281.7 | 380 | 90288 |
+| 7 | 109.9 | 212.8 | 380 | 90258 |
+| 8 | 102.2 | 184.6 | 380 | 90258 |
+| 9 | 103.2 | 171.1 | 380 | 90239 |
+| 10 | 113.3 | 192.5 | 380 | 90239 |
+| 11 | 111.1 | 179.7 | 374 | 90235 |

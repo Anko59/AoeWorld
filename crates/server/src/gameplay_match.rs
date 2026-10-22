@@ -180,7 +180,10 @@ fn place_villages(
                         })
                         && world.tile_passable(*tile)
                 })
-                .take(600)
+                // Spread over the ring walk: the nearest dry tiles alone cluster on one
+                // coast, where a full starting kit may not fit.
+                .step_by(24)
+                .take(800)
                 .collect();
             found = settle(world, player, far.iter().copied(), true, cancelled)?;
             if found.is_none() {
@@ -230,7 +233,10 @@ fn settle(
                 Ok(scout) => return Ok(Some((tile, scout))),
                 Err(EconomyError::InvalidFootprint) => {}
                 Err(EconomyError::Movement(error)) => return Err(error.into()),
-                Err(_) => return Err(MatchError::NoStart(player.0 as usize)),
+                Err(error) => {
+                    tracing::warn!(?tile, %error, slot = player.0, "village refused");
+                    return Err(MatchError::NoStart(player.0 as usize));
+                }
             }
         }
     }
