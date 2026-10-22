@@ -323,6 +323,9 @@ fn start_with<R: Runtime>(
         // Enables POST /match (docs/ai-sdk.md); unset, the endpoint refuses.
         "-e",
         "AOE_MATCH_TOKEN",
+        // Arena mode: POST /match/step advances the game (docs/ai-sdk.md).
+        "-e",
+        "AOE_ARENA",
         "-e",
         &worker_env,
         "-e",

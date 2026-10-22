@@ -30,7 +30,7 @@ from .config import Config
 from .host import BotReport, Host
 
 TICK_HZ = 20
-SECRET = "arena-match-secret-0123456789"
+SECRET = os.environ.get("AOE_MATCH_TOKEN") or "arena-match-secret-0123456789"
 #: Wall seconds to let a step's messages reach the bots before they are polled.
 SETTLE_SECONDS = 0.004
 #: Wall seconds a missing decision is waited for before one more tick is stepped.
@@ -131,6 +131,7 @@ def play(
     seed: int,
     config: Optional[Config] = None,
     stop: Optional[Callable[[list[BotReport]], bool]] = None,
+    before_step: Optional[Callable[[int, list[BotReport]], None]] = None,
 ) -> dict:
     """One seeded match against a running arena server; the report is JSON-able."""
     config = config or Config()
@@ -163,6 +164,8 @@ def play(
                 sent[index] = client.orders_sent
             if tick >= final or not host.open or (stop is not None and stop(host.reports)):
                 break
+            if before_step is not None:
+                before_step(tick, host.reports)  # a showcase paces or pauses the game here
             tick = stepper.step(period, orders)
     finally:
         host.close()
