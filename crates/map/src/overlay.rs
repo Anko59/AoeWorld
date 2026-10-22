@@ -95,9 +95,9 @@ impl ResourceOverlay {
         terrain: &MapChunkGenerator,
         node: ResourceNode,
     ) -> Result<(), ResourceOverlayError> {
-        if self.starting_nodes().count() >= 512
-            || self.remaining.len() >= MAX_RESOURCE_OVERLAY_CHANGES
-        {
+        // The only bound is the overlay's total change limit: a kit is at most
+        // 31 nodes, so it grows with the number of villages seated.
+        if self.remaining.len() >= MAX_RESOURCE_OVERLAY_CHANGES {
             return Err(ResourceOverlayError::Capacity);
         }
         if ResourceNode::starting_from_id(node.id) != Some(node)

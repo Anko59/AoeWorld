@@ -384,6 +384,7 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
             "match_create_seconds": crate::perf_scale::stats::round(create_seconds),
             "bots_connect_seconds": crate::perf_scale::stats::round(connect_seconds),
             "seeded_units": info["seeded_units"],
+            "partial_starting_kits": info["partial_starting_kits"],
             "units_at_first_tick": first_units,
             "start_tiles": info["slots"].as_array().map(|slots| slots.iter().map(|s| s["start_tile"].clone()).collect::<Vec<_>>()),
         }, "run": {

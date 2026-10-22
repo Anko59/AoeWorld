@@ -138,7 +138,7 @@ fn finished_report() -> serde_json::Value {
     json!({
         "label": "smoke", "revision": "abc", "dirty": false,
         "config": {"players": 4, "humans": 1, "tiles": 500, "population_cap": 300, "hosts": 1},
-        "setup": {"map_kind": "flat", "seeded_units": 60, "match_create_seconds": 1.5, "bots_connect_seconds": 5.0},
+        "setup": {"map_kind": "flat", "seeded_units": 60, "partial_starting_kits": 0, "match_create_seconds": 1.5, "bots_connect_seconds": 5.0},
         "run": run,
         "machine": {},
         "bots": report::bot_totals(&[]),

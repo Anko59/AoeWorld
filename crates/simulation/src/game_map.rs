@@ -32,6 +32,7 @@ impl GameWorld {
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
+            partial_kits: 0,
         })
     }
 
@@ -71,6 +72,7 @@ impl GameWorld {
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
+            partial_kits: 0,
         })
     }
 
@@ -101,6 +103,7 @@ impl GameWorld {
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
+            partial_kits: 0,
         })
     }
 }

@@ -29,6 +29,12 @@ a start with no room for a kit begins with an empty or partial one. Activation
 is refused when no footprint has enough reachable free perimeter tiles for the
 starting villagers, plus the scout when it must leave its found position.
 Restored overlays retain the original kit, including exhausted nodes.
+Starting nodes have no cap of their own: the overlay's total change limit
+(65,536) is the only bound, so a 100-slot match (3,100 nodes) gets a full kit
+per village. An earlier fixed 512-node cap gave only about 16 villages a full
+kit. A kit that still cannot be placed in full (genuinely impossible terrain, or
+the overlay limit) is counted per world (`GameWorld::partial_starting_kits`),
+logged, and reported by `POST /match` as `partial_starting_kits`.
 
 Starting resources are authoritative overlay entries: bit 37 marks their
 identity, bits 38–39 select the kind, and the remaining coordinate fields match

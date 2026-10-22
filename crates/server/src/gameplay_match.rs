@@ -303,6 +303,9 @@ pub(crate) struct MatchResponse {
     population_cap: u16,
     /// Units placed by `start_units`, beyond the standard start kit.
     seeded_units: u64,
+    /// Villages whose starting kit could not be placed in full (0 when every
+    /// village has its complete kit).
+    partial_starting_kits: u64,
     slots: Vec<MatchSlot>,
 }
 
@@ -457,6 +460,7 @@ async fn start_match(
             start_tile: service.start_tile(info.primary_unit_id),
         })
         .collect();
+    let partial_starting_kits = service.partial_starting_kits();
     let world_id = service.world_id();
     let previous = {
         let mut active = state.gameplay.write().await;
@@ -470,6 +474,7 @@ async fn start_match(
         tiles_per_side: tiles,
         population_cap: rules.population_cap,
         seeded_units,
+        partial_starting_kits,
         slots,
     }))
 }

@@ -224,6 +224,7 @@ async fn population_cap_and_start_units_are_match_rules() {
         json["seeded_units"], 80,
         "40 extra units for each of 2 seats"
     );
+    assert_eq!(json["partial_starting_kits"], 0);
     // The default is the AoE rule, with nothing seeded.
     let (status, body) = post(address, Some(SECRET), &rules("")).await;
     assert_eq!(status, 200, "{body}");

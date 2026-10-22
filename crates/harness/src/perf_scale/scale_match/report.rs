@@ -197,6 +197,7 @@ pub(super) fn markdown(report: &Value) -> String {
          | game speed (1.0 = real time) | {factor} |\n\
          | units at start / end / max | {u0} / {u1} / {umax} |\n\
          | of which seeded by `start_units` | {seeded} |\n\
+         | villages with a partial starting kit | {partial} |\n\
          | orders applied per second (mean) | {ops} |\n\
          | server CPU mean / max (cores), RSS max (MiB) | {scpu} / {smax}, {srss} |\n\
          | bots CPU mean / max (cores), memory max (MiB) | {bcpu} / {bmax}, {brss} |\n\
@@ -231,6 +232,7 @@ pub(super) fn markdown(report: &Value) -> String {
         u1 = run["units_last"],
         umax = run["units_max"],
         seeded = setup["seeded_units"],
+        partial = setup["partial_starting_kits"],
         ops = run["orders_per_second"],
         scpu = report["machine"]["server_cpu_mean_cores"],
         smax = report["machine"]["server_cpu_max_cores"],

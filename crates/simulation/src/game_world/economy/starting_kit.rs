@@ -5,14 +5,11 @@ use crate::{GameWorld, GameWorldError, Terrain};
 use aoe_core::{TileCoord, TileRect};
 use aoe_map::{ResourceKind, ResourceNode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 const REACH: i32 = 15;
 const ANCHOR_BUDGET: usize = 128;
 type Graph = BTreeMap<TileCoord, Vec<TileCoord>>;
 const STEPS: [(i32, i32); 4] = [(0, -1), (-1, 0), (1, 0), (0, 1)];
-
-static PARTIAL_STARTING_KITS: AtomicU64 = AtomicU64::new(0);
 
 impl GameWorld {
     pub fn starting_resources(&self) -> Vec<ResourceNode> {
@@ -163,17 +160,17 @@ impl GameWorld {
             self.resource_collision_changed();
         }
         if inserted < wanted {
-            PARTIAL_STARTING_KITS.fetch_add(1, Ordering::Relaxed);
+            self.partial_kits += 1;
             eprintln!("starting kit near {center:?} is partial: {inserted} of {wanted} nodes");
             return Err(EconomyError::InvalidFootprint);
         }
         Ok(())
     }
 
-    /// How many villages (in this process) started with a kit that could not be
-    /// placed in full.
-    pub fn partial_starting_kits() -> u64 {
-        PARTIAL_STARTING_KITS.load(Ordering::Relaxed)
+    /// How many villages of this world started with a kit that could not be
+    /// placed in full (genuinely impossible terrain; a healthy match has 0).
+    pub fn partial_starting_kits(&self) -> u64 {
+        self.partial_kits
     }
 
     fn starting_graph(&self, center: TileCoord, root: TileCoord) -> Graph {

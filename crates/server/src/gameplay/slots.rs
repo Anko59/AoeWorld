@@ -173,6 +173,13 @@ impl GameplayService {
             .collect()
     }
 
+    /// Villages of this match whose starting kit was only partly placed.
+    pub(crate) fn partial_starting_kits(&self) -> u64 {
+        self.world
+            .try_read()
+            .map_or(0, |world| world.partial_starting_kits())
+    }
+
     /// Where a slot's primary unit stands, as a tile (0,0 if it is gone).
     pub(crate) fn start_tile(&self, unit: EntityId) -> (i32, i32) {
         self.world

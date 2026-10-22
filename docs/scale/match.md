@@ -80,7 +80,9 @@ AOE_GEODATA_CACHE=<cache> AOE_MAP_REQUEST=local-assets/requests/france-scale-160
 (the request is `requested_side_meters: 960000`, compression 30:1,
 centre 46.6 N 2.5 E). Start sites are spread over the whole map on a grid with
 a search for connected land near each ideal point, and each gets the full
-start kit (`initialize_village`).
+start kit (`initialize_village`). A village whose kit could not be placed in
+full is counted: `setup.partial_starting_kits` in the report (and its summary
+row) must be 0; the match response carries the same counter.
 
 ## Reading the numbers
 
@@ -104,7 +106,9 @@ start kit (`initialize_village`).
 
 The runs up to `france-real-seeded-reviewed` below are **superseded** by `france-real-seeded-fanout`
 (see "Latest run" at the end): they ran before dev's fan-out rebuild (#556) and before every village got a
-starting kit (#553), so they are history, not the current state.
+starting kit (#553), so they are history, not the current state. The runs that report a kit ran with a 512-node
+starting limit, so only about 16 of the 100 villages had a full kit; that limit is removed and those runs'
+`advance` times understate a full-kit world.
 
 Measured 2026-10-22 at revision 99526a24 plus the commit that follows it (far-land start fallback, container stats fix) on the 12-core development machine while other agents ran
 gates and benchmarks (1-minute load average 13 to 15 throughout), so every number

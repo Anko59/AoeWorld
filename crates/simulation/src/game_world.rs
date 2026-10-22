@@ -126,6 +126,8 @@ pub struct GameWorld {
     pub(crate) planning_cursor: usize,
     pub(crate) active_planner_count: usize,
     pub(crate) active_route_searches: usize,
+    /// Villages of this world whose starting kit could not be placed in full.
+    pub(crate) partial_kits: u64,
 }
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
@@ -153,6 +155,7 @@ impl GameWorld {
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
+            partial_kits: 0,
         }
     }
 
