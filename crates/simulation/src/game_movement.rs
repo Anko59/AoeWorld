@@ -94,6 +94,8 @@ impl GameWorld {
                     break;
                 }
                 self.units[index].state.position = position;
+                let stepped = self.units[index].state;
+                self.track_unit_step(id, previous_tile, &stepped);
                 self.update_unit_vision(id);
                 if self.units[index].bucket != ChunkCoord::from_position(position) {
                     self.move_bucket(index, ChunkCoord::from_position(position));

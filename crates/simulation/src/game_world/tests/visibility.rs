@@ -367,3 +367,37 @@ fn minimap_reveals_only_the_observed_tile_pixels_and_counts_shared_pixels() {
         );
     }
 }
+
+#[test]
+fn a_moved_observer_bumps_its_owner_revision_through_the_edge_path() {
+    let mut w = world();
+    let id = w.spawn_villager(PlayerId(0), at(20, 20)).unwrap();
+    let before = w.player_vision_revision(PlayerId(0));
+    // Same owner and LOS: the update takes the disc-edge path.
+    w.update_observer(id, Some((PlayerId(0), TileCoord::new(21, 20), 3)));
+    assert_ne!(w.player_vision_revision(PlayerId(0)), before);
+    assert_eq!(
+        w.visibility(PlayerId(0), TileCoord::new(24, 20)),
+        TileVisibility::Visible
+    );
+    // An unchanged observer is a no-op and keeps the revision.
+    let moved = w.player_vision_revision(PlayerId(0));
+    assert!(!w.update_observer(id, Some((PlayerId(0), TileCoord::new(21, 20), 3))));
+    assert_eq!(w.player_vision_revision(PlayerId(0)), moved);
+}
+
+#[test]
+fn re_enabling_fog_bumps_the_revision_of_a_player_whose_observer_vanished() {
+    let mut w = world();
+    let id = w.spawn_villager(PlayerId(0), at(20, 20)).unwrap();
+    let enabled = w.player_vision_revision(PlayerId(0));
+    w.set_fog_disabled(true);
+    // The observer disappears while fog is off, so no update reaches vision.
+    w.remove_unit(id);
+    w.set_fog_disabled(false);
+    assert_ne!(
+        w.player_vision_revision(PlayerId(0)),
+        enabled,
+        "re-enabling fog cleared this player's sight and must bump it"
+    );
+}

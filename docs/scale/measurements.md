@@ -87,6 +87,38 @@ Simulation `advance`, 600 ticks, milliseconds:
   with 100 server sessions.
 - Changed units per tick: 43,000 (everything that moves is reported every tick).
 
+### Wildlife and vision scale rework (branch `perf/wildlife-vision`)
+
+Same workload after reworking hot spots 4 and 5 (the numbers are inline; the
+current tree's full report is `reports/scale/perf-scale.json`). The canonical hashes at
+ticks 100 to 600 are identical before and after, so behaviour did not change;
+the pinned scenario in `tests/replay_pin.rs` guards this.
+
+| Phase (fog on, p50 / p95) | before | after |
+|---|---|---|
+| Wildlife | 43.7 / 74.0 | 4.95 / 7.8 |
+| Building memory (fog, per player) | 18.3 / 34.2 | 0.22 / 0.33 |
+| Movement and path planning | 295.9 / 460.6 | 316.1 / 473.7 |
+| Whole `advance` | 383.0 / 596.9 | 348.4 / 520.1 |
+
+- After the destroyed-building ghost fix, `perf-scale` at fb3ebeac measured fog-on
+  p50 / p95 of 2.55 / 4.15 ms for wildlife and 0.214 / 0.354 ms for building
+  memory per player, so the ghost index added no measurable cost.
+- Wildlife is now animal-driven: each animal probes the unit cell grid around
+  itself; an animal no unit can reach through its nine-cell neighbourhood is
+  not visited at all. The remaining cost is hunters, fleeing and carcass decay,
+  which scale with real interactions, not population.
+- Building memory is flush-driven: sight flips maintain a watcher set per
+  building, and the per-tick flush only touches watchers instead of scanning
+  every player x building x footprint tile.
+- Visibility counters are chunk-dense (`32x32` per chunk, sparsely allocated)
+  and a moved observer updates only the entering and leaving disc edges.
+  Total vision tile touches drop slightly (5,034,347 to 5,014,563) while all
+  canonical hashes stay identical.
+- The movement phase pays one cell-grid position update per moving unit per
+  tick (about +20 ms p50), the cost of the mirror the wildlife scan reads; the
+  whole tick is still 35 ms p50 and 77 ms p95 faster than before.
+
 Server, 100 sessions, 40 ticks per mode (milliseconds, whole `GameplayService::tick`):
 
 | Case | tick p50 | p95 | fan-out over baseline |
