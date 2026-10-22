@@ -11,6 +11,7 @@ from .play.combat import CombatManager
 from .config import Config
 from .play.constructor import Constructor
 from .context import Context
+from .geometry import dist
 from .play.economy import EconomyManager
 from .blackboard import Blackboard
 from .play.military import MilitaryManager
@@ -52,6 +53,7 @@ class Brain:
         self.absorb(ctx)
         self.note_damage(ctx)
         ctx.board.stats["army_peak"] = max(ctx.board.stats.get("army_peak", 0), len(ctx.army))
+        ctx.board.stats["villagers_peak"] = max(ctx.board.stats.get("villagers_peak", 0), len(ctx.villagers))
         if ctx.economy is None:
             return
         # Priority order = spending order.
@@ -67,16 +69,27 @@ class Brain:
         self.board.bump("decisions")
 
     def note_damage(self, ctx: Context) -> None:
-        """Count enemies seen wounded: proof that our attacks land."""
+        """Count a blow of ours landing: an enemy unit or building whose hit
+        points fell since we last saw it, with a soldier of ours in range.
+        A foundation rising to full health, or a wound given by someone else
+        far from our army, is not one."""
         board = ctx.board
-        wounded = [e for e in ctx.enemies if e.hp < e.max_hp]
-        wounded += [b for b in ctx.world.known_enemy_buildings() if b.hp < b.max_hp]
-        for target in wounded:
-            if target.id not in board.wounded:
+        seen = {e.id: e for e in ctx.enemies}
+        seen.update({b.id: b for b in ctx.world.known_enemy_buildings()})
+        reach = ctx.config.hit_reach
+        for target in seen.values():
+            before = board.enemy_hp.get(target.id)
+            board.enemy_hp[target.id] = target.hp
+            if before is None or target.hp >= before:
+                continue
+            where = target.center if hasattr(target, "center") else target.tile
+            if any(dist(u.tile, where) <= reach for u in ctx.army):
                 board.wounded.add(target.id)
                 board.bump("enemies_wounded")
                 if board.attacking:
                     board.bump("attack_hits")
+        if len(board.enemy_hp) > 4096:
+            board.enemy_hp = {i: board.enemy_hp[i] for i in seen}
 
     # ----- learning from the server's verdicts -----------------------------
     def absorb(self, ctx: Context) -> None:

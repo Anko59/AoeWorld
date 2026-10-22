@@ -49,13 +49,17 @@ class Host:
         tokens: Sequence[str],
         config: Optional[Config] = None,
         brain_factory: Optional[Callable[[int], Brain]] = None,
+        orders_per_second: int = 90,
     ) -> None:
         self.config = config or Config()
         make = brain_factory or (lambda slot: Brain(self.config, name=f"bot{slot}"))
         self.url = url
         self.brains = [make(index) for index in range(len(tokens))]
         self.clients = [
-            aoeworld.connect(url, token, decision_hz=self.config.decision_hz) for token in tokens
+            aoeworld.connect(
+                url, token, decision_hz=self.config.decision_hz, orders_per_second=orders_per_second
+            )
+            for token in tokens
         ]
         self.reports = [BotReport(slot=index) for index in range(len(tokens))]
         self.open = set(range(len(tokens)))

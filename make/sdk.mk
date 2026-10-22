@@ -1,7 +1,7 @@
 # Python bindings of the AI SDK (docs/ai-sdk.md). The bindings live outside the
 # Cargo workspace (crates/sdk-python) because they need a Python toolchain; their
 # image extends the pinned tools image with pinned maturin and pytest.
-.PHONY: sdk-python-tools sdk-python sdk-python-steps sdk-python-test sdk-python-test-steps
+.PHONY: sdk-python-tools sdk-python sdk-python-steps sdk-python-test sdk-python-test-steps ai-arena ai-arena-steps
 sdk-python-tools: tools
 	@$(call IMAGE_BUILD,sdk-python,$(SDK_IMAGE))
 
@@ -30,3 +30,15 @@ sdk-python-test: sdk-python-tools slot-bootstrap
 
 sdk-python-test-steps:
 	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python test
+
+# The AI arena: seeded matches that run as fast as the machine allows (docs/ai-sdk.md).
+# ARENA_SIZE tiles per side, ARENA_BOTS players, ARENA_MINUTES game minutes, ARENA_SEEDS one match each.
+ARENA_SIZE ?= 300
+ARENA_BOTS ?= 2
+ARENA_MINUTES ?= 30
+ARENA_SEEDS ?= 1,2,3,4,5
+ai-arena: sdk-python-tools slot-bootstrap
+	@$(SLOT_RUN) ai-arena -- make --no-print-directory ai-arena-steps ARENA_SIZE=$(ARENA_SIZE) ARENA_BOTS=$(ARENA_BOTS) ARENA_MINUTES=$(ARENA_MINUTES) ARENA_SEEDS=$(ARENA_SEEDS)
+
+ai-arena-steps:
+	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python arena --size $(ARENA_SIZE) --bots $(ARENA_BOTS) --minutes $(ARENA_MINUTES) --seeds $(ARENA_SEEDS)

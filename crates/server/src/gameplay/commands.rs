@@ -223,6 +223,10 @@ impl GameplayService {
         self.queue_command(session_id, sequence, action).await;
     }
     async fn queue_command(&self, session_id: u64, sequence: u64, action: PendingAction) {
+        let arena = super::arena::enabled();
+        if arena {
+            super::arena::note_order();
+        }
         let now = Instant::now();
         let current_tick = self.world.read().await.tick();
         let mut sessions = self.sessions.lock().await;
@@ -256,8 +260,8 @@ impl GameplayService {
             };
             session.command_tokens = (session.command_tokens + elapsed * refill).min(burst);
             session.last_command_refill = now;
-            if session.command_tokens < 1.0 || session.pending.len() >= queue {
-                result = Some(if session.command_tokens < 1.0 {
+            if !arena && session.command_tokens < 1.0 || session.pending.len() >= queue {
+                result = Some(if !arena && session.command_tokens < 1.0 {
                     CommandResult::RejectedRateLimited
                 } else {
                     CommandResult::RejectedQueueFull

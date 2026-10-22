@@ -31,7 +31,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 const MAX_BUFFERED_EVENTS: usize = 4_096;
 const MAX_CHUNKS_IN_FLIGHT: usize = 4;
-/// Orders per second the writer will not exceed (the server allows 100).
+/// Orders per second the writer will not exceed by default (the server allows 100).
 const ORDERS_PER_SECOND: usize = 90;
 const RESUBSCRIBE_MIN_TICKS: u64 = 20;
 const RESUBSCRIBE_DRIFT: i32 = 12;
@@ -65,6 +65,8 @@ pub struct ConnectOptions {
     /// Read public map chunks so resources and walkable tiles are queryable.
     pub fetch_terrain: bool,
     pub connect_timeout: Duration,
+    /// Orders per wall-clock second the writer allows (the arena lifts it).
+    pub orders_per_second: usize,
 }
 
 impl Default for ConnectOptions {
@@ -74,6 +76,7 @@ impl Default for ConnectOptions {
             view: ViewPolicy::default(),
             fetch_terrain: true,
             connect_timeout: Duration::from_secs(10),
+            orders_per_second: ORDERS_PER_SECOND,
         }
     }
 }
@@ -214,6 +217,11 @@ impl Client {
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
         let _ = self.commands.send(Command::Order(sequence, order));
         sequence
+    }
+
+    /// How many orders this client has queued so far.
+    pub fn orders_sent(&self) -> u64 {
+        self.next_sequence.load(Ordering::Relaxed) - 1
     }
 
     pub fn train(&self, building: aoe_core::EntityId, kind: UnitKind) -> u64 {
@@ -452,7 +460,7 @@ async fn run(
                     if window_start.elapsed() >= Duration::from_secs(1) {
                         (window_start, window_sent) = (Instant::now(), 0);
                     }
-                    if window_sent >= ORDERS_PER_SECOND {
+                    if window_sent >= options.orders_per_second {
                         tokio::time::sleep_until(window_start + Duration::from_secs(1)).await;
                         (window_start, window_sent) = (Instant::now(), 0);
                     }

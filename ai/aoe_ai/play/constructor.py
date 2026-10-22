@@ -12,6 +12,8 @@ from ..geometry import Tile, dist, nearest
 from ..blackboard import Plan
 
 MAX_POPULATION = 200
+#: Seconds a foundation may sit without progress before a villager is sent to it.
+FOUNDATION_STALL_SECONDS = 8
 
 
 class Constructor:
@@ -103,8 +105,36 @@ class Constructor:
         if ctx.economy is None or ctx.home is None:
             return
         self.refresh(ctx)
+        self.finish_foundations(ctx)
         self.age_requirements(ctx)
         self.production(ctx)
+
+    def finish_foundations(self, ctx: Context) -> None:
+        """A foundation whose builder was lost, blocked or sent elsewhere stays
+        at its progress for ever: when none has advanced for a while, the
+        nearest free villager is ordered to construct it."""
+        mem = ctx.board
+        stall = FOUNDATION_STALL_SECONDS * ctx.world.tick_hz
+        alive = set()
+        for b in ctx.buildings:
+            if b.complete:
+                continue
+            alive.add(b.id)
+            last = mem.progress.get(b.id)
+            if last is None or b.progress > last[0]:
+                mem.progress[b.id] = (b.progress, ctx.tick)
+                continue
+            if ctx.tick - last[1] < stall or mem.cooling(f"finish:{b.id}", ctx.tick):
+                continue
+            builder = self.builder_near(ctx, b.center)
+            if builder is None:
+                continue
+            ctx.order("construct", [builder.id], b.id)
+            mem.builders[builder.id] = (str(b.kind), b.center)
+            mem.cool(f"finish:{b.id}", ctx.tick, stall)
+            mem.bump("foundations_resumed")
+        for gone in [i for i in mem.progress if i not in alive]:
+            del mem.progress[gone]
 
     def houses(self, ctx: Context) -> None:
         """Raise a house before the population cap is reached."""

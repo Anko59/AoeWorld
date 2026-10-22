@@ -76,15 +76,15 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
 const PINNED_HASHES: [(u64, &str); 3] = [
     (
         100,
-        "787698348b1a9a6d414b04acc7c8f3f38ce1644f87165ae9ca1dd0c5c66dea3f",
+        "9a599565da6e9d8f178925258a38bd2f162d76229d07dd765aa38ab688264914",
     ),
     (
         200,
-        "55931e036a4170b1479ffdd779ed4c0f022104f675b7275388f1dec5ef64d9df",
+        "29c46e614a9634ad4247fa4857d083c7e0a4b051ed22a1d43bf1b6632500024a",
     ),
     (
         300,
-        "2500c5972dfe169f33b256089171530a5fcd0e5ab1f05bc049cf45d36e568291",
+        "84c4ac2e45f1da8c078b1923982d262a9e253bae8c1c845900335043a8d403cb",
     ),
 ];
 

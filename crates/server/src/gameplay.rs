@@ -12,6 +12,8 @@ use std::{
 };
 use tokio::sync::{Mutex, RwLock, mpsc};
 
+#[path = "gameplay/arena.rs"]
+pub(crate) mod arena;
 #[path = "gameplay/commands.rs"]
 mod commands;
 #[path = "gameplay/economy.rs"]

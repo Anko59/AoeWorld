@@ -319,6 +319,7 @@ pub fn app(state: AppState) -> Router {
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))
         .route("/match", post(gameplay_match::start_match))
+        .merge(gameplay::arena::routes())
         .fallback_service(ServeDir::new("web").append_index_html_on_directories(true))
         .with_state(state);
     if let Some(pack) = asset_pack {

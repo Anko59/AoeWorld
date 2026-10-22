@@ -21,6 +21,10 @@ impl Config {
     pub(crate) fn fog_showcase_from_env() -> bool {
         env::var("AOE_FOG_SHOWCASE").is_ok_and(|value| value == "1")
     }
+    /// `AOE_ARENA=1`: no tick clock; `POST /match/step` advances the game (AI arena).
+    pub fn arena_from_env() -> bool {
+        env::var("AOE_ARENA").is_ok_and(|value| value == "1")
+    }
     /// `AOE_MATCH_TOKEN`: the secret that enables `POST /match`.
     pub(crate) fn match_admin_token_from_env() -> Option<String> {
         env::var("AOE_MATCH_TOKEN")

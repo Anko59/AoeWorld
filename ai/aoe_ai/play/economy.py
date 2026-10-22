@@ -36,6 +36,8 @@ MAX_ASSIGN_PER_DECISION = 16
 ASSIGN_PAUSE_SECONDS = 4
 #: Hunt orders on one animal before it is written off.
 HUNT_TRIES = 12
+#: Seconds a hunted animal may stay unchanged before its hunters are stood down.
+HUNT_STALL_SECONDS = 40
 
 
 class EconomyManager:
@@ -52,6 +54,7 @@ class EconomyManager:
         if ctx.economy is None or ctx.home is None:
             return
         self.forget_farmers(ctx)
+        self.drop_stuck_hunts(ctx)
         self.assign_idle(ctx)
 
     # ----- production ------------------------------------------------------
@@ -117,14 +120,19 @@ class EconomyManager:
         total = max(1, len(ctx.villagers))
         pause = ASSIGN_PAUSE_SECONDS * ctx.world.tick_hz
         assigned = ctx.board.assigned
+        alive = {v.id for v in ctx.villagers}
+        for gone in [i for i in assigned if i not in alive]:
+            del assigned[gone]
+        given = 0
         for villager in idle:
             # A villager that goes idle right after an order cannot do it:
             # give it a pause instead of repeating the order every decision.
             if ctx.tick - assigned.get(villager.id, -pause) < pause:
                 continue
+            if given >= MAX_ASSIGN_PER_DECISION:
+                break  # the rest wait for the next decision, unstamped
             assigned[villager.id] = ctx.tick
-            if sum(1 for t in assigned.values() if t == ctx.tick) > MAX_ASSIGN_PER_DECISION:
-                break
+            given += 1
             order = sorted(KEYS, key=lambda k: shares[k] * total - counts[k], reverse=True)
             for key in order:
                 if shares[key] <= 0 and key != order[0]:
@@ -154,7 +162,7 @@ class EconomyManager:
         mem.bump("explored")
         ring = 12 + 6 * (mem.stats["explored"] // 8)
         points = ring_points(ctx.home, min(ring, 60), spacing=8)
-        x, y = clamp_tile(points[mem.stats["explored"] % len(points)], ctx.world.map_size)
+        x, y = ctx.unrefused(clamp_tile(points[mem.stats["explored"] % len(points)], ctx.world.map_size))
         ctx.order("move", villager.id, x, y)
 
     def best_node(self, ctx: Context, villager: Any, kind: ResourceKind) -> Optional[Any]:
@@ -201,7 +209,34 @@ class EconomyManager:
             ctx.board.bad_resources.add(animal.id)
             ctx.board.bump("hunts_abandoned")
         ctx.order("hunt", [villager.id], animal.id)
+        ctx.board.hunters[villager.id] = animal.id
         return True
+
+    def drop_stuck_hunts(self, ctx: Context) -> None:
+        """Hunters never fall idle, so a quarry they cannot reach or catch would
+        hold them for ever: when neither its health nor its meat has changed
+        for a while, write it off and stand the hunters down for a new job."""
+        mem = ctx.board
+        hunters = {v.id: v for v in ctx.villagers if v.task == UnitTask.HUNTING}
+        for gone in [i for i in mem.hunters if i not in hunters]:
+            del mem.hunters[gone]
+        animals = {a.id: a for a in ctx.world.animals()}
+        limit = HUNT_STALL_SECONDS * ctx.world.tick_hz
+        for animal_id in set(mem.hunters.values()):
+            animal = animals.get(animal_id)
+            if animal is None:
+                continue
+            state = (animal.hp, animal.food_remaining)
+            seen = mem.hunt_watch.get(animal_id)
+            if seen is None or seen[0] != state:
+                mem.hunt_watch[animal_id] = (state, ctx.tick)
+            elif ctx.tick - seen[1] > limit:
+                mem.bad_resources.add(animal_id)
+                mem.bump("hunts_abandoned")
+                for villager_id in [v for v, a in mem.hunters.items() if a == animal_id]:
+                    ctx.order("stop", villager_id)
+                    del mem.hunters[villager_id]
+                    mem.assigned.pop(villager_id, None)
 
     def huntable(self, ctx: Context, kinds: tuple) -> Optional[Any]:
         for kind in kinds:

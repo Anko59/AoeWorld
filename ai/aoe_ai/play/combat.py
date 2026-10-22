@@ -3,6 +3,7 @@ strong, and pull back when the attack is failing."""
 
 from __future__ import annotations
 
+import math
 from typing import Any, Optional
 
 from ..context import Context
@@ -120,13 +121,29 @@ class CombatManager:
         cx, cy = building.center
         reach = max(building.width, building.height) / 2 + 3
         d = max(1.0, dist((cx, cy), origin))
-        point = (round(cx + (origin[0] - cx) / d * reach), round(cy + (origin[1] - cy) / d * reach))
-        return clamp_tile(point, ctx.world.map_size)
+        bad = ctx.board.bad_moves
+        first = None
+        # A tile the server refused (a tree, a wall, water) is walked around.
+        for extra in (0, 2, 4, 6):
+            for turn in (0.0, 0.6, -0.6, 1.2, -1.2):
+                ux, uy = (origin[0] - cx) / d, (origin[1] - cy) / d
+                cos, sin = math.cos(turn), math.sin(turn)
+                point = clamp_tile(
+                    (
+                        round(cx + (ux * cos - uy * sin) * (reach + extra)),
+                        round(cy + (ux * sin + uy * cos) * (reach + extra)),
+                    ),
+                    ctx.world.map_size,
+                )
+                first = first or point
+                if point not in bad:
+                    return point
+        return first
 
     def search(self, ctx: Context, army: list, middle: Tile) -> None:
         """No enemy building known: march to the map's far side to find one."""
         width, height = ctx.world.map_size
-        target = (width - 1 - ctx.home[0], height - 1 - ctx.home[1])
+        target = ctx.unrefused((width - 1 - ctx.home[0], height - 1 - ctx.home[1]))
         for unit in army:
             if unit.idle:
                 ctx.order("move", unit.id, target[0], target[1])

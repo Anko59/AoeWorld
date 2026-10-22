@@ -144,6 +144,12 @@ impl Client {
         }
     }
 
+    /// How many orders this client has queued so far.
+    #[getter]
+    fn orders_sent(&self) -> u64 {
+        self.inner.orders_sent()
+    }
+
     #[getter]
     fn closed(&self) -> bool {
         self.inner.is_closed()
@@ -411,7 +417,7 @@ impl Fleet {
 /// points per game second the bot gets (the game runs 20 ticks a second);
 /// `view_padding` and `view_size` bound the map window the server describes.
 #[pyfunction]
-#[pyo3(signature = (url, slot_token, decision_hz=2.0, view_padding=28, view_size=128, fetch_terrain=true))]
+#[pyo3(signature = (url, slot_token, decision_hz=2.0, view_padding=28, view_size=128, fetch_terrain=true, orders_per_second=90))]
 pub fn connect(
     py: Python<'_>,
     url: String,
@@ -420,6 +426,7 @@ pub fn connect(
     view_padding: i32,
     view_size: i32,
     fetch_terrain: bool,
+    orders_per_second: usize,
 ) -> PyResult<Client> {
     let options = ConnectOptions {
         decision_hz,
@@ -428,6 +435,7 @@ pub fn connect(
             max_side: view_size,
         },
         fetch_terrain,
+        orders_per_second: orders_per_second.max(1),
         ..ConnectOptions::default()
     };
     let rt = runtime()?;

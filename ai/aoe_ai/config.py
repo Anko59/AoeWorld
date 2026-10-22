@@ -21,10 +21,10 @@ class Config:
     house_margin: int = 4
     #: Preferred share of villagers per resource before and after Feudal.
     dark_shares: dict[str, float] = field(
-        default_factory=lambda: {"FOOD": 0.52, "WOOD": 0.38, "GOLD": 0.10, "STONE": 0.0}
+        default_factory=lambda: {"FOOD": 0.60, "WOOD": 0.32, "GOLD": 0.08, "STONE": 0.0}
     )
     feudal_shares: dict[str, float] = field(
-        default_factory=lambda: {"FOOD": 0.36, "WOOD": 0.32, "GOLD": 0.32, "STONE": 0.0}
+        default_factory=lambda: {"FOOD": 0.46, "WOOD": 0.30, "GOLD": 0.24, "STONE": 0.0}
     )
     #: A resource node farther than this from every drop-off needs a camp.
     dropoff_distance: int = 9
@@ -72,3 +72,5 @@ class Config:
     #: Defend when a threat is this close to the base.
     defend_radius: int = 24
     rally_offset: int = 7
+    #: A wound counts as ours when a soldier of ours stood within this many tiles.
+    hit_reach: int = 12

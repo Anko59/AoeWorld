@@ -146,13 +146,13 @@ from the deltas the slot receives, so they cover exactly what it can see.
 ## Python API reference
 
 `aoeworld.connect(url, slot_token, decision_hz=2.0, view_padding=28, view_size=128,
-fetch_terrain=True) -> Client`; `aoeworld.start_match(url, admin_token, slots,
+fetch_terrain=True, orders_per_second=90) -> Client`; `aoeworld.start_match(url, admin_token, slots,
 tiles_per_side=500, seed=1, terrain="flat", map_hash=None) -> MatchInfo`. Exceptions: `AoeError`,
 `ConnectionClosed`, `Refused` (bad token, bad secret).
 
 `Client`: `wait_decision(timeout=None) -> Decision | None`, `run(on_tick,
 until_tick=None, max_decisions=None) -> RunSummary`, `world`, `closed`,
-`close_reason`, `close()`, and the orders `move(unit, x, y)`, `stop(unit)`,
+`close_reason`, `orders_sent`, `close()`, and the orders `move(unit, x, y)`, `stop(unit)`,
 `gather(unit, resource_id)`, `build(builders, kind, x, y)`, `build_wall(builders,
 x1, y1, x2, y2)`, `construct(builders, building)`, `cancel_construction(b)`,
 `farm(unit, farm)`, `train(building, kind)`, `cancel_training(b)`,
@@ -234,19 +234,55 @@ several flat matches. These nodes are in no map chunk, so the SDK builds them
 from the resource feed's ids (`World.resources()`); before that fix bots never
 saw their berries and gold.
 
-### Measured live play
+### The AI arena
 
-`ai/tests/test_full_game.py` is the gate: two bots on a 300-tile flat map
-(seed 3, debug server at 60 ticks a second) must each reach Feudal Age, field
-at least five soldiers (ten between them) and land a blow of an attack within
-30 game minutes. One run on the development machine (shared, so wall time is
-only indicative): Feudal Age at 13.5 and 13.3 game minutes (about 22 and 26
-villagers), army peaks of 20 and 7, one 19-unit attack launched around minute
-21 that wounded enemy buildings and units, and 11 kills in the other bot's
-defence. The weaker bot's army stays small (7): its economy is thinner and
-training is resource-bound; the Feudal time is also later than a good player's
-(the build is not yet tuned for speed). Synthetic two-bot workloads on a flat
-map show neither finished RTS performance nor dedicated-hardware
+`make ai-arena` plays seeded matches as fast as the machine allows
+(`ARENA_SIZE`, `ARENA_BOTS`, `ARENA_MINUTES`, `ARENA_SEEDS`; defaults 300 tiles,
+2 bots, 30 game minutes, seeds 1-5) and prints JSON: per seed and bot, the Feudal
+minute, villagers (and peak), army (and peak), attacks launched and landed,
+losses and kills. A server started with `AOE_ARENA=1` has no tick clock; the
+driver (`ai/aoe_ai/arena.py`) advances it with the admin-token call
+`POST /match/step {"ticks", "orders"}`. The bots are ordinary clients: same
+protocol, same SDK, same fog-filtered view, and `decision_hz` counts game
+seconds. The driver steps one decision period, waits until every bot has its
+decision, lets them decide, then steps again; the step waits for the orders the
+bots sent, and the real-time order budgets (server and client) are lifted. A
+seed repeats exactly in practice (same result twice on this machine); the
+exceptions are two benign races, a bot whose map window moved during a step (the
+driver then adds a tick) and wildlife updates reaching a bot within a few
+milliseconds of its poll. A game finishes in a fraction of its length, but the
+wall time still grows with the armies and the machine's load.
+
+### Measured arena play
+
+`ai/tests/test_full_game.py` plays seeds 1-5 on a 300-tile flat map, two bots, up
+to 30 game minutes, and requires per bot: Feudal Age, at least ten soldiers at
+once (`SOLDIERS`) and, per match, one landed blow (an enemy's health fell with
+our soldiers within 12 tiles). `sdk-python-test`, which blocks `ci` and
+`nightly`, runs it because all five seeds passed on the revision that
+introduced it (development machine, shared, so wall times only indicate):
+
+| seed | Feudal minute (bot 0 / 1) | army peak (0 / 1) | blows landed (0 / 1) | wall |
+| --- | --- | --- | --- | --- |
+| 1 | 12.5 / 12.4 | 50 / 60 | 1 / 65 | 880 s |
+| 2 | 12.1 / 12.0 | 66 / 47 | 95 / 0 | 1078 s |
+| 3 | 12.5 / 12.1 | 25 / 56 | 0 / 135 | 307 s |
+| 4 | 12.7 / 12.4 | 38 / 17 | 122 / 0 | 233 s |
+| 5 | 12.4 / 12.4 | 33 / 14 | 67 / 0 | 222 s |
+
+Full 30-minute games; the test stops a seed as soon as it is proven, and wall
+time grows with the armies and the machine's load (two arenas ran side by side
+here). The weakest bot of any seed peaked at 14 soldiers, so ten is met with a
+margin, but five seeds are a sample: if a later change breaks the gate, fix the
+AI or the threshold, and move the test to a non-blocking cadence rather than
+tolerating a flaky blocking gate. Reasons the earlier live runs showed thin
+armies: foundations whose builder was lost stayed unbuilt for ever (the Archery
+Range and second Barracks never stood; the AI now sends a villager to
+`construct` a foundation that stopped advancing), too much gold and too little
+food for a Feudal army (shares moved to food), and hunters held by animals they
+could never kill (now stood down after 40 s without progress). The Feudal time
+(about 12.5 minutes) is later than a good player's. Synthetic two-bot workloads
+on a flat map show neither finished RTS performance nor dedicated-hardware
 qualification.
 
 ## Tests and commands

@@ -60,8 +60,15 @@ class Blackboard:
     #: villager id -> tick of its last job, animal id -> hunt orders given.
     assigned: dict[int, int] = field(default_factory=dict)
     hunt_tries: dict[int, int] = field(default_factory=dict)
+    #: villager id -> animal it was sent after; animal id -> ((hp, meat), tick it last changed).
+    hunters: dict[int, int] = field(default_factory=dict)
+    hunt_watch: dict[int, tuple[tuple[int, int], int]] = field(default_factory=dict)
     #: Enemy units and buildings seen below full health (our hits landing).
     wounded: set[int] = field(default_factory=set)
+    #: Own foundation id -> (progress, tick it last advanced).
+    progress: dict[int, tuple[int, int]] = field(default_factory=dict)
+    #: Enemy unit or building id -> hit points when last seen.
+    enemy_hp: dict[int, int] = field(default_factory=dict)
     #: Counters for reports and tests.
     stats: dict[str, int] = field(default_factory=dict)
 

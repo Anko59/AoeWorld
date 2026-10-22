@@ -8,7 +8,7 @@ import aoeworld
 from aoeworld import BuildingKind, ResourceKind, UnitKind
 
 from .config import Config
-from .geometry import Tile, dist
+from .geometry import Tile, clamp_tile, dist
 from .blackboard import Blackboard, Tracked
 
 MILITARY = (
@@ -88,6 +88,20 @@ class Context:
         if not spots:
             return 1e9
         return min(dist(node.tile, s) for s in spots)
+
+    def unrefused(self, tile: Tile) -> Tile:
+        """`tile`, or the nearest tile around it the server has not refused as a
+        destination (a tree, water or a building: asking again changes nothing)."""
+        bad = self.board.bad_moves
+        size = self.world.map_size
+        if tile not in bad:
+            return tile
+        for radius in (2, 4, 6, 9, 13):
+            for dx, dy in ((1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1)):
+                candidate = clamp_tile((tile[0] + dx * radius, tile[1] + dy * radius), size)
+                if candidate not in bad:
+                    return candidate
+        return tile
 
     # ----- budget ----------------------------------------------------------
     def can_afford(self, cost: tuple[int, int, int, int]) -> bool:
