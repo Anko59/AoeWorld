@@ -1,11 +1,10 @@
 use crate::{
-    GameUnit, GameWorld, GameWorldError, MAX_ROUTE_WORK_PER_ORDER, MAX_ROUTE_WORK_PER_TICK,
-    MovementOrder,
+    GameWorld, GameWorldError, MAX_ROUTE_WORK_PER_ORDER, MAX_ROUTE_WORK_PER_TICK, MovementOrder,
     game_path::next_waypoint,
     game_path::segment_length,
     game_world::{facing_for, interpolate},
 };
-use aoe_core::{ChunkCoord, WorldPosition};
+use aoe_core::{ChunkCoord, EntityId, WorldPosition};
 use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
 use std::collections::VecDeque;
 
@@ -16,7 +15,9 @@ pub(crate) const MAX_ACTIVE_ROUTE_PLANNERS: usize = 64;
 pub(crate) const MAX_ACTIVE_ROUTE_SEARCHES: usize = 2;
 
 impl GameWorld {
-    pub(crate) fn advance_movement(&mut self) -> Vec<GameUnit> {
+    /// Moves every active mover once and returns the ids it touched, in
+    /// arbitrary order; the tick collation sorts and fetches final states.
+    pub(crate) fn advance_movement(&mut self) -> Vec<EntityId> {
         let movers = std::mem::take(&mut self.active_movers);
         let mover_count = movers.len();
         let start = if mover_count == 0 {
@@ -202,12 +203,11 @@ impl GameWorld {
                     crate::UnitTask::Idle
                 };
             }
-            changed.push(self.units[index].state);
+            changed.push(self.units[index].state.id);
         }
         still_moving.sort_unstable();
         self.active_movers = still_moving;
         self.tick.0 = self.tick.0.saturating_add(1);
-        changed.sort_by_key(|unit| unit.id);
         changed
     }
 

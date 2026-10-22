@@ -50,7 +50,7 @@ pub enum UnitKind {
     Spearman,
     ManAtArms,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum BuildingKind {
     TownCenter,
@@ -270,6 +270,10 @@ pub enum EconomyError {
 pub(crate) struct Economy {
     pub(crate) players: BTreeMap<PlayerId, PlayerEconomy>,
     pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
+    /// Drop-off candidates per player and building kind, ascending by id.
+    /// Maintained as buildings are placed and removed; completion is checked
+    /// per query so the buckets never need a mid-construction update.
+    pub(crate) dropoffs: BTreeMap<(PlayerId, BuildingKind), Vec<EntityId>>,
     pub(crate) blocked_tiles: BTreeSet<TileCoord>,
     pub(crate) open_gates: BTreeSet<EntityId>,
     pub(crate) gatherers: BTreeMap<EntityId, GatherTask>,

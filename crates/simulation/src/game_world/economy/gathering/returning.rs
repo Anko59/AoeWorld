@@ -1,4 +1,5 @@
 //! Shared drop-off trips for map resources, farms and carcasses.
+use super::super::VILLAGE_RULES;
 use super::*;
 
 impl GameWorld {

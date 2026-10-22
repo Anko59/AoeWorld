@@ -2,7 +2,7 @@
 //! whose effect is applied on completion. Work per tick is bounded by the
 //! building count (`MAX_ECONOMY_BUILDINGS`); only buildings that research are
 //! touched.
-use super::{EconomyError, GameUnit, GameWorld, UnitKind};
+use super::{EconomyError, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
 mod effects;
@@ -147,7 +147,7 @@ impl GameWorld {
     }
 
     /// Advance every research by one tick and apply those that finish.
-    pub(super) fn advance_research(&mut self, changed: &mut Vec<GameUnit>) {
+    pub(super) fn advance_research(&mut self, changed: &mut Vec<EntityId>) {
         let mut finished = Vec::new();
         for (id, building) in &mut self.economy.buildings {
             let Some(entry) = &mut building.research else {

@@ -256,3 +256,186 @@ fn authoritative_job_kind_survives_collection_and_return_but_clears_on_stop() {
     assert_eq!(world.unit(id).unwrap().task, UnitTask::Carrying);
     assert!(world.unit(id).unwrap().carried.is_some());
 }
+
+/// Finds a fixture node of `kind` that has a passable neighbour tile.
+fn accessible_node(
+    generator: &aoe_map::MapChunkGenerator,
+    world: &GameWorld,
+    kind: ResourceKind,
+) -> ResourceNode {
+    for y in 0..8 {
+        for x in 0..8 {
+            for node in generator.chunk(x, y).unwrap().resources {
+                if node.kind != kind {
+                    continue;
+                }
+                let reachable = (-1..=1).any(|dy| {
+                    (-1..=1).any(|dx| {
+                        (dx != 0 || dy != 0)
+                            && world.terrain().passable(
+                                TileCoord::new(node.tile.x + dx, node.tile.y + dy),
+                                world.config(),
+                            )
+                    })
+                });
+                if reachable {
+                    return node;
+                }
+            }
+        }
+    }
+    panic!("fixture needs an accessible {kind:?} node");
+}
+
+/// A villager spawned on a passable tile next to `node`.
+fn gatherer_at(world: &mut GameWorld, node: ResourceNode) -> EntityId {
+    let tile = (-1..=1)
+        .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
+        .find(|(dx, dy)| {
+            (*dx != 0 || *dy != 0)
+                && world.terrain().passable(
+                    TileCoord::new(node.tile.x + dx, node.tile.y + dy),
+                    world.config(),
+                )
+        })
+        .map(|(dx, dy)| TileCoord::new(node.tile.x + dx, node.tile.y + dy))
+        .expect("node has a passable neighbour");
+    world
+        .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(tile).unwrap())
+        .expect("villager spawn")
+}
+
+/// Replay pin: villagers gather every resource through several drop-off
+/// building kinds while the scout walks, camps rise beside their resources
+/// and a wood node is depleted into a replacement, so any index change that
+/// alters behaviour breaks the pinned hashes. The pins were taken from the
+/// code before the drop-off and resource-chunk indexes.
+#[test]
+fn gathering_and_dropoffs_replay_to_pinned_hashes() {
+    let (package, pages, water) = fixture::flat_fixture(false);
+    let generator = package
+        .generator_with_environment(pages.clone(), water.clone(), Vec::new(), Vec::new())
+        .unwrap();
+    let mut world =
+        GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
+    // A search before the village exists warms any per-chunk resource cache;
+    // the starting nodes inserted by the village must still be found after.
+    let _ = world.nearest_resource(TileCoord::new(64, 64), ResourceKind::Wood, 10, None);
+    (0..40i32)
+        .find_map(|step| {
+            let spot = TileCoord::new(64 + (step % 7) * 6 - 18, 64 + (step / 7) * 6);
+            world
+                .initialize_village(PlayerId(0), spot)
+                .ok()
+                .map(|_| spot)
+        })
+        .expect("a village start site");
+    buildings::set_stock(&mut world, 0, 600, 0, 0);
+
+    // One gatherer per resource, each spawned next to its node.
+    let mut jobs = Vec::new();
+    for kind in [
+        ResourceKind::Wood,
+        ResourceKind::Food,
+        ResourceKind::Gold,
+        ResourceKind::Stone,
+    ] {
+        let node = accessible_node(&generator, &world, kind);
+        let id = gatherer_at(&mut world, node);
+        world.issue_gather(PlayerId(0), id, node.id).unwrap();
+        jobs.push((kind, node, id));
+    }
+
+    // A completed drop-off of each camp kind rises beside its resource, so
+    // returns are attempted toward several building kinds. Candidate spots
+    // skip node tiles, and the builder spawns on a checked neighbour tile.
+    for (kind, base) in [
+        (BuildingKind::LumberCamp, jobs[0].1.tile),
+        (BuildingKind::MiningCamp, jobs[2].1.tile),
+        (BuildingKind::Mill, jobs[1].1.tile),
+    ] {
+        let side = kind.rules().side;
+        let ring = (-1..=side)
+            .flat_map(|dy| (-1..=side).map(move |dx| (dx, dy)))
+            .filter(|(dx, dy)| *dx == -1 || *dx == side || *dy == -1 || *dy == side);
+        let placed = (0..25i32)
+            .find_map(|attempt| {
+                let spot = TileCoord::new(
+                    base.x + 3 + (attempt % 5) * 2,
+                    base.y + 3 + (attempt / 5) * 2,
+                );
+                let clear = (0..side).all(|dy| {
+                    (0..side).all(|dx| {
+                        world
+                            .terrain()
+                            .passable(TileCoord::new(spot.x + dx, spot.y + dy), world.config())
+                    })
+                });
+                if !clear {
+                    return None;
+                }
+                let (sx, sy) = ring.clone().find(|(dx, dy)| {
+                    world
+                        .terrain()
+                        .passable(TileCoord::new(spot.x + dx, spot.y + dy), world.config())
+                })?;
+                let worker = world
+                    .spawn_villager(
+                        PlayerId(0),
+                        WorldPosition::from_tile_center(TileCoord::new(spot.x + sx, spot.y + sy))
+                            .unwrap(),
+                    )
+                    .ok()?;
+                world.issue_build(PlayerId(0), &[worker], kind, spot).ok()
+            })
+            .expect("room for the camp");
+        buildings::finish(&mut world, placed, 1_600);
+    }
+
+    // The scout walks for the whole run, so movement state changes too.
+    let scout = world
+        .units()
+        .find(|unit| unit.kind == crate::UnitKind::Scout)
+        .map(|unit| unit.id)
+        .expect("village scout");
+    (0..40i32)
+        .find_map(|step| {
+            Some(world.issue_move(
+                scout,
+                WorldPosition::from_tile_center(TileCoord::new(60 + step, 90)).ok()?,
+            ))
+            .and_then(|result| result.ok())
+        })
+        .expect("a scout destination");
+
+    let mut pins = Vec::new();
+    for block in 0..6 {
+        if block == 1 {
+            // Exhausting the wood node forces a replacement search mid-run.
+            let node = jobs[0].1;
+            world
+                .deplete_resource(node.id, node.initial_amount)
+                .unwrap();
+        }
+        for _ in 0..100 {
+            world.advance();
+        }
+        pins.push(world.canonical_hash_hex());
+    }
+    assert_eq!(
+        pins.as_slice(),
+        GATHER_REPLAY_PINS,
+        "tick {}",
+        world.tick().0
+    );
+}
+
+/// Canonical hashes at ticks 100..=600, pinned from the pre-index code.
+const GATHER_REPLAY_PINS: [&str; 6] = [
+    "fb7450799c33b51e042ec4db909e718f6df4caaa4e38bb4a5ea81ab43d323d4d",
+    "94bedc363b41ff5f2f882c72a71a5450af2fbde42b532abbb84b1d99afd7e4a8",
+    "425dacfeac64f57521f5da3fa06c9b3d427a66a9e283c87756df9ab152221021",
+    "272393992802581b815a931bcf92e7538d21d1c7f203f89fae6362ecccbdd8f1",
+    "85cd19f28101678fd6ae790ef9830d8f087b74f47a479cba0c243bc13a3762fe",
+    "899ead6756acdc96af3277f0cb3cc272d53f45cdb494699b608d081f40ee5fe5",
+];

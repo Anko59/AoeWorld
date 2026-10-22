@@ -148,6 +148,11 @@ impl GameWorld {
                 .insert_starting_resource(generator, node)
                 .map_err(|_| EconomyError::InvalidFootprint)?;
         }
+        // Inserted starting nodes join candidate lists that may already be
+        // cached from earlier searches.
+        if let Ok(cache) = self.resource_chunks.get_mut() {
+            cache.clear();
+        }
         self.resource_collision_changed();
         Ok(())
     }

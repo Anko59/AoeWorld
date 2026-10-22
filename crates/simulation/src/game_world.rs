@@ -6,8 +6,12 @@ use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
     TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
 };
-use aoe_map::{Depletion, MovementOutcome, ResourceOverlayError, RoutePlanner};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use aoe_map::{Depletion, MovementOutcome, ResourceNode, ResourceOverlayError, RoutePlanner};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
+
+/// One chunk's shared candidate resource nodes.
+pub(crate) type ChunkNodes = Arc<Vec<ResourceNode>>;
 
 mod combat;
 mod economy;
@@ -113,6 +117,10 @@ pub struct GameWorld {
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
     pub(crate) active_movers: Vec<EntityId>,
     pub(crate) terrain: Terrain,
+    /// Candidate resource nodes per generator chunk, built on the first
+    /// replacement search that touches the chunk and reused by later ones.
+    /// See `GameWorld::chunk_resource_nodes`.
+    pub(crate) resource_chunks: Mutex<HashMap<(i32, i32), ChunkNodes>>,
     pub(crate) planning_budget: u32,
     pub(crate) navigation_cache: NavigationCache,
     pub(crate) planning_cursor: usize,
@@ -141,6 +149,7 @@ impl GameWorld {
             active_movers: Vec::new(),
             planning_budget: crate::MAX_ROUTE_WORK_PER_TICK,
             navigation_cache: NavigationCache::default(),
+            resource_chunks: Mutex::new(HashMap::new()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,

@@ -1,42 +1,16 @@
 use super::{
-    CarriedResource, EconomyError, GatherPhase, GatherTask, UnitKind, UnitTask, VILLAGE_RULES,
+    CarriedResource, EconomyError, GatherPhase, GatherTask, UnitKind, UnitTask,
     placement::{distance_squared, perimeter, position},
 };
-use crate::{GameUnit, GameWorld, GameWorldError, PreparedResourceDepletion, Terrain};
+use crate::{GameWorld, GameWorldError, PreparedResourceDepletion, Terrain};
 use aoe_core::{EntityId, PlayerId, TileCoord};
-use aoe_map::{ResourceKind, ResourceNode, ResourceOverlay};
-use std::collections::BTreeMap;
+use aoe_map::ResourceKind;
 
+mod chunks;
 mod returning;
 
 #[cfg(test)]
 mod tests;
-
-// Starting-history entries that replacement searches on this thread touched.
-#[cfg(test)]
-thread_local! {
-    static HISTORY_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
-#[cfg(test)]
-fn starting_history(
-    overlay: &ResourceOverlay,
-    min: TileCoord,
-    max: TileCoord,
-) -> impl Iterator<Item = ResourceNode> + '_ {
-    overlay.starting_nodes_in(min, max).inspect(|_| {
-        HISTORY_VISITS.with(|visits| visits.set(visits.get() + 1));
-    })
-}
-
-#[cfg(not(test))]
-fn starting_history(
-    overlay: &ResourceOverlay,
-    min: TileCoord,
-    max: TileCoord,
-) -> impl Iterator<Item = ResourceNode> + '_ {
-    overlay.starting_nodes_in(min, max)
-}
 
 impl GameWorld {
     /// Wildlife food uses exactly the normal return/drop-off state machine.
@@ -81,59 +55,6 @@ impl GameWorld {
             return None;
         };
         overlay.remaining(generator, id)
-    }
-
-    pub fn nearest_resource(
-        &self,
-        origin: TileCoord,
-        kind: ResourceKind,
-        radius: i32,
-        exclude: Option<u64>,
-    ) -> Option<ResourceNode> {
-        let Terrain::Map { generator, overlay } = &self.terrain else {
-            return None;
-        };
-        // Public callers cannot enlarge the rule's bounded replacement search.
-        let radius = radius.clamp(0, VILLAGE_RULES.replacement_radius_tiles);
-        let squared = (radius as u64).pow(2);
-        // One window read per search. Each tile keeps its first starting entry
-        // in identity order, matching the former per-tile scan.
-        let min = TileCoord::new(
-            origin.x.saturating_sub(radius),
-            origin.y.saturating_sub(radius),
-        );
-        let max = TileCoord::new(
-            origin.x.saturating_add(radius),
-            origin.y.saturating_add(radius),
-        );
-        let mut history = BTreeMap::new();
-        for node in starting_history(overlay, min, max) {
-            history.entry(node.tile).or_insert(node);
-        }
-        let mut nearest = None;
-        let mut score = (u64::MAX, u64::MAX);
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                let tile = TileCoord::new(origin.x.saturating_add(dx), origin.y.saturating_add(dy));
-                let distance = distance_squared(origin, tile);
-                if distance > squared {
-                    continue;
-                }
-                if let Some(node) = history
-                    .get(&tile)
-                    .copied()
-                    .or_else(|| generator.object_at(tile))
-                    && node.kind == kind
-                    && Some(node.id) != exclude
-                    && overlay.blocks_node(node)
-                    && (distance, node.id) < score
-                {
-                    nearest = Some(node);
-                    score = (distance, node.id);
-                }
-            }
-        }
-        nearest
     }
 
     pub fn issue_gather(
@@ -284,16 +205,29 @@ impl GameWorld {
     pub(super) fn advance_gathering(
         &mut self,
         sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) {
         let ids = self.economy.gatherers.keys().copied().collect::<Vec<_>>();
         for id in ids {
+            // A gatherer that is walking under a movement order, with no
+            // failed route, changes nothing in `gather_step`: skip the
+            // remove/insert round trip through the task map.
+            if let (Some(&index), Some(task)) =
+                (self.lookup.get(&id), self.economy.gatherers.get(&id))
+                && task.phase != GatherPhase::WaitingDropoff
+                && self.units[index].order.is_some()
+                && !(task.phase == GatherPhase::Approaching
+                    && self.units[index].last_movement_error.is_some())
+            {
+                continue;
+            }
             let Some(mut task) = self.economy.gatherers.remove(&id) else {
                 continue;
             };
-            let Some(before) = self.unit(id) else {
+            let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
+            let before = self.units[index].state;
             let keep = self.gather_step(id, &mut task, sink);
             if keep {
                 self.economy.gatherers.insert(id, task);
@@ -307,7 +241,7 @@ impl GameWorld {
             if let Some(after) = self.unit(id)
                 && after != before
             {
-                changed.push(after);
+                changed.push(after.id);
             }
         }
     }

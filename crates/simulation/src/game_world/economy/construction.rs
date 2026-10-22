@@ -4,7 +4,7 @@ use super::{
     UnitTask,
     placement::{adjacent, distance_squared, perimeter, position},
 };
-use crate::{GameUnit, GameWorld};
+use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use aoe_map::ResourceKind;
 
@@ -288,7 +288,7 @@ impl GameWorld {
 
     /// Advance every builder and foundation. Cost is bounded by the builders
     /// (at most `MAX_BUILDERS`) and, on completion, the buildings.
-    pub(super) fn advance_construction(&mut self, changed: &mut Vec<GameUnit>) {
+    pub(super) fn advance_construction(&mut self, changed: &mut Vec<EntityId>) {
         if self.economy.builders.is_empty() {
             return;
         }
@@ -341,7 +341,7 @@ impl GameWorld {
         }
         touched.sort_unstable();
         touched.dedup();
-        changed.extend(touched.into_iter().filter_map(|id| self.unit(id)));
+        changed.extend(touched);
     }
 
     /// `builders + 2` work per tick (one builder adds 3, matching the base

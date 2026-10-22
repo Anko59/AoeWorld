@@ -4,7 +4,7 @@ use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, WorldPosition};
 use std::collections::BTreeMap;
 
 impl GameWorld {
-    pub(crate) fn advance_wildlife(&mut self, changed: &mut Vec<GameUnit>) {
+    pub(crate) fn advance_wildlife(&mut self, changed: &mut Vec<EntityId>) {
         self.wildlife.stats = Default::default();
         self.advance_hunters(changed);
         // Animal-driven: each animal probes the unit cell grid around itself.
@@ -126,7 +126,7 @@ impl GameWorld {
         self.advance_carcasses();
     }
 
-    fn animal_attack(&mut self, a: &mut StoredAnimal, changed: &mut Vec<GameUnit>) {
+    fn animal_attack(&mut self, a: &mut StoredAnimal, changed: &mut Vec<EntityId>) {
         let rules = a.state.kind.rules();
         a.cooldown = a.cooldown.saturating_sub(1);
         let target = a.state.target.and_then(|id| self.unit(id)).filter(|u| {
@@ -171,7 +171,7 @@ impl GameWorld {
         if unit.hp == 0 {
             self.kill_unit(index);
         }
-        changed.push(self.units[index].state);
+        changed.push(self.units[index].state.id);
         a.cooldown = (self.config.tick_hz * rules.attack_period_centiseconds / 100).max(1);
     }
 

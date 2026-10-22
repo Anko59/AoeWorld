@@ -1,4 +1,5 @@
 use crate::{GameUnit, GameWorld, PreparedResourceDepletion};
+use aoe_core::EntityId;
 
 /// A phase of one authoritative tick, reported to `advance_with_probe`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -51,7 +52,7 @@ impl GameWorld {
             if !changed.is_empty() {
                 self.remember_visible_buildings();
             }
-            return changed;
+            return self.collect_changed(changed);
         }
         self.advance_combat(&mut changed);
         probe(TickPhase::Combat);
@@ -66,17 +67,20 @@ impl GameWorld {
         self.remember_visible_buildings();
         probe(TickPhase::BuildingMemory);
         self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
-        changed.sort_by_key(|unit| unit.id);
-        changed.dedup_by_key(|unit| unit.id);
-        changed.retain(|unit| self.unit_exists(unit.id));
-        // Economy may alter a mover a second time in the same tick. Return its
-        // final state, not the earlier movement interpolation state.
-        for unit in &mut changed {
-            if let Some(current) = self.unit(unit.id) {
-                *unit = current;
-            }
-        }
+        let collected = self.collect_changed(changed);
         probe(TickPhase::Changed);
-        changed
+        collected
+    }
+
+    /// Every phase reports only the ids it touched. Sorting and deduping ids
+    /// is far cheaper than sorting unit records, and one final fetch returns
+    /// each changed unit's end-of-tick state in id order — the same output
+    /// as when the phases pushed whole unit records. Economy may alter a
+    /// mover a second time in the same tick; the fetch returns that final
+    /// state, not the earlier movement interpolation state.
+    fn collect_changed(&self, mut ids: Vec<EntityId>) -> Vec<GameUnit> {
+        ids.sort_unstable();
+        ids.dedup();
+        ids.into_iter().filter_map(|id| self.unit(id)).collect()
     }
 }

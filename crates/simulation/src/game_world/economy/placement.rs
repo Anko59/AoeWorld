@@ -163,6 +163,9 @@ impl GameWorld {
         );
         self.refresh_population_cap(player);
         self.index_new_building(id, player, footprint);
+        let bucket = self.economy.dropoffs.entry((player, kind)).or_default();
+        let at = bucket.binary_search(&id).unwrap_or_else(|at| at);
+        bucket.insert(at, id);
         if complete {
             self.update_building_vision(id);
             self.remember_visible_buildings();
@@ -194,6 +197,14 @@ impl GameWorld {
             return;
         };
         self.forget_building(id, building.footprint);
+        if let Some(bucket) = self
+            .economy
+            .dropoffs
+            .get_mut(&(building.player, building.kind))
+            && let Ok(at) = bucket.binary_search(&id)
+        {
+            bucket.remove(at);
+        }
         if building.kind.rules().blocks {
             for y in building.footprint.min.y..building.footprint.max.y {
                 for x in building.footprint.min.x..building.footprint.max.x {
