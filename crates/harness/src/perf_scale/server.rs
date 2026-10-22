@@ -3,9 +3,9 @@ use super::{
     stats::{Series, memory, round},
     world::{BoxError, Player},
 };
-use aoe_core::{EntityId, TileCoord, TileRect};
+use aoe_core::{TileCoord, TileRect};
 use aoe_protocol::{GameplayServerMessage, encode_gameplay_server};
-use aoe_server::GameplayService;
+use aoe_server::{GameplayService, SlotInfo};
 use aoe_simulation::GameWorld;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, time::Instant};
@@ -31,6 +31,9 @@ struct Traffic {
     bytes: BTreeMap<&'static str, u64>,
     messages: BTreeMap<&'static str, u64>,
     encode_ms: Series,
+    fanout: Series,
+    fanout_build: Series,
+    fanout_deliver: Series,
     changed_units: u64,
     per_session: BTreeMap<usize, u64>,
 }
@@ -75,6 +78,10 @@ async fn ticks(
         let started = Instant::now();
         service.tick().await;
         series.push_ms(started.elapsed().as_nanos());
+        let (build, deliver) = service.last_fanout_timing();
+        traffic.fanout_build.0.push(build);
+        traffic.fanout_deliver.0.push(deliver);
+        traffic.fanout.0.push(build + deliver);
         drain(receivers, traffic);
     }
     series
@@ -83,17 +90,26 @@ async fn ticks(
 async fn session_run(
     service: &GameplayService,
     players: &[Player],
+    infos: &[SlotInfo],
     side: i32,
     sessions: u16,
     count: u32,
     label: &str,
-) -> Value {
+) -> Result<Value, BoxError> {
     let mut receivers = Vec::new();
     let mut traffic = Traffic::default();
     let subscribe_started = Instant::now();
     for index in 0..usize::from(sessions) {
         let (sender, receiver) = mpsc::channel(8192);
-        let (id, _) = service.register(None, sender).await;
+        // One session per seat, as in a match; extra sessions only watch.
+        let id = match infos.get(index) {
+            Some(info) => service
+                .join_slot(info.token, sender)
+                .await
+                .map(|(id, _)| id)
+                .map_err(|_| "slot token refused")?,
+            None => service.register(None, sender).await.0,
+        };
         let center = players[index % players.len()].center;
         service.subscribe(id, 1, region(center, side)).await;
         receivers.push(receiver);
@@ -112,7 +128,7 @@ async fn session_run(
     let steady_bytes: u64 = traffic.bytes.values().sum();
     let mut busiest: Vec<u64> = traffic.per_session.values().copied().collect();
     busiest.sort_unstable();
-    json!({
+    Ok(json!({
         "mode": label,
         "sessions": sessions,
         "subscribe_all_ms": round(subscribe_ms),
@@ -120,6 +136,9 @@ async fn session_run(
         "initial_bytes": initial.bytes,
         "mean_snapshot_bytes": snapshot_bytes.checked_div(snapshot_count).unwrap_or(0),
         "tick": series.summary(),
+        "fanout_per_tick": traffic.fanout.summary(),
+        "fanout_build_per_tick": traffic.fanout_build.summary(),
+        "fanout_deliver_per_tick": traffic.fanout_deliver.summary(),
         "drain_and_encode_per_tick": traffic.encode_ms.summary(),
         "steady_state_messages": traffic.messages,
         "steady_state_bytes": traffic.bytes,
@@ -127,7 +146,7 @@ async fn session_run(
         "steady_bytes_per_second_per_session_mean": round(steady_bytes as f64 / seconds / f64::from(sessions.max(1))),
         "steady_bytes_per_second_per_session_max": round(busiest.last().copied().unwrap_or(0) as f64 / seconds),
         "mean_changed_units_per_tick_per_session": round(traffic.changed_units as f64 / f64::from(count.max(1)) / f64::from(sessions.max(1))),
-    })
+    }))
 }
 
 pub(super) fn measure(
@@ -142,15 +161,21 @@ pub(super) fn measure(
         .enable_all()
         .build()?;
     runtime.block_on(async move {
-        let service = GameplayService::from_scale_world(world, EntityId(0));
+        // One person and the rest AI processes, the promised match.
+        let seats = players
+            .iter()
+            .enumerate()
+            .map(|(index, player)| (player.id, player.primary, index == 0));
+        let service = GameplayService::from_scale_world_slots(world, seats);
+        let infos = service.slot_infos().await;
         let mut none = Vec::new();
         let mut nothing = Traffic::default();
         let baseline = ticks(&service, count, &mut none, &mut nothing).await;
-        let on = session_run(&service, players, side, sessions, count, "fog_on").await;
+        let on = session_run(&service, players, &infos, side, sessions, count, "fog_on").await?;
         service.set_fog_disabled(true).await;
-        let off = session_run(&service, players, side, sessions, count, "fog_off").await;
+        let off = session_run(&service, players, &infos, side, sessions, count, "fog_off").await?;
         Ok(json!({
-            "note": "the shipped service has one viewer player (the primary unit's owner); every session is filtered through that player's fog and receives that player's units",
+            "note": "one slot per player (player 0 human, the rest AI); session i controls player i and sees a 96 x 96 tile view of its own base through its own fog",
             "world_units": units,
             "view_tiles": VIEW_TILES,
             "ticks_per_mode": count,

@@ -150,6 +150,7 @@ impl GameplayService {
             primary_unit_id,
             resource_directory: None,
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
+            fanout_probe: Arc::default(),
         }
     }
 

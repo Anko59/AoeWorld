@@ -18,6 +18,8 @@ mod commands;
 mod economy;
 #[path = "gameplay/fog.rs"]
 mod fog;
+#[path = "gameplay/probe.rs"]
+mod probe;
 #[path = "gameplay/slots.rs"]
 mod slots;
 #[path = "gameplay/tick.rs"]
@@ -43,6 +45,7 @@ pub struct GameplayService {
     primary_unit_id: EntityId,
     resource_journal: Arc<std::sync::Mutex<resources::Journal>>,
     resource_directory: Option<std::path::PathBuf>,
+    fanout_probe: Arc<probe::FanoutProbe>,
 }
 
 pub(super) struct Session {
@@ -199,6 +202,24 @@ impl GameplayService {
     /// A prebuilt world for headless scale measurements; it has no map identity.
     pub fn from_scale_world(world: GameWorld, primary_unit_id: EntityId) -> Self {
         Self::from_world(world, primary_unit_id, None, None)
+    }
+
+    /// A prebuilt multi-player world with one seat per entry, for headless
+    /// scale measurements of the per-slot fan-out.
+    /// Each seat is `(player, primary unit, is a person)`.
+    pub fn from_scale_world_slots(
+        world: GameWorld,
+        seats: impl IntoIterator<Item = (PlayerId, EntityId, bool)>,
+    ) -> Self {
+        let setups = seats
+            .into_iter()
+            .map(|(player, primary_unit_id, human)| SlotSetup {
+                player,
+                primary_unit_id,
+                human,
+            })
+            .collect();
+        Self::from_world_slots(world, setups, None, None)
     }
 
     pub async fn navigation_cache_usage(&self) -> NavigationCacheUsage {

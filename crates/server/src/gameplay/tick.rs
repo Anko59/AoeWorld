@@ -86,6 +86,7 @@ impl GameplayService {
             tracing::error!("gameplay tick worker failed");
             return;
         };
+        let fan_started = std::time::Instant::now();
         let all_players = super::economy::players(&world);
         let mut viewers = BTreeMap::<PlayerId, ViewerState>::new();
         for view in &subscriptions {
@@ -163,6 +164,7 @@ impl GameplayService {
             ));
         }
         drop(world);
+        let built = fan_started.elapsed();
         let mut sessions = self.sessions.lock().await;
         let mut failed = BTreeSet::new();
         for (id, fog, vision_revision) in fog_updates {
@@ -329,6 +331,15 @@ impl GameplayService {
         for id in failed {
             self.disconnect(id).await;
         }
+        self.fanout_probe
+            .record(built, fan_started.elapsed().saturating_sub(built));
         self.publish_resources().await;
     }
 }
+
+#[path = "tick/tests/scenario.rs"]
+#[cfg(test)]
+mod scenario;
+#[path = "tick/tests.rs"]
+#[cfg(test)]
+mod tests;
