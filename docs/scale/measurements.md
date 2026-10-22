@@ -89,8 +89,8 @@ Simulation `advance`, 600 ticks, milliseconds:
 
 ### Wildlife and vision scale rework (branch `perf/wildlife-vision`)
 
-Same workload after reworking hot spots 4 and 5 (`reports/scale/after-vision.json`,
-before numbers in `reports/scale/before-vision.json`). The canonical hashes at
+Same workload after reworking hot spots 4 and 5 (the numbers are inline; the
+current tree's full report is `reports/scale/perf-scale.json`). The canonical hashes at
 ticks 100 to 600 are identical before and after, so behaviour did not change;
 the pinned scenario in `tests/replay_pin.rs` guards this.
 
@@ -101,6 +101,9 @@ the pinned scenario in `tests/replay_pin.rs` guards this.
 | Movement and path planning | 295.9 / 460.6 | 316.1 / 473.7 |
 | Whole `advance` | 383.0 / 596.9 | 348.4 / 520.1 |
 
+- After the destroyed-building ghost fix, `perf-scale` at fb3ebeac measured fog-on
+  p50 / p95 of 2.55 / 4.15 ms for wildlife and 0.214 / 0.354 ms for building
+  memory per player, so the ghost index added no measurable cost.
 - Wildlife is now animal-driven: each animal probes the unit cell grid around
   itself; an animal no unit can reach through its nine-cell neighbourhood is
   not visited at all. The remaining cost is hunters, fleeing and carcass decay,
