@@ -1,5 +1,5 @@
 use super::{AnimalKind, AnimalTask, StoredAnimal, cell, distance, radius};
-use crate::{DamageKind, GameUnit, GameWorld, HitRecord, UnitKind, damage_dealt};
+use crate::{DamageKind, GameWorld, HitRecord, UnitKind, damage_dealt};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, WorldPosition};
 use std::collections::BTreeMap;
 
