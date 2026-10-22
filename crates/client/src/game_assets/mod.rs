@@ -17,8 +17,8 @@ mod fishing;
 #[path = "manifest.rs"]
 mod manifest;
 use aoe_rendering::{
-    AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_SIDE, GameArt, GameFrame,
-    TerrainTopology,
+    AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
+    GameArt, GameFrame, TerrainTopology,
 };
 #[cfg(test)]
 #[path = "tests/building_sprites.rs"]
@@ -223,8 +223,80 @@ pub(crate) fn team_colour() -> [u8; 3] {
     [colour[0], colour[1], colour[2]]
 }
 
+/// Receives the packed atlas one finished page at a time, in page order, then
+/// `finish` once. Pages are never all resident in the loader.
+pub trait AtlasSink {
+    /// The zeroed buffer for page `index`; the loader fills it in place.
+    fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String>;
+    /// Hands the filled page over.
+    fn commit(&mut self, index: u32) -> Result<(), String>;
+    fn finish(&mut self) -> Result<(), String>;
+}
+
+/// Streams straight into a renderer that the caller owns exclusively.
+pub struct RendererSink<'a> {
+    renderer: &'a mut aoe_rendering::GameRenderer,
+    upload: Option<aoe_rendering::AtlasUpload>,
+}
+
+impl<'a> RendererSink<'a> {
+    pub fn new(renderer: &'a mut aoe_rendering::GameRenderer) -> Self {
+        Self {
+            renderer,
+            upload: None,
+        }
+    }
+}
+
+impl AtlasSink for RendererSink<'_> {
+    fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String> {
+        if self.upload.is_none() {
+            self.upload = Some(self.renderer.begin_game_atlas()?);
+        }
+        self.upload
+            .as_mut()
+            .ok_or("No atlas upload")?
+            .page_buffer(index)
+    }
+    fn commit(&mut self, index: u32) -> Result<(), String> {
+        let upload = self.upload.as_mut().ok_or("No atlas upload")?;
+        self.renderer.write_game_atlas_page(upload, index)
+    }
+    fn finish(&mut self) -> Result<(), String> {
+        let upload = self.upload.take().ok_or("No atlas pages written")?;
+        self.renderer.finish_game_atlas(upload)
+    }
+}
+
+/// Test and tooling sink that gathers the whole atlas.
+#[cfg(test)]
+pub(crate) struct CollectedAtlas(pub Vec<u8>);
+
+#[cfg(test)]
+impl AtlasSink for CollectedAtlas {
+    fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String> {
+        let end = (index as usize + 1) * GAME_ATLAS_PAGE_BYTES;
+        self.0.resize(end, 0);
+        Ok(&mut self.0[end - GAME_ATLAS_PAGE_BYTES..])
+    }
+    fn commit(&mut self, _: u32) -> Result<(), String> {
+        Ok(())
+    }
+    fn finish(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// Loads art and the whole atlas for tests that inspect packed texels.
+#[cfg(test)]
+pub(crate) async fn load_collected() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
+    let mut atlas = CollectedAtlas(Vec::new());
+    let (art, team) = load(&mut atlas).await?;
+    Ok((art, atlas.0, team))
+}
+
 #[inline(never)]
-pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
+pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValue> {
     let team = team_colour();
     let bytes = fetch("/asset-pack/manifest.json").await?;
     let mut manifest = decode_manifest(&bytes)?;
@@ -304,47 +376,6 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
         .zip(&placements)
         .map(|(&index, &placed)| placement::record(&manifest.frames[index], placed))
         .collect::<Vec<_>>();
-    let mut pixels = vec![0; GAME_ATLAS_BYTES];
-    // Every origin is reserved; explicit renderer white addressing uses page 2.
-    for origin in (0..GAME_ATLAS_BYTES).step_by(GAME_ATLAS_PAGE_BYTES) {
-        pixels[origin..origin + 4].copy_from_slice(&[255; 4]);
-    }
-    // A bounded index vector groups source pages without a map or page-ID-sized
-    // allocation. Grouping is for decoding only; records stay in semantic order.
-    let source_order = source_order(&manifest, &selected);
-    let mut start = 0;
-    while start < source_order.len() {
-        let source_page = manifest.frames[selected[source_order[start]]].page;
-        let atlas = &manifest.pages[usize::from(source_page)];
-        let mut end = start;
-        while end < source_order.len()
-            && manifest.frames[selected[source_order[end]]].page == source_page
-        {
-            end += 1;
-        }
-        // Decode one source sheet at a time: the transient peak beside the
-        // runtime atlas is one page plus its decoder, not all three sheets.
-        let group = &source_order[start..end];
-        for (plane, name) in [
-            (placement::Plane::Color, &atlas.color),
-            (placement::Plane::Player, &atlas.player),
-            (placement::Plane::Shadow, &atlas.shadow),
-        ] {
-            let source = page(name).await?;
-            for &semantic in group {
-                let frame = &manifest.frames[selected[semantic]];
-                placement::copy_plane(
-                    frame,
-                    placements[semantic],
-                    plane,
-                    &source,
-                    &mut pixels,
-                    actors::colour(&actor_ranges, semantic, team),
-                )?;
-            }
-        }
-        start = end;
-    }
     let group = |role| group_frames(&ranges, &records, role);
     let mut terrain: [Vec<GameFrame>; 12] = Default::default();
     fill_groups(&mut terrain, &TERRAIN_ROLES, &ranges, &records);
@@ -369,48 +400,100 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
     let foundation = buildings::foundation(&manifest, &selected, &records)?;
 
     atlas_budget(selected.len());
-    Ok((
-        GameArt {
-            actors: actors::resolve(&manifest, &selected, &records, &actor_ranges),
-            fishing: std::array::from_fn(|i| {
-                fishing_ranges[i]
-                    .as_ref()
-                    .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
-            }),
-            walking: group(AssetRole::CavalryWalking),
-            standing: group(AssetRole::CavalryStanding),
-            village,
-            compositions: buildings,
-            buildings: std::array::from_fn(|i| {
-                building_ranges[i]
-                    .as_ref()
-                    .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
-            }),
-            foundation,
-            grass: terrain[0].clone(),
-            terrain,
-            terrain_topology,
-            water_depth: std::array::from_fn(|slot| {
-                (group(WATER_DEPTH_ROLES[slot]), depth_topology[slot])
-            }),
-            resources: [
-                group(AssetRole::ForageBush),
-                group(AssetRole::WoodTree),
-                group(AssetRole::GoldDeposit),
-                group(AssetRole::StoneDeposit),
-            ],
-            tree_shadows: group(AssetRole::WoodTreeShadow),
-            tree_families: [group(AssetRole::TreeConifer), group(AssetRole::TreePalm)],
-            scenery: aoe_rendering::SceneryArt {
-                cliff_faces: group(AssetRole::CliffFace),
-                rocks: group(AssetRole::RockPile),
-                shrubs: group(AssetRole::Shrub),
-                stumps: group(AssetRole::DeadwoodStump),
-                snags: group(AssetRole::DeadwoodTree),
-                logs: group(AssetRole::DeadwoodLog),
-            },
+    let art = GameArt {
+        actors: actors::resolve(&manifest, &selected, &records, &actor_ranges),
+        fishing: std::array::from_fn(|i| {
+            fishing_ranges[i]
+                .as_ref()
+                .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
+        }),
+        walking: group(AssetRole::CavalryWalking),
+        standing: group(AssetRole::CavalryStanding),
+        village,
+        compositions: buildings,
+        buildings: std::array::from_fn(|i| {
+            building_ranges[i]
+                .as_ref()
+                .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
+        }),
+        foundation,
+        grass: terrain[0].clone(),
+        terrain,
+        terrain_topology,
+        water_depth: std::array::from_fn(|slot| {
+            (group(WATER_DEPTH_ROLES[slot]), depth_topology[slot])
+        }),
+        resources: [
+            group(AssetRole::ForageBush),
+            group(AssetRole::WoodTree),
+            group(AssetRole::GoldDeposit),
+            group(AssetRole::StoneDeposit),
+        ],
+        tree_shadows: group(AssetRole::WoodTreeShadow),
+        tree_families: [group(AssetRole::TreeConifer), group(AssetRole::TreePalm)],
+        scenery: aoe_rendering::SceneryArt {
+            cliff_faces: group(AssetRole::CliffFace),
+            rocks: group(AssetRole::RockPile),
+            shrubs: group(AssetRole::Shrub),
+            stumps: group(AssetRole::DeadwoodStump),
+            snags: group(AssetRole::DeadwoodTree),
+            logs: group(AssetRole::DeadwoodLog),
         },
-        pixels,
-        team,
-    ))
+    };
+
+    // Stream one destination page at a time: the loader never holds the whole
+    // atlas, so beside the sink's own storage the peak is one page buffer plus
+    // one decoded source sheet. A source sheet feeding several pages is decoded
+    // again for each of them.
+    let source_order = source_order(&manifest, &selected);
+    for page_index in 0..GAME_ATLAS_PAGES {
+        let page_pixels = sink.page_buffer(page_index).map_err(error)?;
+        // Every origin is reserved; explicit renderer white addressing uses page 2.
+        page_pixels[..4].copy_from_slice(&[255; 4]);
+        let mut start = 0;
+        while start < source_order.len() {
+            let source_page = manifest.frames[selected[source_order[start]]].page;
+            let atlas = &manifest.pages[usize::from(source_page)];
+            let mut end = start;
+            while end < source_order.len()
+                && manifest.frames[selected[source_order[end]]].page == source_page
+            {
+                end += 1;
+            }
+            let group = &source_order[start..end];
+            start = end;
+            if !group
+                .iter()
+                .any(|&semantic| u32::from(placements[semantic].page) == page_index)
+            {
+                continue;
+            }
+            for (plane, name) in [
+                (placement::Plane::Color, &atlas.color),
+                (placement::Plane::Player, &atlas.player),
+                (placement::Plane::Shadow, &atlas.shadow),
+            ] {
+                let source = page(name).await?;
+                for &semantic in group {
+                    if u32::from(placements[semantic].page) != page_index {
+                        continue;
+                    }
+                    placement::copy_plane(
+                        &manifest.frames[selected[semantic]],
+                        placements[semantic],
+                        plane,
+                        &source,
+                        &mut *page_pixels,
+                        actors::colour(&actor_ranges, semantic, team),
+                    )?;
+                }
+            }
+        }
+        if page_index == 0 {
+            aoe_rendering::write_terrain_directory_page(&art, page_pixels).map_err(error)?;
+        }
+        sink.commit(page_index).map_err(error)?;
+    }
+    sink.finish().map_err(error)?;
+    Ok((art, team))
 }

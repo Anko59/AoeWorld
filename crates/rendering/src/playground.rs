@@ -106,21 +106,30 @@ pub struct BuildingArt {
 
 impl Renderer {
     pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
-        let side = GAME_ATLAS_SIDE;
         if pixels.len() != GAME_ATLAS_BYTES {
             return Err("Invalid game atlas size".into());
         }
+        let texture = self.create_game_atlas()?;
+        for (layer, page) in (0..).zip(pixels.chunks_exact(GAME_ATLAS_PAGE_BYTES)) {
+            self.write_game_atlas_page(&texture, layer, page);
+        }
+        self.install_game_atlas(texture);
+        Ok(())
+    }
+
+    /// Allocates the zeroed five-page atlas texture without installing it.
+    pub(crate) fn create_game_atlas(&self) -> Result<wgpu::Texture, String> {
         let limits = self.device.limits();
-        if limits.max_texture_dimension_2d < side
+        if limits.max_texture_dimension_2d < GAME_ATLAS_SIDE
             || limits.max_texture_array_layers < GAME_ATLAS_PAGES
         {
             return Err("WebGPU cannot support the bounded five-page atlas".into());
         }
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+        Ok(self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("local AoE II game atlas"),
             size: wgpu::Extent3d {
-                width: side,
-                height: side,
+                width: GAME_ATLAS_SIDE,
+                height: GAME_ATLAS_SIDE,
                 depth_or_array_layers: GAME_ATLAS_PAGES,
             },
             mip_level_count: 1,
@@ -129,36 +138,41 @@ impl Renderer {
             format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
-        });
-        // One layer per write bounds browser/GPU staging to one page, and only
-        // its occupied rows are staged: the texture starts zeroed.
-        for (layer, page) in (0..).zip(pixels.chunks_exact(GAME_ATLAS_PAGE_BYTES)) {
-            let rows = atlas::occupied_rows(page);
-            if rows == 0 {
-                continue;
-            }
-            self.queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    origin: wgpu::Origin3d {
-                        x: 0,
-                        y: 0,
-                        z: layer,
-                    },
-                    ..texture.as_image_copy()
-                },
-                &page[..rows as usize * side as usize * 4],
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(side * 4),
-                    rows_per_image: Some(side),
-                },
-                wgpu::Extent3d {
-                    width: side,
-                    height: rows,
-                    depth_or_array_layers: 1,
-                },
-            );
+        }))
+    }
+
+    /// One layer per write bounds browser/GPU staging to one page, and only
+    /// its occupied rows are staged: the texture starts zeroed.
+    pub(crate) fn write_game_atlas_page(&self, texture: &wgpu::Texture, layer: u32, page: &[u8]) {
+        let side = GAME_ATLAS_SIDE;
+        let rows = atlas::occupied_rows(page);
+        if rows == 0 {
+            return;
         }
+        self.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                origin: wgpu::Origin3d {
+                    x: 0,
+                    y: 0,
+                    z: layer,
+                },
+                ..texture.as_image_copy()
+            },
+            &page[..rows as usize * side as usize * 4],
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(side * 4),
+                rows_per_image: Some(side),
+            },
+            wgpu::Extent3d {
+                width: side,
+                height: rows,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    pub(crate) fn install_game_atlas(&mut self, texture: wgpu::Texture) {
         let view = texture.create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::D2Array),
             ..Default::default()
@@ -176,7 +190,6 @@ impl Renderer {
         );
         self._atlas.destroy();
         self._atlas = texture;
-        Ok(())
     }
 
     pub fn render_game(

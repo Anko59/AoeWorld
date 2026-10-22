@@ -1,5 +1,5 @@
 use super::{Client, animate, connect, controls, resize};
-use crate::game_assets::load;
+use crate::game_assets::{AtlasSink, RendererSink, load};
 use aoe_core::{Camera, WorldConfig};
 use aoe_rendering::GameRenderer;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
@@ -15,10 +15,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
     let (mut renderer, canvas) = GameRenderer::new_with_backend(canvas, backend)
         .await
         .map_err(|error| JsValue::from_str(&error))?;
-    let (art, pixels, colour) = load().await?;
-    renderer
-        .upload_game_atlas(&art, pixels)
-        .map_err(|error| JsValue::from_str(&error))?;
+    let (art, colour) = load(&mut RendererSink::new(&mut renderer)).await?;
     if let Some(element) = document.get_element_by_id("playground") {
         let _ = element.set_attribute("data-renderer", renderer.backend());
         let _ = element.set_attribute("data-assets", "aoe2-local");
@@ -84,6 +81,43 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
     Ok(())
 }
 
+struct SharedSink<'a> {
+    shared: &'a Rc<RefCell<Client>>,
+    upload: Option<aoe_rendering::AtlasUpload>,
+}
+
+impl<'a> SharedSink<'a> {
+    fn new(shared: &'a Rc<RefCell<Client>>) -> Self {
+        Self {
+            shared,
+            upload: None,
+        }
+    }
+}
+
+impl AtlasSink for SharedSink<'_> {
+    fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String> {
+        if self.upload.is_none() {
+            self.upload = Some(self.shared.borrow_mut().renderer.begin_game_atlas()?);
+        }
+        self.upload
+            .as_mut()
+            .ok_or("No atlas upload")?
+            .page_buffer(index)
+    }
+    fn commit(&mut self, index: u32) -> Result<(), String> {
+        let upload = self.upload.as_mut().ok_or("No atlas upload")?;
+        self.shared
+            .borrow_mut()
+            .renderer
+            .write_game_atlas_page(upload, index)
+    }
+    fn finish(&mut self) -> Result<(), String> {
+        let upload = self.upload.take().ok_or("No atlas pages written")?;
+        self.shared.borrow_mut().renderer.finish_game_atlas(upload)
+    }
+}
+
 // One serialized reload follows setup colour changes. Existing renderers keep
 // the same fixed atlas allocation; no per-frame recolouring or extra pages.
 fn install_colour(shared: Rc<RefCell<Client>>, colour: [u8; 3]) -> Result<(), JsValue> {
@@ -98,13 +132,11 @@ fn install_colour(shared: Rc<RefCell<Client>>, colour: [u8; 3]) -> Result<(), Js
         busy.set(true);
         wasm_bindgen_futures::spawn_local(async move {
             loop {
-                match load().await {
-                    Ok((art, pixels, colour)) => {
+                // The client is borrowed only while a page is handed over, never
+                // across a decode await, so rendering continues on the old atlas.
+                match load(&mut SharedSink::new(&shared)).await {
+                    Ok((art, colour)) => {
                         let mut client = shared.borrow_mut();
-                        if let Err(error) = client.renderer.upload_game_atlas(&art, pixels) {
-                            client.status = error;
-                            break;
-                        }
                         if let Some(element) = client.document.get_element_by_id("playground") {
                             let _ =
                                 element.set_attribute("data-art-colour", &format!("{colour:?}"));

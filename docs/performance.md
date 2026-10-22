@@ -118,6 +118,15 @@ gzip cap and baseline are unchanged. The two ground sheets this trial lacks (roc
 15033, snow 15026, about 950,000 terrain texels) fit the terrain domain's 2,096,642
 spare texels by area; no pack with them was available to prove it.
 
+Streaming (2026-10-22): the client loader no longer builds the 80 MiB atlas in
+WASM memory. It fills one 16 MiB page buffer at a time and hands each page to
+the renderer: WebGPU writes it straight into the texture and reuses the buffer,
+so the CPU atlas never exists; WebGL2 and Canvas gather the pages they must keep
+(restoration copy, raster source). A source sheet that feeds several pages is
+decoded again for each. On the memory spec's webgpu project WASM linear memory
+fell from 115.25 to 51.25 MiB and the largest summed Chromium resident size from
+about 834 to about 741 MiB (single local runs, noisy by tens of MiB).
+
 Dedicated machines can submit `reports/perf/hardware-environment.json` and
 `reports/perf/hardware-samples.json` to `make perf-hardware-check` (or pass
 `--environment`, `--samples`, and `--baseline` paths to the Rust CLI). The

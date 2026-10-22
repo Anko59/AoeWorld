@@ -269,7 +269,7 @@ async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded(
         );
         let value = pack_fixture(sources);
         let fetch = FetchFixture::install(&value);
-        let loaded = load().await;
+        let loaded = load_collected().await;
         drop(fetch);
         let (art, pixels, _) = loaded.expect("minimal pack must initialise");
         assert_eq!(art.walking.len(), 50);
@@ -290,7 +290,7 @@ async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded(
         let source = format!("terrain.drs:[32, 112, 108, 115]:{id}");
         let value = pack_fixture(minimal().into_iter().chain([(source.clone(), 99, true)]));
         let fetch = FetchFixture::install(&value);
-        let loaded = load().await;
+        let loaded = load_collected().await;
         drop(fetch);
         assert!(
             loaded.err().unwrap().as_string().unwrap().contains(&source),
@@ -314,7 +314,7 @@ async fn full_catalog_packs_1474_terrain_frames_and_772_objects_in_their_domains
         });
     let value = pack_fixture(sources);
     let fetch = FetchFixture::install(&value);
-    let loaded = load().await;
+    let loaded = load_collected().await;
     drop(fetch);
     let (_, pixels, _) = loaded.expect("full catalog must initialise");
     let (terrain, objects) = pixels.split_at(2 * GAME_ATLAS_PAGE_BYTES);
@@ -334,4 +334,63 @@ async fn full_catalog_packs_1474_terrain_frames_and_772_objects_in_their_domains
     );
     assert_eq!(count(objects, [120, 120, 120, 255]), 772);
     assert_eq!(count(terrain, [120, 120, 120, 255]), 0);
+}
+
+/// Records what the loader hands over, never keeping a page.
+#[derive(Default)]
+struct PageLog {
+    pages: Vec<(u32, usize)>,
+    scratch: Vec<u8>,
+    finished: usize,
+}
+
+impl AtlasSink for PageLog {
+    fn page_buffer(&mut self, _: u32) -> Result<&mut [u8], String> {
+        self.scratch.clear();
+        self.scratch.resize(GAME_ATLAS_PAGE_BYTES, 0);
+        Ok(&mut self.scratch)
+    }
+    fn commit(&mut self, index: u32) -> Result<(), String> {
+        self.pages.push((index, self.scratch.len()));
+        Ok(())
+    }
+    fn finish(&mut self) -> Result<(), String> {
+        self.finished += 1;
+        Ok(())
+    }
+}
+
+#[wasm_bindgen_test]
+async fn the_atlas_streams_one_page_at_a_time_and_is_never_resident_whole() {
+    let value = pack_fixture(
+        [
+            ("graphics.drs", 3008, 50, false),
+            ("graphics.drs", 3004, 50, false),
+            ("terrain.drs", 15008, 100, true),
+            ("terrain.drs", 15007, 100, true),
+            ("terrain.drs", 15000, 100, true),
+            ("terrain.drs", 15010, 100, true),
+            ("terrain.drs", 15002, 100, true),
+        ]
+        .into_iter()
+        .map(|(archive, id, count, terrain)| {
+            (
+                format!("{archive}:[32, 112, 108, 115]:{id}"),
+                count,
+                terrain,
+            )
+        }),
+    );
+    let fetch = FetchFixture::install(&value);
+    let mut log = PageLog::default();
+    let loaded = load(&mut log).await;
+    drop(fetch);
+    loaded.expect("minimal pack must initialise");
+    // Every page arrives once, in order, as one page buffer; finish follows.
+    let expected = (0..GAME_ATLAS_PAGES)
+        .map(|page| (page, GAME_ATLAS_PAGE_BYTES))
+        .collect::<Vec<_>>();
+    assert_eq!(log.pages, expected);
+    assert_eq!(log.finished, 1);
+    assert!(log.pages.iter().all(|(_, bytes)| *bytes < GAME_ATLAS_BYTES));
 }

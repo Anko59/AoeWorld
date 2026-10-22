@@ -87,6 +87,9 @@ pub(crate) mod minification_tests;
 #[path = "game_renderer/tests/webgl.rs"]
 mod webgl_tests;
 
+mod atlas_upload;
+pub use atlas_upload::AtlasUpload;
+
 pub enum GameRenderer {
     WebGpu(Box<Renderer>),
     WebGl(WebGlRenderer),
