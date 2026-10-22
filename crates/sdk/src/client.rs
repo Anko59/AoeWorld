@@ -98,6 +98,22 @@ struct State {
 struct Shared {
     state: Mutex<State>,
     notify: Notify,
+    drops: AtomicU64,
+    rejoins: AtomicU64,
+    reconnect_micros: AtomicU64,
+}
+
+/// How often the connection was lost and regained (the client rejoins its
+/// slot by itself), so a healthy-looking client is not mistaken for one that
+/// never dropped.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ConnectionStats {
+    /// Connections lost without the client or a world reset ending them.
+    pub drops: u64,
+    /// Drops after which the slot was rejoined.
+    pub rejoins: u64,
+    /// Seconds spent between a drop and the rejoin (or the give-up).
+    pub reconnect_seconds: f64,
 }
 
 impl Shared {
@@ -140,42 +156,7 @@ impl Client {
     pub async fn connect(url: &str, slot_token: &str, options: ConnectOptions) -> Result<Client> {
         let token = parse_token(slot_token)?;
         let endpoint = Endpoint::parse(url)?;
-        let (mut socket, _) = timeout(
-            options.connect_timeout,
-            connect_async(endpoint.websocket_url()),
-        )
-        .await
-        .map_err(|_| SdkError::Timeout)?
-        .map_err(|error| SdkError::WebSocket(error.to_string()))?;
-        send_frame(
-            &mut socket,
-            &GameplayClientMessage::JoinSlot {
-                version: GAMEPLAY_VERSION,
-                token,
-            },
-        )
-        .await?;
-        let welcome = timeout(options.connect_timeout, next_message(&mut socket))
-            .await
-            .map_err(|_| SdkError::Timeout)??;
-        if let GameplayServerMessage::Error { code, message } = &welcome {
-            return Err(SdkError::Refused {
-                code: *code,
-                message: message.clone(),
-            });
-        }
-        if !matches!(
-            welcome,
-            GameplayServerMessage::Welcome {
-                role: GameplayRole::Controller,
-                ..
-            }
-        ) {
-            return Err(SdkError::Refused {
-                code: 403,
-                message: "the server did not seat this token as a controller".to_owned(),
-            });
-        }
+        let (mut socket, welcome) = join(&endpoint, token, options.connect_timeout).await?;
         let mut world = World::from_welcome(&welcome)
             .ok_or_else(|| SdkError::Closed("no welcome".to_owned()))?;
         let tick_hz = world.tick_hz.max(1);
@@ -198,9 +179,19 @@ impl Client {
                 closed: None,
             }),
             notify: Notify::new(),
+            drops: AtomicU64::new(0),
+            rejoins: AtomicU64::new(0),
+            reconnect_micros: AtomicU64::new(0),
         });
         let (commands, receiver) = mpsc::unbounded_channel();
-        let task = tokio::spawn(run(socket, shared.clone(), receiver, endpoint, options));
+        let task = tokio::spawn(run(
+            socket,
+            shared.clone(),
+            receiver,
+            endpoint,
+            options,
+            token,
+        ));
         Ok(Client {
             shared,
             commands,
@@ -274,6 +265,15 @@ impl Client {
         self.shared.lock().closed.clone()
     }
 
+    /// Drops, rejoins and reconnect time so far.
+    pub fn connection_stats(&self) -> ConnectionStats {
+        ConnectionStats {
+            drops: self.shared.drops.load(Ordering::Relaxed),
+            rejoins: self.shared.rejoins.load(Ordering::Relaxed),
+            reconnect_seconds: self.shared.reconnect_micros.load(Ordering::Relaxed) as f64 / 1e6,
+        }
+    }
+
     /// Asks the connection to end; idempotent and usable from any thread.
     pub fn shutdown(&self) {
         let _ = self.commands.send(Command::Close);
@@ -293,6 +293,48 @@ impl Drop for Client {
     fn drop(&mut self) {
         let _ = self.commands.send(Command::Close);
     }
+}
+
+/// Opens a socket and presents the slot token; returns the controller's Welcome.
+async fn join(
+    endpoint: &Endpoint,
+    token: ResumeToken,
+    wait: Duration,
+) -> Result<(Socket, GameplayServerMessage)> {
+    let (mut socket, _) = timeout(wait, connect_async(endpoint.websocket_url()))
+        .await
+        .map_err(|_| SdkError::Timeout)?
+        .map_err(|error| SdkError::WebSocket(error.to_string()))?;
+    send_frame(
+        &mut socket,
+        &GameplayClientMessage::JoinSlot {
+            version: GAMEPLAY_VERSION,
+            token,
+        },
+    )
+    .await?;
+    let welcome = timeout(wait, next_message(&mut socket))
+        .await
+        .map_err(|_| SdkError::Timeout)??;
+    if let GameplayServerMessage::Error { code, message } = &welcome {
+        return Err(SdkError::Refused {
+            code: *code,
+            message: message.clone(),
+        });
+    }
+    if !matches!(
+        welcome,
+        GameplayServerMessage::Welcome {
+            role: GameplayRole::Controller,
+            ..
+        }
+    ) {
+        return Err(SdkError::Refused {
+            code: 403,
+            message: "the server did not seat this token as a controller".to_owned(),
+        });
+    }
+    Ok((socket, welcome))
 }
 
 type Socket =
@@ -377,123 +419,8 @@ fn drifted(a: TileRect, b: TileRect) -> bool {
         || (a.height() - b.height()).abs() > RESUBSCRIBE_DRIFT
 }
 
-async fn run(
-    mut socket: Socket,
-    shared: Arc<Shared>,
-    mut commands: mpsc::UnboundedReceiver<Command>,
-    endpoint: Endpoint,
-    options: ConnectOptions,
-) {
-    let (chunk_tx, mut chunk_rx) = mpsc::unbounded_channel::<((i32, i32), Result<CompactChunk>)>();
-    let mut in_flight = 0_usize;
-    let mut policy = options.view;
-    let mut view = initial_region(&shared.lock().world);
-    let mut view_tick = 0_u64;
-    let (mut window_start, mut window_sent) = (Instant::now(), 0_usize);
-    let reason = loop {
-        tokio::select! {
-            frame = socket.next() => {
-                let message = match frame {
-                    Some(Ok(Message::Binary(bytes))) => match decode_gameplay_server(&bytes) {
-                        Ok(message) => message,
-                        Err(error) => break format!("undecodable server message: {error}"),
-                    },
-                    Some(Ok(Message::Close(_))) | None => break "server closed the connection".to_owned(),
-                    Some(Ok(_)) => continue,
-                    Some(Err(error)) => break format!("websocket error: {error}"),
-                };
-                let reset = matches!(message, GameplayServerMessage::WorldReset { .. });
-                let mut subscribe = None;
-                let mut wanted = Vec::new();
-                {
-                    let mut state = shared.lock();
-                    let events = state.world.apply(message);
-                    state.events.extend(events);
-                    let overflow = state.events.len().saturating_sub(MAX_BUFFERED_EVENTS);
-                    state.events.drain(..overflow);
-                    let world = &mut state.world;
-                    if world.snapshot_seen
-                        && world.tick >= view_tick + RESUBSCRIBE_MIN_TICKS
-                        && let Some(want) = desired_region(world, policy)
-                        && drifted(want, view)
-                    {
-                        view = want;
-                        view_tick = world.tick;
-                        world.subscription += 1;
-                        subscribe = Some((world.subscription, want));
-                    }
-                    if world.fog_dirty && options.fetch_terrain {
-                        world.fog_dirty = false;
-                        if let Some(hash) = world.map_hash {
-                            let chunks = world.fog.known_chunks();
-                            let fresh = Arc::make_mut(&mut world.catalog)
-                                .take_wanted(&chunks, MAX_CHUNKS_IN_FLIGHT.saturating_sub(in_flight));
-                            wanted = fresh.into_iter().map(|chunk| (hash, chunk)).collect();
-                        }
-                    }
-                }
-                shared.notify.notify_waiters();
-                for (hash, chunk) in wanted {
-                    in_flight += 1;
-                    let (endpoint, sender) = (endpoint.clone(), chunk_tx.clone());
-                    tokio::spawn(async move {
-                        let path = format!("/maps/{}/chunks/{}/{}", hex(&hash), chunk.0, chunk.1);
-                        let _ = sender.send((chunk, endpoint.get_json::<CompactChunk>(&path).await));
-                    });
-                }
-                if let Some((revision, region)) = subscribe
-                    && let Err(error) = send_frame(&mut socket, &GameplayClientMessage::Subscribe { revision, region }).await
-                {
-                    break error.to_string();
-                }
-                if reset {
-                    break "the server started a new world".to_owned();
-                }
-            }
-            command = commands.recv() => match command {
-                None | Some(Command::Close) => break "closed by the client".to_owned(),
-                Some(Command::View(next)) => {
-                    policy = next;
-                    view_tick = 0;
-                }
-                Some(Command::Order(sequence, order)) => {
-                    if window_start.elapsed() >= Duration::from_secs(1) {
-                        (window_start, window_sent) = (Instant::now(), 0);
-                    }
-                    if window_sent >= options.orders_per_second {
-                        tokio::time::sleep_until(window_start + Duration::from_secs(1)).await;
-                        (window_start, window_sent) = (Instant::now(), 0);
-                    }
-                    window_sent += 1;
-                    let Some(message) = order.message(sequence) else {
-                        shared.lock().events.push(Event::OrderResult {
-                            sequence,
-                            result: crate::model::CommandResult::RejectedInvalidDestination,
-                        });
-                        continue;
-                    };
-                    if let Err(error) = send_frame(&mut socket, &message).await {
-                        break error.to_string();
-                    }
-                }
-            },
-            fetched = chunk_rx.recv() => {
-                let Some((chunk, result)) = fetched else { continue };
-                in_flight = in_flight.saturating_sub(1);
-                let mut state = shared.lock();
-                let world = &mut state.world;
-                let catalog = Arc::make_mut(&mut world.catalog);
-                match result.map_err(|error| error.to_string()).and_then(|data| catalog.insert(&data)) {
-                    Ok(()) => {}
-                    Err(_) => catalog.forget(chunk),
-                }
-                world.fog_dirty = true;
-            }
-        }
-    };
-    shared.lock().closed = Some(reason);
-    shared.notify.notify_waiters();
-}
+mod session;
+use session::run;
 
 fn hex(hash: &[u8; 32]) -> String {
     hash.iter().map(|byte| format!("{byte:02x}")).collect()

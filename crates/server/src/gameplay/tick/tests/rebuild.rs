@@ -301,3 +301,69 @@ async fn a_primary_unit_inside_the_region_is_listed_once() {
     ids.dedup();
     assert_eq!(before, ids.len(), "the resident list holds a unit twice");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_tick_skipped_for_a_full_queue_does_not_lose_buildings() {
+    use tokio::sync::mpsc;
+    let fixture = start().await;
+    // Seat 3's controller with a two-message queue that nobody reads for a while.
+    let token = fixture.service.slot_infos().await[3].token;
+    let (sender, mut receiver) = mpsc::channel(2);
+    let (id, _) = fixture.service.join_slot(token, sender).await.unwrap();
+    fixture
+        .service
+        .subscribe(id, 1, view_region(fixture.placed[3]))
+        .await;
+    let mut client = Buildings::new();
+    let drain = |client: &mut Buildings, receiver: &mut mpsc::Receiver<GameplayServerMessage>| {
+        while let Ok(message) = receiver.try_recv() {
+            match message {
+                GameplayServerMessage::Snapshot { buildings, .. } => {
+                    *client = buildings.into_iter().map(|b| (b.id, b)).collect();
+                }
+                GameplayServerMessage::Tick {
+                    changed_buildings,
+                    building_removals,
+                    ..
+                } => {
+                    for building in changed_buildings {
+                        client.insert(building.id, building);
+                    }
+                    for id in building_removals {
+                        client.remove(&id);
+                    }
+                }
+                _ => {}
+            }
+        }
+    };
+    // The house appears while every tick finds the queue full: those ticks are
+    // skipped for this session, which must rebuild its buildings afterwards.
+    place_house(&fixture, PlayerId(3)).await;
+    for _ in 0..6 {
+        fixture.service.tick().await;
+    }
+    assert!(
+        fixture
+            .service
+            .sessions
+            .lock()
+            .await
+            .get(&id)
+            .unwrap()
+            .rebuild_buildings,
+        "a skipped delivery marks the session for a building rebuild"
+    );
+    for _ in 0..60 {
+        drain(&mut client, &mut receiver);
+        fixture.service.tick().await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    drain(&mut client, &mut receiver);
+    let truth = known(&fixture, PlayerId(3)).await;
+    assert_eq!(
+        client.keys().collect::<Vec<_>>(),
+        truth.keys().collect::<Vec<_>>(),
+        "the reader ends up with the buildings its viewer knows"
+    );
+}

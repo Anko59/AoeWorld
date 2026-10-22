@@ -54,6 +54,8 @@ pub struct GameplayService {
     resource_journal: Arc<std::sync::Mutex<resources::Journal>>,
     resource_directory: Option<std::path::PathBuf>,
     fanout_probe: Arc<probe::FanoutProbe>,
+    /// What the last tick spent where; read by `run_ticks`.
+    probe: Arc<crate::gameplay_match::TickProbe>,
 }
 
 pub(super) struct Session {
@@ -73,6 +75,8 @@ pub(super) struct Session {
     subscription: Option<Subscription>,
     last_sequence: Option<u64>,
     acknowledgements: VecDeque<u64>,
+    /// Acks (one-shot verdicts) waiting for room in the outgoing queue.
+    pending_acks: VecDeque<GameplayServerMessage>,
     command_tokens: f64,
     last_command_refill: Instant,
     subscription_times: VecDeque<Instant>,
@@ -239,6 +243,16 @@ impl GameplayService {
         Self::from_world_slots(world, setups, None, None)
     }
 
+    /// Units alive in the world, and what the last tick spent where.
+    pub(crate) async fn tick_and_units(&self) -> (u64, usize) {
+        let world = self.world.read().await;
+        (world.tick().0, world.unit_count())
+    }
+
+    pub(crate) fn probe(&self) -> Arc<crate::gameplay_match::TickProbe> {
+        self.probe.clone()
+    }
+
     pub async fn navigation_cache_usage(&self) -> NavigationCacheUsage {
         self.world.read().await.navigation_cache_usage()
     }
@@ -347,10 +361,31 @@ impl GameplayService {
         session.resident_animals = animals;
         session.resident_projectiles = projectiles;
         session.vision_revision = Some(vision_revision);
-        let failed = session.sender.try_send(snapshot).is_err()
-            || session.sender.try_send(wildlife).is_err()
-            || session.sender.try_send(fog).is_err()
-            || session.sender.try_send(projectile_message).is_err();
+        // The first views must arrive, in order, even when the queue is full
+        // (a stalled tick): what does not fit waits for room in its own task.
+        let sender = session.sender.clone();
+        let mut waiting = Vec::new();
+        let mut failed = false;
+        for message in [snapshot, wildlife, fog, projectile_message] {
+            if !waiting.is_empty() {
+                waiting.push(message);
+                continue;
+            }
+            match sender.try_send(message) {
+                Ok(()) => {}
+                Err(mpsc::error::TrySendError::Full(message)) => waiting.push(message),
+                Err(mpsc::error::TrySendError::Closed(_)) => failed = true,
+            }
+        }
+        if !waiting.is_empty() {
+            tokio::spawn(async move {
+                for message in waiting {
+                    if sender.send(message).await.is_err() {
+                        break;
+                    }
+                }
+            });
+        }
         drop(sessions);
         drop(world);
         if failed {

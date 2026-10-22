@@ -292,6 +292,31 @@ pub struct WorldLimits {
     pub builders: usize,
     pub hunters: usize,
     pub animals: usize,
+    /// The population ceiling of one player, however many houses stand.
+    pub population: u16,
+}
+
+impl WorldLimits {
+    /// The limits of a match whose players may each reach `population`:
+    /// the world-wide building, gatherer, builder and hunter capacities grow
+    /// in proportion to the shipped 200, and the player capacity covers
+    /// `players`. A population of 200 or less leaves every default unchanged.
+    pub fn for_match(players: usize, population: u16) -> Self {
+        let base = Self::default();
+        let scale = |value: usize| {
+            value.saturating_mul(usize::from(population).max(usize::from(MAX_POPULATION)))
+                / usize::from(MAX_POPULATION)
+        };
+        Self {
+            players: base.players.max(players),
+            buildings: scale(base.buildings),
+            gatherers: scale(base.gatherers),
+            builders: scale(base.builders),
+            hunters: scale(base.hunters),
+            animals: base.animals,
+            population,
+        }
+    }
 }
 
 impl Default for WorldLimits {
@@ -303,6 +328,7 @@ impl Default for WorldLimits {
             builders: MAX_BUILDERS,
             hunters: super::MAX_HUNTERS,
             animals: super::MAX_ANIMALS,
+            population: MAX_POPULATION,
         }
     }
 }

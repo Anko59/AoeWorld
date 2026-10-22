@@ -37,7 +37,7 @@ mod tests;
 
 pub use bot::{Bot, RunLimits, RunSummary, run_bot};
 pub use catalog::ResourceCatalog;
-pub use client::{Client, ConnectOptions, Decision, ViewPolicy, parse_token};
+pub use client::{Client, ConnectOptions, ConnectionStats, Decision, ViewPolicy, parse_token};
 pub use error::{Result, SdkError};
 pub use events::Event;
 pub use fog::FogMemory;

@@ -31,6 +31,7 @@ impl GameplayService {
             (commands, controllers, views)
         };
         let mut world = self.world.clone().write_owned().await;
+        let orders = pending.len();
         let mut acknowledgements = BTreeMap::<u64, Vec<GameplayServerMessage>>::new();
         for (session_id, command) in pending {
             let result = match controllers.get(&session_id) {
@@ -46,7 +47,10 @@ impl GameplayService {
                 },
             );
         }
-        let Some(mut world) = self.advance_world(world).await else {
+        let advance_started = std::time::Instant::now();
+        let advanced = self.advance_world(world).await;
+        self.probe.record(advance_started.elapsed(), orders);
+        let Some(mut world) = advanced else {
             tracing::error!("gameplay tick worker failed");
             return;
         };

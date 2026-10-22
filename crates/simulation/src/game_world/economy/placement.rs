@@ -1,6 +1,6 @@
 use super::{
-    BuildingKind, ConstructionState, EconomyError, GameBuilding, MAX_POPULATION, MarketPrices,
-    PlayerEconomy, Stockpile, VILLAGE_RULES,
+    BuildingKind, ConstructionState, EconomyError, GameBuilding, MarketPrices, PlayerEconomy,
+    Stockpile, VILLAGE_RULES,
 };
 use crate::{GameWorld, GameWorldError, Terrain, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
@@ -114,11 +114,15 @@ impl GameWorld {
                 }
             }
         }
-        let population_used = self
-            .units()
-            .filter(|unit| unit.player == player)
-            .count()
-            .min(u16::MAX as usize) as u16;
+        // Counting a player's units walks every unit: only a new player needs it.
+        let population_used = if self.economy.players.contains_key(&player) {
+            0
+        } else {
+            self.units()
+                .filter(|unit| unit.player == player)
+                .count()
+                .min(u16::MAX as usize) as u16
+        };
         self.economy.players.entry(player).or_insert(PlayerEconomy {
             player,
             stockpile: Stockpile::default(),
@@ -176,7 +180,8 @@ impl GameWorld {
         Ok(id)
     }
 
-    /// Housing: the supporting completed buildings, capped at 200.
+    /// Housing: the supporting completed buildings, capped at the match's
+    /// population ceiling (200 unless the match sets another).
     pub(super) fn refresh_population_cap(&mut self, player: PlayerId) {
         let cap = self
             .economy
@@ -185,7 +190,7 @@ impl GameWorld {
             .filter(|building| building.player == player && building.is_complete())
             .map(|building| u32::from(building.kind.rules().population_support))
             .sum::<u32>()
-            .min(u32::from(MAX_POPULATION)) as u16;
+            .min(u32::from(self.economy.limits.population)) as u16;
         if let Some(state) = self.economy.players.get_mut(&player) {
             state.population_cap = cap;
         }

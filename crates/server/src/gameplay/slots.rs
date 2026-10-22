@@ -151,6 +151,7 @@ impl GameplayService {
             map_metadata,
             primary_unit_id,
             resource_directory: None,
+            probe: Arc::default(),
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
             fanout_probe: Arc::default(),
         }
@@ -265,6 +266,7 @@ impl GameplayService {
                 subscription: None,
                 last_sequence: None,
                 acknowledgements: VecDeque::new(),
+                pending_acks: VecDeque::new(),
                 command_tokens: 20.0,
                 last_command_refill: Instant::now(),
                 subscription_times: VecDeque::new(),

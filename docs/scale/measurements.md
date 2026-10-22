@@ -319,6 +319,9 @@ rework the server around per-player interest-managed deltas.
 
 ## Commands
 
+The end-to-end proof with the real server, 99 Python AIs and the browser is
+`make scale-match` ([match](match.md)).
+
 - `make perf-scale` (default workload) or
   `PERF_SCALE_ARGS="--players 20 --ticks 200 --fog-off-ticks 0 --server-ticks 0 --out reports/scale/x.json" make perf-scale`;
   options: `--players --units-per-player --side-tiles --ticks --fog-off-ticks

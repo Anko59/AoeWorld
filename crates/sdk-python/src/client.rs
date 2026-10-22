@@ -155,6 +155,14 @@ impl Client {
         self.inner.is_closed()
     }
 
+    /// `(drops, rejoins, reconnect_seconds)`: how often the connection was
+    /// lost and regained by the client itself.
+    #[getter]
+    fn connection_stats(&self) -> (u64, u64, f64) {
+        let stats = self.inner.connection_stats();
+        (stats.drops, stats.rejoins, stats.reconnect_seconds)
+    }
+
     #[getter]
     fn close_reason(&self) -> Option<String> {
         self.inner.close_reason()

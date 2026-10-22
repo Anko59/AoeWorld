@@ -148,16 +148,19 @@ impl GameplayService {
                             .collect(),
                     }
                 };
-                if session
+                // A full queue skips this publication: the next one is computed
+                // against what the session last received. Only a closed queue ends it.
+                match session
                     .sender
                     .try_send(GameplayServerMessage::ResourceState(state))
-                    .is_ok()
                 {
-                    session.resource_revision = Some(revision);
-                    session.resource_vision_revision = Some(vision_revision);
-                    session.resident_resources = known.clone();
-                } else {
-                    failed.push(*id);
+                    Ok(()) => {
+                        session.resource_revision = Some(revision);
+                        session.resource_vision_revision = Some(vision_revision);
+                        session.resident_resources = known.clone();
+                    }
+                    Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {}
+                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => failed.push(*id),
                 }
             }
             failed

@@ -1,5 +1,6 @@
 //! The scale-measurement hooks: capacity limits, the tick probe and the wildlife skip.
 use super::*;
+use crate::MAX_POPULATION;
 use crate::game_world::economy::{
     MAX_BUILDERS, MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS, MAX_GATHERERS,
 };
@@ -20,6 +21,7 @@ fn default_limits_equal_the_shipped_caps() {
             builders: MAX_BUILDERS,
             hunters: MAX_HUNTERS,
             animals: MAX_ANIMALS,
+            population: MAX_POPULATION,
         }
     );
     assert_eq!(WorldLimits::default(), world().limits());
@@ -137,4 +139,33 @@ fn wildlife_skip_counts_every_cell_and_pair_like_the_full_scan() {
     assert!(brute > 0);
     assert_eq!(w.animal(near).unwrap().task, AnimalTask::Fleeing);
     assert_ne!(w.animal(far).unwrap().task, AnimalTask::Fleeing);
+}
+
+#[test]
+fn the_population_ceiling_is_a_world_rule() {
+    let mut w = world();
+    w.set_limits(WorldLimits {
+        population: 3,
+        ..w.limits()
+    });
+    w.place_town_center(PlayerId(0), TileCoord::new(20, 20))
+        .unwrap();
+    // A Town Center supports 5, the default; this world's ceiling is 3.
+    assert_eq!(w.player_economy(PlayerId(0)).unwrap().population_cap, 3);
+}
+
+#[test]
+fn match_limits_grow_with_the_ceiling_and_never_shrink() {
+    let shipped = WorldLimits::default();
+    assert_eq!(WorldLimits::for_match(16, MAX_POPULATION), shipped);
+    let low = WorldLimits::for_match(16, 100);
+    assert_eq!((low.population, low.buildings), (100, shipped.buildings));
+    let big = WorldLimits::for_match(200, 1_000);
+    assert_eq!(big.players, 200);
+    assert_eq!(big.population, 1_000);
+    assert_eq!(big.buildings, shipped.buildings * 5);
+    assert_eq!(big.gatherers, shipped.gatherers * 5);
+    assert_eq!(big.builders, shipped.builders * 5);
+    assert_eq!(big.hunters, shipped.hunters * 5);
+    assert_eq!(big.animals, shipped.animals);
 }

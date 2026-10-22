@@ -5,6 +5,7 @@ use super::fanout::{AI_HEARTBEAT_TICKS, Buildings, Built, SessionBuild, ViewerSt
 use aoe_core::EntityId;
 use aoe_protocol::{FogState, GameplayServerMessage, GameplayUnitState};
 use std::collections::{BTreeMap, BTreeSet};
+use tokio::sync::mpsc::error::TrySendError;
 
 /// What changed between a session's baseline and the units now in view.
 struct UnitDiff {
@@ -73,17 +74,65 @@ fn same_fog(held: &FogState, fresh: &FogState) -> bool {
         && held.overview == fresh.overview
 }
 
+/// Acks a session may have waiting for room before it counts as lost.
+const MAX_PENDING_ACKS: usize = 4_096;
+
+/// Offers `message` without waiting. A full queue is not a failure: every
+/// delta is computed against what the session last received, so a message
+/// that does not fit is folded into the next tick's, and the caller sees
+/// `false` (not delivered; `deliver` then also marks the session
+/// `rebuild_buildings`, as for every other skip). Only a closed queue, a
+/// session that is gone, is recorded in `failed`.
 fn send(
     session: &mut Session,
     message: GameplayServerMessage,
     failed: &mut BTreeSet<u64>,
     id: u64,
 ) -> bool {
-    let sent = session.sender.try_send(message).is_ok();
-    if !sent {
+    match session.sender.try_send(message) {
+        Ok(()) => true,
+        Err(TrySendError::Full(_)) => false,
+        Err(TrySendError::Closed(_)) => {
+            failed.insert(id);
+            false
+        }
+    }
+}
+
+/// Holds `acks` (one-shot verdicts, not deltas the next tick recomputes) and
+/// sends the held ones in order as far as the queue has room. An ack is never
+/// dropped; a session too far behind is reset (the SDK rejoins).
+fn flush_acks(
+    session: &mut Session,
+    acks: impl IntoIterator<Item = GameplayServerMessage>,
+    failed: &mut BTreeSet<u64>,
+    id: u64,
+) {
+    for message in acks {
+        if let GameplayServerMessage::CommandAck { sequence, .. } = message {
+            session.acknowledgements.push_back(sequence);
+            while session.acknowledgements.len() > super::MAX_ACK_HISTORY {
+                session.acknowledgements.pop_front();
+            }
+        }
+        session.pending_acks.push_back(message);
+    }
+    while let Some(ack) = session.pending_acks.pop_front() {
+        match session.sender.try_send(ack) {
+            Ok(()) => {}
+            Err(TrySendError::Full(ack)) => {
+                session.pending_acks.push_front(ack);
+                break;
+            }
+            Err(TrySendError::Closed(_)) => {
+                failed.insert(id);
+                break;
+            }
+        }
+    }
+    if session.pending_acks.len() > MAX_PENDING_ACKS {
         failed.insert(id);
     }
-    sent
 }
 
 fn deliver_tick(
@@ -228,15 +277,8 @@ pub(super) fn deliver(
                 session.vision_revision = Some(*vision);
             }
         }
-        for message in acknowledgements.remove(&id).into_iter().flatten() {
-            if let GameplayServerMessage::CommandAck { sequence, .. } = message {
-                session.acknowledgements.push_back(sequence);
-                while session.acknowledgements.len() > super::MAX_ACK_HISTORY {
-                    session.acknowledgements.pop_front();
-                }
-            }
-            let _ = send(session, message, &mut failed, id);
-        }
+        let new_acks = acknowledgements.remove(&id).unwrap_or_default();
+        flush_acks(session, new_acks, &mut failed, id);
         if failed.contains(&id) {
             continue;
         }
@@ -287,14 +329,13 @@ pub(super) fn deliver(
         let Some(session) = sessions.get_mut(&id) else {
             continue;
         };
-        for message in messages {
-            if let GameplayServerMessage::CommandAck { sequence, .. } = message {
-                session.acknowledgements.push_back(sequence);
-                while session.acknowledgements.len() > super::MAX_ACK_HISTORY {
-                    session.acknowledgements.pop_front();
-                }
-            }
-            let _ = send(session, message, &mut failed, id);
+        flush_acks(session, messages, &mut failed, id);
+    }
+    // Acks held back by a full queue go out once it has room, whether or not
+    // this tick brought new ones.
+    for (id, session) in sessions.iter_mut() {
+        if !session.pending_acks.is_empty() {
+            flush_acks(session, Vec::new(), &mut failed, *id);
         }
     }
     failed

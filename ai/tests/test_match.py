@@ -53,3 +53,28 @@ def test_a_host_survives_a_bot_that_raises(server, secret):
     reports = host.run(until_tick=200, max_seconds=60)
     assert reports[0].errors > 0 and reports[1].errors == 0
     assert reports[1].decisions > 0
+
+
+def test_host_mode_plays_given_tokens_and_writes_a_report(server, secret, tmp_path):
+    """`python -m aoe_ai host`, the entry the scale harness uses."""
+    import json
+
+    from aoe_ai.__main__ import main
+
+    info = aoeworld.start_match(server, secret, ["ai", "ai"], tiles_per_side=500, seed=4)
+    tokens_file = tmp_path / "tokens.json"
+    tokens_file.write_text(json.dumps([slot.token for slot in info.slots]))
+    report = tmp_path / "report.json"
+    code = main(
+        [
+            "host",
+            "--url", server,
+            "--tokens-file", str(tokens_file),
+            "--max-seconds", "4",
+            "--report", str(report),
+        ]
+    )
+    assert code == 0
+    document = json.loads(report.read_text())
+    assert [bot["slot"] for bot in document["bots"]] == [0, 1]
+    assert all(bot["decisions"] > 0 for bot in document["bots"])

@@ -9,7 +9,9 @@ use std::{collections::BTreeMap, time::Duration};
 use tokio::{sync::mpsc, time::timeout};
 
 const LEASE_RESERVATION: Duration = Duration::from_secs(30);
-const SEND_TIMEOUT: Duration = Duration::from_millis(500);
+/// How long one socket write may take before the peer counts as gone: long
+/// enough for a bot busy deciding, short enough to free a dead connection.
+const SEND_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
     let (mut sink, mut stream) = socket.split();
@@ -59,7 +61,11 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
             outgoing = receiver.recv() => {
                 let Some(message) = outgoing else { break };
                 let reset = matches!(message, GameplayServerMessage::WorldReset { .. });
-                if send_socket(&mut sink, message).await.is_err() || reset { break }
+                if send_socket(&mut sink, message).await.is_err() {
+                    tracing::warn!(session_id, "gameplay session dropped: a socket write failed or timed out");
+                    break;
+                }
+                if reset { break }
             }
             incoming = stream.next() => {
                 let Some(Ok(Message::Binary(bytes))) = incoming else { break };

@@ -260,7 +260,7 @@ fn invalid_load_progress_footprint_and_population_are_rejected() {
     let mut footprint = building();
     footprint.footprint.max.x -= 1;
     let mut population = player();
-    population.population_cap = MAX_POPULATION + 1;
+    population.population_cap = MAX_MATCH_POPULATION + 1;
     for message in [
         GameplayServerMessage::Snapshot {
             revision: 1,

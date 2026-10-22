@@ -277,11 +277,22 @@ impl GameplayService {
             }
         }
         if let Some(result) = result {
-            let _ = session.sender.try_send(GameplayServerMessage::CommandAck {
+            // A rejection is a verdict too: sent at once when the queue has room
+            // (and nothing waits ahead of it), otherwise held, never dropped.
+            let ack = GameplayServerMessage::CommandAck {
                 sequence,
                 result,
                 applied_tick: current_tick,
-            });
+            };
+            if session.pending_acks.is_empty() {
+                if let Err(tokio::sync::mpsc::error::TrySendError::Full(ack)) =
+                    session.sender.try_send(ack)
+                {
+                    session.pending_acks.push_back(ack);
+                }
+            } else {
+                session.pending_acks.push_back(ack);
+            }
             session.acknowledgements.push_back(sequence);
             while session.acknowledgements.len() > MAX_ACK_HISTORY {
                 session.acknowledgements.pop_front();

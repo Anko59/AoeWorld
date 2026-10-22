@@ -1,6 +1,6 @@
 """Type stubs of the native module (kept in sync by hand; see tests/test_stubs.py)."""
 
-from typing import Callable, Optional, Sequence
+from typing import Callable, Optional, Sequence, Tuple
 
 class UnitKind:
     VILLAGER: UnitKind
@@ -302,6 +302,8 @@ class Client:
     def closed(self) -> bool: ...
     @property
     def close_reason(self) -> Optional[str]: ...
+    @property
+    def connection_stats(self) -> Tuple[int, int, float]: ...
     def run(
         self,
         on_tick: Callable[["Client", Decision], Optional[bool]],

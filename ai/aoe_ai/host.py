@@ -29,6 +29,10 @@ class BotReport:
     decisions: int = 0
     errors: int = 0
     closed: bool = False
+    close_reason: str = ""
+    drops: int = 0
+    rejoins: int = 0
+    reconnect_seconds: float = 0.0
     last_tick: int = 0
     villagers: int = 0
     army: int = 0
@@ -67,8 +71,10 @@ class Host:
     # ----- the loop --------------------------------------------------------
     def _handle(self, index: int, decision: Optional[aoeworld.Decision]) -> None:
         report = self.reports[index]
+        report.drops, report.rejoins, report.reconnect_seconds = self.clients[index].connection_stats
         if decision is None:
             report.closed = True
+            report.close_reason = str(self.clients[index].close_reason or "")
             self.open.discard(index)
             return
         try:
