@@ -241,9 +241,14 @@ def test_feudal_age_adds_a_range_then_a_blacksmith_and_economy_upgrades():
     kinds = [a[1] for a in client.named("build")]
     assert BuildingKind.ARCHERY_RANGE in kinds
     assert client.named("research") == [(601, Tech.DOUBLE_BIT_AXE)]
-    # The Blacksmith follows once the range stands (one production building at a time).
+    # A second Barracks (production capacity) comes before the Blacksmith.
     brain.board.plans.clear()
     buildings.append(building(602, BuildingKind.ARCHERY_RANGE, tile=(64, 50)))
+    brain.board.cooldowns.clear()
+    _, client = play(FakeWorld(units, buildings, eco=eco), brain=brain)
+    assert BuildingKind.BARRACKS in [a[1] for a in client.named("build")]
+    brain.board.plans.clear()
+    buildings.append(building(603, BuildingKind.BARRACKS, tile=(68, 50)))
     brain.board.cooldowns.clear()
     _, client = play(FakeWorld(units, buildings, eco=eco), brain=brain)
     assert BuildingKind.BLACKSMITH in [a[1] for a in client.named("build")]
@@ -266,6 +271,9 @@ def test_sheep_come_before_berries_and_a_villager_that_stays_idle_is_not_spammed
 def test_outnumbered_at_home_the_villagers_beside_a_raider_walk_to_the_town_center():
     units, buildings = base(6)
     raiders = [unit(800 + i, UnitKind.SPEARMAN, tile=(51, 51 + i), mine=False) for i in range(3)]
+    lone = [unit(900, UnitKind.SCOUT, tile=(51, 51), mine=False)]
+    _, calm = play(FakeWorld(units, buildings, enemies=lone))
+    assert [a for a in calm.named('move') if (a[1], a[2]) == (56, 56)] == []
     brain, client = play(FakeWorld(units, buildings, enemies=raiders))
     home = (52, 52)
     pulled = [a for a in client.named("move") if (a[1], a[2]) == (home[0] + 4, home[1] + 4)]

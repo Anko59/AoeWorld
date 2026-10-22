@@ -93,7 +93,7 @@ class EconomyManager:
         if not ctx.feudal and len(ctx.villagers) >= cfg.feudal_villagers - 4:
             shares["FOOD"] += 0.15
             shares["WOOD"] -= 0.10
-            shares["STONE"] = max(0.0, shares["STONE"] - 0.05)
+            shares["GOLD"] = max(0.0, shares["GOLD"] - 0.05)
         # Early on nothing but food and wood matter.
         if len(ctx.villagers) < 10:
             shares.update(GOLD=0.0, STONE=0.0)

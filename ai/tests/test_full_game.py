@@ -2,9 +2,8 @@
 
 Two to four ``aoe_ai`` players share a small flat map on the real server
 (3x speed: the fixture runs it at 60 ticks a second). Within the game-time
-budget every bot must reach Feudal Age and field soldiers (at least five at
-once each, ten between them: a bot that is attacked loses units to defence),
-and a blow of our own army must land: an enemy unit or building seen below
+budget every bot must reach Feudal Age and field an army of at least ten
+at once, and a blow of our own army must land: an enemy unit or building seen below
 full health while an attack is under way. All of it
 is read from the SDK's world view and events, never from the server.
 """
@@ -23,8 +22,7 @@ TICKS_PER_MINUTE = 20 * 60
 
 def done(reports):
     return (
-        all(r.age == "FEUDAL" and r.stats.get("army_peak", 0) >= 5 for r in reports)
-        and sum(r.stats.get("army_peak", 0) for r in reports) >= 10
+        all(r.age == "FEUDAL" and r.stats.get("army_peak", 0) >= 10 for r in reports)
         and any(r.stats.get("attack_hits", 0) > 0 for r in reports)
     )
 
@@ -46,6 +44,5 @@ def test_bots_reach_feudal_build_an_army_and_land_an_attack(server, secret):
         )
         assert report.errors == 0 and not report.closed, report
         assert report.age == "FEUDAL", report
-        assert report.stats.get("army_peak", 0) >= 5, report
-    assert sum(r.stats.get("army_peak", 0) for r in reports) >= 10
+        assert report.stats.get("army_peak", 0) >= 10, report
     assert any(r.stats.get("attack_hits", 0) > 0 for r in reports), "no attack landed"

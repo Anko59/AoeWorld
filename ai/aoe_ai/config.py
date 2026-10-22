@@ -21,10 +21,10 @@ class Config:
     house_margin: int = 4
     #: Preferred share of villagers per resource before and after Feudal.
     dark_shares: dict[str, float] = field(
-        default_factory=lambda: {"FOOD": 0.50, "WOOD": 0.38, "GOLD": 0.06, "STONE": 0.06}
+        default_factory=lambda: {"FOOD": 0.52, "WOOD": 0.38, "GOLD": 0.10, "STONE": 0.0}
     )
     feudal_shares: dict[str, float] = field(
-        default_factory=lambda: {"FOOD": 0.38, "WOOD": 0.34, "GOLD": 0.20, "STONE": 0.08}
+        default_factory=lambda: {"FOOD": 0.36, "WOOD": 0.32, "GOLD": 0.32, "STONE": 0.0}
     )
     #: A resource node farther than this from every drop-off needs a camp.
     dropoff_distance: int = 9

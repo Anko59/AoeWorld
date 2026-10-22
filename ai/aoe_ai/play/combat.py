@@ -45,7 +45,8 @@ class CombatManager:
         near = [e for e in ctx.enemies if dist(e.tile, ctx.home) <= ctx.config.defend_radius]
         if not near:
             return False
-        if len(army) * 2 < len(near):
+        # A lone raider (an enemy scout) is not worth abandoning the economy for.
+        if len(near) >= 3 and len(army) * 2 < len(near):
             self.pull_back(ctx, near)
         if not army:
             return True

@@ -54,18 +54,17 @@ def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
         if ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE:
             return [(BuildingKind.BARRACKS, 1)]
         return []
+    # Production capacity is what limits an army: a second Barracks comes
+    # before the Blacksmith, and the second range once the economy is large.
     wants = [
         (BuildingKind.BARRACKS, 1),
         (BuildingKind.ARCHERY_RANGE, 1),
-        (BuildingKind.BLACKSMITH, 1),
     ]
-    villagers = len(ctx.villagers)
-    rich = ctx.economy.wood > 450 and ctx.economy.food > 300 and villagers >= 24
-    if rich:
-        wants += [
-            (BuildingKind.BARRACKS, ctx.config.max_barracks),
-            (BuildingKind.ARCHERY_RANGE, ctx.config.max_ranges),
-        ]
+    if len(ctx.villagers) >= 22:
+        wants.append((BuildingKind.BARRACKS, ctx.config.max_barracks))
+    wants.append((BuildingKind.BLACKSMITH, 1))
+    if len(ctx.villagers) >= 26:
+        wants.append((BuildingKind.ARCHERY_RANGE, ctx.config.max_ranges))
     return wants
 
 
