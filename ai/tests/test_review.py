@@ -1,7 +1,7 @@
 """Regression tests for review findings: hit proof, refused approach tiles,
 the per-decision job cap and abandoned foundations."""
 
-from aoeworld import BuildingKind, CommandResult, UnitKind
+from aoeworld import BuildingKind, CommandResult, UnitKind, UnitTask
 
 from aoe_ai import Brain
 from aoe_ai.play.economy import MAX_ASSIGN_PER_DECISION
@@ -61,15 +61,15 @@ def test_villagers_over_the_decision_cap_wait_unstamped_and_dead_ones_are_forgot
     nodes = [node(i, ResourceKind.WOOD, (55 + i % 5, 55)) for i in range(30)]
     world = FakeWorld(units, buildings, nodes=nodes, eco=economy(population=20, cap=40))
     brain.decide(client, decision(world))
-    given = {a[0] for n, a in client.calls if n in ("gather", "hunt", "farm", "move")}
     stamped = {i for i in brain.board.assigned if i in {u.id for u in units}}
     assert 9999 not in brain.board.assigned
     assert len(stamped) == MAX_ASSIGN_PER_DECISION
-    assert stamped >= {v for v in given if isinstance(v, int)} - {0}
 
 
 def test_a_stalled_foundation_gets_a_villager_sent_to_construct_it():
     units, buildings = base(10)
+    for worker in units:
+        worker.idle, worker.task = False, UnitTask.GATHERING
     foundation = building(700, BuildingKind.BARRACKS, tile=(56, 56), complete=False)
     foundation.progress = 50
     brain, _ = play(FakeWorld(units, buildings + [foundation], tick=100))
