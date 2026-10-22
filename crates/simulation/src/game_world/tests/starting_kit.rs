@@ -195,3 +195,43 @@ fn invalid_start_coordinates_fail_without_state_changes() {
         assert_eq!(world.canonical_hash(), before);
     }
 }
+
+#[test]
+fn a_kit_that_cannot_be_placed_in_full_still_starts_a_consistent_village() {
+    let mut world = barren();
+    // Leave room for only two more starting nodes (the overlay holds 512).
+    let Terrain::Map { generator, overlay } = &mut world.terrain else {
+        unreachable!()
+    };
+    for x in 0..510 {
+        let node =
+            aoe_map::ResourceNode::starting(TileCoord::new(100 + x, 100), ResourceKind::Wood)
+                .unwrap();
+        overlay.insert_starting_resource(generator, node).unwrap();
+    }
+    let partial_before = GameWorld::partial_starting_kits();
+    world
+        .initialize_village(PlayerId(0), TileCoord::new(2048, 2048))
+        .unwrap();
+    assert!(GameWorld::partial_starting_kits() > partial_before);
+    assert!(world.buildings().next().is_some());
+    assert!(world.units().any(|u| u.kind == crate::UnitKind::Villager));
+    let near: Vec<_> = world
+        .starting_resources()
+        .into_iter()
+        .filter(|n| n.tile.y > 1000)
+        .collect();
+    assert_eq!(near.len(), 2, "the nodes that fitted are kept");
+    // Inserted nodes block movement and the world is internally consistent:
+    // they can be snapshotted and restored identically.
+    for node in &near {
+        assert!(!world.tile_passable(node.tile));
+        assert_eq!(world.resource_remaining(node.id), Some(node.initial_amount));
+    }
+    let saved = world.resource_snapshot([0; 32]).unwrap();
+    let mut restored = barren();
+    restored
+        .restore_resources(&saved, [0; 32], &|| false)
+        .unwrap();
+    assert_eq!(restored.resource_snapshot([0; 32]).unwrap(), saved);
+}

@@ -54,6 +54,29 @@ impl Server {
     }
 }
 
+/// Stops the bot-host and browser containers on every exit path, including an
+/// error return after they started. Killing a container that already exited
+/// is harmless.
+struct Containers {
+    bots_prefix: String,
+    browser: String,
+}
+
+impl Drop for Containers {
+    fn drop(&mut self) {
+        let listed = Command::new("docker")
+            .args(["ps", "-q", "--filter"])
+            .arg(format!("name={}", self.bots_prefix))
+            .output();
+        let mut command = Command::new("docker");
+        command.args(["kill", &self.browser]);
+        if let Ok(output) = listed {
+            command.args(String::from_utf8_lossy(&output.stdout).split_whitespace());
+        }
+        let _ = command.stdout(Stdio::null()).stderr(Stdio::null()).status();
+    }
+}
+
 impl Drop for Server {
     fn drop(&mut self) {
         let _ = self.child.kill();
@@ -225,6 +248,10 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
     // The first record of the new world is the start of the run.
     let _ = pull_ticks(&server, &mut cursor, &mut rows);
     rows.clear();
+    let _containers = Containers {
+        bots_prefix: format!("aoe-scale-bots-{}-", options.port),
+        browser: browser::container_name(options),
+    };
     let mut hosts = start_hosts(options, &root, &work, &tokens)?;
     let host_names: Vec<String> = hosts.iter().map(|host| host.name.clone()).collect();
     // Every host reports once all its bots hold a session: that is the connect
@@ -260,6 +287,8 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
             browser_child = Some(browser::spawn(options, &root, &browser_out)?);
         }
         if last_sample.elapsed() >= SAMPLE_EVERY {
+            // The CPU reading and its time are taken together; the slow docker
+            // call below must not stretch the next interval.
             let now = Instant::now();
             let cpu_total = procs::process(server.child.id());
             let (cpu_cores, rss) = match cpu_total {
@@ -271,7 +300,7 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
                 None => (0.0, 0),
             };
             let bots = procs::containers(&host_names).unwrap_or_default();
-            last_sample = Instant::now();
+            last_sample = now;
             samples.push(Sample {
                 seconds: run_started.elapsed().as_secs_f64(),
                 tick: rows.last().map_or(0, |row| row.tick),

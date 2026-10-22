@@ -102,6 +102,10 @@ start kit (`initialize_village`).
 
 ## Results on this branch
 
+The runs up to `france-real-seeded-reviewed` below are **superseded** by `france-real-seeded-fanout`
+(see "Latest run" at the end): they ran before dev's fan-out rebuild (#556) and before every village got a
+starting kit (#553), so they are history, not the current state.
+
 Measured 2026-10-22 at revision 99526a24 plus the commit that follows it (far-land start fallback, container stats fix) on the 12-core development machine while other agents ran
 gates and benchmarks (1-minute load average 13 to 15 throughout), so every number
 is pessimistic by an unknown amount. The harness container had 6 CPUs (one heavy
@@ -173,8 +177,8 @@ slot with its token when a connection is lost, taking a fresh snapshot. Tests: s
 stalled reader and catch up (`crates/server/tests/slots.rs`), the SDK rejoins after another connection
 takes its slot (`crates/sdk/tests/local_server.rs`). With the fix, no session ended for good at 0.2 s ticks;
 it is not proven that the old cause was the queue. The 84 resets and the later zeros are different measures (the
-old SDK had no rejoin; the new one rejoins silently), so they are not a before/after; the reviewed run below
-counts drops and rejoins explicitly.
+old SDK had no rejoin; the new one rejoins silently), so they are not a before/after; the `france-real-seeded-reviewed` run (superseded, above) and
+`france-real-seeded-fanout` count drops and rejoins explicitly.
 
 * **Bots at that scale.** 84 of 99 bot sessions were reset by the server
   (`Connection reset without closing handshake`) within the first minutes; the

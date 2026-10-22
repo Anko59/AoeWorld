@@ -5,11 +5,14 @@ use crate::{GameWorld, GameWorldError, Terrain};
 use aoe_core::{TileCoord, TileRect};
 use aoe_map::{ResourceKind, ResourceNode};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const REACH: i32 = 15;
 const ANCHOR_BUDGET: usize = 128;
 type Graph = BTreeMap<TileCoord, Vec<TileCoord>>;
 const STEPS: [(i32, i32); 4] = [(0, -1), (-1, 0), (1, 0), (0, 1)];
+
+static PARTIAL_STARTING_KITS: AtomicU64 = AtomicU64::new(0);
 
 impl GameWorld {
     pub fn starting_resources(&self) -> Vec<ResourceNode> {
@@ -143,18 +146,34 @@ impl GameWorld {
         let Terrain::Map { generator, overlay } = &mut self.terrain else {
             unreachable!()
         };
+        let wanted = planned.len();
+        let mut inserted = 0_usize;
         for node in planned {
-            overlay
-                .insert_starting_resource(generator, node)
-                .map_err(|_| EconomyError::InvalidFootprint)?;
+            if overlay.insert_starting_resource(generator, node).is_err() {
+                break;
+            }
+            inserted += 1;
         }
-        // Inserted starting nodes join candidate lists that may already be
-        // cached from earlier searches.
-        if let Ok(cache) = self.resource_chunks.get_mut() {
-            cache.clear();
+        // Nodes inserted so far are part of the world even when a later one was
+        // refused: the caches and collision state must see them either way.
+        if inserted > 0 {
+            if let Ok(cache) = self.resource_chunks.get_mut() {
+                cache.clear();
+            }
+            self.resource_collision_changed();
         }
-        self.resource_collision_changed();
+        if inserted < wanted {
+            PARTIAL_STARTING_KITS.fetch_add(1, Ordering::Relaxed);
+            eprintln!("starting kit near {center:?} is partial: {inserted} of {wanted} nodes");
+            return Err(EconomyError::InvalidFootprint);
+        }
         Ok(())
+    }
+
+    /// How many villages (in this process) started with a kit that could not be
+    /// placed in full.
+    pub fn partial_starting_kits() -> u64 {
+        PARTIAL_STARTING_KITS.load(Ordering::Relaxed)
     }
 
     fn starting_graph(&self, center: TileCoord, root: TileCoord) -> Graph {
