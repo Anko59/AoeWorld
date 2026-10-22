@@ -1,29 +1,33 @@
 # Parallel movement measurements
 
 Companion to [scale measurements](measurements.md). The figures below were taken on
-branch `perf/parallel-movement` at `1beec88b`, before the rebase onto dev after #558
-(`2adb4339` is the rebased revision). They have not been re-run on the rebased code.
-
+branch `perf/parallel-movement` at `24c29d9a`, rebased onto dev `e9c3f0b5` (after #554 and
+#558). The earlier figures (`1beec88b`, before the rebase) are superseded: dev's walking
+gatherers raised the moving population from 43,665 to 69,480 movers per tick.
 
 Same workload and command (`make perf-scale`, 100 players, 101,111 units, 600 ticks fog
-on, 100 fog off). Raw reports: `reports/scale/before-par.json` and
-`reports/scale/after-par.json` (not committed, `reports/` is ignored). The container has 6
-CPUs and the machine was shared with other agents' builds (1-minute load 4 to 12), so the
-absolute numbers carry noise; the ratio and the hashes are the result.
+on, 100 fog off). "Before" is the same tree with the proposal phase disabled (every mover
+takes the sequential path, vision still batched), so only the proposal phase differs; its
+hashes equal the parallel run's. Raw reports: `.cache/before-par2.json`, `.cache/after-par2.json`
+(not committed). The container has 6 CPUs and the machine was shared (1-minute load 5 to 8),
+so absolute numbers carry noise. A second parallel run gave movement 21.4/45.1 ms and
+advance 34.8/57.8 ms (fog on), 18.4/20.3 and 30.1/32.3 (fog off).
 
 | Milliseconds | before p50 | before p95 | after p50 | after p95 |
 |---|---|---|---|---|
-| Movement and pathfinding, fog on | 30.5 | 41.9 | **12.5** | **28.8** |
-| Whole `advance`, fog on | 115.7 | 164.8 | 90.6 | 103.5 |
-| Movement, fog off | 26.2 | 37.3 | 10.1 | 25.3 |
-| Whole `advance`, fog off | 89.1 | 130.3 | 64.7 | 80.7 |
+| Movement and pathfinding, fog on | 35.1 | 38.0 | **22.4** | 46.0 |
+| Whole `advance`, fog on | 47.6 | 50.9 | 37.0 | 59.0 |
+| Movement, fog off | 33.0 | 34.6 | **19.3** | **21.0** |
+| Whole `advance`, fog off | 44.7 | 46.8 | 31.4 | 33.5 |
 
-The goal of a movement p95 under 10 ms is **not reached**: p50 is 2.4 times lower and p95 1.5
-times lower. Wildlife (48 ms p50), building memory (21 ms) and gathering (12 ms) are now the
-larger phases of the tick.
+The goal of a movement p95 under 10 ms is **not reached**. p50 is 1.6 times lower (fog on)
+and 1.7 times lower (fog off), and fog-off p95 is 1.65 times lower. Fog-on p95 is worse
+than sequential (46 against 38 ms) and reproduced in both runs; it is **not diagnosed**.
 
 **Determinism.** All 6 fog-on and 1 fog-off canonical hashes and the initial hash are
-identical before and after (`python3` comparison of the two reports). The test
+identical before and after (`python3` comparison of the two reports). After the rebase the
+parallel apply initially skipped `track_unit_step` (wildlife's unit cells), which broke dev's
+gathering and wildlife replay pins; applying it fixed both without re-pinning. The test
 `game_world/tests/parallel_movement.rs` replays 1,800 mixed units for 160 ticks on 1, 2 and 6
 rayon threads and requires identical canonical hashes and identical per-tick change sets; it
 also pins the final hash and a digest of all changes, produced by the sequential engine
@@ -39,8 +43,8 @@ before the proposal phase existed.
    planning-cursor rotation order of the old loop. A proposal that assumed the planner
    capacity was exhausted re-checks it at apply time, and any other case (a search, a failure,
    two waypoints in one tick, a planner that wants lookahead) runs the unchanged sequential
-   code in the same order, so the shared planning budget is spent exactly as before. At the
-   benchmark 43,663 of 43,665 movers are proposed per tick.
+   code in the same order, so the shared planning budget is spent exactly as before. Before the rebase
+   43,663 of 43,665 movers were proposed per tick; the share after it was not re-counted.
 2. *Reads made lock free.* The proposal uses per-tick dense tables (owner economy by player,
    a bitset of units with a gather, hunt, attack or build job) and a dense observer table
    (`visibility/observers.rs`) instead of ordered-map lookups. The walk cache keeps four
@@ -54,7 +58,7 @@ before the proposal phase existed.
 4. Structure of arrays was not done: the proposal reads `StoredUnit` once per mover and the
    apply phase (about 4 ms) is dominated by writing it back, which a SoA would not remove.
 
-**Where the rest goes.** Measured with a per-phase timer inside `advance_movement` on a loaded
+**Where the rest goes.** Measured before the rebase (not re-measured) with a per-phase timer inside `advance_movement` on a loaded
 machine: proposal about 5 ms (parallel; 11.6 ms serial), sequential apply about 4 ms, change
 sort 0.5 ms. The p95 above p50 is **not diagnosed**; the likely cause (not measured) is the
 route searches of the at most 64 active planners, up to 16,384 work units per tick, which run
