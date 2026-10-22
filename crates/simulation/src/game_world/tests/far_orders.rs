@@ -7,7 +7,7 @@ use aoe_map::{
     ordered_water_page_root,
 };
 
-const WIDTH: i32 = 4_096;
+pub(super) const WIDTH: i32 = 4_096;
 /// Barren ground: no generated trees or other blocking resources.
 const BARREN: u8 = 28;
 
@@ -100,14 +100,14 @@ pub(super) fn prepared_terrain(water_samples: Vec<u8>, biome_samples: Vec<u8>) -
     }
 }
 
-fn wide_world() -> GameWorld {
+pub(super) fn wide_world() -> GameWorld {
     let config = WorldConfig::new(WIDTH, WIDTH, Seed(0)).expect("config");
     let mut world = GameWorld::new(config).expect("world");
     world.terrain = wide_barren_terrain();
     world
 }
 
-fn center(x: i32, y: i32) -> WorldPosition {
+pub(super) fn center(x: i32, y: i32) -> WorldPosition {
     WorldPosition::from_tile_center(TileCoord::new(x, y)).expect("tile center")
 }
 

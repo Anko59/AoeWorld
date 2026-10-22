@@ -480,6 +480,7 @@ fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
 }
 
 mod combat;
+mod far_attack;
 mod far_orders;
 mod physical_movement;
 mod routes;

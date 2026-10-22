@@ -19,6 +19,8 @@ mod table;
 mod tick;
 mod towers;
 
+#[cfg(test)]
+pub(crate) use approach::{FarAttack, MAX_FAR_SEARCHES_PER_TICK};
 pub(crate) use hash::hash_hit;
 pub use military::researched_stats;
 pub use projectiles::{Projectile, ProjectileKind};
@@ -54,6 +56,8 @@ pub struct CombatStats {
 pub(crate) struct Attacker {
     pub(crate) target: EntityId,
     pub(crate) repath_tick: u64,
+    /// The firing tile of the last far search, while it can still be reused.
+    pub(crate) far: Option<approach::FarAttack>,
 }
 
 #[derive(Debug, Default)]
@@ -65,6 +69,8 @@ pub(crate) struct Combat {
     /// `(tick at which the body is removed, unit)` in death order.
     pub(crate) dying: BTreeSet<(u64, EntityId)>,
     pub(crate) stats: CombatStats,
+    /// Far firing-tile searches still allowed this tick.
+    pub(crate) far_searches: u32,
 }
 
 impl Combat {
@@ -141,6 +147,7 @@ impl GameWorld {
             Attacker {
                 target,
                 repath_tick: self.tick.0.saturating_add(self.repath_ticks()),
+                far: None,
             },
         );
         let state = &mut self.units[index].state;

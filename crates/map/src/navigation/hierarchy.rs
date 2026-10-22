@@ -14,8 +14,9 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::sync::{Arc, OnceLock};
 
-/// Chunk portal lists retained per generator before the cache is reset.
-const MAX_CACHED_CHUNKS: usize = 16_384;
+/// Upper bound for the retained portal lists and cost matrices of one
+/// generator, the same budget as the walk cache.
+pub(crate) const PORTAL_CACHE_MAX_BYTES: usize = 64 << 20;
 /// Default abstract-node expansion bound of one search.
 pub const DEFAULT_HIERARCHY_EXPANSIONS: u32 = 8_192;
 /// Weighted A*: the portal lattice makes an exact search fan out over a wide
@@ -25,21 +26,68 @@ pub const DEFAULT_HIERARCHY_EXPANSIONS: u32 = 8_192;
 const HEURISTIC_WEIGHT: u64 = 2;
 type Key = (i32, i32);
 
-#[derive(Debug, Default)]
+/// Chunk portal lists keyed by chunk, bounded by bytes with least-recently-used
+/// eviction. A cost matrix is computed lazily after insertion, so an entry is
+/// charged for its full `portals x portals` matrix up front.
+#[derive(Debug)]
 pub(crate) struct PortalCache {
-    chunks: HashMap<Key, Arc<ChunkPortals>>,
+    chunks: HashMap<Key, (Arc<ChunkPortals>, u64)>,
+    bytes: usize,
+    clock: u64,
+    limit: usize,
+}
+
+impl Default for PortalCache {
+    fn default() -> Self {
+        Self::with_limit(PORTAL_CACHE_MAX_BYTES)
+    }
 }
 
 impl PortalCache {
-    fn chunk(&mut self, key: Key) -> Option<Arc<ChunkPortals>> {
-        self.chunks.get(&key).cloned()
+    pub(crate) fn with_limit(limit: usize) -> Self {
+        Self {
+            chunks: HashMap::new(),
+            bytes: 0,
+            clock: 0,
+            limit,
+        }
     }
 
-    fn insert(&mut self, key: Key, portals: Arc<ChunkPortals>) {
-        if self.chunks.len() >= MAX_CACHED_CHUNKS {
-            self.chunks.clear();
+    fn chunk(&mut self, key: Key) -> Option<Arc<ChunkPortals>> {
+        self.clock += 1;
+        let clock = self.clock;
+        self.chunks.get_mut(&key).map(|(found, stamp)| {
+            *stamp = clock;
+            Arc::clone(found)
+        })
+    }
+
+    pub(crate) fn insert(&mut self, key: Key, portals: Arc<ChunkPortals>) {
+        self.clock += 1;
+        self.bytes += portals.bytes();
+        if let Some((old, _)) = self.chunks.insert(key, (portals, self.clock)) {
+            self.bytes -= old.bytes();
         }
-        self.chunks.insert(key, portals);
+        if self.bytes > self.limit {
+            let mut stamps: Vec<_> = self.chunks.iter().map(|(k, (_, s))| (*s, *k)).collect();
+            stamps.sort_unstable();
+            for (_, key) in stamps {
+                if self.bytes <= self.limit / 10 * 9 {
+                    break;
+                }
+                if let Some((old, _)) = self.chunks.remove(&key) {
+                    self.bytes -= old.bytes();
+                }
+            }
+        }
+    }
+
+    pub(crate) fn retained_bytes(&self) -> usize {
+        self.bytes
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.chunks.len()
     }
 }
 
@@ -56,6 +104,16 @@ pub(crate) struct ChunkPortals {
     portals: Vec<Portal>,
     /// Row-major `portals x portals` costs, computed on first use.
     costs: OnceLock<Vec<Option<u32>>>,
+}
+
+impl ChunkPortals {
+    fn bytes(&self) -> usize {
+        let count = self.portals.capacity();
+        std::mem::size_of::<Self>()
+            + count * std::mem::size_of::<Portal>()
+            + count * count * std::mem::size_of::<Option<u32>>()
+            + 64
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -122,14 +180,37 @@ fn step_cost(from: TileCoord, to: TileCoord, mud: bool) -> u32 {
 
 type Result<T> = std::result::Result<T, EnvironmentPageError>;
 
+/// `(start, end)` index ranges (end exclusive) of one border's entrances: runs
+/// of open pairs in which every neighbour is walkable to the next on both
+/// sides (`linked[i]` joins pair `i - 1` to pair `i`). A height step or wall
+/// inside a run of open pairs splits it, so each part keeps its own portal.
+pub(super) fn entrance_runs(open: &[bool], linked: &[bool]) -> Vec<(i32, i32)> {
+    let mut runs = Vec::new();
+    let mut start: Option<usize> = None;
+    for i in 0..=open.len() {
+        let continues = i < open.len() && open[i] && (start.is_none() || linked[i]);
+        if !continues && let Some(from) = start.take() {
+            runs.push((from as i32, i as i32));
+        }
+        if i < open.len() && open[i] && start.is_none() {
+            start = Some(i);
+        }
+    }
+    runs
+}
+
 struct Ground<'a>(&'a MapChunkGenerator);
 
 impl Ground<'_> {
+    /// Ground that can ever be walked. A resource node does not close its
+    /// tile here: a depleted node opens it, the static graph cannot know which
+    /// nodes are depleted, and `Unreachable` must stay a proof, so it is
+    /// optimistic. The exact tile planner still honours the overlay.
     fn open(&self, tile: TileCoord) -> Result<Option<(bool, bool)>> {
         Ok(self
             .0
             .walk_at_with_cancel(tile, &|| false)?
-            .map(|cell| (cell.passable && cell.node.is_none(), cell.mud)))
+            .map(|cell| (cell.passable, cell.mud)))
     }
 
     fn is_open(&self, tile: TileCoord) -> Result<bool> {
@@ -195,23 +276,19 @@ impl Ground<'_> {
         let mut portals = Vec::new();
         for side in 0..4 {
             let border = |i| border_pair(side, origin, i);
-            let mut run_start: Option<i32> = None;
-            for i in 0..=CHUNK_TILES {
-                let open = if i < CHUNK_TILES {
-                    let (a, b) = border(i);
-                    self.is_open(a)? && self.is_open(b)? && self.edge(a, b)?
-                } else {
-                    false
-                };
-                match (open, run_start) {
-                    (true, None) => run_start = Some(i),
-                    (false, Some(start)) => {
-                        let (tile, cross) = border((start + i - 1) / 2);
-                        portals.push(Portal { tile, cross });
-                        run_start = None;
-                    }
-                    _ => {}
+            let mut open = [false; CHUNK_TILES as usize];
+            let mut linked = [false; CHUNK_TILES as usize];
+            for i in 0..CHUNK_TILES {
+                let (a, b) = border(i);
+                open[i as usize] = self.is_open(a)? && self.is_open(b)? && self.edge(a, b)?;
+                if i > 0 && open[i as usize] && open[i as usize - 1] {
+                    let (before_a, before_b) = border(i - 1);
+                    linked[i as usize] = self.edge(before_a, a)? && self.edge(before_b, b)?;
                 }
+            }
+            for (start, end) in entrance_runs(&open, &linked) {
+                let (tile, cross) = border((start + end - 1) / 2);
+                portals.push(Portal { tile, cross });
             }
         }
         Ok(ChunkPortals {

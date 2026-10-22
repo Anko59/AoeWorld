@@ -1,6 +1,11 @@
-use super::{HierarchicalOutcome, hierarchical_route};
+use super::{
+    ChunkPortals, Ground, HierarchicalOutcome, Portal, PortalCache, entrance_runs,
+    hierarchical_route,
+};
 use crate::navigation::long_routes_tests::flat_terrain_with_water_wall;
+use crate::{CHUNK_TILES, MapChunkGenerator};
 use aoe_core::TileCoord;
+use std::sync::{Arc, OnceLock};
 
 fn lower_bound(a: TileCoord, b: TileCoord) -> u64 {
     u64::from((a.x - b.x).unsigned_abs().max((a.y - b.y).unsigned_abs())) * 1_024
@@ -96,4 +101,75 @@ fn blocked_endpoints_are_invalid() {
         ),
         Ok(HierarchicalOutcome::Invalid)
     );
+}
+
+#[test]
+fn a_height_step_inside_a_run_of_open_pairs_gives_each_part_its_own_portal() {
+    let open = [true; 8];
+    let mut linked = [true; 8];
+    assert_eq!(entrance_runs(&open, &linked), vec![(0, 8)]);
+    linked[3] = false;
+    assert_eq!(entrance_runs(&open, &linked), vec![(0, 3), (3, 8)]);
+    // A closed pair still ends a run, and a split at the first pair is no split.
+    let open = [true, true, false, true, true, true];
+    let linked = [false, true, true, false, true, true];
+    assert_eq!(entrance_runs(&open, &linked), vec![(0, 2), (3, 6)]);
+    assert!(entrance_runs(&[false; 4], &[false; 4]).is_empty());
+}
+
+fn portals_of(count: usize) -> Arc<ChunkPortals> {
+    let at = TileCoord::new(0, 0);
+    Arc::new(ChunkPortals {
+        portals: vec![
+            Portal {
+                tile: at,
+                cross: at
+            };
+            count
+        ],
+        costs: OnceLock::new(),
+    })
+}
+
+#[test]
+fn the_portal_cache_is_bounded_by_bytes_and_evicts_the_oldest_chunk() {
+    let one = portals_of(40).bytes();
+    let mut cache = PortalCache::with_limit(one * 5);
+    for x in 0..5 {
+        cache.insert((x, 0), portals_of(40));
+    }
+    assert_eq!((cache.len(), cache.retained_bytes()), (5, one * 5));
+    // Touching chunk 0 makes chunk 1 the least recently used.
+    assert!(cache.chunk((0, 0)).is_some());
+    cache.insert((9, 9), portals_of(40));
+    assert!(cache.retained_bytes() <= one * 5);
+    assert!(cache.chunk((0, 0)).is_some(), "the touched chunk survives");
+    assert!(cache.chunk((1, 0)).is_none(), "the oldest chunk is evicted");
+    assert!(cache.chunk((9, 9)).is_some());
+    // Many large entries never exceed the limit, whatever their number.
+    for x in 0..200 {
+        cache.insert((x, 5), portals_of(40));
+        assert!(cache.retained_bytes() <= one * 5);
+    }
+}
+
+#[test]
+fn a_resource_node_does_not_close_its_tile_in_the_static_graph() {
+    let generator = MapChunkGenerator::new([7; 32], 0, 4_096);
+    let ground = Ground(&generator);
+    let mut checked = 0;
+    for y in 0..CHUNK_TILES * 4 {
+        for x in 0..CHUNK_TILES * 4 {
+            let tile = TileCoord::new(x, y);
+            let cell = generator
+                .walk_at_with_cancel(tile, &|| false)
+                .expect("cell")
+                .expect("inside the map");
+            if cell.node.is_some() {
+                checked += 1;
+                assert_eq!(ground.is_open(tile), Ok(cell.passable), "{tile:?}");
+            }
+        }
+    }
+    assert!(checked > 0, "the window must contain resource nodes");
 }

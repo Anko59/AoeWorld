@@ -55,6 +55,7 @@ impl GameWorld {
 
     pub(crate) fn advance_combat(&mut self, changed: &mut Vec<EntityId>) {
         self.combat.stats = Default::default();
+        self.combat.far_searches = super::approach::MAX_FAR_SEARCHES_PER_TICK;
         self.advance_projectiles(changed);
         let now = self.tick.0;
         while let Some(&(due, id)) = self.combat.dying.first() {
@@ -148,7 +149,43 @@ impl GameWorld {
             if let Some(entry) = self.combat.attackers.get_mut(&id) {
                 entry.repath_tick = next_repath;
             }
-            let destination = self.attack_destination(id, &goal).ok().flatten();
+            let centre = goal.centre().tile_floor();
+            let from = self.units[index].state.position.tile_floor();
+            let reusable = attacker.far.filter(|far| {
+                far.centre == centre
+                    && i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
+                        > super::approach::FAR_REUSE_TILES
+            });
+            let destination = if let Some(far) = reusable {
+                Some(far.destination)
+            } else if attacker.far.is_some() && self.combat.far_searches == 0 {
+                // Over this tick's budget: keep walking and look again next tick.
+                if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                    entry.repath_tick = now.saturating_add(1);
+                }
+                self.units[index].state.task = UnitTask::Attacking;
+                if self.units[index].state != before {
+                    changed.push(self.units[index].state);
+                }
+                return;
+            } else {
+                let search = self.attack_search(id, &goal).ok();
+                if attacker.far.is_some() {
+                    self.combat.far_searches -= 1;
+                }
+                let far = search
+                    .as_ref()
+                    .filter(|search| search.far)
+                    .and_then(|search| search.destination)
+                    .map(|destination| super::approach::FarAttack {
+                        centre,
+                        destination,
+                    });
+                if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                    entry.far = far;
+                }
+                search.and_then(|search| search.destination)
+            };
             let stale = match (order, destination) {
                 (None, _) => true,
                 (Some(order), Some(at)) => order.target_tile != at.tile_floor(),

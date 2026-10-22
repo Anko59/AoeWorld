@@ -12,6 +12,27 @@ use std::{
 const MAX_ATTACK_SEARCH_TILES: usize = 8_192;
 /// Targets within this many tiles are checked for reachability over chunk portals.
 const HIERARCHY_PROOF_TILES: i64 = 400;
+/// Candidate tiles proven over the portal graph per search, so a target in a
+/// sealed pocket costs a bounded number of abstract searches.
+const MAX_HIERARCHY_PROOFS: u32 = 16;
+/// Full searches for a unit that already needed the far fallback, per tick.
+pub(crate) const MAX_FAR_SEARCHES_PER_TICK: u32 = 4;
+/// A far firing tile is reused while the target keeps its tile and the
+/// attacker is farther than this: the local search could not meet it anyway.
+pub(crate) const FAR_REUSE_TILES: i64 = 64;
+
+/// The firing tile of a far search, valid for one target tile.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FarAttack {
+    pub(crate) centre: TileCoord,
+    pub(crate) destination: WorldPosition,
+}
+
+pub(crate) struct AttackSearch {
+    pub(crate) destination: Option<WorldPosition>,
+    /// The local search hit its cap and the far fallback decided.
+    pub(crate) far: bool,
+}
 
 impl GameWorld {
     /// Search outward from the attacker, prioritizing travel distance plus a
@@ -22,6 +43,14 @@ impl GameWorld {
         id: EntityId,
         goal: &Goal,
     ) -> Result<Option<WorldPosition>, GameWorldError> {
+        Ok(self.attack_search(id, goal)?.destination)
+    }
+
+    pub(crate) fn attack_search(
+        &self,
+        id: EntityId,
+        goal: &Goal,
+    ) -> Result<AttackSearch, GameWorldError> {
         let unit = self.unit(id).ok_or(GameWorldError::UnknownEntity)?;
         let stats = self.unit_stats(id).ok_or(GameWorldError::UnknownEntity)?;
         let range = i64::from(stats.range) * MELEE_RANGE_SUBUNITS;
@@ -54,7 +83,10 @@ impl GameWorld {
                 .map_err(|_| GameWorldError::InvalidPosition)?;
             let distance = goal.distance_squared(at);
             if distance <= range * range && distance >= min * min {
-                return Ok(Some(at));
+                return Ok(AttackSearch {
+                    destination: Some(at),
+                    far: false,
+                });
             }
             expanded += 1;
             if expanded >= MAX_ATTACK_SEARCH_TILES {
@@ -108,9 +140,15 @@ impl GameWorld {
         if capped {
             // The bounded local search ran out before it met the target: a
             // far target. Pick the firing tile at the target instead.
-            return self.far_attack_destination(unit.kind, origin, goal, range, min);
+            return Ok(AttackSearch {
+                destination: self.far_attack_destination(unit.kind, origin, goal, range, min)?,
+                far: true,
+            });
         }
-        Ok(None)
+        Ok(AttackSearch {
+            destination: None,
+            far: false,
+        })
     }
 
     /// Firing tile for a target beyond the local search: the nearest open tile
@@ -139,8 +177,11 @@ impl GameWorld {
         for dy in -radius..=radius {
             for dx in -radius..=radius {
                 let tile = TileCoord::new(centre.x + dx, centre.y + dy);
-                let at = WorldPosition::from_tile_center(tile)
-                    .map_err(|_| GameWorldError::InvalidPosition)?;
+                // The window may cross the west or north map edge, where a
+                // tile has no centre; such a tile is simply no candidate.
+                let Ok(at) = WorldPosition::from_tile_center(tile) else {
+                    continue;
+                };
                 let distance = goal.distance_squared(at);
                 if distance <= range * range && distance >= min * min {
                     candidates.push((distance, tile.y, tile.x, at));
@@ -152,6 +193,7 @@ impl GameWorld {
             .abs()
             .max((i64::from(origin.y) - i64::from(centre.y)).abs())
             <= HIERARCHY_PROOF_TILES;
+        let mut proofs = 0;
         for (_, y, x, at) in candidates {
             let tile = TileCoord::new(x, y);
             if self.economy.blocked_tiles.contains(&tile)
@@ -161,13 +203,17 @@ impl GameWorld {
             {
                 continue;
             }
-            if near
-                && kind != crate::UnitKind::FishingShip
-                && let Some(HierarchicalOutcome::Unreachable) =
+            if near && kind != crate::UnitKind::FishingShip {
+                if proofs == MAX_HIERARCHY_PROOFS {
+                    return Ok(None);
+                }
+                proofs += 1;
+                if let Some(HierarchicalOutcome::Unreachable) =
                     self.terrain
                         .hierarchical_route(origin, tile, DEFAULT_HIERARCHY_EXPANSIONS)
-            {
-                continue;
+                {
+                    continue;
+                }
             }
             return Ok(Some(at));
         }
