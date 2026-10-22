@@ -13,6 +13,32 @@ pub(crate) struct Node {
     pub initial: u16,
 }
 
+/// The first resource id of the starting kit (bit 37, see `aoe_map::ResourceNode::starting`).
+pub(crate) const STARTING_ID_BASE: u64 = 1 << 37;
+
+impl Node {
+    /// A starting-kit node (berries, gold, stone, trees placed beside a village)
+    /// is not in any map chunk: its id alone says what and where it is.
+    pub(crate) fn from_starting_id(id: u64) -> Option<Self> {
+        let node = aoe_map::ResourceNode::starting_from_id(id)?;
+        Some(Self {
+            id,
+            tile: node.tile,
+            kind: map_kind(node.kind),
+            initial: node.initial_amount,
+        })
+    }
+}
+
+fn map_kind(kind: MapKind) -> ResourceKind {
+    match kind {
+        MapKind::Food => ResourceKind::Food,
+        MapKind::Wood => ResourceKind::Wood,
+        MapKind::Gold => ResourceKind::Gold,
+        MapKind::Stone => ResourceKind::Stone,
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct ResourceCatalog {
     pub(crate) nodes: BTreeMap<u64, Node>,
@@ -56,12 +82,7 @@ impl ResourceCatalog {
                 Node {
                     id: node.id,
                     tile: node.tile,
-                    kind: match node.kind {
-                        MapKind::Food => ResourceKind::Food,
-                        MapKind::Wood => ResourceKind::Wood,
-                        MapKind::Gold => ResourceKind::Gold,
-                        MapKind::Stone => ResourceKind::Stone,
-                    },
+                    kind: map_kind(node.kind),
                     initial: node.initial_amount,
                 },
             );

@@ -30,3 +30,68 @@ fn ring_search_covers_every_second_tile_once() {
             .all(|t| (t.x - 50).abs().max((t.y - 50).abs()) == 4)
     );
 }
+
+/// Per village, what the standard Arabia-like start holds near its centre.
+fn kit_near(world: &GameWorld, scout: aoe_core::EntityId) -> Vec<(String, usize)> {
+    let at = world
+        .units()
+        .find(|unit| unit.id == scout)
+        .expect("scout")
+        .position
+        .tile_floor();
+    let near = |tile: TileCoord| (tile.x - at.x).abs().max((tile.y - at.y).abs()) <= 24;
+    let mut counts = std::collections::BTreeMap::new();
+    for node in world.starting_resources().iter().filter(|n| near(n.tile)) {
+        *counts.entry(format!("{:?}", node.kind)).or_insert(0) += 1;
+    }
+    // Natural nodes of the map count too (the start tops them up, never doubles).
+    if let aoe_simulation::Terrain::Map { generator, .. } = world.terrain() {
+        for y in at.y - 24..=at.y + 24 {
+            for x in at.x - 24..=at.x + 24 {
+                let node = generator
+                    .object_at_with_cancel(TileCoord::new(x, y), &|| false)
+                    .expect("object lookup");
+                if let Some(node) = node {
+                    *counts.entry(format!("{:?}", node.kind)).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    for animal in world.animals().filter(|a| near(a.position.tile_floor())) {
+        *counts.entry(format!("{:?}", animal.kind)).or_insert(0) += 1;
+    }
+    counts.into_iter().collect()
+}
+
+#[test]
+fn every_flat_match_village_gets_the_full_standard_start() {
+    for (tiles, seed, villages) in [(500, 3, 4), (500, 5, 4), (300, 1, 2), (900, 2, 9)] {
+        let (package, pages) = flat::package(flat::FlatMap {
+            tiles_per_side: tiles,
+            seed,
+        })
+        .expect("flat package");
+        let mut world = GameWorld::from_prepared_map(package, pages, vec![], vec![], vec![])
+            .expect("flat world");
+        let scouts = place_villages(&mut world, villages, &|| false).expect("villages");
+        let mut short = Vec::new();
+        for (slot, scout) in scouts.into_iter().enumerate() {
+            let have: std::collections::BTreeMap<_, _> =
+                kit_near(&world, scout).into_iter().collect();
+            for (kind, need) in [
+                ("Food", 6),
+                ("Gold", 5),
+                ("Stone", 5),
+                ("Wood", 12),
+                ("Sheep", 6),
+                ("Deer", 2),
+                ("Boar", 1),
+            ] {
+                if have.get(kind).copied().unwrap_or(0) < need {
+                    short.push(format!("{tiles}/{seed} slot {slot}: {kind} {have:?}"));
+                }
+            }
+        }
+        assert!(short.is_empty(), "{short:#?}");
+    }
+}

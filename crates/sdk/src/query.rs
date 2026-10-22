@@ -134,12 +134,20 @@ impl World {
         &self.projectiles
     }
 
+    /// Every node the slot has been told about: map chunks plus the starting
+    /// kit, which only the resource feed describes.
+    fn nodes(&self) -> impl Iterator<Item = crate::catalog::Node> + '_ {
+        let starting = self
+            .amounts
+            .range(crate::catalog::STARTING_ID_BASE..)
+            .filter_map(|(id, _)| crate::catalog::Node::from_starting_id(*id));
+        self.catalog.nodes.values().copied().chain(starting)
+    }
+
     /// Resource nodes on explored tiles that still hold something, with the
     /// last amount the slot saw.
     pub fn resources(&self, kind: Option<ResourceKind>) -> Vec<ResourceNode> {
-        self.catalog
-            .nodes
-            .values()
+        self.nodes()
             .filter(|node| kind.is_none_or(|k| node.kind == k))
             .filter(|node| self.fog.visibility(node.tile) != Visibility::Unexplored)
             .filter_map(|node| {
@@ -196,7 +204,7 @@ impl World {
             .buildings
             .values()
             .map(|b| b.footprint)
-            .chain(self.catalog.nodes.values().filter_map(|node| {
+            .chain(self.nodes().filter_map(|node| {
                 let remaining = self.amounts.get(&node.id).copied().unwrap_or(node.initial);
                 (remaining > 0).then(|| TileRect::from_xywh(node.tile.x, node.tile.y, 1, 1))
             }))
