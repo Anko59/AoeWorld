@@ -3,7 +3,7 @@
 //! merely moves. Building memory consumes the sight flips separately.
 use super::{GameBuilding, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TileVisibility {
@@ -26,8 +26,6 @@ pub(crate) struct Vision {
     /// Building footprint tiles, for sight-gain and sight-loss events.
     building_at_tile: HashMap<TileCoord, EntityId>,
     building_watchers: BTreeMap<EntityId, Watched>,
-    /// Buildings gone since the last memory flush, with owner and watchers.
-    destroyed: Vec<(EntityId, PlayerId, TileRect, BTreeSet<PlayerId>)>,
     /// Scratch for disc-edge diffs; working memory, never hashed.
     flags: Vec<bool>,
     flips: Vec<(TileCoord, bool)>,
@@ -180,13 +178,13 @@ impl GameWorld {
         self.vision.revision += 1;
         if was_disabled && !disabled {
             self.vision.observers.clear();
-            self.rebuild_building_sight_index();
             for vision in self.vision.players.values_mut() {
                 vision.revision += 1;
                 vision.visible.clear();
                 vision.visible_tiles = 0;
                 vision.overview.clear_counts();
             }
+            self.rebuild_building_sight_index();
             let units = self.units().map(|u| u.id).collect::<Vec<_>>();
             let buildings = self.buildings().map(|b| b.id).collect::<Vec<_>>();
             for id in units {

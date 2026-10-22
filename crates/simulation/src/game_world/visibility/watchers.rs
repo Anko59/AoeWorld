@@ -1,6 +1,7 @@
 //! Building memory driven by sight events. A building's remembered snapshot
-//! refreshes only for players currently seeing it, and a destroyed building
-//! leaves memory only when its site is seen or owned.
+//! refreshes only for players currently seeing it. A destroyed building leaves
+//! memory at once for its owner and its watchers; for everyone else it stays as
+//! a ghost until a tile of its site is seen again.
 use super::Vision;
 use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
@@ -22,6 +23,14 @@ impl Vision {
     pub(super) fn sight_flips(&mut self, player: PlayerId) {
         let flips = std::mem::take(&mut self.flips);
         for (tile, seen) in &flips {
+            if *seen
+                && let Some(vision) = self.players.get_mut(&player)
+                && let Some(ids) = vision.ghost_tiles.get(tile).cloned()
+            {
+                for id in ids {
+                    vision.exorcise(id);
+                }
+            }
             let Some(&building) = self.building_at_tile.get(tile) else {
                 continue;
             };
@@ -129,16 +138,6 @@ impl GameWorld {
                 }
             }
         }
-        let destroyed = std::mem::take(&mut self.vision.destroyed);
-        for (id, owner, footprint, watchers) in destroyed {
-            for player in watchers {
-                if (player == owner || self.building_visible_to(player, footprint))
-                    && let Some(vision) = self.vision.players.get_mut(&player)
-                {
-                    vision.remembered.remove(&id);
-                }
-            }
-        }
     }
 
     /// Queues a removed building for the next flush.
@@ -148,10 +147,19 @@ impl GameWorld {
                 self.vision.building_at_tile.remove(&TileCoord::new(x, y));
             }
         }
-        if let Some(watched) = self.vision.building_watchers.remove(&id) {
-            self.vision
-                .destroyed
-                .push((id, watched.owner, watched.footprint, watched.watchers));
+        let watched = self.vision.building_watchers.remove(&id);
+        for (player, vision) in &mut self.vision.players {
+            let Some(owner) = vision.remembered.get(&id).map(|b| b.player) else {
+                continue;
+            };
+            let sees = watched
+                .as_ref()
+                .is_some_and(|w| w.watchers.contains(player));
+            if sees || owner == *player {
+                vision.remembered.remove(&id);
+            } else {
+                vision.haunt(id, footprint);
+            }
         }
     }
 }

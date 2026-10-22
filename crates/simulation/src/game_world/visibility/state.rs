@@ -1,8 +1,8 @@
 //! Per-player sight storage: exploration bitsets, dense visible counters and
 //! the strategic overview. No allocation or iteration depends on map area.
 use super::TileVisibility;
-use aoe_core::TileCoord;
-use std::collections::BTreeMap;
+use aoe_core::{EntityId, TileCoord, TileRect};
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug, Default)]
 pub(super) struct PlayerVision {
@@ -14,6 +14,10 @@ pub(super) struct PlayerVision {
     pub(super) visible: BTreeMap<(i32, i32), std::boxed::Box<[u32]>>,
     pub(super) visible_tiles: usize,
     pub(super) remembered: BTreeMap<aoe_core::EntityId, crate::GameBuilding>,
+    /// Remembered buildings that no longer exist, by footprint tile. Seeing
+    /// any of those tiles again ends the memory. Derived; never hashed.
+    pub(super) ghost_tiles: HashMap<TileCoord, Vec<EntityId>>,
+    pub(super) ghost_sites: BTreeMap<EntityId, TileRect>,
     pub(super) tile_work: u64,
     pub(super) overview: Overview,
     pub(super) resources: BTreeMap<u64, u16>,
@@ -111,6 +115,38 @@ pub(super) fn pixels(tile: i32, axis: i32) -> std::ops::Range<i64> {
 }
 
 impl PlayerVision {
+    /// Keeps a destroyed building's last sighting until its site is seen.
+    pub(super) fn haunt(&mut self, id: EntityId, footprint: TileRect) {
+        for y in footprint.min.y..footprint.max.y {
+            for x in footprint.min.x..footprint.max.x {
+                self.ghost_tiles
+                    .entry(TileCoord::new(x, y))
+                    .or_default()
+                    .push(id);
+            }
+        }
+        self.ghost_sites.insert(id, footprint);
+    }
+
+    /// Forgets a ghost whose site was just seen.
+    pub(super) fn exorcise(&mut self, id: EntityId) {
+        self.remembered.remove(&id);
+        let Some(footprint) = self.ghost_sites.remove(&id) else {
+            return;
+        };
+        for y in footprint.min.y..footprint.max.y {
+            for x in footprint.min.x..footprint.max.x {
+                let tile = TileCoord::new(x, y);
+                if let Some(ids) = self.ghost_tiles.get_mut(&tile) {
+                    ids.retain(|ghost| *ghost != id);
+                    if ids.is_empty() {
+                        self.ghost_tiles.remove(&tile);
+                    }
+                }
+            }
+        }
+    }
+
     pub(super) fn state(&self, tile: TileCoord) -> TileVisibility {
         let (chunk, index) = counter_index(tile);
         if self
