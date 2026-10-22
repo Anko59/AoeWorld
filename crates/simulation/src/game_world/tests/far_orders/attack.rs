@@ -209,9 +209,47 @@ fn repeated_far_searches_are_capped_per_tick_and_deferred_ones_retry_next_tick()
             .count()
     };
     assert_eq!(deferred(&world), 6, "only four searches fit in one tick");
-    world.advance();
+    let retry = ids
+        .iter()
+        .copied()
+        .filter(|id| world.combat.attackers[id].repath_tick == now + 1)
+        .collect::<Vec<_>>();
+    let searched = |world: &GameWorld, id: &EntityId| {
+        world.combat.attackers[id]
+            .far
+            .is_some_and(|far| far.centre != stale)
+    };
     assert!(
-        ids.iter()
-            .all(|id| world.combat.attackers[id].repath_tick > world.tick.0 - 1)
+        retry.iter().all(|id| !searched(&world, id)),
+        "a deferred attacker was not searched yet"
     );
+    world.advance();
+    // The four free searches of the next tick go to deferred attackers.
+    assert_eq!(
+        retry.iter().filter(|id| searched(&world, id)).count(),
+        4,
+        "deferred attackers are searched on the next tick"
+    );
+}
+
+#[test]
+fn first_far_searches_count_against_the_per_tick_budget() {
+    let (mut world, ids) = far_attackers(10);
+    for id in &ids {
+        let entry = world.combat.attackers.get_mut(id).expect("attacker");
+        entry.far = None;
+        entry.repath_tick = 0;
+    }
+    world.advance();
+    let searched = ids
+        .iter()
+        .filter(|id| world.combat.attackers[*id].far.is_some())
+        .count();
+    assert_eq!(searched, 4, "first searches are capped like repeated ones");
+    world.advance();
+    let searched = ids
+        .iter()
+        .filter(|id| world.combat.attackers[*id].far.is_some())
+        .count();
+    assert_eq!(searched, 8, "the deferred ones follow on the next tick");
 }

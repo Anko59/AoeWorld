@@ -1,5 +1,6 @@
 use super::*;
 
+#[cfg(not(target_arch = "wasm32"))]
 mod parallel;
 use aoe_map::{
     MapPackage, MapRequest, REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR,

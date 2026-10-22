@@ -5,8 +5,8 @@
 //! not depend on how the movers are split over threads. The apply phase then
 //! runs in the planning-cursor rotation order of the sequential engine and
 //! performs every shared write (unit store, vision, spatial buckets, output
-//! lists). A proposal that assumed the route planner capacity was exhausted
-//! re-checks that at apply time. Movers that search, fail, or cross two
+//! lists). A proposal that assumed the mover waits for planner budget or
+//! capacity re-checks that at apply time. Movers that search, fail, or cross two
 //! waypoints in one tick are not proposed (or are rejected at apply); they run
 //! the sequential path in the same order, so they consume the shared planning
 //! budget exactly as before.
@@ -27,8 +27,9 @@ pub(crate) struct FastStep {
     keeps_moving: bool,
     bucket: ChunkCoord,
     vision_stale: bool,
-    /// The unit would have searched but for exhausted planner capacity.
-    assumes_capacity_exhausted: bool,
+    /// The unit would have searched, and waits only while the tick's planning
+    /// budget is spent or planner capacity is exhausted; checked at apply.
+    assumes_waiting: bool,
 }
 
 /// Per-tick dense lookups that replace ordered-map reads on the per-mover path.
@@ -134,7 +135,7 @@ impl GameWorld {
         state.position = position;
         let mut pops = 0;
         let mut keeps_moving = true;
-        let mut assumes_capacity_exhausted = false;
+        let mut assumes_waiting = false;
         let final_order;
         if !arrived {
             order.speed_carry = speed_budget as u64;
@@ -161,7 +162,7 @@ impl GameWorld {
                     .then_some(order.destination)
                 }) {
                 Some(next) => Next::Segment(next),
-                None => self.propose_map_segment(stored, order, &mut assumes_capacity_exhausted)?,
+                None => self.propose_map_segment(stored, order, &mut assumes_waiting)?,
             };
             match next {
                 Next::Waiting => {
@@ -209,7 +210,7 @@ impl GameWorld {
             order: final_order,
             pops,
             keeps_moving,
-            assumes_capacity_exhausted,
+            assumes_waiting,
         })
     }
 
@@ -218,7 +219,7 @@ impl GameWorld {
         &self,
         stored: &crate::game_world::StoredUnit,
         order: MovementOrder,
-        assumes_capacity_exhausted: &mut bool,
+        assumes_waiting: &mut bool,
     ) -> Option<Next> {
         if !self.has_route_navigation() {
             return (order.waypoint != order.destination)
@@ -229,8 +230,12 @@ impl GameWorld {
             .planner
             .as_ref()
             .is_none_or(|planner| !planner.has_route_continuation());
-        if needs_search && self.planner_capacity_exhausted(self.lookup[&stored.state.id]) {
-            *assumes_capacity_exhausted = true;
+        if needs_search {
+            // The sequential engine waits whenever the tick's planning budget
+            // is spent or planner capacity is exhausted, both of which depend
+            // on the movers applied before this one. Assume it and let the
+            // apply phase confirm it at this mover's turn.
+            *assumes_waiting = true;
             return Some(Next::Waiting);
         }
         None
@@ -249,7 +254,10 @@ impl GameWorld {
         let Some(&index) = self.lookup.get(&id) else {
             return false;
         };
-        if step.assumes_capacity_exhausted && !self.planner_capacity_exhausted(index) {
+        if step.assumes_waiting
+            && self.planning_budget > 0
+            && !self.planner_capacity_exhausted(index)
+        {
             return false;
         }
         let stored = &mut self.units[index];

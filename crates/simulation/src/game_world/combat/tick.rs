@@ -156,9 +156,14 @@ impl GameWorld {
                     && i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
                         > super::approach::FAR_REUSE_TILES
             });
+            // A search for a target beyond the local search's reach ends in the
+            // far fallback, first search or repeat; both spend the budget.
+            let counts_as_far = attacker.far.is_some()
+                || i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
+                    > super::approach::FAR_REUSE_TILES;
             let destination = if let Some(far) = reusable {
                 Some(far.destination)
-            } else if attacker.far.is_some() && self.combat.far_searches == 0 {
+            } else if counts_as_far && self.combat.far_searches == 0 {
                 // Over this tick's budget: keep walking and look again next tick.
                 if let Some(entry) = self.combat.attackers.get_mut(&id) {
                     entry.repath_tick = now.saturating_add(1);
@@ -170,7 +175,7 @@ impl GameWorld {
                 return;
             } else {
                 let search = self.attack_search(id, &goal).ok();
-                if attacker.far.is_some() {
+                if counts_as_far {
                     self.combat.far_searches -= 1;
                 }
                 let far = search

@@ -481,7 +481,6 @@ fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
 
 mod combat;
 mod far_orders;
-#[cfg(not(target_arch = "wasm32"))]
 mod physical_movement;
 mod routes;
 mod scale_hooks;
