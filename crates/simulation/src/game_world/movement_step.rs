@@ -237,7 +237,7 @@ impl GameWorld {
     }
 
     /// Commits a proposal: the shared writes of the sequential engine, in the
-    /// same order (position, vision, bucket). Returns `false`, writing nothing,
+    /// same order (position, wildlife cells, vision, bucket). Returns `false`, writing nothing,
     /// when an assumption of the proposal no longer holds.
     pub(crate) fn apply_step(
         &mut self,
@@ -253,11 +253,15 @@ impl GameWorld {
             return false;
         }
         let stored = &mut self.units[index];
+        let previous_tile = stored.state.position.tile_floor();
         stored.state = step.state;
         stored.order = step.order;
         if step.pops > 0 {
             stored.route.pop_front();
         }
+        // Wildlife's unit cells follow every step, before vision, as in the
+        // sequential path.
+        self.track_unit_step(id, previous_tile, &step.state);
         if step.vision_stale {
             self.update_unit_vision(id);
         }
