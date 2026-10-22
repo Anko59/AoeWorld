@@ -26,6 +26,7 @@ jobs:
       - run: make preflight
       - run: make test-source-qualification
       - run: make test-exhaustive
+      - run: make sdk-python-test
       - run: make coverage
       - run: make browser-check
       - run: make test-e2e

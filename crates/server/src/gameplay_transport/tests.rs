@@ -1,5 +1,5 @@
 use super::*;
-use aoe_core::{EntityId, Seed};
+use aoe_core::Seed;
 use std::time::Instant;
 
 async fn expire(service: &GameplayService, slot: usize, session_id: u64) {
@@ -45,6 +45,7 @@ async fn expired_controller_promotes_the_oldest_spectator_and_can_fall_empty() {
         }
     ));
 
+    let next_token = ownership.slots[0].token;
     ownership.slots[0].lease = Some(ControllerLease {
         session_id: next_id,
         disconnected_at: Some(
@@ -56,7 +57,10 @@ async fn expired_controller_promotes_the_oldest_spectator_and_can_fall_empty() {
     sessions.clear();
     promote_expired(&mut ownership, &mut sessions, service.world_id);
     assert!(ownership.slots[0].lease.is_none());
-    let _ = EntityId(7);
+    assert_ne!(
+        ownership.slots[0].token, next_token,
+        "a cleared seat gets a fresh token: the departed player's no longer works"
+    );
 }
 
 #[test]

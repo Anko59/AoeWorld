@@ -13,8 +13,8 @@ from ._native import Decision, Fleet
 class AsyncFleet:
     """`async for index, decision in fleet.decisions()` over many connections.
 
-    ``decision`` is ``None`` once for a connection that has closed; drop it
-    from the fleet (build a new :class:`AsyncFleet`) to stop hearing about it.
+    ``decision`` is ``None`` exactly once for a connection that has closed;
+    the fleet then ignores it.
     """
 
     def __init__(self, fleet: Fleet, poll_seconds: float = 0.5) -> None:
