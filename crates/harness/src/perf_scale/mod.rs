@@ -73,6 +73,7 @@ struct PhaseRun {
     hashes: Vec<Value>,
     hash_ms: Series,
     start_tick: u64,
+    budget_ms: f64,
 }
 
 fn run_ticks(
@@ -82,6 +83,7 @@ fn run_ticks(
     ticks: u32,
     hash_every: u32,
 ) -> PhaseRun {
+    let budget_ms = 1000.0 / f64::from(world.config().tick_hz);
     let mut run = PhaseRun {
         total: Series::default(),
         with_orders: Series::default(),
@@ -91,6 +93,7 @@ fn run_ticks(
         hashes: Vec::new(),
         hash_ms: Series::default(),
         start_tick: world.tick().0,
+        budget_ms,
     };
     for index in 0..ticks {
         let begin = Instant::now();
@@ -166,7 +169,7 @@ impl PhaseRun {
             .map(|(name, series)| ((*name).to_owned(), series.summary()))
             .collect();
         let mean_changed = self.changed.iter().sum::<f64>() / self.changed.len().max(1) as f64;
-        let budget_ms = 50.0;
+        let budget_ms = self.budget_ms;
         let over = self
             .with_orders
             .0
@@ -179,7 +182,8 @@ impl PhaseRun {
             "tick_advance": self.total.summary(),
             "orders_issue": self.orders.summary(),
             "tick_with_orders": self.with_orders.summary(),
-            "ticks_over_50ms": over,
+            "tick_budget_ms": budget_ms,
+            "ticks_over_budget": over,
             "phases": phases,
             "mean_changed_units_per_tick": round(mean_changed),
             "canonical_hash_ms": self.hash_ms.summary(),
@@ -222,6 +226,9 @@ fn census(world: &GameWorld, built_players: &[Player]) -> Value {
         "memory": memory(),
     })
 }
+
+#[cfg(test)]
+mod tests;
 
 fn git(args: &[&str]) -> String {
     Command::new("git")

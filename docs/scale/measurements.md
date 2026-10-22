@@ -135,7 +135,8 @@ about 25 ticks, 41,000 movers give about 1,600 tile entries per tick, each costi
 1. **Per-generator tile memo.** `MapChunkGenerator` memoizes the composed tile and
    resource of a tile (`tile_at`, `object_at`, `tile_and_node`) and the base physical
    tile used by route edge checks, in two direct-mapped 131,072-slot tables behind a
-   mutex (`crates/map/src/terrain/point_memo.rs`, used from
+   mutex (a fixed budget, asserted at most 40 MiB per generator, allocated on first
+   use; the browser build compiles zero slots and keeps no memo) (`crates/map/src/terrain/point_memo.rs`, used from
    `terrain/landscape_dispatch.rs`). The generator is immutable and deterministic;
    only successful, uncancelled answers are stored; every builder that changes its
    inputs resets the memo. Tests assert equality with direct evaluation. Gain at 20
@@ -158,7 +159,7 @@ stated.
 1. **Per-tile terrain evaluation, uncached or first-touch**:
    `crates/map/src/terrain/landscape_dispatch.rs:130` (`memoized_point`), called per
    unit per tick from `crates/simulation/src/game_movement.rs:79` through
-   `crates/simulation/src/terrain.rs:107`. O(M) lookups per tick, O(new tiles) full
+   `crates/simulation/src/terrain.rs:106`. O(M) lookups per tick, O(new tiles) full
    evaluations. Fix: a chunk-level passability and resource bitmap cache (32 x 32
    chunks, generated in bulk, 3.8 times cheaper per tile, shared by movement,
    planner, gathering and placement) with prefetch of the chunks ahead of movers.
@@ -207,7 +208,7 @@ stated.
    (`query_units`: per session, a `BTreeSet` of candidates, an O(U) scan of all
    units of the viewer's player, then a visibility lookup per unit),
    `crates/server/src/gameplay/tick.rs` (a per-session `BTreeMap` of unit states, a
-   clone of the player and building maps per session at `:223`). 1.1 ms per session
+   clone of the player and building maps per session at `:224`). 1.1 ms per session
    per tick, O(S x (view + own units)). Fix: build one shared per-chunk change list
    per tick, let sessions subscribe to chunks (interest management), send each unit
    delta once per chunk, and run the fan-out off the tick thread on the previous
@@ -220,7 +221,7 @@ stated.
 
 ## Hard limits found in the code (independent of speed)
 
-- `MAX_ECONOMY_PLAYERS = 16` (`simulation/.../economy.rs:33`, wire cap
+- `MAX_ECONOMY_PLAYERS = 16` (`simulation/.../economy.rs:34`, wire cap
   `protocol/src/gameplay/economy.rs:9`): with 100 players the fog-off snapshot
   failed to encode for all 100 sessions (`encode_failed`).
 - `MAX_ECONOMY_BUILDINGS = 256` world-wide, `MAX_GATHERERS = 80`, `MAX_BUILDERS = 80`,
@@ -267,7 +268,11 @@ rework the server around per-player interest-managed deltas.
   unreachable, long attack orders are rejected, and 30 bases had no wood in range,
   so only about 41,400 of 101,111 units move. A real economy keeps more villagers
   walking. Scale the movement line accordingly (about 7 us per mover per tick).
-- One run per configuration; no variance across seeds. Ticks are measured with
+- One run per configuration; no variance across seeds. The committed
+  `perf-scale.json` is a later rerun with other agents loading the machine (1-minute
+  load about 11): `advance` 413 p50 / 556 p95 / 790 max, movement 318, server tick
+  with 100 sessions 663 against a 492 baseline. The tables above are the quieter
+  earlier run; the verdict does not change. Ticks are measured with
   other containers on the machine idle but not isolated.
 - The 100-player "before" numbers come from an earlier run of the same command with
   an earlier workload, quoted from its console output. The kept before/after pair

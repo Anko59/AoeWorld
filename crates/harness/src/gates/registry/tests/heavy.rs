@@ -39,6 +39,7 @@ fn the_committed_registry_marks_the_compiling_and_testing_gates_heavy() {
         "perf-instructions",
         "perf-pressure",
         "perf-scale",
+        "perf-scale-smoke",
         "perf-smoke",
         "perf-soak-10",
         "perf-soak-30",

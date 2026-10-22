@@ -111,6 +111,13 @@ perf-scale: tools slot-bootstrap
 perf-scale-steps:
 	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-scale $(PERF_SCALE_ARGS)
 
+# A tiny run (4 players, 2,000 units, 50 ticks) that executes the whole benchmark path.
+perf-scale-smoke: tools slot-bootstrap
+	@$(SLOT_RUN) perf-scale-smoke -- make --no-print-directory perf-scale-smoke-steps
+
+perf-scale-smoke-steps:
+	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-scale --players 4 --units-per-player 500 --side-tiles 4000 --ticks 50 --fog-off-ticks 10 --server-ticks 5 --subscribers 4 --out reports/perf/perf-scale-smoke.json
+
 perf-wasm-size: build-wasm analysis-tools slot-bootstrap
 	@$(SLOT_RUN) perf-wasm-size -- make --no-print-directory perf-wasm-size-steps
 
@@ -345,6 +352,7 @@ perf-soak-30-steps:
   perf-instructions \
   perf-timing \
   perf-scale \
+  perf-scale-smoke \
   perf-wasm-size \
   perf-baseline-propose \
   perf-comment \
