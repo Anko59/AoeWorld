@@ -209,3 +209,60 @@ fn redirected_far_order_moves_toward_the_new_destination_at_once() {
     }
     assert!(world.unit(unit).expect("unit").position.x < turned_at.x);
 }
+
+#[test]
+fn a_1600_tile_attack_order_succeeds_and_the_attacker_walks_toward_the_target() {
+    let mut world = wide_world();
+    let attacker = world
+        .spawn_kind(PlayerId(0), crate::UnitKind::Militia, center(100, 100))
+        .expect("attacker");
+    let target = world
+        .spawn_kind(PlayerId(1), crate::UnitKind::Militia, center(1_700, 100))
+        .expect("target");
+    world
+        .issue_attack(PlayerId(0), attacker, target)
+        .expect("a far attack needs no local firing-position proof");
+    let order = world.movement_order(attacker).expect("walking order");
+    let destination = order.destination.tile_floor();
+    assert!(
+        (1_697..=1_700).contains(&destination.x) && (99..=101).contains(&destination.y),
+        "{destination:?}"
+    );
+    let before = world.unit(attacker).expect("attacker").position;
+    for _ in 0..40 {
+        world.advance();
+    }
+    let after = world.unit(attacker).expect("attacker");
+    assert!(after.position.x > before.x && after.attack_target == Some(target));
+    // Same inputs, same order: the fallback is deterministic.
+    let mut twin = wide_world();
+    let a = twin
+        .spawn_kind(PlayerId(0), crate::UnitKind::Militia, center(100, 100))
+        .expect("attacker");
+    let t = twin
+        .spawn_kind(PlayerId(1), crate::UnitKind::Militia, center(1_700, 100))
+        .expect("target");
+    twin.issue_attack(PlayerId(0), a, t).expect("twin attack");
+    assert_eq!(twin.movement_order(a), Some(order));
+}
+
+#[test]
+fn a_1600_tile_attack_on_a_town_center_succeeds() {
+    let mut world = wide_world();
+    world
+        .initialize_village(PlayerId(1), TileCoord::new(1_700, 200))
+        .expect("enemy village");
+    let town_center = world
+        .buildings()
+        .find(|building| {
+            building.player == PlayerId(1) && building.kind == crate::BuildingKind::TownCenter
+        })
+        .map(|building| building.id)
+        .expect("town center");
+    let attacker = world
+        .spawn_kind(PlayerId(0), crate::UnitKind::Militia, center(100, 200))
+        .expect("attacker");
+    let result = world.issue_attack(PlayerId(0), attacker, town_center);
+    assert_eq!(result, Ok(()));
+    assert!(world.movement_order(attacker).is_some());
+}

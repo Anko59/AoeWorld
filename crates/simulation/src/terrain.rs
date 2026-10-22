@@ -272,6 +272,21 @@ impl Terrain {
         }
     }
 
+    /// Plans over 32 x 32 chunk portals; see [`aoe_map::hierarchical_route`].
+    /// Uniform worlds have no obstacles and return `None`. A provider failure
+    /// is reported as `None` too: the caller then plans optimistically.
+    pub fn hierarchical_route(
+        &self,
+        origin: TileCoord,
+        destination: TileCoord,
+        max_expansions: u32,
+    ) -> Option<aoe_map::HierarchicalOutcome> {
+        let Self::Map { generator, .. } = self else {
+            return None;
+        };
+        aoe_map::hierarchical_route(generator, origin, destination, max_expansions).ok()
+    }
+
     /// Counts a connected walkable component without allocating map-scale
     /// state. Callers choose the stopping threshold (for example 256 tiles
     /// for a playable starting area).

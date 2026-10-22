@@ -358,7 +358,9 @@ fn resumed_provider_failure_is_a_typed_stopped_reason() {
     let mut world = GameWorld::new(config).expect("world");
     world.terrain = terrain;
     let origin = TileCoord::new(1, 1);
-    let destination = TileCoord::new(20, 1);
+    // A chunk the first tick never read: cached chunks no longer ask the
+    // provider, so the outage must hit terrain read for the first time.
+    let destination = TileCoord::new(60, 1);
     let id = world
         .spawn_unit(
             PlayerId(0),
