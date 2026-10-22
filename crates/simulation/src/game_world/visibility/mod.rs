@@ -1,28 +1,15 @@
-//! Sparse player knowledge. No allocation or iteration depends on map area.
+//! Sparse player knowledge. Sight spreads through full-disc updates when an
+//! observer appears, dies or changes LOS, and through disc-edge diffs when it
+//! merely moves. Building memory consumes the sight flips separately.
 use super::{GameBuilding, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TileVisibility {
     Unexplored,
     Explored,
     Visible,
-}
-
-#[derive(Default, Debug)]
-struct PlayerVision {
-    // 32x32 bits, allocated only after a tile in the chunk was observed.
-    explored: BTreeMap<(i32, i32), [u64; 16]>,
-    // Only currently visible tiles carry reference counts. Overlapping LOS
-    // cannot turn a tile fogged when just one observer leaves.
-    visible: BTreeMap<TileCoord, u32>,
-    remembered: BTreeMap<EntityId, GameBuilding>,
-    tile_work: u64,
-    overview: BTreeMap<u16, u32>,
-    resources: BTreeMap<u64, u16>,
-    /// Bumped whenever this player's own line of sight changes.
-    revision: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,49 +23,35 @@ struct Observer {
 pub(crate) struct Vision {
     players: BTreeMap<PlayerId, PlayerVision>,
     observers: BTreeMap<EntityId, Observer>,
+    /// Building footprint tiles, for sight-gain and sight-loss events.
+    building_at_tile: HashMap<TileCoord, EntityId>,
+    building_watchers: BTreeMap<EntityId, Watched>,
+    /// Buildings gone since the last memory flush, with owner and watchers.
+    destroyed: Vec<(EntityId, PlayerId, TileRect, BTreeSet<PlayerId>)>,
+    /// Scratch for disc-edge diffs; working memory, never hashed.
+    flags: Vec<bool>,
+    flips: Vec<(TileCoord, bool)>,
+    entered: Vec<TileCoord>,
     disabled: bool,
     revision: u64,
 }
 
-fn address(tile: TileCoord) -> ((i32, i32), usize, u64) {
-    let index = (tile.y.rem_euclid(32) * 32 + tile.x.rem_euclid(32)) as usize;
-    (
-        (tile.x.div_euclid(32), tile.y.div_euclid(32)),
-        index / 64,
-        1 << (index % 64),
-    )
-}
+#[path = "state.rs"]
+mod state;
+use state::PlayerVision;
 
-/// Every strategic pixel intersecting the tile, including tiles wider than a
-/// pixel on supported small maps. Shared pixels retain reference counts.
-fn pixels(tile: i32, axis: i32) -> std::ops::Range<i64> {
-    let (tile, axis) = (i64::from(tile), i64::from(axis));
-    tile * 256 / axis..((tile + 1) * 256 + axis - 1) / axis
-}
-
-impl PlayerVision {
-    fn state(&self, tile: TileCoord) -> TileVisibility {
-        if self.visible.contains_key(&tile) {
-            return TileVisibility::Visible;
-        }
-        let (chunk, word, mask) = address(tile);
-        if self
-            .explored
-            .get(&chunk)
-            .is_some_and(|bits| bits[word] & mask != 0)
-        {
-            TileVisibility::Explored
-        } else {
-            TileVisibility::Unexplored
-        }
-    }
-}
+#[path = "watchers.rs"]
+mod watchers;
+use watchers::Watched;
 
 impl Vision {
+    /// Full disc update: a fresh observer or one whose LOS changed.
     fn apply(&mut self, observer: Observer, add: bool, width: i32, height: i32) {
         let player = self.players.entry(observer.player).or_default();
         player.revision += 1;
         let radius = i32::from(observer.los);
+        let mut flips = std::mem::take(&mut self.flips);
+        flips.clear();
         for dy in -radius..=radius {
             for dx in -radius..=radius {
                 if dx * dx + dy * dy > radius * radius {
@@ -89,30 +62,103 @@ impl Vision {
                     continue;
                 }
                 player.tile_work += 1;
-                if add {
-                    *player.visible.entry(tile).or_default() += 1;
-                    let (chunk, word, mask) = address(tile);
-                    player.explored.entry(chunk).or_insert([0; 16])[word] |= mask;
-                } else if let Some(count) = player.visible.get_mut(&tile) {
-                    *count -= 1;
-                    if *count == 0 {
-                        player.visible.remove(&tile);
-                    }
+                let flipped = if add {
+                    player.raise_visible(tile)
                 } else {
+                    player.lower_visible(tile)
+                };
+                if !flipped {
                     continue;
                 }
-                for y in pixels(tile.y, height) {
-                    for x in pixels(tile.x, width) {
-                        let pixel = (y * 256 + x) as u16;
-                        if add {
-                            *player.overview.entry(pixel).or_default() += 1;
-                        } else if let Some(total) = player.overview.get_mut(&pixel) {
-                            *total -= 1;
-                        }
-                    }
+                if add {
+                    player.set_explored(tile);
+                }
+                player.touch_overview(tile, add, width, height);
+                flips.push((tile, add));
+            }
+        }
+        self.flips = flips;
+        let mut entered = std::mem::take(&mut self.entered);
+        entered.extend(
+            self.flips
+                .iter()
+                .filter(|(_, add)| *add)
+                .map(|(tile, _)| *tile),
+        );
+        self.entered = entered;
+        self.sight_flips(observer.player);
+    }
+
+    /// Disc-edge update: only the entering and leaving tiles of a moved
+    /// observer touch counters, exploration, overview and building memory.
+    /// Flag slots are offsets from the old center, so both discs share them.
+    fn apply_edge(&mut self, old: Observer, new: Observer, width: i32, height: i32) {
+        let radius = i32::from(old.los);
+        let span = (2 * radius + 1) as usize;
+        let mut flags = std::mem::take(&mut self.flags);
+        flags.clear();
+        flags.resize(span * span, false);
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx * dx + dy * dy > radius * radius {
+                    continue;
+                }
+                let tile = TileCoord::new(old.center.x + dx, old.center.y + dy);
+                if tile.x >= 0 && tile.y >= 0 && tile.x < width && tile.y < height {
+                    flags[((dy + radius) as usize) * span + (dx + radius) as usize] = true;
                 }
             }
         }
+        let (shift_x, shift_y) = (new.center.x - old.center.x, new.center.y - old.center.y);
+        let player = self.players.entry(new.player).or_default();
+        player.revision += 1;
+        let mut flips = std::mem::take(&mut self.flips);
+        flips.clear();
+        let mut entered = std::mem::take(&mut self.entered);
+        entered.clear();
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx * dx + dy * dy > radius * radius {
+                    continue;
+                }
+                let tile = TileCoord::new(new.center.x + dx, new.center.y + dy);
+                if tile.x < 0 || tile.y < 0 || tile.x >= width || tile.y >= height {
+                    continue;
+                }
+                // The same tile in old-disc coordinates.
+                let (ox, oy) = (shift_x + dx, shift_y + dy);
+                if ox.abs() <= radius
+                    && oy.abs() <= radius
+                    && flags[((oy + radius) as usize) * span + (ox + radius) as usize]
+                {
+                    flags[((oy + radius) as usize) * span + (ox + radius) as usize] = false;
+                    continue;
+                }
+                player.tile_work += 1;
+                if player.raise_visible(tile) {
+                    player.set_explored(tile);
+                    flips.push((tile, true));
+                    entered.push(tile);
+                    player.touch_overview(tile, true, width, height);
+                }
+            }
+        }
+        for (slot, leaving) in flags.iter().enumerate() {
+            if !leaving {
+                continue;
+            }
+            let (dy, dx) = ((slot / span) as i32 - radius, (slot % span) as i32 - radius);
+            let tile = TileCoord::new(old.center.x + dx, old.center.y + dy);
+            player.tile_work += 1;
+            if player.lower_visible(tile) {
+                flips.push((tile, false));
+                player.touch_overview(tile, false, width, height);
+            }
+        }
+        self.flags = flags;
+        self.flips = flips;
+        self.entered = entered;
+        self.sight_flips(new.player);
     }
 }
 
@@ -134,11 +180,12 @@ impl GameWorld {
         self.vision.revision += 1;
         if was_disabled && !disabled {
             self.vision.observers.clear();
+            self.rebuild_building_sight_index();
             for vision in self.vision.players.values_mut() {
+                vision.revision += 1;
                 vision.visible.clear();
-                for count in vision.overview.values_mut() {
-                    *count = 0;
-                }
+                vision.visible_tiles = 0;
+                vision.overview.clear_counts();
             }
             let units = self.units().map(|u| u.id).collect::<Vec<_>>();
             let buildings = self.buildings().map(|b| b.id).collect::<Vec<_>>();
@@ -178,12 +225,10 @@ impl GameWorld {
         self.vision.players.get(&player).map_or(0, |v| v.revision)
     }
     pub fn vision_overview(&self, player: PlayerId) -> Vec<(u16, u8)> {
-        self.vision.players.get(&player).map_or_else(Vec::new, |v| {
-            v.overview
-                .iter()
-                .map(|(i, count)| (*i, if *count > 0 { 2 } else { 1 }))
-                .collect()
-        })
+        self.vision
+            .players
+            .get(&player)
+            .map_or_else(Vec::new, |v| v.overview.states().collect())
     }
 
     pub fn unit_visible_to(&self, player: PlayerId, id: EntityId) -> bool {
@@ -224,7 +269,7 @@ impl GameWorld {
     /// bounded-cost regressions. Idle ticks perform no LOS tile work.
     pub fn vision_storage(&self, player: PlayerId) -> (usize, usize, u64) {
         self.vision.players.get(&player).map_or((0, 0, 0), |v| {
-            (v.explored.len(), v.visible.len(), v.tile_work)
+            (v.explored.len(), v.visible_tiles, v.tile_work)
         })
     }
 
@@ -245,19 +290,25 @@ impl GameWorld {
             return false;
         }
         self.vision.revision += 1;
-        if let Some(old) = self.vision.observers.remove(&id) {
-            self.vision.apply(
-                old,
-                false,
-                self.config.width_tiles,
-                self.config.height_tiles,
-            );
-        }
+        let old = self.vision.observers.remove(&id);
+        let (width, height) = (self.config.width_tiles, self.config.height_tiles);
+        match (old, observer) {
+            (Some(old), Some(new)) if old.player == new.player && old.los == new.los => {
+                self.vision.apply_edge(old, new, width, height)
+            }
+            (old, new) => {
+                if let Some(old) = old {
+                    self.vision.apply(old, false, width, height);
+                }
+                if let Some(new) = new {
+                    self.vision.apply(new, true, width, height);
+                }
+            }
+        };
+        let entered = std::mem::take(&mut self.vision.entered);
         if let Some(new) = observer {
-            self.vision
-                .apply(new, true, self.config.width_tiles, self.config.height_tiles);
             self.vision.observers.insert(id, new);
-            self.observe_resource_disk(new);
+            self.observe_resource_tiles(new.player, &entered);
         }
         true
     }
@@ -293,39 +344,6 @@ impl GameWorld {
             )
         });
         self.update_observer(id, observer);
-    }
-
-    pub(crate) fn remember_visible_buildings(&mut self) {
-        if self.vision.disabled {
-            return;
-        }
-        let players = self.vision.players.keys().copied().collect::<Vec<_>>();
-        for player in players {
-            let visible = self
-                .buildings()
-                .filter(|b| b.player == player || self.building_visible_to(player, b.footprint))
-                .cloned()
-                .collect::<Vec<_>>();
-            let vanished = self.vision.players[&player]
-                .remembered
-                .values()
-                .filter(|b| {
-                    !self.economy.buildings.contains_key(&b.id)
-                        && (b.player == player || self.building_visible_to(player, b.footprint))
-                })
-                .map(|b| b.id)
-                .collect::<Vec<_>>();
-            let Some(vision) = self.vision.players.get_mut(&player) else {
-                continue;
-            };
-            let memory = &mut vision.remembered;
-            for id in vanished {
-                memory.remove(&id);
-            }
-            for building in visible {
-                memory.insert(building.id, building);
-            }
-        }
     }
 }
 

@@ -162,6 +162,7 @@ impl GameWorld {
             },
         );
         self.refresh_population_cap(player);
+        self.index_new_building(id, player, footprint);
         if complete {
             self.update_building_vision(id);
             self.remember_visible_buildings();
@@ -192,6 +193,7 @@ impl GameWorld {
         let Some(building) = self.economy.buildings.remove(&id) else {
             return;
         };
+        self.forget_building(id, building.footprint);
         if building.kind.rules().blocks {
             for y in building.footprint.min.y..building.footprint.max.y {
                 for x in building.footprint.min.x..building.footprint.max.x {
@@ -206,9 +208,8 @@ impl GameWorld {
         self.economy.open_gates.remove(&id);
         self.combat.tower_ready.remove(&id);
         self.refresh_population_cap(building.player);
-        if self.update_observer(id, None) {
-            self.remember_visible_buildings();
-        }
+        self.update_observer(id, None);
+        self.remember_visible_buildings();
     }
 
     /// Bounded local placement around the certified start, favoring inland

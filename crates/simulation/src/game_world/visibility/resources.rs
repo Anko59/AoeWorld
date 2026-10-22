@@ -1,5 +1,6 @@
 use super::*;
 use crate::Terrain;
+use aoe_core::TileCoord;
 
 // Both natural and starting-node identities encode their immutable tile. This
 // does not query terrain, page providers, or every resource on a large map.
@@ -32,40 +33,28 @@ impl GameWorld {
         }
     }
 
-    pub(super) fn observe_resource_disk(&mut self, observer: Observer) {
+    /// Probes only the tiles that just became visible; amounts that change
+    /// while a tile stays visible arrive through `record_observed_resource`.
+    pub(crate) fn observe_resource_tiles(&mut self, player: PlayerId, tiles: &[TileCoord]) {
         let Terrain::Map { overlay, .. } = &self.terrain else {
             return;
         };
-        let radius = i32::from(observer.los);
-        let Some(vision) = self.vision.players.get_mut(&observer.player) else {
+        let Some(vision) = self.vision.players.get_mut(&player) else {
             return;
         };
         let memory = &mut vision.resources;
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                if dx * dx + dy * dy > radius * radius {
-                    continue;
-                }
-                let tile = TileCoord::new(observer.center.x + dx, observer.center.y + dy);
-                if tile.x < 0
-                    || tile.y < 0
-                    || tile.x >= self.config.width_tiles
-                    || tile.y >= self.config.height_tiles
-                {
-                    continue;
-                }
-                let base = (tile.y as u64) << 19 | (tile.x as u64) << 1;
-                for prefix in [
-                    0,
-                    1 << 37,
-                    (1 << 37) | (1 << 38),
-                    (1 << 37) | (2 << 38),
-                    (1 << 37) | (3 << 38),
-                ] {
-                    let id = base | prefix;
-                    if let Some(remaining) = overlay.changed_amount(id) {
-                        memory.insert(id, remaining);
-                    }
+        for tile in tiles {
+            let base = (tile.y as u64) << 19 | (tile.x as u64) << 1;
+            for prefix in [
+                0,
+                1 << 37,
+                (1 << 37) | (1 << 38),
+                (1 << 37) | (2 << 38),
+                (1 << 37) | (3 << 38),
+            ] {
+                let id = base | prefix;
+                if let Some(remaining) = overlay.changed_amount(id) {
+                    memory.insert(id, remaining);
                 }
             }
         }

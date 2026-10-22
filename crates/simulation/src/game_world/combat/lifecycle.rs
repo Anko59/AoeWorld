@@ -64,6 +64,8 @@ impl GameWorld {
         state.death_hunt = death_hunt;
         state.task = UnitTask::Dying;
         state.attack_target = None;
+        let at = state.position;
+        self.track_unit_death(id, at);
         self.update_observer(id, None);
         self.combat.attackers.remove(&id);
         self.stop_gathering(id);
@@ -95,6 +97,8 @@ impl GameWorld {
             return;
         };
         self.clear_planner(index);
+        let at = self.units[index].state.position;
+        self.untrack_unit_at(id, at);
         let bucket = self.units[index].bucket;
         let slot = self.units[index].bucket_slot;
         if let Some(ids) = self.chunks.get_mut(&bucket) {

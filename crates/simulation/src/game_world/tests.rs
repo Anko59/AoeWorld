@@ -2,6 +2,7 @@ use super::*;
 use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
 use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, ResourceOverlay};
 
+mod replay_pin;
 mod visibility;
 mod visibility_resources;
 

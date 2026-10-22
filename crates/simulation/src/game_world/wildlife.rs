@@ -1,7 +1,7 @@
 //! Integer wildlife state, local AI and villager hunting jobs.
-use super::{EconomyError, GameWorld};
-use aoe_core::{EntityId, PlayerId, WorldPosition};
-use std::collections::{BTreeMap, BTreeSet};
+use super::{EconomyError, GameUnit, GameWorld, UnitKind};
+use aoe_core::{EntityId, PlayerId, TileCoord, WorldPosition};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 mod ai;
 mod carcass;
@@ -56,6 +56,17 @@ struct HuntJob {
     repath_tick: u64,
 }
 
+/// A live unit mirrored into the wildlife cell grid, so animals can find
+/// nearby units through point lookups instead of scanning the population.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CellUnit {
+    id: EntityId,
+    position: WorldPosition,
+    player: PlayerId,
+    kind: UnitKind,
+    alive: bool,
+}
+
 /// Actual visits by the last tick, including broad-phase pairs and due bodies.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct WildlifeStats {
@@ -72,6 +83,9 @@ pub(crate) struct Wildlife {
     cells: BTreeMap<(i32, i32), BTreeSet<EntityId>>,
     /// Chasing/fleeing animals get a cleanup step if nearby units disappear.
     engaged: BTreeSet<EntityId>,
+    /// Units mirrored by wildlife cell. Only point lookups and per-cell
+    /// edits are made, so the hash map never biases a scan order.
+    unit_cells: HashMap<(i32, i32), Vec<CellUnit>>,
     hunts: BTreeMap<EntityId, HuntJob>,
     due: BTreeSet<(u64, EntityId)>,
     stats: WildlifeStats,
@@ -86,6 +100,9 @@ pub(super) fn cell(at: WorldPosition) -> (i32, i32) {
     let tile = at.tile_floor();
     (tile.x.div_euclid(CELL_TILES), tile.y.div_euclid(CELL_TILES))
 }
+fn cell_of(tile: TileCoord) -> (i32, i32) {
+    (tile.x.div_euclid(CELL_TILES), tile.y.div_euclid(CELL_TILES))
+}
 fn distance(a: WorldPosition, b: WorldPosition) -> i64 {
     let (x, y) = (
         i64::from(a.x) - i64::from(b.x),
@@ -98,6 +115,66 @@ fn radius(tiles: i64) -> i64 {
 }
 
 impl GameWorld {
+    pub(crate) fn track_unit_cell(&mut self, unit: &GameUnit) {
+        self.wildlife
+            .unit_cells
+            .entry(cell(unit.position))
+            .or_default()
+            .push(CellUnit {
+                id: unit.id,
+                position: unit.position,
+                player: unit.player,
+                kind: unit.kind,
+                alive: true,
+            });
+    }
+
+    /// Movement calls this after each step; `previous_tile` is where the unit
+    /// started the step. The mirrored position stays exact even without a
+    /// cell change, because animals score distances against it.
+    pub(crate) fn track_unit_step(
+        &mut self,
+        id: EntityId,
+        previous_tile: TileCoord,
+        unit: &GameUnit,
+    ) {
+        let (old, new) = (cell_of(previous_tile), cell(unit.position));
+        if old == new {
+            if let Some(units) = self.wildlife.unit_cells.get_mut(&old)
+                && let Some(slot) = units.iter().position(|u| u.id == id)
+            {
+                units[slot].position = unit.position;
+            }
+            return;
+        }
+        self.untrack_unit_cell(id, old);
+        self.track_unit_cell(unit);
+    }
+
+    pub(crate) fn untrack_unit_cell(&mut self, id: EntityId, key: (i32, i32)) {
+        if let Some(units) = self.wildlife.unit_cells.get_mut(&key) {
+            if let Some(slot) = units.iter().position(|u| u.id == id) {
+                units.swap_remove(slot);
+            }
+            if units.is_empty() {
+                self.wildlife.unit_cells.remove(&key);
+            }
+        }
+    }
+
+    pub(crate) fn untrack_unit_at(&mut self, id: EntityId, at: WorldPosition) {
+        let key = cell(at);
+        self.untrack_unit_cell(id, key);
+    }
+
+    pub(crate) fn track_unit_death(&mut self, id: EntityId, at: WorldPosition) {
+        if let Some(units) = self.wildlife.unit_cells.get_mut(&cell(at))
+            && let Some(slot) = units.iter().position(|u| u.id == id)
+        {
+            units[slot].alive = false;
+        }
+    }
+
     pub(crate) fn stop_sheep(
         &mut self,
         player: PlayerId,

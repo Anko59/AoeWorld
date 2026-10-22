@@ -89,6 +89,8 @@ impl GameWorld {
         if let Some(player) = self.economy.players.get_mut(&player) {
             player.population_used = player.population_used.saturating_add(1);
         }
+        let state = self.units[self.units.len() - 1].state;
+        self.track_unit_cell(&state);
         self.update_unit_vision(id);
         Ok(id)
     }
