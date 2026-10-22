@@ -71,6 +71,8 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
         1000.0 / f64::from(built.world.config().tick_hz)
     );
     assert_eq!(run.json()["tick_budget_ms"], run.budget_ms);
+}
+
 const PINNED_HASHES: [(u64, &str); 3] = [
     (
         100,

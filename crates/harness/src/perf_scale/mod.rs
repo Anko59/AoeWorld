@@ -232,9 +232,6 @@ fn census(world: &GameWorld, built_players: &[Player]) -> Value {
     })
 }
 
-#[cfg(test)]
-mod tests;
-
 fn git(args: &[&str]) -> String {
     Command::new("git")
         .args(args)
