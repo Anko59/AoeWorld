@@ -29,16 +29,11 @@ impl GameWorld {
         } else {
             (start + 1) % mover_count
         };
-        let movers = movers
-            .iter()
-            .cycle()
-            .skip(start)
-            .take(mover_count)
-            .copied()
-            .collect::<Vec<_>>();
         let mut still_moving = Vec::with_capacity(movers.len());
         let mut changed = Vec::with_capacity(movers.len());
-        for (turn, id) in movers.into_iter().enumerate() {
+        for turn in 0..mover_count {
+            // The rotation by the planning cursor, without copying the list.
+            let id = movers[(start + turn) % mover_count];
             let remaining_movers = mover_count.saturating_sub(turn).max(1);
             let mut planner_allowance = self
                 .planning_budget

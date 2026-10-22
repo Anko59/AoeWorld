@@ -16,6 +16,8 @@ mod hash;
 mod research;
 mod resources;
 mod spawning;
+mod unit_index;
+pub(crate) use unit_index::UnitIndex;
 #[path = "game_world/visibility/mod.rs"]
 mod visibility;
 mod wildlife;
@@ -107,7 +109,7 @@ pub struct GameWorld {
     pub(crate) vision: visibility::Vision,
     pub(crate) tick: Tick,
     pub(crate) units: Vec<StoredUnit>,
-    pub(crate) lookup: BTreeMap<EntityId, usize>,
+    pub(crate) lookup: UnitIndex,
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
     pub(crate) active_movers: Vec<EntityId>,
     pub(crate) terrain: Terrain,
@@ -134,7 +136,7 @@ impl GameWorld {
             wildlife: Default::default(),
             vision: Default::default(),
             units: Vec::new(),
-            lookup: BTreeMap::new(),
+            lookup: UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
             planning_budget: crate::MAX_ROUTE_WORK_PER_TICK,
