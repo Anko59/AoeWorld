@@ -167,7 +167,7 @@ fn inconsistent_building_state_is_rejected() {
         assert!(decode_gameplay_server(&postcard::to_allocvec(&message).unwrap()).is_err());
     }
     let mut player = player();
-    player.population_cap = MAX_POPULATION + 1;
+    player.population_cap = MAX_MATCH_POPULATION + 1;
     let message = GameplayServerMessage::Snapshot {
         revision: 1,
         tick: Tick(0),

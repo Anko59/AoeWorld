@@ -1,6 +1,7 @@
 //! `perf-scale`: headless authoritative-tick benchmark at the promised scale
 //! (100 players, about 100,000 units, a 16,000-tile France-sized map).
 mod driver;
+pub(crate) mod scale_match;
 mod server;
 mod stats;
 #[cfg(test)]

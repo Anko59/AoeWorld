@@ -162,7 +162,7 @@ async fn wildlife_hunting_scenario_over_the_wire() {
 }
 
 #[tokio::test]
-async fn wildlife_subscription_replaces_the_region_and_failed_delivery_disconnects() {
+async fn wildlife_subscription_replaces_the_region_and_a_full_queue_keeps_the_controller() {
     let service = GameplayService::new(Seed(1));
     service.set_fog_disabled(true).await;
     let (tx, mut rx) = mpsc::channel(16);
@@ -187,7 +187,7 @@ async fn wildlife_subscription_replaces_the_region_and_failed_delivery_disconnec
     assert!(drain(&mut rx).iter().any(|m| matches!(m, GameplayServerMessage::WildlifeState { revision: 3, animals, .. } if animals.is_empty())));
 
     // One slot holds the snapshot, but not the animal replacement: the
-    // controller must lose its lease rather than silently dropping the set.
+    // controller keeps its lease and the replacement waits for room.
     let service = GameplayService::new(Seed(1));
     let (tx, _blocked) = mpsc::channel(1);
     let (id, welcome) = service.register(None, tx).await;
@@ -205,7 +205,7 @@ async fn wildlife_subscription_replaces_the_region_and_failed_delivery_disconnec
     else {
         panic!("controller token");
     };
-    assert!(!service.is_controller(token).await);
+    assert!(service.is_controller(token).await);
     service
         .queue_hunt(id, 1, vec![EntityId(2)], EntityId(5))
         .await;

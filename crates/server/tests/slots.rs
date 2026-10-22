@@ -242,3 +242,111 @@ async fn ai_slots_do_not_authorize_server_administration() {
     assert!(service.is_controller(infos[0].token).await);
     assert!(!service.is_controller(infos[1].token).await);
 }
+
+#[tokio::test]
+async fn sessions_survive_a_stalled_reader_and_catch_up_in_one_delta() {
+    let service = match_service(&[false, false, false]);
+    let region = TileRect::new(TileCoord::new(0, 0), TileCoord::new(500, 500));
+    let mut seats = Vec::new();
+    for info in service.slot_infos().await {
+        // A tiny queue: the first views fill it, then nobody reads.
+        let (tx, mut rx) = mpsc::channel(3);
+        let (id, _) = service.join_slot(info.token, tx).await.unwrap();
+        service.subscribe(id, 1, region).await;
+        let buildings = drain(&mut rx)
+            .into_iter()
+            .find_map(|message| match message {
+                GameplayServerMessage::Snapshot { buildings, .. } => Some(buildings),
+                _ => None,
+            })
+            .expect("snapshot");
+        // Training changes the player's economy on every tick of the stall.
+        service
+            .queue_train(id, 1, buildings[0].id, UnitKind::Villager)
+            .await;
+        seats.push(rx);
+    }
+    for _ in 0..40 {
+        service.tick().await;
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    for rx in &mut seats {
+        assert!(!drain(rx).is_empty());
+        // Nobody was disconnected: the queue is empty, not closed.
+        assert!(matches!(
+            rx.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+        // Once there is room, a tick carries what the stall skipped.
+        let mut caught_up = false;
+        for _ in 0..40 {
+            service.tick().await;
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            for message in drain(rx) {
+                if let GameplayServerMessage::Tick {
+                    changed_players,
+                    changed_buildings,
+                    ..
+                } = message
+                {
+                    caught_up |= !changed_players.is_empty() || !changed_buildings.is_empty();
+                }
+            }
+            if caught_up {
+                break;
+            }
+        }
+        assert!(
+            caught_up,
+            "the economy change reaches the reader after the stall"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_stalled_reader_still_receives_every_ack_in_order() {
+    let service = match_service(&[false]);
+    let info = service.slot_infos().await.remove(0);
+    // A tiny queue nobody reads: acks meet a full queue on every tick.
+    let (tx, mut rx) = mpsc::channel(2);
+    let (id, _) = service.join_slot(info.token, tx).await.unwrap();
+    service
+        .subscribe(
+            id,
+            1,
+            TileRect::new(TileCoord::new(0, 0), TileCoord::new(500, 500)),
+        )
+        .await;
+    for sequence in 1..=8 {
+        service.queue_stop(id, sequence, info.primary_unit_id).await;
+        service.tick().await;
+    }
+    // Sequences 1..=8 were applied; a repeated sequence is rejected (also acked).
+    service.queue_stop(id, 3, info.primary_unit_id).await;
+    let mut acks = Vec::new();
+    for _ in 0..80 {
+        service.tick().await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        for message in drain(&mut rx) {
+            if let GameplayServerMessage::CommandAck {
+                sequence, result, ..
+            } = message
+            {
+                acks.push((sequence, result));
+            }
+        }
+        if acks.len() >= 9 {
+            break;
+        }
+    }
+    let applied: Vec<u64> = acks
+        .iter()
+        .filter(|(_, result)| *result == CommandResult::Accepted)
+        .map(|(sequence, _)| *sequence)
+        .collect();
+    assert_eq!(applied, (1..=8).collect::<Vec<_>>(), "{acks:?}");
+    assert!(
+        acks.contains(&(3, CommandResult::RejectedSequence)),
+        "the rejection is delivered too: {acks:?}"
+    );
+}

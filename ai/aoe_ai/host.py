@@ -29,6 +29,10 @@ class BotReport:
     decisions: int = 0
     errors: int = 0
     closed: bool = False
+    close_reason: str = ""
+    drops: int = 0
+    rejoins: int = 0
+    reconnect_seconds: float = 0.0
     last_tick: int = 0
     villagers: int = 0
     army: int = 0
@@ -56,19 +60,36 @@ class Host:
         self.url = url
         self.brains = [make(index) for index in range(len(tokens))]
         self.clients = [
-            aoeworld.connect(
-                url, token, decision_hz=self.config.decision_hz, orders_per_second=orders_per_second
-            )
-            for token in tokens
+            self._connect(url, token, orders_per_second) for token in tokens
         ]
         self.reports = [BotReport(slot=index) for index in range(len(tokens))]
         self.open = set(range(len(tokens)))
 
+    def _connect(self, url: str, token: str, orders_per_second: int) -> "aoeworld.Client":
+        """Joins a slot, retrying a handshake that times out on a busy server
+        (a tick of a huge world can outlast one attempt's 10 s)."""
+        for attempt in range(30):
+            try:
+                return aoeworld.connect(
+                    url,
+                    token,
+                    decision_hz=self.config.decision_hz,
+                    orders_per_second=orders_per_second,
+                )
+            except aoeworld.AoeError as error:
+                if "timed out" not in str(error) or attempt == 29:
+                    raise
+                log.warning("slot join timed out (attempt %d); retrying", attempt + 1)
+                time.sleep(1.0)
+        raise AssertionError("unreachable")
+
     # ----- the loop --------------------------------------------------------
     def _handle(self, index: int, decision: Optional[aoeworld.Decision]) -> None:
         report = self.reports[index]
+        report.drops, report.rejoins, report.reconnect_seconds = self.clients[index].connection_stats
         if decision is None:
             report.closed = True
+            report.close_reason = str(self.clients[index].close_reason or "")
             self.open.discard(index)
             return
         try:

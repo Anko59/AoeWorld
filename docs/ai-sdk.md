@@ -59,6 +59,20 @@ the same value in `X-AoeWorld-Admin-Token`.
 {"flat": {"tiles_per_side": 500, "seed": 3}, "slots": ["human", "ai", "ai"]}
 ```
 
+Optional match rules (both validated, defaults keep the shipped game):
+
+* `"population_cap": 5..5000` (default 200): the ceiling on any player's
+  population; the world's building, gatherer, builder and hunter capacities
+  grow in proportion (`cap / 200`). 100 players x 1,000 = 100,000 units.
+* `"start_units": {"villagers": n, "militia": m}`: extra units every player
+  starts with beside the standard kit, placed around the village. A scenario
+  hook for tests and [scale proofs](scale/match.md); the response reports
+  `population_cap` and `seeded_units`.
+
+`GET /match/stats?since=n` (same secret) returns the per-tick records of the
+server (`[tick, total_us, sim_us, late_us, orders, units, missed]`) that
+`make scale-match` reads.
+
 Name the ground with exactly one of:
 
 * `"flat": {"tiles_per_side": 128..4096, "seed": n}` a flat synthetic ground: one
@@ -284,6 +298,9 @@ could never kill (now stood down after 40 s without progress). The Feudal time
 (about 12.5 minutes) is later than a good player's. Synthetic two-bot workloads
 on a flat map show neither finished RTS performance nor dedicated-hardware
 qualification.
+
+`python -m aoe_ai host --tokens-file` plays many existing slots in one process and writes a
+JSON report with per-bot drop and rejoin counters (the scale harness uses it).
 
 ## Tests and commands
 

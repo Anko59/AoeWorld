@@ -79,6 +79,7 @@ pub struct AppState {
     gameplay: Arc<RwLock<GameplayService>>,
     /// Secret for `POST /match`; without it match hosting is refused.
     match_admin_token: Option<Arc<str>>,
+    tick_stats: Arc<gameplay_match::TickStats>,
 }
 
 impl AppState {
@@ -110,6 +111,7 @@ impl AppState {
             map_jobs: Arc::new(Mutex::new(map_jobs)),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
             match_admin_token: Config::match_admin_token_from_env().map(Into::into),
+            tick_stats: Arc::default(),
         })
     }
 
@@ -156,12 +158,9 @@ impl AppState {
             if let Some(world) = self.world.write().await.as_mut() {
                 world.advance();
             }
-            self.gameplay.read().await.clone().tick().await;
-            if started.duration_since(scheduled) > self.tick_period
-                || started.elapsed() > self.tick_period
-            {
-                self.tick_deadline_misses.fetch_add(1, Ordering::Relaxed);
-            }
+            let gameplay = self.gameplay.read().await.clone();
+            gameplay.tick().await;
+            self.observe_tick(&gameplay, scheduled, started).await;
         }
     }
 
@@ -318,7 +317,7 @@ pub fn app(state: AppState) -> Router {
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))
-        .route("/match", post(gameplay_match::start_match))
+        .merge(gameplay_match::routes())
         .merge(gameplay::arena::routes())
         .fallback_service(ServeDir::new("web").append_index_html_on_directories(true))
         .with_state(state);

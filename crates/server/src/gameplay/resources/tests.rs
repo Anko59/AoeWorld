@@ -323,23 +323,29 @@ async fn subscribers_receive_snapshot_delta_and_reconnect_snapshot() {
 }
 
 #[tokio::test]
-async fn resource_backpressure_disconnects_without_advancing_delivery_state() {
+async fn resource_backpressure_keeps_the_session_and_publishes_once_there_is_room() {
     let service =
         GameplayService::from_stored_map(package(), Some(Arc::new(Flat)), None, &|| false)
             .unwrap()
             .unwrap();
-    let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+    // The four frames of the first view fill this queue; nobody reads yet.
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(4);
     let (id, _) = service.register(None, sender).await;
-    service
-        .subscribe(id, 1, aoe_core::TileRect::from_xywh(0, 0, 64, 64))
-        .await;
+    let region = aoe_core::TileRect::from_xywh(0, 0, 64, 64);
+    service.subscribe(id, 1, region).await;
     service.tick().await;
-    assert!(service.sessions.lock().await.get(&id).is_none());
-    assert!(receiver.try_recv().is_ok());
-    assert!(matches!(
-        receiver.try_recv(),
-        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected)
-    ));
+    assert!(service.sessions.lock().await.get(&id).is_some());
+    while receiver.try_recv().is_ok() {}
+    service.tick().await;
+    let mut kinds = Vec::new();
+    while let Ok(message) = receiver.try_recv() {
+        kinds.push(message);
+    }
+    assert!(
+        kinds
+            .iter()
+            .any(|m| matches!(m, aoe_protocol::GameplayServerMessage::ResourceState(_)))
+    );
 }
 
 #[tokio::test]

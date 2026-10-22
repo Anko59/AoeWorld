@@ -12,6 +12,9 @@ pub const MAX_ECONOMY_BUILDINGS: usize = 4_096;
 pub const MAX_BUILD_GROUP: usize = 32;
 /// The population ceiling, however many houses stand.
 pub const MAX_POPULATION: u16 = 200;
+/// The most a match rule may raise the population ceiling to; a wire state
+/// above it is invalid.
+pub const MAX_MATCH_POPULATION: u16 = 5_000;
 pub const MAX_TRAINING_QUEUE: usize = 5;
 
 /// A Market commodity; wood, food and stone trade for gold.
@@ -314,7 +317,7 @@ pub(super) fn valid_players(players: &[GameplayPlayerState]) -> bool {
         && players.iter().all(valid_research)
         && players
             .iter()
-            .all(|player| player.population_cap <= MAX_POPULATION)
+            .all(|player| player.population_cap <= MAX_MATCH_POPULATION)
         && players
             .windows(2)
             .all(|pair| pair[0].player < pair[1].player)

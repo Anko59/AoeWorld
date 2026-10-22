@@ -199,3 +199,84 @@ async fn a_flat_match_seats_many_players_apart_on_connected_ground() {
     .await;
     assert_eq!(status, 400);
 }
+
+#[tokio::test]
+async fn population_cap_and_start_units_are_match_rules() {
+    let address = server().await;
+    let rules = |extra: &str| {
+        let extra = if extra.is_empty() {
+            String::new()
+        } else {
+            format!(",{extra}")
+        };
+        format!(r#"{{"flat":{{"tiles_per_side":300,"seed":2}},"slots":["human","ai"]{extra}}}"#)
+    };
+    let (status, body) = post(
+        address,
+        Some(SECRET),
+        &rules(r#""population_cap":1000,"start_units":{"villagers":30,"militia":10}"#),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(json["population_cap"], 1_000);
+    assert_eq!(
+        json["seeded_units"], 80,
+        "40 extra units for each of 2 seats"
+    );
+    assert_eq!(json["partial_starting_kits"], 0);
+    // The default is the AoE rule, with nothing seeded.
+    let (status, body) = post(address, Some(SECRET), &rules("")).await;
+    assert_eq!(status, 200, "{body}");
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        (
+            json["population_cap"].as_u64(),
+            json["seeded_units"].as_u64()
+        ),
+        (Some(200), Some(0))
+    );
+    for extra in [
+        r#""population_cap":4"#,
+        r#""population_cap":5001"#,
+        r#""population_cap":100,"start_units":{"villagers":90,"militia":20}"#,
+    ] {
+        let (status, body) = post(address, Some(SECRET), &rules(extra)).await;
+        assert_eq!(status, 400, "{extra}: {body}");
+    }
+}
+
+#[tokio::test]
+async fn the_stats_endpoint_needs_the_secret_and_records_ticks() {
+    let address = server().await;
+    let get = |secret: Option<&'static str>, path: &'static str| async move {
+        let mut stream = TcpStream::connect(address).await.unwrap();
+        let header = secret.map_or(String::new(), |s| {
+            format!("X-AoeWorld-Admin-Token: {s}\r\n")
+        });
+        let request =
+            format!("GET {path} HTTP/1.1\r\nHost: x\r\n{header}Connection: close\r\n\r\n");
+        stream.write_all(request.as_bytes()).await.unwrap();
+        let mut text = String::new();
+        stream.read_to_string(&mut text).await.unwrap();
+        let status: u16 = text.split_whitespace().nth(1).unwrap().parse().unwrap();
+        (
+            status,
+            text.split("\r\n\r\n").nth(1).unwrap_or("").to_owned(),
+        )
+    };
+    assert_eq!(get(None, "/match/stats").await.0, 403);
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    let (status, body) = get(Some(SECRET), "/match/stats?since=0").await;
+    assert_eq!(status, 200, "{body}");
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    let ticks = json["ticks"].as_array().unwrap();
+    assert!(ticks.len() >= 3, "{body}");
+    // [tick, total_us, sim_us, late_us, orders, units, missed]
+    assert_eq!(ticks[0].as_array().unwrap().len(), 7);
+    let next = json["next"].as_u64().unwrap();
+    assert_eq!(next as usize, ticks.len());
+    let (_, body) = get(Some(SECRET), "/match/stats?since=1000000").await;
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert!(json["ticks"].as_array().unwrap().is_empty());
+}

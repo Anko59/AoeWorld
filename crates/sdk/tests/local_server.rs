@@ -185,3 +185,115 @@ async fn a_wrong_token_is_refused_and_a_bad_one_is_rejected_locally() {
         .is_err()
     );
 }
+
+/// A lost connection (here: another connection takes the slot) is rejoined
+/// with the slot token; the bot sees later decisions, not a closed client.
+#[tokio::test]
+async fn a_client_rejoins_its_slot_after_the_connection_is_lost() {
+    use aoe_protocol::{GAMEPLAY_VERSION, GameplayClientMessage, encode_gameplay_client};
+    use futures_util::SinkExt;
+    use tokio_tungstenite::{connect_async, tungstenite::Message};
+
+    let address = server().await;
+    let url = format!("http://{address}");
+    let info = start_match(&url, SECRET, &MatchMap::flat(500, 3), &[SlotKind::Ai])
+        .await
+        .unwrap();
+    let token = info.slots[0].token.clone();
+    let client = Client::connect(&url, &token, ConnectOptions::default())
+        .await
+        .unwrap();
+    let before = client.next_decision().await.unwrap().world.tick();
+    // Someone else presents the token: the server drops the first session.
+    let (mut thief, _) = connect_async(format!("ws://{address}/game/ws"))
+        .await
+        .unwrap();
+    let join = GameplayClientMessage::JoinSlot {
+        version: GAMEPLAY_VERSION,
+        token: aoe_sdk::parse_token(&token).unwrap(),
+    };
+    thief
+        .send(Message::Binary(
+            encode_gameplay_client(&join).unwrap().into(),
+        ))
+        .await
+        .unwrap();
+    drop(thief);
+    let after = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        loop {
+            let decision = client.next_decision().await.unwrap();
+            if decision.world.tick() > before + 60 {
+                return decision.world.tick();
+            }
+        }
+    })
+    .await
+    .expect("decisions resume after the takeover");
+    assert!(after > before);
+    assert!(!client.is_closed());
+}
+
+/// Commands issued while the client is away are not lost: the view policy is
+/// kept, and each order that could not be sent reports a failure result.
+#[tokio::test]
+async fn commands_issued_while_rejoining_are_kept_or_reported() {
+    use aoe_protocol::{GAMEPLAY_VERSION, GameplayClientMessage, encode_gameplay_client};
+    use aoe_sdk::{Event, ViewPolicy};
+    use futures_util::SinkExt;
+    use tokio_tungstenite::{connect_async, tungstenite::Message};
+
+    let address = server().await;
+    let url = format!("http://{address}");
+    let info = start_match(&url, SECRET, &MatchMap::flat(500, 3), &[SlotKind::Ai])
+        .await
+        .unwrap();
+    let token = info.slots[0].token.clone();
+    let client = Client::connect(&url, &token, ConnectOptions::default())
+        .await
+        .unwrap();
+    let first = client.next_decision().await.unwrap();
+    let unit = first.world.my_units(None)[0].id();
+    assert_eq!(client.connection_stats().drops, 0);
+    let (mut thief, _) = connect_async(format!("ws://{address}/game/ws"))
+        .await
+        .unwrap();
+    let join = GameplayClientMessage::JoinSlot {
+        version: GAMEPLAY_VERSION,
+        token: aoe_sdk::parse_token(&token).unwrap(),
+    };
+    thief
+        .send(Message::Binary(
+            encode_gameplay_client(&join).unwrap().into(),
+        ))
+        .await
+        .unwrap();
+    drop(thief);
+    // The client notices the drop, then waits before rejoining: issue commands there.
+    while client.connection_stats().drops == 0 {
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    let sequences: Vec<u64> = (0..3).map(|_| client.send(Order::Stop { unit })).collect();
+    client.set_view(ViewPolicy::Fixed(aoe_sdk::TileRect::from_xywh(
+        0, 0, 40, 40,
+    )));
+    let mut reported = Vec::new();
+    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        while reported.len() < sequences.len() {
+            let decision = client.next_decision().await.unwrap();
+            for event in decision.events {
+                if let Event::OrderResult { sequence, result } = event
+                    && sequences.contains(&sequence)
+                {
+                    assert_eq!(result, aoe_sdk::CommandResult::RejectedNotController);
+                    reported.push(sequence);
+                }
+            }
+        }
+    })
+    .await
+    .expect("every unsent order reports a result");
+    let stats = client.connection_stats();
+    assert!(stats.drops >= 1 && stats.rejoins >= 1, "{stats:?}");
+    assert!(stats.reconnect_seconds > 0.0);
+    assert!(!client.is_closed());
+}

@@ -195,3 +195,69 @@ fn invalid_start_coordinates_fail_without_state_changes() {
         assert_eq!(world.canonical_hash(), before);
     }
 }
+
+#[test]
+fn a_kit_that_cannot_be_placed_in_full_still_starts_a_consistent_village() {
+    let mut world = barren();
+    // Leave room for only two more starting nodes.
+    let Terrain::Map { generator, overlay } = &mut world.terrain else {
+        unreachable!()
+    };
+    for n in 0..aoe_map::MAX_RESOURCE_OVERLAY_CHANGES as i32 - 2 {
+        let tile = TileCoord::new(100 + n % 1000, 100 + n / 1000);
+        let node = aoe_map::ResourceNode::starting(tile, ResourceKind::Wood).unwrap();
+        overlay.insert_starting_resource(generator, node).unwrap();
+    }
+    assert_eq!(world.partial_starting_kits(), 0);
+    world
+        .initialize_village(PlayerId(0), TileCoord::new(2048, 2048))
+        .unwrap();
+    assert_eq!(world.partial_starting_kits(), 1);
+    assert!(world.buildings().next().is_some());
+    assert!(world.units().any(|u| u.kind == crate::UnitKind::Villager));
+    let near: Vec<_> = world
+        .starting_resources()
+        .into_iter()
+        .filter(|n| n.tile.y > 1000)
+        .collect();
+    assert_eq!(near.len(), 2, "the nodes that fitted are kept");
+    // Inserted nodes block movement and the world is internally consistent:
+    // they can be snapshotted and restored identically.
+    for node in &near {
+        assert!(!world.tile_passable(node.tile));
+        assert_eq!(world.resource_remaining(node.id), Some(node.initial_amount));
+    }
+    let saved = world.resource_snapshot([0; 32]).unwrap();
+    let mut restored = barren();
+    restored
+        .restore_resources(&saved, [0; 32], &|| false)
+        .unwrap();
+    assert_eq!(restored.resource_snapshot([0; 32]).unwrap(), saved);
+}
+
+#[test]
+fn a_hundred_villages_each_get_the_complete_standard_kit() {
+    // Regression: a fixed 512-node overlay limit left every village after the
+    // sixteenth (31 nodes each) with a partial or empty kit.
+    let mut world = barren();
+    for slot in 0..100_i32 {
+        let start = TileCoord::new(300 + (slot % 10) * 340, 300 + (slot / 10) * 340);
+        world
+            .initialize_village(PlayerId(slot as u16), start)
+            .unwrap();
+    }
+    assert_eq!(world.partial_starting_kits(), 0);
+    let nodes = world.starting_resources();
+    for (kind, count) in [
+        (ResourceKind::Food, 7),
+        (ResourceKind::Gold, 7),
+        (ResourceKind::Stone, 5),
+        (ResourceKind::Wood, 12),
+    ] {
+        assert_eq!(
+            nodes.iter().filter(|n| n.kind == kind).count(),
+            count * 100,
+            "{kind:?}"
+        );
+    }
+}
