@@ -103,11 +103,23 @@ fn wildlife_skip_counts_every_cell_and_pair_like_the_full_scan() {
     let far = w.spawn_animal(AnimalKind::Deer, at(150, 40)).unwrap();
     w.advance();
     let stats = w.wildlife_stats();
-    let live = w.units().filter(|u| u.hp > 0).count() as u32;
+    // Animal-driven scan: an animal probes its nine cells only when some live
+    // unit sits in them, and only such animals are counted.
+    let reached = w
+        .animals()
+        .filter(|a| {
+            let (ax, ay) = crate::game_world::wildlife::cell(a.position);
+            w.units().any(|u| {
+                let (ux, uy) = crate::game_world::wildlife::cell(u.position);
+                u.hp > 0 && ax.abs_diff(ux) <= 1 && ay.abs_diff(uy) <= 1
+            })
+        })
+        .count() as u32;
+    assert!(reached > 0, "the near animal must be reached");
     assert_eq!(
         stats.cells,
-        9 * live,
-        "skipped units still count nine cells"
+        9 * reached,
+        "each animal a unit can reach counts nine cells, and no other"
     );
     let brute: u32 = w
         .units()
