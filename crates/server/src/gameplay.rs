@@ -14,10 +14,16 @@ use tokio::sync::{Mutex, RwLock, mpsc};
 
 #[path = "gameplay/commands.rs"]
 mod commands;
+#[path = "gameplay/deliver.rs"]
+mod deliver;
 #[path = "gameplay/economy.rs"]
 mod economy;
+#[path = "gameplay/fanout.rs"]
+mod fanout;
 #[path = "gameplay/fog.rs"]
 mod fog;
+#[path = "gameplay/frame.rs"]
+mod frame;
 #[path = "gameplay/probe.rs"]
 mod probe;
 #[path = "gameplay/slots.rs"]
@@ -69,13 +75,19 @@ pub(super) struct Session {
     last_command_refill: Instant,
     subscription_times: VecDeque<Instant>,
     pending: VecDeque<PendingCommand>,
-    resident: BTreeMap<EntityId, GameplayUnitState>,
+    /// Units the client holds, sorted by id.
+    resident: Vec<GameplayUnitState>,
     resource_revision: Option<u64>,
     resident_players: BTreeMap<aoe_core::PlayerId, aoe_protocol::GameplayPlayerState>,
     resident_buildings: BTreeMap<EntityId, aoe_protocol::GameplayBuildingState>,
     resident_animals: Vec<aoe_protocol::AnimalState>,
     resident_projectiles: Vec<aoe_protocol::ProjectileState>,
     vision_revision: Option<u64>,
+    /// The fog view the client holds; an unchanged rebuild is not resent.
+    resident_fog: Option<aoe_protocol::FogState>,
+    /// Set when the building baseline can no longer be advanced by change
+    /// lists alone (a new point of view, fog switched).
+    rebuild_buildings: bool,
     resource_vision_revision: Option<u64>,
     resident_resources: Vec<aoe_protocol::ResourceAmount>,
 }
@@ -166,6 +178,9 @@ impl GameplayService {
     /// Server-side scenario setup, never a gameplay client command.
     pub async fn set_fog_disabled(&self, disabled: bool) {
         self.world.write().await.set_fog_disabled(disabled);
+        for session in self.sessions.lock().await.values_mut() {
+            session.rebuild_buildings = true;
+        }
     }
     /// Local Feudal showcase setup; the ordinary command and wire paths apply.
     pub fn feudal_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
@@ -312,7 +327,10 @@ impl GameplayService {
             tick: world.tick(),
             projectiles: projectiles.clone(),
         };
-        let fog = GameplayServerMessage::FogState(fog::state(&world, player, revision, region));
+        let fog_state = fog::state(&world, player, revision, region);
+        session.resident_fog = Some(fog_state.clone());
+        session.rebuild_buildings = false;
+        let fog = GameplayServerMessage::FogState(fog_state);
         let vision_revision = world.player_vision_revision(player);
         let wildlife = GameplayServerMessage::WildlifeState {
             revision,
@@ -321,7 +339,7 @@ impl GameplayService {
         };
         session.subscription = Some(Subscription { revision, region });
         session.resource_revision = None;
-        session.resident = units.iter().copied().map(|unit| (unit.id, unit)).collect();
+        session.resident = units.clone();
         session.resident_players = players;
         session.resident_buildings = buildings;
         session.resident_animals = animals;

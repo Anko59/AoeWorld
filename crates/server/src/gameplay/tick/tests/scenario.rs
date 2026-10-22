@@ -144,7 +144,12 @@ fn orders(world: &mut GameWorld, tick: u32, homes: &[TileCoord]) {
 }
 
 /// Runs `ticks` ticks of the match with one session per seat plus a spectator.
-pub(super) async fn run(ticks: u32) -> Vec<SessionLog> {
+/// `observe` sees each session's new messages together with the world they
+/// were built from, before the next tick can change it.
+pub(super) async fn run(
+    ticks: u32,
+    observe: &mut dyn FnMut(&GameWorld, PlayerId, &[GameplayServerMessage]),
+) -> Vec<SessionLog> {
     let mut world = GameWorld::from_map(package()).unwrap();
     let mut setups = Vec::new();
     let mut placed = Vec::new();
@@ -196,10 +201,13 @@ pub(super) async fn run(ticks: u32) -> Vec<SessionLog> {
             service.resync(ids[3], 3).await;
         }
         service.tick().await;
+        let world = service.world.read().await;
         for (log, receiver) in logs.iter_mut().zip(&mut receivers) {
+            let from = log.messages.len();
             while let Ok(message) = receiver.try_recv() {
                 log.messages.push(message);
             }
+            observe(&world, log.viewer, &log.messages[from..]);
         }
     }
     logs

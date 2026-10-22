@@ -33,6 +33,9 @@ struct Traffic {
     encode_ms: Series,
     fanout: Series,
     fanout_build: Series,
+    fanout_viewers: Series,
+    fanout_frame: Series,
+    fanout_sessions: Series,
     fanout_deliver: Series,
     changed_units: u64,
     per_session: BTreeMap<usize, u64>,
@@ -78,10 +81,13 @@ async fn ticks(
         let started = Instant::now();
         service.tick().await;
         series.push_ms(started.elapsed().as_nanos());
-        let (build, deliver) = service.last_fanout_timing();
-        traffic.fanout_build.0.push(build);
-        traffic.fanout_deliver.0.push(deliver);
-        traffic.fanout.0.push(build + deliver);
+        let timing = service.last_fanout_timing();
+        traffic.fanout_build.0.push(timing.build_ms());
+        traffic.fanout_deliver.0.push(timing.deliver_ms);
+        traffic.fanout.0.push(timing.build_ms() + timing.deliver_ms);
+        traffic.fanout_viewers.0.push(timing.viewers_ms);
+        traffic.fanout_frame.0.push(timing.frame_ms);
+        traffic.fanout_sessions.0.push(timing.sessions_ms);
         drain(receivers, traffic);
     }
     series
@@ -138,6 +144,9 @@ async fn session_run(
         "tick": series.summary(),
         "fanout_per_tick": traffic.fanout.summary(),
         "fanout_build_per_tick": traffic.fanout_build.summary(),
+        "fanout_build_viewers_per_tick": traffic.fanout_viewers.summary(),
+        "fanout_build_frame_per_tick": traffic.fanout_frame.summary(),
+        "fanout_build_sessions_per_tick": traffic.fanout_sessions.summary(),
         "fanout_deliver_per_tick": traffic.fanout_deliver.summary(),
         "drain_and_encode_per_tick": traffic.encode_ms.summary(),
         "steady_state_messages": traffic.messages,

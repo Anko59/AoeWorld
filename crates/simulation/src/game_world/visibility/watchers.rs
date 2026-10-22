@@ -134,7 +134,11 @@ impl GameWorld {
             };
             for player in watchers {
                 if let Some(vision) = self.vision.players.get_mut(&player) {
-                    vision.remembered.insert(id, building.clone());
+                    // Only a differing snapshot is a change.
+                    if vision.remembered.get(&id) != Some(&building) {
+                        vision.changed.insert(id);
+                        vision.remembered.insert(id, building.clone());
+                    }
                 }
             }
         }
@@ -157,6 +161,7 @@ impl GameWorld {
                 .is_some_and(|w| w.watchers.contains(player));
             if sees || owner == *player {
                 vision.remembered.remove(&id);
+                vision.changed.insert(id);
             } else {
                 vision.haunt(id, footprint);
             }

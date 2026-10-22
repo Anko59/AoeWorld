@@ -233,6 +233,13 @@ impl GameWorld {
             .map(|job| job.animal)
             .or_else(|| self.economy.gatherers.get(&id).and_then(|job| job.animal))
     }
+    /// Every hunter in id order with the animal it hunts.
+    pub fn hunts(&self) -> impl Iterator<Item = (EntityId, EntityId)> + '_ {
+        self.wildlife
+            .hunts
+            .iter()
+            .map(|(id, job)| (*id, job.animal))
+    }
     pub fn animals(&self) -> impl Iterator<Item = &GameAnimal> {
         self.wildlife.animals.values().map(|a| &a.state)
     }

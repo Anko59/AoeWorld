@@ -48,19 +48,11 @@ pub(super) fn state(
     #[cfg(test)]
     tests::record_state(region);
     let disabled = world.fog_disabled();
-    let mut tiles = Vec::new();
-    if !disabled {
-        tiles.reserve((region.width() * region.height()) as usize);
-        for y in region.min.y..region.max.y {
-            for x in region.min.x..region.max.x {
-                tiles.push(match world.visibility(player, TileCoord::new(x, y)) {
-                    TileVisibility::Unexplored => 0,
-                    TileVisibility::Explored => 1,
-                    TileVisibility::Visible => 2,
-                });
-            }
-        }
-    }
+    let tiles = if disabled {
+        Vec::new()
+    } else {
+        world.visibility_tiles(player, region)
+    };
     FogState {
         revision,
         tick: world.tick(),

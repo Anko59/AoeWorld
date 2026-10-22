@@ -1,6 +1,8 @@
 //! The fan-out sends every session exactly the bytes it always did.
 use super::scenario::{SEATS, SessionLog, run};
+use aoe_core::PlayerId;
 use aoe_protocol::{FogState, GameplayServerMessage, encode_gameplay_server};
+use aoe_simulation::{GameWorld, TileVisibility};
 
 /// FNV-1a over every encoded message, in order; `(messages, digest)` per session.
 /// A fog view with the same content the client already holds is not a
@@ -49,7 +51,7 @@ const PINNED: [(usize, u64); SEATS + 1] = [
 
 #[tokio::test(flavor = "multi_thread")]
 async fn per_session_messages_match_the_pinned_stream() {
-    let logs = run(400).await;
+    let logs = run(400, &mut |_, _, _| {}).await;
     let actual = digests(&logs);
     println!("PINNED: {actual:?}");
     println!(
@@ -82,4 +84,63 @@ async fn per_session_messages_match_the_pinned_stream() {
     println!("foreign units sent {foreign_units}");
     assert!(foreign_units > 0, "the scenario never crosses views");
     assert_eq!(actual, PINNED);
+}
+
+/// Whatever a session is sent about other players stands in sight of its
+/// viewer at the moment it is sent, or is a building its viewer remembers.
+fn assert_nothing_unseen(world: &GameWorld, viewer: PlayerId, messages: &[GameplayServerMessage]) {
+    let visible = |at: aoe_core::WorldPosition| {
+        world.visibility(viewer, at.tile_floor()) == TileVisibility::Visible
+    };
+    for message in messages {
+        match message {
+            GameplayServerMessage::Tick {
+                changed_units,
+                changed_players,
+                changed_buildings,
+                ..
+            } => {
+                for unit in changed_units {
+                    assert!(
+                        unit.player == viewer || visible(unit.position),
+                        "{viewer:?} was sent {:?} of {:?} out of sight",
+                        unit.id,
+                        unit.player
+                    );
+                }
+                assert!(changed_players.iter().all(|p| p.player == viewer));
+                let known = world.known_buildings(viewer);
+                for building in changed_buildings {
+                    assert!(
+                        building.player == viewer || known.iter().any(|b| b.id == building.id),
+                        "{viewer:?} was sent building {:?} it never saw",
+                        building.id
+                    );
+                }
+            }
+            GameplayServerMessage::WildlifeState { animals, .. } => {
+                for animal in animals {
+                    assert!(animal.owner == Some(viewer) || visible(animal.position));
+                }
+            }
+            GameplayServerMessage::Projectiles { projectiles, .. } => {
+                for projectile in projectiles {
+                    assert!(visible(projectile.from), "a projectile appeared in the fog");
+                    assert!(projectile.to == projectile.from || visible(projectile.to));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_session_is_never_sent_what_its_player_cannot_see() {
+    let mut checked = 0;
+    run(400, &mut |world, viewer, messages| {
+        checked += messages.len();
+        assert_nothing_unseen(world, viewer, messages);
+    })
+    .await;
+    assert!(checked > 1_000, "the scenario sent {checked} messages");
 }
