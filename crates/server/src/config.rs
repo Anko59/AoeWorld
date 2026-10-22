@@ -21,6 +21,12 @@ impl Config {
     pub(crate) fn fog_showcase_from_env() -> bool {
         env::var("AOE_FOG_SHOWCASE").is_ok_and(|value| value == "1")
     }
+    /// `AOE_MATCH_TOKEN`: the secret that enables `POST /match`.
+    pub(crate) fn match_admin_token_from_env() -> Option<String> {
+        env::var("AOE_MATCH_TOKEN")
+            .ok()
+            .filter(|value| value.len() >= 16)
+    }
     pub const DEFAULT_MAP_PACKAGE_DIRECTORY: &'static str = "local-assets/map-packages";
     pub const DEFAULT_GEODATA_CACHE_DIRECTORY: &'static str = ".cache/geodata";
 

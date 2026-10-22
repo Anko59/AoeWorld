@@ -15,23 +15,21 @@ pub(super) fn query_units(
     world: &GameWorld,
     region: TileRect,
     primary_id: EntityId,
+    player: PlayerId,
 ) -> Vec<GameUnit> {
     let mut units = world.query(region).0;
-    if let Some(primary) = world.unit(primary_id) {
-        if world.player_economy(primary.player).is_some() {
-            units.extend(
-                world
-                    .units()
-                    .filter(|unit| unit.player == primary.player)
-                    .take(MAX_SUBSCRIBED_UNITS + 1),
-            );
-        } else {
-            units.push(primary);
-        }
+    if world.player_economy(player).is_some() {
+        units.extend(
+            world
+                .units()
+                .filter(|unit| unit.player == player)
+                .take(MAX_SUBSCRIBED_UNITS + 1),
+        );
+    } else if let Some(primary) = world.unit(primary_id) {
+        units.push(primary);
     }
     units.sort_unstable_by_key(|unit| unit.id);
     units.dedup_by_key(|unit| unit.id);
-    let player = super::fog::viewer(world, primary_id);
     units.retain(|unit| world.unit_visible_to(player, unit.id));
     units
 }

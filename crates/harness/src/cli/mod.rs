@@ -150,6 +150,11 @@ enum Command {
         previous: Option<PathBuf>,
     },
     RepoPolicyCheck,
+    /// Build or test the Python bindings of the AI SDK (`make sdk-python`, `make sdk-python-test`).
+    SdkPython {
+        #[command(subcommand)]
+        action: crate::sdk_python::Action,
+    },
     SourceCountryProbe(e2e::CountryProbeArgs),
     SourceQualify {
         #[arg(long)]

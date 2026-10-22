@@ -2,6 +2,7 @@
 mod config;
 mod gameplay;
 mod gameplay_map;
+mod gameplay_match;
 mod gameplay_sessions;
 mod gameplay_transport;
 mod map_jobs;
@@ -12,7 +13,8 @@ mod page_residency;
 mod source_qualification;
 mod terrain_cache;
 pub use config::Config;
-pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError};
+pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError, SlotInfo};
+pub use gameplay_match::MAX_MATCH_SLOTS;
 pub use map_store::MapStoreError;
 pub(crate) use map_store::{PageResidency, load as load_map_packages};
 pub use source_qualification::{
@@ -75,6 +77,8 @@ pub struct AppState {
     minimaps: Arc<Mutex<maps::MinimapCache>>,
     map_jobs: Arc<Mutex<map_jobs::Manager>>,
     gameplay: Arc<RwLock<GameplayService>>,
+    /// Secret for `POST /match`; without it match hosting is refused.
+    match_admin_token: Option<Arc<str>>,
 }
 
 impl AppState {
@@ -105,6 +109,7 @@ impl AppState {
             minimaps: Arc::new(Mutex::new(maps::MinimapCache::default())),
             map_jobs: Arc::new(Mutex::new(map_jobs)),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
+            match_admin_token: Config::match_admin_token_from_env().map(Into::into),
         })
     }
 
@@ -127,6 +132,12 @@ impl AppState {
             config.scenario.active_extent,
         )?));
         Ok(state)
+    }
+
+    /// Enables `POST /match` for callers presenting this secret.
+    pub fn with_match_admin_token(mut self, token: impl Into<Arc<str>>) -> Self {
+        self.match_admin_token = Some(token.into());
+        self
     }
 
     async fn ensure_diagnostic_world(&self) {
@@ -307,6 +318,7 @@ pub fn app(state: AppState) -> Router {
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))
+        .route("/match", post(gameplay_match::start_match))
         .fallback_service(ServeDir::new("web").append_index_html_on_directories(true))
         .with_state(state);
     if let Some(pack) = asset_pack {

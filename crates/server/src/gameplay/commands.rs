@@ -6,6 +6,11 @@ use aoe_core::{EntityId, WorldPosition};
 use aoe_protocol::{CommandResult, GameplayRole, GameplayServerMessage};
 use std::time::Instant;
 
+/// Order budget of an AI slot (humans keep 10 per second, burst 20).
+const AI_ORDERS_PER_SECOND: f64 = 100.0;
+const AI_ORDER_BURST: f64 = 200.0;
+const AI_PENDING_COMMANDS: usize = 256;
+
 impl GameplayService {
     pub async fn queue_stop(&self, session_id: u64, sequence: u64, entity_id: EntityId) {
         self.queue_command(session_id, sequence, PendingAction::Stop { entity_id })
@@ -222,6 +227,13 @@ impl GameplayService {
         let current_tick = self.world.read().await.tick();
         let mut sessions = self.sessions.lock().await;
         let global_pending = total_pending(&sessions);
+        // One budget scales with the number of hosted seats, so many AI
+        // connections do not exhaust a limit sized for a single human.
+        let global_limit = MAX_PENDING_COMMANDS_GLOBAL.max(
+            sessions
+                .len()
+                .saturating_mul(MAX_PENDING_COMMANDS_PER_CONNECTION),
+        );
         let Some(session) = sessions.get_mut(&session_id) else {
             return;
         };
@@ -236,17 +248,21 @@ impl GameplayService {
             let elapsed = now
                 .duration_since(session.last_command_refill)
                 .as_secs_f64();
-            session.command_tokens = (session.command_tokens + elapsed * 10.0).min(20.0);
+            // A person clicks; an AI issues a decision's worth of orders at once.
+            let (refill, burst, queue) = if session.ai {
+                (AI_ORDERS_PER_SECOND, AI_ORDER_BURST, AI_PENDING_COMMANDS)
+            } else {
+                (10.0, 20.0, MAX_PENDING_COMMANDS_PER_CONNECTION)
+            };
+            session.command_tokens = (session.command_tokens + elapsed * refill).min(burst);
             session.last_command_refill = now;
-            if session.command_tokens < 1.0
-                || session.pending.len() >= MAX_PENDING_COMMANDS_PER_CONNECTION
-            {
+            if session.command_tokens < 1.0 || session.pending.len() >= queue {
                 result = Some(if session.command_tokens < 1.0 {
                     CommandResult::RejectedRateLimited
                 } else {
                     CommandResult::RejectedQueueFull
                 });
-            } else if global_pending >= MAX_PENDING_COMMANDS_GLOBAL {
+            } else if global_pending >= global_limit {
                 result = Some(CommandResult::RejectedQueueFull);
             } else {
                 session.last_sequence = Some(sequence);

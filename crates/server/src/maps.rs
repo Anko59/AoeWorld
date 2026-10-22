@@ -28,7 +28,7 @@ pub(super) use routes::routes;
 
 const CONTROLLER_TOKEN_HEADER: &str = "x-aoeworld-controller-token";
 const PREVIEW_SAMPLES_PER_AXIS: u16 = 16;
-struct RequestCancellation(Arc<AtomicBool>);
+pub(crate) struct RequestCancellation(Arc<AtomicBool>);
 
 impl Drop for RequestCancellation {
     fn drop(&mut self) {
@@ -36,7 +36,7 @@ impl Drop for RequestCancellation {
     }
 }
 
-fn request_cancellation() -> (RequestCancellation, Arc<AtomicBool>) {
+pub(crate) fn request_cancellation() -> (RequestCancellation, Arc<AtomicBool>) {
     let cancelled = Arc::new(AtomicBool::new(false));
     (RequestCancellation(cancelled.clone()), cancelled)
 }
@@ -441,7 +441,7 @@ pub(super) async fn chunk(
     Ok(Json(chunk))
 }
 
-async fn page_residency(
+pub(crate) async fn page_residency(
     state: &AppState,
     package: &MapPackage,
     cancelled: Arc<AtomicBool>,

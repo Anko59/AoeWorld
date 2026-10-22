@@ -40,6 +40,7 @@ pub(super) fn run(
                 process::run(tool, &["--version"], Duration::from_secs(10))?;
             }
         }
+        Command::SdkPython { action } => crate::sdk_python::run(action)?,
         Command::Recover => process::suspend::containers::recover()?,
         Command::Dev { command } => match command {
             DevCommand::Start => dev::start()?,

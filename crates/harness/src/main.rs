@@ -33,6 +33,7 @@ mod release_publish;
 mod release_stack;
 mod repo_policy;
 mod review;
+mod sdk_python;
 mod ship;
 mod slots;
 mod timeline;

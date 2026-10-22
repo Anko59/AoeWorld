@@ -108,3 +108,5 @@ fn gameplay_collections_are_bounded() {
     ));
     let _ = region();
 }
+
+mod slots;

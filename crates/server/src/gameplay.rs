@@ -1,18 +1,14 @@
-use crate::gameplay_transport;
-use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, Seed, TileRect, WorldConfig, WorldPosition};
+use aoe_core::{EntityId, PlayerId, Seed, TileRect, WorldConfig, WorldPosition};
 use aoe_protocol::{
-    GAMEPLAY_VERSION, GameplayRole, GameplayServerMessage, GameplayUnitState, MAX_ACK_HISTORY,
+    GameplayRole, GameplayServerMessage, GameplayUnitState, MAX_ACK_HISTORY,
     MAX_PENDING_COMMANDS_GLOBAL, MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_SUBSCRIBED_UNITS,
     MAX_SUBSCRIPTION_TILES, MapMetadata, ResumeToken,
 };
 use aoe_simulation::{GameWorld, GameWorldError, NavigationCacheUsage};
 use std::{
     collections::{BTreeMap, VecDeque},
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    sync::{Arc, atomic::AtomicU64},
+    time::{Duration, Instant},
 };
 use tokio::sync::{Mutex, RwLock, mpsc};
 
@@ -22,8 +18,12 @@ mod commands;
 mod economy;
 #[path = "gameplay/fog.rs"]
 mod fog;
+#[path = "gameplay/slots.rs"]
+mod slots;
 #[path = "gameplay/tick.rs"]
 mod tick;
+pub(crate) use slots::{Access, ControllerLease, Ownership};
+pub use slots::{SlotInfo, SlotSetup};
 #[path = "gameplay/wildlife.rs"]
 mod wildlife;
 use economy::unit_state;
@@ -48,6 +48,15 @@ pub struct GameplayService {
 pub(super) struct Session {
     pub(super) role: GameplayRole,
     pub(super) token: Option<ResumeToken>,
+    /// Index of the match slot this session controls; spectators have none.
+    pub(super) slot: Option<usize>,
+    /// Whose fog-filtered view this session receives: its slot's player, or
+    /// the first slot's player for a spectator.
+    pub(super) viewer: PlayerId,
+    /// The slot's primary unit (the Welcome identity), kept for view queries.
+    pub(super) primary_unit_id: EntityId,
+    /// AI slots get a higher order budget and quiet idle ticks.
+    pub(super) ai: bool,
     pub(super) connected_at: Instant,
     pub(super) sender: mpsc::Sender<GameplayServerMessage>,
     subscription: Option<Subscription>,
@@ -146,18 +155,6 @@ enum PendingAction {
     },
 }
 
-#[derive(Clone, Copy)]
-pub(super) struct ControllerLease {
-    pub(super) session_id: u64,
-    pub(super) token: ResumeToken,
-    pub(super) disconnected_at: Option<Instant>,
-}
-
-pub(super) struct Ownership {
-    pub(super) controller: Option<ControllerLease>,
-    pub(super) next_token: u64,
-}
-
 impl GameplayService {
     pub fn military_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::military_demo(seed)?;
@@ -199,121 +196,8 @@ impl GameplayService {
         Ok(Self::from_world(world, EntityId(0), None, None))
     }
 
-    pub(super) fn from_world(
-        mut world: GameWorld,
-        primary_unit_id: EntityId,
-        map_content_hash: Option<[u8; 32]>,
-        map_metadata: Option<MapMetadata>,
-    ) -> Self {
-        if crate::Config::fog_disabled_from_env() {
-            world.set_fog_disabled(true);
-        }
-        if crate::Config::fog_showcase_from_env() {
-            fog::showcase_enemies(&mut world, primary_unit_id);
-        }
-        let world_id = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos() as u64;
-        Self {
-            world: Arc::new(RwLock::new(world)),
-            sessions: Arc::new(Mutex::new(BTreeMap::new())),
-            ownership: Arc::new(Mutex::new(Ownership {
-                controller: None,
-                next_token: 1,
-            })),
-            next_session: Arc::new(AtomicU64::new(1)),
-            world_id,
-            map_content_hash,
-            map_metadata,
-            primary_unit_id,
-            resource_directory: None,
-            resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
-        }
-    }
-
     pub async fn navigation_cache_usage(&self) -> NavigationCacheUsage {
         self.world.read().await.navigation_cache_usage()
-    }
-
-    pub async fn register(
-        &self,
-        requested_token: Option<ResumeToken>,
-        sender: mpsc::Sender<GameplayServerMessage>,
-    ) -> (u64, GameplayServerMessage) {
-        let session_id = self.next_session.fetch_add(1, Ordering::Relaxed);
-        let config = self.world.read().await.config();
-        let mut ownership = self.ownership.lock().await;
-        let mut sessions = self.sessions.lock().await;
-        gameplay_transport::promote_expired(
-            &mut ownership,
-            &mut sessions,
-            self.world_id,
-            self.primary_unit_id,
-        );
-        let (role, token) = if let Some(token) = requested_token
-            .filter(|token| Some(*token) == ownership.controller.map(|lease| lease.token))
-        {
-            if let Some(lease) = ownership.controller {
-                sessions.remove(&lease.session_id);
-            }
-            ownership.controller = Some(ControllerLease {
-                session_id,
-                token,
-                disconnected_at: None,
-            });
-            (GameplayRole::Controller, Some(token))
-        } else if ownership.controller.is_none() {
-            let token = gameplay_transport::make_token(self.world_id, ownership.next_token);
-            ownership.next_token = ownership.next_token.wrapping_add(1);
-            ownership.controller = Some(ControllerLease {
-                session_id,
-                token,
-                disconnected_at: None,
-            });
-            (GameplayRole::Controller, Some(token))
-        } else {
-            (GameplayRole::Spectator, None)
-        };
-        sessions.insert(
-            session_id,
-            Session {
-                role,
-                token,
-                connected_at: Instant::now(),
-                sender,
-                subscription: None,
-                last_sequence: None,
-                acknowledgements: VecDeque::new(),
-                command_tokens: 20.0,
-                last_command_refill: Instant::now(),
-                subscription_times: VecDeque::new(),
-                pending: VecDeque::new(),
-                resident: BTreeMap::new(),
-                resource_revision: None,
-                resident_players: BTreeMap::new(),
-                resident_buildings: BTreeMap::new(),
-                resident_animals: Vec::new(),
-                resident_projectiles: Vec::new(),
-                vision_revision: None,
-                resource_vision_revision: None,
-                resident_resources: Vec::new(),
-            },
-        );
-        let welcome = GameplayServerMessage::Welcome {
-            version: GAMEPLAY_VERSION,
-            world_id: self.world_id,
-            map_content_hash: self.map_content_hash,
-            map_metadata: self.map_metadata,
-            width_tiles: config.width_tiles,
-            height_tiles: config.height_tiles,
-            coordinate_precision: FIXED_SUBUNITS_PER_TILE as u16,
-            tick_hz: config.tick_hz,
-            role,
-            primary_unit_id: self.primary_unit_id,
-            resume_token: token,
-        };
-        (session_id, welcome)
     }
 
     pub async fn subscribe(&self, session_id: u64, revision: u64, region: TileRect) {
@@ -369,7 +253,8 @@ impl GameplayService {
         // At most ten admitted views per second, each at most 512x512 tiles
         // plus the fixed 256x256 overview, regardless of total map area.
         session.subscription_times.push_back(now);
-        let units = economy::query_units(&world, region, self.primary_unit_id);
+        let viewer = session.viewer;
+        let units = economy::query_units(&world, region, session.primary_unit_id, viewer);
         if units.len() > MAX_SUBSCRIBED_UNITS {
             let _ = session.sender.try_send(GameplayServerMessage::Error {
                 code: 413,
@@ -377,7 +262,7 @@ impl GameplayService {
             });
             return;
         }
-        let player = fog::viewer(&world, self.primary_unit_id);
+        let player = viewer;
         let players = economy::players(&world)
             .into_iter()
             .filter(|(id, _)| *id == player || world.fog_disabled())
@@ -402,7 +287,7 @@ impl GameplayService {
             projectiles: projectiles.clone(),
         };
         let fog = GameplayServerMessage::FogState(fog::state(&world, player, revision, region));
-        let vision_revision = world.vision_revision();
+        let vision_revision = world.player_vision_revision(player);
         let wildlife = GameplayServerMessage::WildlifeState {
             revision,
             tick: world.tick(),

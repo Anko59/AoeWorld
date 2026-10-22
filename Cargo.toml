@@ -12,7 +12,10 @@ members = [
   "crates/assets",
   "crates/server",
   "crates/harness",
+  "crates/sdk",
 ]
+
+exclude = ["crates/sdk-python"]
 
 [workspace.package]
 edition = "2024"
@@ -26,6 +29,7 @@ aoe-geodata = { path = "crates/geodata" }
 aoe-scenario = { path = "crates/scenario" }
 aoe-simulation = { path = "crates/simulation" }
 aoe-protocol = { path = "crates/protocol" }
+aoe-sdk = { path = "crates/sdk" }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0"
 

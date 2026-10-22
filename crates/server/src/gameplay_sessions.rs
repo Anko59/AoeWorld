@@ -17,16 +17,20 @@ impl GameplayService {
             });
         }
         sessions.clear();
-        ownership.controller = None;
+        for slot in &mut ownership.slots {
+            slot.lease = None;
+        }
     }
 
     pub async fn disconnect(&self, session_id: u64) {
         let mut ownership = self.ownership.lock().await;
         let mut sessions = self.sessions.lock().await;
         let removed = sessions.remove(&session_id);
-        if removed.is_some_and(|session| session.role == GameplayRole::Controller)
-            && let Some(lease) = ownership
-                .controller
+        if let Some(index) = removed
+            .filter(|session| session.role == GameplayRole::Controller)
+            .and_then(|session| session.slot)
+            && let Some(lease) = ownership.slots[index]
+                .lease
                 .as_mut()
                 .filter(|lease| lease.session_id == session_id)
         {
@@ -34,13 +38,16 @@ impl GameplayService {
         }
     }
 
-    /// Returns whether a current gameplay controller owns this resume token.
+    /// Returns whether a connected controller of a human slot owns this token.
+    /// AI slots never authorize server administration.
     pub async fn is_controller(&self, token: ResumeToken) -> bool {
-        self.ownership
-            .lock()
-            .await
-            .controller
-            .is_some_and(|lease| lease.token == token && lease.disconnected_at.is_none())
+        self.ownership.lock().await.slots.iter().any(|slot| {
+            slot.human
+                && slot.token == token
+                && slot
+                    .lease
+                    .is_some_and(|lease| lease.disconnected_at.is_none())
+        })
     }
 
     pub(super) async fn send_to(&self, session_id: u64, message: GameplayServerMessage) {

@@ -1,26 +1,46 @@
-use super::{GameplayService, MAX_ACK_HISTORY, MAX_SUBSCRIBED_UNITS, unit_state};
+use super::{GameplayService, MAX_ACK_HISTORY, MAX_SUBSCRIBED_UNITS, Subscription, unit_state};
 use crate::gameplay_transport;
+use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{CommandResult, GameplayRole, GameplayServerMessage};
+use aoe_protocol::{GameplayBuildingState, GameplayPlayerState};
 use std::collections::{BTreeMap, BTreeSet};
+
+/// Idle AI sessions still hear the clock this often (in ticks).
+const AI_HEARTBEAT_TICKS: u64 = 10;
+/// An AI's fog view is rebuilt at most this often (in ticks).
+const AI_FOG_TICKS: u64 = 20;
+
+/// A subscribed session's inputs to one tick, copied out of the session lock.
+struct View {
+    session_id: u64,
+    subscription: Subscription,
+    vision: Option<u64>,
+    viewer: PlayerId,
+    primary: EntityId,
+    ai: bool,
+}
+
+/// Everything one player's sessions need, built once per tick however many
+/// sessions look through that player.
+struct ViewerState {
+    players: BTreeMap<PlayerId, GameplayPlayerState>,
+    buildings: BTreeMap<EntityId, GameplayBuildingState>,
+    vision: u64,
+}
 
 impl GameplayService {
     pub async fn tick(&self) {
         let (pending, controllers) = {
             let mut ownership = self.ownership.lock().await;
             let mut sessions = self.sessions.lock().await;
-            gameplay_transport::promote_expired(
-                &mut ownership,
-                &mut sessions,
-                self.world_id,
-                self.primary_unit_id,
-            );
+            gameplay_transport::promote_expired(&mut ownership, &mut sessions, self.world_id);
             let mut commands = Vec::new();
             let controllers = sessions
                 .iter()
                 .filter_map(|(id, session)| {
-                    (session.role == GameplayRole::Controller).then_some(*id)
+                    (session.role == GameplayRole::Controller).then_some((*id, session.viewer))
                 })
-                .collect::<std::collections::BTreeSet<_>>();
+                .collect::<BTreeMap<_, _>>();
             for (session_id, session) in sessions.iter_mut() {
                 while let Some(command) = session.pending.pop_front() {
                     commands.push((*session_id, command));
@@ -35,22 +55,22 @@ impl GameplayService {
             .await
             .iter()
             .filter_map(|(id, session)| {
-                session
-                    .subscription
-                    .map(|subscription| (*id, subscription, session.vision_revision))
+                session.subscription.map(|subscription| View {
+                    session_id: *id,
+                    subscription,
+                    vision: session.vision_revision,
+                    viewer: session.viewer,
+                    primary: session.primary_unit_id,
+                    ai: session.ai,
+                })
             })
             .collect::<Vec<_>>();
         let mut world = self.world.clone().write_owned().await;
         let mut acknowledgements = Vec::new();
         for (session_id, command) in pending {
-            let accepted = controllers.contains(&session_id);
-            let player = world
-                .unit(self.primary_unit_id)
-                .map_or(aoe_core::PlayerId(0), |unit| unit.player);
-            let result = if !accepted {
-                CommandResult::RejectedNotController
-            } else {
-                super::commands::apply(&mut world, player, command.action)
+            let result = match controllers.get(&session_id) {
+                None => CommandResult::RejectedNotController,
+                Some(player) => super::commands::apply(&mut world, *player, command.action),
             };
             let tick = world.tick();
             acknowledgements.push((
@@ -66,28 +86,45 @@ impl GameplayService {
             tracing::error!("gameplay tick worker failed");
             return;
         };
-        let player = super::fog::viewer(&world, self.primary_unit_id);
-        let players = super::economy::players(&world)
-            .into_iter()
-            .filter(|(id, _)| *id == player || world.fog_disabled())
-            .collect::<BTreeMap<_, _>>();
-        let buildings = super::economy::buildings(&world, player);
-        let vision_revision = world.vision_revision();
+        let all_players = super::economy::players(&world);
+        let mut viewers = BTreeMap::<PlayerId, ViewerState>::new();
+        for view in &subscriptions {
+            viewers.entry(view.viewer).or_insert_with(|| ViewerState {
+                players: all_players
+                    .iter()
+                    .filter(|(id, _)| **id == view.viewer || world.fog_disabled())
+                    .map(|(id, state)| (*id, *state))
+                    .collect(),
+                buildings: super::economy::buildings(&world, view.viewer),
+                vision: world.player_vision_revision(view.viewer),
+            });
+        }
         let tick = world.tick();
         let mut updates = Vec::new();
         let mut wildlife_updates = Vec::new();
         let mut projectile_updates = Vec::new();
         let mut fog_updates = Vec::new();
-        for (session_id, subscription, old_vision) in subscriptions {
+        for view in subscriptions {
+            let View {
+                session_id,
+                subscription,
+                vision: old_vision,
+                viewer: player,
+                primary,
+                ai,
+            } = view;
+            let vision_revision = viewers[&player].vision;
             projectile_updates.push((
                 session_id,
                 subscription.revision,
                 super::wildlife::projectiles(&world, subscription.region, player),
             ));
-            if old_vision != Some(vision_revision) {
+            // An AI gets a changed fog view at most once a second.
+            if old_vision != Some(vision_revision) && (!ai || tick.0 % AI_FOG_TICKS == 0) {
                 fog_updates.push((
                     session_id,
                     super::fog::state(&world, player, subscription.revision, subscription.region),
+                    vision_revision,
                 ));
             }
             wildlife_updates.push((
@@ -95,8 +132,7 @@ impl GameplayService {
                 subscription.revision,
                 super::wildlife::animals(&world, subscription.region, player),
             ));
-            let current =
-                super::economy::query_units(&world, subscription.region, self.primary_unit_id);
+            let current = super::economy::query_units(&world, subscription.region, primary, player);
             if current.len() > MAX_SUBSCRIBED_UNITS {
                 updates.push((
                     session_id,
@@ -129,7 +165,7 @@ impl GameplayService {
         drop(world);
         let mut sessions = self.sessions.lock().await;
         let mut failed = BTreeSet::new();
-        for (id, fog) in fog_updates {
+        for (id, fog, vision_revision) in fog_updates {
             let Some(session) = sessions.get_mut(&id) else {
                 continue;
             };
@@ -170,6 +206,10 @@ impl GameplayService {
             let Some(session) = sessions.get_mut(&session_id) else {
                 continue;
             };
+            let Some(viewer) = viewers.get(&session.viewer) else {
+                continue;
+            };
+            let (players, buildings) = (&viewer.players, &viewer.buildings);
             if let GameplayServerMessage::Tick { revision, .. } = &message
                 && session.subscription.is_none_or(|s| s.revision != *revision)
             {
@@ -216,6 +256,17 @@ impl GameplayService {
                     .collect();
                 *changed_units = changed;
                 *removals = removed;
+                if session.ai
+                    && changed_units.is_empty()
+                    && removals.is_empty()
+                    && changed_players.is_empty()
+                    && changed_buildings.is_empty()
+                    && building_removals.is_empty()
+                    && tick.0 % AI_HEARTBEAT_TICKS != 0
+                {
+                    // Nothing to tell an AI: it keeps time from the heartbeat.
+                    continue;
+                }
             }
             if session.sender.try_send(message).is_err() {
                 failed.insert(session_id);

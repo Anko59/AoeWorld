@@ -12,7 +12,7 @@ mod table;
 pub use table::{AnimalKind, WILDLIFE_RULES, WildlifeRules};
 
 pub const MAX_ANIMALS: usize = 4096;
-pub const MAX_HUNTERS: usize = 80;
+pub const MAX_HUNTERS: usize = 2_048;
 const CELL_TILES: i32 = 8;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
