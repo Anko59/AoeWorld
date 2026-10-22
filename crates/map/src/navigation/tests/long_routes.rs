@@ -5,7 +5,11 @@ use crate::{
     ordered_page_root, ordered_water_page_root,
 };
 
-fn flat_terrain_with_water_wall(width: i32, wall_x: i32, gap_y: i32) -> MapChunkGenerator {
+pub(crate) fn flat_terrain_with_water_wall(
+    width: i32,
+    wall_x: i32,
+    gap_y: i32,
+) -> MapChunkGenerator {
     let mut elevation_pages = Vec::new();
     let mut elevation_levels = Vec::new();
     let mut water_pages = Vec::new();

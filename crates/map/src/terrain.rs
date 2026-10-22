@@ -16,7 +16,9 @@ mod fallback;
 mod geometry;
 mod landscape_dispatch;
 mod point_memo;
+mod walk_cache;
 pub use landscape_dispatch::LandscapePoint;
+pub use walk_cache::{WALK_CACHE_MAX_BYTES, WalkCell};
 pub(crate) mod landscape;
 #[path = "terrain/landscape/queries.rs"]
 mod landscape_queries;
@@ -163,7 +165,7 @@ pub struct MapChunkGenerator {
     provider_compression: Option<Ratio>,
     river_queries: Arc<std::sync::Mutex<provider::rivers::Cache>>,
     /// Memo of composed tile answers; every builder that changes inputs resets it.
-    point_memo: Arc<std::sync::Mutex<point_memo::PointMemo>>,
+    derived: Arc<walk_cache::DerivedCaches>,
 }
 
 impl MapChunkGenerator {
@@ -181,7 +183,7 @@ impl MapChunkGenerator {
             provider_environment: None,
             provider_compression: None,
             river_queries: Arc::default(),
-            point_memo: Arc::default(),
+            derived: Default::default(),
         }
     }
 
@@ -199,7 +201,7 @@ impl MapChunkGenerator {
             return Err(EnvironmentError::InvalidPyramid);
         }
         self.river_queries = Arc::default();
-        self.point_memo = Arc::default();
+        self.derived = Default::default();
         self.provider = Some(provider);
         self.provider_environment = Some(Arc::new(environment));
         self.provider_compression = Some(compression);
@@ -234,7 +236,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
-            point_memo: Arc::default(),
+            derived: Default::default(),
         })
     }
 
@@ -271,7 +273,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
-            point_memo: Arc::default(),
+            derived: Default::default(),
         })
     }
 
@@ -308,7 +310,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
-            point_memo: Arc::default(),
+            derived: Default::default(),
         })
     }
 
@@ -344,7 +346,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
-            point_memo: Arc::default(),
+            derived: Default::default(),
         })
     }
 

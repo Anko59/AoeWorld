@@ -26,7 +26,7 @@ impl MapChunkGenerator {
         if tile.x < 0 || tile.y < 0 || tile.x >= self.width_tiles || tile.y >= self.width_tiles {
             return Ok(None);
         }
-        if let Ok(memo) = self.point_memo.lock()
+        if let Ok(memo) = self.derived.point.lock()
             && let Some(base) = memo.get_base(tile)
         {
             return Ok(base);
@@ -36,7 +36,7 @@ impl MapChunkGenerator {
         } else {
             Some(self.sample_base_tile(tile))
         };
-        if let Ok(mut memo) = self.point_memo.lock() {
+        if let Ok(mut memo) = self.derived.point.lock() {
             memo.insert_base(tile, base);
         }
         Ok(base)
@@ -135,7 +135,7 @@ impl MapChunkGenerator {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
         }
-        if let Ok(memo) = self.point_memo.lock()
+        if let Ok(memo) = self.derived.point.lock()
             && let Some(point) = memo.get(tile)
         {
             return Ok(point);
@@ -148,7 +148,7 @@ impl MapChunkGenerator {
                     point.resource.map(|resource| resource.node),
                 )
             });
-        if let Ok(mut memo) = self.point_memo.lock() {
+        if let Ok(mut memo) = self.derived.point.lock() {
             memo.insert(tile, point);
         }
         Ok(point)
