@@ -4,6 +4,7 @@ use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, ResourceOverlay};
 
 mod replay_pin;
 mod visibility;
+mod visibility_fanout;
 mod visibility_ghosts;
 mod visibility_resources;
 
