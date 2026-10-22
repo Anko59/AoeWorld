@@ -3,6 +3,8 @@
 mod driver;
 mod server;
 mod stats;
+#[cfg(test)]
+mod tests;
 mod world;
 
 use aoe_simulation::{GameWorld, TickPhase};
@@ -60,6 +62,9 @@ pub struct Options {
     /// Leave all units idle, so server fan-out can be measured without simulation load.
     #[arg(long)]
     idle_world: bool,
+    /// Drop the driver's attack orders (used by the pinned-hash scenario).
+    #[arg(long)]
+    skip_attacks: bool,
     #[arg(long, default_value = "reports/scale/perf-scale.json")]
     out: PathBuf,
 }
@@ -227,9 +232,6 @@ fn census(world: &GameWorld, built_players: &[Player]) -> Value {
     })
 }
 
-#[cfg(test)]
-mod tests;
-
 fn git(args: &[&str]) -> String {
     Command::new("git")
         .args(args)
@@ -274,6 +276,7 @@ pub fn run(options: Options) -> Result<(), BoxError> {
         options.orders_per_second,
         tick_hz,
     );
+    driver.skip_attacks = options.skip_attacks;
     let fog_on = run_ticks(
         &mut world,
         &mut players,

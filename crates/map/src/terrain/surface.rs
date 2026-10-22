@@ -67,6 +67,9 @@ impl MapChunkGenerator {
         if (delta_x == 0 && delta_y == 0) || delta_x > 1 || delta_y > 1 {
             return Ok(EdgePassability::Blocked);
         }
+        if let Some(edge) = self.cached_edge(from, to, cancelled)? {
+            return Ok(edge);
+        }
         let from = self
             .base_physical_tile_with_cancel(from, cancelled)?
             .ok_or(EnvironmentPageError::Invalid)?;

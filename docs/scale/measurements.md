@@ -288,3 +288,76 @@ rework the server around per-player interest-managed deltas.
   --orders-per-second --seed --fight-size --hash-every --server-ticks --subscribers
   --idle-world --out`.
 - Idle server fan-out: `PERF_SCALE_ARGS="--idle-world --ticks 20 --fog-off-ticks 0 --server-ticks 40 --out reports/scale/perf-scale-idle-server.json" make perf-scale`.
+
+## Movement (branch `perf/movement`, revision 4c07decb)
+
+Same workload and command as above (`make perf-scale`, 100 players, 101,111 units,
+600 ticks fog on, 100 fog off). Raw reports: `reports/scale/before-movement.json`
+(revision 7867e9a3) and `reports/scale/after-movement.json` (4c07decb, clean tree);
+`after-cache.json` is the intermediate run after the chunk cache alone.
+
+| Milliseconds | before p50 | before p95 | after cache p50 | after all p50 | after all p95 |
+|---|---|---|---|---|---|
+| Movement and pathfinding | 300.6 | 380.6 | 37.4 | **26.1** | **40.4** |
+| Whole `advance` | 390.5 | 490.5 | 143.1 | **103.5** | 165.4 |
+
+Movement is 11.5 times cheaper at p50 and 9.4 times at p95 (target: 4 times). The whole
+`advance` is 3.8 times cheaper; the rest (wildlife, vision, gathering, collation) is the
+next target, see hot spots 4 to 8. Fog off: movement 272.5 to 21.5 ms. Memory is 105 MiB
+resident (was 103). The machine was shared with other agents' builds, so absolute
+numbers carry noise of some percent; the ratio is far outside it.
+
+**Determinism.** All 12 canonical hashes (ticks 100 to 600 fog on and the 100 fog-off
+ticks) are identical before and after. The 4-player scenario in
+`crates/harness/src/perf_scale/tests.rs` pins three hashes (ticks 100, 200, 300)
+computed at 7867e9a3; run it with
+`HARNESS_TEST_FILTER=small_scale_scenario make test-harness-focused` (`make test-unit`
+does not run the harness crate's unit tests).
+
+**What changed.**
+
+1. *Chunk terrain cache* (`crates/map/src/terrain/walk_cache.rs`). The first touch of any
+   tile of a 32 x 32 chunk generates the whole chunk once (cost per tile 3.8 times lower
+   than point queries) and keeps bitmaps: passable, walkable surface, mud, plus height
+   levels and the resource nodes. Edge rules (`edge_between`), walkability, step cost
+   and the simulation's `passable`/`crossable` read these instead of evaluating terrain.
+   Bounded to 64 MiB with least-recently-used eviction (about 20,000 chunks). A page
+   provider failure falls back to the exact per-tile path; cancellation is honoured before
+   every hit. A test compares every cell and edge with direct evaluation, including a map
+   edge that cuts a chunk. Caveat: a cached chunk no longer asks a page provider again, so
+   `resumed_provider_failure_is_a_typed_stopped_reason` now fails on terrain not read before.
+   Not done: active prefetch of the chunks ahead of movers. Generation is deterministic and
+   total work is identical, so prefetch only moves cost between ticks; at 100 players every
+   base's neighbourhood is warm after a few seconds.
+2. *Hierarchical planner* (`crates/map/src/navigation/hierarchy.rs`). Portals are open
+   entrance pairs on chunk borders (one per run); intra-chunk costs are computed lazily
+   by a chunk-confined Dijkstra and cached; the abstract search is weighted A* (weight 2,
+   so the route costs at most twice the optimum) bounded to 8,192 abstract expansions.
+   It is built from static terrain and resource nodes only, never the dynamic overlay, so
+   a result never depends on cache state. Tests: wall with and without a gateway, a
+   1,600-tile route across about 50 chunks within 2,048 expansions, a cold-cache twin, the
+   bound. The leg planner (`RoutePlanner`) is unchanged on purpose: it already commits
+   legs of 48 tiles, so short routes stay bit-identical. It is not yet guided by portal
+   waypoints (next step below).
+3. *Far attack orders* (`combat/approach.rs`). The exact local search is unchanged. When it
+   hits its 8,192-tile cap the order picks the nearest in-range open tile at the target and
+   walks like any far move; within 400 tiles the portal graph first rejects a provably
+   disconnected tile. Tests accept a 1,600-tile attack on a unit and on a Town Center.
+   **The benchmark still reports 1,073 `NoAttackPosition`.** Measured with a debug print on
+   a 2-player run: those attackers' local search ends after 4 to 22 tiles with the
+   frontier exhausted, not at the cap, i.e. the synthetic militia are spawned in enclosed
+   pockets of the procedural map. Distance is not their cause, so the gate is spawn
+   placement in `world.rs`, not pathfinding.
+4. *Per-mover step.* `EntityId -> slot` is a flat vector (`game_world/unit_index.rs`),
+   and the rotation of the mover list by the planning cursor no longer copies it per tick.
+
+**Next steps.** (a) Guide `RoutePlanner` legs with portal waypoints (leg target = next
+portal, final target last) to avoid dead-end legs on lakes and rivers; keep the current
+rule for routes shorter than two chunks. (b) Dense structure-of-arrays storage for
+position, order and planner handles indexed by slot, so the mover loop touches two cache
+lines per unit instead of a `StoredUnit`. (c) Rayon: a pure proposal phase over fixed unit
+shards (next position, terrain verdict), then a sequential apply in id order, hash-verified
+against the sequential build; `update_unit_vision` (a `BTreeMap` of observers) and
+`building_step_clear` are the remaining serial parts. (d) Spawn military in open ground in
+the benchmark so attack and move orders stop failing. (e) Chunk generation of 4.5 ms is
+the cold cost; a base-terrain-only fast path would cut it where trees are not needed.

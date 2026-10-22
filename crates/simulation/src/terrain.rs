@@ -115,14 +115,12 @@ impl Terrain {
                 && tile.x < config.width_tiles
                 && tile.y < config.height_tiles),
             Self::Map { generator, overlay } => {
-                let Some((sample, object)) =
-                    generator.tile_and_node_with_cancel(tile, cancelled)?
-                else {
+                let Some(cell) = generator.walk_at_with_cancel(tile, cancelled)? else {
                     return Ok(false);
                 };
                 Ok(destination_passable(
-                    sample.passable,
-                    object.is_some_and(|node| overlay.blocks_node(node)),
+                    cell.passable,
+                    cell.node.is_some_and(|node| overlay.blocks_node(node)),
                     overlay.blocks_tile(tile),
                 ))
             }
@@ -156,7 +154,8 @@ impl Terrain {
                                 EdgePassability::Passable
                             )
                             && generator
-                                .object_at_with_cancel(to, cancelled)?
+                                .walk_at_with_cancel(to, cancelled)?
+                                .and_then(|cell| cell.node)
                                 .is_none_or(|node| !overlay.blocks_node(node)),
                     )
                 };
@@ -271,6 +270,21 @@ impl Terrain {
         if let Self::Map { generator, overlay } = self {
             planner.plan_ahead(generator, overlay, budget, cancelled);
         }
+    }
+
+    /// Plans over 32 x 32 chunk portals; see [`aoe_map::hierarchical_route`].
+    /// Uniform worlds have no obstacles and return `None`. A provider failure
+    /// is reported as `None` too: the caller then plans optimistically.
+    pub fn hierarchical_route(
+        &self,
+        origin: TileCoord,
+        destination: TileCoord,
+        max_expansions: u32,
+    ) -> Option<aoe_map::HierarchicalOutcome> {
+        let Self::Map { generator, .. } = self else {
+            return None;
+        };
+        aoe_map::hierarchical_route(generator, origin, destination, max_expansions).ok()
     }
 
     /// Counts a connected walkable component without allocating map-scale

@@ -1,7 +1,5 @@
 //! Terrain queries shared by the incremental planner's map and uniform worlds.
-use crate::{
-    EdgePassability, EnvironmentPageError, GroundMaterial, MapChunkGenerator, ResourceOverlay,
-};
+use crate::{EdgePassability, EnvironmentPageError, MapChunkGenerator, ResourceOverlay};
 use aoe_core::TileCoord;
 
 pub trait RouteTerrain {
@@ -34,12 +32,12 @@ impl RouteTerrain for MapChunkGenerator {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        let Some((sample, object)) = self.tile_and_node_with_cancel(tile, cancelled)? else {
+        let Some(cell) = self.walk_at_with_cancel(tile, cancelled)? else {
             return Ok(false);
         };
         Ok(!overlay.blocks_tile(tile)
-            && sample.passable
-            && object.is_none_or(|node| !overlay.blocks_node(node)))
+            && cell.passable
+            && cell.node.is_none_or(|node| !overlay.blocks_node(node)))
     }
 
     fn route_edge_clear(
@@ -65,11 +63,10 @@ impl RouteTerrain for MapChunkGenerator {
         } else {
             super::super::DIAGONAL_COST
         };
-        let multiplier = if matches!(
-            self.tile_at_with_cancel(to, cancelled)?
-                .map(|sample| sample.material),
-            Some(GroundMaterial::Mud)
-        ) {
+        let multiplier = if self
+            .walk_at_with_cancel(to, cancelled)?
+            .is_some_and(|cell| cell.mud)
+        {
             3
         } else {
             2
