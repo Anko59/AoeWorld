@@ -43,11 +43,16 @@ class Config:
     build_search_radius: int = 18
 
     # --- age ---------------------------------------------------------------
-    feudal_min_villagers: int = 16
+    #: Research Loom once this many villagers work.
+    loom_villagers: int = 10
+    #: Save for and click Feudal Age at this many villagers (DE players go up
+    #: at 20-22) once two kinds of the required buildings stand.
+    feudal_villagers: int = 21
 
     # --- military ----------------------------------------------------------
-    barracks_min_villagers: int = 12
-    army_min_villagers: int = 14
+    #: The army is trained from Feudal Age on, never before: Dark Age food
+    #: belongs to villagers and the age.
+    army_min_villagers: int = 18
     #: Spearmen : archers : skirmishers.
     army_mix: dict[str, float] = field(
         default_factory=lambda: {"SPEARMAN": 4.0, "ARCHER": 3.0, "SKIRMISHER": 3.0}
@@ -61,7 +66,7 @@ class Config:
 
     # --- combat ------------------------------------------------------------
     #: Army size that starts an attack.
-    attack_army_size: int = 14
+    attack_army_size: int = 12
     #: Retreat when the army drops below this fraction of its launch size.
     retreat_fraction: float = 0.4
     #: Defend when a threat is this close to the base.

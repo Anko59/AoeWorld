@@ -27,7 +27,10 @@ class Plan:
 
 
 @dataclass
-class BotMemory:
+class Blackboard:
+    """Everything the managers share between decisions: orders in flight,
+    refusals learned, plans, scouting progress and the attack state."""
+
     tracked: dict[int, Tracked] = field(default_factory=dict)
     #: Resource nodes a gather order was refused for (fish, unreachable...).
     bad_resources: set[int] = field(default_factory=set)
@@ -43,6 +46,7 @@ class BotMemory:
     scout_waypoints: list[Tile] = field(default_factory=list)
     scout_index: int = 0
     scout_radius: int = 0
+    scout_stage: int = 0
     home: Optional[Tile] = None
     #: Ticks at which a thing was last tried, to avoid hammering refusals.
     cooldowns: dict[str, int] = field(default_factory=dict)
@@ -51,6 +55,13 @@ class BotMemory:
     attack_launch_size: int = 0
     attack_target: Optional[int] = None
     attacking: bool = False
+    #: Destinations a move order was refused for.
+    bad_moves: set[tuple[int, int]] = field(default_factory=set)
+    #: villager id -> tick of its last job, animal id -> hunt orders given.
+    assigned: dict[int, int] = field(default_factory=dict)
+    hunt_tries: dict[int, int] = field(default_factory=dict)
+    #: Enemy units and buildings seen below full health (our hits landing).
+    wounded: set[int] = field(default_factory=set)
     #: Counters for reports and tests.
     stats: dict[str, int] = field(default_factory=dict)
 

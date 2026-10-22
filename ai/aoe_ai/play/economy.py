@@ -15,8 +15,8 @@ from aoeworld import (
 )
 
 from .constructor import Constructor
-from .context import Context
-from .geometry import clamp_tile, dist, dist2, nearest, ring_points
+from ..context import Context
+from ..geometry import clamp_tile, dist, dist2, nearest, ring_points
 
 KEYS = {
     "FOOD": ResourceKind.FOOD,
@@ -30,9 +30,12 @@ CAMPS = {
     ResourceKind.STONE: BuildingKind.MINING_CAMP,
     ResourceKind.FOOD: BuildingKind.MILL,
 }
-HUNTABLE = (AnimalKind.SHEEP, AnimalKind.DEER, AnimalKind.BOAR)
 #: Most idle villagers dispatched in one decision (spreads the order burst).
 MAX_ASSIGN_PER_DECISION = 16
+#: Seconds before a villager that fell idle again is given another job.
+ASSIGN_PAUSE_SECONDS = 4
+#: Hunt orders on one animal before it is written off.
+HUNT_TRIES = 12
 
 
 class EconomyManager:
@@ -69,7 +72,7 @@ class EconomyManager:
             ctx.order("train", center.id, UnitKind.VILLAGER)
             ctx.queued += 1
             queue += 1
-            ctx.memory.bump("villagers_queued")
+            ctx.board.bump("villagers_queued")
 
     # ----- allocation ------------------------------------------------------
     def counts(self, ctx: Context) -> dict[str, int]:
@@ -87,7 +90,7 @@ class EconomyManager:
         cfg = ctx.config
         shares = dict(cfg.feudal_shares if ctx.feudal else cfg.dark_shares)
         # Saving 500 food for Feudal Age: lean on food.
-        if not ctx.feudal and len(ctx.villagers) >= cfg.feudal_min_villagers:
+        if not ctx.feudal and len(ctx.villagers) >= cfg.feudal_villagers - 4:
             shares["FOOD"] += 0.15
             shares["WOOD"] -= 0.10
             shares["STONE"] = max(0.0, shares["STONE"] - 0.05)
@@ -100,19 +103,28 @@ class EconomyManager:
         idle = [
             v
             for v in ctx.villagers
-            if v.idle and v.id not in ctx.busy and ctx.memory.builders.get(v.id) is None
+            if v.idle and v.id not in ctx.busy and ctx.board.builders.get(v.id) is None
         ]
         # A builder whose foundation finished (or vanished) is a worker again.
         for v in ctx.villagers:
-            if v.id in ctx.memory.builders and v.idle and v.id not in ctx.busy:
-                del ctx.memory.builders[v.id]
+            if v.id in ctx.board.builders and v.idle and v.id not in ctx.busy:
+                del ctx.board.builders[v.id]
                 idle.append(v)
         if not idle:
             return
         counts = self.counts(ctx)
         shares = self.shares(ctx)
         total = max(1, len(ctx.villagers))
-        for villager in idle[:MAX_ASSIGN_PER_DECISION]:
+        pause = ASSIGN_PAUSE_SECONDS * ctx.world.tick_hz
+        assigned = ctx.board.assigned
+        for villager in idle:
+            # A villager that goes idle right after an order cannot do it:
+            # give it a pause instead of repeating the order every decision.
+            if ctx.tick - assigned.get(villager.id, -pause) < pause:
+                continue
+            assigned[villager.id] = ctx.tick
+            if sum(1 for t in assigned.values() if t == ctx.tick) > MAX_ASSIGN_PER_DECISION:
+                break
             order = sorted(KEYS, key=lambda k: shares[k] * total - counts[k], reverse=True)
             for key in order:
                 if shares[key] <= 0 and key != order[0]:
@@ -138,7 +150,7 @@ class EconomyManager:
 
     def explore(self, ctx: Context, villager: Any) -> None:
         """Nothing known to work: walk a ring around home to uncover something."""
-        mem = ctx.memory
+        mem = ctx.board
         mem.bump("explored")
         ring = 12 + 6 * (mem.stats["explored"] // 8)
         points = ring_points(ctx.home, min(ring, 60), spacing=8)
@@ -164,11 +176,11 @@ class EconomyManager:
 
     # ----- food ------------------------------------------------------------
     def send_to_food(self, ctx: Context, villager: Any) -> bool:
-        home = ctx.home
-        hunt = self.huntable(ctx)
-        if hunt is not None:
-            ctx.order("hunt", [villager.id], hunt.id)
-            return True
+        """Sheep first, then berries (with a Mill beside them), then deer and
+        boar, then farms once the land runs dry."""
+        sheep = self.huntable(ctx, (AnimalKind.SHEEP,))
+        if sheep is not None:
+            return self.hunt(ctx, villager, sheep)
         node = self.best_node(ctx, villager, ResourceKind.FOOD)
         if node is not None:
             if ctx.dropoff_distance(node) > ctx.config.dropoff_distance:
@@ -176,28 +188,46 @@ class EconomyManager:
                     return True
             ctx.order("gather", villager.id, node.id)
             return True
+        game = self.huntable(ctx, (AnimalKind.DEER, AnimalKind.BOAR))
+        if game is not None:
+            return self.hunt(ctx, villager, game)
         return self.send_to_farm(ctx, villager)
 
-    def huntable(self, ctx: Context) -> Optional[Any]:
-        animals = [
-            a
-            for a in ctx.world.animals()
-            if a.kind in HUNTABLE
-            and a.owner is None
-            and a.food_remaining > 0
-            and dist(a.tile, ctx.home) <= ctx.config.hunt_distance
-        ]
-        return nearest(animals, ctx.home)
+    def hunt(self, ctx: Context, villager: Any, animal: Any) -> bool:
+        """Hunt order that gives up on an animal nobody manages to finish."""
+        tries = ctx.board.hunt_tries
+        tries[animal.id] = tries.get(animal.id, 0) + 1
+        if tries[animal.id] > HUNT_TRIES:
+            ctx.board.bad_resources.add(animal.id)
+            ctx.board.bump("hunts_abandoned")
+        ctx.order("hunt", [villager.id], animal.id)
+        return True
+
+    def huntable(self, ctx: Context, kinds: tuple) -> Optional[Any]:
+        for kind in kinds:
+            animals = [
+                a
+                for a in ctx.world.animals()
+                if a.kind == kind
+                and a.owner in (None, ctx.world.me)
+                and a.food_remaining > 0
+                and dist(a.tile, ctx.home) <= ctx.config.hunt_distance
+                and a.id not in ctx.board.bad_resources
+            ]
+            found = nearest(animals, ctx.home)
+            if found is not None:
+                return found
+        return None
 
     def forget_farmers(self, ctx: Context) -> None:
         alive = {v.id for v in ctx.villagers}
         farms = {b.id for b in ctx.buildings}
-        farmers = ctx.memory.farmers
+        farmers = ctx.board.farmers
         for farm in [f for f, v in farmers.items() if v not in alive or f not in farms]:
             del farmers[farm]
 
     def send_to_farm(self, ctx: Context, villager: Any) -> bool:
-        farmers = ctx.memory.farmers
+        farmers = ctx.board.farmers
         free = [
             f
             for f in ctx.world.my_buildings(BuildingKind.FARM, complete_only=True)

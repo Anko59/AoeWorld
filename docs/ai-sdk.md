@@ -66,10 +66,10 @@ Name the ground with exactly one of:
   to develop and test an AI (generated terrain without source data is rugged,
   and its cliffs wall off most village sites). Needs the server's map package
   directory (`AOE_MAP_PACKAGE_DIRECTORY`, default `local-assets/map-packages`).
-  Resources come from the procedural landscape, so they depend on the seed and
-  the size: flat maps have forests and a few berry bushes but no gold, stone or
-  game, and a map under about 300 tiles can have no trees at all. Check
-  `world.resources()` when choosing a seed.
+  Natural resources come from the procedural landscape (forests, a few berry
+  bushes), but every village also gets the standard start (see below), so
+  each has gold, stone, sheep, deer and boar. A map under about 300 tiles can
+  have few trees besides the start's twelve.
 * `"map": {MapRequest}` a generated package (the browser's map creator
   request); `"map_hash": "<64 hex>"` a package the server already holds.
 
@@ -186,20 +186,59 @@ and the three cancels). `run_bot(&client, &mut bot, RunLimits)` runs a `Bot`
 ## The example AI (`ai/`)
 
 `aoe_ai.Brain` is the player; `Host` runs many in one process. Each decision it
-runs these in priority order, sharing one `Context` (the snapshot plus a spending
-budget) and a `BotMemory`:
+builds one `Context` (the snapshot, a spending budget, order helpers) and runs
+the managers in priority order, sharing one `Blackboard` (orders in flight and
+their verdicts, refused nodes and sites, planned buildings, scouting progress,
+attack state, counters):
 
 | Module | Job |
 | --- | --- |
-| `research.py` | Loom, the climb to Feudal Age (drains the Town Center queue first), then economy upgrades |
-| `combat.py` | defend the base, mass 14 units, attack the nearest known enemy building, retreat below 40% |
-| `economy.py` | villager production, resource shares (food, wood, gold, stone), hunting before foraging, farms once food nodes run out |
-| `constructor.py` | houses before the cap, lumber camps, mining camps and mills beside far resources, Barracks, Archery Range |
-| `military.py` | spearman : archer : skirmisher = 4 : 3 : 3, rally point |
-| `scouting.py` | widening rings, then a sweep of the far side of the map |
+| `play/buildorder.py` | the plan: stage (Dark, advance, Feudal), when to Loom and click Feudal Age, which buildings and upgrades come next |
+| `play/research.py` | executes it: Loom, saving 500 food and Feudal Age (the Town Center queue drains first), then the upgrades |
+| `play/economy.py` | villagers without pause, shares of food, wood, gold and stone, sheep then berries then deer and boar, farms when the land runs dry |
+| `play/constructor.py` | houses before the cap, Lumber Camp and Mill, camps beside far resources, Barracks, Archery Range, Blacksmith |
+| `play/military.py` | spearman : archer : skirmisher = 4 : 3 : 3 from Feudal Age on, rally point |
+| `play/scouting.py` | the starting area, then the circle round the map centre through home (far side first), then wider rings |
+| `play/combat.py` | defend the base (villagers next to raiders walk home when outnumbered), attack the nearest known enemy building at 12 units, retreat below 40% |
 
-It learns from refusals (a refused node or site is not tried again). Tunables
-are in `config.py`. `python -m aoe_ai --help` lists the launcher modes.
+The build order: villagers from the first second, a House before the cap, a
+Lumber Camp and a Mill at 8 villagers (they also satisfy the age's two-kinds
+rule), Loom at 10, and at 21 villagers with those standing it stops training
+villagers, saves 500 food and researches Feudal Age. While the age researches
+it raises the Barracks; in Feudal Age the Archery Range, the Blacksmith, Double-Bit
+Axe, Horse Collar (once farming), Wheelbarrow, Gold Mining and the Blacksmith
+upgrades, and an army from every Barracks and Range. No unit is trained in the
+Dark Age: its food belongs to villagers and the age.
+
+Robustness: every order is remembered until its verdict arrives; a refused
+node, animal or site is never tried again, a refused unit kind is substituted
+until the age changes, a villager that falls idle right after an order waits
+four seconds, and a hunted animal nobody finishes is dropped. Everything is
+read from the fog-filtered world: nothing is assumed about enemy positions
+beyond "villages are spread evenly over the map".
+Tunables are in `config.py`. `python -m aoe_ai --help` lists the launcher modes.
+
+### The standard start
+
+Every village of a match starts like the Arabia start of Age of Empires II:
+Town Center, 3 villagers and a scout, 8 sheep, 7 berry bushes, 7 gold and 5
+stone nodes, 12 trees (topped up beside the natural ones), 2 boar, 4 deer and a
+wolf, placed by the simulation's deterministic starting kit
+([economy](economy.md), [wildlife](economy.md#wildlife-and-hunting)). The
+official guide lists, per player, 8 herdables, 3 forests, 6 fruit bushes, 2
+aggressive and 4 wild hunt, 7 tiles of gold and 5 of stone
+(<https://ageofempires.com/learn-to-play/defending-your-empires-aoe2>). A bug
+gave only the first village of a match its kit (the guard looked for any
+starting node in the world); `gameplay_match` tests now check every village of
+several flat matches. These nodes are in no map chunk, so the SDK builds them
+from the resource feed's ids (`World.resources()`); before that fix bots never
+saw their berries and gold.
+
+### Measured live play
+
+See the pull request notes; `ai/tests/test_full_game.py` is the gate:
+two bots on a 300-tile flat map must each reach Feudal Age, field ten military
+units and land a blow within 30 game minutes (run at 3x by the test server).
 
 ## Tests and commands
 

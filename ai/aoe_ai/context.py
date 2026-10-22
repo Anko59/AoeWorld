@@ -9,7 +9,7 @@ from aoeworld import BuildingKind, ResourceKind, UnitKind
 
 from .config import Config
 from .geometry import Tile, dist
-from .memory import BotMemory, Tracked
+from .blackboard import Blackboard, Tracked
 
 MILITARY = (
     UnitKind.MILITIA,
@@ -34,11 +34,11 @@ DROPOFFS = {
 class Context:
     """Everything a manager needs for one decision, computed once."""
 
-    def __init__(self, client: Any, decision: Any, memory: BotMemory, config: Config) -> None:
+    def __init__(self, client: Any, decision: Any, board: Blackboard, config: Config) -> None:
         self.client = client
         self.world = decision.world
         self.events = decision.events
-        self.memory = memory
+        self.board = board
         self.config = config
         self.tick: int = decision.world.tick
         self.economy = decision.world.economy
@@ -49,9 +49,9 @@ class Context:
         self.buildings = decision.world.my_buildings()
         self.enemies = decision.world.visible_enemies()
         self.center = decision.world.town_center()
-        if self.center is not None and memory.home is None:
-            memory.home = self.center.center
-        self.home: Optional[Tile] = self.center.center if self.center else memory.home
+        if self.center is not None and board.home is None:
+            board.home = self.center.center
+        self.home: Optional[Tile] = self.center.center if self.center else board.home
         self.queued = sum(b.queue_length for b in self.buildings)
         self.spent = [0, 0, 0, 0]
         #: Set by a manager that needs the Town Center's queue to drain.
@@ -71,7 +71,7 @@ class Context:
 
     def resources(self, kind: ResourceKind) -> list:
         if kind not in self._resources:
-            bad = self.memory.bad_resources
+            bad = self.board.bad_resources
             self._resources[kind] = [
                 n for n in self.world.resources(kind) if n.id not in bad
             ]
@@ -118,10 +118,11 @@ class Context:
             first = args[0]
             self.busy.update(first if isinstance(first, (list, tuple)) else (first,))
         sequence = getattr(self.client, name)(*args)
-        tracked = self.memory.tracked
+        tracked = self.board.tracked
         tracked[sequence] = Tracked(name, args, self.tick)
         if len(tracked) > 4096:
             for stale in sorted(tracked)[:1024]:
                 del tracked[stale]
-        self.memory.bump("orders")
+        self.board.bump("orders")
+        self.board.bump("order:" + name)
         return sequence

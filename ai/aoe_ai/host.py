@@ -87,9 +87,9 @@ class Host:
         if economy is not None:
             report.population = economy.population
             report.age = str(economy.age).split(".")[-1]
-        report.accepted = brain.memory.stats.get("accepted", 0)
-        report.rejected = brain.memory.stats.get("rejected", 0)
-        report.stats = dict(brain.memory.stats)
+        report.accepted = brain.board.stats.get("accepted", 0)
+        report.rejected = brain.board.stats.get("rejected", 0)
+        report.stats = dict(brain.board.stats)
 
     def run(
         self,
@@ -97,8 +97,10 @@ class Host:
         max_seconds: Optional[float] = None,
         progress: Optional[Callable[[list[BotReport]], None]] = None,
         progress_every: float = 10.0,
+        stop: Optional[Callable[[list[BotReport]], bool]] = None,
     ) -> list[BotReport]:
-        """Drive every bot until all reach `until_tick`, close, or time runs out."""
+        """Drive every bot until all reach `until_tick`, close, `stop(reports)`
+        says so, or time runs out."""
         fleet = aoeworld.Fleet(self.clients)
         started = last_report = time.monotonic()
         try:
@@ -111,6 +113,8 @@ class Host:
                     progress(self.reports)
                     last_report = now
                 if max_seconds is not None and now - started > max_seconds:
+                    break
+                if stop is not None and stop(self.reports):
                     break
                 if until_tick is not None and all(
                     self.reports[i].last_tick >= until_tick for i in self.open

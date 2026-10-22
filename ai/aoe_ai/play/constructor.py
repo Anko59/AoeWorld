@@ -6,18 +6,11 @@ from typing import Any, Optional
 
 from aoeworld import BuildingKind, ResourceKind, UnitTask, building_cost
 
-from .context import Context
-from .geometry import Tile, dist, nearest
-from .memory import Plan
+from ..context import Context
+from . import buildorder
+from ..geometry import Tile, dist, nearest
+from ..blackboard import Plan
 
-#: At least two of these must stand before Feudal Age can be researched.
-FEUDAL_REQUIREMENT = (
-    BuildingKind.BARRACKS,
-    BuildingKind.MILL,
-    BuildingKind.LUMBER_CAMP,
-    BuildingKind.MINING_CAMP,
-    BuildingKind.DOCK,
-)
 MAX_POPULATION = 200
 
 
@@ -29,22 +22,22 @@ class Constructor:
         """Forget plans that came true or went stale."""
         timeout = ctx.config.plan_timeout_seconds * ctx.world.tick_hz
         live = []
-        for plan in ctx.memory.plans:
+        for plan in ctx.board.plans:
             seen = any(
                 b.kind == plan.kind and abs(b.x - plan.tile[0]) <= 1 and abs(b.y - plan.tile[1]) <= 1
                 for b in ctx.buildings
             )
             if not seen and ctx.tick - plan.tick < timeout:
                 live.append(plan)
-        ctx.memory.plans = live
+        ctx.board.plans = live
 
     def pending(self, ctx: Context, kind: BuildingKind) -> int:
         """Foundations of `kind` in progress or planned but not yet seen."""
         unfinished = sum(1 for b in ctx.buildings if b.kind == kind and not b.complete)
-        return unfinished + sum(1 for p in ctx.memory.plans if p.kind == kind)
+        return unfinished + sum(1 for p in ctx.board.plans if p.kind == kind)
 
     def total(self, ctx: Context, kind: BuildingKind) -> int:
-        return ctx.count(kind) + sum(1 for p in ctx.memory.plans if p.kind == kind)
+        return ctx.count(kind) + sum(1 for p in ctx.board.plans if p.kind == kind)
 
     # ----- placing ---------------------------------------------------------
     def place(
@@ -66,17 +59,17 @@ class Constructor:
         site = None
         for extra in (0, 1, 2):
             found = ctx.world.find_build_site(kind, near[0], near[1], radius, gap + extra)
-            if found is not None and (str(kind), *found) not in ctx.memory.bad_sites:
+            if found is not None and (str(kind), *found) not in ctx.board.bad_sites:
                 site = found
                 break
         if site is None:
             return False
         ctx.spend(cost)
         ctx.order("build", [b.id for b in builders], kind, site[0], site[1])
-        ctx.memory.plans.append(Plan(kind, site, ctx.tick))
+        ctx.board.plans.append(Plan(kind, site, ctx.tick))
         for b in builders:
-            ctx.memory.builders[b.id] = (str(kind), site)
-        ctx.memory.bump("build_orders")
+            ctx.board.builders[b.id] = (str(kind), site)
+        ctx.board.bump("build_orders")
         return True
 
     def builder_near(self, ctx: Context, tile: Tile) -> Optional[Any]:
@@ -86,7 +79,7 @@ class Constructor:
             for v in ctx.villagers
             if v.task != UnitTask.BUILDING
             and v.id not in ctx.busy
-            and v.id not in ctx.memory.farmers.values()
+            and v.id not in ctx.board.farmers.values()
         ]
         return nearest(free, tile)
 
@@ -95,14 +88,14 @@ class Constructor:
         for b in ctx.buildings:
             if b.kind == kind and dist(b.center, node.tile) <= 8:
                 return False
-        for plan in ctx.memory.plans:
+        for plan in ctx.board.plans:
             if plan.kind == kind and dist(plan.tile, node.tile) <= 8:
                 return False
-        if ctx.memory.cooling("camp:" + str(kind), ctx.tick):
+        if ctx.board.cooling("camp:" + str(kind), ctx.tick):
             return False
         placed = self.place(ctx, kind, node.tile, [builder], radius=7, gap=0)
         if not placed:
-            ctx.memory.cool("camp:" + str(kind), ctx.tick, 4 * ctx.world.tick_hz)
+            ctx.board.cool("camp:" + str(kind), ctx.tick, 4 * ctx.world.tick_hz)
         return placed
 
     # ----- periodic needs --------------------------------------------------
@@ -129,19 +122,19 @@ class Constructor:
             return
         builder = self.builder_near(ctx, ctx.home)
         if builder is not None and self.place(ctx, BuildingKind.HOUSE, ctx.home, [builder], gap=1):
-            ctx.memory.bump("houses")
+            ctx.board.bump("houses")
 
     def age_requirements(self, ctx: Context) -> None:
         """Mill and Lumber Camp early: drop-offs the economy needs and the
         buildings Feudal Age asks for."""
-        if len(ctx.villagers) < 8 or ctx.memory.cooling("age-buildings", ctx.tick):
+        if len(ctx.villagers) < 8 or ctx.board.cooling("age-buildings", ctx.tick):
             return
         for kind in (BuildingKind.LUMBER_CAMP, BuildingKind.MILL):
             if self.total(ctx, kind) == 0:
                 builder = self.builder_near(ctx, ctx.home)
                 tile = self.camp_site_hint(ctx, kind)
                 if builder is not None and self.place(ctx, kind, tile, [builder], radius=10, gap=1):
-                    ctx.memory.cool("age-buildings", ctx.tick, 2 * ctx.world.tick_hz)
+                    ctx.board.cool("age-buildings", ctx.tick, 2 * ctx.world.tick_hz)
                     return
 
     def camp_site_hint(self, ctx: Context, kind: BuildingKind) -> Tile:
@@ -151,29 +144,19 @@ class Constructor:
         return node.tile if node is not None else ctx.home
 
     def production(self, ctx: Context) -> None:
-        """Barracks, then an Archery Range once Feudal, then a second of each."""
-        cfg = ctx.config
-        villagers = len(ctx.villagers)
-        if villagers < cfg.barracks_min_villagers or ctx.memory.cooling("production", ctx.tick):
+        """Raise the production buildings the build order asks for, one at a time."""
+        if ctx.board.cooling("production", ctx.tick):
             return
-        wood_floor = cfg.wood_reserve
-        wants = []
-        if self.total(ctx, BuildingKind.BARRACKS) == 0:
-            wants.append(BuildingKind.BARRACKS)
-        if ctx.feudal and self.total(ctx, BuildingKind.ARCHERY_RANGE) == 0 and ctx.count(
-            BuildingKind.BARRACKS, complete=True
-        ):
-            wants.append(BuildingKind.ARCHERY_RANGE)
-        rich = ctx.economy.wood > 450 and ctx.economy.food > 300 and villagers >= 24
-        if rich and self.total(ctx, BuildingKind.BARRACKS) < cfg.max_barracks:
-            wants.append(BuildingKind.BARRACKS)
-        if rich and ctx.feudal and self.total(ctx, BuildingKind.ARCHERY_RANGE) < cfg.max_ranges:
-            wants.append(BuildingKind.ARCHERY_RANGE)
-        for kind in wants:
+        for kind, wanted in buildorder.wanted_buildings(ctx):
+            if self.total(ctx, kind) >= wanted:
+                continue
+            needs = buildorder.PREREQUISITE.get(kind)
+            if needs is not None and not ctx.count(needs, complete=True):
+                continue
             cost = building_cost(kind)
-            if not ctx.can_afford((cost[0], cost[1] + wood_floor, cost[2], cost[3])):
+            if not ctx.can_afford((cost[0], cost[1] + ctx.config.wood_reserve, cost[2], cost[3])):
                 continue
             builder = self.builder_near(ctx, ctx.home)
             if builder is not None and self.place(ctx, kind, ctx.home, [builder], gap=1):
-                ctx.memory.cool("production", ctx.tick, 3 * ctx.world.tick_hz)
+                ctx.board.cool("production", ctx.tick, 3 * ctx.world.tick_hz)
                 return
