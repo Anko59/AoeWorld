@@ -1,9 +1,9 @@
 use super::{Command, DevCommand};
 use crate::{
     agents, architecture, assets, coverage, dev, e2e, format_commands, fuzz, gates, hooks, ledger,
-    mutation, native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure, perf_size,
-    perf_soak, perf_stress, perf_timing, policy, process, qa, qa_mcp, release, release_promotion,
-    release_publish, repo_policy, review, ship, slots, timeline, wasm_test,
+    mutation, native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure, perf_scale,
+    perf_size, perf_soak, perf_stress, perf_timing, policy, process, qa, qa_mcp, release,
+    release_promotion, release_publish, repo_policy, review, ship, slots, timeline, wasm_test,
 };
 use std::{
     path::{Path, PathBuf},
@@ -113,6 +113,7 @@ pub(super) fn run(
         Command::PerfPressure => perf_pressure::run()?,
         Command::PerfStress => perf_stress::run()?,
         Command::PerfTimingReport => perf_timing::report()?,
+        Command::PerfScale(options) => perf_scale::run(options)?,
         Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,
         Command::PerfSoak30 => perf_soak::run(1_800, "soak-30")?,
         Command::PerfBaselinePropose => {

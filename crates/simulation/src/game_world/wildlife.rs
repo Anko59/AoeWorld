@@ -82,7 +82,7 @@ impl Wildlife {
     }
 }
 
-fn cell(at: WorldPosition) -> (i32, i32) {
+pub(super) fn cell(at: WorldPosition) -> (i32, i32) {
     let tile = at.tile_floor();
     (tile.x.div_euclid(CELL_TILES), tile.y.div_euclid(CELL_TILES))
 }

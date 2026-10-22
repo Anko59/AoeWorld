@@ -1,6 +1,6 @@
 use super::{
-    BuildingKind, ConstructionState, EconomyError, GameBuilding, MAX_ECONOMY_BUILDINGS,
-    MAX_ECONOMY_PLAYERS, MAX_POPULATION, MarketPrices, PlayerEconomy, Stockpile, VILLAGE_RULES,
+    BuildingKind, ConstructionState, EconomyError, GameBuilding, MAX_POPULATION, MarketPrices,
+    PlayerEconomy, Stockpile, VILLAGE_RULES,
 };
 use crate::{GameWorld, GameWorldError, Terrain, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
@@ -66,9 +66,9 @@ impl GameWorld {
         player: PlayerId,
         origin: TileCoord,
     ) -> Result<EntityId, EconomyError> {
-        if self.economy.buildings.len() >= MAX_ECONOMY_BUILDINGS
+        if self.economy.buildings.len() >= self.economy.limits.buildings
             || (!self.economy.players.contains_key(&player)
-                && self.economy.players.len() >= MAX_ECONOMY_PLAYERS)
+                && self.economy.players.len() >= self.economy.limits.players)
         {
             return Err(EconomyError::Capacity);
         }
@@ -221,9 +221,9 @@ impl GameWorld {
         if self.buildings().any(|building| building.player == player) {
             return Err(EconomyError::AlreadyStarted);
         }
-        if self.economy.buildings.len() >= MAX_ECONOMY_BUILDINGS
+        if self.economy.buildings.len() >= self.economy.limits.buildings
             || (!self.economy.players.contains_key(&player)
-                && self.economy.players.len() >= MAX_ECONOMY_PLAYERS)
+                && self.economy.players.len() >= self.economy.limits.players)
             || self
                 .next_entity_id
                 .saturating_add(u64::from(VILLAGE_RULES.starting_villagers) + 1)

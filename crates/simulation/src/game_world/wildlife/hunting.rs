@@ -1,4 +1,4 @@
-use super::{AnimalKind, AnimalTask, HuntJob, MAX_HUNTERS, distance, radius};
+use super::{AnimalKind, AnimalTask, HuntJob, distance, radius};
 use crate::{EconomyError, GameUnit, GameWorld, UnitKind, UnitTask, unit_combat};
 use aoe_core::{EntityId, PlayerId};
 
@@ -25,7 +25,7 @@ impl GameWorld {
             .filter(|id| !group.contains(id))
             .count()
             + group.len()
-            > MAX_HUNTERS
+            > self.economy.limits.hunters
         {
             return Err(EconomyError::Capacity);
         }

@@ -78,6 +78,8 @@ help:
 	@echo '  make perf-soak-30    Repeat target network lifecycle for 30 minutes'
 	@echo '  make perf-instructions Run pinned Gungraun/Callgrind kernels'
 	@echo '  make perf-timing    Collect informational Criterion microbenchmarks'
+	@echo '  make perf-scale     Measure 100 players and 100k units on a 16k-tile map (reports/scale/)'
+	@echo '  make perf-scale-smoke  Run the tiny scale benchmark that CI executes'
 	@echo '  make perf-baseline-propose Write a reviewable baseline proposal'
 	@echo '  make perf-comment   Post the informational CI performance comment on a pull request'
 	@echo '  make qa-validate     Validate reports/qa/session.json'

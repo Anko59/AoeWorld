@@ -23,8 +23,8 @@ pub use combat::*;
 pub use economy::{
     BUILDING_RULES, BuildingKind, BuildingRules, CarriedResource, ConstructionState, EconomyError,
     GameBuilding, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, MarketPrices,
-    PlayerEconomy, Stockpile, TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules,
-    trainable_units,
+    PlayerEconomy, Stockpile, TickPhase, TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES,
+    VillageRules, WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;

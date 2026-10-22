@@ -1,5 +1,5 @@
 //! Farms: a completed farm holds food that one villager works by standing on it.
-use super::{BuildingKind, EconomyError, MAX_GATHERERS, UnitKind};
+use super::{BuildingKind, EconomyError, UnitKind};
 use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::ResourceKind;
@@ -39,7 +39,7 @@ impl GameWorld {
             return Err(EconomyError::FarmUnavailable);
         }
         if !self.economy.gatherers.contains_key(&id)
-            && self.economy.gatherers.len() >= MAX_GATHERERS
+            && self.economy.gatherers.len() >= self.economy.limits.gatherers
         {
             return Err(EconomyError::Capacity);
         }

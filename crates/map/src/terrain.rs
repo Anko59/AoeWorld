@@ -15,6 +15,7 @@ mod elevation;
 mod fallback;
 mod geometry;
 mod landscape_dispatch;
+mod point_memo;
 pub use landscape_dispatch::LandscapePoint;
 pub(crate) mod landscape;
 #[path = "terrain/landscape/queries.rs"]
@@ -161,6 +162,8 @@ pub struct MapChunkGenerator {
     provider_environment: Option<Arc<PreparedEnvironment>>,
     provider_compression: Option<Ratio>,
     river_queries: Arc<std::sync::Mutex<provider::rivers::Cache>>,
+    /// Memo of composed tile answers; every builder that changes inputs resets it.
+    point_memo: Arc<std::sync::Mutex<point_memo::PointMemo>>,
 }
 
 impl MapChunkGenerator {
@@ -178,6 +181,7 @@ impl MapChunkGenerator {
             provider_environment: None,
             provider_compression: None,
             river_queries: Arc::default(),
+            point_memo: Arc::default(),
         }
     }
 
@@ -195,6 +199,7 @@ impl MapChunkGenerator {
             return Err(EnvironmentError::InvalidPyramid);
         }
         self.river_queries = Arc::default();
+        self.point_memo = Arc::default();
         self.provider = Some(provider);
         self.provider_environment = Some(Arc::new(environment));
         self.provider_compression = Some(compression);
@@ -229,6 +234,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
+            point_memo: Arc::default(),
         })
     }
 
@@ -265,6 +271,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
+            point_memo: Arc::default(),
         })
     }
 
@@ -301,6 +308,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
+            point_memo: Arc::default(),
         })
     }
 
@@ -336,6 +344,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
+            point_memo: Arc::default(),
         })
     }
 
@@ -383,8 +392,8 @@ impl MapChunkGenerator {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<Tile>, EnvironmentPageError> {
-        self.landscape_point_with_cancel(tile, cancelled)
-            .map(|point| point.map(|point| point.tile.terrain))
+        self.memoized_point(tile, cancelled)
+            .map(|point| point.map(|(terrain, _)| terrain))
     }
 
     pub fn chunk(&self, x: i32, y: i32) -> Result<Chunk, EnvironmentPageError> {
@@ -421,8 +430,8 @@ impl MapChunkGenerator {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<ResourceNode>, EnvironmentPageError> {
-        self.landscape_point_with_cancel(tile, cancelled)
-            .map(|point| point.and_then(|point| point.resource.map(|resource| resource.node)))
+        self.memoized_point(tile, cancelled)
+            .map(|point| point.and_then(|(_, node)| node))
     }
 
     pub fn resource_by_id(&self, id: u64) -> Option<ResourceNode> {

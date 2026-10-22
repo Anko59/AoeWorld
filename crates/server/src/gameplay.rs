@@ -196,6 +196,11 @@ impl GameplayService {
         Ok(Self::from_world(world, EntityId(0), None, None))
     }
 
+    /// A prebuilt world for headless scale measurements; it has no map identity.
+    pub fn from_scale_world(world: GameWorld, primary_unit_id: EntityId) -> Self {
+        Self::from_world(world, primary_unit_id, None, None)
+    }
+
     pub async fn navigation_cache_usage(&self) -> NavigationCacheUsage {
         self.world.read().await.navigation_cache_usage()
     }

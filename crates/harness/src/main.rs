@@ -19,6 +19,7 @@ mod perf_comment;
 mod perf_hardware;
 mod perf_micro;
 mod perf_pressure;
+mod perf_scale;
 mod perf_size;
 mod perf_soak;
 mod perf_stress;

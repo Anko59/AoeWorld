@@ -30,6 +30,10 @@ deadline misses, four reconnects under load, and a paused slow reader. Hosted
 timing samples are informational; missing scheduled work or protocol responses
 fail the workload.
 
+`make perf-scale` is the headless 100-player, 100,000-unit tick and server
+fan-out measurement; its numbers and hot spots are in
+[scale measurements](scale/measurements.md).
+
 `make perf-timing` runs pinned Criterion 0.8.2 benchmarks for a synthetic
 simulation tick, viewport query, 1,000-entity snapshot encode/decode, and
 256-color palette decode. Nightly CI uploads `reports/perf/timing.json` and

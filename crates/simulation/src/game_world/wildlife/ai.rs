@@ -12,8 +12,23 @@ impl GameWorld {
         let mut nearby: BTreeMap<EntityId, Option<GameUnit>> =
             self.wildlife.engaged.iter().map(|id| (*id, None)).collect();
         if !self.wildlife.cells.is_empty() {
+            // A unit can only meet an animal in the nine cells around it, so a
+            // unit whose own cell is not next to any occupied cell is skipped
+            // after one lookup. The skipped nine-cell visit is still counted.
+            let near_animals: std::collections::HashSet<(i32, i32)> = self
+                .wildlife
+                .cells
+                .keys()
+                .flat_map(|&(x, y)| {
+                    (y - 1..=y + 1).flat_map(move |j| (x - 1..=x + 1).map(move |i| (i, j)))
+                })
+                .collect();
             for unit in self.units.iter().filter(|u| u.state.hp > 0) {
                 let (cx, cy) = cell(unit.state.position);
+                if !near_animals.contains(&(cx, cy)) {
+                    self.wildlife.stats.cells += 9;
+                    continue;
+                }
                 for y in cy - 1..=cy + 1 {
                     for x in cx - 1..=cx + 1 {
                         self.wildlife.stats.cells += 1;

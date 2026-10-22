@@ -1,6 +1,8 @@
 mod dispatch;
 
-use crate::{agents, assets, e2e, gates, ledger, mutation, native, qa, review, ship, slots};
+use crate::{
+    agents, assets, e2e, gates, ledger, mutation, native, perf_scale, qa, review, ship, slots,
+};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -95,6 +97,8 @@ enum Command {
     PerfPressure,
     PerfStress,
     PerfTimingReport,
+    /// Headless 100-player, 100,000-unit tick and server fan-out measurement.
+    PerfScale(perf_scale::Options),
     #[command(name = "perf-soak-10")]
     PerfSoak10,
     #[command(name = "perf-soak-30")]

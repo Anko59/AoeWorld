@@ -480,6 +480,7 @@ mod combat;
 mod far_orders;
 mod physical_movement;
 mod routes;
+mod scale_hooks;
 mod stop;
 mod wildlife;
 
