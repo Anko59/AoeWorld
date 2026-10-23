@@ -4,6 +4,16 @@ Companion to [scale measurements](measurements.md). Figures below were taken on 
 `perf/parallel-movement` at the fix commit on top of `a564a8d4`, rebased onto dev `e9c3f0b5`.
 Earlier figures (`24c29d9a` and before) are superseded.
 
+These measurements predate the playtest bundle's fair route scheduler and spacing;
+they were not repeated for that integration. In the current engine the fair
+per-player search pass runs before movement, and lookahead uses its remaining
+budget afterward. A mover needing a search always waits in the movement loop,
+even with free budget or slots. Proposals preserve that wait and its start tick,
+and recheck follower spacing during ordered application. The replay pins were
+regenerated from the merged sequential loop and verified with proposals enabled
+and with 1, 2 and 6 threads. The scheduler's fast attempts, sealed proofs, near/far
+slots and planner retention remain in place.
+
 Same workload and command (`make perf-scale`, 100 players, 101,111 units, 600 ticks fog
 on, 100 fog off). "Sequential" is the same tree with the proposal phase disabled (every
 mover takes the sequential path, vision still batched); its hashes equal the parallel runs'.
@@ -61,7 +71,7 @@ all changes, produced by the sequential engine (proposal phase disabled) and unc
 
 **What changed.**
 
-1. *Proposal and apply* (`game_world/movement_step.rs`). A pure `&self` proposal per mover runs
+1. *Proposal and apply* (`game_world/movement_step/mod.rs`). A pure `&self` proposal per mover runs
    under rayon (rayon splits the rotation-ordered mover range with a minimum chunk of 512; proposals are
    pure, so the split never changes a result) and computes the unit's whole tick when it needs no shared planning state:
    a step inside the segment, an arrival that takes the next route tile, a stop at the final

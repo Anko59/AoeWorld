@@ -90,3 +90,16 @@ pub(super) fn resolve(
         })
         .collect()
 }
+
+// Keep bounded startup group construction shared across array lengths.
+#[inline(never)]
+pub(super) fn fill_groups(
+    target: &mut [Vec<GameFrame>],
+    roles: &[AssetRole],
+    ranges: &RoleRanges,
+    records: &[GameFrame],
+) {
+    for (frames, role) in target.iter_mut().zip(roles) {
+        *frames = group_frames(ranges, records, *role);
+    }
+}

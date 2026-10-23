@@ -21,12 +21,27 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         let _ = element.set_attribute("data-assets", "aoe2-local");
         let _ = element.set_attribute("data-art-colour", &format!("{colour:?}"));
     }
+    let query = web_sys::window()
+        .and_then(|w| w.location().search().ok())
+        .and_then(|query| web_sys::UrlSearchParams::new_with_str(&query).ok());
+    let hover_mode = match query.and_then(|query| query.get("hover")).as_deref() {
+        Some("cursor") => 0,
+        Some("glow") => 2,
+        _ => 1,
+    };
+    if let Some(element) = document.get_element_by_id("playground") {
+        let _ = element.set_attribute(
+            "data-hover-mode",
+            ["cursor", "outline", "glow"][hover_mode as usize],
+        );
+    }
     let config = WorldConfig::default();
     let shared = Rc::new(RefCell::new(Client {
         document,
         canvas,
         renderer,
         art,
+        team_colour: colour,
         socket: None,
         connection_id: 0,
         camera: Camera {
@@ -65,6 +80,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         selected: Default::default(),
         village: Default::default(),
         grid: false,
+        hover_mode,
         drag: None,
         pointer: None,
         last_frame: 0.0,
@@ -142,6 +158,7 @@ fn install_colour(shared: Rc<RefCell<Client>>, colour: [u8; 3]) -> Result<(), Js
                                 element.set_attribute("data-art-colour", &format!("{colour:?}"));
                         }
                         client.art = art;
+                        client.team_colour = colour;
                         client.rendered_frame.clear();
                         loaded.set(colour);
                     }

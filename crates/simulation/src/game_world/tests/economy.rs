@@ -181,10 +181,18 @@ fn villagers_move_at_point_eight_tiles_per_second_and_scout_keeps_its_speed() {
     let mut world = world();
     let start = WorldPosition::from_tile_center(TileCoord::new(20, 20)).unwrap();
     let villager = world.spawn_villager(PlayerId(0), start).unwrap();
-    let scout = world.spawn_unit(PlayerId(0), start).unwrap();
+    // Measure free speed on separate lanes. A stacked scout now yields to a
+    // villager in front; persistent overlap is covered by the spacing tests.
+    let scout_start = WorldPosition::from_tile_center(TileCoord::new(20, 24)).unwrap();
+    let scout = world.spawn_unit(PlayerId(0), scout_start).unwrap();
     let destination = WorldPosition::from_tile_center(TileCoord::new(60, 20)).unwrap();
     world.issue_move(villager, destination).unwrap();
-    world.issue_move(scout, destination).unwrap();
+    world
+        .issue_move(
+            scout,
+            WorldPosition::from_tile_center(TileCoord::new(60, 24)).unwrap(),
+        )
+        .unwrap();
     let scout_speed = world.config().move_speed_subunits_per_tick;
     advance(&mut world, 100);
     assert_eq!(world.unit(villager).unwrap().position.x - start.x, 4096);

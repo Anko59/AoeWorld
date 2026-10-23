@@ -83,6 +83,17 @@ impl RoutePlanner {
         budget: u32,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(), Terminal> {
+        let memo = super::memo::MemoTerrain::new(terrain);
+        self.search_leg_with(&memo, overlay, budget, cancelled)
+    }
+
+    fn search_leg_with(
+        &mut self,
+        terrain: &dyn RouteTerrain,
+        overlay: &ResourceOverlay,
+        budget: u32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(), Terminal> {
         let mut remaining = budget;
         while remaining > 0 {
             if self.reconstruction.is_some() {
@@ -114,6 +125,30 @@ impl RoutePlanner {
                 self.validation_step += 1;
                 if !search::checked_walkable(terrain, overlay, tile, cancelled)? {
                     return Err(Terminal::InvalidDestination);
+                }
+                continue;
+            }
+            if !self.pocket_checked && self.leg_work >= super::POCKET_CHECK_WORK {
+                let mut pocket = self
+                    .pocket
+                    .take()
+                    .unwrap_or_else(|| super::pocket::PocketSearch::new(self.destination));
+                // Reverse proof work spends the poll allowance but is separate
+                // from the forward leg's search-limit/commit counters, as before.
+                self.work = self.work.saturating_add(1);
+                remaining -= 1;
+                let result = pocket.step(terrain, overlay, self.leg_origin, cancelled)?;
+                if let Some(&tile) = pocket.queue.back() {
+                    self.include_bounds(tile);
+                }
+                match result {
+                    Some(true) => return Err(Terminal::Unreachable),
+                    Some(false) => self.pocket_checked = true,
+                    None => self.pocket = Some(pocket),
+                }
+                self.update_peak_retained_entries();
+                if self.retained_entries() > MAX_ROUTE_PLANNER_NODES {
+                    return Err(Terminal::SearchLimit);
                 }
                 continue;
             }
@@ -156,6 +191,7 @@ impl RoutePlanner {
             if current.cost != super::super::priority_cost(record.cost) {
                 continue;
             }
+            self.include_bounds(current.tile);
             if let Some(target) = self.leg_end(current.tile) {
                 self.begin_reconstruction(target)?;
                 continue;

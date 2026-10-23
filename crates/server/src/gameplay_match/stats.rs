@@ -1,7 +1,9 @@
 //! Per-tick timing of the running match, read by the scale harness
 //! (`GET /match/stats`, admin secret). Recording is a lock and a push per
 //! tick; nothing here reads simulation state beyond a unit count.
-use serde::Serialize;
+use crate::AppState;
+use axum::{Json, extract::State, http::HeaderMap, http::StatusCode};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
     sync::{
@@ -130,4 +132,20 @@ impl crate::AppState {
             self.tick_deadline_misses.fetch_add(1, Ordering::Relaxed);
         }
     }
+}
+
+#[derive(Deserialize)]
+pub(crate) struct StatsQuery {
+    #[serde(default)]
+    since: u64,
+}
+
+/// `GET /match/stats?since=n`: the per-tick timing records from sequence `n`.
+pub(super) async fn match_stats(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<StatsQuery>,
+) -> Result<Json<StatsPage>, (StatusCode, String)> {
+    super::authorize(&state, &headers)?;
+    Ok(Json(state.tick_stats.page(query.since)))
 }

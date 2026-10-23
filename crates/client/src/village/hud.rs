@@ -1,4 +1,4 @@
-use super::{Client, building_center, owner, resource_kind};
+use super::{Client, building_center, owner};
 use crate::playground::game::{map, position_at};
 use aoe_protocol::{GameplayRole, ResourceKind, UnitKind, UnitTask};
 use std::{cell::RefCell, rc::Rc};
@@ -26,8 +26,9 @@ fn screen(client: &Client, position: [f64; 2]) -> [f64; 2] {
 pub(in super::super) fn update(client: &Client) {
     let owner = owner(client);
     // Header: four stockpiles, used/cap, four worker counts, clock, observing,
-    // native-art flag, then actor/queue/resource counts. Actor records are fifteen
-    // numbers. Decode immediately in JS; never retain a view of WASM memory.
+    // native-art flag, then actor/queue/resource counts. Actor records contain
+    // sixteen numbers; queue records contain progress, total and unit kind.
+    // Decode immediately in JS; never retain a view of WASM memory.
     let scene = map::scene::prepare(client);
     let camera = aoe_rendering::SceneCamera {
         center: client.camera.center,
@@ -84,8 +85,7 @@ pub(in super::super) fn update(client: &Client) {
         let resource = unit.carried.map(|load| load.kind).or(unit.gathering);
         if unit.player == owner
             && unit.kind == UnitKind::Villager
-            && counts_as_gatherer(unit.task)
-            && let Some(kind) = resource_kind(client, unit.id)
+            && let Some(kind) = worker_resource(unit)
         {
             values[6 + match kind {
                 ResourceKind::Wood => 0,
@@ -216,7 +216,11 @@ pub(in super::super) fn update(client: &Client) {
     {
         values[14] = building.training_queue.len() as f64;
         for entry in &building.training_queue {
-            values.extend_from_slice(&[entry.progress_ticks as f64, entry.total_ticks as f64]);
+            values.extend_from_slice(&[
+                entry.progress_ticks as f64,
+                entry.total_ticks as f64,
+                entry.kind as u8 as f64,
+            ]);
         }
     }
     let details = super::presentation::values(client);
@@ -254,9 +258,20 @@ pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsVal
 }
 
 /// Villagers working a resource, including farmers standing on a farm.
-pub(super) fn counts_as_gatherer(task: UnitTask) -> bool {
-    matches!(
-        task,
-        UnitTask::Gathering | UnitTask::Returning | UnitTask::Farming | UnitTask::Fishing
-    )
+/// The resource a villager's job gathers, as AoE2's top-bar counts it: every
+/// stage of the job (walking to the resource, working, carrying it back or
+/// waiting for a drop-off) and every food job (forager, hunter, shepherd,
+/// fisherman, farmer). Idle, building, fighting and dead villagers count for
+/// nothing, whatever they carry.
+pub(super) fn worker_resource(unit: &aoe_protocol::GameplayUnitState) -> Option<ResourceKind> {
+    if unit.hp == 0
+        || matches!(
+            unit.task,
+            UnitTask::Idle | UnitTask::Building | UnitTask::Attacking | UnitTask::Dying
+        )
+    {
+        return None;
+    }
+    unit.gathering
+        .or(unit.hunt_target.map(|_| ResourceKind::Food))
 }

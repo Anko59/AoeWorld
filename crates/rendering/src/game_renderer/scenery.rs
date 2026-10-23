@@ -5,6 +5,22 @@ use crate::{GameArt, GameFrame};
 /// A scenery piece selected from its approved source group.
 pub(super) fn frame(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
     match resource.kind {
+        SceneResource::RALLY_FLAG => art
+            .scenery
+            .rally_flags
+            .get(usize::from(resource.visual_variant) % 10)
+            .copied(),
+        // Oak, pine and palm all reference graphic 1699 / SLP 1252 in the trial.
+        SceneResource::CHOPPED_TREE => art
+            .scenery
+            .logs
+            .get(usize::from(resource.visual_variant) % 2)
+            .copied(),
+        SceneResource::TREE_STUMP => art
+            .scenery
+            .stumps
+            .get(usize::from(resource.visual_variant) % 3)
+            .copied(),
         SceneResource::ROCK => rock(art, resource),
         SceneResource::SHRUB | SceneResource::GRASS | SceneResource::DEADWOOD => {
             dressing(art, resource)
@@ -28,6 +44,11 @@ fn dressing(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
     let variant = usize::from(resource.visual_variant) + usize::from(resource.visual_family);
     let scenery = &art.scenery;
     match resource.kind {
+        SceneResource::RALLY_FLAG => art
+            .scenery
+            .rally_flags
+            .get(usize::from(resource.visual_variant) % 10)
+            .copied(),
         SceneResource::SHRUB if scenery.shrubs.len() == 6 => Some(scenery.shrubs[3 + variant % 3]),
         // The pack's yellow patches read as ore, and its tan clumps as stumps.
         // Keep meadow dressing out of the resource silhouette vocabulary.

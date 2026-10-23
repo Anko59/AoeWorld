@@ -36,7 +36,7 @@ fn town_center_ellipse_lower_arc_is_drawn_over_flat_ground_on_canvas() {
         kind: SceneUnitKind::TownCenter,
         id: aoe_core::EntityId(1),
         position: [8.0, 8.0],
-        moving: false,
+        visual: crate::SceneUnitVisual::new(false),
         facing: 0,
         selected: true,
         elevation_meters: 0.0,

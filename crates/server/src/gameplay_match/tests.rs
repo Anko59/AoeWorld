@@ -73,7 +73,10 @@ fn every_flat_match_village_gets_the_full_standard_start() {
         .expect("flat package");
         let mut world = GameWorld::from_prepared_map(package, pages, vec![], vec![], vec![])
             .expect("flat world");
-        let scouts = place_villages(&mut world, villages, &|| false).expect("villages");
+        let placed = std::sync::atomic::AtomicUsize::new(0);
+        let scouts =
+            place_villages(&mut world, villages, None, &placed, &|| false).expect("villages");
+        assert_eq!(placed.load(Ordering::Acquire), villages);
         let mut short = Vec::new();
         for (slot, scout) in scouts.into_iter().enumerate() {
             let have: std::collections::BTreeMap<_, _> =
@@ -95,3 +98,8 @@ fn every_flat_match_village_gets_the_full_standard_start() {
         assert!(short.is_empty(), "{short:#?}");
     }
 }
+
+#[path = "tests/real_package.rs"]
+mod real_package;
+#[path = "tests/seats.rs"]
+mod seats;

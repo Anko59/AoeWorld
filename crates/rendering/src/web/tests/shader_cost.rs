@@ -35,7 +35,7 @@ fn ordinary_compilation_source_has_no_ground_mixing_path() {
             "embedded shaders retain comment-only lines"
         );
         assert!(!source.contains(", ") && !source.contains(": "));
-        let fragment = source.split("fn fs_main(").nth(1).unwrap();
+        let fragment = source.split("fn world_colour(").nth(1).unwrap();
         let sprite = fragment
             .split("if in.solid == 0u {")
             .nth(1)

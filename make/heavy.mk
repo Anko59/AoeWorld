@@ -39,6 +39,7 @@ SLOT_ENV := \
   -e AOE_FOG_DISABLED \
   -e AOE_FOG_SHOWCASE \
   -e AOE_MATCH_TOKEN \
+  -e AOE_PRESET_MAPS \
   -e DEV_PORT \
   -e GIT_INDEX_FILE \
   -e RUST_TEST_THREADS \
@@ -125,6 +126,15 @@ perf-scale-smoke: tools slot-bootstrap
 
 perf-scale-smoke-steps:
 	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-scale --players 4 --units-per-player 500 --side-tiles 4000 --ticks 50 --fog-off-ticks 10 --server-ticks 5 --subscribers 4 --out reports/perf/perf-scale-smoke.json
+
+# Per-function Binaryen metrics retain the names in wasm-bindgen's output.
+.PHONY: perf-wasm-functions perf-wasm-functions-steps
+perf-wasm-functions: build-wasm analysis-tools slot-bootstrap
+	@$(SLOT_RUN) perf-wasm-functions -- make --no-print-directory perf-wasm-functions-steps
+
+perf-wasm-functions-steps:
+	@mkdir -p reports/perf
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) wasm-opt web/pkg/aoe_client_bg.wasm --func-metrics -o /dev/null > reports/perf/wasm-functions.txt
 
 perf-wasm-size: build-wasm analysis-tools slot-bootstrap
 	@$(SLOT_RUN) perf-wasm-size -- make --no-print-directory perf-wasm-size-steps
@@ -264,12 +274,13 @@ test-country-source-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(SOURCE_QUAL_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --release --locked -p aoe-harness -- source-country-probe --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' --browser
 
-dev-build: slot-bootstrap
+dev-build: slot-bootstrap sdk-python-tools
 	@$(SLOT_RUN) dev-build -- make --no-print-directory dev-build-steps
 
 dev-build-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
+	@make --no-print-directory sdk-python-steps
 
 # Single-command and release-compile targets: the slot is taken before the first container, so
 # every container they start is capped (the audit in slots/tests/makefile.rs lists the exemptions).

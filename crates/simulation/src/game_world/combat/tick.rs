@@ -1,6 +1,5 @@
 //! Per-tick attack resolution for units that hold an attack order.
 use super::{Attacker, HitRecord, MELEE_RANGE_SUBUNITS, damage_dealt, unit_combat};
-use crate::game_world::facing_for;
 use crate::{GameWorld, UnitTask};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, Tick, TileRect, WorldPosition};
 
@@ -109,13 +108,11 @@ impl GameWorld {
         if self.units[index].order.is_some() || before.moving || before.planning {
             self.stop_movement(index);
         }
-        let (centre, position) = (goal.centre(), before.position);
         let state = &mut self.units[index].state;
-        state.facing = facing_for(
-            i64::from(centre.x) - i64::from(position.x),
-            i64::from(centre.y) - i64::from(position.y),
-            state.facing,
-        );
+        match goal {
+            Goal::Unit(target) => state.face_towards(target),
+            Goal::Building(footprint) => state.face_footprint(footprint),
+        }
         state.task = UnitTask::Attacking;
         if now >= self.units[index].next_hit_tick {
             self.units[index].next_hit_tick = now + u64::from(self.attack_period_ticks(&before));
@@ -143,8 +140,11 @@ impl GameWorld {
             self.end_attack(id, changed);
             return;
         }
-        // The firing-position search runs only when the repath timer expires.
-        if now >= attacker.repath_tick {
+        // The firing-position search runs only when the repath timer expires,
+        // and never while the current route is still being searched: a new
+        // order would restart that search, and a chase whose search needs
+        // longer than the repath interval would never move at all.
+        if now >= attacker.repath_tick && !self.waiting_for_route(index) {
             let next_repath = now.saturating_add(self.repath_ticks());
             if let Some(entry) = self.combat.attackers.get_mut(&id) {
                 entry.repath_tick = next_repath;

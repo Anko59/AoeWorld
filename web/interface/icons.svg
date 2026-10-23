@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-<!-- Original AoeWorld interface symbols. No imported game interface artwork. -->
+<!-- Authored fallback symbols. Original game artwork is loaded only from /asset-pack/. -->
 <symbol id="wood" viewBox="0 0 48 48"><g stroke="#241e16" stroke-width="2.5" stroke-linejoin="round"><path fill="#a9763f" d="m9 18 23-9 8 8-23 10zM8 30l23-9 8 8-23 10z"/><path fill="#d5ab69" d="m9 18 8 9v12l-9-9zm23-9 8 8v12l-9-8z"/><path d="m20 22 13-5M20 34l13-5" stroke="#ebc784"/></g></symbol>
 <symbol id="food" viewBox="0 0 48 48"><g stroke="#351b19" stroke-width="2"><circle cx="17" cy="25" r="10" fill="#bd493c"/><circle cx="31" cy="27" r="10" fill="#db6650"/><circle cx="23" cy="35" r="9" fill="#c34e3c"/><path fill="#789c55" d="M24 19C8 18 12 7 12 7q14 0 12 12m0 0Q23 5 38 7q0 13-14 12"/></g><path d="m14 24 3-3m12 5 3-3" stroke="#f7bda0" stroke-width="3" stroke-linecap="round"/></symbol>
 <symbol id="gold" viewBox="0 0 48 48"><g stroke="#6b4b1f" stroke-width="2" stroke-linejoin="round"><path fill="#e7bc48" d="m5 31 9-15 11-5 14 8 4 16-22 7z"/><path fill="#ffe38a" d="m14 16 11-5 5 15-16-2z"/><path fill="#c58f2d" d="m30 26 9-7 4 16-22 7z"/><path fill="none" d="m5 31 9-7 16 2-9 16"/></g></symbol>
@@ -9,4 +9,8 @@
 <symbol id="towncenter" viewBox="0 0 48 48"><g stroke="#302c22" stroke-width="2.5" stroke-linejoin="round"><path fill="#cbb98a" d="M9 22h30v21H9z"/><path fill="#997246" d="M3 23 24 5l21 18z"/><path fill="#5791b4" d="M21 8V2l11 3-11 3"/><path fill="#514e3d" d="M19 43V30q5-6 10 0v13z"/><path d="M13 26v8m22-8v8" stroke="#f2dca5"/></g></symbol>
 <symbol id="move" viewBox="0 0 48 48"><path fill="none" stroke="#d5c59c" stroke-width="4" stroke-linejoin="round" d="M8 39 35 12M20 10h18v18"/><path stroke="#789bb2" stroke-width="2" d="m5 30 13 13"/></symbol>
 <symbol id="stop" viewBox="0 0 48 48"><path fill="#a05c47" stroke="#e1bf85" stroke-width="2.5" d="M14 6h20l8 8v20l-8 8H14l-8-8V14z"/><path stroke="#f3dfb8" stroke-width="4" d="M15 24h18"/></symbol>
+<symbol id="soldier" viewBox="0 0 48 48"><path d="m9 5 8 2 21 29-6 7L11 14z" fill="#d9d3b8" stroke="#423d30" stroke-width="3"/><path d="m5 31 25-18m-12 9 15 20" stroke="#9f7643" stroke-width="5"/></symbol>
+<symbol id="ship" viewBox="0 0 48 48"><path d="M7 31h34l-8 11H17z" fill="#ae7c43" stroke="#35392c" stroke-width="3"/><path d="M23 29V5l15 22H12L23 5" fill="#e3d9b3" stroke="#665d42" stroke-width="2"/></symbol>
+<symbol id="technology" viewBox="0 0 48 48"><path d="M7 8h17v33H7zm17 0h17v33H24" fill="#c5ae7c" stroke="#51442c" stroke-width="3"/><path d="M12 16h8m-8 7h8m8-7h8m-8 7h8" stroke="#665536" stroke-width="2"/></symbol>
+<symbol id="animal" viewBox="0 0 48 48"><path d="m7 27 8-12h17l9 9-5 8H15l-2 10m20-10 2 10M30 15l4-9 6 3-2 12" fill="#c4b08a" stroke="#4f4936" stroke-width="3"/></symbol>
 </svg>

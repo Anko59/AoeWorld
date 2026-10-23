@@ -1,12 +1,10 @@
-use crate::game_movement::MapRoutePlan;
-use crate::game_path::{next_waypoint, route_waypoint, segment_length};
 use crate::movement_speed::cavalry_config;
 use crate::{GameQueryStats, navigation_cache::NavigationCache, terrain::Terrain};
 use aoe_core::{
     ChunkCoord, EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, SPATIAL_CHUNK_TILES,
     TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
 };
-use aoe_map::{Depletion, MovementOutcome, ResourceNode, ResourceOverlayError, RoutePlanner};
+use aoe_map::{Depletion, ResourceNode, ResourceOverlayError, RoutePlanner};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 /// One chunk's shared candidate resource nodes.
@@ -16,9 +14,13 @@ mod economy;
 mod facing;
 mod hash;
 mod movement_step;
+mod orders;
 mod parallel;
 mod research;
 mod resources;
+mod route_scheduler;
+pub(crate) use route_scheduler::far_route;
+mod spacing;
 mod spawning;
 mod unit_index;
 pub(crate) use unit_index::UnitIndex;
@@ -27,15 +29,16 @@ mod visibility;
 mod wildlife;
 pub use combat::*;
 pub use economy::{
-    BUILDING_RULES, BuildingKind, BuildingRules, CarriedResource, ConstructionState, EconomyError,
-    GameBuilding, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, MarketPrices,
-    PlayerEconomy, Stockpile, TickPhase, TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES,
-    VillageRules, WorldLimits, trainable_units,
+    BUILDING_RULES, BUILDINGS_PER_PLAYER, BuildingKind, BuildingRules, CarriedResource,
+    ConstructionState, EconomyError, GameBuilding, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION,
+    MAX_WALL_SEGMENTS, MarketPrices, PlayerEconomy, RallyPoint, RallyTarget, Stockpile, TickPhase,
+    TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules, WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;
 pub use research::*;
 pub use resources::PreparedResourceDepletion;
+pub use route_scheduler::RouteSchedulerStats;
 pub use visibility::TileVisibility;
 pub use wildlife::*;
 
@@ -98,10 +101,16 @@ pub(crate) struct StoredUnit {
     pub(crate) order: Option<MovementOrder>,
     pub(crate) bucket: ChunkCoord,
     pub(crate) bucket_slot: usize,
+    pub(crate) wildlife_slot: usize,
     pub(crate) route: VecDeque<TileCoord>,
     pub(crate) planner: Option<RoutePlanner>,
     pub(crate) last_movement_error: Option<GameWorldError>,
     pub(crate) next_hit_tick: u64, // no hit before this tick
+    /// Tick the unit last started waiting for a route (diagnostics only).
+    pub(crate) planning_since: u64,
+    /// The route it waits for had its whole fast attempt (see
+    /// `route_scheduler::issue`); it now needs a search slot.
+    pub(crate) fast_route_tried: bool,
 }
 #[derive(Debug)]
 pub struct GameWorld {
@@ -116,18 +125,25 @@ pub struct GameWorld {
     pub(crate) lookup: UnitIndex,
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
     pub(crate) active_movers: Vec<EntityId>,
+    pub(crate) destinations: spacing::Destinations,
     pub(crate) terrain: Terrain,
     /// Candidate resource nodes per generator chunk, built on the first
     /// replacement search that touches the chunk and reused by later ones.
     /// See `GameWorld::chunk_resource_nodes`.
     pub(crate) resource_chunks: Mutex<HashMap<(i32, i32), ChunkNodes>>,
     pub(crate) planning_budget: u32,
+    /// Work left this tick for fast attempts (`FAST_ROUTE_WORK` each).
+    pub(crate) fast_route_budget: u32,
+    /// Fast-attempt work each player spent this tick.
+    pub(crate) fast_route_spent: BTreeMap<PlayerId, u32>,
     pub(crate) navigation_cache: NavigationCache,
     pub(crate) planning_cursor: usize,
     pub(crate) active_planner_count: usize,
     pub(crate) active_route_searches: usize,
-    /// Villages of this world whose starting kit could not be placed in full.
     pub(crate) partial_kits: u64,
+    pub(crate) route_slots: BTreeMap<PlayerId, route_scheduler::RouteSlots>,
+    pub(crate) route_metrics: route_scheduler::RouteMetrics,
+    pub(crate) idle_spacing: spacing::IdleSpacing,
 }
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
@@ -149,13 +165,19 @@ impl GameWorld {
             lookup: UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            destinations: spacing::Destinations::default(),
             planning_budget: crate::MAX_ROUTE_WORK_PER_TICK,
+            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
+            fast_route_spent: BTreeMap::new(),
             navigation_cache: NavigationCache::default(),
             resource_chunks: Mutex::new(HashMap::new()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
             partial_kits: 0,
+            route_slots: BTreeMap::new(),
+            route_metrics: Default::default(),
+            idle_spacing: Default::default(),
         }
     }
 
@@ -302,124 +324,10 @@ impl GameWorld {
     ) -> Result<Depletion, ResourceOverlayError> {
         let depletion = self.terrain.deplete_resource(id, requested)?;
         if depletion.became_nonblocking {
-            self.resource_collision_changed();
+            self.collision_opened(resources::resource_area(depletion.id));
         }
         self.record_observed_resource(depletion.id, depletion.remaining);
         Ok(depletion)
-    }
-
-    pub fn issue_move(
-        &mut self,
-        id: EntityId,
-        destination: WorldPosition,
-    ) -> Result<bool, GameWorldError> {
-        let result = self.issue_task_move(id, destination)?;
-        self.stop_gathering(id);
-        self.cancel_attack(id);
-        self.economy.builders.remove(&id);
-        if let Some(&index) = self.lookup.get(&id) {
-            self.units[index].state.task = if result {
-                UnitTask::Moving
-            } else if self.units[index].state.carried.is_some() {
-                UnitTask::Carrying
-            } else {
-                UnitTask::Idle
-            };
-        }
-        Ok(result)
-    }
-
-    pub(crate) fn issue_task_move(
-        &mut self,
-        id: EntityId,
-        destination: WorldPosition,
-    ) -> Result<bool, GameWorldError> {
-        let index = *self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
-        if self.units[index].state.hp == 0 {
-            return Err(GameWorldError::UnknownEntity);
-        }
-        let destination = self.config.snap_ground_position(destination);
-        let kind = self.units[index].state.kind;
-        let passable = self
-            .unit_tile_passable(kind, destination.tile_floor(), &|| false)
-            .map_err(GameWorldError::Environment)?;
-        if !passable
-            || self
-                .economy
-                .blocked_tiles
-                .contains(&destination.tile_floor())
-        {
-            return Err(GameWorldError::InvalidPosition);
-        }
-        let origin = self.units[index].state.position;
-        let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
-        self.clear_planner(index);
-        self.units[index].last_movement_error = None;
-        if origin == destination {
-            self.units[index].order = None;
-            self.units[index].route.clear();
-            self.units[index].state.moving = false;
-            self.units[index].state.planning = false;
-            return Ok(false);
-        }
-        let target_tile = destination.tile_floor();
-        let (waypoint, route, planner, planning) =
-            match self.next_map_route(origin.tile_floor(), target_tile, kind) {
-                Some(MapRoutePlan::Outcome(MovementOutcome::Path(path))) => {
-                    let (waypoint, route) = route_waypoint(path.tiles, origin, destination)?;
-                    (waypoint, route, None, false)
-                }
-                Some(MapRoutePlan::Segment(path, planner)) => {
-                    let (waypoint, route) = route_waypoint(path.tiles, origin, destination)?;
-                    (waypoint, route, planner, false)
-                }
-                Some(MapRoutePlan::Outcome(MovementOutcome::InvalidDestination)) => {
-                    return Err(GameWorldError::InvalidPosition);
-                }
-                Some(MapRoutePlan::Outcome(MovementOutcome::Unreachable)) => {
-                    return Err(GameWorldError::Unreachable);
-                }
-                Some(MapRoutePlan::Outcome(MovementOutcome::BudgetExceeded))
-                | Some(MapRoutePlan::SearchLimit) => {
-                    return Err(GameWorldError::PathBudgetExceeded);
-                }
-                Some(MapRoutePlan::Pending(planner)) => (origin, VecDeque::new(), planner, true),
-                Some(MapRoutePlan::Environment(error)) => {
-                    return Err(GameWorldError::Environment(error));
-                }
-                None => (
-                    next_waypoint(origin, target_tile, destination),
-                    VecDeque::new(),
-                    None,
-                    false,
-                ),
-            };
-        let dx = i64::from(waypoint.x) - i64::from(origin.x);
-        let dy = i64::from(waypoint.y) - i64::from(origin.y);
-        let length = segment_length(dx, dy);
-        self.units[index].state.previous_position = origin;
-        self.units[index].state.facing = facing_for(dx, dy, self.units[index].state.facing);
-        self.units[index].state.moving = !planning;
-        self.units[index].state.planning = planning;
-        self.units[index].route = route;
-        self.store_planner(index, planner);
-        self.units[index].order = Some(MovementOrder {
-            origin,
-            destination,
-            waypoint,
-            target_tile,
-            segment_length: length,
-            travelled: 0,
-            speed_carry,
-        });
-        if self.active_movers.binary_search(&id).is_err() {
-            let insert_at = self
-                .active_movers
-                .binary_search(&id)
-                .unwrap_or_else(|index| index);
-            self.active_movers.insert(insert_at, id);
-        }
-        Ok(true)
     }
 
     pub fn query(&self, rect: TileRect) -> (Vec<GameUnit>, GameQueryStats) {

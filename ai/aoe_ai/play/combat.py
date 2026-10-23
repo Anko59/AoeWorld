@@ -11,6 +11,8 @@ from ..geometry import Tile, centroid, clamp_tile, dist, nearest
 
 #: Threat memories older than this many seconds are forgotten.
 THREAT_SECONDS = 20
+#: A soldier with nothing to do goes for a visible enemy this close.
+ENGAGE_RADIUS = 30
 
 
 class CombatManager:
@@ -96,11 +98,13 @@ class CombatManager:
         for unit in army:
             if not unit.idle:
                 continue
-            foes = [e for e in ctx.enemies if dist(e.tile, unit.tile) <= 9]
+            foes = [e for e in ctx.enemies if dist(e.tile, unit.tile) <= ENGAGE_RADIUS]
             if foes:
                 ctx.order("attack", unit.id, nearest(foes, unit.tile).id)
                 engaged += 1
         building = self.target_building(ctx, ctx.home)
+        # The server forgets a destroyed building when its footprint is seen.
+        # Distance from its centre cannot establish sight of a remembered target.
         if building is None:
             self.search(ctx, army, middle)
             return
@@ -141,9 +145,21 @@ class CombatManager:
         return first
 
     def search(self, ctx: Context, army: list, middle: Tile) -> None:
-        """No enemy building known: march to the map's far side to find one."""
+        """No enemy building known: march across the map, the far side first, then
+        round the centre, moving on whenever the army has arrived and found nothing."""
+        mem = ctx.board
         width, height = ctx.world.map_size
-        target = ctx.unrefused((width - 1 - ctx.home[0], height - 1 - ctx.home[1]))
+        far = (width - 1 - ctx.home[0], height - 1 - ctx.home[1])
+        ring = [
+            (int(width / 2 + 0.33 * width * math.cos(a * math.pi / 4)), int(height / 2 + 0.33 * height * math.sin(a * math.pi / 4)))
+            for a in range(8)
+        ]
+        points = [far] + sorted(ring, key=lambda p: -dist(p, ctx.home))
+        target = ctx.unrefused(clamp_tile(points[mem.search_index % len(points)], ctx.world.map_size))
+        if dist(middle, target) <= 10:
+            mem.search_index += 1
+            mem.bump("search_legs")
+            target = ctx.unrefused(clamp_tile(points[mem.search_index % len(points)], ctx.world.map_size))
         for unit in army:
             if unit.idle:
                 ctx.order("move", unit.id, target[0], target[1])

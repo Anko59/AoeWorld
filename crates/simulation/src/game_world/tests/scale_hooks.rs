@@ -1,10 +1,10 @@
 //! The scale-measurement hooks: capacity limits, the tick probe and the wildlife skip.
 use super::*;
 use crate::MAX_POPULATION;
-use crate::game_world::economy::{
-    MAX_BUILDERS, MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS, MAX_GATHERERS,
-};
+use crate::game_world::economy::MAX_ECONOMY_PLAYERS;
 use crate::{AnimalKind, AnimalTask, EconomyError, TickPhase, WorldLimits};
+
+mod capacity;
 
 fn at(x: i32, y: i32) -> WorldPosition {
     WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap()
@@ -16,11 +16,12 @@ fn default_limits_equal_the_shipped_caps() {
         world().limits(),
         WorldLimits {
             players: MAX_ECONOMY_PLAYERS,
-            buildings: MAX_ECONOMY_BUILDINGS,
-            gatherers: MAX_GATHERERS,
-            builders: MAX_BUILDERS,
-            hunters: MAX_HUNTERS,
+            buildings: MAX_ECONOMY_PLAYERS * crate::BUILDINGS_PER_PLAYER,
+            gatherers: MAX_ECONOMY_PLAYERS * 200,
+            builders: MAX_ECONOMY_PLAYERS * 200,
+            hunters: MAX_ECONOMY_PLAYERS * 200,
             animals: MAX_ANIMALS,
+            projectiles: MAX_ECONOMY_PLAYERS * 200,
             population: MAX_POPULATION,
         }
     );
@@ -155,17 +156,22 @@ fn the_population_ceiling_is_a_world_rule() {
 }
 
 #[test]
-fn match_limits_grow_with_the_ceiling_and_never_shrink() {
+fn match_limits_grow_with_the_seats_and_the_ceiling() {
     let shipped = WorldLimits::default();
-    assert_eq!(WorldLimits::for_match(16, MAX_POPULATION), shipped);
+    assert_eq!(
+        WorldLimits::for_match(MAX_ECONOMY_PLAYERS, MAX_POPULATION),
+        shipped
+    );
+    let small = WorldLimits::for_match(2, MAX_POPULATION);
+    assert_eq!(small, WorldLimits::for_match(16, MAX_POPULATION));
     let low = WorldLimits::for_match(16, 100);
-    assert_eq!((low.population, low.buildings), (100, shipped.buildings));
+    assert_eq!((low.population, low.buildings), (100, small.buildings));
     let big = WorldLimits::for_match(200, 1_000);
     assert_eq!(big.players, 200);
     assert_eq!(big.population, 1_000);
-    assert_eq!(big.buildings, shipped.buildings * 5);
-    assert_eq!(big.gatherers, shipped.gatherers * 5);
-    assert_eq!(big.builders, shipped.builders * 5);
-    assert_eq!(big.hunters, shipped.hunters * 5);
-    assert_eq!(big.animals, shipped.animals);
+    assert_eq!(big.buildings, 200 * crate::BUILDINGS_PER_PLAYER * 5);
+    assert_eq!(big.gatherers, 200 * 1_000);
+    assert_eq!(big.builders, 200 * 1_000);
+    assert_eq!(big.hunters, 200 * 1_000);
+    assert_eq!(big.animals, 200 * crate::ANIMALS_PER_PLAYER);
 }

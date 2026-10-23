@@ -217,7 +217,7 @@ fn resource_unchecked(
     // must target the tree, not the ground several tiles behind it.
     map::scene_resources(client)
         .into_iter()
-        .filter(|r| r.kind < 4)
+        .filter(|r| r.kind <= aoe_rendering::SceneResource::CHOPPED_TREE)
         .filter_map(|r| {
             let bounds = scene_resource_frame(&client.art, r)
                 .and_then(|f| resource_sprite_bounds(r, f, camera));
@@ -240,7 +240,7 @@ fn resource_unchecked(
                 id,
                 match kind {
                     0 => ResourceKind::Food,
-                    1 => ResourceKind::Wood,
+                    1 | aoe_rendering::SceneResource::CHOPPED_TREE => ResourceKind::Wood,
                     2 => ResourceKind::Gold,
                     _ => ResourceKind::Stone,
                 },

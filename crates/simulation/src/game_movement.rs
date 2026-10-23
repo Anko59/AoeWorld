@@ -5,19 +5,42 @@ use crate::{
     game_world::{facing_for, interpolate},
 };
 use aoe_core::{ChunkCoord, EntityId, WorldPosition};
-use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
+use aoe_map::{RoutePlanner, RoutePlannerPoll};
 use std::collections::VecDeque;
 
 const MAX_WAYPOINTS_PER_TICK: usize = 4_096;
-/// Bounds compact proven route continuations independently from search memory.
-pub(crate) const MAX_ACTIVE_ROUTE_PLANNERS: usize = 64;
-/// At most two planners may retain sparse B-tree search frontiers concurrently.
-pub(crate) const MAX_ACTIVE_ROUTE_SEARCHES: usize = 2;
+/// World-wide bound on compact proven route continuations; each player also
+/// has its own share (`route_scheduler`), so this bound is memory only.
+pub(crate) const MAX_ACTIVE_ROUTE_PLANNERS: usize = 4_096;
+/// World-wide bound on planners retaining sparse search frontiers. A player
+/// holds at most `MAX_ROUTE_SEARCHES_PER_PLAYER` near and as many far ones,
+/// so 100 seats fit.
+pub(crate) const MAX_ACTIVE_ROUTE_SEARCHES: usize = 400;
+/// Work of one order's fast attempt: a route proven with this much work (or
+/// a destination proven unreachable) is answered at once, with no search slot
+/// and no queue. Nearly every order of a real match fits (the gather and
+/// return trips of villagers are a few tiles long; a river or forest detour
+/// of a few dozen tiles takes 4,096 to 16,384).
+pub(crate) const FAST_ROUTE_WORK: u32 = 16_384;
+/// World-wide work of fast attempts per tick, separate from the fair budget
+/// that serves the searches holding slots, so slow searches never delay a
+/// short order and short orders never starve a slow search.
+pub(crate) const MAX_FAST_ROUTE_WORK_PER_TICK: u32 = 65_536;
+/// One player's share of that budget per tick: a client that floods orders
+/// spends its own share, never the other players' fast attempts.
+pub(crate) const MAX_FAST_ROUTE_WORK_PER_PLAYER: u32 = 2 * FAST_ROUTE_WORK;
 
 impl GameWorld {
     /// Moves every active mover once and returns the ids it touched, in
     /// arbitrary order; the tick collation sorts and fetches final states.
     pub(crate) fn advance_movement(&mut self) -> Vec<EntityId> {
+        // Waiting units search first, fairly per player, so a route found now
+        // is walked this tick; walking units plan ahead from what is left.
+        let mut changed = Vec::new();
+        // One tick budget in all: what issued orders left of it (at least the
+        // reserve) is shared here; orders issued later this tick get none.
+        let fair_budget = std::mem::take(&mut self.planning_budget);
+        let lookahead_budget = self.serve_route_searches(fair_budget, &mut changed);
         let movers = std::mem::take(&mut self.active_movers);
         let mover_count = movers.len();
         let start = if mover_count == 0 {
@@ -31,7 +54,7 @@ impl GameWorld {
             (start + 1) % mover_count
         };
         let mut still_moving = Vec::with_capacity(movers.len());
-        let mut changed = Vec::with_capacity(movers.len());
+        changed.reserve(movers.len());
         // Pure proposals in parallel, then the shared writes in rotation
         // order; a proposal whose assumption fails runs the sequential path.
         self.begin_vision_batch();
@@ -44,15 +67,6 @@ impl GameWorld {
             }
             // The rotation by the planning cursor, without copying the list.
             let id = movers[(start + turn) % mover_count];
-            let remaining_movers = mover_count.saturating_sub(turn).max(1);
-            let mut planner_allowance = self
-                .planning_budget
-                .checked_div(u32::try_from(remaining_movers).unwrap_or(u32::MAX))
-                .unwrap_or(0)
-                .min(MAX_ROUTE_WORK_PER_ORDER);
-            if self.planning_budget > 0 && planner_allowance == 0 {
-                planner_allowance = 1;
-            }
             let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
@@ -62,6 +76,7 @@ impl GameWorld {
             self.units[index].state.previous_position = self.units[index].state.position;
             let unit = self.units[index].state;
             let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
+            let speed = if self.following_unit(index) { 0 } else { speed };
             let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
             order.speed_carry = 0;
             let mut current_position = self.units[index].state.position;
@@ -138,13 +153,16 @@ impl GameWorld {
                             && order.waypoint.tile_floor() == order.destination.tile_floor())
                         .then_some(SegmentAdvance::Next(order.destination))
                     })
-                    .unwrap_or_else(|| self.next_map_segment(index, order, &mut planner_allowance));
+                    .unwrap_or_else(|| self.next_map_segment(index, order));
                 match next {
                     SegmentAdvance::Planning => {
                         // A deferred planner has no available path distance this
                         // tick. Keep only the fractional remainder, never a
                         // whole movement credit that could cause a later dash.
                         order.speed_carry = (speed_budget % u128::from(denominator)) as u64;
+                        if !self.units[index].state.planning {
+                            self.units[index].planning_since = self.tick.0;
+                        }
                         self.units[index].state.moving = false;
                         self.units[index].state.planning = true;
                         self.units[index].order = Some(order);
@@ -197,7 +215,6 @@ impl GameWorld {
                 self.units[index].order = Some(order);
                 still_moving.push(id);
             }
-            self.plan_route_ahead(index, &mut planner_allowance);
             if !self.economy.gatherers.contains_key(&id)
                 && self.hunting_target(id).is_none()
                 && !self.combat.attackers.contains_key(&id)
@@ -217,89 +234,28 @@ impl GameWorld {
         self.flush_vision_batch();
         still_moving.sort_unstable();
         self.active_movers = still_moving;
+        self.plan_routes_ahead(&movers, start, lookahead_budget);
         self.tick.0 = self.tick.0.saturating_add(1);
         changed
     }
 
-    pub(crate) fn next_map_route(
-        &mut self,
-        origin: aoe_core::TileCoord,
-        destination: aoe_core::TileCoord,
-        kind: crate::UnitKind,
-    ) -> Option<MapRoutePlan> {
-        if !self.has_route_navigation() {
-            return None;
-        }
-        let budget = self.planning_budget.min(MAX_ROUTE_WORK_PER_ORDER);
-        if kind != crate::UnitKind::FishingShip
-            && let Some((outcome, work)) = self.navigation_cache.get(origin, destination, budget)
-        {
-            self.planning_budget -= work;
-            return Some(MapRoutePlan::Outcome(outcome));
-        }
-        if self.active_planner_count >= MAX_ACTIVE_ROUTE_PLANNERS
-            || self.active_route_searches >= MAX_ACTIVE_ROUTE_SEARCHES
-        {
-            return Some(MapRoutePlan::Pending(None));
-        }
-        let budget = self.take_planning_budget();
-        let mut planner = RoutePlanner::new(origin, destination, MAX_ROUTE_WORK_PER_ORDER);
-        if budget == 0 {
-            return Some(MapRoutePlan::Pending(Some(planner)));
-        }
-        let result = self.poll_world_route_planner(&mut planner, budget, &|| false, kind);
-        // Orders issued later in this tick plan from what this one left.
-        self.refund_unused_planning(budget, 0, &planner);
-        let work = planner.work();
-        let cached = |world: &mut Self, outcome: MovementOutcome| {
-            if kind != crate::UnitKind::FishingShip {
-                world
-                    .navigation_cache
-                    .insert(origin, destination, work, outcome.clone());
-            }
-            Some(MapRoutePlan::Outcome(outcome))
-        };
-        match result {
-            RoutePlannerPoll::Pending => Some(MapRoutePlan::Pending(Some(planner))),
-            RoutePlannerPoll::Path(path) if planner.is_terminal() => {
-                cached(self, MovementOutcome::Path(path))
-            }
-            RoutePlannerPoll::Path(path) => Some(MapRoutePlan::Segment(path, Some(planner))),
-            RoutePlannerPoll::Complete | RoutePlannerPoll::SearchLimit => {
-                Some(MapRoutePlan::SearchLimit)
-            }
-            RoutePlannerPoll::InvalidDestination => {
-                cached(self, MovementOutcome::InvalidDestination)
-            }
-            RoutePlannerPoll::Unreachable => cached(self, MovementOutcome::Unreachable),
-            RoutePlannerPoll::Environment(error) => Some(MapRoutePlan::Environment(error)),
-        }
-    }
-
-    fn next_map_segment(
-        &mut self,
-        index: usize,
-        order: MovementOrder,
-        allowance: &mut u32,
-    ) -> SegmentAdvance {
+    fn next_map_segment(&mut self, index: usize, order: MovementOrder) -> SegmentAdvance {
         if !self.has_route_navigation() {
             return (order.waypoint != order.destination)
                 .then(|| next_waypoint(order.waypoint, order.target_tile, order.destination))
                 .map_or(SegmentAdvance::Stopped(None), SegmentAdvance::Next);
         }
         // A planner with planned segments left emits one without searching.
+        // Searches are never run inline: `serve_route_searches` shares them
+        // fairly between players before the units move.
         let needs_search = self.units[index]
             .planner
             .as_ref()
             .is_none_or(|planner| !planner.has_route_continuation());
-        if needs_search && (*allowance == 0 || self.planner_capacity_exhausted(index)) {
+        if needs_search {
             return SegmentAdvance::Planning;
         }
-        let budget = if needs_search {
-            self.take_planning_budget_share(allowance)
-        } else {
-            0
-        };
+        let budget = 0;
         let mut planner = self.take_planner(index).unwrap_or_else(|| {
             RoutePlanner::new(
                 order.waypoint.tile_floor(),
@@ -355,34 +311,41 @@ impl GameWorld {
         }
     }
 
-    /// Plans the leg after the one a moving unit is walking, from this
-    /// mover's share of the tick budget, so the unit does not pause between
-    /// legs. A search that fails here is reported when the unit has used the
-    /// segments already planned.
-    fn plan_route_ahead(&mut self, index: usize, allowance: &mut u32) {
-        if self.units[index].order.is_none()
-            || *allowance == 0
-            || !self.units[index]
-                .planner
-                .as_ref()
-                .is_some_and(RoutePlanner::wants_lookahead)
-            || self.planner_capacity_exhausted(index)
-        {
-            return;
+    /// Plans the leg after the one each moving unit is walking, from what
+    /// the waiting units left of the tick budget, so a walking unit does not
+    /// pause between legs. A search that fails here is reported when the unit
+    /// has used the segments already planned.
+    fn plan_routes_ahead(&mut self, movers: &[EntityId], start: usize, mut budget: u32) {
+        let wanting = (0..movers.len())
+            .map(|turn| movers[(start + turn) % movers.len()])
+            .filter_map(|id| self.lookup.get(&id).copied())
+            .filter(|&index| {
+                self.units[index].order.is_some()
+                    && self.units[index]
+                        .planner
+                        .as_ref()
+                        .is_some_and(RoutePlanner::wants_lookahead)
+            })
+            .collect::<Vec<_>>();
+        for (turn, &index) in wanting.iter().enumerate() {
+            if budget == 0 {
+                break;
+            }
+            if self.planner_capacity_exhausted(index) {
+                continue;
+            }
+            let share = (budget / (wanting.len() - turn) as u32).clamp(1, MAX_ROUTE_WORK_PER_ORDER);
+            let Some(mut planner) = self.take_planner(index) else {
+                continue;
+            };
+            let work_before = planner.work();
+            let kind = self.units[index].state.kind;
+            self.plan_world_route_ahead(&mut planner, share, &|| false, kind);
+            let spent = planner.work().saturating_sub(work_before);
+            self.route_metrics.lookahead_work += u64::from(spent);
+            budget -= spent.min(budget);
+            self.store_planner(index, Some(planner));
         }
-        let budget = self.take_planning_budget_share(allowance);
-        let Some(mut planner) = self.take_planner(index) else {
-            return;
-        };
-        let work_before = planner.work();
-        self.plan_world_route_ahead(
-            &mut planner,
-            budget,
-            &|| false,
-            self.units[index].state.kind,
-        );
-        self.refund_unused_planning(budget, work_before, &planner);
-        self.store_planner(index, Some(planner));
     }
 
     /// A planner rarely needs its whole share for one leg; what it did not
@@ -395,7 +358,7 @@ impl GameWorld {
             .min(MAX_ROUTE_WORK_PER_TICK);
     }
 
-    pub(crate) fn planner_capacity_exhausted(&self, index: usize) -> bool {
+    fn planner_capacity_exhausted(&self, index: usize) -> bool {
         let own_planner = usize::from(self.units[index].planner.is_some());
         let own_search = usize::from(
             self.units[index]
@@ -403,8 +366,10 @@ impl GameWorld {
                 .as_ref()
                 .is_some_and(RoutePlanner::requires_search_slot),
         );
-        self.active_planner_count.saturating_sub(own_planner) >= MAX_ACTIVE_ROUTE_PLANNERS
-            || self.active_route_searches.saturating_sub(own_search) >= MAX_ACTIVE_ROUTE_SEARCHES
+        let far = self.units[index].planner.as_ref().is_some_and(|planner| {
+            crate::game_world::far_route(planner.origin(), planner.destination())
+        });
+        self.route_capacity_exhausted(self.units[index].state.player, own_planner, own_search, far)
     }
 
     pub(crate) fn clear_planner(&mut self, index: usize) {
@@ -418,33 +383,19 @@ impl GameWorld {
             if planner.requires_search_slot() {
                 self.active_route_searches = self.active_route_searches.saturating_add(1);
             }
+            self.count_route_slots(self.units[index].state.player, planner, true);
         }
         self.units[index].planner = planner;
     }
 
-    fn take_planner(&mut self, index: usize) -> Option<RoutePlanner> {
+    pub(crate) fn take_planner(&mut self, index: usize) -> Option<RoutePlanner> {
         let planner = self.units[index].planner.take()?;
         self.active_planner_count = self.active_planner_count.saturating_sub(1);
         if planner.requires_search_slot() {
             self.active_route_searches = self.active_route_searches.saturating_sub(1);
         }
+        self.count_route_slots(self.units[index].state.player, &planner, false);
         Some(planner)
-    }
-
-    fn take_planning_budget(&mut self) -> u32 {
-        let allocated = self.planning_budget.min(MAX_ROUTE_WORK_PER_ORDER);
-        self.planning_budget -= allocated;
-        allocated
-    }
-
-    fn take_planning_budget_share(&mut self, allowance: &mut u32) -> u32 {
-        let allocated = self
-            .planning_budget
-            .min(*allowance)
-            .min(MAX_ROUTE_WORK_PER_ORDER);
-        self.planning_budget -= allocated;
-        *allowance -= allocated;
-        allocated
     }
 }
 
@@ -452,13 +403,4 @@ enum SegmentAdvance {
     Next(WorldPosition),
     Planning,
     Stopped(Option<GameWorldError>),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) enum MapRoutePlan {
-    Outcome(MovementOutcome),
-    Segment(aoe_map::Path, Option<RoutePlanner>),
-    Pending(Option<RoutePlanner>),
-    SearchLimit,
-    Environment(aoe_map::EnvironmentPageError),
 }

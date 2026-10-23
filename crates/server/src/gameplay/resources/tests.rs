@@ -165,7 +165,9 @@ fn bounded_storage_rejects_oversized_json_and_wrong_map_on_restore() {
         .write(true)
         .open(&saved)
         .unwrap();
-    file.set_len(4 * 1024 * 1024 + 1).unwrap();
+    // Storage covers the supported overlay; reject one byte beyond that
+    // derived bound, independently of the unchanged per-message wire cap.
+    file.set_len(store::MAX_SNAPSHOT_BYTES + 1).unwrap();
     assert!(matches!(
         store::load(&overlays, package.content_hash),
         Err(ResourceLifecycleError::TooLarge)
@@ -283,6 +285,12 @@ async fn subscribers_receive_snapshot_delta_and_reconnect_snapshot() {
         })
         .collect();
     assert_eq!(initial.changes, expected);
+    assert!(
+        service.sessions.lock().await[&id]
+            .resident_resources
+            .is_empty(),
+        "fog-disabled sessions use the shared journal/snapshot instead of per-seat overlay copies"
+    );
     let frame = GameplayServerMessage::ResourceState(initial.clone());
     assert_eq!(
         aoe_protocol::decode_gameplay_server(

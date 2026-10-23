@@ -301,3 +301,48 @@ def test_a_refused_destination_is_not_chosen_again_for_the_rally_point():
     _, client = play(FakeWorld(units + army, buildings, eco=eco), brain=brain, events=[refusal])
     second = next(a for a in client.named("move") if a[0] == 300)
     assert (first[1], first[2]) != (second[1], second[2])
+
+
+def test_a_world_limit_refusal_keeps_the_site_and_pauses_building():
+    units, buildings = base(20)
+    eco = economy(food=900, wood=900, gold=500, population=20, cap=25)
+    brain, client = play(FakeWorld(units, buildings, eco=eco))
+    builds = [i + 1 for i, (n, _) in enumerate(client.calls) if n == "build"]
+    assert builds
+    site = next(a for a in client.named("build"))
+    refusal = order_result(builds[0], CommandResult.REJECTED_WORLD_LIMIT)
+    _, client = play(FakeWorld(units, buildings, eco=eco), brain=brain, events=[refusal])
+    assert (str(site[1]), site[2], site[3]) not in brain.board.bad_sites
+    assert client.named("build") == []
+
+
+def test_town_center_rallies_to_food_then_wood_and_keeps_the_same_target():
+    units, buildings = base(5)
+    food = node(2, ResourceKind.FOOD, (44, 52))
+    wood = node(1, ResourceKind.WOOD, (56, 52))
+    for nodes, expected in [([food, wood], food.id), ([wood], wood.id)]:
+        world = FakeWorld(units, buildings, nodes=nodes, eco=economy(food=500, population=6, cap=15))
+        _, client = play(world)
+        assert client.named("set_rally_resource") == [(500, expected)]
+        buildings[0].rally_resource = expected
+        _, accepted_client = play(world)
+        assert accepted_client.named("set_rally_resource") == []
+        buildings[0].rally_resource = None
+
+
+def test_army_keeps_unseen_town_center_until_the_server_forgets_it():
+    units, buildings = base(10)
+    # Footprint [98,102) x [98,102): (106,100) is five tiles from
+    # its nearest tile, beyond a spearman's four-tile sight.
+    army = [unit(200 + i, UnitKind.SPEARMAN, tile=(106, 100)) for i in range(15)]
+    target = building(901, BuildingKind.TOWN_CENTER, tile=(98, 98), mine=False, visible=False)
+    brain, client = play(FakeWorld(units + army, buildings, enemy_buildings=[target]))
+    assert brain.board.attack_target == target.id
+    assert client.named("move")
+    target.visible = True
+    _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[target]), brain=brain)
+    assert any(args[1] == target.id for args in client.named("attack"))
+    # Destruction/empty-footprint inspection is authoritative fog memory.
+    _, client = play(FakeWorld(units + army, buildings), brain=brain)
+    assert not client.named("attack")
+    assert client.named("move")

@@ -31,7 +31,7 @@ impl GameWorld {
     /// `nearest_dropoff` and a returning villager's choice and its fallbacks.
     /// The per-player, per-kind index replaces the scan over every building
     /// of every player; the candidate set and order are unchanged.
-    pub(super) fn dropoff_order(
+    pub(crate) fn dropoff_order(
         &self,
         player: PlayerId,
         from: TileCoord,

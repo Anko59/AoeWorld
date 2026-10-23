@@ -81,16 +81,20 @@ impl GameWorld {
             order: None,
             bucket,
             bucket_slot,
+            wildlife_slot: usize::MAX,
             route: VecDeque::new(),
             planner: None,
             last_movement_error: None,
             next_hit_tick: 0,
+            planning_since: 0,
+            fast_route_tried: false,
         });
         if let Some(player) = self.economy.players.get_mut(&player) {
             player.population_used = player.population_used.saturating_add(1);
         }
         let state = self.units[self.units.len() - 1].state;
         self.track_unit_cell(&state);
+        self.idle_spacing.insert(id, state.position.tile_floor());
         self.update_unit_vision(id);
         Ok(id)
     }

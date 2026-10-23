@@ -199,6 +199,12 @@ fn deliver_tick(
             }
         }
     }
+    // One delivery stays within the wire bound. Retain only what was sent;
+    // a full rebuild next tick supplies the rest, including after queue pressure.
+    let limit = aoe_protocol::MAX_ECONOMY_BUILDINGS;
+    let more_buildings = changed_buildings.len() + building_removals.len() > limit;
+    building_removals.truncate(limit);
+    changed_buildings.truncate(limit - building_removals.len());
     if session.ai
         && diff.changed.is_empty()
         && diff.removals.is_empty()
@@ -235,7 +241,7 @@ fn deliver_tick(
     for id in building_removals {
         session.resident_buildings.remove(&id);
     }
-    session.rebuild_buildings = false;
+    session.rebuild_buildings = more_buildings;
     true
 }
 

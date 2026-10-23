@@ -13,7 +13,7 @@
   <div id="start-sequence" aria-label="AoeWorld start sequence"></div>
   <main id="playground">
     <canvas id="scene" tabindex="0" aria-label="AoeWorld isometric map. Select villagers and right-click a resource to gather, or ground to move."></canvas>
-    <svg id="resource-highlight" aria-hidden="true" hidden><ellipse/></svg><div id="drag-box" hidden></div><div id="carried-loads" aria-hidden="true"></div><div id="unit-health-bars" aria-hidden="true"></div>
+    <div id="drag-box" hidden></div><div id="carried-loads" aria-hidden="true"></div><div id="unit-health-bars" aria-hidden="true"></div>
     <header id="top-bar" aria-label="Village economy">
       <div class="stockpiles"><div class="counter" title="Wood"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#wood"></use></svg><span><b id="stockpile-wood">—</b><small>Wood</small></span><span class="worker-count" title="Villagers working wood"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#villager"></use></svg><span id="workers-wood">0</span></span></div>
 <div class="counter" title="Food"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#food"></use></svg><span><b id="stockpile-food">—</b><small>Food</small></span><span class="worker-count" title="Villagers working food"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#villager"></use></svg><span id="workers-food">0</span></span></div>
@@ -33,7 +33,7 @@
         <p id="command-hint">Click to select · drag to select a group</p>
       </section>
       <section id="selection" data-count="0" aria-label="Selection"><div id="selection-empty"><span class="crest">A<span>W</span></span><h2>Your village awaits</h2><p>Select villagers to gather resources.<br>Select the Town Center to grow your village.</p></div>
-        <div id="selection-content" hidden><div id="selection-heading"><div id="selection-portrait"></div><div><p class="eyebrow">YOUR VILLAGE <span id="observer-label" hidden>· OBSERVING</span></p><h1 id="selection-name"></h1><p id="selection-task"></p><p id="selection-load"></p><p id="unit-hp" hidden></p><p id="unit-combat" hidden></p></div></div><div id="selected-icons"></div>
+        <div id="selection-content" hidden><div id="selection-heading"><div id="portrait-frame"><div id="selection-portrait"></div><progress id="selection-health" max="1" value="1" aria-label="Selected entity health"></progress></div><div><p class="eyebrow">YOUR VILLAGE <span id="observer-label" hidden>· OBSERVING</span></p><h1 id="selection-name"></h1><p id="selection-task"></p><p id="selection-load"></p><p id="unit-hp" hidden></p><p id="unit-combat" hidden></p></div></div><div id="selected-icons"></div>
           <div id="training" hidden><div class="queue-heading"><span id="training-label">Training Villager</span><button id="cancel-training" type="button" title="Cancel active training and refund 50 food">Cancel</button></div><progress id="training-progress" max="100" value="0" aria-label="Villager training progress"></progress><div id="training-queue"></div></div>
         </div>
       </section>

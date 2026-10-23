@@ -45,6 +45,8 @@ fn actor_animation_metadata_uses_dat_rows_and_individual_frame_durations() {
         (Pose::ManAtArmsDecay, 1045, 5, 6000),
         (Pose::ScoutStand, 2085, 10, 200),
         (Pose::ScoutWalk, 2089, 10, 110),
+        // The farmer's own tilling row (VMFAR_TN), not the forager's.
+        (Pose::FarmerWork, 1512, 15, 133),
     ] {
         let source = SPRITES[pose as usize];
         assert_eq!(

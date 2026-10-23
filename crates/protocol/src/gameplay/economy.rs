@@ -7,7 +7,11 @@ use serde::{
 use std::fmt;
 
 pub const MAX_ECONOMY_PLAYERS: usize = 128;
-pub const MAX_ECONOMY_BUILDINGS: usize = 4_096;
+/// Buildings one message may carry. Larger own/remembered or fog-disabled
+/// views are synchronized over several deliveries, within the same frame cap.
+pub const MAX_ECONOMY_BUILDINGS: usize = 16_384;
+/// A complete retained view may span messages, up to 128 seats at 8,192 each.
+pub const MAX_RETAINED_BUILDINGS: usize = MAX_ECONOMY_PLAYERS * 8_192;
 /// Villagers one build order may name.
 pub const MAX_BUILD_GROUP: usize = 32;
 /// The population ceiling, however many houses stand.
@@ -298,6 +302,7 @@ pub struct GameplayBuildingState {
     /// Age at the last observation; fog memory must not use the owner's live age.
     pub age: Age,
     pub gate_open: bool,
+    pub rally_point: Option<super::RallyPoint>,
 }
 
 fn valid_prices(prices: MarketPrices) -> bool {
@@ -325,7 +330,28 @@ pub(super) fn valid_players(players: &[GameplayPlayerState]) -> bool {
 pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
     buildings.len() <= MAX_ECONOMY_BUILDINGS
         && buildings.iter().all(|building| {
-            building.footprint.min.x >= 0
+            building.rally_point.is_none_or(|r| {
+                r.position.x >= 0
+                    && r.position.y >= 0
+                    && !matches!(
+                        building.kind,
+                        BuildingKind::House
+                            | BuildingKind::Farm
+                            | BuildingKind::Mill
+                            | BuildingKind::LumberCamp
+                            | BuildingKind::MiningCamp
+                            | BuildingKind::PalisadeWall
+                            | BuildingKind::PalisadeGate
+                            | BuildingKind::Outpost
+                            | BuildingKind::Blacksmith
+                            | BuildingKind::Market
+                            | BuildingKind::WatchTower
+                    )
+                    && match r.target {
+                        super::RallyTarget::Ground(p) => p == r.position,
+                        _ => true,
+                    }
+            }) && building.footprint.min.x >= 0
                 && building.footprint.min.y >= 0
                 && building.hp > 0
                 && (!building.gate_open

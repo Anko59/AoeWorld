@@ -160,3 +160,147 @@ fn blocked_spawn_waits_without_losing_the_completed_villager_or_food() {
         150
     );
 }
+
+#[test]
+fn rally_trained_unit_walks_to_ground_and_changes_the_replay_state() {
+    let (mut world, _, center) = village();
+    let target = WorldPosition::from_tile_center(TileCoord::new(72, 68)).unwrap();
+    let before = world.canonical_hash();
+    world
+        .issue_set_rally(PlayerId(0), center, crate::RallyTarget::Ground(target))
+        .unwrap();
+    assert_ne!(before, world.canonical_hash());
+    let accepted = world.canonical_hash();
+    assert_eq!(
+        world.issue_set_rally(PlayerId(1), center, crate::RallyTarget::Ground(target)),
+        Err(EconomyError::NotOwner)
+    );
+    assert_eq!(accepted, world.canonical_hash());
+    world
+        .issue_train(PlayerId(0), center, UnitKind::Villager)
+        .unwrap();
+    advance(&mut world, 1000);
+    let trained = world.units().max_by_key(|u| u.id).unwrap();
+    assert_eq!(trained.position, target);
+    assert_eq!(
+        world
+            .building(center)
+            .unwrap()
+            .rally_point
+            .unwrap()
+            .position,
+        target
+    );
+}
+
+#[test]
+fn rally_trained_villager_gathers_the_resource() {
+    let (package, pages, water) = fixture::flat_fixture(false);
+    let mut world =
+        GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
+    world
+        .initialize_village(PlayerId(0), TileCoord::new(64, 64))
+        .unwrap();
+    let center = world.buildings().next().unwrap().id;
+    let node = world
+        .starting_resources()
+        .into_iter()
+        .find(|n| n.kind == ResourceKind::Food)
+        .unwrap();
+    world.set_fog_disabled(true);
+    world
+        .issue_set_rally(PlayerId(0), center, crate::RallyTarget::Resource(node.id))
+        .unwrap();
+    world
+        .issue_train(PlayerId(0), center, UnitKind::Villager)
+        .unwrap();
+    advance(&mut world, 1000);
+    let trained = world.units().max_by_key(|u| u.id).unwrap();
+    assert_eq!(world.gather_target(trained.id), Some(node.id));
+    assert!(world.resource_remaining(node.id).unwrap() < node.initial_amount);
+}
+
+#[test]
+fn rally_to_a_friendly_foundation_sends_the_trained_villager_to_build() {
+    let (mut world, _, center) = village();
+    let builder = world
+        .units()
+        .find(|u| u.kind == UnitKind::Villager)
+        .unwrap()
+        .id;
+    let house = world
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            TileCoord::new(75, 70),
+        )
+        .unwrap();
+    world.issue_stop(PlayerId(0), builder).unwrap();
+    world
+        .issue_set_rally(PlayerId(0), center, crate::RallyTarget::Building(house))
+        .unwrap();
+    world
+        .issue_train(PlayerId(0), center, UnitKind::Villager)
+        .unwrap();
+    advance(&mut world, 2000);
+    assert!(world.building(house).unwrap().is_complete());
+}
+
+#[test]
+fn rally_rejects_invalid_targets_atomically() {
+    let (mut world, _, center) = village();
+    let before = world.canonical_hash();
+    for target in [
+        crate::RallyTarget::Ground(WorldPosition::new(-1, 0)),
+        crate::RallyTarget::Resource(u64::MAX),
+        crate::RallyTarget::Building(EntityId(u32::MAX)),
+        crate::RallyTarget::Animal(EntityId(u32::MAX)),
+    ] {
+        assert!(world.issue_set_rally(PlayerId(0), center, target).is_err());
+        assert_eq!(world.canonical_hash(), before);
+    }
+}
+
+#[test]
+fn rally_accepts_a_remembered_resource_but_rejects_an_unexplored_one() {
+    let (mut world, node, worker) = resource_world(ResourceKind::Food);
+    world
+        .initialize_village(PlayerId(0), TileCoord::new(128, 128))
+        .unwrap();
+    let center = world.buildings().next().unwrap().id;
+    world.remove_unit(worker);
+    assert_eq!(
+        world.visibility(PlayerId(0), node.tile),
+        crate::TileVisibility::Explored
+    );
+    world
+        .issue_set_rally(PlayerId(0), center, crate::RallyTarget::Resource(node.id))
+        .unwrap();
+    assert_eq!(
+        world.building(center).unwrap().rally_point.unwrap().target,
+        crate::RallyTarget::Resource(node.id)
+    );
+    // Another seat has never seen the node, even though it is a valid resource.
+    let other = world
+        .initialize_village(PlayerId(1), TileCoord::new(200, 200))
+        .unwrap();
+    assert!(world.unit(other).is_some());
+    let other_center = world
+        .buildings()
+        .find(|b| b.player == PlayerId(1))
+        .unwrap()
+        .id;
+    assert_eq!(
+        world.visibility(PlayerId(1), node.tile),
+        crate::TileVisibility::Unexplored
+    );
+    assert_eq!(
+        world.issue_set_rally(
+            PlayerId(1),
+            other_center,
+            crate::RallyTarget::Resource(node.id)
+        ),
+        Err(EconomyError::InvalidResource)
+    );
+}

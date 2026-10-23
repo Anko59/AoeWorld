@@ -32,9 +32,7 @@ impl GameWorld {
         a.state.death_tick = Some(self.tick);
         a.state.task = AnimalTask::Dead;
         a.state.target = None;
-        let key = cell(a.state.position);
         self.wildlife.engaged.remove(&id);
-        self.unindex_animal(id, key);
         self.update_observer(id, None);
         self.wildlife.due.insert((
             self.tick.0.saturating_add(u64::from(self.config.tick_hz)),
@@ -76,7 +74,9 @@ impl GameWorld {
                     .due
                     .insert((due.saturating_add(u64::from(self.config.tick_hz)), id));
             } else {
+                let key = cell(a.state.position);
                 self.wildlife.animals.remove(&id);
+                self.unindex_animal(id, key);
             }
         }
     }

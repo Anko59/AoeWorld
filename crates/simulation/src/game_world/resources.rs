@@ -32,7 +32,8 @@ impl PreparedResourceDepletion<'_> {
         };
         overlay.apply_depletion(&self.depletion);
         if self.depletion.became_nonblocking {
-            self.world.resource_collision_changed();
+            self.world
+                .collision_opened(resource_area(self.depletion.id));
         }
         self.world
             .record_observed_resource(self.depletion.id, self.depletion.remaining);
@@ -103,6 +104,52 @@ impl GameWorld {
             self.units[index].last_movement_error = None;
         }
     }
+
+    /// Ground became walkable (a resource exhausted, a building removed, a
+    /// gate opened). Keep planned routes and searches unless the opening
+    /// can invalidate a suspended reverse flood's sealed-destination proof.
+    /// Restart those planners through the scheduler's normal budget; clearing
+    /// every planner whenever a tree fell caused the long-game freeze.
+    pub(crate) fn collision_opened(&mut self, area: aoe_core::TileRect) {
+        self.navigation_cache.invalidate(area);
+        for index in 0..self.units.len() {
+            if self.units[index]
+                .planner
+                .as_ref()
+                .is_some_and(|planner| planner.opening_invalidates_proof(area))
+            {
+                self.clear_planner(index);
+            }
+            self.units[index].last_movement_error = None;
+        }
+    }
+
+    /// `area` became blocked (a building placed, a gate closed): only the
+    /// planners whose search or planned route touches it are planned again.
+    pub(crate) fn collision_closed(&mut self, area: aoe_core::TileRect) {
+        self.navigation_cache.invalidate(area);
+        for index in 0..self.units.len() {
+            if self.units[index]
+                .planner
+                .as_ref()
+                .is_some_and(|planner| planner.touches(area))
+            {
+                self.clear_planner(index);
+            }
+            self.units[index].last_movement_error = None;
+        }
+    }
+}
+
+/// The ground a resource node blocks: its tile (natural and starting node
+/// identities both encode it), with a tile of margin.
+pub(crate) fn resource_area(id: u64) -> aoe_core::TileRect {
+    let x = ((id >> 1) & 0x3_ffff) as i32;
+    let y = ((id >> 19) & 0x3_ffff) as i32;
+    aoe_core::TileRect::new(
+        aoe_core::TileCoord::new(x - 1, y - 1),
+        aoe_core::TileCoord::new(x + 2, y + 2),
+    )
 }
 
 #[cfg(test)]

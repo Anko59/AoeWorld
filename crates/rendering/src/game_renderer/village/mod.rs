@@ -11,12 +11,12 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
     let scout = unit.kind == SceneUnitKind::Scout;
     let (frames, stride): (&[GameFrame], usize) = if scout {
         (
-            if unit.moving {
+            if unit.visual.moving() {
                 &art.walking
             } else {
                 &art.standing
             },
-            if unit.moving { 10 } else { 1 },
+            if unit.visual.moving() { 10 } else { 1 },
         )
     } else {
         let group = match unit.kind {
@@ -24,10 +24,11 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
             SceneUnitKind::VillagerCarryingWood => 3,
             SceneUnitKind::VillagerForaging => 4,
             SceneUnitKind::VillagerCarryingFood => 5,
-            SceneUnitKind::VillagerMiningGold => 6,
-            SceneUnitKind::VillagerCarryingGold | SceneUnitKind::VillagerCarryingStone => 7,
-            SceneUnitKind::VillagerMiningStone => 8,
-            _ => usize::from(unit.moving),
+            // DAT gold miners (unit 579) swing the stone miner's pick row.
+            SceneUnitKind::VillagerCarryingGold => 6,
+            SceneUnitKind::VillagerCarryingStone => 7,
+            SceneUnitKind::VillagerMiningGold | SceneUnitKind::VillagerMiningStone => 8,
+            _ => usize::from(unit.visual.moving()),
         };
         (
             if unit.kind == SceneUnitKind::VillagerBuilding {
@@ -42,7 +43,7 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
             },
         )
     };
-    let animated = unit.moving
+    let animated = unit.visual.moving()
         || matches!(
             unit.kind,
             SceneUnitKind::VillagerBuilding
@@ -119,7 +120,7 @@ pub(super) fn marker(
             [0.25, 0.57, 0.96, 1.0]
         };
         emit((
-            sprite,
+            sprite.with_unit_contour(unit.visual.outline_colour()),
             scaled(frame, camera.zoom as f32),
             object_depth(WorldObject::Unit(unit)),
             u64::from(unit.id.0),

@@ -6,6 +6,8 @@ use aoe_map::ResourceNode;
 
 use crate::game_world::tests::economy::fixture;
 
+mod facing;
+
 fn resource_mainland() -> (GameWorld, ResourceNode) {
     let (package, pages, water) = fixture::flat_fixture(false);
     let mut world =
@@ -72,11 +74,10 @@ fn return_world(start: TileCoord, isolated: TileCoord) -> (GameWorld, EntityId) 
     });
     let mut task = fresh_task();
     world.begin_return(villager, &mut task);
-    assert!(
-        world.unit(villager).unwrap().planning,
-        "initial search must defer beyond 16384 work"
-    );
-    assert_eq!(
+    // The closest perimeter tile is sealed off: the planner's sealed-
+    // destination proof refuses it when the order is issued (it used to be a
+    // search of the whole map), so the trip takes the next tile at once.
+    assert_ne!(
         world.movement_order(villager).unwrap().target_tile,
         isolated
     );
@@ -234,11 +235,13 @@ fn deferred_unreachable_resource_ends_the_gather_job() {
     let villager = world
         .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(start).unwrap())
         .unwrap();
-    world.issue_gather(PlayerId(0), villager, node.id).unwrap();
-    assert!(
-        world.unit(villager).unwrap().planning,
-        "mainland search must exceed the initial budget"
-    );
+    // Every tile around the node is sealed off: the sealed-destination proof
+    // refuses the job when it is issued, or its search ends soon after.
+    if world.issue_gather(PlayerId(0), villager, node.id).is_err() {
+        assert!(world.gather_target(villager).is_none());
+        assert!(world.movement_order(villager).is_none());
+        return;
+    }
     for _ in 0..256 {
         world.advance();
         if world.gather_target(villager).is_none() {

@@ -5,9 +5,9 @@
 //! not depend on how the movers are split over threads. The apply phase then
 //! runs in the planning-cursor rotation order of the sequential engine and
 //! performs every shared write (unit store, vision, spatial buckets, output
-//! lists). A proposal that assumed the mover waits for planner budget or
-//! capacity re-checks that at apply time. Movers that search, fail, or cross two
-//! waypoints in one tick are not proposed (or are rejected at apply); they run
+//! lists). A proposal re-checks follower spacing at apply time. Movers that
+//! search, fail, or cross two waypoints in one tick are not proposed (or are
+//! rejected at apply); they run
 //! the sequential path in the same order, so they consume the shared planning
 //! budget exactly as before.
 use super::parallel::par_map;
@@ -27,9 +27,8 @@ pub(crate) struct FastStep {
     keeps_moving: bool,
     bucket: ChunkCoord,
     vision_stale: bool,
-    /// The unit would have searched, and waits only while the tick's planning
-    /// budget is spent or planner capacity is exhausted; checked at apply.
-    assumes_waiting: bool,
+    /// Earlier movers can change whether this unit must leave a gap.
+    following: bool,
 }
 
 /// Per-tick dense lookups that replace ordered-map reads on the per-mover path.
@@ -111,6 +110,8 @@ impl GameWorld {
         let mut state = stored.state;
         let economy = tables.economy(self, state.player);
         let (speed, denominator) = self.movement_speed_with(state.kind, economy);
+        let following = self.following_unit(index);
+        let speed = if following { 0 } else { speed };
         let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
         order.speed_carry = 0;
         let remaining = order.segment_length.saturating_sub(order.travelled);
@@ -135,7 +136,6 @@ impl GameWorld {
         state.position = position;
         let mut pops = 0;
         let mut keeps_moving = true;
-        let mut assumes_waiting = false;
         let final_order;
         if !arrived {
             order.speed_carry = speed_budget as u64;
@@ -162,7 +162,7 @@ impl GameWorld {
                     .then_some(order.destination)
                 }) {
                 Some(next) => Next::Segment(next),
-                None => self.propose_map_segment(stored, order, &mut assumes_waiting)?,
+                None => self.propose_map_segment(stored, order)?,
             };
             match next {
                 Next::Waiting => {
@@ -210,7 +210,7 @@ impl GameWorld {
             order: final_order,
             pops,
             keeps_moving,
-            assumes_waiting,
+            following,
         })
     }
 
@@ -219,7 +219,6 @@ impl GameWorld {
         &self,
         stored: &crate::game_world::StoredUnit,
         order: MovementOrder,
-        assumes_waiting: &mut bool,
     ) -> Option<Next> {
         if !self.has_route_navigation() {
             return (order.waypoint != order.destination)
@@ -231,11 +230,8 @@ impl GameWorld {
             .as_ref()
             .is_none_or(|planner| !planner.has_route_continuation());
         if needs_search {
-            // The sequential engine waits whenever the tick's planning budget
-            // is spent or planner capacity is exhausted, both of which depend
-            // on the movers applied before this one. Assume it and let the
-            // apply phase confirm it at this mover's turn.
-            *assumes_waiting = true;
+            // Only the fair per-player pass searches. A mover without a
+            // continuation waits even when budget and slots remain available.
             return Some(Next::Waiting);
         }
         None
@@ -254,14 +250,14 @@ impl GameWorld {
         let Some(&index) = self.lookup.get(&id) else {
             return false;
         };
-        if step.assumes_waiting
-            && self.planning_budget > 0
-            && !self.planner_capacity_exhausted(index)
-        {
+        if step.following != self.following_unit(index) {
             return false;
         }
         let stored = &mut self.units[index];
         let previous_tile = stored.state.position.tile_floor();
+        if step.state.planning && !stored.state.planning {
+            stored.planning_since = self.tick.0;
+        }
         stored.state = step.state;
         stored.order = step.order;
         if step.pops > 0 {

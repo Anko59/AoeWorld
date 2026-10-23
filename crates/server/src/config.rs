@@ -31,6 +31,17 @@ impl Config {
             .ok()
             .filter(|value| value.len() >= 16)
     }
+    /// `AOE_AI_COMMAND`: the program, split on whitespace, that hosts skirmish
+    /// AI players (`python3 -m aoe_ai host`, docs/ai-sdk.md). Unset, a skirmish
+    /// has no AI opponents.
+    pub(crate) fn ai_command_from_env() -> Option<Vec<String>> {
+        let command: Vec<String> = env::var("AOE_AI_COMMAND")
+            .ok()?
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect();
+        (!command.is_empty()).then_some(command)
+    }
     pub const DEFAULT_MAP_PACKAGE_DIRECTORY: &'static str = "local-assets/map-packages";
     pub const DEFAULT_GEODATA_CACHE_DIRECTORY: &'static str = ".cache/geodata";
 

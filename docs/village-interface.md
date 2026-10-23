@@ -48,6 +48,32 @@ and fixture art do not qualify real-map play or finished RTS performance.
 
 Village command feedback uses the simulation destination rule and composed terrain.
 Resource hover highlights a gatherable node; selecting it shows remaining stock.
+The WebGPU default is a narrow, warm silhouette rim with the contextual gather
+cursor. `?hover=cursor` shows only that cursor, `?hover=outline` selects the
+default rim explicitly, and `?hover=glow` uses a wider inner glow. Invalid or
+absent flags select outline. The old ground circle is removed. Compatibility
+backends retain contextual cursors. Selection ellipses are unchanged.
+
+Classic AoE2's contextual gather cursors are the reference (moderate confidence
+about hover-only decoration, based on prior play rather than a running classic
+executable). DE definitely offers configurable hover highlights: its
+[official accessibility guide](https://www.ageofempires.com/age-ii-de-accessibility/)
+lists Off, Only Selections, Only Hovers and All. Confidence is high in that
+setting's existence; this prototype does not claim to reproduce DE's exact
+shader. DAT sprite outline masks alone cannot establish a hover interaction.
+
+The effects reuse the final visible coverage attachment and existing instanced
+contour pass. Cursor-only does not activate that pass. Outline/glow affect only
+the hovered sprite's visible opaque silhouette, preserving its interior,
+transparent holes and shadows. Hover picking stays on the existing four-Hz HUD
+path; there is no new per-frame unit traversal or sprite packet allocation.
+
+`browser/tests/proofs/hover-options.spec.ts` exercises all three resource kinds
+and modes. Without local configuration it uses synthetic art; an ignored
+`.cache/hover-options/capture.json` containing
+`{"url":"http://127.0.0.1:8121/"}` switches it to an already running native-pack
+`make dev` instance. The proof retains nine screenshots and served build IDs
+under `.cache/hover-options/`; these files must never enter Git.
 The minimap uses a diamond frame with own units, buildings and visible deposits.
 Grid remains available through its minimap button and G. Selection ellipses use
 a continuous constant-pixel stroke across all renderers and zoom levels.

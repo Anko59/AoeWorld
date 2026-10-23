@@ -1,5 +1,30 @@
 # 0004: WebGPU-first browser rendering
 
+## Hidden unit contours
+
+The WebGPU world pass also writes an R8Uint coverage attachment: one for an
+opaque upright resource/building fragment, zero for other final fragments.
+Alpha discard, ordinary depth and painter order determine that coverage, so
+transparent holes and equal-depth unit/building ties keep their normal pixels.
+Ground, farms, rubble, fish and separate generated shadows do not mark the mask;
+partially transparent native shadows fail its 0.8 alpha cutoff.
+
+A second pass loads world colour/depth and draws the same instance buffer once.
+Only living player-unit quads reach rasterization; greater-or-equal depth and
+the sampled mask restrict their 1.5 backing-pixel inner contour to hidden parts.
+Five bounded atlas-alpha taps find the edge, including mirrored rectangles.
+The existing scene builder supplies visible units only, so contours reveal no
+enemy outside current vision. Loaded own team colour and the player palette
+travel through spare object words in the unchanged 112-byte Sprite packet.
+
+No CPU overlap queries, extra unit traversal, packet list or instance upload is
+introduced. The mask costs one byte per backing pixel (4 MiB at the client's
+existing backing limit); resize replaces its texture/view and rebinds it. Its
+two persistent handles and the lazy contour pipeline/bind group are counted.
+WebGL2 and Canvas continue drawing the ordinary shared sprites. GPU pixel and
+browser tests establish coverage and ordering, not hardware frame cadence or
+finished RTS performance.
+
 Use Rust/WASM with wgpu's WebGPU backend and instanced sprites as the preferred
 renderer. The client remains single threaded.
 

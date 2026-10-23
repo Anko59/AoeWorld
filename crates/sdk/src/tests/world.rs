@@ -67,6 +67,7 @@ fn building(id: u32, player: PlayerId, state: ConstructionState) -> GameplayBuil
         last_hit: None,
         age: aoe_protocol::Age::Dark,
         gate_open: false,
+        rally_point: None,
     }
 }
 
@@ -377,4 +378,39 @@ fn the_strategic_overview_remembers_ground_outside_the_view_window() {
         Visibility::Unexplored
     );
     assert!(world.fog().known_chunks_for_test().contains(&(3, 3)));
+}
+
+#[test]
+fn resource_snapshot_pages_accumulate_and_a_new_snapshot_clears_old_amounts() {
+    use aoe_protocol::{MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
+    let mut world = started();
+    let total = MAX_RESOURCE_CHANGES + 1;
+    for (offset, count) in [(0, MAX_RESOURCE_CHANGES), (MAX_RESOURCE_CHANGES, 1)] {
+        world.apply(M::ResourceState(ResourceState {
+            subscription_revision: 1,
+            from_revision: None,
+            revision: total as u64,
+            changes: (offset..offset + count)
+                .map(|id| ResourceAmount {
+                    id: id as u64 * 2,
+                    remaining: 0,
+                })
+                .collect(),
+            snapshot_page: Some((offset as u32, total as u32)),
+        }));
+    }
+    assert_eq!(world.amounts.len(), total);
+    assert_eq!(world.amounts.get(&0), Some(&0));
+    assert_eq!(
+        world.amounts.get(&(MAX_RESOURCE_CHANGES as u64 * 2)),
+        Some(&0)
+    );
+    world.apply(M::ResourceState(ResourceState {
+        subscription_revision: 1,
+        from_revision: None,
+        revision: total as u64,
+        changes: Vec::new(),
+        snapshot_page: None,
+    }));
+    assert!(world.amounts.is_empty());
 }

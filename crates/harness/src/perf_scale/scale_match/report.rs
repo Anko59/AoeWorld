@@ -132,6 +132,7 @@ pub(super) fn bot_totals(reports: &[Value]) -> Value {
         "bots": 0, "decisions": 0, "errors": 0, "closed": 0, "villagers": 0, "army": 0,
         "buildings": 0, "population": 0, "orders_accepted": 0, "orders_rejected": 0,
         "drops": 0, "rejoins": 0, "sessions_dropped": 0, "reconnect_seconds": 0.0,
+        "feudal": 0, "build_orders": 0, "buildings_completed": 0, "build_rejections": {},
     });
     let add = |total: &mut Value, key: &str, amount: u64| {
         total[key] = json!(total[key].as_u64().unwrap_or(0) + amount);
@@ -156,6 +157,21 @@ pub(super) fn bot_totals(reports: &[Value]) -> Value {
         add(&mut total, "orders_accepted", number("accepted"));
         add(&mut total, "orders_rejected", number("rejected"));
         add(&mut total, "drops", number("drops"));
+        add(
+            &mut total,
+            "feudal",
+            u64::from(report["age"].as_str() == Some("FEUDAL")),
+        );
+        let stats = report.get("stats").and_then(Value::as_object);
+        for (key, value) in stats.into_iter().flatten() {
+            let amount = value.as_u64().unwrap_or(0);
+            if key == "build_orders" || key == "buildings_completed" {
+                add(&mut total, key, amount);
+            } else if let Some(reason) = key.strip_prefix("rejected:build:") {
+                let by = &mut total["build_rejections"][reason];
+                *by = json!(by.as_u64().unwrap_or(0) + amount);
+            }
+        }
         add(&mut total, "rejoins", number("rejoins"));
         add(
             &mut total,
@@ -247,7 +263,8 @@ pub(super) fn markdown(report: &Value) -> String {
     text.push_str(&format!(
         "\nBots at the end: {} reporting, {} villagers, {} soldiers, {} buildings, {} errors, \
          {} accepted and {} rejected orders. Sessions: {} dropped and rejoined ({} drops, {} rejoins, \
-         {} s away in all), {} permanently lost.\n",
+         {} s away in all), {} permanently lost. {} in Feudal Age; {} build orders sent, {} \
+         buildings completed, build refusals {}.\n",
         bots["bots"],
         bots["villagers"],
         bots["army"],
@@ -260,6 +277,10 @@ pub(super) fn markdown(report: &Value) -> String {
         bots["rejoins"],
         bots["reconnect_seconds"],
         bots["closed"],
+        bots["feudal"],
+        bots["build_orders"],
+        bots["buildings_completed"],
+        bots["build_rejections"],
     ));
     if let Some(browser) = report.get("browser").filter(|b| !b.is_null()) {
         text.push_str(&format!("\nBrowser: {}\n", browser_line(browser)));

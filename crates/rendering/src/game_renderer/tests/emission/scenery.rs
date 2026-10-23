@@ -41,6 +41,7 @@ fn art() -> GameArt {
 
 fn piece(facing: u8) -> SceneResource {
     SceneResource {
+        highlight: 0,
         id: 9,
         position: [10.5; 2],
         kind: SceneResource::CLIFF,
@@ -87,6 +88,7 @@ fn cliff_frame_slots_are_mesh_textures_and_never_random_corner_objects() {
 fn decorative_rocks_use_small_native_frames_distinct_from_ore_at_both_zooms() {
     let mut art = art();
     let rock = |variant| SceneResource {
+        highlight: 0,
         id: 3,
         position: [10.5, 10.5],
         kind: SceneResource::ROCK,

@@ -159,6 +159,9 @@ impl RoutePlanner {
         self.route_costs.extend(reconstruction.costs);
         self.route_directions = Some(directions);
         self.route_cursor = 0;
+        // An unfinished reverse proof belongs to the leg's original origin.
+        // A budget-limited partial leg must not resume it from a new origin.
+        self.pocket = None;
         self.leg_origin = leg_end;
         self.leg_work = 0;
         self.leg_best = None;

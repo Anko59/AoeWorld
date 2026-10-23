@@ -5,6 +5,11 @@ use aoe_protocol::GameplayClientMessage;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Order {
+    /// Set a production building's gather point.
+    SetRally {
+        building: EntityId,
+        target: crate::RallyTarget,
+    },
     /// Walk to the centre of `tile` (animals the slot owns are herded).
     Move {
         unit: EntityId,
@@ -91,6 +96,11 @@ impl Order {
     pub fn message(&self, sequence: u64) -> Option<GameplayClientMessage> {
         use GameplayClientMessage as M;
         Some(match self.clone() {
+            Order::SetRally { building, target } => M::SetRallyOrder {
+                sequence,
+                building_id: building,
+                target,
+            },
             Order::Move { unit, to } => M::MoveOrder {
                 sequence,
                 entity_id: unit,

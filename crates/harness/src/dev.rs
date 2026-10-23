@@ -226,6 +226,7 @@ pub fn start() -> Result<()> {
         std::env::var_os("AOE_OPEN_MAP_PACKAGE").map(|value| value.to_string_lossy().into_owned());
     let port = dev_port(std::env::var("DEV_PORT").ok().as_deref())?;
     let build = build_identity(&root)?;
+    ai::install(&root)?;
     start_with(
         &RealRuntime,
         &root,
@@ -293,6 +294,7 @@ fn start_with<R: Runtime>(
         cache_target.display()
     );
     let worker_env = format!("AOE_MAP_WORKER={}", worker.display());
+    let (image, ai_environment) = ai::container(root);
     let cache_env = format!("AOE_GEODATA_CACHE={}", cache_target.display());
     let mut arguments = vec![
         "run",
@@ -326,6 +328,9 @@ fn start_with<R: Runtime>(
         // Arena mode: POST /match/step advances the game (docs/ai-sdk.md).
         "-e",
         "AOE_ARENA",
+        // Maps prepared at boot and reused by later skirmishes (dev-server.md).
+        "-e",
+        "AOE_PRESET_MAPS",
         "-e",
         &worker_env,
         "-e",
@@ -340,12 +345,14 @@ fn start_with<R: Runtime>(
         &cache_mount,
         "-w",
         root.to_str().ok_or("non-UTF-8 checkout path")?,
-        RUST_TOOLS_IMAGE,
+        image,
         executable.to_str().ok_or("non-UTF-8 server path")?,
     ]
     .into_iter()
     .map(str::to_owned)
     .collect::<Vec<_>>();
+    let image_at = arguments.len() - 2;
+    arguments.splice(image_at..image_at, ai_environment);
     if let Some(hash) = open_map {
         arguments.splice(
             1..1,
@@ -413,5 +420,6 @@ fn logs_with<R: Runtime>(runtime: &R, name: &str) -> Result<()> {
     Ok(())
 }
 
+mod ai;
 #[cfg(test)]
 mod tests;

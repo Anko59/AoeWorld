@@ -1,4 +1,4 @@
-use super::{AnimalKind, AnimalTask, StoredAnimal, cell, distance, radius};
+use super::{AnimalKind, AnimalTask, StoredAnimal, cell, distance, radius, unit_key};
 use crate::{DamageKind, GameWorld, HitRecord, UnitKind, damage_dealt};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, WorldPosition};
 use std::collections::BTreeMap;
@@ -15,8 +15,8 @@ impl GameWorld {
         let ids = self.wildlife.animals.keys().copied().collect::<Vec<_>>();
         for id in ids {
             let a = self.wildlife.animals[&id].state;
-            // Dead animals are unindexed and never processed, like the old
-            // cell-driven scan; carcass state belongs to the decay clock.
+            // Carcasses remain in the food-search index but never run animal
+            // AI; their state belongs to the decay clock.
             if a.hp == 0 {
                 continue;
             }
@@ -27,7 +27,7 @@ impl GameWorld {
             let mut probed = false;
             for y in cy - 1..=cy + 1 {
                 for x in cx - 1..=cx + 1 {
-                    let Some(units) = self.wildlife.unit_cells.get(&(x, y)) else {
+                    let Some(units) = self.wildlife.unit_cells.get(&unit_key((x, y))) else {
                         continue;
                     };
                     for unit in units {
@@ -202,7 +202,9 @@ impl GameWorld {
             if !self.config.valid_ground_position(next)
                 || !self.tile_passable(tile)
                 || !self.building_step_clear(old, tile)
-                || !self.terrain.crossable(old, tile, self.config)
+                // A map's edge rule blocks a tile against itself: a step
+                // inside one tile has no edge to cross.
+                || (old != tile && !self.terrain.crossable(old, tile, self.config))
                 || (old.x != tile.x
                     && old.y != tile.y
                     && (!self.tile_passable(aoe_core::TileCoord::new(old.x, tile.y))

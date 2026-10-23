@@ -9,6 +9,8 @@ mod atlas_pages;
 mod draw_range_tests;
 #[path = "web/tests/grid.rs"]
 mod grid;
+#[path = "web/tests/occlusion.rs"]
+mod occlusion;
 #[path = "web/tests/shader_cost.rs"]
 mod shader_cost;
 #[path = "web/tests/species.rs"]

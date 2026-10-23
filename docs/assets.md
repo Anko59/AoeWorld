@@ -53,13 +53,16 @@ are not qualified as a seamless periodic sheet. Metadata-free material 6 selecti
 Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
 grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
-The periodic groups retain all 100 frames. Catalog v15's base selects 2,361 static frames:
-1,474 terrain and 887 objects including village art and cliff faces 226. The
+The periodic groups retain all 100 frames. Catalog v17's base selects 2,371 frames (including ten gather-point flag cells):
+1,474 terrain and 897 objects including village art and cliff faces 226. The
 [unit and wildlife selection](assets/units.md) adds 2,540 frames. DAT building
 recipes add their selected native frames, including animated Mill layers,
 static House variants and construction/wall angles. Runtime packing uses five
 2048² RGBA pages/80 MiB, terrain on pages 0–1 and objects on pages 2–4,
 with a 5,120-entry frame metadata cap.
+The gather-point flag uses DAT unit 720 / SLP 4480 when present. The trial
+archives omit it; the licensed DE overlay supplies `b_misc_waypoint_flag_x1.sld`,
+sampled from 90 to ten cells in the same bounded object atlas.
 Counts alone do not prove fit. Run `make test-assets-pack AOE_ASSET_PACK=local-assets/packs/<hash>`
 for the private full-catalog packing proof, including actor prefixes and DAT buildings.
 It requires every reviewed optional source, including the separate rock and snow sheets.
@@ -84,6 +87,17 @@ versioned catalog renders four visually reviewed resource roles when their
 optional sources are present: berry bushes for food, broadleaf trees for wood,
 gold deposits, and stone deposits. Wood family 2 selects conifer 4654 healthy
 frames [1,2,3,4,7,8]; family 4 selects palm 4653 singles [0,1,2,3,5,6,8,10,11,12].
+Oak/pine/palm units 349/350/351 all reference dying graphic 1699
+(`TREEA_SN`, SLP 1252), the shipped cut trunk with fallen wood. Their species
+`_SN` graphics 2303/2311/2307 (SLP 2299/2307/2303) exist in the DAT but are
+absent from the trial archive; these are not substituted by guessed IDs.
+The first authoritative wood decrement selects 1252 until amount zero.
+Stump unit 415, graphic 1698 (SLP 1035), then remains decorative for three
+seconds. Snapshots of already exhausted nodes do not replay this local effect.
+Absent chopped art disappears; absent stump art disappears immediately.
+Both stages reuse existing catalog groups, with no extra atlas frames,
+wire fields or per-unit traversal.
+
 The loader retains full raw prefixes 9/13, but bare/autumn conifers and palm clumps
 are not resource presentations. These two species use the selected body alpha
 silhouette, never broadleaf 2296 or unqualified 2304/2300 shadows. Missing optional
@@ -91,8 +105,8 @@ species keeps the healthy broadleaf fallback; family 0 keeps its base variants.
 Culling and drawing share the selected body and its shadow decision. Palm frame 0
 anchor (20,175) lies below its 88×168 image and is deliberately preserved, not clamped.
 Optional village groups add the male villager: idle 1479, walking 1484,
-wood chopping/carrying 1535/1536, berry foraging/food carrying 1490/1493,
-gold mining 1545, stone mining 1560 and shared ore carrying 1552, each five
+wood chopping/carrying 1535/1536, berry foraging/food carrying 2589/2592 (forager `VMFOR`),
+the miners' shared pick 1560 with gold carrying 2117 and stone carrying 1552, each five
 rows of fifteen frames.
 The same eight-direction mirror mapping as the scout uses the native anchors.
 Authoritative Gathering tasks select the resource tool even with a partial
@@ -123,6 +137,9 @@ Synthetic diagnostics are at `/diagnostics.html`. Stop an existing
 server with `make down` before changing the selected pack. Public builds do not
 contain trial files or local packs. Fixture tests run in public CI; actual trial
 import and visual inspection are reported separately.
+
+The [original in-game interface](assets/interface.md) documents the local HUD,
+icon sheets, DAT icon mapping and browser fallback.
 
 ## Definitive Edition buildings
 

@@ -169,6 +169,7 @@ pub enum SceneUnitKind {
     ScoutWalk,
     Arrow,
     Javelin,
+    FarmerWork,
 }
 
 #[path = "scene_actors.rs"]
@@ -238,8 +239,11 @@ impl SceneUnitKind {
         }
         if self.is_foundation() {
             return Some(match self.building_id()? {
+                // The DAT farm has no construction graphic: a farm being
+                // built is its own foundation terrain, never scaffolding.
+                50 => 5,
                 109 | 71 | 84 => 12,
-                50 | 12 | 87 | 101 | 103 | 498 => 11,
+                12 | 87 | 101 | 103 | 498 => 11,
                 72 | 598 | 79 => 9,
                 792 => 43,
                 133 => 24,
@@ -346,7 +350,7 @@ pub struct SceneUnit {
     pub kind: SceneUnitKind,
     pub id: EntityId,
     pub position: [f64; 2],
-    pub moving: bool,
+    pub visual: SceneUnitVisual,
     /// Unit direction, or construction stage/wall variant for a building.
     pub facing: u8,
     pub selected: bool,
@@ -407,6 +411,8 @@ impl SceneTerrainSurface {
 /// A resource node, or one piece of scenery when `kind` is a scenery kind.
 #[derive(Clone, Copy, PartialEq)]
 pub struct SceneResource {
+    /// 0 cursor only, 1 soft outline, 2 inner glow. Render-only state.
+    pub highlight: u8,
     pub id: u64,
     pub position: [f64; 2],
     pub kind: u8,
@@ -417,6 +423,9 @@ pub struct SceneResource {
 }
 
 impl SceneResource {
+    /// Render-only stages; never gatherable protocol resource kinds.
+    pub const CHOPPED_TREE: u8 = 4;
+    pub const TREE_STUMP: u8 = 5;
     /// Cliff anchor marker. Faces are terrain geometry, never object billboards.
     pub const CLIFF: u8 = 16;
     /// A loose rock; visual_variant selects its pile and size.
@@ -427,6 +436,7 @@ impl SceneResource {
     pub const GRASS: u8 = 19;
     /// Weathered stumps and fallen wood, purely visual.
     pub const DEADWOOD: u8 = 20;
+    pub const RALLY_FLAG: u8 = 21;
 }
 
 /// Pure visual dressing: never a resource, blocker, gatherable or economy actor.
@@ -437,4 +447,38 @@ pub struct SceneDecoration {
     pub visual_variant: u8,
     pub orientation: u8,
     pub elevation_meters: f64,
+}
+
+/// Movement and optional palette ownership share the original one-byte slot.
+#[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct SceneUnitVisual(u8);
+impl SceneUnitVisual {
+    pub const COLOURS: [[u8; 3]; 8] = [
+        [65, 145, 245],
+        [245, 65, 65],
+        [50, 190, 65],
+        [245, 220, 40],
+        [40, 220, 220],
+        [175, 65, 220],
+        [160, 160, 160],
+        [245, 145, 40],
+    ];
+    pub fn new(moving: bool) -> Self {
+        Self(u8::from(moving))
+    }
+    pub fn moving(self) -> bool {
+        self.0 & 1 != 0
+    }
+    pub fn set_moving(&mut self, moving: bool) {
+        self.0 = (self.0 & !1) | u8::from(moving);
+    }
+    pub fn with_outline(mut self, colour: Option<u8>) -> Self {
+        self.0 = (self.0 & 1) | colour.map_or(0, |index| ((index % 8) + 1) << 1);
+        self
+    }
+    pub fn outline_colour(self) -> Option<[u8; 3]> {
+        let index = (self.0 >> 1).checked_sub(1)?;
+        Self::COLOURS.get(usize::from(index)).copied()
+    }
 }

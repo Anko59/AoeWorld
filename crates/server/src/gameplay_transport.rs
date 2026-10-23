@@ -75,6 +75,7 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
                     Ok(GameplayClientMessage::StopOrder { sequence, entity_id }) => service.queue_stop(session_id, sequence, entity_id).await,
                     Ok(GameplayClientMessage::GatherOrder { sequence, entity_id, resource_id }) => service.queue_gather(session_id, sequence, entity_id, resource_id).await,
                     Ok(GameplayClientMessage::CancelTrainingOrder { sequence, building_id }) => service.queue_cancel_training(session_id, sequence, building_id).await,
+                    Ok(GameplayClientMessage::SetRallyOrder { sequence, building_id, target }) => service.queue_set_rally(session_id, sequence, building_id, target).await,
                     Ok(GameplayClientMessage::TrainOrder { sequence, building_id, kind }) => service.queue_train(session_id, sequence, building_id, kind).await,
                     Ok(GameplayClientMessage::AttackOrder { sequence, entity_id, target_id }) => service.queue_attack(session_id, sequence, entity_id, target_id).await,
                     Ok(GameplayClientMessage::BuildOrder { sequence, builder_ids, kind, origin }) => service.queue_build(session_id, sequence, builder_ids, kind, origin).await,

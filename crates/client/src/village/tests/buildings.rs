@@ -22,29 +22,37 @@ fn building(id: usize) -> GameplayBuildingState {
         training_queue: vec![],
         last_hit: None,
         gate_open: false,
+        rally_point: None,
         age: aoe_protocol::Age::Dark,
     }
 }
 
 #[wasm_bindgen_test]
 fn building_deltas_enforce_the_merged_limit_and_allow_replacements_and_removals() {
-    let retained: Vec<_> = (0..MAX_ECONOMY_BUILDINGS).map(building).collect();
-    assert!(merge_buildings(&retained, &[building(MAX_ECONOMY_BUILDINGS + 99)], &[]).is_none());
-    assert_eq!(retained.len(), MAX_ECONOMY_BUILDINGS);
+    // The complete retained-world cap is independent of the wire-message cap.
+    // Keep the actual boundary exercised, including atomic overflow rejection.
+    const LIMIT: usize = aoe_protocol::MAX_RETAINED_BUILDINGS;
+    let retained: Vec<_> = (0..LIMIT).map(building).collect();
+    assert!(merge_buildings(&retained, &[building(LIMIT + 99)], &[]).is_none());
+    assert_eq!(retained.len(), LIMIT);
     let replaced = merge_buildings(&retained, &[building(0)], &[]).unwrap();
-    assert_eq!(replaced.len(), MAX_ECONOMY_BUILDINGS);
-    let swapped = merge_buildings(
-        &retained,
-        &[building(MAX_ECONOMY_BUILDINGS + 99)],
-        &[EntityId(0)],
-    )
-    .unwrap();
-    assert_eq!(swapped.len(), MAX_ECONOMY_BUILDINGS);
+    assert_eq!(replaced.len(), LIMIT);
+    drop(replaced);
+    let swapped = merge_buildings(&retained, &[building(LIMIT + 99)], &[EntityId(0)]).unwrap();
+    assert_eq!(swapped.len(), LIMIT);
     assert!(
         swapped
             .iter()
-            .any(|b| b.id == EntityId((MAX_ECONOMY_BUILDINGS + 99) as u32))
+            .any(|b| b.id == EntityId((LIMIT + 99) as u32))
     );
     assert!(!swapped.iter().any(|b| b.id == EntityId(0)));
-    assert!(merge_buildings(&swapped, &[building(MAX_ECONOMY_BUILDINGS + 100)], &[]).is_none());
+    assert!(merge_buildings(&swapped, &[building(LIMIT + 100)], &[]).is_none());
+}
+
+#[wasm_bindgen_test]
+fn retained_buildings_can_span_multiple_bounded_messages() {
+    let retained: Vec<_> = (0..MAX_ECONOMY_BUILDINGS).map(building).collect();
+    let merged =
+        merge_buildings(&retained, &[building(MAX_ECONOMY_BUILDINGS)], &[]).expect("another batch");
+    assert_eq!(merged.len(), MAX_ECONOMY_BUILDINGS + 1);
 }

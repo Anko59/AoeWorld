@@ -32,7 +32,12 @@ impl RoutePlanner {
                 hash.update(&remaining.to_le_bytes())
             }
         };
-        hash.update(&[self.validation_step]);
+        hash.update(&[self.validation_step, u8::from(self.pocket_checked)]);
+        // Reverse flood state affects future work and must participate in replay.
+        hash.update(&[u8::from(self.pocket.is_some())]);
+        if let Some(pocket) = &self.pocket {
+            pocket.update_hash(hash);
+        }
         hash_usize(hash, self.route_cursor);
         hash.update(&self.route_position.x.to_le_bytes());
         hash.update(&self.route_position.y.to_le_bytes());

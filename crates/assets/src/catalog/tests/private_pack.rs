@@ -115,7 +115,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         .sum::<usize>();
     // 45 cavalry idle and 70 villager idle cells are not drawn.
     if extents.len() != MAX_REVIEWED_FRAMES as usize + actor_count - 115
-        || counts != [1474, 887 + actor_count - 115]
+        || counts != [1474, 897 + actor_count - 115]
     {
         return Err("incomplete semantic selection".into());
     }
@@ -278,12 +278,12 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        2160,
-        "military and projectile cells included"
+        2200,
+        "military, projectile and farmer cells included"
     );
     assert_eq!(
         prove(&manifest).unwrap(),
-        (1474, 887 + actor_frames() - 115)
+        (1474, 897 + actor_frames() - 115)
     );
     let saved = manifest.frames[0].clone();
     manifest.frames[0].frame = 1;
@@ -396,7 +396,7 @@ fn full_catalog_with_native_mill_dock_and_farm_fits_runtime_budget() {
     }
     assert_eq!(
         prove(&manifest).unwrap(),
-        (1510, 887 + actor_frames() - 115 + 74)
+        (1510, 897 + actor_frames() - 115 + 74)
     );
 }
 
@@ -435,7 +435,7 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
     }
     assert_eq!(
         prove(&manifest).unwrap(),
-        (1474, 887 + actor_frames() - 115 + 15)
+        (1474, 897 + actor_frames() - 115 + 15)
     );
     for index in manifest.frames.len() - 15..manifest.frames.len() {
         let mut bad = manifest.clone();

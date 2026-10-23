@@ -1,6 +1,6 @@
+use super::route_scheduler::{MAX_ROUTE_PLANNERS_PER_PLAYER, MAX_ROUTE_SEARCHES_PER_PLAYER};
 use super::*;
 use crate::MAX_ROUTE_WORK_PER_TICK;
-use crate::game_movement::{MAX_ACTIVE_ROUTE_PLANNERS, MAX_ACTIVE_ROUTE_SEARCHES};
 use aoe_map::{
     ENVIRONMENT_PAGE_SAMPLES, ElevationPage, EnvironmentPage, EnvironmentPageError,
     EnvironmentPageKey, EnvironmentPageProvider, FieldPyramid, PreparedEnvironment, PyramidLevel,
@@ -202,61 +202,6 @@ fn toggle_provider_terrain() -> (Terrain, Arc<AtomicBool>) {
 }
 
 #[test]
-fn resumable_planners_rotate_with_a_shared_one_expansion_budget() {
-    let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
-    let mut world = GameWorld::new(config).expect("world");
-    world.terrain = flat_map_terrain();
-    let first = world
-        .spawn_unit(
-            PlayerId(0),
-            WorldPosition::from_tile_center(TileCoord::new(1, 1)).expect("first"),
-        )
-        .expect("first unit");
-    let second = world
-        .spawn_unit(
-            PlayerId(0),
-            WorldPosition::from_tile_center(TileCoord::new(1, 3)).expect("second"),
-        )
-        .expect("second unit");
-    let first_target = WorldPosition::from_tile_center(TileCoord::new(20, 1)).expect("target");
-    let second_target = WorldPosition::from_tile_center(TileCoord::new(20, 3)).expect("target");
-    world.planning_budget = 1;
-    world.issue_move(first, first_target).expect("first route");
-    world
-        .issue_move(second, second_target)
-        .expect("second route");
-    world.planning_budget = 1;
-
-    world.advance();
-    let first_progress = world.units[world.lookup[&first]]
-        .planner
-        .as_ref()
-        .expect("first planner")
-        .work();
-    let second_progress = world.units[world.lookup[&second]]
-        .planner
-        .as_ref()
-        .expect("second planner")
-        .work();
-    assert!(first_progress > second_progress);
-
-    world.planning_budget = 1;
-    world.advance();
-    let first_again = world.units[world.lookup[&first]]
-        .planner
-        .as_ref()
-        .expect("first planner")
-        .work();
-    let second_again = world.units[world.lookup[&second]]
-        .planner
-        .as_ref()
-        .expect("second planner")
-        .work();
-    assert!(second_again > second_progress);
-    assert_eq!(first_again, first_progress);
-}
-
-#[test]
 fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");
     let mut world = GameWorld::new(config).expect("world");
@@ -276,7 +221,7 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
     assert!(!continuation.requires_search_slot());
 
     let mut planner_units = Vec::new();
-    for raw in 0..MAX_ACTIVE_ROUTE_PLANNERS {
+    for raw in 0..MAX_ROUTE_PLANNERS_PER_PLAYER {
         let tile = TileCoord::new(1 + (raw as i32 % 8), 1 + (raw as i32 / 8));
         let id = world
             .spawn_unit(
@@ -287,7 +232,7 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
         let index = world.lookup[&id];
         world.store_planner(
             index,
-            Some(if raw < MAX_ACTIVE_ROUTE_SEARCHES {
+            Some(if raw < MAX_ROUTE_SEARCHES_PER_PLAYER {
                 RoutePlanner::new(tile, TileCoord::new(tile.x + 20, tile.y), 4_096)
             } else {
                 continuation.clone()
@@ -295,8 +240,8 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
         );
         planner_units.push(id);
     }
-    assert_eq!(world.active_planner_count, MAX_ACTIVE_ROUTE_PLANNERS);
-    assert_eq!(world.active_route_searches, MAX_ACTIVE_ROUTE_SEARCHES);
+    assert_eq!(world.active_planner_count, MAX_ROUTE_PLANNERS_PER_PLAYER);
+    assert_eq!(world.active_route_searches, MAX_ROUTE_SEARCHES_PER_PLAYER);
 
     let queued = world
         .spawn_unit(
@@ -306,28 +251,36 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
         .expect("queued spawn");
     let target = WorldPosition::from_tile_center(TileCoord::new(63, 1)).expect("target");
     world.planning_budget = 1;
+    world.fast_route_budget = 0;
     assert!(world.issue_move(queued, target).expect("deferred order"));
     assert!(world.movement_order(queued).is_some());
     assert!(world.unit(queued).expect("unit").planning);
     assert!(world.units[world.lookup[&queued]].planner.is_none());
-    assert_eq!(world.active_planner_count, MAX_ACTIVE_ROUTE_PLANNERS);
-    assert_eq!(world.active_route_searches, MAX_ACTIVE_ROUTE_SEARCHES);
+    assert_eq!(world.active_planner_count, MAX_ROUTE_PLANNERS_PER_PLAYER);
+    assert_eq!(world.active_route_searches, MAX_ROUTE_SEARCHES_PER_PLAYER);
     assert_eq!(world.planning_budget, 1);
 
     let redirected = planner_units[0];
     let redirect_target =
         WorldPosition::from_tile_center(TileCoord::new(63, 1)).expect("redirect target");
     world.planning_budget = MAX_ROUTE_WORK_PER_TICK;
+    world.fast_route_budget = crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK;
     assert!(
         world
             .issue_move(redirected, redirect_target)
             .expect("redirect")
     );
-    assert_eq!(world.active_planner_count, MAX_ACTIVE_ROUTE_PLANNERS);
-    assert_eq!(world.active_route_searches, MAX_ACTIVE_ROUTE_SEARCHES - 1);
+    assert_eq!(world.active_planner_count, MAX_ROUTE_PLANNERS_PER_PLAYER);
+    assert_eq!(
+        world.active_route_searches,
+        MAX_ROUTE_SEARCHES_PER_PLAYER - 1
+    );
 
     world.clear_planner(world.lookup[&planner_units[1]]);
-    assert_eq!(world.active_planner_count, MAX_ACTIVE_ROUTE_PLANNERS - 1);
+    assert_eq!(
+        world.active_planner_count,
+        MAX_ROUTE_PLANNERS_PER_PLAYER - 1
+    );
     assert_eq!(world.active_route_searches, 0);
     world.planning_budget = MAX_ROUTE_WORK_PER_TICK;
     assert!(
@@ -341,7 +294,7 @@ fn planner_slot_exhaustion_defers_a_new_order_without_rejecting_it() {
             .as_ref()
             .is_some_and(|planner| planner.has_route_continuation())
     );
-    assert_eq!(world.active_planner_count, MAX_ACTIVE_ROUTE_PLANNERS);
+    assert_eq!(world.active_planner_count, MAX_ROUTE_PLANNERS_PER_PLAYER);
     assert_eq!(world.active_route_searches, 0);
     assert!(world.movement_order(queued).is_some());
     for index in 0..world.units.len() {
@@ -409,3 +362,9 @@ fn scheduling_budget_is_part_of_canonical_state() {
     second.planning_budget = 1;
     assert_ne!(first.canonical_hash(), second.canonical_hash());
 }
+
+#[path = "routes/fairness.rs"]
+mod fairness;
+mod freeze;
+mod long_run;
+mod saturation;

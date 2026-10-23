@@ -1,8 +1,9 @@
 use super::*;
 use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
-use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, ResourceOverlay};
+use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, MovementOutcome, ResourceOverlay};
 
 mod replay_pin;
+mod spacing;
 mod visibility;
 mod visibility_fanout;
 mod visibility_ghosts;
@@ -273,7 +274,8 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
             .next_map_route(
                 TileCoord::new(0, 0),
                 TileCoord::new(0, 0),
-                crate::UnitKind::Scout
+                crate::UnitKind::Scout,
+                PlayerId(0)
             )
             .is_some()
     );
@@ -292,9 +294,12 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
         .expect("final depletion");
     assert_eq!(final_depletion.remaining, 0);
     assert!(final_depletion.became_nonblocking);
-    assert_eq!(world.navigation_cache.entry_count(), 0);
-    assert_eq!(world.active_planner_count, 0);
-    assert_eq!(world.active_route_searches, 0);
+    // Only outcomes whose explored ground holds the opened tile are dropped:
+    // the cached route stays at (0, 0), so it stays unless the node is there.
+    let near = resource.tile.x < 4 && resource.tile.y < 4;
+    assert_eq!(world.navigation_cache.entry_count(), usize::from(!near));
+    // Opened ground keeps every planned route and search valid: they stay.
+    assert_eq!(world.route_accounting_error(), None);
     assert_ne!(world.canonical_hash(), partial_hash);
     assert!(world.terrain().passable(resource.tile, config));
 }

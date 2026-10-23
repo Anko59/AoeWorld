@@ -1,9 +1,9 @@
+import { icon } from '/interface/ui-art.js';
 // Presentation only; authoritative values and the simulation's movement rule
 // arrive with the four-Hz HUD update. No canvas frame loop or terrain guesses.
 const byId = id => document.getElementById(id);
 const kinds = ['Berry bush', 'Tree', 'Gold deposit', 'Stone deposit', 'Shore fish', 'Deep fish'];
 const icons = ['food', 'wood', 'gold', 'stone', 'food', 'food'];
-const svg = name => `<svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#${name}"></use></svg>`;
 let markers = '';
 export function updateDetails(values) {
   byId('scene').dataset.connected = String(values[0] === 1);
@@ -15,21 +15,22 @@ export function updateDetails(values) {
     byId('selection-name').textContent = kinds[values[1]];
     byId('selection-task').textContent = values[2] ? 'Natural resource' : 'Exhausted';
     byId('selection-load').textContent = `${values[2]} ${icons[values[1]]} remaining`;
-    byId('selection-portrait').innerHTML = svg(icons[values[1]]);
+    const portrait=byId('selection-portrait'), key=`resource-${values[1]}`;
+    if (portrait.dataset.entityIcon!==key) {
+      portrait.dataset.entityIcon=key;
+      portrait.innerHTML=icon('units',[59,349,66,102,53,53][values[1]],icons[values[1]]);
+    }
+    byId('selection-health').hidden=true;
     byId('selected-icons').replaceChildren();
     byId('command-context').textContent = kinds[values[1]];
   }
-  const cursor = ['', 'gather', 'move', 'forbidden', 'attack', 'hunt'][values[3]];
+  const cursor = ['', 'gather', 'move', 'forbidden', 'attack', 'hunt', 'gather', 'gather', 'gather', 'gather'][values[3]];
   byId('scene').dataset.commandCursor = cursor;
-  const highlight = byId('resource-highlight');
-  const highlighted = cursor === 'gather' && values[8] > 0;
-  highlight.toggleAttribute('hidden', !highlighted);
-  if (highlighted) {
-    const width = values[8], height = width / 2;
-    Object.assign(highlight.style, { left: `${values[4]-width/2-3}px`, top: `${values[5]-height/2-3}px`, width: `${width+6}px`, height: `${height+6}px` });
-    const ellipse = highlight.firstElementChild;
-    for (const [key, value] of Object.entries({ cx: width/2+3, cy: height/2+3, rx: width/2, ry: height/2 })) ellipse.setAttribute(key, value);
-  }
+  byId('scene').dataset.gatherKind = ['fish', 'forage', 'chop', 'mine'][values[3] - 6] ?? '';
+  // WebGPU follows the sprite silhouette; compatibility backends keep the
+  // contextual gather cursor. The former ground ellipse is no longer drawn.
+  byId('scene').dataset.hoverMode = byId('playground')?.dataset.hoverMode ?? 'outline';
+  byId('scene').dataset.resourceHovered = String(cursor === 'gather' && values[8] > 0);
   const panel = byId('minimap');
   const world = [Number(panel.dataset.worldWidth), Number(panel.dataset.worldHeight)];
   if (!world.every(value => value > 0)) return;

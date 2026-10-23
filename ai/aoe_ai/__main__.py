@@ -34,18 +34,22 @@ def _write_report(path: str, reports: list[BotReport], started: float) -> None:
 
 
 def _host(args: argparse.Namespace) -> int:
-    with open(args.tokens_file, encoding="utf-8") as handle:
-        tokens = json.load(handle)
+    if args.tokens_file == "-":  # the game server hands a skirmish's slots over stdin
+        tokens = json.load(sys.stdin)
+    else:
+        with open(args.tokens_file, encoding="utf-8") as handle:
+            tokens = json.load(handle)
     started = time.monotonic()
     host = Host(args.url, tokens, Config())
     print(f"{len(tokens)} bots connected in {time.monotonic() - started:.1f}s", flush=True)
     started = time.monotonic()
 
     def progress(reports: list[BotReport]) -> None:
-        _write_report(args.report, reports, started)
+        if args.report:
+            _write_report(args.report, reports, started)
 
     reports = host.run(max_seconds=args.max_seconds, progress=progress, progress_every=10.0)
-    _write_report(args.report, reports, started)
+    progress(reports)
     return 1 if any(r.errors for r in reports) else 0
 
 
@@ -78,9 +82,9 @@ def main(argv: list[str] | None = None) -> int:
         "host", help="play many existing slots in this process (the scale harness uses it)"
     )
     hosting.add_argument("--url", default="http://127.0.0.1:8080")
-    hosting.add_argument("--tokens-file", required=True, help="a JSON list of slot tokens")
+    hosting.add_argument("--tokens-file", required=True, help="a JSON list of slot tokens ('-': stdin)")
     hosting.add_argument("--max-seconds", type=float, required=True, help="wall-clock time limit")
-    hosting.add_argument("--report", required=True, help="JSON file rewritten every few seconds")
+    hosting.add_argument("--report", help="JSON file rewritten every few seconds")
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")

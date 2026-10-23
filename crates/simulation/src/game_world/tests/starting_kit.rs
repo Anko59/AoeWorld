@@ -203,7 +203,7 @@ fn a_kit_that_cannot_be_placed_in_full_still_starts_a_consistent_village() {
     let Terrain::Map { generator, overlay } = &mut world.terrain else {
         unreachable!()
     };
-    for n in 0..aoe_map::MAX_RESOURCE_OVERLAY_CHANGES as i32 - 2 {
+    for n in 0..aoe_map::MAX_STARTING_NODES as i32 - 2 {
         let tile = TileCoord::new(100 + n % 1000, 100 + n / 1000);
         let node = aoe_map::ResourceNode::starting(tile, ResourceKind::Wood).unwrap();
         overlay.insert_starting_resource(generator, node).unwrap();

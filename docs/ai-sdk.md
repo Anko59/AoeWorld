@@ -62,8 +62,8 @@ the same value in `X-AoeWorld-Admin-Token`.
 Optional match rules (both validated, defaults keep the shipped game):
 
 * `"population_cap": 5..5000` (default 200): the ceiling on any player's
-  population; the world's building, gatherer, builder and hunter capacities
-  grow in proportion (`cap / 200`). 100 players x 1,000 = 100,000 units.
+  population; the world's capacities are sized per seat from it (see
+  [capacities](scale/capacity.md)). 100 players x 1,000 = 100,000 units.
 * `"start_units": {"villagers": n, "militia": m}`: extra units every player
   starts with beside the standard kit, placed around the village. A scenario
   hook for tests and [scale proofs](scale/match.md); the response reports
@@ -102,6 +102,26 @@ python -m aoe_ai match --url http://127.0.0.1:9000 --admin-token change-me-01234
     --humans 1 --bots 99 --tiles 900 --minutes 20
 ```
 
+## Skirmish from the browser
+
+The setup screen's **Opponents** setting (0 to 99) plays a match against the
+example AI without any command line. `make dev` builds the wheel, installs it
+into `target/dev-ai/site` and runs the server in the SDK image with
+`AOE_AI_COMMAND="python3 -m aoe_ai host"`. After the map job, the browser calls
+`POST /skirmish {"map_hash", "opponents"}` (controller token): the server
+builds the match (slot 0 human, the rest AI, standard starts, population cap
+200), swaps it in and starts one host process per 13 AI slots, handing each
+its tokens on stdin. `GET /skirmish` reports the phase (`opening_map`,
+`placing_villages`, `starting_ai`, `connecting_ai`, `ready`, `failed`,
+`cancelled`, `stopped`) with measured counts. The hosts are killed by
+`POST /skirmish/stop` (Cancel, Quit to Main Menu), when another match or map
+replaces this one, when they exit, or when nobody has held the human seat
+for five minutes.
+
+```sh
+AOE_PRESET_MAPS=qa/skirmish-presets.json DEV_PORT=8097 make dev   # France prepared at boot
+```
+
 ## Writing an AI in Python
 
 ```python
@@ -122,6 +142,14 @@ def on_tick(client, decision):            # called every decision point
 
 client.run(on_tick, until_tick=20 * 60 * 10)   # ten game minutes
 ```
+
+Production buildings retain a server-owned rally point across reconnects. In
+Python, use `set_rally(building, x, y)`, `set_rally_resource(building, resource)`,
+`set_rally_building(building, target)` or `set_rally_animal(building, animal)`;
+these return ordinary order sequences. Buildings expose `rally_position` and
+optional `rally_resource`, `rally_building` and `rally_animal` identities. Rust
+uses `Order::SetRally` with `RallyTarget` and observes `Building.state.rally_point`.
+Known resources may be in explored fog; undiscovered targets are refused.
 
 * **Decision rate.** `decision_hz` decision points per game second (the game runs
   20 ticks a second, so `decision_hz=2` is every 10 ticks). Decisions are tied to
@@ -321,8 +349,11 @@ economy and building views built once per tick; idle `Tick` messages dropped
 for AI slots (a heartbeat every half second); AI fog views at most once a
 second; one Rust runtime with two network threads for every connection of a
 Python process; `Fleet.wait` serving all bots from one Python thread. Capacities
-are raised to match: 128 players, 4,096 buildings, 8,192 gatherers, 2,048
-builders and 2,048 hunters world-wide.
+are sized per seat: 1,024 buildings and one gatherer, builder and hunter per
+unit of population for every seat ([capacities](scale/capacity.md)). A refused
+order says why: `REJECTED_WORLD_LIMIT` when a world capacity is reached,
+`REJECTED_ORDER_TOO_LARGE` for an oversized group or wall, and
+`REJECTED_QUEUE_FULL` only for a full order queue.
 
 Measured on the development machine (12 cores, shared with other work, release
 server, flat 900-tile map, `aoe-ai` bots at 2 decisions a second, one Python

@@ -214,3 +214,40 @@ fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
     );
     assert_eq!(world.canonical_hash(), before);
 }
+
+#[test]
+fn a_full_world_reports_a_world_limit_and_an_empty_group_a_too_large_order() {
+    // The owner's report: build orders after Feudal Age answered "The order
+    // queue is full" because the world's building capacity was reached.
+    let (mut world, _) = aoe_simulation::GameWorld::default_with_village(Seed(1));
+    let player = aoe_core::PlayerId(0);
+    let villager = world
+        .units()
+        .find(|unit| unit.kind == aoe_simulation::UnitKind::Villager)
+        .unwrap()
+        .id;
+    let origin = world
+        .buildings()
+        .next()
+        .map(|building| {
+            aoe_core::TileCoord::new(building.footprint.max.x + 3, building.footprint.min.y)
+        })
+        .unwrap();
+    world.set_limits(aoe_simulation::WorldLimits {
+        buildings: world.buildings().count(),
+        ..world.limits()
+    });
+    let build = |builder_ids| PendingAction::Build {
+        builder_ids,
+        kind: aoe_protocol::BuildingKind::House,
+        origin,
+    };
+    assert_eq!(
+        apply(&mut world, player, build(vec![villager])),
+        CommandResult::RejectedWorldLimit
+    );
+    assert_eq!(
+        apply(&mut world, player, build(Vec::new())),
+        CommandResult::RejectedOrderTooLarge
+    );
+}

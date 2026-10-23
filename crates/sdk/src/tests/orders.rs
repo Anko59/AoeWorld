@@ -46,6 +46,22 @@ fn all_orders() -> Vec<Order> {
             kind: UnitKind::Spearman,
         },
         Order::CancelTraining { building: id(7) },
+        Order::SetRally {
+            building: id(7),
+            target: crate::RallyTarget::Ground(WorldPosition::new(512, 1024)),
+        },
+        Order::SetRally {
+            building: id(7),
+            target: crate::RallyTarget::Resource(77),
+        },
+        Order::SetRally {
+            building: id(7),
+            target: crate::RallyTarget::Building(id(9)),
+        },
+        Order::SetRally {
+            building: id(7),
+            target: crate::RallyTarget::Animal(id(12)),
+        },
         Order::Research {
             building: id(7),
             tech: Tech::FeudalAge,
@@ -82,8 +98,8 @@ fn every_order_maps_to_a_wire_message_that_round_trips() {
         seen.insert(bytes[0]);
     }
     // Move, Stop, Gather, Build, BuildWall, Construct, CancelConstruction, Farm,
-    // Train, CancelTraining, Research, CancelResearch, Attack, Hunt, Buy, Sell.
-    assert_eq!(seen.len(), 16, "distinct wire variants: {seen:?}");
+    // Train, CancelTraining, Research, CancelResearch, Attack, Hunt, Buy, Sell, SetRally.
+    assert_eq!(seen.len(), 17, "distinct wire variants: {seen:?}");
 }
 
 #[test]

@@ -54,6 +54,9 @@ impl GameplayService {
             tracing::error!("gameplay tick worker failed");
             return;
         };
+        if world.tick().0.is_multiple_of(ROUTE_LOG_TICKS) {
+            log_route_scheduler(&world);
+        }
         let changes = world.take_remembered_building_changes();
         // The simulation has stepped: from here the world is only read, so
         // commands and map work may queue for the write lock while the views
@@ -108,3 +111,33 @@ mod scenario;
 #[path = "tick/tests.rs"]
 #[cfg(test)]
 mod tests;
+
+/// Route-scheduler occupancy is logged once a minute at 20 Hz.
+const ROUTE_LOG_TICKS: u64 = 1_200;
+
+/// A stalled player shows up in the server log: units that wait for a route,
+/// the slots held, and any drift between the counters and a recount.
+fn log_route_scheduler(world: &aoe_simulation::GameWorld) {
+    let stats = world.route_scheduler_stats();
+    tracing::info!(
+        tick = world.tick().0,
+        planners = stats.planners,
+        searches = stats.searches,
+        waiting = stats.waiting_units,
+        waiting_without_planner = stats.waiting_without_planner,
+        waiting_players = stats.waiting_players,
+        most_waiting = stats.most_waiting,
+        most_waiting_player = ?stats.most_waiting_player.map(|player| player.0),
+        oldest_wait_ticks = stats.oldest_wait_ticks,
+        players_at_planner_cap = stats.players_at_planner_cap,
+        players_at_search_cap = stats.players_at_search_cap,
+        world_capacity_exhausted = stats.world_capacity_exhausted,
+        orphan_planners = stats.orphan_planners,
+        oldest_waiting = stats.oldest_waiting.as_deref().unwrap_or("none"),
+        metrics = %stats.metrics,
+        "route scheduler"
+    );
+    if let Some(error) = world.route_accounting_error() {
+        tracing::warn!(%error, "route scheduler");
+    }
+}

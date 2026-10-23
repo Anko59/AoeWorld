@@ -29,10 +29,9 @@ a start with no room for a kit begins with an empty or partial one. Activation
 is refused when no footprint has enough reachable free perimeter tiles for the
 starting villagers, plus the scout when it must leave its found position.
 Restored overlays retain the original kit, including exhausted nodes.
-Starting nodes have no cap of their own: the overlay's total change limit
-(65,536) is the only bound, so a 100-slot match (3,100 nodes) gets a full kit
-per village. An earlier fixed 512-node cap gave only about 16 villages a full
-kit. A kit that still cannot be placed in full (genuinely impossible terrain, or
+Starting nodes share the overlay's 1,048,576-entry limit and have a separate
+4,096-node startup bound. A 100-slot match needs 3,100 nodes for full kits.
+A kit that still cannot be placed in full (genuinely impossible terrain, or
 the overlay limit) is counted per world (`GameWorld::partial_starting_kits`),
 logged, and reported by `POST /match` as `partial_starting_kits`.
 
@@ -265,3 +264,11 @@ values and reproducible coast scenario are documented there.
 economy research, age gating, age-up art, the accelerated local demo and limits.
 The [Feudal military](military.md) adds rosters, attack classes, delayed ranged
 hits, Blacksmith equipment and native unit/projectile art.
+
+Hunters and shepherds reuse the ten-tile replacement radius after exhausting
+an animal, including after returning food when its carcass has disappeared.
+Shepherds choose owned sheep; hunters choose deer or boar, alive or as carcasses.
+They use the existing wildlife cell index, rank by squared distance then entity
+identity, and never switch to berries or other food professions. Carcasses stay
+indexed until removed; only visible prey or owned sheep can be selected. The
+simulation reports local search cell/candidate counts in `WildlifeStats`.

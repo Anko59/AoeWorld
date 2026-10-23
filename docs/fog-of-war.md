@@ -18,7 +18,9 @@ scans or allocates the map. The 256x256 strategic overview is also sparse.
 
 Resource observation probes five possible overlay identities per revealed tile,
 without fetching terrain pages. Depletion updates only players currently seeing
-that tile. Resource memory is bounded by the overlay's existing 65,536 entries.
+that tile. Resource memory is bounded by the overlay's 1,048,576 entries. Reconnect
+snapshots use pages of at most 65,536 amounts; the browser publishes the
+assembled snapshot atomically.
 Buildings retain their last observed state and age variant until revisited; an unseen
 destruction stays remembered. Owned building destruction is known immediately.
 The existing building count bounds building-state refresh work each tick.

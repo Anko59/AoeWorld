@@ -483,6 +483,13 @@ mod fast;
 #[path = "start_search/regions.rs"]
 mod regions;
 
+#[path = "start_search/land_masses.rs"]
+mod land_masses;
+pub use land_masses::LandMasses;
+
+#[cfg(test)]
+#[path = "start_search/tests/land_masses.rs"]
+mod land_masses_tests;
 #[cfg(test)]
 #[path = "start_search/tests/start_search.rs"]
 mod tests;

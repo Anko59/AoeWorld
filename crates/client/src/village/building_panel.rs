@@ -1,6 +1,12 @@
 //! Bounded numeric building presentation; no DOM rules duplicate the simulation.
 use super::{Client, construction, orders::send, owner};
-use crate::{building_ui, playground::game::map};
+use crate::{
+    building_ui::{
+        self,
+        availability::{self, Availability},
+    },
+    playground::game::map,
+};
 use aoe_protocol::{ConstructionState, GameplayClientMessage as Message, Tech};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
@@ -20,6 +26,14 @@ pub(super) fn update(client: &Client) {
         .players
         .iter()
         .find(|p| p.player == owner(client));
+    let reserved = client
+        .village
+        .buildings
+        .iter()
+        .filter(|b| b.player == owner(client))
+        .map(|b| b.training_queue.len())
+        .sum::<usize>();
+    let completed = construction::completed(client);
     // age, selected kind, hp, max hp, construction, food, research kind/progress,
     // research availability, build availability entries, trained kind.
     let mut v = vec![0.0; 8 + Tech::ALL.len()];
@@ -46,34 +60,12 @@ pub(super) fn update(client: &Client) {
             v[7] = r.progress_ticks as f64 / (r.total_ticks as f64).max(1.0);
         }
         for (i, r) in aoe_simulation::TECH_RULES.iter().enumerate() {
-            let requirement = match r.requires {
-                aoe_simulation::TechRequirement::None => true,
-                aoe_simulation::TechRequirement::Age(age) => {
-                    age == aoe_simulation::Age::Dark
-                        || player.is_some_and(|p| p.age == aoe_protocol::Age::Feudal)
-                }
-                aoe_simulation::TechRequirement::BuildingKinds { count, kinds } => {
-                    kinds
-                        .iter()
-                        .filter(|k| construction::completed(client) & (1 << **k as u8) != 0)
-                        .count()
-                        >= count
-                }
-            };
-            let enabled = r.building as u8 == b.kind as u8
-                && b.player == owner(client)
-                && b.construction == ConstructionState::Complete
-                && b.training_queue.is_empty()
-                && b.research.is_none()
-                && requirement
-                && player.is_some_and(|p| {
-                    p.researched & (1 << i) == 0
-                        && building_ui::affordable(p.stockpile, building_ui::stock(r.cost))
-                })
-                && !client.village.buildings.iter().any(|b| {
-                    b.player == owner(client) && b.research.is_some_and(|r| r.tech as usize == i)
-                });
-            v[8 + i] = f64::from(u8::from(enabled));
+            let duplicate = client.village.buildings.iter().any(|b| {
+                b.player == owner(client)
+                    && b.research.is_some_and(|entry| entry.tech as usize == i)
+            });
+            v[8 + i] =
+                availability::research(b, player, owner(client), completed, duplicate, r).number();
         }
     }
     for r in &aoe_simulation::BUILDING_RULES[1..] {
@@ -84,48 +76,16 @@ pub(super) fn update(client: &Client) {
         b.and_then(|b| b.training_queue.first())
             .map_or(0.0, |e| e.kind as u8 as f64),
     );
-    let train_enabled = b.is_some_and(|b| {
-        let rules = building_ui::rules(b.kind);
-        let cost = if b.kind == aoe_protocol::BuildingKind::TownCenter {
-            aoe_protocol::Stockpile {
-                food: aoe_simulation::VILLAGE_RULES.villager_food_cost,
-                ..Default::default()
-            }
-        } else {
-            let c = aoe_simulation::GameWorld::unit_training(
-                if b.kind == aoe_protocol::BuildingKind::Dock {
-                    aoe_simulation::UnitKind::FishingShip
-                } else {
-                    aoe_simulation::UnitKind::Militia
-                },
-            )
-            .map(|t| t.cost)
-            .unwrap_or_default();
-            aoe_protocol::Stockpile {
-                food: c.food,
-                wood: c.wood,
-                gold: c.gold,
-                stone: c.stone,
-            }
-        };
-        let reserved = client
-            .village
-            .buildings
-            .iter()
-            .filter(|v| v.player == owner(client))
-            .map(|v| v.training_queue.len())
-            .sum::<usize>();
-        b.player == owner(client)
-            && b.construction == ConstructionState::Complete
-            && !rules.trainable.is_empty()
-            && b.research.is_none()
-            && b.training_queue.len() < aoe_protocol::MAX_TRAINING_QUEUE
-            && player.is_some_and(|p| {
-                building_ui::affordable(p.stockpile, cost)
-                    && usize::from(p.population_used) + reserved < usize::from(p.population_cap)
-            })
+    let train = b.map_or(Availability::Unavailable, |b| {
+        availability::training(
+            b,
+            player,
+            owner(client),
+            reserved,
+            availability::primary_training(b, player),
+        )
     });
-    v.push(f64::from(u8::from(train_enabled)));
+    v.push(train.number());
     let foundations: Vec<_> = client
         .village
         .buildings
@@ -139,42 +99,10 @@ pub(super) fn update(client: &Client) {
         v.extend_from_slice(&[p.x * scale, p.y * scale, f64::from(b.progress_permille)]);
     }
     for kind in aoe_protocol::UnitKind::ALL {
-        let ready = b.is_some_and(|b| {
-            let native = aoe_simulation::UNIT_COMBAT[kind as usize].kind;
-            let r = building_ui::rules(b.kind);
-            let cost = aoe_simulation::GameWorld::unit_training(native).map(|t| t.cost);
-            b.player == owner(client)
-                && b.progress_permille == 1000
-                && b.research.is_none()
-                && b.training_queue.len() < aoe_protocol::MAX_TRAINING_QUEUE
-                && r.trainable.contains(&native)
-                && player.is_some_and(|p| {
-                    p.age == aoe_protocol::Age::Feudal
-                        && (kind != aoe_protocol::UnitKind::ManAtArms
-                            || p.researched & Tech::ManAtArms.bit() != 0)
-                        && cost.is_some_and(|c| {
-                            building_ui::affordable(
-                                p.stockpile,
-                                aoe_protocol::Stockpile {
-                                    food: c.food,
-                                    wood: c.wood,
-                                    gold: c.gold,
-                                    stone: c.stone,
-                                },
-                            )
-                        })
-                        && usize::from(p.population_used)
-                            + client
-                                .village
-                                .buildings
-                                .iter()
-                                .filter(|b| b.player == p.player)
-                                .map(|b| b.training_queue.len())
-                                .sum::<usize>()
-                            < usize::from(p.population_cap)
-                })
+        let ready = b.map_or(Availability::Unavailable, |b| {
+            availability::training(b, player, owner(client), reserved, kind)
         });
-        v.push(f64::from(u8::from(ready)));
+        v.push(ready.number());
     }
     v.push(f64::from(u8::from(
         player.is_some_and(|p| p.researched & Tech::ManAtArms.bit() != 0),

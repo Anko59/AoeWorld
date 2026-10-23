@@ -51,7 +51,7 @@ impl GameWorld {
         bonus: u16,
         kind: ProjectileKind,
     ) {
-        if self.combat.projectiles.len() >= 4096 {
+        if self.combat.projectiles.len() >= self.economy.limits.projectiles {
             return;
         }
         let Some((player, from)) =

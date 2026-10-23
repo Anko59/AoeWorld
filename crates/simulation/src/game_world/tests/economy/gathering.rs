@@ -1,3 +1,4 @@
+mod spacing;
 use super::*;
 
 #[test]
@@ -66,6 +67,48 @@ fn a_full_load_returns_deposits_and_resumes_the_same_node() {
     assert!(returning && deposited);
     advance(&mut world, 2000);
     assert!(world.resource_remaining(node.id).unwrap() < node.initial_amount - 10);
+}
+
+#[test]
+fn workers_stand_against_the_bush_or_tree_they_gather() {
+    for kind in [ResourceKind::Food, ResourceKind::Wood] {
+        let (mut world, node, id) = resource_world(kind);
+        world.initialize_village(PlayerId(0), node.tile).unwrap();
+        world.issue_gather(PlayerId(0), id, node.id).unwrap();
+        let centre = WorldPosition::from_tile_center(node.tile).unwrap();
+        let mut worked = false;
+        for _ in 0..2000 {
+            world.advance();
+            let unit = world.unit(id).unwrap();
+            if unit.task != UnitTask::Gathering {
+                continue;
+            }
+            let (dx, dy) = (
+                i64::from(unit.position.x - centre.x),
+                i64::from(unit.position.y - centre.y),
+            );
+            // A tile-centre stand is 1.0 (side) or 1.41 (corner) tiles away;
+            // AoE2 workers touch the node: at most 0.7 or 1.0 tiles.
+            let tile = i64::from(FIXED_SUBUNITS_PER_TILE);
+            let limit = if dx != 0 && dy != 0 {
+                tile
+            } else {
+                7 * tile / 10
+            };
+            assert!(dx * dx + dy * dy <= limit * limit, "{kind:?} {dx},{dy}");
+            assert_eq!(
+                unit.position
+                    .tile_floor()
+                    .x
+                    .abs_diff(node.tile.x)
+                    .max(unit.position.tile_floor().y.abs_diff(node.tile.y)),
+                1
+            );
+            worked = true;
+            break;
+        }
+        assert!(worked, "{kind:?} gatherer never worked");
+    }
 }
 
 #[test]
@@ -253,6 +296,10 @@ fn authoritative_job_kind_survives_collection_and_return_but_clears_on_stop() {
     assert!(unit.carried.is_some());
     world.issue_move(id, unit.position).unwrap();
     assert_eq!(world.gathering_kind(id), None);
+    // A worker stepped up against its node walks the last step to the centre.
+    for _ in 0..40 {
+        world.advance();
+    }
     assert_eq!(world.unit(id).unwrap().task, UnitTask::Carrying);
     assert!(world.unit(id).unwrap().carried.is_some());
 }
@@ -308,8 +355,7 @@ fn gatherer_at(world: &mut GameWorld, node: ResourceNode) -> EntityId {
 /// Replay pin: villagers gather every resource through several drop-off
 /// building kinds while the scout walks, camps rise beside their resources
 /// and a wood node is depleted into a replacement, so any index change that
-/// alters behaviour breaks the pinned hashes. The pins were taken from the
-/// code before the drop-off and resource-chunk indexes.
+/// alters authoritative state breaks the current pinned hashes.
 #[test]
 fn gathering_and_dropoffs_replay_to_pinned_hashes() {
     let (package, pages, water) = fixture::flat_fixture(false);
@@ -430,12 +476,24 @@ fn gathering_and_dropoffs_replay_to_pinned_hashes() {
     );
 }
 
-/// Canonical hashes at ticks 100..=600, pinned from the pre-index code.
+/// Canonical hashes at ticks 100..=600. Intended changes moved them: the
+/// per-player fair route pass (route scheduler at 70c5da80); site ranking that
+/// settles the village at (47, 65) in the immediate clearing (aff67cb8); an
+/// exhausted node no longer clearing every planner; workers stepping 0.3 tiles
+/// toward the node; unit spacing (destination slots, work spots, idle
+/// separation, yielding followers); hashed work facing; and route throughput:
+/// trips start on their order's tick (fast attempt), and the fast budget and
+/// the fast-attempt and sealed-destination flags are hashed. The scheduler and
+/// placement changes each reproduced their own earlier pin alone; determinism
+/// is unchanged. Rally points added optional state to buildings (hashed).
+/// Review re-pin: hash the resumable reverse-flood frontier/cursor, and share
+/// work between players before near/far classes. Both intentionally change
+/// current planner state/timing; no checkpoint or determinism assertion is removed.
 const GATHER_REPLAY_PINS: [&str; 6] = [
-    "fb7450799c33b51e042ec4db909e718f6df4caaa4e38bb4a5ea81ab43d323d4d",
-    "94bedc363b41ff5f2f882c72a71a5450af2fbde42b532abbb84b1d99afd7e4a8",
-    "425dacfeac64f57521f5da3fa06c9b3d427a66a9e283c87756df9ab152221021",
-    "272393992802581b815a931bcf92e7538d21d1c7f203f89fae6362ecccbdd8f1",
-    "85cd19f28101678fd6ae790ef9830d8f087b74f47a479cba0c243bc13a3762fe",
-    "899ead6756acdc96af3277f0cb3cc272d53f45cdb494699b608d081f40ee5fe5",
+    "e692120954f0dddf0a3754d6a5962a37a12c92cba162531909ba46d0423bf2b0",
+    "e442cafaf09ee8be94098aedf1d00b81619bf0f4d77fc01188ca641c1be619da",
+    "43295a039d855c8a042053030fa95326132b4f379cb364c5240cbb5fe8dd1f0c",
+    "83cd66ab22fb875416f3b72609c6b21b126ca1bc031019bf0311f80e3e927d18",
+    "482a874db276be95620e66f147dbf8f6344818ec37f9d3bb107b53544922ad1a",
+    "898b6c0d229f9bea73ff4642c4bb5823f5c02cb8362a8a6ac11ff1f7d23d28ec",
 ];

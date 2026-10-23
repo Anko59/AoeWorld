@@ -24,18 +24,19 @@ impl GameWorld {
         {
             return Err(EconomyError::Capacity);
         }
-        let a = self.animal(animal).ok_or(EconomyError::InvalidResource)?;
+        let a = *self.animal(animal).ok_or(EconomyError::InvalidResource)?;
         if a.hp > 0 || a.task != crate::AnimalTask::Carcass || a.food_remaining == 0 {
             return Err(EconomyError::InvalidResource);
         }
         self.begin_gather(id, 0, a.position.tile_floor(), ResourceKind::Food, None)?;
         if let Some(task) = self.economy.gatherers.get_mut(&id) {
             task.animal = Some(animal);
+            task.carcass_kind = Some(a.kind);
             task.fish = None;
         }
         let index = self.lookup[&id];
         if self.units[index].state.task == UnitTask::Moving {
-            self.units[index].state.task = self.carcass_task(animal);
+            self.units[index].state.task = self.carcass_walk_task(animal);
         }
         Ok(())
     }
@@ -50,6 +51,16 @@ impl GameWorld {
             UnitTask::Hunting
         }
     }
+
+    /// Hunters keep their profession on the way to a carcass; a shepherd only
+    /// herds while leading a living sheep, so it walks to the carcass.
+    pub(super) fn carcass_walk_task(&self, animal: EntityId) -> UnitTask {
+        match self.carcass_task(animal) {
+            UnitTask::Shepherding => UnitTask::Moving,
+            task => task,
+        }
+    }
+
     pub fn resource_remaining(&self, id: u64) -> Option<u16> {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return None;
@@ -125,6 +136,7 @@ impl GameWorld {
             node,
             farm,
             animal: None,
+            carcass_kind: None,
             fish: if farm.is_none() {
                 self.fish_object(node)
             } else {
@@ -179,6 +191,7 @@ impl GameWorld {
         });
         candidates.sort_by_key(|tile| {
             (
+                self.work_spot_busy(*tile, id),
                 distance_squared(unit.position.tile_floor(), *tile),
                 tile.y,
                 tile.x,
@@ -231,7 +244,9 @@ impl GameWorld {
             let keep = self.gather_step(id, &mut task, sink);
             if keep {
                 self.economy.gatherers.insert(id, task);
-            } else if let Some(&index) = self.lookup.get(&id) {
+            } else if self.hunting_target(id).is_none()
+                && let Some(&index) = self.lookup.get(&id)
+            {
                 self.units[index].state.task = if self.units[index].state.carried.is_some() {
                     UnitTask::Carrying
                 } else {
@@ -293,15 +308,18 @@ impl GameWorld {
         if tile.x.abs_diff(task.tile.x) > 1 || tile.y.abs_diff(task.tile.y) > 1 {
             return self.resume_resource(id, task);
         }
+        if task.phase == GatherPhase::Approaching && task.farm.is_none() {
+            self.step_up_to_work(id, index, task.tile);
+        }
         task.phase = GatherPhase::Gathering;
-        if task.fish.is_some() {
-            let unit = &mut self.units[index].state;
-            let from = unit.position.tile_floor();
-            unit.facing = crate::game_world::facing_for(
-                i64::from(task.tile.x - from.x),
-                i64::from(task.tile.y - from.y),
-                unit.facing,
-            );
+        if let Some(target) = task
+            .animal
+            .and_then(|id| self.animal(id))
+            .map(|a| a.position)
+        {
+            self.units[index].state.face_towards(target);
+        } else {
+            self.units[index].state.face_tile(task.tile);
         }
         self.units[index].state.task = if task.fish.is_some() {
             UnitTask::Fishing
@@ -399,4 +417,32 @@ impl GameWorld {
         }
         true
     }
+
+    /// Routes end at tile centres, a full tile from the node. As in AoE2 the
+    /// worker then steps up against the bush, tree, mine, fish or carcass,
+    /// inside its own tile. Facing is left to the facing rules.
+    fn step_up_to_work(&mut self, id: EntityId, index: usize, target: TileCoord) {
+        let unit = self.units[index].state;
+        let stand = unit.position.tile_floor();
+        let Ok(centre) = position(stand) else {
+            return;
+        };
+        let (dx, dy) = (target.x - stand.x, target.y - stand.y);
+        if unit.position != centre {
+            return;
+        }
+        let state = &mut self.units[index].state;
+        state.previous_position = unit.position;
+        state.position = aoe_core::WorldPosition::new(
+            centre.x + dx.signum() * WORK_STEP,
+            centre.y + dy.signum() * WORK_STEP,
+        );
+        let moved = *state;
+        self.track_unit_step(id, stand, &moved);
+    }
 }
+
+/// How far a worker steps from its tile centre toward the node: it then
+/// stands 0.7 tiles from a cardinal neighbour's centre, touching a one-tile
+/// bush or trunk, and stays inside its own (passable) tile.
+pub(crate) const WORK_STEP: i32 = aoe_core::FIXED_SUBUNITS_PER_TILE * 3 / 10;

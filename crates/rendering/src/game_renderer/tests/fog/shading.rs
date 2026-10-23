@@ -26,6 +26,7 @@ fn resource_and_unit_identity_collision_cannot_change_their_fog_shading() {
         scenery: Default::default(),
     };
     let resource = SceneResource {
+        highlight: 0,
         id: 7,
         position: [0.5, 0.5],
         kind: 0,
@@ -37,7 +38,7 @@ fn resource_and_unit_identity_collision_cannot_change_their_fog_shading() {
         kind: SceneUnitKind::Scout,
         id: aoe_core::EntityId(7),
         position: [5.5, 0.5],
-        moving: false,
+        visual: crate::SceneUnitVisual::new(false),
         facing: 0,
         selected: false,
         elevation_meters: 0.0,

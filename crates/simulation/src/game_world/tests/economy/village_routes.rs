@@ -8,6 +8,7 @@ fn distant_order_reaches(target: TileCoord, initial_budget: u32) {
         TileCoord::new(8192, 8192)
     );
     world.planning_budget = initial_budget;
+    world.fast_route_budget = initial_budget;
     let destination = WorldPosition::from_tile_center(target).unwrap();
     assert_eq!(world.issue_move(scout, destination), Ok(true));
     let index = world.lookup[&scout];

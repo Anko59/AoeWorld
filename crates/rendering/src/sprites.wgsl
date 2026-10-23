@@ -75,8 +75,7 @@ fn sheet(material: u32) -> vec4<f32> {
     return vec4<f32>(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + b.y * 256.0, b.z + b.w * 256.0);
 }
 
-@vertex
-fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> VertexOutput {
+fn sprite_vertex(vertex: u32, instance: u32) -> VertexOutput {
     let corners = array<vec2<f32>, 6>(
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0),
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
@@ -295,8 +294,7 @@ fn junction_water(word: u32) -> f32 {
 }
 // #endif
 
-@fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn world_colour(in: VertexOutput) -> vec4<f32> {
     let dx = dpdx(in.uv);
     let dy = dpdy(in.uv);
     let dx2 = dpdx(in.uv2);

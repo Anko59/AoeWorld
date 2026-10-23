@@ -80,6 +80,7 @@ pub struct AppState {
     /// Secret for `POST /match`; without it match hosting is refused.
     match_admin_token: Option<Arc<str>>,
     tick_stats: Arc<gameplay_match::TickStats>,
+    skirmish: Arc<gameplay_match::Skirmish>,
 }
 
 impl AppState {
@@ -112,6 +113,7 @@ impl AppState {
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
             match_admin_token: Config::match_admin_token_from_env().map(Into::into),
             tick_stats: Arc::default(),
+            skirmish: Arc::new(gameplay_match::Skirmish::from_env(config.bind.port())),
         })
     }
 
@@ -195,8 +197,7 @@ struct Health {
 #[derive(Serialize)]
 struct NavigationCacheHealth {
     entries: usize,
-    /// Logical cached-outcome bytes; allocator and BTreeMap overhead is not
-    /// included, so this is an accounting budget rather than an RSS cap.
+    /// Logical cached-outcome bytes (no allocator or BTreeMap overhead): a budget, not RSS.
     retained_bytes: usize,
     /// Logical cached-outcome budget rather than a hard process-memory cap.
     limit_bytes: usize,

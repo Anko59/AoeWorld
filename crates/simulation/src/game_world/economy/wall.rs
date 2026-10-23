@@ -49,7 +49,7 @@ impl GameWorld {
         let builders = self.validate_builders(player, builders)?;
         let tiles = line_tiles(from, to);
         if tiles.len() > MAX_WALL_SEGMENTS {
-            return Err(EconomyError::Capacity);
+            return Err(EconomyError::OrderTooLarge);
         }
         let kind = BuildingKind::PalisadeWall;
         let cost = self.check_buildable(player, kind, tiles.len() as u32)?;

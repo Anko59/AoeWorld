@@ -46,7 +46,7 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
             kind: building_kind(building),
             id: building.id,
             position: super::super::village::building_center(building),
-            moving: false,
+            visual: aoe_rendering::SceneUnitVisual::new(false),
             facing: 0,
             selected: false,
             elevation_meters: 0.0,
@@ -197,6 +197,7 @@ pub(in super::super) fn units(
     scene: &PreparedScene,
 ) -> Vec<aoe_rendering::SceneUnit> {
     let player = super::super::village::owner(client);
+    let colours = crate::unit_visuals::outline_palette(player, client.team_colour);
     let mut units = client
         .units
         .values()
@@ -211,8 +212,14 @@ pub(in super::super) fn units(
             let position = client.presentation.position(*unit);
             let mut kind = worker_kind(unit);
             let mut facing = unit.facing;
-            if unit.kind != aoe_protocol::UnitKind::Villager
+            let animal = unit
+                .hunt_target
+                .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
+            if crate::unit_visuals::walks_as_villager(unit, animal) {
+                kind = aoe_rendering::SceneUnitKind::Villager;
+            } else if unit.kind != aoe_protocol::UnitKind::Villager
                 || (unit.task == aoe_protocol::UnitTask::Fishing && !unit.moving)
+                || (unit.task == aoe_protocol::UnitTask::Farming && !unit.moving)
                 || unit.hp == 0
                 || matches!(
                     unit.task,
@@ -221,9 +228,6 @@ pub(in super::super) fn units(
                 || (unit.task == aoe_protocol::UnitTask::Attacking && !unit.moving)
                 || unit.hunt_target.is_some()
             {
-                let animal = unit
-                    .hunt_target
-                    .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
                 let pose = crate::unit_visuals::lifecycle_pose(
                     crate::unit_visuals::unit_pose(unit, animal),
                     unit.death_tick,
@@ -244,7 +248,10 @@ pub(in super::super) fn units(
                 kind,
                 id: unit.id,
                 position,
-                moving: unit.moving || position != unit.position.as_tiles(),
+                visual: aoe_rendering::SceneUnitVisual::new(
+                    unit.moving || position != unit.position.as_tiles(),
+                )
+                .with_outline((unit.hp > 0).then_some(colours[usize::from(unit.player.0) % 8])),
                 facing,
                 selected: unit.hp > 0 && client.selected.units.contains(&unit.id),
                 elevation_meters: scene
@@ -265,7 +272,12 @@ pub(in super::super) fn units(
             kind: aoe_rendering::SceneUnitKind::actor(pose as u8),
             id: animal.id,
             position,
-            moving: animal.moving,
+            visual: aoe_rendering::SceneUnitVisual::new(animal.moving).with_outline(
+                animal
+                    .owner
+                    .filter(|_| animal.hp > 0)
+                    .map(|owner| colours[usize::from(owner.0) % 8]),
+            ),
             facing: crate::unit_visuals::packed_frame(
                 pose,
                 animal.facing,
@@ -302,7 +314,7 @@ pub(in super::super) fn units(
             },
             id: building.id,
             position,
-            moving: false,
+            visual: aoe_rendering::SceneUnitVisual::new(false),
             facing: if building.progress_permille < 1000 {
                 (u32::from(building.progress_permille) * 3 / 1000) as u8
             } else if building.kind == aoe_protocol::BuildingKind::PalisadeWall {
@@ -354,7 +366,7 @@ pub(in super::super) fn units(
             ) as u8),
             id: building.id,
             position,
-            moving: false,
+            visual: aoe_rendering::SceneUnitVisual::new(false),
             facing: 0,
             selected: false,
             elevation_meters: scene
@@ -407,9 +419,7 @@ fn worker_kind(unit: &aoe_protocol::GameplayUnitState) -> aoe_rendering::SceneUn
     }
     match (unit.task, unit.gathering, unit.carried) {
         (UnitTask::Fishing, _, _) if !unit.moving => Art::VillagerFishing,
-        // The catalog has no farmer art: farming draws the foraging pose.
         (UnitTask::Building, _, _) if !unit.moving => Art::VillagerBuilding,
-        (UnitTask::Farming, _, _) => Art::VillagerForaging,
         (UnitTask::Gathering, Some(kind), _) => match kind {
             ResourceKind::Food => Art::VillagerForaging,
             ResourceKind::Wood => Art::VillagerChopping,

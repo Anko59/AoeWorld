@@ -78,7 +78,9 @@ test("rubble survives camera resubscription until its original game tick expiry"
     0,
     0,
     ...darkAgeState.slice(0, 1), // Observed age, from the codec-pinned Age fragment.
-    ...townCenterState.slice(-1), // Authoritative closed gate flag.
+    // Current codec tail: closed gate and absent rally point. Omitting the
+    // rally field consumes the removal count and makes the whole Tick invalid.
+    ...townCenterState.slice(-2),
   ];
   send(1, [1, ...house], [0]);
   await expect

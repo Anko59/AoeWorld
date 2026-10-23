@@ -35,10 +35,26 @@ impl GameWorld {
         sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
         probe: &mut impl FnMut(TickPhase),
     ) -> Vec<GameUnit> {
+        let changed = self.advance_phases(sink, probe);
+        // Every test tick checks that the route scheduler's counters equal
+        // a recount: a drifted counter can block a player's routes for good.
+        #[cfg(test)]
+        if let Some(error) = self.route_accounting_error() {
+            panic!("{error}");
+        }
+        changed
+    }
+
+    fn advance_phases(
+        &mut self,
+        sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
+        probe: &mut impl FnMut(TickPhase),
+    ) -> Vec<GameUnit> {
         // A consumer has one tick to drain these bounded changes. Keeping an
         // undrained history would grow storage without a transport obligation.
         self.economy.depletions.clear();
         let mut changed = self.advance_movement();
+        self.advance_spacing(&mut changed);
         probe(TickPhase::Movement);
         self.advance_wildlife(&mut changed);
         probe(TickPhase::Wildlife);
@@ -48,7 +64,7 @@ impl GameWorld {
             && self.economy.buildings.is_empty()
             && self.wildlife.is_idle()
         {
-            self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
+            self.refill_route_budgets();
             if !changed.is_empty() {
                 self.remember_visible_buildings();
             }
@@ -66,7 +82,7 @@ impl GameWorld {
         probe(TickPhase::ResearchTraining);
         self.remember_visible_buildings();
         probe(TickPhase::BuildingMemory);
-        self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
+        self.refill_route_budgets();
         let collected = self.collect_changed(changed);
         probe(TickPhase::Changed);
         collected

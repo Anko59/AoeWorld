@@ -1,4 +1,4 @@
-//! The fan-out sends every session exactly the bytes it always did.
+//! Pin the current deterministic state stream delivered to every session.
 use super::scenario::{SEATS, SessionLog, run};
 use aoe_core::PlayerId;
 use aoe_protocol::{FogState, GameplayServerMessage, encode_gameplay_server};
@@ -38,19 +38,16 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
         .collect()
 }
 
-/// Computed with the per-session fan-out before it was rebuilt; regenerate from
-/// the printed line only when the wire output changes on purpose.
-/// Sessions 1 and 3 were re-pinned when #553 gave every match village its own
-/// starting kit: their villages' animals now spawn at other tiles and owners.
-/// Byte-identical to unmodified origin/dev, and to the previous pin when
-/// starting_kit.rs and start_search.rs are taken from before #553.
+/// Current per-session wire digests. The optional rally-point field adds one
+/// byte to each building observation, including None. These pins are regenerated
+/// for that deliberate wire change; message counts and sight rules stay pinned.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 4780852846789625595),
-    (409, 17207219187486702634),
-    (51, 9022699601399011410),
-    (168, 954570145533629443),
-    (170, 9229010762936698779),
-    (407, 1662405826965071658),
+    (407, 13079712425393864257),
+    (409, 2188909878759062395),
+    (51, 17104482913462763068),
+    (168, 9892112248539535877),
+    (170, 707842460394309217),
+    (407, 14298925848245696670),
 ];
 
 #[tokio::test(flavor = "multi_thread")]

@@ -1,10 +1,9 @@
-//! Pins the replay hashes of a small, fixed scenario with movers, gathering,
-//! construction and short routes, so movement and terrain-cache changes prove
-//! they are behaviour-preserving. The values were computed before the chunk
-//! cache and the hierarchical planner existed, with `perf-scale --players 4
-//! --units-per-player 80 --side-tiles 2048 --fight-size 4 --skip-attacks
-//! --ticks 300 --fog-off-ticks 0 --hash-every 100 --server-ticks 0`
-//! (revision 7867e9a3).
+//! Current-output replay pins for a fixed scenario with movers, gathering,
+//! construction and short routes. Cache and index refactors preserve these;
+//! intentional gameplay changes regenerate them after behaviour tests pass.
+//! Capture with `perf-scale --players 4 --units-per-player 80 --side-tiles 2048
+//! --fight-size 4 --skip-attacks --ticks 300 --fog-off-ticks 0 --hash-every 100
+//! --server-ticks 0`.
 use super::*;
 
 fn smoke_options(out: PathBuf) -> Options {
@@ -73,18 +72,31 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
     assert_eq!(run.json()["tick_budget_ms"], run.budget_ms);
 }
 
+/// Re-pinned when route searches became a per-player fair pass run before
+/// units move (see `route_scheduler`): legs are found on different ticks.
+/// Re-pinned again when gatherers began to step up against their node and
+/// animals to move inside their tile on map terrain. The merge with the
+/// seeded mainland placement and the route planners surviving ground changes
+/// moved them once more; the values are the combined tree's.
+/// Unit spacing (distinct destination and work slots, idle separation,
+/// yielding followers) is a further intended cause of the values below, as is facing the work target on working ticks.
+/// Route throughput moved them again: orders get a fast attempt from their
+/// own per-tick budget (routes start on the order's tick), sealed destinations
+/// are proven at once, and the fast budget and flags are hashed state; near
+/// and far searches got their own slots, and the fast attempt grew to 16,384. Rally points add optional state to live and
+/// remembered buildings, which the state hash includes.
 const PINNED_HASHES: [(u64, &str); 3] = [
     (
         100,
-        "9a599565da6e9d8f178925258a38bd2f162d76229d07dd765aa38ab688264914",
+        "0dab9280d7dd086ec6fc63a76f809291702222a299852d463abc7ec4ace11d27",
     ),
     (
         200,
-        "29c46e614a9634ad4247fa4857d083c7e0a4b051ed22a1d43bf1b6632500024a",
+        "a11d3585343b4f57f88a9a57cb6e67f49b49c6e4dee91bd09d87fbadb804e7ee",
     ),
     (
         300,
-        "84c4ac2e45f1da8c078b1923982d262a9e253bae8c1c845900335043a8d403cb",
+        "2c4c8394eba65ff5d8247899f0e293cd7500ba5c31ac13b51eedc2ba850c1e76",
     ),
 ];
 

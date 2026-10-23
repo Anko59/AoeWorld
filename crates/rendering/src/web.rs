@@ -13,6 +13,10 @@ pub(crate) use instance_buffer::surface_instance;
 use instance_buffer::{InstanceBuffer, required_capacity};
 #[path = "web/draw.rs"]
 mod draw;
+#[path = "web/occlusion.rs"]
+mod occlusion;
+#[path = "web/submit.rs"]
+mod submit;
 use draw::draw_ranges;
 
 #[cfg(test)]
@@ -30,11 +34,22 @@ pub(crate) struct Sprite {
     pub(crate) depths: [f32; 4],
     pub(crate) terrain_blend: [[f32; 4]; 2],
     /// Primary, secondary, tertiary atlas layers. Surface w stores appearance;
-    /// quad w stores NEAREST_TERRAIN_QUAD or zero for filtered object sampling.
+    /// Quad w stores sampling/selection tags and occluder/unit-contour bits.
     pub(crate) pages: [u32; 4],
 }
 impl Sprite {
     pub(crate) const NEAREST_TERRAIN_QUAD: u32 = 1;
+    pub(crate) const OCCLUDER: u32 = 4;
+    pub(crate) const UNIT_CONTOUR: u32 = 8;
+
+    pub(crate) fn with_unit_contour(mut self, colour: Option<[u8; 3]>) -> Self {
+        if let Some(colour) = colour {
+            self.pages[3] |= Self::UNIT_CONTOUR;
+            // Object quads leave terrain-blend words free; keep Sprite112 intact.
+            self.terrain_blend[0][..3].copy_from_slice(&colour.map(|c| f32::from(c) / 255.0));
+        }
+        self
+    }
 }
 
 pub struct Renderer {
@@ -45,6 +60,9 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     pub(crate) pipeline: wgpu::RenderPipeline,
     mixed_pipeline: Option<wgpu::RenderPipeline>,
+    mask: occlusion::Mask,
+    occlusion: Option<occlusion::Contour>,
+    has_occlusion: bool,
     draws: Vec<(std::ops::Range<u32>, bool)>,
     pub(crate) instances: InstanceBuffer,
     pub(crate) _atlas: wgpu::Texture,
@@ -197,6 +215,7 @@ impl Renderer {
             &sampler,
         );
         let depth = create_depth_texture(&device, width, height);
+        let mask = occlusion::Mask::new(&device, width, height);
         Ok(Self {
             adapter_label,
             surface,
@@ -205,6 +224,9 @@ impl Renderer {
             config,
             pipeline,
             mixed_pipeline: None,
+            mask,
+            occlusion: None,
+            has_occlusion: false,
             draws: Vec::new(),
             instances,
             _atlas: atlas,
@@ -225,6 +247,11 @@ impl Renderer {
         self.surface.configure(&self.device, &self.config);
         self.depth.destroy();
         self.depth = create_depth_texture(&self.device, width, height);
+        self.mask.texture.destroy();
+        self.mask = occlusion::Mask::new(&self.device, width, height);
+        if let Some(contour) = &mut self.occlusion {
+            contour.rebind(&self.device, &self.mask.view);
+        }
     }
 
     pub fn render(
@@ -275,135 +302,6 @@ impl Renderer {
         self.render_world_layers(&[], sprites, clear)
     }
 
-    pub(crate) fn render_world_layers(
-        &mut self,
-        surfaces: &[ProjectedSurfaceTriangle],
-        sprites: &[Sprite],
-        clear: [f64; 4],
-    ) -> Result<Counters, String> {
-        let required = required_capacity(surfaces, sprites)?;
-        self.instances.ensure_capacity(
-            required,
-            &self.device,
-            &self.pipeline.get_bind_group_layout(0),
-        )?;
-        let mut instances = Vec::with_capacity(required);
-        let width = self.config.width.max(1) as f64;
-        let height = self.config.height.max(1) as f64;
-        for triangle in surfaces {
-            instances.push(surface_instance(triangle, [width, height], 0.0));
-        }
-        instances.extend_from_slice(sprites);
-        normalize_depths(&mut instances);
-        self.draws = draw_ranges(&instances);
-        if self.mixed_pipeline.is_none() && self.draws.iter().any(|(_, mixed)| *mixed) {
-            self.mixed_pipeline = Some(draw::pipeline(
-                &self.device,
-                &self.pipeline.get_bind_group_layout(0),
-                self.config.format,
-                true,
-            ));
-        }
-        self.instances.write(&self.queue, &instances);
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Ok(Counters {
-                    did_present: false,
-                    visible: sprites.len(),
-                    draw_calls: 0,
-                    gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 7 + usize::from(self.mixed_pipeline.is_some()),
-                    atlas_pages: self._atlas.size().depth_or_array_layers as usize,
-                    atlas_uploads: 1,
-                    atlas_bytes: self._atlas.width() as usize
-                        * self._atlas.height() as usize
-                        * self._atlas.size().depth_or_array_layers as usize
-                        * 4,
-                });
-            }
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface.configure(&self.device, &self.config);
-                return Ok(Counters {
-                    did_present: false,
-                    visible: sprites.len(),
-                    draw_calls: 0,
-                    gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 7 + usize::from(self.mixed_pipeline.is_some()),
-                    atlas_pages: self._atlas.size().depth_or_array_layers as usize,
-                    atlas_uploads: 1,
-                    atlas_bytes: self._atlas.width() as usize
-                        * self._atlas.height() as usize
-                        * self._atlas.size().depth_or_array_layers as usize
-                        * 4,
-                });
-            }
-            wgpu::CurrentSurfaceTexture::Lost => {
-                return Err("WebGPU surface lost; reload to restore it".to_owned());
-            }
-            wgpu::CurrentSurfaceTexture::Validation => {
-                return Err("WebGPU surface validation failed".to_owned());
-            }
-        };
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let depth_view = self
-            .depth
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("sprites"),
-            });
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("world layers"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: clear[0],
-                            g: clear[1],
-                            b: clear[2],
-                            a: clear[3],
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
-            });
-            self.draw_on(&mut pass, instances.len() as u32);
-        }
-        self.queue.submit(Some(encoder.finish()));
-        self.queue.present(frame);
-        Ok(Counters {
-            did_present: true,
-            visible: sprites.len(),
-            draw_calls: self.draws.len(),
-            gpu_buffer_bytes: self.instances.bytes(),
-            persistent_gpu_resources: 7 + usize::from(self.mixed_pipeline.is_some()),
-            atlas_pages: self._atlas.size().depth_or_array_layers as usize,
-            atlas_uploads: 1,
-            atlas_bytes: self._atlas.width() as usize
-                * self._atlas.height() as usize
-                * self._atlas.size().depth_or_array_layers as usize
-                * 4,
-        })
-    }
     pub(crate) fn draw_on(&self, pass: &mut wgpu::RenderPass<'_>, count: u32) {
         for (range, mixed) in &self.draws {
             assert!(range.end <= count, "draw exceeds instances");
@@ -419,9 +317,16 @@ impl Renderer {
     }
 }
 
-pub(crate) fn normalize_depths(instances: &mut [Sprite]) {
+pub(crate) fn normalize_depths(instances: &mut [Sprite]) -> bool {
+    let (mut units, mut occluders) = (false, false);
     let mut range: Option<(f32, f32)> = None;
     for sprite in instances.iter() {
+        if sprite.color[3] >= 0.0 {
+            // H || (U && O) == (U || H) && (O || H): retain the existing
+            // two flag checks, including for units, with no hover-only scan.
+            units |= sprite.pages[3] & (Sprite::UNIT_CONTOUR | 48) != 0;
+            occluders |= sprite.pages[3] & (Sprite::OCCLUDER | 48) != 0;
+        }
         for depth in sprite.depths[..3].iter().copied() {
             if depth.is_finite() {
                 range = Some(match range {
@@ -456,6 +361,7 @@ pub(crate) fn normalize_depths(instances: &mut [Sprite]) {
             };
         }
     }
+    units && occluders
 }
 
 fn create_depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {

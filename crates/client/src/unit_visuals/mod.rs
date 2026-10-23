@@ -1,6 +1,7 @@
 //! Pure choices from authoritative state; no client damage or lifetime timers.
 pub(crate) use aoe_assets::catalog::units::Pose;
 use aoe_assets::catalog::units::SPRITES;
+use aoe_core::FIXED_SUBUNITS_PER_TILE;
 use aoe_protocol::{AnimalKind, AnimalState, AnimalTask, GameplayUnitState, UnitKind, UnitTask};
 
 pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> Pose {
@@ -28,6 +29,9 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     if u.task == UnitTask::Fishing && !u.moving {
         return FisherWork;
     }
+    if u.task == UnitTask::Farming && !u.moving && u.hp > 0 {
+        return FarmerWork;
+    }
     if u.hp == 0 {
         return match u.kind {
             UnitKind::Militia => MilitiaDie,
@@ -52,26 +56,29 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     if u.hunt_target.is_some() && u.task == UnitTask::Returning {
         return HunterCarry;
     }
+    let sheep = animal.is_some_and(|a| a.kind == AnimalKind::Sheep);
     if u.hunt_target.is_some() && u.task == UnitTask::Moving {
-        return if animal.is_some_and(|a| a.kind == AnimalKind::Sheep) {
-            ShepherdWalk
-        } else {
-            HunterWalk
-        };
+        return if sheep { ShepherdWalk } else { HunterWalk };
     }
     if u.hunt_target.is_some() && u.task == UnitTask::Gathering {
         return if !u.moving {
             Butcher
-        } else if animal.is_some_and(|a| a.kind == AnimalKind::Sheep) {
+        } else if sheep {
             ShepherdWalk
         } else {
             HunterWalk
         };
     }
+    let carcass = animal.is_some_and(|a| a.hp == 0);
+    // The work pose plays only while the hunter actually strikes or carves:
+    // a unit waiting for its route or still out of reach stands.
+    let working = !u.planning && (carcass || in_reach(u, animal));
     if u.task == UnitTask::Shepherding {
         return if u.moving {
             ShepherdWalk
-        } else if animal.is_some_and(|a| a.hp == 0) {
+        } else if !working {
+            ShepherdStand
+        } else if carcass {
             Butcher
         } else {
             ShepherdWork
@@ -80,13 +87,41 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     if u.task == UnitTask::Hunting {
         return if u.moving {
             HunterWalk
-        } else if animal.is_some_and(|a| a.hp == 0) {
+        } else if !working {
+            HunterStand
+        } else if carcass {
             Butcher
         } else {
             HunterAttack
         };
     }
-    VillagerAttack
+    if u.task == UnitTask::Attacking || u.hunt_target.is_none() {
+        VillagerAttack
+    } else if sheep {
+        ShepherdStand
+    } else {
+        HunterStand
+    }
+}
+
+/// A shepherd walking to its sheep (or to a sheep carcass) is drawn as an
+/// ordinary walking villager; the herding walk is for leading a living sheep.
+pub(crate) fn walks_as_villager(u: &GameplayUnitState, animal: Option<&AnimalState>) -> bool {
+    u.hunt_target.is_some()
+        && u.task == UnitTask::Moving
+        && animal.is_some_and(|a| a.kind == AnimalKind::Sheep)
+}
+
+/// The simulation's strike reach (`hunter_step`): one tile for a sheep, four
+/// for bow hunting.
+fn in_reach(u: &GameplayUnitState, animal: Option<&AnimalState>) -> bool {
+    animal.is_some_and(|a| {
+        let reach =
+            if a.kind == AnimalKind::Sheep { 1 } else { 4 } * i64::from(FIXED_SUBUNITS_PER_TILE);
+        let dx = i64::from(u.position.x) - i64::from(a.position.x);
+        let dy = i64::from(u.position.y) - i64::from(a.position.y);
+        dx * dx + dy * dy <= reach * reach
+    })
 }
 
 fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
@@ -266,4 +301,11 @@ pub(crate) fn actor_hit(bounds: [f64; 4], foot: [f64; 2], point: [f64; 2], zoom:
         && point[1] >= bounds[1]
         && point[1] <= bounds[3])
         || dx * dx + dy * dy <= (5.0 * zoom).powi(2)
+}
+
+/// Resolve the loaded own colour and player ownership once per scene.
+pub(crate) fn outline_palette(owner: aoe_core::PlayerId, team: [u8; 3]) -> [u8; 8] {
+    let colours = aoe_rendering::SceneUnitVisual::COLOURS;
+    let start = colours.iter().position(|c| *c == team).unwrap_or(0);
+    std::array::from_fn(|player| ((start + player + 8 - usize::from(owner.0) % 8) % 8) as u8)
 }

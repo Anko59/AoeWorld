@@ -12,6 +12,24 @@ const AI_ORDER_BURST: f64 = 200.0;
 const AI_PENDING_COMMANDS: usize = 256;
 
 impl GameplayService {
+    pub async fn queue_set_rally(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        target: aoe_protocol::RallyTarget,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::SetRally {
+                building_id,
+                target,
+            },
+        )
+        .await;
+    }
+
     pub async fn queue_stop(&self, session_id: u64, sequence: u64, entity_id: EntityId) {
         self.queue_command(session_id, sequence, PendingAction::Stop { entity_id })
             .await;
@@ -307,6 +325,10 @@ pub(super) fn apply(
     action: PendingAction,
 ) -> CommandResult {
     let result = match action {
+        PendingAction::SetRally {
+            building_id,
+            target,
+        } => world.issue_set_rally(player, building_id, super::economy::native_rally(target)),
         PendingAction::Stop { entity_id } => world.issue_stop(player, entity_id),
         PendingAction::Hunt {
             unit_ids,
@@ -442,7 +464,8 @@ pub(super) fn apply(
         Err(E::RequiresFeudalAge) => CommandResult::RejectedRequiresFeudalAge,
         Err(E::NoMarket) => CommandResult::RejectedNoMarket,
         Err(E::TechRequirementMissing) => CommandResult::RejectedTechRequirement,
-        Err(E::Capacity) => CommandResult::RejectedQueueFull,
+        Err(E::Capacity) => CommandResult::RejectedWorldLimit,
+        Err(E::OrderTooLarge) => CommandResult::RejectedOrderTooLarge,
         Err(E::NoAttackPosition | E::Movement(W::Unreachable)) => {
             CommandResult::RejectedUnreachable
         }

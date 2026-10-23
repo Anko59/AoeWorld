@@ -52,7 +52,9 @@ class Surveyor:
             for node in world.resources(kind):
                 self.nodes[node.id] = node
         for animal in world.animals():
-            self.animals[animal.id] = animal
+            # Animals move now (deer flee the scout, sheep follow it): the kit
+            # is where each one stood when first seen, not where it ran to.
+            self.animals.setdefault(animal.id, animal)
 
     def near(self, items):
         return [i for i in items if math.dist(i.tile, self.home) <= KIT_RADIUS]

@@ -46,6 +46,12 @@ impl GameWorld {
         hash.update(&(self.active_planner_count as u64).to_le_bytes());
         hash.update(&(self.active_route_searches as u64).to_le_bytes());
         hash.update(&self.planning_budget.to_le_bytes());
+        hash.update(&self.fast_route_budget.to_le_bytes());
+        hash.update(&(self.fast_route_spent.len() as u64).to_le_bytes());
+        for (player, spent) in &self.fast_route_spent {
+            hash.update(&player.0.to_le_bytes());
+            hash.update(&spent.to_le_bytes());
+        }
         self.terrain.update_mutable_state_hash(&mut hash);
         hash.update(&self.next_entity_id.to_le_bytes());
         self.economy.update_hash(&mut hash);
@@ -111,6 +117,7 @@ impl GameWorld {
                 hash.update(&tile.x.to_le_bytes());
                 hash.update(&tile.y.to_le_bytes());
             }
+            hash.update(&[u8::from(unit.fast_route_tried)]);
             if let Some(planner) = &unit.planner {
                 hash.update(&[1]);
                 planner.update_hash(&mut hash);

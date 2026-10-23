@@ -13,7 +13,7 @@ mod terrain_overlay_state;
 
 #[path = "start_search.rs"]
 mod start_search;
-pub use start_search::StartSearchResult;
+pub use start_search::{LandMasses, StartSearchResult};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UniformGrass {
@@ -87,6 +87,18 @@ impl Terrain {
             generator: package.generator_with_page_provider(provider)?,
             overlay: ResourceOverlay::default(),
         })
+    }
+
+    /// Conservative: `true` proves that every tile within `radius` of `tile` is
+    /// lake or ocean, from coarse hydrology alone (no chunk composition, a few
+    /// microseconds). `false` proves nothing.
+    pub fn open_water_certain(&self, tile: TileCoord, radius: i32) -> bool {
+        match self {
+            Self::Uniform(_) => false,
+            Self::Map { generator, .. } => generator
+                .open_water_certain_near(tile, radius, &|| false)
+                .unwrap_or(false),
+        }
     }
 
     pub fn passable(&self, tile: TileCoord, config: WorldConfig) -> bool {

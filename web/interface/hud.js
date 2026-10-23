@@ -1,9 +1,9 @@
 import { initBuildings, buildingKinds, buildingNames } from '/interface/buildings.js';
+import { initArt, icon as packIcon, entityIcon, setEntityIcon } from '/interface/ui-art.js';
 import { updateDetails } from '/interface/details.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
-const icon = name => `<svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#${name}"></use></svg>`;
-const symbol = kind => ({ Scout:'scout', Villager:'villager', TownCenter:'towncenter' })[kind] ?? 'villager';
+const icon = name => packIcon('resources',name,name);
 const byId = id => document.getElementById(id);
 const text = (id,value) => { const node = byId(id); const next = String(value); if (node && node.textContent !== next) node.textContent = next; };
 const show = (id,visible) => { byId(id).hidden = !visible; };
@@ -11,6 +11,9 @@ const attribute = (node,name,value) => { if (node.getAttribute(name) !== value) 
 
 export function initInterface() {
   initBuildings();
+  byId('move-units').querySelector('.icon').outerHTML=packIcon('commands','move','move');
+  byId('stop-units').querySelector('.icon').outerHTML=packIcon('commands','stop','stop');
+  initArt();
   const scene = () => byId('scene');
   const menu = byId('game-menu');
   const grid = byId('command-grid');
@@ -34,7 +37,7 @@ export function initInterface() {
     Object.assign(box.style,{left:`${Math.min(drag[0],event.clientX)}px`,top:`${Math.min(drag[1],event.clientY)}px`,width:`${width}px`,height:`${height}px`});
   });
   for (const event of ['pointerup','pointercancel','lostpointercapture']) document.addEventListener(event,()=>{ drag=null;box.hidden=true; });
-  let previousSelection='', previousQueue='', previousLoads='';
+  let previousSelection='', previousLoads='', previousHealth='';
   const update = state => {
     ['wood','food','gold','stone'].forEach((resource,index) => {
       text(`stockpile-${resource}`,state.stockpile[index]); text(`workers-${resource}`,state.workers[index]);
@@ -58,9 +61,11 @@ export function initInterface() {
     text('command-context',count>1?`${count} units`:first?.name ?? 'Select a unit');
     text('command-hint',building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: hunt, attack, gather or move':first.kind==='FishingShip'?'Right-click: fish or move':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms'].includes(first.kind)?'Right-click: attack or move':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag to select a group');
     show('observer-label',state.observer);
+    show('selection-health',count===1);
     show('unit-hp',count===1 && !building); show('unit-combat',count===1 && !building);
     if (first) {
       text('unit-hp',`${first.hp} / ${first.maxHp} HP`);
+      byId('selection-health').value=first.hp; byId('selection-health').max=Math.max(1,first.maxHp);
       text('unit-combat',`Attack ${first.attack} · Armour ${first.melee} / ${first.pierce} · Range ${first.range}`);
       const groupName=selected.every(unit=>unit.kind===first.kind)?`${first.name}s`:'units';
       text('selection-name',count>1?`${count} ${groupName} selected`:first.name);
@@ -68,26 +73,17 @@ export function initInterface() {
       text('selection-load',['Sheep','Deer','Boar','Wolf'].includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/${first.capacity} ${first.resource}`:building?'Resource drop-off · supports 5 population':'');
       const signature=selected.map(unit=>`${unit.id}:${unit.kind}`).join(',');
       if (signature!==previousSelection) {
-        byId('selection-portrait').innerHTML=icon(symbol(first.kind));
-        byId('selected-icons').innerHTML=count>1?selected.map(unit=>`<span class="unit-token" title="${unit.name}">${icon(symbol(unit.kind))}</span>`).join(''):'';
+        setEntityIcon(byId('selection-portrait'),first.kind);
+        byId('selected-icons').innerHTML=count>1?selected.map(unit=>`<span class="unit-token" title="${unit.name}">${entityIcon(unit.kind)}</span>`).join(''):'';
         previousSelection=signature;
       }
     } else previousSelection='';
-    const queue=state.queue;
-    show('training',building && queue.length>0);
-    if (queue.length) {
-      const percent=Math.floor(queue[0][0]/Math.max(1,queue[0][1])*100);
-      byId('training-progress').value=percent;
-      text('training-label',`Training Villager · ${percent}%`);
-      const signature=String(queue.length);
-      if (signature!==previousQueue) {
-        byId('training-queue').innerHTML=queue.map(()=>`<span class="unit-token" title="Villager queued">${icon('villager')}</span>`).join('');previousQueue=signature;
-      }
-    } else previousQueue='';
+    window.aoeBuildings?.queue(state.queue,building);
     attribute(scene(),'data-actors',JSON.stringify(state.actors));
     attribute(scene(),'data-resource-targets',JSON.stringify(state.resources));
     attribute(scene(),'data-village-art',state.art?'native':'markers');
-    byId('unit-health-bars').innerHTML=state.actors.filter(a=>a.selected && a.hp>0 && !buildingKinds.includes(a.kind)).map(a=>`<span class="unit-hp-bar" style="left:${a.x-18}px;top:${a.head}px"><span style="width:${100*a.hp/a.maxHp}%"></span></span>`).join('');
+    const health=state.actors.filter(a=>a.selected && a.hp>0 && !buildingKinds.includes(a.kind)).map(a=>`<span class="unit-hp-bar" style="left:${a.x-18}px;top:${a.head}px"><span style="width:${100*a.hp/a.maxHp}%"></span></span>`).join('');
+    if (health!==previousHealth) { byId('unit-health-bars').innerHTML=health; previousHealth=health; }
     const loads=state.actors.filter(actor=>actor.hp>0 && actor.load && actor.x>0 && actor.y>54 && actor.y<innerHeight-208);
     const signature=JSON.stringify(loads);
     if (signature!==previousLoads) {
@@ -105,7 +101,7 @@ export function initInterface() {
       state.actors.push({id,kind:kinds[kind],x,y,selected:!!selected,hp,maxHp,head,task:tasks[task],load:kind===1 && amount?[resources[resource],amount]:null});
       if (selected) state.selected.push({id,kind:kinds[kind],name:names[kind],task:tasks[task],resource:resources[resource],amount,hp,maxHp,attack,melee,pierce,capacity,range});
     }
-    for (let index=0;index<values[14];index++,at+=2) state.queue.push([values[at],values[at+1]]);
+    for (let index=0;index<values[14];index++,at+=3) state.queue.push([values[at],values[at+1],values[at+2]]);
     for (let index=0;index<values[15];index++,at+=4) state.resources.push({kind:values[at],x:values[at+1],y:values[at+2],distance:values[at+3]});
     update(state);
     window.aoeBuildings?.refresh();

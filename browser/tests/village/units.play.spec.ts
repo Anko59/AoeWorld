@@ -22,10 +22,14 @@ test("an owned sheep stops herding when Stop is pressed", async ({
   page,
   request,
 }) => {
+  test.setTimeout(120_000);
   expect((await request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page);
   await page.goto("/?play=1#zoom=.45");
-  await expect(page.locator("#connection")).toHaveText("connected");
+  // The native pack loads before the socket connects, as in the Militia test.
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 60_000,
+  });
   await centerVillage(page);
   await freshHud(page);
   const neutral = (await actors(page)).find(
@@ -65,6 +69,27 @@ test("an owned sheep stops herding when Stop is pressed", async ({
   expect(
     Math.hypot(stopped.x - destination.x, stopped.y - destination.y),
   ).toBeGreaterThan(20);
+});
+
+test("a shepherd counts as a food villager from the order on", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(150_000);
+  expect((await request.post("/maps/reset")).status()).toBe(204);
+  await gameAssets(page);
+  await page.goto("/?play=1#zoom=.45");
+  // The native pack loads before the socket connects, as in the Militia test.
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 60_000,
+  });
+  await centerVillage(page);
+  await freshHud(page);
+  await expect(page.locator("#workers-food")).toHaveText("0");
+  await click(page, "Villager");
+  await click(page, "Sheep", "right");
+  // A shepherd is a food villager before any carcass is worked.
+  await expect(page.locator("#workers-food")).toHaveText("1");
 });
 
 test("private native gameplay captures and prepares the units showcase", async ({

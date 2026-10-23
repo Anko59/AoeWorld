@@ -89,6 +89,10 @@ pub struct Building {
     /// False for a building remembered from earlier, now out of sight.
     pub visible: bool,
     pub queue_length: usize,
+    pub rally_position: Option<(i32, i32)>,
+    pub rally_resource: Option<u64>,
+    pub rally_building: Option<u32>,
+    pub rally_animal: Option<u32>,
     pub researching: Option<Tech>,
     pub idle: bool,
 }
@@ -125,6 +129,22 @@ impl From<aoe_sdk::Building> for Building {
             max_hp: building.state.max_hp,
             visible: building.visible,
             queue_length: building.state.training_queue.len(),
+            rally_position: building.state.rally_point.map(|r| {
+                let t = r.position.tile_floor();
+                (t.x, t.y)
+            }),
+            rally_resource: building.state.rally_point.and_then(|r| match r.target {
+                aoe_sdk::RallyTarget::Resource(id) => Some(id),
+                _ => None,
+            }),
+            rally_building: building.state.rally_point.and_then(|r| match r.target {
+                aoe_sdk::RallyTarget::Building(id) => Some(id.0),
+                _ => None,
+            }),
+            rally_animal: building.state.rally_point.and_then(|r| match r.target {
+                aoe_sdk::RallyTarget::Animal(id) => Some(id.0),
+                _ => None,
+            }),
             researching: building.state.research.map(|r| r.tech.into()),
             idle: building.idle(),
         }

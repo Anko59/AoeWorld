@@ -161,7 +161,9 @@ impl World {
             }
             M::ResourceState(state) if state.subscription_revision == self.subscription => {
                 let amounts = Arc::make_mut(&mut self.amounts);
-                if state.from_revision.is_none() {
+                if state.from_revision.is_none()
+                    && state.snapshot_page.is_none_or(|(offset, _)| offset == 0)
+                {
                     amounts.clear();
                 }
                 for change in state.changes {

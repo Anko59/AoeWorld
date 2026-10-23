@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, readFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -173,21 +173,26 @@ test("gather uses reported screen coordinates", async () => {
 
 // Only the HUD publisher advances this revision, every 250 ms in the client.
 // A camera read can therefore be current while the resource positions are old.
-type GatherSetup = { clamp: boolean; details: string };
+type GatherSetup = { clamp: boolean };
 
 async function gatherPage(page: Page, clamp: boolean) {
-  const details = readFileSync(
-    new URL("../../../web/interface/details.js", import.meta.url),
-  ).toString("base64");
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.setContent(`<body data-start-state="game" style="margin:0">
+  // Serve the fixture at the game's origin: the current HUD imports its icon
+  // module by absolute path, which cannot resolve from a data URL.
+  await page.route("**/gather-fixture", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<body data-start-state="game" style="margin:0">
     <canvas id="scene" width="1280" height="720" data-hud-revision="0"></canvas>
     <div id="minimap" data-camera-x="100" data-camera-y="100" data-zoom="1"
       data-world-width="1000" data-world-height="1000"></div>
     <div id="resource-highlight"></div><div id="minimap-entities"></div><div id="minimap-resources"></div>
-    <div id="selection" data-count="1"></div></body>`);
-  const setup = async ({ clamp, details }: GatherSetup) => {
-    const moduleUrl = `data:text/javascript;base64,${details}`;
+    <div id="selection" data-count="1"></div></body>`,
+    }),
+  );
+  await page.goto("/gather-fixture");
+  const setup = async ({ clamp }: GatherSetup) => {
+    const moduleUrl = "/interface/details.js";
     const { updateDetails } = await import(moduleUrl);
     const publish = (x: number, y: number) =>
       updateDetails(new Float64Array([1, -1, 0, 0, 0, 0, 0, 0, 0, 0, x, y, 2]));
@@ -221,7 +226,7 @@ async function gatherPage(page: Page, clamp: boolean) {
       { once: true },
     );
   };
-  await page.evaluate(setup, { clamp, details });
+  await page.evaluate(setup, { clamp });
 }
 
 const gatherScript = {

@@ -4,6 +4,32 @@ use aoe_protocol::{GameplayUnitState, ResourceKind, UnitKind, UnitTask};
 use aoe_rendering::SceneUnitKind;
 use wasm_bindgen_test::wasm_bindgen_test;
 
+#[wasm_bindgen_test]
+fn contours_follow_the_loaded_team_colour_and_distinguish_visible_enemy_players() {
+    let (blue, red, green) = ([65, 145, 245], [245, 65, 65], [50, 190, 65]);
+    for owner in [0, 3, 7] {
+        let enemy = usize::from((owner + 1) % 8);
+        let colours = crate::unit_visuals::outline_palette(PlayerId(owner), blue);
+        assert_eq!(
+            aoe_rendering::SceneUnitVisual::COLOURS[usize::from(colours[usize::from(owner)])],
+            blue
+        );
+        assert_eq!(
+            aoe_rendering::SceneUnitVisual::COLOURS[usize::from(colours[enemy])],
+            red
+        );
+        let recoloured = crate::unit_visuals::outline_palette(PlayerId(owner), red);
+        assert_eq!(
+            aoe_rendering::SceneUnitVisual::COLOURS[usize::from(recoloured[usize::from(owner)])],
+            red
+        );
+        assert_eq!(
+            aoe_rendering::SceneUnitVisual::COLOURS[usize::from(recoloured[enemy])],
+            green
+        );
+    }
+}
+
 fn villager(task: UnitTask, gathering: Option<ResourceKind>) -> GameplayUnitState {
     GameplayUnitState {
         id: EntityId(1),
@@ -26,11 +52,15 @@ fn villager(task: UnitTask, gathering: Option<ResourceKind>) -> GameplayUnitStat
     }
 }
 
-// The trial lacks a farmer: use foraging; construction uses dat builder 1496.
+// Farmers till with DAT unit 259's own row; construction uses dat builder 1496.
 #[wasm_bindgen_test]
-fn farmers_use_foraging_and_builders_use_the_dat_task_art() {
-    let farmer = villager(UnitTask::Farming, Some(ResourceKind::Food));
-    assert_eq!(worker_kind(&farmer), SceneUnitKind::VillagerForaging);
+fn farmers_and_builders_use_their_own_dat_task_art() {
+    use crate::unit_visuals::{Pose, unit_pose};
+    let mut farmer = villager(UnitTask::Farming, Some(ResourceKind::Food));
+    assert_eq!(unit_pose(&farmer, None), Pose::FarmerWork);
+    assert_ne!(worker_kind(&farmer), SceneUnitKind::VillagerForaging);
+    farmer.moving = true;
+    assert_eq!(worker_kind(&farmer), SceneUnitKind::Villager);
     let builder = villager(UnitTask::Building, None);
     assert_eq!(worker_kind(&builder), SceneUnitKind::VillagerBuilding);
 }
@@ -48,10 +78,11 @@ fn militia_combat_and_hunting_never_use_the_generic_worker_pose() {
     assert_eq!(unit_pose(&u, None), Pose::MilitiaAttack);
     u.kind = UnitKind::Villager;
     assert_eq!(unit_pose(&u, None), Pose::VillagerAttack);
+    // Without its prey in reach a hunter or shepherd stands, never strikes.
     u.task = UnitTask::Hunting;
-    assert_eq!(unit_pose(&u, None), Pose::HunterAttack);
+    assert_eq!(unit_pose(&u, None), Pose::HunterStand);
     u.task = UnitTask::Shepherding;
-    assert_eq!(unit_pose(&u, None), Pose::ShepherdWork);
+    assert_eq!(unit_pose(&u, None), Pose::ShepherdStand);
     u.hunt_target = Some(EntityId(9));
     u.task = UnitTask::Gathering;
     assert_eq!(unit_pose(&u, None), Pose::Butcher);
@@ -157,6 +188,11 @@ fn moving_hunt_jobs_keep_hunter_or_shepherd_walk_even_with_the_moving_task() {
             death_tick: None,
         };
         assert_eq!(unit_pose(&worker, Some(&animal)), expected, "{kind:?}");
+        // Walking to a sheep is an ordinary villager walk, not herding.
+        assert_eq!(
+            crate::unit_visuals::walks_as_villager(&worker, Some(&animal)),
+            kind == AnimalKind::Sheep
+        );
         worker.task = if kind == AnimalKind::Sheep {
             UnitTask::Shepherding
         } else {
@@ -166,4 +202,60 @@ fn moving_hunt_jobs_keep_hunter_or_shepherd_walk_even_with_the_moving_task() {
         worker.task = UnitTask::Moving;
     }
     assert_eq!(unit_pose(&worker, None), Pose::HunterWalk);
+}
+
+#[wasm_bindgen_test]
+fn hunt_work_poses_play_only_in_reach_and_never_while_a_route_is_planned() {
+    use crate::unit_visuals::{Pose, unit_pose};
+    use aoe_core::FIXED_SUBUNITS_PER_TILE as TILE;
+    use aoe_protocol::{AnimalKind, AnimalState, AnimalTask};
+    let animal = |kind, x: i32, hp| AnimalState {
+        id: EntityId(9),
+        kind,
+        owner: Some(PlayerId(0)),
+        hp,
+        position: WorldPosition::new(x, 0),
+        task: AnimalTask::Idle,
+        food_remaining: 100,
+        target: None,
+        facing: 0,
+        moving: false,
+        death_tick: None,
+    };
+    let mut u = villager(UnitTask::Hunting, None);
+    u.hunt_target = Some(EntityId(9));
+    // Bow reach is four tiles: a deer six tiles away is not shot at.
+    assert_eq!(
+        unit_pose(&u, Some(&animal(AnimalKind::Deer, 6 * TILE, 5))),
+        Pose::HunterStand
+    );
+    assert_eq!(
+        unit_pose(&u, Some(&animal(AnimalKind::Deer, 4 * TILE, 5))),
+        Pose::HunterAttack
+    );
+    u.planning = true;
+    assert_eq!(
+        unit_pose(&u, Some(&animal(AnimalKind::Deer, 4 * TILE, 5))),
+        Pose::HunterStand
+    );
+    u.planning = false;
+    // A shepherd kills only beside its sheep, then carves the carcass.
+    u.task = UnitTask::Shepherding;
+    assert_eq!(
+        unit_pose(&u, Some(&animal(AnimalKind::Sheep, 3 * TILE, 7))),
+        Pose::ShepherdStand
+    );
+    assert_eq!(
+        unit_pose(&u, Some(&animal(AnimalKind::Sheep, TILE, 7))),
+        Pose::ShepherdWork
+    );
+    assert_eq!(
+        unit_pose(&u, Some(&animal(AnimalKind::Sheep, TILE, 0))),
+        Pose::Butcher
+    );
+    u.moving = true;
+    assert_eq!(
+        unit_pose(&u, Some(&animal(AnimalKind::Sheep, 3 * TILE, 7))),
+        Pose::ShepherdWalk
+    );
 }

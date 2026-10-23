@@ -38,6 +38,25 @@ impl GameplayService {
         }
     }
 
+    /// Slot occupancy for a match host: AI slots holding a live connection,
+    /// AI slots in all, and whether any human slot holds one.
+    pub(crate) async fn presence(&self) -> (usize, usize, bool) {
+        let ownership = self.ownership.lock().await;
+        let (mut live_ai, mut ai, mut human) = (0, 0, false);
+        for slot in &ownership.slots {
+            let live = slot
+                .lease
+                .is_some_and(|lease| lease.disconnected_at.is_none());
+            if slot.human {
+                human |= live;
+            } else {
+                ai += 1;
+                live_ai += usize::from(live);
+            }
+        }
+        (live_ai, ai, human)
+    }
+
     /// Returns whether a connected controller of a human slot owns this token.
     /// AI slots never authorize server administration.
     pub async fn is_controller(&self, token: ResumeToken) -> bool {

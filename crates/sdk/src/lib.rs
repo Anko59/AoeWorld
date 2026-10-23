@@ -45,8 +45,9 @@ pub use http::Endpoint;
 pub use lobby::{MatchInfo, MatchMap, SlotAssignment, SlotKind, start_match};
 pub use model::{
     Age, Animal, AnimalKind, AnimalTask, Building, BuildingKind, CarriedResource, CommandResult,
-    ConstructionState, Economy, MarketPrices, Projectile, ResourceKind, ResourceNode, Stockpile,
-    Tech, TradeResource, Unit, UnitKind, UnitTask, Visibility, distance_squared,
+    ConstructionState, Economy, MarketPrices, Projectile, RallyPoint, RallyTarget, ResourceKind,
+    ResourceNode, Stockpile, Tech, TradeResource, Unit, UnitKind, UnitTask, Visibility,
+    distance_squared,
 };
 pub use orders::Order;
 pub use world::World;

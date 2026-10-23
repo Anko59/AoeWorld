@@ -177,3 +177,20 @@ fn native_ambient_and_construction_texels_keep_native_geometry() {
         assert_eq!(record.anchor, [-4.0, 8.0]);
     }
 }
+
+#[wasm_bindgen_test]
+fn rally_flag_samples_the_licensed_loop_and_rejects_a_partial_group() {
+    let source = "de/b_misc_waypoint_flag_x1.sld";
+    let manifest = manifest_with(source, 90);
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
+    assert_eq!(
+        building_sprites::rally(&manifest, &mut selected, &mut domains).unwrap(),
+        Some(0..10)
+    );
+    assert_eq!(selected, (0..90).step_by(9).collect::<Vec<_>>());
+    assert_eq!(domains.len(), 10);
+    assert!(
+        building_sprites::rally(&manifest_with(source, 89), &mut Vec::new(), &mut Vec::new())
+            .is_err()
+    );
+}

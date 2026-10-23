@@ -152,27 +152,9 @@ async fn fetch_bounds(hash: [u8; 32]) -> Result<(i16, i16), JsValue> {
     )
 }
 
-// A typed projection avoids retaining a general JSON object tree in the
-// village bundle. Reject the same integer range, identity and order failures.
+// Browser JSON parsing preserves identity, range, order and duplicate guards.
 fn parse_bounds(body: &str, content_hash: &str) -> Result<(i16, i16), JsValue> {
-    if !body.trim_start().starts_with('{') {
-        return Err(JsValue::from_str("invalid map height bounds"));
-    }
-    #[derive(serde::Deserialize)]
-    struct Bounds {
-        content_hash: String,
-        minimum_height_level: i16,
-        maximum_height_level: i16,
-    }
-    let bounds: Bounds =
-        serde_json::from_str(body).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    if bounds.minimum_height_level <= bounds.maximum_height_level
-        && bounds.content_hash == content_hash
-    {
-        Ok((bounds.minimum_height_level, bounds.maximum_height_level))
-    } else {
-        Err(JsValue::from_str("invalid map height bounds"))
-    }
+    crate::game_assets::decode_bounds(body, content_hash)
 }
 
 #[path = "heights/tests.rs"]
