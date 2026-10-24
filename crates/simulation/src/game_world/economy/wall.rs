@@ -64,6 +64,7 @@ impl GameWorld {
             .collect::<Vec<_>>();
         // Validate every segment before placing any, so a refusal changes nothing.
         for rect in &rects {
+            self.validate_explored_footprint(player, *rect)?;
             self.validate_footprint(*rect)?;
         }
         let mut ids = Vec::new();
@@ -107,9 +108,6 @@ impl GameWorld {
                 let _ = self.issue_cancel_construction(player, *id);
             }
             return Err(crate::GameWorldError::Unreachable.into());
-        }
-        for id in &ids {
-            self.update_building_vision(*id);
         }
         self.remember_visible_buildings();
         Ok(ids)

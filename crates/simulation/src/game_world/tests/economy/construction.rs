@@ -49,6 +49,7 @@ fn three_builders_take_base_times_three_over_five() {
 fn builders_walk_to_the_foundation_before_adding_progress() {
     let (mut world, _, _) = village();
     let builder = villager_at(&mut world, 90, 100);
+    fixture::survey(&mut world, PlayerId(0), at(100, 100), 0);
     let id = world
         .issue_build(PlayerId(0), &[builder], BuildingKind::Outpost, at(100, 100))
         .unwrap();
@@ -179,6 +180,7 @@ fn wall_ring(world: &mut GameWorld, builders: &[EntityId]) -> Vec<EntityId> {
 fn palisade_segments_cost_two_wood_each_and_take_six_seconds_per_tile() {
     let (mut world, _, _) = village();
     let builder = villager_at(&mut world, 99, 99);
+    fixture::survey(&mut world, PlayerId(0), at(102, 100), 2);
     let ids = world
         .issue_build_wall(PlayerId(0), &[builder], at(100, 100), at(104, 100))
         .unwrap();
@@ -286,6 +288,7 @@ fn a_wall_makes_the_route_longer_but_not_impossible() {
         let walker = villager_at(&mut world, 98, 100);
         if with_wall {
             let builder = villager_at(&mut world, 99, 94);
+            fixture::survey(&mut world, PlayerId(0), at(100, 100), 5);
             let ids = world
                 .issue_build_wall(PlayerId(0), &[builder], at(100, 95), at(100, 105))
                 .unwrap();

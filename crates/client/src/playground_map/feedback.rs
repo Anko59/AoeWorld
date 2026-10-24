@@ -150,6 +150,7 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
         RejectedNotBuildable => "Cannot build: that building cannot be constructed.",
         RejectedRequirementMissing => "Cannot build: a required building is missing.",
         RejectedInvalidPlacement => "Cannot build there: the site is blocked or outside the map.",
+        RejectedUnexploredPlacement => "Cannot build there: explore every tile of the site first.",
         RejectedUnderConstruction => "That building is still under construction.",
         RejectedAlreadyComplete => "That building is already complete.",
         RejectedNotResearchable => "That building cannot research that technology.",

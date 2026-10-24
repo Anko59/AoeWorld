@@ -17,26 +17,43 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
     ));
     // Header: connection, selected kind/remaining, cursor (6-9: gather fish,
     // forage, chop, mine), highlight center,
-    // actor count, resource count, highlight width. Own actors are world triples.
+    // actor count, resource count, highlight width. Actor records append owner and RGB to world triples.
     values[1] = -1.0;
     for u in client.units.values() {
-        if u.player == owner {
+        let position = u.position.as_tiles();
+        if u.hp > 0
+            && (u.player == owner || client.fog.state(position.map(|p| p.floor() as i32)) == 2)
+        {
             values[6] += 1.0;
-            marker(&mut values, 0.0, u.position.as_tiles());
+            actor_marker(
+                &mut values,
+                0.0,
+                position,
+                u.player,
+                owner,
+                client.team_colour,
+            );
         }
     }
     for b in &client.village.buildings {
-        if b.player == owner {
-            values[6] += 1.0;
-            marker(&mut values, 1.0, building_center(b));
-        }
+        values[6] += 1.0;
+        actor_marker(
+            &mut values,
+            1.0,
+            building_center(b),
+            b.player,
+            owner,
+            client.team_colour,
+        );
     }
 
     let focus = client.selected.units.iter().find_map(|id| {
         client
             .units
             .get(id)
-            .filter(|u| matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip))
+            .filter(|u| {
+                u.player == owner && matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip)
+            })
             .map(|u| u.position.as_tiles())
     });
     let villager = focus.is_some();
@@ -246,4 +263,17 @@ fn passable(client: &Client, point: ScreenPoint) -> bool {
 #[inline(never)]
 fn marker(values: &mut Vec<f64>, kind: f64, position: [f64; 2]) {
     values.extend_from_slice(&[kind, position[0], position[1]]);
+}
+
+fn actor_marker(
+    values: &mut Vec<f64>,
+    kind: f64,
+    position: [f64; 2],
+    player: aoe_core::PlayerId,
+    owner: aoe_core::PlayerId,
+    team: [u8; 3],
+) {
+    marker(values, kind, position);
+    let [r, g, b] = aoe_rendering::player_colour(player, owner, team).map(u32::from);
+    values.extend_from_slice(&[f64::from(player.0), f64::from(r << 16 | g << 8 | b)]);
 }

@@ -17,13 +17,38 @@ The existing scene builder supplies visible units only, so contours reveal no
 enemy outside current vision. Loaded own team colour and the player palette
 travel through spare object words in the unchanged 112-byte Sprite packet.
 
-No CPU overlap queries, extra unit traversal, packet list or instance upload is
-introduced. The mask costs one byte per backing pixel (4 MiB at the client's
+Scene construction adds no CPU overlap queries, unit traversal, packet list or
+instance upload. The WebGPU mask costs one byte per backing pixel (4 MiB at the client's
 existing backing limit); resize replaces its texture/view and rebinds it. Its
 two persistent handles and the lazy contour pipeline/bind group are counted.
-WebGL2 and Canvas continue drawing the ordinary shared sprites. GPU pixel and
-browser tests establish coverage and ordering, not hardware frame cadence or
-finished RTS performance.
+WebGL2 uses the same final coverage bits and contour kernels. The world renders
+directly into the browser framebuffer, a coverage-only pass writes R8UI and
+Depth24, and contours load the browser framebuffer. This removes the owned
+full-resolution colour texture and final blit. The mask pass reuses the instance
+upload and painter order; it adds a world geometry draw without a second upload.
+Coverage-only shader variants omit RGB output, pruning unused colour work while
+preserving alpha discard and depth.
+The targets allocate only when effects are present, resize in place and release
+on the first idle frame. Above one megapixel, coverage/depth use half-size axes
+with nearest coverage sampling; world colour and contour kernels remain at full
+resolution. They cost five bytes per coverage pixel (about 5 MiB at the existing
+backing ceiling), plus the browser's default framebuffer and driver storage.
+Canvas retains the contextual gather cursor. GPU pixel and browser tests establish coverage and
+ordering, not hardware frame cadence or finished RTS performance.
+
+Owner colours use three aligned player-mask pages beside the five colour pages:
+128 MiB of atlas storage, independent of player count. Each renderer composes
+the ramp, coverage weight and original base alpha before filtering and fog;
+unmasked blue artwork is preserved. WebGPU still streams one 16 MiB CPU page,
+while WebGL2 owns one 128 MiB WASM restoration source and Canvas retains raster
+source bytes. WebGL borrows that allocation instead of copying it into JS;
+restoration refreshes its typed view after WASM memory growth. Owner palette
+and selection flags keep `SceneUnit` at 32 bytes.
+CPU backends fill their existing full atlas in source order, decoding each
+source plane once for both colour and aligned masks. Repeating those decodes
+per destination page raised a measured native-pack load from 153 to 243 plane
+decodes when masks were added; source order requires 63. It adds no decoded-page
+cache or retained allocation. WebGPU keeps its one-page streaming budget.
 
 Use Rust/WASM with wgpu's WebGPU backend and instanced sprites as the preferred
 renderer. The client remains single threaded.
@@ -47,8 +72,20 @@ WebGL2 requires a 24-bit depth buffer and preserves the existing 64 MiB instance
 and 4,194,304-pixel backing limits. Instance uploads borrow a bounded WASM memory
 view for a synchronous graphics call; never retain the packet or await while
 using it. WebGL copies it into its instance buffer before the borrow ends,
-without another retained CPU packet. One additional owned 48 MiB source atlas supports
-context restoration without cloning on restore.
+without another retained CPU packet. Atlas upload completes each 16 MiB page
+before submitting the next: page-sized calls alone can still queue the full
+128 MiB atlas in driver transfer staging. This startup/restoration boundary
+uses a synchronous completion; ordinary frames do not wait on the GPU.
+The renderer retains its source atlas in
+WASM for context restoration without a second JS allocation. The shared depth
+normalizer requests coverage only for hover or a unit/occluder pair.
+Occlusion and hover share one R8UI mask and one 24-bit depth renderbuffer
+(four-byte storage): five owned bytes per active coverage pixel, counted once
+in GPU texture accounting. Large canvases halve only the coverage/depth axes.
+Resize replaces storage in the same objects without retaining old sizes; frames without effects delete them. Browser swapchains and
+driver overhead remain outside this logical accounting. The dense-forest RSS
+check retains dev's original 1 GiB ceiling, 64 MiB steady RSS growth limit and
+16 MiB steady WASM growth limit, with no allowance for coverage attachments.
 Restore shaders, buffers, texture, and atlas on the original canvas, then
 invalidate the frame cache so an idle scene also redraws. A lost/zero-size or
 skipped GPU frame is not a successful presentation: do not advance picking or
@@ -94,8 +131,9 @@ appearance, not its geometry or dedicated-source qualification.
 
 ## Bounded multi-atlas addressing
 
-Gameplay owns exactly three 2048-square RGBA pages (48 MiB base pixels): terrain
-0/1, objects/units/shadows 2. Source page numbers are never runtime page numbers.
+Gameplay owns eight 2048-square RGBA pages (128 MiB base pixels): terrain 0/1,
+objects/units/shadows 2–4, and aligned player masks 5–7. Source page numbers are
+never runtime page numbers.
 Required overflow fails; never discard visible trees or regroup painter order.
 Page and UV travel together through shared terrain samples and sprite frames.
 Selectors append at byte 96 of the 112-byte ABI (primary, two blends, appearance
@@ -106,7 +144,7 @@ Canvas samples page-major pixels with lazily created per-page canvases.
 Diagnostic WebGPU still uses one 8-square layer (256 bytes), with actual texture
 size/layers reported separately from gameplay. GL/Canvas have no GPU counter
 observation API; unavailable measurements must not become fabricated counters.
-48 MiB is not total memory: source decode scratch, GL restoration ownership,
+128 MiB is not total memory: source decode scratch, GL restoration ownership,
 Canvas copies, transient uploads and presentation buffers remain separately real.
 Synthetic page/depth/blend/restoration pixels do not qualify France or hardware.
 

@@ -70,8 +70,10 @@ Optional match rules (both validated, defaults keep the shipped game):
   `population_cap` and `seeded_units`.
 
 `GET /match/stats?since=n` (same secret) returns the per-tick records of the
-server (`[tick, total_us, sim_us, late_us, orders, units, missed]`) that
-`make scale-match` reads.
+server (`[tick, total_us, sim_us, late_us, orders, units, missed, planning_us]`)
+that `make scale-match` reads. `planning_us` measures route planning during order
+issue, fair polling and lookahead, including component refresh; it is diagnostic
+and does not enter authoritative replay state.
 
 Name the ground with exactly one of:
 
@@ -162,6 +164,9 @@ Known resources may be in explored fog; undiscovered targets are refused.
   server's verdict arrives as an `order_result` event carrying that number and a
   `CommandResult` (`ACCEPTED` or a `REJECTED_*` reason). Orders are applied on the
   next server tick, so a snapshot taken right after sending does not show them.
+  Building orders require every footprint tile to be explored and otherwise
+  return `REJECTED_UNEXPLORED_PLACEMENT`. The site finder uses exact fog memory,
+  never coarse overview pixels; scout unknown ground before building there.
 * **The world** holds own units, buildings and economy, visible foreign units,
   remembered foreign buildings (`visible` says whether in sight), wildlife,
   explored resource nodes, the fog (`visibility(x, y)`), walkable tiles
@@ -172,10 +177,20 @@ Known resources may be in explored fog; undiscovered targets are refused.
 * **The view window.** The server describes foreign units, fog and wildlife only
   inside the slot's subscribed region; own units are always reported. The SDK
   moves a window (`view_size`, `view_padding`) over the slot's non-scout units
-  and buildings so a bot pays only for what it can act on.
+  and buildings so a bot pays only for what it can act on. When their spread
+  exceeds the window, it centers on the living army's mean position: centering
+  halfway between home and a distant army would hide the army's opponents.
 * **Rules tables.** `aoeworld.building_cost`, `unit_cost`, `tech_cost`,
   `trainable`, `build_seconds`, `building_size`, `building_requires` expose the
   numbers the server charges from.
+
+`world.land_route(x, y, tx, ty)` returns a bounded route through explored
+public terrain, ignoring temporary units and buildings. `None` means unknown,
+disconnected or beyond the query bound. Rivers, cliff edges and blocked diagonal
+corners remain barriers. `world.land_frontier(x, y, tx, ty)` instead returns an
+explored reachable tile toward the goal. The example AI chooses known land
+routes for attacks and follows reachable frontiers while exploring; it never
+assumes that a loaded but unexplored tile proves a connection.
 
 ### Events
 
@@ -258,6 +273,15 @@ until the age changes, a villager that falls idle right after an order waits
 four seconds, and a hunted animal nobody finishes is dropped. Everything is
 read from the fog-filtered world: nothing is assumed about enemy positions
 beyond "villages are spread evenly over the map".
+Workers with a carried load and no gather job are reassigned too. Nearby
+automatic farmers are associated with their plots from their work pose and
+tile; builders leave them at work, and refused farms cool down instead of
+trapping idle workers in repeated assignments. Nearby
+soldiers or the scout protect workers from wolves and attacking boars; without
+them, nearby workers fight together. Marching soldiers engage visible enemies,
+and a refused attack cools down for that soldier and target while alternatives
+are tried. A fogged building remains a target until its destruction is observed;
+standing nearby alone does not establish that it is gone.
 Tunables are in `config.py`. `python -m aoe_ai --help` lists the launcher modes.
 
 ### The standard start
@@ -294,6 +318,11 @@ exceptions are two benign races, a bot whose map window moved during a step (the
 driver then adds a tick) and wildlife updates reaching a bot within a few
 milliseconds of its poll. A game finishes in a fraction of its length, but the
 wall time still grows with the armies and the machine's load.
+
+Each arena process also writes `.cache/ai-arena/seed-<seed>-<run>-<pid>.jsonl`:
+minute snapshots of jobs, positions, stockpiles, wildlife and decision counters,
+sampled order refusals with their arguments, and damage events identifying the
+attacker. These are SDK observations, not privileged simulation state.
 
 ### Measured arena play
 

@@ -321,30 +321,52 @@ impl GameplayService {
         let hash = self.map_content_hash;
         let directory = self.resource_directory.clone();
         let journal = self.resource_journal.clone();
+        let probe = self.probe.clone();
         let advance = move || {
-            world.advance_with_resource_sink(&mut |transaction| {
-                if let (Some(hash), Some(directory)) = (hash, &directory) {
-                    match super::resources::save_gathering(
-                        directory,
-                        &transaction.snapshot(hash),
-                        transaction.previous_revision(),
-                    ) {
-                        Ok(_) => true,
-                        Err(error) => {
-                            tracing::warn!("gathering persistence refused: {error}");
-                            false
+            let mut phase_started = std::time::Instant::now();
+            world.advance_with_probe(
+                &mut |transaction| {
+                    if let (Some(hash), Some(directory)) = (hash, &directory) {
+                        match super::resources::save_gathering(
+                            directory,
+                            &transaction.snapshot(hash),
+                            transaction.previous_revision(),
+                        ) {
+                            Ok(_) => true,
+                            Err(error) => {
+                                tracing::warn!("gathering persistence refused: {error}");
+                                false
+                            }
                         }
+                    } else {
+                        true
                     }
-                } else {
-                    true
-                }
-            });
+                },
+                &mut |phase| {
+                    let now = std::time::Instant::now();
+                    let name = match phase {
+                        aoe_simulation::TickPhase::Movement => "movement",
+                        aoe_simulation::TickPhase::Spacing => "spacing",
+                        aoe_simulation::TickPhase::Wildlife => "wildlife",
+                        aoe_simulation::TickPhase::Combat => "combat",
+                        aoe_simulation::TickPhase::Construction => "construction",
+                        aoe_simulation::TickPhase::Gathering => "gathering",
+                        aoe_simulation::TickPhase::ResearchTraining => "research_training",
+                        aoe_simulation::TickPhase::BuildingMemory => "building_memory",
+                        aoe_simulation::TickPhase::Changed => "changed",
+                    };
+                    probe.phase(name, now.duration_since(phase_started));
+                    phase_started = now;
+                },
+            );
+            let journal_started = std::time::Instant::now();
             let changes = world.take_resource_changes();
             let mut journal = journal.lock().unwrap_or_else(|error| error.into_inner());
             for change in changes {
                 journal.record(change);
             }
             drop(journal);
+            probe.phase("resource_journal", journal_started.elapsed());
             world
         };
         if self.resource_directory.is_some() {

@@ -2,6 +2,57 @@
 use super::*;
 
 #[test]
+fn dense_idle_separation_has_a_fixed_tick_budget() {
+    let mut w = world();
+    w.set_fog_disabled(true);
+    for _ in 0..2_000 {
+        w.spawn_villager(PlayerId(0), at(30, 30)).unwrap();
+    }
+    for _ in 0..16 {
+        w.advance();
+        assert!(w.idle_spacing.inspected_units <= 32);
+    }
+}
+
+#[test]
+fn bounded_idle_pass_rotates_without_starving_high_ids() {
+    let mut index = crate::game_world::spacing::IdleSpacing::default();
+    let tile = TileCoord::new(30, 30);
+    for n in 0..512 {
+        index.insert(EntityId(n), tile);
+    }
+    let mut seen = BTreeSet::new();
+    for _ in 0..4 {
+        for phase in 0..4 {
+            let batch = index.take_candidates(phase);
+            assert_eq!(batch.len(), 32);
+            for id in batch {
+                assert_eq!(id.0 as usize % 4, phase);
+                assert!(seen.insert(id), "revisited before completing a round");
+            }
+        }
+    }
+    assert_eq!(seen.len(), 512);
+    // Cursor removal and new arrivals must not pin traversal at low ids.
+    index.remove(EntityId(508), tile);
+    index.insert(EntityId(512), tile);
+    let batch = index.take_candidates(0);
+    assert_eq!(batch[0], EntityId(512));
+    assert_eq!(batch[1], EntityId(0));
+}
+
+#[test]
+fn idle_rotation_cursor_is_part_of_the_replay_state() {
+    let mut w = world();
+    for _ in 0..512 {
+        w.spawn_villager(PlayerId(0), at(30, 30)).unwrap();
+    }
+    let before = w.canonical_hash();
+    w.idle_spacing.take_candidates(0);
+    assert_ne!(w.canonical_hash(), before, "cursor changes the next pass");
+}
+
+#[test]
 fn tile_occupancy_updates_visit_only_eight_adjacent_cells() {
     let mut index = crate::game_world::spacing::IdleSpacing::default();
     for n in 0..2_000 {
@@ -11,8 +62,8 @@ fn tile_occupancy_updates_visit_only_eight_adjacent_cells() {
     index.relocate(EntityId(0), TileCoord::new(0, 4), TileCoord::new(1, 4));
     assert_eq!(
         index.adjacent_visits - before,
-        16,
-        "one removal and one insertion"
+        3,
+        "the cached empty window leaves only three newly exposed tiles"
     );
     for phase in 0..4 {
         assert_eq!(index.candidates(phase).count(), 0);
@@ -99,6 +150,7 @@ fn indexed_spacing_matches_population_scan_through_moves_stops_deaths_and_remova
         let mut actual = indexed.advance_movement();
         let mut expected = exhaustive.advance_movement();
         indexed.advance_spacing(&mut actual);
+        exhaustive.finish_spacing_orders(&expected);
         let indices = (0..exhaustive.units.len()).collect::<Vec<_>>();
         exhaustive.advance_spacing_indices(&mut expected, indices);
         indexed.refill_route_budgets();

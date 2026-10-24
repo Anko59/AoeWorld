@@ -5,6 +5,9 @@ use aoe_protocol::{
     GameplayServerMessage as M, GameplayUnitState, HitState, MarketPrices, Stockpile,
 };
 
+#[path = "land.rs"]
+mod land;
+
 const ME: PlayerId = PlayerId(3);
 const FOE: PlayerId = PlayerId(4);
 
@@ -413,4 +416,35 @@ fn resource_snapshot_pages_accumulate_and_a_new_snapshot_clears_old_amounts() {
         snapshot_page: None,
     }));
     assert!(world.amounts.is_empty());
+}
+
+#[test]
+fn build_sites_require_exact_exploration_and_remember_it_after_the_window_moves() {
+    let mut world = started();
+    world.apply(M::FogState(FogState {
+        revision: 1,
+        tick: Tick(1),
+        region: TileRect::from_xywh(100, 100, 2, 2),
+        disabled: false,
+        tiles: vec![0, 2, 0, 1],
+        overview: vec![(128 * 256 + 128, 1)],
+    }));
+    assert!(world.fog().explored_exactly(TileCoord::new(101, 100)));
+    assert!(!world.fog().explored_exactly(TileCoord::new(100, 100)));
+    assert!(!world.fog().explored_exactly(TileCoord::new(100, 101)));
+    world.apply(M::FogState(FogState {
+        revision: 1,
+        tick: Tick(2),
+        region: TileRect::from_xywh(0, 0, 2, 2),
+        disabled: false,
+        tiles: vec![0; 4],
+        overview: vec![],
+    }));
+    assert_eq!(
+        world.visibility(TileCoord::new(100, 100)),
+        Visibility::Explored
+    );
+    assert!(!world.fog().explored_exactly(TileCoord::new(100, 100)));
+    assert!(world.fog().explored_exactly(TileCoord::new(101, 100)));
+    assert!(!world.fog().explored_exactly(TileCoord::new(100, 101)));
 }

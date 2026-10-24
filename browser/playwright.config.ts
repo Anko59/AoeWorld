@@ -1,6 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 import { serverUrls } from "./server.js";
 
+// Keep preset viewports and browser identity, with the Linux browser's native UA.
+const nativeDevice = (name: "Desktop Chrome" | "Desktop Firefox") => {
+  const device = { ...devices[name] };
+  Reflect.deleteProperty(device, "userAgent");
+  return device;
+};
+
 // Projects differ only in how the browser draws the canvas. `webgpu` runs every
 // spec. `browser-defaults` and `canvas` run only the renderer-dependent specs
 // (renderer selection, fallbacks, pixel reads, per-project branches), so the
@@ -10,6 +17,7 @@ import { serverUrls } from "./server.js";
 // every `*.play.spec.ts`).
 const rendererDependent = [
   /[\\/]play\.spec\.ts$/,
+  /[\\/]rendering[\\/]occlusion\.spec\.ts$/,
   /(?:^|[\\/.])shared-surfaces\.spec\.ts$/,
   /[\\/]source-creator\.spec\.ts$/,
   /[\\/]camera[\\/](?:hooks|navigation)\.play\.spec\.ts$/,
@@ -29,12 +37,21 @@ export default defineConfig({
   workers: serverUrls().length,
   reporter: [["list"]],
   use: {
-    ...devices["Desktop Chrome"],
+    ...nativeDevice("Desktop Chrome"),
     baseURL: serverUrls()[0],
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
   projects: [
+    {
+      name: "firefox-webgl2",
+      testMatch:
+        /[\\/]rendering[\\/](?:occlusion\.spec|(?:hover|ownership|startup)\.play\.spec)\.ts$/,
+      use: {
+        ...nativeDevice("Desktop Firefox"),
+        launchOptions: { firefoxUserPrefs: { "webgl.force-enabled": true } },
+      },
+    },
     {
       name: "webgpu",
       use: {
@@ -56,7 +73,7 @@ export default defineConfig({
     {
       name: "canvas",
       testMatch:
-        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/](?:selection|feudal)\.play\.spec\.ts$/,
+        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/](?:selection|feudal)\.play\.spec\.ts$|[\\/]rendering[\\/]ownership\.play\.spec\.ts$/,
       use: { launchOptions: { args: [] } },
     },
     {

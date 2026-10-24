@@ -29,7 +29,9 @@ impl Destinations {
 impl GameWorld {
     pub(crate) fn index_destination(&mut self, id: EntityId) {
         self.destinations.remove(id);
-        if let Some(order) = self.movement_order(id) {
+        let order = self.movement_order(id);
+        self.refresh_spacing_order(id);
+        if let Some(order) = order {
             self.destinations.insert(id, order.target_tile);
         }
     }

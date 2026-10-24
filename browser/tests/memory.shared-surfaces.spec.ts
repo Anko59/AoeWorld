@@ -24,6 +24,20 @@ async function wasmBytes(page: Page) {
   });
 }
 
+interface RendererMemory {
+  backend: string;
+  renderer: [string, number][];
+}
+
+async function rendererMemory(page: Page) {
+  return page.evaluate(async () => {
+    const module = (await import(
+      new URL("/pkg/aoe_client.js", location.href).href
+    )) as { client_memory_snapshot(): string };
+    return JSON.parse(module.client_memory_snapshot()) as RendererMemory;
+  });
+}
+
 test("dense forest resize and camera cycles keep backing and WASM memory bounded", async ({
   playwright,
   browserName,
@@ -74,6 +88,7 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
     );
     expect(Math.max(...backing)).toBeLessThanOrEqual(4096);
     const maximumBackingMemory = await processMemory(session);
+    const maximumBackingRenderer = await rendererMemory(page);
     // Check the maximum-size backing once, then exercise allocation reuse at
     // ordinary window sizes so the software renderer stays within the suite budget.
     await page.setViewportSize({ width: 800, height: 450 });
@@ -83,6 +98,7 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
     await frames(page, 2);
     const samples: number[] = [];
     const residentSamples: ProcessMemory[] = [];
+    const rendererSamples: RendererMemory[] = [];
     for (let cycle = 0; cycle < 6; cycle++) {
       for (const key of ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"]) {
         await page.keyboard.press(key);
@@ -95,11 +111,21 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
       await frames(page, 2);
       samples.push(await wasmBytes(page));
       residentSamples.push(await processMemory(session));
+      rendererSamples.push(await rendererMemory(page));
     }
     // Allow allocator warm-up, then reject continuing linear-memory growth.
     const steady = samples.slice(2);
     const residentBytes = residentSamples.map((sample) => sample.residentBytes);
     const residentSteady = residentBytes.slice(2);
+    const coverageBytes = [maximumBackingRenderer, ...rendererSamples].map(
+      (memory) =>
+        memory.backend === "webgl2"
+          ? (memory.renderer.find(
+              ([name]) => name === "gpu_texture_bytes",
+            )?.[1] ?? NaN) -
+            128 * 1024 * 1024
+          : 0,
+    );
     const evidence = testInfo.outputPath("dense-forest-memory.json");
     await writeFile(
       evidence,
@@ -107,6 +133,10 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
         backing,
         isolation: "Fresh browser process with the project's launch options",
         maximumBackingMemory,
+        maximumBackingRenderer,
+        rendererSamples,
+        webglCoverageBytes: coverageBytes,
+        rssBudgetBytes: 1024 * 1024 * 1024,
         wasmBytes: samples,
         chromiumProcessMemory: residentSamples,
         limitation:
@@ -117,6 +147,12 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
       path: evidence,
       contentType: "application/json",
     });
+    // Account the mask and depth even though they receive no RSS allowance.
+    // Above one megapixel, half-size axes need only ceil-rounding headroom.
+    for (const coverage of coverageBytes) {
+      expect(coverage).toBeGreaterThanOrEqual(0);
+      expect(coverage).toBeLessThanOrEqual((1_048_576 + 4096) * 5);
+    }
     expect(Math.max(...steady) - Math.min(...steady)).toBeLessThanOrEqual(
       16 * 1024 * 1024,
     );

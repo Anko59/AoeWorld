@@ -42,6 +42,16 @@ impl Sprite {
     pub(crate) const OCCLUDER: u32 = 4;
     pub(crate) const UNIT_CONTOUR: u32 = 8;
 
+    pub(crate) const PLAYER_MASK: u32 = 64;
+
+    pub(crate) fn with_owner(mut self, visual: crate::SceneUnitVisual) -> Self {
+        if let Some(colour) = visual.colour() {
+            self.pages[3] |= Self::PLAYER_MASK;
+            self.terrain_blend[1][..3].copy_from_slice(&colour.map(|c| f32::from(c) / 255.0));
+        }
+        self.with_unit_contour(visual.outline_colour())
+    }
+
     pub(crate) fn with_unit_contour(mut self, colour: Option<[u8; 3]>) -> Self {
         if let Some(colour) = colour {
             self.pages[3] |= Self::UNIT_CONTOUR;
@@ -90,6 +100,17 @@ pub struct Counters {
 }
 
 impl Renderer {
+    pub(crate) fn memory_usage(&self) -> (usize, usize) {
+        (
+            self._atlas.width() as usize
+                * self._atlas.height() as usize
+                * self._atlas.depth_or_array_layers() as usize
+                * 4
+                + self.config.width as usize * self.config.height as usize * 5,
+            self.instances.bytes(),
+        )
+    }
+
     pub async fn new(canvas: HtmlCanvasElement) -> Result<Self, String> {
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = wgpu::Backends::BROWSER_WEBGPU;

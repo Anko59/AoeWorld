@@ -43,6 +43,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         art,
         team_colour: colour,
         socket: None,
+        connection_callbacks: None,
         connection_id: 0,
         camera: Camera {
             center: [
@@ -112,6 +113,16 @@ impl<'a> SharedSink<'a> {
 }
 
 impl AtlasSink for SharedSink<'_> {
+    fn resident_buffer(&mut self) -> Result<Option<&mut [u8]>, String> {
+        if self.upload.is_none() {
+            self.upload = Some(self.shared.borrow_mut().renderer.begin_game_atlas()?);
+        }
+        Ok(self
+            .upload
+            .as_mut()
+            .ok_or("No atlas upload")?
+            .resident_buffer())
+    }
     fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String> {
         if self.upload.is_none() {
             self.upload = Some(self.shared.borrow_mut().renderer.begin_game_atlas()?);

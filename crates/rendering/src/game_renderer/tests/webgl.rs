@@ -5,6 +5,8 @@ use crate::web::surface_instance;
 use aoe_core::ScreenPoint;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_test::wasm_bindgen_test;
+#[path = "effects/webgl.rs"]
+mod effects;
 #[path = "webgl_filter.rs"]
 mod filter_pixels;
 #[path = "webgl_floor.rs"]

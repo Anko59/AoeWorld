@@ -83,6 +83,23 @@ impl FogMemory {
         &self.overview
     }
 
+    /// Build sites need tile-exact knowledge: an overview pixel may include
+    /// unseen tiles. Older exact subscriptions remain usable after moving away.
+    pub(crate) fn explored_exactly(&self, tile: TileCoord) -> bool {
+        if self.disabled {
+            return true;
+        }
+        if let Some(region) = self.region.filter(|region| region.contains(tile)) {
+            let index = (tile.y - region.min.y) * region.width() + tile.x - region.min.x;
+            return matches!(self.live.get(index as usize), Some(1 | 2));
+        }
+        self.explored
+            .get(&(tile.x.div_euclid(CHUNK), tile.y.div_euclid(CHUNK)))
+            .is_some_and(|bits| {
+                bits[(tile.y.rem_euclid(CHUNK) * CHUNK + tile.x.rem_euclid(CHUNK)) as usize] != 0
+            })
+    }
+
     pub fn visibility(&self, tile: TileCoord) -> Visibility {
         if self.disabled {
             return Visibility::Visible;

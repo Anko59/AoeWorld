@@ -338,16 +338,16 @@ pub(super) fn raster_sprite(
                 continue;
             }
             let texture_u = u + source_width * horizontal;
-            let mut source = sample_atlas(
+            let mut source = filter::owner_sample(
                 atlas,
-                sprite.pages[0],
+                sprite,
                 texture_u * f64::from(GAME_ATLAS_SIDE),
                 texture_v * f64::from(GAME_ATLAS_SIDE),
             );
             if let Some(offsets) = &offsets {
                 source = filter::sprite_sample(
                     atlas,
-                    sprite.pages[0],
+                    sprite,
                     sprite.uv,
                     [texture_u, texture_v],
                     offsets,

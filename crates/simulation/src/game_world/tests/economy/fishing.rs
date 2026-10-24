@@ -149,6 +149,12 @@ fn build_dock(world: &mut GameWorld, origin: TileCoord) -> EntityId {
         .unwrap()
         .stockpile
         .wood = 1000;
+    fixture::survey(
+        world,
+        PlayerId(0),
+        TileCoord::new(origin.x + 1, origin.y + 1),
+        2,
+    );
     let dock = world
         .issue_build(PlayerId(0), &[worker.unwrap()], BuildingKind::Dock, origin)
         .unwrap();

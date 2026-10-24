@@ -20,8 +20,10 @@ pub(crate) const MAX_ACTIVE_ROUTE_SEARCHES: usize = 400;
 /// a destination proven unreachable) is answered at once, with no search slot
 /// and no queue. Nearly every order of a real match fits (the gather and
 /// return trips of villagers are a few tiles long; a river or forest detour
-/// of a few dozen tiles takes 4,096 to 16,384).
-pub(crate) const FAST_ROUTE_WORK: u32 = 16_384;
+/// of a few dozen tiles takes 4,096 to 16,384). It is also what a near trip
+/// to ground it cannot reach costs before it is given up (`approach_if_hard`),
+/// and with armies in the field 16,384 saturated the world's fast budget.
+pub(crate) const FAST_ROUTE_WORK: u32 = 8_192;
 /// World-wide work of fast attempts per tick, separate from the fair budget
 /// that serves the searches holding slots, so slow searches never delay a
 /// short order and short orders never starve a slow search.
@@ -110,11 +112,24 @@ impl GameWorld {
                         }
                     };
                 if !terrain_ok || !self.building_step_clear(previous_tile, tile) {
+                    // Collision can change after a segment was refined. Keep
+                    // the order and replan from the last valid fixed position.
                     self.clear_planner(index);
+                    self.units[index].route.clear();
                     self.units[index].state.moving = false;
-                    self.units[index].state.planning = false;
-                    self.units[index].order = None;
+                    self.units[index].state.planning = true;
+                    self.units[index].planning_since = self.tick.0;
+                    self.units[index].fast_route_tried = false;
                     self.units[index].last_movement_error = None;
+                    self.units[index].order = Some(MovementOrder {
+                        origin: current_position,
+                        waypoint: current_position,
+                        segment_length: 1,
+                        travelled: 0,
+                        speed_carry: 0,
+                        ..order
+                    });
+                    still_moving.push(id);
                     finished = true;
                     break;
                 }
@@ -171,6 +186,9 @@ impl GameWorld {
                         break;
                     }
                     SegmentAdvance::Stopped(error) => {
+                        if error == Some(GameWorldError::Unreachable) {
+                            self.remember_unreachable(index, order.target_tile);
+                        }
                         self.clear_planner(index);
                         self.units[index].state.moving = false;
                         self.units[index].state.planning = false;
@@ -281,7 +299,12 @@ impl GameWorld {
                     .pop_front()
                     .and_then(|tile| WorldPosition::from_tile_center(tile).ok());
                 self.units[index].route = route;
-                if !planner.is_terminal() || planner.has_route_continuation() {
+                // Keep the certified endpoint's terminal verdict until the
+                // unit consumes this last segment and asks for continuation.
+                if !planner.is_terminal()
+                    || planner.has_route_continuation()
+                    || planner.certified_destination().is_some()
+                {
                     self.store_planner(index, Some(planner));
                 }
                 next.map_or(
@@ -331,7 +354,7 @@ impl GameWorld {
             if budget == 0 {
                 break;
             }
-            if self.planner_capacity_exhausted(index) {
+            if self.planner_capacity_exhausted(index) || self.lookahead_jumps_queue(index) {
                 continue;
             }
             let share = (budget / (wanting.len() - turn) as u32).clamp(1, MAX_ROUTE_WORK_PER_ORDER);
@@ -340,7 +363,12 @@ impl GameWorld {
             };
             let work_before = planner.work();
             let kind = self.units[index].state.kind;
+            let certified_before = planner.certified_destination();
             self.plan_world_route_ahead(&mut planner, share, &|| false, kind);
+            if certified_before.is_none() && planner.certified_destination().is_some() {
+                self.route_metrics
+                    .sample("certified-nearest", kind, &planner);
+            }
             let spent = planner.work().saturating_sub(work_before);
             self.route_metrics.lookahead_work += u64::from(spent);
             budget -= spent.min(budget);
@@ -356,6 +384,18 @@ impl GameWorld {
             .planning_budget
             .saturating_add(budget.saturating_sub(spent))
             .min(MAX_ROUTE_WORK_PER_TICK);
+    }
+
+    /// A new leg search planned ahead would take a slot its player's waiting
+    /// units queue for.
+    fn lookahead_jumps_queue(&self, index: usize) -> bool {
+        self.units[index].planner.as_ref().is_some_and(|planner| {
+            !planner.requires_search_slot()
+                && self.route_queued.contains(&(
+                    self.units[index].state.player,
+                    crate::game_world::far_route(planner.origin(), planner.destination()),
+                ))
+        })
     }
 
     fn planner_capacity_exhausted(&self, index: usize) -> bool {

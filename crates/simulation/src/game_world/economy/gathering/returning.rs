@@ -64,6 +64,7 @@ impl GameWorld {
             self.units[index].state.moving = false;
             self.units[index].state.planning = false;
             self.units[index].state.task = UnitTask::Carrying;
+            self.refresh_spacing_order(id);
         }
         // At most the owned centers' bounded perimeters are attempted once
         // per trip. No center yet may appear later; exhausted choices end it.

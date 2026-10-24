@@ -6,7 +6,7 @@ use std::{
 use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
 
 thread_local! {
-    static ACTIVE: RefCell<Option<Weak<RefCell<Client>>>> = const { RefCell::new(None) };
+    pub(super) static ACTIVE: RefCell<Option<Weak<RefCell<Client>>>> = const { RefCell::new(None) };
 }
 
 pub(super) fn set_active(client: &Rc<RefCell<Client>>) {

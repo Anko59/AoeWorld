@@ -170,6 +170,14 @@ test-e2e-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_SPECS -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
 
+# Keep the memory investigation serial, including its nested builds. Existing
+# guards validate the inherited slot; every gate keeps its normal checks.
+.PHONY: test-client-memory
+test-client-memory: export AOE_E2E_WORKERS := 1
+test-client-memory: disk-precheck slot-bootstrap
+	$(if $(strip $(AOE_E2E_SPECS)),,$(error test-client-memory requires focused AOE_E2E_SPECS))
+	@$(SLOT_RUN) test-client-memory -- make --no-print-directory -j1 test-unit test-wasm test-e2e
+
 .PHONY: \
   test-harness \
   test-harness-steps \

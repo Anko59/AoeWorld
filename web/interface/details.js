@@ -12,6 +12,7 @@ export function updateDetails(values) {
     byId('selection').dataset.kind = 'Resource';
     byId('selection-empty').hidden = true;
     byId('selection-content').hidden = false;
+    byId('selection-owner').textContent = 'Natural resource';
     byId('selection-name').textContent = kinds[values[1]];
     byId('selection-task').textContent = values[2] ? 'Natural resource' : 'Exhausted';
     byId('selection-load').textContent = `${values[2]} ${icons[values[1]]} remaining`;
@@ -27,7 +28,7 @@ export function updateDetails(values) {
   const cursor = ['', 'gather', 'move', 'forbidden', 'attack', 'hunt', 'gather', 'gather', 'gather', 'gather'][values[3]];
   byId('scene').dataset.commandCursor = cursor;
   byId('scene').dataset.gatherKind = ['fish', 'forage', 'chop', 'mine'][values[3] - 6] ?? '';
-  // WebGPU follows the sprite silhouette; compatibility backends keep the
+  // GPU backends follow the sprite silhouette; Canvas keeps the
   // contextual gather cursor. The former ground ellipse is no longer drawn.
   byId('scene').dataset.hoverMode = byId('playground')?.dataset.hoverMode ?? 'outline';
   byId('scene').dataset.resourceHovered = String(cursor === 'gather' && values[8] > 0);
@@ -36,11 +37,13 @@ export function updateDetails(values) {
   if (!world.every(value => value > 0)) return;
   let at = 9, actors = '', resources = '';
   const point = () => [values[at+1]/world[0]*256, values[at+2]/world[1]*256];
-  for (let index=0; index<values[6]; index++,at+=3) {
+  for (let index=0; index<values[6]; index++,at+=5) {
     const [x,y] = point();
+    const fill=`rgb(${[(values[at+4]>>16)&255,(values[at+4]>>8)&255,values[at+4]&255].join(',')})`;
+    const owner=`data-player="${values[at+3]}" fill="${fill}"`;
     actors += values[at] === 1
-      ? `<rect class="minimap-building" x="${x-5}" y="${y-5}" width="10" height="10"/>`
-      : `<circle class="minimap-unit" cx="${x}" cy="${y}" r="3.5"/>`;
+      ? `<rect ${owner} class="minimap-building" x="${x-5}" y="${y-5}" width="10" height="10"/>`
+      : `<circle ${owner} class="minimap-unit" cx="${x}" cy="${y}" r="3.5"/>`;
   }
   for (let index=0; index<values[7]; index++,at+=3) {
     const [x,y] = point();

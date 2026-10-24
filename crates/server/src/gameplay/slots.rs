@@ -141,6 +141,11 @@ impl GameplayService {
                 }
             })
             .collect();
+        let probe = Arc::new(crate::gameplay_match::TickProbe::default());
+        world.set_planning_probe(probe.clone());
+        if let aoe_simulation::Terrain::Map { generator, .. } = world.terrain() {
+            generator.set_navigation_probe(probe.clone());
+        }
         Self {
             world: Arc::new(RwLock::new(world)),
             sessions: Arc::new(Mutex::new(BTreeMap::new())),
@@ -151,7 +156,7 @@ impl GameplayService {
             map_metadata,
             primary_unit_id,
             resource_directory: None,
-            probe: Arc::default(),
+            probe,
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
             fanout_probe: Arc::default(),
         }
@@ -270,6 +275,7 @@ impl GameplayService {
                 ai,
                 connected_at: Instant::now(),
                 sender,
+                subscription_delivery: None,
                 subscription: None,
                 last_sequence: None,
                 acknowledgements: VecDeque::new(),

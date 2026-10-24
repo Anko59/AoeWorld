@@ -119,10 +119,14 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
     let content_hash = super::storage::hex(&map_hash);
     for request in requests {
         let (x, y) = request.coordinate;
-        let shared = shared.clone();
+        // Retired fetches must not keep their old client alive across await.
+        let shared = Rc::downgrade(&shared);
         let content_hash = content_hash.clone();
         spawn_local(async move {
             let result = fetch_chunk(&content_hash, x, y, request.handle.as_ref()).await;
+            let Some(shared) = shared.upgrade() else {
+                return;
+            };
             let mut client = shared.borrow_mut();
             if client.connection_id != connection_id
                 || client.map_content_hash != Some(map_hash)

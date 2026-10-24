@@ -256,3 +256,63 @@ async fn first_views_arrive_in_order_even_when_they_must_wait_for_room() {
         GameplayServerMessage::Projectiles { revision: 1, .. }
     ));
 }
+
+#[tokio::test]
+async fn stalled_camera_subscriptions_keep_only_the_in_flight_and_latest_views() {
+    let service = GameplayService::new(Seed(1));
+    let (tx, mut rx) = mpsc::channel(1);
+    let (id, _) = service.register(None, tx).await;
+    for revision in 1..=10 {
+        service
+            .subscribe(id, revision, TileRect::from_xywh(8000, 8000, 64, 64))
+            .await;
+    }
+    let mut revisions = Vec::new();
+    for _ in 0..8 {
+        let message = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        let revision = match message {
+            GameplayServerMessage::Snapshot { revision, .. }
+            | GameplayServerMessage::WildlifeState { revision, .. }
+            | GameplayServerMessage::Projectiles { revision, .. } => revision,
+            GameplayServerMessage::FogState(state) => state.revision,
+            other => panic!("unexpected initial view: {other:?}"),
+        };
+        revisions.push(revision);
+    }
+    assert_eq!(
+        revisions,
+        [1, 1, 1, 1, 10, 10, 10, 10],
+        "intermediate camera views must be replaced, not retained by waiting tasks"
+    );
+    assert!(!rx.is_closed());
+}
+
+#[tokio::test]
+async fn replacing_a_session_cancels_its_waiting_subscription_worker() {
+    let service = GameplayService::new(Seed(1));
+    let (tx, mut old_rx) = mpsc::channel(1);
+    let (old, welcome) = service.register(None, tx).await;
+    let GameplayServerMessage::Welcome { resume_token, .. } = welcome else {
+        panic!("welcome");
+    };
+    service
+        .subscribe(old, 1, TileRect::from_xywh(8000, 8000, 64, 64))
+        .await;
+    let (tx, _new_rx) = mpsc::channel(8);
+    service.register(resume_token, tx).await;
+    tokio::task::yield_now().await;
+    assert!(matches!(
+        old_rx.try_recv(),
+        Ok(GameplayServerMessage::Snapshot { .. })
+    ));
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_secs(2), old_rx.recv())
+            .await
+            .unwrap()
+            .is_none(),
+        "the old subscription worker must release its queued messages and sender"
+    );
+}

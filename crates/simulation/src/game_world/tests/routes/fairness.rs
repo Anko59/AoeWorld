@@ -6,10 +6,11 @@ use super::*;
 
 /// Half a tick's fair budget, set before an order in these tests.
 pub(super) const FAIR_ROUTE_WORK_RESERVE: u32 = crate::MAX_ROUTE_WORK_PER_TICK / 2;
-/// Ring radius: the sealed ground (35 x 35 tiles) is larger than the planner's
-/// sealed-destination proof recognises, so a route into it stays a search
-/// that cannot finish before it has explored the whole map.
-pub(super) const RING: i32 = 18;
+/// Ring radius: the sealed ground (139 x 139 tiles) is larger than the
+/// planner's sealed-destination proof recognises, and its centre is a far
+/// route (more than `NEAR_ROUTE_TILES`) from outside, exercising the far
+/// search class with work that cannot finish before exploring the whole map.
+pub(super) const RING: i32 = 70;
 
 /// A uniform world whose tiles around `(cx, cy)` (radius `RING - 1`) are
 /// sealed by a ring of blocked tiles. From the four outside tiles nearest the
@@ -45,16 +46,16 @@ pub(super) fn beside_ring(cx: i32, cy: i32, raw: i32) -> WorldPosition {
 fn one_players_route_flood_never_delays_another_players_order() {
     // Player 1 floods: every unit is sent into a sealed ring, a search that
     // cannot finish before it has explored the whole map.
-    let mut world = sealed_ring_world(256, 200, 200);
+    let mut world = sealed_ring_world(512, 250, 250);
     let mut flood = Vec::new();
     for raw in 0..60 {
         let id = world
-            .spawn_unit(PlayerId(1), beside_ring(200, 200, raw))
+            .spawn_unit(PlayerId(1), beside_ring(250, 250, raw))
             .expect("flood unit");
         world.planning_budget = FAIR_ROUTE_WORK_RESERVE;
         assert!(
             world
-                .issue_task_move(id, tile_position(200, 200))
+                .issue_task_move(id, tile_position(250, 250))
                 .expect("accepted")
         );
         flood.push(id);
@@ -97,14 +98,14 @@ fn one_players_route_flood_never_delays_another_players_order() {
 
 #[test]
 fn a_players_own_sealed_searches_do_not_block_other_players_slots() {
-    let mut world = sealed_ring_world(128, 100, 100);
+    let mut world = sealed_ring_world(512, 250, 250);
     for raw in 0..8 {
         let id = world
-            .spawn_unit(PlayerId(1), beside_ring(100, 100, raw))
+            .spawn_unit(PlayerId(1), beside_ring(250, 250, raw))
             .expect("unit");
         world.planning_budget = FAIR_ROUTE_WORK_RESERVE;
         world
-            .issue_task_move(id, tile_position(100, 100))
+            .issue_task_move(id, tile_position(250, 250))
             .expect("accepted");
     }
     world.advance();
@@ -113,7 +114,7 @@ fn a_players_own_sealed_searches_do_not_block_other_players_slots() {
         MAX_ROUTE_SEARCHES_PER_PLAYER
     );
     assert!(!world.route_capacity_exhausted(PlayerId(0), 0, 0, false));
-    assert!(world.route_capacity_exhausted(PlayerId(1), 0, 0, false));
+    assert!(world.route_capacity_exhausted(PlayerId(1), 0, 0, true));
 }
 
 /// Both of the player's search slots are held by hopeless searches; its next
@@ -121,14 +122,14 @@ fn a_players_own_sealed_searches_do_not_block_other_players_slots() {
 /// wait until one of those searches had proven hopeless).
 #[test]
 fn a_short_order_never_waits_for_slots_held_by_hopeless_searches() {
-    let mut world = sealed_ring_world(256, 200, 200);
+    let mut world = sealed_ring_world(512, 250, 250);
     let mut sealed = Vec::new();
     for raw in 0..2 {
         let id = world
-            .spawn_unit(PlayerId(1), beside_ring(200, 200, raw))
+            .spawn_unit(PlayerId(1), beside_ring(250, 250, raw))
             .expect("sealed unit");
         world
-            .issue_task_move(id, tile_position(200, 200))
+            .issue_task_move(id, tile_position(250, 250))
             .expect("accepted");
         sealed.push(id);
     }
@@ -161,10 +162,10 @@ fn a_short_order_never_waits_for_slots_held_by_hopeless_searches() {
 
 #[test]
 fn sustained_near_searches_cannot_starve_a_retained_far_search() {
-    let mut world = sealed_ring_world(256, 200, 200);
+    let mut world = sealed_ring_world(512, 200, 200);
     // A long wall keeps the far search from committing a cheap partial leg;
     // its fast attempt must finish with a retained frontier, not a walking route.
-    for x in 0..256 {
+    for x in 0..512 {
         world.economy.blocked_tiles.insert(TileCoord::new(x, 110));
     }
     let near = (0..2)
@@ -213,4 +214,66 @@ fn sustained_near_searches_cannot_starve_a_retained_far_search() {
         previous = planner.work();
         assert!(world.route_metrics.fair_work - fair_before <= u64::from(FAIR_ROUTE_WORK_RESERVE));
     }
+}
+
+#[test]
+fn a_players_far_search_keeps_a_quarter_share_while_its_near_queue_is_busy() {
+    let mut world = world();
+    world.fast_route_budget = 0;
+    world.planning_budget = 0;
+    let player = PlayerId(0);
+    for raw in 0..20 {
+        let origin = TileCoord::new(20, 20 + raw);
+        let target = TileCoord::new(50, 50 + raw);
+        let id = world
+            .spawn_unit(player, tile_position(origin.x, origin.y))
+            .unwrap();
+        world
+            .issue_task_move(id, tile_position(target.x, target.y))
+            .unwrap();
+        let index = world.lookup[&id];
+        world.units[index].fast_route_tried = true;
+        world.units[index].state.planning = true;
+        world.units[index].route.clear();
+        world.units[index].order.as_mut().unwrap().waypoint = tile_position(origin.x, origin.y);
+        if raw < 2 {
+            world.store_planner(
+                index,
+                Some(aoe_map::RoutePlanner::new(
+                    origin,
+                    target,
+                    crate::MAX_ROUTE_WORK_PER_ORDER,
+                )),
+            );
+        }
+    }
+    let origin = TileCoord::new(20, 80);
+    let target = TileCoord::new(220, 220);
+    let far = world
+        .spawn_unit(player, tile_position(origin.x, origin.y))
+        .unwrap();
+    world
+        .issue_task_move(far, tile_position(target.x, target.y))
+        .unwrap();
+    let index = world.lookup[&far];
+    world.units[index].fast_route_tried = true;
+    world.units[index].state.planning = true;
+    world.units[index].route.clear();
+    world.units[index].order.as_mut().unwrap().waypoint = tile_position(origin.x, origin.y);
+    world.store_planner(
+        index,
+        Some(aoe_map::RoutePlanner::new(
+            origin,
+            target,
+            crate::MAX_ROUTE_WORK_PER_ORDER,
+        )),
+    );
+    let budget = 80;
+    world.serve_route_searches(budget, &mut Vec::new());
+    let spent = world.units[index].planner.as_ref().unwrap().work();
+    assert!(
+        spent >= budget / 4,
+        "far route received only {spent} of {budget}"
+    );
+    assert!(world.route_metrics.fair_work <= u64::from(budget));
 }

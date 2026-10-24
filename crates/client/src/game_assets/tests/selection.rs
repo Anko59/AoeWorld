@@ -172,9 +172,13 @@ pub(super) struct FetchFixture(JsValue);
 
 impl FetchFixture {
     pub(super) fn install(value: &serde_json::Value) -> Self {
+        Self::install_with_player(value, false)
+    }
+
+    pub(super) fn install_with_player(value: &serde_json::Value, player: bool) -> Self {
         let mut pixels = vec![0; GAME_ATLAS_PAGE_BYTES];
         pixels[..4].copy_from_slice(&[80, 90, 100, 255]);
-        pixels[8..12].copy_from_slice(&[120, 120, 120, 255]);
+        pixels[8..12].copy_from_slice(&[120, 120, 120, if player { 128 } else { 255 }]);
         let encode = |pixels: &[u8]| {
             let mut bytes = Vec::new();
             {
@@ -189,6 +193,9 @@ impl FetchFixture {
         };
         let color = encode(&pixels);
         pixels.fill(0);
+        if player {
+            pixels[8..12].copy_from_slice(&[7, 0, 0, 119]);
+        }
         let mask = encode(&pixels);
         let install = js_sys::Function::new_with_args(
             "manifest, color, mask",

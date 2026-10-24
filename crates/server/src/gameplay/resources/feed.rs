@@ -67,6 +67,13 @@ impl GameplayService {
             let mut failed = Vec::new();
             let mut snapshot = None;
             for (id, session) in sessions.iter_mut() {
+                if session
+                    .subscription_delivery
+                    .as_ref()
+                    .is_some_and(|d| d.pending())
+                {
+                    continue;
+                }
                 let Some(subscription) = session.subscription else {
                     continue;
                 };

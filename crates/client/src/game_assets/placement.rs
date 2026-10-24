@@ -65,6 +65,12 @@ pub(super) enum Plane {
     Player,
     /// Fills only texels that are still transparent after colour and player.
     Shadow,
+    /// Owner-independent body alpha, with native RGB retained for composition.
+    PlayerCoverage,
+    /// Original base alpha in B, aligned to its colour page at page + 3.
+    MaskBase,
+    /// Player ramp in R and coverage weight in G; B keeps base alpha.
+    MaskPlayer,
 }
 
 /// Applies one plane. Running `Color`, `Player`, then `Shadow` reproduces the
@@ -78,7 +84,10 @@ pub(super) fn copy_plane(
     team: [u8; 3],
 ) -> Result<(), JsValue> {
     let side = GAME_ATLAS_SIDE as usize;
-    if source.len() != GAME_ATLAS_PAGE_BYTES
+    let mask = matches!(plane, Plane::MaskBase | Plane::MaskPlayer);
+    if (mask && !(5..8).contains(&placed.page))
+        || (!mask && placed.page >= 5)
+        || source.len() != GAME_ATLAS_PAGE_BYTES
         || (pixels.len() != GAME_ATLAS_BYTES && pixels.len() != GAME_ATLAS_PAGE_BYTES)
         || usize::from(placed.page) >= GAME_ATLAS_BYTES / GAME_ATLAS_PAGE_BYTES
         || placed.width != frame.width
@@ -108,6 +117,18 @@ pub(super) fn copy_plane(
                 source[from + 3],
             ];
             match plane {
+                Plane::MaskBase => value = [0, 0, value[3], 0],
+                Plane::MaskPlayer => value = [value[0], value[3], pixels[to + 2], 0],
+                Plane::PlayerCoverage => {
+                    let alpha = u32::from(value[3]);
+                    value = [
+                        pixels[to],
+                        pixels[to + 1],
+                        pixels[to + 2],
+                        ((alpha * 255 + u32::from(pixels[to + 3]) * (255 - alpha) + 127) / 255)
+                            as u8,
+                    ];
+                }
                 Plane::Color => {
                     // The trial's cliff palette is strongly orange. Keep its
                     // luminance relief and alpha, with a restrained warm stone

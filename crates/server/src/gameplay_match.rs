@@ -62,9 +62,20 @@ impl GameplayService {
             None if package.environment.samples_per_axis == 0 => GameWorld::from_map(package)?,
             None => return Err(GameWorldError::InvalidTerrain.into()),
         };
+        let navigation_started = std::time::Instant::now();
+        world
+            .prepare_navigation(cancelled)
+            .map_err(GameWorldError::Environment)?;
+        tracing::info!(
+            elapsed_ms = navigation_started.elapsed().as_millis() as u64,
+            "map navigation prepared"
+        );
         world.set_limits(rules.limits(humans.len()));
         let starts = place_villages(&mut world, humans.len(), rules.seed, placed, cancelled)?;
         let seeded = rules::seed_units(&mut world, &starts, rules, cancelled)?;
+        world
+            .prepare_navigation(cancelled)
+            .map_err(GameWorldError::Environment)?;
         let setups = starts
             .into_iter()
             .zip(humans)

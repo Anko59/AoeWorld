@@ -152,7 +152,8 @@ mirror!(
         RejectedRequiresFeudalAge,
         RejectedNoMarket,
         RejectedWorldLimit,
-        RejectedOrderTooLarge
+        RejectedOrderTooLarge,
+        RejectedUnexploredPlacement
     ]
 );
 

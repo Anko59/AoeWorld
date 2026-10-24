@@ -223,6 +223,7 @@ fn rally_trained_villager_gathers_the_resource() {
 #[test]
 fn rally_to_a_friendly_foundation_sends_the_trained_villager_to_build() {
     let (mut world, _, center) = village();
+    fixture::survey(&mut world, PlayerId(0), TileCoord::new(75, 70), 2);
     let builder = world
         .units()
         .find(|u| u.kind == UnitKind::Villager)

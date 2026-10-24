@@ -95,6 +95,15 @@ pub(crate) struct MapHeightBounds {
     probe_order: std::collections::VecDeque<(i32, i32)>,
 }
 
+impl MapHeightBounds {
+    pub(crate) fn memory_entries(&self) -> (usize, usize) {
+        (
+            self.probes.len(),
+            self.candidates.as_ref().map_or(0, |c| c.3.capacity()),
+        )
+    }
+}
+
 pub(super) fn ensure_bounds(
     shared: Rc<RefCell<Client>>,
     client: &mut Client,
@@ -108,8 +117,12 @@ pub(super) fn ensure_bounds(
     }
     client.terrain_bounds.pending = true;
     let connection = client.connection_id;
+    let shared = Rc::downgrade(&shared);
     spawn_local(async move {
         let result = fetch_bounds(hash).await;
+        let Some(shared) = shared.upgrade() else {
+            return;
+        };
         let mut client = shared.borrow_mut();
         if client.connection_id != connection || client.map_content_hash != Some(hash) {
             return;
