@@ -112,6 +112,10 @@ struct PendingCommand {
 
 #[derive(Clone)]
 enum PendingAction {
+    SetRally {
+        building_id: EntityId,
+        target: aoe_protocol::RallyTarget,
+    },
     Stop {
         entity_id: EntityId,
     },
@@ -324,7 +328,12 @@ impl GameplayService {
             .into_iter()
             .filter(|(id, _)| *id == player || world.fog_disabled())
             .collect::<BTreeMap<_, _>>();
-        let buildings = economy::buildings(&world, player);
+        let all_buildings = economy::buildings(&world, player);
+        let more_buildings = all_buildings.len() > aoe_protocol::MAX_ECONOMY_BUILDINGS;
+        let buildings = all_buildings
+            .into_iter()
+            .take(aoe_protocol::MAX_ECONOMY_BUILDINGS)
+            .collect::<BTreeMap<_, _>>();
         let units = units
             .iter()
             .map(|unit| unit_state(&world, unit))
@@ -345,7 +354,7 @@ impl GameplayService {
         };
         let fog_state = fog::state(&world, player, revision, region);
         session.resident_fog = Some(fog_state.clone());
-        session.rebuild_buildings = false;
+        session.rebuild_buildings = more_buildings;
         let fog = GameplayServerMessage::FogState(fog_state);
         let vision_revision = world.player_vision_revision(player);
         let wildlife = GameplayServerMessage::WildlifeState {

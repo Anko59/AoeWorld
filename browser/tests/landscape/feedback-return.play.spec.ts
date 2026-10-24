@@ -163,7 +163,7 @@ async function feedbackWorld(
             0, // Buildings
           ]),
         );
-        socket.send(Buffer.from([6, ...unsigned(revision), 0, 0, 0]));
+        socket.send(Buffer.from([6, ...unsigned(revision), 0, 0, 0, 0]));
       }
     });
   });

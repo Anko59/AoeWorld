@@ -87,7 +87,8 @@ fn viewer_states(
                 .collect()
         };
         let buildings = if disabled {
-            // Without fog every viewer knows every building.
+            // With fog disabled all targets are revealed as well. Keep one
+            // shared map even when a hundred seats have set their rally points.
             let all: &Arc<_> =
                 everything.get_or_insert_with(|| Arc::new(economy::buildings(world, viewer)));
             Buildings::Full(all.clone())
@@ -101,7 +102,7 @@ fn viewer_states(
                     .flatten()
                     .map(|id| {
                         let known = world.remembered_building(viewer, *id);
-                        (*id, known.map(wire_building_state))
+                        (*id, known.map(|b| wire_building_state(b, Some(viewer))))
                     })
                     .collect(),
             )
@@ -200,3 +201,7 @@ pub(super) fn build(
         phases: [viewers_done, frame_done - viewers_done, done - frame_done],
     })
 }
+
+#[path = "fanout/tests.rs"]
+#[cfg(test)]
+mod tests;

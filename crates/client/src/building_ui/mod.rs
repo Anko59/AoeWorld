@@ -1,4 +1,6 @@
 //! Building presentation decisions. The server remains authoritative.
+pub(crate) mod availability;
+
 use aoe_core::TileCoord;
 use aoe_protocol::BuildingKind;
 use aoe_protocol::Stockpile;

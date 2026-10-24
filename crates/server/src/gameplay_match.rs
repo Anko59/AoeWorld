@@ -4,33 +4,19 @@ use crate::{AppState, GameplayService, map_store, maps};
 use aoe_core::{PlayerId, TileCoord};
 use aoe_map::{EnvironmentPageProvider, MAP_SCHEMA_VERSION, MapPackage, MapRequest};
 use aoe_protocol::ResumeToken;
-use aoe_simulation::{EconomyError, GameWorld, GameWorldError};
+use aoe_simulation::{GameWorld, GameWorldError};
 use axum::{Json, extract::State, http::HeaderMap, http::StatusCode};
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 /// Header carrying the match-hosting secret (`AOE_MATCH_TOKEN`).
 pub(crate) const ADMIN_TOKEN_HEADER: &str = "x-aoeworld-admin-token";
 
 /// Upper bound on seats of one match (the simulation's player capacity).
 pub const MAX_MATCH_SLOTS: usize = aoe_protocol::MAX_ECONOMY_PLAYERS;
-
-#[derive(Debug, thiserror::Error)]
-pub enum MatchError {
-    #[error("a match needs between 1 and {MAX_MATCH_SLOTS} slots")]
-    SlotCount,
-    #[error("map has no land start for slot {0}; use a larger or less watery map")]
-    NoStart(usize),
-    #[error(
-        "population_cap must be between 5 and {}",
-        aoe_protocol::MAX_MATCH_POPULATION
-    )]
-    PopulationCap,
-    #[error("start_units may not exceed the population cap")]
-    StartUnits,
-    #[error(transparent)]
-    World(#[from] GameWorldError),
-}
 
 impl GameplayService {
     /// A match on `package`: `humans[i]` says whether slot `i` is a person
@@ -42,18 +28,28 @@ impl GameplayService {
         humans: &[bool],
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Self, MatchError> {
-        Self::from_match_rules(package, provider, humans, &MatchRules::default(), cancelled)
-            .map(|(service, _)| service)
+        let rules = MatchRules::default();
+        Self::from_match_rules(
+            package,
+            provider,
+            humans,
+            &rules,
+            &AtomicUsize::new(0),
+            cancelled,
+        )
+        .map(|(service, _)| service)
     }
 
     /// `from_match` under `rules`: the population ceiling (with the world
     /// capacities that grow with it) and the start units of every seat.
-    /// Also returns how many start units were placed.
+    /// Also returns how many start units were placed; `placed` counts the
+    /// villages settled so far (a loading screen's progress).
     pub fn from_match_rules(
         package: MapPackage,
         provider: Option<Arc<dyn EnvironmentPageProvider>>,
         humans: &[bool],
         rules: &MatchRules,
+        placed: &AtomicUsize,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(Self, u64), MatchError> {
         if humans.is_empty() || humans.len() > MAX_MATCH_SLOTS {
@@ -67,7 +63,7 @@ impl GameplayService {
             None => return Err(GameWorldError::InvalidTerrain.into()),
         };
         world.set_limits(rules.limits(humans.len()));
-        let starts = place_villages(&mut world, humans.len(), cancelled)?;
+        let starts = place_villages(&mut world, humans.len(), rules.seed, placed, cancelled)?;
         let seeded = rules::seed_units(&mut world, &starts, rules, cancelled)?;
         let setups = starts
             .into_iter()
@@ -88,7 +84,13 @@ impl GameplayService {
 
 /// Ideal village centres: a ring for a few players (neighbours equally far
 /// apart, so two players start on opposite sides), a grid for many.
+#[cfg(test)]
 pub(crate) fn ideal_starts(side: i32, count: usize) -> Vec<TileCoord> {
+    ring_or_grid(side, count, std::f64::consts::FRAC_PI_4)
+}
+
+/// `ideal_starts` with the ring (for up to eight players) turned by `offset`.
+pub(super) fn ring_or_grid(side: i32, count: usize, offset: f64) -> Vec<TileCoord> {
     let margin = (side / 10).max(12);
     let span = (side - 2 * margin).max(1);
     let middle = side / 2;
@@ -99,8 +101,7 @@ pub(crate) fn ideal_starts(side: i32, count: usize) -> Vec<TileCoord> {
         let radius = f64::from(span) / 2.0 * 0.85;
         return (0..count)
             .map(|index| {
-                let angle = std::f64::consts::TAU * index as f64 / count as f64
-                    + std::f64::consts::FRAC_PI_4;
+                let angle = std::f64::consts::TAU * index as f64 / count as f64 + offset;
                 TileCoord::new(
                     middle + (angle.cos() * radius).round() as i32,
                     middle + (angle.sin() * radius).round() as i32,
@@ -118,146 +119,6 @@ pub(crate) fn ideal_starts(side: i32, count: usize) -> Vec<TileCoord> {
             )
         })
         .collect()
-}
-
-/// Gives every seat a village near its ideal point, searching outward in
-/// square rings and keeping villages apart. Returns each seat's scout.
-fn place_villages(
-    world: &mut GameWorld,
-    count: usize,
-    cancelled: &dyn Fn() -> bool,
-) -> Result<Vec<aoe_core::EntityId>, MatchError> {
-    let side = world.config().width_tiles;
-    let ideals = ideal_starts(side, count);
-    let reach = if count <= 8 {
-        side / 6
-    } else {
-        side / (2 * (count as f64).sqrt().ceil() as i32)
-    }
-    .max(8);
-    let separation = (reach / 2).max(10);
-    let mut placed: Vec<TileCoord> = Vec::new();
-    let mut scouts = Vec::new();
-    for (index, ideal) in ideals.into_iter().enumerate() {
-        // Candidate tiles in widening rings, away from earlier villages. Lazy:
-        // on a large map the full set is millions of tiles and the nearest
-        // few almost always suffice.
-        let candidates = || {
-            (0..=reach)
-                .step_by(2)
-                .flat_map(|ring| ring_tiles(ideal, ring))
-                .filter(|tile| {
-                    tile.x >= 4
-                        && tile.y >= 4
-                        && tile.x < side - 4
-                        && tile.y < side - 4
-                        && !placed.iter().any(|other| {
-                            (other.x - tile.x).abs().max((other.y - tile.y).abs()) < separation
-                        })
-                })
-        };
-        // Prefer ground connected to a large walkable region; terrain whose
-        // cliffs leave no such place (generated maps) falls back to any site
-        // a village fits on. Certifying is costly: a quick look first.
-        let player = PlayerId(index as u16);
-        let mut found = settle(world, player, candidates().take(48), true, cancelled)?;
-        if found.is_none() {
-            found = settle(world, player, candidates().take(2_000), false, cancelled)?;
-        }
-        if found.is_none() {
-            // The ideal point lies in the sea or on bare cliffs (a country on a
-            // square map): take the nearest dry ground anywhere on the map.
-            let far: Vec<TileCoord> = (0..=side)
-                .step_by(16)
-                .flat_map(|ring| ring_tiles(ideal, ring))
-                .filter(|tile| {
-                    tile.x >= 4
-                        && tile.y >= 4
-                        && tile.x < side - 4
-                        && tile.y < side - 4
-                        && !placed.iter().any(|other| {
-                            (other.x - tile.x).abs().max((other.y - tile.y).abs()) < separation
-                        })
-                        && world.tile_passable(*tile)
-                })
-                // Spread over the ring walk: the nearest dry tiles alone cluster on one
-                // coast, where a full starting kit may not fit.
-                .step_by(24)
-                .take(800)
-                .collect();
-            found = settle(world, player, far.iter().copied(), true, cancelled)?;
-            if found.is_none() {
-                found = settle(world, player, far.iter().copied(), false, cancelled)?;
-            }
-        }
-        let (tile, scout) = found.ok_or(MatchError::NoStart(index))?;
-        placed.push(tile);
-        scouts.push(scout);
-    }
-    Ok(scouts)
-}
-
-/// Settles a village for `player` on the first of `tiles` that takes it.
-/// `require_region` keeps only sites connected to a large walkable region.
-fn settle(
-    world: &mut GameWorld,
-    player: PlayerId,
-    tiles: impl Iterator<Item = TileCoord>,
-    require_region: bool,
-    cancelled: &dyn Fn() -> bool,
-) -> Result<Option<(TileCoord, aoe_core::EntityId)>, MatchError> {
-    let mut tiles = tiles.peekable();
-    while tiles.peek().is_some() {
-        if cancelled() {
-            return Err(GameWorldError::StartSearchLimit.into());
-        }
-        // Certify a few sites against the terrain, then try to settle one.
-        let batch = {
-            let config = world.config();
-            let mut certifier = world.terrain().start_certifier(config, cancelled);
-            let mut batch = Vec::new();
-            while batch.len() < 3 {
-                let Some(tile) = tiles.next() else { break };
-                if !require_region
-                    || certifier
-                        .certify(tile)
-                        .map_err(GameWorldError::Environment)?
-                {
-                    batch.push(tile);
-                }
-            }
-            batch
-        };
-        for tile in batch {
-            match world.initialize_village(player, tile) {
-                Ok(scout) => return Ok(Some((tile, scout))),
-                Err(EconomyError::InvalidFootprint) => {}
-                Err(EconomyError::Movement(error)) => return Err(error.into()),
-                Err(error) => {
-                    tracing::warn!(?tile, %error, slot = player.0, "village refused");
-                    return Err(MatchError::NoStart(player.0 as usize));
-                }
-            }
-        }
-    }
-    Ok(None)
-}
-
-/// The tiles at Chebyshev distance `ring` from `center`, every second one.
-fn ring_tiles(center: TileCoord, ring: i32) -> Vec<TileCoord> {
-    if ring == 0 {
-        return vec![center];
-    }
-    let mut tiles = Vec::new();
-    for offset in (-ring..=ring).step_by(2) {
-        tiles.push(TileCoord::new(center.x + offset, center.y - ring));
-        tiles.push(TileCoord::new(center.x + offset, center.y + ring));
-        if offset.abs() != ring {
-            tiles.push(TileCoord::new(center.x - ring, center.y + offset));
-            tiles.push(TileCoord::new(center.x + ring, center.y + offset));
-        }
-    }
-    tiles
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -282,6 +143,9 @@ pub(crate) struct MatchRequest {
     population_cap: Option<u16>,
     /// Extra villagers and militia every player starts with.
     start_units: Option<StartUnits>,
+    /// Seeds the village layout (which slot starts where). Omitted: a fresh
+    /// seed per match, reported back so the layout can be reproduced.
+    seed: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -306,6 +170,8 @@ pub(crate) struct MatchResponse {
     /// Villages whose starting kit could not be placed in full (0 when every
     /// village has its complete kit).
     partial_starting_kits: u64,
+    /// The seed the village layout was drawn from.
+    seed: u64,
     slots: Vec<MatchSlot>,
 }
 
@@ -330,27 +196,12 @@ fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), (StatusCode, S
     }
 }
 
-#[derive(Deserialize)]
-pub(crate) struct StatsQuery {
-    #[serde(default)]
-    since: u64,
-}
-
-/// `GET /match/stats?since=n`: the per-tick timing records from sequence `n`.
-async fn match_stats(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    axum::extract::Query(query): axum::extract::Query<StatsQuery>,
-) -> Result<Json<stats::StatsPage>, (StatusCode, String)> {
-    authorize(&state, &headers)?;
-    Ok(Json(state.tick_stats.page(query.since)))
-}
-
 pub(crate) fn routes() -> axum::Router<AppState> {
     use axum::routing::{get, post};
     axum::Router::new()
         .route("/match", post(start_match))
-        .route("/match/stats", get(match_stats))
+        .route("/match/stats", get(stats::match_stats))
+        .merge(skirmish::routes())
 }
 
 async fn start_match(
@@ -361,6 +212,8 @@ async fn start_match(
     authorize(&state, &headers)?;
     let rules = MatchRules::new(request.population_cap, request.start_units)
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
+    let seed = request.seed.unwrap_or_else(fresh_seed);
+    let rules = rules.with_seed(seed);
     let package = match (&request.map_hash, request.map, request.flat) {
         (None, None, Some(flat)) => {
             let directory = state.map_package_directory.clone().ok_or((
@@ -429,6 +282,7 @@ async fn start_match(
             provider.map(|value| value as Arc<dyn EnvironmentPageProvider>),
             &humans,
             &rules,
+            &AtomicUsize::new(0),
             &|| cancelled.load(Ordering::Acquire),
         )
     })
@@ -475,14 +329,22 @@ async fn start_match(
         population_cap: rules.population_cap,
         seeded_units,
         partial_starting_kits,
+        seed,
         slots,
     }))
 }
 
 mod flat;
 mod rules;
+mod seats;
+mod skirmish;
 mod stats;
-pub use rules::{MatchRules, StartUnits};
+pub use rules::{MatchError, MatchRules, StartUnits};
+pub(crate) use seats::fresh_seed;
+use seats::place_villages;
+#[cfg(test)]
+use seats::ring_tiles;
+pub(crate) use skirmish::Skirmish;
 pub use stats::{TickProbe, TickStats};
 
 #[path = "gameplay_match/tests.rs"]

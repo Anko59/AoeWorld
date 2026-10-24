@@ -18,9 +18,11 @@ pub use composition::{BuildingComposition, BuildingPart};
 pub use terrain::Terrain;
 pub mod table;
 mod table_details;
+mod technologies;
 #[cfg(test)]
 mod tests;
 mod units;
+pub use technologies::Technology;
 
 use crate::Error;
 use serde::Serialize;
@@ -82,6 +84,7 @@ pub struct Unit {
     /// Genie unit type: 10 base, 20/25 moving, 30 dead, 60 projectile, 70 creatable, 80 building.
     pub kind: u8,
     pub name: String,
+    pub icon_id: i16,
     pub hit_points: i16,
     pub line_of_sight: f32,
     pub collision_size: [f32; 2],
@@ -119,6 +122,7 @@ pub struct Report {
     pub civilisation_name: Option<String>,
     pub unit_headers_offset: Option<usize>,
     pub unit_slots: usize,
+    pub technologies_offset: Option<usize>,
     pub units_parsed: usize,
     /// Why a later stage did not run, if it did not.
     pub stopped: Option<String>,
@@ -130,6 +134,7 @@ pub struct DatFile {
     pub graphics: Vec<Graphic>,
     pub terrains: Vec<Terrain>,
     pub units: Vec<Unit>,
+    pub technologies: Vec<Technology>,
     pub report: Report,
     #[serde(skip)]
     graphic_index: HashMap<i32, usize>,
@@ -187,6 +192,10 @@ pub fn parse(bytes: &[u8]) -> Result<DatFile, Error> {
             Vec::new()
         }
     };
+    let technologies = match report.technologies_offset {
+        Some(at) => technologies::decode(bytes, at)?,
+        None => Vec::new(),
+    };
     let graphic_index = graphics
         .iter()
         .enumerate()
@@ -198,6 +207,7 @@ pub fn parse(bytes: &[u8]) -> Result<DatFile, Error> {
         graphics,
         terrains,
         units,
+        technologies,
         report,
         graphic_index,
         unit_index,

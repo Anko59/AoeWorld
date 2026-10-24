@@ -48,10 +48,10 @@ an original-art pack (`AOE_ASSET_PACK=local-assets/packs/<hash>`).
 `POST /match` accepts (see [the AI SDK](../ai-sdk.md)):
 
 * `population_cap` (5 to 5,000, default 200, the AoE rule): the most population
-  any player reaches however many houses stand. World capacities for
-  buildings, gatherers, builders and hunters grow in proportion to
-  `cap / 200` (never below the shipped caps), and the player capacity covers the
-  seats. 100 players x 1,000 = 100,000 units.
+  any player reaches however many houses stand. World capacities are sized
+  from the seats and this cap ([capacities](capacity.md)): 1,024 buildings per
+  seat (more above cap 200) and one worker per unit of population.
+  100 players x 1,000 = 100,000 units.
 * `start_units: {"villagers": n, "militia": m}`: the scenario hook. After the
   standard start kit (Town Center, villagers, scout) every player gets `n`
   extra villagers and `m` militia placed on free ground around the village,
@@ -101,6 +101,34 @@ row) must be 0; the match response carries the same counter.
   does. They are `requestAnimationFrame` intervals of the real game page.
 * A synthetic workload at this scale does not demonstrate finished RTS
   performance or dedicated hardware qualification.
+
+## World capacity run
+
+`world-capacity` (2026-10-22, branch `fix/world-capacity`: commit d8dddfd0's code, built from the
+working tree before that commit, on `play/integration` 70c5da80). The owner's setup: the
+source-backed France package (`cf552006...`, 16,000 tiles), 100 slots (slot 0 human and empty,
+99 `aoe_ai` bots on 8 hosts), population cap 200, standard starts, no seeding, 25 minutes of wall
+time; machine load 10 to 13 from other agents.
+
+```sh
+SCALE_MATCH_ARGS="--players 100 --humans 1 --population-cap 200 --minutes 25 --hosts 8 \
+  --map package --map-hash cf55200686bf3117e7ac33d48c3b8ae0354c8709cb33d54ba070def4fed12910 \
+  --package-directory local-assets/map-packages --label world-capacity --no-summary" make scale-match
+```
+
+| Ticks | Game time | Tick p50 / p95 / p99 (ms) | `advance` p50 / p95 | Missed | Units at end | Bot buildings | Feudal |
+|---|---|---|---|---|---|---|---|
+| 29,393 (19.6 a second) | 24.5 min (0.98x) | 25.4 / 51.3 / 87.4 | 20.9 / 38.3 | 1,823 (6.2%) | 4,249 | 1,591 | 77 of 99 |
+
+The bots sent 1,692 build orders and completed 1,473 buildings; 77 of them reached Feudal Age
+and kept building. Build refusals: 155 `REJECTED_INVALID_PLACEMENT`, 36 `REJECTED_UNREACHABLE`; no
+`REJECTED_QUEUE_FULL` and no `REJECTED_WORLD_LIMIT` on any order. By a lower bound (99 Town
+Centers of 16 tiles, at most 594 farms, at least 898 other buildings of 4 tiles or more) the
+buildings cover over 5,190 collision tiles, past the old overlay's 4,096 that stopped the
+owner's game. 0 bot sessions dropped, 0 errors. Server 0.75 cores mean, 921 MiB RSS. The bots
+reached about 43 population each, far below the cap: the 100-village Feudal world of 13,600
+buildings is covered by the simulation test in [capacities](capacity.md), not by this run.
+50,250 of the 54,921 refusals are the bots' own `move` orders to invalid destinations.
 
 ## Results on this branch
 
@@ -209,6 +237,22 @@ old SDK had no rejoin; the new one rejoins silently), so they are not a before/a
   enumeration (millions of tiles per seat on a 16,000-tile map) and a far-land
   fallback for ideal points in the sea (the France square includes the Channel,
   the Atlantic and the Mediterranean).
+
+## From the browser: France and 99 AIs through the menu
+
+Measured 2026-10-22 at revision b882caa0 (`make dev` on port 8097, the source-backed France
+package `cf552006...` reused through `AOE_PRESET_MAPS`, Chromium 1.64 with software WebGPU
+driving the real menu; 1-minute load 13 to 18 from other agents). Start Game to playable took
+**357 s**: the map job 4 s (reused), village placement **321 s** (100 seats, no seeding), the 99
+AIs seated in **29 s** after their 8 host processes started, terrain and minimap 5 s. The
+placement time sits in a few villages: the first village of several grid rows (an ideal point at
+sea off the west coast) took 15 to 57 s each, the others well under a second; the server now logs
+each placement over 2 s. Over 3 minutes of play with 99 bots and no human orders: tick p50 6.6 ms,
+p95 24.2 ms, p99 46.7 ms (max 160), `advance` 3.6 / 16.0 ms, 43 of 3,593 ticks missed, game speed
+0.996, units 674 growing to 995. Human orders (slot 0, a Python client on the human budget):
+move orders were accepted within 0.1 s but the villager first moved after 43 to 220 s, and one
+not within 300 s; gather orders moved within 0.9 s. That move latency is the bug being fixed on
+`fix/order-latency`.
 
 <!-- scale-match:latest -->
 

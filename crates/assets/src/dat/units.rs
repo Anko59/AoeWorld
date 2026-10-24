@@ -62,6 +62,21 @@ pub(super) fn decode(bytes: &[u8], from: usize, report: &mut Report) -> Result<V
         units.push(unit);
         report.units_parsed = units.len();
     }
+    for _ in 1..anchor.count {
+        r.skip(1 + 20)?; // civilisation type and name
+        let resources = usize::from(r.u16()?);
+        r.bounded(resources, MAX_RESOURCES, "civilisation resources")?;
+        r.skip(4 + 4 * resources + 1)?; // tech tree, team bonus, resources, icon set
+        let slots = usize::from(r.u16()?);
+        r.bounded(slots, MAX_UNIT_SLOTS, "civilisation unit slots")?;
+        let pointers = (0..slots).map(|_| r.i32()).collect::<Result<Vec<_>, _>>()?;
+        for (slot, pointer) in pointers.into_iter().enumerate() {
+            if pointer != 0 && unit(&mut r)?.id != slot as i32 {
+                return Err(r.fail("civilisation unit slot mismatch"));
+            }
+        }
+    }
+    report.technologies_offset = Some(r.pos);
     Ok(units)
 }
 
@@ -201,6 +216,8 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
     let footprint = collision_size.map(|radius| radius * 2.0);
     r.pos = start + 43; // remaining collision radius and creation/damage sounds
     let dead_unit = r.i16()?;
+    r.pos = start + 47;
+    let icon_id = r.i16()?;
     r.pos = start + 75;
     let resource_capacity = r.i16()?;
     r.pos = start + 124;
@@ -219,6 +236,7 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         id,
         kind,
         name,
+        icon_id,
         hit_points,
         line_of_sight,
         collision_size,

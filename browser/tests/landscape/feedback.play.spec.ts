@@ -113,7 +113,7 @@ async function feedbackWorld(
             0, // Buildings
           ]),
         );
-        socket.send(Buffer.from([6, ...unsigned(revision), 0, 0, 0]));
+        socket.send(Buffer.from([6, ...unsigned(revision), 0, 0, 0, 0]));
       }
       if (bytes[0] === 2) {
         const sequence = readUnsigned(bytes).value;
@@ -158,6 +158,7 @@ async function feedbackWorld(
           1,
           ...unsigned(treeId),
           0,
+          0, // Current ResourceState snapshot-page option (None).
         ]),
       );
     },

@@ -77,6 +77,8 @@ pub enum Pose {
     ScoutWalk,
     Arrow,
     Javelin,
+    /// DAT unit 259 (VMFAR) task: tilling a farm.
+    FarmerWork,
 }
 
 #[derive(Clone, Copy)]
@@ -120,7 +122,7 @@ const fn sprite(id: u32, stride: u8, millis: u16) -> ActorSource {
     ActorSource { id, stride, millis }
 }
 
-pub const SPRITES: [ActorSource; 74] = [
+pub const SPRITES: [ActorSource; 75] = [
     sprite(993, 6, 1000),
     sprite(997, 12, 70),
     sprite(987, 10, 100),
@@ -195,6 +197,7 @@ pub const SPRITES: [ActorSource; 74] = [
     sprite(2089, 10, 110),
     sprite(3799, 1, 100),
     sprite(3820, 1, 100),
+    sprite(1512, 15, 133),
 ];
 
 #[cfg(test)]

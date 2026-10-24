@@ -104,6 +104,8 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
     let (renderer, canvas) = GameRenderer::new(canvas).await.unwrap();
     let id = EntityId(1);
     Client {
+        hover_mode: 1,
+        team_colour: [65, 145, 245],
         document,
         canvas,
         renderer,
@@ -289,6 +291,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         last_hit: None,
         age: Age::Dark,
         gate_open: false,
+        rally_point: None,
     });
     let rendered = |client: &Client| {
         units(client, &scene)
@@ -325,6 +328,7 @@ async fn authoritative_gate_stays_open_when_the_holding_enemy_is_not_resident() 
         last_hit: None,
         age: Age::Feudal,
         gate_open: true,
+        rally_point: None,
     });
     for _ in 0..20 {
         let gate = units(&client, &scene)

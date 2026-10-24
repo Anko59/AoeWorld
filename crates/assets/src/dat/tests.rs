@@ -8,7 +8,8 @@ mod composition;
 mod corpse_tests;
 #[path = "tests/fishing.rs"]
 mod fishing_tests;
-
+mod interface;
+mod trees;
 fn le16(out: &mut Vec<u8>, value: i16) {
     out.extend_from_slice(&value.to_le_bytes());
 }
@@ -408,9 +409,15 @@ fn real_trial_file_matches_the_reviewed_ids() {
     assert_eq!(status("Villager idle"), "match");
     assert_eq!(status("Villager walk"), "match");
     assert_eq!(status("Stone mining"), "match");
-    assert_eq!(status("Gold mining"), "mismatch");
+    assert_eq!(status("Gold mining"), "match");
+    assert_eq!(status("Gold carrying"), "match");
+    assert_eq!(status("Stone carrying"), "match");
     assert_eq!(status("Wood chopping"), "match");
     assert_eq!(status("Wood carrying"), "match");
+    // 1490/1493 were the builder's death and stand rows (VMBLD_DN/FN).
+    assert_eq!(status("Berry foraging"), "match");
+    assert_eq!(status("Food carrying"), "match");
+    assert_eq!(status("Farm tilling"), "match");
     let lumberjack = file.unit(123).unwrap();
     assert_eq!(
         lumberjack.tasks[0].graphics.map(|g| g > 0),

@@ -255,10 +255,18 @@ pub(super) fn buildings(
     world
         .known_buildings(player)
         .iter()
-        .map(|state| (state.id, wire_building_state(state)))
+        .map(|state| {
+            (
+                state.id,
+                wire_building_state(state, (!world.fog_disabled()).then_some(player)),
+            )
+        })
         .collect()
 }
-pub(super) fn wire_building_state(state: &aoe_simulation::GameBuilding) -> GameplayBuildingState {
+pub(super) fn wire_building_state(
+    state: &aoe_simulation::GameBuilding,
+    viewer: Option<PlayerId>,
+) -> GameplayBuildingState {
     GameplayBuildingState {
         age: match state.age {
             aoe_simulation::Age::Dark => aoe_protocol::Age::Dark,
@@ -266,6 +274,13 @@ pub(super) fn wire_building_state(state: &aoe_simulation::GameBuilding) -> Gamep
         },
         id: state.id,
         gate_open: state.gate_open,
+        rally_point: state
+            .rally_point
+            .filter(|_| viewer.is_none_or(|player| state.player == player))
+            .map(|r| aoe_protocol::RallyPoint {
+                position: r.position,
+                target: wire_rally(r.target),
+            }),
         player: state.player,
         kind: wire_building(state.kind),
         footprint: state.footprint,
@@ -337,5 +352,27 @@ impl GameplayService {
         } else {
             Some(advance())
         }
+    }
+}
+
+/// Transport conversion stays at the adapter boundary.
+pub(super) fn native_rally(target: aoe_protocol::RallyTarget) -> aoe_simulation::RallyTarget {
+    use aoe_protocol::RallyTarget as W;
+    use aoe_simulation::RallyTarget as N;
+    match target {
+        W::Ground(p) => N::Ground(p),
+        W::Resource(id) => N::Resource(id),
+        W::Building(id) => N::Building(id),
+        W::Animal(id) => N::Animal(id),
+    }
+}
+fn wire_rally(target: aoe_simulation::RallyTarget) -> aoe_protocol::RallyTarget {
+    use aoe_protocol::RallyTarget as W;
+    use aoe_simulation::RallyTarget as N;
+    match target {
+        N::Ground(p) => W::Ground(p),
+        N::Resource(id) => W::Resource(id),
+        N::Building(id) => W::Building(id),
+        N::Animal(id) => W::Animal(id),
     }
 }

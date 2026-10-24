@@ -80,6 +80,9 @@ body[data-start-state="game"] #playground { visibility: visible; }
 .map-preset span { font: 12px Georgia, serif; color: #c3ad8f; }
 #start-sequence .map-preset[aria-pressed="true"] { color: #ffdda0; border-color: #dfb76e; background: linear-gradient(135deg, #69452599, #392518); box-shadow: inset 3px 0 #dfb76e; }
 #start-sequence .map-preset:hover { border-color: #dfb76e; }
+/* The whole-country preset spans the grid: it is the large-match map. */
+#start-sequence .map-preset[data-preset="france"] { grid-column: 1 / -1; flex-direction: row; align-items: baseline; justify-content: space-between; }
+.coordinate-row.size-row { grid-template-columns: 1.4fr 1fr 1fr; }
 .parchment-panel { background: radial-gradient(ellipse at 30% 20%, #f0dfb8, #d0b481); color: #352618; padding: 16px 18px; box-shadow: inset 0 0 25px #60411733; border: 1px solid #967440; }
 .map-heading { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #72533350; padding-bottom: 10px; margin-bottom: 11px; }
 .map-heading strong { font: 14px Cinzel, Georgia, serif; }

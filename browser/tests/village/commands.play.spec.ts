@@ -52,7 +52,11 @@ test("villager resource cursors, live resource selection, grid and own minimap m
     "data-command-cursor",
     "gather",
   );
-  await expect(page.locator("#resource-highlight")).toBeVisible();
+  await expect(page.locator("#resource-highlight")).toBeHidden();
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-resource-hovered",
+    "true",
+  );
   await page.mouse.click(tree.x, tree.y, { button: "right" });
   await expect(page.locator("#workers-wood")).toHaveText("1", {
     timeout: 35_000,
@@ -61,8 +65,10 @@ test("villager resource cursors, live resource selection, grid and own minimap m
   await expect(page.locator("#selection-name")).toHaveText("Tree");
   await expect(page.locator("#selection-load")).toContainText("remaining");
   const initial = await page.locator("#selection-load").innerText();
+  // The top bar counts the woodcutter from the order on, while it still
+  // walks to the tree, so the first chop may be further away.
   await expect(page.locator("#selection-load")).not.toHaveText(initial, {
-    timeout: 10_000,
+    timeout: 35_000,
   });
   await expect(page.locator("#minimap-entities .minimap-unit")).toHaveCount(4);
   await expect(page.locator("#minimap-entities .minimap-building")).toHaveCount(

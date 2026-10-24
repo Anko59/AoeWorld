@@ -33,6 +33,14 @@ impl Wildlife {
             hash.update(&id.0.to_le_bytes());
             hash.update(&job.animal.0.to_le_bytes());
             hash.update(&job.repath_tick.to_le_bytes());
+            let (stage, lead) = match job.stage {
+                super::HuntStage::Approach => (0u8, None),
+                super::HuntStage::Lead(to) => (1, Some(to)),
+                super::HuntStage::Kill => (2, None),
+            };
+            hash.update(&[stage]);
+            hash.update(&lead.map_or(i32::MIN, |p| p.x).to_le_bytes());
+            hash.update(&lead.map_or(i32::MIN, |p| p.y).to_le_bytes());
         }
         hash.update(&(self.due.len() as u64).to_le_bytes());
         for (due, id) in &self.due {

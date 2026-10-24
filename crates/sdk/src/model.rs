@@ -4,8 +4,8 @@ use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
 pub use aoe_protocol::{
     Age, AnimalKind, AnimalState as Animal, AnimalTask, BuildingKind, CarriedResource,
     CommandResult, ConstructionState, GameplayBuildingState, GameplayPlayerState,
-    GameplayUnitState, MarketPrices, ProjectileState as Projectile, ResourceKind, Stockpile, Tech,
-    TradeResource, UnitKind, UnitTask,
+    GameplayUnitState, MarketPrices, ProjectileState as Projectile, RallyPoint, RallyTarget,
+    ResourceKind, Stockpile, Tech, TradeResource, UnitKind, UnitTask,
 };
 
 /// A unit the slot can currently see (its own, or a visible foreign one).

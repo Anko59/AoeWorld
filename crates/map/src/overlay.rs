@@ -7,9 +7,22 @@ mod starting;
 pub use snapshot::{RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange, ResourceOverlaySnapshot};
 
 /// Logical entry limit; allocator overhead is not included in this count.
-pub const MAX_RESOURCE_OVERLAY_CHANGES: usize = 65_536;
+/// Every depleted node keeps its entry, so the count only grows: 100 seats
+/// exhaust about 5 trees a second, which filled 65,536 in about 3.5 hours.
+/// 2^20 entries (about 24 MiB) last over 50 hours of such a match.
+pub const MAX_RESOURCE_OVERLAY_CHANGES: usize = 1 << 20;
+/// Starting resource nodes of a match: a kit is at most 31 nodes, so every
+/// village of 128 seats fits.
+pub const MAX_STARTING_NODES: usize = 4_096;
+/// Starting resource identities begin here (`ResourceNode::starting`).
+const STARTING_IDS: u64 = 1 << 37;
 /// Building collision tiles the overlay holds at once (towns, houses, walls).
-pub const MAX_OBSTACLE_TILES: u64 = 4_096;
+/// The simulation's building capacity is the real bound (at most 16 tiles a
+/// building: 128 seats x 8,192 buildings); this ceiling only keeps the set
+/// finite. 4,096 filled at about 100 buildings per seat in a 100-seat match.
+pub const MAX_OBSTACLE_TILES: u64 = 1 << 24;
+/// The largest footprint one building may add.
+pub const MAX_FOOTPRINT_TILES: u64 = 4_096;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ResourceOverlay {
@@ -53,7 +66,7 @@ impl ResourceOverlay {
         if rect.min.x < 0
             || rect.min.y < 0
             || area == 0
-            || area > MAX_OBSTACLE_TILES
+            || area > MAX_FOOTPRINT_TILES
             || (self.obstacles.len() as u64).saturating_add(area) > MAX_OBSTACLE_TILES
         {
             return Err(ResourceOverlayError::Capacity);
@@ -95,9 +108,11 @@ impl ResourceOverlay {
         terrain: &MapChunkGenerator,
         node: ResourceNode,
     ) -> Result<(), ResourceOverlayError> {
-        // The only bound is the overlay's total change limit: a kit is at most
-        // 31 nodes, so it grows with the number of villages seated.
-        if self.remaining.len() >= MAX_RESOURCE_OVERLAY_CHANGES {
+        // Kits are bounded on their own so a small world can be filled; the
+        // count runs once per node at match creation only.
+        if self.remaining.range(STARTING_IDS..).count() >= MAX_STARTING_NODES
+            || self.remaining.len() >= MAX_RESOURCE_OVERLAY_CHANGES
+        {
             return Err(ResourceOverlayError::Capacity);
         }
         if ResourceNode::starting_from_id(node.id) != Some(node)
@@ -115,7 +130,7 @@ impl ResourceOverlay {
 
     pub fn starting_nodes(&self) -> impl Iterator<Item = ResourceNode> + '_ {
         self.remaining
-            .range((1 << 37)..)
+            .range(STARTING_IDS..)
             .filter_map(|(id, _)| ResourceNode::starting_from_id(*id))
     }
 

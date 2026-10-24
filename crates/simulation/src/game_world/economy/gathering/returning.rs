@@ -49,7 +49,7 @@ impl GameWorld {
                 return true;
             }
             task.failed_dropoffs.insert(tile);
-            if self.planning_budget == 0 {
+            if self.fast_route_allowance(unit.player) == 0 {
                 break;
             }
         }
@@ -75,7 +75,7 @@ impl GameWorld {
 
     pub(super) fn task_remaining(&self, task: &GatherTask) -> Option<u16> {
         if let Some(animal) = task.animal {
-            return self.animal(animal).map(|a| a.food_remaining);
+            return Some(self.animal(animal).map_or(0, |a| a.food_remaining));
         }
         match task.farm {
             Some(farm) => self.farm_remaining(farm),
@@ -84,9 +84,29 @@ impl GameWorld {
     }
 
     pub(super) fn resume_resource(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
-        if task.animal.is_some() {
-            return self.task_remaining(task).is_some_and(|left| left > 0)
-                && self.restart_approach(id, task);
+        if let Some(animal) = task.animal {
+            if self.task_remaining(task).is_some_and(|left| left > 0) {
+                return self.restart_approach(id, task);
+            }
+            let Some(player) = self.unit(id).map(|u| u.player) else {
+                return false;
+            };
+            let Some(kind) = task.carcass_kind else {
+                return false;
+            };
+            let Some(next) = self.next_food_animal(player, task.tile, kind, animal) else {
+                return false;
+            };
+            if next.hp == 0 && next.task == crate::AnimalTask::Carcass {
+                task.animal = Some(next.id);
+                task.carcass_kind = Some(next.kind);
+                task.tile = next.position.tile_floor();
+                return self.restart_approach(id, task);
+            }
+            // The gather loop has removed this job. A living animal (or one
+            // still dying) needs the ordinary hunt/lead/kill state machine.
+            let _ = self.issue_hunt(player, &[id], next.id);
+            return false;
         }
         if let Some(farm) = task.farm {
             // A spent farm is removed once its farmer has delivered; farms are
@@ -129,7 +149,7 @@ impl GameWorld {
         if let Some(&index) = self.lookup.get(&id) {
             self.units[index].state.task = task
                 .animal
-                .map_or(UnitTask::Moving, |animal| self.carcass_task(animal));
+                .map_or(UnitTask::Moving, |animal| self.carcass_walk_task(animal));
         }
         true
     }

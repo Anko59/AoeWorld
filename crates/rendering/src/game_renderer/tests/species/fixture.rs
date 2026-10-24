@@ -14,6 +14,7 @@ pub(crate) fn camera() -> SceneCamera {
 }
 pub(crate) fn resource(family: u8, variant: u8) -> SceneResource {
     SceneResource {
+        highlight: 0,
         id: 7,
         position: [0.5; 2],
         kind: 1,

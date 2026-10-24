@@ -96,13 +96,14 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 @media(max-width:950px) { #top-bar { gap:8px; } #age { display:none; } #top-bar { grid-template-columns:1fr auto; } #top-bar button:disabled { display:none; } #bottom-panel { grid-template-columns:260px 1fr 195px; gap:12px; padding-left:12px; padding-right:12px; } #commands { padding-right:12px; } #selection-portrait { width:55px; height:65px; } #selection-portrait .icon { width:45px; height:45px; } #selection h1 { font-size:19px; } .crest { display:none; } #selection-empty { padding-left:0; } }
 
 #map-navigation .icon { width:18px; height:18px; }
-#resource-highlight { position:fixed; z-index:1; pointer-events:none; overflow:visible; }
-#resource-highlight[hidden] { display:none; }
-#resource-highlight ellipse { fill:#f8e3a522; stroke:#f8e3a5; stroke-width:2; }
 #minimap-entities { fill:var(--player-colour,#006dff); stroke:#101e25; stroke-width:.7; pointer-events:none; }
 #minimap-primary { opacity:0; }
 #scene[data-command-cursor=move] { cursor:url('/interface/cursors.svg') 12 12, crosshair; }
 #scene[data-command-cursor=gather] { cursor:url('/interface/gather.svg') 12 12, pointer; }
+#scene[data-command-cursor=gather][data-gather-kind=fish] { cursor:url('/interface/cursor-fish.svg') 12 12, pointer; }
+#scene[data-command-cursor=gather][data-gather-kind=forage] { cursor:url('/interface/cursor-forage.svg') 12 12, pointer; }
+#scene[data-command-cursor=gather][data-gather-kind=chop] { cursor:url('/interface/cursor-chop.svg') 12 12, pointer; }
+#scene[data-command-cursor=gather][data-gather-kind=mine] { cursor:url('/interface/cursor-mine.svg') 12 12, pointer; }
 #scene[data-command-cursor=forbidden] { cursor:not-allowed; }
 #scene[data-command-cursor=attack] { cursor:crosshair; }
 #scene[data-command-cursor=hunt] { cursor:crosshair; }
@@ -134,3 +135,85 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 #building-panel { display:flex; align-items:center; gap:4px 12px; flex-wrap:wrap; margin-top:4px; line-height:1.15; }
 #building-panel progress { width:90px; }
 #building-panel button { padding:3px 7px; font-size:11px; }
+
+#command-grid #train-villager>.training-unit { bottom:14px; line-height:1; }
+
+/* Icons remain semantic SVGs until the private runtime pack has loaded. */
+.art-icon { display:inline-flex; align-items:center; justify-content:center; flex:none; width:28px; height:28px; vertical-align:middle; }
+.art-icon .icon { width:100%; height:100%; margin:0; }
+#portrait-frame { flex:none; }
+#selection-health { height:6px; margin-top:4px; }
+#selection-health::-webkit-progress-value { background:#36b32b; }
+#selection-health::-moz-progress-bar { background:#36b32b; }
+#selection-portrait>.art-icon { width:65px; height:65px; }
+.unit-token>.art-icon { width:100%; height:100%; }
+#command-grid button>.art-icon, #command-grid .train-icon { position:static; display:inline-flex; width:29px; height:29px; }
+#command-grid .build-command>.art-icon { display:none; }
+#command-grid .research-command>.art-icon { display:none; }
+#top-bar .worker-count .art-icon { width:12px; height:12px; }
+.load-badge .art-icon { width:14px; height:14px; }
+#research-status { display:flex; align-items:center; gap:5px; }
+#research-status:empty { display:none; }
+#research-icon:empty { display:none; }
+#research-progress { width:65px; }
+
+/* Native AoK compartments, cropped from the imported 1024×768 HUD frame. */
+html[data-interface-art=original] #bottom-panel { padding:0; gap:0; border:0; background:#39392e; grid-template-columns:300px minmax(300px,1fr) 310px; box-shadow:none; }
+html[data-interface-art=original] #bottom-panel::before { display:none; }
+html[data-interface-art=original] #commands { padding:19px 18px 12px; border:0; }
+html[data-interface-art=original] #commands h2 { height:13px; margin:0 0 7px; letter-spacing:.06em; color:#eee0af; text-shadow:0 1px 2px #000; }
+html[data-interface-art=original] #command-grid { width:236px; margin:auto; grid-template-columns:repeat(5,44px); grid-template-rows:repeat(3,42px); gap:3px 4px; }
+html[data-interface-art=original] #command-grid button, html[data-interface-art=original] #command-grid .empty-command { background-image:var(--ui-button-image); background-size:var(--ui-button-size); background-position:var(--ui-button-position); border:1px solid #161711; border-radius:0; box-shadow:inset 1px 1px #d7d2b080,inset -1px -1px #000a; padding:2px; }
+html[data-interface-art=original] #command-grid button { display:flex; align-items:center; justify-content:center; }
+html[data-interface-art=original] #command-grid button:disabled { opacity:.48; filter:grayscale(.65); }
+html[data-interface-art=original] #command-grid button:hover:not(:disabled) { outline:1px solid #f1d889; outline-offset:-2px; }
+html[data-interface-art=original] #command-grid button:active:not(:disabled) { transform:translateY(1px); }
+html[data-interface-art=original] #command-grid .empty-command { opacity:.35; }
+html[data-interface-art=original] #command-grid button>.art-icon, html[data-interface-art=original] #command-grid .train-icon { display:inline-flex; position:static; width:36px; height:36px; }
+html[data-interface-art=original] #command-grid .train-icon>.art-icon { width:100%; height:100%; }
+html[data-interface-art=original] #command-grid .command-label, html[data-interface-art=original] #command-grid button>small, html[data-interface-art=original] #command-grid button>.training-unit, html[data-interface-art=original] #command-grid button>.cost, html[data-interface-art=original] #command-grid button>span:not([class]) { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+html[data-interface-art=original] #command-grid kbd { z-index:1; right:3px; top:0; font-size:9px; color:#fff2b1; text-shadow:1px 1px #000,-1px -1px #000; }
+html[data-interface-art=original] #command-hint { white-space:normal; line-height:1.15; margin:6px 2px 0; font-size:9px; text-shadow:0 1px #000; }
+html[data-interface-art=original] #selection { padding:20px 22px 10px; color:#302418; }
+html[data-interface-art=original] #selection-heading { gap:12px; align-items:flex-start; }
+html[data-interface-art=original] #selection-portrait { width:58px; height:58px; border:0; background-color:#15150f; box-shadow:none; }
+html[data-interface-art=original] #selection-portrait>.art-icon { width:46px; height:46px; }
+html[data-interface-art=original] #selection h1 { color:#362716; font:bold 17px Georgia,serif; margin:0 0 3px; }
+html[data-interface-art=original] #selection .eyebrow { color:#76613d; font-size:8px; margin-bottom:2px; }
+html[data-interface-art=original] #selection-task { color:#493c25; font-size:11px; }
+html[data-interface-art=original] #selection-load { color:#675126; font-size:10px; margin:2px 0; }
+html[data-interface-art=original] #unit-hp, html[data-interface-art=original] #unit-combat { color:#3c3323; font-size:10px; }
+html[data-interface-art=original] #selected-icons { gap:3px; margin-top:7px; max-height:88px; }
+html[data-interface-art=original] .unit-token { width:36px; height:36px; border:1px solid #5c4c30; background:#48483b; box-shadow:inset 1px 1px #e0cf9d; }
+html[data-interface-art=original] #selection[data-count]:not([data-count="1"]) #portrait-frame { display:none; }
+html[data-interface-art=original] #selection[data-count]:not([data-count="1"]) #selection-task { display:none; }
+html[data-interface-art=original] #training { margin-top:6px; }
+html[data-interface-art=original] #training-queue { gap:3px; margin-top:4px; }
+html[data-interface-art=original] #training-queue .unit-token { width:30px; height:30px; }
+html[data-interface-art=original] #training-progress { height:7px; }
+html[data-interface-art=original] .queue-heading { font-size:10px; margin-bottom:3px; }
+html[data-interface-art=original] #building-panel { font-size:10px; gap:3px 8px; margin-top:3px; }
+html[data-interface-art=original] #building-panel button, html[data-interface-art=original] #cancel-training { font-size:9px; padding:1px 5px; }
+html[data-interface-art=original] #research-icon .art-icon { width:24px; height:24px; }
+html[data-interface-art=original] #minimap { border:0; padding:19px 18px 9px; }
+html[data-interface-art=original] #minimap-map { height:143px; }
+html[data-interface-art=original] #minimap-title { position:absolute; left:22px; top:10px; font-size:8px; }
+html[data-interface-art=original] #map-navigation { gap:3px; margin-top:8px; }
+html[data-interface-art=original] #selection-empty { padding:0; color:#685532; }
+html[data-interface-art=original] #selection-empty h2 { color:#4c3a24; }
+html[data-interface-art=original] .crest { display:none; }
+html[data-interface-art=original] #top-bar { border-bottom:2px solid #8b8062; }
+@media(max-width:1000px) {
+  html[data-interface-art=original] #bottom-panel { grid-template-columns:270px minmax(240px,1fr) 230px; }
+  html[data-interface-art=original] #commands { padding-left:12px; padding-right:12px; }
+  html[data-interface-art=original] #selection { padding-left:15px; padding-right:15px; }
+  html[data-interface-art=original] #selection-portrait { width:48px; height:48px; }
+  html[data-interface-art=original] #selection-portrait>.art-icon { width:38px; height:38px; }
+  html[data-interface-art=original] #selection h1 { font-size:15px; }
+}
+
+html[data-interface-art=original] #command-grid.building-menu-open .empty-command { display:block; }
+html[data-interface-art=original] #command-grid .trade-side { position:absolute; right:3px; bottom:0; width:auto; height:auto; clip-path:none; color:#fff0a0; font-size:15px; text-shadow:1px 1px #000; }
+
+.original-icon image { image-rendering:pixelated; }
+html[data-interface-art=original] #top-bar .counter, html[data-interface-art=original] #age, html[data-interface-art=original] #game-clock { background:#090b08e6; box-shadow:inset 0 0 0 1px #a6936966; text-shadow:0 1px #000; }

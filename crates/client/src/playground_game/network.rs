@@ -197,7 +197,8 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             Ok(GameplayServerMessage::Tick { .. }) => {}
             Ok(GameplayServerMessage::ResourceState(state)) => {
-                if state.subscription_revision == client.revision && !client.resources.apply(state)
+                if state.subscription_revision == client.revision
+                    && !client.resources.apply_at(state, super::now())
                 {
                     reconnect(
                         &mut client,
@@ -321,13 +322,18 @@ pub(super) fn merge_buildings(
     changed: &[aoe_protocol::GameplayBuildingState],
     removals: &[aoe_core::EntityId],
 ) -> Option<Vec<aoe_protocol::GameplayBuildingState>> {
-    let mut merged = retained.to_vec();
-    merged.retain(|building| !removals.contains(&building.id));
-    for building in changed {
-        merged.retain(|existing| existing.id != building.id);
-        merged.push(building.clone());
+    let mut merged = retained
+        .iter()
+        .map(|b| (b.id, b))
+        .collect::<BTreeMap<_, _>>();
+    for id in removals {
+        merged.remove(id);
     }
-    (merged.len() <= aoe_protocol::MAX_ECONOMY_BUILDINGS).then_some(merged)
+    for b in changed {
+        merged.insert(b.id, b);
+    }
+    (merged.len() <= aoe_protocol::MAX_RETAINED_BUILDINGS)
+        .then(|| merged.into_values().cloned().collect())
 }
 
 fn reconnect(client: &mut Client, status: &str) {

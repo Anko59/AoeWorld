@@ -41,7 +41,7 @@ pub(crate) fn request_cancellation() -> (RequestCancellation, Arc<AtomicBool>) {
     (RequestCancellation(cancelled.clone()), cancelled)
 }
 
-fn controller_token(headers: &HeaderMap) -> Option<ResumeToken> {
+pub(crate) fn controller_token(headers: &HeaderMap) -> Option<ResumeToken> {
     let value = headers.get(CONTROLLER_TOKEN_HEADER)?.to_str().ok()?;
     if value.len() != 48 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return None;

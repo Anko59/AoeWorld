@@ -55,6 +55,15 @@ impl GameWorld {
         }
     }
 
+    pub(crate) fn work_separation_clear(&self, id: aoe_core::EntityId, tile: TileCoord) -> bool {
+        self.economy.gatherers.get(&id).is_none_or(|task| {
+            !matches!(
+                task.phase,
+                super::GatherPhase::Gathering | super::GatherPhase::Approaching
+            ) || (tile.x.abs_diff(task.tile.x) <= 1 && tile.y.abs_diff(task.tile.y) <= 1)
+        })
+    }
+
     pub(crate) fn building_step_clear(&self, from: TileCoord, to: TileCoord) -> bool {
         if self.economy.blocked_tiles.is_empty() {
             return true;

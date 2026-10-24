@@ -25,17 +25,30 @@ async function wasmBytes(page: Page) {
 }
 
 test("dense forest resize and camera cycles keep backing and WASM memory bounded", async ({
-  browser,
+  playwright,
+  browserName,
+  launchOptions,
+  headless,
+  channel,
   request,
 }, testInfo) => {
   test.setTimeout(120_000);
   expect((await request.post("/maps/reset")).status()).toBe(204);
-  const context = await browser.newContext({
-    viewport: { width: 3840, height: 2160 },
-    deviceScaleFactor: 2,
+  // VmRSS covers the whole browser, including its shared GPU process. A new
+  // context in the worker's browser still counts driver allocations retained
+  // by earlier WebGL/WebGPU tests. Isolate this workload's process, preserving
+  // the project's renderer flags and every backing, RSS and WASM limit.
+  const browser = await playwright[browserName].launch({
+    ...launchOptions,
+    headless,
+    channel,
   });
-  const session = await browser.newBrowserCDPSession();
   try {
+    const context = await browser.newContext({
+      viewport: { width: 3840, height: 2160 },
+      deviceScaleFactor: 2,
+    });
+    const session = await browser.newBrowserCDPSession();
     const page = await context.newPage();
     await gameAssets(page, true);
     if (testInfo.project.name === "canvas") {
@@ -46,6 +59,11 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
       "data-assets",
       "aoe2-local",
     );
+    if (testInfo.project.name !== "browser-defaults")
+      await expect(page.locator("#playground")).toHaveAttribute(
+        "data-renderer",
+        testInfo.project.name === "canvas" ? "canvas2d" : "webgpu",
+      );
     await frames(page, 1);
     const backing = await page.locator("#scene").evaluate((element) => {
       const canvas = element as HTMLCanvasElement;
@@ -87,6 +105,7 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
       evidence,
       JSON.stringify({
         backing,
+        isolation: "Fresh browser process with the project's launch options",
         maximumBackingMemory,
         wasmBytes: samples,
         chromiumProcessMemory: residentSamples,
@@ -109,6 +128,6 @@ test("dense forest resize and camera cycles keep backing and WASM memory bounded
     ).toBeLessThanOrEqual(64 * 1024 * 1024);
     await expect(page.locator("#connection")).toHaveText("connected");
   } finally {
-    await context.close();
+    await browser.close();
   }
 });

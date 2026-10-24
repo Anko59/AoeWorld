@@ -16,6 +16,7 @@ impl Vision {
             }
             hash.update(&(player.remembered.len() as u64).to_le_bytes());
             for b in player.remembered.values() {
+                super::super::economy::training::rally::hash_rally(hash, b.rally_point);
                 hash.update(&b.id.0.to_le_bytes());
                 hash.update(&b.player.0.to_le_bytes());
                 hash.update(&[

@@ -29,7 +29,7 @@ fn bounded_role_ranges_preserve_reference_lookup_absence_and_replacement() {
         );
     }
     assert!(ranges[AssetRole::Rock as usize].is_some());
-    assert_eq!(ROLE_SLOTS, 40);
+    assert_eq!(ROLE_SLOTS, 41);
     assert!(ranges[AssetRole::TreeConifer as usize].is_some());
     assert!(ranges[AssetRole::TreePalm as usize].is_some());
 }
@@ -300,7 +300,7 @@ async fn minimal_pack_starts_without_mountain_sources_and_present_art_is_loaded(
 }
 
 #[wasm_bindgen_test]
-async fn full_catalog_packs_1474_terrain_frames_and_772_objects_in_their_domains() {
+async fn full_catalog_packs_1474_terrain_frames_and_782_objects_in_their_domains() {
     let sources = REQUIRED_RENDER_SOURCES
         .iter()
         .chain(&OPTIONAL_RESOURCE_SOURCES)
@@ -332,7 +332,7 @@ async fn full_catalog_packs_1474_terrain_frames_and_772_objects_in_their_domains
         0,
         "marsh belongs on terrain pages"
     );
-    assert_eq!(count(objects, [120, 120, 120, 255]), 772);
+    assert_eq!(count(objects, [120, 120, 120, 255]), 782);
     assert_eq!(count(terrain, [120, 120, 120, 255]), 0);
 }
 

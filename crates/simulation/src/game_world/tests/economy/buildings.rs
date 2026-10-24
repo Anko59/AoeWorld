@@ -207,7 +207,7 @@ fn invalid_placements_and_orders_are_refused_atomically() {
             vec![],
             BuildingKind::House,
             at(150, 150),
-            EconomyError::Capacity,
+            EconomyError::OrderTooLarge,
         ),
     ];
     for (player, builders, kind, origin, expected) in cases {

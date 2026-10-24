@@ -1,6 +1,6 @@
 //! Research: a building's queue spends time and resources on a technology
 //! whose effect is applied on completion. Work per tick is bounded by the
-//! building count (`MAX_ECONOMY_BUILDINGS`); only buildings that research are
+//! building count (`WorldLimits::buildings`); only buildings that research are
 //! touched.
 use super::{EconomyError, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId};

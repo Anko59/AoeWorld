@@ -314,6 +314,17 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   await page.mouse.click(shoreFisher.x, shoreFisher.y);
   await frame(page, scene.shore);
   const shore = await point(page, scene.shore);
+  // Fish show the fishing cursor, never the builder's hammer-like default.
+  await page.mouse.move(shore.x, shore.y);
+  await freshHud(page);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-command-cursor",
+    "gather",
+  );
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-gather-kind",
+    "fish",
+  );
   await page.mouse.click(shore.x, shore.y, { button: "right" });
   await expect(page.locator("#selection-task")).toHaveText("Fishing", {
     timeout: 100_000,

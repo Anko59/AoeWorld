@@ -35,6 +35,8 @@ pub struct GameFrame {
 /// Optional nonblocking scenery; an empty group means the pack has no such art.
 #[derive(Default)]
 pub struct SceneryArt {
+    /// Native DAT gather-point flag (ten cells).
+    pub rally_flags: Vec<GameFrame>,
     /// Raw 25-slot cliff-face group; only the reviewed slots are drawn.
     pub cliff_faces: Vec<GameFrame>,
     /// Grey rock piles drawn as loose rocks.

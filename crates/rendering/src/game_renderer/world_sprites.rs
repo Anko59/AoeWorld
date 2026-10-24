@@ -39,7 +39,12 @@ pub(super) fn resource_presentation_at(
     if resource.kind == 0 && matches!(resource.visual_family, 5 | 6) {
         return fish::frame(art, resource, animation).map(|f| (f, None));
     }
-    if resource.kind >= SceneResource::CLIFF {
+    if resource.kind >= SceneResource::CLIFF
+        || matches!(
+            resource.kind,
+            SceneResource::CHOPPED_TREE | SceneResource::TREE_STUMP
+        )
+    {
         return scenery::frame(art, resource).map(|frame| (frame, None));
     }
     if resource.kind == 1 {
@@ -157,9 +162,15 @@ pub(super) fn emit_world_sprite_frames(
             ) {
                 emit((sprite, shadow_frame, depth, object.stable_id()));
             }
-            if let Some(sprite) =
+            if let Some(mut sprite) =
                 scene_sprite(frame, resource.position, resource.elevation_meters, camera)
             {
+                if resource.kind <= SceneResource::CHOPPED_TREE
+                    && !(resource.kind == 0 && matches!(resource.visual_family, 5 | 6))
+                {
+                    sprite.pages[3] |= Sprite::OCCLUDER;
+                }
+                sprite.pages[3] |= u32::from(resource.highlight & 3) << 4;
                 emit((
                     sprite,
                     scaled(frame, camera.zoom as f32),
@@ -171,7 +182,17 @@ pub(super) fn emit_world_sprite_frames(
         };
         let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
         if unit.kind.building_side().is_some() {
-            village::building(art, unit, camera, animation, &mut emit);
+            village::building(art, unit, camera, animation, &mut |(
+                mut sprite,
+                frame,
+                depth,
+                id,
+            )| {
+                if unit.kind.building_id().is_some_and(|id| id != 50) {
+                    sprite.pages[3] |= Sprite::OCCLUDER;
+                }
+                emit((sprite, frame, depth, id));
+            });
             continue;
         }
         let Some((frames, stride, animated)) = village::frames(art, unit) else {
@@ -235,7 +256,8 @@ pub(super) fn emit_world_sprite_frames(
                 depths: [0.0; 4],
                 terrain_blend: [[0.0; 4]; 2],
                 pages: [frame.atlas.page, 0, 0, 0],
-            };
+            }
+            .with_unit_contour(unit.visual.outline_colour());
             let mut scaled_frame = frame;
             scaled_frame.size = scaled_frame.size.map(|value| value * scale);
             scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);

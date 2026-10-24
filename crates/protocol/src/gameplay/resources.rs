@@ -4,7 +4,10 @@ use serde::{
 };
 use std::fmt;
 
+/// Entries in one bounded wire message.
 pub const MAX_RESOURCE_CHANGES: usize = 65_536;
+/// Entries retained across snapshot pages and deltas; matches the map overlay.
+pub const MAX_RESOURCE_CACHE: usize = 1 << 20;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ResourceAmount {
@@ -12,8 +15,9 @@ pub struct ResourceAmount {
     pub remaining: u16,
 }
 
-/// None starts a complete sparse snapshot; Some requires the exact prior
-/// overlay revision. Subscription revisions bind messages to the active view.
+/// None starts a sparse snapshot (possibly paged); Some requires the exact
+/// prior overlay revision. Snapshot pages carry offsets and a retained total.
+/// Subscription revisions bind messages to the active view.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ResourceState {
     pub subscription_revision: u64,
@@ -21,12 +25,21 @@ pub struct ResourceState {
     pub revision: u64,
     #[serde(deserialize_with = "bounded_changes")]
     pub changes: Vec<ResourceAmount>,
+    /// Snapshot page (offset, total); pages share a revision and sorted IDs.
+    pub snapshot_page: Option<(u32, u32)>,
 }
 
 impl ResourceState {
     pub fn valid(&self) -> bool {
         self.changes.len() <= MAX_RESOURCE_CHANGES
             && self.subscription_revision != 0
+            && self.snapshot_page.is_none_or(|(offset, total)| {
+                self.from_revision.is_none()
+                    && total as usize > MAX_RESOURCE_CHANGES
+                    && total as usize <= MAX_RESOURCE_CACHE
+                    && !self.changes.is_empty()
+                    && u64::from(offset) + self.changes.len() as u64 <= u64::from(total)
+            })
             && self
                 .from_revision
                 .is_none_or(|from| from < self.revision && !self.changes.is_empty())
@@ -76,79 +89,7 @@ fn bounded_changes<'de, D: Deserializer<'de>>(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        GAMEPLAY_MAX_MESSAGE, GameplayServerMessage, decode_gameplay_server, encode_gameplay_server,
-    };
-    #[test]
-    fn resource_wire_fixture_and_full_limit_fit_the_frame_bound() {
-        let message = GameplayServerMessage::ResourceState(ResourceState {
-            subscription_revision: 1,
-            from_revision: None,
-            revision: 1,
-            changes: vec![ResourceAmount {
-                id: 0,
-                remaining: 0,
-            }],
-        });
-        assert_eq!(
-            encode_gameplay_server(&message).unwrap(),
-            [6, 1, 0, 1, 1, 0, 0]
-        );
-        assert_eq!(
-            decode_gameplay_server(&[6, 1, 0, 1, 1, 0, 0]).unwrap(),
-            message
-        );
-        let changes = (0..MAX_RESOURCE_CHANGES)
-            .map(|index| ResourceAmount {
-                id: (1_u64 << 36) + index as u64 * 2,
-                remaining: u16::MAX,
-            })
-            .collect();
-        let full = GameplayServerMessage::ResourceState(ResourceState {
-            subscription_revision: u64::MAX,
-            from_revision: None,
-            revision: u64::MAX,
-            changes,
-        });
-        let bytes = encode_gameplay_server(&full).unwrap();
-        assert!(bytes.len() < GAMEPLAY_MAX_MESSAGE);
-        assert_eq!(decode_gameplay_server(&bytes).unwrap(), full);
-    }
-    #[test]
-    fn malformed_and_oversized_resource_frames_are_rejected_on_decode() {
-        let empty = GameplayServerMessage::ResourceState(ResourceState {
-            subscription_revision: 1,
-            from_revision: Some(1),
-            revision: 2,
-            changes: Vec::new(),
-        });
-        assert!(encode_gameplay_server(&empty).is_err());
-        assert!(decode_gameplay_server(&postcard::to_allocvec(&empty).unwrap()).is_err());
-        let invalid = GameplayServerMessage::ResourceState(ResourceState {
-            subscription_revision: 1,
-            from_revision: Some(3),
-            revision: 2,
-            changes: Vec::new(),
-        });
-        assert!(encode_gameplay_server(&invalid).is_err());
-        assert!(decode_gameplay_server(&postcard::to_allocvec(&invalid).unwrap()).is_err());
-        let oversized = GameplayServerMessage::ResourceState(ResourceState {
-            subscription_revision: 1,
-            from_revision: None,
-            revision: u64::MAX,
-            changes: vec![
-                ResourceAmount {
-                    id: 0,
-                    remaining: 0
-                };
-                MAX_RESOURCE_CHANGES + 1
-            ],
-        });
-        assert!(decode_gameplay_server(&postcard::to_allocvec(&oversized).unwrap()).is_err());
-    }
-}
+mod tests;
 
 #[cfg(test)]
 #[path = "tests/starting_resources.rs"]

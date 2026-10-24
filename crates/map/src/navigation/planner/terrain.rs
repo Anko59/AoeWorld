@@ -2,6 +2,9 @@
 use crate::{EdgePassability, EnvironmentPageError, MapChunkGenerator, ResourceOverlay};
 use aoe_core::TileCoord;
 
+/// Ground a route search reads. Answers must not change during one poll (a
+/// poll memoizes them), and a step's cost may depend only on its target tile
+/// and on whether the step is diagonal.
 pub trait RouteTerrain {
     fn route_walkable(
         &self,

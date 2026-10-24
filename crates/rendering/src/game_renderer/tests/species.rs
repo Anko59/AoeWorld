@@ -197,7 +197,7 @@ fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() 
         kind: Default::default(),
         id: EntityId(11),
         position: [0.5; 2],
-        moving: false,
+        visual: crate::SceneUnitVisual::new(false),
         selected: false,
         facing: 0,
         elevation_meters: 0.0,
@@ -276,6 +276,7 @@ fn broadleaf_tree_variants_keep_paired_shadows_and_limit_bare_trees() {
     };
     let trees = (0..256_u16)
         .map(|variant| SceneResource {
+            highlight: 0,
             visual_family: 0,
             id: u64::from(variant),
             position: [0.5, 0.5],

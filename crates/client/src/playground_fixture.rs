@@ -1,5 +1,4 @@
 use super::{Client, map};
-use aoe_map::CompactChunk;
 use std::{
     cell::RefCell,
     rc::{Rc, Weak},
@@ -26,8 +25,7 @@ pub fn activate_surface_fixture(content_hash: &str, chunk_json: &str) -> Result<
         *byte = u8::from_str_radix(&content_hash[index * 2..index * 2 + 2], 16)
             .map_err(|_| JsValue::from_str("surface fixture hash is not hexadecimal"))?;
     }
-    let compact: Vec<CompactChunk> = serde_json::from_str(chunk_json)
-        .map_err(|error| JsValue::from_str(&format!("invalid surface fixture chunk: {error}")))?;
+    let compact = crate::game_assets::decode_chunks(chunk_json)?;
     let mut chunks = Vec::with_capacity(compact.len());
     for chunk in compact {
         chunks.push(
@@ -61,6 +59,7 @@ pub fn activate_surface_fixture(content_hash: &str, chunk_json: &str) -> Result<
                 overview: Vec::new(),
             });
             client.resources.apply(aoe_protocol::ResourceState {
+                snapshot_page: None,
                 subscription_revision,
                 from_revision: None,
                 revision: 0,

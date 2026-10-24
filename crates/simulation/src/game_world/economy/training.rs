@@ -5,6 +5,8 @@ use super::{
 use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId};
 
+pub(crate) mod rally;
+
 impl GameWorld {
     pub fn issue_train(
         &mut self,
@@ -12,6 +14,13 @@ impl GameWorld {
         center: EntityId,
         kind: UnitKind,
     ) -> Result<(), EconomyError> {
+        // The Militia line has one current trainable identity after its upgrade.
+        let kind =
+            if kind == UnitKind::Militia && self.has_researched(player, crate::Tech::ManAtArms) {
+                UnitKind::ManAtArms
+            } else {
+                kind
+            };
         let building = self
             .economy
             .buildings
@@ -115,7 +124,13 @@ impl GameWorld {
     }
 
     pub(super) fn advance_training(&mut self, changed: &mut Vec<EntityId>) {
-        let centers = self.economy.buildings.keys().copied().collect::<Vec<_>>();
+        let centers = self
+            .economy
+            .buildings
+            .iter()
+            .filter(|(_, building)| !building.training_queue.is_empty())
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
         for id in centers {
             let Some(building) = self.economy.buildings.get_mut(&id) else {
                 continue;
@@ -131,6 +146,7 @@ impl GameWorld {
             if entry.progress_ticks != entry.total_ticks {
                 continue;
             }
+            let rally = building.rally_point;
             let footprint = building.footprint;
             let player = building.player;
             if self
@@ -158,6 +174,9 @@ impl GameWorld {
             if let Ok(unit) = spawned {
                 if let Some(building) = self.economy.buildings.get_mut(&id) {
                     building.training_queue.pop_front();
+                }
+                if let Some(rally) = rally {
+                    self.apply_rally(unit, rally);
                 }
                 changed.push(unit);
             }

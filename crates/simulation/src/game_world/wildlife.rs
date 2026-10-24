@@ -5,14 +5,18 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 mod ai;
 mod carcass;
+mod continuation;
 mod hash;
 mod hunting;
+mod lure;
 mod spawning;
 mod table;
 pub use table::{AnimalKind, WILDLIFE_RULES, WildlifeRules};
 
-pub const MAX_ANIMALS: usize = 4096;
-pub const MAX_HUNTERS: usize = 2_048;
+/// Animals per seat: the 15 of a village's wildlife kit, with room to spare.
+pub const ANIMALS_PER_PLAYER: usize = 32;
+/// The animal capacity of a world with every seat of the default limits.
+pub const MAX_ANIMALS: usize = super::economy::MAX_ECONOMY_PLAYERS * ANIMALS_PER_PLAYER;
 const CELL_TILES: i32 = 8;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -54,6 +58,17 @@ struct StoredAnimal {
 struct HuntJob {
     animal: EntityId,
     repath_tick: u64,
+    stage: HuntStage,
+}
+
+/// AoE2 shepherding: walk to the sheep, lead it to the nearest food drop-off,
+/// then kill it there. Other prey (and a sheep that cannot be led) is killed
+/// where it stands.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HuntStage {
+    Approach,
+    Lead(WorldPosition),
+    Kill,
 }
 
 /// A live unit mirrored into the wildlife cell grid, so animals can find
@@ -75,17 +90,21 @@ pub struct WildlifeStats {
     pub animal_steps: u32,
     pub hunters: u32,
     pub carcasses: u32,
+    /// Actual local cell and animal visits for depleted-food replacement.
+    pub food_search_cells: u32,
+    pub food_search_candidates: u32,
 }
 
 #[derive(Debug, Default)]
 pub(crate) struct Wildlife {
     animals: BTreeMap<EntityId, StoredAnimal>,
+    /// Living animals and retained carcasses, for local food replacement.
     cells: BTreeMap<(i32, i32), BTreeSet<EntityId>>,
     /// Chasing/fleeing animals get a cleanup step if nearby units disappear.
     engaged: BTreeSet<EntityId>,
     /// Units mirrored by wildlife cell. Only point lookups and per-cell
     /// edits are made, so the hash map never biases a scan order.
-    unit_cells: HashMap<(i32, i32), Vec<CellUnit>>,
+    unit_cells: HashMap<u64, Vec<CellUnit>>,
     hunts: BTreeMap<EntityId, HuntJob>,
     due: BTreeSet<(u64, EntityId)>,
     stats: WildlifeStats,
@@ -108,6 +127,11 @@ pub(super) fn cell(at: WorldPosition) -> (i32, i32) {
 fn cell_of(tile: TileCoord) -> (i32, i32) {
     (tile.x.div_euclid(CELL_TILES), tile.y.div_euclid(CELL_TILES))
 }
+// One integer hash instead of two field hashes. These maps use point lookups
+// only; packing coordinates never changes the order inside a cell's vector.
+fn unit_key((x, y): (i32, i32)) -> u64 {
+    u64::from(x as u32) | (u64::from(y as u32) << 32)
+}
 fn distance(a: WorldPosition, b: WorldPosition) -> i64 {
     let (x, y) = (
         i64::from(a.x) - i64::from(b.x),
@@ -120,35 +144,103 @@ fn radius(tiles: i64) -> i64 {
 }
 
 impl GameWorld {
-    pub(crate) fn track_unit_cell(&mut self, unit: &GameUnit) {
-        self.wildlife
-            .unit_cells
-            .entry(cell(unit.position))
-            .or_default()
-            .push(CellUnit {
-                id: unit.id,
-                position: unit.position,
-                player: unit.player,
-                kind: unit.kind,
-                alive: true,
-            });
+    /// Four local eight-tile cells at most, with 32 inspections per cell.
+    /// Rotate a deterministic window in crowded cells so dense stacks do not
+    /// turn pair work quadratic or permanently hide the same neighbours.
+    pub(crate) fn spacing_neighbours(
+        &self,
+        at: WorldPosition,
+        salt: u64,
+    ) -> impl Iterator<Item = EntityId> + '_ {
+        let tile = at.tile_floor();
+        let min = cell_of(TileCoord::new(tile.x - 1, tile.y - 1));
+        let max = cell_of(TileCoord::new(tile.x + 1, tile.y + 1));
+        let min_x = at.x.saturating_sub(1023);
+        let max_x = at.x.saturating_add(1023);
+        let min_y = at.y.saturating_sub(1023);
+        let max_y = at.y.saturating_add(1023);
+        // A rotated window is at most two contiguous slices. Walk those
+        // directly: no modulo or nested iterator stack per inspected unit.
+        let mut windows: [&[CellUnit]; 8] = [&[]; 8];
+        let mut count = 0;
+        for y in min.1..=max.1 {
+            for x in min.0..=max.0 {
+                let units = self
+                    .wildlife
+                    .unit_cells
+                    .get(&unit_key((x, y)))
+                    .map_or(&[][..], Vec::as_slice);
+                let start = (salt % units.len().max(1) as u64) as usize;
+                let limit = units.len().min(32);
+                let first = limit.min(units.len() - start);
+                if first > 0 {
+                    windows[count] = &units[start..start + first];
+                    count += 1;
+                }
+                if limit > first {
+                    windows[count] = &units[..limit - first];
+                    count += 1;
+                }
+            }
+        }
+        let mut window = 0;
+        let mut offset = 0;
+        std::iter::from_fn(move || {
+            while window < count {
+                let units = windows[window];
+                if offset >= units.len() {
+                    window += 1;
+                    offset = 0;
+                    continue;
+                }
+                let unit = &units[offset];
+                offset += 1;
+                if unit.alive
+                    && unit.position.x >= min_x
+                    && unit.position.x <= max_x
+                    && unit.position.y >= min_y
+                    && unit.position.y <= max_y
+                {
+                    return Some(unit.id);
+                }
+            }
+            None
+        })
     }
 
-    /// Movement calls this after each step; `previous_tile` is where the unit
-    /// started the step. The mirrored position stays exact even without a
-    /// cell change, because animals score distances against it.
+    pub(crate) fn track_unit_cell(&mut self, unit: &GameUnit) {
+        let units = self
+            .wildlife
+            .unit_cells
+            .entry(unit_key(cell(unit.position)))
+            .or_default();
+        self.units[self.lookup[&unit.id]].wildlife_slot = units.len();
+        units.push(CellUnit {
+            id: unit.id,
+            position: unit.position,
+            player: unit.player,
+            kind: unit.kind,
+            alive: true,
+        });
+    }
+
+    /// The dense unit index supplies its cell slot: even a completely stacked
+    /// crowd updates its spatial mirror in O(1), without searching the bucket.
     pub(crate) fn track_unit_step(
         &mut self,
         id: EntityId,
         previous_tile: TileCoord,
         unit: &GameUnit,
     ) {
+        self.idle_spacing
+            .relocate(id, previous_tile, unit.position.tile_floor());
         let (old, new) = (cell_of(previous_tile), cell(unit.position));
         if old == new {
-            if let Some(units) = self.wildlife.unit_cells.get_mut(&old)
-                && let Some(slot) = units.iter().position(|u| u.id == id)
+            let slot = self.units[self.lookup[&id]].wildlife_slot;
+            if let Some(units) = self.wildlife.unit_cells.get_mut(&unit_key(old))
+                && let Some(entry) = units.get_mut(slot).filter(|u| u.id == id)
             {
-                units[slot].position = unit.position;
+                entry.position = unit.position;
             }
             return;
         }
@@ -157,26 +249,39 @@ impl GameWorld {
     }
 
     pub(crate) fn untrack_unit_cell(&mut self, id: EntityId, key: (i32, i32)) {
-        if let Some(units) = self.wildlife.unit_cells.get_mut(&key) {
-            if let Some(slot) = units.iter().position(|u| u.id == id) {
-                units.swap_remove(slot);
-            }
-            if units.is_empty() {
-                self.wildlife.unit_cells.remove(&key);
-            }
+        let key = unit_key(key);
+        let Some(&index) = self.lookup.get(&id) else {
+            return;
+        };
+        let slot = self.units[index].wildlife_slot;
+        let Some(units) = self.wildlife.unit_cells.get_mut(&key) else {
+            return;
+        };
+        if units.get(slot).is_none_or(|u| u.id != id) {
+            return;
+        }
+        units.swap_remove(slot);
+        self.units[index].wildlife_slot = usize::MAX;
+        if let Some(displaced) = units.get(slot) {
+            self.units[self.lookup[&displaced.id]].wildlife_slot = slot;
+        }
+        if units.is_empty() {
+            self.wildlife.unit_cells.remove(&key);
         }
     }
 
     pub(crate) fn untrack_unit_at(&mut self, id: EntityId, at: WorldPosition) {
-        let key = cell(at);
-        self.untrack_unit_cell(id, key);
+        self.idle_spacing.remove(id, at.tile_floor());
+        self.untrack_unit_cell(id, cell(at));
     }
 
     pub(crate) fn track_unit_death(&mut self, id: EntityId, at: WorldPosition) {
-        if let Some(units) = self.wildlife.unit_cells.get_mut(&cell(at))
-            && let Some(slot) = units.iter().position(|u| u.id == id)
+        self.idle_spacing.remove(id, at.tile_floor());
+        let slot = self.units[self.lookup[&id]].wildlife_slot;
+        if let Some(units) = self.wildlife.unit_cells.get_mut(&unit_key(cell(at)))
+            && let Some(entry) = units.get_mut(slot).filter(|u| u.id == id)
         {
-            units[slot].alive = false;
+            entry.alive = false;
         }
     }
 
@@ -257,7 +362,11 @@ impl GameWorld {
     pub(crate) fn cancel_hunt(&mut self, id: EntityId) {
         self.wildlife.hunts.remove(&id);
     }
-    fn huntable(&self, player: PlayerId, id: EntityId) -> Result<GameAnimal, EconomyError> {
+    pub(crate) fn huntable(
+        &self,
+        player: PlayerId,
+        id: EntityId,
+    ) -> Result<GameAnimal, EconomyError> {
         let a = *self.animal(id).ok_or(EconomyError::InvalidTarget)?;
         if a.owner.is_some_and(|owner| owner != player) {
             return Err(EconomyError::NotOwner);

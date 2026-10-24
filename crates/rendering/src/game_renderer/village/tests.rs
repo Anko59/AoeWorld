@@ -6,6 +6,7 @@ use wasm_bindgen_test::wasm_bindgen_test;
 fn fish_sprites_animate_at_their_sampled_native_period() {
     let mut art = art();
     let fish = SceneResource {
+        highlight: 0,
         id: 0,
         position: [0.5; 2],
         kind: 0,
@@ -118,7 +119,7 @@ pub(super) fn unit(kind: SceneUnitKind) -> SceneUnit {
         kind,
         id: EntityId(2),
         position: [0.5; 2],
-        moving: false,
+        visual: crate::SceneUnitVisual::new(false),
         facing: 0,
         selected: false,
         elevation_meters: 0.0,
@@ -157,7 +158,7 @@ fn villager_walk_uses_fifteen_frame_rows_for_all_eight_facings() {
     {
         let mut u = unit(SceneUnitKind::Villager);
         u.facing = facing as u8;
-        u.moving = true;
+        u.visual.set_moving(true);
         let frames = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 7);
         assert_eq!(frames.last().unwrap().1.atlas.uv[0], index as f32 / 4096.0);
         assert_eq!(
@@ -429,4 +430,36 @@ fn feudal_building_roles_and_actor_groups_do_not_overlap() {
         assert_eq!(kind.actor_slot(), Some(usize::from(slot)));
         assert_eq!(kind.building_slot(), None);
     }
+}
+
+/// The DAT farm has no construction graphic: a farm being built is drawn as
+/// its own ground (slot 5 emits no sprite), never the 3x3 scaffolding.
+#[wasm_bindgen_test]
+fn a_farm_under_construction_draws_no_scaffolding() {
+    let farm = SceneUnitKind::foundation(50);
+    assert_eq!(farm, SceneUnitKind::ConstructionFarm);
+    assert_eq!(farm.building_slot(), Some(5));
+    assert_eq!(SceneUnitKind::foundation(12).building_slot(), Some(11));
+    let mut emitted = 0;
+    sprite_building(
+        &art(),
+        SceneUnit {
+            kind: farm,
+            id: EntityId(1),
+            position: [10.5; 2],
+            visual: crate::SceneUnitVisual::new(false),
+            facing: 0,
+            selected: false,
+            elevation_meters: 0.0,
+        },
+        SceneCamera {
+            center: [10.5; 2],
+            zoom: 1.0,
+            viewport: [512.0; 2],
+            focus_elevation_meters: 0.0,
+        },
+        0,
+        &mut |_| emitted += 1,
+    );
+    assert_eq!(emitted, 0);
 }

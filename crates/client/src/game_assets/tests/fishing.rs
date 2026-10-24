@@ -137,8 +137,8 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
     buildings::select(&manifest, &mut selected, &mut domains).unwrap();
     building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
     fishing::select(&manifest, &mut selected, &mut domains).unwrap();
-    // The eight static TC entries are now selected through DAT recipes.
-    assert_eq!(selected.len(), 4620);
+    // The TC entries use DAT recipes; the catalog now includes ten rally flag cells.
+    assert_eq!(selected.len(), 4670);
     assert!(selected.len() <= MAX_SELECTED_FRAMES);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)

@@ -150,7 +150,9 @@ mirror!(
         RejectedResearchBusy,
         RejectedTechRequirement,
         RejectedRequiresFeudalAge,
-        RejectedNoMarket
+        RejectedNoMarket,
+        RejectedWorldLimit,
+        RejectedOrderTooLarge
     ]
 );
 

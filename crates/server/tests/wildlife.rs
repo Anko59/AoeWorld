@@ -99,7 +99,12 @@ async fn wildlife_hunting_scenario_over_the_wire() {
                     log.push(format!("tick {tick}: HuntOrder Accepted"));
                 }
                 GameplayServerMessage::WildlifeState { animals, .. } => {
-                    let a = animals.iter().find(|a| a.id == sheep).unwrap();
+                    // A harvested carcass leaves the world once its decay ends.
+                    let Some(a) = animals.iter().find(|a| a.id == sheep) else {
+                        assert!(dead, "the living sheep stays visible");
+                        gathered = true;
+                        continue;
+                    };
                     if !owned && a.owner == Some(PlayerId(0)) {
                         owned = true;
                         log.push(format!("tick {tick}: sheep converts to player 0"));
@@ -151,7 +156,9 @@ async fn wildlife_hunting_scenario_over_the_wire() {
         }
     ));
     service.resync(id, 2).await;
-    assert!(drain(&mut rx).iter().any(|m| matches!(m, GameplayServerMessage::WildlifeState { revision: 2, animals, .. } if animals.iter().any(|a| a.id == sheep && a.food_remaining == 0))));
+    // The carcass, slaughtered beside the Town Center, is exhausted; its
+    // decay may already have removed it when the last load is delivered.
+    assert!(drain(&mut rx).iter().any(|m| matches!(m, GameplayServerMessage::WildlifeState { revision: 2, animals, .. } if animals.iter().all(|a| a.id != sheep || a.food_remaining == 0))));
     log.push(
         "scenario PASS: carcass exhausted, 100 food delivered; resync and authority verified"
             .to_owned(),

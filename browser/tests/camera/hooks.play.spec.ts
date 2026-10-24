@@ -152,11 +152,13 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
     const before = PNG.sync.read(
       await spectator.locator("#scene").screenshot(),
     );
-    // Terrain fills the central viewport: neither blank background nor a sprite suffices.
+    // Sample clear terrain to the right of the starting kit. Its current opaque
+    // tree fixtures cover the old central patch; keep the same area and floor
+    // so neither blank background nor those sprites can satisfy this check.
     const colors = new Set<string>();
     let terrainPixels = 0;
     for (let y = 150; y < 450; y += 10)
-      for (let x = 250; x < 650; x += 10) {
+      for (let x = 750; x < 1150; x += 10) {
         const offset = (y * before.width + x) * 4;
         const color = before.data.subarray(offset, offset + 3).toString("hex");
         // Current composed grass base/accent for the flat temperate package,

@@ -62,6 +62,12 @@ class EconomyManager:
         center = ctx.center
         if center is None or ctx.hold_town_center or center.researching is not None:
             return
+        for kind in (ResourceKind.FOOD, ResourceKind.WOOD):
+            target = nearest(ctx.resources(kind), ctx.home)
+            if target is not None:
+                if getattr(center, "rally_resource", None) != target.id:
+                    ctx.order("set_rally_resource", center.id, target.id)
+                break
         queued_villagers = center.queue_length
         if len(ctx.villagers) + queued_villagers >= ctx.config.max_villagers:
             return

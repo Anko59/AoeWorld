@@ -20,6 +20,7 @@ use aoe_rendering::{
     AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
     GameArt, GameFrame, TerrainTopology,
 };
+pub(crate) use manifest::{decode_bounds, decode_chunk, decode_chunks};
 #[cfg(test)]
 #[path = "tests/building_sprites.rs"]
 mod building_sprite_tests;
@@ -42,7 +43,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::VillagerMiningStone as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::RallyFlag as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
 async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
@@ -80,7 +81,7 @@ fn error(e: impl std::fmt::Display) -> JsValue {
 // Both the base pack and DE overlay share one JSON parser instantiation.
 #[inline(never)]
 fn decode_manifest(bytes: &[u8]) -> Result<Manifest, JsValue> {
-    serde_json::from_slice(bytes).map_err(error)
+    manifest::decode(bytes)
 }
 
 // Startup-only lists are bounded by reviewed catalogue frame counts (`MAX_REVIEWED_FRAMES`).
@@ -194,19 +195,6 @@ fn group_frames(ranges: &RoleRanges, records: &[GameFrame], role: AssetRole) -> 
     match &ranges[role as usize] {
         Some(range) => records[range.clone()].to_vec(),
         None => Vec::new(),
-    }
-}
-
-// Keep bounded startup group construction shared across array lengths.
-#[inline(never)]
-fn fill_groups(
-    target: &mut [Vec<GameFrame>],
-    roles: &[AssetRole],
-    ranges: &RoleRanges,
-    records: &[GameFrame],
-) {
-    for (frames, role) in target.iter_mut().zip(roles) {
-        *frames = group_frames(ranges, records, *role);
     }
 }
 
@@ -363,6 +351,7 @@ pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValu
             ranges[selection.role as usize] = Some(start..selected.len());
         }
     }
+    let rally_range = building_sprites::rally(&manifest, &mut selected, &mut domains)?;
     let actor_ranges = actors::select(&manifest, &mut selected, &mut domains)?;
     buildings::select(&manifest, &mut selected, &mut domains)?;
     let building_ranges = building_sprites::select(&manifest, &mut selected, &mut domains)?;
@@ -378,9 +367,9 @@ pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValu
         .collect::<Vec<_>>();
     let group = |role| group_frames(&ranges, &records, role);
     let mut terrain: [Vec<GameFrame>; 12] = Default::default();
-    fill_groups(&mut terrain, &TERRAIN_ROLES, &ranges, &records);
+    actors::fill_groups(&mut terrain, &TERRAIN_ROLES, &ranges, &records);
     let mut village: [Vec<GameFrame>; 9] = Default::default();
-    fill_groups(
+    actors::fill_groups(
         &mut village,
         &[
             AssetRole::VillagerStanding,
@@ -389,8 +378,8 @@ pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValu
             AssetRole::VillagerCarryingWood,
             AssetRole::VillagerForaging,
             AssetRole::VillagerCarryingFood,
-            AssetRole::VillagerMiningGold,
-            AssetRole::VillagerCarryingOre,
+            AssetRole::VillagerCarryingGold,
+            AssetRole::VillagerCarryingStone,
             AssetRole::VillagerMiningStone,
         ],
         &ranges,
@@ -432,6 +421,11 @@ pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValu
         tree_shadows: group(AssetRole::WoodTreeShadow),
         tree_families: [group(AssetRole::TreeConifer), group(AssetRole::TreePalm)],
         scenery: aoe_rendering::SceneryArt {
+            rally_flags: building_sprites::rally_frames(
+                &records,
+                rally_range,
+                group(AssetRole::RallyFlag),
+            ),
             cliff_faces: group(AssetRole::CliffFace),
             rocks: group(AssetRole::RockPile),
             shrubs: group(AssetRole::Shrub),

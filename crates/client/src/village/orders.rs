@@ -113,6 +113,9 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
     if client.role != Some(GameplayRole::Controller) {
         return;
     }
+    if client.selected.building_id.is_some() && super::rally::at_pointer(client, point) {
+        return;
+    }
     let actor = super::picking::actor(client, point);
     let enemy = actor
         .filter(|a| a.2)

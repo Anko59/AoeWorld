@@ -448,3 +448,7 @@ mod long_routes_tests;
 #[cfg(test)]
 #[path = "navigation/tests/priority.rs"]
 mod priority_tests;
+
+#[cfg(test)]
+#[path = "navigation/tests/pocket.rs"]
+mod pocket_tests;

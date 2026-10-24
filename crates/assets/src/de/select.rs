@@ -13,6 +13,11 @@ pub const FARM_TEXTURES: &[&str] = &["g_fm1", "g_fm2"];
 
 pub const SELECTION: &[Item] = &[
     Item {
+        building: "rally_point",
+        role: "flag",
+        stem: "b_misc_waypoint_flag",
+    },
+    Item {
         building: "house",
         role: "standing",
         stem: "b_dark_house_age1",

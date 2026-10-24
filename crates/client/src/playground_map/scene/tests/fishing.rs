@@ -196,6 +196,7 @@ async fn clicking_fish_on_water_selects_a_resource_and_never_a_unit() {
             overview: Vec::new(),
         }));
         assert!(client.resources.apply(ResourceState {
+            snapshot_page: None,
             subscription_revision: 1,
             from_revision: None,
             revision: 1,
@@ -330,4 +331,24 @@ async fn nearer_ordinary_ground_hides_a_fishing_ship_from_selection() {
     let selected = shared.borrow().selected.units.clone();
     shared.borrow().canvas.remove();
     assert!(selected.is_empty(), "hidden hull must not be selectable");
+}
+
+#[wasm_bindgen_test]
+fn gather_cursor_names_fishing_never_building() {
+    use crate::playground::game::village::presentation::gather_cursor;
+    use aoe_map::{ObjectKind, ResourceKind};
+    assert_eq!(
+        gather_cursor(ObjectKind::ShoreFish, ResourceKind::Food),
+        6.0
+    );
+    assert_eq!(gather_cursor(ObjectKind::DeepFish, ResourceKind::Food), 6.0);
+    assert_eq!(
+        gather_cursor(ObjectKind::ForageBush, ResourceKind::Food),
+        7.0
+    );
+    assert_eq!(gather_cursor(ObjectKind::Tree, ResourceKind::Wood), 8.0);
+    assert_eq!(
+        gather_cursor(ObjectKind::GoldDeposit, ResourceKind::Gold),
+        9.0
+    );
 }

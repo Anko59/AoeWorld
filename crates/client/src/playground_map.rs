@@ -452,9 +452,9 @@ async fn fetch_chunk(
         return Err(JsValue::from_str(&format!("HTTP {}", response.status())));
     }
     let body = JsFuture::from(response.text()?).await?;
-    let compact: CompactChunk =
-        serde_json::from_str(&body.as_string().ok_or("map chunk response was not text")?)
-            .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let compact = crate::game_assets::decode_chunk(
+        &body.as_string().ok_or("map chunk response was not text")?,
+    )?;
     let chunk =
         CachedChunk::decode(&compact).map_err(|error| JsValue::from_str(&error.to_string()))?;
     if chunk.coordinate() != (x, y) {

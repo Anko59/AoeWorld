@@ -120,6 +120,14 @@ class Brain:
     def on_rejected(self, ctx: Context, tracked: Any, result: Any) -> None:
         mem = ctx.board
         name, args = tracked.name, tracked.args
+        if result == CommandResult.REJECTED_WORLD_LIMIT:
+            # The world is full, not the site or target: wait, then try again.
+            mem.cool("world-limit:" + name, ctx.tick, ctx.config.world_limit_wait_seconds * ctx.world.tick_hz)
+            if name == "build":
+                mem.plans = [p for p in mem.plans if p.tile != (args[2], args[3])]
+                for builder in args[0]:
+                    mem.builders.pop(builder, None)
+            return
         if name == "gather" and result in HOPELESS:
             mem.bad_resources.add(args[1])
         elif name == "build":

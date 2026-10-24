@@ -51,8 +51,9 @@ pub use navigation::{
     find_path, find_path_segment_with_overlay, find_path_with_overlay, hierarchical_route,
 };
 pub use overlay::{
-    Depletion, MAX_RESOURCE_OVERLAY_CHANGES, RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange,
-    ResourceOverlay, ResourceOverlayError, ResourceOverlaySnapshot,
+    Depletion, MAX_OBSTACLE_TILES, MAX_RESOURCE_OVERLAY_CHANGES, MAX_STARTING_NODES,
+    RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange, ResourceOverlay, ResourceOverlayError,
+    ResourceOverlaySnapshot,
 };
 pub use package::{
     EnvironmentalProvenance, LayerProvenance, MapPackage, MapPackageError, PreparationNote,

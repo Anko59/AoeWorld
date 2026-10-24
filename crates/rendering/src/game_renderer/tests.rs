@@ -190,7 +190,7 @@ fn an_overlapping_cliff_is_drawn_over_a_lower_depth_selection_marker() {
         kind: Default::default(),
         id: EntityId(7),
         position: [0.5, 0.5],
-        moving: false,
+        visual: crate::SceneUnitVisual::new(false),
         facing: 0,
         selected: true,
         elevation_meters: 0.0,
@@ -282,7 +282,7 @@ fn units_order_behind_and_in_front_of_a_raised_surface_at_contact_height() {
         kind: Default::default(),
         id: EntityId(id),
         position: [1.8, 1.8],
-        moving: false,
+        visual: crate::SceneUnitVisual::new(false),
         facing: 0,
         selected: false,
         elevation_meters,
@@ -326,6 +326,7 @@ fn depleted_resource_disappears_from_both_backend_draw_lists() {
         focus_elevation_meters: 0.0,
     };
     let resource = SceneResource {
+        highlight: 0,
         visual_family: 0,
         id: 9,
         position: [0.5, 0.5],

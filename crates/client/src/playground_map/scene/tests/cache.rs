@@ -36,6 +36,7 @@ async fn stationary_wall_corner_projections_reuse_the_prepared_foundation_key() 
             training_queue: Vec::new(),
             last_hit: None,
             gate_open: false,
+            rally_point: None,
         })
         .collect();
     let scene = prepare(&client);
@@ -111,6 +112,7 @@ fn building_family_uses_its_observed_age_including_construction() {
             training_queue: Vec::new(),
             last_hit: None,
             gate_open: false,
+            rally_point: None,
         };
         assert_eq!(building_kind(&building).building_id(), Some(dark));
         building.age = aoe_protocol::Age::Feudal;

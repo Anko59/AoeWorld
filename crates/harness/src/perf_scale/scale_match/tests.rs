@@ -113,11 +113,17 @@ fn tick_rows_parse_and_summarise() {
 #[test]
 fn bot_reports_add_up() {
     let totals = report::bot_totals(&[
-        json!([{"decisions": 4, "villagers": 10, "accepted": 3, "closed": false}]),
+        json!([{"decisions": 4, "villagers": 10, "accepted": 3, "closed": false, "age": "FEUDAL",
+                "stats": {"build_orders": 7, "buildings_completed": 5,
+                          "rejected:build:REJECTED_WORLD_LIMIT": 2}}]),
         json!([{"decisions": 6, "villagers": 5, "rejected": 1, "closed": true, "errors": 2,
                 "drops": 2, "rejoins": 1, "reconnect_seconds": 1.5}]),
     ]);
     assert_eq!(totals["drops"], 2);
+    assert_eq!(totals["feudal"], 1);
+    assert_eq!(totals["build_orders"], 7);
+    assert_eq!(totals["buildings_completed"], 5);
+    assert_eq!(totals["build_rejections"]["REJECTED_WORLD_LIMIT"], 2);
     assert_eq!(totals["rejoins"], 1);
     assert_eq!(totals["sessions_dropped"], 1);
     assert_eq!(totals["reconnect_seconds"], 1.5);

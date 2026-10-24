@@ -208,3 +208,34 @@ def test_a_closed_connection_is_reported_once_and_never_busy_spins_the_fleet(ser
     finally:
         for client in clients:
             client.close()
+
+
+def test_rally_round_trip_survives_reconnecting(server, secret):
+    info = new_match(server, secret, ["ai"])
+    token = info.slots[0].token
+    with aoeworld.connect(server, token, decision_hz=5) as client:
+        first = client.wait_decision(timeout=10)
+        center = first.world.town_center()
+        # Terrain/catalog delivery follows the first authoritative unit snapshot.
+        nodes = first.world.resources(ResourceKind.FOOD)
+        deadline = time.time() + 10
+        while not nodes and time.time() < deadline:
+            decision = client.wait_decision(timeout=2)
+            if decision is not None:
+                nodes = decision.world.resources(ResourceKind.FOOD)
+        assert nodes, "visible starting food must arrive through the SDK catalog"
+        node = min(nodes, key=lambda n: (n.x-center.x)**2 + (n.y-center.y)**2)
+        sequence = client.set_rally_resource(center.id, node.id)
+        deadline = time.time() + 10
+        accepted = False
+        while time.time() < deadline:
+            decision = client.wait_decision(timeout=2)
+            accepted |= any(e.sequence == sequence and e.result == aoeworld.CommandResult.ACCEPTED for e in decision.events if e.kind == "order_result")
+            if accepted and decision.world.town_center().rally_resource == node.id:
+                break
+        assert accepted
+        assert client.world.town_center().rally_position == node.tile
+    with aoeworld.connect(server, token, decision_hz=5) as resumed:
+        decision = resumed.wait_decision(timeout=10)
+        assert decision.world.town_center().rally_resource == node.id
+        assert decision.world.town_center().rally_position == node.tile

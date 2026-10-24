@@ -25,6 +25,7 @@ use wasm_bindgen_test::wasm_bindgen_test;
 
 fn state(revision: u64, id: u64, remaining: u16) -> ResourceState {
     ResourceState {
+        snapshot_page: None,
         subscription_revision: 1,
         from_revision: (revision > 1).then_some(revision - 1),
         revision,

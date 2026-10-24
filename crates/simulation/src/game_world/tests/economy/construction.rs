@@ -143,7 +143,7 @@ fn construct_orders_reject_complete_foreign_and_missing_buildings() {
         ),
         (PlayerId(1), vec![stranger], house, EconomyError::NotOwner),
         (PlayerId(0), vec![stranger], house, EconomyError::NotOwner),
-        (PlayerId(0), vec![], house, EconomyError::Capacity),
+        (PlayerId(0), vec![], house, EconomyError::OrderTooLarge),
     ] {
         assert_eq!(
             world.issue_construct(player, &builders, target),
@@ -204,7 +204,7 @@ fn palisade_segments_cost_two_wood_each_and_take_six_seconds_per_tile() {
     let before = world.canonical_hash();
     assert_eq!(
         world.issue_build_wall(PlayerId(0), &[builder], at(0, 10), at(100, 10)),
-        Err(EconomyError::Capacity)
+        Err(EconomyError::OrderTooLarge)
     );
     assert_eq!(
         world.issue_build_wall(PlayerId(0), &[builder], at(102, 98), at(102, 102)),

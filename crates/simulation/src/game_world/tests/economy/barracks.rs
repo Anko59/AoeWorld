@@ -76,3 +76,104 @@ fn a_barracks_trains_a_militia_end_to_end() {
         used + 1
     );
 }
+
+#[test]
+fn dark_age_militia_research_in_feudal_and_train_men_at_arms() {
+    use crate::{Age, Tech};
+    let (mut w, _, center) = village();
+    set_stock(&mut w, 10_000, 10_000, 10_000, 10_000);
+    let worker = villager_at(&mut w, 99, 100);
+    let barracks = w
+        .issue_build(
+            PlayerId(0),
+            &[worker],
+            BuildingKind::Barracks,
+            TileCoord::new(100, 100),
+        )
+        .unwrap();
+    finish(&mut w, barracks, 1200);
+    w.economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .population_cap = 30;
+    assert_eq!(
+        w.issue_research(PlayerId(0), barracks, Tech::ManAtArms),
+        Err(EconomyError::RequiresFeudalAge)
+    );
+    w.issue_train(PlayerId(0), barracks, UnitKind::Militia)
+        .unwrap();
+    advance(&mut w, 21 * 20);
+    let militia = w.units().find(|u| u.kind == UnitKind::Militia).unwrap().id;
+    w.units[w.lookup[&militia]].state.hp = 30;
+    let builder = villager_at(&mut w, 119, 100);
+    let mill = w
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::Mill,
+            TileCoord::new(120, 100),
+        )
+        .unwrap();
+    finish(&mut w, mill, 1000);
+    w.issue_research(PlayerId(0), center, Tech::FeudalAge)
+        .unwrap();
+    advance(&mut w, 130 * 20);
+    assert_eq!(w.player_economy(PlayerId(0)).unwrap().age, Age::Feudal);
+    w.economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .population_cap = 30;
+    assert_eq!(
+        w.issue_train(PlayerId(0), barracks, UnitKind::ManAtArms),
+        Err(EconomyError::TechRequirementMissing)
+    );
+    w.issue_train(PlayerId(0), barracks, UnitKind::Militia)
+        .unwrap();
+    assert_eq!(
+        w.issue_research(PlayerId(0), barracks, Tech::ManAtArms),
+        Err(EconomyError::ResearchBusy)
+    );
+    w.issue_cancel_training(PlayerId(0), barracks).unwrap();
+    set_stock(&mut w, 99, 0, 40, 0);
+    assert_eq!(
+        w.issue_research(PlayerId(0), barracks, Tech::ManAtArms),
+        Err(EconomyError::InsufficientResources)
+    );
+    set_stock(&mut w, 500, 0, 200, 0);
+    let before = stock(&w);
+    w.issue_research(PlayerId(0), barracks, Tech::ManAtArms)
+        .unwrap();
+    assert_eq!(stock(&w), (before.0 - 100, 0, before.2 - 40, 0));
+    advance(&mut w, Tech::ManAtArms.rules().seconds * 20 - 1);
+    assert_eq!(w.unit(militia).unwrap().kind, UnitKind::Militia);
+    w.advance();
+    let upgraded = w.unit(militia).unwrap();
+    assert_eq!(
+        (upgraded.kind, upgraded.hp, upgraded.max_hp),
+        (UnitKind::ManAtArms, 35, 45)
+    );
+    w.economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .population_cap = 30;
+    w.issue_train(PlayerId(0), barracks, UnitKind::Militia)
+        .unwrap();
+    assert_eq!(
+        w.building(barracks)
+            .unwrap()
+            .training_queue
+            .front()
+            .unwrap()
+            .kind,
+        UnitKind::ManAtArms
+    );
+    advance(&mut w, 21 * 20);
+    assert_eq!(
+        w.units().filter(|u| u.kind == UnitKind::ManAtArms).count(),
+        2
+    );
+    assert!(!w.units().any(|u| u.kind == UnitKind::Militia));
+}

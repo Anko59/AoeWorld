@@ -285,7 +285,7 @@ replacement overlay. Failure leaves the caller's current overlay untouched.
 The revision counts changing depletion calls; zero-removal calls do not advance
 it. Restored collision and subsequent depletion use the same authoritative state.
 
-At most 65,536 changed resources may be retained or decoded in one overlay.
+At most 1,048,576 changed resources may be retained or decoded in one overlay.
 Adding another changed resource fails explicitly without partial depletion;
 already changed resources can still deplete. This is an entry count, not an RSS
 claim. The map crate owns the snapshot contract; the server owns persistence and
@@ -328,12 +328,17 @@ receives a complete reset, including an empty reset for an unchanged map. Later
 messages name the exact previous overlay revision and contain sorted final
 amounts for changed IDs. The server retains 1,024 revision entries, coalesces
 repeated IDs, and sends a fresh bounded snapshot when a client has fallen behind
-that journal. Both forms carry the subscription revision; superseded replies
-cannot change the current view. An unsuccessful resource queue write disconnects
-the consumer rather than advancing its acknowledged publication state.
+that journal. Each message contains at most 65,536 amounts; larger snapshots
+carry explicit `(offset, total)` pages with a shared overlay/subscription revision.
+The server reserves the complete page batch before publishing any page. A full
+queue defers publication without advancing its delivered revision; a closed
+queue disconnects the consumer. Superseded subscriptions cannot change the view.
 
-The client retains at most 65,536 changed amounts separately from immutable
-chunks. Exhausted resources are filtered before rendering, so chunk eviction and
+The client retains at most 1,048,576 changed amounts separately from immutable
+chunks. Snapshot pages must arrive in order and assemble atomically; incomplete
+or invalid pages cannot replace the previous complete view. The SDK accumulates
+pages, clearing its sparse amounts only on the first page. Exhausted resources
+are filtered before rendering, so chunk eviction and
 reload cannot restore their sprites. Unknown resource state hides sprites until
 the initial reset arrives. Welcome and world replacement clear this state;
 a malformed or discontinuous update closes the socket and requires reconnect.

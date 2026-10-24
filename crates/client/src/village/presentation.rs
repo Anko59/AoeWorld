@@ -5,6 +5,7 @@ use crate::resource_state::ResourceStateCache;
 use aoe_core::{ScreenPoint, TileCoord};
 use aoe_protocol::UnitKind;
 pub(in super::super) fn values(client: &Client) -> Vec<f64> {
+    super::rally::present(client);
     let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
     let owner = owner(client);
     let mut values = vec![0.0; 9];
@@ -14,7 +15,8 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             .as_ref()
             .is_some_and(|s| s.ready_state() == web_sys::WebSocket::OPEN),
     ));
-    // Header: connection, selected kind/remaining, cursor, highlight center,
+    // Header: connection, selected kind/remaining, cursor (6-9: gather fish,
+    // forage, chop, mine), highlight center,
     // actor count, resource count, highlight width. Own actors are world triples.
     values[1] = -1.0;
     for u in client.units.values() {
@@ -38,7 +40,11 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             .map(|u| u.position.as_tiles())
     });
     let villager = focus.is_some();
-    let hover = if villager && !client.village.move_cursor {
+    let hover = if villager
+        && !client.village.move_cursor
+        && client.village.placement.is_none()
+        && client.drag.is_none()
+    {
         client
             .pointer
             .and_then(|p| super::picking::resource(client, p))
@@ -121,6 +127,9 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             }
         }
         let highlighted = hover.is_some_and(|(id, _)| id == node.id);
+        if highlighted && values[3] == 1.0 {
+            values[3] = gather_cursor(node.object, node.kind);
+        }
         if node.kind as u8 == 1 && !highlighted {
             continue;
         }
@@ -147,7 +156,27 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             values.extend_from_slice(&[kind as f64, p.x * scale, p.y * scale, distance]);
         }
     }
+    client.village.hovered_resource.set(
+        hover
+            .filter(|_| (6.0..=9.0).contains(&values[3]))
+            .map(|(id, _)| id),
+    );
     values
+}
+
+/// The gather cursor names the work, as AoE2's do: a fishing hook over fish
+/// (never a builder's hammer), a basket over berries, an axe over trees and a
+/// pick over gold and stone.
+pub(in super::super) fn gather_cursor(
+    object: aoe_map::ObjectKind,
+    kind: aoe_map::ResourceKind,
+) -> f64 {
+    match (object, kind) {
+        (aoe_map::ObjectKind::ShoreFish | aoe_map::ObjectKind::DeepFish, _) => 6.0,
+        (_, aoe_map::ResourceKind::Food) => 7.0,
+        (_, aoe_map::ResourceKind::Wood) => 8.0,
+        _ => 9.0,
+    }
 }
 
 /// HUD tags distinguish food objects without changing their stockpile kind.

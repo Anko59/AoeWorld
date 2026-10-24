@@ -8,16 +8,20 @@ use std::{fmt, marker::PhantomData};
 pub(crate) mod economy;
 mod fog;
 mod projectiles;
+mod rally;
 mod resources;
+pub use rally::{RallyPoint, RallyTarget};
 mod wildlife;
 pub use economy::*;
 pub use fog::FogState;
 pub use projectiles::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
-pub use resources::{MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
+pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
 pub const VERSION: u16 = 2;
-pub const MAX_MESSAGE: usize = 1_048_576;
+/// One gameplay frame: room for the largest combined tick (16,384 units and
+/// 16,384 buildings with full training queues, about 1.8 MiB).
+pub const MAX_MESSAGE: usize = 4 * 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;
 pub const MAX_PENDING_COMMANDS_PER_CONNECTION: usize = 64;
@@ -178,6 +182,11 @@ pub enum ClientMessage {
         version: u16,
         token: ResumeToken,
     },
+    SetRallyOrder {
+        sequence: u64,
+        building_id: EntityId,
+        target: RallyTarget,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -214,6 +223,13 @@ pub enum CommandResult {
     RejectedRequiresFeudalAge,
     /// Trading needs a completed Market owned by the player.
     RejectedNoMarket,
+    /// A world-wide capacity (buildings, building ground, workers, hunters,
+    /// changed resources) is reached; the order is valid and the queue is not
+    /// involved. Appended so earlier discriminants keep their wire value.
+    RejectedWorldLimit,
+    /// The order's unit group is empty, repeats a unit or exceeds
+    /// `MAX_BUILD_GROUP`, or its wall exceeds the longest one order may lay.
+    RejectedOrderTooLarge,
 }
 
 /// Immutable physical properties of the active geographic map. The package

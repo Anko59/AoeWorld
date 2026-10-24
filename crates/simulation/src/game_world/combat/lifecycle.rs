@@ -41,6 +41,7 @@ impl GameWorld {
 
     /// Drops the unit's route and order without touching its task.
     pub(crate) fn stop_movement(&mut self, index: usize) {
+        self.destinations.remove(self.units[index].state.id);
         self.clear_planner(index);
         let unit = &mut self.units[index];
         unit.order = None;
@@ -93,6 +94,7 @@ impl GameWorld {
 
     /// Removes a unit from every index. Its slot is filled by the last unit.
     pub(crate) fn remove_unit(&mut self, id: EntityId) {
+        self.destinations.remove(id);
         let Some(&index) = self.lookup.get(&id) else {
             return;
         };

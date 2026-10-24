@@ -1,8 +1,11 @@
-use aoe_core::TileCoord;
+use aoe_core::{TileCoord, TileRect};
 use aoe_map::MovementOutcome;
 use std::{collections::BTreeMap, mem::size_of};
 
 pub(crate) const MAX_NAVIGATION_CACHE_BYTES: usize = 128 * 1024 * 1024;
+/// Entries retained at once: a ground change scans them all, so the count,
+/// not only the bytes, is bounded.
+pub(crate) const MAX_NAVIGATION_CACHE_ENTRIES: usize = 8_192;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct NavigationCacheUsage {
@@ -25,6 +28,8 @@ struct Entry {
     outcome: MovementOutcome,
     /// Planner work that produced the outcome from a fresh search.
     work: u32,
+    /// Ground the outcome depends on (`RoutePlanner::explored_area`).
+    area: TileRect,
     bytes: usize,
     last_used: u64,
 }
@@ -34,7 +39,9 @@ struct Entry {
 /// BTreeMap metadata remain outside the reported budget. An entry records the
 /// planner work its outcome cost and answers only a caller that could afford
 /// that work; the caller charges it, so a hit and a fresh search leave the
-/// same canonical planning budget.
+/// same canonical planning budget. A ground change drops only the entries
+/// whose explored area it touches: outside that area the search would read
+/// the same ground and prove the same outcome.
 #[derive(Debug)]
 pub(crate) struct NavigationCache {
     entries: BTreeMap<Key, Entry>,
@@ -83,6 +90,7 @@ impl NavigationCache {
         origin: TileCoord,
         destination: TileCoord,
         work: u32,
+        area: TileRect,
         outcome: MovementOutcome,
     ) {
         if matches!(outcome, MovementOutcome::BudgetExceeded) {
@@ -100,7 +108,9 @@ impl NavigationCache {
         if let Some(previous) = self.entries.remove(&key) {
             self.retained_bytes = self.retained_bytes.saturating_sub(previous.bytes);
         }
-        while self.retained_bytes.saturating_add(bytes) > self.limit_bytes {
+        while self.retained_bytes.saturating_add(bytes) > self.limit_bytes
+            || self.entries.len() >= MAX_NAVIGATION_CACHE_ENTRIES
+        {
             let Some(eviction) = self
                 .entries
                 .iter()
@@ -119,10 +129,30 @@ impl NavigationCache {
             Entry {
                 outcome,
                 work,
+                area,
                 bytes,
                 last_used: self.clock,
             },
         );
+    }
+
+    /// Drops the outcomes that depend on ground inside `changed`.
+    pub(crate) fn invalidate(&mut self, changed: TileRect) {
+        let overlaps = |area: &TileRect| {
+            area.min.x < changed.max.x
+                && changed.min.x < area.max.x
+                && area.min.y < changed.max.y
+                && changed.min.y < area.max.y
+        };
+        let mut freed = 0;
+        self.entries.retain(|_, entry| {
+            let keep = !overlaps(&entry.area);
+            if !keep {
+                freed += entry.bytes;
+            }
+            keep
+        });
+        self.retained_bytes = self.retained_bytes.saturating_sub(freed);
     }
 
     pub(crate) fn clear(&mut self) {
@@ -155,60 +185,4 @@ fn outcome_bytes(outcome: &MovementOutcome) -> usize {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aoe_map::Path;
-
-    fn path(x: i32) -> MovementOutcome {
-        MovementOutcome::Path(Path {
-            tiles: vec![TileCoord::new(x, 0)],
-            cost: 0,
-        })
-    }
-
-    #[test]
-    fn evicts_the_least_recently_used_segment() {
-        let first = path(1);
-        let entry_bytes = outcome_bytes(&first);
-        let mut cache = NavigationCache::with_limit(entry_bytes * 2);
-        cache.insert(TileCoord::new(0, 0), TileCoord::new(1, 0), 32, first);
-        cache.insert(TileCoord::new(0, 0), TileCoord::new(2, 0), 32, path(2));
-        assert_eq!(
-            cache.usage(),
-            NavigationCacheUsage {
-                entries: 2,
-                retained_bytes: entry_bytes * 2,
-                limit_bytes: entry_bytes * 2,
-            }
-        );
-        assert!(
-            cache
-                .get(TileCoord::new(0, 0), TileCoord::new(1, 0), 32)
-                .is_some()
-        );
-
-        cache.insert(TileCoord::new(0, 0), TileCoord::new(3, 0), 32, path(3));
-
-        assert!(
-            cache
-                .get(TileCoord::new(0, 0), TileCoord::new(1, 0), 32)
-                .is_some()
-        );
-        assert!(
-            cache
-                .get(TileCoord::new(0, 0), TileCoord::new(2, 0), 32)
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn expansion_exhaustion_is_not_cached() {
-        let mut cache = NavigationCache::default();
-        let origin = TileCoord::new(1, 2);
-        let destination = TileCoord::new(5, 4);
-        cache.insert(origin, destination, 4_096, MovementOutcome::BudgetExceeded);
-
-        assert_eq!(cache.entry_count(), 0);
-        assert_eq!(cache.get(origin, destination, 4_096), None);
-    }
-}
+mod tests;

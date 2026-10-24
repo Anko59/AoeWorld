@@ -95,7 +95,7 @@ impl MapChunkGenerator {
 
     /// Conservative depth test: `true` proves that every tile within
     /// `radius` tiles is lake or ocean water, without sampling those tiles.
-    pub(super) fn open_water_certain_near(
+    pub fn open_water_certain_near(
         &self,
         tile: TileCoord,
         radius: i32,

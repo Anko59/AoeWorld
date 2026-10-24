@@ -110,3 +110,15 @@ fn gameplay_collections_are_bounded() {
 }
 
 mod slots;
+
+#[test]
+fn rally_order_has_one_current_golden_wire_format() {
+    let message = ClientMessage::SetRallyOrder {
+        sequence: 9,
+        building_id: EntityId(3),
+        target: RallyTarget::Resource(77),
+    };
+    let bytes = encode_client(&message).unwrap();
+    assert_eq!(bytes, [20, 9, 3, 1, 77]);
+    assert_eq!(decode_client(&bytes).unwrap(), message);
+}

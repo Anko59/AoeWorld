@@ -300,6 +300,7 @@ test("skirmish offers bounded AoE map sizes and persists the selection", async (
     "Tiny · 30 km square",
     "Small · 120 km square",
     "Large · 480 km square",
+    "Country · 960 km square",
     "Giant · 1,920 km square",
   ]);
   await size.selectOption("1920");

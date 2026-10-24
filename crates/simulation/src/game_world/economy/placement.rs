@@ -162,20 +162,21 @@ impl GameWorld {
                     )),
                 research: None,
                 gate_open: false,
+                rally_point: None,
                 food_remaining: (kind == BuildingKind::Farm).then(|| self.farm_food(player)),
             },
         );
-        self.refresh_population_cap(player);
-        self.index_new_building(id, player, footprint);
         let bucket = self.economy.dropoffs.entry((player, kind)).or_default();
         let at = bucket.binary_search(&id).unwrap_or_else(|at| at);
         bucket.insert(at, id);
+        self.refresh_population_cap(player);
+        self.index_new_building(id, player, footprint);
         if complete {
             self.update_building_vision(id);
             self.remember_visible_buildings();
         }
         if rules.blocks {
-            self.resource_collision_changed();
+            self.collision_closed(footprint);
         }
         Ok(id)
     }
@@ -183,11 +184,11 @@ impl GameWorld {
     /// Housing: the supporting completed buildings, capped at the match's
     /// population ceiling (200 unless the match sets another).
     pub(super) fn refresh_population_cap(&mut self, player: PlayerId) {
+        // Only the player's own buildings, through the per-kind index: a
+        // whole-world scan here ran on every placement in a 100-seat world.
         let cap = self
-            .economy
-            .buildings
-            .values()
-            .filter(|building| building.player == player && building.is_complete())
+            .player_buildings(player)
+            .filter(|building| building.is_complete())
             .map(|building| u32::from(building.kind.rules().population_support))
             .sum::<u32>()
             .min(u32::from(self.economy.limits.population)) as u16;
@@ -219,7 +220,7 @@ impl GameWorld {
             if let Terrain::Map { overlay, .. } = &mut self.terrain {
                 overlay.remove_footprint(building.footprint);
             }
-            self.resource_collision_changed();
+            self.collision_opened(building.footprint);
         }
         self.economy.open_gates.remove(&id);
         self.combat.tower_ready.remove(&id);
@@ -235,7 +236,7 @@ impl GameWorld {
         player: PlayerId,
         start: TileCoord,
     ) -> Result<EntityId, EconomyError> {
-        if self.buildings().any(|building| building.player == player) {
+        if self.player_buildings(player).next().is_some() {
             return Err(EconomyError::AlreadyStarted);
         }
         if self.economy.buildings.len() >= self.economy.limits.buildings

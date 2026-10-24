@@ -31,6 +31,7 @@ impl Economy {
         }
         hash.update(&(self.buildings.len() as u64).to_le_bytes());
         for building in self.buildings.values() {
+            super::training::rally::hash_rally(hash, building.rally_point);
             hash.update(&building.id.0.to_le_bytes());
             hash.update(&building.player.0.to_le_bytes());
             hash.update(&[building.kind as u8, building.age as u8]);
@@ -83,6 +84,9 @@ impl Economy {
                     .map_or(u64::MAX, |animal| u64::from(animal.0))
                     .to_le_bytes(),
             );
+            if task.animal.is_some() {
+                hash.update(&[task.carcass_kind.map_or(u8::MAX, |kind| kind as u8)]);
+            }
             hash.update(&task.tile.x.to_le_bytes());
             hash.update(&task.tile.y.to_le_bytes());
             hash.update(&[task.kind as u8, task.phase as u8]);

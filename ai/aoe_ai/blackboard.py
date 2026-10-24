@@ -55,6 +55,8 @@ class Blackboard:
     attack_launch_size: int = 0
     attack_target: Optional[int] = None
     attacking: bool = False
+    #: Which far point the army marches to when no enemy building is known.
+    search_index: int = 0
     #: Destinations a move order was refused for.
     bad_moves: set[tuple[int, int]] = field(default_factory=set)
     #: villager id -> tick of its last job, animal id -> hunt orders given.

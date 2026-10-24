@@ -219,6 +219,11 @@ export async function gameAssets(
       100,
     ]),
     ["graphics", 435, 4],
+    // Current resource roles need opaque bodies for CI silhouette proofs.
+    // These generated pixels contain no original game assets.
+    ["graphics", 2560, 4],
+    ["graphics", 4479, 7],
+    ["graphics", 4482, 7],
     ["graphics", 4652, 14],
     ["graphics", 2296, 14],
     ...[
@@ -231,6 +236,7 @@ export async function gameAssets(
       [444, 5],
       [449, 5],
       [446, 5],
+      [4480, 10],
       [3575, 140],
       [3980, 75],
       [376, 1],

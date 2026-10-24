@@ -57,6 +57,7 @@ fn depletion_and_initial_amount_control_resource_feedback() {
     };
     assert_eq!(live_blocker(&node, &state), None);
     assert!(state.apply(ResourceState {
+        snapshot_page: None,
         subscription_revision: 1,
         from_revision: None,
         revision: 0,
@@ -74,6 +75,7 @@ fn depletion_and_initial_amount_control_resource_feedback() {
         None
     );
     assert!(state.apply(ResourceState {
+        snapshot_page: None,
         subscription_revision: 1,
         from_revision: Some(0),
         revision: 1,
@@ -181,7 +183,19 @@ fn economy_rejections_remain_clear_in_the_existing_client() {
         (CommandResult::RejectedPopulationCap, "population"),
         (CommandResult::RejectedTrainingQueueFull, "training queue"),
         (CommandResult::RejectedResourceUnavailable, "unavailable"),
+        (CommandResult::RejectedWorldLimit, "world"),
+        (CommandResult::RejectedOrderTooLarge, "too large"),
     ] {
         assert!(order_message(result, None).contains(phrase));
+    }
+}
+
+#[wasm_bindgen_test]
+fn only_a_full_order_queue_says_the_queue_is_full() {
+    for result in [
+        CommandResult::RejectedWorldLimit,
+        CommandResult::RejectedOrderTooLarge,
+    ] {
+        assert!(!order_message(result, None).contains("queue"));
     }
 }

@@ -250,6 +250,7 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
             frames: sprite.frames.len(),
         })
         .collect();
+    let mut interface_dat = None;
     let mut buildings = match inputs
         .iter()
         .find(|f| f.name.eq_ignore_ascii_case("empires2.dat"))
@@ -259,6 +260,7 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
             if let Some(reason) = &dat.report.stopped {
                 return Err(invalid("composition", 0, reason));
             }
+            interface_dat = Some(dat.clone());
             crate::dat::table::DARK_AGE
                 .iter()
                 .chain(crate::dat::table::FEUDAL)
@@ -275,15 +277,32 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
         }
     }
     let mut identity = blake3::Hasher::new();
+    identity.update(b"AoK interface catalog: DAT icons, research table and reviewed HUD crops\0");
+    identity.update(&[crate::catalog::interface::VERSION]);
     identity.update(hash.as_bytes());
     identity.update(&serde_json::to_vec(&buildings)?);
     let hash = identity.finalize().to_hex().to_string();
-    write_pack(&output_root, hash, &refs, buildings, |sprite, frame| {
+    let destination = write_pack(&output_root, hash, &refs, buildings, |sprite, frame| {
         Planes::from_slp(&sprites[sprite].frames[frame], &palette)
-    })
+    })?;
+    if let Some(dat) = interface_dat {
+        let manifest = parse_manifest(&fs::read(destination.join("manifest.json"))?)?;
+        let mut interface = crate::catalog::interface::build(&dat, &manifest)?;
+        interface::write(&destination, &manifest, &mut interface)?;
+        let temporary = destination.join(format!("interface-{}.tmp", std::process::id()));
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        std::io::Write::write_all(&mut file, &serde_json::to_vec_pretty(&interface)?)?;
+        drop(file);
+        fs::rename(temporary, destination.join("interface.json"))?;
+    }
+    Ok(destination)
 }
 
 pub(crate) mod atlas;
+mod interface;
 mod player;
 pub use player::blend_player;
 pub mod composite;

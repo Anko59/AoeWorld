@@ -18,23 +18,24 @@ use aoe_core::{CHUNK_SIZE, EntityId, PlayerId, Position, Region, Tick};
 use aoe_scenario::Scenario;
 pub use game_query::GameQueryStats;
 pub use game_world::{
-    Age, BUILDING_COMBAT, BUILDING_RULES, BuildingAttack, BuildingCombat, BuildingKind,
-    BuildingRules, CORPSE_SECONDS, CarriedResource, CombatStats, ConstructionState, DYING_SECONDS,
-    DamageKind, EconomyError, FEUDAL_BUILDINGS, Facing, GameBuilding, GameUnit, GameWorld,
-    GameWorldError, HitRecord, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS,
-    MarketPrices, MovementOrder, PlayerEconomy, PreparedResourceDepletion, Projectile,
-    ProjectileKind, ResearchEntry, Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement,
-    TechRules, TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask,
-    UnitTraining, VILLAGE_RULES, VillageRules, WorldLimits, building_combat, damage_dealt,
-    researched_stats, trainable_units, unit_combat, villager_capacity,
+    ANIMALS_PER_PLAYER, AnimalKind, AnimalTask, GameAnimal, MAX_ANIMALS, WILDLIFE_RULES,
+    WildlifeRules, WildlifeStats,
 };
 pub use game_world::{
-    AnimalKind, AnimalTask, GameAnimal, MAX_ANIMALS, MAX_HUNTERS, WILDLIFE_RULES, WildlifeRules,
-    WildlifeStats,
+    Age, BUILDING_COMBAT, BUILDING_RULES, BUILDINGS_PER_PLAYER, BuildingAttack, BuildingCombat,
+    BuildingKind, BuildingRules, CORPSE_SECONDS, CarriedResource, CombatStats, ConstructionState,
+    DYING_SECONDS, DamageKind, EconomyError, FEUDAL_BUILDINGS, Facing, GameBuilding, GameUnit,
+    GameWorld, GameWorldError, HitRecord, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION,
+    MAX_WALL_SEGMENTS, MarketPrices, MovementOrder, PlayerEconomy, PreparedResourceDepletion,
+    Projectile, ProjectileKind, RallyPoint, RallyTarget, ResearchEntry, RouteSchedulerStats,
+    Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules, TickPhase, TrainingEntry,
+    UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VILLAGE_RULES,
+    VillageRules, WorldLimits, building_combat, damage_dealt, researched_stats, trainable_units,
+    unit_combat, villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::{BTreeMap, BTreeSet};
-pub use terrain::{StartSearchResult, Terrain, UniformGrass, destination_passable};
+pub use terrain::{LandMasses, StartSearchResult, Terrain, UniformGrass, destination_passable};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Entity {

@@ -26,13 +26,19 @@ impl GameWorld {
             lookup: crate::game_world::UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            destinations: Default::default(),
+            idle_spacing: Default::default(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
+            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
+            fast_route_spent: BTreeMap::new(),
             navigation_cache: NavigationCache::default(),
             resource_chunks: Mutex::new(HashMap::new()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
             partial_kits: 0,
+            route_slots: BTreeMap::new(),
+            route_metrics: Default::default(),
         })
     }
 
@@ -66,13 +72,19 @@ impl GameWorld {
             lookup: crate::game_world::UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            destinations: Default::default(),
+            idle_spacing: Default::default(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
+            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
+            fast_route_spent: BTreeMap::new(),
             navigation_cache: NavigationCache::default(),
             resource_chunks: Mutex::new(HashMap::new()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
             partial_kits: 0,
+            route_slots: BTreeMap::new(),
+            route_metrics: Default::default(),
         })
     }
 
@@ -97,13 +109,19 @@ impl GameWorld {
             lookup: crate::game_world::UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            destinations: Default::default(),
+            idle_spacing: Default::default(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
+            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
+            fast_route_spent: BTreeMap::new(),
             navigation_cache: NavigationCache::default(),
             resource_chunks: Mutex::new(HashMap::new()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
             partial_kits: 0,
+            route_slots: BTreeMap::new(),
+            route_metrics: Default::default(),
         })
     }
 }

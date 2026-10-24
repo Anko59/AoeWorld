@@ -52,7 +52,7 @@ class Constructor:
         gap: int = 1,
     ) -> bool:
         """Order `builders` to raise a `kind` near `near`; False if impossible now."""
-        if not builders:
+        if not builders or ctx.board.cooling("world-limit:build", ctx.tick):
             return False
         cost = building_cost(kind)
         if not ctx.can_afford(cost):

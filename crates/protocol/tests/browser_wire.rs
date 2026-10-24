@@ -96,6 +96,7 @@ fn browser_building_combat_fragment_matches_the_current_codec() {
         last_hit: None,
         age: aoe_protocol::Age::Dark,
         gate_open: false,
+        rally_point: None,
         construction: ConstructionState::Complete,
         progress_permille: 1000,
         los: 8,
@@ -117,6 +118,7 @@ fn browser_dock_fragment_matches_current_codec() {
         kind: BuildingKind::Dock,
         age: aoe_protocol::Age::Dark,
         gate_open: false,
+        rally_point: None,
         footprint: TileRect::new(TileCoord::new(5, 5), TileCoord::new(8, 8)),
         training_queue: vec![],
         hp: 1800,
@@ -168,6 +170,7 @@ fn snapshot() -> GameplayServerMessage {
             last_hit: None,
             age: aoe_protocol::Age::Dark,
             gate_open: false,
+            rally_point: None,
         }],
     }
 }

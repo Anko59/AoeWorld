@@ -1,9 +1,26 @@
 //! Match rules a host may set: the population ceiling and a start-unit hook.
-use super::MatchError;
+use super::MAX_MATCH_SLOTS;
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 use aoe_protocol::{MAX_MATCH_POPULATION, MAX_POPULATION};
-use aoe_simulation::{GameWorld, WorldLimits};
+use aoe_simulation::{GameWorld, GameWorldError, WorldLimits};
 use serde::Deserialize;
+
+#[derive(Debug, thiserror::Error)]
+pub enum MatchError {
+    #[error("a match needs between 1 and {MAX_MATCH_SLOTS} slots")]
+    SlotCount,
+    #[error("map has no land start for slot {0}; use a larger or less watery map")]
+    NoStart(usize),
+    #[error(
+        "population_cap must be between 5 and {}",
+        aoe_protocol::MAX_MATCH_POPULATION
+    )]
+    PopulationCap,
+    #[error("start_units may not exceed the population cap")]
+    StartUnits,
+    #[error(transparent)]
+    World(#[from] GameWorldError),
+}
 
 /// A population ceiling below this cannot hold even a Town Center's housing.
 const MIN_POPULATION: u16 = 5;
@@ -31,6 +48,9 @@ pub struct MatchRules {
     /// The most population any player may reach, however many houses stand.
     pub population_cap: u16,
     pub start_units: StartUnits,
+    /// Seeds which village each slot gets (and the human's seat in it). `None`
+    /// keeps the canonical layout; a hosted match gets a fresh seed.
+    pub seed: Option<u64>,
 }
 
 impl Default for MatchRules {
@@ -38,6 +58,7 @@ impl Default for MatchRules {
         Self {
             population_cap: MAX_POPULATION,
             start_units: StartUnits::default(),
+            seed: None,
         }
     }
 }
@@ -59,7 +80,16 @@ impl MatchRules {
         Ok(Self {
             population_cap,
             start_units,
+            seed: None,
         })
+    }
+
+    /// The same rules with the village layout drawn from `seed`.
+    pub fn with_seed(self, seed: u64) -> Self {
+        Self {
+            seed: Some(seed),
+            ..self
+        }
     }
 
     /// World capacities for `players` seats under this ceiling.

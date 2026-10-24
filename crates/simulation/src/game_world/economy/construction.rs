@@ -44,7 +44,7 @@ impl GameWorld {
         ids.sort_unstable();
         ids.dedup();
         if ids.is_empty() || ids.len() > MAX_BUILD_GROUP {
-            return Err(EconomyError::Capacity);
+            return Err(EconomyError::OrderTooLarge);
         }
         for id in &ids {
             let unit = self.unit(*id).ok_or(EconomyError::UnknownEntity)?;
@@ -55,12 +55,12 @@ impl GameWorld {
                 return Err(EconomyError::WrongUnitKind);
             }
         }
-        let others = self
-            .economy
-            .builders
-            .keys()
-            .filter(|id| !ids.contains(id))
+        // Builders already assigned elsewhere, counted from the group alone.
+        let reassigned = ids
+            .iter()
+            .filter(|id| self.economy.builders.contains_key(id))
             .count();
+        let others = self.economy.builders.len() - reassigned;
         if others + ids.len() > self.economy.limits.builders {
             return Err(EconomyError::Capacity);
         }
@@ -81,9 +81,9 @@ impl GameWorld {
             return Err(EconomyError::RequiresFeudalAge);
         }
         if let Some(required) = rules.requires
-            && !self.buildings().any(|building| {
-                building.player == player && building.kind == required && building.is_complete()
-            })
+            && !self
+                .player_buildings_of(player, required)
+                .any(|building| building.is_complete())
         {
             return Err(EconomyError::RequirementMissing);
         }
@@ -316,6 +316,7 @@ impl GameWorld {
                 continue;
             }
             if adjacent(footprint, self.units[index].state.position.tile_floor()) {
+                self.units[index].state.face_footprint(footprint);
                 self.units[index].state.task = UnitTask::Building;
                 *working.entry(task.building).or_insert(0) += 1;
                 continue;

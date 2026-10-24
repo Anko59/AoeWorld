@@ -73,6 +73,9 @@ pub(crate) mod wear_fixture;
 pub(crate) mod relief_fixture;
 
 #[cfg(test)]
+#[path = "game_renderer/tests/canvas/alpha.rs"]
+mod canvas_alpha_tests;
+#[cfg(test)]
 mod tests;
 
 #[cfg(test)]
@@ -105,7 +108,7 @@ pub enum GameRenderer {
 mod scene_types;
 pub use scene_types::{
     SceneCamera, SceneDecoration, SceneResource, SceneTerrain, SceneTerrainAppearance,
-    SceneTerrainSurface, SceneUnit, SceneUnitKind,
+    SceneTerrainSurface, SceneUnit, SceneUnitKind, SceneUnitVisual,
 };
 fn error(e: impl Into<JsValue>) -> String {
     format!("Canvas rendering unavailable: {:?}", e.into())
@@ -132,6 +135,22 @@ fn context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, Strin
         .ok_or("Canvas 2D is unavailable")?
         .dyn_into()
         .map_err(error)
+}
+
+/// Canvas already owns alpha compositing; keep float-to-CSS formatting out
+/// of the WASM bundle and restore the caller's drawing state after each fill.
+fn fill_solid(context: &CanvasRenderingContext2d, colour: [f32; 4], rect: [f64; 4]) {
+    let [r, g, b, a] = colour;
+    context.save();
+    context.set_fill_style_str(&format!(
+        "rgb({},{},{})",
+        (r * 255.0) as u8,
+        (g * 255.0) as u8,
+        (b * 255.0) as u8
+    ));
+    context.set_global_alpha(context.global_alpha() * f64::from(a.clamp(0.0, 1.0)));
+    context.fill_rect(rect[0], rect[1], rect[2], rect[3]);
+    context.restore();
 }
 
 impl GameRenderer {
@@ -247,14 +266,7 @@ impl GameRenderer {
                     let w = f64::from(sprite.radius[0]) * width;
                     let h = f64::from(sprite.radius[1]) * height;
                     if sprite.color != [1.0; 4] {
-                        let [r, g, b, a] = sprite.color;
-                        context.set_fill_style_str(&format!(
-                            "rgba({},{},{},{a})",
-                            (r * 255.0) as u8,
-                            (g * 255.0) as u8,
-                            (b * 255.0) as u8
-                        ));
-                        context.fill_rect(x, y, w, h);
+                        fill_solid(context, sprite.color, [x, y, w, h]);
                         continue;
                     }
                     let [mut sx, sy, sw, sh] =

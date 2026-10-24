@@ -142,3 +142,34 @@ fn native_stages(manifest: &Manifest, side: f32) -> bool {
     }
     found
 }
+
+/// The licensed DE install supplies the waypoint flag absent from the trial.
+/// Sample its 90-cell loop into ten cells; classic MFLAG remains the base pack.
+pub(super) fn rally(
+    manifest: &Manifest,
+    selected: &mut Vec<usize>,
+    domains: &mut Vec<AtlasDomain>,
+) -> Result<Option<std::ops::Range<usize>>, JsValue> {
+    let source = "de/b_misc_waypoint_flag_x1.sld";
+    let Some(frames) = source_frames(manifest, source, 90) else {
+        if source_present(manifest, source) {
+            return Err(error("Corrupt rally flag art"));
+        }
+        return Ok(None);
+    };
+    if selected.len() > MAX_SELECTED_FRAMES - 10 {
+        return Err(error("Too many selected flag frames"));
+    }
+    let start = selected.len();
+    selected.extend(frames.into_iter().step_by(9));
+    domains.extend(std::iter::repeat_n(AtlasDomain::Objects, 10));
+    Ok(Some(start..selected.len()))
+}
+
+pub(super) fn rally_frames(
+    records: &[GameFrame],
+    range: Option<std::ops::Range<usize>>,
+    classic: Vec<GameFrame>,
+) -> Vec<GameFrame> {
+    range.map_or(classic, |r| records[r].to_vec())
+}
