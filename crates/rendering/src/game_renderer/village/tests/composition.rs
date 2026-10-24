@@ -199,3 +199,43 @@ fn feudal_mill_fallback_animates_when_native_parts_are_absent() {
         camera()
     ));
 }
+
+#[wasm_bindgen_test]
+fn native_building_parts_keep_owner_masks_and_a_hostile_red_selection() {
+    let art = art();
+    let mut building = unit(SceneUnitKind::TownCenter);
+    building.visual = crate::SceneUnitVisual::new(false)
+        .with_player(
+            Some(aoe_core::PlayerId(2)),
+            aoe_core::PlayerId(0),
+            crate::PLAYER_COLOURS[0],
+            false,
+        )
+        .with_selected(true);
+    let layers =
+        super::super::direct_world_layers(Vec::new(), &art, &[], &[], &[building], camera(), 0);
+    let mut bodies = 0;
+    let mut rings = 0;
+    for layer in layers {
+        match layer {
+            super::super::WorldLayer::Sprite(sprite, _, _, _) => {
+                assert_ne!(sprite.pages[3] & Sprite::PLAYER_MASK, 0);
+                assert_eq!(
+                    sprite.terrain_blend[1][..3],
+                    crate::PLAYER_COLOURS[2].map(|c| f32::from(c) / 255.0)
+                );
+                bodies += 1;
+            }
+            super::super::WorldLayer::Selection(sprite, _) => {
+                assert_eq!(
+                    sprite.color,
+                    [245.0 / 255.0, 65.0 / 255.0, 65.0 / 255.0, 1.0]
+                );
+                rings += 1;
+            }
+            _ => panic!("only native building parts and its ring expected"),
+        }
+    }
+    assert_eq!(bodies, art.compositions[0].parts.len());
+    assert_eq!(rings, 1);
+}

@@ -4,6 +4,18 @@ use aoe_core::{Seed, TileCoord, WorldConfig};
 mod fog;
 
 #[test]
+fn unexplored_placement_rejection_has_current_golden_wire() {
+    let ack = ServerMessage::CommandAck {
+        sequence: 3,
+        result: CommandResult::RejectedUnexploredPlacement,
+        applied_tick: Tick(4),
+    };
+    let bytes = encode_server(&ack).unwrap();
+    assert_eq!(bytes, [3, 3, 32, 4]);
+    assert_eq!(decode_server(&bytes).unwrap(), ack);
+}
+
+#[test]
 fn fishing_appends_wire_discriminants_and_round_trips_orders() {
     assert_eq!(postcard::to_allocvec(&UnitKind::FishingShip).unwrap(), [3]);
     assert_eq!(postcard::to_allocvec(&BuildingKind::Dock).unwrap(), [9]);

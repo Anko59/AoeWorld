@@ -28,7 +28,9 @@ pub enum Order {
         unit: EntityId,
         resource: u64,
     },
-    /// Place a foundation with its top-left tile at `origin`; the builders
+    /// Place a foundation with its top-left tile at `origin`; every footprint
+    /// tile must be explored, or the server returns `RejectedUnexploredPlacement`.
+    /// The builders
     /// start work. The cost is paid when the order is accepted.
     Build {
         builders: Vec<EntityId>,

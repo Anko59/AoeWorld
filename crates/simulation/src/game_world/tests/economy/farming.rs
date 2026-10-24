@@ -23,6 +23,7 @@ pub(super) fn mill_and_farm() -> (GameWorld, EntityId, EntityId, EntityId) {
         Err(EconomyError::RequirementMissing)
     );
     finish(&mut world, mill, 800);
+    fixture::survey(&mut world, PlayerId(0), at(104, 101), 2);
     let farm = world
         .issue_build(PlayerId(0), &[worker], BuildingKind::Farm, farm_site)
         .unwrap();

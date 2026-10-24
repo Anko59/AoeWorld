@@ -197,8 +197,7 @@ fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() 
         kind: Default::default(),
         id: EntityId(11),
         position: [0.5; 2],
-        visual: crate::SceneUnitVisual::new(false),
-        selected: false,
+        visual: crate::SceneUnitVisual::new(false).with_selected(false),
         facing: 0,
         elevation_meters: 0.0,
     };

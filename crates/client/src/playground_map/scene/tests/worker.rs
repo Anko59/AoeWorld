@@ -4,32 +4,6 @@ use aoe_protocol::{GameplayUnitState, ResourceKind, UnitKind, UnitTask};
 use aoe_rendering::SceneUnitKind;
 use wasm_bindgen_test::wasm_bindgen_test;
 
-#[wasm_bindgen_test]
-fn contours_follow_the_loaded_team_colour_and_distinguish_visible_enemy_players() {
-    let (blue, red, green) = ([65, 145, 245], [245, 65, 65], [50, 190, 65]);
-    for owner in [0, 3, 7] {
-        let enemy = usize::from((owner + 1) % 8);
-        let colours = crate::unit_visuals::outline_palette(PlayerId(owner), blue);
-        assert_eq!(
-            aoe_rendering::SceneUnitVisual::COLOURS[usize::from(colours[usize::from(owner)])],
-            blue
-        );
-        assert_eq!(
-            aoe_rendering::SceneUnitVisual::COLOURS[usize::from(colours[enemy])],
-            red
-        );
-        let recoloured = crate::unit_visuals::outline_palette(PlayerId(owner), red);
-        assert_eq!(
-            aoe_rendering::SceneUnitVisual::COLOURS[usize::from(recoloured[usize::from(owner)])],
-            red
-        );
-        assert_eq!(
-            aoe_rendering::SceneUnitVisual::COLOURS[usize::from(recoloured[enemy])],
-            green
-        );
-    }
-}
-
 fn villager(task: UnitTask, gathering: Option<ResourceKind>) -> GameplayUnitState {
     GameplayUnitState {
         id: EntityId(1),

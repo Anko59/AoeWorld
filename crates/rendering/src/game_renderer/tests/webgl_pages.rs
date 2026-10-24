@@ -94,10 +94,20 @@ export function restrict_array_limits(canvas, layers) {
 }
 export function restore_owned_pages(bridge, fail) {
     const source = bridge.atlasPixels;
-    if (source.byteLength !== 83886080) throw new Error('restoration owner size');
+    // Five colour pages plus three owner-mask pages are retained on restore.
+    if (source.byteLength !== 134217728) throw new Error('restoration owner size');
     if (fail) bridge.initialize = () => { throw new Error('injected restoration error'); };
     bridge.onRestored();
     if (bridge.atlasPixels !== source) throw new Error('restoration cloned source');
+}
+export function restore_shared_atlas_after_memory_growth(bridge, memory) {
+    const source = bridge.atlasPixels;
+    if (source.buffer !== memory.buffer) throw new Error('atlas duplicated outside WASM');
+    const offset = source.byteOffset;
+    memory.grow(1);
+    bridge.onRestored();
+    if (bridge.atlasPixels.buffer !== memory.buffer || bridge.atlasPixels.byteOffset !== offset)
+        throw new Error('restoration must refresh the retained WASM view without copying');
 }
 ")]
 extern "C" {
@@ -105,6 +115,27 @@ extern "C" {
     fn restrict_array_limits(canvas: &HtmlCanvasElement, layers: bool) -> Result<(), JsValue>;
     #[wasm_bindgen(catch)]
     fn restore_owned_pages(bridge: &JsValue, fail: bool) -> Result<(), JsValue>;
+    #[wasm_bindgen(catch)]
+    fn restore_shared_atlas_after_memory_growth(
+        bridge: &JsValue,
+        memory: &JsValue,
+    ) -> Result<(), JsValue>;
+}
+
+#[wasm_bindgen_test]
+fn webgl_restoration_reuses_the_wasm_atlas_even_after_linear_memory_grows() {
+    let (canvas, mut renderer) = target(&page_atlas());
+    // An extra 128 MiB JS restoration copy breached the unchanged whole-browser
+    // RSS ceiling. The renderer must own one source and survive detached views.
+    restore_shared_atlas_after_memory_growth(renderer.test_bridge(), &wasm_bindgen::memory())
+        .unwrap();
+    let mut body = sprite(0.0, 1.0);
+    body.pages[0] = 2;
+    render(&mut renderer, &mut [body]);
+    assert_pixel(&canvas, 64, 64, [0, 0, 255, 255]);
+    let usage = GameRenderer::WebGl(renderer).memory_usage();
+    assert_eq!(usage[2], ("wasm_atlas_bytes", crate::GAME_ATLAS_BYTES));
+    assert_eq!(usage[3], ("js_atlas_bytes", 0));
 }
 
 #[wasm_bindgen_test]
@@ -161,4 +192,34 @@ fn webgl_landscape_parity_fixture_matches_shared_expected_texels() {
             assert_pixel(&canvas, at, at, case.expected.unwrap_or(legacy[index]));
         }
     }
+}
+
+#[wasm_bindgen(inline_js = "
+export function bound_atlas_transfers(canvas) {
+    const gl = canvas.getContext('webgl2');
+    const upload = gl.texSubImage3D.bind(gl), finish = gl.finish.bind(gl);
+    let pending = false, completed = 0;
+    gl.texSubImage3D = (...args) => {
+        if (pending) throw new Error('Previous atlas page transfer is still queued');
+        pending = true;
+        return upload(...args);
+    };
+    gl.finish = () => { finish(); if (pending) completed++; pending = false; };
+    return () => completed;
+}")]
+extern "C" {
+    fn bound_atlas_transfers(canvas: &HtmlCanvasElement) -> js_sys::Function;
+}
+
+#[wasm_bindgen_test]
+fn webgl_atlas_upload_bounds_driver_transfer_staging_to_one_page() {
+    let canvas = canvas();
+    let mut renderer = WebGlRenderer::new(&canvas).unwrap();
+    let completed = bound_atlas_transfers(&canvas);
+    renderer.upload(&page_atlas()).unwrap();
+    assert_eq!(completed.call0(&JsValue::NULL).unwrap().as_f64(), Some(8.0));
+    let mut body = sprite(0.0, 1.0);
+    body.pages[0] = 2;
+    render(&mut renderer, &mut [body]);
+    assert_pixel(&canvas, 64, 64, [0, 0, 255, 255]);
 }

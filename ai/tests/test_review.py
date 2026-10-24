@@ -14,6 +14,20 @@ def armed(count=12, tile=(60, 60)):
     return [unit(300 + i, UnitKind.SPEARMAN, tile=tile) for i in range(count)]
 
 
+def test_an_unexplored_build_refusal_releases_the_plan_without_blacklisting_the_site():
+    units, buildings = base(8)
+    world = FakeWorld(units, buildings, eco=economy(wood=100, population=11, cap=15))
+    brain, client = play(world)
+    sequence, args = next((i + 1, a) for i, (name, a) in enumerate(client.calls) if name == "build")
+    from aoe_ai.context import Context
+    tracked = brain.board.tracked[sequence]
+    brain.on_rejected(Context(FakeClient(), decision(world), brain.board, brain.config),
+                      tracked, CommandResult.REJECTED_UNEXPLORED_PLACEMENT)
+    assert not brain.board.plans
+    assert not brain.board.builders
+    assert (str(args[1]), args[2], args[3]) not in brain.board.bad_sites
+
+
 def test_a_foundation_rising_in_health_is_not_a_landed_blow():
     units, buildings = base(10)
     foundation = building(901, BuildingKind.HOUSE, tile=(64, 64), complete=False, mine=False, hp=100)

@@ -177,9 +177,8 @@ fn direct_scene_has_expected_content_order_and_ties_in_72_bounded_cases() {
                     kind: Default::default(),
                     id: EntityId((i % 3) as u32),
                     position: positions[(i / 2) % 6],
-                    visual: crate::SceneUnitVisual::new(i % 2 == 0),
+                    visual: crate::SceneUnitVisual::new(i % 2 == 0).with_selected(i % 3 == 0),
                     facing: (i % 8) as u8,
-                    selected: i % 3 == 0,
                     elevation_meters: if i == 1 {
                         f64::from_bits(0x7ff8_0000_0000_0001)
                     } else {
@@ -219,7 +218,7 @@ fn direct_scene_has_expected_content_order_and_ties_in_72_bounded_cases() {
                         animation,
                     );
                     assert_sorted(&actual);
-                    let rings = units.iter().filter(|unit| unit.selected).count()
+                    let rings = units.iter().filter(|unit| unit.visual.selected()).count()
                         * game_grid::SELECTION_RING_SPRITES;
                     let count = |f: fn(&WorldLayer) -> bool| actual.iter().filter(|l| f(l)).count();
                     assert_eq!(

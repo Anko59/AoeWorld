@@ -8,7 +8,9 @@ const SIDE: usize = 2048;
 #[cfg(test)]
 const PIXEL_BYTES: usize = SIDE * SIDE * 4;
 const MAX_INPUT_BYTES: usize = 32 * 1024 * 1024;
-const WRITE_CHUNK_BYTES: usize = 1024;
+// Batch browser stream writes without changing either input or decoded limits.
+// The read/write race drains output during each bounded write (backpressure).
+const WRITE_CHUNK_BYTES: usize = 16 * 1024;
 const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 const ADAM7: [Pass; 7] = [
     Pass::new(0, 0, 8, 8),
@@ -308,11 +310,18 @@ fn reconstruct(
             source += row_bytes;
             unfilter(&mut row, &previous, filter)?;
             let target_y = pass.y + row_index * pass.step_y;
-            for column in 0..pass_width {
-                let target_x = pass.x + column * pass.step_x;
-                let from = column * 4;
-                let to = (target_y * width + target_x) * 4;
-                pixels[to..to + 4].copy_from_slice(&row[from..from + 4]);
+            if pass.step_x == 1 {
+                // Ordinary PNG rows and the final Adam7 pass are contiguous.
+                // Copy the row in bulk rather than checking/copying each pixel.
+                let to = (target_y * width + pass.x) * 4;
+                pixels[to..to + row_bytes].copy_from_slice(&row);
+            } else {
+                for column in 0..pass_width {
+                    let target_x = pass.x + column * pass.step_x;
+                    let from = column * 4;
+                    let to = (target_y * width + target_x) * 4;
+                    pixels[to..to + 4].copy_from_slice(&row[from..from + 4]);
+                }
             }
             std::mem::swap(&mut previous, &mut row);
         }
@@ -324,13 +333,22 @@ fn unfilter(row: &mut [u8], previous: &[u8], filter: u8) -> Result<(), JsValue> 
     if filter > 4 {
         return Err(invalid("Unsupported atlas PNG filter"));
     }
+    if filter == 0 {
+        return Ok(());
+    }
+    if filter == 1 {
+        // Imported pages use Sub: the first RGBA pixel is already absolute,
+        // and each following byte only needs its four-byte predecessor.
+        for index in 4..row.len() {
+            row[index] = row[index].wrapping_add(row[index - 4]);
+        }
+        return Ok(());
+    }
     for index in 0..row.len() {
         let left = if index >= 4 { row[index - 4] } else { 0 };
         let above = previous[index];
         let upper_left = if index >= 4 { previous[index - 4] } else { 0 };
         let predictor = match filter {
-            0 => 0,
-            1 => left,
             2 => above,
             3 => ((u16::from(left) + u16::from(above)) / 2) as u8,
             _ => paeth(left, above, upper_left),

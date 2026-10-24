@@ -10,6 +10,19 @@ pub(super) enum Staging {
 pub struct AtlasUpload(Staging);
 
 impl AtlasUpload {
+    /// CPU backends already retain every page. Expose that same allocation so
+    /// the loader can decode each source once and fill all its destinations.
+    /// WebGPU keeps its one-page scratch buffer and never takes this path.
+    pub fn resident_buffer(&mut self) -> Option<&mut [u8]> {
+        match &mut self.0 {
+            Staging::Cpu(pixels) => {
+                pixels.resize(crate::GAME_ATLAS_BYTES, 0);
+                Some(pixels)
+            }
+            Staging::Gpu(_, _) => None,
+        }
+    }
+
     /// The zeroed buffer for page `layer`, to be filled in place and then
     /// committed with `GameRenderer::write_game_atlas_page`. GPU uploads reuse
     /// one page; CPU tiers write straight into the atlas they must retain.
@@ -36,6 +49,40 @@ impl AtlasUpload {
 }
 
 impl GameRenderer {
+    /// Owned payload only; excludes driver overhead and browser swapchains.
+    pub fn memory_usage(&self) -> [(&'static str, usize); 5] {
+        let (textures, buffers, wasm_atlas, js_atlas, raster) = match self {
+            Self::WebGpu(r) => {
+                let (textures, buffers) = r.memory_usage();
+                (textures, buffers, 0, 0, 0)
+            }
+            Self::WebGl(r) => (r.texture_bytes(), r.buffer_bytes(), r.source_bytes(), 0, 0),
+            Self::Canvas {
+                source_atlas,
+                atlas,
+                presentation,
+                ..
+            } => (
+                0,
+                0,
+                source_atlas.capacity(),
+                atlas
+                    .iter()
+                    .flatten()
+                    .map(|c| c.width() as usize * c.height() as usize * 4)
+                    .sum(),
+                presentation.resident_bytes(),
+            ),
+        };
+        [
+            ("gpu_texture_bytes", textures),
+            ("gpu_buffer_bytes", buffers),
+            ("wasm_atlas_bytes", wasm_atlas),
+            ("js_atlas_bytes", js_atlas),
+            ("canvas_raster_bytes", raster),
+        ]
+    }
+
     /// Starts a streamed atlas upload. The previous atlas keeps rendering until
     /// `finish_game_atlas`. WebGPU receives each page straight into a fresh
     /// texture, so no CPU copy of the atlas exists; WebGL2 and Canvas gather
@@ -81,7 +128,7 @@ impl GameRenderer {
                 renderer.install_game_atlas(texture);
                 Ok(())
             }
-            (Staging::Cpu(pixels), Self::WebGl(renderer)) => renderer.upload(&pixels),
+            (Staging::Cpu(pixels), Self::WebGl(renderer)) => renderer.upload_owned(pixels),
             (
                 Staging::Cpu(pixels),
                 Self::Canvas {

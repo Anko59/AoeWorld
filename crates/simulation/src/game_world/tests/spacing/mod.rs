@@ -1,6 +1,7 @@
 //! Soft unit collision must preserve passage while ending persistent stacks.
 use super::*;
 
+mod following_tests;
 mod performance;
 
 fn at(x: i32, y: i32) -> WorldPosition {

@@ -2,6 +2,26 @@ use super::*;
 use aoe_core::{Seed, Tick};
 
 #[test]
+fn comparison_summary_identifies_regressions_and_missing_measurements() {
+    let comparisons = [
+        compare("optimized_gzip_wasm_bytes", Some(302_106), Some(287_702)),
+        compare("instructions::advance", None, Some(712_509)),
+        compare("new_metric", Some(10), None),
+        compare("allocation_count", Some(0), Some(0)),
+    ];
+    let text = comparison_summary(&comparisons);
+    assert!(text.contains("| Metric | Observed | Baseline | Allowance | Verdict |"));
+    for row in [
+        "| optimized_gzip_wasm_bytes | 302106 | 287702 | 5% | Regression |",
+        "| instructions::advance | unavailable | 712509 | 5% | Inconclusive |",
+        "| new_metric | 10 | unavailable | 5% | Unbaselined |",
+        "| allocation_count | 0 | 0 | 5% | Pass |",
+    ] {
+        assert!(text.contains(row), "missing {row} in {text}");
+    }
+}
+
+#[test]
 fn comparator_rejects_missing_and_regressed_samples() {
     assert_eq!(network::initial_client_result(37).bytes, 37);
     assert_eq!(compare("x", None, Some(100)).verdict, Verdict::Inconclusive);

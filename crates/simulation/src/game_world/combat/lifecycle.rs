@@ -41,13 +41,15 @@ impl GameWorld {
 
     /// Drops the unit's route and order without touching its task.
     pub(crate) fn stop_movement(&mut self, index: usize) {
-        self.destinations.remove(self.units[index].state.id);
+        let id = self.units[index].state.id;
+        self.destinations.remove(id);
         self.clear_planner(index);
         let unit = &mut self.units[index];
         unit.order = None;
         unit.route.clear();
         unit.state.moving = false;
         unit.state.planning = false;
+        self.refresh_spacing_order(id);
     }
 
     /// Population is freed now; native death playback precedes thirty seconds of corpse decay.

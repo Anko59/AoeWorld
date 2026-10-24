@@ -2,7 +2,7 @@
 //! the strategic overview. No allocation or iteration depends on map area.
 use super::TileVisibility;
 use aoe_core::{EntityId, TileCoord, TileRect};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 #[derive(Debug, Default)]
 pub(super) struct PlayerVision {
@@ -11,7 +11,7 @@ pub(super) struct PlayerVision {
     // Only currently visible tiles carry reference counts, as dense 32x32
     // counters per chunk. Overlapping LOS cannot turn a tile fogged when just
     // one observer leaves.
-    pub(super) visible: BTreeMap<(i32, i32), std::boxed::Box<[u32]>>,
+    pub(super) visible: BTreeMap<(i32, i32), VisibleChunk>,
     pub(super) visible_tiles: usize,
     pub(super) remembered: BTreeMap<aoe_core::EntityId, crate::GameBuilding>,
     /// Buildings whose entry in `remembered` was added, changed or dropped
@@ -21,11 +21,18 @@ pub(super) struct PlayerVision {
     /// any of those tiles again ends the memory. Derived; never hashed.
     pub(super) ghost_tiles: HashMap<TileCoord, Vec<EntityId>>,
     pub(super) ghost_sites: BTreeMap<EntityId, TileRect>,
+    pub(super) ghost_order: VecDeque<EntityId>,
     pub(super) tile_work: u64,
     pub(super) overview: Overview,
     pub(super) resources: BTreeMap<u64, u16>,
     /// Bumped whenever this player's own line of sight changes.
     pub(super) revision: u64,
+}
+
+#[derive(Debug)]
+pub(super) struct VisibleChunk {
+    pub(super) counts: Box<[u32]>,
+    occupied: usize,
 }
 
 /// Per-pixel overview counts, dense per 256-pixel row and allocated on first
@@ -120,6 +127,13 @@ pub(super) fn pixels(tile: i32, axis: i32) -> std::ops::Range<i64> {
 impl PlayerVision {
     /// Keeps a destroyed building's last sighting until its site is seen.
     pub(super) fn haunt(&mut self, id: EntityId, footprint: TileRect) {
+        self.remove_ghost_site(id);
+        while self.ghost_order.len() >= 4096 {
+            if let Some(oldest) = self.ghost_order.front().copied() {
+                self.exorcise(oldest);
+            }
+        }
+        self.ghost_order.push_back(id);
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
                 self.ghost_tiles
@@ -136,9 +150,14 @@ impl PlayerVision {
         if self.remembered.remove(&id).is_some() {
             self.changed.insert(id);
         }
+        self.remove_ghost_site(id);
+    }
+
+    fn remove_ghost_site(&mut self, id: EntityId) {
         let Some(footprint) = self.ghost_sites.remove(&id) else {
             return;
         };
+        self.ghost_order.retain(|ghost| *ghost != id);
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
                 let tile = TileCoord::new(x, y);
@@ -157,7 +176,7 @@ impl PlayerVision {
         if self
             .visible
             .get(&chunk)
-            .is_some_and(|counters| counters[index] > 0)
+            .is_some_and(|counters| counters.counts[index] > 0)
         {
             return TileVisibility::Visible;
         }
@@ -176,13 +195,14 @@ impl PlayerVision {
     /// Raises one tile's reference count; true when the tile became visible.
     pub(super) fn raise_visible(&mut self, tile: TileCoord) -> bool {
         let (chunk, index) = counter_index(tile);
-        let counters = self
-            .visible
-            .entry(chunk)
-            .or_insert_with(|| vec![0; 1024].into_boxed_slice());
-        counters[index] += 1;
-        let fresh = counters[index] == 1;
+        let counters = self.visible.entry(chunk).or_insert_with(|| VisibleChunk {
+            counts: vec![0; 1024].into_boxed_slice(),
+            occupied: 0,
+        });
+        counters.counts[index] += 1;
+        let fresh = counters.counts[index] == 1;
         if fresh {
+            counters.occupied += 1;
             self.visible_tiles += 1;
         }
         fresh
@@ -194,12 +214,16 @@ impl PlayerVision {
         let Some(counters) = self.visible.get_mut(&chunk) else {
             return false;
         };
-        if counters[index] == 0 {
+        if counters.counts[index] == 0 {
             return false;
         }
-        counters[index] -= 1;
-        if counters[index] == 0 {
+        counters.counts[index] -= 1;
+        if counters.counts[index] == 0 {
+            counters.occupied -= 1;
             self.visible_tiles -= 1;
+            if counters.occupied == 0 {
+                self.visible.remove(&chunk);
+            }
             return true;
         }
         false

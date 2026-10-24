@@ -10,12 +10,13 @@ fn address(page: u32, x: f32) -> crate::AtlasAddress {
 
 #[wasm_bindgen_test]
 async fn webgpu_array_same_uv_primary_blends_and_page_two_body_shadow_pixels() {
-    // Reuse one real device/five-layer atlas for all probes, then explicitly
+    // Reuse one real device/eight-layer atlas for all probes, then explicitly
     // destroy it. Allocating a device per sentinel caused resource pressure.
     let mut renderer = surface_renderer().await;
     let gameplay = renderer.render_sprites(&[]).unwrap();
-    assert_eq!(gameplay.atlas_pages, 5);
-    assert_eq!(gameplay.atlas_bytes, 83_886_080);
+    // Three aligned player-mask pages now accompany the five colour pages.
+    assert_eq!(gameplay.atlas_pages, 8);
+    assert_eq!(gameplay.atlas_bytes, 134_217_728);
     let mut triangle = capacity_surface();
     triangle.points = [[16.0, 16.0], [112.0, 16.0], [16.0, 112.0]].map(surface_point);
     triangle.tint = 0;

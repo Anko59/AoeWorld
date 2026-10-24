@@ -38,7 +38,7 @@ pub use facing::Facing;
 pub(crate) use facing::facing_for;
 pub use research::*;
 pub use resources::PreparedResourceDepletion;
-pub use route_scheduler::RouteSchedulerStats;
+pub use route_scheduler::{PlanningProbe, RouteSchedulerStats};
 pub use visibility::TileVisibility;
 pub use wildlife::*;
 
@@ -106,11 +106,15 @@ pub(crate) struct StoredUnit {
     pub(crate) planner: Option<RoutePlanner>,
     pub(crate) last_movement_error: Option<GameWorldError>,
     pub(crate) next_hit_tick: u64, // no hit before this tick
-    /// Tick the unit last started waiting for a route (diagnostics only).
+    /// Tick the unit last started waiting for a route: the fair pass serves
+    /// a player's longest-waiting units first.
     pub(crate) planning_since: u64,
     /// The route it waits for had its whole fast attempt (see
     /// `route_scheduler::issue`); it now needs a search slot.
     pub(crate) fast_route_tried: bool,
+    /// The last order this unit could not complete as unreachable: from where,
+    /// to where, and on which tick (see `route_scheduler::order`).
+    pub(crate) unreachable_memo: Option<(TileCoord, TileCoord, u64)>,
 }
 #[derive(Debug)]
 pub struct GameWorld {
@@ -142,8 +146,13 @@ pub struct GameWorld {
     pub(crate) active_route_searches: usize,
     pub(crate) partial_kits: u64,
     pub(crate) route_slots: BTreeMap<PlayerId, route_scheduler::RouteSlots>,
+    /// (player, far) classes whose units waited for a slot in the last fair
+    /// pass: an order issued or planned ahead later does not jump that queue.
+    pub(crate) route_queued: BTreeSet<(PlayerId, bool)>,
     pub(crate) route_metrics: route_scheduler::RouteMetrics,
+    pub(crate) planning_probe: Option<std::sync::Arc<dyn PlanningProbe>>,
     pub(crate) idle_spacing: spacing::IdleSpacing,
+    pub(crate) followers: spacing::Followers,
 }
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
@@ -177,7 +186,10 @@ impl GameWorld {
             partial_kits: 0,
             route_slots: BTreeMap::new(),
             route_metrics: Default::default(),
+            planning_probe: None,
+            route_queued: BTreeSet::new(),
             idle_spacing: Default::default(),
+            followers: Default::default(),
         }
     }
 

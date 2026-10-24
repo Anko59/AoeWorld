@@ -27,7 +27,7 @@ pub(in super::super) fn update(client: &Client) {
     let owner = owner(client);
     // Header: four stockpiles, used/cap, four worker counts, clock, observing,
     // native-art flag, then actor/queue/resource counts. Actor records contain
-    // sixteen numbers; queue records contain progress, total and unit kind.
+    // eighteen numbers; queue records contain progress, total and unit kind.
     // Decode immediately in JS; never retain a view of WASM memory.
     let scene = map::scene::prepare(client);
     let camera = aoe_rendering::SceneCamera {
@@ -38,7 +38,7 @@ pub(in super::super) fn update(client: &Client) {
     };
     let heads = map::scene::units(client, &scene)
         .into_iter()
-        .filter(|u| u.selected)
+        .filter(|u| u.visual.selected())
         .filter_map(|u| {
             aoe_rendering::scene_unit_bounds(
                 &client.art,
@@ -146,6 +146,8 @@ pub(in super::super) fn update(client: &Client) {
                 )
             }),
             f64::from(stats.range),
+            f64::from(unit.player.0),
+            flag(unit.player == owner),
         ]);
     }
     for building in &client.village.buildings {
@@ -171,6 +173,8 @@ pub(in super::super) fn update(client: &Client) {
             y,
             0.0,
             0.0,
+            f64::from(building.player.0),
+            flag(building.player == owner),
         ]);
     }
     for animal in &client.village.animals {
@@ -206,13 +210,15 @@ pub(in super::super) fn update(client: &Client) {
             head(animal.id, y),
             0.0,
             0.0,
+            animal.owner.map_or(-1.0, |p| f64::from(p.0)),
+            flag(animal.owner == Some(owner) && animal.hp > 0),
         ]);
     }
     if let Some(building) = client
         .village
         .buildings
         .iter()
-        .find(|b| Some(b.id) == client.selected.building_id)
+        .find(|b| Some(b.id) == client.selected.building_id && b.player == owner)
     {
         values[14] = building.training_queue.len() as f64;
         for entry in &building.training_queue {

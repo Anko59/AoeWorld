@@ -179,8 +179,7 @@ fn farm_crop_uvs_keep_both_triangle_halves_when_the_apron_blends() {
         kind: SceneUnitKind::Farm,
         position: [0.5; 2],
         elevation_meters: 0.0,
-        selected: false,
-        visual: crate::SceneUnitVisual::new(false),
+        visual: crate::SceneUnitVisual::new(false).with_selected(false),
         facing: 0,
     };
     let mut tiles = (-3..=3)
@@ -237,8 +236,7 @@ fn distant_farms_do_not_enter_the_per_triangle_candidates() {
         kind: SceneUnitKind::Farm,
         position,
         elevation_meters,
-        selected: false,
-        visual: crate::SceneUnitVisual::new(false),
+        visual: crate::SceneUnitVisual::new(false).with_selected(false),
         facing: 0,
     };
     let mut units: Vec<_> = (0..100)
@@ -293,8 +291,7 @@ fn test_unit(kind: SceneUnitKind) -> SceneUnit {
         kind,
         position: [0.5; 2],
         elevation_meters: 0.0,
-        selected: false,
-        visual: crate::SceneUnitVisual::new(false),
+        visual: crate::SceneUnitVisual::new(false).with_selected(false),
         facing: 0,
     }
 }

@@ -18,6 +18,9 @@ pub(in crate::game_renderer) fn raster_selection(
     if radius_x <= 0.0 || radius_y <= 0.0 {
         return;
     }
+    let rgba = sprite
+        .color
+        .map(|value| (value * 255.0).round().clamp(0.0, 255.0) as u8);
     for y in bounds[1]..bounds[3] {
         for x in bounds[0]..bounds[2] {
             let dx = (f64::from(x) + 0.5 - center_x) / radius_x;
@@ -44,7 +47,7 @@ pub(in crate::game_renderer) fn raster_selection(
                         f64::from(y) + 0.5,
                         viewport[1],
                     ),
-                    [242, 217, 89, u8::MAX],
+                    rgba,
                     color,
                     depth,
                 );

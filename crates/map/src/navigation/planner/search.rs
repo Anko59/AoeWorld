@@ -81,6 +81,7 @@ pub(super) struct ExpansionContext<'a> {
     terrain: &'a dyn RouteTerrain,
     overlay: &'a ResourceOverlay,
     cancelled: &'a dyn Fn() -> bool,
+    proof_overlay: Option<&'a ResourceOverlay>,
 }
 
 impl<'a> ExpansionContext<'a> {
@@ -95,7 +96,13 @@ impl<'a> ExpansionContext<'a> {
             terrain,
             overlay,
             cancelled,
+            proof_overlay: None,
         }
+    }
+
+    pub(super) fn with_proof_overlay(mut self, overlay: Option<&'a ResourceOverlay>) -> Self {
+        self.proof_overlay = overlay;
+        self
     }
 
     pub(super) fn expand_neighbor(
@@ -123,6 +130,38 @@ impl<'a> ExpansionContext<'a> {
                 .terrain
                 .route_edge_clear(active.tile, next, self.cancelled)?
             || !diagonal_ok
+        {
+            return Ok(());
+        }
+        if let Some(snapshot) = self.proof_overlay
+            && (!checked_walkable(self.terrain, snapshot, next, self.cancelled)?
+                || !self
+                    .terrain
+                    .route_edge_clear(next, active.tile, self.cancelled)?
+                || (delta_x != 0
+                    && delta_y != 0
+                    && (!diagonal_clear_checked(
+                        self.terrain,
+                        self.overlay,
+                        next,
+                        -delta_x,
+                        -delta_y,
+                        self.cancelled,
+                    )? || !diagonal_clear_checked(
+                        self.terrain,
+                        snapshot,
+                        active.tile,
+                        delta_x,
+                        delta_y,
+                        self.cancelled,
+                    )? || !diagonal_clear_checked(
+                        self.terrain,
+                        snapshot,
+                        next,
+                        -delta_x,
+                        -delta_y,
+                        self.cancelled,
+                    )?)))
         {
             return Ok(());
         }
@@ -221,3 +260,7 @@ fn diagonal_clear_checked(
         && terrain.route_edge_clear(tile, horizontal, cancelled)?
         && terrain.route_edge_clear(tile, vertical, cancelled)?)
 }
+
+#[path = "search/tests.rs"]
+#[cfg(test)]
+mod tests;

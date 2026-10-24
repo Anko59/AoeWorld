@@ -29,31 +29,30 @@ fn pinned_replay_world() -> GameWorld {
     w
 }
 
-/// Re-pinned for the route-throughput fix: every order now gets a fast
-/// attempt from its own per-tick budget, so a scout's route starts on the
-/// order's tick, and the fast budget and per-player spend, each unit's
-/// fast-attempt flag and each planner's sealed-destination flag are hashed. Rally points also add optional state to
-/// buildings, which is hashed. Review re-pin adds resumable reverse-flood
-/// frontier/cursor state and player-first budget allocation. Only checkpoints
-/// holding changed planner state move; the paired replay assertion stays. Two runs still agree.
+/// Current pins include route guidance, certified endpoints and unreachable
+/// memos, resumable reverse-flood frontiers, player-first scheduling, bounded
+/// idle rotation and active-follower sampling slots. Exact explored visibility
+/// adds per-player fog state. These intentional authoritative-state and timing
+/// changes regenerate the combined tree's checkpoints; both independent runs
+/// must still agree on every tick and match every checkpoint.
 #[test]
 fn wildlife_and_fog_replay_hashes_stay_pinned() {
     const PINS: [(&str, &str); 4] = [
         (
             "100",
-            "b8ed5e0e37a4cdf45982d7fec13332a3afb19136cc073b4fa036f5f3b7956ae6",
+            "cf81ff8cb84ba1ae148304945637ddb6391a37815ceb47b5a127543fbaf987b1",
         ),
         (
             "200",
-            "2440d186157253ebf1042fbcb626dcdd3a84ad6663757878503428b8868095dd",
+            "7938800d7a9d15131de7ea5130677720fb8a726ee9f1b18e112c31ec2092077a",
         ),
         (
             "300",
-            "2b310225bc9d6f0135ce9f4e506195afcf651f25ee515797bf8a9bcfd93ddf04",
+            "3e20809bb3e3d4d10797479da2342fa6ddfdb6da9cc65c33a2c08083566c91ed",
         ),
         (
             "400",
-            "8c3cb0cc43edfc2d47a420561811878dcef7fcaf4481e033e06fac6dd302092a",
+            "24a4502c6526191ce82a65184db41440da11ea83a234ff41c7289af801b80cfb",
         ),
     ];
     let mut checkpoints = Vec::new();

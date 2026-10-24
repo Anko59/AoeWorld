@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 
 impl GameplayService {
     pub async fn tick(&self) {
+        let started = std::time::Instant::now();
         let (pending, controllers, views) = {
             let mut ownership = self.ownership.lock().await;
             let mut sessions = self.sessions.lock().await;
@@ -30,7 +31,11 @@ impl GameplayService {
                 .collect::<Vec<_>>();
             (commands, controllers, views)
         };
+        self.probe.phase("sessions", started.elapsed());
+        let started = std::time::Instant::now();
         let mut world = self.world.clone().write_owned().await;
+        self.probe.phase("world_lock", started.elapsed());
+        let started = std::time::Instant::now();
         let orders = pending.len();
         let mut acknowledgements = BTreeMap::<u64, Vec<GameplayServerMessage>>::new();
         for (session_id, command) in pending {
@@ -47,6 +52,7 @@ impl GameplayService {
                 },
             );
         }
+        self.probe.phase("orders", started.elapsed());
         let advance_started = std::time::Instant::now();
         let advanced = self.advance_world(world).await;
         self.probe.record(advance_started.elapsed(), orders);
@@ -62,6 +68,7 @@ impl GameplayService {
         // commands and map work may queue for the write lock while the views
         // are built on worker threads.
         let world = world.downgrade();
+        let fanout_started = std::time::Instant::now();
         let built = tokio::task::spawn_blocking(move || fanout::build(&world, &views, &changes))
             .await
             .ok()
@@ -75,6 +82,7 @@ impl GameplayService {
             }
             return;
         };
+        self.probe.phase("fanout_wait", fanout_started.elapsed());
         let delivery_started = std::time::Instant::now();
         let failed = {
             let mut sessions = self.sessions.lock().await;
@@ -84,9 +92,15 @@ impl GameplayService {
             self.disconnect(id).await;
         }
         let [viewers, frame, sessions] = built.phases;
+        self.probe.phase("viewers", viewers);
+        self.probe.phase("frame", frame);
+        self.probe.phase("session_views", sessions);
+        self.probe.phase("delivery", delivery_started.elapsed());
         self.fanout_probe
             .record([viewers, frame, sessions, delivery_started.elapsed()]);
+        let started = std::time::Instant::now();
         self.publish_resources().await;
+        self.probe.phase("resources", started.elapsed());
     }
 }
 
@@ -134,6 +148,8 @@ fn log_route_scheduler(world: &aoe_simulation::GameWorld) {
         world_capacity_exhausted = stats.world_capacity_exhausted,
         orphan_planners = stats.orphan_planners,
         oldest_waiting = stats.oldest_waiting.as_deref().unwrap_or("none"),
+        cache_entries = world.navigation_cache_usage().entries,
+        units = world.units().count(),
         metrics = %stats.metrics,
         "route scheduler"
     );

@@ -72,6 +72,7 @@ pub(super) struct Session {
     pub(super) ai: bool,
     pub(super) connected_at: Instant,
     pub(super) sender: mpsc::Sender<GameplayServerMessage>,
+    subscription_delivery: Option<fanout::subscription::Delivery>,
     subscription: Option<Subscription>,
     last_sequence: Option<u64>,
     acknowledgements: VecDeque<u64>,
@@ -370,31 +371,11 @@ impl GameplayService {
         session.resident_animals = animals;
         session.resident_projectiles = projectiles;
         session.vision_revision = Some(vision_revision);
-        // The first views must arrive, in order, even when the queue is full
-        // (a stalled tick): what does not fit waits for room in its own task.
-        let sender = session.sender.clone();
-        let mut waiting = Vec::new();
-        let mut failed = false;
-        for message in [snapshot, wildlife, fog, projectile_message] {
-            if !waiting.is_empty() {
-                waiting.push(message);
-                continue;
-            }
-            match sender.try_send(message) {
-                Ok(()) => {}
-                Err(mpsc::error::TrySendError::Full(message)) => waiting.push(message),
-                Err(mpsc::error::TrySendError::Closed(_)) => failed = true,
-            }
-        }
-        if !waiting.is_empty() {
-            tokio::spawn(async move {
-                for message in waiting {
-                    if sender.send(message).await.is_err() {
-                        break;
-                    }
-                }
-            });
-        }
+        let failed = !fanout::subscription::Delivery::offer(
+            &mut session.subscription_delivery,
+            &session.sender,
+            vec![snapshot, wildlife, fog, projectile_message],
+        );
         drop(sessions);
         drop(world);
         if failed {

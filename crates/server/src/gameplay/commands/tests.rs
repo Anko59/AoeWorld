@@ -2,6 +2,40 @@ use super::*;
 use aoe_core::Seed;
 use tokio::sync::mpsc;
 
+#[test]
+fn build_orders_report_unexplored_placement_without_mutating_the_world() {
+    use aoe_core::{PlayerId, TileCoord, WorldConfig};
+    use aoe_simulation::{GameWorld, UnitKind};
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    world
+        .initialize_village(PlayerId(0), TileCoord::new(20, 20))
+        .unwrap();
+    let builder = world
+        .units()
+        .find(|u| u.kind == UnitKind::Villager)
+        .unwrap()
+        .id;
+    let before = world.canonical_hash();
+    for action in [
+        PendingAction::Build {
+            builder_ids: vec![builder],
+            kind: aoe_protocol::BuildingKind::House,
+            origin: TileCoord::new(100, 100),
+        },
+        PendingAction::BuildWall {
+            builder_ids: vec![builder],
+            from: TileCoord::new(100, 100),
+            to: TileCoord::new(101, 100),
+        },
+    ] {
+        assert_eq!(
+            apply(&mut world, PlayerId(0), action),
+            CommandResult::RejectedUnexploredPlacement
+        );
+        assert_eq!(world.canonical_hash(), before);
+    }
+}
+
 #[tokio::test]
 async fn queue_move_rejects_unknown_and_non_controller_sessions_then_deduplicates_sequences() {
     let service = GameplayService::new(Seed(1));

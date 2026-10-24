@@ -39,13 +39,15 @@ fn map_kind(kind: MapKind) -> ResourceKind {
     }
 }
 
+type GroundChunk = Box<[(bool, i16); 1024]>;
+
 #[derive(Clone, Debug, Default)]
 pub struct ResourceCatalog {
     pub(crate) nodes: BTreeMap<u64, Node>,
     loaded: BTreeSet<(i32, i32)>,
     requested: BTreeSet<(i32, i32)>,
     /// 32x32 walkable flags per chunk (the map format's fixed chunk edge).
-    passable: BTreeMap<(i32, i32), Box<[bool; 1024]>>,
+    passable: BTreeMap<(i32, i32), GroundChunk>,
 }
 
 impl ResourceCatalog {
@@ -69,10 +71,12 @@ impl ResourceCatalog {
     pub(crate) fn insert(&mut self, chunk: &CompactChunk) -> Result<(), String> {
         let landscape: LandscapeChunk = chunk.decode().map_err(|error| error.to_string())?;
         self.loaded.insert((landscape.x, landscape.y));
-        let mut walkable = Box::new([false; 1024]);
+        let mut walkable = Box::new([(false, 0); 1024]);
         for tile in &landscape.tiles {
-            walkable[(tile.tile.y.rem_euclid(32) * 32 + tile.tile.x.rem_euclid(32)) as usize] =
-                tile.terrain.passable;
+            walkable[(tile.tile.y.rem_euclid(32) * 32 + tile.tile.x.rem_euclid(32)) as usize] = (
+                tile.terrain.passable && tile.terrain.surface.walkable(),
+                tile.terrain.game_height_level,
+            );
         }
         self.passable.insert((landscape.x, landscape.y), walkable);
         for resource in &landscape.resources {
@@ -90,6 +94,20 @@ impl ResourceCatalog {
         Ok(())
     }
 
+    /// The public physical step rule, including cliff ledges between tiles.
+    pub(crate) fn land_edge(&self, from: TileCoord, to: TileCoord) -> bool {
+        let sample = |tile: TileCoord| {
+            let chunk = self
+                .passable
+                .get(&(tile.x.div_euclid(32), tile.y.div_euclid(32)))?;
+            Some(chunk[(tile.y.rem_euclid(32) * 32 + tile.x.rem_euclid(32)) as usize])
+        };
+        match (sample(from), sample(to)) {
+            (Some((true, a)), Some((true, b))) => (i32::from(a) - i32::from(b)).abs() <= 1,
+            _ => false,
+        }
+    }
+
     pub fn loaded_chunks(&self) -> usize {
         self.loaded.len()
     }
@@ -99,6 +117,6 @@ impl ResourceCatalog {
         let chunk = self
             .passable
             .get(&(tile.x.div_euclid(32), tile.y.div_euclid(32)))?;
-        Some(chunk[(tile.y.rem_euclid(32) * 32 + tile.x.rem_euclid(32)) as usize])
+        Some(chunk[(tile.y.rem_euclid(32) * 32 + tile.x.rem_euclid(32)) as usize].0)
     }
 }

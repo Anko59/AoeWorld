@@ -1,3 +1,7 @@
+mod budget;
+mod preparation;
+mod reference;
+
 use super::{
     ChunkPortals, Ground, HierarchicalOutcome, Portal, PortalCache, entrance_runs,
     hierarchical_route,
@@ -123,11 +127,16 @@ fn portals_of(count: usize) -> Arc<ChunkPortals> {
         portals: vec![
             Portal {
                 tile: at,
-                cross: at
+                cross: at,
+                crossing_cost: 0,
+                bidirectional: true,
             };
             count
         ],
         costs: OnceLock::new(),
+        labels: super::grid::Labels::Empty,
+        components: 0,
+        links: Vec::new(),
     })
 }
 
@@ -136,27 +145,33 @@ fn the_portal_cache_is_bounded_by_bytes_and_evicts_the_oldest_chunk() {
     let one = portals_of(40).bytes();
     let mut cache = PortalCache::with_limit(one * 5);
     for x in 0..5 {
-        cache.insert((x, 0), portals_of(40));
+        cache.insert((x, 0), [0; 32], portals_of(40));
     }
     assert_eq!((cache.len(), cache.retained_bytes()), (5, one * 5));
     // Touching chunk 0 makes chunk 1 the least recently used.
-    assert!(cache.chunk((0, 0)).is_some());
-    cache.insert((9, 9), portals_of(40));
+    assert!(cache.chunk((0, 0), [0; 32]).is_some());
+    cache.insert((9, 9), [0; 32], portals_of(40));
     assert!(cache.retained_bytes() <= one * 5);
-    assert!(cache.chunk((0, 0)).is_some(), "the touched chunk survives");
-    assert!(cache.chunk((1, 0)).is_none(), "the oldest chunk is evicted");
-    assert!(cache.chunk((9, 9)).is_some());
+    assert!(
+        cache.chunk((0, 0), [0; 32]).is_some(),
+        "the touched chunk survives"
+    );
+    assert!(
+        cache.chunk((1, 0), [0; 32]).is_none(),
+        "the oldest chunk is evicted"
+    );
+    assert!(cache.chunk((9, 9), [0; 32]).is_some());
     // Many large entries never exceed the limit, whatever their number.
     for x in 0..200 {
-        cache.insert((x, 5), portals_of(40));
+        cache.insert((x, 5), [0; 32], portals_of(40));
         assert!(cache.retained_bytes() <= one * 5);
     }
 }
 
 #[test]
-fn a_resource_node_does_not_close_its_tile_in_the_static_graph() {
+fn depleted_resource_nodes_do_not_close_tiles_in_the_current_graph() {
     let generator = MapChunkGenerator::new([7; 32], 0, 4_096);
-    let ground = Ground(&generator);
+    let mut overlay = crate::ResourceOverlay::default();
     let mut checked = 0;
     for y in 0..CHUNK_TILES * 4 {
         for x in 0..CHUNK_TILES * 4 {
@@ -165,11 +180,213 @@ fn a_resource_node_does_not_close_its_tile_in_the_static_graph() {
                 .walk_at_with_cancel(tile, &|| false)
                 .expect("cell")
                 .expect("inside the map");
-            if cell.node.is_some() {
+            if let Some(node) = cell.node {
                 checked += 1;
+                overlay
+                    .deplete(&generator, node.id, node.initial_amount)
+                    .unwrap();
+                let ground = Ground::new(&generator, &overlay, &|| false);
                 assert_eq!(ground.is_open(tile), Ok(cell.passable), "{tile:?}");
             }
         }
     }
     assert!(checked > 0, "the window must contain resource nodes");
+}
+
+#[test]
+fn incremental_guidance_is_budgeted_and_independent_of_cache_warmth() {
+    use super::incremental::Search;
+    let generator = flat_terrain_with_water_wall(64, 32, 5);
+    let run = |slice| {
+        let mut search = Search::new(TileCoord::new(1, 32), TileCoord::new(62, 32), 256);
+        let mut work = 0;
+        loop {
+            let mut remaining = slice;
+            let outcome = search.poll(&generator, &mut remaining, &|| false).unwrap();
+            work += slice - remaining;
+            assert!(search.retained_entries() <= 65_536);
+            if let Some(outcome) = outcome {
+                return (outcome, work);
+            }
+            assert!(work < 20_000_000);
+        }
+    };
+    let cold = run(16_384);
+    assert!(matches!(cold.0, HierarchicalOutcome::Path { .. }));
+    assert_eq!(cold, run(7));
+}
+
+#[test]
+fn incremental_guidance_cancels_without_spending_its_budget() {
+    use super::incremental::Search;
+    let generator = flat_terrain_with_water_wall(64, 32, 5);
+    let mut search = Search::new(TileCoord::new(1, 32), TileCoord::new(62, 32), 256);
+    let mut budget = 16_384;
+    assert_eq!(
+        search.poll(&generator, &mut budget, &|| true),
+        Err(crate::EnvironmentPageError::Cancelled)
+    );
+    assert_eq!(budget, 16_384);
+}
+
+#[test]
+fn prepared_components_certify_the_nearest_reachable_tile_and_track_barriers() {
+    use crate::ResourceOverlay;
+    use aoe_core::TileRect;
+    let generator = flat_terrain_with_water_wall(64, 32, -1);
+    let mut overlay = ResourceOverlay::default();
+    let origin = TileCoord::new(1, 20);
+    let target = TileCoord::new(62, 20);
+    generator.prepare_navigation(&overlay, &|| false).unwrap();
+    assert_eq!(
+        generator
+            .navigation_destination(&overlay, origin, target, &|| false)
+            .unwrap(),
+        Some(TileCoord::new(31, 20))
+    );
+    let wall = TileRect::from_xywh(16, 0, 1, 64);
+    overlay.add_footprint(wall).unwrap();
+    assert_eq!(
+        generator
+            .navigation_destination(&overlay, origin, target, &|| false)
+            .unwrap(),
+        Some(TileCoord::new(15, 20))
+    );
+    overlay.remove_footprint(wall);
+    assert_eq!(
+        generator
+            .navigation_destination(&overlay, origin, target, &|| false)
+            .unwrap(),
+        Some(TileCoord::new(31, 20))
+    );
+}
+
+#[test]
+fn a_warm_abstract_search_charges_graph_work_instead_of_tile_floods() {
+    use super::incremental::Search;
+    use crate::ResourceOverlay;
+    let generator = flat_terrain_with_water_wall(256, -1, -1);
+    let overlay = ResourceOverlay::default();
+    generator.prepare_navigation(&overlay, &|| false).unwrap();
+    let mut search = Search::new(TileCoord::new(1, 20), TileCoord::new(250, 20), 256);
+    let mut remaining = 32_768;
+    let outcome = search.poll(&generator, &mut remaining, &|| false).unwrap();
+    assert!(
+        matches!(outcome, Some(HierarchicalOutcome::Path { .. })),
+        "{outcome:?}"
+    );
+}
+
+#[test]
+fn depleted_gateway_and_restored_overlay_update_only_the_current_graph() {
+    use crate::{ResourceKind, ResourceNode, ResourceOverlay};
+    let generator = flat_terrain_with_water_wall(64, 32, 5);
+    let mut overlay = ResourceOverlay::default();
+    let (origin, target) = (TileCoord::new(1, 20), TileCoord::new(62, 20));
+    generator.prepare_navigation(&overlay, &|| false).unwrap();
+    assert_eq!(
+        generator
+            .navigation_destination(&overlay, origin, target, &|| false)
+            .unwrap(),
+        Some(target)
+    );
+    let tree = ResourceNode::starting(TileCoord::new(32, 5), ResourceKind::Wood).unwrap();
+    overlay.insert_starting_resource(&generator, tree).unwrap();
+    assert_eq!(
+        generator
+            .navigation_destination(&overlay, origin, target, &|| false)
+            .unwrap(),
+        Some(TileCoord::new(31, 20))
+    );
+    overlay
+        .deplete(&generator, tree.id, tree.initial_amount)
+        .unwrap();
+    let restored =
+        ResourceOverlay::from_snapshot(&overlay.snapshot([7; 32]), [7; 32], &generator, &|| false)
+            .unwrap();
+    assert_eq!(overlay, restored);
+    assert_eq!(
+        generator
+            .navigation_destination(&restored, origin, target, &|| false)
+            .unwrap(),
+        Some(target)
+    );
+}
+
+#[test]
+fn cancelling_preparation_does_not_publish_partial_land_components() {
+    use crate::ResourceOverlay;
+    use std::cell::Cell;
+    let generator = flat_terrain_with_water_wall(64, 32, 5);
+    let overlay = ResourceOverlay::default();
+    // Startup only captures collision now. Cancel that publication first,
+    // then cancel the deferred terrain work after its original 100 probes.
+    let result = generator.prepare_navigation(&overlay, &|| true);
+    assert_eq!(result, Err(crate::EnvironmentPageError::Cancelled));
+    assert_eq!(
+        generator
+            .navigation_destination(
+                &overlay,
+                TileCoord::new(1, 20),
+                TileCoord::new(62, 20),
+                &|| false
+            )
+            .unwrap(),
+        None
+    );
+    generator.prepare_navigation(&overlay, &|| false).unwrap();
+    let calls = Cell::new(0);
+    let result = generator.navigation_destination(
+        &overlay,
+        TileCoord::new(1, 20),
+        TileCoord::new(62, 20),
+        &|| {
+            calls.set(calls.get() + 1);
+            calls.get() > 100
+        },
+    );
+    assert_eq!(result, Err(crate::EnvironmentPageError::Cancelled));
+    assert_eq!(
+        generator
+            .navigation_destination(
+                &overlay,
+                TileCoord::new(1, 20),
+                TileCoord::new(62, 20),
+                &|| false
+            )
+            .unwrap(),
+        Some(TileCoord::new(62, 20))
+    );
+}
+
+#[test]
+fn opening_ground_during_an_abstract_search_keeps_its_portal_snapshot_valid() {
+    use super::incremental::Search;
+    use crate::{ResourceKind, ResourceNode, ResourceOverlay};
+    let generator = flat_terrain_with_water_wall(64, -1, -1);
+    let mut overlay = ResourceOverlay::default();
+    let tree = ResourceNode::starting(TileCoord::new(31, 10), ResourceKind::Wood).unwrap();
+    overlay.insert_starting_resource(&generator, tree).unwrap();
+    generator.prepare_navigation(&overlay, &|| false).unwrap();
+    let mut search = Search::new(TileCoord::new(1, 20), TileCoord::new(62, 20), 256);
+    let mut budget = (32 * 32 * 9 + 32 * 8) * 2;
+    assert_eq!(
+        search
+            .poll_overlay(&generator, &overlay, &mut budget, &|| false)
+            .unwrap(),
+        None
+    );
+    overlay
+        .deplete(&generator, tree.id, tree.initial_amount)
+        .unwrap();
+    // Removing the border tree merges two runs and changes their midpoint.
+    generator.prepare_navigation(&overlay, &|| false).unwrap();
+    let mut budget = 32_768;
+    let outcome = search
+        .poll_overlay(&generator, &overlay, &mut budget, &|| false)
+        .unwrap();
+    assert!(
+        matches!(outcome, Some(HierarchicalOutcome::Path { .. })),
+        "{outcome:?}"
+    );
 }

@@ -69,6 +69,9 @@ impl PocketSearch {
         origin: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<bool>, Terminal> {
+        let _span = terrain
+            .route_generator()
+            .and_then(|generator| generator.measure_navigation(crate::NavigationPhase::Pocket));
         if cancelled() {
             return Err(crate::EnvironmentPageError::Cancelled.into());
         }

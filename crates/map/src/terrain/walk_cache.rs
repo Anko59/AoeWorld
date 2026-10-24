@@ -11,6 +11,9 @@ use aoe_core::TileCoord;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+mod probe;
+pub use probe::{NavigationPhase, NavigationProbe, NavigationSpan};
+
 const SIDE: usize = CHUNK_TILES as usize;
 const CELLS: usize = SIDE * SIDE;
 const WORDS: usize = CELLS / 64;
@@ -81,6 +84,8 @@ pub(super) struct DerivedCaches {
     /// Process-unique, so a thread's recent chunks can never serve another
     /// generator, even one allocated at the same address.
     id: u64,
+
+    pub(super) probe: std::sync::RwLock<Option<Arc<dyn NavigationProbe>>>,
     pub(super) point: std::sync::Mutex<super::point_memo::PointMemo>,
     pub(super) walk: std::sync::Mutex<WalkCache>,
     pub(super) portals: std::sync::Mutex<crate::navigation::PortalCache>,
@@ -91,6 +96,7 @@ impl Default for DerivedCaches {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         Self {
             id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            probe: Default::default(),
             point: Default::default(),
             walk: Default::default(),
             portals: Default::default(),
@@ -180,6 +186,7 @@ impl MapChunkGenerator {
             Err(_) => return Ok(None),
         };
         if let Ok(mut cache) = self.derived.walk.lock() {
+            let _span = self.measure_navigation(NavigationPhase::WalkCache);
             cache.insert(chunk, Arc::clone(&built));
         }
         Ok(Some(built))
@@ -190,6 +197,7 @@ impl MapChunkGenerator {
         (x, y): (i32, i32),
         cancelled: &dyn Fn() -> bool,
     ) -> Result<WalkChunk, EnvironmentPageError> {
+        let _span = self.measure_navigation(NavigationPhase::Terrain);
         let scene = self.landscape_chunk_with_cancel(x, y, cancelled)?;
         let mut chunk = WalkChunk {
             present: [0; WORDS],
@@ -313,6 +321,31 @@ impl MapChunkGenerator {
                 EdgePassability::Passable
             },
         ))
+    }
+
+    pub(crate) fn navigation_cells(
+        &self,
+        key: (i32, i32),
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Vec<Option<WalkCell>>, EnvironmentPageError> {
+        let chunk = self.walk_chunk(key, cancelled)?;
+        (0..CELLS)
+            .map(|index| {
+                let tile = TileCoord::new(
+                    key.0 * CHUNK_TILES + (index % SIDE) as i32,
+                    key.1 * CHUNK_TILES + (index / SIDE) as i32,
+                );
+                match &chunk {
+                    Some(chunk) => Ok(chunk.cell(tile)),
+                    None => self.walk_at_with_cancel(tile, cancelled),
+                }
+            })
+            .collect()
+    }
+
+    pub(crate) fn navigation_chunk_side(&self) -> i32 {
+        self.width_tiles.div_euclid(CHUNK_TILES)
+            + i32::from(self.width_tiles.rem_euclid(CHUNK_TILES) != 0)
     }
 
     pub(crate) fn portal_cache(&self) -> &std::sync::Mutex<crate::navigation::PortalCache> {

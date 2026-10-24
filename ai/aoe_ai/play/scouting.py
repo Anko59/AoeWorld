@@ -16,16 +16,47 @@ class ScoutManager:
         if ctx.home is None:
             return
         board = ctx.board
+        reach = ctx.config.scout_unreachable_tiles
+        live = {scout.id for scout in ctx.scouts}
+        board.scout_sent = {i: tick for i, tick in board.scout_sent.items() if i in live}
+        board.scout_targets = {i: tile for i, tile in board.scout_targets.items() if i in live}
         for scout in ctx.scouts:
-            if not scout.idle:
+            if not scout.idle or scout.id in ctx.busy:
                 continue
+            target = board.scout_targets.get(scout.id)
+            if (target is not None and target != scout.tile
+                    and scout.id in board.scout_sent
+                    and ctx.tick - board.scout_sent[scout.id] >= ctx.config.scout_settle_seconds * ctx.world.tick_hz):
+                # A frontier can be dry land but occupied by a tree. Do not
+                # send the idle scout back to that same failed tile forever.
+                if len(board.bad_moves) >= 4096:
+                    board.bad_moves.clear()
+                board.bad_moves.add(target)
+            if target is not None and dist(scout.tile, target) > reach:
+                # The ride ended far short of its waypoint: there is no route
+                # from here, and waypoints as far away would fail the same way.
+                done = board.scout_waypoints[: board.scout_index]
+                rest = board.scout_waypoints[board.scout_index :]
+                board.scout_waypoints = done + [p for p in rest if dist(p, scout.tile) <= reach]
             if board.scout_index >= len(board.scout_waypoints):
                 self.extend(ctx)
                 if board.scout_index >= len(board.scout_waypoints):
                     return
-            x, y = board.scout_waypoints[board.scout_index]
-            board.scout_index += 1
-            ctx.order("move", scout.id, x, y)
+            goal = board.scout_waypoints[board.scout_index]
+            path = ctx.land_route(scout.tile, goal)
+            target = goal if path else ctx.land_frontier(scout.tile, goal)
+            if target is not None:
+                target = ctx.unrefused(target)
+                if ctx.land_route(scout.tile, target) is None:
+                    target = None
+            if target is None or target == scout.tile:
+                board.scout_index += 1
+                continue
+            if target == goal:
+                board.scout_index += 1
+            board.scout_targets[scout.id] = target
+            board.scout_sent[scout.id] = ctx.tick
+            ctx.order("move", scout.id, *target)
 
     def extend(self, ctx: Context) -> None:
         """Queue the next leg: home ring, map circle, then ever wider rings."""

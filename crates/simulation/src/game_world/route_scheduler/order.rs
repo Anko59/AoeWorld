@@ -7,9 +7,12 @@ use super::issue::MapRoutePlan;
 use crate::game_path::{next_waypoint, route_waypoint, segment_length};
 use crate::game_world::facing_for;
 use crate::{GameWorld, GameWorldError, MovementOrder};
-use aoe_core::{EntityId, WorldPosition};
+use aoe_core::{EntityId, TileCoord, WorldPosition};
 use aoe_map::{MovementOutcome, RoutePlanner};
 use std::collections::VecDeque;
+
+/// How long (ticks, 10 s at 20 Hz) an unreachable verdict is remembered.
+const UNREACHABLE_MEMO_TICKS: u64 = 200;
 
 /// Where a new order starts: the first waypoint, the planned tiles after it,
 /// the planner that continues the route, whether it still waits for one, and
@@ -46,6 +49,9 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition);
         }
         let origin = self.units[index].state.position;
+        if self.recently_unreachable(index, origin.tile_floor(), destination.tile_floor()) {
+            return Err(GameWorldError::Unreachable);
+        }
         if origin == destination {
             self.clear_planner(index);
             self.units[index].last_movement_error = None;
@@ -64,6 +70,9 @@ impl GameWorld {
                 Ok(route) => route,
                 Err(error) => {
                     self.store_planner(index, previous);
+                    if error == GameWorldError::Unreachable {
+                        self.remember_unreachable(index, destination.tile_floor());
+                    }
                     return Err(error);
                 }
             };
@@ -94,6 +103,27 @@ impl GameWorld {
         }
         self.index_destination(id);
         Ok(true)
+    }
+
+    /// Remembers that the unit, where it stands, could not get to `target`.
+    pub(crate) fn remember_unreachable(&mut self, index: usize, target: TileCoord) {
+        let at = self.units[index].state.position.tile_floor();
+        self.units[index].unreachable_memo = Some((at, target, self.tick.0));
+    }
+
+    /// True when the unit, still where it stood, was refused `target` in the
+    /// last `UNREACHABLE_MEMO_TICKS` and no ground has opened since.
+    /// A chase or a re-sent order to the same unreachable spot (a soldier
+    /// facing an enemy across a river re-plans every second) is refused at
+    /// once instead of costing a whole fast attempt each time.
+    fn recently_unreachable(&self, index: usize, from: TileCoord, target: TileCoord) -> bool {
+        self.units[index]
+            .unreachable_memo
+            .is_some_and(|(at, to, tick)| {
+                at == from
+                    && to == target
+                    && self.tick.0.saturating_sub(tick) < UNREACHABLE_MEMO_TICKS
+            })
     }
 
     fn order_route(

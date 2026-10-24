@@ -455,6 +455,7 @@ pub(super) fn apply(
         Err(E::NotBuildable) => CommandResult::RejectedNotBuildable,
         Err(E::RequirementMissing) => CommandResult::RejectedRequirementMissing,
         Err(E::InvalidFootprint) => CommandResult::RejectedInvalidPlacement,
+        Err(E::UnexploredFootprint) => CommandResult::RejectedUnexploredPlacement,
         Err(E::UnderConstruction) => CommandResult::RejectedUnderConstruction,
         Err(E::AlreadyComplete) => CommandResult::RejectedAlreadyComplete,
         Err(E::FarmUnavailable) => CommandResult::RejectedFarmUnavailable,

@@ -119,6 +119,14 @@ pub(super) fn marker(
         } else {
             [0.25, 0.57, 0.96, 1.0]
         };
+        if let Some(colour) = unit.visual.colour() {
+            sprite.color = [
+                f32::from(colour[0]) / 255.0,
+                f32::from(colour[1]) / 255.0,
+                f32::from(colour[2]) / 255.0,
+                1.0,
+            ];
+        }
         emit((
             sprite.with_unit_contour(unit.visual.outline_colour()),
             scaled(frame, camera.zoom as f32),
@@ -184,7 +192,7 @@ pub(super) fn building(
         let frame = world_frame(native);
         if let Some(sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
             emit((
-                sprite,
+                sprite.with_owner(unit.visual),
                 scaled(frame, camera.zoom as f32),
                 object_depth(WorldObject::Unit(unit)),
                 u64::from(unit.id.0),
@@ -237,7 +245,7 @@ pub(super) fn sprite_building(
         let frame = world_frame(frames[index]);
         if let Some(sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
             emit((
-                sprite,
+                sprite.with_owner(unit.visual),
                 scaled(frame, camera.zoom as f32),
                 object_depth(WorldObject::Unit(unit)),
                 u64::from(unit.id.0),

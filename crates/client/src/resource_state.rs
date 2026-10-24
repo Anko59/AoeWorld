@@ -25,9 +25,18 @@ pub struct ResourceStateCache {
     pending: Option<(u64, u64, usize, Vec<ResourceAmount>)>,
     amounts: Vec<ResourceAmount>,
     exhausted_at: std::collections::BTreeMap<u64, f64>,
+    effect_order: std::collections::VecDeque<u64>,
 }
 
 impl ResourceStateCache {
+    pub fn memory_usage(&self) -> (usize, usize, usize) {
+        (
+            self.amounts.len(),
+            self.amounts.capacity() * std::mem::size_of::<ResourceAmount>(),
+            self.exhausted_at.len(),
+        )
+    }
+
     #[cfg(target_arch = "wasm32")]
     pub fn starting_nodes(&self) -> impl Iterator<Item = aoe_map::ResourceNode> + '_ {
         self.amounts
@@ -40,6 +49,7 @@ impl ResourceStateCache {
         self.pending = None;
         self.amounts.clear();
         self.exhausted_at.clear();
+        self.effect_order.clear();
     }
     #[inline(never)]
     pub fn remaining(&self, id: u64, initial: u16) -> u16 {
@@ -71,11 +81,25 @@ impl ResourceStateCache {
         }
         if snapshot {
             self.exhausted_at.clear();
+            self.effect_order.clear();
         }
+        self.expire_effects(now_ms);
         for id in exhausted {
+            if self.effect_order.len() == 4096
+                && let Some(oldest) = self.effect_order.pop_front()
+            {
+                self.exhausted_at.remove(&oldest);
+            }
             self.exhausted_at.insert(id, now_ms);
+            self.effect_order.push_back(id);
         }
         true
+    }
+    /// Cosmetic history expires even when no more resource messages arrive.
+    pub fn expire_effects(&mut self, now_ms: f64) {
+        self.exhausted_at.retain(|_, at| now_ms - *at < 3000.0);
+        self.effect_order
+            .retain(|id| self.exhausted_at.contains_key(id));
     }
     pub fn tree_stage(&self, id: u64, initial: u16, now_ms: f64) -> TreeStage {
         if self.revision.is_none() {
