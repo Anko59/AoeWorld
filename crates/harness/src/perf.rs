@@ -343,6 +343,7 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
     let json = serde_json::to_vec_pretty(&report)?;
     fs::write(format!("reports/perf/{mode}.json"), json)?;
     fs::write(format!("reports/perf/{mode}.md"), summary(&report))?;
+    print!("{}", comparison_summary(&report.comparisons));
     println!("report: reports/perf/{mode}.json ({:?})", report.verdict);
     if mode != "smoke" && verdict != Verdict::Pass {
         return Err(format!("required performance comparisons are {verdict:?}").into());
@@ -366,7 +367,33 @@ fn summary(report: &Report) -> String {
             item.encoded_bytes
         ));
     }
+    text.push('\n');
+    text.push_str(&comparison_summary(&report.comparisons));
     text.push_str("\nHardware qualification: not established. Tick timing is informational on shared hardware.\n");
+    text
+}
+
+fn comparison_summary(comparisons: &[Comparison]) -> String {
+    let mut text = String::new();
+    if comparisons.is_empty() {
+        return text;
+    }
+    text.push_str(
+        "| Metric | Observed | Baseline | Allowance | Verdict |\n|---|---:|---:|---:|---|\n",
+    );
+    for item in comparisons {
+        let value = |sample: Option<u64>| {
+            sample.map_or_else(|| "unavailable".to_owned(), |value| value.to_string())
+        };
+        text.push_str(&format!(
+            "| {} | {} | {} | {}% | {:?} |\n",
+            item.metric,
+            value(item.observed),
+            value(item.baseline),
+            item.threshold_percent,
+            item.verdict,
+        ));
+    }
     text
 }
 

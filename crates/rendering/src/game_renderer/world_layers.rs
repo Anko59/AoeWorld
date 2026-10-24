@@ -69,7 +69,7 @@ fn ordered_world_layers_with(
     emit: impl FnOnce(&mut Vec<WorldLayer>),
 ) -> Vec<WorldLayer> {
     let surfaces = surfaces.into_iter();
-    let selected_count = units.iter().filter(|unit| unit.selected).count();
+    let selected_count = units.iter().filter(|unit| unit.visual.selected()).count();
     let mut entries = Vec::with_capacity(
         surfaces
             .size_hint()
@@ -78,7 +78,7 @@ fn ordered_world_layers_with(
             .saturating_add(selected_count.saturating_mul(game_grid::SELECTION_RING_SPRITES)),
     );
     entries.extend(surfaces.map(WorldLayer::Surface));
-    for unit in units.iter().filter(|unit| unit.selected) {
+    for unit in units.iter().filter(|unit| unit.visual.selected()) {
         entries.extend(
             (if let Some(side) = unit.kind.building_side() {
                 game_grid::selection_ellipse(
@@ -94,7 +94,12 @@ fn ordered_world_layers_with(
                 game_grid::selection_ring(camera, unit.position, unit.elevation_meters)
             })
             .into_iter()
-            .map(|(sprite, depth)| WorldLayer::Selection(sprite, depth)),
+            .map(|(mut sprite, depth)| {
+                if unit.visual.hostile() {
+                    sprite.color = [245.0 / 255.0, 65.0 / 255.0, 65.0 / 255.0, 1.0];
+                }
+                WorldLayer::Selection(sprite, depth)
+            }),
         );
     }
     emit(&mut entries);

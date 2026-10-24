@@ -302,10 +302,3 @@ pub(crate) fn actor_hit(bounds: [f64; 4], foot: [f64; 2], point: [f64; 2], zoom:
         && point[1] <= bounds[3])
         || dx * dx + dy * dy <= (5.0 * zoom).powi(2)
 }
-
-/// Resolve the loaded own colour and player ownership once per scene.
-pub(crate) fn outline_palette(owner: aoe_core::PlayerId, team: [u8; 3]) -> [u8; 8] {
-    let colours = aoe_rendering::SceneUnitVisual::COLOURS;
-    let start = colours.iter().position(|c| *c == team).unwrap_or(0);
-    std::array::from_fn(|player| ((start + player + 8 - usize::from(owner.0) % 8) % 8) as u8)
-}

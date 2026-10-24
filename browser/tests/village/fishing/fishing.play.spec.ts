@@ -109,7 +109,13 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   test.setTimeout(420_000);
   const scene = JSON.parse(
     await readFile("../.cache/fishing/scene.json", "utf8"),
-  ) as { hash: string; dock: Tile; shore: Tile; deep: Tile; start: Tile };
+  ) as {
+    hash: string;
+    dock: Tile;
+    shore: Tile;
+    deep: Tile;
+    start: Tile;
+  };
   expect((await request.post("/maps/reset")).status()).toBe(204);
   const art = await gameAssets(page);
   const shot = async (name: string) => {
@@ -170,6 +176,19 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
   const buildActor = (await actors(page)).find((a) => a.id === builder.id);
   if (!buildActor) throw new Error("Builder missing");
   await page.mouse.click(buildActor.x, buildActor.y);
+  // Placement now requires the whole footprint to have been explored. The
+  // shore-fish scout only reveals its northern edge; approach with the real
+  // builder before arming construction instead of placing into unseen fog.
+  const reveal = { x: scene.dock.x - 1, y: scene.dock.y + 1 };
+  await frame(page, reveal);
+  const approach = await point(page, reveal);
+  await page.mouse.move(approach.x, approach.y);
+  await expect(page.locator("#tile-inspection")).toContainText(" · passable");
+  await page.mouse.click(approach.x, approach.y, { button: "right" });
+  await expect(page.locator("#unit-state")).not.toHaveText("unit idle");
+  await expect(page.locator("#unit-state")).toHaveText("unit idle", {
+    timeout: 60_000,
+  });
   await page.locator("#build-menu").click();
   await expect(page.locator("#build-dock")).toContainText("150 wood");
   const dockButton = page.locator("#build-dock");

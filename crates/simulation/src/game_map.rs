@@ -28,6 +28,7 @@ impl GameWorld {
             active_movers: Vec::new(),
             destinations: Default::default(),
             idle_spacing: Default::default(),
+            followers: Default::default(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
             fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
             fast_route_spent: BTreeMap::new(),
@@ -39,6 +40,8 @@ impl GameWorld {
             partial_kits: 0,
             route_slots: BTreeMap::new(),
             route_metrics: Default::default(),
+            planning_probe: None,
+            route_queued: Default::default(),
         })
     }
 
@@ -74,6 +77,7 @@ impl GameWorld {
             active_movers: Vec::new(),
             destinations: Default::default(),
             idle_spacing: Default::default(),
+            followers: Default::default(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
             fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
             fast_route_spent: BTreeMap::new(),
@@ -85,6 +89,8 @@ impl GameWorld {
             partial_kits: 0,
             route_slots: BTreeMap::new(),
             route_metrics: Default::default(),
+            planning_probe: None,
+            route_queued: Default::default(),
         })
     }
 
@@ -111,6 +117,7 @@ impl GameWorld {
             active_movers: Vec::new(),
             destinations: Default::default(),
             idle_spacing: Default::default(),
+            followers: Default::default(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
             fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
             fast_route_spent: BTreeMap::new(),
@@ -122,6 +129,8 @@ impl GameWorld {
             partial_kits: 0,
             route_slots: BTreeMap::new(),
             route_metrics: Default::default(),
+            planning_probe: None,
+            route_queued: Default::default(),
         })
     }
 }

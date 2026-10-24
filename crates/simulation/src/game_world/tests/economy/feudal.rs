@@ -13,6 +13,7 @@ fn rich(world: &mut GameWorld) {
 
 fn built(world: &mut GameWorld, kind: BuildingKind, x: i32) -> EntityId {
     let worker = villager_at(world, x - 1, 100);
+    fixture::survey(world, PlayerId(0), at(x + 1, 101), 3);
     let id = world
         .issue_build(PlayerId(0), &[worker], kind, at(x, 100))
         .unwrap();
@@ -80,6 +81,7 @@ fn feudal_buildings_are_age_gated_atomically_then_build_with_de_stats() {
         );
         let x = 130 + 10 * i as i32;
         let worker = villager_at(&mut world, x - 1, 100);
+        fixture::survey(&mut world, PlayerId(0), at(x + 1, 101), 3);
         let before = stock(&world);
         let id = world
             .issue_build(PlayerId(0), &[worker], kind, at(x, 100))

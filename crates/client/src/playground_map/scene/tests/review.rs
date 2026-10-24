@@ -128,6 +128,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
             scenery: Default::default(),
         },
         socket: None,
+        connection_callbacks: None,
         connection_id: 0,
         camera: scene.camera,
         capture: Default::default(),
@@ -188,6 +189,40 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
         last_frame: 0.0,
         status: String::new(),
     }
+}
+
+#[wasm_bindgen_test]
+async fn successive_unit_deltas_cannot_grow_the_resident_table_beyond_its_budget() {
+    let scene = PreparedScene::new(
+        Camera {
+            center: [100.0, 100.0],
+            zoom: 1.0,
+            viewport: [640.0, 360.0],
+            focus_elevation_meters: 0.0,
+        },
+        vec![],
+    );
+    let mut client = client(&scene).await;
+    let mut state = *client.units.values().next().unwrap();
+    client.units.clear();
+    for id in 0..aoe_protocol::MAX_SUBSCRIBED_UNITS {
+        state.id = EntityId(id as u32);
+        crate::playground::game::remember(&mut client, &state, 1);
+    }
+    state.id = EntityId(aoe_protocol::MAX_SUBSCRIBED_UNITS as u32);
+    assert!(!crate::playground::game::remember(&mut client, &state, 1));
+    assert_eq!(client.units.len(), aoe_protocol::MAX_SUBSCRIBED_UNITS);
+    assert!(!client.units.contains_key(&state.id));
+    state.id = EntityId(0);
+    state.facing = 3;
+    crate::playground::game::remember(&mut client, &state, 2);
+    assert_eq!(client.units[&state.id].facing, 3);
+    client.units.remove(&state.id);
+    client.presentation.remove(state.id);
+    state.id = EntityId(aoe_protocol::MAX_SUBSCRIBED_UNITS as u32);
+    crate::playground::game::remember(&mut client, &state, 3);
+    assert!(client.units.contains_key(&state.id));
+    assert_eq!(client.units.len(), aoe_protocol::MAX_SUBSCRIBED_UNITS);
 }
 
 #[wasm_bindgen_test]

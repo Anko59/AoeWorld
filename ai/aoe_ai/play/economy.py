@@ -40,6 +40,18 @@ HUNT_TRIES = 12
 HUNT_STALL_SECONDS = 40
 
 
+def unemployed(villager: Any) -> bool:
+    """Failed jobs and completed builders can leave a worker holding a load.
+
+    A live gather job waiting for a drop-off still exposes its resource kind.
+    Reassign only orphaned loads, preserving ordinary return/drop-off retries.
+    """
+    return villager.alive and (villager.idle or (
+        villager.task == UnitTask.CARRYING and not villager.moving
+        and villager.gathering is None
+    ))
+
+
 class EconomyManager:
     def __init__(self, constructor: Constructor) -> None:
         self.constructor = constructor
@@ -63,7 +75,10 @@ class EconomyManager:
         if center is None or ctx.hold_town_center or center.researching is not None:
             return
         for kind in (ResourceKind.FOOD, ResourceKind.WOOD):
-            target = nearest(ctx.resources(kind), ctx.home)
+            candidates = heapq.nsmallest(48, ctx.resources(kind), key=lambda n: dist2(n.tile, ctx.home))
+            target = next((n for n in candidates
+                           if dist(n.tile, ctx.home) <= ctx.config.max_gather_distance
+                           and ctx.land_route(ctx.home, n.tile) is not None), None)
             if target is not None:
                 if getattr(center, "rally_resource", None) != target.id:
                     ctx.order("set_rally_resource", center.id, target.id)
@@ -112,11 +127,11 @@ class EconomyManager:
         idle = [
             v
             for v in ctx.villagers
-            if v.idle and v.id not in ctx.busy and ctx.board.builders.get(v.id) is None
+            if unemployed(v) and v.id not in ctx.busy and ctx.board.builders.get(v.id) is None
         ]
         # A builder whose foundation finished (or vanished) is a worker again.
         for v in ctx.villagers:
-            if v.id in ctx.board.builders and v.idle and v.id not in ctx.busy:
+            if v.id in ctx.board.builders and unemployed(v) and v.id not in ctx.busy:
                 del ctx.board.builders[v.id]
                 idle.append(v)
         if not idle:
@@ -129,6 +144,7 @@ class EconomyManager:
         alive = {v.id for v in ctx.villagers}
         for gone in [i for i in assigned if i not in alive]:
             del assigned[gone]
+        self.learn_unreachable(ctx, idle)
         given = 0
         for villager in idle:
             # A villager that goes idle right after an order cannot do it:
@@ -159,8 +175,36 @@ class EconomyManager:
         if ctx.dropoff_distance(node) > ctx.config.dropoff_distance:
             if self.constructor.ensure_camp(ctx, CAMPS[kind], node, villager):
                 return True
-        ctx.order("gather", villager.id, node.id)
+        self.gather(ctx, villager, node)
         return True
+
+    def gather(self, ctx: Context, villager: Any, node: Any) -> None:
+        ctx.order("gather", villager.id, node.id)
+        ctx.board.gather_sent[villager.id] = (node.id, ctx.tick)
+
+    def learn_unreachable(self, ctx: Context, idle: list) -> None:
+        """A villager idle right after a gather order could not reach the node:
+        leave that node alone for a while instead of sending villagers there
+        again (each such trip costs the server a hopeless route search)."""
+        sent = ctx.board.gather_sent
+        alive = {v.id for v in ctx.villagers}
+        for gone in [i for i in sent if i not in alive]:
+            del sent[gone]
+        window = ctx.config.gather_fail_seconds * ctx.world.tick_hz
+        settle = 2 * ctx.world.tick_hz  # the order itself may still be in flight
+        for villager in idle:
+            last = sent.get(villager.id)
+            if last is None or ctx.tick - last[1] < settle:
+                continue
+            del sent[villager.id]
+            if ctx.tick - last[1] > window:
+                continue
+            ctx.board.cool(
+                f"unreachable:{last[0]}:villager",
+                ctx.tick,
+                ctx.config.gather_unreachable_seconds * ctx.world.tick_hz,
+            )
+            ctx.board.bump("gather_unreachable")
 
     def explore(self, ctx: Context, villager: Any) -> None:
         """Nothing known to work: walk a ring around home to uncover something."""
@@ -168,25 +212,33 @@ class EconomyManager:
         mem.bump("explored")
         ring = 12 + 6 * (mem.stats["explored"] // 8)
         points = ring_points(ctx.home, min(ring, 60), spacing=8)
-        x, y = ctx.unrefused(clamp_tile(points[mem.stats["explored"] % len(points)], ctx.world.map_size))
-        ctx.order("move", villager.id, x, y)
+        goal = clamp_tile(points[mem.stats["explored"] % len(points)], ctx.world.map_size)
+        target = goal if ctx.land_route(villager.tile, goal) else ctx.land_frontier(villager.tile, goal)
+        if target is not None:
+            target = ctx.land_hop(villager.tile, target)
+            if target != villager.tile:
+                ctx.order("move", villager.id, *target)
 
     def best_node(self, ctx: Context, villager: Any, kind: ResourceKind) -> Optional[Any]:
         home = ctx.home
         reach = ctx.config.max_gather_distance
-        best, best_score = None, None
+        scored = []
         # The nearest few dozen to the villager are plenty to choose from.
         candidates = heapq.nsmallest(
             48, ctx.resources(kind), key=lambda n: dist2(n.tile, villager.tile)
         )
         for node in candidates:
-            if dist(node.tile, home) > reach:
+            if dist(node.tile, home) > reach or ctx.board.cooling(
+                f"unreachable:{node.id}:villager", ctx.tick
+            ):
                 continue
             drop = min(ctx.dropoff_distance(node), 60.0)
             score = 2.0 * drop + dist(node.tile, villager.tile)
-            if best_score is None or score < best_score:
-                best, best_score = node, score
-        return best
+            scored.append((score, node.id, node))
+        # Check in preference order, leaving the bounded query budget available
+        # for other workers once a connected resource has been found.
+        return next((node for _, _, node in sorted(scored)
+                     if ctx.land_route(villager.tile, node.tile) is not None), None)
 
     # ----- food ------------------------------------------------------------
     def send_to_food(self, ctx: Context, villager: Any) -> bool:
@@ -200,7 +252,7 @@ class EconomyManager:
             if ctx.dropoff_distance(node) > ctx.config.dropoff_distance:
                 if self.constructor.ensure_camp(ctx, BuildingKind.MILL, node, villager):
                     return True
-            ctx.order("gather", villager.id, node.id)
+            self.gather(ctx, villager, node)
             return True
         game = self.huntable(ctx, (AnimalKind.DEER, AnimalKind.BOAR))
         if game is not None:
@@ -261,11 +313,28 @@ class EconomyManager:
         return None
 
     def forget_farmers(self, ctx: Context) -> None:
-        alive = {v.id for v in ctx.villagers}
-        farms = {b.id for b in ctx.buildings}
+        workers = {v.id: v for v in ctx.villagers}
+        farms = {b.id: b for b in ctx.buildings if b.kind == BuildingKind.FARM}
         farmers = ctx.board.farmers
-        for farm in [f for f, v in farmers.items() if v not in alive or f not in farms]:
-            del farmers[farm]
+        pause = ASSIGN_PAUSE_SECONDS * ctx.world.tick_hz
+        for farm, worker in list(farmers.items()):
+            unit = workers.get(worker)
+            if unit is None or farm not in farms or (
+                unit.gathering is None and unit.task != UnitTask.FARMING
+                and ctx.tick - ctx.board.assigned.get(worker, -pause) >= pause
+            ):
+                del farmers[farm]
+        # Construction automatically puts a farm's builder to work. That job
+        # did not originate in send_to_farm, but its visible work pose and tile
+        # identify the occupied plot, including after a reconnect.
+        for worker in ctx.villagers:
+            if worker.task != UnitTask.FARMING:
+                continue
+            x, y = worker.tile
+            for farm in farms.values():
+                if farm.x <= x < farm.x + farm.width and farm.y <= y < farm.y + farm.height:
+                    farmers[farm.id] = worker.id
+                    break
 
     def send_to_farm(self, ctx: Context, villager: Any) -> bool:
         farmers = ctx.board.farmers
@@ -273,6 +342,7 @@ class EconomyManager:
             f
             for f in ctx.world.my_buildings(BuildingKind.FARM, complete_only=True)
             if f.id not in farmers
+            and not ctx.board.cooling(f"farm:{f.id}", ctx.tick)
         ]
         farm = nearest(free, villager.tile, key=lambda b: b.center)
         if farm is not None:

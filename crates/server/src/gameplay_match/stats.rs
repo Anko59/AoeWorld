@@ -13,14 +13,19 @@ use std::{
     time::Duration,
 };
 
+mod phases;
+
 /// Ticks kept (100 minutes at 20 Hz); older ones are dropped.
 pub(crate) const MAX_RECORDS: usize = 120_000;
 
 /// What `GameplayService::tick` learned about itself, handed to `run_ticks`.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct TickProbe {
     advance_micros: AtomicU64,
     orders: AtomicU64,
+    planning_micros: AtomicU64,
+    planning_started: Mutex<Option<std::time::Instant>>,
+    phases: phases::Phases,
 }
 
 impl TickProbe {
@@ -28,6 +33,10 @@ impl TickProbe {
         self.advance_micros
             .store(advance.as_micros() as u64, Ordering::Relaxed);
         self.orders.store(orders as u64, Ordering::Relaxed);
+    }
+
+    pub(crate) fn phase(&self, name: &'static str, elapsed: Duration) {
+        self.phases.record(name, elapsed);
     }
 
     fn read(&self) -> (u64, u64) {
@@ -38,9 +47,36 @@ impl TickProbe {
     }
 }
 
-/// One tick: `[tick, total_us, sim_us, late_us, orders, units, missed]`.
-#[derive(Clone, Copy, Serialize)]
-pub(crate) struct TickRecord(u64, u64, u64, u64, u64, u64, u8);
+impl aoe_map::NavigationProbe for TickProbe {
+    fn begin(&self, phase: aoe_map::NavigationPhase) -> Box<dyn aoe_map::NavigationSpan> {
+        Box::new(self.phases.span(phase.name()))
+    }
+}
+
+impl aoe_simulation::PlanningProbe for TickProbe {
+    fn cache_span(&self) -> Option<Box<dyn aoe_map::NavigationSpan>> {
+        Some(Box::new(self.phases.span("route_cache")))
+    }
+    fn begin(&self) {
+        if let Ok(mut started) = self.planning_started.lock() {
+            *started = Some(std::time::Instant::now());
+        }
+    }
+    fn end(&self) {
+        if let Ok(mut started) = self.planning_started.lock()
+            && let Some(started) = started.take()
+        {
+            self.planning_micros
+                .fetch_add(started.elapsed().as_micros() as u64, Ordering::Relaxed);
+        }
+    }
+}
+
+/// One tick: tick, total/sim/late microseconds, orders, units, missed,
+/// planning microseconds, and named phase microseconds. Navigation spans are
+/// inclusive (terrain can be nested in portals, hierarchy and planning).
+#[derive(Clone, Serialize)]
+pub(crate) struct TickRecord(u64, u64, u64, u64, u64, u64, u8, u64, phases::Micros);
 
 #[derive(Default)]
 struct Inner {
@@ -60,7 +96,7 @@ pub(crate) struct StatsPage {
     /// Pass back as `since` to continue.
     next: u64,
     missed_total: u64,
-    /// `[tick, total_us, sim_us, late_us, orders, units, missed]` per tick.
+    /// See `TickRecord` for the column order and inclusive span semantics.
     ticks: Vec<TickRecord>,
 }
 
@@ -82,6 +118,12 @@ impl TickStats {
             return;
         };
         inner.missed += u64::from(missed);
+        let phases = probe.phases.drain();
+        let planning = probe.planning_micros.swap(0, Ordering::Relaxed);
+        if total > Duration::from_millis(200) {
+            tracing::warn!(tick, total_us = total.as_micros() as u64, sim_us = sim,
+                planning_us = planning, orders, units, phases_us = ?phases, "slow gameplay tick");
+        }
         inner.records.push_back(TickRecord(
             tick,
             total.as_micros() as u64,
@@ -90,6 +132,8 @@ impl TickStats {
             orders,
             units as u64,
             u8::from(missed),
+            planning,
+            phases,
         ));
         if inner.records.len() > MAX_RECORDS {
             inner.records.pop_front();
@@ -109,7 +153,7 @@ impl TickStats {
         StatsPage {
             next: inner.first + inner.records.len() as u64,
             missed_total: inner.missed,
-            ticks: inner.records.iter().skip(skip).copied().collect(),
+            ticks: inner.records.iter().skip(skip).cloned().collect(),
         }
     }
 }
@@ -123,9 +167,12 @@ impl crate::AppState {
         scheduled: tokio::time::Instant,
         started: tokio::time::Instant,
     ) {
-        let (late, total) = (started.duration_since(scheduled), started.elapsed());
+        let late = started.duration_since(scheduled);
+        let observed = std::time::Instant::now();
         let (tick, units) = gameplay.tick_and_units().await;
         let probe = gameplay.probe();
+        probe.phase("observation_lock", observed.elapsed());
+        let total = started.elapsed();
         self.tick_stats
             .record(tick, total, late, self.tick_period, &probe, units);
         if late > self.tick_period || total > self.tick_period {
@@ -149,3 +196,6 @@ pub(super) async fn match_stats(
     super::authorize(&state, &headers)?;
     Ok(Json(state.tick_stats.page(query.since)))
 }
+
+#[cfg(test)]
+mod tests;

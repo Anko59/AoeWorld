@@ -200,6 +200,14 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let Some(building_id) = client.selected.building_id else {
                 return;
             };
+            if !client
+                .village
+                .buildings
+                .iter()
+                .any(|b| b.id == building_id && b.player == owner(&client))
+            {
+                return;
+            }
             let sequence = client.next_sequence;
             let message = match i {
                 15..=28 => Message::ResearchOrder {
@@ -257,6 +265,14 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let Some(building_id) = client.selected.building_id else {
                 return;
             };
+            if !client
+                .village
+                .buildings
+                .iter()
+                .any(|b| b.id == building_id && b.player == owner(&client))
+            {
+                return;
+            }
             let sequence = client.next_sequence;
             let resource = aoe_protocol::TradeResource::ALL[i % 3];
             let message = if i < 3 {

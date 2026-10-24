@@ -42,7 +42,8 @@ const RESUBSCRIBE_DRIFT: i32 = 12;
 /// the bot's decisions need.
 #[derive(Clone, Copy, Debug)]
 pub enum ViewPolicy {
-    /// Track a window around the slot's own units and buildings.
+    /// Track own units and buildings, centering on the living army when their
+    /// spread exceeds the window. Own economy records are always reported.
     Follow { padding: i32, max_side: i32 },
     /// Always this region.
     Fixed(TileRect),
@@ -381,7 +382,7 @@ fn desired_region(world: &World, policy: ViewPolicy) -> Option<TileRect> {
             let mut points = world
                 .units
                 .values()
-                .filter(|u| Some(u.player) == world.me && u.kind != UnitKind::Scout)
+                .filter(|u| Some(u.player) == world.me && u.hp > 0 && u.kind != UnitKind::Scout)
                 .map(|u| u.position.tile_floor())
                 .chain(
                     world
@@ -403,7 +404,26 @@ fn desired_region(world: &World, policy: ViewPolicy) -> Option<TileRect> {
             let max_side = max_side.clamp(16, aoe_protocol::MAX_SUBSCRIPTION_TILES);
             let width = (max_x - min_x + 1 + 2 * padding).min(max_side);
             let height = (max_y - min_y + 1 + 2 * padding).min(max_side);
-            let center = ((min_x + max_x) / 2, (min_y + max_y) / 2);
+            let mut center = ((min_x + max_x) / 2, (min_y + max_y) / 2);
+            if max_x - min_x + 1 + 2 * padding > max_side
+                || max_y - min_y + 1 + 2 * padding > max_side
+            {
+                // Centering between a distant army and home describes empty
+                // ground: even buildings beside our soldiers appear fogged.
+                // Use the army's mean rather than its bounding box so fresh
+                // reinforcements at home do not pull the view off the front.
+                let (x, y, count) = world
+                    .my_units(None)
+                    .into_iter()
+                    .filter(|u| u.is_military() && u.alive())
+                    .fold((0_i64, 0_i64, 0_i64), |(x, y, n), u| {
+                        let tile = u.tile();
+                        (x + i64::from(tile.x), y + i64::from(tile.y), n + 1)
+                    });
+                if count > 0 {
+                    center = ((x / count) as i32, (y / count) as i32);
+                }
+            }
             Some(
                 TileRect::from_xywh(center.0 - width / 2, center.1 - height / 2, width, height)
                     .clamp(world.width, world.height),
@@ -421,6 +441,9 @@ fn drifted(a: TileRect, b: TileRect) -> bool {
 
 mod session;
 use session::run;
+
+#[cfg(test)]
+mod tests;
 
 fn hex(hash: &[u8; 32]) -> String {
     hash.iter().map(|byte| format!("{byte:02x}")).collect()

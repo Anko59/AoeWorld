@@ -155,7 +155,11 @@ fn deliver_tick(
         );
         return false;
     };
-    if session.viewer != build.viewer
+    if session
+        .subscription_delivery
+        .as_ref()
+        .is_some_and(|d| d.pending())
+        || session.viewer != build.viewer
         || session
             .subscription
             .is_none_or(|s| s.revision != build.revision)
@@ -263,7 +267,14 @@ pub(super) fn deliver(
         };
         let current = session
             .subscription
-            .is_some_and(|s| s.revision == build.revision);
+            .is_some_and(|s| s.revision == build.revision)
+            // Every revision-scoped frame must follow its initial snapshot.
+            // Leave skipped baselines untouched so an unchanged final view
+            // remains eligible for delivery after the worker drains.
+            && !session
+                .subscription_delivery
+                .as_ref()
+                .is_some_and(|delivery| delivery.pending());
         if let Some((fog, vision)) = &build.fog
             && current
         {

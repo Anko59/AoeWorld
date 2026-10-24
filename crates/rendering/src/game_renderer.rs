@@ -108,7 +108,7 @@ pub enum GameRenderer {
 mod scene_types;
 pub use scene_types::{
     SceneCamera, SceneDecoration, SceneResource, SceneTerrain, SceneTerrainAppearance,
-    SceneTerrainSurface, SceneUnit, SceneUnitKind, SceneUnitVisual,
+    SceneTerrainSurface, SceneUnit, SceneUnitKind,
 };
 fn error(e: impl Into<JsValue>) -> String {
     format!("Canvas rendering unavailable: {:?}", e.into())
@@ -205,7 +205,7 @@ impl GameRenderer {
         crate::write_terrain_directory(art, &mut pixels)?;
         match self {
             Self::WebGpu(renderer) => renderer.upload_game_atlas(&pixels),
-            Self::WebGl(renderer) => renderer.upload(&pixels),
+            Self::WebGl(renderer) => renderer.upload_owned(pixels),
             Self::Canvas {
                 atlas,
                 source_atlas,

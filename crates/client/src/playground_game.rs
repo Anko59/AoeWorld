@@ -20,6 +20,8 @@ mod init;
 #[path = "playground_map.rs"]
 mod map;
 use map::{state::Drag, ui::set_text};
+#[path = "playground_game/memory.rs"]
+mod memory;
 #[path = "playground_game/network.rs"]
 mod network;
 #[path = "playground_status.rs"]
@@ -37,6 +39,7 @@ pub(super) struct Client {
     pub art: GameArt,
     pub team_colour: [u8; 3],
     pub socket: Option<WebSocket>,
+    connection_callbacks: Option<network::ConnectionCallbacks>,
     pub connection_id: u64,
     pub camera: Camera,
     pub capture: capture::Capture,
@@ -127,10 +130,7 @@ pub(super) fn subscribe(client: &mut Client) {
         region,
     };
     if let Ok(bytes) = encode_gameplay_client(&message)
-        && client
-            .socket
-            .as_ref()
-            .is_some_and(|socket| socket.send_with_u8_array(&bytes).is_ok())
+        && network::send(client, &bytes)
     {
         client.sent_region = Some(region);
         client.last_subscribe = now();
@@ -147,7 +147,12 @@ pub(super) fn position_at(client: &Client, id: EntityId) -> [f64; 2] {
         .unwrap_or_else(|| client.presentation.position(*state))
 }
 
-pub(super) fn remember(client: &mut Client, state: &GameplayUnitState, tick: u64) {
+pub(super) fn remember(client: &mut Client, state: &GameplayUnitState, tick: u64) -> bool {
+    if client.units.len() >= aoe_protocol::MAX_SUBSCRIBED_UNITS
+        && !client.units.contains_key(&state.id)
+    {
+        return false;
+    }
     let Client {
         units,
         presentation,
@@ -155,6 +160,7 @@ pub(super) fn remember(client: &mut Client, state: &GameplayUnitState, tick: u64
     } = client;
     presentation.remember(units.get(&state.id), state, tick);
     units.insert(state.id, *state);
+    true
 }
 
 pub(super) fn reconnect(shared: Rc<RefCell<Client>>) {
@@ -184,6 +190,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             (time - client.last_frame).clamp(0.0, 100.0)
         };
         client.last_frame = time;
+        client.resources.expire_effects(time);
         controls::edge_pan(&mut client, delta_ms);
         subscribe(&mut client);
         let canvas = matches!(&client.renderer, GameRenderer::Canvas { .. });

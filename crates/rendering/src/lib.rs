@@ -1,3 +1,6 @@
+mod player;
+pub use player::{PLAYER_COLOURS, SceneUnitVisual, player_colour};
+
 #[cfg(target_arch = "wasm32")]
 mod web;
 #[cfg(target_arch = "wasm32")]
@@ -26,8 +29,8 @@ mod world_key_index;
 #[cfg(target_arch = "wasm32")]
 pub use game_renderer::{
     AtlasUpload, GameRenderer, SceneCamera, SceneDecoration, SceneResource, SceneTerrain,
-    SceneTerrainAppearance, SceneTerrainSurface, SceneUnit, SceneUnitKind, SceneUnitVisual,
-    actor_frame_index, apply_building_foundations, resource_sprite_bounds, scene_building_visible,
+    SceneTerrainAppearance, SceneTerrainSurface, SceneUnit, SceneUnitKind, actor_frame_index,
+    apply_building_foundations, resource_sprite_bounds, scene_building_visible,
     scene_resource_animation_frame, scene_resource_frame, scene_resource_presentation,
     scene_unit_animates, scene_unit_bounds, scene_unit_depth, scene_unit_render_key,
 };

@@ -112,10 +112,15 @@ tests and wire follow. Values are Age of Empires II: Definitive Edition's.
 | Outpost | 25 wood, 5 stone | 15 s | 500 | 1x1 | line of sight 10 |
 
 Build and BuildWall orders name villagers and a tile. The server validates the
-footprint (inside the map, passable, free of resources, units and buildings),
+footprint (every tile explored by the owner, inside the map, passable, free of resources, units and buildings),
 the owner, the requirement and the cost, then charges the cost and creates a
 foundation (`ConstructionState::UnderConstruction`, hp 1 growing with progress).
 A foundation blocks movement like the finished building (a farm never does).
+An untouched foundation gives no sight, though its owner still knows it exists.
+Sight starts with the first builder's work and grows with construction progress
+to the building's LOS (radius rounded up to whole tiles). Fog toggles and LOS
+research use the same rule. Orders on never-seen ground return
+`RejectedUnexploredPlacement`; explored grey fog permits placement.
 Builders walk to a tile beside it; each tick the foundation gains `builders + 2`
 of `3 x base seconds x tick rate` work, the AoE II rule `base x 3 / (n + 2)`: one
 builder takes the base time, three take three fifths of it. Builders stop on

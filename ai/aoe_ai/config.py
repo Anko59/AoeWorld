@@ -34,6 +34,8 @@ class Config:
     hunt_distance: int = 30
     #: Farms wanted per food-assigned villager once hunting and foraging end.
     farm_target: int = 6
+    #: A refused farm may be occupied by an automatic farmer still off screen.
+    farm_refusal_wait_seconds: int = 30
 
     # --- construction ------------------------------------------------------
     #: Wood kept back for houses when spending on anything else.
@@ -65,6 +67,29 @@ class Config:
     # --- scouting ----------------------------------------------------------
     scout_ring_step: int = 13
     scout_max_radius: int = 120
+    #: A scout idle this far from its waypoint did not get there (no route):
+    #: queued waypoints at least as far away are dropped. Each such order
+    #: costs the server a long hopeless route search.
+    scout_unreachable_tiles: int = 100
+    scout_settle_seconds: int = 2
+    #: A villager idle again this soon after a gather order never got to the
+    #: node (no route: across a river, inside a forest). The node is left
+    #: alone for `gather_unreachable_seconds` and another one is chosen.
+    #: An army marches to a far target in hops of this many tiles (a short
+    #: route each, planned at once); one order across the whole map per
+    #: soldier made the server plan thousands of map-wide routes at a time.
+    march_hop_tiles: int = 48
+    #: A soldier is sent on at most once per this many seconds, and an army
+    #: that got no nearer its goal for `march_stall_seconds` gives it up.
+    march_pause_seconds: int = 5
+    march_stall_seconds: int = 60
+    gather_fail_seconds: int = 20
+    gather_unreachable_seconds: int = 180
+
+    #: Bound the public land queries across every manager in one decision.
+    land_queries_per_decision: int = 16
+    land_retry_seconds: int = 10
+    land_cache_entries: int = 1024
 
     # --- combat ------------------------------------------------------------
     #: Army size that starts an attack.
@@ -76,3 +101,10 @@ class Config:
     rally_offset: int = 7
     #: A wound counts as ours when a soldier of ours stood within this many tiles.
     hit_reach: int = 12
+    #: Retry refused attack targets after the battlefield has had time to change.
+    attack_refusal_wait_seconds: int = 30
+    #: Protect working villagers from nearby wolves and provoked boars.
+    predator_worker_radius: int = 6
+    predator_defender_radius: int = 12
+    predator_soldier_group: int = 2
+    predator_worker_group: int = 4

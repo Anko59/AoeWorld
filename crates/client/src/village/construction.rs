@@ -88,6 +88,9 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
         origin,
         [client.config.width_tiles, client.config.height_tiles],
         |tile| {
+            if client.fog.state([tile.x, tile.y]) == 0 {
+                return false;
+            }
             let ground = map::terrain_tile(client, tile.x, tile.y).map_or(
                 client.map_content_hash.is_none() && kind != BuildingKind::Dock,
                 |t| {

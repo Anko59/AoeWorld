@@ -39,7 +39,8 @@ async fn feudal_demo_rejects_dark_building_then_builds_and_researches_over_the_w
         .find(|u| u.kind == UnitKind::Villager)
         .unwrap()
         .id;
-    let at = TileCoord::new(138, 136);
+    // Entire footprint inside the Town Center's explored disc.
+    let at = TileCoord::new(134, 133);
     service
         .queue_build(session, 1, vec![worker], BuildingKind::Blacksmith, at)
         .await;

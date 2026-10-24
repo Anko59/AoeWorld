@@ -26,12 +26,12 @@ pub use game_world::{
     BuildingKind, BuildingRules, CORPSE_SECONDS, CarriedResource, CombatStats, ConstructionState,
     DYING_SECONDS, DamageKind, EconomyError, FEUDAL_BUILDINGS, Facing, GameBuilding, GameUnit,
     GameWorld, GameWorldError, HitRecord, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION,
-    MAX_WALL_SEGMENTS, MarketPrices, MovementOrder, PlayerEconomy, PreparedResourceDepletion,
-    Projectile, ProjectileKind, RallyPoint, RallyTarget, ResearchEntry, RouteSchedulerStats,
-    Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules, TickPhase, TrainingEntry,
-    UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VILLAGE_RULES,
-    VillageRules, WorldLimits, building_combat, damage_dealt, researched_stats, trainable_units,
-    unit_combat, villager_capacity,
+    MAX_WALL_SEGMENTS, MarketPrices, MovementOrder, PlanningProbe, PlayerEconomy,
+    PreparedResourceDepletion, Projectile, ProjectileKind, RallyPoint, RallyTarget, ResearchEntry,
+    RouteSchedulerStats, Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules,
+    TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining,
+    VILLAGE_RULES, VillageRules, WorldLimits, building_combat, damage_dealt, researched_stats,
+    trainable_units, unit_combat, villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::{BTreeMap, BTreeSet};

@@ -243,6 +243,7 @@ fn invalid_placements_and_orders_are_refused_atomically() {
 fn cancelling_before_progress_refunds_everything_and_frees_the_site() {
     let (mut world, _, _) = village();
     let builder = villager_at(&mut world, 60, 100);
+    fixture::survey(&mut world, PlayerId(0), at(101, 101), 2);
     let id = world
         .issue_build(
             PlayerId(0),
@@ -471,6 +472,7 @@ fn identical_build_orders_replay_to_the_same_hash() {
         world
             .issue_build(PlayerId(0), &[a, b], BuildingKind::House, at(100, 100))
             .unwrap();
+        fixture::survey(&mut world, PlayerId(0), at(112, 100), 2);
         world
             .issue_build_wall(PlayerId(0), &[b], at(110, 100), at(114, 100))
             .unwrap();

@@ -28,6 +28,7 @@ fn bindings_paths_match_the_repository_layout() {
     for (tests, project) in TESTS {
         paths.extend([tests, project]);
     }
+    paths.extend(LOGIC_TESTS);
     for path in paths {
         assert!(root.join(path).exists(), "{path} is missing");
     }

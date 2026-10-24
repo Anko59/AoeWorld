@@ -21,6 +21,15 @@ const TESTS: [(&str, &str); 2] = [
     ),
     ("ai/tests", "ai/pyproject.toml"),
 ];
+const LOGIC_TESTS: [&str; 7] = [
+    "ai/tests/test_geometry.py",
+    "ai/tests/test_logic.py",
+    "ai/tests/test_navigation.py",
+    "ai/tests/test_review.py",
+    "ai/tests/test_combat_orders.py",
+    "ai/tests/test_predator_defence.py",
+    "ai/tests/test_worker_recovery.py",
+];
 const AI_SOURCE: &str = "ai";
 const BINDINGS_TARGET: &str = "target/sdk-python";
 const SITE: &str = "target/sdk-python/site";
@@ -35,6 +44,8 @@ pub(crate) enum Action {
     Build,
     /// Build a debug wheel and the server, then run pytest against a local server.
     Test,
+    /// Run only the example AI's fake-world decision regressions.
+    LogicTest,
     /// Play seeded lockstep AI matches against an arena server and print JSON (`make ai-arena`).
     Arena(ArenaArgs),
 }
@@ -63,6 +74,7 @@ pub(crate) fn run(action: Action) -> Result<(), Box<dyn Error>> {
             println!("built {}", wheel.display());
         }
         Action::Test => test(&root)?,
+        Action::LogicTest => logic_test(&root)?,
         Action::Arena(args) => arena(&root, &args)?,
     }
     Ok(())
@@ -88,6 +100,31 @@ fn build_wheel(root: &Path, release: bool, out: &str) -> Result<PathBuf, Box<dyn
         STEP_DEADLINE,
     )?;
     newest_wheel(&root.join(out))
+}
+
+fn logic_test(root: &Path) -> Result<(), Box<dyn Error>> {
+    let (_, python_path) = prepare(root)?;
+    let mut args = vec![
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "--rootdir",
+        "ai",
+        "-c",
+        "ai/pyproject.toml",
+    ];
+    args.extend(LOGIC_TESTS);
+    process::run_with_env(
+        "python3",
+        &args,
+        &[
+            ("PYTHONPATH", &python_path),
+            ("PYTHONDONTWRITEBYTECODE", "1"),
+        ],
+        STEP_DEADLINE,
+    )?;
+    Ok(())
 }
 
 fn test(root: &Path) -> Result<(), Box<dyn Error>> {

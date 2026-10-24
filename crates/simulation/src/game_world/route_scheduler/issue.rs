@@ -55,6 +55,10 @@ impl GameWorld {
         let before = planner.work();
         let result = self.poll_world_route_planner(planner, allowance, &|| false, kind);
         let spent = planner.work().saturating_sub(before);
+        if planner.certified_destination().is_some() {
+            self.route_metrics
+                .sample("certified-nearest", kind, planner);
+        }
         self.charge_fast_route(player, spent);
         self.route_metrics.issue_work += u64::from(spent);
         (result, allowance == FAST_ROUTE_WORK)
@@ -75,7 +79,11 @@ impl GameWorld {
         kind: UnitKind,
         outcome: &MovementOutcome,
     ) {
-        if kind != UnitKind::FishingShip {
+        if kind != UnitKind::FishingShip && planner.certified_destination().is_none() {
+            let _span = self
+                .planning_probe
+                .as_ref()
+                .and_then(|probe| probe.cache_span());
             self.navigation_cache.insert(
                 planner.origin(),
                 planner.destination(),
@@ -110,14 +118,19 @@ impl GameWorld {
         let (result, full) = self.poll_fast_route(&mut planner, kind, player);
         let work = planner.work();
         let settled = |world: &mut Self, outcome: MovementOutcome| {
-            world.cache_route(&planner, kind, &outcome);
+            // A route given up on is no answer for the destination.
+            if !planner.is_approach() {
+                world.cache_route(&planner, kind, &outcome);
+            }
             Some(MapRoutePlan::Outcome(outcome))
         };
         match result {
             RoutePlannerPoll::Pending => {
                 self.route_metrics.deferred(origin, destination);
                 let far = super::far_route(origin, destination);
-                if self.route_capacity_exhausted(player, 0, 0, far) {
+                if self.route_capacity_exhausted(player, 0, 0, far)
+                    || self.route_queued.contains(&(player, far))
+                {
                     self.route_metrics.deferred_without_slot += 1;
                     Some(MapRoutePlan::Pending(None, full))
                 } else {
@@ -128,7 +141,10 @@ impl GameWorld {
                 self.route_metrics.solved_at_issue += 1;
                 self.route_metrics.fast_path += 1;
                 self.route_metrics.found(work);
-                if planner.is_terminal() {
+                if planner.is_terminal()
+                    && !planner.is_approach()
+                    && planner.certified_destination().is_none()
+                {
                     settled(self, MovementOutcome::Path(path))
                 } else {
                     Some(MapRoutePlan::Segment(path, Some(planner)))

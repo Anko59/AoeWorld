@@ -22,6 +22,15 @@ pub struct CanvasPresentation {
 }
 
 impl CanvasPresentation {
+    pub(super) fn resident_bytes(&self) -> usize {
+        self.color_buffer.capacity()
+            + self.depth_buffer.capacity() * std::mem::size_of::<f64>()
+            + self
+                .image_store
+                .as_ref()
+                .map_or(0, |pixels| pixels.length() as usize)
+    }
+
     pub(super) fn new(width: u32, height: u32) -> Self {
         Self {
             color_buffer: Vec::new(),

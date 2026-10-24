@@ -172,6 +172,7 @@ const terrainSources = new Map<number, TerrainSource>([
 export async function gameAssets(
   page: Page,
   forceSynthetic = false,
+  additionalSprites: readonly (readonly [number, number])[] = [],
 ): Promise<string> {
   if (!forceSynthetic) {
     const response = await page.request.get("/asset-pack/manifest.json");
@@ -213,6 +214,7 @@ export async function gameAssets(
   const frames = [
     ["graphics", 3008, 50],
     ["graphics", 3004, 50],
+    ...additionalSprites.map(([id, count]) => ["graphics", id, count]),
     ...[15008, 15007, 15000, 15010, 15018, 15002, 15016].map((id) => [
       "terrain",
       id,

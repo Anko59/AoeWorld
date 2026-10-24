@@ -60,6 +60,46 @@ class Context:
         self.busy: set[int] = set()
         self._resources: dict[Any, list] = {}
         self._spots: dict[Any, list] = {}
+        self._land_routes: dict[tuple[Tile, Tile], Any] = {}
+        self._land_queries = 0
+        army_ids = {unit.id for unit in self.army if unit.alive}
+        board.marched = {i: tick for i, tick in board.marched.items() if i in army_ids}
+        board.land_failures = {key: until for key, until in board.land_failures.items() if until > self.tick}
+
+    def land_route(self, origin: Tile, target: Tile) -> Optional[list[Tile]]:
+        key = (origin, target)
+        if key not in self._land_routes:
+            if key in self.board.land_failures:
+                return None
+            if self._land_queries >= self.config.land_queries_per_decision:
+                return None
+            self._land_queries += 1
+            self._land_routes[key] = self.world.land_route(*origin, *target)
+            if self._land_routes[key] is None:
+                if len(self.board.land_failures) >= self.config.land_cache_entries:
+                    self.board.land_failures.clear()
+                self.board.land_failures[key] = self.tick + self.config.land_retry_seconds * self.world.tick_hz
+        return self._land_routes[key]
+
+    def land_hop(self, origin: Tile, target: Tile) -> Tile:
+        """A short proven land hop, shared by marching and rallying soldiers."""
+        path = self.land_route(origin, target)
+        if path is None:
+            return origin
+        length, stop = 0.0, origin
+        for before, after in zip(path, path[1:]):
+            length += dist(before, after)
+            if length > self.config.march_hop_tiles:
+                break
+            stop = after
+        stop = self.unrefused(stop)
+        return stop if self.land_route(origin, stop) is not None else origin
+
+    def land_frontier(self, origin: Tile, target: Tile) -> Optional[Tile]:
+        if self._land_queries >= self.config.land_queries_per_decision:
+            return None
+        self._land_queries += 1
+        return self.world.land_frontier(*origin, *target)
 
     # ----- queries ---------------------------------------------------------
     @property
@@ -72,6 +112,8 @@ class Context:
     def resources(self, kind: ResourceKind) -> list:
         if kind not in self._resources:
             bad = self.board.bad_resources
+            if len(bad) > 8192:
+                bad.clear()  # bounded: refused nodes are learned again if still bad
             self._resources[kind] = [
                 n for n in self.world.resources(kind) if n.id not in bad
             ]

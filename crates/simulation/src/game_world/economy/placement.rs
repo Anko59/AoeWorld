@@ -7,6 +7,29 @@ use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
 use std::collections::{BTreeSet, VecDeque};
 
 impl GameWorld {
+    /// Player orders need tile-exact exploration of the entire footprint.
+    /// Check knowledge before terrain/occupancy to avoid probing black ground.
+    /// Scenario initialization uses `validate_footprint` directly.
+    pub(super) fn validate_explored_footprint(
+        &self,
+        player: PlayerId,
+        footprint: TileRect,
+    ) -> Result<(), EconomyError> {
+        if !footprint.valid(self.config.width_tiles, self.config.height_tiles) {
+            return Err(EconomyError::InvalidFootprint);
+        }
+        for y in footprint.min.y..footprint.max.y {
+            for x in footprint.min.x..footprint.max.x {
+                if self.visibility(player, TileCoord::new(x, y))
+                    == crate::TileVisibility::Unexplored
+                {
+                    return Err(EconomyError::UnexploredFootprint);
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn tile_passable(&self, tile: TileCoord) -> bool {
         !self.economy.blocked_tiles.contains(&tile) && self.terrain.passable(tile, self.config)
     }
@@ -83,7 +106,7 @@ impl GameWorld {
 
     /// Create a building (or foundation) after its footprint was validated.
     /// Nothing is charged here; the caller owns the cost. Foundations reveal
-    /// only after the caller accepts their builder approaches.
+    /// only after a builder contributes construction work.
     pub(in crate::game_world) fn insert_building(
         &mut self,
         player: PlayerId,

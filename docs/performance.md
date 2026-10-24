@@ -200,6 +200,24 @@ On 2026-10-20, the same source tree measured 287584 B with Rust 1.93.1 and
 only its toolchain identity changes. Diagnostics measured 84358 B and 83308 B,
 respectively, and retain the shared gameplay cap.
 
+On 2026-10-24, PR #567's
+[target-performance report](https://github.com/Anko59/AoeWorld/actions/runs/40073429466)
+at merge revision `67f1947dabe77cd8d86c544aa776a30564107bef` measured gameplay
+WASM at 302106 B: 19 B above the unchanged 302087 B cap (287702 B + 5%).
+All twelve instruction/allocation comparisons passed. The corresponding head
+`a4920de316ec43e661ffc3e6f8d1bd3e6920e24a` passed local `make perf-ci` at
+302032 B, leaving only 55 B; the local/CI size difference was 74 B.
+The memory diagnostic serializer constructed a second nineteen-element array
+of keys and counter values on each observation. Keeping the keys in static
+storage and serializing a compact counter array in place reduced local
+`make perf-ci` to 301791 B (-241 B), leaving 296 B under the same cap.
+The JSON fields, integer values and renderer pairs are unchanged and covered
+by a browser WASM regression test. The diagnostic bundle remains 84994 B.
+No baseline or threshold changed; these are bundle sizes, not gameplay timing
+or dedicated Firefox/GTX 1660 Ti qualification. `make perf-ci` now prints every
+comparison's metric, observed value, baseline, allowance and verdict, and
+includes the same rows in its Markdown report.
+
 The instruction baselines below were re-taken for the toolchain change, same tree,
 using `make perf-instructions` with Gungraun 0.19.4 and Valgrind 3.19.0:
 

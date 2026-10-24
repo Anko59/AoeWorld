@@ -17,6 +17,11 @@ impl RoutePlanner {
         hash.update(&self.origin.y.to_le_bytes());
         hash.update(&self.destination.x.to_le_bytes());
         hash.update(&self.destination.y.to_le_bytes());
+        hash.update(&[u8::from(self.resolved_destination.is_some())]);
+        if let Some(target) = self.resolved_destination {
+            hash.update(&target.x.to_le_bytes());
+            hash.update(&target.y.to_le_bytes());
+        }
         hash.update(&self.max_work.to_le_bytes());
         hash.update(&self.work.to_le_bytes());
         hash.update(&self.expansions.to_le_bytes());
@@ -32,8 +37,28 @@ impl RoutePlanner {
                 hash.update(&remaining.to_le_bytes())
             }
         };
-        hash.update(&[self.validation_step, u8::from(self.pocket_checked)]);
-        // Reverse flood state affects future work and must participate in replay.
+        hash.update(&[
+            self.validation_step,
+            u8::from(self.pocket_checked),
+            u8::from(self.approach),
+        ]);
+        hash.update(&[u8::from(self.guidance_checked)]);
+        hash_usize(hash, self.guidance.len());
+        for tile in &self.guidance {
+            hash.update(&tile.x.to_le_bytes());
+            hash.update(&tile.y.to_le_bytes());
+        }
+        hash.update(&[u8::from(self.hierarchy.is_some())]);
+        if let Some(search) = &self.hierarchy {
+            search.update_hash(hash);
+        }
+        if self.components_checked {
+            hash.update(b"components-checked");
+        }
+        if let Some(resolution) = &self.resolution {
+            resolution.update_hash(hash);
+        }
+        // Reverse flood state affects future bounded work and replay.
         hash.update(&[u8::from(self.pocket.is_some())]);
         if let Some(pocket) = &self.pocket {
             pocket.update_hash(hash);

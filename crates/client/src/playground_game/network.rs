@@ -3,6 +3,63 @@ use aoe_protocol::{GameplayServerMessage, decode_gameplay_server};
 use js_sys::Uint8Array;
 use web_sys::{Event, MessageEvent};
 
+#[path = "network/tests.rs"]
+#[cfg(test)]
+mod tests;
+
+pub(super) struct ConnectionCallbacks {
+    socket: WebSocket,
+    _onopen: Closure<dyn FnMut(Event)>,
+    _onmessage: Closure<dyn FnMut(MessageEvent)>,
+    _onclose: Closure<dyn FnMut(Event)>,
+}
+
+impl Drop for ConnectionCallbacks {
+    fn drop(&mut self) {
+        self.socket.set_onopen(None);
+        self.socket.set_onmessage(None);
+        self.socket.set_onclose(None);
+        let _ = self.socket.close();
+    }
+}
+
+fn incoming_bytes(data: &JsValue) -> Result<Vec<u8>, &'static str> {
+    let buffer = data
+        .dyn_ref::<js_sys::ArrayBuffer>()
+        .ok_or("non-binary game frame; reconnect required")?;
+    if buffer.byte_length() as usize > aoe_protocol::GAMEPLAY_MAX_MESSAGE {
+        return Err("protocol frame too large; reconnect required");
+    }
+    Ok(Uint8Array::new(buffer).to_vec())
+}
+
+fn send_bytes(socket: &WebSocket, bytes: &[u8]) -> Result<(), &'static str> {
+    const BUDGET: usize = 1024 * 1024;
+    if (socket.buffered_amount() as usize).saturating_add(bytes.len()) > BUDGET {
+        let _ = socket.close();
+        return Err("connection stalled; reconnect required");
+    }
+    if socket.ready_state() != WebSocket::OPEN {
+        return Err("connection closed; reconnect required");
+    }
+    socket
+        .send_with_u8_array(bytes)
+        .map_err(|_| "send failed; reconnect required")
+}
+
+pub(super) fn send(client: &mut Client, bytes: &[u8]) -> bool {
+    let Some(socket) = client.socket.clone() else {
+        return false;
+    };
+    match send_bytes(&socket, bytes) {
+        Ok(()) => true,
+        Err(message) => {
+            reconnect(client, message);
+            false
+        }
+    }
+}
+
 pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let location = shared
         .borrow()
@@ -18,6 +75,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     socket.set_binary_type(web_sys::BinaryType::Arraybuffer);
     let id = {
         let mut client = shared.borrow_mut();
+        client.connection_callbacks.take();
         client.connection_id = client.connection_id.saturating_add(1);
         if let Some(old) = client.socket.replace(socket.clone()) {
             let _ = old.close();
@@ -27,8 +85,11 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.sent_region = None;
         client.connection_id
     };
-    let opened = shared.clone();
+    let opened = Rc::downgrade(&shared);
     let onopen = Closure::<dyn FnMut(Event)>::new(move |_| {
+        let Some(opened) = opened.upgrade() else {
+            return;
+        };
         let client = &mut *opened.borrow_mut();
         if client.connection_id != id {
             return;
@@ -39,22 +100,27 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             resume_token: client.token,
         };
         if let Ok(bytes) = encode_gameplay_client(&hello) {
-            let _ = client
-                .socket
-                .as_ref()
-                .and_then(|socket| socket.send_with_u8_array(&bytes).ok());
+            let _ = send(client, &bytes);
         }
     });
     socket.set_onopen(Some(onopen.as_ref().unchecked_ref()));
-    onopen.forget();
 
-    let received = shared.clone();
+    let received = Rc::downgrade(&shared);
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
+        let Some(received) = received.upgrade() else {
+            return;
+        };
         let mut client = received.borrow_mut();
         if client.connection_id != id {
             return;
         }
-        let bytes = Uint8Array::new(&event.data()).to_vec();
+        let bytes = match incoming_bytes(&event.data()) {
+            Ok(bytes) => bytes,
+            Err(message) => {
+                reconnect(&mut client, message);
+                return;
+            }
+        };
         match decode_gameplay_server(&bytes) {
             Ok(GameplayServerMessage::Welcome {
                 width_tiles,
@@ -192,7 +258,10 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.presentation.remove(id);
                 }
                 for unit in &changed_units {
-                    remember(&mut client, unit, tick.0);
+                    if !remember(&mut client, unit, tick.0) {
+                        reconnect(&mut client, "unit table full; reconnect required");
+                        return;
+                    }
                 }
             }
             Ok(GameplayServerMessage::Tick { .. }) => {}
@@ -302,10 +371,12 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
     });
     socket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-    onmessage.forget();
 
-    let closed = shared.clone();
+    let closed = Rc::downgrade(&shared);
     let onclose = Closure::<dyn FnMut(Event)>::new(move |_| {
+        let Some(closed) = closed.upgrade() else {
+            return;
+        };
         let client = &mut *closed.borrow_mut();
         if client.connection_id == id {
             client.status = "reconnecting".to_owned();
@@ -313,7 +384,12 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
     });
     socket.set_onclose(Some(onclose.as_ref().unchecked_ref()));
-    onclose.forget();
+    shared.borrow_mut().connection_callbacks = Some(ConnectionCallbacks {
+        socket,
+        _onopen: onopen,
+        _onmessage: onmessage,
+        _onclose: onclose,
+    });
     Ok(())
 }
 

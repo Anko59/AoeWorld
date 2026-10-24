@@ -31,6 +31,14 @@ sdk-python-test: sdk-python-tools slot-bootstrap
 sdk-python-test-steps:
 	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python test
 
+# Fast fake-world regressions; sdk-python-test remains the full integration gate.
+.PHONY: sdk-python-logic-test sdk-python-logic-test-steps
+sdk-python-logic-test: sdk-python-tools slot-bootstrap
+	@$(SLOT_RUN) sdk-python-logic-test -- make --no-print-directory sdk-python-logic-test-steps
+
+sdk-python-logic-test-steps:
+	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python logic-test
+
 # The AI arena: seeded matches that run as fast as the machine allows (docs/ai-sdk.md).
 # ARENA_SIZE tiles per side, ARENA_BOTS players, ARENA_MINUTES game minutes, ARENA_SEEDS one match each.
 ARENA_SIZE ?= 300

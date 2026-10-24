@@ -353,7 +353,6 @@ pub struct SceneUnit {
     pub visual: SceneUnitVisual,
     /// Unit direction, or construction stage/wall variant for a building.
     pub facing: u8,
-    pub selected: bool,
     pub elevation_meters: f64,
 }
 
@@ -449,36 +448,4 @@ pub struct SceneDecoration {
     pub elevation_meters: f64,
 }
 
-/// Movement and optional palette ownership share the original one-byte slot.
-#[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
-#[repr(transparent)]
-pub struct SceneUnitVisual(u8);
-impl SceneUnitVisual {
-    pub const COLOURS: [[u8; 3]; 8] = [
-        [65, 145, 245],
-        [245, 65, 65],
-        [50, 190, 65],
-        [245, 220, 40],
-        [40, 220, 220],
-        [175, 65, 220],
-        [160, 160, 160],
-        [245, 145, 40],
-    ];
-    pub fn new(moving: bool) -> Self {
-        Self(u8::from(moving))
-    }
-    pub fn moving(self) -> bool {
-        self.0 & 1 != 0
-    }
-    pub fn set_moving(&mut self, moving: bool) {
-        self.0 = (self.0 & !1) | u8::from(moving);
-    }
-    pub fn with_outline(mut self, colour: Option<u8>) -> Self {
-        self.0 = (self.0 & 1) | colour.map_or(0, |index| ((index % 8) + 1) << 1);
-        self
-    }
-    pub fn outline_colour(self) -> Option<[u8; 3]> {
-        let index = (self.0 >> 1).checked_sub(1)?;
-        Self::COLOURS.get(usize::from(index)).copied()
-    }
-}
+pub use crate::player::SceneUnitVisual;

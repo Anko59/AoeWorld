@@ -101,6 +101,7 @@ fn a_hundred_feudal_villages_fit_and_building_orders_still_succeed() {
     assert!(world.economy.blocked_tiles.len() > 4_096);
     for (player, villager, ox, oy) in &villagers {
         let origin = TileCoord::new(ox + 110, oy + 100);
+        super::super::economy::fixture::survey(&mut world, *player, origin, 2);
         let house = world
             .issue_build(*player, &[*villager], BuildingKind::House, origin)
             .unwrap_or_else(|error| panic!("house of {player:?}: {error:?}"));

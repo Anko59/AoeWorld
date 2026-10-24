@@ -54,6 +54,8 @@ pub struct RouteMetrics {
     /// Searches ended by the stuck-search bound.
     pub stuck: u64,
     pub yielded: u64,
+    /// Near routes given up on for the closest reachable tile.
+    pub approached: u64,
     /// The latest searches that ended stuck or needed 64 Ki work or more.
     pub samples: std::collections::VecDeque<String>,
 }
@@ -71,14 +73,15 @@ impl RouteMetrics {
         let (o, d) = (planner.origin(), planner.destination());
         let area = planner.explored_area();
         self.samples.push_back(format!(
-            "{what} {kind:?} ({},{})->({},{}) work {} area {}x{}",
+            "{what} {kind:?} ({},{})->({},{}) work {} area {}x{} certified {:?}",
             o.x,
             o.y,
             d.x,
             d.y,
             planner.work(),
             area.max.x - area.min.x,
-            area.max.y - area.min.y
+            area.max.y - area.min.y,
+            planner.certified_destination()
         ));
     }
 
@@ -101,7 +104,7 @@ impl fmt::Display for RouteMetrics {
         write!(
             f,
             "orders={} at_issue={} cache_hits={} fast={} deferred={:?} no_slot={} \
-             work issue={} fair={} ahead={} refusals={} found={:?} failed={:?} stuck={} yielded={} \
+             work issue={} fair={} ahead={} refusals={} found={:?} failed={:?} stuck={} yielded={} approached={} \
              samples={:?}",
             self.orders,
             self.solved_at_issue,
@@ -117,7 +120,24 @@ impl fmt::Display for RouteMetrics {
             self.failed,
             self.stuck,
             self.yielded,
+            self.approached,
             self.samples,
         )
+    }
+}
+
+/// Environment-owned timing observer; measurements never enter replay state.
+pub trait PlanningProbe: std::fmt::Debug + Send + Sync {
+    fn begin(&self);
+    fn end(&self);
+    fn cache_span(&self) -> Option<Box<dyn aoe_map::NavigationSpan>> {
+        None
+    }
+}
+
+pub(crate) struct PlanningMeasurement<'a>(pub(crate) &'a dyn PlanningProbe);
+impl Drop for PlanningMeasurement<'_> {
+    fn drop(&mut self) {
+        self.0.end();
     }
 }

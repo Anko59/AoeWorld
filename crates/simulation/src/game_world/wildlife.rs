@@ -232,8 +232,13 @@ impl GameWorld {
         previous_tile: TileCoord,
         unit: &GameUnit,
     ) {
-        self.idle_spacing
-            .relocate(id, previous_tile, unit.position.tile_floor());
+        if self.followers.contains(id) {
+            self.followers
+                .relocate(id, previous_tile, unit.position.tile_floor());
+        } else {
+            self.idle_spacing
+                .relocate(id, previous_tile, unit.position.tile_floor());
+        }
         let (old, new) = (cell_of(previous_tile), cell(unit.position));
         if old == new {
             let slot = self.units[self.lookup[&id]].wildlife_slot;
@@ -272,11 +277,13 @@ impl GameWorld {
 
     pub(crate) fn untrack_unit_at(&mut self, id: EntityId, at: WorldPosition) {
         self.idle_spacing.remove(id, at.tile_floor());
+        self.followers.remove(id, at.tile_floor());
         self.untrack_unit_cell(id, cell(at));
     }
 
     pub(crate) fn track_unit_death(&mut self, id: EntityId, at: WorldPosition) {
         self.idle_spacing.remove(id, at.tile_floor());
+        self.followers.remove(id, at.tile_floor());
         let slot = self.units[self.lookup[&id]].wildlife_slot;
         if let Some(units) = self.wildlife.unit_cells.get_mut(&unit_key(cell(at)))
             && let Some(entry) = units.get_mut(slot).filter(|u| u.id == id)

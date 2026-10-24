@@ -12,9 +12,8 @@ pub(crate) fn faces(building: bool) -> Vec<ProjectedSurfaceTriangle> {
         kind: crate::SceneUnitKind::TownCenter,
         id: aoe_core::EntityId(2),
         position: camera.center,
-        visual: crate::SceneUnitVisual::new(false),
+        visual: crate::SceneUnitVisual::new(false).with_selected(false),
         facing: 0,
-        selected: false,
         elevation_meters: 0.0,
     };
     let units = if building {

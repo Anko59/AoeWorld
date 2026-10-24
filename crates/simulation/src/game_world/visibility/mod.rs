@@ -40,6 +40,8 @@ mod observers;
 
 #[path = "state.rs"]
 mod state;
+#[cfg(test)]
+mod tests;
 use state::PlayerVision;
 
 #[path = "watchers.rs"]
@@ -257,16 +259,27 @@ impl GameWorld {
     }
 
     pub(crate) fn update_building_vision(&mut self, id: EntityId) {
-        let observer = self.building(id).map(|b| {
-            (
-                b.player,
-                TileCoord::new(
-                    (b.footprint.min.x + b.footprint.max.x) / 2,
-                    (b.footprint.min.y + b.footprint.max.y) / 2,
-                ),
-                b.los,
-            )
-        });
+        let observer = self
+            .building(id)
+            .filter(|b| b.work_done > 0 || b.is_complete())
+            .map(|b| {
+                // Untouched foundations have no observer at all (even radius zero
+                // would reveal their centre). Worked buildings grow their radius
+                // with construction, rounded up to the next whole sight tile.
+                let los = if b.is_complete() {
+                    b.los
+                } else {
+                    (u64::from(b.los) * b.work_done).div_ceil(b.work_total.max(1)) as u8
+                };
+                (
+                    b.player,
+                    TileCoord::new(
+                        (b.footprint.min.x + b.footprint.max.x) / 2,
+                        (b.footprint.min.y + b.footprint.max.y) / 2,
+                    ),
+                    los,
+                )
+            });
         self.update_observer(id, observer);
     }
     /// What `player` remembers of a building: its last observation.
@@ -330,7 +343,9 @@ impl GameWorld {
                 };
                 for y in rect.min.y.max(chunk_y * 32)..rect.max.y.min(chunk_y * 32 + 32) {
                     for x in rect.min.x.max(chunk_x * 32)..rect.max.x.min(chunk_x * 32 + 32) {
-                        if counters[((y - chunk_y * 32) * 32 + (x - chunk_x * 32)) as usize] > 0 {
+                        if counters.counts[((y - chunk_y * 32) * 32 + (x - chunk_x * 32)) as usize]
+                            > 0
+                        {
                             tiles[(y - rect.min.y) as usize * width + (x - rect.min.x) as usize] =
                                 2;
                         }

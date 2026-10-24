@@ -2,6 +2,9 @@
 use super::{GameWorld, GameWorldError};
 use aoe_core::{ChunkCoord, EntityId, TileCoord, WorldPosition};
 
+mod cells;
+mod followers;
+pub(crate) use followers::Followers;
 mod destinations;
 pub(crate) use destinations::Destinations;
 mod idle;
@@ -14,23 +17,35 @@ const PUSH: i64 = 32; // at most 45 subunits diagonally, once per four ticks
 const _: () = assert!(SPACING + 2 * PUSH < aoe_core::FIXED_SUBUNITS_PER_TILE as i64);
 
 impl GameWorld {
+    pub(crate) fn refresh_spacing_order(&mut self, id: EntityId) {
+        let Some(&index) = self.lookup.get(&id) else {
+            return;
+        };
+        let tile = self.units[index].state.position.tile_floor();
+        if self.units[index].order.is_some() {
+            self.idle_spacing.remove(id, tile);
+            self.followers.insert(id, tile);
+        } else {
+            self.followers.remove(id, tile);
+            if self.units[index].state.hp > 0 {
+                self.idle_spacing.insert(id, tile);
+            }
+        }
+    }
+
     /// Pause only a follower in the same heading octant. Opposing/perpendicular
     /// traffic is permeable. The id breaks an exact tie, so one leader proceeds.
     /// Waiting discards this tick's whole speed credit instead of banking a dash.
     pub(crate) fn following_unit(&self, index: usize) -> bool {
-        let unit = self.units[index].state;
-        let Some(order) = self.units[index].order else {
+        let unit = &self.units[index].state;
+        let Some(order) = self.units[index].order.as_ref() else {
             return false;
         };
-        let direction = heading(order.origin, order.waypoint);
-        if direction == (0, 0) {
+        if order.origin == order.waypoint {
             return false;
         }
-        self.spacing_neighbours(
-            unit.position,
-            self.tick.0.wrapping_add(u64::from(unit.id.0)),
-        )
-        .any(|id| {
+        let mut direction = None;
+        let is_leader = |id| {
             if id == unit.id {
                 return false;
             }
@@ -38,32 +53,40 @@ impl GameWorld {
                 return false;
             };
             let other = &self.units[other_index];
-            if other.state.hp == 0
-                || !other.state.moving
-                || other
-                    .order
-                    .is_none_or(|o| heading(o.origin, o.waypoint) != direction)
-            {
+            if other.state.hp == 0 || !other.state.moving {
                 return false;
             }
             let (dx, dy) = delta(other.state.position, unit.position);
             if dx * dx + dy * dy >= SPACING * SPACING {
                 return false;
             }
+            let direction = *direction.get_or_insert_with(|| heading(order.origin, order.waypoint));
+            if other
+                .order
+                .as_ref()
+                .is_none_or(|o| heading(o.origin, o.waypoint) != direction)
+            {
+                return false;
+            }
             let ahead = dx * direction.0 + dy * direction.1;
             ahead > 0 || (ahead == 0 && id < unit.id)
-        })
+        };
+        let salt = self.tick.0.wrapping_add(u64::from(unit.id.0));
+        self.followers
+            .any_neighbour(unit.position.tile_floor(), salt, unit.id, is_leader)
     }
 
     pub(crate) fn advance_spacing(&mut self, changed: &mut Vec<EntityId>) {
+        self.finish_spacing_orders(changed);
         // A pair closer than SPACING must occupy the same or adjacent tiles.
-        // Snapshot the due candidates, then preserve the population scan's
-        // storage order (including swap-removal). An earlier push is at most
+        // Rotate a bounded batch of due ids, then preserve storage order
+        // within the batch (including swap-removal). An earlier push is at most
         // 32 subunits per axis: it cannot bring an initially nonadjacent tile
         // pair within SPACING during this pass. Neighbour sampling is unchanged.
         let mut indices = self
             .idle_spacing
-            .candidates((self.tick.0 % 4) as usize)
+            .take_candidates((self.tick.0 % 4) as usize)
+            .into_iter()
             .filter_map(|id| self.lookup.get(&id).copied())
             .collect::<Vec<_>>();
         indices.sort_unstable();
@@ -78,12 +101,6 @@ impl GameWorld {
         #[cfg(test)]
         {
             self.idle_spacing.inspected_units = 0;
-        }
-        // Completed/failed movement no longer reserves its old target.
-        for &id in changed.iter() {
-            if self.movement_order(id).is_none() {
-                self.destinations.remove(id);
-            }
         }
         for index in indices {
             #[cfg(test)]
@@ -156,6 +173,16 @@ impl GameWorld {
                 }
                 changed.push(unit.id);
                 break;
+            }
+        }
+    }
+
+    pub(super) fn finish_spacing_orders(&mut self, changed: &[EntityId]) {
+        // Re-enrol finished movers before selecting the bounded idle batch.
+        for &id in changed {
+            if self.movement_order(id).is_none() {
+                self.destinations.remove(id);
+                self.refresh_spacing_order(id);
             }
         }
     }

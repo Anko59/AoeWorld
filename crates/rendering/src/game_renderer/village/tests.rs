@@ -119,9 +119,8 @@ pub(super) fn unit(kind: SceneUnitKind) -> SceneUnit {
         kind,
         id: EntityId(2),
         position: [0.5; 2],
-        visual: crate::SceneUnitVisual::new(false),
+        visual: crate::SceneUnitVisual::new(false).with_selected(false),
         facing: 0,
-        selected: false,
         elevation_meters: 0.0,
     }
 }
@@ -447,9 +446,8 @@ fn a_farm_under_construction_draws_no_scaffolding() {
             kind: farm,
             id: EntityId(1),
             position: [10.5; 2],
-            visual: crate::SceneUnitVisual::new(false),
+            visual: crate::SceneUnitVisual::new(false).with_selected(false),
             facing: 0,
-            selected: false,
             elevation_meters: 0.0,
         },
         SceneCamera {

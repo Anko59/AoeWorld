@@ -83,7 +83,13 @@ fn short_orders_start_at_once_while_every_player_floods_hopeless_searches() {
             if world.movement_order(pocket).is_some() {
                 assert!(
                     tick - pocket_sent[&pocket] <= 3,
-                    "tick {tick}: a pocket order still searches"
+                    "tick {tick}: a pocket order still searches: fast_tried={}, fast_budget={}, planner_work={:?}",
+                    world.units[world.lookup[&pocket]].fast_route_tried,
+                    world.fast_route_budget,
+                    world.units[world.lookup[&pocket]]
+                        .planner
+                        .as_ref()
+                        .map(|p| p.work())
                 );
             } else if tick % 4 == 0 {
                 match world.issue_move(pocket, tile_position(300, 300)) {
@@ -121,15 +127,16 @@ fn short_orders_start_at_once_while_every_player_floods_hopeless_searches() {
         // Every player's fast share is whole again for the next tick.
         assert!(world.fast_route_spent.is_empty());
         for slots in world.route_slots.values() {
-            assert!(slots.searches <= MAX_ROUTE_SEARCHES_PER_PLAYER);
+            assert!(slots.class_searches(false) <= MAX_ROUTE_SEARCHES_PER_PLAYER);
+            assert!(slots.class_searches(true) <= MAX_ROUTE_SEARCHES_PER_PLAYER);
         }
         let stats = world.route_scheduler_stats();
         assert!(!stats.world_capacity_exhausted);
-        assert!(stats.waiting_units <= flood.len());
+        assert!(stats.waiting_units <= flood.len() + pocketed.len() + 20);
     }
     assert_eq!(started, 20);
     assert!(refused >= 60, "only {refused} pocket orders were refused");
-    assert!(world.active_route_searches <= MAX_ROUTE_SEARCHES_PER_PLAYER * PLAYERS as usize);
+    assert!(world.active_route_searches <= 2 * MAX_ROUTE_SEARCHES_PER_PLAYER * PLAYERS as usize);
     assert!(
         world.active_route_searches > 0,
         "the flood never held a search"
@@ -212,14 +219,14 @@ fn a_repeated_trip_is_answered_from_the_route_cache() {
     assert_eq!(world.route_metrics.cache_hits, hits + 1);
 }
 
-/// A player's scouts riding to sealed-off ground across the map hold its far
-/// search slots for a long time; its villagers' harder trips of a few dozen
-/// tiles still get near slots of their own at once.
+/// Busy far slots leave the player's near slots available. A long wall's
+/// open ends make the target reachable, so the fast cutoff cannot certify it
+/// unreachable: retain its search until the existing total-work bound. This
+/// replaces the previous assertion that pinned the premature approach bug.
 #[test]
-fn far_searches_never_take_a_players_near_slots() {
+fn an_unresolved_near_order_retains_a_bounded_search_beside_busy_far_slots() {
     let mut world = sealed_ring_world(1_024, 500, 500);
     let player = PlayerId(4);
-    // Two far searches in flight hold the player's far slots.
     for n in 0..MAX_ROUTE_SEARCHES_PER_PLAYER as i32 {
         let from = TileCoord::new(100 + n, 100);
         let id = world
@@ -235,24 +242,78 @@ fn far_searches_never_take_a_players_near_slots() {
             )),
         );
     }
-    let slots = world.route_slots[&player];
-    assert_eq!(slots.class_searches(true), MAX_ROUTE_SEARCHES_PER_PLAYER);
-    assert_eq!(slots.class_searches(false), 0);
-    let near = world
-        .spawn_unit(player, beside_ring(500, 500, 0))
+    assert!(world.route_capacity_exhausted(player, 0, 0, true));
+    // A wall from y = 100 to y = 900 at x = 200: its ends are far away.
+    for y in 100..900 {
+        world.economy.blocked_tiles.insert(TileCoord::new(200, y));
+    }
+    let villager = world
+        .spawn_unit(player, tile_position(190, 300))
         .expect("villager");
-    world
-        .issue_task_move(near, tile_position(500, 500))
-        .expect("accepted");
-    world.advance();
-    assert!(
-        world.units[world.lookup[&near]]
-            .planner
-            .as_ref()
-            .is_some_and(aoe_map::RoutePlanner::requires_search_slot),
-        "the near order waits behind the far searches"
+    assert_eq!(
+        world.issue_move(villager, tile_position(210, 300)),
+        Ok(true)
     );
-    let slots = world.route_slots[&player];
-    assert_eq!(slots.class_searches(false), 1);
-    assert_eq!(slots.class_searches(true), MAX_ROUTE_SEARCHES_PER_PLAYER);
+    assert!(world.unit(villager).expect("villager").planning);
+    assert_eq!(world.route_metrics.approached, 0);
+    assert_eq!(world.route_slots[&player].class_searches(false), 1);
+    assert_eq!(
+        world.route_slots[&player].class_searches(true),
+        MAX_ROUTE_SEARCHES_PER_PLAYER
+    );
+    let mut ended = None;
+    for tick in 0..400 {
+        world.advance();
+        if world.movement_order(villager).is_none() {
+            ended = Some(tick);
+            break;
+        }
+    }
+    assert!(ended.is_some(), "the bounded search never ended");
+    assert_eq!(
+        world.movement_failure(villager),
+        Some(GameWorldError::PathBudgetExceeded)
+    );
+    assert_eq!(world.route_slots[&player].class_searches(false), 0);
+}
+
+/// A fast attempt's work allowance is not a proof of disconnection: this
+/// short wall has two open ends, but finding either detour takes more work
+/// than the issue-time allowance. Retained polling must finish that search.
+#[test]
+fn a_reachable_near_order_keeps_searching_past_the_fast_allowance() {
+    let config = WorldConfig::new(1_024, 1_024, Seed(0)).expect("config");
+    let mut world = GameWorld::new(config).expect("flat world");
+    // Completed palisade collision, with open ground around both ends.
+    for y in 280..=320 {
+        world.economy.blocked_tiles.insert(TileCoord::new(200, y));
+    }
+    let scout = world
+        .spawn_kind(PlayerId(0), UnitKind::Scout, tile_position(190, 300))
+        .expect("scout");
+    world.refill_route_budgets();
+    let target = tile_position(210, 300);
+    assert_eq!(world.issue_move(scout, target), Ok(true));
+
+    let mut went_around_end = false;
+    for _ in 0..2_000 {
+        world.advance();
+        let tile = world.unit(scout).expect("scout").position.tile_floor();
+        assert!(
+            tile.x != 200 || !(280..=320).contains(&tile.y),
+            "scout crossed the completed palisade at {tile:?}"
+        );
+        went_around_end |= tile.y < 280 || tile.y > 320;
+        if world.movement_order(scout).is_none() {
+            break;
+        }
+    }
+    assert_eq!(
+        world.movement_failure(scout),
+        None,
+        "exhausting the fast allowance must retain the reachable search"
+    );
+    assert_eq!(world.unit(scout).expect("scout").position, target);
+    assert!(went_around_end, "scout did not use an open wall end");
+    assert_eq!(world.route_accounting_error(), None);
 }

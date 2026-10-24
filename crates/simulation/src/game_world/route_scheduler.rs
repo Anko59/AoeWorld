@@ -12,23 +12,25 @@ use aoe_map::{MovementOutcome, RoutePlanner, RoutePlannerPoll};
 use std::collections::{BTreeMap, VecDeque};
 
 mod accounting;
+mod fast;
 mod issue;
 mod metrics;
 mod order;
 pub use accounting::RouteSchedulerStats;
-pub use metrics::RouteMetrics;
+pub(crate) use metrics::PlanningMeasurement;
+pub use metrics::{PlanningProbe, RouteMetrics};
 
 /// Retained search frontiers one player may hold at once.
 pub(crate) const MAX_ROUTE_SEARCHES_PER_PLAYER: usize = 2;
 /// Compact route continuations one player may hold at once.
 pub(crate) const MAX_ROUTE_PLANNERS_PER_PLAYER: usize = 64;
 /// Leg work after which a search that has proven no progress ends as
-/// `PathBudgetExceeded` (two leg commits' worth): a target sealed off must
+/// `PathBudgetExceeded` (one leg commit's worth): a target sealed off must
 /// not hold one of its player's two search slots, nor a share of every
 /// tick's budget, for the rest of the match. In a 99-AI match such searches
 /// (scouts riding to sealed-off ground across the map) still took nearly half
-/// of the fair budget at four commits' worth.
-pub(crate) const STUCK_SEARCH_WORK: u32 = 2 * aoe_map::ROUTE_LEG_COMMIT_WORK;
+/// of the fair budget at four commits' worth, and most at two.
+pub(crate) const STUCK_SEARCH_WORK: u32 = aoe_map::ROUTE_LEG_COMMIT_WORK;
 /// The same bound for a near route (a trip of at most `NEAR_ROUTE_TILES`):
 /// a villager's few-tile trip across water or into fenced-off ground took
 /// 131,072 work to give up on, and in a 99-AI match such trips outgrew the
@@ -146,6 +148,7 @@ impl GameWorld {
                 waiting.entry(unit.state.player).or_default().push(id);
             }
         }
+        self.route_queued.clear();
         self.serve_waiting(waiting, budget, changed)
     }
 
@@ -163,22 +166,30 @@ impl GameWorld {
         // A unit that already holds a search keeps its frontier; it is served
         // before the player's units that still wait for a slot.
         for ids in waiting.values_mut() {
+            // Then the longest-waiting first: by id, a busy player's newest
+            // units were never reached and their wait grew without bound.
             ids.sort_by_key(|id| {
                 let held = self
                     .lookup
                     .get(id)
                     .is_some_and(|&index| self.units[index].planner.is_some());
                 let unit = &self.units[self.lookup[id]];
-                let far = unit.planner.as_ref().map_or_else(
-                    || {
-                        unit.order.is_some_and(|order| {
-                            far_route(order.waypoint.tile_floor(), order.target_tile)
-                        })
-                    },
-                    far_planner,
-                );
-                (!held, far, *id)
+                (!held, unit.planning_since, *id)
             });
+        }
+        // Fast work is its own budget. Offer it to near orders before a
+        // far frontier can consume it, while fair work stays player-first.
+        self.serve_fast_near_routes(&waiting, changed);
+        for ids in waiting.values_mut() {
+            ids.retain(|id| {
+                self.lookup
+                    .get(id)
+                    .is_some_and(|&index| self.waiting_for_route(index))
+            });
+        }
+        waiting.retain(|_, ids| !ids.is_empty());
+        if waiting.is_empty() {
+            return budget;
         }
         let players = waiting.into_iter().collect::<Vec<_>>();
         let start = (self.tick.0 % players.len() as u64) as usize;
@@ -188,20 +199,46 @@ impl GameWorld {
             let remaining_players = (players.len() - turn) as u32;
             let mut share = (budget / remaining_players).max(u32::from(budget > 0));
             budget -= share;
-            for (position, &id) in ids.iter().enumerate() {
-                // With the share spent, units still get their fast attempts.
-                let remaining_units = (ids.len() - position) as u32;
-                let allowance = if share == 0 {
-                    0
-                } else {
-                    (share / remaining_units).clamp(1, MAX_ROUTE_WORK_PER_ORDER)
-                };
-                let spent = self.search_waiting_route(*player, id, allowance, changed);
-                share -= spent.min(share);
-            }
+            let (far, near): (Vec<_>, Vec<_>) = ids.iter().copied().partition(|id| {
+                let unit = &self.units[self.lookup[id]];
+                unit.planner.as_ref().map_or_else(
+                    || {
+                        unit.order.is_some_and(|order| {
+                            far_route(order.waypoint.tile_floor(), order.target_tile)
+                        })
+                    },
+                    far_planner,
+                )
+            });
+            // Reserve inside this player's fair share. A global near/far
+            // split would let another player's near flood shrink this share.
+            let reserve = if far.is_empty() { 0 } else { share / 4 };
+            share = self.serve_route_class(*player, &near, share - reserve, changed);
+            share = self.serve_route_class(*player, &far, share + reserve, changed);
             budget += share;
         }
         budget
+    }
+
+    fn serve_route_class(
+        &mut self,
+        player: PlayerId,
+        ids: &[EntityId],
+        mut share: u32,
+        changed: &mut Vec<EntityId>,
+    ) -> u32 {
+        for (position, &id) in ids.iter().enumerate() {
+            // Even an empty fair share permits a unit's one fast attempt.
+            let remaining = (ids.len() - position) as u32;
+            let allowance = if share == 0 {
+                0
+            } else {
+                (share / remaining).clamp(1, MAX_ROUTE_WORK_PER_ORDER)
+            };
+            let spent = self.search_waiting_route(player, id, allowance, changed);
+            share -= spent.min(share);
+        }
+        share
     }
 
     /// One waiting unit's search with at most `allowance` work of the fair
@@ -230,13 +267,15 @@ impl GameWorld {
             || far_route(order.waypoint.tile_floor(), order.target_tile),
             far_planner,
         );
-        let fast = !holds_search
-            && !self.units[index].fast_route_tried
-            && self.fast_route_allowance(player) > 0;
+        // A retained zero/partial-work planner still owes its full fast
+        // attempt after an exhausted issue-time budget; retention is no proof
+        // that the attempt ran. This matters with resumable reverse proofs.
+        let fast = !self.units[index].fast_route_tried && self.fast_route_allowance(player) > 0;
         if !fast && allowance == 0 {
             return 0;
         }
         if !holds_search && !fast && self.route_capacity_exhausted(player, holds_planner, 0, far) {
+            self.route_queued.insert((player, far));
             self.route_metrics.slot_refusals += 1;
             return 0;
         }
@@ -262,17 +301,26 @@ impl GameWorld {
         let error = match result {
             RoutePlannerPoll::Path(path) => {
                 self.route_metrics.found(planner.work());
+                if planner.certified_destination().is_some() {
+                    self.route_metrics
+                        .sample("certified-nearest", kind, &planner);
+                }
                 if planner.work() >= 65_536 {
                     self.route_metrics.sample("slow", kind, &planner);
                 }
-                if fast && fresh && planner.is_terminal() {
+                if fast && fresh && planner.is_terminal() && !planner.is_approach() {
                     self.cache_route(&planner, kind, &MovementOutcome::Path(path.clone()));
                 }
                 let mut route = VecDeque::from(path.tiles);
                 if route.pop_front() == Some(order.waypoint.tile_floor()) {
                     self.units[index].route = route;
                     self.units[index].fast_route_tried = false;
-                    if !planner.is_terminal() || planner.has_route_continuation() {
+                    // A certified nearest endpoint still owes the order its
+                    // terminal Unreachable result after this final segment.
+                    if !planner.is_terminal()
+                        || planner.has_route_continuation()
+                        || planner.certified_destination().is_some()
+                    {
                         self.store_planner(index, Some(planner));
                     }
                     return spent;
@@ -311,7 +359,7 @@ impl GameWorld {
             RoutePlannerPoll::SearchLimit => Some(GameWorldError::PathBudgetExceeded),
             RoutePlannerPoll::Environment(error) => Some(GameWorldError::Environment(error)),
         };
-        if fast && fresh && error == Some(GameWorldError::Unreachable) {
+        if fast && fresh && !planner.is_approach() && error == Some(GameWorldError::Unreachable) {
             self.cache_route(&planner, kind, &MovementOutcome::Unreachable);
         }
         self.route_metrics.failed(planner.work());
@@ -325,6 +373,11 @@ impl GameWorld {
 
     /// Ends a unit's movement order after its route search failed.
     pub(crate) fn stop_route(&mut self, index: usize, error: Option<GameWorldError>) {
+        if error == Some(GameWorldError::Unreachable)
+            && let Some(order) = self.units[index].order
+        {
+            self.remember_unreachable(index, order.target_tile);
+        }
         self.clear_planner(index);
         let state = &mut self.units[index].state;
         state.moving = false;
@@ -333,6 +386,7 @@ impl GameWorld {
         self.units[index].route.clear();
         self.units[index].last_movement_error = error;
         let id = self.units[index].state.id;
+        self.refresh_spacing_order(id);
         if !self.economy.gatherers.contains_key(&id)
             && self.hunting_target(id).is_none()
             && !self.combat.attackers.contains_key(&id)

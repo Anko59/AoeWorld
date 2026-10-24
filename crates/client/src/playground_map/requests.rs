@@ -30,6 +30,11 @@ impl<T> Default for RequestWindow<T> {
 }
 
 impl<T> RequestWindow<T> {
+    #[cfg(target_arch = "wasm32")]
+    pub fn len(&self) -> usize {
+        self.pending.len()
+    }
+
     pub fn complete(&mut self, coordinate: Coordinate, id: u64) -> bool {
         let Some(index) = self
             .pending

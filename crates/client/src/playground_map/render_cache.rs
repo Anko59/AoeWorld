@@ -22,6 +22,14 @@ impl<S> Default for RenderFrameCache<S> {
 }
 
 impl<S> RenderFrameCache<S> {
+    pub(crate) fn resident_bytes(&self, scene_bytes: impl FnOnce(&S) -> usize) -> usize {
+        self.previous.as_ref().map_or(0, |frame| {
+            scene_bytes(&frame.scene)
+                + frame.units.capacity() * std::mem::size_of::<SceneUnit>()
+                + frame.resources.capacity() * std::mem::size_of::<(SceneResource, Option<usize>)>()
+        })
+    }
+
     pub(crate) fn position(&self, id: aoe_core::EntityId) -> Option<[f64; 2]> {
         // Scene units preserve the authoritative BTreeMap's entity-ID order.
         let units = &self.previous.as_ref()?.units;

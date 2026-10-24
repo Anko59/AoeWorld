@@ -1,7 +1,8 @@
 use crate::{MapChunkGenerator, ResourceKind, ResourceNode};
 use aoe_core::{TileCoord, TileRect};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
+mod navigation;
 mod snapshot;
 mod starting;
 pub use snapshot::{RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange, ResourceOverlaySnapshot};
@@ -28,7 +29,7 @@ pub const MAX_FOOTPRINT_TILES: u64 = 4_096;
 pub struct ResourceOverlay {
     remaining: BTreeMap<u64, u16>,
     revision: u64,
-    obstacles: BTreeSet<TileCoord>,
+    navigation_state: Box<navigation::CollisionState>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -67,13 +68,17 @@ impl ResourceOverlay {
             || rect.min.y < 0
             || area == 0
             || area > MAX_FOOTPRINT_TILES
-            || (self.obstacles.len() as u64).saturating_add(area) > MAX_OBSTACLE_TILES
+            || (self.navigation_state.obstacles.len() as u64).saturating_add(area)
+                > MAX_OBSTACLE_TILES
         {
             return Err(ResourceOverlayError::Capacity);
         }
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
-                self.obstacles.insert(TileCoord::new(x, y));
+                let tile = TileCoord::new(x, y);
+                if self.navigation_state.obstacles.insert(tile) {
+                    self.navigation_toggle(tile, 1, 0);
+                }
             }
         }
         Ok(())
@@ -83,23 +88,16 @@ impl ResourceOverlay {
     pub fn remove_footprint(&mut self, rect: TileRect) {
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
-                self.obstacles.remove(&TileCoord::new(x, y));
+                let tile = TileCoord::new(x, y);
+                if self.navigation_state.obstacles.remove(&tile) {
+                    self.navigation_toggle(tile, 1, 0);
+                }
             }
         }
     }
 
     pub fn blocks_tile(&self, tile: TileCoord) -> bool {
-        self.obstacles.contains(&tile)
-            || (!self.remaining.is_empty()
-                && [
-                    crate::ResourceKind::Food,
-                    crate::ResourceKind::Wood,
-                    crate::ResourceKind::Gold,
-                    crate::ResourceKind::Stone,
-                ]
-                .into_iter()
-                .filter_map(|kind| ResourceNode::starting_id(tile, kind))
-                .any(|id| self.remaining.get(&id).is_some_and(|amount| *amount > 0)))
+        self.collision_blocks_tile(tile)
     }
 
     /// Startup insertion is part of the initial snapshot, not a depletion revision.
@@ -125,6 +123,7 @@ impl ResourceOverlay {
             return Err(ResourceOverlayError::InvalidSnapshot);
         }
         self.remaining.insert(node.id, node.initial_amount);
+        self.navigation_toggle(node.tile, 3, node.id);
         Ok(())
     }
 
@@ -210,11 +209,7 @@ impl ResourceOverlay {
     /// checked terrain query. This avoids resolving a provider-backed tile a
     /// second time after its page handle has been validated.
     pub fn blocks_node(&self, node: ResourceNode) -> bool {
-        self.remaining
-            .get(&node.id)
-            .copied()
-            .unwrap_or(node.initial_amount)
-            > 0
+        self.collision_blocks_node(node)
     }
 
     pub fn deplete(
@@ -269,6 +264,22 @@ impl ResourceOverlay {
 
     /// Applies a depletion returned by `plan_depletion` on this same overlay.
     pub fn apply_depletion(&mut self, depletion: &Depletion) {
+        if depletion.became_nonblocking {
+            let id = depletion.id;
+            let tile = TileCoord::new(
+                ((id >> 1) & 0x3_ffff) as i32,
+                ((id >> 19) & 0x3_ffff) as i32,
+            );
+            self.navigation_toggle(
+                tile,
+                if ResourceNode::starting_from_id(id).is_some() {
+                    3
+                } else {
+                    2
+                },
+                id,
+            );
+        }
         if depletion.removed > 0 {
             self.remaining.insert(depletion.id, depletion.remaining);
             self.revision = depletion.revision;

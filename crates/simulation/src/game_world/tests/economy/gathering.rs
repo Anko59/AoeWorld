@@ -476,24 +476,16 @@ fn gathering_and_dropoffs_replay_to_pinned_hashes() {
     );
 }
 
-/// Canonical hashes at ticks 100..=600. Intended changes moved them: the
-/// per-player fair route pass (route scheduler at 70c5da80); site ranking that
-/// settles the village at (47, 65) in the immediate clearing (aff67cb8); an
-/// exhausted node no longer clearing every planner; workers stepping 0.3 tiles
-/// toward the node; unit spacing (destination slots, work spots, idle
-/// separation, yielding followers); hashed work facing; and route throughput:
-/// trips start on their order's tick (fast attempt), and the fast budget and
-/// the fast-attempt and sealed-destination flags are hashed. The scheduler and
-/// placement changes each reproduced their own earlier pin alone; determinism
-/// is unchanged. Rally points added optional state to buildings (hashed).
-/// Review re-pin: hash the resumable reverse-flood frontier/cursor, and share
-/// work between players before near/far classes. Both intentionally change
-/// current planner state/timing; no checkpoint or determinism assertion is removed.
+/// Current gathering/drop-off replay includes route guidance, certified
+/// endpoints, resumable reverse-flood state and exact explored fog. Bounded
+/// idle rotation and active follower sampling intentionally change hashed
+/// state and timing. Regenerate the combined tree's six checkpoints while
+/// preserving every assertion and the independent replay tests.
 const GATHER_REPLAY_PINS: [&str; 6] = [
-    "e692120954f0dddf0a3754d6a5962a37a12c92cba162531909ba46d0423bf2b0",
-    "e442cafaf09ee8be94098aedf1d00b81619bf0f4d77fc01188ca641c1be619da",
-    "43295a039d855c8a042053030fa95326132b4f379cb364c5240cbb5fe8dd1f0c",
-    "83cd66ab22fb875416f3b72609c6b21b126ca1bc031019bf0311f80e3e927d18",
-    "482a874db276be95620e66f147dbf8f6344818ec37f9d3bb107b53544922ad1a",
-    "898b6c0d229f9bea73ff4642c4bb5823f5c02cb8362a8a6ac11ff1f7d23d28ec",
+    "54e9230fa998922d4541e3f00dd45163498ed8010fc7de9971e523827527fc58",
+    "94b67f2ba4e2aee309524cf8c39b46d583f5aa7386c0c345d6dfa96615723f0a",
+    "0806263785863d896aa886a6f9456df9688f88171f721784df8745650ff90375",
+    "13a24d870131d00b9fbf3a6fd404ab670a6fb305a0bfe8e5ef6719e92fad305b",
+    "954a7dbcfc7e102af0c853b1ca3f1a114ec467e5d9b0edfdad12220efe903916",
+    "cd1ff52cea4185f6a258ffd7e0951367e9bb791554531997015320daaa0fb6ba",
 ];

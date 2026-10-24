@@ -257,7 +257,7 @@ pub(super) fn emit_world_sprite_frames(
                 terrain_blend: [[0.0; 4]; 2],
                 pages: [frame.atlas.page, 0, 0, 0],
             }
-            .with_unit_contour(unit.visual.outline_colour());
+            .with_owner(unit.visual);
             let mut scaled_frame = frame;
             scaled_frame.size = scaled_frame.size.map(|value| value * scale);
             scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);

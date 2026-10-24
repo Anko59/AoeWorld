@@ -16,6 +16,21 @@ mod buildings;
 mod fishing;
 #[path = "manifest.rs"]
 mod manifest;
+#[cfg(test)]
+#[path = "tests/player_masks.rs"]
+mod player_mask_tests;
+mod resident;
+mod sink;
+mod streaming;
+pub use sink::RendererSink;
+#[cfg(test)]
+#[path = "tests/collected.rs"]
+mod collected;
+#[cfg(test)]
+pub(crate) use collected::CollectedAtlas;
+#[cfg(test)]
+#[path = "tests/resident.rs"]
+mod resident_tests;
 use aoe_rendering::{
     AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
     GameArt, GameFrame, TerrainTopology,
@@ -211,68 +226,18 @@ pub(crate) fn team_colour() -> [u8; 3] {
     [colour[0], colour[1], colour[2]]
 }
 
-/// Receives the packed atlas one finished page at a time, in page order, then
-/// `finish` once. Pages are never all resident in the loader.
+/// GPU sinks receive one finished page at a time. CPU sinks can expose the
+/// atlas they already retain, filled in source order before `finish`.
 pub trait AtlasSink {
+    /// Existing CPU destination storage; page-only sinks allocate no full atlas.
+    fn resident_buffer(&mut self) -> Result<Option<&mut [u8]>, String> {
+        Ok(None)
+    }
     /// The zeroed buffer for page `index`; the loader fills it in place.
     fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String>;
     /// Hands the filled page over.
     fn commit(&mut self, index: u32) -> Result<(), String>;
     fn finish(&mut self) -> Result<(), String>;
-}
-
-/// Streams straight into a renderer that the caller owns exclusively.
-pub struct RendererSink<'a> {
-    renderer: &'a mut aoe_rendering::GameRenderer,
-    upload: Option<aoe_rendering::AtlasUpload>,
-}
-
-impl<'a> RendererSink<'a> {
-    pub fn new(renderer: &'a mut aoe_rendering::GameRenderer) -> Self {
-        Self {
-            renderer,
-            upload: None,
-        }
-    }
-}
-
-impl AtlasSink for RendererSink<'_> {
-    fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String> {
-        if self.upload.is_none() {
-            self.upload = Some(self.renderer.begin_game_atlas()?);
-        }
-        self.upload
-            .as_mut()
-            .ok_or("No atlas upload")?
-            .page_buffer(index)
-    }
-    fn commit(&mut self, index: u32) -> Result<(), String> {
-        let upload = self.upload.as_mut().ok_or("No atlas upload")?;
-        self.renderer.write_game_atlas_page(upload, index)
-    }
-    fn finish(&mut self) -> Result<(), String> {
-        let upload = self.upload.take().ok_or("No atlas pages written")?;
-        self.renderer.finish_game_atlas(upload)
-    }
-}
-
-/// Test and tooling sink that gathers the whole atlas.
-#[cfg(test)]
-pub(crate) struct CollectedAtlas(pub Vec<u8>);
-
-#[cfg(test)]
-impl AtlasSink for CollectedAtlas {
-    fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String> {
-        let end = (index as usize + 1) * GAME_ATLAS_PAGE_BYTES;
-        self.0.resize(end, 0);
-        Ok(&mut self.0[end - GAME_ATLAS_PAGE_BYTES..])
-    }
-    fn commit(&mut self, _: u32) -> Result<(), String> {
-        Ok(())
-    }
-    fn finish(&mut self) -> Result<(), String> {
-        Ok(())
-    }
 }
 
 /// Loads art and the whole atlas for tests that inspect packed texels.
@@ -353,12 +318,43 @@ pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValu
     }
     let rally_range = building_sprites::rally(&manifest, &mut selected, &mut domains)?;
     let actor_ranges = actors::select(&manifest, &mut selected, &mut domains)?;
+    let building_start = selected.len();
     buildings::select(&manifest, &mut selected, &mut domains)?;
     let building_ranges = building_sprites::select(&manifest, &mut selected, &mut domains)?;
     building_sprites::crop_farm(&mut manifest, &selected, &building_ranges)?;
     let fishing_ranges = fishing::select(&manifest, &mut selected, &mut domains)?;
     // Validate count, source bounds, and all extents before pixel allocation.
     let placements = placement::plan(&manifest, &selected, &domains)?;
+    let mut maskable = vec![false; selected.len()];
+    for role in [
+        AssetRole::CavalryStanding,
+        AssetRole::CavalryWalking,
+        AssetRole::VillagerStanding,
+        AssetRole::VillagerWalking,
+        AssetRole::VillagerChopping,
+        AssetRole::VillagerCarryingWood,
+        AssetRole::VillagerForaging,
+        AssetRole::VillagerCarryingFood,
+        AssetRole::VillagerCarryingGold,
+        AssetRole::VillagerCarryingStone,
+        AssetRole::VillagerMiningStone,
+    ] {
+        if let Some(range) = &ranges[role as usize] {
+            maskable[range.clone()].fill(true);
+        }
+    }
+    for (index, range) in actor_ranges.iter().enumerate() {
+        use aoe_assets::catalog::units::Pose;
+        if !(Pose::NeutralSheepStand as usize..Pose::NeutralSheepStand as usize + 4)
+            .contains(&index)
+            && let Some(range) = range
+        {
+            maskable[range.clone()].fill(true);
+        }
+    }
+    for index in building_start..maskable.len() {
+        maskable[index] = domains[index] == AtlasDomain::Objects;
+    }
     drop(domains);
     let records = selected
         .iter()
@@ -435,59 +431,16 @@ pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValu
         },
     };
 
-    // Stream one destination page at a time: the loader never holds the whole
-    // atlas, so beside the sink's own storage the peak is one page buffer plus
-    // one decoded source sheet. A source sheet feeding several pages is decoded
-    // again for each of them.
-    let source_order = source_order(&manifest, &selected);
-    for page_index in 0..GAME_ATLAS_PAGES {
-        let page_pixels = sink.page_buffer(page_index).map_err(error)?;
-        // Every origin is reserved; explicit renderer white addressing uses page 2.
-        page_pixels[..4].copy_from_slice(&[255; 4]);
-        let mut start = 0;
-        while start < source_order.len() {
-            let source_page = manifest.frames[selected[source_order[start]]].page;
-            let atlas = &manifest.pages[usize::from(source_page)];
-            let mut end = start;
-            while end < source_order.len()
-                && manifest.frames[selected[source_order[end]]].page == source_page
-            {
-                end += 1;
-            }
-            let group = &source_order[start..end];
-            start = end;
-            if !group
-                .iter()
-                .any(|&semantic| u32::from(placements[semantic].page) == page_index)
-            {
-                continue;
-            }
-            for (plane, name) in [
-                (placement::Plane::Color, &atlas.color),
-                (placement::Plane::Player, &atlas.player),
-                (placement::Plane::Shadow, &atlas.shadow),
-            ] {
-                let source = page(name).await?;
-                for &semantic in group {
-                    if u32::from(placements[semantic].page) != page_index {
-                        continue;
-                    }
-                    placement::copy_plane(
-                        &manifest.frames[selected[semantic]],
-                        placements[semantic],
-                        plane,
-                        &source,
-                        &mut *page_pixels,
-                        actors::colour(&actor_ranges, semantic, team),
-                    )?;
-                }
-            }
-        }
-        if page_index == 0 {
-            aoe_rendering::write_terrain_directory_page(&art, page_pixels).map_err(error)?;
-        }
-        sink.commit(page_index).map_err(error)?;
+    streaming::Input {
+        manifest: &manifest,
+        selected: &selected,
+        placements: &placements,
+        maskable: &maskable,
+        actor_ranges: &actor_ranges,
+        art: &art,
+        team,
     }
-    sink.finish().map_err(error)?;
+    .upload(sink)
+    .await?;
     Ok((art, team))
 }

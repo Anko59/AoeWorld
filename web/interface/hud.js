@@ -49,21 +49,24 @@ export function initInterface() {
     byId('game-notice').classList.toggle('connected',state.status==='connected');
     const selected=state.selected, count=selected.length, first=selected[0];
     const building=count===1 && buildingKinds.includes(first.kind);
-    const units=count>0 && !building;
+    const owned=count>0 && selected.every(actor=>actor.owned);
+    const units=owned && !building;
     attribute(byId('selection'),'data-count',String(count));
     attribute(byId('selection'),'data-kind',first?.kind ?? '');
-    attribute(byId('selection'),'data-villagers',String(selected.some(unit=>unit.kind==='Villager')));
+    attribute(byId('selection'),'data-owned',String(owned));
+    attribute(byId('selection'),'data-villagers',String(owned && selected.some(unit=>unit.kind==='Villager')));
     show('selection-empty',count===0); show('selection-content',count>0);
-    show('train-villager',building); show('move-units',units); show('stop-units',units);
+    show('train-villager',building && owned); show('move-units',units); show('stop-units',units);
     for (const id of ['train-villager','move-units','stop-units','cancel-training']) byId(id).disabled=state.observer;
     const actions=building?1:units?2:0;
     empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
     text('command-context',count>1?`${count} units`:first?.name ?? 'Select a unit');
-    text('command-hint',building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: hunt, attack, gather or move':first.kind==='FishingShip'?'Right-click: fish or move':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms'].includes(first.kind)?'Right-click: attack or move':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag to select a group');
+    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: hunt, attack, gather or move':first.kind==='FishingShip'?'Right-click: fish or move':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms'].includes(first.kind)?'Right-click: attack or move':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag to select a group');
     show('observer-label',state.observer);
     show('selection-health',count===1);
     show('unit-hp',count===1 && !building); show('unit-combat',count===1 && !building);
     if (first) {
+      text('selection-owner',first.player<0?'Wildlife':first.owned?'Your village':`Player ${first.player+1}`);
       text('unit-hp',`${first.hp} / ${first.maxHp} HP`);
       byId('selection-health').value=first.hp; byId('selection-health').max=Math.max(1,first.maxHp);
       text('unit-combat',`Attack ${first.attack} · Armour ${first.melee} / ${first.pierce} · Range ${first.range}`);
@@ -78,7 +81,7 @@ export function initInterface() {
         previousSelection=signature;
       }
     } else previousSelection='';
-    window.aoeBuildings?.queue(state.queue,building);
+    window.aoeBuildings?.queue(state.queue,building && owned);
     attribute(scene(),'data-actors',JSON.stringify(state.actors));
     attribute(scene(),'data-resource-targets',JSON.stringify(state.resources));
     attribute(scene(),'data-village-art',state.art?'native':'markers');
@@ -96,10 +99,10 @@ export function initInterface() {
     const resources=['food','wood','gold','stone',''];
     const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],observer:values[11]===1,art:values[12]===1,status,actors:[],selected:[],queue:[],resources:[]};
     let at=16;
-    for (let index=0;index<values[13];index++,at+=16) {
-      const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity,range]=values.subarray(at,at+16);
-      state.actors.push({id,kind:kinds[kind],x,y,selected:!!selected,hp,maxHp,head,task:tasks[task],load:kind===1 && amount?[resources[resource],amount]:null});
-      if (selected) state.selected.push({id,kind:kinds[kind],name:names[kind],task:tasks[task],resource:resources[resource],amount,hp,maxHp,attack,melee,pierce,capacity,range});
+    for (let index=0;index<values[13];index++,at+=18) {
+      const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity,range,player,owned]=values.subarray(at,at+18);
+      state.actors.push({id,player,owned:!!owned,kind:kinds[kind],x,y,selected:!!selected,hp,maxHp,head,task:tasks[task],load:kind===1 && amount?[resources[resource],amount]:null});
+      if (selected) state.selected.push({id,player,owned:!!owned,kind:kinds[kind],name:names[kind],task:tasks[task],resource:resources[resource],amount,hp,maxHp,attack,melee,pierce,capacity,range});
     }
     for (let index=0;index<values[14];index++,at+=3) state.queue.push([values[at],values[at+1],values[at+2]]);
     for (let index=0;index<values[15];index++,at+=4) state.resources.push({kind:values[at],x:values[at+1],y:values[at+2],distance:values[at+3]});
