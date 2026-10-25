@@ -2,7 +2,72 @@ use super::*;
 use aoe_map::{CompactChunk, MapChunkGenerator, SurfaceKind, WaterKind};
 use std::sync::Arc;
 
+#[test]
+fn bridge_observations_connect_known_land_and_removal_disconnects_it() {
+    let mut world = river_world(false, true);
+    let (from, to) = (TileCoord::new(8, 8), TileCoord::new(24, 8));
+    assert!(world.land_route(from, to).is_none());
+    let mut bridge = building(10, ME, ConstructionState::Complete);
+    bridge.kind = BuildingKind::Bridge;
+    bridge.footprint = TileRect::from_xywh(15, 8, 3, 1);
+    world.apply(M::Tick {
+        revision: 1,
+        tick: Tick(2),
+        changed_units: vec![],
+        removals: vec![],
+        changed_players: vec![],
+        changed_buildings: vec![bridge],
+        building_removals: vec![],
+    });
+    assert_eq!(world.passable(TileCoord::new(16, 8)), Some(true));
+    let route = world.land_route(from, to).unwrap();
+    assert!(route.contains(&TileCoord::new(16, 8)));
+    for edge in route.windows(2) {
+        if edge.contains(&TileCoord::new(16, 8)) {
+            assert_eq!(edge[0].y, edge[1].y, "no lateral entry on the deck");
+        }
+    }
+    world.apply(M::Tick {
+        revision: 1,
+        tick: Tick(3),
+        changed_units: vec![],
+        removals: vec![],
+        changed_players: vec![],
+        changed_buildings: vec![],
+        building_removals: vec![EntityId(10)],
+    });
+    assert!(world.land_route(from, to).is_none());
+}
+
+#[test]
+fn bridge_site_heuristic_uses_only_explored_water_and_land_banks() {
+    let from = TileCoord::new(15, 8);
+    let to = TileCoord::new(24, 8);
+    let world = river_world(false, true);
+    assert_eq!(
+        world.find_bridge_site(from, to),
+        Some((from, TileCoord::new(17, 8)))
+    );
+    assert_eq!(
+        river_kind_world(false, true, WaterKind::Shallow).find_bridge_site(from, to),
+        Some((from, TileCoord::new(17, 8)))
+    );
+    assert_eq!(river_world(false, false).find_bridge_site(from, to), None);
+    assert_eq!(
+        world.find_bridge_site(TileCoord::new(i32::MAX, 0), to),
+        None
+    );
+    assert_eq!(
+        world.find_bridge_site(from, TileCoord::new(i32::MIN, 0)),
+        None
+    );
+}
+
 fn river_world(gap: bool, explored: bool) -> World {
+    river_kind_world(gap, explored, WaterKind::River)
+}
+
+fn river_kind_world(gap: bool, explored: bool, water: WaterKind) -> World {
     let mut world = started();
     world.map_hash = Some([0; 32]);
     let generator = MapChunkGenerator::new([0; 32], 0, 200);
@@ -17,11 +82,7 @@ fn river_world(gap: bool, explored: bool) -> World {
         sample.terrain.game_height_level = 0;
         sample.terrain.surface.corner_game_height_levels = [0; 4];
         sample.terrain.surface.kind = SurfaceKind::Plateau;
-        sample.terrain.water = if river {
-            WaterKind::River
-        } else {
-            WaterKind::None
-        };
+        sample.terrain.water = if river { water } else { WaterKind::None };
     }
     Arc::make_mut(&mut world.catalog)
         .insert(&CompactChunk::encode(&chunk).unwrap())

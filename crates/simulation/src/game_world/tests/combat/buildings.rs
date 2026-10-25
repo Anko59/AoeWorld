@@ -160,6 +160,7 @@ fn attack_and_construct_orders_replace_each_other_without_resuming_old_work() {
             &[builder],
             BuildingKind::House,
             TileCoord::new(100, 100),
+            false,
         )
         .unwrap();
     advance(&mut world, 2);
@@ -196,6 +197,7 @@ fn working_builders_do_not_retaliate_and_death_releases_their_job() {
             &[builder],
             BuildingKind::House,
             TileCoord::new(100, 100),
+            false,
         )
         .unwrap();
     advance(&mut world, 2);
@@ -229,6 +231,7 @@ fn destroying_a_house_uses_its_armour_and_removes_only_its_housing() {
             &[builder],
             BuildingKind::House,
             TileCoord::new(100, 100),
+            false,
         )
         .unwrap();
     advance(&mut world, 600);

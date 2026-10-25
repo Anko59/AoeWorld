@@ -203,7 +203,14 @@ fn incremental_guidance_is_budgeted_and_independent_of_cache_warmth() {
         let mut work = 0;
         loop {
             let mut remaining = slice;
-            let outcome = search.poll(&generator, &mut remaining, &|| false).unwrap();
+            let outcome = search
+                .poll_overlay(
+                    &generator,
+                    &crate::ResourceOverlay::default(),
+                    &mut remaining,
+                    &|| false,
+                )
+                .unwrap();
             work += slice - remaining;
             assert!(search.retained_entries() <= 65_536);
             if let Some(outcome) = outcome {
@@ -224,7 +231,12 @@ fn incremental_guidance_cancels_without_spending_its_budget() {
     let mut search = Search::new(TileCoord::new(1, 32), TileCoord::new(62, 32), 256);
     let mut budget = 16_384;
     assert_eq!(
-        search.poll(&generator, &mut budget, &|| true),
+        search.poll_overlay(
+            &generator,
+            &crate::ResourceOverlay::default(),
+            &mut budget,
+            &|| true
+        ),
         Err(crate::EnvironmentPageError::Cancelled)
     );
     assert_eq!(budget, 16_384);
@@ -271,7 +283,14 @@ fn a_warm_abstract_search_charges_graph_work_instead_of_tile_floods() {
     generator.prepare_navigation(&overlay, &|| false).unwrap();
     let mut search = Search::new(TileCoord::new(1, 20), TileCoord::new(250, 20), 256);
     let mut remaining = 32_768;
-    let outcome = search.poll(&generator, &mut remaining, &|| false).unwrap();
+    let outcome = search
+        .poll_overlay(
+            &generator,
+            &crate::ResourceOverlay::default(),
+            &mut remaining,
+            &|| false,
+        )
+        .unwrap();
     assert!(
         matches!(outcome, Some(HierarchicalOutcome::Path { .. })),
         "{outcome:?}"

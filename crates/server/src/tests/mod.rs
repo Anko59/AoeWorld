@@ -2,6 +2,8 @@ use crate::{AppState, Config};
 use aoe_scenario::SMOKE;
 use std::{net::SocketAddr, time::Duration};
 
+mod admin;
+
 #[tokio::test]
 async fn records_tick_delayed_by_world_lock_contention() {
     let state = AppState::new(

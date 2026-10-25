@@ -10,6 +10,17 @@ pub struct Selection {
     pub required: bool,
 }
 
+/// Bridges have no owner-colour pixels and can borrow spare terrain space.
+/// Buildings retain aligned team-mask pages; farm ground stays on terrain.
+pub fn domain(slot: usize) -> super::packing::AtlasDomain {
+    use super::packing::AtlasDomain;
+    match slot {
+        5 => AtlasDomain::Terrain,
+        65..=70 => AtlasDomain::Shared,
+        _ => AtlasDomain::Objects,
+    }
+}
+
 fn trial(id: u32) -> String {
     format!("graphics.drs:[32, 112, 108, 115]:{id}")
 }
@@ -137,10 +148,16 @@ pub fn supplemental(
         (42, -1, "b_dark_gate_palisade_se_open", 1, None),
         (43, -1, "b_dark_gate_palisade_se_constr", 3, None),
         (44, 133, "b_west_dock_age2", 1, Some((388, 1))),
+        (65, -1, "s_bridge_a_top", 1, Some((3688, 1))),
+        (66, -1, "s_bridge_a_middle", 1, Some((3690, 1))),
+        (67, -1, "s_bridge_a_bottom", 1, Some((3692, 1))),
+        (68, -1, "s_bridge_b_top", 1, Some((3694, 1))),
+        (69, -1, "s_bridge_b_middle", 1, Some((3696, 1))),
+        (70, -1, "s_bridge_b_bottom", 1, Some((3698, 1))),
     ] {
         let mut source = format!("de/{stem}_x1.sld");
         let mut frames = count;
-        if !present(&source)
+        if (!present(&source) || slot >= 45 && fallback.is_some_and(|(id, _)| present(&trial(id))))
             && let Some((id, count)) = fallback
         {
             source = trial(id);
@@ -172,6 +189,77 @@ pub fn supplemental(
                 required: true,
             });
         }
+    }
+    for (i, (id, slp, count)) in [(82, 305, 1), (104, 281, 1), (209, 1363, 9), (49, 958, 1)]
+        .into_iter()
+        .enumerate()
+    {
+        out.push(Selection {
+            slot: 45 + i,
+            source: if id == 82 && !present(&trial(slp)) {
+                "de/b_west_castle_age3_x1.sld".into()
+            } else {
+                trial(slp)
+            },
+            frames: count,
+            step: 1,
+            take: usize::MAX,
+            resident: !native(id),
+            required: false,
+        });
+        out.push(Selection {
+            slot: 49 + i,
+            source: if id == 82 && !present(&trial(931)) {
+                "de/b_west_castle_age3_rubble_x1.sld".into()
+            } else {
+                trial(if id == 104 { 930 } else { 931 })
+            },
+            frames: 1,
+            step: 1,
+            take: 1,
+            resident: true,
+            required: false,
+        });
+    }
+    for (i, (id, slp, count)) in [
+        (141, 3620, 1),
+        (464, 2247, 3),
+        (564, 3503, 1),
+        (586, 3491, 1),
+        (130, 749, 10),
+        (132, 145, 1),
+        (47, 2263, 60),
+        (10, 36, 1),
+        (86, 1021, 1),
+        (18, 105, 1),
+        (116, 820, 1),
+        (31, 281, 1),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let source = if !present(&trial(slp)) && matches!(id, 564 | 586) {
+            format!(
+                "de/b_west_{}_camp_age2_x1.sld",
+                if id == 564 { "lumber" } else { "mining" }
+            )
+        } else {
+            trial(slp)
+        };
+        let (source, frames) = if id == 47 && !present(&trial(slp)) {
+            ("de/b_west_dock_age3_x1.sld".into(), 1)
+        } else {
+            (source, count)
+        };
+        out.push(Selection {
+            slot: 53 + i,
+            source,
+            frames,
+            step: 1,
+            take: usize::MAX,
+            resident: !native(id),
+            required: false,
+        });
     }
     out
 }

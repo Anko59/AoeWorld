@@ -129,7 +129,13 @@ async fn qualification_rejects_unbounded_tick_requests_before_source_access() {
 #[test]
 fn qualification_accepts_only_the_current_recipe() {
     assert!(supported_recipe(aoe_map::GENERATION_RECIPE_VERSION));
-    for recipe in [0, 1, 3, 8, 9, 10, u16::MAX] {
+    for recipe in [
+        0,
+        1,
+        aoe_map::GENERATION_RECIPE_VERSION - 1,
+        aoe_map::GENERATION_RECIPE_VERSION + 1,
+        u16::MAX,
+    ] {
         assert!(!supported_recipe(recipe));
     }
 }

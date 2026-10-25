@@ -12,6 +12,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         .get_element_by_id("scene")
         .ok_or("No canvas")?
         .dyn_into()?;
+    crate::building_ui::content::load().await?;
     let backend = super::capture::current().renderer();
     let (mut renderer, canvas) = GameRenderer::new_with_backend(canvas, backend)
         .await

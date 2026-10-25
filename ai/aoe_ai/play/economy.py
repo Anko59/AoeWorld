@@ -9,12 +9,16 @@ from aoeworld import (
     AnimalKind,
     BuildingKind,
     ResourceKind,
+    Tech,
+    tech_cost,
     UnitKind,
     UnitTask,
     unit_cost,
 )
 
+from . import buildorder
 from .constructor import Constructor
+from .naval import food_reachable
 from .reseeding import queue_reseeds
 from ..context import Context
 from ..geometry import clamp_tile, dist, dist2, nearest, ring_points
@@ -68,8 +72,24 @@ class EconomyManager:
             return
         self.forget_farmers(ctx)
         self.drop_stuck_hunts(ctx)
+        self.castle_food(ctx)
         self.assign_idle(ctx)
         queue_reseeds(ctx)
+
+    def castle_food(self, ctx: Context) -> None:
+        """Keep gold for the age and its first army upgrade before moving miners."""
+        food, _, gold, _ = tech_cost(Tech.CASTLE_AGE)
+        if not buildorder.wants_castle_food(ctx) or ctx.economy.food >= food or ctx.economy.gold < gold + tech_cost(Tech.CROSSBOWMAN)[2]:
+            return
+        pause = ASSIGN_PAUSE_SECONDS * ctx.world.tick_hz
+        for worker in ctx.villagers:
+            if (worker.gathering == ResourceKind.GOLD and worker.carrying is None
+                    and worker.id not in ctx.busy and worker.id not in ctx.board.builders
+                    and ctx.tick - ctx.board.assigned.get(worker.id, -pause) >= pause
+                    and self.send_to_food(ctx, worker)):
+                ctx.board.assigned[worker.id] = ctx.tick
+                ctx.board.bump("castle_food_workers")
+                return
 
     # ----- production ------------------------------------------------------
     def train_villagers(self, ctx: Context) -> None:
@@ -120,6 +140,9 @@ class EconomyManager:
             shares["FOOD"] += 0.15
             shares["WOOD"] -= 0.10
             shares["GOLD"] = max(0.0, shares["GOLD"] - 0.05)
+        if buildorder.wants_castle_food(ctx) and ctx.economy.gold >= tech_cost(Tech.CASTLE_AGE)[2] + tech_cost(Tech.CROSSBOWMAN)[2]:
+            shares["FOOD"] += shares["GOLD"]
+            shares["GOLD"] = 0.0
         # Early on nothing but food and wood matter.
         if len(ctx.villagers) < 10:
             shares.update(GOLD=0.0, STONE=0.0)
@@ -240,7 +263,7 @@ class EconomyManager:
         # Check in preference order, leaving the bounded query budget available
         # for other workers once a connected resource has been found.
         return next((node for _, _, node in sorted(scored)
-                     if ctx.land_route(villager.tile, node.tile) is not None), None)
+                     if food_reachable(ctx, villager, node)), None)
 
     # ----- food ------------------------------------------------------------
     def send_to_food(self, ctx: Context, villager: Any) -> bool:

@@ -234,6 +234,7 @@ fn rejected_foundations_leave_all_visibility_and_memory_unchanged() {
                         &[enemy_builder],
                         BuildingKind::PalisadeWall,
                         TileCoord::new(x, y),
+                        false,
                     )
                     .unwrap();
                 }
@@ -257,10 +258,10 @@ fn rejected_foundations_leave_all_visibility_and_memory_unchanged() {
                 .all(|b| b.player == PlayerId(0))
         );
         let result = if wall_order {
-            w.issue_build_wall(PlayerId(0), &[builder], tile, tile)
+            w.issue_build_wall(PlayerId(0), &[builder], tile, tile, false)
                 .map(|_| ())
         } else {
-            w.issue_build(PlayerId(0), &[builder], BuildingKind::Outpost, tile)
+            w.issue_build(PlayerId(0), &[builder], BuildingKind::Outpost, tile, false)
                 .map(|_| ())
         };
         assert_eq!(

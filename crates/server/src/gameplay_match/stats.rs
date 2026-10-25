@@ -14,6 +14,7 @@ use std::{
 };
 
 mod phases;
+mod summary;
 
 /// Ticks kept (100 minutes at 20 Hz); older ones are dropped.
 pub(crate) const MAX_RECORDS: usize = 120_000;
@@ -83,6 +84,7 @@ struct Inner {
     /// Sequence number of the oldest kept record.
     first: u64,
     records: VecDeque<TickRecord>,
+    times: VecDeque<std::time::Instant>,
     missed: u64,
 }
 
@@ -117,6 +119,13 @@ impl TickStats {
         let Ok(mut inner) = self.inner.lock() else {
             return;
         };
+        // A replacement match restarts its tick sequence. Keep the public
+        // record cursor monotonic while discarding the previous game's window.
+        if inner.records.back().is_some_and(|record| record.0 >= tick) {
+            inner.first += inner.records.len() as u64;
+            inner.records.clear();
+            inner.times.clear();
+        }
         inner.missed += u64::from(missed);
         let phases = probe.phases.drain();
         let planning = probe.planning_micros.swap(0, Ordering::Relaxed);
@@ -124,6 +133,7 @@ impl TickStats {
             tracing::warn!(tick, total_us = total.as_micros() as u64, sim_us = sim,
                 planning_us = planning, orders, units, phases_us = ?phases, "slow gameplay tick");
         }
+        inner.times.push_back(std::time::Instant::now());
         inner.records.push_back(TickRecord(
             tick,
             total.as_micros() as u64,
@@ -137,6 +147,7 @@ impl TickStats {
         ));
         if inner.records.len() > MAX_RECORDS {
             inner.records.pop_front();
+            inner.times.pop_front();
             inner.first += 1;
         }
     }

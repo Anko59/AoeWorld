@@ -63,8 +63,9 @@ test-assets-ui-steps:
 ui-proof: browser-deps slot-bootstrap
 	@$(SLOT_RUN) ui-proof -- make --no-print-directory ui-proof-steps
 
+AOE_UI_PROOF_PROJECT ?= webgpu
 ui-proof-steps:
-	@$(BROWSER_RUN) npx playwright test tests/proofs/ui-panel.spec.ts --project=webgpu --output=../.cache/ui/playwright-results
+	@$(BROWSER_RUN) xvfb-run -a npx playwright test tests/proofs/ui-panel.spec.ts --project=$(call MOUNT_QUOTE,$(AOE_UI_PROOF_PROJECT)) --output=../.cache/ui/playwright-results
 
 .PHONY: test-assets-ui-local test-assets-ui-local-steps
 test-assets-ui-local: slot-bootstrap

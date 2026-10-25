@@ -97,7 +97,7 @@ impl GameWorld {
                         if distance > squared
                             || node.kind != kind
                             || Some(node.id) == exclude
-                            || !overlay.blocks_node(*node)
+                            || !overlay.resource_available(*node)
                             || (distance, node.id) >= score
                         {
                             continue;

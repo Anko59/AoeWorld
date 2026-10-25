@@ -13,6 +13,28 @@ pub fn scene_building_visible(
     visible
 }
 
+/// Hit each displayed native part, using the drawing emitter's animation,
+/// offsets, hotspots, elevation and zoom rather than the ground footprint.
+pub fn scene_building_hit(
+    art: &GameArt,
+    unit: SceneUnit,
+    camera: SceneCamera,
+    animation: usize,
+    point: aoe_core::ScreenPoint,
+) -> bool {
+    let ndc = [
+        point.x / camera.viewport[0] * 2.0 - 1.0,
+        1.0 - point.y / camera.viewport[1] * 2.0,
+    ];
+    let mut hit = false;
+    village::building(art, unit, camera, animation, &mut |(sprite, _, _, _)| {
+        hit |= (0..2).all(|axis| {
+            (ndc[axis] - f64::from(sprite.position[axis])).abs() <= f64::from(sprite.radius[axis])
+        });
+    });
+    hit
+}
+
 /// The actual native body rectangle, shared by selection and order picking.
 pub fn scene_unit_bounds(
     art: &GameArt,
@@ -86,8 +108,18 @@ pub(super) fn object_depth(object: WorldObject) -> f64 {
     // The native Town Center reaches 64 source pixels below its anchor, farther
     // than a tree/unit. Its front foundation must clear its own flat footprint.
     let clearance = match object {
+        WorldObject::Unit(unit) if unit.visual.ghost() => 32.0,
         // Order feedback stays above a building used as the rally target.
         WorldObject::Resource(r, _, _) if r.kind == SceneResource::RALLY_FLAG => 4.0,
+        // The deck lies below actors walking across it, above the water.
+        WorldObject::Unit(unit)
+            if unit
+                .kind
+                .building_slot()
+                .is_some_and(|slot| (65..=70).contains(&slot)) =>
+        {
+            1.25
+        }
         WorldObject::Unit(unit) if unit.kind.building_side().is_some() => 3.0,
         _ => GROUND_CLEARANCE,
     };

@@ -10,7 +10,7 @@ impl GameWorld {
     ) -> Result<bool, EconomyError> {
         let unit = self
             .unit(id)
-            .filter(|u| u.hp > 0)
+            .filter(|u| u.hp > 0 && !self.embarked(u.id))
             .ok_or(EconomyError::UnknownEntity)?;
         if !self.config.valid_map_position(destination) {
             return Err(GameWorldError::InvalidPosition.into());
@@ -48,6 +48,9 @@ impl GameWorld {
 
     /// Authoritative marker list; ordinary, unqueued movement has no markers.
     pub fn move_destinations(&self, id: EntityId) -> Vec<WorldPosition> {
+        if let Some(destinations) = self.formation_destinations(id) {
+            return destinations;
+        }
         let Some(queue) = self.move_queues.get(&id) else {
             return Vec::new();
         };

@@ -261,12 +261,10 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
                 return Err(invalid("composition", 0, reason));
             }
             interface_dat = Some(dat.clone());
-            crate::dat::table::DARK_AGE
+            crate::catalog::GAMEPLAY_BUILDING_IDS
                 .iter()
-                .chain(crate::dat::table::FEUDAL)
-                .filter(|(_, id)| *id != 618)
-                .filter(|(_, id)| dat.unit(*id).is_some_and(|u| u.building.is_some()))
-                .map(|(_, id)| dat.building_composition(*id))
+                .filter(|id| dat.unit(**id).is_some_and(|u| u.building.is_some()))
+                .map(|id| dat.building_composition(*id))
                 .collect::<Result<Vec<_>, _>>()?
         }
         None => Vec::new(),

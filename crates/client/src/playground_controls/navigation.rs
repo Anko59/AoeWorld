@@ -29,6 +29,8 @@ export function control_group(action, selected, positions) {
 export function groups_update(positions) { window.aoeNavigation?.groupsUpdate(positions); }
 export function group_members() { return window.aoeNavigation?.groupMembers() ?? 0; }
 export function gameplay_key(event) {
+  if (event.type === 'blur') return 6;
+  if (event.type === 'keyup') return event.key === 'Shift' ? 6 : 0;
   if (document.querySelector('dialog[open]') || event.repeat || event.altKey || event.metaKey ||
       (event.target instanceof Element && event.target.closest('input:not([type=button]):not([type=checkbox]):not([type=radio]),textarea,select,[contenteditable]'))) return 0;
   if (/^Digit[0-9]$/.test(event.code)) {

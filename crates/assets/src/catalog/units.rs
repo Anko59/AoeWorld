@@ -1,5 +1,7 @@
 //! Direction rows and frame durations decoded from the owner's VER 5.7 dat.
 //! Five stored rows supply eight facings. Pixels remain in the private pack.
+#[path = "units/castle.rs"]
+mod castle;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Pose {
@@ -79,7 +81,69 @@ pub enum Pose {
     Javelin,
     /// DAT unit 259 (VMFAR) task: tilling a farm.
     FarmerWork,
+    LongSwordsmanStand,
+    LongSwordsmanWalk,
+    LongSwordsmanAttack,
+    LongSwordsmanDie,
+    LongSwordsmanDecay,
+    PikemanStand,
+    PikemanWalk,
+    PikemanAttack,
+    PikemanDie,
+    PikemanDecay,
+    CrossbowmanStand,
+    CrossbowmanWalk,
+    CrossbowmanAttack,
+    CrossbowmanDie,
+    CrossbowmanDecay,
+    EliteSkirmisherStand,
+    EliteSkirmisherWalk,
+    EliteSkirmisherAttack,
+    EliteSkirmisherDie,
+    EliteSkirmisherDecay,
+    KnightStand,
+    KnightWalk,
+    KnightAttack,
+    KnightDie,
+    KnightDecay,
+    LightCavalryStand,
+    LightCavalryWalk,
+    LightCavalryAttack,
+    LightCavalryDie,
+    LightCavalryDecay,
+    MonkStand,
+    MonkWalk,
+    MonkAttack,
+    MonkDie,
+    MonkDecay,
+    MangonelStand,
+    MangonelWalk,
+    MangonelAttack,
+    MangonelDie,
+    MangonelDecay,
+    BatteringRamStand,
+    BatteringRamWalk,
+    BatteringRamAttack,
+    BatteringRamDie,
+    BatteringRamDecay,
+    Stone,
+    Galley,
+    WarGalley,
+    FireShip,
+    DemolitionShip,
+    TransportShip,
 }
+
+// The owner's licensed DE pack supplies sixteen directions starting east;
+// frames 4,6,8,10,12 supply south through
+// north for our existing five-row mirror convention.
+const NAVY: [(u32, &str); 5] = [
+    (100_539, "galley"),
+    (100_021, "war_galley"),
+    (100_529, "fire_ship"),
+    (100_527, "demo_ship"),
+    (100_545, "transport_ship"),
+];
 
 #[derive(Clone, Copy)]
 pub struct ActorSource {
@@ -87,10 +151,15 @@ pub struct ActorSource {
     pub stride: u8,
     /// Rounded milliseconds per native cell, not one universal animation rate.
     pub millis: u16,
+    /// Upper bound on selected native cells per facing; zero uses the base policy.
+    pub phases: u8,
 }
 impl ActorSource {
     /// Bound the fisherman atlas rows while retaining their native loop duration.
     pub const fn sample_step(self) -> u8 {
+        if self.phases > 0 {
+            return self.stride.div_ceil(self.phases);
+        }
         if self.stride >= 8 && self.id != 990 {
             2
         } else {
@@ -98,7 +167,11 @@ impl ActorSource {
         }
     }
     pub const fn frames(self) -> u32 {
+        if self.id >= 100_000 {
+            return 16;
+        }
         match self.id {
+            4500 => 1,
             3799 => 176,
             3820 => 170,
             _ => self.stride as u32 * 5,
@@ -108,21 +181,33 @@ impl ActorSource {
         self.stride.div_ceil(self.sample_step()) as usize * 5
     }
     pub const fn source_frame(self, row: usize, phase: usize) -> usize {
+        if self.id >= 100_000 {
+            return 4 + row * 2;
+        }
         match self.id {
+            4500 => 0,
             3799 => [0, 44, 88, 132, 165][row],
             3820 => row * 40,
             _ => row * self.stride as usize + phase,
         }
     }
     pub fn manifest_source(self) -> String {
+        if let Some((_, name)) = NAVY.iter().find(|(id, _)| *id == self.id) {
+            return format!("de/u_shp_{name}_x1.sld");
+        }
         format!("graphics.drs:[32, 112, 108, 115]:{}", self.id)
     }
 }
 const fn sprite(id: u32, stride: u8, millis: u16) -> ActorSource {
-    ActorSource { id, stride, millis }
+    ActorSource {
+        id,
+        stride,
+        millis,
+        phases: 0,
+    }
 }
 
-pub const SPRITES: [ActorSource; 75] = [
+pub const SPRITES: [ActorSource; 126] = [
     sprite(993, 6, 1000),
     sprite(997, 12, 70),
     sprite(987, 10, 100),
@@ -198,6 +283,62 @@ pub const SPRITES: [ActorSource; 75] = [
     sprite(3799, 1, 100),
     sprite(3820, 1, 100),
     sprite(1512, 15, 133),
+    castle::SPRITES[0],
+    castle::SPRITES[1],
+    castle::SPRITES[2],
+    castle::SPRITES[3],
+    castle::SPRITES[4],
+    castle::SPRITES[5],
+    castle::SPRITES[6],
+    castle::SPRITES[7],
+    castle::SPRITES[8],
+    castle::SPRITES[9],
+    castle::SPRITES[10],
+    castle::SPRITES[11],
+    castle::SPRITES[12],
+    castle::SPRITES[13],
+    castle::SPRITES[14],
+    castle::SPRITES[15],
+    castle::SPRITES[16],
+    castle::SPRITES[17],
+    castle::SPRITES[18],
+    castle::SPRITES[19],
+    castle::SPRITES[20],
+    castle::SPRITES[21],
+    castle::SPRITES[22],
+    castle::SPRITES[23],
+    castle::SPRITES[24],
+    castle::SPRITES[25],
+    castle::SPRITES[26],
+    castle::SPRITES[27],
+    castle::SPRITES[28],
+    castle::SPRITES[29],
+    castle::SPRITES[30],
+    castle::SPRITES[31],
+    castle::SPRITES[32],
+    castle::SPRITES[33],
+    castle::SPRITES[34],
+    castle::SPRITES[35],
+    castle::SPRITES[36],
+    castle::SPRITES[37],
+    castle::SPRITES[38],
+    castle::SPRITES[39],
+    castle::SPRITES[40],
+    castle::SPRITES[41],
+    castle::SPRITES[42],
+    castle::SPRITES[43],
+    castle::SPRITES[44],
+    ActorSource {
+        id: 4500,
+        stride: 1,
+        millis: 100,
+        phases: 1,
+    },
+    sprite(100_539, 1, 200),
+    sprite(100_021, 1, 200),
+    sprite(100_529, 1, 200),
+    sprite(100_527, 1, 200),
+    sprite(100_545, 1, 200),
 ];
 
 #[cfg(test)]

@@ -15,6 +15,10 @@ pub(crate) fn hash_hit(hash: &mut blake3::Hasher, hit: Option<HitRecord>) {
 
 impl Combat {
     pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
+        hash.update(&(self.healers.len() as u64).to_le_bytes());
+        for id in &self.healers {
+            hash.update(&id.0.to_le_bytes());
+        }
         hash.update(&self.next_projectile.to_le_bytes());
         hash.update(&(self.projectiles.len() as u64).to_le_bytes());
         for p in self.projectiles.values() {

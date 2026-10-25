@@ -79,7 +79,7 @@ export function updateDetails(values) {
     byId('selected-icons').replaceChildren();
     byId('command-context').textContent = kinds[values[1]];
   }
-  const cursor = ['', 'gather', 'move', 'forbidden', 'attack', 'hunt', 'gather', 'gather', 'gather', 'gather', 'build'][values[3]];
+  const cursor = ['', 'gather', 'move', 'forbidden', 'attack', 'hunt', 'gather', 'gather', 'gather', 'gather', 'build', 'garrison'][values[3]];
   byId('scene').dataset.commandCursor = cursor;
   byId('scene').dataset.gatherKind = ['fish', 'forage', 'chop', 'mine'][values[3] - 6] ?? '';
   // GPU backends follow the sprite silhouette; Canvas keeps the

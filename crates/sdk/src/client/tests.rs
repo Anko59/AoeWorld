@@ -22,6 +22,7 @@ fn unit(id: u32, kind: UnitKind, tile: TileCoord) -> GameplayUnitState {
         hunt_target: None,
         death_hunt: None,
         auto_scout: false,
+        cargo_count: 0,
     }
 }
 

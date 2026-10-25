@@ -13,6 +13,7 @@ fn palisade_gate_is_dark_age_buildable_and_opens_for_its_owner() {
             &[worker],
             BuildingKind::PalisadeGate,
             TileCoord::new(100, 100),
+            false,
         )
         .unwrap();
     let gate = world.building(id).unwrap();

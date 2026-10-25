@@ -192,13 +192,16 @@ impl Ground<'_> {
 
     fn is_open(&self, tile: TileCoord) -> Result<bool> {
         Ok(self.open(tile)?.is_some_and(|cell| {
-            cell.passable
+            (cell.passable || self.overlay.bridge_axis(tile).is_some())
                 && !self.overlay.blocks_tile(tile)
                 && cell.node.is_none_or(|node| !self.overlay.blocks_node(node))
         }))
     }
 
     fn edge(&self, from: TileCoord, to: TileCoord) -> Result<bool> {
+        if let Some(clear) = self.overlay.bridge_edge(from, to) {
+            return Ok(clear);
+        }
         let (Some(a), Some(b)) = (self.open(from)?, self.open(to)?) else {
             return Ok(false);
         };
@@ -262,6 +265,7 @@ impl Ground<'_> {
         // Loaded navigation already contains all water/passability facts.
         // Dynamic rebuilds must never fall back to cold source residency.
         if !self.generator.has_static_navigation()
+            && !self.overlay.bridge_in_chunk(key)
             && self.generator.open_water_certain_near(
                 TileCoord::new(origin.x + CHUNK_TILES / 2, origin.y + CHUNK_TILES / 2),
                 CHUNK_TILES / 2,
@@ -441,9 +445,26 @@ pub fn hierarchical_route(
     destination: TileCoord,
     max_expansions: u32,
 ) -> Result<HierarchicalOutcome> {
+    hierarchical_route_with_overlay(
+        generator,
+        &ResourceOverlay::default(),
+        origin,
+        destination,
+        max_expansions,
+    )
+}
+
+/// Portal guidance over the current collision and bridge snapshot.
+pub fn hierarchical_route_with_overlay(
+    generator: &MapChunkGenerator,
+    overlay: &ResourceOverlay,
+    origin: TileCoord,
+    destination: TileCoord,
+    max_expansions: u32,
+) -> Result<HierarchicalOutcome> {
     let mut search = incremental::Search::new(origin, destination, max_expansions);
     loop {
-        if let Some(outcome) = search.poll(generator, &mut 65_536, &|| false)? {
+        if let Some(outcome) = search.poll_overlay(generator, overlay, &mut 65_536, &|| false)? {
             return Ok(outcome);
         }
     }

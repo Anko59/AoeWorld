@@ -11,10 +11,17 @@ class Config:
 
     # --- decision pacing ---------------------------------------------------
     decision_hz: float = 2.0
+    #: Enable the bounded known-water crossing heuristic for army targets.
+    build_bridges: bool = False
+    bridge_retry_seconds: int = 30
 
     # --- economy -----------------------------------------------------------
     #: Stop training villagers at this count.
     max_villagers: int = 60
+    #: Save 800 food and 200 gold after the Feudal production buildings stand.
+    castle_villagers: int = 28
+    castle_army_min: int = 12
+    castle_knight_weight: float = 1.0
     #: Villagers the Town Center queue is kept at.
     town_center_queue: int = 2
     #: Build a house when fewer than this many population slots are free.
@@ -67,6 +74,12 @@ class Config:
     max_barracks: int = 2
     max_ranges: int = 2
 
+    # --- optional river fleet ----------------------------------------------
+    fishing_ships: int = 1
+    galleys: int = 2
+    dock_search_radius: int = 12
+    naval_settle_seconds: int = 2
+
     # --- scouting ----------------------------------------------------------
     scout_ring_step: int = 13
     scout_max_radius: int = 120
@@ -82,6 +95,8 @@ class Config:
     #: route each, planned at once); one order across the whole map per
     #: soldier made the server plan thousands of map-wide routes at a time.
     march_hop_tiles: int = 48
+    march_group_tiles: int = 16
+    army_formation: str = "LINE"
     #: A soldier is sent on at most once per this many seconds, and an army
     #: that got no nearer its goal for `march_stall_seconds` gives it up.
     march_pause_seconds: int = 5

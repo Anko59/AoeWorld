@@ -61,7 +61,8 @@ at **7.0 tiles/s** here. Integer travel is ceil(distance × tick rate / speed),
 at least one tick. Units and Watch Towers share launch/impact/damage/death code.
 Shots retain the aim point sampled at launch and hit the original target at impact;
 accuracy, ballistic evasion, collision, friendly fire and terrain occlusion
-are absent. Ungarrisoned Town Centers do not fire; garrison commands are absent.
+are absent. Ungarrisoned Town Centers do not fire; villagers and foot archers
+provide their arrows through [garrisoning](garrison.md).
 
 Server attack commands require visible targets; ranged attacks also require
 continued visibility to launch shots. A launched shot may finish after LOS is

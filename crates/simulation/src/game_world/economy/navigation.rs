@@ -132,7 +132,7 @@ impl GameWorld {
         kind: crate::UnitKind,
     ) -> RoutePlannerPoll {
         let _measurement = self.measure_planning();
-        if kind == crate::UnitKind::FishingShip {
+        if kind.is_naval() {
             return planner.poll(
                 &super::fishing::navigation::NavalNavigation(self),
                 &ResourceOverlay::default(),
@@ -170,7 +170,7 @@ impl GameWorld {
         kind: crate::UnitKind,
     ) {
         let _measurement = self.measure_planning();
-        if kind == crate::UnitKind::FishingShip {
+        if kind.is_naval() {
             planner.plan_ahead(
                 &super::fishing::navigation::NavalNavigation(self),
                 &ResourceOverlay::default(),

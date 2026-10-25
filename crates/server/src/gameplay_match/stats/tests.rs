@@ -50,3 +50,94 @@ fn detailed_phases_are_named_and_drained_between_ticks() {
     assert_eq!(value["ticks"][1][8]["orders"], 0);
     assert_eq!(value["ticks"][1][8]["movement"], 0);
 }
+
+#[test]
+fn empty_perf_window_has_finite_zero_rate_and_no_phases() {
+    let stats = TickStats::default();
+    let summary = stats.summary(Duration::from_millis(50));
+    assert_eq!(summary["samples"], 0);
+    assert_eq!(summary["tick_rate"], 0.0);
+    assert_eq!(summary["tick_hz"], 20.0);
+    assert_eq!(summary["missed_ticks"], 0);
+    assert_eq!(summary["missed_total"], 0);
+    assert_eq!(summary["phases"], serde_json::json!({}));
+    assert_eq!(summary["top_phases"], serde_json::json!([]));
+}
+
+#[test]
+fn stopped_perf_window_expires_without_new_ticks_but_keeps_raw_history() {
+    let stats = TickStats::default();
+    let probe = TickProbe::default();
+    probe.phase("movement", Duration::from_micros(300));
+    stats.record(
+        1,
+        Duration::from_millis(60),
+        Duration::ZERO,
+        Duration::from_millis(50),
+        &probe,
+        12,
+    );
+    assert_eq!(stats.summary(Duration::from_millis(50))["samples"], 1);
+    // Age the stored observation rather than sleeping: a stopped server must
+    // stop reporting an old window even when record() is never called again.
+    stats.inner.lock().unwrap().times[0] = std::time::Instant::now() - Duration::from_secs(61);
+    let summary = stats.summary(Duration::from_millis(50));
+    assert_eq!(summary["samples"], 0);
+    assert_eq!(summary["tick_rate"], 0.0);
+    assert_eq!(summary["missed_ticks"], 0);
+    assert_eq!(summary["missed_total"], 1);
+    assert_eq!(summary["phases"], serde_json::json!({}));
+    assert_eq!(summary["top_phases"], serde_json::json!([]));
+    let page = stats.page(0);
+    assert_eq!(page.next, 1);
+    assert_eq!(page.ticks.len(), 1);
+    assert_eq!(page.missed_total, 1);
+}
+
+#[test]
+fn replacing_match_clears_old_perf_window_and_preserves_cursor_and_misses() {
+    let stats = TickStats::default();
+    let probe = TickProbe::default();
+    for tick in [10, 11] {
+        probe.phase("movement", Duration::from_micros(900));
+        stats.record(
+            tick,
+            Duration::from_millis(60),
+            Duration::ZERO,
+            Duration::from_millis(50),
+            &probe,
+            100,
+        );
+    }
+    let old_cursor = stats.page(0).next;
+    assert_eq!(old_cursor, 2);
+    for tick in [0, 1] {
+        probe.phase("movement", Duration::from_micros(7));
+        stats.record(
+            tick,
+            Duration::from_micros(10),
+            Duration::ZERO,
+            Duration::from_millis(50),
+            &probe,
+            4,
+        );
+    }
+    let summary = stats.summary(Duration::from_millis(50));
+    assert_eq!(summary["samples"], 2);
+    assert_eq!(summary["missed_ticks"], 0);
+    assert_eq!(summary["missed_total"], 2);
+    assert_eq!(summary["phases"]["movement"]["max_us"], 7);
+    let page = stats.page(old_cursor);
+    assert_eq!(page.next, 4, "the public cursor never restarts at zero");
+    assert_eq!(page.missed_total, 2);
+    assert_eq!(
+        page.ticks.iter().map(|row| row.0).collect::<Vec<_>>(),
+        [0, 1]
+    );
+    assert_eq!(
+        stats.page(0).ticks.len(),
+        2,
+        "old match samples are dropped"
+    );
+    assert!(stats.page(page.next).ticks.is_empty());
+}

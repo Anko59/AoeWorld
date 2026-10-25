@@ -322,3 +322,43 @@ fn annex_age_family_is_selected_before_its_own_delta_offsets() {
             .any(|p| p.graphic_id == 2 && p.offset == [-17, 29] && p.misplacement == [-1.0, 0.5])
     );
 }
+
+#[test]
+fn real_trial_castle_university_composes_each_native_layer_once() {
+    let Ok(bytes) = std::fs::read("../../local-assets/trial/Data/empires2.dat") else {
+        return;
+    };
+    let file = decode(&bytes).unwrap();
+    let recipe = file.building_composition(209).unwrap();
+    for slp in [1359, 1363, 3835] {
+        assert_eq!(recipe.parts.iter().filter(|p| p.slp_id == slp).count(), 1);
+    }
+}
+
+#[test]
+fn measured_castle_composite_back_references_emit_each_layer_once() {
+    for (animation, body) in [(569, 573), (65, 69)] {
+        let mut file = parse(&fixture(0)).unwrap();
+        let mut a = file.graphics[0].clone();
+        a.id = animation;
+        a.slp_id = 1001;
+        a.deltas = vec![GraphicDelta {
+            graphic_id: body as i16,
+            offset_x: 0,
+            offset_y: 0,
+            display_angle: -1,
+        }];
+        let mut b = a.clone();
+        b.id = body;
+        b.slp_id = 1002;
+        b.deltas[0].graphic_id = animation as i16;
+        file.graphic_index.insert(animation, file.graphics.len());
+        file.graphic_index.insert(body, file.graphics.len() + 1);
+        file.graphics.extend([a, b]);
+        file.units[0].standing[0] = animation as i16;
+        let composed = file.building_composition(0).unwrap();
+        for slp in [1001, 1002] {
+            assert_eq!(composed.parts.iter().filter(|p| p.slp_id == slp).count(), 1);
+        }
+    }
+}

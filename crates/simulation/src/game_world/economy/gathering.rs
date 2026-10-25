@@ -75,7 +75,10 @@ impl GameWorld {
         id: EntityId,
         node_id: u64,
     ) -> Result<(), EconomyError> {
-        let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
+        let unit = self
+            .unit(id)
+            .filter(|u| u.hp > 0 && !self.embarked(u.id))
+            .ok_or(EconomyError::UnknownEntity)?;
         if unit.player != player {
             return Err(EconomyError::NotOwner);
         }
@@ -93,7 +96,7 @@ impl GameWorld {
         let node = overlay
             .resource_by_id_with_cancel(generator, node_id, &|| false)
             .map_err(GameWorldError::Environment)?
-            .filter(|node| overlay.blocks_node(*node))
+            .filter(|node| overlay.resource_available(*node))
             .ok_or(EconomyError::InvalidResource)?;
         if (unit.kind == UnitKind::FishingShip
             && !matches!(
@@ -120,6 +123,7 @@ impl GameWorld {
         farm: Option<EntityId>,
     ) -> Result<(), EconomyError> {
         self.approach_resource(id, tile)?;
+        self.cancel_garrison_order(id);
         self.cancel_hunt(id);
         self.cancel_attack(id);
         let previous_farm = self.economy.gatherers.get(&id).and_then(|task| task.farm);
@@ -158,11 +162,9 @@ impl GameWorld {
         } else {
             UnitTask::Moving
         };
-        let keep = self.units[index]
-            .state
-            .carried
-            .is_none_or(|load| load.amount < self.gather_capacity(&self.units[index].state))
-            || self.begin_return(id, &mut task);
+        let keep = self.units[index].state.carried.is_none_or(|load| {
+            load.amount < self.gather_capacity(&self.units[index].state, task.farm.is_some())
+        }) || self.begin_return(id, &mut task);
         if keep {
             self.economy.gatherers.insert(id, task);
         } else {
@@ -338,10 +340,9 @@ impl GameWorld {
             return false;
         };
         if remaining == 0
-            || self.units[index]
-                .state
-                .carried
-                .is_some_and(|load| load.amount >= self.gather_capacity(&self.units[index].state))
+            || self.units[index].state.carried.is_some_and(|load| {
+                load.amount >= self.gather_capacity(&self.units[index].state, task.farm.is_some())
+            })
         {
             if self.units[index].state.carried.is_some() {
                 return self.begin_return(id, task);
@@ -353,19 +354,21 @@ impl GameWorld {
         }
         // Fish rates use current DE naval balance, independent of land technologies.
         let rate = match (task.fish, self.units[index].state.kind) {
-            (Some(aoe_map::ObjectKind::DeepFish), UnitKind::FishingShip) => 4165,
-            (Some(aoe_map::ObjectKind::ShoreFish), UnitKind::FishingShip) => 2380,
-            (Some(_), _) => 4300,
+            (Some(aoe_map::ObjectKind::DeepFish), UnitKind::FishingShip) => 416500,
+            (Some(aoe_map::ObjectKind::ShoreFish), UnitKind::FishingShip) => 238000,
+            (Some(_), _) => 430000,
             _ => task.animal.and_then(|id| self.animal(id)).map_or_else(
                 || {
-                    self.gather_rate(self.units[index].state.player, task.kind)
-                        .0
+                    let (numerator, denominator) =
+                        self.gather_rate(self.units[index].state.player, task.kind);
+                    numerator * 10_000 / denominator
                 },
-                |a| u32::from(a.kind.rules().gather_hundredths) * 100,
+                |a| u32::from(a.kind.rules().gather_hundredths) * 10_000,
             ),
         };
         task.credits += u64::from(rate);
-        let threshold = u64::from(self.config.tick_hz) * 10_000;
+        // Millionths retain stacked 1.15 * 1.15 = 1.3225 exactly.
+        let threshold = u64::from(self.config.tick_hz) * 1_000_000;
         if task.credits < threshold {
             return true;
         }
@@ -388,7 +391,9 @@ impl GameWorld {
                 kind: task.kind,
                 amount,
             });
-            if amount >= self.gather_capacity(&self.units[index].state) || left == 0 {
+            if amount >= self.gather_capacity(&self.units[index].state, task.farm.is_some())
+                || left == 0
+            {
                 return self.begin_return(id, task);
             }
             return true;
@@ -414,7 +419,8 @@ impl GameWorld {
                 amount,
             });
             self.economy.depletions.push(depletion);
-            if amount >= self.gather_capacity(&self.units[index].state) || depletion.remaining == 0
+            if amount >= self.gather_capacity(&self.units[index].state, task.farm.is_some())
+                || depletion.remaining == 0
             {
                 return self.begin_return(id, task);
             }

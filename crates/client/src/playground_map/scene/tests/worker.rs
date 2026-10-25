@@ -24,6 +24,7 @@ fn villager(task: UnitTask, gathering: Option<ResourceKind>) -> GameplayUnitStat
         hunt_target: None,
         death_hunt: None,
         auto_scout: false,
+        cargo_count: 0,
     }
 }
 

@@ -31,6 +31,11 @@ fn native_building(kind: BuildingKind) -> sim::BuildingKind {
         BuildingKind::Market => N::Market,
         BuildingKind::WatchTower => N::WatchTower,
         BuildingKind::PalisadeGate => N::PalisadeGate,
+        BuildingKind::Castle => N::Castle,
+        BuildingKind::Monastery => N::Monastery,
+        BuildingKind::University => N::University,
+        BuildingKind::SiegeWorkshop => N::SiegeWorkshop,
+        BuildingKind::Bridge => N::Bridge,
     }
 }
 
@@ -44,6 +49,20 @@ fn native_unit(kind: UnitKind) -> sim::UnitKind {
         UnitKind::Skirmisher => sim::UnitKind::Skirmisher,
         UnitKind::Spearman => sim::UnitKind::Spearman,
         UnitKind::ManAtArms => sim::UnitKind::ManAtArms,
+        UnitKind::LongSwordsman => sim::UnitKind::LongSwordsman,
+        UnitKind::Pikeman => sim::UnitKind::Pikeman,
+        UnitKind::Crossbowman => sim::UnitKind::Crossbowman,
+        UnitKind::EliteSkirmisher => sim::UnitKind::EliteSkirmisher,
+        UnitKind::Knight => sim::UnitKind::Knight,
+        UnitKind::LightCavalry => sim::UnitKind::LightCavalry,
+        UnitKind::Monk => sim::UnitKind::Monk,
+        UnitKind::Mangonel => sim::UnitKind::Mangonel,
+        UnitKind::BatteringRam => sim::UnitKind::BatteringRam,
+        UnitKind::Galley => sim::UnitKind::Galley,
+        UnitKind::FireShip => sim::UnitKind::FireShip,
+        UnitKind::DemolitionShip => sim::UnitKind::DemolitionShip,
+        UnitKind::TransportShip => sim::UnitKind::TransportShip,
+        UnitKind::WarGalley => sim::UnitKind::WarGalley,
     }
 }
 
@@ -63,15 +82,35 @@ fn native_tech(tech: Tech) -> sim::Tech {
         Tech::ScaleBardingArmor => sim::Tech::ScaleBardingArmor,
         Tech::Fletching => sim::Tech::Fletching,
         Tech::PaddedArcherArmor => sim::Tech::PaddedArcherArmor,
+        Tech::CastleAge => sim::Tech::CastleAge,
+        Tech::LongSwordsman => sim::Tech::LongSwordsman,
+        Tech::Pikeman => sim::Tech::Pikeman,
+        Tech::Crossbowman => sim::Tech::Crossbowman,
+        Tech::EliteSkirmisher => sim::Tech::EliteSkirmisher,
+        Tech::LightCavalry => sim::Tech::LightCavalry,
+        Tech::HandCart => sim::Tech::HandCart,
+        Tech::TownPatrol => sim::Tech::TownPatrol,
+        Tech::IronCasting => sim::Tech::IronCasting,
+        Tech::ChainMailArmor => sim::Tech::ChainMailArmor,
+        Tech::ChainBardingArmor => sim::Tech::ChainBardingArmor,
+        Tech::BodkinArrow => sim::Tech::BodkinArrow,
+        Tech::LeatherArcherArmor => sim::Tech::LeatherArcherArmor,
+        Tech::HeavyPlow => sim::Tech::HeavyPlow,
+        Tech::BowSaw => sim::Tech::BowSaw,
+        Tech::GoldShaftMining => sim::Tech::GoldShaftMining,
+        Tech::Masonry => sim::Tech::Masonry,
+        Tech::Ballistics => sim::Tech::Ballistics,
+        Tech::MurderHoles => sim::Tech::MurderHoles,
+        Tech::WarGalley => sim::Tech::WarGalley,
     }
 }
 
-/// What placing a building costs (per segment for palisades).
+/// Placement cost: per segment for palisades, per water tile for bridges.
 pub fn building_cost(kind: BuildingKind) -> Stockpile {
     stock(native_building(kind).rules().cost)
 }
 
-/// Seconds one villager takes to build it, as the rules table states.
+/// One-villager build seconds (per water tile for a bridge).
 pub fn building_build_seconds(kind: BuildingKind) -> u32 {
     native_building(kind).rules().build_seconds
 }

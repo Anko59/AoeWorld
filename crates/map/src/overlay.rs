@@ -68,7 +68,9 @@ impl ResourceOverlay {
             || rect.min.y < 0
             || area == 0
             || area > MAX_FOOTPRINT_TILES
-            || (self.navigation_state.obstacles.len() as u64).saturating_add(area)
+            || (self.navigation_state.obstacles.len() as u64)
+                .saturating_add(self.bridge_tile_count() as u64)
+                .saturating_add(area)
                 > MAX_OBSTACLE_TILES
         {
             return Err(ResourceOverlayError::Capacity);
@@ -205,9 +207,15 @@ impl ResourceOverlay {
         self.remaining(terrain, id).is_some_and(|amount| amount > 0)
     }
 
-    /// Applies overlay state to a resource that was already resolved by a
-    /// checked terrain query. This avoids resolving a provider-backed tile a
-    /// second time after its page handle has been validated.
+    /// Whether an already resolved node still has resources to gather.
+    /// Fish remain available even though they never block movement.
+    pub fn resource_available(&self, node: ResourceNode) -> bool {
+        self.changed_amount(node.id).unwrap_or(node.initial_amount) > 0
+    }
+
+    /// Navigation/placement collision for an already resolved resource.
+    /// Fish never block; gather targets use `resource_available` instead.
+    /// Avoids resolving a provider-backed tile again after validation.
     pub fn blocks_node(&self, node: ResourceNode) -> bool {
         self.collision_blocks_node(node)
     }

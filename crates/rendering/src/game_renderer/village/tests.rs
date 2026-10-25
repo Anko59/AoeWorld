@@ -3,6 +3,23 @@ use aoe_core::EntityId;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn naval_actor_tags_render_their_own_original_direction_rows() {
+    let mut art = art();
+    art.actors = vec![Vec::new(); 80];
+    for index in 75..80 {
+        let original = art.village[1][(index - 75) * 5..(index - 74) * 5].to_vec();
+        art.actors[index] = original.clone();
+        let kind = SceneUnitKind::actor(index as u8);
+        assert_eq!(kind.actor_slot(), Some(index));
+        let (selected, stride, _) = frames(&art, unit(kind)).expect("native naval body");
+        assert_eq!(stride, 1);
+        assert_eq!(selected.len(), 5);
+        assert_eq!(selected[0].atlas, original[0].atlas);
+        assert_eq!(selected[4].atlas, original[4].atlas);
+    }
+}
+
+#[wasm_bindgen_test]
 fn fish_sprites_animate_at_their_sampled_native_period() {
     let mut art = art();
     let fish = SceneResource {

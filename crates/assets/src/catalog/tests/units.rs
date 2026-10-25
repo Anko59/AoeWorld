@@ -56,3 +56,39 @@ fn actor_animation_metadata_uses_dat_rows_and_individual_frame_durations() {
         assert_eq!(source.frames(), u32::from(stride) * 5);
     }
 }
+
+#[test]
+fn castle_actor_selection_keeps_native_sources_inside_the_existing_budget() {
+    for (pose, id) in [
+        (Pose::KnightStand, 669),
+        (Pose::MonkWalk, 779),
+        (Pose::MangonelAttack, 716),
+        (Pose::BatteringRamDie, 176),
+    ] {
+        let s = SPRITES[pose as usize];
+        assert_eq!(s.id, id);
+        assert!(s.selected_frames() <= 10);
+    }
+    assert_eq!(SPRITES[Pose::KnightWalk as usize].millis, 110);
+}
+
+#[test]
+fn navy_actor_sources_sample_eight_facings_from_original_sixteen_direction_art() {
+    for (pose, name) in [
+        (Pose::Galley, "galley"),
+        (Pose::WarGalley, "war_galley"),
+        (Pose::FireShip, "fire_ship"),
+        (Pose::DemolitionShip, "demo_ship"),
+        (Pose::TransportShip, "transport_ship"),
+    ] {
+        let source = SPRITES[pose as usize];
+        assert_eq!(source.frames(), 16);
+        assert_eq!(source.selected_frames(), 5);
+        assert_eq!(source.manifest_source(), format!("de/u_shp_{name}_x1.sld"));
+        for row in 0..5 {
+            // Native DE frame zero faces screen east; the existing mirrored
+            // actor rows begin south, then SW, west, NW and north.
+            assert_eq!(source.source_frame(row, 0), 4 + row * 2);
+        }
+    }
+}

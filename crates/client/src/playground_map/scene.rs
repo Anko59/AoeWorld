@@ -1,6 +1,8 @@
 //! One projected terrain snapshot shared by rendering, contacts and picking.
 use super::*;
 use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
+#[path = "scene/bridges.rs"]
+mod bridges;
 #[path = "scene/projectiles.rs"]
 mod projectiles;
 
@@ -213,6 +215,7 @@ pub(in super::super) fn units(
     let mut units = client
         .units
         .values()
+        .filter(|u| u.hp > 0 || !u.kind.is_naval())
         .filter(|u| {
             u.player == player
                 || client
@@ -310,6 +313,10 @@ pub(in super::super) fn units(
         .map(|b| (b.footprint.min.x, b.footprint.min.y))
         .collect();
     for building in &client.village.buildings {
+        if building.kind == aoe_protocol::BuildingKind::Bridge {
+            bridges::append(client, scene, building, &mut units);
+            continue;
+        }
         let position = super::super::village::building_center(building);
         let gate_open = building.kind == aoe_protocol::BuildingKind::PalisadeGate
             && crate::building_ui::gate_sprite_slot(building.gate_open, building.progress_permille)
@@ -363,7 +370,7 @@ pub(in super::super) fn units(
         units.insert(slot, unit);
     }
     for (building, expiry) in &client.village.rubble {
-        if *expiry <= client.village.tick {
+        if *expiry <= client.village.tick || building.kind == aoe_protocol::BuildingKind::Bridge {
             continue;
         }
         let position = super::super::village::building_center(building);
@@ -385,6 +392,7 @@ pub(in super::super) fn units(
         units.insert(slot, unit);
     }
     projectiles::append(client, scene, &mut units);
+    super::super::village::building_panel::preview(client, &mut units);
     units
 }
 

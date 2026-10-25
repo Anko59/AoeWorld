@@ -143,6 +143,9 @@ fn deliver_tick(
     failed: &mut BTreeSet<u64>,
 ) -> bool {
     let id = build.session_id;
+    let Some(subscription) = session.subscription else {
+        return false;
+    };
     let Some(slots) = &build.units else {
         let _ = send(
             session,
@@ -177,15 +180,27 @@ fn deliver_tick(
     let mut building_removals = Vec::new();
     match &viewer.buildings {
         Buildings::Full(known) => {
+            let in_view = |state: &aoe_protocol::GameplayBuildingState| {
+                !built.fog_disabled
+                    || super::economy::building_in_camera(
+                        state,
+                        session.viewer,
+                        subscription.region,
+                    )
+            };
             changed_buildings = known
                 .iter()
-                .filter(|(id, state)| session.resident_buildings.get(*id) != Some(*state))
+                .filter(|(id, state)| {
+                    in_view(state) && session.resident_buildings.get(*id) != Some(*state)
+                })
+                .take(aoe_protocol::MAX_ECONOMY_BUILDINGS + 1)
                 .map(|(_, state)| state.clone())
                 .collect();
             building_removals = session
                 .resident_buildings
                 .keys()
-                .filter(|id| !known.contains_key(*id))
+                .filter(|id| known.get(*id).is_none_or(|state| !in_view(state)))
+                .take(aoe_protocol::MAX_ECONOMY_BUILDINGS + 1)
                 .copied()
                 .collect();
         }

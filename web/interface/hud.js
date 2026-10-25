@@ -1,3 +1,4 @@
+import { castleUnits, castleUnitNames, castleKinds } from '/interface/castle.js';
 import { initBuildings, buildingKinds, buildingNames } from '/interface/buildings.js';
 import { initArt, icon as packIcon, entityIcon, setEntityIcon } from '/interface/ui-art.js';
 import { updateDetails } from '/interface/details.js';
@@ -51,6 +52,9 @@ export function initInterface() {
     const building=count===1 && buildingKinds.includes(first.kind);
     const owned=count>0 && selected.every(actor=>actor.owned);
     const units=owned && !building;
+    const military=units && count>1 && selected.every(u=>['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits].includes(u.kind));
+    for(const name of ['line','box','staggered','flank']){show(`formation-${name}`,military);byId(`formation-${name}`).disabled=state.observer;}
+    show('attack-move-units',military);byId('attack-move-units').disabled=state.observer;
     attribute(byId('selection'),'data-count',String(count));
     attribute(byId('selection'),'data-kind',first?.kind ?? '');
     attribute(byId('selection'),'data-owned',String(owned));
@@ -61,7 +65,7 @@ export function initInterface() {
     const actions=building?1:units?2:0;
     empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
     text('command-context',count>1?`${count} units`:first?.name ?? 'Select a unit');
-    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Shift: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
+    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Shift: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
     show('observer-label',state.observer);
     show('selection-health',count===1);
     show('unit-hp',count===1 && !building); show('unit-combat',count===1 && !building);
@@ -73,7 +77,7 @@ export function initInterface() {
       const groupName=selected.every(unit=>unit.kind===first.kind)?`${first.name}s`:'units';
       text('selection-name',count>1?`${count} ${groupName} selected`:first.name);
       text('selection-task',count===1?building?(state.queue.length?'Training':'Building'): `${first.task}${first.resource && first.task==='Gathering'?' '+first.resource:''}`:'Right-click to give this group an order');
-      text('selection-load',['Sheep','Deer','Boar','Wolf'].includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/${first.capacity} ${first.resource}`:building?'Resource drop-off · supports 5 population':'');
+      text('selection-load',['Sheep','Deer','Boar','Wolf'].includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/${first.capacity} ${first.resource}`:building?first.kind==='Castle'?'Supports 20 population':castleKinds.includes(first.kind)?'':'Resource drop-off · supports 5 population':'');
       const signature=selected.map(unit=>`${unit.id}:${unit.kind}`).join(',');
       if (signature!==previousSelection) {
         setEntityIcon(byId('selection-portrait'),first.kind);
@@ -94,7 +98,7 @@ export function initInterface() {
     }
   };
   window.aoeInterface = { details: updateDetails, numeric(values,status) {
-    const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','ManAtArms'], names=['Scout Cavalry','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','Man-at-Arms'];
+    const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'], names=['Scout Cavalry','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley'];
     const tasks=['Idle','Moving','Gathering','Carrying','Returning to drop-off','Attacking','Dying','Building','Farming','Hunting','Shepherding','Fishing','Idle','Fleeing','Attacking','Dying','Carcass'];
     const resources=['food','wood','gold','stone',''];
     const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],observer:values[11]===1,art:values[12]===1,status,actors:[],selected:[],queue:[],resources:[]};

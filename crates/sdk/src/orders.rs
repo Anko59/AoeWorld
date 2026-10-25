@@ -5,6 +5,35 @@ use aoe_protocol::GameplayClientMessage;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Order {
+    Garrison {
+        unit: EntityId,
+        building: EntityId,
+    },
+    Ungarrison {
+        building: EntityId,
+        unit: Option<EntityId>,
+    },
+    Load {
+        units: Vec<EntityId>,
+        transport: EntityId,
+    },
+    Unload {
+        transport: EntityId,
+        to: TileCoord,
+    },
+    /// Rearrange immediately, retaining the group's route and queued points.
+    SetFormation {
+        units: Vec<EntityId>,
+        formation: crate::Formation,
+    },
+    /// Share one route and slowest-member speed; queued points retain the group.
+    FormationMove {
+        units: Vec<EntityId>,
+        formation: crate::Formation,
+        to: TileCoord,
+        queued: bool,
+        attack_move: bool,
+    },
     AutoScout {
         unit: EntityId,
         enabled: bool,
@@ -50,6 +79,12 @@ pub enum Order {
         builders: Vec<EntityId>,
         kind: BuildingKind,
         origin: TileCoord,
+    },
+    /// Build a cardinal bridge between two land banks (at most forty water tiles).
+    BuildBridge {
+        builders: Vec<EntityId>,
+        from: TileCoord,
+        to: TileCoord,
     },
     /// Lay palisade segments along the line from `from` to `to`.
     BuildWall {
@@ -112,6 +147,48 @@ impl Order {
     pub fn message(&self, sequence: u64) -> Option<GameplayClientMessage> {
         use GameplayClientMessage as M;
         Some(match self.clone() {
+            Order::Garrison { unit, building } => M::GarrisonOrder {
+                sequence,
+                entity_id: unit,
+                building_id: building,
+            },
+            Order::Ungarrison { building, unit } => M::UngarrisonOrder {
+                sequence,
+                building_id: building,
+                entity_id: unit,
+            },
+            Order::Load { units, transport } => M::LoadOrder {
+                sequence,
+                unit_ids: units,
+                transport_id: transport,
+            },
+            Order::Unload { transport, to } => M::UnloadOrder {
+                sequence,
+                transport_id: transport,
+                destination: to,
+            },
+            Order::SetFormation { units, formation } => M::FormationOrder {
+                sequence,
+                unit_ids: units,
+                formation,
+                destination: None,
+                queued: false,
+                attack_move: false,
+            },
+            Order::FormationMove {
+                units,
+                formation,
+                to,
+                queued,
+                attack_move,
+            } => M::FormationOrder {
+                sequence,
+                unit_ids: units,
+                formation,
+                destination: Some(WorldPosition::from_tile_center(to).ok()?),
+                queued,
+                attack_move,
+            },
             Order::AutoScout { unit, enabled } => M::AutoScoutOrder {
                 sequence,
                 entity_id: unit,
@@ -160,12 +237,21 @@ impl Order {
                 builder_ids: builders,
                 kind,
                 origin,
+                queued: false,
+            },
+            Order::BuildBridge { builders, from, to } => M::BuildBridgeOrder {
+                sequence,
+                builder_ids: builders,
+                from,
+                to,
+                queued: false,
             },
             Order::BuildWall { builders, from, to } => M::BuildWallOrder {
                 sequence,
                 builder_ids: builders,
                 from,
                 to,
+                queued: false,
             },
             Order::Construct { builders, building } => M::ConstructOrder {
                 sequence,

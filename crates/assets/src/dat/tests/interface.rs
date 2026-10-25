@@ -55,6 +55,93 @@ fn interface_catalog_resolves_dat_ids_to_the_correct_sheets() {
 }
 
 #[test]
+fn interface_catalog_exports_naval_units_and_castle_research() {
+    use crate::pack::{AtlasPage, FrameRecord, Manifest};
+    let mut dat = parse(&fixture(0)).unwrap();
+    let template = dat.units[0].clone();
+    let ships = [539, 529, 527, 545, 21];
+    dat.units = ships
+        .iter()
+        .enumerate()
+        .map(|(index, id)| {
+            let mut unit = template.clone();
+            unit.id = *id;
+            unit.kind = 70;
+            unit.icon_id = index as i16;
+            unit
+        })
+        .collect();
+    dat.unit_index = ships
+        .iter()
+        .enumerate()
+        .map(|(index, id)| (*id, index))
+        .collect();
+    dat.technologies = [102, 34]
+        .iter()
+        .enumerate()
+        .map(|(index, id)| Technology {
+            id: *id,
+            name: "synthetic research".into(),
+            icon_id: index as i16,
+            location: 45,
+        })
+        .collect();
+    let hash = "a".repeat(64);
+    let manifest = Manifest {
+        version: 1,
+        converter: "synthetic".into(),
+        input_hash: hash.clone(),
+        pages: vec![AtlasPage {
+            color: "icons.png".into(),
+            color_hash: hash.clone(),
+            player: "p.png".into(),
+            player_hash: hash.clone(),
+            shadow: "s.png".into(),
+            shadow_hash: hash.clone(),
+            outline: "o.png".into(),
+            outline_hash: hash.clone(),
+            width: 2048,
+            height: 2048,
+        }],
+        frames: [(50730, 5), (50729, 2)]
+            .into_iter()
+            .flat_map(|(sheet, count)| {
+                let hash = hash.clone();
+                (0..count).map(move |frame| FrameRecord {
+                    source: format!("interfac.drs:[32, 112, 108, 115]:{sheet}"),
+                    source_hash: hash.clone(),
+                    frame,
+                    page: 0,
+                    x: (frame * 36) as u16,
+                    y: 0,
+                    width: 36,
+                    height: 36,
+                    anchor_x: 0,
+                    anchor_y: 0,
+                })
+            })
+            .collect(),
+        buildings: vec![],
+        building_data: String::new(),
+    };
+    let catalog = crate::catalog::interface::build(&dat, &manifest).unwrap();
+    for id in ships {
+        assert_eq!(
+            catalog.units.get(&id).map(|art| art.page.as_str()),
+            Some("icons.png"),
+            "naval icon {id}"
+        );
+    }
+    for id in [102, 34] {
+        assert_eq!(
+            catalog.technologies.get(&id).map(|art| art.page.as_str()),
+            Some("icons.png"),
+            "research icon {id}"
+        );
+    }
+}
+
+#[test]
 #[ignore = "requires the owner's local AoK trial; no original bytes in fixtures"]
 fn interface_trial_dat_icon_ids_match_reviewed_sheets() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

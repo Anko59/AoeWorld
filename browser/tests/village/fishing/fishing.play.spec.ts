@@ -1,7 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { test } from "../../../server.js";
+import { isolatedTest as test } from "../../../server.js";
 import { gameAssets } from "../../game-assets.js";
 import { activatePackage } from "../../start/package.js";
 import {
@@ -300,10 +300,16 @@ test("coastal village builds a Dock, trains a Fishing Ship, and deposits fish fo
       { timeout: 60_000 },
     )
     .toBe(true);
-  const ship = (await actors(page)).find((a) => a.kind === "FishingShip");
-  if (!ship) throw new Error("Fishing Ship missing");
-  await page.mouse.click(ship.x, ship.y);
-  await expect(page.locator("#selection-name")).toHaveText("Fishing Ship");
+  // The new ship can still be leaving the Dock beside shore fish, so each
+  // attempt clicks its current position rather than its spawn snapshot.
+  await expect(async () => {
+    const ship = (await actors(page)).find((a) => a.kind === "FishingShip");
+    if (!ship) throw new Error("Fishing Ship missing");
+    await page.mouse.click(ship.x, ship.y);
+    await expect(page.locator("#selection-name")).toHaveText("Fishing Ship", {
+      timeout: 1_000,
+    });
+  }).toPass({ timeout: 15_000 });
   await expect(page.locator("#unit-health-bars .unit-hp-bar")).toHaveCount(1);
   await revealFish(page, scene.deep, true);
   await shot("deep-fish");

@@ -4,6 +4,9 @@
 //! Capture with `perf-scale --players 4 --units-per-player 80 --side-tiles 2048
 //! --fight-size 4 --skip-attacks --ticks 300 --fog-off-ticks 0 --hash-every 100
 //! --server-ticks 0`.
+// Combined Castle bundle: u64 research, healers, garrisons, queued builders and
+// cargo/embarked maps extend current state. Regenerate the same scenario; all
+// independent replay, thread equality and emitted-change assertions remain.
 use super::*;
 
 fn smoke_options(out: PathBuf) -> Options {
@@ -93,23 +96,27 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
 /// The merged drop-off work state, prepaid reseeds and auto-scout scheduling
 /// extend that same schema. Regenerate these current pins for the combination;
 /// the scenario, checkpoints and limits remain unchanged.
+/// Castle Age widens research bits, adds the ordered healer index and refines
+/// gather credits. Regenerate current hashes for those deliberate state changes.
 const PINNED_HASHES: [(u64, &str); 3] = [
     (
         100,
-        "d88b93fa64055351dab903174d9407898c4599d7a96c6d702eeb375cd39c2c27",
+        "4d8997ddc44b76d1854d778a97fda39e95d66d57c0f0da3491f355e322922cb3",
     ),
     (
         200,
-        "eb201c9cdf8d199c67b79dc682efd36f1026781b329c75a41eefdd977dc0c7b5",
+        "bd8019702b6f8a31de0cb93579d8b9704a34ebb0b276da9de3d488bf108de687",
     ),
     (
         300,
-        "030c91284474ada462505c9edd7eb010345870ab45611b02029ff63073713356",
+        "8c04465c3befc4a6f1473554df4c15e6c262db892e17a967e6549437deacd913",
     ),
 ];
 
 #[test]
 fn small_scale_scenario_replays_to_the_pinned_hashes() {
+    // Regenerated for the current construction state: builders now hash their
+    // ordered foundation queues, and completion can choose another own site.
     let params = Params {
         players: 4,
         units_per_player: 80,

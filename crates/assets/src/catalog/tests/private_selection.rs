@@ -77,11 +77,7 @@ pub(super) fn append(
             }
             let terrain = item.slot == 5;
             extents.push(FrameExtent {
-                domain: if terrain {
-                    AtlasDomain::Terrain
-                } else {
-                    AtlasDomain::Objects
-                },
+                domain: crate::catalog::buildings::domain(item.slot),
                 width: frame.width,
                 height: frame.height,
             });

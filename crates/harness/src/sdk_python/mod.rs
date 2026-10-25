@@ -21,7 +21,7 @@ const TESTS: [(&str, &str); 2] = [
     ),
     ("ai/tests", "ai/pyproject.toml"),
 ];
-const LOGIC_TESTS: [&str; 7] = [
+const LOGIC_TESTS: [&str; 8] = [
     "ai/tests/test_geometry.py",
     "ai/tests/test_logic.py",
     "ai/tests/test_navigation.py",
@@ -29,6 +29,7 @@ const LOGIC_TESTS: [&str; 7] = [
     "ai/tests/test_combat_orders.py",
     "ai/tests/test_predator_defence.py",
     "ai/tests/test_worker_recovery.py",
+    "ai/tests/test_naval.py",
 ];
 const AI_SOURCE: &str = "ai";
 const BINDINGS_TARGET: &str = "target/sdk-python";

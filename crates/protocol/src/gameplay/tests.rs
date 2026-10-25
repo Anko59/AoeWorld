@@ -1,8 +1,40 @@
 use super::*;
 use aoe_core::{Seed, TileCoord, WorldConfig};
 
+mod bridges;
 mod fog;
+mod formations;
+mod garrison;
 mod queues;
+
+#[test]
+fn building_orders_pin_the_current_queue_flag() {
+    // Shift placement adds one boolean to each current construction order.
+    for queued in [false, true] {
+        let building = ClientMessage::BuildOrder {
+            sequence: 3,
+            builder_ids: vec![EntityId(7)],
+            kind: BuildingKind::House,
+            origin: TileCoord::new(10, 12),
+            queued,
+        };
+        let wall = ClientMessage::BuildWallOrder {
+            sequence: 3,
+            builder_ids: vec![EntityId(7)],
+            from: TileCoord::new(10, 12),
+            to: TileCoord::new(11, 12),
+            queued,
+        };
+        for (order, expected) in [
+            (building, vec![8, 3, 1, 7, 1, 20, 24, u8::from(queued)]),
+            (wall, vec![9, 3, 1, 7, 20, 24, 22, 24, u8::from(queued)]),
+        ] {
+            let bytes = encode_client(&order).unwrap();
+            assert_eq!(bytes, expected);
+            assert_eq!(decode_client(&bytes).unwrap(), order);
+        }
+    }
+}
 
 #[test]
 fn auto_scout_orders_have_current_golden_wire() {
@@ -136,6 +168,7 @@ fn gameplay_collections_are_bounded() {
             hunt_target: None,
             death_hunt: None,
             auto_scout: false,
+            cargo_count: 0,
         };
         MAX_SUBSCRIBED_UNITS + 1
     ];

@@ -45,7 +45,7 @@ pub use resources::{PersistedDepletion, ResourceLifecycleError};
 
 #[derive(Clone)]
 pub struct GameplayService {
-    world: Arc<RwLock<GameWorld>>,
+    pub(super) world: Arc<RwLock<GameWorld>>,
     pub(super) sessions: Arc<Mutex<BTreeMap<u64, Session>>>,
     pub(super) ownership: Arc<Mutex<Ownership>>,
     next_session: Arc<AtomicU64>,
@@ -129,6 +129,29 @@ impl PendingCommand {
 
 #[derive(Clone)]
 enum PendingAction {
+    Garrison {
+        entity_id: EntityId,
+        building_id: EntityId,
+    },
+    Ungarrison {
+        building_id: EntityId,
+        entity_id: Option<EntityId>,
+    },
+    Load {
+        unit_ids: Vec<EntityId>,
+        transport_id: EntityId,
+    },
+    Unload {
+        transport_id: EntityId,
+        destination: aoe_core::TileCoord,
+    },
+    Formation {
+        unit_ids: Vec<EntityId>,
+        formation: aoe_core::Formation,
+        destination: Option<WorldPosition>,
+        queued: bool,
+        attack_move: bool,
+    },
     AutoScout {
         entity_id: EntityId,
         enabled: bool,
@@ -172,11 +195,19 @@ enum PendingAction {
         builder_ids: Vec<EntityId>,
         kind: aoe_protocol::BuildingKind,
         origin: aoe_core::TileCoord,
+        queued: bool,
+    },
+    BuildBridge {
+        builder_ids: Vec<EntityId>,
+        from: aoe_core::TileCoord,
+        to: aoe_core::TileCoord,
+        queued: bool,
     },
     BuildWall {
         builder_ids: Vec<EntityId>,
         from: aoe_core::TileCoord,
         to: aoe_core::TileCoord,
+        queued: bool,
     },
     Construct {
         builder_ids: Vec<EntityId>,
@@ -216,6 +247,7 @@ impl GameplayService {
         self.world.write().await.set_fog_disabled(disabled);
         for session in self.sessions.lock().await.values_mut() {
             session.rebuild_buildings = true;
+            session.vision_revision = None;
         }
     }
     /// Local Feudal showcase setup; the ordinary command and wire paths apply.
@@ -354,7 +386,7 @@ impl GameplayService {
             .into_iter()
             .filter(|(id, _)| *id == player || world.fog_disabled())
             .collect::<BTreeMap<_, _>>();
-        let all_buildings = economy::buildings(&world, player);
+        let all_buildings = economy::subscription_buildings(&world, player, region);
         let more_buildings = all_buildings.len() > aoe_protocol::MAX_ECONOMY_BUILDINGS;
         let buildings = all_buildings
             .into_iter()

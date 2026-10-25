@@ -11,7 +11,7 @@ impl Input<'_> {
             let start = page * GAME_ATLAS_PAGE_BYTES;
             pixels[start..start + 4].copy_from_slice(&[255; 4]);
         }
-        let order = source_order(self.manifest, self.selected);
+        let order = copy_order(self.manifest, self.selected, self.placements);
         let mut start = 0;
         while start < order.len() {
             let source_page = self.manifest.frames[self.selected[order[start]]].page;

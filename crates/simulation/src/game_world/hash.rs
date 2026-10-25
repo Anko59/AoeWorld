@@ -173,6 +173,7 @@ impl GameWorld {
                 }
             }
         }
+        self.hash_formations(&mut hash);
         *hash.finalize().as_bytes()
     }
 

@@ -156,7 +156,13 @@ fn build_dock(world: &mut GameWorld, origin: TileCoord) -> EntityId {
         2,
     );
     let dock = world
-        .issue_build(PlayerId(0), &[worker.unwrap()], BuildingKind::Dock, origin)
+        .issue_build(
+            PlayerId(0),
+            &[worker.unwrap()],
+            BuildingKind::Dock,
+            origin,
+            false,
+        )
         .unwrap();
     advance(world, 36 * 20);
     assert!(world.building(dock).unwrap().is_complete());
@@ -188,8 +194,8 @@ fn feudal_age_and_wheelbarrow_preserve_naval_capacity_speed_and_dock_training() 
     let player = world.economy.players.get_mut(&PlayerId(0)).unwrap();
     player.age = crate::Age::Feudal;
     player.researched = crate::Tech::FeudalAge.bit() | crate::Tech::Wheelbarrow.bit();
-    assert_eq!(world.gather_capacity(&ship), 15);
-    assert_eq!(world.gather_capacity(&villager), 13);
+    assert_eq!(world.gather_capacity(&ship, false), 15);
+    assert_eq!(world.gather_capacity(&villager, false), 13);
     assert_eq!(world.movement_speed(ship.kind, ship.player), ship_speed);
     assert_ne!(
         world.movement_speed(villager.kind, villager.player),

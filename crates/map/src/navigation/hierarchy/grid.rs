@@ -116,7 +116,7 @@ impl Grid {
         for (at, cell) in cells.iter().enumerate() {
             let tile = tile(key, at);
             grid.open[at] = cell.is_some_and(|cell| {
-                cell.passable
+                (cell.passable || ground.overlay.bridge_axis(tile).is_some())
                     && !ground.overlay.blocks_tile(tile)
                     && cell
                         .node
@@ -124,6 +124,9 @@ impl Grid {
             });
         }
         let edge = |a: usize, b: usize| {
+            if let Some(clear) = ground.overlay.bridge_edge(tile(key, a), tile(key, b)) {
+                return clear;
+            }
             let (Some(a), Some(b)) = (cells[a], cells[b]) else {
                 return false;
             };

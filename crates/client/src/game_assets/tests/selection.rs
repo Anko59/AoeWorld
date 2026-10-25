@@ -339,6 +339,8 @@ async fn full_catalog_packs_1474_terrain_frames_and_782_objects_in_their_domains
         0,
         "marsh belongs on terrain pages"
     );
+    // Castle Light Cavalry keeps its five standing and ten walking semantic
+    // entries while sharing their existing scout texels: still 782 stored cells.
     assert_eq!(count(objects, [120, 120, 120, 255]), 782);
     assert_eq!(count(terrain, [120, 120, 120, 255]), 0);
 }

@@ -352,3 +352,48 @@ fn gather_cursor_names_fishing_never_building() {
         9.0
     );
 }
+
+#[wasm_bindgen_test]
+async fn dead_naval_units_never_render_an_intact_living_hull() {
+    use aoe_protocol::{UnitKind, UnitTask};
+    let scene = super::contact_scene();
+    let mut client = super::client_with_backend(&scene, Some("canvas")).await;
+    for kind in [
+        UnitKind::FishingShip,
+        UnitKind::Galley,
+        UnitKind::FireShip,
+        UnitKind::DemolitionShip,
+        UnitKind::TransportShip,
+        UnitKind::WarGalley,
+    ] {
+        let ship = client.units.get_mut(&EntityId(1)).unwrap();
+        ship.kind = kind;
+        ship.hp = 50;
+        ship.task = UnitTask::Idle;
+        ship.death_tick = None;
+        assert!(
+            units(&client, &scene)
+                .iter()
+                .any(|unit| unit.id == EntityId(1)),
+            "living {kind:?} remains visible"
+        );
+        let ship = client.units.get_mut(&EntityId(1)).unwrap();
+        ship.hp = 0;
+        ship.task = UnitTask::Dying;
+        ship.death_tick = Some(aoe_core::Tick(0));
+        assert!(
+            !units(&client, &scene)
+                .iter()
+                .any(|unit| unit.id == EntityId(1)),
+            "dead {kind:?} must not retain its intact hull"
+        );
+    }
+    client.units.get_mut(&EntityId(1)).unwrap().kind = UnitKind::Militia;
+    assert!(
+        units(&client, &scene)
+            .iter()
+            .any(|unit| unit.id == EntityId(1)),
+        "land units retain their native corpse presentation"
+    );
+    client.canvas.remove();
+}

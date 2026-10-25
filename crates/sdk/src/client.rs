@@ -220,6 +220,17 @@ impl Client {
         self.send(Order::Train { building, kind })
     }
 
+    pub fn load(&self, units: &[aoe_core::EntityId], transport: aoe_core::EntityId) -> u64 {
+        self.send(Order::Load {
+            units: units.to_vec(),
+            transport,
+        })
+    }
+
+    pub fn unload(&self, transport: aoe_core::EntityId, to: TileCoord) -> u64 {
+        self.send(Order::Unload { transport, to })
+    }
+
     /// Changes how the slot's view region follows its units.
     pub fn set_view(&self, view: ViewPolicy) {
         let _ = self.commands.send(Command::View(view));

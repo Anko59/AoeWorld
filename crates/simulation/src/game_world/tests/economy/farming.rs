@@ -11,21 +11,27 @@ pub(super) fn mill_and_farm() -> (GameWorld, EntityId, EntityId, EntityId) {
     let worker = villager_at(&mut world, 99, 100);
     let farm_site = at(103, 100);
     assert_eq!(
-        world.issue_build(PlayerId(0), &[worker], BuildingKind::Farm, farm_site),
+        world.issue_build(PlayerId(0), &[worker], BuildingKind::Farm, farm_site, false),
         Err(EconomyError::RequirementMissing)
     );
     let mill = world
-        .issue_build(PlayerId(0), &[worker], BuildingKind::Mill, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[worker],
+            BuildingKind::Mill,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     // An unfinished mill does not satisfy the requirement.
     assert_eq!(
-        world.issue_build(PlayerId(0), &[worker], BuildingKind::Farm, farm_site),
+        world.issue_build(PlayerId(0), &[worker], BuildingKind::Farm, farm_site, false),
         Err(EconomyError::RequirementMissing)
     );
     finish(&mut world, mill, 800);
     fixture::survey(&mut world, PlayerId(0), at(104, 101), 2);
     let farm = world
-        .issue_build(PlayerId(0), &[worker], BuildingKind::Farm, farm_site)
+        .issue_build(PlayerId(0), &[worker], BuildingKind::Farm, farm_site, false)
         .unwrap();
     (world, worker, mill, farm)
 }
@@ -127,7 +133,13 @@ fn equidistant_dropoffs_break_ties_toward_the_lower_id() {
     for y in [100, 109] {
         let worker = villager_at(&mut world, 99, y);
         let id = world
-            .issue_build(PlayerId(0), &[worker], BuildingKind::Mill, at(100, y))
+            .issue_build(
+                PlayerId(0),
+                &[worker],
+                BuildingKind::Mill,
+                at(100, y),
+                false,
+            )
             .unwrap();
         finish(&mut world, id, 800);
         mills.push(id);
@@ -145,7 +157,13 @@ fn a_farmers_return_trip_goes_to_the_dropoff_the_shared_rule_names() {
     set_stock(&mut world, 0, 1000, 0, 0);
     let helper = villager_at(&mut world, 107, 100);
     let far = world
-        .issue_build(PlayerId(0), &[helper], BuildingKind::Mill, at(108, 100))
+        .issue_build(
+            PlayerId(0),
+            &[helper],
+            BuildingKind::Mill,
+            at(108, 100),
+            false,
+        )
         .unwrap();
     finish(&mut world, far, 800);
     let footprint = world.building(mill).unwrap().footprint;
@@ -274,7 +292,13 @@ fn reseeds_are_bounded_and_an_unfinished_mill_cannot_take_payment() {
     );
     fixture::survey(&mut world, PlayerId(0), at(112, 100), 4);
     let unfinished = world
-        .issue_build(PlayerId(0), &[worker], BuildingKind::Mill, at(111, 99))
+        .issue_build(
+            PlayerId(0),
+            &[worker],
+            BuildingKind::Mill,
+            at(111, 99),
+            false,
+        )
         .unwrap();
     let before = stock(&world).1;
     assert_eq!(

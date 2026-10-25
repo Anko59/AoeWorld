@@ -4,7 +4,7 @@
 use super::economy::wire_unit;
 use aoe_core::{EntityId, PlayerId, TileRect};
 use aoe_protocol::{GameplayUnitState, MAX_SUBSCRIBED_UNITS};
-use aoe_simulation::{GameWorld, TileVisibility};
+use aoe_simulation::GameWorld;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 
@@ -143,14 +143,17 @@ impl UnitFrame {
             let mut owned = Vec::new();
             for (n, unit) in world.units_range(range.clone()).enumerate() {
                 let target = hunt.get(unit.id);
-                states.push(wire_unit(
+                let mut state = wire_unit(
                     &unit,
                     resource_of(gather.get(unit.id)),
                     (target != ABSENT).then_some(EntityId(target)),
-                ));
-                if let Some(list) = list_of
-                    .get(usize::from(unit.player.0))
-                    .filter(|list| **list != ABSENT)
+                );
+                state.cargo_count = world.transport_cargo(unit.id).len() as u8;
+                states.push(state);
+                if world.unit_visible_to(unit.player, unit.id)
+                    && let Some(list) = list_of
+                        .get(usize::from(unit.player.0))
+                        .filter(|list| **list != ABSENT)
                 {
                     owned.push((*list, (range.start + n) as u32));
                 }
@@ -223,11 +226,7 @@ impl UnitFrame {
         lens: &Lens,
         scratch: &mut Scratch,
     ) -> Vec<u32> {
-        let visible = |state: &GameplayUnitState| {
-            state.player == lens.viewer
-                || world.visibility(lens.viewer, state.position.tile_floor())
-                    == TileVisibility::Visible
-        };
+        let visible = |state: &GameplayUnitState| world.unit_visible_to(lens.viewer, state.id);
         let economy = world.player_economy(lens.viewer).is_some();
         let own = self
             .own

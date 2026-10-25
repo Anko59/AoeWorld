@@ -50,6 +50,64 @@ fn complete_actor_animation_sets_can_use_three_object_pages() {
 }
 
 #[test]
+fn later_castle_frames_fill_the_unused_width_of_earlier_tall_shelves() {
+    let mut frames = vec![object(1300, 1300); 3];
+    frames.extend([object(1000, 700); 6]);
+    frames.extend([object(700, 700); 3]);
+    // The old single cursor abandoned a 745-pixel-wide gap beside each tall
+    // frame, then overflowed at the first small frame despite ample free area.
+    // Reuse those holes inside the same three object pages and pixel budget.
+    let placed = pack_frames(&frames).unwrap();
+    assert_eq!(
+        placed[9..].iter().map(|p| p.page).collect::<Vec<_>>(),
+        [2, 3, 4]
+    );
+    assert!(placed[9..].iter().all(|p| (p.x, p.y) == (1303, 2)));
+    for (index, p) in placed.iter().enumerate() {
+        for q in &placed[..index] {
+            assert!(
+                p.page != q.page
+                    || u32::from(p.x) + u32::from(p.width) < u32::from(q.x)
+                    || u32::from(q.x) + u32::from(q.width) < u32::from(p.x)
+                    || u32::from(p.y) + u32::from(p.height) < u32::from(q.y)
+                    || u32::from(q.y) + u32::from(q.height) < u32::from(p.y)
+            );
+        }
+    }
+    assert_eq!(ATLAS_BYTES, 83_886_080);
+}
+
+#[test]
+fn unowned_art_borrows_spare_terrain_space_without_displacing_masked_objects() {
+    let mut shared = object(2044, 2044);
+    shared.domain = AtlasDomain::Shared;
+    let frames = [
+        shared,
+        object(2044, 2044),
+        terrain(2044, 2044),
+        object(2044, 2044),
+        object(2044, 2044),
+    ];
+    let placed = pack_frames(&frames).unwrap();
+    // Shared appears first in semantic order, but must leave both hard domains
+    // their space before using the spare terrain page. No new pixel storage.
+    assert_eq!(
+        placed.iter().map(|p| p.page).collect::<Vec<_>>(),
+        [1, 2, 0, 3, 4]
+    );
+    assert_eq!(ATLAS_BYTES, 83_886_080);
+    let mut full = frames.to_vec();
+    full.push(object(1, 1));
+    assert!(matches!(
+        pack_frames(&full),
+        Err(PackingError::DomainOverflow {
+            domain: AtlasDomain::Objects,
+            ..
+        })
+    ));
+}
+
+#[test]
 fn count_limit_distinguishes_the_full_animation_budget_from_one_excess_frame() {
     let calls = Cell::new(0);
     let frames = vec![terrain(1, 1); MAX_SELECTED_FRAMES];
@@ -243,6 +301,7 @@ fn domains_gutters_row_gap_and_no_overlap() {
         match frames[index].domain {
             AtlasDomain::Terrain => assert!(p.page < 2),
             AtlasDomain::Objects => assert_eq!(p.page, 2),
+            AtlasDomain::Shared => assert!((p.page as usize) < PAGE_COUNT),
         }
         assert_eq!(
             (p.width, p.height),
@@ -260,6 +319,78 @@ fn domains_gutters_row_gap_and_no_overlap() {
                 || u32::from(p.y) + u32::from(p.height) < u32::from(q.y)
                 || u32::from(q.y) + u32::from(q.height) < u32::from(p.y);
             assert!(separated, "overlap or missing gutter: {p:?} versus {q:?}");
+        }
+    }
+}
+
+#[test]
+fn tall_unowned_art_uses_vertical_slivers_between_short_terrain_rows() {
+    let mut frames = vec![object(2044, 2044); 3];
+    frames.extend([terrain(1000, 100); 80]);
+    frames.push(FrameExtent {
+        domain: AtlasDomain::Shared,
+        width: 40,
+        height: 600,
+    });
+    // All masked pages are occupied. Packing short terrain rows first leaves
+    // a continuous 43px-wide side sliver that shelves cannot reuse. Dense packing fits
+    // unchanged art on the same two terrain pages, respecting every hard domain.
+    let placed = pack_frames(&frames).unwrap();
+    assert_eq!(placed.len(), frames.len());
+    assert!(placed[..3].iter().all(|p| (2..5).contains(&p.page)));
+    assert!(placed[3..].iter().all(|p| p.page < 2));
+    for (index, p) in placed.iter().enumerate() {
+        assert!(p.x >= 2 && p.y >= 2);
+        assert!(p.x + p.width + 1 < PAGE_SIDE && p.y + p.height + 1 < PAGE_SIDE);
+        for q in &placed[..index] {
+            assert!(
+                p.page != q.page
+                    || p.x + p.width < q.x
+                    || q.x + q.width < p.x
+                    || p.y + p.height < q.y
+                    || q.y + q.height < p.y
+            );
+        }
+    }
+    assert_eq!(ATLAS_BYTES, 83_886_080);
+}
+
+#[test]
+fn dense_retry_keeps_mixed_rectangles_disjoint_and_deterministic() {
+    let frames: Vec<_> = (0..240)
+        .map(|i| FrameExtent {
+            domain: match i % 3 {
+                0 => AtlasDomain::Terrain,
+                1 => AtlasDomain::Objects,
+                _ => AtlasDomain::Shared,
+            },
+            width: 30 + (i * 37 % 160) as u16,
+            height: 20 + (i * 53 % 120) as u16,
+        })
+        .collect();
+    let indices: Vec<_> = (0..frames.len() as u16).collect();
+    let mut placed = vec![Placement::default(); frames.len()];
+    dense::pack(&frames, &indices, &mut placed).unwrap();
+    let mut repeat = placed.clone();
+    dense::pack(&frames, &indices, &mut repeat).unwrap();
+    assert_eq!(placed, repeat);
+    for (i, p) in placed.iter().enumerate() {
+        assert_eq!((p.width, p.height), (frames[i].width, frames[i].height));
+        assert!(p.x >= 2 && p.y >= 2);
+        assert!(p.x + p.width + 1 < PAGE_SIDE && p.y + p.height + 1 < PAGE_SIDE);
+        match frames[i].domain {
+            AtlasDomain::Terrain => assert!(p.page < 2),
+            AtlasDomain::Objects => assert!((2..5).contains(&p.page)),
+            AtlasDomain::Shared => assert!(p.page < 5),
+        }
+        for q in &placed[..i] {
+            assert!(
+                p.page != q.page
+                    || p.x + p.width < q.x
+                    || q.x + q.width < p.x
+                    || p.y + p.height < q.y
+                    || q.y + q.height < p.y
+            );
         }
     }
 }

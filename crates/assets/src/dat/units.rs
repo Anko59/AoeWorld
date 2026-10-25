@@ -211,7 +211,7 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
     r.skip(3)?; // undead graphic, death mode
     let hit_points = r.i16()?;
     let line_of_sight = r.f32()?;
-    r.skip(1)?; // garrison capacity
+    let garrison_capacity = r.u8()?;
     let collision_size = [r.f32()?, r.f32()?];
     let footprint = collision_size.map(|radius| radius * 2.0);
     r.pos = start + 43; // remaining collision radius and creation/damage sounds
@@ -239,6 +239,7 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         icon_id,
         hit_points,
         line_of_sight,
+        garrison_capacity,
         collision_size,
         resource_capacity,
         resource_storage,
@@ -252,6 +253,9 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         walking: None,
         attack_graphic: None,
         projectile_unit: None,
+        attack_range: None,
+        blast_radius: None,
+        reload_time: None,
         attacks: Vec::new(),
         armours: Vec::new(),
         costs: Vec::new(),
@@ -276,7 +280,10 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         r.skip(1)?; // default armour
         out.attacks = pairs(r)?;
         out.armours = pairs(r)?;
-        r.skip(14)?;
+        r.skip(2)?; // terrain restriction
+        out.attack_range = Some(r.f32()?);
+        out.blast_radius = Some(r.f32()?);
+        out.reload_time = Some(r.f32()?);
         out.projectile_unit = Some(r.i16()?);
         r.skip(COMBAT_TAIL - 30)?;
         out.attack_graphic = Some(r.i16()?);

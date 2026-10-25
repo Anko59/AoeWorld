@@ -229,6 +229,7 @@ pub(crate) fn routes() -> axum::Router<AppState> {
         .route("/match", post(start_match))
         .route("/match/stats", get(stats::match_stats))
         .merge(skirmish::routes())
+        .merge(admin::routes())
 }
 
 async fn start_match(
@@ -363,6 +364,7 @@ async fn start_match(
     }))
 }
 
+mod admin;
 mod flat;
 mod rules;
 mod seats;

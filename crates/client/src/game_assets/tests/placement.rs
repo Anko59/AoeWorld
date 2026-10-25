@@ -461,3 +461,30 @@ fn formerly_halved_sources_plan_and_copy_at_full_native_resolution() {
         );
     }
 }
+
+#[wasm_bindgen_test]
+fn repeated_masked_frames_share_storage_and_upload_once_within_the_fixed_budget() {
+    let mut manifest = fixture();
+    manifest.frames[0].width = 1800;
+    manifest.frames[0].height = 1800;
+    let selected = [0; 6];
+    let domains = [
+        AtlasDomain::Objects,
+        AtlasDomain::Objects,
+        AtlasDomain::Objects,
+        AtlasDomain::Terrain,
+        AtlasDomain::Shared,
+        AtlasDomain::Shared,
+    ];
+    let places = plan(&manifest, &selected, &domains).unwrap();
+    assert_eq!(places.len(), 6, "all semantic entries survive");
+    assert_eq!(copy_order(&manifest, &selected, &places), [0, 3, 4, 5]);
+    assert_eq!(places[0], places[1]);
+    assert_eq!(places[1], places[2]);
+    assert_eq!(places[0].page, 2);
+    assert_eq!(places[3].page, 0);
+    assert_ne!(
+        places[4], places[5],
+        "unmasked entries can bake different colours"
+    );
+}

@@ -4,12 +4,13 @@
 use super::super::{BuildingKind, Stockpile};
 
 /// The player's age, used by building and technology requirements.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum Age {
     #[default]
     Dark,
     Feudal,
+    Castle,
 }
 
 /// Canonical order; a technology's bit in `researched` is `1 << tech as u8`.
@@ -30,6 +31,26 @@ pub enum Tech {
     ScaleBardingArmor,
     Fletching,
     PaddedArcherArmor,
+    CastleAge,
+    LongSwordsman,
+    Pikeman,
+    Crossbowman,
+    EliteSkirmisher,
+    LightCavalry,
+    HandCart,
+    TownPatrol,
+    IronCasting,
+    ChainMailArmor,
+    ChainBardingArmor,
+    BodkinArrow,
+    LeatherArcherArmor,
+    HeavyPlow,
+    BowSaw,
+    GoldShaftMining,
+    Masonry,
+    Ballistics,
+    MurderHoles,
+    WarGalley,
 }
 
 /// What a finished technology changes.
@@ -37,6 +58,12 @@ pub enum Tech {
 pub enum TechEffect {
     Military,
     UpgradeMilitia,
+    UpgradeUnit {
+        from: super::super::UnitKind,
+        to: super::super::UnitKind,
+    },
+    Masonry,
+    UpgradeGalley,
     /// Every villager of the player, existing and future.
     VillagerBonus {
         hp: u16,
@@ -61,6 +88,7 @@ pub enum TechEffect {
 pub enum TechRequirement {
     None,
     Age(Age),
+    Technology(Tech),
     /// At least `count` distinct kinds from `kinds`, each completed at least once.
     BuildingKinds {
         count: usize,
@@ -70,6 +98,7 @@ pub enum TechRequirement {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TechRules {
+    pub age: Age,
     pub tech: Tech,
     /// The kind of building whose queue researches it.
     pub building: BuildingKind,
@@ -99,8 +128,9 @@ pub const FEUDAL_BUILDINGS: &[BuildingKind] = &[
 ];
 
 /// Indexed by `Tech as usize`; a test pins the order.
-pub const TECH_RULES: [TechRules; 14] = [
+pub const TECH_RULES: [TechRules; 34] = [
     TechRules {
+        age: Age::Dark,
         tech: Tech::Loom,
         building: BuildingKind::TownCenter,
         cost: cost(0, 0, 50, 0),
@@ -113,6 +143,7 @@ pub const TECH_RULES: [TechRules; 14] = [
         },
     },
     TechRules {
+        age: Age::Feudal,
         tech: Tech::TownWatch,
         building: BuildingKind::TownCenter,
         cost: cost(75, 0, 0, 0),
@@ -121,6 +152,7 @@ pub const TECH_RULES: [TechRules; 14] = [
         effect: TechEffect::BuildingLos(4),
     },
     TechRules {
+        age: Age::Dark,
         tech: Tech::FeudalAge,
         building: BuildingKind::TownCenter,
         cost: cost(500, 0, 0, 0),
@@ -132,6 +164,7 @@ pub const TECH_RULES: [TechRules; 14] = [
         effect: TechEffect::AgeUp(Age::Feudal),
     },
     TechRules {
+        age: Age::Feudal,
         tech: Tech::DoubleBitAxe,
         building: BuildingKind::LumberCamp,
         cost: cost(100, 50, 0, 0),
@@ -143,6 +176,7 @@ pub const TECH_RULES: [TechRules; 14] = [
         },
     },
     TechRules {
+        age: Age::Feudal,
         tech: Tech::HorseCollar,
         building: BuildingKind::Mill,
         cost: cost(75, 75, 0, 0),
@@ -151,6 +185,7 @@ pub const TECH_RULES: [TechRules; 14] = [
         effect: TechEffect::FarmFood(75),
     },
     TechRules {
+        age: Age::Feudal,
         tech: Tech::GoldMining,
         building: BuildingKind::MiningCamp,
         cost: cost(100, 75, 0, 0),
@@ -162,6 +197,7 @@ pub const TECH_RULES: [TechRules; 14] = [
         },
     },
     TechRules {
+        age: Age::Feudal,
         tech: Tech::StoneMining,
         building: BuildingKind::MiningCamp,
         cost: cost(100, 75, 0, 0),
@@ -173,6 +209,7 @@ pub const TECH_RULES: [TechRules; 14] = [
         },
     },
     TechRules {
+        age: Age::Feudal,
         tech: Tech::Wheelbarrow,
         building: BuildingKind::TownCenter,
         cost: cost(175, 50, 0, 0),
@@ -184,6 +221,7 @@ pub const TECH_RULES: [TechRules; 14] = [
         },
     },
     TechRules {
+        age: Age::Feudal,
         tech: Tech::ManAtArms,
         building: BuildingKind::Barracks,
         cost: cost(100, 0, 40, 0),
@@ -196,10 +234,39 @@ pub const TECH_RULES: [TechRules; 14] = [
     military(Tech::ScaleBardingArmor, 150, 0, 45),
     military(Tech::Fletching, 100, 50, 30),
     military(Tech::PaddedArcherArmor, 100, 0, 40),
+    super::castle::RULES[0],
+    super::castle::RULES[1],
+    super::castle::RULES[2],
+    super::castle::RULES[3],
+    super::castle::RULES[4],
+    super::castle::RULES[5],
+    super::castle::RULES[6],
+    super::castle::RULES[7],
+    super::castle::RULES[8],
+    super::castle::RULES[9],
+    super::castle::RULES[10],
+    super::castle::RULES[11],
+    super::castle::RULES[12],
+    super::castle::RULES[13],
+    super::castle::RULES[14],
+    super::castle::RULES[15],
+    super::castle::RULES[16],
+    super::castle::RULES[17],
+    super::castle::RULES[18],
+    TechRules {
+        age: Age::Castle,
+        tech: Tech::WarGalley,
+        building: BuildingKind::Dock,
+        cost: cost(230, 0, 100, 0),
+        seconds: 50,
+        requires: TechRequirement::Age(Age::Castle),
+        effect: TechEffect::UpgradeGalley,
+    },
 ];
 
 const fn military(tech: Tech, food: u32, gold: u32, seconds: u32) -> TechRules {
     TechRules {
+        age: Age::Feudal,
         tech,
         building: BuildingKind::Blacksmith,
         cost: cost(food, 0, gold, 0),
@@ -213,7 +280,7 @@ impl Tech {
     pub const fn rules(self) -> &'static TechRules {
         &TECH_RULES[self as usize]
     }
-    pub const fn bit(self) -> u32 {
+    pub const fn bit(self) -> u64 {
         1 << self as u8
     }
 }

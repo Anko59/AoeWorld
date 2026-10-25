@@ -4,7 +4,7 @@ export const nodes = [
   { kind: 2, name: "gold", gather: "mine", x: 8196, y: 8190 },
 ];
 
-export function chunks() {
+export function chunks(fixtureNodes = nodes) {
   const push = (bytes: number[], value: number, count: number) => {
     for (let byte = 0; byte < count; byte++)
       bytes.push(Math.floor(value / 2 ** (byte * 8)) & 255);
@@ -15,7 +15,7 @@ export function chunks() {
     [255, 256],
     [256, 256],
   ].map(([cx = 0, cy = 0]) => {
-    const resources = nodes.filter(
+    const resources = fixtureNodes.filter(
       (node) =>
         Math.floor(node.x / 32) === cx && Math.floor(node.y / 32) === cy,
     );
@@ -36,12 +36,18 @@ export function chunks() {
       push(bytes, node.x, 4);
       push(bytes, node.y, 4);
       bytes.push(
-        node.kind,
-        node.kind === 1 ? 0 : node.kind === 0 ? 1 : 2,
+        node.kind >= 5 ? 0 : node.kind,
+        node.kind >= 5
+          ? node.kind
+          : node.kind === 1
+            ? 0
+            : node.kind === 0
+              ? 1
+              : 2,
         100,
         0,
         0,
-        node.kind === 1 ? 2 : 0,
+        node.kind === 1 ? 2 : node.kind >= 5 ? node.kind : 0,
       );
     }
     return {

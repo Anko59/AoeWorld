@@ -126,7 +126,7 @@ fn orders(world: &mut GameWorld, tick: u32, homes: &[TileCoord]) {
             .map(|u| u.id)
             .collect::<Vec<_>>();
         let origin = TileCoord::new(homes[0].x + 6, homes[0].y + 6);
-        let _ = world.issue_build(PlayerId(0), &builders, BuildingKind::House, origin);
+        let _ = world.issue_build(PlayerId(0), &builders, BuildingKind::House, origin, false);
     }
     if tick == 150 {
         // Everyone walks home again, so units leave and re-enter other views.

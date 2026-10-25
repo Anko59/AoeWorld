@@ -22,12 +22,15 @@ impl GameWorld {
             return;
         };
         let tile = self.units[index].state.position.tile_floor();
-        if self.units[index].order.is_some() {
+        if self.units[index].formation.is_some() {
+            self.idle_spacing.remove(id, tile);
+            self.followers.remove(id, tile);
+        } else if self.units[index].order.is_some() {
             self.idle_spacing.remove(id, tile);
             self.followers.insert(id, tile);
         } else {
             self.followers.remove(id, tile);
-            if self.units[index].state.hp > 0 {
+            if self.units[index].state.hp > 0 && !self.embarked(id) {
                 self.idle_spacing.insert(id, tile);
             }
         }
@@ -110,6 +113,7 @@ impl GameWorld {
             let unit = self.units[index].state;
             if unit.hp == 0
                 || self.units[index].order.is_some()
+                || self.units[index].formation.is_some()
                 || u64::from(unit.id.0) % 4 != self.tick.0 % 4
             {
                 continue;

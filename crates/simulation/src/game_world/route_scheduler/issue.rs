@@ -59,6 +59,9 @@ impl GameWorld {
         let before = planner.work();
         let result = self.poll_world_route_planner(planner, allowance, &|| false, kind);
         let spent = planner.work().saturating_sub(before);
+        if before == 0 && spent > 0 {
+            self.route_metrics.searches_started += 1;
+        }
         if planner.certified_destination().is_some() {
             self.route_metrics
                 .sample("certified-nearest", kind, planner);
@@ -83,7 +86,7 @@ impl GameWorld {
         kind: UnitKind,
         outcome: &MovementOutcome,
     ) {
-        if kind != UnitKind::FishingShip && planner.certified_destination().is_none() {
+        if !kind.is_naval() && planner.certified_destination().is_none() {
             let _span = self
                 .planning_probe
                 .as_ref()
@@ -110,7 +113,7 @@ impl GameWorld {
         }
         self.route_metrics.orders += 1;
         let allowance = self.fast_route_allowance(player);
-        if kind != UnitKind::FishingShip
+        if !kind.is_naval()
             && let Some((outcome, work)) = self.navigation_cache.get(origin, destination, allowance)
         {
             self.charge_fast_route(player, work);

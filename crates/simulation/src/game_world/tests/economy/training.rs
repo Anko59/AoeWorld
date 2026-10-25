@@ -235,6 +235,7 @@ fn rally_to_a_friendly_foundation_sends_the_trained_villager_to_build() {
             &[builder],
             BuildingKind::House,
             TileCoord::new(75, 70),
+            false,
         )
         .unwrap();
     world.issue_stop(PlayerId(0), builder).unwrap();

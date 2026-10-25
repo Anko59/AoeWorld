@@ -106,6 +106,13 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             || super::picking::enemy_building(client, point).is_some()
         {
             values[3] = 4.0;
+        } else if let Some(building) = super::garrison::target(client, point) {
+            values[3] = if building.garrison.len() < usize::from(building.kind.garrison_capacity())
+            {
+                11.0
+            } else {
+                3.0
+            };
         } else if !super::construction::builders(client).is_empty()
             && super::construction::target(client, point).is_some_and(|b| {
                 b.construction == aoe_protocol::ConstructionState::UnderConstruction
@@ -232,16 +239,26 @@ pub(super) fn starting_selection(id: u64, resources: &ResourceStateCache) -> Opt
 }
 
 fn passable(client: &Client, point: ScreenPoint) -> bool {
-    if client.map_content_hash.is_some()
+    let Some(p) = map::world_at_screen(client, point) else {
+        return false;
+    };
+    let tile = TileCoord::new(p[0].floor() as i32, p[1].floor() as i32);
+    let occupant = client
+        .village
+        .buildings
+        .iter()
+        .find(|b| b.footprint.contains(tile));
+    let bridge = occupant.is_some_and(|b| {
+        b.kind == aoe_protocol::BuildingKind::Bridge
+            && b.construction == aoe_protocol::ConstructionState::Complete
+    });
+    if !bridge
+        && client.map_content_hash.is_some()
         && aoe_rendering::surface_hit_at(&map::scene::prepare(client).triangles, point)
             .is_none_or(|hit| !hit.1)
     {
         return false;
     }
-    let Some(p) = map::world_at_screen(client, point) else {
-        return false;
-    };
-    let tile = TileCoord::new(p[0].floor() as i32, p[1].floor() as i32);
     let terrain = map::terrain_tile(client, tile.x, tile.y);
     // Orders are accepted independently per unit: a mixed selection can move
     // wherever at least one living owned unit's domain permits it.
@@ -249,27 +266,23 @@ fn passable(client: &Client, point: ScreenPoint) -> bool {
         client.units.get(id).is_some_and(|u| {
             u.player == owner(client)
                 && u.hp > 0
-                && if u.kind == UnitKind::FishingShip {
-                    terrain.is_some_and(|t| {
-                        matches!(
-                            t.water,
-                            aoe_map::WaterKind::Ocean
-                                | aoe_map::WaterKind::Lake
-                                | aoe_map::WaterKind::River
-                        ) && t.material != aoe_map::GroundMaterial::Ford
-                    })
+                && if u.kind.is_naval() {
+                    !bridge
+                        && terrain.is_some_and(|t| {
+                            matches!(
+                                t.water,
+                                aoe_map::WaterKind::Ocean
+                                    | aoe_map::WaterKind::Lake
+                                    | aoe_map::WaterKind::River
+                            ) && t.material != aoe_map::GroundMaterial::Ford
+                        })
                 } else {
-                    terrain.map_or(client.map_content_hash.is_none(), |t| t.passable)
+                    bridge || terrain.map_or(client.map_content_hash.is_none(), |t| t.passable)
                 }
         })
     });
     let resource = map::feedback::blocker_at(client, tile).is_some();
-    let building = client.village.buildings.iter().any(|b| {
-        tile.x >= b.footprint.min.x
-            && tile.y >= b.footprint.min.y
-            && tile.x < b.footprint.max.x
-            && tile.y < b.footprint.max.y
-    });
+    let building = occupant.is_some() && !bridge;
     aoe_simulation::destination_passable(ground, resource, building)
 }
 

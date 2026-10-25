@@ -42,7 +42,9 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
         {
             continue;
         }
-        let pose = if shot.kind == ProjectileKind::Arrow {
+        let pose = if shot.kind == ProjectileKind::Stone {
+            Pose::Stone
+        } else if shot.kind == ProjectileKind::Arrow {
             Pose::Arrow
         } else {
             Pose::Javelin

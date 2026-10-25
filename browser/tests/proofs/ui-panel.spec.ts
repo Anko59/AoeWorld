@@ -2,23 +2,50 @@ import { expect } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
 import { test } from "../../server.js";
 import { forceWebGl } from "../rendering/backends.js";
+import { bundleProof } from "./bundle.js";
+import { castleProof } from "./castle.js";
 import { centerVillage } from "../village/fixtures/resources.js";
+
+test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
 
 test("local original panel proof with real selection and training", async ({
   page,
 }) => {
   const config = await readFile("../.cache/ui/proof.json", "utf8").then(
-    (text) => JSON.parse(text) as { phase: string; url: string },
+    (text) =>
+      JSON.parse(text) as {
+        phase: string;
+        url: string;
+        renderer?: "webgpu" | "webgl2";
+      },
     () => null,
   );
   test.skip(!config, "Local panel proof was not requested");
   if (!config) return;
-  test.setTimeout(180_000);
-  expect(config.url).toBe("http://127.0.0.1:8141/");
+  test.setTimeout(config.phase === "castle" ? 300_000 : 180_000);
+  const url = new URL(config.url);
+  expect(url.hostname).toBe("127.0.0.1");
+  expect(url.protocol).toBe("http:");
+  expect(["8080", "8081", "8097"]).not.toContain(url.port);
   const health = await page.request.get(`${config.url}health`);
   expect(health.ok()).toBe(true);
   await page.setViewportSize({ width: 1280, height: 720 });
-  await forceWebGl(page);
+  if (config.renderer !== "webgpu") await forceWebGl(page);
+  if (config.phase.startsWith("bundle")) {
+    await bundleProof(page, config.url, config.phase === "bundle-film");
+    return;
+  }
+  if (config.phase.startsWith("castle")) {
+    await castleProof(
+      page,
+      config.url,
+      config.renderer ?? "webgl2",
+      config.phase.startsWith("castle-startup"),
+      config.phase === "castle-continue" || config.phase.endsWith("-existing"),
+      config.phase === "castle-tc",
+    );
+    return;
+  }
   expect((await page.request.post(`${config.url}maps/reset`)).status()).toBe(
     204,
   );
@@ -56,6 +83,7 @@ test("local original panel proof with real selection and training", async ({
     );
   };
   await capture("town-center");
+  if (config.phase === "dark") return;
   await select("Villager");
   await capture("villager");
   const villager = (await actors()).find((a) => a.kind === "Villager");

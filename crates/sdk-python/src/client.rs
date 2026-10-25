@@ -1,6 +1,6 @@
 //! `connect`, `start_match` and the `Client` a bot holds.
 use crate::{
-    enums::{BuildingKind, Tech, TradeResource, UnitKind},
+    enums::{Formation, BuildingKind, Tech, TradeResource, UnitKind},
     types::Event,
     world::World,
 };
@@ -223,13 +223,47 @@ impl Client {
             to: TileCoord::new(x, y),
         })
     }
+    fn set_formation(&self, units: Vec<u32>, formation: Formation) -> u64 {
+        self.order(Order::SetFormation {
+            units: units.into_iter().map(EntityId).collect(),
+            formation: formation.into(),
+        })
+    }
+    #[pyo3(signature = (units, x, y, formation=Formation::Line, *, queued=false, attack_move=false))]
+    #[allow(clippy::too_many_arguments)]
+    fn formation_move(
+        &self,
+        units: Vec<u32>,
+        x: i32,
+        y: i32,
+        formation: Formation,
+        queued: bool,
+        attack_move: bool,
+    ) -> u64 {
+        self.order(Order::FormationMove {
+            units: units.into_iter().map(EntityId).collect(),
+            formation: formation.into(),
+            to: TileCoord::new(x, y),
+            queued,
+            attack_move,
+        })
+    }
     fn queue_move(&self, unit: u32, x: i32, y: i32) -> u64 {
-        self.order(Order::QueueMove { unit:EntityId(unit),to:TileCoord::new(x,y) })
+        self.order(Order::QueueMove {
+            unit: EntityId(unit),
+            to: TileCoord::new(x, y),
+        })
     }
     fn stop(&self, unit: u32) -> u64 {
         self.order(Order::Stop {
             unit: EntityId(unit),
         })
+    }
+    fn load(&self, unit_ids: Vec<u32>, transport_id: u32) -> u64 {
+        self.order(Order::Load { units: many(unit_ids), transport: EntityId(transport_id) })
+    }
+    fn unload(&self, transport_id: u32, x: i32, y: i32) -> u64 {
+        self.order(Order::Unload { transport: EntityId(transport_id), to: TileCoord::new(x, y) })
     }
     fn set_rally(&self, building: u32, x: i32, y: i32) -> PyResult<u64> {
         let p = aoe_sdk::WorldPosition::from_tile_center(TileCoord::new(x, y))
@@ -270,6 +304,10 @@ impl Client {
             origin: TileCoord::new(x, y),
         })
     }
+    fn build_bridge(&self, builders: Vec<u32>, x1: i32, y1: i32, x2: i32, y2: i32) -> u64 {
+        self.order(Order::BuildBridge { builders: many(builders),
+            from: TileCoord::new(x1, y1), to: TileCoord::new(x2, y2) })
+    }
     fn build_wall(&self, builders: Vec<u32>, x1: i32, y1: i32, x2: i32, y2: i32) -> u64 {
         self.order(Order::BuildWall {
             builders: many(builders),
@@ -291,6 +329,13 @@ impl Client {
     #[pyo3(signature = (unit, enabled=true))]
     fn auto_scout(&self, unit: u32, enabled: bool) -> u64 {
         self.order(Order::AutoScout { unit: EntityId(unit), enabled })
+    }
+    fn garrison(&self, unit: u32, building: u32) -> u64 {
+        self.order(Order::Garrison { unit: EntityId(unit), building: EntityId(building) })
+    }
+    #[pyo3(signature = (building, unit=None))]
+    fn ungarrison(&self, building: u32, unit: Option<u32>) -> u64 {
+        self.order(Order::Ungarrison { building: EntityId(building), unit: unit.map(EntityId) })
     }
     fn farm(&self, unit: u32, farm: u32) -> u64 {
         self.order(Order::Farm {

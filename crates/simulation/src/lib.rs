@@ -7,6 +7,10 @@ mod game_query;
 mod game_waypoints;
 mod game_world;
 pub use game_world::TileVisibility;
+pub use game_world::apply_research_stats;
+#[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
+pub use game_world::browser_content;
+pub use game_world::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
 mod movement_speed;
 mod navigation_cache;
 mod terrain;
@@ -26,15 +30,15 @@ pub use game_world::{
 };
 pub use game_world::{
     Age, BUILDING_COMBAT, BUILDING_RULES, BUILDINGS_PER_PLAYER, BuildingAttack, BuildingCombat,
-    BuildingKind, BuildingRules, CORPSE_SECONDS, CarriedResource, CombatStats, ConstructionState,
-    DYING_SECONDS, DamageKind, EconomyError, FEUDAL_BUILDINGS, Facing, GameBuilding, GameUnit,
-    GameWorld, GameWorldError, HitRecord, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION,
-    MAX_WALL_SEGMENTS, MarketPrices, MovementOrder, PlanningProbe, PlayerEconomy,
-    PreparedResourceDepletion, Projectile, ProjectileKind, RallyPoint, RallyTarget, ResearchEntry,
-    RouteSchedulerStats, Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules,
-    TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining,
-    VILLAGE_RULES, VillageRules, WorldLimits, building_combat, damage_dealt, researched_stats,
-    trainable_units, unit_combat, villager_capacity,
+    BuildingKind, BuildingRules, CORPSE_SECONDS, CarriedResource, CombatStats, CombatTelemetry,
+    ConstructionState, DYING_SECONDS, DamageKind, EconomyError, FEUDAL_BUILDINGS, Facing,
+    GameBuilding, GameUnit, GameWorld, GameWorldError, GarrisonedUnit, HitRecord, MARKET_RULES,
+    MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, MarketPrices, MovementOrder, PlanningProbe,
+    PlayerEconomy, PreparedResourceDepletion, Projectile, ProjectileKind, RallyPoint, RallyTarget,
+    ResearchEntry, RouteSchedulerStats, Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement,
+    TechRules, TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask,
+    UnitTraining, VILLAGE_RULES, VillageRules, WorldLimits, building_combat, damage_dealt,
+    researched_stats, trainable_units, unit_combat, villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::{BTreeMap, BTreeSet};

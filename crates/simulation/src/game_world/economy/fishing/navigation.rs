@@ -11,6 +11,9 @@ impl RouteTerrain for NavalNavigation<'_> {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
+        if self.0.economy.blocked_tiles.contains(&tile) {
+            return Ok(false);
+        }
         self.0
             .unit_tile_passable(UnitKind::FishingShip, tile, cancelled)
     }
@@ -20,10 +23,12 @@ impl RouteTerrain for NavalNavigation<'_> {
         to: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        Ok(
-            self.route_walkable(&ResourceOverlay::default(), from, cancelled)?
-                && self.route_walkable(&ResourceOverlay::default(), to, cancelled)?,
-        )
+        let wet = |tile| self.route_walkable(&ResourceOverlay::default(), tile, cancelled);
+        Ok(wet(from)?
+            && wet(to)?
+            && (from.x == to.x
+                || from.y == to.y
+                || (wet(TileCoord::new(from.x, to.y))? && wet(TileCoord::new(to.x, from.y))?)))
     }
     fn route_step_cost(
         &self,
@@ -49,7 +54,7 @@ impl GameWorld {
         from: TileCoord,
         to: TileCoord,
     ) -> Result<bool, EnvironmentPageError> {
-        if kind != UnitKind::FishingShip {
+        if !kind.is_naval() {
             return self
                 .terrain
                 .passable_with_cancel(to, self.config, &|| false)

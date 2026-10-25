@@ -21,6 +21,12 @@
 //! TC collision now uses the NW 2x2 annex, and planner hashes drop the obsolete
 //! unproven-approach flag. Near portal guidance and retained searches change
 //! timing intentionally. Regenerate pins while keeping all thread comparisons.
+// Castle Age widens researched bits to u64 and hashes the ordered healer index;
+// Gather credits now use millionths for exact stacked mining upgrades.
+// Regenerate current checkpoints for these deliberate state-schema changes.
+// Combined Castle bundle: u64 research, healers, garrisons, queued builders and
+// cargo/embarked maps extend current state. Regenerate the same scenario; all
+// independent replay, thread equality and emitted-change assertions remain.
 use super::*;
 use aoe_map::{MapPackage, MapRequest};
 
@@ -156,7 +162,7 @@ fn parallel_movement_matches_the_pinned_sequential_replay() {
 // Regenerate the current combined replay for retained detours, open TC arches,
 // drop-off work state, prepaid reseeds and auto-scout state. Keep every
 // sequential/parallel equality assertion and the existing scenario unchanged.
-const PINNED_FINAL_HASH: &str = "68b2a3bfbc6e936e7164b59bea4672cb113cc6c2e504d2a93c6bb23c7d62de60";
+const PINNED_FINAL_HASH: &str = "6619d857662788d79bdd54f70fb0845d7a93cdf68b09499d2ffcaea94ff9da3e";
 const PINNED_CHANGE_DIGEST: &str =
     "19e97a35767f422063d4c6a1868a4cd9365b8293c6683105755af5bed8811f6b";
 
@@ -176,8 +182,9 @@ fn parallel_movement_with_buildings_matches_the_pinned_sequential_replay() {
 // Auto-scout flags and retained fair frontier state extend the world schema;
 // regenerate current hashes/digests while keeping every thread equality check.
 // The tests above retain complete 1/2/6-thread equality checks.
+// Cargo/embarked maps extend canonical state; the emitted-change digest stays.
 const PINNED_BUILDINGS_HASH: &str =
-    "6f62d52d9a7442b24c5a91dbaceb4947bdfbcf32036b0101f4cef782d82068b0";
+    "55d82f0894f68063f4b9477136b43a2aa4bb114dfae7b4231a065221b1f592f8";
 const PINNED_BUILDINGS_DIGEST: &str =
     "0514a1a3b7dc0ca6a5a51269de231c0af434781a8a787787e122497ccfa6dd55";
 

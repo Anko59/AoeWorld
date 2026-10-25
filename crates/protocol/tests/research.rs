@@ -9,7 +9,7 @@ use aoe_protocol::{
     decode_gameplay_server, encode_gameplay_client, encode_gameplay_server,
 };
 
-fn player(age: Age, researched: u32) -> GameplayPlayerState {
+fn player(age: Age, researched: u64) -> GameplayPlayerState {
     GameplayPlayerState {
         player: PlayerId(0),
         stockpile: Stockpile::default(),
@@ -38,6 +38,7 @@ fn center(research: Option<ResearchState>) -> GameplayBuildingState {
         gate_open: false,
         rally_point: None,
         farm_reseeds: 0,
+        garrison: Vec::new(),
         age: aoe_protocol::Age::Dark,
         research,
     }
@@ -105,7 +106,7 @@ fn research_orders_have_current_golden_wire_and_round_trip() {
         assert_eq!(decode_gameplay_client(&bytes).unwrap(), message);
     }
     // An unknown technology is not a message.
-    assert!(decode_gameplay_client(&[13, 7, 1, 14]).is_err());
+    assert!(decode_gameplay_client(&[13, 7, 1, 34]).is_err());
 }
 
 #[test]
@@ -125,6 +126,7 @@ fn research_state_has_current_golden_wire_and_round_trips() {
 const GOLDEN_TICK: &[u8] = &[
     2, 2, 9, 0, 0, 1, 0, 0, 0, 0, 0, 4, 5, 1, 5, 100, 100, 100, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232,
     7, 224, 18, 224, 18, 8, 0, 0, 1, 0, 125, 244, 3, 0, 0, 0, 0, 0, 0,
+    0, // Building state now appends the bounded garrison list, empty here.
 ];
 
 #[test]
@@ -191,4 +193,32 @@ fn research_and_militia_queues_require_their_production_buildings() {
     barracks.kind = BuildingKind::TownCenter;
     barracks.footprint.max = TileCoord::new(9, 9);
     refused(tick_with(vec![], vec![barracks]));
+}
+
+#[test]
+fn castle_orders_and_high_research_bit_have_current_golden_wire() {
+    for (tech, byte) in [(Tech::CastleAge, 14), (Tech::MurderHoles, 32)] {
+        let order = GameplayClientMessage::ResearchOrder {
+            sequence: 7,
+            building_id: EntityId(1),
+            tech,
+        };
+        let bytes = vec![13, 7, 1, byte];
+        assert_eq!(encode_gameplay_client(&order).unwrap(), bytes);
+        assert_eq!(decode_gameplay_client(&bytes).unwrap(), order);
+    }
+    let researched = Tech::FeudalAge.bit() | Tech::CastleAge.bit() | Tech::MurderHoles.bit();
+    let state = tick_with(vec![player(Age::Castle, researched)], vec![]);
+    let bytes = encode_gameplay_server(&state).unwrap();
+    assert_eq!(decode_gameplay_server(&bytes).unwrap(), state);
+    assert!(
+        bytes
+            .windows(5)
+            .any(|b| b == [0x84, 0x80, 0x81, 0x80, 0x10])
+    );
+    refused(tick_with(vec![player(Age::Feudal, researched)], vec![]));
+    refused(tick_with(
+        vec![player(Age::Castle, Tech::CastleAge.bit())],
+        vec![],
+    ));
 }

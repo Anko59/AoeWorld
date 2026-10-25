@@ -287,6 +287,7 @@ fn steep_crossings_keep_blocking_water_instead_of_impassable_ford_art() {
 
 #[test]
 fn current_blocking_river_chunks_are_pinned() {
+    // River-fish resources intentionally change the current encoded chunks.
     let generator = crossing();
     let mut hash = blake3::Hasher::new();
     for (x, y) in [(4, 0), (4, 1), (4, 3), (4, 4), (4, 7)] {
@@ -298,7 +299,7 @@ fn current_blocking_river_chunks_are_pinned() {
     }
     assert_eq!(
         hash.finalize().to_hex().as_str(),
-        "cc8bd648cf54f32cb43d15db52befa76984670a74536ce6e562af2b73051dc64"
+        "777bf69a1742b5e5ce33c61733e8a02b75c1dd05d6fa2a263af589e5ee64c78e"
     );
 }
 

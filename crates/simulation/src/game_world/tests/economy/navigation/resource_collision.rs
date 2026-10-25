@@ -1,4 +1,68 @@
 use super::*;
+use crate::game_world::economy::placement::perimeter;
+
+#[test]
+fn gathering_exhausted_natural_resources_release_placement_and_cached_navigation() {
+    for kind in [
+        ResourceKind::Wood,
+        ResourceKind::Food,
+        ResourceKind::Gold,
+        ResourceKind::Stone,
+    ] {
+        let (mut world, node, builder) = resource_world(kind);
+        // Exercise immutable prepared navigation as well as the live overlay.
+        world.prepare_navigation(&|| false).unwrap();
+        world
+            .initialize_village(PlayerId(0), TileCoord::new(180, 180))
+            .unwrap();
+        world.advance();
+        let build = |world: &mut GameWorld| {
+            world.issue_build(
+                PlayerId(0),
+                &[builder],
+                BuildingKind::PalisadeWall,
+                node.tile,
+                false,
+            )
+        };
+        assert_eq!(
+            build(&mut world),
+            Err(EconomyError::InvalidFootprint),
+            "live {kind:?}"
+        );
+        let target = WorldPosition::from_tile_center(node.tile).unwrap();
+        assert!(world.issue_move(builder, target).is_err());
+        world
+            .deplete_resource(node.id, node.initial_amount - 1)
+            .unwrap();
+        assert_eq!(
+            build(&mut world),
+            Err(EconomyError::InvalidFootprint),
+            "partial {kind:?}"
+        );
+        world.deplete_resource(node.id, 1).unwrap();
+        world.issue_move(builder, target).unwrap();
+        advance(&mut world, 100);
+        assert_eq!(
+            world.unit(builder).unwrap().position,
+            target,
+            "opened {kind:?}"
+        );
+        // Vacate the site: occupied ground must still reject construction.
+        assert_eq!(build(&mut world), Err(EconomyError::InvalidFootprint));
+        let free = perimeter(TileRect::from_xywh(node.tile.x, node.tile.y, 1, 1))
+            .into_iter()
+            .find(|tile| world.tile_free(*tile))
+            .unwrap();
+        world
+            .issue_move(builder, WorldPosition::from_tile_center(free).unwrap())
+            .unwrap();
+        advance(&mut world, 100);
+        let wall =
+            build(&mut world).unwrap_or_else(|error| panic!("exhausted {kind:?}: {error:?}"));
+        assert_eq!(world.building(wall).unwrap().footprint.min, node.tile);
+    }
+}
 
 #[test]
 fn every_gatherable_blocks_orders_routes_and_steering_until_empty() {

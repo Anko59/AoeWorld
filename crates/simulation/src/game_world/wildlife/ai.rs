@@ -93,7 +93,7 @@ impl GameWorld {
                     if a.state
                         .target
                         .and_then(|id| self.unit(id))
-                        .is_none_or(|u| u.hp == 0)
+                        .is_none_or(|u| u.hp == 0 || self.embarked(u.id))
                     {
                         a.state.target = nearest.map(|u| u.id);
                     }
@@ -131,6 +131,7 @@ impl GameWorld {
         a.cooldown = a.cooldown.saturating_sub(1);
         let target = a.state.target.and_then(|id| self.unit(id)).filter(|u| {
             u.hp > 0
+                && !self.embarked(u.id)
                 && (rules.chase_tiles == 0
                     || distance(u.position, a.home) <= radius(i64::from(rules.chase_tiles)))
         });
@@ -168,7 +169,9 @@ impl GameWorld {
             attacker: a.state.id,
             tick: self.tick,
         });
-        if unit.hp == 0 {
+        let (victim, killed) = (unit.player, unit.hp == 0);
+        self.record_combat_hit(None, victim, false, killed);
+        if killed {
             self.kill_unit(index);
         }
         changed.push(self.units[index].state.id);

@@ -34,7 +34,14 @@ fn exhausted_endpoint_budget_does_not_prepare_a_portal_chunk() {
     let mut search = incremental::Search::new(TileCoord::new(1, 20), TileCoord::new(500, 20), 256);
     let mut remaining = (32 * 32 * 9 + 32 * 8) * 2;
     assert_eq!(
-        search.poll(&generator, &mut remaining, &|| false).unwrap(),
+        search
+            .poll_overlay(
+                &generator,
+                &crate::ResourceOverlay::default(),
+                &mut remaining,
+                &|| false
+            )
+            .unwrap(),
         None
     );
     assert_eq!(remaining, 0);

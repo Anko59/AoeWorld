@@ -38,6 +38,7 @@ async fn stationary_wall_corner_projections_reuse_the_prepared_foundation_key() 
             gate_open: false,
             rally_point: None,
             farm_reseeds: 0,
+            garrison: Vec::new(),
         })
         .collect();
     let scene = prepare(&client);
@@ -88,14 +89,14 @@ async fn stationary_wall_corner_projections_reuse_the_prepared_foundation_key() 
 
 #[wasm_bindgen_test]
 fn building_family_uses_its_observed_age_including_construction() {
-    for (kind, dark, feudal) in [
-        (BuildingKind::TownCenter, 109, 71),
-        (BuildingKind::House, 70, 463),
-        (BuildingKind::Mill, 68, 129),
-        (BuildingKind::LumberCamp, 562, 563),
-        (BuildingKind::MiningCamp, 584, 585),
-        (BuildingKind::Barracks, 12, 498),
-        (BuildingKind::Dock, 45, 133),
+    for (kind, dark, feudal, castle) in [
+        (BuildingKind::TownCenter, 109, 71, 141),
+        (BuildingKind::House, 70, 463, 464),
+        (BuildingKind::Mill, 68, 129, 130),
+        (BuildingKind::LumberCamp, 562, 563, 564),
+        (BuildingKind::MiningCamp, 584, 585, 586),
+        (BuildingKind::Barracks, 12, 498, 132),
+        (BuildingKind::Dock, 45, 133, 47),
     ] {
         let mut building = GameplayBuildingState {
             id: EntityId(1),
@@ -115,6 +116,7 @@ fn building_family_uses_its_observed_age_including_construction() {
             gate_open: false,
             rally_point: None,
             farm_reseeds: 0,
+            garrison: Vec::new(),
         };
         assert_eq!(building_kind(&building).building_id(), Some(dark));
         building.age = aoe_protocol::Age::Feudal;
@@ -122,5 +124,18 @@ fn building_family_uses_its_observed_age_including_construction() {
         building.construction = ConstructionState::UnderConstruction;
         building.progress_permille = 100;
         assert_eq!(building_kind(&building).building_id(), Some(feudal));
+        building.age = aoe_protocol::Age::Castle;
+        assert_eq!(
+            building_kind(&building).building_id(),
+            Some(feudal),
+            "Castle foundation: {kind:?}"
+        );
+        building.construction = ConstructionState::Complete;
+        building.progress_permille = 1000;
+        assert_eq!(
+            building_kind(&building).building_id(),
+            Some(castle),
+            "Castle complete: {kind:?}"
+        );
     }
 }

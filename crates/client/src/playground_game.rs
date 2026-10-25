@@ -24,6 +24,8 @@ use map::{state::Drag, ui::set_text};
 mod memory;
 #[path = "playground_game/network.rs"]
 mod network;
+#[path = "playground_game/perf.rs"]
+mod perf;
 #[path = "playground_game/recovery.rs"]
 mod recovery;
 #[path = "playground_status.rs"]
@@ -184,6 +186,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let callback = Rc::new(RefCell::new(None::<Closure<dyn FnMut(f64)>>));
     let next = callback.clone();
     *callback.borrow_mut() = Some(Closure::new(move |time: f64| {
+        perf::perf_mark(0);
         let mut client = shared.borrow_mut();
         if let Err(error) = recovery::check(&client.renderer) {
             match recovery::restart(&client.renderer, Some(client.camera), &error) {
@@ -205,6 +208,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.presentation.advance(time, canvas);
         // Keep input, networking and the HUD live while the overview covers the scene.
         if !controls::navigation::overview_active() {
+            let _draw = perf::Scope::new(2);
             let scene = map::scene::prepare(&client);
             let units = map::scene::units(&client, &scene);
             let camera = SceneCamera {
@@ -234,7 +238,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.status = error;
             }
         }
-        village::building_panel::preview(&client);
+        let ui = perf::Scope::new(3);
         village::waypoints::present(&client);
         if time - client.village.last_hud >= 250.0 {
             controls::groups::update(&client);
@@ -248,6 +252,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             client.camera.center[1],
         );
         capture::update(&mut client);
+        drop(ui);
         let surface_fixture = client.surface_fixture;
         drop(client);
         if !surface_fixture {

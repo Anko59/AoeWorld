@@ -98,7 +98,12 @@ pub(super) fn inspection_label(client: &Client) -> String {
         tile.water,
         tile.elevation_provenance,
         feedback::movement_label(
-            tile.passable,
+            tile.passable
+                || client.village.buildings.iter().any(|b| {
+                    b.kind == aoe_protocol::BuildingKind::Bridge
+                        && b.construction == aoe_protocol::ConstructionState::Complete
+                        && b.footprint.contains(aoe_core::TileCoord::new(x, y))
+                }),
             feedback::blocker_at(client, aoe_core::TileCoord::new(x, y))
         ),
     )

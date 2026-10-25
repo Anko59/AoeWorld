@@ -53,6 +53,7 @@
         <button id="town-center" type="button" aria-label="Center on Town Center" title="Town Center (H)"><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#towncenter"></use></svg></button>
         <button id="recenter" type="button" aria-label="Center on primary unit" title="Center on scout (Home)">⌾</button>
         <button id="grid" type="button" aria-label="Toggle isometric grid" aria-pressed="false" title="Grid (G)">▦</button>
+        <button id="carry-indicators" type="button" aria-label="Show carried resource indicators" aria-pressed="true" aria-keyshortcuts="L" title="Carried resource indicators (L)">Loads</button>
         <button id="overview-toggle" type="button" aria-label="Show whole map" aria-expanded="false" title="Whole map (M)">Map</button>
         <button id="fullscreen" type="button" aria-label="Toggle fullscreen" title="Fullscreen">⛶</button>
       </nav>
@@ -62,6 +63,7 @@
     <dialog id="game-menu" aria-labelledby="game-menu-title"><p class="eyebrow">AOEWORLD</p><h1 id="game-menu-title">Game menu</h1><button id="resume-game" type="button">Resume</button><button type="button" disabled>Settings</button><button id="quit-game" type="button">Quit to Main Menu</button><section class="menu-tools"><button id="reconnect" type="button" aria-label="Reconnect to server">Reconnect</button></section></dialog>
     <div class="diagnostics" aria-hidden="true"><span id="unit-state">no unit selected</span><span id="world-position">8192.0, 8192.0</span><span id="terrain-cache"></span><span id="tile-inspection"></span></div>
     <p id="unsupported" role="alert"></p>
+    <pre id="performance-overlay" aria-label="Client performance" hidden></pre>
   </main>
   <script type="module" src="/start/bootstrap.js"></script>
 </body>

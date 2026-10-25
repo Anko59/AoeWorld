@@ -220,26 +220,54 @@ impl Request {
         world: &aoe_simulation::GameWorld,
         action: &super::PendingAction,
     ) -> Option<Self> {
-        let (
+        let aoe_simulation::Terrain::Map { generator, .. } = world.terrain() else {
+            return None;
+        };
+        let (unit, origin, destination) = match action {
             super::PendingAction::Move {
                 entity_id,
                 destination,
                 ..
-            },
-            aoe_simulation::Terrain::Map { generator, .. },
-        ) = (action, world.terrain())
-        else {
-            return None;
+            } => {
+                let unit = world.unit(*entity_id).filter(|u| u.hp > 0)?;
+                (unit, unit.position, *destination)
+            }
+            super::PendingAction::Formation {
+                unit_ids,
+                destination,
+                ..
+            } => {
+                if unit_ids.is_empty() || unit_ids.len() > aoe_core::MAX_FORMATION_MEMBERS {
+                    return None;
+                }
+                let unit = world.unit(unit_ids[0]).filter(|u| u.hp > 0)?;
+                let (x, y) = unit_ids.iter().try_fold((0_i64, 0_i64), |(x, y), id| {
+                    world
+                        .unit(*id)
+                        .map(|u| (x + i64::from(u.position.x), y + i64::from(u.position.y)))
+                })?;
+                (
+                    unit,
+                    aoe_core::WorldPosition::new(
+                        (x / unit_ids.len() as i64) as i32,
+                        (y / unit_ids.len() as i64) as i32,
+                    ),
+                    destination.unwrap_or(aoe_core::WorldPosition::new(
+                        (x / unit_ids.len() as i64) as i32,
+                        (y / unit_ids.len() as i64) as i32,
+                    )),
+                )
+            }
+            _ => return None,
         };
-        let unit = world.unit(*entity_id).filter(|unit| unit.hp > 0)?;
         Some(Self {
             owner: unit.player,
             generator: generator.clone(),
             tiles: [
-                unit.position.tile_floor(),
+                origin.tile_floor(),
                 world
                     .config()
-                    .snap_ground_position(*destination)
+                    .snap_ground_position(destination)
                     .tile_floor(),
             ],
         })

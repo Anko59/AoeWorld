@@ -11,10 +11,10 @@ fn unexplored_footprints_are_refused_atomically_for_buildings_and_walls() {
         let before = w.canonical_hash();
         let origin = TileCoord::new(100, 100);
         let result = if wall {
-            w.issue_build_wall(PlayerId(0), &[builder], origin, origin)
+            w.issue_build_wall(PlayerId(0), &[builder], origin, origin, false)
                 .map(|_| ())
         } else {
-            w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin)
+            w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin, false)
                 .map(|_| ())
         };
         assert_eq!(
@@ -26,10 +26,10 @@ fn unexplored_footprints_are_refused_atomically_for_buildings_and_walls() {
         w.update_observer(EntityId(9000), None);
         assert_eq!(w.visibility(PlayerId(0), origin), TileVisibility::Explored);
         if wall {
-            w.issue_build_wall(PlayerId(0), &[builder], origin, origin)
+            w.issue_build_wall(PlayerId(0), &[builder], origin, origin, false)
                 .unwrap();
         } else {
-            w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin)
+            w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin, false)
                 .unwrap();
         }
     }
@@ -45,17 +45,23 @@ fn every_footprint_tile_must_be_explored_by_the_ordering_player() {
     // A zero-radius observer explores only the origin, not the rest of a house.
     w.update_observer(EntityId(9000), Some((PlayerId(0), origin, 0)));
     assert_eq!(
-        w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin),
+        w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin, false),
         Err(crate::EconomyError::UnexploredFootprint)
     );
     let enemy = w.spawn_villager(PlayerId(1), at(101, 101)).unwrap();
     assert_eq!(
-        w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin),
+        w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin, false),
         Err(crate::EconomyError::UnexploredFootprint)
     );
     let before = w.buildings().count();
     assert_eq!(
-        w.issue_build_wall(PlayerId(0), &[builder], origin, TileCoord::new(101, 100)),
+        w.issue_build_wall(
+            PlayerId(0),
+            &[builder],
+            origin,
+            TileCoord::new(101, 100),
+            false
+        ),
         Err(crate::EconomyError::UnexploredFootprint)
     );
     assert_eq!(w.buildings().count(), before);
@@ -63,6 +69,6 @@ fn every_footprint_tile_must_be_explored_by_the_ordering_player() {
     w.update_observer(EntityId(9000), Some((PlayerId(0), origin, 3)));
     w.update_observer(EntityId(9000), None);
     assert_eq!(w.visibility(PlayerId(0), origin), TileVisibility::Explored);
-    w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin)
+    w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin, false)
         .unwrap();
 }

@@ -2,6 +2,7 @@ use super::*;
 use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
 use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, MovementOutcome, ResourceOverlay};
 
+mod formations;
 mod replay_pin;
 mod spacing;
 mod visibility;
@@ -192,7 +193,13 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
             let generator = generator.clone();
             (0..4).flat_map(move |x| generator.chunk(x, y).expect("fixture chunk").resources)
         })
-        .next()
+        // River fish can lead the resource list; this land-route test needs
+        // walkable ground beneath its resource blocker.
+        .find(|node| {
+            generator
+                .tile_at(node.tile)
+                .is_some_and(|tile| tile.passable)
+        })
         .expect("resource");
     let mut world = GameWorld::new(config).expect("world");
     let unit = world
@@ -448,3 +455,6 @@ mod wildlife;
 pub(crate) mod economy;
 
 mod starting_kit;
+
+#[path = "tests/navy/mod.rs"]
+mod navy;

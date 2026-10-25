@@ -4,8 +4,8 @@ use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
 pub use aoe_protocol::{
     Age, AnimalKind, AnimalState as Animal, AnimalTask, BuildingKind, CarriedResource,
     CommandResult, ConstructionState, GameplayBuildingState, GameplayPlayerState,
-    GameplayUnitState, MarketPrices, ProjectileState as Projectile, RallyPoint, RallyTarget,
-    ResourceKind, Stockpile, Tech, TradeResource, UnitKind, UnitTask,
+    GameplayUnitState, GarrisonUnitState, MarketPrices, ProjectileState as Projectile, RallyPoint,
+    RallyTarget, ResourceKind, Stockpile, Tech, TradeResource, UnitKind, UnitTask,
 };
 
 /// A unit the slot can currently see (its own, or a visible foreign one).
@@ -31,6 +31,9 @@ impl Unit {
     pub fn tile(&self) -> TileCoord {
         self.state.position.tile_floor()
     }
+    pub fn cargo_count(&self) -> u8 {
+        self.state.cargo_count
+    }
     pub fn idle(&self) -> bool {
         self.state.task == UnitTask::Idle && !self.state.moving
     }
@@ -41,7 +44,7 @@ impl Unit {
     pub fn is_military(&self) -> bool {
         !matches!(
             self.state.kind,
-            UnitKind::Villager | UnitKind::Scout | UnitKind::FishingShip
+            UnitKind::Villager | UnitKind::Scout | UnitKind::FishingShip | UnitKind::TransportShip
         )
     }
     /// Hit points as a fraction of the maximum, in `0.0..=1.0`.
@@ -60,6 +63,12 @@ pub struct Building {
 }
 
 impl Building {
+    pub fn garrison(&self) -> &[GarrisonUnitState] {
+        &self.state.garrison
+    }
+    pub fn garrison_capacity(&self) -> u8 {
+        self.kind().garrison_capacity()
+    }
     pub fn id(&self) -> EntityId {
         self.state.id
     }

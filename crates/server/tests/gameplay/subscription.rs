@@ -108,6 +108,7 @@ fn subscription_response_classification_rejects_changed_revision_or_nonstationar
         hunt_target: None,
         death_hunt: None,
         auto_scout: false,
+        cargo_count: 0,
     };
     let messages = [
         GameplayServerMessage::Tick {

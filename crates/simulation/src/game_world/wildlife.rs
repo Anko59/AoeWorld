@@ -235,7 +235,7 @@ impl GameWorld {
         if self.followers.contains(id) {
             self.followers
                 .relocate(id, previous_tile, unit.position.tile_floor());
-        } else {
+        } else if self.units[self.lookup[&id]].formation.is_none() {
             self.idle_spacing
                 .relocate(id, previous_tile, unit.position.tile_floor());
         }

@@ -35,7 +35,7 @@ impl GameWorld {
                             .filter(|n| {
                                 n.id != task.node
                                     && n.kind == task.kind
-                                    && overlay.blocks_node(*n)
+                                    && overlay.resource_available(*n)
                                     && distance_squared(n.tile, task.tile) <= (radius as u64).pow(2)
                             }),
                     );

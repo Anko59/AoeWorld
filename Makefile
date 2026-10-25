@@ -28,7 +28,7 @@ HARNESS_CARGO_CACHE ?= $(GIT_COMMON)/aoe-cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
 # Expose the cache at its host path too: harness commands start sibling containers.
 CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo) $(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(HARNESS_CARGO_CACHE))) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
-HEAVY_ENV := -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e GITHUB_ACTIONS -e CI -e AOE_DISK_FLOOR_GIB -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
+HEAVY_ENV := -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e CARGO_INCREMENTAL -e CARGO_PROFILE_DEV_DEBUG -e CARGO_PROFILE_TEST_DEBUG -e GITHUB_ACTIONS -e CI -e AOE_DISK_FLOOR_GIB -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
 # The CPUs each slot gives its containers: gates/heavy.json cores shared among its slots. The
 # harness that holds the slot computes the count and exports it as AOE_SLOT_CPUS beside
 # AOE_HEAVY_SLOT; make only expands that variable, so there is no host binary to find. A container

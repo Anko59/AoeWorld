@@ -13,6 +13,8 @@ mod fishing;
 mod fixture;
 #[path = "gates.rs"]
 mod gates;
+#[path = "picking.rs"]
+mod picking;
 
 fn contact_scene() -> PreparedScene {
     let generator = fixture::plane(-432, -432);
@@ -94,14 +96,43 @@ async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
     );
 }
 
+#[wasm_bindgen_test]
+async fn nonzero_viewer_keeps_transport_control_when_the_primary_scout_is_aboard() {
+    use crate::playground::game::village::owner;
+    let scene = contact_scene();
+    let mut client = client_with_backend(&scene, Some("canvas")).await;
+    let scout = client.primary.unwrap();
+    client.units.get_mut(&scout).unwrap().player = PlayerId(7);
+    assert_eq!(owner(&client), PlayerId(7));
+    let mut transport = client.units.remove(&scout).unwrap();
+    transport.id = EntityId(99);
+    transport.kind = aoe_protocol::UnitKind::TransportShip;
+    transport.cargo_count = 1;
+    client.units.insert(transport.id, transport);
+    assert!(!client.units.contains_key(&scout));
+    assert_eq!(owner(&client), PlayerId(7));
+    assert_eq!(client.units[&transport.id].player, owner(&client));
+    assert_ne!(owner(&client), PlayerId(0));
+    client.canvas.remove();
+}
+
 pub(super) async fn client(scene: &PreparedScene) -> Client {
+    client_with_backend(scene, None).await
+}
+
+pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&str>) -> Client {
     let document = web_sys::window().unwrap().document().unwrap();
-    let canvas = document
+    let canvas: web_sys::HtmlCanvasElement = document
         .create_element("canvas")
         .unwrap()
         .dyn_into()
         .unwrap();
-    let (renderer, canvas) = GameRenderer::new(canvas).await.unwrap();
+    if backend == Some("canvas") {
+        document.body().unwrap().append_child(&canvas).unwrap();
+    }
+    let (renderer, canvas) = GameRenderer::new_with_backend(canvas, backend)
+        .await
+        .unwrap();
     let id = EntityId(1);
     Client {
         hover_mode: 1,
@@ -175,6 +206,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
                 hunt_target: None,
                 death_hunt: None,
                 auto_scout: false,
+                cargo_count: 0,
             },
         )]),
         presentation: Default::default(),
@@ -329,6 +361,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         gate_open: false,
         rally_point: None,
         farm_reseeds: 0,
+        garrison: Vec::new(),
     });
     let rendered = |client: &Client| {
         units(client, &scene)
@@ -367,6 +400,7 @@ async fn authoritative_gate_stays_open_when_the_holding_enemy_is_not_resident() 
         gate_open: true,
         rally_point: None,
         farm_reseeds: 0,
+        garrison: Vec::new(),
     });
     for _ in 0..20 {
         let gate = units(&client, &scene)

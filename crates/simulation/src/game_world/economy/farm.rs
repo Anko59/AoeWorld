@@ -112,7 +112,10 @@ impl GameWorld {
         id: EntityId,
         farm: EntityId,
     ) -> Result<(), EconomyError> {
-        let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
+        let unit = self
+            .unit(id)
+            .filter(|u| u.hp > 0 && !self.embarked(u.id))
+            .ok_or(EconomyError::UnknownEntity)?;
         if unit.player != player {
             return Err(EconomyError::NotOwner);
         }
@@ -167,6 +170,7 @@ impl GameWorld {
     /// End `id`'s gather job. A farm whose last food is already on the farmer
     /// would otherwise linger empty and unworkable, so it is removed here.
     pub(crate) fn stop_gathering(&mut self, id: EntityId) {
+        self.cancel_garrison_order(id);
         self.move_queues.remove(&id);
         self.cancel_hunt(id);
         if let Some(task) = self.economy.gatherers.remove(&id)

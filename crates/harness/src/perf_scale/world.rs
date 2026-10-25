@@ -151,7 +151,8 @@ pub(super) fn build(params: &Params) -> Result<Built, BoxError> {
                     break;
                 }
                 let origin = TileCoord::new(player.center.x + dx, player.center.y + dy);
-                if let Ok(id) = world.issue_build(player.id, &starters, BuildingKind::House, origin)
+                if let Ok(id) =
+                    world.issue_build(player.id, &starters, BuildingKind::House, origin, false)
                 {
                     player.foundations.push(id);
                 }

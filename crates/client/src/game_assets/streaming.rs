@@ -16,7 +16,7 @@ impl Input<'_> {
             self.upload_resident(pixels).await?;
             return sink.finish().map_err(error);
         }
-        let source_order = source_order(self.manifest, self.selected);
+        let source_order = copy_order(self.manifest, self.selected, self.placements);
         for page_index in 0..GAME_ATLAS_PAGES {
             let mask = page_index >= 5;
             let colour_page = if mask { page_index - 3 } else { page_index };

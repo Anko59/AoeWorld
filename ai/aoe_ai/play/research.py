@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from aoeworld import BuildingKind, Tech, tech_cost
+from aoeworld import BuildingKind, Tech, UnitKind, tech_cost
 
 from ..context import Context
 from . import buildorder
@@ -15,6 +15,16 @@ class ResearchManager:
         if eco is None or center is None:
             return
         stage = buildorder.stage(ctx)
+        if stage == buildorder.CASTLE_ADVANCE:
+            ctx.saving_castle = True
+            ctx.hold_town_center = True
+            self.research(ctx, Tech.CASTLE_AGE, center)
+            return
+        if buildorder.wants_castle_food(ctx):
+            # The Feudal army may keep growing, but villagers and optional
+            # upgrades must not consume the age's food reserve meanwhile.
+            ctx.hold_town_center = True
+            return
         if stage == buildorder.ADVANCE:
             # Everything for the age is standing: stop spending on anything but
             # the age and let food pile up to its price.
@@ -52,6 +62,12 @@ class ResearchManager:
             cost = tech_cost(tech)
             # Keep a float for units: upgrades only from a comfortable stockpile.
             padded = (cost[0] + 100, cost[1] + 75, cost[2], cost[3])
+            base = {Tech.CROSSBOWMAN: UnitKind.ARCHER, Tech.PIKEMAN: UnitKind.SPEARMAN}.get(tech)
+            if (ctx.castle and ctx.board.stats.get("castle_units_peak", 0) == 0
+                    and any(unit.kind == base for unit in ctx.army)):
+                # Fund the first Castle army before restarting villager spending.
+                ctx.hold_town_center = True
+                padded = cost
             if ctx.can_afford(padded):
                 ctx.spend(cost)
                 ctx.order("research", builders[0].id, tech)

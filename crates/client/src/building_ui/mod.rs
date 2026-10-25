@@ -1,5 +1,6 @@
 //! Building presentation decisions. The server remains authoritative.
 pub(crate) mod availability;
+pub(crate) mod content;
 
 use aoe_core::TileCoord;
 use aoe_protocol::BuildingKind;
@@ -48,8 +49,8 @@ impl GateArt {
 }
 
 #[inline(never)]
-pub fn rules(kind: BuildingKind) -> &'static aoe_simulation::BuildingRules {
-    &aoe_simulation::BUILDING_RULES[kind as usize]
+pub fn rules(kind: BuildingKind) -> &'static aoe_simulation::BrowserBuilding {
+    &content::rules().buildings[kind as usize]
 }
 #[inline(never)]
 pub fn stock(s: aoe_simulation::Stockpile) -> Stockpile {
@@ -108,12 +109,12 @@ pub fn market_panel(
 pub fn build_enabled(
     kind: BuildingKind,
     stock: Stockpile,
-    completed: u16,
+    completed: u32,
     age: aoe_protocol::Age,
 ) -> bool {
     let r = rules(kind);
     r.buildable
-        && (r.age == aoe_simulation::Age::Dark || age == aoe_protocol::Age::Feudal)
+        && (age as u8 >= r.age as u8)
         && affordable(stock, self::stock(r.cost))
         && r.requires.is_none_or(|k| completed & (1 << k as u8) != 0)
 }
@@ -140,6 +141,24 @@ pub fn footprint_valid(
 /// Standing kinds, four foundation sizes, then rubble kinds.
 #[inline(never)]
 pub fn sprite_slot(kind: BuildingKind, progress: u16, rubble: bool) -> usize {
+    if kind == BuildingKind::Bridge {
+        return if rubble {
+            20
+        } else if progress < 1000 {
+            9
+        } else {
+            66
+        };
+    }
+    if kind as usize >= 16 {
+        return if rubble {
+            49 + kind as usize - 16
+        } else if progress < 1000 {
+            9 + rules(kind).side as usize - 1
+        } else {
+            45 + kind as usize - 16
+        };
+    }
     if kind == BuildingKind::Dock {
         return if rubble {
             25
@@ -232,8 +251,26 @@ pub fn age_sprite_slot(
     rubble: bool,
     age: aoe_protocol::Age,
 ) -> usize {
+    const CASTLE: [u8; 20] = [
+        53, 54, 55, 56, 57, 5, 58, 7, 8, 59, 60, 61, 62, 63, 30, 31, 45, 64, 47, 48,
+    ];
+    if kind == BuildingKind::Bridge {
+        return sprite_slot(kind, progress, rubble);
+    }
+    if progress == 1000 && !rubble && age == aoe_protocol::Age::Castle {
+        return CASTLE[kind as usize] as usize;
+    }
     const FEUDAL: [u8; 16] = [38, 39, 2, 3, 40, 5, 41, 7, 8, 44, 26, 27, 28, 29, 30, 31];
-    if progress == 1000 && !rubble && age == aoe_protocol::Age::Feudal {
+    if kind as usize >= 16 {
+        return if rubble {
+            49 + kind as usize - 16
+        } else if progress < 1000 {
+            9 + rules(kind).side as usize - 1
+        } else {
+            45 + kind as usize - 16
+        };
+    }
+    if progress == 1000 && !rubble && age >= aoe_protocol::Age::Feudal {
         usize::from(FEUDAL[kind as usize])
     } else {
         sprite_slot(kind, progress, rubble)

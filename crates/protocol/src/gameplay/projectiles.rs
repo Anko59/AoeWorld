@@ -5,6 +5,7 @@ pub const MAX_PROJECTILES: usize = 4096;
 pub enum ProjectileKind {
     Arrow,
     Javelin,
+    Stone,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProjectileState {

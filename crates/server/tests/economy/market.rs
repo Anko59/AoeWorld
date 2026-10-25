@@ -73,6 +73,7 @@ async fn a_completed_market_trades_and_moves_prices_over_the_wire() {
             vec![worker],
             BuildingKind::Market,
             TileCoord::new(134, 133), // Entire footprint already explored by the Town Center.
+            false,
         )
         .await;
     let mut market = None;

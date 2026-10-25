@@ -23,6 +23,7 @@ fn villager(task: UnitTask) -> GameplayUnitState {
         hunt_target: None,
         death_hunt: None,
         auto_scout: false,
+        cargo_count: 0,
     }
 }
 

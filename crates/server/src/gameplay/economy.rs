@@ -1,4 +1,6 @@
 use super::GameplayService;
+#[path = "economy/kinds.rs"]
+mod kinds;
 use aoe_core::{EntityId, PlayerId, TileRect};
 use aoe_protocol::{
     Age, BuildingKind, CarriedResource, ConstructionState, GameplayBuildingState,
@@ -6,6 +8,8 @@ use aoe_protocol::{
     ResourceKind, Stockpile, Tech, TradeResource, TrainingState, UnitKind, UnitTask,
 };
 use aoe_simulation::{GameUnit, GameWorld};
+pub(super) use kinds::{native_building, native_kind, native_tech};
+use kinds::{wire_building, wire_kind, wire_tech};
 use std::collections::BTreeMap;
 
 /// Economy units stay authoritative while offscreen, for selection and worker
@@ -34,108 +38,6 @@ pub(super) fn query_units(
     units
 }
 
-pub(super) fn native_kind(kind: UnitKind) -> aoe_simulation::UnitKind {
-    match kind {
-        UnitKind::Villager => aoe_simulation::UnitKind::Villager,
-        UnitKind::Scout => aoe_simulation::UnitKind::Scout,
-        UnitKind::Militia => aoe_simulation::UnitKind::Militia,
-        UnitKind::FishingShip => aoe_simulation::UnitKind::FishingShip,
-        UnitKind::Archer => aoe_simulation::UnitKind::Archer,
-        UnitKind::Skirmisher => aoe_simulation::UnitKind::Skirmisher,
-        UnitKind::Spearman => aoe_simulation::UnitKind::Spearman,
-        UnitKind::ManAtArms => aoe_simulation::UnitKind::ManAtArms,
-    }
-}
-pub(super) fn native_tech(tech: Tech) -> aoe_simulation::Tech {
-    match tech {
-        Tech::Loom => aoe_simulation::Tech::Loom,
-        Tech::TownWatch => aoe_simulation::Tech::TownWatch,
-        Tech::DoubleBitAxe => aoe_simulation::Tech::DoubleBitAxe,
-        Tech::HorseCollar => aoe_simulation::Tech::HorseCollar,
-        Tech::GoldMining => aoe_simulation::Tech::GoldMining,
-        Tech::StoneMining => aoe_simulation::Tech::StoneMining,
-        Tech::Wheelbarrow => aoe_simulation::Tech::Wheelbarrow,
-        Tech::FeudalAge => aoe_simulation::Tech::FeudalAge,
-        Tech::ManAtArms => aoe_simulation::Tech::ManAtArms,
-        Tech::Forging => aoe_simulation::Tech::Forging,
-        Tech::ScaleMailArmor => aoe_simulation::Tech::ScaleMailArmor,
-        Tech::ScaleBardingArmor => aoe_simulation::Tech::ScaleBardingArmor,
-        Tech::Fletching => aoe_simulation::Tech::Fletching,
-        Tech::PaddedArcherArmor => aoe_simulation::Tech::PaddedArcherArmor,
-    }
-}
-fn wire_tech(tech: aoe_simulation::Tech) -> Tech {
-    match tech {
-        aoe_simulation::Tech::Loom => Tech::Loom,
-        aoe_simulation::Tech::TownWatch => Tech::TownWatch,
-        aoe_simulation::Tech::DoubleBitAxe => Tech::DoubleBitAxe,
-        aoe_simulation::Tech::HorseCollar => Tech::HorseCollar,
-        aoe_simulation::Tech::GoldMining => Tech::GoldMining,
-        aoe_simulation::Tech::StoneMining => Tech::StoneMining,
-        aoe_simulation::Tech::Wheelbarrow => Tech::Wheelbarrow,
-        aoe_simulation::Tech::FeudalAge => Tech::FeudalAge,
-        aoe_simulation::Tech::ManAtArms => Tech::ManAtArms,
-        aoe_simulation::Tech::Forging => Tech::Forging,
-        aoe_simulation::Tech::ScaleMailArmor => Tech::ScaleMailArmor,
-        aoe_simulation::Tech::ScaleBardingArmor => Tech::ScaleBardingArmor,
-        aoe_simulation::Tech::Fletching => Tech::Fletching,
-        aoe_simulation::Tech::PaddedArcherArmor => Tech::PaddedArcherArmor,
-    }
-}
-pub(super) fn native_building(kind: BuildingKind) -> aoe_simulation::BuildingKind {
-    use aoe_simulation::BuildingKind as N;
-    match kind {
-        BuildingKind::TownCenter => N::TownCenter,
-        BuildingKind::House => N::House,
-        BuildingKind::LumberCamp => N::LumberCamp,
-        BuildingKind::MiningCamp => N::MiningCamp,
-        BuildingKind::Mill => N::Mill,
-        BuildingKind::Farm => N::Farm,
-        BuildingKind::Barracks => N::Barracks,
-        BuildingKind::PalisadeWall => N::PalisadeWall,
-        BuildingKind::ArcheryRange => N::ArcheryRange,
-        BuildingKind::Stable => N::Stable,
-        BuildingKind::Blacksmith => N::Blacksmith,
-        BuildingKind::Market => N::Market,
-        BuildingKind::WatchTower => N::WatchTower,
-        BuildingKind::PalisadeGate => N::PalisadeGate,
-        BuildingKind::Outpost => N::Outpost,
-        BuildingKind::Dock => N::Dock,
-    }
-}
-fn wire_building(kind: aoe_simulation::BuildingKind) -> BuildingKind {
-    use aoe_simulation::BuildingKind as N;
-    match kind {
-        N::TownCenter => BuildingKind::TownCenter,
-        N::House => BuildingKind::House,
-        N::LumberCamp => BuildingKind::LumberCamp,
-        N::MiningCamp => BuildingKind::MiningCamp,
-        N::Mill => BuildingKind::Mill,
-        N::Farm => BuildingKind::Farm,
-        N::Barracks => BuildingKind::Barracks,
-        N::PalisadeWall => BuildingKind::PalisadeWall,
-        N::ArcheryRange => BuildingKind::ArcheryRange,
-        N::Stable => BuildingKind::Stable,
-        N::Blacksmith => BuildingKind::Blacksmith,
-        N::Market => BuildingKind::Market,
-        N::WatchTower => BuildingKind::WatchTower,
-        N::PalisadeGate => BuildingKind::PalisadeGate,
-        N::Outpost => BuildingKind::Outpost,
-        N::Dock => BuildingKind::Dock,
-    }
-}
-fn wire_kind(kind: aoe_simulation::UnitKind) -> UnitKind {
-    match kind {
-        aoe_simulation::UnitKind::Villager => UnitKind::Villager,
-        aoe_simulation::UnitKind::Scout => UnitKind::Scout,
-        aoe_simulation::UnitKind::Militia => UnitKind::Militia,
-        aoe_simulation::UnitKind::FishingShip => UnitKind::FishingShip,
-        aoe_simulation::UnitKind::Archer => UnitKind::Archer,
-        aoe_simulation::UnitKind::Skirmisher => UnitKind::Skirmisher,
-        aoe_simulation::UnitKind::Spearman => UnitKind::Spearman,
-        aoe_simulation::UnitKind::ManAtArms => UnitKind::ManAtArms,
-    }
-}
 fn wire_hit(hit: aoe_simulation::HitRecord) -> HitState {
     HitState {
         attacker: hit.attacker,
@@ -151,11 +53,13 @@ fn wire_resource(kind: aoe_map::ResourceKind) -> ResourceKind {
     }
 }
 pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitState {
-    wire_unit(
+    let mut state = wire_unit(
         unit,
         world.gathering_kind(unit.id),
         world.hunting_target(unit.id),
-    )
+    );
+    state.cargo_count = world.transport_cargo(unit.id).len() as u8;
+    state
 }
 /// A unit as the wire sees it, given the two facts only the economy knows.
 pub(super) fn wire_unit(
@@ -193,6 +97,7 @@ pub(super) fn wire_unit(
         death_tick: unit.death_tick,
         hunt_target,
         auto_scout: unit.auto_scout,
+        cargo_count: 0,
         death_hunt: unit.death_hunt.map(|kind| match kind {
             aoe_simulation::AnimalKind::Sheep => aoe_protocol::AnimalKind::Sheep,
             aoe_simulation::AnimalKind::Deer => aoe_protocol::AnimalKind::Deer,
@@ -244,11 +149,24 @@ fn player_state(state: &aoe_simulation::PlayerEconomy) -> GameplayPlayerState {
         age: match state.age {
             aoe_simulation::Age::Dark => Age::Dark,
             aoe_simulation::Age::Feudal => Age::Feudal,
+            aoe_simulation::Age::Castle => Age::Castle,
         },
         researched: state.researched,
         market_prices: wire_market_prices(state.market_prices),
     }
 }
+pub(super) fn building_in_camera(
+    state: &GameplayBuildingState,
+    player: PlayerId,
+    region: TileRect,
+) -> bool {
+    state.player == player
+        || (state.footprint.min.x < region.max.x
+            && state.footprint.max.x > region.min.x
+            && state.footprint.min.y < region.max.y
+            && state.footprint.max.y > region.min.y)
+}
+
 pub(super) fn buildings(
     world: &GameWorld,
     player: PlayerId,
@@ -264,6 +182,28 @@ pub(super) fn buildings(
         })
         .collect()
 }
+pub(super) fn subscription_buildings(
+    world: &GameWorld,
+    player: PlayerId,
+    region: TileRect,
+) -> BTreeMap<EntityId, GameplayBuildingState> {
+    if !world.fog_disabled() {
+        return buildings(world, player);
+    }
+    world
+        .buildings()
+        .filter(|b| {
+            b.player == player
+                || (b.footprint.min.x < region.max.x
+                    && b.footprint.max.x > region.min.x
+                    && b.footprint.min.y < region.max.y
+                    && b.footprint.max.y > region.min.y)
+        })
+        .take(aoe_protocol::MAX_ECONOMY_BUILDINGS + 1)
+        .map(|b| (b.id, wire_building_state(b, None)))
+        .collect()
+}
+
 pub(super) fn wire_building_state(
     state: &aoe_simulation::GameBuilding,
     viewer: Option<PlayerId>,
@@ -272,6 +212,7 @@ pub(super) fn wire_building_state(
         age: match state.age {
             aoe_simulation::Age::Dark => aoe_protocol::Age::Dark,
             aoe_simulation::Age::Feudal => aoe_protocol::Age::Feudal,
+            aoe_simulation::Age::Castle => aoe_protocol::Age::Castle,
         },
         id: state.id,
         gate_open: state.gate_open,
@@ -297,6 +238,17 @@ pub(super) fn wire_building_state(
         los: state.los,
         food_remaining: state.food_remaining,
         farm_reseeds: state.farm_reseeds,
+        garrison: state
+            .garrison
+            .iter()
+            .filter(|_| viewer.is_none_or(|player| state.player == player))
+            .map(|g| aoe_protocol::GarrisonUnitState {
+                id: g.unit.id,
+                kind: wire_kind(g.unit.kind),
+                hp: g.unit.hp,
+                max_hp: g.unit.max_hp,
+            })
+            .collect(),
         last_hit: state.last_hit.map(wire_hit),
         research: state.research.map(|entry| ResearchState {
             tech: wire_tech(entry.tech),

@@ -28,7 +28,7 @@ impl GameWorld {
         for id in &group {
             let u = self
                 .unit(*id)
-                .filter(|u| u.hp > 0)
+                .filter(|u| u.hp > 0 && !self.embarked(u.id))
                 .ok_or(EconomyError::UnknownEntity)?;
             if u.player != player {
                 return Err(EconomyError::NotOwner);

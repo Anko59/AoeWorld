@@ -24,14 +24,14 @@ fn step_allowed(
         let vertical = TileCoord::new(from.x, from.y + dy);
         if !(checked_walkable(terrain, overlay, horizontal, cancelled)?
             && checked_walkable(terrain, overlay, vertical, cancelled)?
-            && terrain.route_edge_clear(from, horizontal, cancelled)?
-            && terrain.route_edge_clear(from, vertical, cancelled)?)
+            && terrain.route_overlay_edge_clear(overlay, from, horizontal, cancelled)?
+            && terrain.route_overlay_edge_clear(overlay, from, vertical, cancelled)?)
         {
             return Ok(false);
         }
     }
     Ok(checked_walkable(terrain, overlay, next, cancelled)?
-        && terrain.route_edge_clear(from, next, cancelled)?)
+        && terrain.route_overlay_edge_clear(overlay, from, next, cancelled)?)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

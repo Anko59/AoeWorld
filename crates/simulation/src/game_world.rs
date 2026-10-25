@@ -12,10 +12,14 @@ pub(crate) type ChunkNodes = Arc<Vec<ResourceNode>>;
 mod combat;
 mod economy;
 mod facing;
+#[path = "game_world/formation/mod.rs"]
+mod formation;
 mod hash;
 #[path = "game_world/orders/queue.rs"]
 mod move_queue;
 mod movement_step;
+#[path = "game_world/navy/mod.rs"]
+mod navy;
 mod orders;
 mod parallel;
 mod research;
@@ -32,9 +36,10 @@ mod wildlife;
 pub use combat::*;
 pub use economy::{
     BUILDING_RULES, BUILDINGS_PER_PLAYER, BuildingKind, BuildingRules, CarriedResource,
-    ConstructionState, EconomyError, GameBuilding, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION,
-    MAX_WALL_SEGMENTS, MarketPrices, PlayerEconomy, RallyPoint, RallyTarget, Stockpile, TickPhase,
-    TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules, WorldLimits, trainable_units,
+    ConstructionState, EconomyError, GameBuilding, GarrisonedUnit, MARKET_RULES, MAX_BUILD_GROUP,
+    MAX_POPULATION, MAX_WALL_SEGMENTS, MarketPrices, PlayerEconomy, RallyPoint, RallyTarget,
+    Stockpile, TickPhase, TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules,
+    WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;
@@ -101,6 +106,7 @@ pub enum GameWorldError {
 }
 #[derive(Debug)]
 pub(crate) struct StoredUnit {
+    pub(crate) formation: Option<EntityId>,
     pub(crate) state: GameUnit,
     pub(crate) order: Option<MovementOrder>,
     pub(crate) bucket: ChunkCoord,
@@ -133,6 +139,7 @@ pub struct GameWorld {
     pub(crate) lookup: UnitIndex,
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
     pub(crate) active_movers: Vec<EntityId>,
+    pub(crate) formations: BTreeMap<EntityId, formation::Group>,
     pub(crate) move_queues: BTreeMap<EntityId, VecDeque<WorldPosition>>,
     pub(crate) destinations: spacing::Destinations,
     pub(crate) terrain: Terrain,
@@ -181,6 +188,7 @@ impl GameWorld {
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
             move_queues: BTreeMap::new(),
+            formations: BTreeMap::new(),
             destinations: spacing::Destinations::default(),
             planning_budget: crate::MAX_ROUTE_WORK_PER_TICK,
             navigation_preparation_budget: Mutex::new(crate::MAX_NAV_PREPARATIONS_PER_TICK),
@@ -375,6 +383,7 @@ impl GameWorld {
         let result = candidates
             .into_iter()
             .filter_map(|id| self.unit(id))
+            .filter(|unit| !self.embarked(unit.id))
             .filter(|unit| world_rect.contains(unit.position))
             .collect::<Vec<_>>();
         stats.returned_units = result.len() as u32;

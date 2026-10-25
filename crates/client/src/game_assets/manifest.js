@@ -65,6 +65,20 @@ export function parse_manifest(bytes) {
   return [u16(data.version),string(data.building_data),pages,frames];
 }
 
+export function parse_content(bytes) {
+  if (bytes.length > 32768) throw Error('game content exceeds startup budget');
+  const data = document(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  const rules = array(data.rules).map(i32);
+  const actors = array(data.actors);
+  if (actors.length !== 126) throw Error('invalid actor content count');
+  const words = actors.flatMap(actor => {
+    const row = array(actor);
+    if (row.length !== 4) throw Error('invalid actor content record');
+    return [u32(row[0]), integer(row[1],1,255), integer(row[2],1,65535), integer(row[3],0,255)];
+  });
+  return [new Int32Array(rules), new Uint32Array(words)];
+}
+
 function document(text) {
   const data = JSON.parse(text);
   uniqueKeys(text);

@@ -1,7 +1,7 @@
 """An engagement must survive the rest of the same combat decision."""
 
 import pytest
-from aoeworld import BuildingKind, CommandResult, UnitKind, UnitTask
+from aoeworld import Formation, BuildingKind, CommandResult, UnitKind, UnitTask
 
 from aoe_ai import Brain
 from aoe_ai.blackboard import Blackboard
@@ -126,3 +126,33 @@ def test_unconnected_raiders_do_not_trigger_defence():
     ctx = Context(client, decision(world), Blackboard(), Config())
     assert not CombatManager().defend(ctx, [])
     assert not client.calls
+
+
+def test_marching_an_army_uses_one_formation_and_keeps_stragglers_local():
+    army = [unit(300+i, UnitKind.SPEARMAN, tile=(60,60)) for i in range(14)]
+    army.append(unit(400, UnitKind.SPEARMAN, tile=(5,60)))
+    client = FakeClient()
+    world = FakeWorld(army, tick=100)
+    ctx = Context(client, decision(world), Blackboard(), Config())
+    CombatManager().march(ctx, army, (60,60), (200,200))
+    groups = client.named("formation_move")
+    assert len(groups) == 1 and groups[0][0] == list(range(300,314))
+    assert groups[0][3] == Formation.LINE
+    assert len(client.named("move")) == 1 and client.named("move")[0][0] == 400
+    assert ctx.busy == {u.id for u in army}
+    # The same idle report immediately afterwards must not reset the shared route.
+    CombatManager().march(ctx, army, (60,60), (200,200))
+    assert client.named("formation_move") == groups
+
+
+def test_distributed_army_reserves_land_queries_for_its_shared_march():
+    units, buildings = base(10)
+    army = [unit(300+i, UnitKind.SPEARMAN, tile=(55+i%7,55+i//7)) for i in range(28)]
+    target = building(901, BuildingKind.HOUSE, tile=(250,250), mine=False, visible=False)
+    world = FakeWorld(units+army, buildings, enemy_buildings=[target])
+    client = FakeClient()
+    ctx = Context(client, decision(world), Blackboard(attacking=True, attack_launch_size=28), Config())
+    CombatManager().attack(ctx, army)
+    group, = client.named("formation_move")
+    assert group[0] == list(range(300,328))
+    assert ctx._land_queries <= ctx.config.land_queries_per_decision

@@ -72,6 +72,9 @@ impl GameWorld {
             let Some(&index) = self.lookup.get(&id) else {
                 continue;
             };
+            if self.advance_formation_anchor(index, &mut still_moving) {
+                continue;
+            }
             let Some(mut order) = self.units[index].order else {
                 continue;
             };
@@ -249,16 +252,22 @@ impl GameWorld {
             }
             changed.push(self.units[index].state.id);
         }
-        self.flush_vision_batch();
         still_moving.sort_unstable();
         self.active_movers = still_moving;
+        self.advance_formations(&mut changed);
+        self.flush_vision_batch();
+        self.engage_formations(&mut changed);
         self.plan_routes_ahead(&movers, start, lookahead_budget);
         self.resume_queued_moves(&mut changed);
         self.tick.0 = self.tick.0.saturating_add(1);
         changed
     }
 
-    fn next_map_segment(&mut self, index: usize, order: MovementOrder) -> SegmentAdvance {
+    pub(crate) fn next_map_segment(
+        &mut self,
+        index: usize,
+        order: MovementOrder,
+    ) -> SegmentAdvance {
         if !self.has_route_navigation() {
             return (order.waypoint != order.destination)
                 .then(|| next_waypoint(order.waypoint, order.target_tile, order.destination))
@@ -440,7 +449,7 @@ impl GameWorld {
     }
 }
 
-enum SegmentAdvance {
+pub(crate) enum SegmentAdvance {
     Next(WorldPosition),
     Planning,
     Stopped(Option<GameWorldError>),

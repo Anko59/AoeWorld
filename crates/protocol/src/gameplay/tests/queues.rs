@@ -1,4 +1,36 @@
+// Combined current command order includes bridges and shelter orders before navy.
 use super::*;
+
+#[test]
+fn transport_orders_pin_current_wire_and_bound_the_load_group() {
+    for (order, bytes) in [
+        (
+            ClientMessage::LoadOrder {
+                sequence: 1,
+                unit_ids: vec![EntityId(2), EntityId(3)],
+                transport_id: EntityId(4),
+            },
+            vec![27, 1, 2, 2, 3, 4],
+        ),
+        (
+            ClientMessage::UnloadOrder {
+                sequence: 2,
+                transport_id: EntityId(4),
+                destination: TileCoord::new(12, 13),
+            },
+            vec![28, 2, 4, 24, 26],
+        ),
+    ] {
+        assert_eq!(encode_client(&order).unwrap(), bytes);
+        assert_eq!(decode_client(&bytes).unwrap(), order);
+    }
+    let oversized = ClientMessage::LoadOrder {
+        sequence: 1,
+        unit_ids: vec![EntityId(2); MAX_BUILD_GROUP + 1],
+        transport_id: EntityId(4),
+    };
+    assert!(decode_client(&postcard::to_allocvec(&oversized).unwrap()).is_err());
+}
 
 #[test]
 fn queued_move_and_authoritative_markers_have_current_golden_wire() {

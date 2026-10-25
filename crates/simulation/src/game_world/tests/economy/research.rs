@@ -31,7 +31,7 @@ fn rich(world: &mut GameWorld) {
 fn built(world: &mut GameWorld, kind: BuildingKind, origin: TileCoord) -> EntityId {
     let worker = villager_at(world, origin.x - 1, origin.y);
     let id = world
-        .issue_build(PlayerId(0), &[worker], kind, origin)
+        .issue_build(PlayerId(0), &[worker], kind, origin, false)
         .unwrap();
     finish(world, id, 4000);
     id
@@ -258,7 +258,13 @@ fn the_building_must_be_owned_finished_and_able_to_research() {
     );
     let worker = villager_at(&mut world, 119, 100);
     let mill = world
-        .issue_build(PlayerId(0), &[worker], BuildingKind::Mill, at(120, 100))
+        .issue_build(
+            PlayerId(0),
+            &[worker],
+            BuildingKind::Mill,
+            at(120, 100),
+            false,
+        )
         .unwrap();
     assert_eq!(
         research(&mut world, mill, Tech::Loom),
@@ -319,6 +325,7 @@ fn unfinished_and_foreign_buildings_do_not_qualify_for_feudal() {
             &[worker],
             BuildingKind::LumberCamp,
             at(120, 100),
+            false,
         )
         .unwrap();
     assert_eq!(

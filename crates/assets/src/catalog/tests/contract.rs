@@ -85,7 +85,8 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    assert_eq!(VERSION, 17);
+    // Castle poses, architecture and deduplicated composite recipes extend the catalog.
+    assert_eq!(VERSION, 19);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
@@ -277,4 +278,87 @@ fn rally_flag_uses_the_dat_movement_flag_group() {
         ("graphics.drs", 4480, 10)
     );
     assert!(flag.terrain_topology.is_none());
+}
+#[test]
+fn bridge_catalog_selects_only_the_six_native_scenario_pieces() {
+    let plan = crate::catalog::buildings::supplemental(
+        |s| s.starts_with("de/"),
+        |_| false,
+        |_| false,
+        |_| false,
+    );
+    let bridges: Vec<_> = plan.iter().filter(|item| item.slot >= 65).collect();
+    assert_eq!(bridges.len(), 6);
+    for (item, stem) in bridges.iter().zip([
+        "s_bridge_a_top",
+        "s_bridge_a_middle",
+        "s_bridge_a_bottom",
+        "s_bridge_b_top",
+        "s_bridge_b_middle",
+        "s_bridge_b_bottom",
+    ]) {
+        assert_eq!(item.source, format!("de/{stem}_x1.sld"));
+        assert_eq!((item.frames, item.take), (1, 1));
+        assert!(item.resident);
+        assert!(
+            !item.required,
+            "missing private art keeps the semantic fallback"
+        );
+    }
+}
+
+#[test]
+fn bridge_catalog_prefers_original_slps_when_available() {
+    let plan = crate::catalog::buildings::supplemental(|_| true, |_| false, |_| false, |_| false);
+    for (item, slp) in plan
+        .iter()
+        .filter(|item| item.slot >= 65)
+        .zip([3688, 3690, 3692, 3694, 3696, 3698])
+    {
+        assert_eq!(
+            item.source,
+            format!("graphics.drs:[32, 112, 108, 115]:{slp}")
+        );
+    }
+}
+
+#[test]
+fn castle_supplemental_slots_keep_distinct_families_and_de_fallback() {
+    let plan = crate::catalog::buildings::supplemental(|_| true, |_| false, |_| false, |_| false);
+    for (slot, slp) in [(45, 305), (46, 281), (49, 931)] {
+        let items: Vec<_> = plan.iter().filter(|item| item.slot == slot).collect();
+        assert_eq!(items.len(), 1, "one Castle family per slot {slot}");
+        assert_eq!(
+            items[0].source,
+            format!("graphics.drs:[32, 112, 108, 115]:{slp}")
+        );
+    }
+    let plan = crate::catalog::buildings::supplemental(
+        |source| source.starts_with("de/"),
+        |_| false,
+        |_| false,
+        |_| false,
+    );
+    let castle = plan.iter().find(|item| item.slot == 45).unwrap();
+    assert_eq!(castle.source, "de/b_west_castle_age3_x1.sld");
+    let rubble = plan.iter().find(|item| item.slot == 49).unwrap();
+    assert_eq!(rubble.source, "de/b_west_castle_age3_rubble_x1.sld");
+}
+
+#[test]
+fn castle_dock_uses_licensed_de_art_when_the_trial_lacks_its_slp() {
+    assert!(
+        crate::de::SELECTION
+            .iter()
+            .any(|item| item.stem == "b_west_dock_age3")
+    );
+    let plan = crate::catalog::buildings::supplemental(
+        |source| source.starts_with("de/"),
+        |_| false,
+        |_| false,
+        |_| false,
+    );
+    let dock = plan.iter().find(|item| item.slot == 59).unwrap();
+    assert_eq!(dock.source, "de/b_west_dock_age3_x1.sld");
+    assert_eq!((dock.frames, dock.take), (1, usize::MAX));
 }

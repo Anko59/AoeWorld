@@ -67,3 +67,13 @@ fn interface_commands_use_command_frames_and_the_garrison_cursor() {
     }
     assert!(command_icon("unknown").is_none());
 }
+
+#[test]
+fn interface_castle_building_families_are_in_the_gameplay_catalog() {
+    for id in [82, 104, 209, 49] {
+        assert!(
+            crate::catalog::GAMEPLAY_BUILDING_IDS.contains(&id),
+            "missing Castle DAT building {id}"
+        );
+    }
+}
