@@ -55,10 +55,11 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
     (frames.len() >= stride * 5).then_some((frames, stride, animated))
 }
 
+#[inline(never)]
 pub(super) fn marker(
     unit: SceneUnit,
     camera: SceneCamera,
-    emit: &mut impl FnMut((Sprite, GameFrame, f64, u64)),
+    emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
 ) {
     let side = unit.kind.building_side();
     let building = side.is_some();
@@ -136,12 +137,15 @@ pub(super) fn marker(
     }
 }
 
+// Drawing and visibility share one emitter body rather than cloning the
+// multipart renderer for each callback in the browser WASM.
+#[inline(never)]
 pub(super) fn building(
     art: &GameArt,
     unit: SceneUnit,
     camera: SceneCamera,
     animation: usize,
-    emit: &mut impl FnMut((Sprite, GameFrame, f64, u64)),
+    emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
 ) {
     let Some(building) = art
         .compositions
@@ -205,12 +209,13 @@ pub(super) fn building(
 mod tests;
 
 /// Native anchors and player/shadow planes are shared by all backends.
+#[inline(never)]
 pub(super) fn sprite_building(
     art: &GameArt,
     unit: SceneUnit,
     camera: SceneCamera,
     animation: usize,
-    emit: &mut impl FnMut((Sprite, GameFrame, f64, u64)),
+    emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
 ) {
     let Some(art_slot) = unit.kind.building_slot() else {
         marker(unit, camera, emit);

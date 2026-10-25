@@ -7,6 +7,11 @@ use aoe_core::TileCoord;
 /// and on whether the step is diagonal.
 pub trait RouteTerrain {
     /// Static map guidance is optional for other movement domains.
+    /// Reserve one logical chunk preparation, independently of physical cache hits.
+    fn prepare_navigation_chunk(&self) -> bool {
+        true
+    }
+
     fn route_generator(&self) -> Option<&MapChunkGenerator> {
         None
     }

@@ -125,10 +125,10 @@ impl GameWorld {
         overlay: &ResourceOverlay,
         chunk: (i32, i32),
     ) -> Arc<Vec<ResourceNode>> {
-        if let Ok(cache) = self.resource_chunks.lock()
+        if let Ok(mut cache) = self.resource_chunks.lock()
             && let Some(nodes) = cache.get(&chunk)
         {
-            return nodes.clone();
+            return nodes;
         }
         let (x, y) = chunk;
         let origin = TileCoord::new(x.saturating_mul(BLOCK_TILES), y.saturating_mul(BLOCK_TILES));

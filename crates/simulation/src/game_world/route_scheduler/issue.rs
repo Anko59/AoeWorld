@@ -28,6 +28,10 @@ impl GameWorld {
     /// Both route budgets are refilled at the end of every tick.
     pub(crate) fn refill_route_budgets(&mut self) {
         self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
+        *self
+            .navigation_preparation_budget
+            .get_mut()
+            .unwrap_or_else(|error| error.into_inner()) = crate::MAX_NAV_PREPARATIONS_PER_TICK;
         self.fast_route_budget = MAX_FAST_ROUTE_WORK_PER_TICK;
         self.fast_route_spent.clear();
     }
@@ -118,10 +122,7 @@ impl GameWorld {
         let (result, full) = self.poll_fast_route(&mut planner, kind, player);
         let work = planner.work();
         let settled = |world: &mut Self, outcome: MovementOutcome| {
-            // A route given up on is no answer for the destination.
-            if !planner.is_approach() {
-                world.cache_route(&planner, kind, &outcome);
-            }
+            world.cache_route(&planner, kind, &outcome);
             Some(MapRoutePlan::Outcome(outcome))
         };
         match result {
@@ -141,10 +142,7 @@ impl GameWorld {
                 self.route_metrics.solved_at_issue += 1;
                 self.route_metrics.fast_path += 1;
                 self.route_metrics.found(work);
-                if planner.is_terminal()
-                    && !planner.is_approach()
-                    && planner.certified_destination().is_none()
-                {
+                if planner.is_terminal() && planner.certified_destination().is_none() {
                     settled(self, MovementOutcome::Path(path))
                 } else {
                     Some(MapRoutePlan::Segment(path, Some(planner)))

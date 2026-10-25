@@ -12,11 +12,13 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
 #[wasm_bindgen(
-    inline_js = "export function buildings_update(v) { window.aoeBuildings?.update(v); } export function placement_update(v) { window.aoeBuildings?.preview(v); }"
+    inline_js = "export function buildings_update(v) { window.aoeBuildings?.update(v); } export function placement_update(v) { window.aoeBuildings?.preview(v); } export function commands_bind(callback) { window.aoeBuildings.bind(callback); }"
 )]
 extern "C" {
     fn buildings_update(v: &[f64]);
     fn placement_update(v: &[f64]);
+    #[wasm_bindgen(catch)]
+    fn commands_bind(callback: &js_sys::Function) -> Result<(), JsValue>;
 }
 
 #[inline(never)]
@@ -116,6 +118,22 @@ pub(super) fn update(client: &Client) {
         Some(p) => building_ui::market_panel(market, p.market_prices, p.stockpile),
         None => [0.0; 15],
     });
+    let reseeds = b.map_or(0, |b| b.farm_reseeds);
+    let mill = b.is_some_and(|b| {
+        b.kind == aoe_protocol::BuildingKind::Mill
+            && b.player == owner(client)
+            && b.construction == ConstructionState::Complete
+    });
+    let cost = aoe_simulation::BuildingKind::Farm.rules().cost.wood;
+    v.extend([
+        f64::from(reseeds),
+        f64::from(u8::from(
+            mill && reseeds < 99 && player.is_some_and(|p| p.stockpile.wood >= cost),
+        )),
+        f64::from(u8::from(mill && reseeds > 0)),
+        f64::from(cost),
+    ]);
+    v.extend(super::automation::state(client));
     buildings_update(&v);
 }
 
@@ -149,54 +167,24 @@ pub(in super::super) fn preview(client: &Client) {
     placement_update(&v);
 }
 
+// Numeric UI actions are wired in the DOM module that creates the buttons.
+// Ownership, availability and ordinary protocol encoding stay in Rust.
 #[inline(never)]
-pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
-    for (i, id) in [
-        "build-house",
-        "build-lumber-camp",
-        "build-mining-camp",
-        "build-mill",
-        "build-farm",
-        "build-barracks",
-        "build-palisade-wall",
-        "build-outpost",
-        "build-dock",
-        "build-archery-range",
-        "build-stable",
-        "build-blacksmith",
-        "build-market",
-        "build-watch-tower",
-        "build-palisade-gate",
-        "research-loom",
-        "research-town-watch",
-        "research-feudal-age",
-        "research-double-bit-axe",
-        "research-horse-collar",
-        "research-gold-mining",
-        "research-stone-mining",
-        "research-wheelbarrow",
-        "research-man-at-arms",
-        "research-forging",
-        "research-scale-mail-armor",
-        "research-scale-barding-armor",
-        "research-fletching",
-        "research-padded-archer-armor",
-        "cancel-construction",
-        "cancel-research",
-    ]
-    .iter()
-    .enumerate()
-    {
-        let Some(button) = shared.borrow().document.get_element_by_id(id) else {
-            continue;
-        };
-        let target = shared.clone();
-        let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
-            let mut client = target.borrow_mut();
-            if i < 15 {
-                construction::arm(&mut client, KINDS[i + 1]);
-                return;
-            }
+fn command(client: &mut Client, action: u32) {
+    match action {
+        0..=14 => construction::arm(client, KINDS[action as usize + 1]),
+        33 => super::automation::toggle(client),
+        34..=41 => {
+            super::orders::train_kind(client, aoe_protocol::UnitKind::ALL[(action - 34) as usize])
+        }
+        48 => super::orders::train(client, false),
+        49 => super::orders::stop(client),
+        50 => {
+            client.village.move_cursor = true;
+            let _ = client.canvas.set_attribute("data-order-mode", "move");
+        }
+        51 => super::orders::train(client, true),
+        _ => {
             let Some(building_id) = client.selected.building_id else {
                 return;
             };
@@ -204,94 +192,52 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 .village
                 .buildings
                 .iter()
-                .any(|b| b.id == building_id && b.player == owner(&client))
+                .any(|b| b.id == building_id && b.player == owner(client))
             {
                 return;
             }
             let sequence = client.next_sequence;
-            let message = match i {
+            let message = match action {
                 15..=28 => Message::ResearchOrder {
                     sequence,
                     building_id,
-                    tech: Tech::ALL[i - 15],
+                    tech: Tech::ALL[(action - 15) as usize],
                 },
                 29 => Message::CancelConstructionOrder {
                     sequence,
                     building_id,
                 },
-                _ => Message::CancelResearch {
+                30 => Message::CancelResearch {
                     sequence,
                     building_id,
                 },
-            };
-            send(&mut client, message);
-        });
-        button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
-        callback.forget();
-    }
-    for (id, kind) in [
-        ("train-archer", aoe_protocol::UnitKind::Archer),
-        ("train-skirmisher", aoe_protocol::UnitKind::Skirmisher),
-        ("train-spearman", aoe_protocol::UnitKind::Spearman),
-        ("train-scout", aoe_protocol::UnitKind::Scout),
-    ] {
-        let Some(button) = shared.borrow().document.get_element_by_id(id) else {
-            continue;
-        };
-        let target = shared.clone();
-        let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
-            super::orders::train_kind(&mut target.borrow_mut(), kind);
-        });
-        button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
-        callback.forget();
-    }
-    for (i, id) in [
-        "market-buy-wood",
-        "market-buy-food",
-        "market-buy-stone",
-        "market-sell-wood",
-        "market-sell-food",
-        "market-sell-stone",
-    ]
-    .iter()
-    .enumerate()
-    {
-        let Some(button) = shared.borrow().document.get_element_by_id(id) else {
-            continue;
-        };
-        let target = shared.clone();
-        let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
-            let mut client = target.borrow_mut();
-            let Some(building_id) = client.selected.building_id else {
-                return;
-            };
-            if !client
-                .village
-                .buildings
-                .iter()
-                .any(|b| b.id == building_id && b.player == owner(&client))
-            {
-                return;
-            }
-            let sequence = client.next_sequence;
-            let resource = aoe_protocol::TradeResource::ALL[i % 3];
-            let message = if i < 3 {
-                Message::MarketBuy {
+                31..=32 => Message::FarmReseedOrder {
                     sequence,
                     building_id,
-                    resource,
-                }
-            } else {
-                Message::MarketSell {
+                    add: action == 31,
+                },
+                42..=44 => Message::MarketBuy {
                     sequence,
                     building_id,
-                    resource,
-                }
+                    resource: aoe_protocol::TradeResource::ALL[(action - 42) as usize],
+                },
+                45..=47 => Message::MarketSell {
+                    sequence,
+                    building_id,
+                    resource: aoe_protocol::TradeResource::ALL[(action - 45) as usize],
+                },
+                _ => return,
             };
-            send(&mut client, message);
-        });
-        button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
-        callback.forget();
+            send(client, message);
+        }
     }
+}
+
+pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
+    let callback = Closure::<dyn FnMut(u32)>::new(move |action| {
+        command(&mut shared.borrow_mut(), action);
+    });
+    commands_bind(callback.as_ref().unchecked_ref())?;
+    callback.forget();
     Ok(())
 }

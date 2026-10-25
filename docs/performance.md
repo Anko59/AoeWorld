@@ -160,8 +160,18 @@ E2E checks exercise the resulting shipped bundle. The gameplay bundle is
 `web/pkg`; the diagnostics app uses `web/diagnostics-pkg`, including its replay
 verification kernel. Both are built by `make build-wasm`, and `make perf-wasm-cap`
 requires both optimized gzip artifacts to fit the same unchanged baseline cap.
-`make perf-wasm-functions` writes per-function Binaryen metrics under `.cache/`
+`make perf-wasm-functions` writes per-function Binaryen metrics to
+`reports/perf/wasm-functions.txt`
 for diagnosing size growth; it does not change the baseline.
+
+`make build-wasm` also emits the current build-assembled WGSL programs into
+ignored `web/pkg/*.wgsl`. WebGPU downloads and validates both before creating
+pipelines; download/validation failures follow the normal WebGL2/Canvas recovery
+path and its initialization deadline. Native generation and browser unit tests
+use the same shader templates. Production WASM contains only the loader.
+Recovery URL serialization and startup diagnostics run in JavaScript: formatting
+the live camera's floats in Rust would retain its full decimal formatter solely
+for a browser navigation. Camera, seat and unknown fragment fields are preserved.
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot

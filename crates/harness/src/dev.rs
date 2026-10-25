@@ -301,6 +301,10 @@ fn start_with<R: Runtime>(
         "--rm",
         "-d",
         "--init",
+        // The local lab shares the owner's machine with browsers and builds.
+        // Bound the server AND its AI/worker children; do not spill into swap.
+        "--memory=5g",
+        "--memory-swap=5g",
         "--name",
         &name,
         "--user",

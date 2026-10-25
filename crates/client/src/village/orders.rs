@@ -114,7 +114,7 @@ pub(in super::super) fn stop(client: &mut Client) {
     }
 }
 
-pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
+pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queued: bool) {
     if client.role != Some(GameplayRole::Controller) {
         return;
     }
@@ -127,7 +127,11 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
         .map(|a| a.0)
         .or_else(|| super::picking::enemy_building(client, point));
     let animal = actor.filter(|a| a.1).map(|a| a.0);
-    if enemy.is_none() && animal.is_none() && super::construction::interact(client, point) {
+    if !queued
+        && enemy.is_none()
+        && animal.is_none()
+        && super::construction::interact(client, point)
+    {
         return;
     }
     let resource = super::picking::resource(client, point);
@@ -168,6 +172,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
         }
     }
     let group_gathers = resource.is_some()
+        && !queued
         && animal.is_none()
         && enemy.is_none()
         && !client.village.move_cursor
@@ -192,7 +197,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
         use crate::unit_visuals::{ClickOrder, click_order};
         let choice = click_order(
             unit.kind,
-            client.village.move_cursor,
+            client.village.move_cursor || queued,
             animal.is_some(),
             enemy.is_some(),
             resource.is_some(),
@@ -212,6 +217,11 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint) {
                 sequence,
                 entity_id: id,
                 resource_id,
+            },
+            _ if queued => Message::QueueMoveOrder {
+                sequence,
+                entity_id: id,
+                destination,
             },
             _ => Message::MoveOrder {
                 sequence,

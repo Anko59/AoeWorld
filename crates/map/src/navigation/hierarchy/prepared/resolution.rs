@@ -28,6 +28,10 @@ pub(crate) struct Resolution {
     best: (i64, i32, i32),
     best_component: Option<Component>,
     outcome: Option<ResolutionOutcome>,
+    /// A completed reverse flood proved these tiles cannot be reached from
+    /// the origin. Excluding them from endpoint selection avoids flooding a
+    /// whole continent merely to reject a small sealed destination pocket.
+    excluded: BTreeSet<TileCoord>,
 }
 
 impl Resolution {
@@ -60,11 +64,16 @@ impl Resolution {
             best: (squared_distance(origin, destination), origin.y, origin.x),
             best_component: None,
             outcome: None,
+            excluded: BTreeSet::new(),
         }
     }
 
     pub(crate) fn inherit_chunks(&mut self, chunks: BTreeSet<Key>) {
         self.chunks = chunks;
+    }
+
+    pub(crate) fn exclude_sealed(&mut self, tiles: BTreeSet<TileCoord>) {
+        self.excluded = tiles;
     }
 
     pub(crate) fn into_search(
@@ -95,12 +104,17 @@ impl Resolution {
         .filter(|key| self.atlas.contains(*key))
     }
 
+    pub(crate) fn preparation_tile(&self) -> Option<TileCoord> {
+        self.next_key().map(|key| grid::tile(key, 0))
+    }
+
     pub(crate) fn retained_entries(&self) -> usize {
         self.chunks.len()
             + self.geometric.len()
             + self.geometric_seen.len()
             + self.heap.len()
             + self.parents.len()
+            + self.excluded.len()
     }
 
     pub(crate) fn touches(&self, area: aoe_core::TileRect) -> bool {
@@ -124,6 +138,17 @@ impl Resolution {
         limits: Option<(u32, usize)>,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<ResolutionOutcome>> {
+        self.poll_budgeted(generator, remaining, limits, cancelled, &|| true)
+    }
+
+    pub(crate) fn poll_budgeted(
+        &mut self,
+        generator: &MapChunkGenerator,
+        remaining: &mut u32,
+        limits: Option<(u32, usize)>,
+        cancelled: &dyn Fn() -> bool,
+        prepare: &dyn Fn() -> bool,
+    ) -> Result<Option<ResolutionOutcome>> {
         let _span = generator.measure_navigation(crate::NavigationPhase::Components);
         loop {
             if cancelled() {
@@ -133,7 +158,9 @@ impl Resolution {
                 return Ok(Some(outcome));
             }
             if limits.is_some_and(|(work, entries)| {
-                self.work >= u64::from(work) || self.retained_entries() > entries
+                (self.work >= u64::from(work)
+                    && !(self.stage_work > 0 && self.credit == self.stage_work))
+                    || self.retained_entries() > entries
             }) {
                 self.outcome = Some(ResolutionOutcome::Bounded);
                 continue;
@@ -142,14 +169,10 @@ impl Resolution {
                 return Ok(None);
             }
             if self.credit == 0 {
-                self.stage_work = if self
+                let chunk = self
                     .next_key()
-                    .is_some_and(|key| !self.chunks.contains(&key))
-                {
-                    CHUNK_WORK
-                } else {
-                    1
-                };
+                    .is_some_and(|key| !self.chunks.contains(&key));
+                self.stage_work = if chunk { CHUNK_WORK } else { 1 };
             }
             let allowed = limits.map_or(u32::MAX, |(maximum, _)| {
                 u64::from(maximum)
@@ -161,6 +184,13 @@ impl Resolution {
             self.work += u64::from(take);
             *remaining -= take;
             if self.credit < self.stage_work {
+                return Ok(None);
+            }
+            if self
+                .next_key()
+                .is_some_and(|key| !self.chunks.contains(&key))
+                && !prepare()
+            {
                 return Ok(None);
             }
             self.credit = 0;
@@ -221,8 +251,36 @@ impl Resolution {
             return Ok(());
         };
         let chunk = self.atlas.chunk(generator, key, cancelled)?;
+        // A component unreachable from every boundary entry and the origin
+        // cannot be entered. Reject these certified local islands before
+        // choosing an endpoint, including when the requested tile is blocked.
+        // Keep incoming-only portals and follow directed local links; never
+        // assume a one-way drop can be traversed backwards.
+        let mut entered = BTreeSet::new();
+        if inside(key, self.origin) {
+            entered.insert(chunk.labels[grid::index(self.origin)]);
+        }
+        entered.extend(
+            chunk
+                .portals
+                .iter()
+                .map(|p| chunk.labels[grid::index(p.tile)]),
+        );
+        let mut successors: BTreeMap<u16, Vec<u16>> = BTreeMap::new();
+        for &(from, to) in &chunk.links {
+            successors.entry(from).or_default().push(to);
+        }
+        let mut frontier: Vec<_> = entered.iter().copied().collect();
+        while let Some(from) = frontier.pop() {
+            for &to in successors.get(&from).into_iter().flatten() {
+                if entered.insert(to) {
+                    frontier.push(to);
+                }
+            }
+        }
         let closest = closest_in_chunk(key, self.destination);
-        if chunk.labels[grid::index(closest)] != 0 {
+        let label = chunk.labels[grid::index(closest)];
+        if label != 0 && entered.contains(&label) && !self.excluded.contains(&closest) {
             self.best = self.best.min((
                 squared_distance(closest, self.destination),
                 closest.y,
@@ -230,8 +288,11 @@ impl Resolution {
             ));
         } else {
             for (at, &label) in chunk.labels.iter().enumerate() {
-                if label != 0 {
+                if label != 0 && entered.contains(&label) {
                     let tile = grid::tile(key, at);
+                    if self.excluded.contains(&tile) {
+                        continue;
+                    }
                     self.best =
                         self.best
                             .min((squared_distance(tile, self.destination), tile.y, tile.x));
@@ -290,6 +351,9 @@ impl Resolution {
             for (at, &local) in chunk.labels.iter().enumerate() {
                 if local == label {
                     let tile = grid::tile(key, at);
+                    if self.excluded.contains(&tile) {
+                        continue;
+                    }
                     let next = (squared_distance(tile, self.destination), tile.y, tile.x);
                     if next < self.best {
                         self.best = next;
@@ -326,6 +390,11 @@ impl Resolution {
         // Inherited chunk credit is authoritative progress, unlike the
         // generator's physical caches. Hash its canonical frontier as well.
         hash.update(b"lazy-components");
+        hash.update(&(self.excluded.len() as u64).to_le_bytes());
+        for tile in &self.excluded {
+            hash.update(&tile.x.to_le_bytes());
+            hash.update(&tile.y.to_le_bytes());
+        }
         hash.update(&self.atlas.stamp());
         for tile in [self.origin, self.destination, self.candidate] {
             hash.update(&tile.x.to_le_bytes());

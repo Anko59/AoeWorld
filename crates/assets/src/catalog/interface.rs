@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// Increment when the exported interface selection or crops change.
-pub const VERSION: u8 = 4;
+pub const VERSION: u8 = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct IconSource {
@@ -52,6 +52,7 @@ const COMMANDS: &[(&str, u32, u32)] = &[
     ("garrison", 51000, 13),
     ("ungarrison", 50721, 2),
     ("attack", 51000, 4),
+    ("build-cursor", 51000, 7),
     ("repair", 50721, 28),
     ("cancel", 50721, 0),
 ];

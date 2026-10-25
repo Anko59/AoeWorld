@@ -174,6 +174,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
                 death_tick: None,
                 hunt_target: None,
                 death_hunt: None,
+                auto_scout: false,
             },
         )]),
         presentation: Default::default(),
@@ -327,6 +328,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         age: Age::Dark,
         gate_open: false,
         rally_point: None,
+        farm_reseeds: 0,
     });
     let rendered = |client: &Client| {
         units(client, &scene)
@@ -364,6 +366,7 @@ async fn authoritative_gate_stays_open_when_the_holding_enemy_is_not_resident() 
         age: Age::Feudal,
         gate_open: true,
         rally_point: None,
+        farm_reseeds: 0,
     });
     for _ in 0..20 {
         let gate = units(&client, &scene)

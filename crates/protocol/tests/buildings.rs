@@ -35,6 +35,7 @@ fn building() -> GameplayBuildingState {
         last_hit: None,
         gate_open: false,
         rally_point: None,
+        farm_reseeds: 0,
         age: aoe_protocol::Age::Dark,
     }
 }
@@ -52,6 +53,59 @@ fn farm(construction: ConstructionState, permille: u16) -> GameplayBuildingState
         food_remaining: Some(175),
         training_queue: vec![],
         ..building()
+    }
+}
+
+#[test]
+fn prepaid_reseeds_are_bounded_and_belong_only_to_completed_mills() {
+    let message = |building| GameplayServerMessage::Snapshot {
+        revision: 1,
+        tick: Tick(0),
+        units: vec![],
+        players: vec![player()],
+        buildings: vec![building],
+    };
+    let mut mill = building();
+    mill.kind = BuildingKind::Mill;
+    mill.footprint.max = TileCoord::new(7, 7);
+    mill.farm_reseeds = 99;
+    let valid = message(mill.clone());
+    assert_eq!(
+        decode_gameplay_server(&encode_gameplay_server(&valid).unwrap()).unwrap(),
+        valid
+    );
+    for (kind, side, state, progress, count) in [
+        (
+            BuildingKind::Mill,
+            2,
+            ConstructionState::Complete,
+            1000,
+            100,
+        ),
+        (
+            BuildingKind::TownCenter,
+            4,
+            ConstructionState::Complete,
+            1000,
+            1,
+        ),
+        (
+            BuildingKind::Mill,
+            2,
+            ConstructionState::UnderConstruction,
+            0,
+            1,
+        ),
+    ] {
+        let mut invalid = mill.clone();
+        invalid.kind = kind;
+        invalid.footprint.max = TileCoord::new(5 + side, 5 + side);
+        invalid.construction = state;
+        invalid.progress_permille = progress;
+        invalid.farm_reseeds = count;
+        let invalid = message(invalid);
+        assert!(encode_gameplay_server(&invalid).is_err());
+        assert!(decode_gameplay_server(&postcard::to_allocvec(&invalid).unwrap()).is_err());
     }
 }
 

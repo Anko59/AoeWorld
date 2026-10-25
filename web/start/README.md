@@ -4,6 +4,8 @@ The root page opens the cinematic once per browser session, then the main menu.
 `?skipIntro=1` opens the menu immediately; `?play=1` opens the game directly.
 Existing camera fragments also open the game directly, preserving capture links.
 `?introStills=1` keeps the cinematic timing but uses its animated poster fallback.
+The game renderer starts after the cinematic finishes or is skipped, so GPU
+recovery cannot replace the entry document during its playback.
 
 The opening preloads four muted, inline, non-looping clips. Each plays at normal
 speed; its final frame holds through the short crossfade. Posters remain beneath
@@ -56,16 +58,24 @@ placed n/N, AI players seated n/M. Only then does the usual terrain wait
 start. Cancel and Quit to Main Menu call `POST /skirmish/stop`, which ends
 the AI processes; a new game or any other map replaces them too.
 
-**Reload resumes the match.** A tab holding a controller resume token (session
-storage, which survives a reload) first asks `GET /skirmish` before choosing
+**Returning resumes the match.** A tab holding a controller resume token (local
+storage, shared by tabs on this origin) first asks `GET /skirmish` before choosing
 the cinematic or the menu. When the server reports phase `ready`, the page skips
 both and opens the loading screen ("Returning to your game") on the usual
 terrain wait for that `content_hash`, then centres the Town Center. The game's
 socket sends the same token, so the server gives the tab its human seat back
-(the seat is reserved for 30 s after a disconnect). The AI players keep playing
+(the seat is reserved for 30 s after a disconnect). A closed tab can be replaced
+after that hold too, if nobody else took the seat. An unrelated world's token
+cannot claim a human seat or gain one through spectator promotion. The AI players keep playing
 throughout: the server stops them only after 5 minutes with nobody in the human
 seat. If this tab reconnects as an observer, or no match is running, the page
 falls back to the cinematic or menu as usual.
+
+The terrain wait has no wall-clock failure deadline: a ready, connected match
+keeps loading under CPU pressure. The scene's pending chunk count is shown as
+"Opening terrain · n chunks remaining"; retrying requests and a missing minimap
+have separate messages. Definitive preparation/activation errors still open the
+error screen. Both new games and reloads use this wait.
 
 The **France** preset is all of mainland France (46.6 N, 2.5 E) at the
 Country size, 960 km at 30:1 (16,000 tiles a side): the map of

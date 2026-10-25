@@ -35,7 +35,7 @@ test("shepherds exhaust one sheep and start another without a second hunt order"
     timeout: 60_000,
   });
   await centerVillage(page);
-  let all = await actors(page);
+  const all = await actors(page);
   const first = all.find((a) => a.kind === "Sheep" && a.hp > 0);
   const scout = all.find((a) => a.kind === "Scout");
   if (!first || !scout) throw new Error("Starting sheep/scout missing");
@@ -43,18 +43,29 @@ test("shepherds exhaust one sheep and start another without a second hunt order"
   await page.mouse.click(scout.x, scout.y);
   await page.locator("#move-units").click();
   await page.mouse.click(first.x, first.y, { button: "right" });
-  await expect
-    .poll(
-      async () => {
-        all = await actors(page);
-        const current = all.find((a) => a.id === scout.id);
-        return current
-          ? Math.hypot(current.x - first.x, current.y - first.y)
-          : Infinity;
-      },
-      { timeout: 15_000 },
-    )
-    .toBeLessThan(5);
+  // Poll the HUD in the browser so every observation does not add report steps.
+  // Keep the original distance, HP predicates and deadlines for all three waits.
+  await test.step(
+    "Scout claims the nearby herd",
+    async () => {
+      await page.waitForFunction(
+        ({ scoutId, first }) => {
+          const all = JSON.parse(
+            document.querySelector("#scene")?.getAttribute("data-actors") ??
+              "[]",
+          ) as Actor[];
+          const current = all.find((a) => a.id === scoutId);
+          return (
+            !!current &&
+            Math.hypot(current.x - first.x, current.y - first.y) < 5
+          );
+        },
+        { scoutId: scout.id, first },
+        { timeout: 15_000, polling: 250 },
+      );
+    },
+    { box: true },
+  );
   await freshHud(page);
   const villager = (await actors(page))
     .filter((a) => a.kind === "Villager")
@@ -66,20 +77,42 @@ test("shepherds exhaust one sheep and start another without a second hunt order"
   if (!sheep) throw new Error("First sheep disappeared before the order");
   // This is the only hunt input. A second animal losing HP proves continuation.
   await page.mouse.click(sheep.x, sheep.y, { button: "right" });
-  await expect
-    .poll(async () => (await actors(page)).find((a) => a.id === first.id)?.hp, {
-      timeout: 25_000,
-    })
-    .toBe(0);
-  await expect
-    .poll(
-      async () =>
-        (await actors(page)).some(
-          (a) => a.kind === "Sheep" && a.id !== first.id && a.hp < 7,
-        ),
-      { timeout: 180_000 },
-    )
-    .toBe(true);
+  await test.step(
+    "The first sheep is killed",
+    async () => {
+      await page.waitForFunction(
+        (firstId) => {
+          const all = JSON.parse(
+            document.querySelector("#scene")?.getAttribute("data-actors") ??
+              "[]",
+          ) as Actor[];
+          return all.find((a) => a.id === firstId)?.hp === 0;
+        },
+        first.id,
+        { timeout: 25_000, polling: 250 },
+      );
+    },
+    { box: true },
+  );
+  await test.step(
+    "Shepherds start another sheep without another order",
+    async () => {
+      await page.waitForFunction(
+        (firstId) => {
+          const all = JSON.parse(
+            document.querySelector("#scene")?.getAttribute("data-actors") ??
+              "[]",
+          ) as Actor[];
+          return all.some(
+            (a) => a.kind === "Sheep" && a.id !== firstId && a.hp < 7,
+          );
+        },
+        first.id,
+        { timeout: 180_000, polling: 1_000 },
+      );
+    },
+    { box: true },
+  );
   await freshHud(page);
   if (capture) {
     await page.screenshot({

@@ -38,6 +38,7 @@ pub(crate) fn docker_tools(
         .map(String::from)
         .to_vec();
     all.push(user());
+    all.extend(crate::slots::cap_args());
     for (name, value) in [
         ("CARGO_HOME", cargo_home.display().to_string()),
         ("CARGO_TARGET_DIR", target.display().to_string()),
@@ -71,19 +72,40 @@ pub(crate) fn docker_tools(
     Ok(())
 }
 
+/// Whether the client source fetches build-assembled external shaders.
+pub(crate) fn has_external_shaders(tree: &Path) -> bool {
+    tree.join("crates/rendering/src/web/shaders.js").is_file()
+}
+
 /// Build both current web bundles in order: bind gameplay before the diagnostics
 /// feature build overwrites Cargo's output. Shared by compare, dev-server and
 /// the focused browser prerequisites; Make's build-wasm uses the same steps.
 /// Older revisions, such as a comparison's merge base, predate the
 /// diagnostics feature; `diagnostics` is false for them and only the gameplay
-/// bundle is built.
-pub(crate) fn web_commands(wasm: &str, diagnostics: bool) -> Vec<Vec<&str>> {
+/// bundle is built. Emit external shaders when the source declares that dependency.
+pub(crate) fn web_commands(
+    wasm: &str,
+    diagnostics: bool,
+    external_shaders: bool,
+) -> Vec<Vec<&str>> {
     let bundles: &[_] = if diagnostics {
         &[("web/pkg", false), ("web/diagnostics-pkg", true)]
     } else {
         &[("web/pkg", false)]
     };
-    let mut commands = Vec::with_capacity(4);
+    let mut commands = Vec::new();
+    if external_shaders {
+        commands.push(vec![
+            "cargo",
+            "run",
+            "--locked",
+            "-p",
+            "aoe-harness",
+            "--",
+            "assets",
+            "browser-shaders",
+        ]);
+    }
     for &(output, diagnostics) in bundles {
         let mut build = vec![
             "cargo",
@@ -119,16 +141,20 @@ pub(crate) fn build_app(tree: &Path, target: &Path, cargo_home: &Path) -> Result
     fs::create_dir_all(target)?;
     let wasm = target.join("wasm32-unknown-unknown/wasm-release/aoe_client.wasm");
     let wasm = wasm.display().to_string();
-    let commands = web_commands(&wasm, has_diagnostics_feature(tree))
-        .into_iter()
-        .chain([vec![
-            "cargo",
-            "build",
-            "--locked",
-            "--release",
-            "-p",
-            "aoe-server",
-        ]]);
+    let commands = web_commands(
+        &wasm,
+        has_diagnostics_feature(tree),
+        has_external_shaders(tree),
+    )
+    .into_iter()
+    .chain([vec![
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-p",
+        "aoe-server",
+    ]]);
     for args in commands {
         eprintln!("compare: {} (in {})", args[..2].join(" "), tree.display());
         docker_tools(tree, target, cargo_home, &args)?;

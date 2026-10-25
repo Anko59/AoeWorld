@@ -7,8 +7,25 @@ use aoe_core::TileCoord;
 mod components;
 
 const GUIDANCE_AFTER_WORK: u32 = 16_384;
+// Keep first-use local legs cheap, then certify connectivity while a long
+// trip still has walking distance to hide the bounded global work.
+const GUIDANCE_AFTER_TILES: i32 = 64;
 
 impl RoutePlanner {
+    /// Immutable terrain the next polls may visit. Adapters may warm these
+    /// caches without changing planner work, ordering or results.
+    pub fn preparation_tiles(&self) -> Vec<TileCoord> {
+        let mut tiles = vec![self.leg_origin];
+        if let Some(search) = &self.hierarchy {
+            tiles.extend(search.preparation_tiles());
+        }
+        if let Some(resolution) = &self.resolution {
+            tiles.extend(resolution.preparation_tile());
+        }
+        tiles.extend(self.guidance.front().copied());
+        tiles
+    }
+
     pub(super) fn effective_destination(&self) -> TileCoord {
         self.resolved_destination.unwrap_or(self.destination)
     }
@@ -20,17 +37,53 @@ impl RoutePlanner {
             .unwrap_or(self.effective_destination())
     }
 
-    pub(super) fn needs_guidance(&self) -> bool {
-        !self.approach
-            && self.hierarchy.is_none()
-            && self.resolution.is_none()
-            && !self.guidance_checked
-            && (self.leg_work >= GUIDANCE_AFTER_WORK
-                || (self.route_directions.is_some() && self.work < GUIDANCE_AFTER_WORK))
+    /// Before connectivity is proved, a provisional far leg must preserve
+    /// the origin's reachable component rather than taking a one-way drop.
+    pub(super) fn provisional_map_leg(&self, terrain: &dyn RouteTerrain) -> bool {
+        terrain.route_generator().is_some()
+            && self.guidance.is_empty()
+            && self.resolved_destination.is_none()
             && (self.origin.x - self.destination.x)
                 .abs()
                 .max((self.origin.y - self.destination.y).abs())
                 > 64
+    }
+
+    pub(super) fn begin_guidance(
+        &mut self,
+        terrain: &dyn RouteTerrain,
+        overlay: &ResourceOverlay,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(), Terminal> {
+        self.guidance_checked = true;
+        if let Some(generator) = terrain.route_generator()
+            && (self.leg_work >= GUIDANCE_AFTER_WORK
+                || generator.refresh_navigation(overlay, cancelled)?)
+        {
+            // A difficult local trip also needs an atlas when the adapter
+            // has not prepared one yet. Capturing collision composes no tiles.
+            generator.prepare_navigation(overlay, cancelled)?;
+            self.hierarchy = Some(super::super::hierarchy::Search::new(
+                self.leg_origin,
+                self.effective_destination(),
+                DEFAULT_HIERARCHY_EXPANSIONS,
+            ));
+        }
+        Ok(())
+    }
+
+    pub(super) fn needs_guidance(&self, terrain: &dyn RouteTerrain) -> bool {
+        self.hierarchy.is_none()
+            && self.resolution.is_none()
+            && !self.guidance_checked
+            && (self.leg_work >= GUIDANCE_AFTER_WORK
+                || (self.work < GUIDANCE_AFTER_WORK
+                    && terrain.route_generator().is_some()
+                    && (self.origin.x - self.leg_origin.x)
+                        .abs()
+                        .max((self.origin.y - self.leg_origin.y).abs())
+                        >= GUIDANCE_AFTER_TILES))
+        // Straight-line proximity says nothing about the required detour.
     }
 
     pub(super) fn guide(
@@ -49,46 +102,59 @@ impl RoutePlanner {
                 self.begin_components(generator, overlay, cancelled)?;
             }
         }
+        if self.needs_guidance(terrain) {
+            self.begin_guidance(terrain, overlay, cancelled)?;
+        }
+        if (self.hierarchy.is_some() || self.resolution.is_some())
+            && !self.pocket_checked
+            && self.resolved_destination.is_none()
+            && terrain.route_walkable(overlay, self.destination, cancelled)?
+            && !self.check_destination_pocket(terrain, overlay, &mut remaining, cancelled)?
+        {
+            return Ok(0);
+        }
         if self.resolution.is_some() {
             let Some(generator) = terrain.route_generator() else {
                 return Err(Terminal::SearchLimit);
             };
-            let local = if self.needs_local_lookahead() {
+            let local = if self.needs_local_lookahead() && self.leg_work < GUIDANCE_AFTER_WORK {
                 remaining / 2
             } else {
                 0
             };
             let mut proof = remaining - local;
-            let ready = self.poll_components(generator, &mut proof, cancelled)?;
+            let ready = self.poll_components(generator, &mut proof, cancelled, &|| {
+                terrain.prepare_navigation_chunk()
+            })?;
             remaining = local + proof;
             if !ready {
-                return Ok(remaining);
+                return Ok(local);
             }
         }
-        if self.needs_guidance() {
-            self.guidance_checked = true;
-            if let Some(generator) = terrain.route_generator()
-                && (self.leg_work >= GUIDANCE_AFTER_WORK
-                    || generator.refresh_navigation(overlay, cancelled)?)
-            {
-                generator.refresh_navigation(overlay, cancelled)?;
-                self.hierarchy = Some(super::super::hierarchy::Search::new(
-                    self.leg_origin,
-                    self.effective_destination(),
-                    DEFAULT_HIERARCHY_EXPANSIONS,
-                ));
-            }
-        }
+        let hierarchy_local = if self.needs_local_lookahead() && self.leg_work < GUIDANCE_AFTER_WORK
+        {
+            remaining / 2
+        } else {
+            0
+        };
         if let Some(hierarchy) = self.hierarchy.as_mut() {
             let Some(generator) = terrain.route_generator() else {
                 return Err(Terminal::SearchLimit);
             };
-            let before = remaining;
-            let outcome = hierarchy.poll_overlay(generator, overlay, &mut remaining, cancelled);
-            self.work = self.work.saturating_add(before - remaining);
+            // Pending global guidance must not stop cheap local legs. Keep
+            // half of this poll for lookahead, as endpoint refinement does.
+            let local = hierarchy_local;
+            let mut proof = remaining - local;
+            let before = proof;
+            let outcome =
+                hierarchy.poll_budgeted(generator, overlay, &mut proof, cancelled, &|| {
+                    terrain.prepare_navigation_chunk()
+                });
+            self.work = self.work.saturating_add(before - proof);
             self.update_peak_retained_entries();
+            remaining = local + proof;
             let Some(outcome) = outcome? else {
-                return Ok(0);
+                return Ok(local);
             };
             let finished = self.hierarchy.take().ok_or(Terminal::SearchLimit)?;
             match outcome {
@@ -121,38 +187,5 @@ impl RoutePlanner {
             self.guidance.pop_front();
         }
         Ok(remaining)
-    }
-}
-
-impl RoutePlanner {
-    /// Gives the destination up, as Age of Empires does with a target a unit
-    /// cannot reach: the route goes on to the closed tile nearest the
-    /// destination (the best this leg proved) and then ends, and the planner
-    /// reports `Unreachable` once that route is used. With no tile nearer
-    /// than where the leg starts, it reports `Unreachable` at once.
-    pub fn approach_closest(&mut self) {
-        if self.terminal.is_some() || self.approach {
-            return;
-        }
-        self.approach = true;
-        if self.reconstruction.is_some() {
-            return;
-        }
-        let best = self.leg_best.map(|(best, _)| best);
-        match best {
-            Some(best) if self.search.is_some() => {
-                if self.begin_reconstruction(best).is_err() {
-                    self.finish_terminal(Terminal::SearchLimit);
-                }
-            }
-            _ => {
-                self.finish_terminal(Terminal::Unreachable);
-            }
-        }
-    }
-
-    /// True once `approach_closest` gave the destination up.
-    pub fn is_approach(&self) -> bool {
-        self.approach
     }
 }

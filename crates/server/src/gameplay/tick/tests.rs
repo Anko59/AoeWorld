@@ -38,16 +38,18 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
         .collect()
 }
 
-/// Current per-session wire digests. The optional rally-point field adds one
-/// byte to each building observation, including None. These pins are regenerated
-/// for that deliberate wire change; message counts and sight rules stay pinned.
+/// Current per-session wire digests. TC arches now permit movement through
+/// the open footprint, changing routes, fog and message counts intentionally.
+/// Re-pin the same scenario; all sight and replay assertions remain in force.
+/// The merged wire also appends prepaid Mill reseeds and unit auto-scout flags.
+/// Regenerate the combined stream, retaining the same scenario and sight rules.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 13079712425393864257),
-    (409, 2188909878759062395),
-    (51, 17104482913462763068),
-    (168, 9892112248539535877),
-    (170, 707842460394309217),
-    (407, 14298925848245696670),
+    (407, 12576066171330405047),
+    (409, 18016452352948481079),
+    (51, 15140963984619083848),
+    (168, 16130475816194725269),
+    (410, 17060129097136812851),
+    (407, 8990576408232183146),
 ];
 
 #[tokio::test(flavor = "multi_thread")]

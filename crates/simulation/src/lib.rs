@@ -12,6 +12,9 @@ mod navigation_cache;
 mod terrain;
 
 pub(crate) const MAX_ROUTE_WORK_PER_ORDER: u32 = aoe_map::MAX_ROUTE_PLANNER_WORK;
+// Eight executions keep global guidance ahead of the existing movement
+// lookahead while bounding cold preparation across every player's planners.
+pub(crate) const MAX_NAV_PREPARATIONS_PER_TICK: u32 = 8;
 pub(crate) const MAX_ROUTE_WORK_PER_TICK: u32 = 16_384;
 
 use aoe_core::{CHUNK_SIZE, EntityId, PlayerId, Position, Region, Tick};

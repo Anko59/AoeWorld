@@ -321,6 +321,7 @@ fn browser_build(root: &Path) -> git::Result<()> {
     let web = crate::ship::compare::build::web_commands(
         "target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm",
         crate::ship::compare::build::has_diagnostics_feature(root),
+        crate::ship::compare::build::has_external_shaders(root),
     );
     let commands = [vec![
         "cargo",

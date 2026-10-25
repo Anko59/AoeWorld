@@ -68,8 +68,11 @@ impl Presentation {
         self.last_draw = Some(time);
         if let Some((latest, received)) = self.anchor {
             let elapsed = (time - received).max(0.0);
-            let target =
-                (latest as f64 + elapsed * self.tick_hz / 1_000.0 - 2.0).clamp(0.0, latest as f64);
+            let target = aoe_core::clamp_f64(
+                latest as f64 + elapsed * self.tick_hz / 1_000.0 - 2.0,
+                0.0,
+                latest as f64,
+            );
             self.tick = self.tick.max(target);
         }
     }

@@ -72,10 +72,13 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
                 match decode_gameplay_client(&bytes) {
                     Ok(GameplayClientMessage::Subscribe { revision, region }) => service.subscribe(session_id, revision, region).await,
                     Ok(GameplayClientMessage::MoveOrder { sequence, entity_id, destination }) => service.queue_move(session_id, sequence, entity_id, destination).await,
+                    Ok(GameplayClientMessage::QueueMoveOrder { sequence, entity_id, destination }) => service.queue_waypoint(session_id, sequence, entity_id, destination).await,
                     Ok(GameplayClientMessage::StopOrder { sequence, entity_id }) => service.queue_stop(session_id, sequence, entity_id).await,
                     Ok(GameplayClientMessage::GatherOrder { sequence, entity_id, resource_id }) => service.queue_gather(session_id, sequence, entity_id, resource_id).await,
                     Ok(GameplayClientMessage::CancelTrainingOrder { sequence, building_id }) => service.queue_cancel_training(session_id, sequence, building_id).await,
+                    Ok(GameplayClientMessage::AutoScoutOrder { sequence, entity_id, enabled }) => service.queue_auto_scout(session_id, sequence, entity_id, enabled).await,
                     Ok(GameplayClientMessage::SetRallyOrder { sequence, building_id, target }) => service.queue_set_rally(session_id, sequence, building_id, target).await,
+                    Ok(GameplayClientMessage::FarmReseedOrder { sequence, building_id, add }) => service.queue_farm_reseed(session_id, sequence, building_id, add).await,
                     Ok(GameplayClientMessage::TrainOrder { sequence, building_id, kind }) => service.queue_train(session_id, sequence, building_id, kind).await,
                     Ok(GameplayClientMessage::AttackOrder { sequence, entity_id, target_id }) => service.queue_attack(session_id, sequence, entity_id, target_id).await,
                     Ok(GameplayClientMessage::BuildOrder { sequence, builder_ids, kind, origin }) => service.queue_build(session_id, sequence, builder_ids, kind, origin).await,
@@ -112,7 +115,8 @@ where
 }
 
 /// Gives every human slot whose controller stayed away past the lease to the
-/// oldest spectator, under a fresh token; an empty slot stays claimable under a fresh token.
+/// oldest eligible spectator, under a fresh token. Without a successor, the
+/// same-world credential remains valid for a new tab returning to its seat.
 /// AI slots are never reassigned: only their token reaches them.
 pub(super) fn promote_expired(
     ownership: &mut Ownership,
@@ -132,18 +136,19 @@ pub(super) fn promote_expired(
         }
         let next = sessions
             .iter()
-            .filter(|(_, session)| session.role == GameplayRole::Spectator)
+            .filter(|(_, session)| {
+                session.role == GameplayRole::Spectator && session.may_claim_human_seat
+            })
             .min_by_key(|(_, session)| session.connected_at)
             .map(|(id, _)| *id);
-        let token = make_token(world_id, ownership.next_token);
-        ownership.next_token = ownership.next_token.wrapping_add(1);
         let Some(session_id) = next else {
-            // Nobody to promote: the seat opens, and the departed player's
-            // token must not open it again or hand it to the next claimant.
+            // No successor took the seat. A returning tab may resume this
+            // exact world/slot; tokens never match an unrelated world's slots.
             ownership.slots[index].lease = None;
-            ownership.slots[index].token = token;
             continue;
         };
+        let token = make_token(world_id, ownership.next_token);
+        ownership.next_token = ownership.next_token.wrapping_add(1);
         let slot = &mut ownership.slots[index];
         slot.token = token;
         slot.lease = Some(ControllerLease {

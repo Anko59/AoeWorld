@@ -44,7 +44,11 @@ pub(super) fn shade_objects(
             levels.resources.push(ResourceFactor {
                 body: frame_key(body),
                 shadow: shadow.map(frame_key),
-                light: light(r.position),
+                light: if r.kind == SceneResource::RALLY_FLAG {
+                    1.0
+                } else {
+                    light(r.position)
+                },
                 next: levels.entries[slot].resource,
             });
             levels.entries[slot].resource = levels.resources.len();

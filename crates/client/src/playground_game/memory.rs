@@ -6,48 +6,51 @@ use wasm_bindgen::prelude::*;
 #[cfg(test)]
 mod tests;
 
-// A fixed schema avoids pulling the recursive JSON Value serializer into
-// gameplay WASM, and allocates no temporary object/map per observation.
+// Rust owns the counters; the browser encodes the on-demand JSON presentation.
+// This keeps a second JSON codec and its generic error/number formatters out of
+// gameplay WASM. Typed views are consumed synchronously and never retained.
+#[wasm_bindgen(inline_js = "
+const count_names = [
+  'client_references', 'terrain_chunks', 'terrain_bytes', 'height_probes',
+  'height_candidates', 'terrain_requests', 'scene_bytes', 'render_frame_bytes',
+  'fog_bytes', 'units', 'unit_bytes', 'interpolation_bytes', 'buildings_and_ghosts',
+  'animals', 'projectiles', 'resource_entries', 'resource_bytes', 'stump_effects',
+  'outgoing_message_bytes', 'control_group_members', 'move_queue_bytes'
+];
+export function snapshot_json(backend, counts, names, renderer) {
+  const value = {backend};
+  count_names.forEach((name, i) => { value[name] = counts[i]; });
+  value.renderer = names.map((name, i) => [name, renderer[i]]);
+  return JSON.stringify(value);
+}
+")]
+extern "C" {
+    fn snapshot_json(
+        backend: &str,
+        counts: &[u32],
+        names: &js_sys::Array,
+        renderer: &[u32],
+    ) -> String;
+}
+
 struct Snapshot {
     backend: &'static str,
-    counts: [usize; COUNT_NAMES.len()],
+    counts: [usize; 21],
     renderer: [(&'static str, usize); 5],
 }
 
-const COUNT_NAMES: [&str; 19] = [
-    "client_references",
-    "terrain_chunks",
-    "terrain_bytes",
-    "height_probes",
-    "height_candidates",
-    "terrain_requests",
-    "scene_bytes",
-    "render_frame_bytes",
-    "fog_bytes",
-    "units",
-    "unit_bytes",
-    "interpolation_bytes",
-    "buildings_and_ghosts",
-    "animals",
-    "projectiles",
-    "resource_entries",
-    "resource_bytes",
-    "stump_effects",
-    "outgoing_message_bytes",
-];
-
-impl serde::Serialize for Snapshot {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeMap;
-        let mut map = serializer.serialize_map(Some(COUNT_NAMES.len() + 2))?;
-        map.serialize_entry("backend", &self.backend)?;
-        // Keep keys in static storage and serialize the counters in place,
-        // without building a second array of key/value pairs on every call.
-        for (key, value) in COUNT_NAMES.iter().zip(&self.counts) {
-            map.serialize_entry(key, value)?;
+impl Snapshot {
+    fn json(&self) -> String {
+        let names = js_sys::Array::new();
+        for (name, _) in self.renderer {
+            names.push(&JsValue::from_str(name));
         }
-        map.serialize_entry("renderer", &self.renderer)?;
-        map.end()
+        snapshot_json(
+            self.backend,
+            &self.counts.map(|value| value as u32),
+            &names,
+            &self.renderer.map(|(_, value)| value as u32),
+        )
     }
 }
 
@@ -95,9 +98,21 @@ pub fn client_memory_snapshot() -> Result<String, JsValue> {
                 resource_bytes,
                 effects,
                 client.socket.as_ref().map_or(0, |s| s.buffered_amount()) as usize,
+                super::controls::navigation::group_members(),
+                client.village.move_queues.capacity()
+                    * std::mem::size_of::<aoe_protocol::MoveQueue>()
+                    + client
+                        .village
+                        .move_queues
+                        .iter()
+                        .map(|q| {
+                            q.destinations.capacity()
+                                * std::mem::size_of::<aoe_core::WorldPosition>()
+                        })
+                        .sum::<usize>(),
             ],
             renderer: client.renderer.memory_usage(),
         };
-        serde_json::to_string(&value).map_err(|error| JsValue::from_str(&error.to_string()))
+        Ok(value.json())
     })
 }

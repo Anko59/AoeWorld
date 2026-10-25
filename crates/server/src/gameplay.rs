@@ -26,8 +26,10 @@ mod fanout;
 mod fog;
 #[path = "gameplay/frame.rs"]
 mod frame;
+#[path = "gameplay/preparation.rs"]
+mod preparation;
 #[path = "gameplay/probe.rs"]
-mod probe;
+pub(crate) mod probe;
 #[path = "gameplay/slots.rs"]
 mod slots;
 #[path = "gameplay/tick.rs"]
@@ -47,6 +49,7 @@ pub struct GameplayService {
     pub(super) sessions: Arc<Mutex<BTreeMap<u64, Session>>>,
     pub(super) ownership: Arc<Mutex<Ownership>>,
     next_session: Arc<AtomicU64>,
+    command_cursor: Arc<AtomicU64>,
     pub(super) world_id: u64,
     map_content_hash: Option<[u8; 32]>,
     map_metadata: Option<MapMetadata>,
@@ -54,12 +57,15 @@ pub struct GameplayService {
     resource_journal: Arc<std::sync::Mutex<resources::Journal>>,
     resource_directory: Option<std::path::PathBuf>,
     fanout_probe: Arc<probe::FanoutProbe>,
+    preparation: preparation::Preparation,
     /// What the last tick spent where; read by `run_ticks`.
     probe: Arc<crate::gameplay_match::TickProbe>,
 }
 
 pub(super) struct Session {
     pub(super) role: GameplayRole,
+    /// Unknown tokens from another world never gain control by waiting.
+    pub(super) may_claim_human_seat: bool,
     pub(super) token: Option<ResumeToken>,
     /// Index of the match slot this session controls; spectators have none.
     pub(super) slot: Option<usize>,
@@ -89,6 +95,7 @@ pub(super) struct Session {
     resident_buildings: BTreeMap<EntityId, aoe_protocol::GameplayBuildingState>,
     resident_animals: Vec<aoe_protocol::AnimalState>,
     resident_projectiles: Vec<aoe_protocol::ProjectileState>,
+    resident_move_queues: Vec<aoe_protocol::MoveQueue>,
     vision_revision: Option<u64>,
     /// The fog view the client holds; an unchanged rebuild is not resent.
     resident_fog: Option<aoe_protocol::FogState>,
@@ -109,10 +116,27 @@ struct Subscription {
 struct PendingCommand {
     sequence: u64,
     action: PendingAction,
+    prepared: Vec<preparation::Ready>,
+}
+
+impl PendingCommand {
+    fn ready(&self) -> bool {
+        self.prepared
+            .iter()
+            .all(|flag| flag.load(std::sync::atomic::Ordering::Acquire))
+    }
 }
 
 #[derive(Clone)]
 enum PendingAction {
+    AutoScout {
+        entity_id: EntityId,
+        enabled: bool,
+    },
+    FarmReseed {
+        building_id: EntityId,
+        add: bool,
+    },
     SetRally {
         building_id: EntityId,
         target: aoe_protocol::RallyTarget,
@@ -127,6 +151,7 @@ enum PendingAction {
     Move {
         entity_id: EntityId,
         destination: WorldPosition,
+        queued: bool,
     },
     Gather {
         entity_id: EntityId,
@@ -370,11 +395,21 @@ impl GameplayService {
         session.resident_buildings = buildings;
         session.resident_animals = animals;
         session.resident_projectiles = projectiles;
+        session.resident_move_queues =
+            fanout::move_queues(&world, player, units.iter().map(|u| u.id));
         session.vision_revision = Some(vision_revision);
+        let mut initial = vec![snapshot, wildlife, fog, projectile_message];
+        if !session.resident_move_queues.is_empty() {
+            initial.push(GameplayServerMessage::MoveQueues {
+                revision,
+                tick: world.tick(),
+                queues: session.resident_move_queues.clone(),
+            });
+        }
         let failed = !fanout::subscription::Delivery::offer(
             &mut session.subscription_delivery,
             &session.sender,
-            vec![snapshot, wildlife, fog, projectile_message],
+            initial,
         );
         drop(sessions);
         drop(world);

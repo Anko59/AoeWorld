@@ -13,6 +13,8 @@ use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
 pub(crate) enum AssetCommand {
+    /// Emit the current GPU programs into the ignored browser bundle.
+    BrowserShaders,
     Inspect {
         input: Option<PathBuf>,
     },
@@ -50,8 +52,20 @@ pub(crate) enum AssetCommand {
     },
 }
 
+pub(crate) fn browser_shaders() -> impl Iterator<Item = (&'static str, &'static str)> {
+    ["ordinary", "mixing"]
+        .into_iter()
+        .zip(aoe_rendering::shader_data::browser_shaders())
+}
+
 pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error>> {
     match command {
+        AssetCommand::BrowserShaders => {
+            std::fs::create_dir_all("web/pkg")?;
+            for (name, source) in browser_shaders() {
+                std::fs::write(format!("web/pkg/{name}.wgsl"), source)?;
+            }
+        }
         AssetCommand::DeReference { install, output } => {
             aoe_assets::de::reference(&install, &output)?;
         }

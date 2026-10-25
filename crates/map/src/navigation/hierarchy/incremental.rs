@@ -100,6 +100,15 @@ impl Search {
                 .any(|node| matches!(node,Node::Portal(tile) if overlaps(*tile)))
     }
 
+    pub(crate) fn preparation_tiles(&self) -> Vec<TileCoord> {
+        let mut tiles = vec![self.origin, self.destination];
+        tiles.extend(self.heap.iter().take(4).filter_map(|entry| match entry.2 {
+            Node::Portal(tile) => Some(tile),
+            _ => None,
+        }));
+        tiles
+    }
+
     pub(crate) fn retained_entries(&self) -> usize {
         (self.chunks.len()
             + usize::from(self.preparing.is_some())
@@ -127,6 +136,17 @@ impl Search {
         remaining: &mut u32,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<HierarchicalOutcome>> {
+        self.poll_budgeted(generator, overlay, remaining, cancelled, &|| true)
+    }
+
+    pub(crate) fn poll_budgeted(
+        &mut self,
+        generator: &MapChunkGenerator,
+        overlay: &ResourceOverlay,
+        remaining: &mut u32,
+        cancelled: &dyn Fn() -> bool,
+        prepare: &dyn Fn() -> bool,
+    ) -> Result<Option<HierarchicalOutcome>> {
         let _span = generator.measure_navigation(crate::NavigationPhase::Hierarchy);
         if !self.atlas_checked {
             self.atlas = generator.prepared_navigation(overlay);
@@ -147,7 +167,8 @@ impl Search {
                     Some(Node::Portal(tile)) => Some(chunk_of(tile)),
                     _ => None,
                 };
-                self.preparing = key.filter(|key| self.phase >= 2 && !self.chunks.contains(key));
+                let preparing = key.filter(|key| self.phase >= 2 && !self.chunks.contains(key));
+                self.preparing = preparing;
                 self.stage_work = if self.preparing.is_some() {
                     prepared::CHUNK_WORK
                 } else if self.phase < 2 {
@@ -168,6 +189,11 @@ impl Search {
             self.credit += take;
             *remaining -= take;
             if self.credit < self.stage_work {
+                return Ok(None);
+            }
+            // Reserve when executing, so credits completed on earlier ticks
+            // cannot all turn into cold chunk builds on the same tick.
+            if (self.preparing.is_some() || self.phase < 2) && !prepare() {
                 return Ok(None);
             }
             self.credit = 0;

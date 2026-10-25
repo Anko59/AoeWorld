@@ -1,6 +1,7 @@
 //! Bounded, versioned binary WebSocket contract.
 mod gameplay;
 pub use gameplay::FogState;
+pub use gameplay::MoveQueue;
 pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
 pub use gameplay::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 

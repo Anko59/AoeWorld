@@ -1,8 +1,8 @@
 //! Hierarchical route search over 32 x 32 chunks (HPA*). Entrances are pairs
 //! of open tiles across a chunk border (one portal per open run); intra-chunk
 //! costs and exact local land components are cached per chunk state.
-//! Match preparation only captures collision; terrain, components and costs
-//! are built lazily in the chunks visited by connectivity and route queries. A route
+//! Native match preparation installs immutable terrain, components and costs.
+//! Only overlay changes rebuild local graphs under the planner budgets. A route
 //! is planned over portals first; the caller refines each
 //! hop locally with the exact tile planner. Spatial overlay fingerprints
 //! update affected chunks after building, wall and depletion changes. Results
@@ -17,6 +17,9 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::sync::{Arc, OnceLock};
 mod grid;
+mod static_data;
+pub use static_data::NavigationSnapshot;
+pub use static_data::{NAVIGATION_FORMAT_VERSION, NavigationChunk, navigation_checksum};
 mod prepared;
 pub(crate) use prepared::{Resolution, ResolutionOutcome};
 
@@ -39,7 +42,7 @@ pub(crate) use cache::PortalCache;
 
 /// An entrance seen from one chunk: `tile` is inside it, `cross` is the open
 /// tile on the other side of the border.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 struct Portal {
     tile: TileCoord,
     cross: TileCoord,
@@ -256,11 +259,15 @@ impl Ground<'_> {
             .generator
             .measure_navigation(crate::NavigationPhase::Portals);
         let origin = TileCoord::new(key.0 * CHUNK_TILES, key.1 * CHUNK_TILES);
-        if self.generator.open_water_certain_near(
-            TileCoord::new(origin.x + CHUNK_TILES / 2, origin.y + CHUNK_TILES / 2),
-            CHUNK_TILES / 2,
-            self.cancelled,
-        )? {
+        // Loaded navigation already contains all water/passability facts.
+        // Dynamic rebuilds must never fall back to cold source residency.
+        if !self.generator.has_static_navigation()
+            && self.generator.open_water_certain_near(
+                TileCoord::new(origin.x + CHUNK_TILES / 2, origin.y + CHUNK_TILES / 2),
+                CHUNK_TILES / 2,
+                self.cancelled,
+            )?
+        {
             return Ok(ChunkPortals {
                 portals: Vec::new(),
                 costs: OnceLock::new(),
@@ -355,6 +362,11 @@ impl Ground<'_> {
             return atlas.chunk(self.generator, key, self.cancelled);
         }
         let stamp = self.overlay.navigation_key(key);
+        if stamp == ResourceOverlay::default().navigation_key(key)
+            && let Some(chunk) = self.generator.static_navigation_chunk(key)
+        {
+            return Ok(Arc::clone(&chunk.graph));
+        }
         if let Ok(mut cache) = self.generator.portal_cache().lock()
             && let Some(found) = cache.chunk(key, stamp)
         {

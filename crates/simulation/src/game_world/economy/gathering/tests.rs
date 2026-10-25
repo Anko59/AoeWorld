@@ -7,6 +7,7 @@ use aoe_map::ResourceNode;
 use crate::game_world::tests::economy::fixture;
 
 mod facing;
+mod replacement;
 
 fn resource_mainland() -> (GameWorld, ResourceNode) {
     let (package, pages, water) = fixture::flat_fixture(false);

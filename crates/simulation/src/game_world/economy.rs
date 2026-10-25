@@ -19,6 +19,7 @@ mod market;
 mod movement;
 mod navigation;
 pub(crate) mod placement;
+mod scouting;
 mod start_site;
 mod starting_kit;
 mod tick;
@@ -163,6 +164,8 @@ pub struct GameBuilding {
     /// Authoritative gate state, also retained in fog observations.
     pub gate_open: bool,
     pub rally_point: Option<RallyPoint>,
+    /// Prepaid farm rebuilds held by a Mill (at most 99).
+    pub farm_reseeds: u8,
 }
 impl GameBuilding {
     /// Construction progress in thousandths, 1000 once complete.
@@ -288,6 +291,9 @@ pub(crate) struct Economy {
     pub(crate) dropoffs: BTreeMap<(PlayerId, BuildingKind), Vec<EntityId>>,
     pub(crate) blocked_tiles: BTreeSet<TileCoord>,
     pub(crate) open_gates: BTreeSet<EntityId>,
+    pub(crate) scouts: BTreeMap<EntityId, scouting::AutoScout>,
+    pub(crate) scout_searches: BTreeSet<EntityId>,
+    pub(crate) scout_cursor: Option<EntityId>,
     pub(crate) gatherers: BTreeMap<EntityId, GatherTask>,
     pub(crate) builders: BTreeMap<EntityId, BuildTask>,
     pub(crate) depletions: Vec<aoe_map::Depletion>,
@@ -359,6 +365,8 @@ pub(crate) struct GatherTask {
     carcass_kind: Option<crate::AnimalKind>,
     fish: Option<aoe_map::ObjectKind>,
     tile: TileCoord,
+    /// Last reached work spot: certifies the local area after a long return.
+    work_tile: Option<TileCoord>,
     kind: ResourceKind,
     phase: GatherPhase,
     credits: u64,

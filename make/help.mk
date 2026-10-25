@@ -28,6 +28,8 @@ help:
 	@echo '  AOE_SOURCE_QUAL_PACKAGE_DIRECTORY=... AOE_SOURCE_QUAL_CONTENT_HASH=... make map-source-qualify  Qualify the 50,000-tile, 1:1 source-backed 100km case'
 	@echo '  Optional scale references: AOE_SOURCE_QUAL_512_*, AOE_SOURCE_QUAL_16384_*, AOE_SOURCE_QUAL_262144_*'
 	@echo '  make map-source-scale-qualify  Sample verified source packages at the configured scale axes without running movement'
+	@echo '  make test-navigation Focused static-navigation persistence and dynamic-update tests'
+	@echo '  make test-economy-automation Focused gather, farm, scout, replay, protocol and SDK tests'
 	@echo '  make map-test        Run deterministic map-model tests'
 	@echo '  AOE_MAP_REQUEST=... make map-perf  Sample synthetic map-generation work'
 	@echo '  make duel DUEL_TASK=<file>  Run tester red then implementer green (docs/shipping.md)'

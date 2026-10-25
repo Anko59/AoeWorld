@@ -198,3 +198,121 @@ fn attacking_cancels_farming_and_removes_a_spent_farm() {
     );
     assert_eq!(world.unit(worker).unwrap().task, UnitTask::Attacking);
 }
+
+#[test]
+fn mill_reseed_queue_charges_refunds_and_validates_authority() {
+    let (mut world, _, mill, farm) = mill_and_farm();
+    let wood = stock(&world).1;
+    assert_eq!(
+        world.issue_farm_reseed(PlayerId(1), mill, true),
+        Err(EconomyError::NotOwner)
+    );
+    assert_eq!(
+        world.issue_farm_reseed(PlayerId(0), farm, true),
+        Err(EconomyError::FarmUnavailable)
+    );
+    world.issue_farm_reseed(PlayerId(0), mill, true).unwrap();
+    assert_eq!(world.building(mill).unwrap().farm_reseeds, 1);
+    assert_eq!(stock(&world).1, wood - 60);
+    world.issue_farm_reseed(PlayerId(0), mill, false).unwrap();
+    assert_eq!(world.building(mill).unwrap().farm_reseeds, 0);
+    assert_eq!(stock(&world).1, wood);
+    assert!(world.issue_farm_reseed(PlayerId(0), mill, false).is_err());
+    set_stock(&mut world, 0, 59, 0, 0);
+    assert_eq!(
+        world.issue_farm_reseed(PlayerId(0), mill, true),
+        Err(EconomyError::InsufficientResources)
+    );
+}
+
+#[test]
+fn queued_reseed_rebuilds_once_and_keeps_the_same_farmer() {
+    let (mut world, worker, mill, farm) = mill_and_farm();
+    finish(&mut world, farm, 700);
+    world.issue_farm_reseed(PlayerId(0), mill, true).unwrap();
+    let wood = stock(&world).1;
+    world
+        .economy
+        .buildings
+        .get_mut(&farm)
+        .unwrap()
+        .food_remaining = Some(1);
+    let mut rebuilding = false;
+    for _ in 0..3000 {
+        world.advance();
+        let b = world
+            .building(farm)
+            .expect("queued reseed retains the farm");
+        rebuilding |= !b.is_complete();
+        if rebuilding && b.is_complete() && world.unit(worker).unwrap().task == UnitTask::Farming {
+            assert_eq!(world.building(mill).unwrap().farm_reseeds, 0);
+            assert_eq!(stock(&world).1, wood, "wood was paid when queued");
+            assert_eq!(stock(&world).0, 1, "last load delivered before rebuilding");
+            assert!(b.food_remaining.unwrap() > 160);
+            return;
+        }
+    }
+    panic!("same farmer must rebuild and resume without another order");
+}
+
+#[test]
+fn reseeds_are_bounded_and_an_unfinished_mill_cannot_take_payment() {
+    let (mut world, worker, mill, _) = mill_and_farm();
+    set_stock(&mut world, 0, 10_000, 0, 0);
+    for _ in 0..99 {
+        world.issue_farm_reseed(PlayerId(0), mill, true).unwrap();
+    }
+    let before = world.canonical_hash();
+    assert_eq!(
+        world.issue_farm_reseed(PlayerId(0), mill, true),
+        Err(EconomyError::Capacity)
+    );
+    assert_eq!(
+        world.canonical_hash(),
+        before,
+        "full queue must not charge again"
+    );
+    fixture::survey(&mut world, PlayerId(0), at(112, 100), 4);
+    let unfinished = world
+        .issue_build(PlayerId(0), &[worker], BuildingKind::Mill, at(111, 99))
+        .unwrap();
+    let before = stock(&world).1;
+    assert_eq!(
+        world.issue_farm_reseed(PlayerId(0), unfinished, true),
+        Err(EconomyError::UnderConstruction)
+    );
+    assert_eq!(stock(&world).1, before);
+}
+
+#[test]
+fn destroying_a_mill_loses_its_prepaid_reseeds() {
+    let (mut world, worker, mill, farm) = mill_and_farm();
+    finish(&mut world, farm, 700);
+    world.issue_farm_reseed(PlayerId(0), mill, true).unwrap();
+    let wood = stock(&world).1;
+    world.remove_building(mill);
+    assert_eq!(stock(&world).1, wood);
+    world
+        .economy
+        .buildings
+        .get_mut(&farm)
+        .unwrap()
+        .food_remaining = Some(1);
+    for _ in 0..6000 {
+        world.advance();
+        if world.building(farm).is_none() {
+            assert_eq!(world.unit(worker).unwrap().task, UnitTask::Idle);
+            return;
+        }
+    }
+    panic!("destroyed queue must not rebuild the spent farm");
+}
+
+#[test]
+fn prepaid_reseed_counts_are_part_of_authoritative_replay_state() {
+    let (mut world, _, mill, _) = mill_and_farm();
+    let before = world.canonical_hash();
+    // Isolate queue state from its wood payment: both must be replay inputs.
+    world.economy.buildings.get_mut(&mill).unwrap().farm_reseeds = 1;
+    assert_ne!(world.canonical_hash(), before);
+}

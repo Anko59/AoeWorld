@@ -18,9 +18,29 @@ fn direct(generator: &MapChunkGenerator, tile: TileCoord) -> Option<super::WalkC
 fn chunk_cells_and_edges_equal_direct_evaluation_including_the_map_edge() {
     // 100 tiles: the last chunk row and column are partly outside the map.
     let generator = MapChunkGenerator::new([7; 32], 11, 100);
+    for cy in 0..4 {
+        for cx in 0..4 {
+            generator.precompose_walk_chunk(cx, cy, &|| false).unwrap();
+        }
+    }
     for y in -2..103 {
         for x in -2..103 {
             let tile = TileCoord::new(x, y);
+            let direct_point = generator
+                .landscape_point_with_cancel(tile, &|| false)
+                .unwrap()
+                .map(|point| {
+                    (
+                        point.tile.terrain,
+                        point.resource.map(|resource| resource.node),
+                    )
+                });
+            assert_eq!(
+                generator
+                    .tile_and_node_with_cancel(tile, &|| false)
+                    .unwrap(),
+                direct_point
+            );
             assert_eq!(
                 generator.walk_at_with_cancel(tile, &|| false),
                 Ok(direct(&generator, tile)),
@@ -60,6 +80,7 @@ fn chunk_cells_and_edges_equal_direct_evaluation_including_the_map_edge() {
 fn cache_is_bounded_and_cancellation_wins_over_a_hit() {
     let generator = MapChunkGenerator::new([3; 32], 5, 4_096);
     let tile = TileCoord::new(40, 40);
+    generator.precompose_walk_chunk(1, 1, &|| false).unwrap();
     assert!(generator.walk_at_with_cancel(tile, &|| false).is_ok());
     let (bytes, chunks) = generator.walk_cache_usage();
     assert_eq!(chunks, 1);
@@ -105,10 +126,8 @@ fn navigation_spans_balance_and_warm_walk_hits_do_not_compose() {
     assert_eq!(
         *events.lock().unwrap(),
         vec![
-            (NavigationPhase::Terrain, true),
-            (NavigationPhase::Terrain, false),
-            (NavigationPhase::WalkCache, true),
-            (NavigationPhase::WalkCache, false),
+            (NavigationPhase::TerrainPoint, true),
+            (NavigationPhase::TerrainPoint, false),
         ]
     );
     events.lock().unwrap().clear();
@@ -117,10 +136,54 @@ fn navigation_spans_balance_and_warm_walk_hits_do_not_compose() {
         cold
     );
     assert!(events.lock().unwrap().is_empty());
+    generator.precompose_walk_chunk(2, 2, &|| false).unwrap();
+    assert!(
+        events.lock().unwrap().is_empty(),
+        "background preparation must not be charged to a tick"
+    );
+    assert!(generator.walk_chunk_resident(2, 2));
     assert!(
         generator
             .walk_at_with_cancel(TileCoord::new(80, 80), &|| true)
             .is_err()
     );
     assert!(events.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_cold_single_tile_query_does_not_compose_a_whole_chunk() {
+    let generator = MapChunkGenerator::new([3; 32], 5, 128);
+    let tile = TileCoord::new(40, 40);
+    assert_eq!(
+        generator.walk_at_with_cancel(tile, &|| false).unwrap(),
+        direct(&generator, tile)
+    );
+    assert_eq!(
+        generator.walk_cache_usage(),
+        (0, 0),
+        "single-tile validation must not synchronously compose 1024 tiles"
+    );
+}
+
+#[test]
+fn prepared_chunk_serves_full_points_without_recomposing_or_using_the_point_memo() {
+    let generator = MapChunkGenerator::new([3; 32], 5, 128);
+    let tile = TileCoord::new(40, 40);
+    let expected = generator
+        .tile_and_node_with_cancel(tile, &|| false)
+        .unwrap();
+    generator.precompose_walk_chunk(1, 1, &|| false).unwrap();
+    *generator.derived.point.lock().unwrap() = Default::default();
+    assert_eq!(
+        generator
+            .tile_and_node_with_cancel(tile, &|| false)
+            .unwrap(),
+        expected
+    );
+    assert_eq!(
+        generator.derived.point.lock().unwrap().get(tile),
+        None,
+        "a resident chunk must serve full points without another composition"
+    );
+    assert!(generator.tile_and_node_with_cancel(tile, &|| true).is_err());
 }

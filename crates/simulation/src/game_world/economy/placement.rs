@@ -122,17 +122,18 @@ impl GameWorld {
             .player_economy(player)
             .map_or(crate::Age::Dark, |p| p.age);
         let (max_hp, los) = kind.age_stats(age);
-        if rules.blocks
+        let collision = kind.collision_rect(footprint, complete);
+        if let Some(rect) = collision
             && let Terrain::Map { overlay, .. } = &mut self.terrain
         {
             overlay
-                .add_footprint(footprint)
+                .add_footprint(rect)
                 .map_err(|_| EconomyError::Capacity)?;
         }
         let id = self.allocate_entity_id()?;
-        if rules.blocks {
-            for y in footprint.min.y..footprint.max.y {
-                for x in footprint.min.x..footprint.max.x {
+        if let Some(rect) = collision {
+            for y in rect.min.y..rect.max.y {
+                for x in rect.min.x..rect.max.x {
                     self.economy.blocked_tiles.insert(TileCoord::new(x, y));
                 }
             }
@@ -187,6 +188,7 @@ impl GameWorld {
                 gate_open: false,
                 rally_point: None,
                 food_remaining: (kind == BuildingKind::Farm).then(|| self.farm_food(player)),
+                farm_reseeds: 0,
             },
         );
         let bucket = self.economy.dropoffs.entry((player, kind)).or_default();
@@ -234,14 +236,17 @@ impl GameWorld {
         {
             bucket.remove(at);
         }
-        if building.kind.rules().blocks {
-            for y in building.footprint.min.y..building.footprint.max.y {
-                for x in building.footprint.min.x..building.footprint.max.x {
+        if let Some(rect) = building
+            .kind
+            .collision_rect(building.footprint, building.is_complete())
+        {
+            for y in rect.min.y..rect.max.y {
+                for x in rect.min.x..rect.max.x {
                     self.economy.blocked_tiles.remove(&TileCoord::new(x, y));
                 }
             }
             if let Terrain::Map { overlay, .. } = &mut self.terrain {
-                overlay.remove_footprint(building.footprint);
+                overlay.remove_footprint(rect);
             }
             self.collision_opened(building.footprint);
         }
@@ -250,6 +255,24 @@ impl GameWorld {
         self.refresh_population_cap(building.player);
         self.update_observer(id, None);
         self.remember_visible_buildings();
+    }
+
+    pub(super) fn open_town_center_arches(&mut self, footprint: TileRect) {
+        let Some(solid) = BuildingKind::TownCenter.collision_rect(footprint, true) else {
+            return;
+        };
+        for y in footprint.min.y..footprint.max.y {
+            for x in footprint.min.x..footprint.max.x {
+                let tile = TileCoord::new(x, y);
+                if !solid.contains(tile) {
+                    self.economy.blocked_tiles.remove(&tile);
+                    if let Terrain::Map { overlay, .. } = &mut self.terrain {
+                        overlay.remove_footprint(TileRect::from_xywh(x, y, 1, 1));
+                    }
+                }
+            }
+        }
+        self.collision_opened(footprint);
     }
 
     /// Bounded local placement around the certified start, favoring inland

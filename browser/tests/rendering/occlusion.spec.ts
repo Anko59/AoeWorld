@@ -159,13 +159,14 @@ async function occlusionFixture(page: Page, trees = false, rally = false) {
                 ...uint(8194 * 2),
                 ...(rally
                   ? [
-                      ...townCenterState.slice(0, -1),
+                      ...townCenterState.slice(0, -2),
                       1,
                       0,
                       ...uint(8195 * 2048),
                       ...uint(8191 * 2048),
                       ...uint(8195 * 2048),
                       ...uint(8191 * 2048),
+                      0, // Prepaid Mill reseeds follow the rally point.
                     ]
                   : townCenterState),
               ]),

@@ -11,7 +11,7 @@ const readJson = async response => {
   return response.json();
 };
 const controllerHeaders = () => {
-  const token = sessionStorage.getItem('aoeworld.resume-token');
+  const token = localStorage.getItem('aoeworld.resume-token');
   if (!/^[0-9a-f]{48}$/i.test(token || '')) throw new Error('Connect to your world before preparing a map.');
   return { 'X-AoeWorld-Controller-Token': token };
 };
@@ -44,7 +44,19 @@ function recoverWhenReady() {
 recoveryObserver.observe(document.getElementById('scene'), { attributes: true, attributeFilter: ['data-connected'] });
 recoveryObserver.observe(document.getElementById('observer-label'), { attributes: true, attributeFilter: ['hidden'] });
 recoverWhenReady();
-init().catch(error => {
+// The cinematic owns presentation until it finishes or is skipped. Starting
+// GPU uploads behind it can trigger recovery and replace the entry document.
+const cinematicFinished = sequence.resumeDecided.then(() => new Promise(resolve => {
+  const ready = () => {
+    if (document.body.dataset.startState === 'intro') return;
+    observer.disconnect();
+    resolve();
+  };
+  const observer = new MutationObserver(ready);
+  observer.observe(document.body, { attributes: true, attributeFilter: ['data-start-state'] });
+  ready();
+}));
+cinematicFinished.then(() => init()).catch(error => {
   document.getElementById('connection').textContent = 'Unavailable';
   document.getElementById('unsupported').textContent = `Unable to start AoeWorld: ${error}`;
   sequence.error('The game could not connect. Reload the page to try again.');

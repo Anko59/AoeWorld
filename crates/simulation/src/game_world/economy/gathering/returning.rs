@@ -1,5 +1,4 @@
 //! Shared drop-off trips for map resources, farms and carcasses.
-use super::super::VILLAGE_RULES;
 use super::*;
 
 impl GameWorld {
@@ -115,17 +114,23 @@ impl GameWorld {
             if self.farm_remaining(farm).is_some_and(|food| food > 0) {
                 return self.restart_approach(id, task);
             }
+            if self.reseed_farm(id, farm) {
+                return false;
+            }
             self.remove_building(farm);
             return false;
         }
         if self.resource_remaining(task.node) == Some(0) {
+            if task.fish.is_none() && task.kind != ResourceKind::Food {
+                return self.replacement_resource(id, task);
+            }
             let Some(next) = (if task.fish.is_some() {
                 self.nearest_fish(id, task.tile, task.node)
             } else {
                 self.nearest_resource(
                     task.tile,
                     task.kind,
-                    VILLAGE_RULES.replacement_radius_tiles,
+                    super::super::VILLAGE_RULES.replacement_radius_tiles,
                     Some(task.node),
                 )
             }) else {

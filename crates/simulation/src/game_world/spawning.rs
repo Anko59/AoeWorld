@@ -77,6 +77,7 @@ impl GameWorld {
                 last_hit: None,
                 death_tick: None,
                 death_hunt: None,
+                auto_scout: false,
             },
             order: None,
             bucket,

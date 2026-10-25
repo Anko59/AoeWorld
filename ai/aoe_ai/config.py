@@ -34,6 +34,9 @@ class Config:
     hunt_distance: int = 30
     #: Farms wanted per food-assigned villager once hunting and foraging end.
     farm_target: int = 6
+    #: Prepaid farm rebuilds retained at each Mill once farms exist.
+    farm_reseed_queue: int = 4
+    reseed_settle_seconds: int = 2
     #: A refused farm may be occupied by an automatic farmer still off screen.
     farm_refusal_wait_seconds: int = 30
 

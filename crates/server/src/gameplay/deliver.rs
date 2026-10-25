@@ -307,6 +307,18 @@ pub(super) fn deliver(
         if failed.contains(&id) || !current {
             continue;
         }
+        if session.resident_move_queues != build.move_queues {
+            let message = GameplayServerMessage::MoveQueues {
+                revision: build.revision,
+                tick: built.tick,
+                queues: build.move_queues.clone(),
+            };
+            if send(session, message, &mut failed, id) {
+                session.resident_move_queues = build.move_queues.clone();
+            } else {
+                continue;
+            }
+        }
         // A concurrent subscription supersedes work collected for an old
         // revision; never overwrite its fresh residents with an old set.
         if session.resident_animals != build.animals {

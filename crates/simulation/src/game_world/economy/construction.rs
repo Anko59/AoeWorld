@@ -143,8 +143,7 @@ impl GameWorld {
         Ok(id)
     }
 
-    /// Send villagers to an existing unfinished foundation of `player`
-    /// (right-clicking it). Nothing is charged: the cost was paid on placement.
+    /// Resume a foundation or repair a damaged completed building of `player`.
     pub fn issue_construct(
         &mut self,
         player: PlayerId,
@@ -160,7 +159,7 @@ impl GameWorld {
         if state.player != player {
             return Err(EconomyError::NotOwner);
         }
-        if state.is_complete() {
+        if state.is_complete() && state.hp == state.max_hp {
             return Err(EconomyError::AlreadyComplete);
         }
         if self.assign_builders(&builders, |_| building) {
@@ -307,8 +306,11 @@ impl GameWorld {
                 self.release_builder(id);
                 continue;
             };
-            let (complete, footprint) = (building.is_complete(), building.footprint);
-            if complete {
+            let (healthy, footprint) = (
+                building.is_complete() && building.hp == building.max_hp,
+                building.footprint,
+            );
+            if healthy {
                 self.release_builder(id);
                 continue;
             }
@@ -336,7 +338,9 @@ impl GameWorld {
             }
         }
         for (building, count) in working {
-            if let Some(done) = self.add_work(building, count) {
+            if self.building(building).is_some_and(|b| b.is_complete()) {
+                self.repair_building(building, count);
+            } else if let Some(done) = self.add_work(building, count) {
                 touched.extend(done);
             }
             self.update_building_vision(building);
@@ -344,6 +348,42 @@ impl GameWorld {
         touched.sort_unstable();
         touched.dedup();
         changed.extend(touched);
+    }
+
+    /// Integer repair work, priced at half the building's original cost for
+    /// a full HP bar. HP thresholds retain fractional resource costs without
+    /// introducing a clock or an unbounded per-builder accumulator.
+    fn repair_building(&mut self, id: EntityId, builders: u64) {
+        let Some(b) = self.economy.buildings.get(&id) else {
+            return;
+        };
+        let hp = u64::from(b.hp);
+        let max = u64::from(b.max_hp);
+        let next = (hp + ((builders + 2) * max / b.work_total.max(1)).max(1)).min(max);
+        let cost = b.kind.rules().cost;
+        let charge = |amount| {
+            ((u64::from(amount) * next / (2 * max)) - (u64::from(amount) * hp / (2 * max))) as u32
+        };
+        let Some(player) = self.economy.players.get_mut(&b.player) else {
+            return;
+        };
+        let s = &mut player.stockpile;
+        let bill = super::Stockpile {
+            food: charge(cost.food),
+            wood: charge(cost.wood),
+            gold: charge(cost.gold),
+            stone: charge(cost.stone),
+        };
+        if s.food < bill.food || s.wood < bill.wood || s.gold < bill.gold || s.stone < bill.stone {
+            return;
+        }
+        s.food -= bill.food;
+        s.wood -= bill.wood;
+        s.gold -= bill.gold;
+        s.stone -= bill.stone;
+        if let Some(building) = self.economy.buildings.get_mut(&id) {
+            building.hp = next as u16;
+        }
     }
 
     /// `builders + 2` work per tick (one builder adds 3, matching the base
@@ -362,6 +402,9 @@ impl GameWorld {
         }
         building.state = ConstructionState::Complete;
         let (kind, player, footprint) = (building.kind, building.player, building.footprint);
+        if kind == BuildingKind::TownCenter {
+            self.open_town_center_arches(footprint);
+        }
         if kind == BuildingKind::WatchTower {
             self.combat.tower_ready.insert(id, 0);
         }

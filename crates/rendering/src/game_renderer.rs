@@ -162,11 +162,14 @@ impl GameRenderer {
         canvas: HtmlCanvasElement,
         backend: Option<&str>,
     ) -> Result<(Self, HtmlCanvasElement), String> {
-        if backend != Some("canvas")
-            && backend != Some("webgl2")
-            && let Ok(renderer) = Renderer::new(canvas.clone()).await
-        {
-            return Ok((Self::WebGpu(Box::new(renderer)), canvas));
+        if backend != Some("canvas") && backend != Some("webgl2") {
+            match crate::web::health::within(Renderer::new(canvas.clone())).await {
+                Ok(renderer) => return Ok((Self::WebGpu(Box::new(renderer)), canvas)),
+                Err(error) => web_sys::console::warn_1(
+                    &format!("WebGPU initialization failed: {error}; falling back to WebGL2")
+                        .into(),
+                ),
+            }
         }
         let replacement = replace_canvas(&canvas)?;
         if backend != Some("canvas")
@@ -209,6 +212,7 @@ impl GameRenderer {
             Self::Canvas {
                 atlas,
                 source_atlas,
+                presentation,
                 ..
             } => {
                 if pixels.len() != crate::GAME_ATLAS_BYTES {
@@ -216,6 +220,7 @@ impl GameRenderer {
                 }
                 *atlas = [None, None, None, None];
                 *source_atlas = pixels;
+                presentation.invalidate();
                 Ok(())
             }
         }
@@ -469,6 +474,7 @@ fn new_atlas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {
     Ok(atlas)
 }
 
+#[derive(Clone, Copy)]
 enum WorldLayer {
     Surface(ProjectedSurfaceTriangle),
     Selection(Sprite, f64),

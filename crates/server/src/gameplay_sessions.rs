@@ -9,6 +9,7 @@ impl GameplayService {
 
     /// Ends all sessions bound to this world before a replacement is activated.
     pub async fn retire(&self, replacement_world_id: u64) {
+        self.cancel_preparation();
         let mut ownership = self.ownership.lock().await;
         let mut sessions = self.sessions.lock().await;
         for session in sessions.values() {

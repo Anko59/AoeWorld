@@ -13,8 +13,14 @@ pub(crate) use instance_buffer::surface_instance;
 use instance_buffer::{InstanceBuffer, required_capacity};
 #[path = "web/draw.rs"]
 mod draw;
+#[path = "web/health.rs"]
+pub(crate) mod health;
 #[path = "web/occlusion.rs"]
 mod occlusion;
+#[path = "web/presentation.rs"]
+mod presentation;
+#[path = "web/shaders.rs"]
+mod shaders;
 #[path = "web/submit.rs"]
 mod submit;
 use draw::draw_ranges;
@@ -63,6 +69,7 @@ impl Sprite {
 }
 
 pub struct Renderer {
+    pub(crate) health: health::Health,
     adapter_label: String,
     surface: wgpu::Surface<'static>,
     pub(crate) device: wgpu::Device,
@@ -77,6 +84,18 @@ pub struct Renderer {
     pub(crate) instances: InstanceBuffer,
     pub(crate) _atlas: wgpu::Texture,
     depth: wgpu::Texture,
+    page_retirement: Option<js_sys::Function>,
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        if let Some(detach) = &self.page_retirement {
+            let _ = detach.call0(&wasm_bindgen::JsValue::UNDEFINED);
+        }
+        // wgpu's browser Device drop is a no-op. Retire the device even when
+        // startup health fails or its initialization deadline cancels a future.
+        self.shutdown();
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -112,6 +131,7 @@ impl Renderer {
     }
 
     pub async fn new(canvas: HtmlCanvasElement) -> Result<Self, String> {
+        shaders::load().await?;
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = wgpu::Backends::BROWSER_WEBGPU;
         let instance = wgpu::Instance::new(descriptor);
@@ -121,6 +141,7 @@ impl Renderer {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 compatible_surface: Some(&surface),
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 ..Default::default()
             })
             .await
@@ -131,11 +152,17 @@ impl Renderer {
             .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .map_err(|e| format!("WebGPU device: {e}"))?;
+        let health = health::Health::default();
+        health.install(&device);
         let width = canvas.width().max(1);
         let height = canvas.height().max(1);
-        let config = surface
+        let mut config = surface
             .get_default_config(&adapter, width, height)
             .ok_or("No compatible canvas format")?;
+        // Firefox/Wayland PRIME can advertise BGRA while its shared-texture
+        // presentation stays black without validation errors. Core RGBA takes
+        // Firefox's working presentation path, including on the discrete GPU.
+        config.format = wgpu::TextureFormat::Rgba8Unorm;
         surface.configure(&device, &config);
 
         let atlas = device.create_texture(&wgpu::TextureDescriptor {
@@ -237,7 +264,20 @@ impl Renderer {
         );
         let depth = create_depth_texture(&device, width, height);
         let mask = occlusion::Mask::new(&device, width, height);
-        Ok(Self {
+        // Rust clients can outlive their document through callback cycles.
+        // Release native GPU work on navigation, before browser context teardown.
+        let page_retirement = device
+            .as_webgpu()
+            .map(|device| presentation::retire_with_page(device.as_ref()));
+        web_sys::console::info_1(
+            &format!(
+                "WebGPU adapter {adapter_label}; canvas {:?}; core features/default limits",
+                config.format
+            )
+            .into(),
+        );
+        let mut renderer = Self {
+            health,
             adapter_label,
             surface,
             device,
@@ -252,11 +292,33 @@ impl Renderer {
             instances,
             _atlas: atlas,
             depth,
-        })
+            page_retirement,
+        };
+        // Verify a known coloured clear before assets, fog or networking can
+        // legitimately leave the game black. Queue success alone is insufficient.
+        renderer.render_sprites_with_clear(&[], presentation::CLEAR)?;
+        if let Err(error) = health::within(presentation::check(canvas)).await {
+            renderer.shutdown();
+            return Err(error);
+        }
+        renderer.check_health()?;
+        Ok(renderer)
     }
 
     pub fn adapter_label(&self) -> &str {
         &self.adapter_label
+    }
+
+    pub fn check_health(&self) -> Result<(), String> {
+        self.health.check()
+    }
+
+    pub fn page_retired(&self) -> bool {
+        presentation::page_retired()
+    }
+
+    pub fn shutdown(&self) {
+        self.device.destroy();
     }
     pub fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 || (self.config.width == width && self.config.height == height)

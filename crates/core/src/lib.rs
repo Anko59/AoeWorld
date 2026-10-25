@@ -1,8 +1,10 @@
 //! Configuration-independent values shared by diagnostics and gameplay.
 mod coordinates;
+mod numeric;
 mod projection;
 
 pub use coordinates::*;
+pub use numeric::clamp_f64;
 pub use projection::{
     Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint, inverse_project, project,
 };
@@ -14,6 +16,8 @@ pub const WORLD_LIMIT: i32 = 16_384;
 /// simulation's trade rules and the protocol's price validation both read it.
 pub const MARKET_MIN_PRICE: u16 = 20;
 pub const MARKET_MAX_PRICE: u16 = 9999;
+/// Player movement destinations retained per unit, including the active one.
+pub const MAX_MOVE_DESTINATIONS: usize = 16;
 
 #[derive(
     Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize,

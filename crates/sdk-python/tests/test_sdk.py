@@ -87,6 +87,48 @@ def test_orders_get_verdicts_as_events(server, secret):
         assert len(verdicts) == 3
 
 
+def test_reseed_sdk_uses_authoritative_ordinary_orders(server, secret):
+    info = new_match(server, secret, ["ai"])
+    with aoeworld.connect(server, info.slots[0].token, decision_hz=5) as client:
+        first = client.wait_decision(timeout=10)
+        center = first.world.town_center()
+        assert center.farm_reseeds == 0
+        # Only a completed Mill may hold prepaid reseeds. The browser covers
+        # a successful Mill queue; here the real server must refuse a TC.
+        sequence = client.farm_reseed(center.id)
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            decision = client.wait_decision(timeout=2)
+            verdict = next((e for e in decision.events if e.kind == "order_result" and e.sequence == sequence), None) if decision else None
+            if verdict is not None:
+                assert verdict.result == aoeworld.CommandResult.REJECTED_FARM_UNAVAILABLE
+                assert decision.world.economy.wood == 200
+                return
+        pytest.fail("reseed order was not acknowledged")
+
+
+def test_scout_sdk_toggles_the_server_owned_exploration_state(server, secret):
+    info = new_match(server, secret, ["ai"])
+    with aoeworld.connect(server, info.slots[0].token, decision_hz=5) as client:
+        first = client.wait_decision(timeout=10)
+        scout = first.world.my_units(UnitKind.SCOUT)[0]
+        assert not scout.auto_scout
+        for enabled in (True, False):
+            sequence = client.auto_scout(scout.id, enabled)
+            accepted = False
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                decision = client.wait_decision(timeout=2)
+                if decision is None:
+                    continue
+                accepted |= any(e.kind == "order_result" and e.sequence == sequence and e.result == aoeworld.CommandResult.ACCEPTED for e in decision.events)
+                current = decision.world.my_units(UnitKind.SCOUT)[0]
+                if accepted and current.auto_scout == enabled:
+                    break
+            else:
+                pytest.fail("auto-scout did not reach its authoritative toggle state")
+
+
 def test_waiting_releases_the_gil(server, secret):
     info = new_match(server, secret, ["ai"])
     # One decision every five game seconds: the wait below really blocks.
@@ -111,6 +153,32 @@ def test_waiting_releases_the_gil(server, secret):
         assert waited >= 0.5
         # A thread holding the GIL through the wait would count almost nothing.
         assert counted[0] > 10_000, counted
+
+
+def test_queued_moves_expose_authoritative_destinations_and_stop_clears_them(server, secret):
+    info = new_match(server, secret, ["ai"])
+    with aoeworld.connect(server, info.slots[0].token, decision_hz=20) as client:
+        first = client.wait_decision(timeout=10)
+        scout = first.world.my_units(UnitKind.SCOUT)[0]
+        x, y = scout.tile
+        client.move(scout.id, x + 12, y)
+        client.queue_move(scout.id, x + 12, y + 8)
+        deadline = time.time() + 10
+        observed = []
+        while time.time() < deadline:
+            decision = client.wait_decision(timeout=2)
+            if decision:
+                observed = decision.world.move_queue(scout.id)
+                if len(observed) == 2:
+                    break
+        assert observed == [((x + 12) * 1024 + 512, y * 1024 + 512),
+                            ((x + 12) * 1024 + 512, (y + 8) * 1024 + 512)]
+        client.stop(scout.id)
+        while time.time() < deadline:
+            decision = client.wait_decision(timeout=2)
+            if decision and not decision.world.move_queue(scout.id):
+                return
+        pytest.fail("Stop did not clear the authoritative movement queue")
 
 
 def test_two_ai_players_grow_through_the_callback_loop(server, secret):

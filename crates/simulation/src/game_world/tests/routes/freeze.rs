@@ -6,7 +6,6 @@
 //! hopeless bound and held one of its player's two search slots forever.
 use super::fairness::{FAIR_ROUTE_WORK_RESERVE, beside_ring, sealed_ring_world, tile_position};
 use super::*;
-use crate::game_world::route_scheduler::STUCK_SEARCH_WORK;
 
 /// Sends `id` into the sealed ring at `(cx, cy)`: a search with no route.
 fn send_into_ring(world: &mut GameWorld, id: EntityId, cx: i32, cy: i32) {
@@ -45,7 +44,7 @@ fn a_refused_order_keeps_the_route_search_already_spent() {
         .spawn_unit(PlayerId(1), beside_ring(250, 250, 0))
         .expect("unit");
     send_into_ring(&mut world, id, 250, 250);
-    // One tick: a near hopeless search gives up after 32,768 work.
+    // One tick retains its search instead of restarting a refused order.
     world.advance();
     let work = world.units[world.lookup[&id]]
         .planner
@@ -74,7 +73,10 @@ fn a_sealed_off_search_ends_on_its_own_and_frees_its_slot() {
         .spawn_unit(PlayerId(1), beside_ring(500, 500, 0))
         .expect("unit");
     send_into_ring(&mut world, id, 500, 500);
-    let bound = 4 * STUCK_SEARCH_WORK / FAIR_ROUTE_WORK_RESERVE;
+    // Scheduling slices no longer end searches. This generic uniform-terrain
+    // fixture has no portal atlas; its finite planner safety cap still frees
+    // the slot. Real map nearest-point proofs are covered by detours.rs.
+    let bound = 4 * crate::MAX_ROUTE_WORK_PER_ORDER / FAIR_ROUTE_WORK_RESERVE;
     let ended = (0..bound).find(|_| {
         world.advance();
         world.movement_order(id).is_none()

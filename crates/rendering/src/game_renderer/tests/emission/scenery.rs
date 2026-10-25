@@ -61,6 +61,50 @@ fn camera() -> SceneCamera {
 }
 
 #[wasm_bindgen_test]
+fn rally_flags_keep_a_visible_pole_and_banner_without_optional_original_art() {
+    let mut art = art();
+    let mut flag = piece(0);
+    flag.kind = SceneResource::RALLY_FLAG;
+    for variant in 0..10 {
+        flag.visual_variant = variant;
+        let bounds = scene_resource_frame(&art, flag).expect("fallback flag bounds");
+        assert!(bounds.size[1] >= 30.0);
+        let sprites = world_sprite_frames(&art, &[], &[flag], &[], camera(), 0);
+        assert_eq!(sprites.len(), 2, "pole and banner on every backend");
+        assert!(
+            sprites.iter().all(|(_, _, depth, _)| *depth
+                > crate::surface_mesh::surface_depth([10.5, 10.5, 0.0]) + 3.0),
+            "a building rally target must not hide its owner's flag"
+        );
+        assert!(sprites.iter().all(|(s, _, _, _)| s.color[3] == 1.0));
+        let mut layers: Vec<_> = sprites
+            .into_iter()
+            .map(|(s, f, d, id)| WorldLayer::Sprite(s, f, d, id))
+            .collect();
+        crate::game_renderer::fog::shade_objects(&mut layers, &art, &[flag], &[], 0, &|_| 0.0);
+        assert!(
+            layers
+                .iter()
+                .all(|l| matches!(l,WorldLayer::Sprite(s,_,_,_) if s.color[2]>0.0)),
+            "an owner's flag stays visible beyond explored terrain"
+        );
+    }
+    let native = GameFrame {
+        atlas: crate::AtlasAddress {
+            page: 2,
+            uv: [0.2, 0.3, 0.02, 0.03],
+        },
+        size: [30.0, 42.0],
+        anchor: [10.0, 40.0],
+    };
+    art.scenery.rally_flags = vec![native; 10];
+    assert_eq!(
+        scene_resource_frame(&art, flag).unwrap().atlas,
+        native.atlas
+    );
+}
+
+#[wasm_bindgen_test]
 fn cliffs_are_drawn_by_the_surface_mesh_without_an_overlapping_billboard() {
     let art = art();
     for zoom in [1.0, 0.64, 0.25] {

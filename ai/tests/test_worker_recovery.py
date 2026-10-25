@@ -8,7 +8,29 @@ from aoe_ai.config import Config
 from aoe_ai.context import Context
 from aoe_ai.play.constructor import Constructor
 from aoe_ai.play.economy import EconomyManager
+from aoe_ai.play.reseeding import queue_reseeds
 from fakes import FakeClient, FakeWorld, base, building, decision, node, order_result, unit
+
+
+def test_ai_prepays_reseeds_only_with_farms_and_spare_wood():
+    units, buildings = base(1)
+    mill = building(901, BuildingKind.MILL)
+    mill.farm_reseeds = 0
+    farm = building(902, BuildingKind.FARM, tile=(55, 55))
+    world = FakeWorld(units, buildings + [mill, farm])
+    ctx = Context(FakeClient(), decision(world), Blackboard(), Config())
+    queue_reseeds(ctx)
+    assert ctx.client.named("farm_reseed") == [(mill.id, True)]
+    assert ctx.spent[1] == 60
+    queue_reseeds(ctx)
+    assert len(ctx.client.named("farm_reseed")) == 1, "wait for authoritative count"
+    for wood, farms, queued in [(59, True, 0), (200, False, 0), (200, True, 4)]:
+        world.economy.wood = wood
+        world._buildings = buildings + [mill] + ([farm] if farms else [])
+        mill.farm_reseeds = queued
+        ctx = Context(FakeClient(), decision(world), Blackboard(), Config())
+        queue_reseeds(ctx)
+        assert ctx.client.calls == []
 
 
 def worker_context(gathering=None):

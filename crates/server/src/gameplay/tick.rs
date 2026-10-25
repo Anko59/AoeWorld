@@ -12,18 +12,17 @@ impl GameplayService {
             let mut ownership = self.ownership.lock().await;
             let mut sessions = self.sessions.lock().await;
             gameplay_transport::promote_expired(&mut ownership, &mut sessions, self.world_id);
-            let mut commands = Vec::new();
             let controllers = sessions
                 .iter()
                 .filter_map(|(id, session)| {
                     (session.role == GameplayRole::Controller).then_some((*id, session.viewer))
                 })
                 .collect::<BTreeMap<_, _>>();
-            for (session_id, session) in sessions.iter_mut() {
-                while let Some(command) = session.pending.pop_front() {
-                    commands.push((*session_id, command));
-                }
-            }
+            let start = self.command_cursor.fetch_add(
+                MAX_COMMANDS_PER_TICK as u64,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            let mut commands = take_pending(&mut sessions, start as usize);
             commands.sort_by_key(|(session_id, command)| (*session_id, command.sequence));
             let views = sessions
                 .iter()
@@ -101,6 +100,45 @@ impl GameplayService {
         let started = std::time::Instant::now();
         self.publish_resources().await;
         self.probe.phase("resources", started.elapsed());
+        let started = std::time::Instant::now();
+        self.prefetch_routes().await;
+        self.probe.phase("prefetch", started.elapsed());
+    }
+}
+
+/// A join burst cannot turn thousands of pending actions into one long tick.
+const MAX_COMMANDS_PER_TICK: usize = 32;
+fn take_pending(
+    sessions: &mut BTreeMap<u64, Session>,
+    start: usize,
+) -> Vec<(u64, super::PendingCommand)> {
+    let ids = sessions.keys().copied().collect::<Vec<_>>();
+    let mut commands = Vec::new();
+    if ids.is_empty() {
+        return commands;
+    }
+    loop {
+        let before = commands.len();
+        for turn in 0..ids.len() {
+            if commands.len() == MAX_COMMANDS_PER_TICK {
+                return commands;
+            }
+            let id = ids[(start + turn) % ids.len()];
+            let Some(session) = sessions.get_mut(&id) else {
+                continue;
+            };
+            if session
+                .pending
+                .front()
+                .is_some_and(super::PendingCommand::ready)
+                && let Some(command) = session.pending.pop_front()
+            {
+                commands.push((id, command));
+            }
+        }
+        if commands.len() == before {
+            return commands;
+        }
     }
 }
 

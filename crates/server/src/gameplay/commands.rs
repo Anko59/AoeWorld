@@ -11,7 +11,38 @@ const AI_ORDERS_PER_SECOND: f64 = 100.0;
 const AI_ORDER_BURST: f64 = 200.0;
 const AI_PENDING_COMMANDS: usize = 256;
 
+#[path = "commands/queue.rs"]
+mod queue;
+
 impl GameplayService {
+    pub async fn queue_auto_scout(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        enabled: bool,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::AutoScout { entity_id, enabled },
+        )
+        .await;
+    }
+    pub async fn queue_farm_reseed(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        add: bool,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::FarmReseed { building_id, add },
+        )
+        .await;
+    }
     pub async fn queue_set_rally(
         &self,
         session_id: u64,
@@ -68,6 +99,25 @@ impl GameplayService {
             PendingAction::Move {
                 entity_id,
                 destination,
+                queued: false,
+            },
+        )
+        .await;
+    }
+    pub async fn queue_waypoint(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        destination: WorldPosition,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::Move {
+                entity_id,
+                destination,
+                queued: true,
             },
         )
         .await;
@@ -240,83 +290,6 @@ impl GameplayService {
         };
         self.queue_command(session_id, sequence, action).await;
     }
-    async fn queue_command(&self, session_id: u64, sequence: u64, action: PendingAction) {
-        let arena = super::arena::enabled();
-        if arena {
-            super::arena::note_order();
-        }
-        let now = Instant::now();
-        let current_tick = self.world.read().await.tick();
-        let mut sessions = self.sessions.lock().await;
-        let global_pending = total_pending(&sessions);
-        // One budget scales with the number of hosted seats, so many AI
-        // connections do not exhaust a limit sized for a single human.
-        let global_limit = MAX_PENDING_COMMANDS_GLOBAL.max(
-            sessions
-                .len()
-                .saturating_mul(MAX_PENDING_COMMANDS_PER_CONNECTION),
-        );
-        let Some(session) = sessions.get_mut(&session_id) else {
-            return;
-        };
-        let mut result = None;
-        if session.role != GameplayRole::Controller {
-            result = Some(CommandResult::RejectedNotController);
-        } else if session.last_sequence.is_some_and(|last| sequence <= last)
-            || session.acknowledgements.contains(&sequence)
-        {
-            result = Some(CommandResult::RejectedSequence);
-        } else {
-            let elapsed = now
-                .duration_since(session.last_command_refill)
-                .as_secs_f64();
-            // A person clicks; an AI issues a decision's worth of orders at once.
-            let (refill, burst, queue) = if session.ai {
-                (AI_ORDERS_PER_SECOND, AI_ORDER_BURST, AI_PENDING_COMMANDS)
-            } else {
-                (10.0, 20.0, MAX_PENDING_COMMANDS_PER_CONNECTION)
-            };
-            session.command_tokens = (session.command_tokens + elapsed * refill).min(burst);
-            session.last_command_refill = now;
-            if !arena && session.command_tokens < 1.0 || session.pending.len() >= queue {
-                result = Some(if !arena && session.command_tokens < 1.0 {
-                    CommandResult::RejectedRateLimited
-                } else {
-                    CommandResult::RejectedQueueFull
-                });
-            } else if global_pending >= global_limit {
-                result = Some(CommandResult::RejectedQueueFull);
-            } else {
-                session.last_sequence = Some(sequence);
-                session.command_tokens -= 1.0;
-                session
-                    .pending
-                    .push_back(PendingCommand { sequence, action });
-            }
-        }
-        if let Some(result) = result {
-            // A rejection is a verdict too: sent at once when the queue has room
-            // (and nothing waits ahead of it), otherwise held, never dropped.
-            let ack = GameplayServerMessage::CommandAck {
-                sequence,
-                result,
-                applied_tick: current_tick,
-            };
-            if session.pending_acks.is_empty() {
-                if let Err(tokio::sync::mpsc::error::TrySendError::Full(ack)) =
-                    session.sender.try_send(ack)
-                {
-                    session.pending_acks.push_back(ack);
-                }
-            } else {
-                session.pending_acks.push_back(ack);
-            }
-            session.acknowledgements.push_back(sequence);
-            while session.acknowledgements.len() > MAX_ACK_HISTORY {
-                session.acknowledgements.pop_front();
-            }
-        }
-    }
 }
 
 pub(super) fn apply(
@@ -325,6 +298,12 @@ pub(super) fn apply(
     action: PendingAction,
 ) -> CommandResult {
     let result = match action {
+        PendingAction::AutoScout { entity_id, enabled } => {
+            world.issue_auto_scout(player, entity_id, enabled)
+        }
+        PendingAction::FarmReseed { building_id, add } => {
+            world.issue_farm_reseed(player, building_id, add)
+        }
         PendingAction::SetRally {
             building_id,
             target,
@@ -346,8 +325,12 @@ pub(super) fn apply(
         PendingAction::Move {
             entity_id,
             destination,
+            queued,
         } => {
             if world.animal(entity_id).is_some() {
+                if queued {
+                    return CommandResult::RejectedWrongUnitKind;
+                }
                 return match world.issue_herd(player, entity_id, destination) {
                     Ok(()) => CommandResult::Accepted,
                     Err(aoe_simulation::EconomyError::NotOwner) => CommandResult::RejectedNotOwner,
@@ -363,10 +346,14 @@ pub(super) fn apply(
             if !world.config().valid_map_position(destination) {
                 return CommandResult::RejectedInvalidDestination;
             }
-            world
-                .issue_move(entity_id, destination)
-                .map(|_| ())
-                .map_err(aoe_simulation::EconomyError::Movement)
+            if queued {
+                world.issue_queued_move(entity_id, destination).map(|_| ())
+            } else {
+                world
+                    .issue_move(entity_id, destination)
+                    .map(|_| ())
+                    .map_err(aoe_simulation::EconomyError::Movement)
+            }
         }
         PendingAction::Gather {
             entity_id,

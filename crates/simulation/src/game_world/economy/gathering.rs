@@ -7,6 +7,7 @@ use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::ResourceKind;
 
 mod chunks;
+mod replacement;
 mod returning;
 
 #[cfg(test)]
@@ -133,6 +134,7 @@ impl GameWorld {
             self.units[index].state.carried = None;
         }
         let mut task = GatherTask {
+            work_tile: None,
             node,
             farm,
             animal: None,
@@ -245,6 +247,7 @@ impl GameWorld {
             if keep {
                 self.economy.gatherers.insert(id, task);
             } else if self.hunting_target(id).is_none()
+                && !self.economy.builders.contains_key(&id)
                 && let Some(&index) = self.lookup.get(&id)
             {
                 self.units[index].state.task = if self.units[index].state.carried.is_some() {
@@ -309,6 +312,7 @@ impl GameWorld {
             return self.resume_resource(id, task);
         }
         if task.phase == GatherPhase::Approaching && task.farm.is_none() {
+            task.work_tile = Some(tile);
             self.step_up_to_work(id, index, task.tile);
         }
         task.phase = GatherPhase::Gathering;

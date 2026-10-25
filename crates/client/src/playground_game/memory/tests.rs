@@ -25,6 +25,8 @@ fn snapshot_preserves_counts_and_renderer_pair_schema() {
             18,
             19,
             u32::MAX as usize,
+            20,
+            21,
         ],
         renderer: [
             ("cpu_atlas", 0),
@@ -34,8 +36,7 @@ fn snapshot_preserves_counts_and_renderer_pair_schema() {
             ("escaped\"\\\n", usize::MAX),
         ],
     };
-    let actual: serde_json::Value =
-        serde_json::from_str(&serde_json::to_string(&snapshot).unwrap()).unwrap();
+    let actual: serde_json::Value = serde_json::from_str(&snapshot.json()).unwrap();
     assert_eq!(
         actual,
         serde_json::json!({
@@ -59,6 +60,8 @@ fn snapshot_preserves_counts_and_renderer_pair_schema() {
             "resource_bytes": 18,
             "stump_effects": 19,
             "outgoing_message_bytes": u32::MAX,
+            "control_group_members": 20,
+            "move_queue_bytes": 21,
             "renderer": [
                 ["cpu_atlas", 0],
                 ["gpu_atlas", 83_886_080],

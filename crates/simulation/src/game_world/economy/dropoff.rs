@@ -5,7 +5,7 @@ use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use aoe_map::ResourceKind;
 
 /// Squared distance from `tile` to the closest tile of the ring around `rect`.
-fn ring_distance(rect: TileRect, tile: TileCoord) -> u64 {
+pub(super) fn ring_distance(rect: TileRect, tile: TileCoord) -> u64 {
     let ring = TileCoord::new(
         tile.x.clamp(rect.min.x - 1, rect.max.x),
         tile.y.clamp(rect.min.y - 1, rect.max.y),

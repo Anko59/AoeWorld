@@ -4,6 +4,8 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{Event, PointerEvent, WheelEvent};
 
+#[path = "playground_controls/groups.rs"]
+pub(super) mod groups;
 #[path = "playground_controls/navigation.rs"]
 pub(super) mod navigation;
 
@@ -155,7 +157,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             return;
         }
         if event.button() == 2 {
-            send_order(&mut client, target);
+            super::village::orders::at_pointer(&mut client, target, event.shift_key());
             return;
         }
         if event.button() == 0 && client.village.placement.is_some() {
@@ -322,6 +324,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             3 => center_on_primary(&mut client),
             4 => super::village::orders::train(&mut client, false),
             5 => super::village::orders::focus_town_center(&mut client, true),
+            10..=39 => groups::key(&mut client, action),
             _ => return,
         }
         subscribe(&mut client);

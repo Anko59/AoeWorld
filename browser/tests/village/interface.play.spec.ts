@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { test } from "../../server.js";
+import { isolatedTest as test } from "../../server.js";
 import { forceCanvas } from "../rendering/backends.js";
 import { gameAssets } from "../game-assets.js";
 import {
@@ -83,7 +83,7 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
   const hash = process.env["AOE_E2E_LANDSCAPE_HASH"];
   if (!hash) throw new Error("Run through the Dockerized browser gate");
   const token = await page.evaluate(() =>
-    sessionStorage.getItem("aoeworld.resume-token"),
+    localStorage.getItem("aoeworld.resume-token"),
   );
   if (!token) throw new Error("Controller token missing");
   const opened = await page.request.post(`/maps/${hash}`, {

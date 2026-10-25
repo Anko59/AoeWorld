@@ -157,6 +157,7 @@ build-wasm: slot-bootstrap
 	@$(SLOT_RUN) build-wasm -- make --no-print-directory build-wasm-steps
 
 build-wasm-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets browser-shaders
 	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client
 	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
 	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client --features diagnostics
@@ -384,3 +385,34 @@ perf-soak-30-steps:
   perf-baseline-propose \
   perf-comment \
   perf-hardware-check
+
+.PHONY: test-navigation test-navigation-steps
+.PHONY: test-auto-scout test-auto-scout-steps
+test-auto-scout: disk-precheck slot-bootstrap
+	@$(SLOT_RUN) test-auto-scout -- make --no-print-directory test-auto-scout-steps
+
+test-auto-scout-steps:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-simulation --lib game_world::economy::scouting::tests -- --show-output
+
+.PHONY: test-economy-automation test-economy-automation-steps
+test-economy-automation: disk-precheck slot-bootstrap
+	@$(SLOT_RUN) test-economy-automation -- make --no-print-directory test-economy-automation-steps
+
+test-economy-automation-steps: disk-precheck
+	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-simulation -p aoe-protocol -p aoe-sdk -p aoe-server -p aoe-harness --no-fail-fast --no-tests fail --failure-output final -E 'package(aoe-protocol) | package(aoe-sdk) | test(gathering) | test(farming) | test(scouting) | test(pinned) | test(per_session_messages_match_the_pinned_stream)'
+
+test-navigation: slot-bootstrap
+	@$(SLOT_RUN) test-navigation -- make --no-print-directory test-navigation-steps
+
+test-navigation-steps:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map navigation::hierarchy::prepared::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map navigation::hierarchy::static_data::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-simulation game_cache::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map navigation::hierarchy::tests::static_data
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map pocket
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server map_store::navigation::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server map_store::navigation::shared::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server gameplay::probe::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server complete_static_navigation_never_queues_cold_move_preparation
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server a_job_for_a_stored_preset_publishes_navigation_without_a_worker
+	@$(DOCKER_RUN) cargo test --locked -p aoe-simulation pinned

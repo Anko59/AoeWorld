@@ -405,6 +405,21 @@ fn a_unit_crosses_3900_tiles_and_takes_the_distant_river_gateway() {
     for tick in 0..100_000 {
         world.advance();
         let state = world.unit(unit).unwrap();
+        if tick % 1_000 == 0 {
+            let i = world.lookup[&unit];
+            eprintln!(
+                "return {tick} {:?} {:?}",
+                state.position.tile_floor(),
+                world.units[i].planner.as_ref().map(|p| (
+                    p.origin(),
+                    p.work(),
+                    p.leg_work(),
+                    p.preparing_guidance(),
+                    p.certified_destination(),
+                    p.peak_retained_entries()
+                ))
+            );
+        }
         pause = if state.position == previous_position {
             pause + 1
         } else {
@@ -432,7 +447,13 @@ fn a_unit_crosses_3900_tiles_and_takes_the_distant_river_gateway() {
             break;
         }
     }
-    assert_eq!(world.unit(unit).unwrap().position.tile_floor(), nearest);
+    assert_eq!(
+        world.unit(unit).unwrap().position.tile_floor(),
+        nearest,
+        "failure={:?}, scheduler={:?}",
+        world.movement_failure(unit),
+        world.route_scheduler_stats()
+    );
     assert_eq!(
         world.movement_failure(unit),
         Some(GameWorldError::Unreachable)
@@ -440,3 +461,6 @@ fn a_unit_crosses_3900_tiles_and_takes_the_distant_river_gateway() {
     assert_eq!(world.route_scheduler_stats().waiting_units, 0);
     assert_eq!(world.route_accounting_error(), None);
 }
+
+#[path = "preparation.rs"]
+mod preparation;

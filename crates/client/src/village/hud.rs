@@ -2,7 +2,7 @@ use super::{Client, building_center, owner};
 use crate::playground::game::{map, position_at};
 use aoe_protocol::{GameplayRole, ResourceKind, UnitKind, UnitTask};
 use std::{cell::RefCell, rc::Rc};
-use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
+use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
 
 #[wasm_bindgen(
     inline_js = "export function village_update(values, status, details) { window.aoeInterface?.numeric(values, status); window.aoeInterface?.details(details); }"
@@ -235,32 +235,7 @@ pub(in super::super) fn update(client: &Client) {
 }
 
 pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
-    for (id, action) in [
-        ("train-villager", 0),
-        ("stop-units", 1),
-        ("move-units", 2),
-        ("cancel-training", 3),
-    ] {
-        if let Some(button) = shared.borrow().document.get_element_by_id(id) {
-            let target = shared.clone();
-            let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
-                let mut client = target.borrow_mut();
-                match action {
-                    0 => super::orders::train(&mut client, false),
-                    1 => super::orders::stop(&mut client),
-                    2 => {
-                        client.village.move_cursor = true;
-                        let _ = client.canvas.set_attribute("data-order-mode", "move");
-                    }
-                    _ => super::orders::train(&mut client, true),
-                }
-            });
-            button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
-            callback.forget();
-        }
-    }
-    super::building_panel::install(shared)?;
-    Ok(())
+    super::building_panel::install(shared)
 }
 
 /// Villagers working a resource, including farmers standing on a farm.

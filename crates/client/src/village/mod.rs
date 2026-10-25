@@ -3,6 +3,7 @@ use super::Client;
 use aoe_core::PlayerId;
 use aoe_protocol::{GameplayBuildingState, GameplayPlayerState};
 
+pub(super) mod automation;
 pub(super) mod building_panel;
 pub(super) mod construction;
 pub(super) mod hud;
@@ -11,9 +12,11 @@ pub(super) mod picking;
 pub(super) mod presentation;
 pub(super) mod rally;
 pub(super) mod selection;
+pub(super) mod waypoints;
 
 #[derive(Default)]
 pub(crate) struct Village {
+    pub move_queues: Vec<aoe_protocol::MoveQueue>,
     pub players: Vec<GameplayPlayerState>,
     pub buildings: Vec<GameplayBuildingState>,
     pub tick: u64,

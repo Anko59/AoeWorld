@@ -5,6 +5,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NavigationPhase {
     Terrain,
+    TerrainPoint,
     WalkCache,
     Portals,
     PortalCosts,
@@ -17,6 +18,7 @@ impl NavigationPhase {
     pub fn name(self) -> &'static str {
         match self {
             Self::Terrain => "terrain",
+            Self::TerrainPoint => "terrain_point",
             Self::WalkCache => "walk_cache",
             Self::Portals => "portals",
             Self::PortalCosts => "portal_costs",

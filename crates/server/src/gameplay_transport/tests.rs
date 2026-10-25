@@ -57,9 +57,11 @@ async fn expired_controller_promotes_the_oldest_spectator_and_can_fall_empty() {
     sessions.clear();
     promote_expired(&mut ownership, &mut sessions, service.world_id);
     assert!(ownership.slots[0].lease.is_none());
-    assert_ne!(
+    assert_eq!(
         ownership.slots[0].token, next_token,
-        "a cleared seat gets a fresh token: the departed player's no longer works"
+        // The current requirement allows the same machine to resume this
+        // world after the hold, provided nobody else took the human seat.
+        "an unclaimed same-world seat keeps its returning owner's credential"
     );
 }
 
@@ -67,4 +69,33 @@ async fn expired_controller_promotes_the_oldest_spectator_and_can_fall_empty() {
 fn tokens_are_unpredictable_even_for_the_same_world_and_counter() {
     assert_ne!(make_token(42, 7), make_token(42, 7));
     assert_ne!(make_token(42, 7), make_token(42, 8));
+}
+
+#[tokio::test]
+async fn a_retired_world_token_cannot_claim_or_be_promoted_in_an_unrelated_world() {
+    let retired = GameplayService::new(Seed(1));
+    let token = retired.slot_infos().await[0].token;
+    let current = GameplayService::new(Seed(2));
+    let (tx, _rx) = mpsc::channel(8);
+    let (intruder, welcome) = current.register(Some(token), tx).await;
+    assert!(
+        matches!(
+            welcome,
+            GameplayServerMessage::Welcome {
+                role: GameplayRole::Spectator,
+                ..
+            }
+        ),
+        "an unrelated token cannot claim a free human seat"
+    );
+    let (tx, _rx) = mpsc::channel(8);
+    let (controller, _) = current.register(None, tx).await;
+    current.disconnect(controller).await;
+    expire(&current, 0, controller).await;
+    current.tick().await;
+    assert_eq!(
+        current.sessions.lock().await[&intruder].role,
+        GameplayRole::Spectator,
+        "waiting must not authorize a retired controller for another world"
+    );
 }

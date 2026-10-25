@@ -34,7 +34,7 @@ test("prepare a live berry worker for the narrated village recording", async ({
   let chosen = false;
   for (const candidate of candidates) {
     const token = await page.evaluate(() =>
-      sessionStorage.getItem("aoeworld.resume-token"),
+      localStorage.getItem("aoeworld.resume-token"),
     );
     if (!token) throw new Error("Recording controller token missing");
     expect(

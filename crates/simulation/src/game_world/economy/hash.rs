@@ -2,6 +2,16 @@ use super::Economy;
 
 impl Economy {
     pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
+        hash.update(&self.scout_cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
+        hash.update(&(self.scout_searches.len() as u64).to_le_bytes());
+        for id in &self.scout_searches {
+            hash.update(&id.0.to_le_bytes());
+        }
+        hash.update(&(self.scouts.len() as u64).to_le_bytes());
+        for (id, job) in &self.scouts {
+            hash.update(&id.0.to_le_bytes());
+            job.update_hash(hash);
+        }
         hash.update(&(self.players.len() as u64).to_le_bytes());
         for player in self.players.values() {
             hash.update(&player.player.0.to_le_bytes());
@@ -31,6 +41,7 @@ impl Economy {
         }
         hash.update(&(self.buildings.len() as u64).to_le_bytes());
         for building in self.buildings.values() {
+            hash.update(&[building.farm_reseeds]);
             super::training::rally::hash_rally(hash, building.rally_point);
             hash.update(&building.id.0.to_le_bytes());
             hash.update(&building.player.0.to_le_bytes());
@@ -101,6 +112,16 @@ impl Economy {
                 }
             }
             match task.return_target {
+                Some(tile) => {
+                    hash.update(&[1]);
+                    hash.update(&tile.x.to_le_bytes());
+                    hash.update(&tile.y.to_le_bytes());
+                }
+                None => {
+                    hash.update(&[0]);
+                }
+            }
+            match task.work_tile {
                 Some(tile) => {
                     hash.update(&[1]);
                     hash.update(&tile.x.to_le_bytes());

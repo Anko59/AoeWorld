@@ -23,6 +23,7 @@ fn villager(task: UnitTask, gathering: Option<ResourceKind>) -> GameplayUnitStat
         death_tick: None,
         hunt_target: None,
         death_hunt: None,
+        auto_scout: false,
     }
 }
 

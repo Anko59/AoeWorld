@@ -1,3 +1,5 @@
+//! Auto-scout flags and retained frontier state deliberately extend replay hashes
+//! and change digests; current pins are regenerated, with thread checks retained.
 //! The parallel proposal phase must reproduce the sequential engine bit for
 //! bit, for any number of worker threads. Pins were regenerated on the merged
 //! playtest tree: fair route scheduling, destination spreading and spacing
@@ -12,6 +14,13 @@
 //! The combined scheduler offers near fast attempts before far work and
 //! reserves far fair work inside each player share, intentionally changing
 //! route timing and emitted changes. All thread-equality assertions stay.
+//! Static navigation adds a hashed per-tick preparation allowance and budgeted
+//! proof state; guidance pacing also changes the emitted movement. Regenerate
+//! these pins for that intentional state/pacing change, keeping the workload
+//! and every complete 1/2/6-thread equality assertion.
+//! TC collision now uses the NW 2x2 annex, and planner hashes drop the obsolete
+//! unproven-approach flag. Near portal guidance and retained searches change
+//! timing intentionally. Regenerate pins while keeping all thread comparisons.
 use super::*;
 use aoe_map::{MapPackage, MapRequest};
 
@@ -144,9 +153,12 @@ fn parallel_movement_matches_the_pinned_sequential_replay() {
     );
 }
 
-const PINNED_FINAL_HASH: &str = "b78a638e982f4625e07d19c76c36cd1bac7294ff041ba75cb4c7c151dfc69758";
+// Regenerate the current combined replay for retained detours, open TC arches,
+// drop-off work state, prepaid reseeds and auto-scout state. Keep every
+// sequential/parallel equality assertion and the existing scenario unchanged.
+const PINNED_FINAL_HASH: &str = "68b2a3bfbc6e936e7164b59bea4672cb113cc6c2e504d2a93c6bb23c7d62de60";
 const PINNED_CHANGE_DIGEST: &str =
-    "0660b5007570d68a7deea35d21c686112d73b3ef73f034ed61e552d7211e5534";
+    "19e97a35767f422063d4c6a1868a4cd9365b8293c6683105755af5bed8811f6b";
 
 #[test]
 fn parallel_movement_with_buildings_matches_the_pinned_sequential_replay() {
@@ -159,11 +171,15 @@ fn parallel_movement_with_buildings_matches_the_pinned_sequential_replay() {
 }
 
 // Current player-first/resumable-proof replay, including emitted changes.
+// Prepaid reseed counts extend live and remembered building hashes; regenerate
+// the current building replay pins for that intentional state-schema change.
+// Auto-scout flags and retained fair frontier state extend the world schema;
+// regenerate current hashes/digests while keeping every thread equality check.
 // The tests above retain complete 1/2/6-thread equality checks.
 const PINNED_BUILDINGS_HASH: &str =
-    "d4c62a98a082f9221271c943bacafb1aac22348ee301710bfc0740927fd9c295";
+    "6f62d52d9a7442b24c5a91dbaceb4947bdfbcf32036b0101f4cef782d82068b0";
 const PINNED_BUILDINGS_DIGEST: &str =
-    "9aa293ded8cb194e9e6b59bc177fee2ca8f2241facf3096f609ab7121e5ef7ba";
+    "0514a1a3b7dc0ca6a5a51269de231c0af434781a8a787787e122497ccfa6dd55";
 
 fn waiting_fixture() -> (GameWorld, EntityId) {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");

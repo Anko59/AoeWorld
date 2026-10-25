@@ -303,6 +303,7 @@ pub struct GameplayBuildingState {
     pub age: Age,
     pub gate_open: bool,
     pub rally_point: Option<super::RallyPoint>,
+    pub farm_reseeds: u8,
 }
 
 fn valid_prices(prices: MarketPrices) -> bool {
@@ -330,6 +331,9 @@ pub(super) fn valid_players(players: &[GameplayPlayerState]) -> bool {
 pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
     buildings.len() <= MAX_ECONOMY_BUILDINGS
         && buildings.iter().all(|building| {
+            if !super::automation::valid_reseeds(building) {
+                return false;
+            }
             building.rally_point.is_none_or(|r| {
                 r.position.x >= 0
                     && r.position.y >= 0
@@ -399,6 +403,7 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
 pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
     units.iter().all(|unit| {
         unit.facing < 8
+            && super::automation::valid_auto_scout(unit)
             && unit.max_hp > 0
             && unit.hp <= unit.max_hp
             && unit.death_tick.is_none_or(|_| unit.hp == 0)

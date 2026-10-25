@@ -24,19 +24,6 @@ pub use metrics::{PlanningProbe, RouteMetrics};
 pub(crate) const MAX_ROUTE_SEARCHES_PER_PLAYER: usize = 2;
 /// Compact route continuations one player may hold at once.
 pub(crate) const MAX_ROUTE_PLANNERS_PER_PLAYER: usize = 64;
-/// Leg work after which a search that has proven no progress ends as
-/// `PathBudgetExceeded` (one leg commit's worth): a target sealed off must
-/// not hold one of its player's two search slots, nor a share of every
-/// tick's budget, for the rest of the match. In a 99-AI match such searches
-/// (scouts riding to sealed-off ground across the map) still took nearly half
-/// of the fair budget at four commits' worth, and most at two.
-pub(crate) const STUCK_SEARCH_WORK: u32 = aoe_map::ROUTE_LEG_COMMIT_WORK;
-/// The same bound for a near route (a trip of at most `NEAR_ROUTE_TILES`):
-/// a villager's few-tile trip across water or into fenced-off ground took
-/// 131,072 work to give up on, and in a 99-AI match such trips outgrew the
-/// fair budget by minute 15.
-pub(crate) const NEAR_STUCK_SEARCH_WORK: u32 = aoe_map::ROUTE_LEG_COMMIT_WORK / 2;
-
 /// A route whose ends are farther apart than this (Chebyshev tiles) searches
 /// in its player's far slots. A scout riding across the map, or an army sent
 /// to sealed-off ground, searches for minutes; in a 99-AI match such searches
@@ -308,7 +295,7 @@ impl GameWorld {
                 if planner.work() >= 65_536 {
                     self.route_metrics.sample("slow", kind, &planner);
                 }
-                if fast && fresh && planner.is_terminal() && !planner.is_approach() {
+                if fast && fresh && planner.is_terminal() {
                     self.cache_route(&planner, kind, &MovementOutcome::Path(path.clone()));
                 }
                 let mut route = VecDeque::from(path.tiles);
@@ -326,19 +313,6 @@ impl GameWorld {
                     return spent;
                 }
                 Some(GameWorldError::InvalidPosition)
-            }
-            RoutePlannerPoll::Pending
-                if planner.requires_search_slot()
-                    && planner.leg_work()
-                        >= if far {
-                            STUCK_SEARCH_WORK
-                        } else {
-                            NEAR_STUCK_SEARCH_WORK
-                        } =>
-            {
-                self.route_metrics.stuck += 1;
-                self.route_metrics.sample("stuck", kind, &planner);
-                Some(GameWorldError::PathBudgetExceeded)
             }
             RoutePlannerPoll::Pending => {
                 if fast && self.route_capacity_exhausted(player, 0, 0, far) {
@@ -359,7 +333,7 @@ impl GameWorld {
             RoutePlannerPoll::SearchLimit => Some(GameWorldError::PathBudgetExceeded),
             RoutePlannerPoll::Environment(error) => Some(GameWorldError::Environment(error)),
         };
-        if fast && fresh && !planner.is_approach() && error == Some(GameWorldError::Unreachable) {
+        if fast && fresh && error == Some(GameWorldError::Unreachable) {
             self.cache_route(&planner, kind, &MovementOutcome::Unreachable);
         }
         self.route_metrics.failed(planner.work());

@@ -121,8 +121,8 @@ impl Camera {
         if max_y > height {
             self.center[1] -= max_y - height;
         }
-        self.center[0] = self.center[0].clamp(0.0, width);
-        self.center[1] = self.center[1].clamp(0.0, height);
+        self.center[0] = crate::clamp_f64(self.center[0], 0.0, width);
+        self.center[1] = crate::clamp_f64(self.center[1], 0.0, height);
         self
     }
 

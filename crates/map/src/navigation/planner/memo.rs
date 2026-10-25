@@ -59,6 +59,9 @@ impl<'a> MemoTerrain<'a> {
 }
 
 impl RouteTerrain for MemoTerrain<'_> {
+    fn prepare_navigation_chunk(&self) -> bool {
+        self.inner.prepare_navigation_chunk()
+    }
     fn route_generator(&self) -> Option<&crate::MapChunkGenerator> {
         self.inner.route_generator()
     }

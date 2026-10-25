@@ -53,22 +53,88 @@ async fn a_stored_package_of_another_request_or_detail_is_not_reused() {
 }
 
 #[tokio::test]
-async fn a_job_for_a_stored_preset_completes_without_a_worker() {
-    let (state, id, _) = state_with_job();
-    let package = overview_response(true);
+async fn a_job_for_a_stored_preset_publishes_navigation_without_a_worker() {
+    use aoe_map::{ElevationPage, FieldPyramid, PreparedEnvironment, PyramidLevel};
+    let (mut state, id, _) = state_with_job();
+    let directory = tempfile::tempdir().unwrap();
+    state.map_package_directory = Some(directory.path().to_owned());
+    let elevation = ElevationPage {
+        level: 0,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        geographic_height_centimeters: vec![0],
+    };
+    let environment = PreparedEnvironment {
+        samples_per_axis: 1,
+        geographic_millimeters_per_sample: 1_000,
+        page_samples: aoe_map::ENVIRONMENT_PAGE_SAMPLES,
+        elevation: FieldPyramid {
+            levels: vec![PyramidLevel {
+                samples_per_axis: 1,
+                ordered_page_root: aoe_map::ordered_page_root(std::slice::from_ref(&elevation))
+                    .unwrap(),
+            }],
+        },
+        ..PreparedEnvironment::default()
+    };
+    // A real, small stored source fixture: reuse now also prepares navigation,
+    // so an in-memory manifest with invented page roots is insufficient.
+    let request = MapRequest {
+        requested_side_meters: 3840,
+        ..MapRequest::default()
+    };
+    let package = MapPackage::with_prepared_environment(
+        1,
+        request,
+        vec![overview_response(true).source_locks[0].clone()],
+        Default::default(),
+        Default::default(),
+        environment,
+    )
+    .unwrap();
+    crate::map_store::persist_prepared(
+        Some(directory.path()),
+        &package,
+        &[elevation],
+        &[],
+        &[],
+        &[],
+    )
+    .unwrap();
     store(&state, &package).await;
     state.reuse_prepared_maps.store(true, Ordering::SeqCst);
     {
         let mut manager = state.map_jobs.lock().await;
         let entry = manager.jobs.get_mut(&id).expect("job");
         entry.job.request = package.request;
-        entry.job.preparation = overview_plan();
+        entry.job.preparation = PreparationPlan {
+            mode: PreparationMode::Detailed,
+            samples_per_axis: 1,
+            field_axes: None,
+            hydrology_mode: crate::map_jobs::HydrologyMode::None,
+            geographic_millimeters_per_sample: Some(1_000),
+            explanation: "stored source fixture",
+        };
     }
     launch(state.clone(), id);
     for _ in 0..100 {
         let job = status(&state, id).await.expect("job");
         if job.state == JobState::Completed {
             assert_eq!(job.content_hash, Some(package.content_hash_hex()));
+            assert_eq!(
+                std::fs::read_dir(directory.path().join("navigation"))
+                    .unwrap()
+                    .filter(|entry| entry
+                        .as_ref()
+                        .unwrap()
+                        .path()
+                        .extension()
+                        .is_some_and(|ext| ext == "bin"))
+                    .count(),
+                1
+            );
             return;
         }
         assert_ne!(job.state, JobState::Failed, "{:?}", job.error);

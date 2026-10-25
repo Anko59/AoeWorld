@@ -5,10 +5,13 @@ use serde::{
 };
 use std::{fmt, marker::PhantomData};
 
+mod automation;
 pub(crate) mod economy;
 mod fog;
 mod projectiles;
+mod queues;
 mod rally;
+pub use queues::MoveQueue;
 mod resources;
 pub use rally::{RallyPoint, RallyTarget};
 mod wildlife;
@@ -60,6 +63,8 @@ pub struct UnitState {
     /// Hunting or carcass job, independent of military attack orders.
     pub hunt_target: Option<EntityId>,
     pub death_hunt: Option<AnimalKind>,
+    /// Authoritative cavalry exploration toggle.
+    pub auto_scout: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -132,6 +137,7 @@ pub enum ClientMessage {
     },
     /// Send villagers to finish an unfinished foundation the player owns;
     /// nothing is charged.
+    /// Resume construction or repair a damaged own building.
     ConstructOrder {
         sequence: u64,
         #[serde(deserialize_with = "economy::bounded_builders")]
@@ -186,6 +192,23 @@ pub enum ClientMessage {
         sequence: u64,
         building_id: EntityId,
         target: RallyTarget,
+    },
+    /// Append a movement destination instead of replacing the current order.
+    QueueMoveOrder {
+        sequence: u64,
+        entity_id: EntityId,
+        destination: WorldPosition,
+    },
+    /// Prepay or cancel one farm reseed at a Mill.
+    FarmReseedOrder {
+        sequence: u64,
+        building_id: EntityId,
+        add: bool,
+    },
+    AutoScoutOrder {
+        sequence: u64,
+        entity_id: EntityId,
+        enabled: bool,
     },
 }
 
@@ -315,6 +338,13 @@ pub enum ServerMessage {
         #[serde(deserialize_with = "projectiles::bounded_projectiles")]
         projectiles: Vec<ProjectileState>,
     },
+    /// Complete queued-movement marker set for the current subscription.
+    MoveQueues {
+        revision: u64,
+        tick: Tick,
+        #[serde(deserialize_with = "bounded_vec")]
+        queues: Vec<MoveQueue>,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -376,6 +406,7 @@ where
 }
 
 fn validate_server(message: &ServerMessage) -> Result<(), Error> {
+    queues::validate(message)?;
     wildlife::validate_server(message)?;
     if let ServerMessage::Projectiles {
         revision,

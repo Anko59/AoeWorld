@@ -15,6 +15,7 @@ from aoeworld import (
 )
 
 from .constructor import Constructor
+from .reseeding import queue_reseeds
 from ..context import Context
 from ..geometry import clamp_tile, dist, dist2, nearest, ring_points
 
@@ -68,6 +69,7 @@ class EconomyManager:
         self.forget_farmers(ctx)
         self.drop_stuck_hunts(ctx)
         self.assign_idle(ctx)
+        queue_reseeds(ctx)
 
     # ----- production ------------------------------------------------------
     def train_villagers(self, ctx: Context) -> None:

@@ -326,14 +326,16 @@ async fn prepare(
     tracing::info!(seed, "village layout seed");
     let started = Instant::now();
     let (cancel, count) = (cancelled.clone(), placed.clone());
+    let directory = state.map_package_directory.clone();
     let service = tokio::task::spawn_blocking(move || {
-        GameplayService::from_match_rules(
+        GameplayService::from_match_rules_stored(
             package,
             provider.map(|value| value as Arc<dyn EnvironmentPageProvider>),
             &humans,
             &MatchRules::default().with_seed(seed),
             &count,
             &|| cancel.load(Ordering::Acquire),
+            directory.as_deref(),
         )
     })
     .await

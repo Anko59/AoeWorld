@@ -363,6 +363,7 @@ fn scheduling_budget_is_part_of_canonical_state() {
     assert_ne!(first.canonical_hash(), second.canonical_hash());
 }
 
+mod detours;
 #[path = "routes/fairness.rs"]
 mod fairness;
 mod freeze;

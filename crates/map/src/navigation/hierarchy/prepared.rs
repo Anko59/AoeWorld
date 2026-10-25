@@ -41,6 +41,10 @@ impl PartialEq for Atlas {
 impl Eq for Atlas {}
 
 impl Atlas {
+    pub(super) fn entry_count(&self) -> Option<usize> {
+        self.destinations.lock().ok().map(|cache| cache.len())
+    }
+
     fn contains(&self, key: Key) -> bool {
         key.0 >= 0 && key.1 >= 0 && key.0 < self.side && key.1 < self.side
     }
@@ -221,3 +225,6 @@ impl MapChunkGenerator {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

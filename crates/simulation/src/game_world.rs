@@ -5,7 +5,7 @@ use aoe_core::{
     TILE_GROUND_RADIUS_SUBUNITS, Tick, TileCoord, TileRect, WorldConfig, WorldPosition, WorldRect,
 };
 use aoe_map::{Depletion, ResourceNode, ResourceOverlayError, RoutePlanner};
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex};
 /// One chunk's shared candidate resource nodes.
 pub(crate) type ChunkNodes = Arc<Vec<ResourceNode>>;
@@ -13,6 +13,8 @@ mod combat;
 mod economy;
 mod facing;
 mod hash;
+#[path = "game_world/orders/queue.rs"]
+mod move_queue;
 mod movement_step;
 mod orders;
 mod parallel;
@@ -60,6 +62,8 @@ pub struct GameUnit {
     pub last_hit: Option<HitRecord>,
     pub death_tick: Option<Tick>,
     pub death_hunt: Option<AnimalKind>,
+    /// Authoritative cavalry exploration toggle.
+    pub auto_scout: bool,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MovementOrder {
@@ -129,13 +133,15 @@ pub struct GameWorld {
     pub(crate) lookup: UnitIndex,
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
     pub(crate) active_movers: Vec<EntityId>,
+    pub(crate) move_queues: BTreeMap<EntityId, VecDeque<WorldPosition>>,
     pub(crate) destinations: spacing::Destinations,
     pub(crate) terrain: Terrain,
     /// Candidate resource nodes per generator chunk, built on the first
     /// replacement search that touches the chunk and reused by later ones.
     /// See `GameWorld::chunk_resource_nodes`.
-    pub(crate) resource_chunks: Mutex<HashMap<(i32, i32), ChunkNodes>>,
+    pub(crate) resource_chunks: Mutex<crate::game_cache::ResourceCache>,
     pub(crate) planning_budget: u32,
+    pub(crate) navigation_preparation_budget: Mutex<u32>,
     /// Work left this tick for fast attempts (`FAST_ROUTE_WORK` each).
     pub(crate) fast_route_budget: u32,
     /// Fast-attempt work each player spent this tick.
@@ -174,12 +180,14 @@ impl GameWorld {
             lookup: UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            move_queues: BTreeMap::new(),
             destinations: spacing::Destinations::default(),
             planning_budget: crate::MAX_ROUTE_WORK_PER_TICK,
+            navigation_preparation_budget: Mutex::new(crate::MAX_NAV_PREPARATIONS_PER_TICK),
             fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
             fast_route_spent: BTreeMap::new(),
             navigation_cache: NavigationCache::default(),
-            resource_chunks: Mutex::new(HashMap::new()),
+            resource_chunks: Mutex::new(Default::default()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,

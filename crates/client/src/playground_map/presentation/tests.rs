@@ -21,6 +21,7 @@ fn state(x: i32, moving: bool) -> GameplayUnitState {
         death_tick: None,
         hunt_target: None,
         death_hunt: None,
+        auto_scout: false,
     }
 }
 

@@ -1,10 +1,11 @@
-//! Startup must not compose the map or flood its chunks.
+//! Capturing collision for retained searches must not rebuild terrain.
+//! Complete native static preparation is covered by the snapshot tests.
 use super::super::*;
 use crate::navigation::long_routes_tests::flat_terrain_with_water_wall;
 use std::time::Instant;
 
 #[test]
-fn france_sized_preparation_does_not_visit_terrain() {
+fn france_sized_collision_snapshot_does_not_rebuild_terrain() {
     chunk_preparation_cost_breakdown();
     let generator = flat_terrain_with_water_wall(16_000, -1, -1);
     let overlay = ResourceOverlay::default();
@@ -15,7 +16,7 @@ fn france_sized_preparation_does_not_visit_terrain() {
             probes.set(probes.get() + 1);
             probes.get() > 8
         })
-        .expect("preparation must only publish a lazy snapshot");
+        .expect("collision capture must only publish a snapshot");
     assert_eq!(generator.walk_cache_usage(), before);
     assert!(generator.portal_cache().lock().unwrap().chunks.is_empty());
 }

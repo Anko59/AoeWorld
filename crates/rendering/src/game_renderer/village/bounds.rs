@@ -68,3 +68,28 @@ pub(super) fn frames_visible(
             sprite_screen_bounds(frame, unit.position, unit.elevation_meters, camera).is_some()
         })
 }
+
+/// Depth by which an object clears the ground it stands on. A frame reaches
+/// below its hotspot (a gold pile by half its height), where flat ground is
+/// nearer the viewer by one depth unit per 32 pixels; the tallest reviewed
+/// overhang is 43 pixels. One shared offset keeps objects ordered among
+/// themselves, and a one-level rise in front (two units) still hides them.
+const GROUND_CLEARANCE: f64 = 1.5;
+
+/// The rendered body depth, including clearance below the native hotspot.
+pub fn scene_unit_depth(unit: SceneUnit) -> f64 {
+    object_depth(WorldObject::Unit(unit))
+}
+
+pub(super) fn object_depth(object: WorldObject) -> f64 {
+    let position = object.position();
+    // The native Town Center reaches 64 source pixels below its anchor, farther
+    // than a tree/unit. Its front foundation must clear its own flat footprint.
+    let clearance = match object {
+        // Order feedback stays above a building used as the rally target.
+        WorldObject::Resource(r, _, _) if r.kind == SceneResource::RALLY_FLAG => 4.0,
+        WorldObject::Unit(unit) if unit.kind.building_side().is_some() => 3.0,
+        _ => GROUND_CLEARANCE,
+    };
+    surface_depth([position[0], position[1], object.elevation_meters()]) + clearance
+}

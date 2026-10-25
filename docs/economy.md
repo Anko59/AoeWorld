@@ -53,6 +53,11 @@ Full loads and loads from exhausted nodes return to the nearest reachable owned
 Town Center perimeter. Deposits change only the matching resource stockpile.
 The job resumes the same node; after exhaustion it searches for a same-kind
 node within the rules table's Euclidean radius around the exhausted node.
+Wood, gold and stone replacements rank that local work area from the perimeter
+of the drop-off actually used, with resource identity breaking ties. A bounded
+1,024-tile land flood excludes disconnected work spots before at most eight
+route admissions. This keeps the worker in its reachable forest or deposit area
+while preferring the side nearest its Lumber Camp, Mining Camp or Town Center.
 Without a replacement or after a terminal resource-route failure it becomes
 idle. A return trip remembers failed perimeter tiles and tries other owned
 drop-off tiles. Exhausting them ends the job while preserving the carried load.
@@ -141,9 +146,17 @@ owned building that accepts its load (`nearest_dropoff`).
 A farm holds 175 food from placement, but only a completed one can be worked,
 by one villager standing on it (`UnitTask::Farming`, food rate as gathering). It
 returns each 10-food load to the nearest food drop-off, and when the 175th
-unit is delivered the farm building is removed (a removal on the wire). A farm
+unit is delivered the farm building is removed unless a reseed is prepaid. A farm
 with no food left is also removed when its farmer is ordered away (Move, build,
 farm or gather) before delivering; a farm with food left stays workable.
+An owned completed Mill holds up to 99 prepaid reseeds. Add pays the Farm's
+60 wood cost immediately; remove refunds it. After delivering the final load,
+the same farmer consumes one entry from the nearest owned Mill with a queue,
+rebuilds the farm in place over the normal 15 seconds, then resumes farming.
+The rebuilt farm uses the owner's current farm-food technology. Destroying a
+Mill loses its unused queue. The Mill panel displays the server's queue count
+and add/remove availability; `FarmReseedOrder` and `farm_reseeds` carry it over
+the ordinary authenticated protocol and reconnect snapshots.
 Per-tick cost is bounded by builders and gatherers (at most 80 each) and the
 building count (at most 256); placement and completion alone scan buildings.
 
@@ -152,6 +165,16 @@ Wire: `BuildOrder`, `BuildWallOrder`, `ConstructOrder`, `CancelConstructionOrder
 each building state carries `construction`, `progress_permille`, `hp`, `max_hp`,
 `los` and `food_remaining`; `UnitTask` gains `Building` and `Farming`. Hit
 points are authoritative state for the combat track to change.
+
+Auto-scout is a per-cavalry toggle (Scout Cavalry is the current mounted kind).
+It finds the nearest reachable explored land frontier by integer walking cost,
+with tile coordinates breaking ties, then uses ordinary authoritative movement.
+Searches use only explored terrain, respect water, cliffs and building corners,
+and remember failed targets. A fair cursor admits eight jobs per tick, at most
+128 heap pops per job. Sixteen searches may retain up to 65,536 visited tiles
+each; searches without a frontier sleep until the player's vision changes.
+Move, Stop, attack, death and removal clear the toggle and its search memory.
+The cavalry command panel shows the server's toggle, including mixed groups.
 
 Start activation also surveys the whole map on a bounded coarse lattice,
 ranking connected sampled lowlands before elevation and centre distance.

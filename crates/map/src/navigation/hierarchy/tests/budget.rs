@@ -80,3 +80,24 @@ fn component_refinement_is_independent_of_slices_and_cached_answers() {
     assert_eq!(cold, run(1));
     assert_eq!(cold, run(73));
 }
+
+#[test]
+fn zero_total_component_work_ends_without_preparing_a_chunk() {
+    let generator = flat_terrain_with_water_wall(128, -1, -1);
+    let overlay = ResourceOverlay::default();
+    generator.prepare_navigation(&overlay, &|| false).unwrap();
+    let mut resolution = generator
+        .navigation_resolution(
+            &overlay,
+            TileCoord::new(10, 10),
+            TileCoord::new(20, 10),
+            &|| false,
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        resolution.poll(&generator, &mut 1, Some((0, 64)), &|| false),
+        Ok(Some(ResolutionOutcome::Bounded))
+    );
+    assert_eq!(generator.walk_cache_usage().1, 0);
+}
