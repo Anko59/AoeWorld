@@ -24,6 +24,8 @@ use map::{state::Drag, ui::set_text};
 mod memory;
 #[path = "playground_game/network.rs"]
 mod network;
+#[path = "playground_game/recovery.rs"]
+mod recovery;
 #[path = "playground_status.rs"]
 mod status;
 #[path = "playground_storage.rs"]
@@ -175,7 +177,7 @@ pub(super) fn center_on_primary(client: &mut Client) {
 }
 
 pub(super) fn send_order(client: &mut Client, point: ScreenPoint) {
-    village::orders::at_pointer(client, point);
+    village::orders::at_pointer(client, point, false);
 }
 
 fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
@@ -183,6 +185,12 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let next = callback.clone();
     *callback.borrow_mut() = Some(Closure::new(move |time: f64| {
         let mut client = shared.borrow_mut();
+        if let Err(error) = recovery::check(&client.renderer) {
+            match recovery::restart(&client.renderer, Some(client.camera), &error) {
+                Ok(true) => return,
+                _ => client.status = error,
+            }
+        }
         resize(&mut client);
         let delta_ms = if client.last_frame == 0.0 {
             16.0
@@ -217,11 +225,19 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 animation,
                 grid,
             ) {
+                if matches!(
+                    recovery::restart(&client.renderer, Some(client.camera), &error),
+                    Ok(true)
+                ) {
+                    return;
+                }
                 client.status = error;
             }
         }
         village::building_panel::preview(&client);
+        village::waypoints::present(&client);
         if time - client.village.last_hud >= 250.0 {
+            controls::groups::update(&client);
             client.village.last_hud = time;
             status::update(&client);
             village::hud::update(&client);

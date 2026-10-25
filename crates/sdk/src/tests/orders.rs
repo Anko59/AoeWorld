@@ -9,6 +9,10 @@ fn id(n: u32) -> EntityId {
 fn all_orders() -> Vec<Order> {
     let tile = TileCoord::new(10, 20);
     vec![
+        Order::AutoScout {
+            unit: id(1),
+            enabled: true,
+        },
         Order::Move {
             unit: id(1),
             to: tile,
@@ -18,6 +22,10 @@ fn all_orders() -> Vec<Order> {
             to: WorldPosition::new(5_000, 6_000),
         },
         Order::Stop { unit: id(1) },
+        Order::QueueMove {
+            unit: id(1),
+            to: tile,
+        },
         Order::Gather {
             unit: id(2),
             resource: 77,
@@ -40,6 +48,10 @@ fn all_orders() -> Vec<Order> {
         Order::Farm {
             unit: id(5),
             farm: id(6),
+        },
+        Order::FarmReseed {
+            building: id(7),
+            add: true,
         },
         Order::Train {
             building: id(7),
@@ -98,8 +110,9 @@ fn every_order_maps_to_a_wire_message_that_round_trips() {
         seen.insert(bytes[0]);
     }
     // Move, Stop, Gather, Build, BuildWall, Construct, CancelConstruction, Farm,
-    // Train, CancelTraining, Research, CancelResearch, Attack, Hunt, Buy, Sell, SetRally.
-    assert_eq!(seen.len(), 17, "distinct wire variants: {seen:?}");
+    // Training, construction, combat, rally, queued moves, reseeds and auto-scout
+    // all retain distinct ordinary authenticated wire variants.
+    assert_eq!(seen.len(), 20, "distinct wire variants: {seen:?}");
 }
 
 #[test]

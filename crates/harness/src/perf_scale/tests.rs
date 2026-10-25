@@ -85,18 +85,26 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
 /// rotation and active follower sampling. These intentional state/timing
 /// changes, including deferred fast attempts and within-player far reserves,
 /// preserve the three checkpoints and deterministic scenario checks.
+/// Static-navigation integration adds the shared per-tick preparation allowance
+/// and the budgeted reverse-proof state to authoritative hashes. Re-pin for
+/// that intentional schema/pacing change, keeping seed, workload and thresholds.
+/// Re-pin for the original DAT TC annex collision, retained detour searches
+/// and removal of the obsolete unproven-approach flag from planner hashes.
+/// The merged drop-off work state, prepaid reseeds and auto-scout scheduling
+/// extend that same schema. Regenerate these current pins for the combination;
+/// the scenario, checkpoints and limits remain unchanged.
 const PINNED_HASHES: [(u64, &str); 3] = [
     (
         100,
-        "7bbfaf4981571e9ee123810da2b0646fa9b6f6d71389d452c3488ca2c05822ab",
+        "d88b93fa64055351dab903174d9407898c4599d7a96c6d702eeb375cd39c2c27",
     ),
     (
         200,
-        "055ebe658243d9d3e06039f3ab3e63f3b028e962c20ee1677b2e21487f05cce0",
+        "eb201c9cdf8d199c67b79dc682efd36f1026781b329c75a41eefdd977dc0c7b5",
     ),
     (
         300,
-        "a43fba5f3e03497d18c1b191ff5d0420fb07787edf6ad8b590a1757d197f96bd",
+        "030c91284474ada462505c9edd7eb010345870ab45611b02029ff63073713356",
     ),
 ];
 

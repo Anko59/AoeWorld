@@ -52,16 +52,31 @@ impl GameplayService {
         placed: &AtomicUsize,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<(Self, u64), MatchError> {
+        Self::from_match_rules_stored(package, provider, humans, rules, placed, cancelled, None)
+    }
+
+    pub(crate) fn from_match_rules_stored(
+        package: MapPackage,
+        provider: Option<Arc<dyn EnvironmentPageProvider>>,
+        humans: &[bool],
+        rules: &MatchRules,
+        placed: &AtomicUsize,
+        cancelled: &dyn Fn() -> bool,
+        directory: Option<&std::path::Path>,
+    ) -> Result<(Self, u64), MatchError> {
         if humans.is_empty() || humans.len() > MAX_MATCH_SLOTS {
             return Err(MatchError::SlotCount);
         }
         let content_hash = package.content_hash;
+        let content_hash_hex = package.content_hash_hex();
         let metadata = crate::gameplay_map::map_metadata(&package);
         let mut world = match provider {
             Some(provider) => GameWorld::from_page_provider(package, provider)?,
             None if package.environment.samples_per_axis == 0 => GameWorld::from_map(package)?,
             None => return Err(GameWorldError::InvalidTerrain.into()),
         };
+        map_store::navigation::prepare_world(&world, content_hash, directory, cancelled)
+            .map_err(MatchError::Navigation)?;
         let navigation_started = std::time::Instant::now();
         world
             .prepare_navigation(cancelled)
@@ -72,6 +87,8 @@ impl GameplayService {
         );
         world.set_limits(rules.limits(humans.len()));
         let starts = place_villages(&mut world, humans.len(), rules.seed, placed, cancelled)?;
+        let terrain = warmup::camera(&world, &starts, humans, &content_hash_hex, cancelled)?;
+        warmup::prepare(&world, &starts, cancelled)?;
         let seeded = rules::seed_units(&mut world, &starts, rules, cancelled)?;
         world
             .prepare_navigation(cancelled)
@@ -86,10 +103,9 @@ impl GameplayService {
                 human: *human,
             })
             .collect();
-        Ok((
-            Self::from_world_slots(world, setups, Some(content_hash), Some(metadata)),
-            seeded,
-        ))
+        let service = Self::from_world_slots(world, setups, Some(content_hash), Some(metadata));
+        service.install_initial_terrain(terrain);
+        Ok((service, seeded))
     }
 }
 
@@ -287,14 +303,16 @@ async fn start_match(
         .collect::<Vec<_>>();
     let (summary_hash, tiles) = (package.content_hash_hex(), package.estimate.tiles_per_side);
     let stored = package.clone();
+    let directory = state.map_package_directory.clone();
     let (service, seeded_units) = tokio::task::spawn_blocking(move || {
-        GameplayService::from_match_rules(
+        GameplayService::from_match_rules_stored(
             package,
             provider.map(|value| value as Arc<dyn EnvironmentPageProvider>),
             &humans,
             &rules,
             &AtomicUsize::new(0),
             &|| cancelled.load(Ordering::Acquire),
+            directory.as_deref(),
         )
     })
     .await
@@ -361,3 +379,6 @@ pub use stats::{TickProbe, TickStats};
 #[path = "gameplay_match/tests.rs"]
 #[cfg(test)]
 mod tests;
+
+#[path = "gameplay_match/warmup.rs"]
+mod warmup;

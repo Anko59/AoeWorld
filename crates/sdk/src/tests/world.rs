@@ -11,6 +11,35 @@ mod land;
 const ME: PlayerId = PlayerId(3);
 const FOE: PlayerId = PlayerId(4);
 
+#[test]
+fn authoritative_move_queues_replace_the_current_subscription_and_ignore_stale_frames() {
+    let mut world = World::from_welcome(&welcome()).unwrap();
+    world.subscription = 2;
+    let p = WorldPosition::new(512, 1536);
+    let queue = aoe_protocol::MoveQueue {
+        entity_id: EntityId(1),
+        destinations: vec![p],
+    };
+    world.apply(M::MoveQueues {
+        revision: 1,
+        tick: Tick(1),
+        queues: vec![queue.clone()],
+    });
+    assert!(world.move_queue(EntityId(1)).is_empty());
+    world.apply(M::MoveQueues {
+        revision: 2,
+        tick: Tick(1),
+        queues: vec![queue],
+    });
+    assert_eq!(world.move_queue(EntityId(1)), [p]);
+    world.apply(M::MoveQueues {
+        revision: 2,
+        tick: Tick(2),
+        queues: vec![],
+    });
+    assert!(world.move_queue(EntityId(1)).is_empty());
+}
+
 fn welcome() -> M {
     M::Welcome {
         version: 2,
@@ -46,6 +75,7 @@ fn unit(id: u32, player: PlayerId, kind: UnitKind) -> GameplayUnitState {
         death_tick: None,
         hunt_target: None,
         death_hunt: None,
+        auto_scout: false,
     }
 }
 
@@ -71,6 +101,7 @@ fn building(id: u32, player: PlayerId, state: ConstructionState) -> GameplayBuil
         age: aoe_protocol::Age::Dark,
         gate_open: false,
         rally_point: None,
+        farm_reseeds: 0,
     }
 }
 

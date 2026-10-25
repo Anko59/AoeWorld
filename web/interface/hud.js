@@ -61,7 +61,7 @@ export function initInterface() {
     const actions=building?1:units?2:0;
     empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
     text('command-context',count>1?`${count} units`:first?.name ?? 'Select a unit');
-    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: hunt, attack, gather or move':first.kind==='FishingShip'?'Right-click: fish or move':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms'].includes(first.kind)?'Right-click: attack or move':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag to select a group');
+    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Shift: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
     show('observer-label',state.observer);
     show('selection-health',count===1);
     show('unit-hp',count===1 && !building); show('unit-combat',count===1 && !building);

@@ -2,6 +2,40 @@ use super::*;
 use aoe_core::{Seed, TileCoord, WorldConfig};
 
 mod fog;
+mod queues;
+
+#[test]
+fn auto_scout_orders_have_current_golden_wire() {
+    // QueueMove occupies the preceding discriminant in the combined protocol;
+    // regenerate the current order bytes for this intentional enum change.
+    for enabled in [false, true] {
+        let order = ClientMessage::AutoScoutOrder {
+            sequence: 3,
+            entity_id: EntityId(7),
+            enabled,
+        };
+        let bytes = encode_client(&order).unwrap();
+        assert_eq!(bytes, [23, 3, 7, u8::from(enabled)]);
+        assert_eq!(decode_client(&bytes).unwrap(), order);
+    }
+    assert!(decode_client(&[23, 3, 7, 2]).is_err());
+}
+
+#[test]
+fn farm_reseed_orders_have_current_golden_wire() {
+    // The combined protocol inserts QueueMove before the eco orders.
+    for add in [false, true] {
+        let order = ClientMessage::FarmReseedOrder {
+            sequence: 3,
+            building_id: EntityId(7),
+            add,
+        };
+        let bytes = encode_client(&order).unwrap();
+        assert_eq!(bytes, [22, 3, 7, u8::from(add)]);
+        assert_eq!(decode_client(&bytes).unwrap(), order);
+    }
+    assert!(decode_client(&[22, 3, 7, 2]).is_err());
+}
 
 #[test]
 fn unexplored_placement_rejection_has_current_golden_wire() {
@@ -101,6 +135,7 @@ fn gameplay_collections_are_bounded() {
             death_tick: None,
             hunt_target: None,
             death_hunt: None,
+            auto_scout: false,
         };
         MAX_SUBSCRIBED_UNITS + 1
     ];

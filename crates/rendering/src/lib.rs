@@ -1,3 +1,6 @@
+#[cfg(any(not(target_arch = "wasm32"), test, feature = "shader-source"))]
+pub mod shader_data;
+
 mod player;
 pub use player::{PLAYER_COLOURS, SceneUnitVisual, player_colour};
 

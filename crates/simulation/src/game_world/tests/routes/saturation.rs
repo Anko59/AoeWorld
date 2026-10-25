@@ -220,9 +220,8 @@ fn a_repeated_trip_is_answered_from_the_route_cache() {
 }
 
 /// Busy far slots leave the player's near slots available. A long wall's
-/// open ends make the target reachable, so the fast cutoff cannot certify it
-/// unreachable: retain its search until the existing total-work bound. This
-/// replaces the previous assertion that pinned the premature approach bug.
+/// open ends make the target reachable. Both the fast allowance and the old
+/// near-search cutoff must preserve the order all the way to arrival.
 #[test]
 fn an_unresolved_near_order_retains_a_bounded_search_beside_busy_far_slots() {
     let mut world = sealed_ring_world(1_024, 500, 500);
@@ -262,17 +261,18 @@ fn an_unresolved_near_order_retains_a_bounded_search_beside_busy_far_slots() {
         MAX_ROUTE_SEARCHES_PER_PLAYER
     );
     let mut ended = None;
-    for tick in 0..400 {
+    for tick in 0..12_000 {
         world.advance();
+        assert_eq!(world.movement_failure(villager), None);
         if world.movement_order(villager).is_none() {
             ended = Some(tick);
             break;
         }
     }
-    assert!(ended.is_some(), "the bounded search never ended");
+    assert!(ended.is_some(), "the detour never arrived");
     assert_eq!(
-        world.movement_failure(villager),
-        Some(GameWorldError::PathBudgetExceeded)
+        world.unit(villager).unwrap().position,
+        tile_position(210, 300)
     );
     assert_eq!(world.route_slots[&player].class_searches(false), 0);
 }

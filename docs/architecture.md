@@ -50,6 +50,15 @@ at 512 chunks and 128 MiB, with at most 64 concurrent requests. Height metadata
 and candidate coordinates each have a separate 65,536-entry ceiling; very large
 views remain bounded rather than allocating in proportion to map area.
 
+Terrain composition shares two off-tick workers with navigation warmups. A
+connected human's authenticated camera requests use a priority queue with 64
+reserved admissions; background and AI work have a separate 64-request bound.
+Running jobs finish before the next job is chosen from the human queue first.
+Match startup retains rendered chunks around the map-centre camera and human
+starts in a bounded cache, so HTTP can reuse that work. Complete static
+navigation disables redundant speculative walk-chunk preparation. Terrain
+timing logs separate time in the queue from time spent executing the work.
+
 The minimap and whole-map overview draw one strategic raster per package from
 `GET /maps/{hash}/minimap`. The server samples the composed landscape query
 that also produces chunks, at one sample per tile up to 512 per axis, so the
@@ -67,6 +76,34 @@ box before encoding its shade. Its radius follows four elevation facets,
 bounded by a four-pixel minimum and one eighth of the raster axis (smaller
 rasters use a smaller window). Sliding sums keep filtering linear in raster
 area, with bounded scratch; class queries, colours and water shading are unchanged.
+
+Native map preparation computes immutable navigation on at most four parallel
+workers for maps up to 65,536 chunks, with a 512 MiB retained snapshot budget.
+Larger maps use the lazy walk/portal caches instead of allocating a whole-map
+snapshot; oversized eager builds/loads fail with a smaller-map/compression hint.
+Eager preparation captures compact walk fields and resource nodes, exact local
+land components, portals, and all intra-chunk portal costs. The server persists a checksummed
+binary snapshot under `map-packages/navigation/<package-hash>-<navigation-format>.bin`.
+For eager maps, preset reuse prepares missing snapshots before reporting the
+map ready. Match creation decodes their current snapshot before ticking; missing
+procedural or old package data is built there, never by the tick. Large maps
+prepare only local walk chunks and use off-tick workers for cold requests.
+Only overlay changes rebuild local graphs, using the existing deterministic planner budgets and immutable
+walk data. Move admission does not wait for terrain workers once the snapshot
+is installed. Navigation format changes regenerate the derived file in place;
+there is no migration path. These files stay outside Git and container images.
+
+Verified navigation snapshots are shared by `Arc` across preparation and match
+replacement. The process retains at most 1 GiB in its snapshot LRU and 256
+package handles; weak handles reuse data still owned by a world after LRU
+eviction. Mutable world caches stay separate. Snapshot resource records omit
+redundant global tile coordinates, and component labels retain runs when those
+use less space than a tile array. Encoding and checksums are unchanged.
+Resource-candidate blocks have an 8,192-entry, 32 MiB LRU, including empty
+blocks. Walk and dynamic portal caches each retain at most 64 MiB.
+`/health` exposes live world/session counts and retained snapshot, atlas and
+cache capacities; snapshot loading also logs its allocation progress. These
+logical capacities exclude allocator slack and do not replace RSS measurements.
 
 `aoe-map` is the environment-independent boundary for frozen geographic map
 identity. It validates the 600 CE request, physical compression and bounded

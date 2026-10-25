@@ -223,6 +223,9 @@ impl Client {
             to: TileCoord::new(x, y),
         })
     }
+    fn queue_move(&self, unit: u32, x: i32, y: i32) -> u64 {
+        self.order(Order::QueueMove { unit:EntityId(unit),to:TileCoord::new(x,y) })
+    }
     fn stop(&self, unit: u32) -> u64 {
         self.order(Order::Stop {
             unit: EntityId(unit),
@@ -285,11 +288,20 @@ impl Client {
             building: EntityId(building),
         })
     }
+    #[pyo3(signature = (unit, enabled=true))]
+    fn auto_scout(&self, unit: u32, enabled: bool) -> u64 {
+        self.order(Order::AutoScout { unit: EntityId(unit), enabled })
+    }
     fn farm(&self, unit: u32, farm: u32) -> u64 {
         self.order(Order::Farm {
             unit: EntityId(unit),
             farm: EntityId(farm),
         })
+    }
+    /// Prepay or cancel one farm rebuild at a Mill.
+    #[pyo3(signature = (building, add=true))]
+    fn farm_reseed(&self, building: u32, add: bool) -> u64 {
+        self.order(Order::FarmReseed { building: EntityId(building), add })
     }
     fn train(&self, building: u32, kind: UnitKind) -> u64 {
         self.order(Order::Train {

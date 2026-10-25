@@ -15,6 +15,9 @@ endpoint and client diagnostics show the checkout commit; a modified tree adds
 container. Containers are named per checkout, so two worktrees can each run a
 server on their own port, and `make down` stops only its own. Changing the
 port of a running server needs `make down` first.
+The dev container has a hard 5 GiB memory limit, including its AI hosts and
+map-worker children, with no additional swap allowance. An oversized match
+is stopped by Docker rather than exhausting the host's RAM and swap.
 After `make dev` has built the checkout, `make dev-start` starts those existing
 artifacts in the same checkout-scoped container. Use it after `make down` to
 change scenario settings without rebuilding; source changes still need `make dev`.

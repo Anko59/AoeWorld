@@ -119,6 +119,7 @@ fn stop_command_applies_to_owned_sheep_and_preserves_typed_rejections() {
             PendingAction::Move {
                 entity_id: sheep,
                 destination: at(110),
+                queued: false,
             }
         ),
         CommandResult::Accepted
@@ -225,13 +226,23 @@ fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
     use aoe_simulation::GameWorld;
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    world
+        .initialize_village(PlayerId(0), TileCoord::new(20, 20))
+        .unwrap();
+    world.set_fog_disabled(true);
+    let builder = world.spawn_villager(PlayerId(0), at(110, 110)).unwrap();
     let attacker = world.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
     let target = world.spawn_villager(PlayerId(1), at(106, 100)).unwrap();
-    // Four non-overlapping footprints enclose all eight neighboring tiles.
-    // Their vision also keeps the target visible to the commanding player.
-    for (x, y) in [(96, 97), (100, 96), (101, 100), (97, 101)] {
+    // Four solid house foundations enclose all eight neighboring tiles.
+    // Completed Town Centers have open arches, so cannot serve as solid walls.
+    for (x, y) in [(98, 99), (100, 98), (101, 100), (99, 101)] {
         world
-            .place_town_center(PlayerId(0), TileCoord::new(x, y))
+            .issue_build(
+                PlayerId(0),
+                &[builder],
+                aoe_simulation::BuildingKind::House,
+                TileCoord::new(x, y),
+            )
             .unwrap();
     }
     let before = world.canonical_hash();

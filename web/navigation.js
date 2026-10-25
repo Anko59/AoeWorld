@@ -36,6 +36,9 @@ export function initNavigation() {
   const viewport = document.getElementById('minimap-viewport');
   const fog = initFogMap(svg);
   const keys = new Set();
+  const groups = Array.from({ length: 10 }, () => new Set());
+  const groupPositions = new Map();
+  let groupTap = null;
   const output = new Float64Array([0, 0, NaN, NaN]);
   let world = [1, 1];
   let center = [0, 0];
@@ -44,6 +47,7 @@ export function initNavigation() {
   let dragging = null;
   let mapHash = null;
   let request = null;
+  let retryTimer;
   let samples = 0;
   let panImpulse = [0, 0];
 
@@ -86,8 +90,8 @@ export function initNavigation() {
     return target instanceof Element && !!target.closest('input,textarea,select,[contenteditable]');
   }
   function direction(key) {
-    return { ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0],
-      ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1] }[key];
+    return { ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+      ArrowUp: [0, -1], ArrowDown: [0, 1] }[key];
   }
   document.addEventListener('keydown', event => {
     if (document.querySelector("dialog[open]") || editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -153,6 +157,7 @@ export function initNavigation() {
       ? Array.from(hashBytes, byte => byte.toString(16).padStart(2, '0')).join('') : '';
     if (hash === mapHash) return;
     mapHash = hash;
+    clearTimeout(retryTimer);
     fog(false, []);
     panel.dataset.mapHash = hash;
     rasterState('pending');
@@ -163,7 +168,12 @@ export function initNavigation() {
     image.removeAttribute('href');
     samples = 0;
     overview(expanded);
-    if (!hash) return;
+    if (hash) await loadRaster(hash);
+  }
+
+  async function loadRaster(hash) {
+    // Retry only the raster: a transient failure must retain camera and fog.
+    rasterState('pending');
     const controller = new AbortController();
     request = controller;
     const timeout = setTimeout(() => controller.abort(), 45000);
@@ -191,6 +201,9 @@ export function initNavigation() {
         samples = 0;
         overview(expanded);
         rasterState('failed');
+        retryTimer = setTimeout(() => {
+          if (mapHash === hash && request === null) void loadRaster(hash);
+        }, 5000);
       }
       if (error.name !== 'AbortError') console.warn('Minimap terrain unavailable; using schematic', error);
     } finally {
@@ -199,7 +212,51 @@ export function initNavigation() {
     }
   }
 
+  function groupsUpdate(positions, selected = []) {
+    const tracked = new Set([...groups.flatMap(group => [...group]), ...selected]);
+    for (let i = 0; i < positions.length; i += 3) {
+      const [id, x, y] = positions.subarray(i, i + 3);
+      if (!tracked.has(id)) continue;
+      if (Number.isFinite(x) && Number.isFinite(y)) groupPositions.set(id, [x, y]);
+      else {
+        groupPositions.delete(id);
+        groups.forEach(group => group.delete(id));
+      }
+    }
+  }
+
   window.aoeNavigation = {
+    clearGroups() {
+      groups.forEach(group => group.clear());
+      groupTap = null;
+      groupPositions.clear();
+    },
+    groupMembers: () => groups.reduce((count, group) => count + group.size, 0),
+    groupsUpdate,
+    group(action, selected, positions) {
+      groupsUpdate(positions, selected);
+      const index = action % 10;
+      const operation = Math.floor(action / 10);
+      if (operation >= 2) {
+        if (operation === 2) groups[index].clear();
+        for (const id of selected) if (groupPositions.has(id)) groups[index].add(id);
+        const tracked = new Set(groups.flatMap(group => [...group]));
+        for (const id of groupPositions.keys()) if (!tracked.has(id)) groupPositions.delete(id);
+        groupTap = null;
+        return [];
+      }
+      const members = [...groups[index]].sort((a, b) => a - b);
+      const now = performance.now();
+      if (members.length && groupTap?.index === index && now - groupTap.time <= 350) {
+        const sum = members.reduce((sum, id) => {
+          const p = groupPositions.get(id);
+          return [sum[0] + p[0], sum[1] + p[1]];
+        }, [0, 0]);
+        pending = sum.map(value => value / members.length);
+      }
+      groupTap = { index, time: now };
+      return members;
+    },
     fog,
     overview: () => expanded,
     fragment: () => parseCameraFragment(location.hash),

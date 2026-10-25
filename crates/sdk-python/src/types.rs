@@ -19,6 +19,7 @@ pub struct Unit {
     pub hp: u16,
     pub max_hp: u16,
     pub moving: bool,
+    pub auto_scout: bool,
     pub idle: bool,
     pub alive: bool,
     pub military: bool,
@@ -59,6 +60,7 @@ impl From<aoe_sdk::Unit> for Unit {
             hp: unit.state.hp,
             max_hp: unit.state.max_hp,
             moving: unit.state.moving,
+            auto_scout: unit.state.auto_scout,
             idle: unit.idle(),
             alive: unit.alive(),
             military: unit.is_military(),
@@ -89,6 +91,7 @@ pub struct Building {
     /// False for a building remembered from earlier, now out of sight.
     pub visible: bool,
     pub queue_length: usize,
+    pub farm_reseeds: u8,
     pub rally_position: Option<(i32, i32)>,
     pub rally_resource: Option<u64>,
     pub rally_building: Option<u32>,
@@ -129,6 +132,7 @@ impl From<aoe_sdk::Building> for Building {
             max_hp: building.state.max_hp,
             visible: building.visible,
             queue_length: building.state.training_queue.len(),
+            farm_reseeds: building.state.farm_reseeds,
             rally_position: building.state.rally_point.map(|r| {
                 let t = r.position.tile_floor();
                 (t.x, t.y)

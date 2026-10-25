@@ -4,7 +4,14 @@ Builds start from a clean `dev` commit. Run `make test-e2e` and `make perf-ci`
 against that commit, then `make release-build`. The Rust harness rejects stale,
 dirty, or failing reports. It compiles the server and WASM client once in a
 single artifact image, then creates the server and browser runtime images from
-that build. The runtime images run as non-root users with read-only filesystems
+that build. The artifact build also emits the build-assembled WGSL programs into
+`web/pkg`; both clients fetch them from `/pkg`. The release content check
+rejects missing or stale shaders and exports each runtime image's web root to
+check every bundled file against the manifest-bound static bundle before writing or verifying the manifest.
+The full web root (including generated packages, snippets and shaders) travels
+through `dev-artifacts` into `bundle.tar` and both images; `main-promotion`
+reuses those exact attested artifacts without rebuilding or selective copying.
+The runtime images run as non-root users with read-only filesystems
 in rehearsal.
 
 `reports/release/<commit>/manifest.json` binds the source commit and tree,

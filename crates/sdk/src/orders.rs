@@ -5,6 +5,15 @@ use aoe_protocol::GameplayClientMessage;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Order {
+    AutoScout {
+        unit: EntityId,
+        enabled: bool,
+    },
+    /// Prepay (or cancel and refund) one farm reseed at a completed Mill.
+    FarmReseed {
+        building: EntityId,
+        add: bool,
+    },
     /// Set a production building's gather point.
     SetRally {
         building: EntityId,
@@ -19,6 +28,11 @@ pub enum Order {
     MoveTo {
         unit: EntityId,
         to: WorldPosition,
+    },
+    /// Append a tile-center move to the unit's current movement queue.
+    QueueMove {
+        unit: EntityId,
+        to: TileCoord,
     },
     Stop {
         unit: EntityId,
@@ -98,6 +112,16 @@ impl Order {
     pub fn message(&self, sequence: u64) -> Option<GameplayClientMessage> {
         use GameplayClientMessage as M;
         Some(match self.clone() {
+            Order::AutoScout { unit, enabled } => M::AutoScoutOrder {
+                sequence,
+                entity_id: unit,
+                enabled,
+            },
+            Order::FarmReseed { building, add } => M::FarmReseedOrder {
+                sequence,
+                building_id: building,
+                add,
+            },
             Order::SetRally { building, target } => M::SetRallyOrder {
                 sequence,
                 building_id: building,
@@ -112,6 +136,11 @@ impl Order {
                 sequence,
                 entity_id: unit,
                 destination: to,
+            },
+            Order::QueueMove { unit, to } => M::QueueMoveOrder {
+                sequence,
+                entity_id: unit,
+                destination: WorldPosition::from_tile_center(to).ok()?,
             },
             Order::Stop { unit } => M::StopOrder {
                 sequence,

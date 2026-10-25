@@ -61,8 +61,9 @@ pub(in super::super) fn scene_resources(client: &Client) -> Vec<SceneResource> {
     select_visible_resources(
         resources
             .chain(decorations::scenery(&scene))
-            .chain(super::super::village::rally::marker(client))
-            .filter(|r| client.fog.state(r.position.map(|v| v.floor() as i32)) > 0),
+            .filter(|r| client.fog.state(r.position.map(|v| v.floor() as i32)) > 0)
+            // An owner's order is visible even when its destination is unexplored.
+            .chain(super::super::village::rally::marker(client)),
         &client.art,
         camera,
     )

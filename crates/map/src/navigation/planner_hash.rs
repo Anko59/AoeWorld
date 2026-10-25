@@ -37,11 +37,7 @@ impl RoutePlanner {
                 hash.update(&remaining.to_le_bytes())
             }
         };
-        hash.update(&[
-            self.validation_step,
-            u8::from(self.pocket_checked),
-            u8::from(self.approach),
-        ]);
+        hash.update(&[self.validation_step, u8::from(self.pocket_checked)]);
         hash.update(&[u8::from(self.guidance_checked)]);
         hash_usize(hash, self.guidance.len());
         for tile in &self.guidance {

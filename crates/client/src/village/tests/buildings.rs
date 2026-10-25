@@ -23,6 +23,7 @@ fn building(id: usize) -> GameplayBuildingState {
         last_hit: None,
         gate_open: false,
         rally_point: None,
+        farm_reseeds: 0,
         age: aoe_protocol::Age::Dark,
     }
 }

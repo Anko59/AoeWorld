@@ -158,6 +158,15 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 capture::world_received(&mut client, map_changed);
                 subscribe(&mut client);
             }
+            Ok(GameplayServerMessage::MoveQueues {
+                revision,
+                tick,
+                queues,
+            }) => {
+                if revision == client.revision && tick.0 >= client.village.tick {
+                    client.village.move_queues = queues;
+                }
+            }
             Ok(GameplayServerMessage::Snapshot {
                 revision,
                 tick,
@@ -187,6 +196,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     presentation.remember(units.get(&unit.id), unit, tick.0);
                 }
                 client.units = resident;
+                client.village.move_queues.clear();
                 client.village.players = players;
                 client.village.rubble.retain(|(_, until)| *until > tick.0);
                 map::scene::replace_buildings(&mut client, buildings);

@@ -220,7 +220,7 @@ test("isolated original-pack country renders actual chunks on three explicit bac
     });
     if (backend !== "canvas2d") {
       const token = await current.evaluate(() =>
-        sessionStorage.getItem("aoeworld.resume-token"),
+        localStorage.getItem("aoeworld.resume-token"),
       );
       if (!token) throw new Error("missing controller resume token");
       const origin = new URL(current.url()).origin;
@@ -230,7 +230,7 @@ test("isolated original-pack country renders actual chunks on three explicit bac
       await next.addInitScript(
         ({ origin, token }) => {
           if (location.origin === origin)
-            sessionStorage.setItem("aoeworld.resume-token", token);
+            localStorage.setItem("aoeworld.resume-token", token);
         },
         { origin, token },
       );

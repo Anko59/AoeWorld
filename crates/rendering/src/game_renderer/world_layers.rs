@@ -1,5 +1,6 @@
 use super::*;
 
+#[inline(never)]
 pub(super) fn direct_world_layers(
     surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
     art: &GameArt,
@@ -15,11 +16,7 @@ pub(super) fn direct_world_layers(
     } else {
         Vec::new()
     };
-    let surfaces = surfaces.into_iter().chain(compatibility).map(|mut face| {
-        ground.apply(&mut face);
-        ground.farm(&mut face, art);
-        face
-    });
+    let surfaces = surfaces.into_iter().chain(compatibility);
     // Reserve the ordinary shadow/body pairs and the extra Town Center pieces.
     let object_capacity = resources
         .len()
@@ -32,17 +29,24 @@ pub(super) fn direct_world_layers(
                 .count()
                 * 6,
         );
-    ordered_world_layers_with(surfaces, object_capacity, units, camera, |entries| {
-        world_sprites::emit_world_sprite_frames(
-            art,
-            terrain,
-            resources,
-            units,
-            camera,
-            animation,
-            |(sprite, frame, depth, id)| entries.push(WorldLayer::Sprite(sprite, frame, depth, id)),
-        );
-    })
+    let mut entries = Vec::with_capacity(capacity(surfaces.size_hint().0, object_capacity, units));
+    for mut face in surfaces {
+        ground.apply(&mut face);
+        ground.farm(&mut face, art);
+        entries.push(WorldLayer::Surface(face));
+    }
+    append_selections(&mut entries, units, camera);
+    world_sprites::emit_world_sprite_frames(
+        art,
+        terrain,
+        resources,
+        units,
+        camera,
+        animation,
+        |(sprite, frame, depth, id)| entries.push(WorldLayer::Sprite(sprite, frame, depth, id)),
+    );
+    sort_layers(&mut entries);
+    entries
 }
 
 #[cfg(test)]
@@ -52,57 +56,58 @@ pub(super) fn ordered_world_layers(
     units: &[SceneUnit],
     camera: SceneCamera,
 ) -> Vec<WorldLayer> {
-    ordered_world_layers_with(surfaces, objects.len(), units, camera, |entries| {
-        entries.extend(
-            objects
-                .into_iter()
-                .map(|(sprite, frame, depth, id)| WorldLayer::Sprite(sprite, frame, depth, id)),
-        );
-    })
+    let surfaces = surfaces.into_iter();
+    let mut entries = Vec::with_capacity(capacity(surfaces.size_hint().0, objects.len(), units));
+    for surface in surfaces {
+        entries.push(WorldLayer::Surface(surface));
+    }
+    append_selections(&mut entries, units, camera);
+    for (sprite, frame, depth, id) in objects {
+        entries.push(WorldLayer::Sprite(sprite, frame, depth, id));
+    }
+    sort_layers(&mut entries);
+    entries
 }
 
-fn ordered_world_layers_with(
-    surfaces: impl IntoIterator<Item = ProjectedSurfaceTriangle>,
-    object_capacity: usize,
-    units: &[SceneUnit],
-    camera: SceneCamera,
-    emit: impl FnOnce(&mut Vec<WorldLayer>),
-) -> Vec<WorldLayer> {
-    let surfaces = surfaces.into_iter();
-    let selected_count = units.iter().filter(|unit| unit.visual.selected()).count();
-    let mut entries = Vec::with_capacity(
-        surfaces
-            .size_hint()
-            .0
-            .saturating_add(object_capacity)
-            .saturating_add(selected_count.saturating_mul(game_grid::SELECTION_RING_SPRITES)),
-    );
-    entries.extend(surfaces.map(WorldLayer::Surface));
+fn capacity(surfaces: usize, objects: usize, units: &[SceneUnit]) -> usize {
+    surfaces.saturating_add(objects).saturating_add(
+        units
+            .iter()
+            .filter(|unit| unit.visual.selected())
+            .count()
+            .saturating_mul(game_grid::SELECTION_RING_SPRITES),
+    )
+}
+
+// Direct pushes keep one shared layer builder instead of iterator adapter
+// specializations for each terrain source and sprite callback in WASM.
+#[inline(never)]
+fn append_selections(entries: &mut Vec<WorldLayer>, units: &[SceneUnit], camera: SceneCamera) {
     for unit in units.iter().filter(|unit| unit.visual.selected()) {
-        entries.extend(
-            (if let Some(side) = unit.kind.building_side() {
-                game_grid::selection_ellipse(
-                    camera,
-                    unit.position,
-                    unit.elevation_meters,
-                    [
-                        side / 2.0 * aoe_core::ISO_TILE_WIDTH,
-                        side / 2.0 * aoe_core::ISO_TILE_HEIGHT,
-                    ],
-                )
-            } else {
-                game_grid::selection_ring(camera, unit.position, unit.elevation_meters)
-            })
-            .into_iter()
-            .map(|(mut sprite, depth)| {
-                if unit.visual.hostile() {
-                    sprite.color = [245.0 / 255.0, 65.0 / 255.0, 65.0 / 255.0, 1.0];
-                }
-                WorldLayer::Selection(sprite, depth)
-            }),
-        );
+        let selections = if let Some(side) = unit.kind.building_side() {
+            game_grid::selection_ellipse(
+                camera,
+                unit.position,
+                unit.elevation_meters,
+                [
+                    side / 2.0 * aoe_core::ISO_TILE_WIDTH,
+                    side / 2.0 * aoe_core::ISO_TILE_HEIGHT,
+                ],
+            )
+        } else {
+            game_grid::selection_ring(camera, unit.position, unit.elevation_meters)
+        };
+        for (mut sprite, depth) in selections {
+            if unit.visual.hostile() {
+                sprite.color = [245.0 / 255.0, 65.0 / 255.0, 65.0 / 255.0, 1.0];
+            }
+            entries.push(WorldLayer::Selection(sprite, depth));
+        }
     }
-    emit(&mut entries);
+}
+
+#[inline(never)]
+fn sort_layers(entries: &mut [WorldLayer]) {
     // Compose the former object (depth, id) pre-sort with layer (depth, kind)
     // ordering in one stable sort. Exact id ties keep shadow/body and source
     // input order, without a second scene or a second object sort buffer.
@@ -114,7 +119,6 @@ fn ordered_world_layers_with(
             .then(left.1.cmp(&right.1))
             .then(left.2.cmp(&right.2))
     });
-    entries
 }
 
 pub(super) fn layer_order(layer: &WorldLayer) -> (f64, u8, u64) {

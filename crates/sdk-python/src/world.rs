@@ -68,6 +68,10 @@ impl World {
     fn unit(&self, id: u32) -> Option<Unit> {
         self.inner.unit(EntityId(id)).map(Unit::from)
     }
+    /// Queued destinations in fixed-point subunits, including the active leg.
+    fn move_queue(&self, unit:u32)->Vec<(i32,i32)> {
+        self.inner.move_queue(EntityId(unit)).iter().map(|p|(p.x,p.y)).collect()
+    }
     /// Own buildings, foundations included unless `complete_only`.
     #[pyo3(signature = (kind=None, complete_only=false))]
     fn my_buildings(&self, kind: Option<BuildingKind>, complete_only: bool) -> Vec<Building> {

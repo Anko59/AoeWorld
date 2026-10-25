@@ -30,22 +30,60 @@ pub(super) enum Labels {
     Empty,
     Open,
     Tiles(Box<[u16; CELLS]>),
+    Runs(Box<[(u16, u16)]>),
 }
 impl Labels {
     pub(super) fn bytes(&self) -> usize {
         match self {
             Self::Tiles(_) => std::mem::size_of::<[u16; CELLS]>(),
+            Self::Runs(runs) => std::mem::size_of_val(runs.as_ref()),
             Self::Empty | Self::Open => 0,
         }
     }
+
+    pub(super) fn from_runs(runs: Vec<(u16, u16)>) -> Self {
+        match runs.as_slice() {
+            [(_, 0)] => Self::Empty,
+            [(_, 1)] => Self::Open,
+            _ if runs.len() * size_of::<(u16, u16)>() < size_of::<[u16; CELLS]>() => {
+                Self::Runs(runs.into_boxed_slice())
+            }
+            _ => {
+                let mut labels = Box::new([0; CELLS]);
+                let mut start = 0;
+                for (end, label) in runs {
+                    labels[start..usize::from(end)].fill(label);
+                    start = usize::from(end);
+                }
+                Self::Tiles(labels)
+            }
+        }
+    }
+
+    pub(super) fn iter(&self) -> impl Iterator<Item = &u16> {
+        let mut run = 0;
+        (0..CELLS).map(move |at| match self {
+            Self::Empty => &0,
+            Self::Open => &1,
+            Self::Tiles(labels) => &labels[at],
+            Self::Runs(runs) => {
+                while usize::from(runs[run].0) <= at {
+                    run += 1;
+                }
+                &runs[run].1
+            }
+        })
+    }
 }
-impl std::ops::Deref for Labels {
-    type Target = [u16; CELLS];
-    fn deref(&self) -> &Self::Target {
+impl std::ops::Index<usize> for Labels {
+    type Output = u16;
+    fn index(&self, at: usize) -> &Self::Output {
+        assert!(at < CELLS);
         match self {
-            Self::Empty => &[0; CELLS],
-            Self::Open => &[1; CELLS],
-            Self::Tiles(labels) => labels,
+            Self::Empty => &0,
+            Self::Open => &1,
+            Self::Tiles(labels) => &labels[at],
+            Self::Runs(runs) => &runs[runs.partition_point(|(end, _)| usize::from(*end) <= at)].1,
         }
     }
 }

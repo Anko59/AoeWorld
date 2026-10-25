@@ -18,6 +18,8 @@ const commands = [
 ];
 export function initBuildings() {
   const grid = byId('command-grid');
+  const autoScout=document.createElement('button');autoScout.id='auto-scout';autoScout.hidden=true;autoScout.innerHTML=entityIcon('Scout')+'<span class="command-label">Auto-scout</span>';autoScout.title='Auto-scout · explore the nearest reachable frontier';autoScout.setAttribute('aria-pressed','false');grid.append(autoScout);
+  const reseedButtons=['add','remove'].map(side=>{const button=document.createElement('button');button.id=`${side}-farm-reseed`;button.hidden=true;button.innerHTML=entityIcon('Farm')+`<span class="command-label">${side==='add'?'Queue farm reseed':'Remove farm reseed'}</span>`;grid.append(button);return button;});
   const trainIcon=document.createElement('span');trainIcon.className='train-icon';
   byId('train-villager').querySelector(':scope>.icon').replaceWith(trainIcon);
   setEntityIcon(trainIcon,'Villager');
@@ -46,6 +48,7 @@ export function initBuildings() {
   const panel=document.createElement('div');panel.id='building-panel';panel.hidden=true;
   panel.innerHTML='<b id="building-hp"></b><div id="building-status"></div><progress id="construction-progress" max="1000"></progress><div id="research-status"><span id="research-icon"></span><span id="research-label"></span><progress id="research-progress" max="100" aria-label="Research progress" hidden></progress></div><div id="market-prices"></div><button id="cancel-construction" hidden>Cancel construction</button><button id="cancel-research" hidden>Cancel research</button>';
   byId('selection-content').insertBefore(panel,byId('training'));
+  const reseedQueue=document.createElement('div');reseedQueue.id='farm-reseed-queue';reseedQueue.hidden=true;reseedQueue.innerHTML='Farm reseeds queued: <span id="farm-reseed-count">0</span>';panel.append(reseedQueue);
   const progressLabels=document.createElement('div');progressLabels.id='construction-labels';document.body.append(progressLabels);
   const preview=document.createElementNS('http://www.w3.org/2000/svg','svg');preview.id='building-preview';preview.setAttribute('aria-hidden','true');document.body.append(preview);
   let open=false, state=[], lastPreview='', queue=[], previousQueue='', previousResearch=-1, previousLabels='';
@@ -62,6 +65,17 @@ export function initBuildings() {
   build.addEventListener('click',()=>{open=open==='economy'?false:'economy';menu();});
   military.addEventListener('click',()=>{open=open==='military'?false:'military';menu();});
   window.aoeBuildings={
+    // One numeric callback replaces per-button Rust closures and duplicate ID tables.
+    bind(callback) {
+      const on=(button,action)=>button.addEventListener('click',()=>callback(action));
+      buttons.forEach((button,i)=>on(button,i));
+      techs.forEach((button,i)=>on(button,15+i));
+      on(byId('cancel-construction'),29);on(byId('cancel-research'),30);
+      reseedButtons.forEach((button,i)=>on(button,31+i));on(autoScout,33);
+      militaryTrain.forEach(({button,kind})=>on(button,34+kind));
+      tradeButtons.forEach(({button},i)=>on(button,42+i));
+      ['train-villager','stop-units','move-units','cancel-training'].forEach((id,i)=>on(byId(id),48+i));
+    },
     queue(values,visible) { queue=values; byId('training').hidden=!visible||!queue.length; },
     key(event) {
       const key=event.key.toUpperCase();
@@ -81,6 +95,10 @@ export function initBuildings() {
       militaryTrain.forEach(({button,site,kind:unit})=>{button.hidden=!owned||kind!==site||v[4]<1000;action(button,`Train ${button.textContent}`,v[availability+unit],!byId('observer-label').hidden);});
       panel.hidden=!selected;
       const market=availability+9;
+      const reseed=market+15;
+      const cavalry=v[reseed+4]??0,scouting=v[reseed+5]??0;autoScout.hidden=cavalry===0;autoScout.disabled=!byId('observer-label').hidden;autoScout.setAttribute('aria-pressed',scouting===0?'false':scouting===cavalry?'true':'mixed');autoScout.querySelector('.command-label').textContent=scouting===cavalry&&cavalry>0?'Stop auto-scout':'Auto-scout';
+      reseedQueue.hidden=kind!==4||!owned;byId('farm-reseed-count').textContent=String(v[reseed]??0);
+      reseedButtons.forEach((button,i)=>{button.hidden=!owned||kind!==4||v[4]<1000;button.disabled=v[reseed+1+i]!==1||!byId('observer-label').hidden;button.title=i===0?`Queue farm reseed · ${v[reseed+3]} wood`:`Remove farm reseed · refund ${v[reseed+3]} wood`;button.setAttribute('aria-label',button.title);});
       tradeButtons.forEach(({button,side,res},i)=>{const price=v[market+i%3];const gold=v[market+(side==='buy'?9:12)+i%3];button.hidden=!owned||kind!==13||v[4]<1000;button.disabled=v[market+3+i]!==1||!byId('observer-label').hidden;const name=res[0].toUpperCase()+res.slice(1);const signature=`${side}:${res}:${gold}`;if(button.dataset.signature!==signature){button.innerHTML=icon('resources',res,res)+`<span class="command-label">${side==='buy'?'Buy':'Sell'} ${name}</span><span class="trade-side">${side==='buy'?'+':'−'}</span><small>${gold} gold</small>`;button.dataset.signature=signature;}button.dataset.price=String(price);button.title=`${side==='buy'?'Buy':'Sell'} 100 ${res} for ${gold} gold (price ${price})`;button.setAttribute('aria-label',button.title);});
       byId('market-prices')&&(byId('market-prices').textContent=kind===13&&v[4]>=1000?`Prices per 100: wood ${v[market]} · food ${v[market+1]} · stone ${v[market+2]} gold`:'');
       techs.forEach((b,i)=>{b.hidden=!owned||kind!==sites[i];action(b,`Research ${research[i]}${i===8?' · Upgrades existing and future Militia':''}`,v[8+i],!byId('observer-label').hidden);});

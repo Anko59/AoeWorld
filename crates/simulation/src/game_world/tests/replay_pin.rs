@@ -2,6 +2,12 @@
 //! canonical hashes include the current authoritative state schema.
 //! Rally points add an explicit optional field to live and remembered buildings;
 //! the pins are regenerated for that deliberate state-hash change.
+//! Prepaid farm reseeds add a byte to live and remembered building hashes;
+//! regenerate the current checkpoints for that deliberate schema change.
+//! Cavalry auto-scout flags, its fair cursor and retained frontier searches
+//! extend the authoritative schema again; regenerate the current pins.
+//! The merged retained-detour planner and open TC arches change routes and
+//! planner hashes too; regenerate this combined schema with the same scenario.
 use super::*;
 
 fn at(x: i32, y: i32) -> WorldPosition {
@@ -34,25 +40,30 @@ fn pinned_replay_world() -> GameWorld {
 /// idle rotation and active-follower sampling slots. Exact explored visibility
 /// adds per-player fog state. These intentional authoritative-state and timing
 /// changes regenerate the combined tree's checkpoints; both independent runs
-/// must still agree on every tick and match every checkpoint.
+/// must still agree on every tick and match every checkpoint. Static navigation
+/// adds the hashed shared preparation allowance and budgeted reverse-proof state;
+/// regenerate for that deliberate schema/pacing change without changing the run.
+/// TC collision now uses its NW 2x2 annex, and the obsolete unproven-approach
+/// flag is removed from planner state. Near detour guidance and retained
+/// searches deliberately change timing; regenerate these current checkpoints.
 #[test]
 fn wildlife_and_fog_replay_hashes_stay_pinned() {
     const PINS: [(&str, &str); 4] = [
         (
             "100",
-            "cf81ff8cb84ba1ae148304945637ddb6391a37815ceb47b5a127543fbaf987b1",
+            "5645a0e52b025a900eae98199f7310685f354119c7661932dda9e53371efc77d",
         ),
         (
             "200",
-            "7938800d7a9d15131de7ea5130677720fb8a726ee9f1b18e112c31ec2092077a",
+            "9e4280f11814fcba85379a90807f2c1675130322d555eb2fe1320a116b124179",
         ),
         (
             "300",
-            "3e20809bb3e3d4d10797479da2342fa6ddfdb6da9cc65c33a2c08083566c91ed",
+            "db5c72fb9b1c17f1dd227b5cf5f4f167fa5dfe2aa10cf74b29f12296b47387e0",
         ),
         (
             "400",
-            "24a4502c6526191ce82a65184db41440da11ea83a234ff41c7289af801b80cfb",
+            "949a22460fbe9ae269298fc3e9bc9e69b84ce9e27e782ebc5cfb3961c1be3c0c",
         ),
     ];
     let mut checkpoints = Vec::new();

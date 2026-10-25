@@ -23,6 +23,7 @@ impl GameWorld {
         if unit.player != player {
             return Err(crate::EconomyError::NotOwner);
         }
+        self.cancel_auto_scout(id);
         self.stop_movement(index);
         if let Ok(slot) = self.active_movers.binary_search(&id) {
             self.active_movers.remove(slot);
@@ -54,6 +55,7 @@ impl GameWorld {
 
     /// Population is freed now; native death playback precedes thirty seconds of corpse decay.
     pub(crate) fn kill_unit(&mut self, index: usize) {
+        self.cancel_auto_scout(self.units[index].state.id);
         self.stop_movement(index);
         let id = self.units[index].state.id;
         let player = self.units[index].state.player;
@@ -96,6 +98,7 @@ impl GameWorld {
 
     /// Removes a unit from every index. Its slot is filled by the last unit.
     pub(crate) fn remove_unit(&mut self, id: EntityId) {
+        self.cancel_auto_scout(id);
         self.destinations.remove(id);
         let Some(&index) = self.lookup.get(&id) else {
             return;

@@ -29,10 +29,14 @@ async fn composed_chunks_use_the_current_format_and_authoritative_resources() {
         .await
         .insert(package.content_hash_hex(), package.clone());
     let hash = package.content_hash_hex();
-    let generated = chunk(Path((hash.clone(), 2, 2)), State(state.clone()))
-        .await
-        .expect("chunk")
-        .0;
+    let generated = chunk(
+        Path((hash.clone(), 2, 2)),
+        State(state.clone()),
+        HeaderMap::new(),
+    )
+    .await
+    .expect("chunk")
+    .0;
     assert!(generated.payload_hex.starts_with("05"));
     let scene = generated.decode().expect("composed decode");
     assert_eq!(scene.tiles.len(), 18 * 18);
@@ -51,15 +55,19 @@ async fn composed_chunks_use_the_current_format_and_authoritative_resources() {
             Some(resource.node)
         );
     }
-    let cached = chunk(Path((hash, 2, 2)), State(state.clone()))
+    let cached = chunk(Path((hash, 2, 2)), State(state.clone()), HeaderMap::new())
         .await
         .expect("cached")
         .0;
     assert_eq!(cached, generated);
     assert_eq!(
-        chunk(Path((package.content_hash_hex(), 3, 0)), State(state))
-            .await
-            .err(),
+        chunk(
+            Path((package.content_hash_hex(), 3, 0)),
+            State(state),
+            HeaderMap::new()
+        )
+        .await
+        .err(),
         Some(StatusCode::NOT_FOUND)
     );
 }

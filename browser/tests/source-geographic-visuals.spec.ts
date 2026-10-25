@@ -79,7 +79,7 @@ test("source-backed water and high-relief maps render and remain navigable", asy
   // the same resume mechanism as an ordinary reconnect.
   const origin = new URL(page.url()).origin;
   const resumeToken = await page.evaluate(() =>
-    sessionStorage.getItem("aoeworld.resume-token"),
+    localStorage.getItem("aoeworld.resume-token"),
   );
   if (!resumeToken)
     throw new Error("visual controller has no resumable session");
@@ -91,9 +91,9 @@ test("source-backed water and high-relief maps render and remain navigable", asy
       ({ origin, resumeToken }) => {
         if (
           location.origin === origin &&
-          !sessionStorage.getItem("aoeworld.resume-token")
+          !localStorage.getItem("aoeworld.resume-token")
         ) {
-          sessionStorage.setItem("aoeworld.resume-token", resumeToken);
+          localStorage.setItem("aoeworld.resume-token", resumeToken);
         }
       },
       { origin, resumeToken },

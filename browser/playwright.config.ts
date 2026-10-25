@@ -29,6 +29,7 @@ const rendererDependent = [
 
 export default defineConfig({
   testDir: "./tests",
+  outputDir: "../.cache/playwright-results",
   timeout: 30_000,
   expect: { timeout: 10_000 },
   retries: 0,
@@ -45,9 +46,22 @@ export default defineConfig({
   },
   projects: [
     {
+      name: "firefox-webgpu",
+      testMatch: /[\\/]rendering[\\/]recovery[\\/]firefox\.play\.spec\.ts$/,
+      use: {
+        ...nativeDevice("Desktop Firefox"),
+        launchOptions: {
+          firefoxUserPrefs: {
+            "dom.webgpu.enabled": true,
+            "webgl.force-enabled": true,
+          },
+        },
+      },
+    },
+    {
       name: "firefox-webgl2",
       testMatch:
-        /[\\/]rendering[\\/](?:occlusion\.spec|(?:hover|ownership|startup)\.play\.spec)\.ts$/,
+        /[\\/]rendering[\\/](?:occlusion\.spec|(?:hover|ownership|startup)\.play\.spec)\.ts$|[\\/]village[\\/](?:input[\\/][^\\/]+|production[\\/](?:rally|reseed|auto-scout))\.play\.spec\.ts$/,
       use: {
         ...nativeDevice("Desktop Firefox"),
         launchOptions: { firefoxUserPrefs: { "webgl.force-enabled": true } },

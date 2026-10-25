@@ -114,7 +114,11 @@ pub(super) fn sprite_sample(
     let mut sums = [0_u32; 4];
     for offset in offsets {
         let point: [f64; 2] = std::array::from_fn(|axis| {
-            (texture[axis] * side + offset[axis] * side).clamp(lo[axis], hi[axis])
+            aoe_core::clamp_f64(
+                texture[axis] * side + offset[axis] * side,
+                lo[axis],
+                hi[axis],
+            )
         });
         let tap = owner_sample(atlas, sprite, point[0], point[1]);
         for channel in 0..3 {

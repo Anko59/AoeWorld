@@ -90,3 +90,55 @@ test("blocked playback keeps a poster visible and skip stops all media", async (
       .evaluateAll((nodes) => nodes.every((node) => !node.hasAttribute("src"))),
   ).toBe(true);
 });
+
+for (const phase of ["idle", "ready"]) {
+  test(`fresh tab waits for the resume decision before initializing (${phase})`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      sessionStorage.clear();
+      localStorage.setItem("aoeworld.resume-token", "a".repeat(48));
+      Reflect.set(window, "initStates", []);
+    });
+    await page.route("**/pkg/aoe_client.js", (route) =>
+      route.fulfill({
+        contentType: "application/javascript",
+        body: `export default async function() { window.initStates.push(document.body.dataset.startState); }`,
+      }),
+    );
+    let release!: () => void;
+    const decision = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/skirmish", async (route) => {
+      await decision;
+      await route.fulfill({
+        json: { phase, content_hash: "b".repeat(64), ai_available: true },
+      });
+    });
+    await page.goto("/?introStills=1");
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-start-state",
+      "loading",
+    );
+    // A task turn lets the initialization promise run if it was released early.
+    await page.evaluate(
+      () => new Promise((resolve) => setTimeout(resolve, 100)),
+    );
+    expect(
+      await page.evaluate(() => Reflect.get(window, "initStates")),
+    ).toEqual([]);
+    release();
+    if (phase === "idle") {
+      await expect(page.locator("#entry-intro")).toBeVisible();
+      expect(
+        await page.evaluate(() => Reflect.get(window, "initStates")),
+      ).toEqual([]);
+      await page.keyboard.press("Space");
+      await expect(page.locator("#main-menu")).toBeVisible();
+    }
+    await expect
+      .poll(() => page.evaluate(() => Reflect.get(window, "initStates")))
+      .toEqual([phase === "idle" ? "menu" : "loading"]);
+  });
+}

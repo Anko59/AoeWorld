@@ -1,6 +1,7 @@
 mod budget;
 mod preparation;
 mod reference;
+mod static_data;
 
 use super::{
     ChunkPortals, Ground, HierarchicalOutcome, Portal, PortalCache, entrance_runs,

@@ -28,6 +28,49 @@ fn a_house_takes_twenty_five_seconds_with_one_builder() {
 }
 
 #[test]
+fn right_click_repairs_a_damaged_own_building_and_releases_the_builder() {
+    let (mut world, _, _) = village();
+    let builder = villager_at(&mut world, 99, 100);
+    let house = world
+        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .unwrap();
+    finish(&mut world, house, 700);
+    world.economy.buildings.get_mut(&house).unwrap().hp -= 20;
+    let mut replay = village().0;
+    let replay_builder = villager_at(&mut replay, 99, 100);
+    let replay_house = replay
+        .issue_build(
+            PlayerId(0),
+            &[replay_builder],
+            BuildingKind::House,
+            at(100, 100),
+        )
+        .unwrap();
+    finish(&mut replay, replay_house, 700);
+    replay.economy.buildings.get_mut(&replay_house).unwrap().hp -= 20;
+    world
+        .issue_construct(PlayerId(0), &[builder], house)
+        .unwrap();
+    replay
+        .issue_construct(PlayerId(0), &[replay_builder], replay_house)
+        .unwrap();
+    for _ in 0..40 {
+        world.advance();
+        replay.advance();
+        assert_eq!(world.canonical_hash(), replay.canonical_hash());
+        assert_eq!(
+            world.remembered_building(PlayerId(0), house).unwrap().hp,
+            world.building(house).unwrap().hp,
+            "repair HP reaches the subscribed building view"
+        );
+    }
+    let state = world.building(house).unwrap();
+    assert_eq!(state.hp, state.max_hp);
+    assert_eq!(state.progress_permille(), 1000);
+    assert_eq!(world.unit(builder).unwrap().task, UnitTask::Idle);
+}
+
+#[test]
 fn three_builders_take_base_times_three_over_five() {
     // base * 3 / (n + 2) = 25 * 3 / 5 = 15 s = 300 ticks.
     let (mut world, _, _) = village();

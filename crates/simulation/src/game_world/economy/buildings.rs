@@ -27,7 +27,8 @@ pub struct BuildingRules {
     pub requires: Option<BuildingKind>,
     /// Villagers can construct it (the Town Center is placed by the start).
     pub buildable: bool,
-    /// Units cannot walk through it (farms are walked on).
+    /// Has movement collision; it can occupy only part of the placement
+    /// footprint. Farms have none.
     pub blocks: bool,
     /// Food a farm holds when complete.
     pub food: u16,
@@ -332,6 +333,24 @@ pub const BUILD_WORK_PER_BASE_TICK: u64 = 3;
 pub const MAX_WALL_SEGMENTS: usize = 64;
 
 impl BuildingKind {
+    /// Movement collision is separate from the placement/selection footprint.
+    /// AoK DAT 109 is non-obstructing; its annex 618 has half extents (1,1)
+    /// at native NE/SE (1,-1), the NW 2x2 in our world axes. Annexes 619/620
+    /// are non-obstructing. Construction unit 621 blocks 4x4 until replaced.
+    pub(crate) fn collision_rect(
+        self,
+        footprint: aoe_core::TileRect,
+        complete: bool,
+    ) -> Option<aoe_core::TileRect> {
+        self.rules().blocks.then(|| {
+            if self == Self::TownCenter && complete {
+                aoe_core::TileRect::from_xywh(footprint.min.x, footprint.min.y, 2, 2)
+            } else {
+                footprint
+            }
+        })
+    }
+
     /// DE's upgraded unit records, plus the automatic palisade HP effect 293.
     pub fn age_stats(self, age: Age) -> (u16, u8) {
         if age == Age::Feudal {

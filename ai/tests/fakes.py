@@ -30,7 +30,7 @@ def building(id, kind, tile=(50, 50), complete=True, queue=0, researching=None, 
         center=(tile[0] + w // 2, tile[1] + h // 2), complete=complete, queue_length=queue,
         researching=researching, idle=complete and queue == 0 and researching is None,
         mine=mine, visible=visible, owner=0 if mine else 1, hp=hp, max_hp=1000,
-        progress=0 if not complete else 1000,
+        progress=0 if not complete else 1000, farm_reseeds=0,
     )
 
 

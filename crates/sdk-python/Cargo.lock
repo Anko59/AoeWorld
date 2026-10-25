@@ -16,6 +16,7 @@ version = "0.1.0"
 dependencies = [
  "aoe-core",
  "blake3",
+ "postcard",
  "serde",
  "serde_json",
  "thiserror",

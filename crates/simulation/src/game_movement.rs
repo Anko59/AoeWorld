@@ -253,6 +253,7 @@ impl GameWorld {
         still_moving.sort_unstable();
         self.active_movers = still_moving;
         self.plan_routes_ahead(&movers, start, lookahead_budget);
+        self.resume_queued_moves(&mut changed);
         self.tick.0 = self.tick.0.saturating_add(1);
         changed
     }

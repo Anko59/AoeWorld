@@ -1,3 +1,4 @@
+//! Current building wire includes prepaid Mill reseeds.
 //! Research wire state: the research orders, the player's age and researched
 //! bitset, and a building's research progress.
 use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect};
@@ -36,6 +37,7 @@ fn center(research: Option<ResearchState>) -> GameplayBuildingState {
         last_hit: None,
         gate_open: false,
         rally_point: None,
+        farm_reseeds: 0,
         age: aoe_protocol::Age::Dark,
         research,
     }
@@ -122,7 +124,7 @@ fn research_state_has_current_golden_wire_and_round_trips() {
 
 const GOLDEN_TICK: &[u8] = &[
     2, 2, 9, 0, 0, 1, 0, 0, 0, 0, 0, 4, 5, 1, 5, 100, 100, 100, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232,
-    7, 224, 18, 224, 18, 8, 0, 0, 1, 0, 125, 244, 3, 0, 0, 0, 0, 0,
+    7, 224, 18, 224, 18, 8, 0, 0, 1, 0, 125, 244, 3, 0, 0, 0, 0, 0, 0,
 ];
 
 #[test]

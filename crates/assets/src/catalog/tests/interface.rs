@@ -60,6 +60,7 @@ fn interface_commands_use_command_frames_and_the_garrison_cursor() {
         ("ungarrison", 50721, 2),
         ("move", 51000, 0),
         ("attack", 51000, 4),
+        ("build-cursor", 51000, 7),
     ] {
         let source = command_icon(name).unwrap();
         assert_eq!((source.slp, source.frame), (slp, frame), "{name}");

@@ -14,10 +14,9 @@ pub(super) fn builders(client: &Client) -> Vec<EntityId> {
         .iter()
         .copied()
         .filter(|id| {
-            client
-                .units
-                .get(id)
-                .is_some_and(|u| u.player == owner(client) && u.kind == UnitKind::Villager)
+            client.units.get(id).is_some_and(|u| {
+                u.player == owner(client) && u.hp > 0 && u.kind == UnitKind::Villager
+            })
         })
         .take(aoe_protocol::MAX_BUILD_GROUP)
         .collect()
@@ -179,27 +178,30 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
 }
 
 /// Foundations take precedence over gather/move; completed farms receive a farmer.
+pub(super) fn target(
+    client: &Client,
+    point: ScreenPoint,
+) -> Option<&aoe_protocol::GameplayBuildingState> {
+    let at = origin(client, point)?;
+    client
+        .village
+        .buildings
+        .iter()
+        .find(|b| b.player == owner(client) && b.footprint.contains(at))
+}
+
 #[inline(never)]
 pub(super) fn interact(client: &mut Client, point: ScreenPoint) -> bool {
     let ids = builders(client);
     if ids.is_empty() || client.village.move_cursor {
         return false;
     }
-    let Some(at) = origin(client, point) else {
-        return false;
-    };
-    let Some(b) = client.village.buildings.iter().find(|b| {
-        b.player == owner(client)
-            && at.x >= b.footprint.min.x
-            && at.y >= b.footprint.min.y
-            && at.x < b.footprint.max.x
-            && at.y < b.footprint.max.y
-    }) else {
+    let Some(b) = target(client, point) else {
         return false;
     };
     let (id, unfinished, farm) = (
         b.id,
-        b.construction == ConstructionState::UnderConstruction,
+        b.construction == ConstructionState::UnderConstruction || b.hp < b.max_hp,
         b.kind == BuildingKind::Farm,
     );
     if unfinished {

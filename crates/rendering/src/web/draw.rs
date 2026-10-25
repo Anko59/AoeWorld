@@ -22,12 +22,7 @@ pub(super) fn draw_ranges(instances: &[Sprite]) -> Vec<(Range<u32>, bool)> {
 }
 
 pub(super) fn shader_source(mixed: bool) -> &'static str {
-    // These are the build-assembled modules supplied verbatim to WebGPU.
-    if mixed {
-        include_str!(concat!(env!("OUT_DIR"), "/mixing.wgsl"))
-    } else {
-        include_str!(concat!(env!("OUT_DIR"), "/ordinary.wgsl"))
-    }
+    super::shaders::source(mixed)
 }
 
 pub(super) fn pipeline(

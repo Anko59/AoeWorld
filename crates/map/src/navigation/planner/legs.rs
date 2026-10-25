@@ -4,13 +4,14 @@
 //! `ROUTE_LEG_COMMIT_WORK` is spent, the nearest tile closed so far. Every leg
 //! ends strictly nearer the destination than it starts, so legs cannot cycle,
 //! and the frontier of a finished leg is dropped before the next one starts.
+use super::RoutePlannerPoll;
 use super::reconstruction::ReconstructionState;
 use super::search::{self, ActiveExpansion, SearchState};
 use super::{
     MAX_ROUTE_PLANNER_NODES, ROUTE_LEG_COMMIT_WORK, ROUTE_LEG_PROGRESS_TILES, RoutePlanner,
     RouteTerrain, Terminal, heuristic,
 };
-use crate::{EnvironmentPageError, ResourceOverlay};
+use crate::{EnvironmentPageError, Path, ResourceOverlay};
 use aoe_core::TileCoord;
 
 /// The next leg is planned ahead only while fewer planned steps than this wait
@@ -21,6 +22,46 @@ const LEG_PROGRESS_COST: u64 =
     ROUTE_LEG_PROGRESS_TILES as u64 * super::super::ORTHOGONAL_COST as u64;
 
 impl RoutePlanner {
+    pub(super) fn emit_segment(&mut self) -> RoutePlannerPoll {
+        let Some(directions) = self.route_directions.as_ref() else {
+            return RoutePlannerPoll::Pending;
+        };
+        if self.route_cursor >= directions.len() {
+            self.terminal.get_or_insert(Terminal::Complete);
+            return RoutePlannerPoll::Complete;
+        }
+        let end = self
+            .route_cursor
+            .saturating_add(super::MAX_SEGMENT_STEPS)
+            .min(directions.len());
+        let mut tiles = Vec::with_capacity(end - self.route_cursor + 1);
+        tiles.push(self.route_position);
+        let mut cost = 0_u64;
+        for (index, direction) in directions
+            .iter()
+            .enumerate()
+            .take(end)
+            .skip(self.route_cursor)
+        {
+            let (dx, dy) = search::neighbor_offset(*direction);
+            self.route_position =
+                TileCoord::new(self.route_position.x + dx, self.route_position.y + dy);
+            tiles.push(self.route_position);
+            cost = cost.saturating_add(u64::from(self.route_costs[index]));
+        }
+        self.route_cursor = end;
+        if self.route_cursor == directions.len() && self.leg_origin == self.effective_destination()
+        {
+            self.terminal
+                .get_or_insert(if self.resolved_destination.is_some() {
+                    Terminal::Unreachable
+                } else {
+                    Terminal::Complete
+                });
+        }
+        RoutePlannerPoll::Path(Path { tiles, cost })
+    }
+
     /// True once the planned route ends at the destination.
     pub(super) fn route_is_complete(&self) -> bool {
         self.route_directions.is_some() && self.leg_origin == self.effective_destination()
@@ -31,7 +72,9 @@ impl RoutePlanner {
     pub fn wants_lookahead(&self) -> bool {
         self.terminal.is_none()
             && !self.route_is_complete()
-            && (self.resolution.is_some() || self.needs_local_lookahead())
+            && (self.resolution.is_some()
+                || self.hierarchy.is_some()
+                || self.needs_local_lookahead())
     }
 
     pub(super) fn needs_local_lookahead(&self) -> bool {
@@ -111,15 +154,11 @@ impl RoutePlanner {
                     remaining -= 1;
                 }
                 if self.reconstruction.is_none() {
-                    if self.approach {
-                        // The route now ends at the closest tile reached.
-                        self.terminal = Some(Terminal::Unreachable);
-                    }
                     return Ok(());
                 }
                 continue;
             }
-            if self.needs_guidance() || self.hierarchy.is_some() {
+            if self.needs_guidance(terrain) {
                 remaining = self.guide(terrain, overlay, remaining, cancelled)?;
                 if remaining == 0 {
                     return Ok(());
@@ -156,25 +195,11 @@ impl RoutePlanner {
                 && self.resolution.is_none()
                 && self.leg_work >= super::POCKET_CHECK_WORK
             {
-                let mut pocket = self.pocket.take().unwrap_or_else(|| {
-                    super::pocket::PocketSearch::new(self.effective_destination())
-                });
-                // Reverse proof work spends the poll allowance but is separate
-                // from the forward leg's search-limit/commit counters, as before.
-                self.work = self.work.saturating_add(1);
-                remaining -= 1;
-                let result = pocket.step(terrain, overlay, self.leg_origin, cancelled)?;
-                if let Some(&tile) = pocket.queue.back() {
-                    self.include_bounds(tile);
+                if !self.check_destination_pocket(terrain, overlay, &mut remaining, cancelled)? {
+                    return Ok(());
                 }
-                match result {
-                    Some(true) => return Err(Terminal::Unreachable),
-                    Some(false) => self.pocket_checked = true,
-                    None => self.pocket = Some(pocket),
-                }
-                self.update_peak_retained_entries();
-                if self.retained_entries() > MAX_ROUTE_PLANNER_NODES {
-                    return Err(Terminal::SearchLimit);
+                if self.resolution.is_some() {
+                    remaining = self.guide(terrain, overlay, remaining, cancelled)?;
                 }
                 continue;
             }
@@ -199,7 +224,8 @@ impl RoutePlanner {
                         .with_proof_overlay(
                             self.resolution
                                 .as_ref()
-                                .map(|resolution| resolution.overlay()),
+                                .map(|resolution| resolution.overlay())
+                                .or_else(|| self.provisional_map_leg(terrain).then_some(overlay)),
                         );
                 context.expand_neighbor(&mut search, active, offset)?;
                 self.search = Some(search);
@@ -211,7 +237,12 @@ impl RoutePlanner {
             }
 
             let Some(current) = search.open.pop_first() else {
-                if self.resolution.is_some() {
+                if !self.guidance_checked && self.provisional_map_leg(terrain) {
+                    self.search = Some(search);
+                    self.begin_guidance(terrain, overlay, cancelled)?;
+                    return Ok(());
+                }
+                if self.resolution.is_some() || self.hierarchy.is_some() {
                     self.search = Some(search);
                     return Ok(());
                 }

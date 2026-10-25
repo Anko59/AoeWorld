@@ -1,7 +1,7 @@
 use crate::{
     GAME_ATLAS_SIDE,
     surface_mesh::{
-        ProjectedSurfaceTriangle, SurfacePoint, directory, mix, relief, surface_render_depth,
+        ProjectedSurfaceTriangle, directory, mix, relief, surface_render_depth,
         triangle_texture_coordinates,
     },
 };
@@ -12,8 +12,11 @@ mod filter;
 mod junction;
 #[path = "canvas_raster/mixing.rs"]
 mod mixing;
+#[path = "canvas_raster/plane.rs"]
+mod plane;
 #[path = "canvas_raster/selection.rs"]
 mod selection;
+use plane::RasterPlane;
 pub(super) use selection::raster_selection;
 
 #[cfg(test)]
@@ -28,10 +31,26 @@ pub(crate) fn raster_surface(
     raster_surface_with_fog(triangle, atlas, bounds, width, color, depth, [1.0; 3]);
 }
 
+#[cfg(test)]
 pub(super) fn raster_surface_with_fog(
     triangle: &ProjectedSurfaceTriangle,
     atlas: &[u8],
     bounds: [u32; 4],
+    width: u32,
+    color: &mut [u8],
+    depth: &mut [f64],
+    fog: [f32; 3],
+) {
+    raster_surface_region(triangle, atlas, bounds, bounds[0], width, color, depth, fog);
+}
+
+// Keep the original row's x origin when clipping damage. Incrementing from a
+// different origin changes floating rounding at exact atlas/triangle edges.
+pub(super) fn raster_surface_region(
+    triangle: &ProjectedSurfaceTriangle,
+    atlas: &[u8],
+    bounds: [u32; 4],
+    clip_left: u32,
     width: u32,
     color: &mut [u8],
     depth: &mut [f64],
@@ -98,6 +117,11 @@ pub(super) fn raster_surface_with_fog(
         let mut second =
             plane.x[1] * (f64::from(bounds[0]) + 0.5) + plane.y[1] * screen_y + plane.constant[1];
         for x in bounds[0]..bounds[2] {
+            if x < clip_left {
+                first += plane.x[0];
+                second += plane.x[1];
+                continue;
+            }
             let third = 1.0 - first - second;
             if first < -1e-7 || second < -1e-7 || third < -1e-7 {
                 first += plane.x[0];
@@ -264,26 +288,6 @@ fn sample_terrain_atlas(atlas: &[u8], address: crate::AtlasAddress, local: [f64;
         sample(local.map(|v| v + (0.5 - v) * (2.0 / extent)))
     } else {
         center
-    }
-}
-
-struct RasterPlane {
-    x: [f64; 2],
-    y: [f64; 2],
-    constant: [f64; 2],
-}
-
-impl RasterPlane {
-    fn new(points: [SurfacePoint; 3]) -> Option<Self> {
-        let [a, b, c] = [points[0].screen, points[1].screen, points[2].screen];
-        let denominator = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
-        if denominator.abs() < f64::EPSILON {
-            return None;
-        }
-        let x = [(b.y - c.y) / denominator, (c.y - a.y) / denominator];
-        let y = [(c.x - b.x) / denominator, (a.x - c.x) / denominator];
-        let constant = [-x[0] * c.x - y[0] * c.y, -x[1] * c.x - y[1] * c.y];
-        Some(Self { x, y, constant })
     }
 }
 

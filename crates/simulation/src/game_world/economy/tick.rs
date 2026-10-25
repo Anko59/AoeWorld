@@ -55,6 +55,7 @@ impl GameWorld {
         // undrained history would grow storage without a transport obligation.
         self.economy.depletions.clear();
         let mut changed = self.advance_movement();
+        self.advance_auto_scout(&mut changed);
         probe(TickPhase::Movement);
         self.advance_spacing(&mut changed);
         probe(TickPhase::Spacing);

@@ -25,6 +25,7 @@ const matchPhases = {
   ready: 'Every AI player is in the game',
 };
 const getSaved = key => { try { return sessionStorage.getItem(key); } catch { return null; } };
+const getToken = () => { try { return localStorage.getItem('aoeworld.resume-token'); } catch { return null; } };
 const save = (key, value) => { try { sessionStorage.setItem(key, value); } catch { /* Memory remains usable. */ } };
 
 export function initStartSequence({ readJson, start, cancel }) {
@@ -47,7 +48,7 @@ export function initStartSequence({ readJson, start, cancel }) {
     el('playground').inert = false;
     gameColour(getSaved(colourKey));
     const idle = () => {};
-    return { menu() { location.assign('/?skipIntro=1'); }, opponents: () => 0, aiAvailable: idle, resume: idle, match: idle, begin: idle, recover: idle, progress: idle, activated: idle, error: idle, settled: idle, cancelable: idle, cancelled: idle };
+    return { resumeDecided: Promise.resolve(), menu() { location.assign('/?skipIntro=1'); }, opponents: () => 0, aiAvailable: idle, resume: idle, match: idle, begin: idle, recover: idle, progress: idle, activated: idle, error: idle, settled: idle, cancelable: idle, cancelled: idle };
   }
   root.innerHTML = views();
   let state = 'intro';
@@ -55,16 +56,18 @@ export function initStartSequence({ readJson, start, cancel }) {
   let estimateTimer;
   const cinematic = createCinematic(root, skipIntro);
   let tipTimer;
-  let terrainTimer;
   let waiting = null;
   let recovery = false;
   let jobRunning = false;
   let prepared = false;
   let skirmishJob = false;
   let canCancel = false;
-  // A reload in a tab holding a controller token first asks the server for
+  // A tab holding a shared controller token first asks the server for
   // a running match (resume) before choosing the cinematic or the menu.
-  let resuming = /^[0-9a-f]{48}$/i.test(getSaved('aoeworld.resume-token') || '');
+  let resuming = /^[0-9a-f]{48}$/i.test(getToken() || '');
+  let finishResume = () => {};
+  const resumeDecided = resuming
+    ? new Promise(resolve => { finishResume = resolve; }) : Promise.resolve();
   const fields = ['start-latitude', 'start-longitude', 'start-size', 'start-scale'];
 
 
@@ -164,7 +167,7 @@ export function initStartSequence({ readJson, start, cancel }) {
   el('setup-back').addEventListener('click', () => show('menu'));
   function controllerReady() {
     const connected = el('scene').dataset.connected === 'true' || el('connection').textContent === 'connected';
-    const controller = /^[0-9a-f]{48}$/i.test(getSaved('aoeworld.resume-token') || '') && el('observer-label').hidden;
+    const controller = /^[0-9a-f]{48}$/i.test(getToken() || '') && el('observer-label').hidden;
     el('start-game').disabled = !connected || !controller || jobRunning;
     el('start-game').firstChild.textContent = recovery ? 'Resume map preparation ' : 'Start Game ';
     el('setup-status').textContent = connected
@@ -204,7 +207,6 @@ export function initStartSequence({ readJson, start, cancel }) {
     jobRunning = true;
     prepared = false;
     waiting = null;
-    clearTimeout(terrainTimer);
     cinematic.stop();
     clearInterval(tipTimer);
     el('loading-error').hidden = el('loading-back').hidden = true;
@@ -225,7 +227,6 @@ export function initStartSequence({ readJson, start, cancel }) {
     if (!skirmishJob) { controllerReady(); return; }
     waiting = null;
     jobRunning = false;
-    clearTimeout(terrainTimer);
     clearInterval(tipTimer);
     show('loading');
     el('loading-title').textContent = 'Your world needs another moment';
@@ -257,9 +258,20 @@ export function initStartSequence({ readJson, start, cancel }) {
     const terrain = sameMap && Number(scene.dataset.frame) > 0 && scene.dataset.chunksPending === '0'
       && scene.dataset.chunksFailed === '0' && scene.dataset.frame !== waiting.frame;
     const raster = sameMap && minimap.dataset.raster === 'ready';
+    const pending = sameMap ? Number(scene.dataset.chunksPending) : NaN;
+    const failed = sameMap ? Number(scene.dataset.chunksFailed) : 0;
+    const connected = el('connection').textContent === 'connected';
+    // A ready match remains alive while terrain requests queue or retry. Time
+    // spent under CPU pressure is not evidence that the map has failed.
+    const phase = !connected ? 'Reconnecting to your game…'
+      : failed > 0 ? 'Opening terrain · retrying terrain requests'
+        : Number.isSafeInteger(pending) && pending > 0
+          ? `Opening terrain · ${pending.toLocaleString()} chunks remaining`
+          : !raster ? 'Opening terrain · waiting for the minimap'
+            : 'Opening terrain · waiting for the first landscape';
     progress(Number(terrain) + Number(raster), 2,
-      terrain && raster ? 'Your landscape is ready' : 'Opening terrain · waiting for the first landscape and minimap');
-    if (terrain && raster && el('connection').textContent === 'connected') {
+      terrain && raster && connected ? 'Your landscape is ready' : phase);
+    if (terrain && raster && connected) {
       const primary = el('minimap-primary');
       const start = [Number(primary.getAttribute('cx')) * Number(minimap.dataset.worldWidth) / 256,
         Number(primary.getAttribute('cy')) * Number(minimap.dataset.worldHeight) / 256];
@@ -278,7 +290,6 @@ export function initStartSequence({ readJson, start, cancel }) {
       jobRunning = false;
       prepared = false;
       skirmishJob = false;
-      clearTimeout(terrainTimer);
       clearInterval(tipTimer);
       el('playground').inert = false;
       document.body.dataset.startState = 'game';
@@ -294,7 +305,6 @@ export function initStartSequence({ readJson, start, cancel }) {
     skirmishJob = false;
     waiting = null;
     jobRunning = prepared = false;
-    clearTimeout(terrainTimer);
     clearInterval(tipTimer);
     show('setup');
     controllerReady();
@@ -350,6 +360,7 @@ export function initStartSequence({ readJson, start, cancel }) {
   locationName();
   controllerReady();
   return {
+    resumeDecided,
     menu() { show('menu'); },
     opponents,
     aiAvailable(available, max) {
@@ -363,12 +374,13 @@ export function initStartSequence({ readJson, start, cancel }) {
     resume(status) {
       if (!resuming) return;
       resuming = false;
+      // Continuations run after this decision has updated the entry state.
+      finishResume();
       if (status?.phase !== 'ready' || typeof status.content_hash !== 'string') { entry(); return; }
       skirmishJob = jobRunning = prepared = true;
       const rivals = status.opponents ? ` · ${status.opponents} AI opponent${status.opponents === 1 ? '' : 's'}` : '';
       el('loading-location').textContent = `${locationName()} · ${el('start-size').value} km square${rivals}`;
       waiting = { hash: status.content_hash, frame: el('scene').dataset.frame, centered: false, resumed: true };
-      terrainTimer = setTimeout(() => error('The terrain could not finish loading. Check your connection, then try again.'), 90000);
       checkTerrain();
     },
     match(status) {
@@ -412,7 +424,6 @@ export function initStartSequence({ readJson, start, cancel }) {
       waiting = { hash: value.content_hash, frame: el('scene').dataset.frame, centered: false };
       el('loading-title').textContent = 'Opening your world';
       el('reconnect').click();
-      terrainTimer = setTimeout(() => error('The terrain could not finish loading. Check your connection, then try again.'), 90000);
       checkTerrain();
     },
     error,

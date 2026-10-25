@@ -1,4 +1,5 @@
 //! Browser mocks share these current wire fragments with the Rust codec.
+//! Building fragments include the new authoritative prepaid reseed count.
 use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect, WorldPosition};
 use aoe_protocol::{
     BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState,
@@ -73,6 +74,7 @@ fn browser_unit_combat_fragments_match_the_current_codec() {
             death_tick: None,
             hunt_target: None,
             death_hunt: None,
+            auto_scout: false,
         };
         let mut expected = vec![
             1, 1, 0, 1, 7, 1, 128, 32, 128, 64, 0, 0, 2, kind as u8, 0, 0, 0,
@@ -97,6 +99,7 @@ fn browser_building_combat_fragment_matches_the_current_codec() {
         age: aoe_protocol::Age::Dark,
         gate_open: false,
         rally_point: None,
+        farm_reseeds: 0,
         construction: ConstructionState::Complete,
         progress_permille: 1000,
         los: 8,
@@ -119,6 +122,7 @@ fn browser_dock_fragment_matches_current_codec() {
         age: aoe_protocol::Age::Dark,
         gate_open: false,
         rally_point: None,
+        farm_reseeds: 0,
         footprint: TileRect::new(TileCoord::new(5, 5), TileCoord::new(8, 8)),
         training_queue: vec![],
         hp: 1800,
@@ -171,6 +175,7 @@ fn snapshot() -> GameplayServerMessage {
             age: aoe_protocol::Age::Dark,
             gate_open: false,
             rally_point: None,
+            farm_reseeds: 0,
         }],
     }
 }

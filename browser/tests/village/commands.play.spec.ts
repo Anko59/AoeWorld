@@ -21,7 +21,7 @@ test("villager resource cursors, live resource selection, grid and own minimap m
   const hash = process.env["AOE_E2E_LANDSCAPE_HASH"];
   if (!hash) throw new Error("Prepared landscape missing");
   const token = await page.evaluate(
-    () => sessionStorage.getItem("aoeworld.resume-token") ?? "",
+    () => localStorage.getItem("aoeworld.resume-token") ?? "",
   );
   expect(
     (

@@ -138,6 +138,7 @@ impl GameWorld {
     /// Sets the attack target and the visible state. The hit rate belongs to
     /// the unit (`StoredUnit::next_hit_tick`), so no order sequence can speed it up.
     pub(crate) fn begin_attack(&mut self, id: EntityId, target: EntityId) {
+        self.cancel_auto_scout(id);
         let Some(&index) = self.lookup.get(&id) else {
             return;
         };

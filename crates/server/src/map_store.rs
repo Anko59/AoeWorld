@@ -13,6 +13,7 @@ const MAX_PACKAGES: usize = 256;
 const MAX_PACKAGE_BYTES: u64 = 64 * 1024;
 const MAX_PAGE_BYTES: u64 = 128 * 1024;
 
+pub(crate) mod navigation;
 mod pages;
 mod residency;
 mod verify;

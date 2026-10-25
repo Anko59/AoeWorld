@@ -248,6 +248,9 @@ pub(super) async fn surface_renderer_with_atlas(atlas: &[u8]) -> Renderer {
     assert_eq!(diagnostic.atlas_pages, 1);
     assert_eq!(diagnostic.atlas_bytes, 8 * 8 * 4);
     renderer.upload_game_atlas(atlas).unwrap();
+    // Setup must finish before probes consume the two outstanding-frame slots.
+    // Keep every shader pixel, draw-count and resource assertion unchanged.
+    super::submitted_frame(&renderer).await;
     renderer
 }
 

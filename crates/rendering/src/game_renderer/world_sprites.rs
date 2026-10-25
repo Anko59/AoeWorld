@@ -12,7 +12,10 @@ pub use fish::scene_resource_animation_frame;
 
 #[path = "village/bounds.rs"]
 mod bounds;
-pub use bounds::{scene_building_visible, scene_unit_bounds, scene_unit_render_key};
+use bounds::object_depth;
+pub use bounds::{
+    scene_building_visible, scene_unit_bounds, scene_unit_depth, scene_unit_render_key,
+};
 
 /// Fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
@@ -100,6 +103,8 @@ pub(super) fn world_sprite_frames(
     result
 }
 
+// Keep the shared object pass out of the large backend packet builders.
+#[inline(never)]
 pub(super) fn emit_world_sprite_frames(
     art: &GameArt,
     terrain: &[SceneTerrain],
@@ -139,6 +144,10 @@ pub(super) fn emit_world_sprite_frames(
                 continue;
             };
             let depth = object_depth(object);
+            if resource.kind == SceneResource::RALLY_FLAG && art.scenery.rally_flags.is_empty() {
+                scenery::emit_flag(resource, camera, depth, &mut emit);
+                continue;
+            }
             if let Some(shadow_frame) = paired_shadow {
                 if let Some(sprite) = scene_sprite(
                     shadow_frame,
@@ -279,29 +288,6 @@ fn world_frame(frame: GameFrame) -> GameFrame {
         frame,
         aoe_core::ISO_TILE_WIDTH as f32 / crate::terrain::TERRAIN_NATIVE_DIAMOND_WIDTH,
     )
-}
-
-/// Depth by which an object clears the ground it stands on. A frame reaches
-/// below its hotspot (a gold pile by half its height), where flat ground is
-/// nearer the viewer by one depth unit per 32 pixels; the tallest reviewed
-/// overhang is 43 pixels. One shared offset keeps objects ordered among
-/// themselves, and a one-level rise in front (two units) still hides them.
-const GROUND_CLEARANCE: f64 = 1.5;
-
-/// The rendered body depth, including clearance below the native hotspot.
-pub fn scene_unit_depth(unit: SceneUnit) -> f64 {
-    object_depth(WorldObject::Unit(unit))
-}
-
-fn object_depth(object: WorldObject) -> f64 {
-    let position = object.position();
-    // The native Town Center reaches 64 source pixels below its anchor, farther
-    // than a tree/unit. Its front foundation must clear its own flat footprint.
-    let clearance = match object {
-        WorldObject::Unit(unit) if unit.kind.building_side().is_some() => 3.0,
-        _ => GROUND_CLEARANCE,
-    };
-    surface_depth([position[0], position[1], object.elevation_meters()]) + clearance
 }
 
 #[derive(Clone, Copy)]

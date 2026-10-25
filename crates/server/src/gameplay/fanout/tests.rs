@@ -3,6 +3,19 @@ use aoe_core::{Seed, TileCoord, TileRect, WorldConfig, WorldPosition};
 use aoe_simulation::{GameWorld, RallyTarget};
 
 #[test]
+fn queued_destinations_are_private_to_the_owning_viewer_even_with_fog_disabled() {
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let unit = world.spawn_unit(PlayerId(1), at(10, 10)).unwrap();
+    world.issue_queued_move(unit, at(14, 10)).unwrap();
+    world.issue_queued_move(unit, at(14, 14)).unwrap();
+    world.set_fog_disabled(true);
+    assert!(move_queues(&world, PlayerId(0), std::iter::once(unit)).is_empty());
+    let own = move_queues(&world, PlayerId(1), std::iter::once(unit));
+    assert_eq!(own[0].destinations, [at(14, 10), at(14, 14)]);
+}
+
+#[test]
 fn rally_is_private_in_fog_and_a_hundred_no_fog_viewers_share_one_building_map() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
     world

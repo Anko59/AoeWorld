@@ -444,6 +444,16 @@ async fn fetch_chunk(
 ) -> Result<CachedChunk, JsValue> {
     let window = web_sys::window().ok_or("No window")?;
     let options = RequestInit::new();
+    // Only a live human seat receives the server's camera priority. The
+    // server validates this token; spectators and AI traffic use the low lane.
+    if let Some(token) = super::storage::stored_token() {
+        let headers = web_sys::Headers::new()?;
+        headers.set(
+            "X-AoeWorld-Controller-Token",
+            &super::storage::hex(&token.0),
+        )?;
+        options.set_headers(&headers);
+    }
     if let Some(controller) = controller {
         options.set_signal(Some(&controller.signal()));
     }

@@ -14,58 +14,6 @@ fn world() -> GameWorld {
 }
 
 #[test]
-fn fixed_speed_has_equal_distance_for_cardinal_and_diagonal_orders() {
-    let mut cardinal = world();
-    let mut diagonal = world();
-    let start = WorldPosition::new(10 * FIXED_SUBUNITS_PER_TILE, 10 * FIXED_SUBUNITS_PER_TILE);
-    let a = cardinal.spawn_unit(PlayerId(0), start).unwrap();
-    let b = diagonal.spawn_unit(PlayerId(0), start).unwrap();
-    cardinal
-        .issue_move(a, WorldPosition::new(start.x + 5_000, start.y))
-        .unwrap();
-    diagonal
-        .issue_move(b, WorldPosition::new(start.x + 5_000, start.y + 5_000))
-        .unwrap();
-    assert_eq!(cardinal.movement_order(a).unwrap().travelled, 0);
-    for _ in 0..8 {
-        cardinal.advance();
-        diagonal.advance();
-    }
-    assert_eq!(cardinal.movement_order(a).unwrap().travelled, 1_024);
-    assert_eq!(diagonal.movement_order(b).unwrap().travelled, 1_024);
-}
-
-#[test]
-fn exact_arrival_and_mid_move_redirection_are_deterministic() {
-    let mut first = world();
-    let mut second = world();
-    let start = WorldPosition::new(20_000, 20_000);
-    let a = first.spawn_unit(PlayerId(0), start).unwrap();
-    let b = second.spawn_unit(PlayerId(0), start).unwrap();
-    let target = WorldPosition::new(23_000, 24_000);
-    first.issue_move(a, target).unwrap();
-    second.issue_move(b, target).unwrap();
-    for _ in 0..100 {
-        first.advance();
-        second.advance();
-    }
-    assert_eq!(
-        first.unit(a),
-        second.unit(b).map(|unit| GameUnit { id: a, ..unit })
-    );
-    assert_eq!(
-        first.unit(a).unwrap().position,
-        WorldConfig::default().snap_ground_position(target)
-    );
-    assert!(!first.unit(a).unwrap().moving);
-    first
-        .issue_move(a, WorldPosition::new(25_000, 24_000))
-        .unwrap();
-    first.advance();
-    assert!(first.unit(a).unwrap().moving);
-}
-
-#[test]
 fn move_destinations_snap_to_tile_centers() {
     let mut world = world();
     let unit = world
@@ -489,6 +437,8 @@ mod combat;
 mod far_orders;
 #[path = "tests/movement/physical_movement.rs"]
 mod physical_movement;
+#[path = "tests/movement/queue.rs"]
+mod queue;
 mod routes;
 mod scale_hooks;
 #[path = "tests/movement/stop.rs"]

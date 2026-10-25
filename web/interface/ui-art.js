@@ -56,6 +56,17 @@ export function initArt() {
     })));
     catalog=data;
     hydrate();
+    // Crop original cursor pixels only in browser memory; no derived assets
+    // are published. Firefox accepts these bounded PNG cursor URLs.
+    for (const [role,key] of [['attack','attack'],['build','build-cursor']]) {
+      const art=catalog.commands?.[key];
+      if (!validArt(art) || art.width>64 || art.height>64) continue;
+      const image=new Image(); image.src=`/asset-pack/${art.page}`; await image.decode();
+      const canvas=document.createElement('canvas');canvas.width=art.width;canvas.height=art.height;
+      const context=canvas.getContext('2d');if(!context)continue;
+      context.drawImage(image,art.x,art.y,art.width,art.height,0,0,art.width,art.height);
+      document.documentElement.style.setProperty(`--cursor-${role}`,`url('${canvas.toDataURL()}') 0 0`);
+    }
     const style=document.documentElement.dataset.interfaceStyle ?? 'western';
     const roles=[['commands','commands'],['selection','selection'],['minimap','minimap'],['top-bar','top']];
     for (const [id,role] of roles) {

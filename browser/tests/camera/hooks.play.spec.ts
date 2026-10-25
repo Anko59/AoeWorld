@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { test } from "../../server.js";
+import { isolatedTest as test } from "../../server.js";
 import { PNG } from "pngjs";
 import { gameAssets } from "../game-assets.js";
 
@@ -87,7 +87,7 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
   await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   const token = await page.evaluate(() =>
-    sessionStorage.getItem("aoeworld.resume-token"),
+    localStorage.getItem("aoeworld.resume-token"),
   );
   expect(token).toBeTruthy();
   const hash = process.env["AOE_E2E_LANDSCAPE_HASH"];
@@ -98,7 +98,7 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
       method: "POST",
       headers: {
         "x-aoeworld-controller-token":
-          sessionStorage.getItem("aoeworld.resume-token") ?? "",
+          localStorage.getItem("aoeworld.resume-token") ?? "",
       },
     });
     if (!response.ok) throw new Error(await response.text());
@@ -113,13 +113,13 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await expect
     .poll(() =>
-      page.evaluate(() => sessionStorage.getItem("aoeworld.resume-token")),
+      page.evaluate(() => localStorage.getItem("aoeworld.resume-token")),
     )
     .not.toBe(token);
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect
     .poll(() =>
-      page.evaluate(() => sessionStorage.getItem("aoeworld.resume-token")),
+      page.evaluate(() => localStorage.getItem("aoeworld.resume-token")),
     )
     .toBeTruthy();
   const context = await browser.newContext();
@@ -214,7 +214,7 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
     // The spectator gets no lease token, yet its map raster comes from the opened package.
     expect(
       await spectator.evaluate(() =>
-        sessionStorage.getItem("aoeworld.resume-token"),
+        localStorage.getItem("aoeworld.resume-token"),
       ),
     ).toBeNull();
     expect(

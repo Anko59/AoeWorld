@@ -1,8 +1,113 @@
 use super::*;
 
+#[test]
+fn town_center_arches_accept_and_cross_center_destinations() {
+    for mapped in [false, true] {
+        let mut world = if mapped {
+            super::super::far_orders::wide_world()
+        } else {
+            super::super::world()
+        };
+        let tc = world
+            .place_town_center(PlayerId(0), TileCoord::new(64, 64))
+            .unwrap();
+        // Unit 109 and decorative annexes 619/620 do not obstruct. Annex
+        // 618 alone blocks the NW 2x2; its offset is NE=1, SE=-1.
+        for y in 64..68 {
+            for x in 64..68 {
+                assert_eq!(
+                    world.tile_passable(TileCoord::new(x, y)),
+                    !(x < 66 && y < 66)
+                );
+            }
+        }
+        let scout = world
+            .spawn_unit(
+                PlayerId(0),
+                WorldPosition::from_tile_center(TileCoord::new(62, 66)).unwrap(),
+            )
+            .unwrap();
+        for tile in [TileCoord::new(66, 66), TileCoord::new(69, 66)] {
+            let target = WorldPosition::from_tile_center(tile).unwrap();
+            assert_eq!(
+                world.issue_move(scout, target),
+                Ok(true),
+                "mapped={mapped}, tile={tile:?}"
+            );
+            for _ in 0..200 {
+                world.advance();
+            }
+            assert_eq!(world.unit(scout).unwrap().position, target);
+            assert_eq!(world.movement_failure(scout), None);
+        }
+        let builder = world
+            .spawn_villager(
+                PlayerId(0),
+                WorldPosition::from_tile_center(TileCoord::new(62, 68)).unwrap(),
+            )
+            .unwrap();
+        world
+            .economy
+            .players
+            .get_mut(&PlayerId(0))
+            .unwrap()
+            .stockpile
+            .wood = 1000;
+        assert_eq!(
+            world.issue_build(
+                PlayerId(0),
+                &[builder],
+                BuildingKind::House,
+                TileCoord::new(66, 66)
+            ),
+            Err(EconomyError::InvalidFootprint),
+            "open arches still reserve the placement footprint"
+        );
+        world.remove_building(tc);
+        for y in 64..68 {
+            for x in 64..68 {
+                assert!(world.tile_passable(TileCoord::new(x, y)));
+            }
+        }
+    }
+}
+
+#[test]
+fn a_town_center_foundation_opens_its_arches_only_on_completion() {
+    let mut world = super::super::far_orders::wide_world();
+    let footprint = aoe_core::TileRect::from_xywh(64, 64, 4, 4);
+    let tc = world
+        .insert_building(PlayerId(0), BuildingKind::TownCenter, footprint, false)
+        .unwrap();
+    for y in 64..68 {
+        for x in 64..68 {
+            assert!(!world.tile_passable(TileCoord::new(x, y)));
+        }
+    }
+    let builder = world
+        .spawn_villager(
+            PlayerId(0),
+            WorldPosition::from_tile_center(TileCoord::new(63, 66)).unwrap(),
+        )
+        .unwrap();
+    world.economy.buildings.get_mut(&tc).unwrap().work_total = 3;
+    world.issue_construct(PlayerId(0), &[builder], tc).unwrap();
+    world.advance();
+    assert!(world.building(tc).unwrap().is_complete());
+    for y in 64..68 {
+        for x in 64..68 {
+            assert_eq!(
+                world.tile_passable(TileCoord::new(x, y)),
+                !(x < 66 && y < 66)
+            );
+        }
+    }
+}
+
 fn distant_order_reaches(target: TileCoord, initial_budget: u32) {
     let (mut world, scout) = GameWorld::default_with_village(Seed(1));
     let footprint = world.buildings().next().unwrap().footprint;
+    let solid = aoe_core::TileRect::from_xywh(footprint.min.x, footprint.min.y, 2, 2);
     assert_eq!(
         world.unit(scout).unwrap().position.tile_floor(),
         TileCoord::new(8192, 8192)
@@ -22,7 +127,7 @@ fn distant_order_reaches(target: TileCoord, initial_budget: u32) {
     for _ in 0..12_000 {
         world.advance();
         let unit = world.unit(scout).unwrap();
-        assert!(!footprint.contains(unit.position.tile_floor()));
+        assert!(!solid.contains(unit.position.tile_floor()));
         assert_eq!(world.movement_failure(scout), None);
         if !unit.moving && !unit.planning {
             assert_eq!(unit.position, destination);
@@ -61,6 +166,7 @@ fn village_order_keeps_its_frontier_when_the_tick_budget_runs_out() {
 fn uniform_incremental_route_detours_around_the_center_without_corner_cutting() {
     let (mut world, scout, center) = village();
     let footprint = world.building(center).unwrap().footprint;
+    let solid = aoe_core::TileRect::from_xywh(footprint.min.x, footprint.min.y, 2, 2);
     let start = TileCoord::new(footprint.min.x - 2, footprint.min.y + 1);
     world
         .issue_move(scout, WorldPosition::from_tile_center(start).unwrap())
@@ -77,12 +183,12 @@ fn uniform_incremental_route_detours_around_the_center_without_corner_cutting() 
     for _ in 0..1000 {
         world.advance();
         let tile = world.unit(scout).unwrap().position.tile_floor();
-        assert!(!footprint.contains(tile));
+        assert!(!solid.contains(tile));
         if previous.x != tile.x && previous.y != tile.y {
-            assert!(!footprint.contains(TileCoord::new(previous.x, tile.y)));
-            assert!(!footprint.contains(TileCoord::new(tile.x, previous.y)));
+            assert!(!solid.contains(TileCoord::new(previous.x, tile.y)));
+            assert!(!solid.contains(TileCoord::new(tile.x, previous.y)));
         }
-        detoured |= tile.y < footprint.min.y || tile.y >= footprint.max.y;
+        detoured |= tile.y < solid.min.y || tile.y >= solid.max.y;
         previous = tile;
     }
     assert!(detoured);

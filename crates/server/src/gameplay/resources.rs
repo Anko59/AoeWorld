@@ -11,6 +11,8 @@ pub(super) use store::save as save_gathering;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResourceLifecycleError {
+    #[error("navigation preparation failed: {0}")]
+    Navigation(String),
     #[error("resource storage error: {0}")]
     Io(#[from] std::io::Error),
     #[error("resource snapshot JSON error: {0}")]
@@ -55,6 +57,13 @@ impl GameplayService {
             }
             GameWorld::from_map(package)?
         };
+        crate::map_store::navigation::prepare_world(
+            &world,
+            content_hash,
+            package_directory.as_deref(),
+            cancelled,
+        )
+        .map_err(ResourceLifecycleError::Navigation)?;
         let directory = package_directory.map(|root| root.join("resource-overlays"));
         if let Some(directory) = &directory
             && let Some(snapshot) = store::load(directory, content_hash)?

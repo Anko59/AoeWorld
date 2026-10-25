@@ -107,6 +107,29 @@ mirrored units, and real movement, plus bound-context initialization failure and
 context loss/restoration. Synthetic pixel tests do not establish real-source
 frame cadence or dedicated-hardware performance; measure those separately.
 
+WebGPU initialization and unfinished queue/surface work have a five-second
+deadline. Uncaptured device errors, lost-device reasons and rejected queue
+promises go to the browser console. Gameplay checks health even when its frame
+cache or overview skips drawing. Recovery destroys the failed device and reloads
+with `renderer=webgl2`, preserving camera coordinates and the shared same-world
+seat credential while rebuilding canvas input handlers. Initialization failures
+select WebGL2 directly; Canvas remains the final compatibility tier.
+GPU owners retire on ordinary pagehide and Renderer Drop, including failed startup.
+Canvas repaints disjoint changed regions in original depth/alpha order, retaining
+at most 65,536 previous layers plus their fog values in its memory accounting.
+Before loading assets, an asynchronous canvas snapshot must reproduce a known
+startup clear in an 8×8 sample, within the same deadline. One snapshot/bitmap is
+transiently retained (each bounded by canvas backing size); it is never repeated
+per frame. Blank snapshots also select WebGL2 despite successful queue promises.
+At most two frames may be outstanding on either GPU tier; WebGL2 polls completion
+fences before instance uploads. WebGPU also bounds eight atlas-page uploads.
+Acquire its surface before creating/uploading frame instances, so failed acquisition
+cannot accumulate uploads. Completion callbacks retain scalar health state only.
+WebGPU uses core features/default limits and RGBA for Firefox presentation.
+Production rendering does not use `mapAsync`.
+Queue completion establishes GPU progress, not successful compositor display:
+Firefox/Linux PRIME/Wayland still requires visual qualification on that hardware.
+
 ## Immediate natural-surface appearance corrections
 
 Scene material 4 is explicitly procedural neutral rock, using native dirt detail

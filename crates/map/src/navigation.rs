@@ -5,8 +5,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mod hierarchy;
 mod planner;
+pub use hierarchy::NavigationSnapshot;
 pub(crate) use hierarchy::PortalCache;
 pub use hierarchy::{DEFAULT_HIERARCHY_EXPANSIONS, HierarchicalOutcome, hierarchical_route};
+pub use hierarchy::{NAVIGATION_FORMAT_VERSION, NavigationChunk, navigation_checksum};
 pub use planner::{
     MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, ROUTE_LEG_COMMIT_WORK,
     ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain,

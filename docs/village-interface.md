@@ -14,8 +14,24 @@ double-click a unit to select every owned unit of that kind on screen. A group
 can contain both villagers and the scout. Right-clicking a resource tells its
 villagers to gather; the scout keeps its current order. Right-clicking ground
 moves the group. Move in the command panel arms a destination click; Stop
-cancels the job using a Move to each unit's current authoritative position.
-Carried loads remain governed by the simulation's Move rules.
+cancels each unit's current job and queued destinations. Carried loads remain
+governed by the simulation's Stop rules.
+
+Arrow keys pan the camera; alphabetic keys are reserved for commands. B opens
+economic buildings, then A places a Farm when a completed Mill is available.
+Ctrl+0–9 assigns owned living units to a local control group; 0–9 recalls it,
+a second tap within 350 ms centers its centroid, and Shift+number adds the
+current selection to that group. Editable fields and dialogs keep their keys.
+Shift+right-click queues up to sixteen movement destinations, including the
+active leg. Numbered flags and connecting lines show the authoritative queue
+for selected units. Plain orders and Stop replace or clear it. A blocked leg
+is skipped when reached; later valid destinations still execute deterministically.
+
+Selected production buildings show their rally flag in every renderer, even
+without optional flag art or beyond explored terrain. A local pack's original
+hammer and sword cursors indicate construction/repair and hunting/attack;
+authored cursors cover packs without those sheets. Right-clicking a damaged
+own building repairs it, charging half its original cost over a full HP bar.
 
 Click the Town Center footprint (or press H to select and center it), then press
 Q or click Train Villager. The cost is fifty food and the authoritative training

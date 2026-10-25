@@ -135,11 +135,15 @@ impl MapChunkGenerator {
         if cancelled() {
             return Err(EnvironmentPageError::Cancelled);
         }
+        if let Some(point) = self.resident_point(tile) {
+            return Ok(point);
+        }
         if let Ok(memo) = self.derived.point.lock()
             && let Some(point) = memo.get(tile)
         {
             return Ok(point);
         }
+        let _span = self.measure_navigation(crate::NavigationPhase::TerrainPoint);
         let point = self
             .landscape_point_with_cancel(tile, cancelled)?
             .map(|point| {

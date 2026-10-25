@@ -43,10 +43,14 @@ export class AoeWebGl {
         };
         canvas.addEventListener('webglcontextlost', this.onLost);
         canvas.addEventListener('webglcontextrestored', this.onRestored);
+        this.onPageHide = event => { if (!event.persisted) this.dispose(); };
+        window.addEventListener('pagehide', this.onPageHide);
     }
 
     initialize() {
         const gl = this.gl;
+        // A restored context invalidates all sync objects from its lost lifetime.
+        this.pendingFrames = [];
         this.bufferBytes = 0;
         this.atlasReady = false;
         this.shaders = [];
@@ -250,6 +254,17 @@ export class AoeWebGl {
             this.releaseCoverage();
             return false;
         }
+        // Do not enqueue another packet behind a busy software or hardware GPU.
+        // Poll without blocking the page, before any instance-buffer upload.
+        while (this.pendingFrames.length) {
+            const sync = this.pendingFrames[0];
+            const status = gl.clientWaitSync(sync, 0, 0);
+            if (status === gl.TIMEOUT_EXPIRED) break;
+            if (status === gl.WAIT_FAILED) throw new Error('WebGL2 frame completion failed');
+            gl.deleteSync(sync);
+            this.pendingFrames.shift();
+        }
+        if (this.pendingFrames.length >= 2) return false;
         const count = instances.byteLength / STRIDE;
         const words = new DataView(instances.buffer, instances.byteOffset, instances.byteLength);
         // Shared Rust normalization selects hover, or units AND occluders.
@@ -312,6 +327,10 @@ export class AoeWebGl {
             gl.bindTexture(gl.TEXTURE_2D, null);
             gl.activeTexture(gl.TEXTURE0);
         }
+        const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        if (!sync) throw new Error('WebGL2 frame completion unavailable');
+        this.pendingFrames.push(sync);
+        gl.flush();
         this.check();
         return true;
     }
@@ -358,6 +377,9 @@ export class AoeWebGl {
     dispose() {
         if (this.disposed) return;
         const gl = this.gl;
+        window.removeEventListener('pagehide', this.onPageHide);
+        for (const sync of this.pendingFrames) gl.deleteSync(sync);
+        this.pendingFrames = [];
         for (const shader of this.shaders) gl.deleteShader(shader);
         for (const program of this.programs) gl.deleteProgram(program);
         if (this.buffer) gl.deleteBuffer(this.buffer);

@@ -305,7 +305,16 @@ fn launch(state: AppState, id: u64) {
             return;
         };
         if let Some(package) = presets::reusable(&state, request, &preparation).await {
-            finish(&state, id, Ok(package)).await;
+            let directory = state.map_package_directory.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                map_store::navigation::prepare_package(&package, directory.as_deref(), &|| {
+                    cancelled.load(Ordering::Acquire)
+                })?;
+                Ok(package)
+            })
+            .await
+            .unwrap_or_else(|_| Err("navigation preparation task failed".to_owned()));
+            finish(&state, id, result).await;
             return;
         }
         let directory = state.map_package_directory.clone();
@@ -352,6 +361,9 @@ fn launch(state: AppState, id: u64) {
             if cancelled.load(Ordering::SeqCst) {
                 return Err("map creation cancelled".to_owned());
             }
+            map_store::navigation::prepare_package(&package, directory.as_deref(), &|| {
+                cancelled.load(Ordering::Acquire)
+            })?;
             Ok::<_, String>(package)
         })
         .await

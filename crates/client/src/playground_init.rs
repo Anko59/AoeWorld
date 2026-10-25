@@ -7,6 +7,7 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Document, HtmlCanvasElement};
 
 pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
+    super::recovery::report();
     let canvas: HtmlCanvasElement = document
         .get_element_by_id("scene")
         .ok_or("No canvas")?
@@ -15,7 +16,12 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
     let (mut renderer, canvas) = GameRenderer::new_with_backend(canvas, backend)
         .await
         .map_err(|error| JsValue::from_str(&error))?;
-    let (art, colour) = load(&mut RendererSink::new(&mut renderer)).await?;
+    let assets = load(&mut RendererSink::new(&mut renderer)).await;
+    if let Err(error) = super::recovery::check(&renderer) {
+        super::recovery::restart(&renderer, None, &error)?;
+        return Ok(());
+    }
+    let (art, colour) = assets?;
     if let Some(element) = document.get_element_by_id("playground") {
         let _ = element.set_attribute("data-renderer", renderer.backend());
         let _ = element.set_attribute("data-assets", "aoe2-local");

@@ -1,4 +1,6 @@
 //! Local immutable-image build and evidence binding. Published signing is a separate gate.
+mod content;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -244,6 +246,7 @@ fn build_with<R: Runtime>(runtime: &R, root: &Path) -> Result<()> {
     let remove_result = runtime.checked("docker", &["rm", "-f", &container]);
     copy_result?;
     remove_result?;
+    content::verify_shaders(&staging.path.join("bundle"))?;
     let manifest = Manifest {
         version: 1,
         source_commit: revision.clone(),
@@ -272,9 +275,15 @@ fn build_with<R: Runtime>(runtime: &R, root: &Path) -> Result<()> {
     {
         return Err("release report changed while copying evidence".into());
     }
-    // Rehash after all runtime commands: bind the actual staged artifact bytes.
+    // Reject bundle changes before comparing the runtime image contents.
     if hash_bundle(&staging.path.join("bundle"))? != manifest.bundle_hash {
         return Err("release static bundle changed during build".into());
+    }
+    content::verify_images(runtime, &manifest, &staging.path.join("bundle"))?;
+    check_source(runtime, &revision, &tree)?;
+    // Image extraction must not move the final binding before runtime commands.
+    if hash_bundle(&staging.path.join("bundle"))? != manifest.bundle_hash {
+        return Err("release static bundle changed during image extraction".into());
     }
     fs::write(
         staging.path.join("manifest.json"),
@@ -317,6 +326,7 @@ fn load_and_verify_with<R: Runtime>(runtime: &R, path: &Path) -> Result<Manifest
     if hash_bundle(&directory.join("bundle"))? != manifest.bundle_hash {
         return Err("release static bundle hash mismatch".into());
     }
+    content::verify_shaders(&directory.join("bundle"))?;
     let server_tag = format!("aoeworld/server:{}", manifest.source_commit);
     let browser_tag = format!("aoeworld/browser:{}", manifest.source_commit);
     if image_id(runtime, &server_tag)? != manifest.server_image_id
@@ -340,6 +350,7 @@ fn load_and_verify_with<R: Runtime>(runtime: &R, path: &Path) -> Result<Manifest
     {
         return Err("release performance evidence mismatch".into());
     }
+    content::verify_images(runtime, &manifest, &directory.join("bundle"))?;
     Ok(manifest)
 }
 

@@ -105,6 +105,7 @@ fn dark_players_cannot_claim_feudal_techs_and_wheelbarrow_loads_round_trip() {
         death_tick: None,
         hunt_target: None,
         death_hunt: None,
+        auto_scout: false,
     });
     let bytes = encode_gameplay_server(&snapshot).unwrap();
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);

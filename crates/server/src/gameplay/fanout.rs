@@ -54,6 +54,7 @@ pub(super) struct SessionBuild {
     pub fog: Option<(FogState, u64)>,
     pub animals: Vec<AnimalState>,
     pub projectiles: Vec<ProjectileState>,
+    pub move_queues: Vec<aoe_protocol::MoveQueue>,
 }
 
 pub(super) struct Built {
@@ -143,6 +144,11 @@ fn build_session(
         region,
     };
     let slots = frame.current(world, &lens, scratch);
+    let move_queues = move_queues(
+        world,
+        view.viewer,
+        slots.iter().map(|slot| frame.state(*slot).id),
+    );
     Some(SessionBuild {
         session_id: view.session_id,
         revision,
@@ -151,7 +157,28 @@ fn build_session(
         fog,
         animals: super::wildlife::animals(world, region, view.viewer),
         projectiles: super::wildlife::projectiles(world, region, view.viewer),
+        move_queues,
     })
+}
+
+pub(super) fn move_queues(
+    world: &GameWorld,
+    viewer: PlayerId,
+    ids: impl Iterator<Item = EntityId>,
+) -> Vec<aoe_protocol::MoveQueue> {
+    ids.filter(|id| {
+        world
+            .unit(*id)
+            .is_some_and(|u| u.player == viewer && u.hp > 0)
+    })
+    .filter_map(|entity_id| {
+        let destinations = world.move_destinations(entity_id);
+        (!destinations.is_empty()).then_some(aoe_protocol::MoveQueue {
+            entity_id,
+            destinations,
+        })
+    })
+    .collect()
 }
 
 /// Reads `world` once and builds every session's view, on as many threads as

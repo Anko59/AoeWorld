@@ -192,6 +192,7 @@ pub(super) fn wire_unit(
         last_hit: unit.last_hit.map(wire_hit),
         death_tick: unit.death_tick,
         hunt_target,
+        auto_scout: unit.auto_scout,
         death_hunt: unit.death_hunt.map(|kind| match kind {
             aoe_simulation::AnimalKind::Sheep => aoe_protocol::AnimalKind::Sheep,
             aoe_simulation::AnimalKind::Deer => aoe_protocol::AnimalKind::Deer,
@@ -295,6 +296,7 @@ pub(super) fn wire_building_state(
         max_hp: state.max_hp,
         los: state.los,
         food_remaining: state.food_remaining,
+        farm_reseeds: state.farm_reseeds,
         last_hit: state.last_hit.map(wire_hit),
         research: state.research.map(|entry| ResearchState {
             tech: wire_tech(entry.tech),
@@ -369,7 +371,7 @@ impl GameplayService {
             probe.phase("resource_journal", journal_started.elapsed());
             world
         };
-        if self.resource_directory.is_some() {
+        if self.resource_directory.is_some() || self.map_content_hash.is_some() {
             tokio::task::spawn_blocking(advance).await.ok()
         } else {
             Some(advance())

@@ -12,15 +12,26 @@ test("a production building sets a rally flag and its trained villager walks the
   const capture = await readFile("../.cache/qol/capture.json", "utf8")
     .then((text) => JSON.parse(text) as { url: string })
     .catch(() => null);
-  if (capture && capture.url !== "http://127.0.0.1:8131/")
+  if (capture && capture.url !== "http://127.0.0.1:8134/")
     throw new Error("Unexpected quality-of-life capture origin");
   const base = capture?.url ?? "/";
   expect((await request.post(`${base}maps/reset`)).status()).toBe(204);
-  await gameAssets(page);
-  await page.goto(`${base}?play=1#zoom=.5`);
+  if (capture) {
+    expect((await request.get(`${base}asset-pack/manifest.json`)).ok()).toBe(
+      true,
+    );
+  } else {
+    await gameAssets(page);
+  }
+  const renderer = test.info().project.name === "webgpu" ? "webgpu" : "webgl2";
+  await page.goto(`${base}?play=1#zoom=.5&renderer=${renderer}`);
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 60_000,
   });
+  await expect(page.locator("#playground")).toHaveAttribute(
+    "data-renderer",
+    renderer,
+  );
   await centerVillage(page, true);
   const canvas = page.locator("#scene");
   const before = JSON.parse(

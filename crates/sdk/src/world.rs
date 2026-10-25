@@ -37,6 +37,7 @@ pub struct World {
     pub(crate) buildings: BTreeMap<EntityId, GameplayBuildingState>,
     pub(crate) animals: BTreeMap<EntityId, Animal>,
     pub(crate) projectiles: Vec<Projectile>,
+    move_queues: Vec<aoe_protocol::MoveQueue>,
     pub(crate) economy: Option<GameplayPlayerState>,
     pub(crate) fog: Arc<FogMemory>,
     pub(crate) catalog: Arc<ResourceCatalog>,
@@ -47,6 +48,13 @@ pub struct World {
 }
 
 impl World {
+    /// Authoritative queued movement destinations, including the active leg.
+    pub fn move_queue(&self, id: EntityId) -> &[aoe_core::WorldPosition] {
+        self.move_queues
+            .iter()
+            .find(|q| q.entity_id == id)
+            .map_or(&[], |q| q.destinations.as_slice())
+    }
     /// A model for the match described by the server's `Welcome`.
     pub(crate) fn from_welcome(message: &GameplayServerMessage) -> Option<Self> {
         let GameplayServerMessage::Welcome {
@@ -75,6 +83,7 @@ impl World {
             buildings: BTreeMap::new(),
             animals: BTreeMap::new(),
             projectiles: Vec::new(),
+            move_queues: Vec::new(),
             economy: None,
             fog: Arc::new(FogMemory::default()),
             catalog: Arc::new(ResourceCatalog::default()),
@@ -90,6 +99,13 @@ impl World {
         use GameplayServerMessage as M;
         let mut events = Vec::new();
         match message {
+            M::MoveQueues {
+                revision,
+                tick,
+                queues,
+            } if revision == self.subscription && tick.0 >= self.tick => {
+                self.move_queues = queues;
+            }
             M::Snapshot {
                 revision,
                 tick,
@@ -99,6 +115,7 @@ impl World {
             } if revision == self.subscription => {
                 self.tick = tick.0;
                 self.units = units.into_iter().map(|u| (u.id, u)).collect();
+                self.move_queues.clear();
                 self.buildings = buildings.into_iter().map(|b| (b.id, b)).collect();
                 self.dying_seen = self
                     .units

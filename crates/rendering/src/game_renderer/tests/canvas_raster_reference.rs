@@ -1,5 +1,6 @@
 //! Scalar current-output pixel oracle; updated when ground coverage changes.
 use super::*;
+use crate::surface_mesh::SurfacePoint;
 
 pub(super) fn raster_surface(
     triangle: &ProjectedSurfaceTriangle,

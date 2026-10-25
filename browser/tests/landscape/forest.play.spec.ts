@@ -67,7 +67,7 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
       "aoe2-local",
     );
     const token = await page.evaluate(() =>
-      sessionStorage.getItem("aoeworld.resume-token"),
+      localStorage.getItem("aoeworld.resume-token"),
     );
     if (!token) throw new Error("Connected controller token absent");
     expect(token).toMatch(/^[0-9a-f]{48}$/i);

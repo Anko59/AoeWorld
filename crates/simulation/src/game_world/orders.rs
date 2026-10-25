@@ -9,6 +9,7 @@ impl GameWorld {
     ) -> Result<bool, GameWorldError> {
         let destination = self.spread_destination(id, destination)?;
         let result = self.issue_task_move(id, destination)?;
+        self.cancel_auto_scout(id);
         self.stop_gathering(id);
         self.cancel_attack(id);
         self.economy.builders.remove(&id);

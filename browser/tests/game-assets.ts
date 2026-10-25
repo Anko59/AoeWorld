@@ -173,6 +173,7 @@ export async function gameAssets(
   page: Page,
   forceSynthetic = false,
   additionalSprites: readonly (readonly [number, number])[] = [],
+  omitSprites: readonly number[] = [],
 ): Promise<string> {
   if (!forceSynthetic) {
     const response = await page.request.get("/asset-pack/manifest.json");
@@ -249,6 +250,7 @@ export async function gameAssets(
       [2089, 50],
     ].map(([id, count]) => ["graphics", id, count]),
   ].flatMap(([archive, id, count]) => {
+    if (omitSprites.includes(Number(id))) return [];
     const source = terrainSources.get(Number(id));
     return Array.from({ length: Number(count) }, (_, frame) => ({
       source: `${archive}.drs:[32, 112, 108, 115]:${id}`,

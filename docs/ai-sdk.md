@@ -15,6 +15,12 @@ bots; the target is one human and 99 AIs on one server.
  aoe-ai: Fleet → Client ×N (one Rust runtime)  └─────────────────────────────┘
 ```
 
+`Client.queue_move(unit, x, y)` appends a tile-center movement destination;
+`World.move_queue(unit)` returns the authoritative list in fixed-point
+subunits (1,024 per tile), active destination first. The Rust counterparts are
+`Order::QueueMove` and `World::move_queue`. The queue holds at most sixteen
+destinations per unit. Stop and accepted replacement orders clear it.
+
 Layers, each testable on its own:
 
 | Layer | Where | What it adds |
@@ -152,6 +158,16 @@ these return ordinary order sequences. Buildings expose `rally_position` and
 optional `rally_resource`, `rally_building` and `rally_animal` identities. Rust
 uses `Order::SetRally` with `RallyTarget` and observes `Building.state.rally_point`.
 Known resources may be in explored fog; undiscovered targets are refused.
+
+`client.farm_reseed(mill, add=True)` prepays one farm rebuild at an owned,
+completed Mill; `add=False` removes and refunds one. Buildings expose
+`farm_reseeds`. Rust sends `Order::FarmReseed { building, add }`. The example
+AI keeps a configurable reserve once it has farms, preserving its house wood
+reserve and waiting for the server's count before adding another entry.
+
+`client.auto_scout(unit, enabled=True)` toggles server-owned cavalry exploration;
+`Unit.auto_scout` reflects the authoritative state. Rust uses
+`Order::AutoScout { unit, enabled }`. Move, Stop and combat orders cancel it.
 
 * **Decision rate.** `decision_hz` decision points per game second (the game runs
   20 ticks a second, so `decision_hz=2` is every 10 ticks). Decisions are tied to

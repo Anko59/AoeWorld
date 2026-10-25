@@ -2,6 +2,9 @@ use crate::{EnvironmentPageError, ResourceOverlay, RoutePlanner, RoutePlannerPol
 use aoe_core::TileCoord;
 use std::cell::Cell;
 
+#[path = "detours.rs"]
+mod detours;
+
 struct Ring {
     radius: i32,
     probes: Cell<u32>,

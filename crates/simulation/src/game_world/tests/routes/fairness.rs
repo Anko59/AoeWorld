@@ -153,8 +153,7 @@ fn a_short_order_never_waits_for_slots_held_by_hopeless_searches() {
     let ended = (0..2_000).find(|_| {
         world.advance();
         sealed.iter().any(|id| {
-            world.units[world.lookup[id]].last_movement_error
-                == Some(GameWorldError::PathBudgetExceeded)
+            world.units[world.lookup[id]].last_movement_error == Some(GameWorldError::Unreachable)
         })
     });
     assert!(ended.is_some(), "a hopeless search still holds its slot");

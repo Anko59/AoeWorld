@@ -85,6 +85,8 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         0.0
     };
     if !client.village.move_cursor
+        && client.village.placement.is_none()
+        && client.drag.is_none()
         && client.selected.units.iter().any(|id| {
             client
                 .units
@@ -95,11 +97,22 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
     {
         let actor = super::picking::actor(client, point);
         if actor.is_some_and(|a| a.1) {
-            values[3] = if villager { 5.0 } else { 4.0 };
+            values[3] = if !super::construction::builders(client).is_empty() {
+                5.0
+            } else {
+                4.0
+            };
         } else if actor.is_some_and(|a| a.2)
             || super::picking::enemy_building(client, point).is_some()
         {
             values[3] = 4.0;
+        } else if !super::construction::builders(client).is_empty()
+            && super::construction::target(client, point).is_some_and(|b| {
+                b.construction == aoe_protocol::ConstructionState::UnderConstruction
+                    || b.hp < b.max_hp
+            })
+        {
+            values[3] = 10.0;
         }
     }
     // Starting-kit nodes live in the resource overlay, not in terrain chunks.

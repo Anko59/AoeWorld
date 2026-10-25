@@ -145,6 +145,13 @@ fn gpu_depth_normalization_preserves_original_iterator_bits() {
 }
 
 #[wasm_bindgen(inline_js = "
+export function webgl_complete_frame(bridge) {
+    bridge.gl.finish();
+    // WebGL exposes fence status after a browser task. These synchronous
+    // pixel tests have already completed the GPU work with finish().
+    for (const sync of bridge.pendingFrames) bridge.gl.deleteSync(sync);
+    bridge.pendingFrames.length = 0;
+}
 export function webgl_test_context(canvas) {
     const gl = canvas.getContext('webgl2');
     if (!gl || gl.isContextLost()) throw new Error('WebGL2 test context unavailable');
@@ -162,6 +169,7 @@ export function webgl_test_pixel(canvas, x, y, output) {
 }
 ")]
 extern "C" {
+    fn webgl_complete_frame(bridge: &JsValue);
     #[wasm_bindgen(catch)]
     fn webgl_test_context(canvas: &HtmlCanvasElement) -> Result<JsValue, JsValue>;
     fn context_is_lost(gl: &JsValue) -> bool;
@@ -285,6 +293,10 @@ fn render(renderer: &mut WebGlRenderer, sprites: &mut [Sprite]) {
             .expect("actual WebGL2 instanced render"),
         "frame not presented"
     );
+    // Pixel/attachment tests submit synchronous sequences. Complete each real
+    // frame instead of filling the production queue; E2E separately holds
+    // completion fences and verifies the two-frame bound.
+    webgl_complete_frame(renderer.test_bridge());
 }
 
 fn rect(x: f32) -> [f32; 4] {

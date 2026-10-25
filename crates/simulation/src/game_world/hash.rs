@@ -47,6 +47,13 @@ impl GameWorld {
         hash.update(&(self.active_planner_count as u64).to_le_bytes());
         hash.update(&(self.active_route_searches as u64).to_le_bytes());
         hash.update(&self.planning_budget.to_le_bytes());
+        hash.update(
+            &self
+                .navigation_preparation_budget
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .to_le_bytes(),
+        );
         hash.update(&self.fast_route_budget.to_le_bytes());
         hash.update(&(self.route_queued.len() as u64).to_le_bytes());
         for (player, far) in &self.route_queued {
@@ -85,6 +92,7 @@ impl GameWorld {
                 unit.state.kind as u8,
                 unit.state.task as u8,
             ]);
+            hash.update(&[u8::from(unit.state.auto_scout)]);
             hash.update(&unit.next_hit_tick.to_le_bytes());
             hash.update(&unit.state.hp.to_le_bytes());
             hash.update(&unit.state.max_hp.to_le_bytes());
@@ -151,6 +159,18 @@ impl GameWorld {
                 hash.update(&[1, movement_error_code(error)]);
             } else {
                 hash.update(&[0, 0]);
+            }
+        }
+        if !self.move_queues.is_empty() {
+            hash.update(b"player move queues\0");
+            hash.update(&(self.move_queues.len() as u64).to_le_bytes());
+            for (id, queue) in &self.move_queues {
+                hash.update(&id.0.to_le_bytes());
+                hash.update(&(queue.len() as u64).to_le_bytes());
+                for point in queue {
+                    hash.update(&point.x.to_le_bytes());
+                    hash.update(&point.y.to_le_bytes());
+                }
             }
         }
         *hash.finalize().as_bytes()

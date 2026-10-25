@@ -3,7 +3,7 @@ use super::*;
 use crate::navigation::hierarchy::ResolutionOutcome;
 
 impl RoutePlanner {
-    pub(super) fn begin_components(
+    pub(in crate::navigation::planner) fn begin_components(
         &mut self,
         generator: &crate::MapChunkGenerator,
         overlay: &ResourceOverlay,
@@ -29,12 +29,13 @@ impl RoutePlanner {
         generator: &crate::MapChunkGenerator,
         remaining: &mut u32,
         cancelled: &dyn Fn() -> bool,
+        prepare: &dyn Fn() -> bool,
     ) -> Result<bool, Terminal> {
         let Some(resolution) = self.resolution.as_mut() else {
             return Ok(true);
         };
         let before = *remaining;
-        let outcome = resolution.poll(
+        let outcome = resolution.poll_budgeted(
             generator,
             remaining,
             Some((
@@ -42,6 +43,7 @@ impl RoutePlanner {
                 super::super::MAX_ROUTE_PLANNER_NODES,
             )),
             cancelled,
+            prepare,
         );
         self.work = self.work.saturating_add(before - *remaining);
         self.update_peak_retained_entries();

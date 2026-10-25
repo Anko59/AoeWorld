@@ -46,9 +46,11 @@ pub use land_use::{
 };
 pub use navigation::{
     DEFAULT_HIERARCHY_EXPANSIONS, HierarchicalOutcome, MAX_ROUTE_PLANNER_NODES,
-    MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_SEGMENT_TILES, MAX_ROUTE_TILES, MovementOutcome, Path,
-    ROUTE_LEG_COMMIT_WORK, ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain,
-    find_path, find_path_segment_with_overlay, find_path_with_overlay, hierarchical_route,
+    MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_SEGMENT_TILES, MAX_ROUTE_TILES, MovementOutcome,
+    NAVIGATION_FORMAT_VERSION, NavigationChunk, NavigationSnapshot, Path, ROUTE_LEG_COMMIT_WORK,
+    ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain, find_path,
+    find_path_segment_with_overlay, find_path_with_overlay, hierarchical_route,
+    navigation_checksum,
 };
 pub use overlay::{
     Depletion, MAX_OBSTACLE_TILES, MAX_RESOURCE_OVERLAY_CHANGES, MAX_STARTING_NODES,

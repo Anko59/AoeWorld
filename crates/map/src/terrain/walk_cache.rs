@@ -1,7 +1,7 @@
 //! Chunk-level walk data: passability, walkable surface, height level, mud and
-//! resource-node bitmaps of a whole 32 x 32 chunk, generated in bulk the first
-//! time any tile of the chunk is touched and shared by movement, the route
-//! planner, gathering and placement. The cache is bounded by bytes and evicts
+//! resource-node bitmaps of a whole 32 x 32 chunk, prepared explicitly by
+//! navigation or background workers and shared by movement, route planning,
+//! gathering and placement. Cold point reads stay local. The cache evicts
 //! the least recently used chunks. Every value is a pure function of the
 //! immutable generator, so hits and misses can never change a result.
 use super::{EdgePassability, GroundMaterial, MapChunkGenerator, ResourceNode};
@@ -38,6 +38,7 @@ pub(super) struct WalkChunk {
     walkable: [u64; WORDS],
     mud: [u64; WORDS],
     levels: Box<[i16; CELLS]>,
+    tiles: Box<[Option<super::Tile>; CELLS]>,
     /// `(local index, node)` ordered by local index.
     nodes: Vec<(u16, ResourceNode)>,
 }
@@ -58,6 +59,7 @@ impl WalkChunk {
     fn bytes(&self) -> usize {
         std::mem::size_of::<Self>()
             + CELLS * 2
+            + CELLS * std::mem::size_of::<Option<super::Tile>>()
             + self.nodes.capacity() * std::mem::size_of::<(u16, ResourceNode)>()
             + 64
     }
@@ -84,6 +86,7 @@ pub(super) struct DerivedCaches {
     /// Process-unique, so a thread's recent chunks can never serve another
     /// generator, even one allocated at the same address.
     id: u64,
+    pub(crate) static_navigation: std::sync::OnceLock<Arc<crate::navigation::NavigationSnapshot>>,
 
     pub(super) probe: std::sync::RwLock<Option<Arc<dyn NavigationProbe>>>,
     pub(super) point: std::sync::Mutex<super::point_memo::PointMemo>,
@@ -96,6 +99,7 @@ impl Default for DerivedCaches {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         Self {
             id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            static_navigation: Default::default(),
             probe: Default::default(),
             point: Default::default(),
             walk: Default::default(),
@@ -170,23 +174,77 @@ pub(super) enum Lookup {
 }
 
 impl MapChunkGenerator {
+    pub(crate) fn static_navigation(
+        &self,
+    ) -> &std::sync::OnceLock<Arc<crate::navigation::NavigationSnapshot>> {
+        &self.derived.static_navigation
+    }
+
+    /// Isolated scratch caches for an adapter's parallel preparation worker.
+    pub fn navigation_preparation_worker(&self) -> Self {
+        let mut worker = self.clone();
+        worker.derived = Default::default();
+        worker.river_queries = Default::default();
+        worker
+    }
+
+    pub fn width_tiles(&self) -> i32 {
+        self.width_tiles
+    }
+
+    /// Compose an immutable walk chunk on an adapter-owned preparation worker.
+    pub fn precompose_walk_chunk(
+        &self,
+        x: i32,
+        y: i32,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(), EnvironmentPageError> {
+        self.walk_chunk_observed((x, y), cancelled, false)
+            .map(|_| ())
+    }
+
+    pub fn walk_chunk_resident(&self, x: i32, y: i32) -> bool {
+        self.derived
+            .walk
+            .lock()
+            .is_ok_and(|cache| cache.chunks.contains_key(&(x, y)))
+    }
+
     fn walk_chunk(
         &self,
         chunk: (i32, i32),
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<Arc<WalkChunk>>, EnvironmentPageError> {
+        self.walk_chunk_observed(chunk, cancelled, true)
+    }
+
+    fn walk_chunk_observed(
+        &self,
+        chunk: (i32, i32),
+        cancelled: &dyn Fn() -> bool,
+        observed: bool,
+    ) -> Result<Option<Arc<WalkChunk>>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
         if let Ok(mut cache) = self.derived.walk.lock()
             && let Some(found) = cache.get(chunk)
         {
             return Ok(Some(found));
         }
+        let measurement = observed
+            .then(|| self.measure_navigation(NavigationPhase::Terrain))
+            .flatten();
         let built = match self.build_walk_chunk(chunk, cancelled) {
             Ok(built) => Arc::new(built),
             Err(EnvironmentPageError::Cancelled) => return Err(EnvironmentPageError::Cancelled),
             Err(_) => return Ok(None),
         };
+        drop(measurement);
         if let Ok(mut cache) = self.derived.walk.lock() {
-            let _span = self.measure_navigation(NavigationPhase::WalkCache);
+            let _span = observed
+                .then(|| self.measure_navigation(NavigationPhase::WalkCache))
+                .flatten();
             cache.insert(chunk, Arc::clone(&built));
         }
         Ok(Some(built))
@@ -197,7 +255,6 @@ impl MapChunkGenerator {
         (x, y): (i32, i32),
         cancelled: &dyn Fn() -> bool,
     ) -> Result<WalkChunk, EnvironmentPageError> {
-        let _span = self.measure_navigation(NavigationPhase::Terrain);
         let scene = self.landscape_chunk_with_cancel(x, y, cancelled)?;
         let mut chunk = WalkChunk {
             present: [0; WORDS],
@@ -205,11 +262,13 @@ impl MapChunkGenerator {
             walkable: [0; WORDS],
             mud: [0; WORDS],
             levels: Box::new([0; CELLS]),
+            tiles: Box::new([None; CELLS]),
             nodes: Vec::with_capacity(scene.resources.len()),
         };
         for tile in &scene.tiles {
             let index = local(tile.tile);
             let terrain = &tile.terrain;
+            chunk.tiles[index] = Some(*terrain);
             set(&mut chunk.present, index);
             if terrain.passable {
                 set(&mut chunk.passable, index);
@@ -242,6 +301,9 @@ impl MapChunkGenerator {
         if tile.x < 0 || tile.y < 0 || tile.x >= self.width_tiles || tile.y >= self.width_tiles {
             return Ok(Lookup::OutOfMap);
         }
+        if let Some(cell) = self.static_navigation_cell(tile) {
+            return Ok(cell.map_or(Lookup::OutOfMap, Lookup::Cell));
+        }
         let key = (
             tile.x.div_euclid(CHUNK_TILES),
             tile.y.div_euclid(CHUNK_TILES),
@@ -261,7 +323,14 @@ impl MapChunkGenerator {
         if let Some(found) = recent {
             return Ok(found);
         }
-        Ok(match self.walk_chunk(key, cancelled)? {
+        // Point reads only reuse explicitly prepared chunks; a miss stays local.
+        let chunk = self
+            .derived
+            .walk
+            .lock()
+            .ok()
+            .and_then(|mut cache| cache.get(key));
+        Ok(match chunk {
             Some(chunk) => {
                 let found = chunk.cell(tile).map_or(Lookup::OutOfMap, Lookup::Cell);
                 RECENT.with(|recent| {
@@ -273,6 +342,20 @@ impl MapChunkGenerator {
             }
             None => Lookup::Slow,
         })
+    }
+
+    /// The full point projection is already present in a prepared chunk.
+    /// Reuse it even after the small direct-mapped point memo has collided.
+    pub(super) fn resident_point(&self, tile: TileCoord) -> Option<super::point_memo::Point> {
+        let key = (
+            tile.x.div_euclid(CHUNK_TILES),
+            tile.y.div_euclid(CHUNK_TILES),
+        );
+        let chunk = self.derived.walk.lock().ok()?.get(key)?;
+        Some(chunk.tiles[local(tile)].map(|terrain| {
+            let node = chunk.cell(tile).and_then(|cell| cell.node);
+            (terrain, node)
+        }))
     }
 
     /// Cached composed walk data of one tile; `None` outside the map.
@@ -328,6 +411,19 @@ impl MapChunkGenerator {
         key: (i32, i32),
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Vec<Option<WalkCell>>, EnvironmentPageError> {
+        if self.has_static_navigation() {
+            return (0..CELLS)
+                .map(|index| {
+                    self.walk_at_with_cancel(
+                        TileCoord::new(
+                            key.0 * CHUNK_TILES + (index % SIDE) as i32,
+                            key.1 * CHUNK_TILES + (index / SIDE) as i32,
+                        ),
+                        cancelled,
+                    )
+                })
+                .collect();
+        }
         let chunk = self.walk_chunk(key, cancelled)?;
         (0..CELLS)
             .map(|index| {

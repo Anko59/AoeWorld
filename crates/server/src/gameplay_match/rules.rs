@@ -7,6 +7,8 @@ use serde::Deserialize;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MatchError {
+    #[error("navigation preparation failed: {0}")]
+    Navigation(String),
     #[error("a match needs between 1 and {MAX_MATCH_SLOTS} slots")]
     SlotCount,
     #[error("map has no land start for slot {0}; use a larger or less watery map")]

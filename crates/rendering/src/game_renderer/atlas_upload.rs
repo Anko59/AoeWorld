@@ -89,7 +89,10 @@ impl GameRenderer {
     /// the pages they must retain anyway (JS restoration copy, raster source).
     pub fn begin_game_atlas(&mut self) -> Result<AtlasUpload, String> {
         Ok(AtlasUpload(match self {
-            Self::WebGpu(renderer) => Staging::Gpu(renderer.create_game_atlas()?, Vec::new()),
+            Self::WebGpu(renderer) => {
+                renderer.check_health()?;
+                Staging::Gpu(renderer.create_game_atlas()?, Vec::new())
+            }
             Self::WebGl(_) | Self::Canvas { .. } => {
                 Staging::Cpu(Vec::with_capacity(crate::GAME_ATLAS_BYTES))
             }
@@ -109,7 +112,9 @@ impl GameRenderer {
             (Staging::Gpu(texture, scratch), Self::WebGpu(renderer))
                 if scratch.len() == crate::GAME_ATLAS_PAGE_BYTES =>
             {
+                renderer.health.allow_upload()?;
                 renderer.write_game_atlas_page(texture, layer, scratch);
+                renderer.health.submitted(&renderer.queue, true);
                 Ok(())
             }
             (Staging::Cpu(pixels), Self::WebGl(_) | Self::Canvas { .. })
@@ -125,6 +130,7 @@ impl GameRenderer {
     pub fn finish_game_atlas(&mut self, upload: AtlasUpload) -> Result<(), String> {
         match (upload.0, self) {
             (Staging::Gpu(texture, _), Self::WebGpu(renderer)) => {
+                renderer.check_health()?;
                 renderer.install_game_atlas(texture);
                 Ok(())
             }
@@ -134,6 +140,7 @@ impl GameRenderer {
                 Self::Canvas {
                     atlas,
                     source_atlas,
+                    presentation,
                     ..
                 },
             ) => {
@@ -142,6 +149,7 @@ impl GameRenderer {
                 }
                 *atlas = [None, None, None, None];
                 *source_atlas = pixels;
+                presentation.invalidate();
                 Ok(())
             }
             _ => Err("Game atlas upload does not match its renderer".into()),

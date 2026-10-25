@@ -79,6 +79,7 @@ impl Session {
         self.resident_buildings.clear();
         self.resident_animals.clear();
         self.resident_projectiles.clear();
+        self.resident_move_queues.clear();
         self.resident_resources.clear();
         self.vision_revision = None;
         self.resource_revision = None;
@@ -146,11 +147,14 @@ impl GameplayService {
         if let aoe_simulation::Terrain::Map { generator, .. } = world.terrain() {
             generator.set_navigation_probe(probe.clone());
         }
+        let world = Arc::new(RwLock::new(world));
+        super::probe::track(&world);
         Self {
-            world: Arc::new(RwLock::new(world)),
+            world,
             sessions: Arc::new(Mutex::new(BTreeMap::new())),
             ownership: Arc::new(Mutex::new(Ownership { slots, next_token })),
             next_session: Arc::new(AtomicU64::new(1)),
+            command_cursor: Arc::default(),
             world_id,
             map_content_hash,
             map_metadata,
@@ -159,6 +163,7 @@ impl GameplayService {
             probe,
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
             fanout_probe: Arc::default(),
+            preparation: Default::default(),
         }
     }
 
@@ -232,11 +237,11 @@ impl GameplayService {
             Access::Hello(None) => None,
         }
         .or_else(|| match access {
-            Access::Hello(_) => ownership
+            Access::Hello(None) => ownership
                 .slots
                 .iter()
                 .position(|slot| slot.human && slot.lease.is_none()),
-            Access::Join(_) => None,
+            Access::Hello(Some(_)) | Access::Join(_) => None,
         });
         let session_id = self.next_session.fetch_add(1, Ordering::Relaxed);
         let (role, token, viewer, primary, ai) = if let Some(index) = slot_index {
@@ -268,6 +273,7 @@ impl GameplayService {
             session_id,
             Session {
                 role,
+                may_claim_human_seat: slot_index.is_some() || matches!(access, Access::Hello(None)),
                 token,
                 slot: slot_index,
                 viewer,
@@ -292,6 +298,7 @@ impl GameplayService {
                 resident_buildings: BTreeMap::new(),
                 resident_animals: Vec::new(),
                 resident_projectiles: Vec::new(),
+                resident_move_queues: Vec::new(),
                 vision_revision: None,
                 resource_vision_revision: None,
                 resident_resources: Vec::new(),
