@@ -11,6 +11,11 @@ import { forceCanvas, forceWebGl } from "./backends.js";
 
 const colors = Object.values(syntheticSurfaceColors);
 
+// These tests explicitly deny WebGPU. Keep the process on the normal fallback
+// compositor too: the WebGPU project's Vulkan flags otherwise remain active
+// and stall GL captures/restoration without exercising any WebGPU game code.
+test.use({ launchOptions: { args: [] } });
+
 test.beforeEach(async ({ request }) => {
   expect((await request.post("/maps/reset")).status()).toBe(204);
 });

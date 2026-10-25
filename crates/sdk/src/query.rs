@@ -189,7 +189,8 @@ impl World {
     }
 
     /// A tile for a new `kind` building near `near`, or `None`: every footprint
-    /// tile explored, walkable and free of resources and known buildings, with
+    /// tile explored exactly (not inferred from the overview), walkable and
+    /// free of resources and known buildings, with
     /// `gap` free tiles around so villagers can still pass.
     pub fn find_build_site(
         &self,
@@ -237,9 +238,7 @@ impl World {
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
                 let tile = TileCoord::new(x, y);
-                if self.fog.visibility(tile) == Visibility::Unexplored
-                    || self.catalog.passable(tile) != Some(true)
-                {
+                if !self.fog.explored_exactly(tile) || self.catalog.passable(tile) != Some(true) {
                     return false;
                 }
             }

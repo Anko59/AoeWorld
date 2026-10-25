@@ -64,6 +64,31 @@ impl RouteTerrain for UniformNavigation<'_> {
 }
 
 impl GameWorld {
+    /// Attach an adapter-owned profiler without changing authoritative state.
+    pub fn set_planning_probe(&mut self, probe: std::sync::Arc<dyn crate::PlanningProbe>) {
+        self.planning_probe = Some(probe);
+    }
+
+    fn measure_planning(
+        &self,
+    ) -> Option<crate::game_world::route_scheduler::PlanningMeasurement<'_>> {
+        self.planning_probe.as_ref().map(|probe| {
+            probe.begin();
+            crate::game_world::route_scheduler::PlanningMeasurement(probe.as_ref())
+        })
+    }
+
+    /// Prepare the immutable map hierarchy before starting the tick clock.
+    pub fn prepare_navigation(
+        &self,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<(), EnvironmentPageError> {
+        if let Terrain::Map { generator, overlay } = &self.terrain {
+            generator.prepare_navigation(overlay, cancelled)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn has_route_navigation(&self) -> bool {
         self.terrain.has_map_navigation() || !self.economy.blocked_tiles.is_empty()
     }
@@ -75,6 +100,7 @@ impl GameWorld {
         cancelled: &dyn Fn() -> bool,
         kind: crate::UnitKind,
     ) -> RoutePlannerPoll {
+        let _measurement = self.measure_planning();
         if kind == crate::UnitKind::FishingShip {
             return planner.poll(
                 &super::fishing::navigation::NavalNavigation(self),
@@ -106,6 +132,7 @@ impl GameWorld {
         cancelled: &dyn Fn() -> bool,
         kind: crate::UnitKind,
     ) {
+        let _measurement = self.measure_planning();
         if kind == crate::UnitKind::FishingShip {
             planner.plan_ahead(
                 &super::fishing::navigation::NavalNavigation(self),

@@ -87,11 +87,13 @@ impl ResourceOverlay {
         if snapshot.revision > removed_total || snapshot.revision < depleted_count {
             return Err(ResourceOverlayError::InvalidSnapshot);
         }
-        Ok(Self {
+        let mut overlay = Self {
             remaining,
             revision: snapshot.revision,
-            obstacles: Default::default(),
-        })
+            ..Self::default()
+        };
+        overlay.rebuild_navigation();
+        Ok(overlay)
     }
 }
 

@@ -54,6 +54,10 @@ impl Vision {
                     hash.update(&e.total_ticks.to_le_bytes());
                 }
             }
+            hash.update(&(player.ghost_order.len() as u64).to_le_bytes());
+            for id in &player.ghost_order {
+                hash.update(&id.0.to_le_bytes());
+            }
             hash.update(&(player.resources.len() as u64).to_le_bytes());
             for (id, remaining) in &player.resources {
                 hash.update(&id.to_le_bytes());

@@ -241,6 +241,8 @@ pub enum EconomyError {
     InsufficientResources,
     #[error("town center footprint or spawn perimeter is unsuitable")]
     InvalidFootprint,
+    #[error("building footprint contains unexplored terrain")]
+    UnexploredFootprint,
     #[error("the building is already complete")]
     AlreadyComplete,
     #[error("that building kind cannot be constructed")]

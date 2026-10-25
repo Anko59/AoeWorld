@@ -1,8 +1,12 @@
 import { expect, type Page } from "@playwright/test";
-import { test } from "../../server.js";
+import { test as preferredTest } from "../../server.js";
 import { PNG } from "pngjs";
 import { gameAssets } from "../game-assets.js";
-import { forceCanvas, forceWebGl } from "../rendering/backends.js";
+import {
+  fallbackTest,
+  forceCanvas,
+  forceWebGl,
+} from "../rendering/backends.js";
 
 async function primaryBluePosition(page: Page) {
   const image = PNG.sync.read(await page.locator("#scene").screenshot());
@@ -36,6 +40,7 @@ async function primaryBluePosition(page: Page) {
 }
 
 for (const backend of ["preferred", "webgl2", "canvas"] as const) {
+  const test = backend === "preferred" ? preferredTest : fallbackTest;
   test(`synthetic prepared forest serves metadata, draws and moves on ${backend}`, async ({
     page,
     request,

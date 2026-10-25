@@ -485,10 +485,13 @@ fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
 }
 
 mod combat;
+#[path = "tests/movement/far_orders.rs"]
 mod far_orders;
+#[path = "tests/movement/physical_movement.rs"]
 mod physical_movement;
 mod routes;
 mod scale_hooks;
+#[path = "tests/movement/stop.rs"]
 mod stop;
 mod wildlife;
 

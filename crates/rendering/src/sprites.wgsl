@@ -308,10 +308,12 @@ fn world_colour(in: VertexOutput) -> vec4<f32> {
         return in.color;
     }
     if in.solid == 0u {
+        let owner = vec4<f32>(in.rect3.rgb, select(0.0, 1.0, (in.pages.w & 64u) != 0u));
         var texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
+        texel = owner_texel(texel, in.uv, i32(in.pages.x), owner);
         // Quad pages.w bit 0 marks nearest-sampled terrain, not an object.
         if (in.pages.w & 1u) == 0u {
-            let average = box_average(in.uv, i32(in.pages.x), in.rect, dx, dy);
+            let average = box_average(in.uv, i32(in.pages.x), in.rect, dx, dy, owner);
             if average.a >= 0.0 { texel = average; }
         }
         if texel.a <= 0.0 { discard; }

@@ -59,6 +59,10 @@ impl<'a> MemoTerrain<'a> {
 }
 
 impl RouteTerrain for MemoTerrain<'_> {
+    fn route_generator(&self) -> Option<&crate::MapChunkGenerator> {
+        self.inner.route_generator()
+    }
+
     fn route_walkable(
         &self,
         overlay: &ResourceOverlay,

@@ -111,6 +111,10 @@ impl GameWorld {
     /// Restart those planners through the scheduler's normal budget; clearing
     /// every planner whenever a tree fell caused the long-game freeze.
     pub(crate) fn collision_opened(&mut self, area: aoe_core::TileRect) {
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|probe| probe.cache_span());
         self.navigation_cache.invalidate(area);
         for index in 0..self.units.len() {
             if self.units[index]
@@ -121,12 +125,18 @@ impl GameWorld {
                 self.clear_planner(index);
             }
             self.units[index].last_movement_error = None;
+            // Opened ground can make a refused target reachable.
+            self.units[index].unreachable_memo = None;
         }
     }
 
     /// `area` became blocked (a building placed, a gate closed): only the
     /// planners whose search or planned route touches it are planned again.
     pub(crate) fn collision_closed(&mut self, area: aoe_core::TileRect) {
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|probe| probe.cache_span());
         self.navigation_cache.invalidate(area);
         for index in 0..self.units.len() {
             if self.units[index]

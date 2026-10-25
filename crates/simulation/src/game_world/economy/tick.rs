@@ -5,6 +5,7 @@ use aoe_core::EntityId;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TickPhase {
     Movement,
+    Spacing,
     Wildlife,
     Combat,
     Construction,
@@ -54,8 +55,9 @@ impl GameWorld {
         // undrained history would grow storage without a transport obligation.
         self.economy.depletions.clear();
         let mut changed = self.advance_movement();
-        self.advance_spacing(&mut changed);
         probe(TickPhase::Movement);
+        self.advance_spacing(&mut changed);
+        probe(TickPhase::Spacing);
         self.advance_wildlife(&mut changed);
         probe(TickPhase::Wildlife);
         if self.economy.gatherers.is_empty()

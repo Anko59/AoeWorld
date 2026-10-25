@@ -28,6 +28,7 @@ import aoeworld
 
 from .config import Config
 from .host import BotReport, Host
+from .diagnostics import outcomes, trace
 
 TICK_HZ = 20
 SECRET = os.environ.get("AOE_MATCH_TOKEN") or "arena-match-secret-0123456789"
@@ -143,12 +144,17 @@ def play(
     stepper, fleet = Stepper(url), aoeworld.Fleet(host.clients)
     sent = [0] * bots
     tick = stepper.step(period, 0)
+    last_minute = -1
     try:
         while True:
             time.sleep(SETTLE_SECONDS)
             decisions, tick = _await_decisions(fleet, host.open, stepper, tick)
             for index, decision in sorted(decisions.items()):
+                outcomes(host, index, decision, seed)
                 host._handle(index, decision)
+            if tick // (TICK_HZ * 60) != last_minute:
+                last_minute = tick // (TICK_HZ * 60)
+                trace(host, tick, seed)
             if os.environ.get("AOE_ARENA_TRACE") and tick % (TICK_HZ * 60) == 0:
                 for r in host.reports:
                     eco = host.clients[r.slot].world.economy

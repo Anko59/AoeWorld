@@ -185,6 +185,7 @@ fn economy_rejections_remain_clear_in_the_existing_client() {
         (CommandResult::RejectedResourceUnavailable, "unavailable"),
         (CommandResult::RejectedWorldLimit, "world"),
         (CommandResult::RejectedOrderTooLarge, "too large"),
+        (CommandResult::RejectedUnexploredPlacement, "explore"),
     ] {
         assert!(order_message(result, None).contains(phrase));
     }

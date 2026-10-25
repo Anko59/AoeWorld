@@ -92,7 +92,10 @@ fn idle_ticks_report_only_the_early_phases() {
     w.spawn_unit(PlayerId(0), at(100, 100)).unwrap();
     let mut phases = Vec::new();
     w.advance_with_probe(&mut |_| true, &mut |phase| phases.push(phase));
-    assert_eq!(phases, [TickPhase::Movement, TickPhase::Wildlife]);
+    assert_eq!(
+        phases,
+        [TickPhase::Movement, TickPhase::Spacing, TickPhase::Wildlife]
+    );
 }
 
 #[test]
@@ -174,4 +177,44 @@ fn match_limits_grow_with_the_seats_and_the_ceiling() {
     assert_eq!(big.builders, 200 * 1_000);
     assert_eq!(big.hunters, 200 * 1_000);
     assert_eq!(big.animals, 200 * crate::ANIMALS_PER_PLAYER);
+}
+
+#[test]
+fn route_timing_observer_balances_polls_without_changing_replay() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    #[derive(Debug, Default)]
+    struct Probe(AtomicUsize, AtomicUsize);
+    impl crate::PlanningProbe for Probe {
+        fn begin(&self) {
+            self.0.fetch_add(1, Ordering::Relaxed);
+        }
+        fn end(&self) {
+            self.1.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    let probe = Arc::new(Probe::default());
+    let mut plain = busy_world();
+    let mut observed = busy_world();
+    plain
+        .place_town_center(PlayerId(0), TileCoord::new(20, 20))
+        .unwrap();
+    observed
+        .place_town_center(PlayerId(0), TileCoord::new(20, 20))
+        .unwrap();
+    observed.set_planning_probe(probe.clone());
+    let id = observed.units().next().unwrap().id;
+    plain.issue_move(id, at(130, 110)).unwrap();
+    observed.issue_move(id, at(130, 110)).unwrap();
+    for _ in 0..40 {
+        assert_eq!(plain.advance(), observed.advance());
+    }
+    assert_eq!(plain.canonical_hash(), observed.canonical_hash());
+    assert!(probe.0.load(Ordering::Relaxed) > 0);
+    assert_eq!(
+        probe.0.load(Ordering::Relaxed),
+        probe.1.load(Ordering::Relaxed)
+    );
 }

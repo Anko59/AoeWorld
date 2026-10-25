@@ -79,7 +79,7 @@ class Constructor:
         free = [
             v
             for v in ctx.villagers
-            if v.task != UnitTask.BUILDING
+            if v.task not in (UnitTask.BUILDING, UnitTask.FARMING)
             and v.id not in ctx.busy
             and v.id not in ctx.board.farmers.values()
         ]

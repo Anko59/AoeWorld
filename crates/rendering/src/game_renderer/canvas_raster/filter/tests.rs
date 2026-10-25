@@ -84,3 +84,54 @@ fn threshold_nonfinite_and_quadrants_keep_nearest_ieee_fallback() {
         [128, 128, 128, 255]
     );
 }
+
+#[wasm_bindgen_test]
+fn owner_masks_colour_canvas_taps_before_minification_without_tinting_native_blue() {
+    let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
+    atlas[..8].copy_from_slice(&[65, 145, 245, 255, 65, 145, 245, 255]);
+    let mask = 3 * crate::GAME_ATLAS_PAGE_BYTES;
+    atlas[mask..mask + 4].copy_from_slice(&[7, 255, 255, 0]);
+    for colour in crate::PLAYER_COLOURS {
+        let sprite = Sprite {
+            position: [0.0; 2],
+            radius: [1.0; 2],
+            color: [1.0; 4],
+            uv: [0.0, 0.0, 2.0 / 2048.0, 1.0 / 2048.0],
+            depths: [0.0; 4],
+            terrain_blend: [[0.0; 4]; 2],
+            pages: [0; 4],
+        }
+        .with_owner(crate::SceneUnitVisual::new(false).with_owner(
+            Some(colour),
+            false,
+            false,
+        ));
+        assert_eq!(
+            owner_sample(&atlas, sprite, 0.0, 0.0),
+            [colour[0], colour[1], colour[2], 255]
+        );
+        assert_eq!(owner_sample(&atlas, sprite, 1.0, 0.0), [65, 145, 245, 255]);
+        let averaged = sprite_sample(
+            &atlas,
+            sprite,
+            sprite.uv,
+            [1.0 / 2048.0, 0.5 / 2048.0],
+            &[
+                [-0.5 / 2048.0, 0.0],
+                [-0.5 / 2048.0, 0.0],
+                [0.5 / 2048.0, 0.0],
+                [0.5 / 2048.0, 0.0],
+            ],
+            [0; 4],
+        );
+        assert_eq!(
+            averaged,
+            [
+                ((u16::from(colour[0]) + 65).div_ceil(2)) as u8,
+                ((u16::from(colour[1]) + 145).div_ceil(2)) as u8,
+                ((u16::from(colour[2]) + 245).div_ceil(2)) as u8,
+                255
+            ]
+        );
+    }
+}

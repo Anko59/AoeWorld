@@ -12,10 +12,7 @@ pub(super) fn send(client: &mut Client, message: Message) {
     let sequence = client.next_sequence;
     client.next_sequence = sequence.saturating_add(1);
     if let Ok(bytes) = encode_gameplay_client(&message)
-        && client
-            .socket
-            .as_ref()
-            .is_some_and(|socket| socket.send_with_u8_array(&bytes).is_ok())
+        && crate::playground::game::network::send(client, &bytes)
     {
         client.order_feedback.record(sequence, None);
     }
@@ -73,6 +70,14 @@ pub(super) fn train_kind(client: &mut Client, kind: UnitKind) {
     let Some(building_id) = client.selected.building_id else {
         return;
     };
+    if !client
+        .village
+        .buildings
+        .iter()
+        .any(|b| b.id == building_id && b.player == owner(client))
+    {
+        return;
+    }
     let sequence = client.next_sequence;
     send(
         client,

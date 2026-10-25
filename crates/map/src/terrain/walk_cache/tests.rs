@@ -77,3 +77,50 @@ fn cache_is_bounded_and_cancellation_wins_over_a_hit() {
     assert!(cache.retained_bytes() <= super::WALK_CACHE_MAX_BYTES);
     assert!(cache.get((0, 0)).is_none(), "oldest chunk is evicted first");
 }
+
+#[test]
+fn navigation_spans_balance_and_warm_walk_hits_do_not_compose() {
+    use crate::{NavigationPhase, NavigationProbe, NavigationSpan};
+    use std::sync::{Arc, Mutex};
+    #[derive(Debug)]
+    struct Probe(Arc<Mutex<Vec<(NavigationPhase, bool)>>>);
+    struct Span(Arc<Mutex<Vec<(NavigationPhase, bool)>>>, NavigationPhase);
+    impl NavigationSpan for Span {}
+    impl Drop for Span {
+        fn drop(&mut self) {
+            self.0.lock().unwrap().push((self.1, false));
+        }
+    }
+    impl NavigationProbe for Probe {
+        fn begin(&self, phase: NavigationPhase) -> Box<dyn NavigationSpan> {
+            self.0.lock().unwrap().push((phase, true));
+            Box::new(Span(self.0.clone(), phase))
+        }
+    }
+    let generator = MapChunkGenerator::new([3; 32], 5, 128);
+    let events = Arc::new(Mutex::new(Vec::new()));
+    generator.set_navigation_probe(Arc::new(Probe(events.clone())));
+    let tile = TileCoord::new(40, 40);
+    let cold = generator.walk_at_with_cancel(tile, &|| false).unwrap();
+    assert_eq!(
+        *events.lock().unwrap(),
+        vec![
+            (NavigationPhase::Terrain, true),
+            (NavigationPhase::Terrain, false),
+            (NavigationPhase::WalkCache, true),
+            (NavigationPhase::WalkCache, false),
+        ]
+    );
+    events.lock().unwrap().clear();
+    assert_eq!(
+        generator.walk_at_with_cancel(tile, &|| false).unwrap(),
+        cold
+    );
+    assert!(events.lock().unwrap().is_empty());
+    assert!(
+        generator
+            .walk_at_with_cancel(TileCoord::new(80, 80), &|| true)
+            .is_err()
+    );
+    assert!(events.lock().unwrap().is_empty());
+}

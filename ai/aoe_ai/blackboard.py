@@ -36,6 +36,8 @@ class Blackboard:
     bad_resources: set[int] = field(default_factory=set)
     #: (kind name, x, y) sites the server refused.
     bad_sites: set[tuple[str, int, int]] = field(default_factory=set)
+    #: Building targets abandoned after a stalled land approach.
+    cleared: set[int] = field(default_factory=set)
     #: Unit kinds the server refused to train (cleared when the age changes).
     blocked_units: set[str] = field(default_factory=set)
     plans: list[Plan] = field(default_factory=list)
@@ -47,6 +49,17 @@ class Blackboard:
     scout_index: int = 0
     scout_radius: int = 0
     scout_stage: int = 0
+    #: The army's march: goal, nearest the army got to it, and since when.
+    march_goal: Optional[Tile] = None
+    march_best: float = 0.0
+    march_since: int = 0
+    #: soldier id -> tick of its last march order
+    marched: dict[int, int] = field(default_factory=dict)
+    #: villager id -> (resource node, tick) of its last gather order
+    gather_sent: dict[int, tuple[int, int]] = field(default_factory=dict)
+    #: scout id -> the waypoint it was last sent to
+    scout_sent: dict[int, int] = field(default_factory=dict)
+    scout_targets: dict[int, Tile] = field(default_factory=dict)
     home: Optional[Tile] = None
     #: Ticks at which a thing was last tried, to avoid hammering refusals.
     cooldowns: dict[str, int] = field(default_factory=dict)
@@ -59,6 +72,8 @@ class Blackboard:
     search_index: int = 0
     #: Destinations a move order was refused for.
     bad_moves: set[tuple[int, int]] = field(default_factory=set)
+    #: Failed public land queries are retried after a short bounded cooldown.
+    land_failures: dict[tuple[tuple[int, int], tuple[int, int]], int] = field(default_factory=dict)
     #: villager id -> tick of its last job, animal id -> hunt orders given.
     assigned: dict[int, int] = field(default_factory=dict)
     hunt_tries: dict[int, int] = field(default_factory=dict)
@@ -81,4 +96,8 @@ class Blackboard:
         return self.cooldowns.get(name, -1) > tick
 
     def cool(self, name: str, tick: int, ticks: int) -> None:
+        # Expired cooldowns are dropped, so the table is bounded by what is
+        # cooling now, not by the length of the game.
+        if len(self.cooldowns) >= 2048:
+            self.cooldowns = {k: v for k, v in self.cooldowns.items() if v > tick}
         self.cooldowns[name] = tick + ticks

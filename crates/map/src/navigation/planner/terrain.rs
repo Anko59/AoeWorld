@@ -6,6 +6,11 @@ use aoe_core::TileCoord;
 /// poll memoizes them), and a step's cost may depend only on its target tile
 /// and on whether the step is diagonal.
 pub trait RouteTerrain {
+    /// Static map guidance is optional for other movement domains.
+    fn route_generator(&self) -> Option<&MapChunkGenerator> {
+        None
+    }
+
     fn route_walkable(
         &self,
         overlay: &ResourceOverlay,
@@ -29,6 +34,10 @@ pub trait RouteTerrain {
 }
 
 impl RouteTerrain for MapChunkGenerator {
+    fn route_generator(&self) -> Option<&MapChunkGenerator> {
+        Some(self)
+    }
+
     fn route_walkable(
         &self,
         overlay: &ResourceOverlay,

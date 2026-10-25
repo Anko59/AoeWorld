@@ -14,6 +14,8 @@ use std::{
     sync::Arc,
 };
 
+mod land;
+
 /// Bound on remembered dying units (an event dedup set, not game state).
 const MAX_DYING_MEMORY: usize = 8_192;
 

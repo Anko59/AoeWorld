@@ -132,16 +132,34 @@ class Brain:
             mem.bad_resources.add(args[1])
         elif name == "build":
             kind, x, y = args[1], args[2], args[3]
-            mem.bad_sites.add((str(kind), x, y))
+            # Exploration can make this site legal later. Keep permanent
+            # refusals for blocked or unreachable ground only.
+            if result != CommandResult.REJECTED_UNEXPLORED_PLACEMENT:
+                mem.bad_sites.add((str(kind), x, y))
             mem.plans = [p for p in mem.plans if p.tile != (x, y)]
             for builder in args[0]:
                 mem.builders.pop(builder, None)
-        elif name == "move" and result == CommandResult.REJECTED_INVALID_DESTINATION:
+        elif name == "move" and result in (
+            CommandResult.REJECTED_INVALID_DESTINATION,
+            CommandResult.REJECTED_UNREACHABLE,
+        ):
+            if len(mem.bad_moves) >= 4096:
+                mem.bad_moves.clear()  # bounded: forget the oldest lessons at once
             mem.bad_moves.add((args[1], args[2]))
+            # An explicit refusal permits a different hop immediately.
+            mem.marched.pop(args[0], None)
         elif name == "hunt" and result in HOPELESS:
             mem.bad_resources.add(args[1])
+        elif name == "attack" and result in HOPELESS + (
+            CommandResult.REJECTED_INVALID_TARGET, CommandResult.REJECTED_PATH_BUDGET_EXCEEDED,
+        ):
+            mem.cool(f"attack:{args[0]}:{args[1]}", ctx.tick,
+                     ctx.config.attack_refusal_wait_seconds * ctx.world.tick_hz)
         elif name == "farm":
-            mem.farmers.pop(args[1], None)
+            if mem.farmers.get(args[1]) == args[0]:
+                mem.farmers.pop(args[1], None)
+            mem.cool(f"farm:{args[1]}", ctx.tick,
+                     ctx.config.farm_refusal_wait_seconds * ctx.world.tick_hz)
         elif name == "train" and result == CommandResult.REJECTED_REQUIRES_FEUDAL_AGE:
             mem.blocked_units.add(str(args[1]))
         elif name == "research":

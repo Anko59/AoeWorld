@@ -5,6 +5,13 @@
 //! sequential reference. Re-pinned for the review fixes: player-first budget
 //! sharing changes route timing, and resumable reverse frontiers/cursors are
 //! hashed. The same cases still compare complete 1/2/6-thread replays.
+//! Re-pinned for bounded idle separation: large crowds now rotate across ticks,
+//! changing spacing timing and emitted changes; cursors and both neighbour
+//! sampling slots are hashed. Followers no longer sample distant idle tiles.
+//! Ordered units leave the idle queue, so only idle units spend its budget.
+//! The combined scheduler offers near fast attempts before far work and
+//! reserves far fair work inside each player share, intentionally changing
+//! route timing and emitted changes. All thread-equality assertions stay.
 use super::*;
 use aoe_map::{MapPackage, MapRequest};
 
@@ -137,9 +144,9 @@ fn parallel_movement_matches_the_pinned_sequential_replay() {
     );
 }
 
-const PINNED_FINAL_HASH: &str = "df903c9aeb25056efaa7c2ed4aed3385e7fa11797c6056faacedeeaf31986d6b";
+const PINNED_FINAL_HASH: &str = "b78a638e982f4625e07d19c76c36cd1bac7294ff041ba75cb4c7c151dfc69758";
 const PINNED_CHANGE_DIGEST: &str =
-    "bda7b77ed4d674bfcb27ed3bd96d995b68aff0ab0f5e6d19dd485edcb6a20a0a";
+    "0660b5007570d68a7deea35d21c686112d73b3ef73f034ed61e552d7211e5534";
 
 #[test]
 fn parallel_movement_with_buildings_matches_the_pinned_sequential_replay() {
@@ -154,9 +161,9 @@ fn parallel_movement_with_buildings_matches_the_pinned_sequential_replay() {
 // Current player-first/resumable-proof replay, including emitted changes.
 // The tests above retain complete 1/2/6-thread equality checks.
 const PINNED_BUILDINGS_HASH: &str =
-    "4687dab12fd12ce97bcfe33c8dff0134c2cc0a557c65fa0f334d2682c23c2f56";
+    "d4c62a98a082f9221271c943bacafb1aac22348ee301710bfc0740927fd9c295";
 const PINNED_BUILDINGS_DIGEST: &str =
-    "fa9ed781a90d816c14618a2a8b9732c622c2a3c75c48142ea1ee5c5707d30fc6";
+    "9aa293ded8cb194e9e6b59bc177fee2ca8f2241facf3096f609ab7121e5ef7ba";
 
 fn waiting_fixture() -> (GameWorld, EntityId) {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");

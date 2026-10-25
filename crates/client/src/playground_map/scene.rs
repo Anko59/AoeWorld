@@ -46,9 +46,8 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
             kind: building_kind(building),
             id: building.id,
             position: super::super::village::building_center(building),
-            visual: aoe_rendering::SceneUnitVisual::new(false),
+            visual: aoe_rendering::SceneUnitVisual::new(false).with_selected(false),
             facing: 0,
-            selected: false,
             elevation_meters: 0.0,
         })
         .collect::<Vec<_>>();
@@ -83,6 +82,20 @@ pub(in super::super) fn replace_buildings(
 }
 
 impl PreparedScene {
+    pub(crate) fn resident_bytes(&self) -> usize {
+        self.bucket_keys.resident_bytes()
+            + self.terrain.capacity() * size_of::<SceneTerrain>()
+            + self.decorations.capacity() * size_of::<SceneDecoration>()
+            + self.triangles.capacity() * size_of::<ProjectedSurfaceTriangle>()
+            + self.foundations.capacity() * size_of::<(aoe_rendering::SceneUnitKind, [f64; 2])>()
+            + self.buckets.capacity() * size_of::<Vec<usize>>()
+            + self
+                .buckets
+                .iter()
+                .map(|b| b.capacity() * size_of::<usize>())
+                .sum::<usize>()
+    }
+
     pub(super) fn new(camera: Camera, terrain: Vec<SceneTerrain>) -> Self {
         let triangles = aoe_rendering::projected_surface_triangles(
             &terrain,
@@ -197,7 +210,6 @@ pub(in super::super) fn units(
     scene: &PreparedScene,
 ) -> Vec<aoe_rendering::SceneUnit> {
     let player = super::super::village::owner(client);
-    let colours = crate::unit_visuals::outline_palette(player, client.team_colour);
     let mut units = client
         .units
         .values()
@@ -251,9 +263,9 @@ pub(in super::super) fn units(
                 visual: aoe_rendering::SceneUnitVisual::new(
                     unit.moving || position != unit.position.as_tiles(),
                 )
-                .with_outline((unit.hp > 0).then_some(colours[usize::from(unit.player.0) % 8])),
+                .with_player(Some(unit.player), player, client.team_colour, unit.hp > 0)
+                .with_selected(unit.hp > 0 && client.selected.units.contains(&unit.id)),
                 facing,
-                selected: unit.hp > 0 && client.selected.units.contains(&unit.id),
                 elevation_meters: scene
                     .height(position)
                     .unwrap_or_else(|| elevation_at_world(client, position)),
@@ -272,12 +284,9 @@ pub(in super::super) fn units(
             kind: aoe_rendering::SceneUnitKind::actor(pose as u8),
             id: animal.id,
             position,
-            visual: aoe_rendering::SceneUnitVisual::new(animal.moving).with_outline(
-                animal
-                    .owner
-                    .filter(|_| animal.hp > 0)
-                    .map(|owner| colours[usize::from(owner.0) % 8]),
-            ),
+            visual: aoe_rendering::SceneUnitVisual::new(animal.moving)
+                .with_player(animal.owner, player, client.team_colour, animal.hp > 0)
+                .with_selected(client.selected.units.contains(&animal.id) && animal.hp > 0),
             facing: crate::unit_visuals::packed_frame(
                 pose,
                 animal.facing,
@@ -286,7 +295,6 @@ pub(in super::super) fn units(
                 client.village.tick.max(client.village.wildlife_tick),
                 client.config.tick_hz,
             ),
-            selected: client.selected.units.contains(&animal.id) && animal.hp > 0,
             elevation_meters: scene
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position)),
@@ -314,7 +322,9 @@ pub(in super::super) fn units(
             },
             id: building.id,
             position,
-            visual: aoe_rendering::SceneUnitVisual::new(false),
+            visual: aoe_rendering::SceneUnitVisual::new(false)
+                .with_player(Some(building.player), player, client.team_colour, false)
+                .with_selected(client.selected.building_id == Some(building.id)),
             facing: if building.progress_permille < 1000 {
                 (u32::from(building.progress_permille) * 3 / 1000) as u8
             } else if building.kind == aoe_protocol::BuildingKind::PalisadeWall {
@@ -324,7 +334,6 @@ pub(in super::super) fn units(
             } else {
                 0
             },
-            selected: client.selected.building_id == Some(building.id),
             elevation_meters: scene
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position)),
@@ -366,9 +375,8 @@ pub(in super::super) fn units(
             ) as u8),
             id: building.id,
             position,
-            visual: aoe_rendering::SceneUnitVisual::new(false),
+            visual: aoe_rendering::SceneUnitVisual::new(false).with_selected(false),
             facing: 0,
-            selected: false,
             elevation_meters: scene
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position)),

@@ -272,8 +272,20 @@ async fn the_stats_endpoint_needs_the_secret_and_records_ticks() {
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     let ticks = json["ticks"].as_array().unwrap();
     assert!(ticks.len() >= 3, "{body}");
-    // [tick, total_us, sim_us, late_us, orders, units, missed]
-    assert_eq!(ticks[0].as_array().unwrap().len(), 7);
+    // The current row includes an object of named phase microseconds after
+    // [tick, total_us, sim_us, late_us, orders, units, missed, planning_us].
+    assert_eq!(ticks[0].as_array().unwrap().len(), 9);
+    for phase in [
+        "orders",
+        "movement",
+        "spacing",
+        "terrain",
+        "pocket",
+        "route_cache",
+    ] {
+        assert!(ticks[0][8][phase].as_u64().is_some(), "{phase}: {body}");
+    }
+    assert!(ticks[0][7].as_u64().is_some());
     let next = json["next"].as_u64().unwrap();
     assert_eq!(next as usize, ticks.len());
     let (_, body) = get(Some(SECRET), "/match/stats?since=1000000").await;

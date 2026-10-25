@@ -1,9 +1,9 @@
 import { expect, type Page } from "@playwright/test";
-import { test } from "../../server.js";
+import { test as preferredTest } from "../../server.js";
 import { PNG } from "pngjs";
 import { gameAssets } from "../game-assets.js";
 import { activateSyntheticMap } from "../synthetic-map.js";
-import { forceCanvas, forceWebGl } from "./backends.js";
+import { fallbackTest, forceCanvas, forceWebGl } from "./backends.js";
 
 // World pixels only: no toolbar, minimap, status line or centre horse.
 const NEAR = { left: 150, top: 110, right: 450, bottom: 400 };
@@ -11,7 +11,7 @@ const NEAR = { left: 150, top: 110, right: 450, bottom: 400 };
 const FAR = { left: 480, top: 300, right: 620, bottom: 420 };
 type Region = typeof NEAR;
 
-test.beforeEach(async ({ request }) => {
+preferredTest.beforeEach(async ({ request }) => {
   expect((await request.post("/maps/reset")).status()).toBe(204);
 });
 
@@ -40,6 +40,7 @@ async function shot(page: Page): Promise<PNG> {
 }
 
 for (const backend of ["webgpu", "webgl2", "canvas2d"] as const) {
+  const test = backend === "webgpu" ? preferredTest : fallbackTest;
   test(`grid button shows a clear tile grid at every zoom on ${backend}`, async ({
     page,
   }, testInfo) => {

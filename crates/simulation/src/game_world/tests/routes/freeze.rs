@@ -40,11 +40,11 @@ fn unchanged_area() -> aoe_core::TileRect {
 
 #[test]
 fn a_refused_order_keeps_the_route_search_already_spent() {
-    let mut world = sealed_ring_world(256, 200, 200);
+    let mut world = sealed_ring_world(512, 250, 250);
     let id = world
-        .spawn_unit(PlayerId(1), beside_ring(200, 200, 0))
+        .spawn_unit(PlayerId(1), beside_ring(250, 250, 0))
         .expect("unit");
-    send_into_ring(&mut world, id, 200, 200);
+    send_into_ring(&mut world, id, 250, 250);
     // One tick: a near hopeless search gives up after 32,768 work.
     world.advance();
     let work = world.units[world.lookup[&id]]
@@ -216,7 +216,7 @@ fn collision_changes_elsewhere_keep_route_searches() {
         Some(before),
         "a far building keeps the search"
     );
-    let searched = aoe_core::TileRect::new(TileCoord::new(500, 480), TileCoord::new(501, 481));
+    let searched = aoe_core::TileRect::new(TileCoord::new(500, 429), TileCoord::new(501, 430));
     assert!(
         world.units[world.lookup[&id]]
             .planner

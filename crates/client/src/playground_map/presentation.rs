@@ -22,6 +22,17 @@ pub(crate) struct Presentation {
 }
 
 impl Presentation {
+    pub(crate) fn resident_bytes(&self) -> usize {
+        self.history
+            .values()
+            .map(|h| {
+                std::mem::size_of::<aoe_core::EntityId>()
+                    + std::mem::size_of_val(h)
+                    + h.capacity() * std::mem::size_of::<Sample>()
+            })
+            .sum()
+    }
+
     pub(crate) fn reset(&mut self, tick_hz: u32) {
         *self = Self {
             tick_hz: f64::from(tick_hz.clamp(1, 60)),

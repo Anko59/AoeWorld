@@ -202,6 +202,8 @@ pub(super) fn build(
     })
 }
 
+#[path = "fanout/subscription.rs"]
+pub(super) mod subscription;
 #[path = "fanout/tests.rs"]
 #[cfg(test)]
 mod tests;

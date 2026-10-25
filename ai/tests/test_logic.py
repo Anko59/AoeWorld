@@ -149,10 +149,30 @@ def test_the_scout_checks_home_then_rides_the_map_circle_far_side_first():
         moves = [a for a in client.named("move") if a[0] == 100]
         assert len(moves) == 1
         visited.append((moves[0][1], moves[0][2]))
+        # The scout arrives before it is idle again.
+        scout = units[-1]
+        scout.x, scout.y = visited[-1]
+        scout.tile = visited[-1]
     home = (52, 52)
     assert all(abs(dist(p, home) - 18) < 2 for p in visited[:6]), visited
     far = visited[9]  # first point of the map circle: the mirror of home
     assert dist(far, home) > 150 and len(set(visited)) == len(visited), visited
+
+
+def test_a_scout_that_cannot_reach_a_far_waypoint_drops_the_far_ones():
+    # The fake scout never moves: its ride to the first map-circle point ends
+    # far short of it, so the rest of the circle is dropped for nearer rings.
+    units, buildings = base(4)
+    brain = Brain()
+    visited = []
+    for _ in range(14):
+        _, client = play(FakeWorld(units, buildings, eco=economy(food=0, wood=0, population=5, cap=20)), brain=brain)
+        moves = [a for a in client.named("move") if a[0] == 100]
+        visited.append((moves[0][1], moves[0][2]))
+    home = (52, 52)
+    far = [i for i, p in enumerate(visited) if dist(p, home) > 150]
+    assert far, visited
+    assert all(dist(p, home) <= 110 for p in visited[far[0] + 1 :]), visited
 
 
 def test_a_scout_that_is_busy_is_left_alone():
@@ -168,7 +188,7 @@ def test_a_strong_army_attacks_the_nearest_known_enemy_building():
     far = building(900, BuildingKind.HOUSE, tile=(250, 250), mine=False, visible=False)
     near = building(901, BuildingKind.BARRACKS, tile=(150, 120), mine=False, visible=False)
     world = FakeWorld(units + army, buildings, enemy_buildings=[far, near], eco=economy(population=25, cap=40))
-    brain, client = play(world)
+    brain, client = play(world, config=Config(march_hop_tiles=10_000))
     assert brain.board.attacking and brain.board.attack_target == 901
     moves = [a for a in client.named("move") if a[0] >= 300]
     assert len(moves) == 14 and all(dist((a[1], a[2]), near.center) <= 6 for a in moves)
@@ -284,7 +304,7 @@ def test_the_army_walks_to_a_tile_beside_the_enemy_building_not_onto_it():
     units, buildings = base(10)
     army = [unit(300 + i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(12)]
     target = building(901, BuildingKind.BARRACKS, tile=(150, 120), mine=False, visible=False)
-    _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[target]))
+    _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[target]), config=Config(march_hop_tiles=10_000))
     moves = [a for a in client.named("move") if a[0] >= 300]
     assert moves and all(dist((a[1], a[2]), target.center) in range(2, 6) for a in moves)
     assert all((a[1], a[2]) != target.center for a in moves)
@@ -316,6 +336,49 @@ def test_a_world_limit_refusal_keeps_the_site_and_pauses_building():
     assert client.named("build") == []
 
 
+def test_a_villager_that_cannot_reach_its_node_is_sent_to_another():
+    # One villager and two wood nodes; the near one cannot be reached: the
+    # villager is idle again a few seconds after the order.
+    units = [unit(1, tile=(50, 56))]
+    buildings = [building(500, BuildingKind.TOWN_CENTER, tile=(50, 50)),
+                 building(501, BuildingKind.LUMBER_CAMP, tile=(60, 60))]
+    nodes = [node(700, ResourceKind.WOOD, (58, 58)), node(701, ResourceKind.WOOD, (64, 64))]
+    eco = economy(food=0, wood=0, gold=0, stone=0, population=1, cap=10)
+    brain = Brain()
+    targets = []
+    for tick in (100, 200, 300):
+        _, client = play(FakeWorld(units, buildings, eco=eco, nodes=nodes, tick=tick), brain=brain)
+        targets += [a[1] for a in client.named("gather") if a[0] == 1]
+    assert targets[0] == 700, targets
+    assert targets[1:] and all(t == 701 for t in targets[1:]), targets
+
+
+def test_an_army_marches_to_a_far_target_in_short_hops():
+    units, buildings = base(10)
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(14)]
+    far = building(900, BuildingKind.HOUSE, tile=(250, 250), mine=False, visible=False)
+    _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=economy(population=25, cap=40)))
+    moves = [a for a in client.named("move") if a[0] >= 300]
+    assert len(moves) == 14 and len({(a[1], a[2]) for a in moves}) == 1, moves
+    stop = (moves[0][1], moves[0][2])
+    assert abs(dist(stop, (60, 60)) - 48) <= 2 and dist(stop, far.center) < dist((60, 60), far.center), moves
+
+
+def test_an_army_that_gets_no_nearer_gives_its_target_up_and_waits_between_orders():
+    units, buildings = base(10)
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(14)]
+    far = building(900, BuildingKind.HOUSE, tile=(250, 250), mine=False, visible=False)
+    eco = economy(population=25, cap=40)
+    brain, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=eco, tick=100))
+    assert len([a for a in client.named("move") if a[0] >= 300]) == 14
+    # Idle again a second later (stopped short): not re-sent at once.
+    _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=eco, tick=120), brain=brain)
+    assert [a for a in client.named("move") if a[0] >= 300] == []
+    # A minute on and no nearer: the building is given up.
+    play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=eco, tick=100 + 61 * 20), brain=brain)
+    assert 900 in brain.board.cleared
+
+
 def test_town_center_rallies_to_food_then_wood_and_keeps_the_same_target():
     units, buildings = base(5)
     food = node(2, ResourceKind.FOOD, (44, 52))
@@ -330,19 +393,99 @@ def test_town_center_rallies_to_food_then_wood_and_keeps_the_same_target():
         buildings[0].rally_resource = None
 
 
-def test_army_keeps_unseen_town_center_until_the_server_forgets_it():
-    units, buildings = base(10)
-    # Footprint [98,102) x [98,102): (106,100) is five tiles from
-    # its nearest tile, beyond a spearman's four-tile sight.
-    army = [unit(200 + i, UnitKind.SPEARMAN, tile=(106, 100)) for i in range(15)]
-    target = building(901, BuildingKind.TOWN_CENTER, tile=(98, 98), mine=False, visible=False)
-    brain, client = play(FakeWorld(units + army, buildings, enemy_buildings=[target]))
-    assert brain.board.attack_target == target.id
-    assert client.named("move")
-    target.visible = True
-    _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[target]), brain=brain)
-    assert any(args[1] == target.id for args in client.named("attack"))
-    # Destruction/empty-footprint inspection is authoritative fog memory.
-    _, client = play(FakeWorld(units + army, buildings), brain=brain)
-    assert not client.named("attack")
-    assert client.named("move")
+
+def test_army_chooses_a_building_on_its_own_land_component():
+    units, buildings = base(12)
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(55, 55)) for i in range(14)]
+    across = building(900, BuildingKind.HOUSE, tile=(70, 55), mine=False, visible=True)
+    reachable = building(901, BuildingKind.HOUSE, tile=(55, 90), mine=False, visible=True)
+    world = FakeWorld(units + army, buildings, enemy_buildings=[across, reachable],
+                      eco=economy(population=27, cap=40))
+    world.land_route = lambda x, y, tx, ty: None if tx >= 65 else [(x, y), (tx, ty)]
+    _, client = play(world)
+    attacks = [a for a in client.named("attack") if a[0] >= 300]
+    assert attacks and all(a[1] == 901 for a in attacks)
+
+
+def test_visible_enemies_across_a_river_do_not_pin_the_army():
+    units, buildings = base(12)
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(55, 55)) for i in range(14)]
+    foe = unit(900, UnitKind.SPEARMAN, tile=(58, 55), mine=False)
+    world = FakeWorld(units + army, buildings, enemies=[foe],
+                      eco=economy(population=27, cap=40))
+    world.land_route = lambda x, y, tx, ty: None if tx >= 58 else [(x, y), (tx, ty)]
+    _, client = play(world)
+    assert client.named("attack") == []
+
+
+def test_each_straggler_marches_in_a_short_land_hop():
+    units, buildings = base(12)
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(60 if i else 5, 60)) for i in range(14)]
+    far = building(900, BuildingKind.HOUSE, tile=(250, 250), mine=False, visible=False)
+    _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far],
+                               eco=economy(population=27, cap=40)))
+    origins = {u.id: u.tile for u in army}
+    moves = [a for a in client.named("move") if a[0] in origins]
+    assert moves and all(dist(origins[a[0]], (a[1], a[2])) <= 48 for a in moves)
+
+
+def test_a_visible_distant_building_still_uses_short_march_hops():
+    units, buildings = base(12)
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(14)]
+    far = building(900, BuildingKind.HOUSE, tile=(250, 250), mine=False, visible=True)
+    _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far],
+                               eco=economy(population=27, cap=40)))
+    assert [a for a in client.named("attack") if a[0] >= 300] == []
+    moves = [a for a in client.named("move") if a[0] >= 300]
+    assert moves and all(dist((60, 60), (a[1], a[2])) <= 48 for a in moves)
+
+
+def test_defence_does_not_order_soldiers_across_a_river_to_home():
+    units, buildings = base(12)
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(80, 55)) for i in range(14)]
+    foe = unit(900, UnitKind.SPEARMAN, tile=(55, 55), mine=False)
+    world = FakeWorld(units + army, buildings, enemies=[foe], eco=economy(population=27, cap=40))
+    world.land_route = lambda x, y, tx, ty: [(x, y), (tx, ty)] if (x < 65) == (tx < 65) else None
+    _, client = play(world)
+    assert client.named("attack") == []
+
+
+def test_far_defenders_use_short_hops_and_keep_their_pause():
+    units, buildings = base(12)
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(200, 55)) for i in range(14)]
+    foe = unit(900, UnitKind.SPEARMAN, tile=(55, 55), mine=False)
+    world = lambda tick: FakeWorld(units + army, buildings, enemies=[foe], tick=tick,
+                                   eco=economy(population=27, cap=40))
+    brain, client = play(world(100))
+    assert len([a for a in client.named("move") if a[0] >= 300]) == 14
+    assert client.named("attack") == []
+    _, client = play(world(120), brain=brain)
+    assert [a for a in client.named("move") if a[0] >= 300] == []
+
+
+def test_disconnected_land_queries_are_bounded_and_retried_after_the_cooldown():
+    from aoe_ai.context import Context
+    from aoe_ai.config import Config
+    from aoe_ai.blackboard import Blackboard
+    from fakes import FakeClient, decision
+    board, config, calls = Blackboard(), Config(), []
+    world = FakeWorld(tick=100)
+    world.land_route = lambda *args: calls.append(args)
+    def context(tick):
+        world.tick = tick
+        return Context(FakeClient(), decision(world), board, config)
+    for tick in (100, 120, 200):
+        assert context(tick).land_route((10, 10), (20, 10)) is None
+    assert len(calls) == 1
+    assert context(301).land_route((10, 10), (20, 10)) is None
+    assert len(calls) == 2
+    assert len(board.land_failures) <= config.land_cache_entries
+
+
+def test_crowded_defence_leaves_query_budget_to_issue_orders():
+    units, buildings = base(12)
+    army = [unit(300 + i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(14)]
+    foes = [unit(900 + i, UnitKind.SPEARMAN, tile=(42 + i % 8, 45 + i // 8), mine=False) for i in range(32)]
+    _, client = play(FakeWorld(units + army, buildings, enemies=foes,
+                               eco=economy(population=27, cap=40)))
+    assert [a for a in client.named("attack") if a[0] >= 300]

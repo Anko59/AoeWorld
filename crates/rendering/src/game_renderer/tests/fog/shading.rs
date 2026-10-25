@@ -38,9 +38,8 @@ fn resource_and_unit_identity_collision_cannot_change_their_fog_shading() {
         kind: SceneUnitKind::Scout,
         id: aoe_core::EntityId(7),
         position: [5.5, 0.5],
-        visual: crate::SceneUnitVisual::new(false),
+        visual: crate::SceneUnitVisual::new(false).with_selected(false),
         facing: 0,
-        selected: false,
         elevation_meters: 0.0,
     };
     let mut layers = [

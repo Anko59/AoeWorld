@@ -26,8 +26,16 @@ centre is water. A bounded terrain wait reports an error with a route back to se
 
 The eight player colours are saved in session storage and passed to the game
 as `#playground data-player-colour` and the `--player-colour` CSS property.
-The own-unit and building minimap markers adopt that colour. Imported original
-unit and building sprite masks currently use blue.
+Units, buildings, hidden-unit contours and minimap markers use their owner's
+colour on WebGPU, WebGL2 and Canvas. Players 1–8 use blue, red, green, yellow,
+cyan, purple, grey and orange. Choosing a banner swaps that palette slot with
+the human's slot. Beyond eight, the palette cycles with alternating darker
+(9% per step) and lighter (7% per step) shades, repeating after 104 players;
+the supported 100-player match has 100 distinct RGB colours. Recolouring uses
+the imported player masks, preserving unmasked artwork and shadows.
+Selecting a foreign actor shows its player number and hides commands. Hostile
+selections have red rings; units grant vision and accept orders only for their
+owner.
 
 Artwork provenance is in `web/art/README.md`. The bundled Cinzel display font
 is from Google Fonts, under `FONT-LICENSE.txt`; screens need no external font

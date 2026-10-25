@@ -67,6 +67,18 @@ class FakeWorld:
         self._enemy_buildings = list(enemy_buildings)
         self.sites: list[tuple] = []
 
+    def land_route(self, x, y, tx, ty):
+        path = [(x, y)]
+        while (x, y) != (tx, ty):
+            x += (tx > x) - (tx < x)
+            y += (ty > y) - (ty < y)
+            path.append((x, y))
+        return path
+
+    def land_frontier(self, x, y, tx, ty):
+        path = self.land_route(x, y, tx, ty)
+        return path[-1] if path else None
+
     def my_units(self, kind=None):
         return [u for u in self._units if kind is None or u.kind == kind]
 

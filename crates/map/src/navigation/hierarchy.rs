@@ -1,22 +1,30 @@
 //! Hierarchical route search over 32 x 32 chunks (HPA*). Entrances are pairs
 //! of open tiles across a chunk border (one portal per open run); intra-chunk
-//! costs between a chunk's portals are computed lazily and cached with the
-//! portal list. A route is planned over portals first; the caller refines each
-//! hop locally with the exact tile planner. The graph is built from static
-//! terrain and static resource nodes only (never the dynamic overlay), so a
-//! result depends on the inputs alone, never on cache state. The search is
+//! costs and exact local land components are cached per chunk state.
+//! Match preparation only captures collision; terrain, components and costs
+//! are built lazily in the chunks visited by connectivity and route queries. A route
+//! is planned over portals first; the caller refines each
+//! hop locally with the exact tile planner. Spatial overlay fingerprints
+//! update affected chunks after building, wall and depletion changes. Results
+//! depend on inputs alone, never on cache state. The search is
 //! bounded by an abstract-node cap and is deterministic: ties break on tile
 //! coordinates.
 use super::{DIAGONAL_COST, ORTHOGONAL_COST, heuristic};
-use crate::{CHUNK_TILES, EdgePassability, EnvironmentPageError, MapChunkGenerator};
+use crate::{CHUNK_TILES, EnvironmentPageError, MapChunkGenerator, ResourceOverlay, WalkCell};
 use aoe_core::TileCoord;
+use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::sync::{Arc, OnceLock};
+mod grid;
+mod prepared;
+pub(crate) use prepared::{Resolution, ResolutionOutcome};
 
 /// Upper bound for the retained portal lists and cost matrices of one
 /// generator, the same budget as the walk cache.
 pub(crate) const PORTAL_CACHE_MAX_BYTES: usize = 64 << 20;
+/// Bounded nearest-destination memo entries per collision snapshot.
+const MAX_CACHED_CHUNKS: usize = 262_144;
 /// Default abstract-node expansion bound of one search.
 pub const DEFAULT_HIERARCHY_EXPANSIONS: u32 = 8_192;
 /// Weighted A*: the portal lattice makes an exact search fan out over a wide
@@ -26,70 +34,8 @@ pub const DEFAULT_HIERARCHY_EXPANSIONS: u32 = 8_192;
 const HEURISTIC_WEIGHT: u64 = 2;
 type Key = (i32, i32);
 
-/// Chunk portal lists keyed by chunk, bounded by bytes with least-recently-used
-/// eviction. A cost matrix is computed lazily after insertion, so an entry is
-/// charged for its full `portals x portals` matrix up front.
-#[derive(Debug)]
-pub(crate) struct PortalCache {
-    chunks: HashMap<Key, (Arc<ChunkPortals>, u64)>,
-    bytes: usize,
-    clock: u64,
-    limit: usize,
-}
-
-impl Default for PortalCache {
-    fn default() -> Self {
-        Self::with_limit(PORTAL_CACHE_MAX_BYTES)
-    }
-}
-
-impl PortalCache {
-    pub(crate) fn with_limit(limit: usize) -> Self {
-        Self {
-            chunks: HashMap::new(),
-            bytes: 0,
-            clock: 0,
-            limit,
-        }
-    }
-
-    fn chunk(&mut self, key: Key) -> Option<Arc<ChunkPortals>> {
-        self.clock += 1;
-        let clock = self.clock;
-        self.chunks.get_mut(&key).map(|(found, stamp)| {
-            *stamp = clock;
-            Arc::clone(found)
-        })
-    }
-
-    pub(crate) fn insert(&mut self, key: Key, portals: Arc<ChunkPortals>) {
-        self.clock += 1;
-        self.bytes += portals.bytes();
-        if let Some((old, _)) = self.chunks.insert(key, (portals, self.clock)) {
-            self.bytes -= old.bytes();
-        }
-        if self.bytes > self.limit {
-            let mut stamps: Vec<_> = self.chunks.iter().map(|(k, (_, s))| (*s, *k)).collect();
-            stamps.sort_unstable();
-            for (_, key) in stamps {
-                if self.bytes <= self.limit / 10 * 9 {
-                    break;
-                }
-                if let Some((old, _)) = self.chunks.remove(&key) {
-                    self.bytes -= old.bytes();
-                }
-            }
-        }
-    }
-
-    pub(crate) fn retained_bytes(&self) -> usize {
-        self.bytes
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        self.chunks.len()
-    }
-}
+mod cache;
+pub(crate) use cache::PortalCache;
 
 /// An entrance seen from one chunk: `tile` is inside it, `cross` is the open
 /// tile on the other side of the border.
@@ -97,13 +43,18 @@ impl PortalCache {
 struct Portal {
     tile: TileCoord,
     cross: TileCoord,
+    crossing_cost: u32,
+    bidirectional: bool,
 }
 
 #[derive(Debug)]
 pub(crate) struct ChunkPortals {
     portals: Vec<Portal>,
-    /// Row-major `portals x portals` costs, computed on first use.
-    costs: OnceLock<Vec<Option<u32>>>,
+    /// Filled on the first route through this chunk, after connectivity queries.
+    costs: OnceLock<Vec<Vec<Option<u32>>>>,
+    labels: grid::Labels,
+    components: u16,
+    links: Vec<(u16, u16)>,
 }
 
 impl ChunkPortals {
@@ -112,6 +63,9 @@ impl ChunkPortals {
         std::mem::size_of::<Self>()
             + count * std::mem::size_of::<Portal>()
             + count * count * std::mem::size_of::<Option<u32>>()
+            + self.labels.bytes()
+            + self.links.capacity() * std::mem::size_of::<(u16, u16)>()
+            + count * std::mem::size_of::<Vec<Option<u32>>>()
             + 64
     }
 }
@@ -199,80 +153,122 @@ pub(super) fn entrance_runs(open: &[bool], linked: &[bool]) -> Vec<(i32, i32)> {
     runs
 }
 
-struct Ground<'a>(&'a MapChunkGenerator);
+struct Ground<'a> {
+    generator: &'a MapChunkGenerator,
+    cancelled: &'a dyn Fn() -> bool,
+    overlay: &'a ResourceOverlay,
+    walk: RefCell<HashMap<TileCoord, Option<WalkCell>>>,
+    atlas: Option<Arc<prepared::Atlas>>,
+}
+
+impl<'a> Ground<'a> {
+    fn new(
+        generator: &'a MapChunkGenerator,
+        overlay: &'a ResourceOverlay,
+        cancelled: &'a dyn Fn() -> bool,
+    ) -> Self {
+        Self {
+            generator,
+            cancelled,
+            overlay,
+            walk: RefCell::default(),
+            atlas: None,
+        }
+    }
+}
 
 impl Ground<'_> {
-    /// Ground that can ever be walked. A resource node does not close its
-    /// tile here: a depleted node opens it, the static graph cannot know which
-    /// nodes are depleted, and `Unreachable` must stay a proof, so it is
-    /// optimistic. The exact tile planner still honours the overlay.
-    fn open(&self, tile: TileCoord) -> Result<Option<(bool, bool)>> {
-        Ok(self
-            .0
-            .walk_at_with_cancel(tile, &|| false)?
-            .map(|cell| (cell.passable, cell.mud)))
+    fn open(&self, tile: TileCoord) -> Result<Option<WalkCell>> {
+        if let Some(value) = self.walk.borrow().get(&tile) {
+            return Ok(*value);
+        }
+        let value = self.generator.walk_at_with_cancel(tile, self.cancelled)?;
+        self.walk.borrow_mut().insert(tile, value);
+        Ok(value)
     }
 
     fn is_open(&self, tile: TileCoord) -> Result<bool> {
-        Ok(self.open(tile)?.is_some_and(|(open, _)| open))
+        Ok(self.open(tile)?.is_some_and(|cell| {
+            cell.passable
+                && !self.overlay.blocks_tile(tile)
+                && cell.node.is_none_or(|node| !self.overlay.blocks_node(node))
+        }))
     }
 
     fn edge(&self, from: TileCoord, to: TileCoord) -> Result<bool> {
-        Ok(matches!(
-            self.0.edge_between_with_cancel(from, to, &|| false)?,
-            EdgePassability::Passable
-        ))
+        let (Some(a), Some(b)) = (self.open(from)?, self.open(to)?) else {
+            return Ok(false);
+        };
+        Ok(a.passable
+            && b.passable
+            && a.walkable_surface
+            && b.walkable_surface
+            && (i32::from(a.game_height_level) - i32::from(b.game_height_level)).abs() <= 1)
     }
 
-    /// The exact tile planner's step rule, on static ground.
-    fn step(&self, from: TileCoord, to: TileCoord) -> Result<Option<u32>> {
-        let Some((open, mud)) = self.open(to)? else {
-            return Ok(None);
-        };
-        if !open || !self.edge(from, to)? {
+    fn diagonal_transition(&self, from: TileCoord, to: TileCoord) -> Result<Option<u32>> {
+        if !self.is_open(from)? || !self.is_open(to)? || !self.edge(from, to)? {
             return Ok(None);
         }
-        if from.x != to.x && from.y != to.y {
-            for corner in [TileCoord::new(to.x, from.y), TileCoord::new(from.x, to.y)] {
-                if !self.is_open(corner)? || !self.edge(from, corner)? {
-                    return Ok(None);
-                }
+        let corners = [TileCoord::new(to.x, from.y), TileCoord::new(from.x, to.y)];
+        for corner in corners {
+            if !self.is_open(corner)? || !self.edge(from, corner)? {
+                return Ok(None);
             }
         }
-        Ok(Some(step_cost(from, to, mud)))
+        for corner in corners {
+            if self.edge(corner, to)? {
+                return Ok(None);
+            }
+        }
+        Ok(Some(step_cost(
+            from,
+            to,
+            self.open(to)?.is_some_and(|cell| cell.mud),
+        )))
     }
 
     /// Dijkstra confined to one chunk from `source`; cost to every reached tile.
     fn local_costs(&self, key: Key, source: TileCoord) -> Result<BTreeMap<TileCoord, u32>> {
-        let mut best = BTreeMap::from([(source, 0_u32)]);
-        let mut heap = BinaryHeap::from([Reverse((0_u32, source.y, source.x))]);
-        while let Some(Reverse((cost, y, x))) = heap.pop() {
-            let tile = TileCoord::new(x, y);
-            if best.get(&tile) != Some(&cost) {
-                continue;
-            }
-            for dy in -1..=1 {
-                for dx in -1..=1 {
-                    let next = TileCoord::new(x + dx, y + dy);
-                    if (dx == 0 && dy == 0) || !inside(key, next) {
-                        continue;
-                    }
-                    let Some(step) = self.step(tile, next)? else {
-                        continue;
-                    };
-                    let total = cost + step;
-                    if best.get(&next).is_none_or(|known| *known > total) {
-                        best.insert(next, total);
-                        heap.push(Reverse((total, next.y, next.x)));
-                    }
-                }
-            }
-        }
-        Ok(best)
+        let costs = grid::Grid::new(self, key)?.costs(source, self.cancelled)?;
+        Ok(costs
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(_, cost)| *cost != u32::MAX)
+            .map(|(at, cost)| (grid::tile(key, at), cost))
+            .collect())
+    }
+
+    fn goal_costs(&self, key: Key, source: TileCoord) -> Result<BTreeMap<TileCoord, u32>> {
+        let costs = grid::Grid::new(self, key)?.costs_to(source, self.cancelled)?;
+        Ok(costs
+            .iter()
+            .copied()
+            .enumerate()
+            .filter(|(_, cost)| *cost != u32::MAX)
+            .map(|(at, cost)| (grid::tile(key, at), cost))
+            .collect())
     }
 
     fn build_portals(&self, key: Key) -> Result<ChunkPortals> {
+        let _span = self
+            .generator
+            .measure_navigation(crate::NavigationPhase::Portals);
         let origin = TileCoord::new(key.0 * CHUNK_TILES, key.1 * CHUNK_TILES);
+        if self.generator.open_water_certain_near(
+            TileCoord::new(origin.x + CHUNK_TILES / 2, origin.y + CHUNK_TILES / 2),
+            CHUNK_TILES / 2,
+            self.cancelled,
+        )? {
+            return Ok(ChunkPortals {
+                portals: Vec::new(),
+                costs: OnceLock::new(),
+                labels: grid::Labels::Empty,
+                components: 0,
+                links: Vec::new(),
+            });
+        }
         let mut portals = Vec::new();
         for side in 0..4 {
             let border = |i| border_pair(side, origin, i);
@@ -288,42 +284,134 @@ impl Ground<'_> {
             }
             for (start, end) in entrance_runs(&open, &linked) {
                 let (tile, cross) = border((start + end - 1) / 2);
-                portals.push(Portal { tile, cross });
+                portals.push(Portal {
+                    tile,
+                    cross,
+                    crossing_cost: step_cost(
+                        tile,
+                        cross,
+                        self.open(cross)?.is_some_and(|cell| cell.mud),
+                    ),
+                    bidirectional: true,
+                });
             }
         }
+        let grid = grid::Grid::new(self, key)?;
+        // Only diagonal border transitions that have no two-cardinal-step
+        // equivalent need extra portals. Most chunks have none.
+        for at in 0..grid::CELLS {
+            let from = grid::tile(key, at);
+            if from.x != origin.x
+                && from.x != origin.x + CHUNK_TILES - 1
+                && from.y != origin.y
+                && from.y != origin.y + CHUNK_TILES - 1
+            {
+                continue;
+            }
+            if !self.is_open(from)? {
+                continue;
+            }
+            for (dx, dy) in [(-1, -1), (-1, 1), (1, -1), (1, 1)] {
+                let to = TileCoord::new(from.x + dx, from.y + dy);
+                if inside(key, to) {
+                    continue;
+                }
+                // On a uniform-height chunk a side crossing always has a
+                // cardinal equivalent through its local corner. Corner-to-
+                // corner chunk crossings still need their exact check.
+                if grid.uniform_height && (chunk_of(to).0 == key.0 || chunk_of(to).1 == key.1) {
+                    continue;
+                }
+                if let Some(cost) = self.diagonal_transition(from, to)? {
+                    portals.push(Portal {
+                        tile: from,
+                        cross: to,
+                        crossing_cost: cost,
+                        bidirectional: false,
+                    });
+                }
+                if self.diagonal_transition(to, from)?.is_some() {
+                    portals.push(Portal {
+                        tile: from,
+                        cross: to,
+                        crossing_cost: 0,
+                        bidirectional: false,
+                    });
+                }
+            }
+        }
+        let (labels, components, links) = grid.components();
         Ok(ChunkPortals {
-            portals,
             costs: OnceLock::new(),
+            portals,
+            labels,
+            components,
+            links,
         })
     }
 
     fn portals(&self, key: Key) -> Result<Arc<ChunkPortals>> {
-        if let Ok(mut cache) = self.0.portal_cache().lock()
-            && let Some(found) = cache.chunk(key)
+        if let Some(atlas) = &self.atlas {
+            return atlas.chunk(self.generator, key, self.cancelled);
+        }
+        let stamp = self.overlay.navigation_key(key);
+        if let Ok(mut cache) = self.generator.portal_cache().lock()
+            && let Some(found) = cache.chunk(key, stamp)
         {
             return Ok(found);
         }
         let built = Arc::new(self.build_portals(key)?);
-        if let Ok(mut cache) = self.0.portal_cache().lock() {
-            cache.insert(key, Arc::clone(&built));
+        if let Ok(mut cache) = self.generator.portal_cache().lock() {
+            cache.insert(key, stamp, Arc::clone(&built));
         }
         Ok(built)
     }
 
-    fn intra<'a>(&self, key: Key, chunk: &'a ChunkPortals) -> Result<&'a [Option<u32>]> {
+    fn row<'a>(
+        &self,
+        key: Key,
+        chunk: &'a ChunkPortals,
+        source: TileCoord,
+    ) -> Result<&'a [Option<u32>]> {
+        let Some(from) = chunk
+            .portals
+            .iter()
+            .position(|portal| portal.tile == source)
+        else {
+            return Ok(&[]);
+        };
         if chunk.costs.get().is_none() {
-            let count = chunk.portals.len();
-            let mut matrix = vec![None; count * count];
-            for (from, portal) in chunk.portals.iter().enumerate() {
-                let reached = self.local_costs(key, portal.tile)?;
-                for (to, other) in chunk.portals.iter().enumerate() {
-                    matrix[from * count + to] = reached.get(&other.tile).copied();
-                }
+            let _span = self
+                .generator
+                .measure_navigation(crate::NavigationPhase::PortalCosts);
+            let overlay = self
+                .atlas
+                .as_ref()
+                .map_or(self.overlay, |atlas| atlas.overlay());
+            let ground = Ground::new(self.generator, overlay, self.cancelled);
+            let grid = grid::Grid::new(&ground, key)?;
+            let mut costs = Vec::with_capacity(chunk.portals.len());
+            for source in &chunk.portals {
+                let reached = grid.costs(source.tile, self.cancelled)?;
+                costs.push(
+                    chunk
+                        .portals
+                        .iter()
+                        .map(|portal| {
+                            let cost = reached[grid::index(portal.tile)];
+                            (cost != u32::MAX).then_some(cost)
+                        })
+                        .collect(),
+                );
             }
-            let _ = chunk.costs.set(matrix);
+            let _ = chunk.costs.set(costs);
         }
-        // SAFETY of unwrap: set above or by another thread.
-        Ok(chunk.costs.get().map_or(&[][..], Vec::as_slice))
+        chunk
+            .costs
+            .get()
+            .and_then(|costs| costs.get(from))
+            .map(Vec::as_slice)
+            .ok_or(EnvironmentPageError::Unavailable)
     }
 }
 
@@ -341,111 +429,16 @@ pub fn hierarchical_route(
     destination: TileCoord,
     max_expansions: u32,
 ) -> Result<HierarchicalOutcome> {
-    let ground = Ground(generator);
-    if !ground.is_open(origin)? || !ground.is_open(destination)? {
-        return Ok(HierarchicalOutcome::Invalid);
-    }
-    let (start_key, goal_key) = (chunk_of(origin), chunk_of(destination));
-    let start_costs = ground.local_costs(start_key, origin)?;
-    if start_key == goal_key
-        && let Some(cost) = start_costs.get(&destination)
-    {
-        return Ok(HierarchicalOutcome::Path {
-            waypoints: Vec::new(),
-            cost: u64::from(*cost),
-        });
-    }
-    let goal_costs = ground.local_costs(goal_key, destination)?;
-    let mut best: BTreeMap<Node, u64> = BTreeMap::from([(Node::Start, 0)]);
-    let mut parent: BTreeMap<Node, Node> = BTreeMap::new();
-    // Equal estimates expand the node with the greater actual cost first, as
-    // the tile planner does, so open ground is crossed in a straight corridor.
-    let mut heap = BinaryHeap::from([Reverse((
-        HEURISTIC_WEIGHT * heuristic(origin, destination),
-        u64::MAX,
-        Node::Start,
-    ))]);
-    let mut expansions = 0_u32;
-    let position = |node: Node| match node {
-        Node::Start => origin,
-        Node::Goal => destination,
-        Node::Portal(tile) => tile,
-    };
-    while let Some(Reverse((_, inverse_cost, node))) = heap.pop() {
-        let cost = u64::MAX - inverse_cost;
-        if best.get(&node) != Some(&cost) {
-            continue;
-        }
-        if node == Node::Goal {
-            let mut waypoints = Vec::new();
-            let mut at = node;
-            while let Some(&before) = parent.get(&at) {
-                if let Node::Portal(tile) = at {
-                    waypoints.push(tile);
-                }
-                at = before;
-            }
-            waypoints.reverse();
-            return Ok(HierarchicalOutcome::Path { waypoints, cost });
-        }
-        expansions += 1;
-        if expansions > max_expansions {
-            return Ok(HierarchicalOutcome::Bounded);
-        }
-        let mut edges: Vec<(Node, u64)> = Vec::new();
-        match node {
-            Node::Start => {
-                for portal in &ground.portals(start_key)?.portals {
-                    if let Some(cost) = start_costs.get(&portal.tile) {
-                        edges.push((Node::Portal(portal.tile), u64::from(*cost)));
-                    }
-                }
-            }
-            Node::Goal => {}
-            Node::Portal(tile) => {
-                let key = chunk_of(tile);
-                let chunk = ground.portals(key)?;
-                let costs = ground.intra(key, &chunk)?;
-                let count = chunk.portals.len();
-                for (from, here) in chunk.portals.iter().enumerate() {
-                    if here.tile != tile {
-                        continue;
-                    }
-                    for (to, other) in chunk.portals.iter().enumerate() {
-                        if to != from
-                            && let Some(Some(cost)) = costs.get(from * count + to)
-                        {
-                            edges.push((Node::Portal(other.tile), u64::from(*cost)));
-                        }
-                    }
-                    let mud = ground.open(here.cross)?.is_some_and(|(_, mud)| mud);
-                    edges.push((
-                        Node::Portal(here.cross),
-                        u64::from(step_cost(here.tile, here.cross, mud)),
-                    ));
-                }
-                if key == goal_key
-                    && let Some(cost) = goal_costs.get(&tile)
-                {
-                    edges.push((Node::Goal, u64::from(*cost)));
-                }
-            }
-        }
-        for (next, step) in edges {
-            let total = cost + step;
-            if best.get(&next).is_none_or(|known| *known > total) {
-                best.insert(next, total);
-                parent.insert(next, node);
-                heap.push(Reverse((
-                    total + HEURISTIC_WEIGHT * heuristic(position(next), destination),
-                    u64::MAX - total,
-                    next,
-                )));
-            }
+    let mut search = incremental::Search::new(origin, destination, max_expansions);
+    loop {
+        if let Some(outcome) = search.poll(generator, &mut 65_536, &|| false)? {
+            return Ok(outcome);
         }
     }
-    Ok(HierarchicalOutcome::Unreachable)
 }
+
+mod incremental;
+pub(crate) use incremental::Search;
 
 #[cfg(test)]
 mod tests;

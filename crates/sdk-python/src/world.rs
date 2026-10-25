@@ -123,6 +123,16 @@ impl World {
     fn passable(&self, x: i32, y: i32) -> Option<bool> {
         self.inner.passable(TileCoord::new(x, y))
     }
+    /// A bounded route over explored public land; unknown or disconnected returns None.
+    fn land_route(&self, x: i32, y: i32, tx: i32, ty: i32) -> Option<Vec<(i32, i32)>> {
+        self.inner.land_route(TileCoord::new(x, y), TileCoord::new(tx, ty))
+            .map(|path| path.into_iter().map(|tile| (tile.x, tile.y)).collect())
+    }
+    /// An explored reachable frontier toward a goal, without crossing unknown water.
+    fn land_frontier(&self, x: i32, y: i32, tx: i32, ty: i32) -> Option<(i32, i32)> {
+        self.inner.land_frontier(TileCoord::new(x, y), TileCoord::new(tx, ty))
+            .map(|tile| (tile.x, tile.y))
+    }
     /// A top-left tile for a new building near `(x, y)`: explored, walkable,
     /// clear of resources and buildings, with `gap` free tiles around it.
     #[pyo3(signature = (kind, x, y, max_radius=24, gap=1))]

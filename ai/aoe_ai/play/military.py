@@ -116,7 +116,14 @@ class MilitaryManager:
             return
         point = self.rally_point(ctx)
         sent = 0
+        marched = ctx.board.marched
+        pause = ctx.config.march_pause_seconds * ctx.world.tick_hz
         for unit in ctx.army:
-            if unit.idle and dist(unit.tile, point) > 5 and sent < 12:
-                ctx.order("move", unit.id, point[0], point[1])
+            if (unit.idle and unit.id not in ctx.busy and dist(unit.tile, point) > 5 and sent < 12
+                    and ctx.tick - marched.get(unit.id, -pause) >= pause):
+                target = ctx.land_hop(unit.tile, point)
+                if target == unit.tile:
+                    continue
+                marched[unit.id] = ctx.tick
+                ctx.order("move", unit.id, *target)
                 sent += 1

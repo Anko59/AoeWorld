@@ -131,6 +131,7 @@ impl GameWorld {
                 origin.y.saturating_add(kind.rules().depth),
             ),
         );
+        self.validate_explored_footprint(player, footprint)?;
         self.validate_building_placement(kind, origin)?;
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
@@ -138,7 +139,6 @@ impl GameWorld {
             let _ = self.issue_cancel_construction(player, id);
             return Err(crate::GameWorldError::Unreachable.into());
         }
-        self.update_building_vision(id);
         self.remember_visible_buildings();
         Ok(id)
     }
@@ -339,6 +339,7 @@ impl GameWorld {
             if let Some(done) = self.add_work(building, count) {
                 touched.extend(done);
             }
+            self.update_building_vision(building);
         }
         touched.sort_unstable();
         touched.dedup();

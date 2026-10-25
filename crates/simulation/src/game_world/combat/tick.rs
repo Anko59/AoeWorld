@@ -191,9 +191,21 @@ impl GameWorld {
                 }
                 search.and_then(|search| search.destination)
             };
+            // A far chase follows its target loosely: it is re-planned once
+            // the target has moved more than a quarter of the remaining way.
+            // Re-planning every attacker each second toward a target a few
+            // tiles off was most of the route demand of a 99-AI match.
+            let here = self.units[index].state.position.tile_floor();
             let stale = match (order, destination) {
                 (None, _) => true,
-                (Some(order), Some(at)) => order.target_tile != at.tile_floor(),
+                (Some(order), Some(at)) => {
+                    let to = at.tile_floor();
+                    let moved = (order.target_tile.x - to.x)
+                        .abs()
+                        .max((order.target_tile.y - to.y).abs());
+                    let remaining = (here.x - to.x).abs().max((here.y - to.y).abs());
+                    moved > (remaining / 4).max(0)
+                }
                 (Some(_), None) => true,
             };
             if stale {

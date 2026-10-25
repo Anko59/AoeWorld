@@ -80,23 +80,23 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
 /// moved them once more; the values are the combined tree's.
 /// Unit spacing (distinct destination and work slots, idle separation,
 /// yielding followers) is a further intended cause of the values below, as is facing the work target on working ticks.
-/// Route throughput moved them again: orders get a fast attempt from their
-/// own per-tick budget (routes start on the order's tick), sealed destinations
-/// are proven at once, and the fast budget and flags are hashed state; near
-/// and far searches got their own slots, and the fast attempt grew to 16,384. Rally points add optional state to live and
-/// remembered buildings, which the state hash includes.
+/// Re-pinned for the combined follow-ups: exact explored placement/foundation
+/// sight, retained route guidance and endpoint proof state, bounded idle
+/// rotation and active follower sampling. These intentional state/timing
+/// changes, including deferred fast attempts and within-player far reserves,
+/// preserve the three checkpoints and deterministic scenario checks.
 const PINNED_HASHES: [(u64, &str); 3] = [
     (
         100,
-        "0dab9280d7dd086ec6fc63a76f809291702222a299852d463abc7ec4ace11d27",
+        "7bbfaf4981571e9ee123810da2b0646fa9b6f6d71389d452c3488ca2c05822ab",
     ),
     (
         200,
-        "a11d3585343b4f57f88a9a57cb6e67f49b49c6e4dee91bd09d87fbadb804e7ee",
+        "055ebe658243d9d3e06039f3ab3e63f3b028e962c20ee1677b2e21487f05cce0",
     ),
     (
         300,
-        "2c4c8394eba65ff5d8247899f0e293cd7500ba5c31ac13b51eedc2ba850c1e76",
+        "a43fba5f3e03497d18c1b191ff5d0420fb07787edf6ad8b590a1757d197f96bd",
     ),
 ];
 

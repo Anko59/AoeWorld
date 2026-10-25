@@ -43,10 +43,16 @@ impl GameWorld {
         );
         hash.update(&self.tick.0.to_le_bytes());
         hash.update(&(self.planning_cursor as u64).to_le_bytes());
+        self.idle_spacing.update_hash(&mut hash);
         hash.update(&(self.active_planner_count as u64).to_le_bytes());
         hash.update(&(self.active_route_searches as u64).to_le_bytes());
         hash.update(&self.planning_budget.to_le_bytes());
         hash.update(&self.fast_route_budget.to_le_bytes());
+        hash.update(&(self.route_queued.len() as u64).to_le_bytes());
+        for (player, far) in &self.route_queued {
+            hash.update(&player.0.to_le_bytes());
+            hash.update(&[u8::from(*far)]);
+        }
         hash.update(&(self.fast_route_spent.len() as u64).to_le_bytes());
         for (player, spent) in &self.fast_route_spent {
             hash.update(&player.0.to_le_bytes());
@@ -60,6 +66,13 @@ impl GameWorld {
         self.vision.update_hash(&mut hash);
         for unit in &self.units {
             hash.update(&unit.state.id.0.to_le_bytes());
+            // Both cyclic neighbour windows carry mutable sampling order.
+            hash.update(&self.followers.sampling_slot(unit.state.id).to_le_bytes());
+            let wildlife_slot = match unit.wildlife_slot {
+                usize::MAX => u64::MAX,
+                slot => slot as u64,
+            };
+            hash.update(&wildlife_slot.to_le_bytes());
             hash.update(&unit.state.player.0.to_le_bytes());
             hash.update(&unit.state.position.x.to_le_bytes());
             hash.update(&unit.state.position.y.to_le_bytes());
@@ -118,6 +131,16 @@ impl GameWorld {
                 hash.update(&tile.y.to_le_bytes());
             }
             hash.update(&[u8::from(unit.fast_route_tried)]);
+            match unit.unreachable_memo {
+                None => hash.update(&[0]),
+                Some((from, to, at)) => {
+                    hash.update(&[1]);
+                    for value in [from.x, from.y, to.x, to.y] {
+                        hash.update(&value.to_le_bytes());
+                    }
+                    hash.update(&at.to_le_bytes())
+                }
+            };
             if let Some(planner) = &unit.planner {
                 hash.update(&[1]);
                 planner.update_hash(&mut hash);

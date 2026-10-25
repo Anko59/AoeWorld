@@ -162,3 +162,74 @@ fn walled_far_route_starts_at_once_and_still_finds_the_distant_gateway() {
     assert!(tiles.iter().any(|tile| tile.y < 140), "used the gateway");
     assert!(planner.peak_retained_entries() <= MAX_ROUTE_PLANNER_NODES);
 }
+
+#[test]
+fn a_4000_tile_route_finds_a_gateway_far_behind_its_closest_river_bank() {
+    let terrain = flat_terrain_with_water_wall(WIDTH, 32, 5);
+    let origin = TileCoord::new(100, 2_000);
+    let destination = TileCoord::new(4_000, 2_000);
+    let mut planner = RoutePlanner::new(origin, destination, 131_072);
+    let overlay = ResourceOverlay::default();
+    let mut tiles = vec![origin];
+    for _ in 0..16_384 {
+        match planner.poll(&terrain, &overlay, TICK_WORK, &|| false) {
+            RoutePlannerPoll::Pending => {}
+            RoutePlannerPoll::Path(path) => {
+                assert_eq!(path.tiles.first(), tiles.last());
+                tiles.extend(path.tiles.into_iter().skip(1));
+                if planner.is_terminal() {
+                    break;
+                }
+            }
+            other => panic!("reachable river detour was abandoned: {other:?}"),
+        }
+    }
+    assert_eq!(tiles.last(), Some(&destination));
+    assert!(
+        tiles.iter().any(|tile| tile.y < 400),
+        "used the distant gateway"
+    );
+    assert_walkable_steps(&terrain, &tiles);
+    // The abstract route must guide local legs instead of flooding millions
+    // of tiles at the bank or increasing the 131,072-work local search cap.
+    assert!(
+        planner.expansions() < 100_000,
+        "{} tile expansions",
+        planner.expansions()
+    );
+}
+
+#[test]
+fn guided_river_detour_is_the_same_with_small_budget_partitions() {
+    let terrain = flat_terrain_with_water_wall(256, 32, 5);
+    let (from, to) = (TileCoord::new(80, 180), TileCoord::new(220, 180));
+    let mut a = RoutePlanner::new(from, to, 131_072);
+    let mut b = RoutePlanner::new(from, to, 131_072);
+    let collect = |planner: &mut RoutePlanner, budget| {
+        let mut tiles = vec![from];
+        for _ in 0..131_072 {
+            match planner.poll(&terrain, &ResourceOverlay::default(), budget, &|| false) {
+                RoutePlannerPoll::Pending => {}
+                RoutePlannerPoll::Path(path) => {
+                    assert_eq!(path.tiles.first(), tiles.last());
+                    tiles.extend(path.tiles.into_iter().skip(1));
+                    if planner.is_terminal() {
+                        return tiles;
+                    }
+                }
+                other => panic!("guided route failed: {other:?}"),
+            }
+        }
+        panic!("guided route never completed")
+    };
+    let expected = collect(&mut a, TICK_WORK);
+    let actual = collect(&mut b, 127);
+    assert_eq!(expected.last(), Some(&to));
+    assert_eq!(actual, expected);
+    assert_eq!(a.work(), b.work());
+    let mut ah = blake3::Hasher::new();
+    let mut bh = blake3::Hasher::new();
+    a.update_hash(&mut ah);
+    b.update_hash(&mut bh);
+    assert_eq!(ah.finalize(), bh.finalize());
+}

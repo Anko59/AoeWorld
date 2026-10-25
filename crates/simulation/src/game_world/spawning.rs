@@ -88,6 +88,7 @@ impl GameWorld {
             next_hit_tick: 0,
             planning_since: 0,
             fast_route_tried: false,
+            unreachable_memo: None,
         });
         if let Some(player) = self.economy.players.get_mut(&player) {
             player.population_used = player.population_used.saturating_add(1);

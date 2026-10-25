@@ -11,18 +11,20 @@ import { PNG } from "pngjs";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { activateSyntheticMap } from "../synthetic-map.js";
+import { forceWebGl } from "./backends.js";
 import { freshHud } from "../village/fixtures/resources.js";
 
 test("visible friendly and enemy units retain player-coloured contours behind trees", async ({
   page,
-}) => {
+}, info) => {
+  if (info.project.name !== "webgpu") await forceWebGl(page);
   await gameAssets(page, true);
   await occlusionFixture(page, true);
   await page.goto("/?play=1#x=8192&y=8192&zoom=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-renderer",
-    "webgpu",
+    info.project.name === "webgpu" ? "webgpu" : "webgl2",
   );
   await activateSyntheticMap(
     page,
@@ -66,7 +68,7 @@ test("visible friendly and enemy units retain player-coloured contours behind tr
   expect(count(3, [235, 40, 200], -20, -4)).toBeGreaterThan(300);
 });
 
-async function occlusionFixture(page: Page, trees = false) {
+async function occlusionFixture(page: Page, trees = false, rally = false) {
   const uint = (value: number) => {
     const bytes: number[] = [];
     do {
@@ -155,7 +157,17 @@ async function occlusionFixture(page: Page, trees = false) {
                 ...uint(8190 * 2),
                 ...uint(8194 * 2),
                 ...uint(8194 * 2),
-                ...townCenterState,
+                ...(rally
+                  ? [
+                      ...townCenterState.slice(0, -1),
+                      1,
+                      0,
+                      ...uint(8195 * 2048),
+                      ...uint(8191 * 2048),
+                      ...uint(8195 * 2048),
+                      ...uint(8191 * 2048),
+                    ]
+                  : townCenterState),
               ]),
         ]),
       );
@@ -163,3 +175,57 @@ async function occlusionFixture(page: Page, trees = false) {
     });
   });
 }
+
+test("a selected production building displays its authoritative rally flag on each backend", async ({
+  page,
+}, info) => {
+  if (info.project.name !== "webgpu") await forceWebGl(page);
+  await gameAssets(page, true);
+  await occlusionFixture(page, false, true);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto("/?play=1#zoom=1");
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await activateSyntheticMap(page);
+  await page.keyboard.press("h");
+  await freshHud(page);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-rally-point",
+    /.+/,
+  );
+  const clip = { x: 875, y: 360, width: 45, height: 75 };
+  const selected = PNG.sync.read(await page.screenshot({ clip }));
+  await page.keyboard.press("Escape");
+  await freshHud(page);
+  await expect(page.locator("#scene")).toHaveAttribute("data-rally-point", "");
+  const deselected = PNG.sync.read(await page.screenshot({ clip }));
+  let changed = 0;
+  for (let at = 0; at < selected.data.length; at += 4)
+    if (
+      Math.abs((selected.data[at + 2] ?? 0) - (deselected.data[at + 2] ?? 0)) >
+      50
+    )
+      changed++;
+  expect(
+    changed,
+    "the flag must change world pixels, not only a DOM attribute",
+  ).toBeGreaterThan(500);
+});
+
+test("records the browser's unforced game renderer", async ({ page }, info) => {
+  await gameAssets(page, true);
+  await occlusionFixture(page, true);
+  await page.goto("/?play=1");
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await expect(page.locator("#playground")).toHaveAttribute(
+    "data-renderer",
+    /^(webgpu|webgl2|canvas2d)$/,
+  );
+  const observed = await page.evaluate(() => ({
+    browser: navigator.userAgent,
+    webgpuAPI: !!Reflect.get(navigator, "gpu"),
+    renderer: document.getElementById("playground")?.dataset.renderer,
+  }));
+  console.log(
+    `${info.project.name} default renderer: ${JSON.stringify(observed)}`,
+  );
+});

@@ -36,8 +36,10 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
         (2400, 2400, 8)
     );
     let house_at = TileCoord::new(tc.max.x + 4, tc.min.y);
-    let mill_at = TileCoord::new(tc.max.x + 4, tc.min.y + 5);
-    let farm_at = TileCoord::new(tc.max.x + 8, tc.min.y + 5);
+    // The mill fits inside the Town Center's surveyed disc; once complete,
+    // its LOS explores the entire farm footprint further south.
+    let mill_at = TileCoord::new(tc.max.x + 3, tc.min.y + 3);
+    let farm_at = TileCoord::new(tc.max.x + 3, tc.min.y + 5);
 
     let mut log =
         vec!["village: town center, three villagers; wood 200, population cap 5".to_owned()];

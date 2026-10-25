@@ -20,11 +20,11 @@ fn changing_only_a_resources_hover_mode_invalidates_the_presented_frame() {
 fn a_stationary_units_contour_colour_change_invalidates_its_presented_frame() {
     let scene = Rc::new(());
     let mut actor = unit([1.0, 2.0], false, false);
-    actor.visual = actor.visual.with_outline(Some(0));
+    actor.visual = actor.visual.with_owner(Some([65, 145, 245]), false, true);
     let mut cache = RenderFrameCache::default();
     cache.record_success(&scene, &art(), &[actor], &[], false, 0, camera());
     assert!(!cache.needs_render(&scene, &art(), &[actor], &[], false, 0, camera()));
-    actor.visual = actor.visual.with_outline(Some(1));
+    actor.visual = actor.visual.with_owner(Some([245, 65, 65]), true, true);
     assert!(cache.needs_render(&scene, &art(), &[actor], &[], false, 0, camera()));
 }
 
@@ -33,9 +33,8 @@ fn unit(position: [f64; 2], selected: bool, moving: bool) -> SceneUnit {
         kind: Default::default(),
         id: EntityId(7),
         position,
-        visual: aoe_rendering::SceneUnitVisual::new(moving),
+        visual: aoe_rendering::SceneUnitVisual::new(moving).with_selected(selected),
         facing: 2,
-        selected,
         elevation_meters: 1.0,
     }
 }
