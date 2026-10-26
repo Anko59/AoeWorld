@@ -1,3 +1,4 @@
+mod spacing;
 use super::*;
 
 #[test]
@@ -69,6 +70,48 @@ fn a_full_load_returns_deposits_and_resumes_the_same_node() {
 }
 
 #[test]
+fn workers_stand_against_the_bush_or_tree_they_gather() {
+    for kind in [ResourceKind::Food, ResourceKind::Wood] {
+        let (mut world, node, id) = resource_world(kind);
+        world.initialize_village(PlayerId(0), node.tile).unwrap();
+        world.issue_gather(PlayerId(0), id, node.id).unwrap();
+        let centre = WorldPosition::from_tile_center(node.tile).unwrap();
+        let mut worked = false;
+        for _ in 0..2000 {
+            world.advance();
+            let unit = world.unit(id).unwrap();
+            if unit.task != UnitTask::Gathering {
+                continue;
+            }
+            let (dx, dy) = (
+                i64::from(unit.position.x - centre.x),
+                i64::from(unit.position.y - centre.y),
+            );
+            // A tile-centre stand is 1.0 (side) or 1.41 (corner) tiles away;
+            // AoE2 workers touch the node: at most 0.7 or 1.0 tiles.
+            let tile = i64::from(FIXED_SUBUNITS_PER_TILE);
+            let limit = if dx != 0 && dy != 0 {
+                tile
+            } else {
+                7 * tile / 10
+            };
+            assert!(dx * dx + dy * dy <= limit * limit, "{kind:?} {dx},{dy}");
+            assert_eq!(
+                unit.position
+                    .tile_floor()
+                    .x
+                    .abs_diff(node.tile.x)
+                    .max(unit.position.tile_floor().y.abs_diff(node.tile.y)),
+                1
+            );
+            worked = true;
+            break;
+        }
+        assert!(worked, "{kind:?} gatherer never worked");
+    }
+}
+
+#[test]
 fn depleted_nodes_deposit_partial_load_then_find_only_nearby_same_type() {
     let (mut world, node, id) = resource_world(ResourceKind::Wood);
     world.initialize_village(PlayerId(0), node.tile).unwrap();
@@ -98,7 +141,39 @@ fn depleted_nodes_deposit_partial_load_then_find_only_nearby_same_type() {
         world.player_economy(PlayerId(0)).unwrap().stockpile.wood,
         before + 2
     );
-    assert_eq!(world.gather_target(id), Some(replacement.id));
+    // Exhaustion now ranks from the drop-off, rather than the old tree.
+    // Keep the partial-load/type/locality contract and assert the new preference.
+    let chosen = world.gather_target(id).unwrap();
+    let Terrain::Map { generator, overlay } = world.terrain() else {
+        unreachable!()
+    };
+    let chosen = overlay
+        .resource_by_id_with_cancel(generator, chosen, &|| false)
+        .unwrap()
+        .unwrap();
+    assert_eq!(chosen.kind, node.kind);
+    assert_ne!(chosen.id, node.id);
+    assert!(
+        chosen.tile.x.abs_diff(node.tile.x).pow(2) + chosen.tile.y.abs_diff(node.tile.y).pow(2)
+            <= 100
+    );
+    let camp = world
+        .nearest_dropoff(
+            PlayerId(0),
+            world.unit(id).unwrap().position.tile_floor(),
+            node.kind,
+        )
+        .unwrap();
+    let rect = world.building(camp).unwrap().footprint;
+    let distance = |tile: TileCoord| {
+        let dx = tile.x.abs_diff(tile.x.clamp(rect.min.x - 1, rect.max.x));
+        let dy = tile.y.abs_diff(tile.y.clamp(rect.min.y - 1, rect.max.y));
+        dx * dx + dy * dy
+    };
+    assert!(
+        distance(chosen.tile) < distance(replacement.tile),
+        "prefer the camp side of this forest"
+    );
     assert!(
         world
             .resource_snapshot([1; 32])
@@ -253,6 +328,60 @@ fn authoritative_job_kind_survives_collection_and_return_but_clears_on_stop() {
     assert!(unit.carried.is_some());
     world.issue_move(id, unit.position).unwrap();
     assert_eq!(world.gathering_kind(id), None);
+    // A worker stepped up against its node walks the last step to the centre.
+    for _ in 0..40 {
+        world.advance();
+    }
     assert_eq!(world.unit(id).unwrap().task, UnitTask::Carrying);
     assert!(world.unit(id).unwrap().carried.is_some());
 }
+
+/// Finds a fixture node of `kind` that has a passable neighbour tile.
+fn accessible_node(
+    generator: &aoe_map::MapChunkGenerator,
+    world: &GameWorld,
+    kind: ResourceKind,
+) -> ResourceNode {
+    for y in 0..8 {
+        for x in 0..8 {
+            for node in generator.chunk(x, y).unwrap().resources {
+                if node.kind != kind {
+                    continue;
+                }
+                let reachable = (-1..=1).any(|dy| {
+                    (-1..=1).any(|dx| {
+                        (dx != 0 || dy != 0)
+                            && world.terrain().passable(
+                                TileCoord::new(node.tile.x + dx, node.tile.y + dy),
+                                world.config(),
+                            )
+                    })
+                });
+                if reachable {
+                    return node;
+                }
+            }
+        }
+    }
+    panic!("fixture needs an accessible {kind:?} node");
+}
+
+/// A villager spawned on a passable tile next to `node`.
+fn gatherer_at(world: &mut GameWorld, node: ResourceNode) -> EntityId {
+    let tile = (-1..=1)
+        .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
+        .find(|(dx, dy)| {
+            (*dx != 0 || *dy != 0)
+                && world.terrain().passable(
+                    TileCoord::new(node.tile.x + dx, node.tile.y + dy),
+                    world.config(),
+                )
+        })
+        .map(|(dx, dy)| TileCoord::new(node.tile.x + dx, node.tile.y + dy))
+        .expect("node has a passable neighbour");
+    world
+        .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(tile).unwrap())
+        .expect("villager spawn")
+}
+
+mod replay;

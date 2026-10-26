@@ -26,6 +26,8 @@ Registry v2 drives selection and dependency plans. The opt-in gate-run CLI execu
 | perf-smoke | `make perf-smoke` | test-unit | native | [Pr, Ci, Nightly] | 600 | yes | versioned synthetic JSON report |
 | perf-ci | `make perf-ci` | perf-smoke, perf-instructions, perf-wasm-size | performance | [Pr, Ci, Nightly] | 1800 | yes | target counts and baseline comparisons |
 | perf-timing | `make perf-timing` | perf-ci | performance | [Nightly] | 900 | yes | informational Criterion raw samples and versioned report |
+| perf-scale-smoke | `make perf-scale-smoke` | — | performance | [Nightly] | 900 | yes | 4-player, 2,000-unit, 50-tick run of the scale benchmark writing valid JSON |
+| perf-scale | `make perf-scale` | — | performance | [] | 3600 | yes | per-phase tick times, memory and server fan-out for 100 players and 100k units, as JSON |
 | perf-pressure | `make perf-pressure` | perf-ci | performance | [Pr, Ci, Nightly] | 1800 | yes | clock-scheduled subscriptions, backlog, slow reader, and reconnect report |
 | perf-stress | `make perf-stress` | perf-ci | performance | [Weekly] | 2700 | yes | 256k-entity protocol load and explicit overload report |
 | perf-soak-10 | `make perf-soak-10` | perf-ci | performance | [Nightly] | 2700 | yes | 10-minute target network lifecycle and retained-memory report |
@@ -51,5 +53,6 @@ Registry v2 drives selection and dependency plans. The opt-in gate-run CLI execu
 | test-creator-source | `make test-creator-source` | build-wasm, browser-check, test-unit | browser | [Qualification] | 5400 | — | overview and detailed source maps across restart |
 | test-source-qualification | `make test-source-qualification` | test-unit | native | [Ci, Nightly, Qualification] | 1800 | yes | slow offline source-qualification movement, replay and package tests that test-unit excludes |
 | test-exhaustive | `make test-exhaustive` | test-unit | native | [Ci, Nightly] | 1800 | yes | 16-seed landscape sweeps and full-axis geodata round-trips that test-unit runs on two seeds or reduced axes |
+| sdk-python-test | `make sdk-python-test` | test-unit | native | [Ci, Nightly] | 3600 | yes | pytest results of the Python bindings, the example AI decision logic, the standard start and a seeded Dark-to-Feudal game between bots on the AI arena (five seeds) |
 | test-geographic-matrix | `make test-geographic-matrix` | test-unit | browser | [Qualification] | 5400 | — | prepared and verified fixed overview source regions |
 | test-geographic-visuals | `make test-geographic-visuals` | build-wasm, browser-check, test-unit | browser | [Qualification] | 5400 | — | water and Alpine source packages on WebGPU and Canvas |

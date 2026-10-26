@@ -17,6 +17,11 @@ pub(in super::super) fn unit(client: &Client, point: ScreenPoint) -> Option<Enti
 }
 
 fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(EntityId, bool, bool)> {
+    if crate::playground::game::strategic::active(client) {
+        return None;
+    }
+    let building = building_target(client, point);
+    let resource = resource_target(client, point);
     let scene = map::scene::prepare(client);
     let terrain_depth = aoe_rendering::surface_depth_at(&scene.triangles, point);
     let rendered = map::scene::units(client, &scene);
@@ -67,12 +72,19 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
                 .binary_search_by_key(&id, |unit| unit.id)
                 .ok()
                 .map(|index| aoe_rendering::scene_unit_depth(rendered[index]))?;
-            (crate::unit_visuals::actor_hit(
-                bounds,
-                [screen.x, screen.y],
-                [point.x, point.y],
-                client.camera.zoom,
-            ) && terrain_depth.is_none_or(|surface| surface <= depth + 1e-6))
+            let key = (depth, u64::from(id.0));
+            (building.is_none_or(|(d, id)| in_front(key, (d, u64::from(id.0))))
+                // As in AoE2, the player's own units win over a resource
+                // under them, such as a new Fishing Ship over shore fish.
+                && (!(animal || enemy)
+                    || resource.is_none_or(|(d, id, _)| in_front(key, (d, id))))
+                && crate::unit_visuals::actor_hit(
+                    bounds,
+                    [screen.x, screen.y],
+                    [point.x, point.y],
+                    client.camera.zoom,
+                )
+                && terrain_depth.is_none_or(|surface| surface <= depth + 1e-6))
             .then_some((depth, id, animal, enemy))
         })
         .max_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
@@ -80,18 +92,17 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
 }
 
 pub(super) fn enemy_building(client: &Client, point: ScreenPoint) -> Option<EntityId> {
-    let world = map::world_at_screen(client, point)?;
+    let (depth, id) = building_target(client, point)?;
+    if resource_target(client, point)
+        .is_some_and(|(d, r, _)| !in_front((depth, u64::from(id.0)), (d, r)))
+    {
+        return None;
+    }
     client
         .village
         .buildings
         .iter()
-        .find(|b| {
-            b.player != owner(client)
-                && world[0] >= f64::from(b.footprint.min.x)
-                && world[0] < f64::from(b.footprint.max.x)
-                && world[1] >= f64::from(b.footprint.min.y)
-                && world[1] < f64::from(b.footprint.max.y)
-        })
+        .find(|b| b.id == id && b.player != owner(client))
         .map(|b| b.id)
 }
 
@@ -112,20 +123,79 @@ pub(in super::super) fn click(client: &mut Client, point: ScreenPoint, unit: Opt
         client.selected.units(vec![id]);
         return;
     }
-    if let Some(world) = map::world_at_screen(client, point)
-        && let Some(building) = client.village.buildings.iter().find(|b| {
-            world[0] >= f64::from(b.footprint.min.x)
-                && world[0] < f64::from(b.footprint.max.x)
-                && world[1] >= f64::from(b.footprint.min.y)
-                && world[1] < f64::from(b.footprint.max.y)
-        })
+    let resource = resource_target(client, point);
+    if let Some((depth, id)) = building_target(client, point)
+        && resource.is_none_or(|(d, r, _)| in_front((depth, u64::from(id.0)), (d, r)))
     {
-        client.selected.building(building.id);
-    } else if let Some((id, _)) = resource(client, point) {
+        client.selected.building(id);
+    } else if let Some((_, id, _)) = resource {
         client.selected.resource(id);
     } else {
         client.selected = Default::default();
     }
+}
+
+// Rendering sorts by body depth, then entity ID. Storage order and the
+// inverse-projected ground tile must not select something behind a roof.
+fn in_front(a: (f64, u64), b: (f64, u64)) -> bool {
+    a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).is_ge()
+}
+
+fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId)> {
+    if crate::playground::game::strategic::active(client) {
+        return None;
+    }
+    let scene = map::scene::prepare(client);
+    let terrain_depth = aoe_rendering::surface_depth_at(&scene.triangles, point);
+    let camera = SceneCamera {
+        center: client.camera.center,
+        zoom: client.camera.zoom,
+        viewport: client.camera.viewport,
+        focus_elevation_meters: client.camera.focus_elevation_meters,
+    };
+    let rendered = map::scene::units(client, &scene);
+    let world = map::world_at_screen(client, point);
+    client
+        .village
+        .buildings
+        .iter()
+        .filter(|b| b.hp > 0)
+        .flat_map(|b| {
+            // A farm's visible crop is painted into the ground mesh.
+            let ground = b.kind == aoe_protocol::BuildingKind::Farm
+                && world.is_some_and(|p| {
+                    p[0] >= f64::from(b.footprint.min.x)
+                        && p[0] < f64::from(b.footprint.max.x)
+                        && p[1] >= f64::from(b.footprint.min.y)
+                        && p[1] < f64::from(b.footprint.max.y)
+                });
+            let start = rendered.partition_point(|u| u.id < b.id);
+            rendered[start..]
+                .iter()
+                .copied()
+                .take_while(move |u| u.id == b.id)
+                .map(move |u| (u, ground))
+        })
+        .filter_map(|(u, ground)| {
+            let depth = if ground {
+                world.map_or(0.0, |p| {
+                    p[0] + p[1] + 2.0 * scene.height(p).unwrap_or(u.elevation_meters)
+                })
+            } else {
+                aoe_rendering::scene_unit_depth(u)
+            };
+            (terrain_depth.is_none_or(|surface| surface <= depth + 1e-6)
+                && (ground
+                    || aoe_rendering::scene_building_hit(
+                        &client.art,
+                        u,
+                        camera,
+                        (client.last_frame / 100.0) as usize,
+                        point,
+                    )))
+            .then_some((depth, u.id))
+        })
+        .max_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
 }
 
 pub(in super::super) fn double_click(client: &mut Client, unit: EntityId) {
@@ -152,6 +222,51 @@ pub(in super::super) fn double_click(client: &mut Client, unit: EntityId) {
     client.selected.same_kind(candidates, owner(client), kind);
 }
 
+pub(in super::super) fn double_building(client: &mut Client) {
+    let Some(building) = client.village.buildings.iter().find(|b| {
+        Some(b.id) == client.selected.building_id && b.player == owner(client) && b.hp > 0
+    }) else {
+        return;
+    };
+    let (kind, primary) = (building.kind, building.id);
+    let scale = client.camera.viewport[1] / f64::from(client.canvas.client_height().max(1));
+    let camera = SceneCamera {
+        center: client.camera.center,
+        zoom: client.camera.zoom,
+        viewport: client.camera.viewport,
+        focus_elevation_meters: client.camera.focus_elevation_meters,
+    };
+    let scene = map::scene::prepare(client);
+    // Intersect actual sprite bounds so a partially visible roof also counts.
+    let visible = map::scene::units(client, &scene)
+        .into_iter()
+        .filter_map(|unit| {
+            let p = map::screen_position(client, unit.position);
+            let bounds = aoe_rendering::scene_unit_bounds(
+                &client.art,
+                unit,
+                camera,
+                (client.last_frame / 100.0) as usize,
+            )
+            .unwrap_or([p.x, p.y, p.x, p.y]);
+            (bounds[2] >= 0.0
+                && bounds[3] >= 54.0 * scale
+                && bounds[0] < client.camera.viewport[0]
+                && bounds[1] < client.camera.viewport[1] - 208.0 * scale)
+                .then_some(unit.id)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    let candidates = client
+        .village
+        .buildings
+        .iter()
+        .map(|b| (b.id, b.player, b.kind, b.hp > 0 && visible.contains(&b.id)))
+        .collect::<Vec<_>>();
+    client
+        .selected
+        .same_buildings(candidates, owner(client), kind, primary);
+}
+
 /// The resource under the pointer, unless a nearer cliff face hides it. The
 /// same frontmost-surface test as `passable` keeps gather feedback and orders
 /// from reaching a resource behind an occluding cliff.
@@ -160,19 +275,31 @@ pub(in super::super) fn resource(
     client: &Client,
     point: ScreenPoint,
 ) -> Option<(u64, ResourceKind)> {
+    let (depth, id, kind) = resource_target(client, point)?;
+    building_target(client, point)
+        .is_none_or(|(d, b)| in_front((depth, id), (d, u64::from(b.0))))
+        .then_some((id, kind))
+}
+
+fn resource_target(client: &Client, point: ScreenPoint) -> Option<(f64, u64, ResourceKind)> {
+    if crate::playground::game::strategic::active(client) {
+        return None;
+    }
     let (id, kind, world) = resource_unchecked(client, point)?;
-    if client.map_content_hash.is_some() {
-        let scene = map::scene::prepare(client);
-        let height = scene.height(world).unwrap_or(0.0);
-        if aoe_rendering::cliff_face_in_front(
+    let scene = map::scene::prepare(client);
+    let height = scene
+        .height(world)
+        .unwrap_or_else(|| map::elevation_at_world(client, world));
+    if client.map_content_hash.is_some()
+        && aoe_rendering::cliff_face_in_front(
             &scene.triangles,
             point,
             world[0] + world[1] + 2.0 * height,
-        ) {
-            return None;
-        }
+        )
+    {
+        return None;
     }
-    Some((id, kind))
+    Some((world[0] + world[1] + height * 2.0 + 1.5, id, kind))
 }
 
 fn resource_unchecked(
@@ -217,7 +344,7 @@ fn resource_unchecked(
     // must target the tree, not the ground several tiles behind it.
     map::scene_resources(client)
         .into_iter()
-        .filter(|r| r.kind < 4)
+        .filter(|r| r.kind <= aoe_rendering::SceneResource::CHOPPED_TREE)
         .filter_map(|r| {
             let bounds = scene_resource_frame(&client.art, r)
                 .and_then(|f| resource_sprite_bounds(r, f, camera));
@@ -240,7 +367,7 @@ fn resource_unchecked(
                 id,
                 match kind {
                     0 => ResourceKind::Food,
-                    1 => ResourceKind::Wood,
+                    1 | aoe_rendering::SceneResource::CHOPPED_TREE => ResourceKind::Wood,
                     2 => ResourceKind::Gold,
                     _ => ResourceKind::Stone,
                 },

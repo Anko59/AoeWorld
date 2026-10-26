@@ -15,6 +15,7 @@ fn player() -> GameplayPlayerState {
         population_cap: 5,
         age: aoe_protocol::Age::Dark,
         researched: 0,
+        market_prices: aoe_protocol::MarketPrices::default(),
     }
 }
 fn building() -> GameplayBuildingState {
@@ -33,6 +34,9 @@ fn building() -> GameplayBuildingState {
         training_queue: vec![],
         last_hit: None,
         gate_open: false,
+        rally_point: None,
+        farm_reseeds: 0,
+        garrison: Vec::new(),
         age: aoe_protocol::Age::Dark,
     }
 }
@@ -50,6 +54,114 @@ fn farm(construction: ConstructionState, permille: u16) -> GameplayBuildingState
         food_remaining: Some(175),
         training_queue: vec![],
         ..building()
+    }
+}
+
+#[test]
+fn garrison_occupants_are_bounded_alive_sorted_and_eligible() {
+    let mut center = building();
+    center.garrison = vec![GarrisonUnitState {
+        id: EntityId(7),
+        kind: UnitKind::Villager,
+        hp: 10,
+        max_hp: 25,
+    }];
+    let snapshot = |b| GameplayServerMessage::Snapshot {
+        revision: 1,
+        tick: Tick(0),
+        units: vec![],
+        players: vec![],
+        buildings: vec![b],
+    };
+    let valid = snapshot(center.clone());
+    let bytes = encode_gameplay_server(&valid).unwrap();
+    assert_eq!(decode_gameplay_server(&bytes).unwrap(), valid);
+    // The current building tail appends the occupant list and its compact records.
+    assert!(bytes.ends_with(&[1, 7, 0, 10, 25]));
+    for invalid in [
+        GarrisonUnitState {
+            hp: 0,
+            ..center.garrison[0]
+        },
+        GarrisonUnitState {
+            hp: 26,
+            ..center.garrison[0]
+        },
+        GarrisonUnitState {
+            kind: UnitKind::Scout,
+            ..center.garrison[0]
+        },
+        GarrisonUnitState {
+            id: center.id,
+            ..center.garrison[0]
+        },
+    ] {
+        let mut b = center.clone();
+        b.garrison = vec![invalid];
+        assert!(encode_gameplay_server(&snapshot(b.clone())).is_err());
+        assert!(decode_gameplay_server(&postcard::to_allocvec(&snapshot(b)).unwrap()).is_err());
+    }
+    center.garrison = (0..21)
+        .map(|id| GarrisonUnitState {
+            id: EntityId(id + 2),
+            kind: UnitKind::Villager,
+            hp: 25,
+            max_hp: 25,
+        })
+        .collect();
+    assert!(decode_gameplay_server(&postcard::to_allocvec(&snapshot(center)).unwrap()).is_err());
+}
+
+#[test]
+fn prepaid_reseeds_are_bounded_and_belong_only_to_completed_mills() {
+    let message = |building| GameplayServerMessage::Snapshot {
+        revision: 1,
+        tick: Tick(0),
+        units: vec![],
+        players: vec![player()],
+        buildings: vec![building],
+    };
+    let mut mill = building();
+    mill.kind = BuildingKind::Mill;
+    mill.footprint.max = TileCoord::new(7, 7);
+    mill.farm_reseeds = 99;
+    let valid = message(mill.clone());
+    assert_eq!(
+        decode_gameplay_server(&encode_gameplay_server(&valid).unwrap()).unwrap(),
+        valid
+    );
+    for (kind, side, state, progress, count) in [
+        (
+            BuildingKind::Mill,
+            2,
+            ConstructionState::Complete,
+            1000,
+            100,
+        ),
+        (
+            BuildingKind::TownCenter,
+            4,
+            ConstructionState::Complete,
+            1000,
+            1,
+        ),
+        (
+            BuildingKind::Mill,
+            2,
+            ConstructionState::UnderConstruction,
+            0,
+            1,
+        ),
+    ] {
+        let mut invalid = mill.clone();
+        invalid.kind = kind;
+        invalid.footprint.max = TileCoord::new(5 + side, 5 + side);
+        invalid.construction = state;
+        invalid.progress_permille = progress;
+        invalid.farm_reseeds = count;
+        let invalid = message(invalid);
+        assert!(encode_gameplay_server(&invalid).is_err());
+        assert!(decode_gameplay_server(&postcard::to_allocvec(&invalid).unwrap()).is_err());
     }
 }
 
@@ -166,7 +278,7 @@ fn inconsistent_building_state_is_rejected() {
         assert!(decode_gameplay_server(&postcard::to_allocvec(&message).unwrap()).is_err());
     }
     let mut player = player();
-    player.population_cap = MAX_POPULATION + 1;
+    player.population_cap = MAX_MATCH_POPULATION + 1;
     let message = GameplayServerMessage::Snapshot {
         revision: 1,
         tick: Tick(0),

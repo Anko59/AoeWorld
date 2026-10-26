@@ -160,8 +160,9 @@ fn default_package_identity_and_terrain_are_pinned() {
     );
 }
 
+// River-fish generation advances the single recipe and its content identity.
 const DEFAULT_PACKAGE_HASH: &str =
-    "97d49f8d9959e1c5f75e5aff4a3f73b59058115366c28bc334a11c8b6cbc05f5";
+    "ca2b797aebe65f014bae0c4a80fde48fa7a441b23f0638d362a41a6b92de9115";
 const DEFAULT_TERRAIN_FINGERPRINT: &str =
     "5216ecbe42545ee3958222a22b78957a274aad41029b38797e926ac8ac46aa29";
 

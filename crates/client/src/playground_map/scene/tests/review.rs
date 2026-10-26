@@ -13,6 +13,8 @@ mod fishing;
 mod fixture;
 #[path = "gates.rs"]
 mod gates;
+#[path = "picking.rs"]
+mod picking;
 
 fn contact_scene() -> PreparedScene {
     let generator = fixture::plane(-432, -432);
@@ -94,16 +96,47 @@ async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
     );
 }
 
+#[wasm_bindgen_test]
+async fn nonzero_viewer_keeps_transport_control_when_the_primary_scout_is_aboard() {
+    use crate::playground::game::village::owner;
+    let scene = contact_scene();
+    let mut client = client_with_backend(&scene, Some("canvas")).await;
+    let scout = client.primary.unwrap();
+    client.units.get_mut(&scout).unwrap().player = PlayerId(7);
+    assert_eq!(owner(&client), PlayerId(7));
+    let mut transport = client.units.remove(&scout).unwrap();
+    transport.id = EntityId(99);
+    transport.kind = aoe_protocol::UnitKind::TransportShip;
+    transport.cargo_count = 1;
+    client.units.insert(transport.id, transport);
+    assert!(!client.units.contains_key(&scout));
+    assert_eq!(owner(&client), PlayerId(7));
+    assert_eq!(client.units[&transport.id].player, owner(&client));
+    assert_ne!(owner(&client), PlayerId(0));
+    client.canvas.remove();
+}
+
 pub(super) async fn client(scene: &PreparedScene) -> Client {
+    client_with_backend(scene, None).await
+}
+
+pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&str>) -> Client {
     let document = web_sys::window().unwrap().document().unwrap();
-    let canvas = document
+    let canvas: web_sys::HtmlCanvasElement = document
         .create_element("canvas")
         .unwrap()
         .dyn_into()
         .unwrap();
-    let (renderer, canvas) = GameRenderer::new(canvas).await.unwrap();
+    if backend == Some("canvas") {
+        document.body().unwrap().append_child(&canvas).unwrap();
+    }
+    let (renderer, canvas) = GameRenderer::new_with_backend(canvas, backend)
+        .await
+        .unwrap();
     let id = EntityId(1);
     Client {
+        hover_mode: 1,
+        team_colour: [65, 145, 245],
         document,
         canvas,
         renderer,
@@ -126,6 +159,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
             scenery: Default::default(),
         },
         socket: None,
+        connection_callbacks: None,
         connection_id: 0,
         camera: scene.camera,
         capture: Default::default(),
@@ -171,6 +205,8 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
                 death_tick: None,
                 hunt_target: None,
                 death_hunt: None,
+                auto_scout: false,
+                cargo_count: 0,
             },
         )]),
         presentation: Default::default(),
@@ -178,6 +214,7 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
             units: vec![id],
             building_id: None,
             resource_id: None,
+            buildings: Vec::new(),
         },
         village: Default::default(),
         grid: false,
@@ -186,6 +223,40 @@ pub(super) async fn client(scene: &PreparedScene) -> Client {
         last_frame: 0.0,
         status: String::new(),
     }
+}
+
+#[wasm_bindgen_test]
+async fn successive_unit_deltas_cannot_grow_the_resident_table_beyond_its_budget() {
+    let scene = PreparedScene::new(
+        Camera {
+            center: [100.0, 100.0],
+            zoom: 1.0,
+            viewport: [640.0, 360.0],
+            focus_elevation_meters: 0.0,
+        },
+        vec![],
+    );
+    let mut client = client(&scene).await;
+    let mut state = *client.units.values().next().unwrap();
+    client.units.clear();
+    for id in 0..aoe_protocol::MAX_SUBSCRIBED_UNITS {
+        state.id = EntityId(id as u32);
+        crate::playground::game::remember(&mut client, &state, 1);
+    }
+    state.id = EntityId(aoe_protocol::MAX_SUBSCRIBED_UNITS as u32);
+    assert!(!crate::playground::game::remember(&mut client, &state, 1));
+    assert_eq!(client.units.len(), aoe_protocol::MAX_SUBSCRIBED_UNITS);
+    assert!(!client.units.contains_key(&state.id));
+    state.id = EntityId(0);
+    state.facing = 3;
+    crate::playground::game::remember(&mut client, &state, 2);
+    assert_eq!(client.units[&state.id].facing, 3);
+    client.units.remove(&state.id);
+    client.presentation.remove(state.id);
+    state.id = EntityId(aoe_protocol::MAX_SUBSCRIBED_UNITS as u32);
+    crate::playground::game::remember(&mut client, &state, 3);
+    assert!(client.units.contains_key(&state.id));
+    assert_eq!(client.units.len(), aoe_protocol::MAX_SUBSCRIBED_UNITS);
 }
 
 #[wasm_bindgen_test]
@@ -260,7 +331,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
     use aoe_core::{TileCoord, TileRect};
     use aoe_protocol::{
         Age, BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState,
-        Stockpile, Tech,
+        MarketPrices, Stockpile, Tech,
     };
     let scene = contact_scene();
     let mut client = client(&scene).await;
@@ -271,6 +342,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         population_cap: 5,
         age: Age::Feudal,
         researched: Tech::FeudalAge.bit(),
+        market_prices: MarketPrices::default(),
     });
     client.village.buildings.push(GameplayBuildingState {
         id: EntityId(2),
@@ -288,6 +360,9 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         last_hit: None,
         age: Age::Dark,
         gate_open: false,
+        rally_point: None,
+        farm_reseeds: 0,
+        garrison: Vec::new(),
     });
     let rendered = |client: &Client| {
         units(client, &scene)
@@ -324,6 +399,9 @@ async fn authoritative_gate_stays_open_when_the_holding_enemy_is_not_resident() 
         last_hit: None,
         age: Age::Feudal,
         gate_open: true,
+        rally_point: None,
+        farm_reseeds: 0,
+        garrison: Vec::new(),
     });
     for _ in 0..20 {
         let gate = units(&client, &scene)

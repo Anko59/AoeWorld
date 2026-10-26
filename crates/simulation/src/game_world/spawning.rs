@@ -39,7 +39,9 @@ impl GameWorld {
     ) -> Result<EntityId, GameWorldError> {
         self.spawn_kind(player, UnitKind::Villager, position)
     }
-    pub(crate) fn spawn_kind(
+    /// Construct a unit for a server-owned scenario. Gameplay clients train
+    /// units through a production building and cannot call this constructor.
+    pub fn spawn_kind(
         &mut self,
         player: PlayerId,
         kind: UnitKind,
@@ -55,41 +57,60 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition);
         }
         let id = self.allocate_entity_id()?;
+        let state = GameUnit {
+            id,
+            player,
+            position,
+            previous_position: position,
+            moving: false,
+            planning: false,
+            facing: Facing::South,
+            kind,
+            task: UnitTask::Idle,
+            carried: None,
+            hp: unit_combat(kind).hp + self.researched_hp_bonus(player, kind),
+            max_hp: unit_combat(kind).hp + self.researched_hp_bonus(player, kind),
+            attack_target: None,
+            last_hit: None,
+            death_tick: None,
+            death_hunt: None,
+            auto_scout: false,
+        };
+        if let Some(player) = self.economy.players.get_mut(&player) {
+            player.population_used = player.population_used.saturating_add(1);
+        }
+        self.insert_map_unit(state, 0);
+        Ok(id)
+    }
+
+    pub(crate) fn insert_map_unit(&mut self, state: GameUnit, next_hit_tick: u64) {
+        let (id, position) = (state.id, state.position);
+        if state.kind == UnitKind::Monk {
+            self.combat.healers.insert(id);
+        }
         let bucket = ChunkCoord::from_position(position);
         let bucket_slot = self.chunks.entry(bucket).or_default().len();
         self.chunks.entry(bucket).or_default().push(id);
         self.lookup.insert(id, self.units.len());
         self.units.push(StoredUnit {
-            state: GameUnit {
-                id,
-                player,
-                position,
-                previous_position: position,
-                moving: false,
-                planning: false,
-                facing: Facing::South,
-                kind,
-                task: UnitTask::Idle,
-                carried: None,
-                hp: unit_combat(kind).hp + self.researched_hp_bonus(player, kind),
-                max_hp: unit_combat(kind).hp + self.researched_hp_bonus(player, kind),
-                attack_target: None,
-                last_hit: None,
-                death_tick: None,
-                death_hunt: None,
-            },
+            formation: None,
+            state,
             order: None,
+            obstruction: None,
             bucket,
             bucket_slot,
+            wildlife_slot: usize::MAX,
             route: VecDeque::new(),
             planner: None,
             last_movement_error: None,
-            next_hit_tick: 0,
+            next_hit_tick,
+            planning_since: 0,
+            fast_route_tried: false,
+            unreachable_memo: None,
         });
-        if let Some(player) = self.economy.players.get_mut(&player) {
-            player.population_used = player.population_used.saturating_add(1);
-        }
+        let state = self.units[self.units.len() - 1].state;
+        self.track_unit_cell(&state);
+        self.idle_spacing.insert(id, state.position.tile_floor());
         self.update_unit_vision(id);
-        Ok(id)
     }
 }

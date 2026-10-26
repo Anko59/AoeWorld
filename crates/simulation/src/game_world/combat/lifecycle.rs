@@ -17,12 +17,21 @@ impl GameWorld {
             .get(&id)
             .ok_or(crate::EconomyError::UnknownEntity)?;
         let unit = self.units[index].state;
-        if unit.hp == 0 {
+        if unit.hp == 0 || self.embarked(id) {
             return Err(crate::EconomyError::InvalidTarget);
         }
         if unit.player != player {
             return Err(crate::EconomyError::NotOwner);
         }
+        self.stop_unit_orders(index);
+        Ok(())
+    }
+
+    /// Infallible cancellation after the command has validated its actors.
+    pub(crate) fn stop_unit_orders(&mut self, index: usize) {
+        let unit = self.units[index].state;
+        let id = unit.id;
+        self.cancel_auto_scout(id);
         self.stop_movement(index);
         if let Ok(slot) = self.active_movers.binary_search(&id) {
             self.active_movers.remove(slot);
@@ -36,24 +45,30 @@ impl GameWorld {
         } else {
             UnitTask::Idle
         };
-        Ok(())
     }
 
     /// Drops the unit's route and order without touching its task.
     pub(crate) fn stop_movement(&mut self, index: usize) {
+        self.units[index].obstruction = None;
+        let id = self.units[index].state.id;
+        self.break_formation(id);
+        self.destinations.remove(id);
         self.clear_planner(index);
         let unit = &mut self.units[index];
         unit.order = None;
         unit.route.clear();
         unit.state.moving = false;
         unit.state.planning = false;
+        self.refresh_spacing_order(id);
     }
 
     /// Population is freed now; native death playback precedes thirty seconds of corpse decay.
     pub(crate) fn kill_unit(&mut self, index: usize) {
+        self.cancel_auto_scout(self.units[index].state.id);
         self.stop_movement(index);
         let id = self.units[index].state.id;
         let player = self.units[index].state.player;
+        self.sink_cargo(id);
         let death_hunt = self
             .hunting_target(id)
             .and_then(|target| self.animal(target))
@@ -64,8 +79,11 @@ impl GameWorld {
         state.death_hunt = death_hunt;
         state.task = UnitTask::Dying;
         state.attack_target = None;
+        let at = state.position;
+        self.track_unit_death(id, at);
         self.update_observer(id, None);
         self.combat.attackers.remove(&id);
+        self.combat.healers.remove(&id);
         self.stop_gathering(id);
         self.cancel_hunt(id);
         self.economy.builders.remove(&id);
@@ -80,7 +98,15 @@ impl GameWorld {
             crate::UnitKind::Archer | crate::UnitKind::Skirmisher | crate::UnitKind::Spearman => {
                 1000
             }
-            crate::UnitKind::FishingShip => 0,
+            crate::UnitKind::FishingShip
+            | crate::UnitKind::Galley
+            | crate::UnitKind::FireShip
+            | crate::UnitKind::DemolitionShip
+            | crate::UnitKind::TransportShip
+            | crate::UnitKind::WarGalley => 0,
+            crate::UnitKind::Knight | crate::UnitKind::LightCavalry => 1850,
+            crate::UnitKind::BatteringRam => 1200,
+            _ => 1000,
         };
         let die_ticks = (u64::from(self.config.tick_hz) * die_millis).div_ceil(1000);
         let due = self.tick.0.saturating_add(
@@ -91,10 +117,16 @@ impl GameWorld {
 
     /// Removes a unit from every index. Its slot is filled by the last unit.
     pub(crate) fn remove_unit(&mut self, id: EntityId) {
+        self.economy.embarked.remove(&id);
+        self.cancel_auto_scout(id);
+        self.break_formation(id);
+        self.destinations.remove(id);
         let Some(&index) = self.lookup.get(&id) else {
             return;
         };
         self.clear_planner(index);
+        let at = self.units[index].state.position;
+        self.untrack_unit_at(id, at);
         let bucket = self.units[index].bucket;
         let slot = self.units[index].bucket_slot;
         if let Some(ids) = self.chunks.get_mut(&bucket) {
@@ -112,6 +144,7 @@ impl GameWorld {
             self.active_movers.remove(position);
         }
         self.combat.attackers.remove(&id);
+        self.combat.healers.remove(&id);
         self.stop_gathering(id);
         self.economy.builders.remove(&id);
         self.lookup.remove(&id);

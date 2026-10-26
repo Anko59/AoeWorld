@@ -146,6 +146,10 @@ continuously animated Mill. Keep that refusal explicit in the local report.
 
 ## Findings on the trial (Gaia, 5,024 graphics, 720 units)
 
+- Tree rows 349/350/351 inventory oak/pine/palm graphic families, including
+  `_SN` chopped art: graphics 2303/2311/2307 resolve to SLP 2299/2307/2303.
+  The trial does not expose these as separate standing units. All three tree
+  units reference decorative stump unit 415 (`STUMP_NN`, graphic 1698, SLP 1035).
 - The graphic id is not the SLP id: graphic 1284 `VMBAS_FN` uses SLP 1479.
 - Villager idle 1479 and walk 1484 are unit 83. Town Center 891 is graphic
   `RTWC1NNG`, the stand graphic of unit 618 (the Dark Age Town Center variant);
@@ -155,9 +159,9 @@ continuously animated Mill. Keep that refusal explicit in the local report.
   575). Scout Cavalry (unit 448) is `SCOUT_*`, SLP 2085 idle, 2089 walk.
 - Villager task art comes from unit headers: `proceeding`, `working` and
   `carrying` slots. Wood 1535/1536 and stone 1560 and carrying 1552 match.
-  1545 is `VMLUM_TN` (lumberjack), not gold mining; gold miners reuse 1560 with
-  carry 2117. 1490/1493 are `VMBLD_DN`/`VMBLD_FN` (builder dying and standing),
-  not berry foraging; the forager is `VMFOR_*` with tasks 2589/2592.
+  Gold miners (unit 579) reuse the stone miner's pick 1560 and carry with 2117;
+  1545 is `VMLUM_TN` (lumberjack) and is not used for mining. Foraging and food carrying use the forager `VMFOR_*` tasks 2589/2592;
+  1490/1493 are `VMBLD_DN`/`VMBLD_FN` (builder dying and standing).
 - Farm, Lumber Camp and Mining Camp art is partly or wholly absent from the
   trial `graphics.drs`; the table's `pack` column says which. The composition
   section also inventories every delta and annex resource separately.

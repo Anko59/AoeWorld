@@ -60,6 +60,7 @@ pub(super) fn scenery(scene: &scene::PreparedScene) -> impl Iterator<Item = Scen
         };
         let [x, y] = decoration.position.map(|value| value.floor() as u64);
         Some(SceneResource {
+            highlight: 0,
             id: (y << 19) | (x << 1) | 1,
             position: decoration.position,
             kind,

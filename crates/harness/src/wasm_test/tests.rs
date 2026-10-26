@@ -1,5 +1,34 @@
 use super::*;
 
+#[test]
+fn focused_wasm_arguments_select_only_the_requested_library_tests() {
+    for package in ["aoe-client", "aoe-rendering"] {
+        let args = suites::focused_arguments(package, "navy::").unwrap();
+        assert_eq!(
+            args,
+            [
+                "test",
+                "--locked",
+                "--release",
+                "-p",
+                package,
+                "--target",
+                "wasm32-unknown-unknown",
+                "--lib",
+                "--",
+                "navy::"
+            ]
+            .map(str::to_owned)
+        );
+    }
+    for package in ["", "aoe-server", "aoe-sdk"] {
+        assert!(suites::focused_arguments(package, "navy::").is_err());
+    }
+    for filter in ["", " ", "\t\n"] {
+        assert!(suites::focused_arguments("aoe-client", filter).is_err());
+    }
+}
+
 fn context_count(output: &str) -> Option<usize> {
     retry::context_failures(output).map(|names| names.len())
 }

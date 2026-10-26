@@ -11,6 +11,11 @@ import { forceCanvas, forceWebGl } from "./backends.js";
 
 const colors = Object.values(syntheticSurfaceColors);
 
+// These tests explicitly deny WebGPU. Keep the process on the normal fallback
+// compositor too: the WebGPU project's Vulkan flags otherwise remain active
+// and stall GL captures/restoration without exercising any WebGPU game code.
+test.use({ launchOptions: { args: [] } });
+
 test.beforeEach(async ({ request }) => {
   expect((await request.post("/maps/reset")).status()).toBe(204);
 });
@@ -233,6 +238,9 @@ async function selectAndMove(page: Page, movementPixelTimeout = 10_000) {
     .toBeGreaterThan(10);
   const before = await horsePixels(page);
   await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  await expect(page.locator("#selection-name")).toHaveText("Scout Cavalry");
+  // This ground tile is occupied by a starting villager. The scout must
+  // choose a nearby arrival instead of cancelling the order at its origin.
   await canvas.click({
     position: { x: box.width / 2 + 110, y: box.height / 2 + 30 },
     button: "right",

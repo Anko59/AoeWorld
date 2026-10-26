@@ -42,7 +42,9 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
         {
             continue;
         }
-        let pose = if shot.kind == ProjectileKind::Arrow {
+        let pose = if shot.kind == ProjectileKind::Stone {
+            Pose::Stone
+        } else if shot.kind == ProjectileKind::Arrow {
             Pose::Arrow
         } else {
             Pose::Javelin
@@ -51,9 +53,8 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
             id: aoe_core::EntityId(u32::MAX.saturating_sub(shot.id as u32)),
             kind: SceneUnitKind::actor(pose as u8),
             position,
-            moving: true,
+            visual: aoe_rendering::SceneUnitVisual::new(true).with_selected(false),
             facing: facing(to[0] - from[0], to[1] - from[1]),
-            selected: false,
             elevation_meters: scene
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position))

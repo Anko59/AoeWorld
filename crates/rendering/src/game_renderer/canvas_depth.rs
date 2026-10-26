@@ -7,6 +7,10 @@ const BACKGROUND: [u8; 4] = [41, 74, 36, 255];
 #[path = "canvas_raster.rs"]
 mod raster;
 use raster::{raster_selection, raster_sprite};
+#[path = "canvas_depth/damage.rs"]
+mod damage;
+#[path = "canvas_depth/equality.rs"]
+mod equality;
 
 /// Reuses both the WASM-side raster buffers and the browser-owned ImageData
 /// backing array. A resize only wraps a new ImageData view around the retained
@@ -18,10 +22,21 @@ pub struct CanvasPresentation {
     pub(super) image_data: Option<ImageData>,
     pub(super) image_pixels: Option<Uint8ClampedArray>,
     pub(super) image_store: Option<Uint8ClampedArray>,
+    damage: damage::Damage,
     size: [u32; 2],
 }
 
 impl CanvasPresentation {
+    pub(super) fn resident_bytes(&self) -> usize {
+        self.color_buffer.capacity()
+            + self.depth_buffer.capacity() * std::mem::size_of::<f64>()
+            + self
+                .image_store
+                .as_ref()
+                .map_or(0, |pixels| pixels.length() as usize)
+            + self.damage.resident_bytes()
+    }
+
     pub(super) fn new(width: u32, height: u32) -> Self {
         Self {
             color_buffer: Vec::new(),
@@ -29,6 +44,7 @@ impl CanvasPresentation {
             image_data: None,
             image_pixels: None,
             image_store: None,
+            damage: Default::default(),
             size: [width, height],
         }
     }
@@ -38,6 +54,7 @@ impl CanvasPresentation {
             return;
         }
         self.size = [width, height];
+        self.invalidate();
         self.image_data = None;
         self.image_pixels = None;
 
@@ -45,6 +62,10 @@ impl CanvasPresentation {
             shrink_after_large_resize(&mut self.color_buffer, color_bytes);
             shrink_after_large_resize(&mut self.depth_buffer, pixels);
         }
+    }
+
+    pub(super) fn invalidate(&mut self) {
+        self.damage.invalidate();
     }
 
     fn present(
@@ -160,65 +181,102 @@ pub(super) fn render_canvas_world_with_fog(
     let (pixel_count, color_bytes) = buffer_lengths(width, height)
         .ok_or_else(|| "Canvas depth buffer size overflowed".to_owned())?;
     presentation.resize(width, height);
+    let lights = layers
+        .iter()
+        .map(|layer| match layer {
+            WorldLayer::Surface(triangle) => super::fog::vertices(triangle, light),
+            _ => [1.0; 3],
+        })
+        .collect::<Vec<_>>();
+    let damage = presentation.damage.regions(
+        layers,
+        &lights,
+        camera.viewport,
+        [width, height],
+        fog_active,
+        atlas,
+    );
     let color = &mut presentation.color_buffer;
     let depth = &mut presentation.depth_buffer;
     color.resize(color_bytes, 0);
-    for pixel in color.as_chunks_mut::<4>().0 {
-        pixel.copy_from_slice(if fog_active {
-            &[0, 0, 0, 255]
-        } else {
-            &BACKGROUND
-        });
-    }
     depth.resize(pixel_count, f64::NEG_INFINITY);
-    depth.fill(f64::NEG_INFINITY);
+    for &[dirty_left, dirty_top, dirty_right, dirty_bottom] in &damage {
+        for y in dirty_top..dirty_bottom {
+            let start = (y * width + dirty_left) as usize;
+            let end = (y * width + dirty_right) as usize;
+            for pixel in color[start * 4..end * 4].as_chunks_mut::<4>().0 {
+                pixel.copy_from_slice(if fog_active {
+                    &[0, 0, 0, 255]
+                } else {
+                    &BACKGROUND
+                });
+            }
+            depth[start..end].fill(f64::NEG_INFINITY);
+        }
 
-    for layer in layers {
-        let Some([left, top, right, bottom]) =
-            canvas_layer_bounds(layer, camera.viewport, width, height)
-        else {
-            continue;
-        };
-        match layer {
-            WorldLayer::Surface(triangle) => {
-                raster::raster_surface_with_fog(
-                    triangle,
-                    atlas,
-                    [left, top, right, bottom],
-                    width,
-                    color,
-                    depth,
-                    super::fog::vertices(triangle, light),
-                );
+        for (layer, fog) in layers.iter().zip(&lights) {
+            let Some([original_left, top, right, bottom]) =
+                canvas_layer_bounds(layer, camera.viewport, width, height)
+            else {
+                continue;
+            };
+            let left = original_left.max(dirty_left);
+            let top = top.max(dirty_top);
+            let right = right.min(dirty_right);
+            let bottom = bottom.min(dirty_bottom);
+            if left >= right || top >= bottom {
+                continue;
             }
-            WorldLayer::Selection(sprite, layer_depth) => {
-                raster_selection(
-                    *sprite,
-                    *layer_depth,
-                    camera.viewport,
-                    [left, top, right, bottom],
-                    width,
-                    color,
-                    depth,
-                );
-            }
-            WorldLayer::Sprite(sprite, frame, layer_depth, _) => {
-                raster_sprite(
-                    *sprite,
-                    *frame,
-                    *layer_depth,
-                    atlas,
-                    camera.viewport,
-                    [left, top, right, bottom],
-                    width,
-                    color,
-                    depth,
-                );
+            match layer {
+                WorldLayer::Surface(triangle) => {
+                    raster::raster_surface_region(
+                        triangle,
+                        atlas,
+                        [original_left, top, right, bottom],
+                        left,
+                        width,
+                        color,
+                        depth,
+                        *fog,
+                    );
+                }
+                WorldLayer::Selection(sprite, layer_depth) => {
+                    raster_selection(
+                        *sprite,
+                        *layer_depth,
+                        camera.viewport,
+                        [left, top, right, bottom],
+                        width,
+                        color,
+                        depth,
+                    );
+                }
+                WorldLayer::Sprite(sprite, frame, layer_depth, _) => {
+                    raster_sprite(
+                        *sprite,
+                        *frame,
+                        *layer_depth,
+                        atlas,
+                        camera.viewport,
+                        [left, top, right, bottom],
+                        width,
+                        color,
+                        depth,
+                    );
+                }
             }
         }
     }
 
     presentation.present(context, width, height)?;
+    presentation.damage.remember(
+        layers,
+        &lights,
+        camera.viewport,
+        [width, height],
+        fog_active,
+        atlas,
+    );
     if grid {
         game_grid::draw_grid(context, &super::fog::grid_segments(layers, camera, light));
     }
@@ -276,9 +334,9 @@ pub(super) fn canvas_layer_bounds(
             )
         }
     };
-    let left = min_x.floor().clamp(0.0, f64::from(width)) as u32;
-    let top = min_y.floor().clamp(0.0, f64::from(height)) as u32;
-    let right = max_x.ceil().clamp(0.0, f64::from(width)) as u32;
-    let bottom = max_y.ceil().clamp(0.0, f64::from(height)) as u32;
+    let left = aoe_core::clamp_f64(min_x.floor(), 0.0, f64::from(width)) as u32;
+    let top = aoe_core::clamp_f64(min_y.floor(), 0.0, f64::from(height)) as u32;
+    let right = aoe_core::clamp_f64(max_x.ceil(), 0.0, f64::from(width)) as u32;
+    let bottom = aoe_core::clamp_f64(max_y.ceil(), 0.0, f64::from(height)) as u32;
     (right > left && bottom > top).then_some([left, top, right, bottom])
 }

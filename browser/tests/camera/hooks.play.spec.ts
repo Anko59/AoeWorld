@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { test } from "../../server.js";
+import { isolatedTest as test } from "../../server.js";
 import { PNG } from "pngjs";
 import { gameAssets } from "../game-assets.js";
 
@@ -58,7 +58,7 @@ test("camera fragment parser preserves decimals, invalid parts, and zoom limits"
   }
   expect(parsed.zoomOnly).toEqual([null, null, 2, 0]);
   expect(parsed.high).toEqual([-500, 9999999, 3, 0]);
-  expect(parsed.low).toEqual([null, null, 0.25, 0]);
+  expect(parsed.low).toEqual([null, null, 1 / 4096, 0]);
   expect(parsed.unrelated).toEqual([null, null, null, 0]);
   expect(parsed.renderers).toEqual([
     [null, null, null, 0],
@@ -87,7 +87,7 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
   await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
   const token = await page.evaluate(() =>
-    sessionStorage.getItem("aoeworld.resume-token"),
+    localStorage.getItem("aoeworld.resume-token"),
   );
   expect(token).toBeTruthy();
   const hash = process.env["AOE_E2E_LANDSCAPE_HASH"];
@@ -98,7 +98,7 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
       method: "POST",
       headers: {
         "x-aoeworld-controller-token":
-          sessionStorage.getItem("aoeworld.resume-token") ?? "",
+          localStorage.getItem("aoeworld.resume-token") ?? "",
       },
     });
     if (!response.ok) throw new Error(await response.text());
@@ -113,13 +113,13 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
   await page.getByRole("button", { name: "Reconnect to server" }).click();
   await expect
     .poll(() =>
-      page.evaluate(() => sessionStorage.getItem("aoeworld.resume-token")),
+      page.evaluate(() => localStorage.getItem("aoeworld.resume-token")),
     )
     .not.toBe(token);
   await expect(page.locator("#connection")).toHaveText("connected");
   await expect
     .poll(() =>
-      page.evaluate(() => sessionStorage.getItem("aoeworld.resume-token")),
+      page.evaluate(() => localStorage.getItem("aoeworld.resume-token")),
     )
     .toBeTruthy();
   const context = await browser.newContext();
@@ -152,11 +152,13 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
     const before = PNG.sync.read(
       await spectator.locator("#scene").screenshot(),
     );
-    // Terrain fills the central viewport: neither blank background nor a sprite suffices.
+    // Sample clear terrain to the right of the starting kit. Its current opaque
+    // tree fixtures cover the old central patch; keep the same area and floor
+    // so neither blank background nor those sprites can satisfy this check.
     const colors = new Set<string>();
     let terrainPixels = 0;
     for (let y = 150; y < 450; y += 10)
-      for (let x = 250; x < 650; x += 10) {
+      for (let x = 750; x < 1150; x += 10) {
         const offset = (y * before.width + x) * 4;
         const color = before.data.subarray(offset, offset + 3).toString("hex");
         // Current composed grass base/accent for the flat temperate package,
@@ -212,7 +214,7 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
     // The spectator gets no lease token, yet its map raster comes from the opened package.
     expect(
       await spectator.evaluate(() =>
-        sessionStorage.getItem("aoeworld.resume-token"),
+        localStorage.getItem("aoeworld.resume-token"),
       ),
     ).toBeNull();
     expect(

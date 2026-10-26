@@ -4,7 +4,7 @@ use super::SceneUnitKind;
 impl SceneUnitKind {
     /// Flat tags keep the scene DTO at 32 bytes, including actor animations.
     pub fn actor(index: u8) -> Self {
-        const ACTORS: [SceneUnitKind; 74] = [
+        const ACTORS: [SceneUnitKind; 126] = [
             SceneUnitKind::MilitiaStand,
             SceneUnitKind::MilitiaWalk,
             SceneUnitKind::MilitiaAttack,
@@ -79,6 +79,58 @@ impl SceneUnitKind {
             SceneUnitKind::ScoutWalk,
             SceneUnitKind::Arrow,
             SceneUnitKind::Javelin,
+            SceneUnitKind::FarmerWork,
+            SceneUnitKind::LongSwordsmanStand,
+            SceneUnitKind::LongSwordsmanWalk,
+            SceneUnitKind::LongSwordsmanAttack,
+            SceneUnitKind::LongSwordsmanDie,
+            SceneUnitKind::LongSwordsmanDecay,
+            SceneUnitKind::PikemanStand,
+            SceneUnitKind::PikemanWalk,
+            SceneUnitKind::PikemanAttack,
+            SceneUnitKind::PikemanDie,
+            SceneUnitKind::PikemanDecay,
+            SceneUnitKind::CrossbowmanStand,
+            SceneUnitKind::CrossbowmanWalk,
+            SceneUnitKind::CrossbowmanAttack,
+            SceneUnitKind::CrossbowmanDie,
+            SceneUnitKind::CrossbowmanDecay,
+            SceneUnitKind::EliteSkirmisherStand,
+            SceneUnitKind::EliteSkirmisherWalk,
+            SceneUnitKind::EliteSkirmisherAttack,
+            SceneUnitKind::EliteSkirmisherDie,
+            SceneUnitKind::EliteSkirmisherDecay,
+            SceneUnitKind::KnightStand,
+            SceneUnitKind::KnightWalk,
+            SceneUnitKind::KnightAttack,
+            SceneUnitKind::KnightDie,
+            SceneUnitKind::KnightDecay,
+            SceneUnitKind::LightCavalryStand,
+            SceneUnitKind::LightCavalryWalk,
+            SceneUnitKind::LightCavalryAttack,
+            SceneUnitKind::LightCavalryDie,
+            SceneUnitKind::LightCavalryDecay,
+            SceneUnitKind::MonkStand,
+            SceneUnitKind::MonkWalk,
+            SceneUnitKind::MonkAttack,
+            SceneUnitKind::MonkDie,
+            SceneUnitKind::MonkDecay,
+            SceneUnitKind::MangonelStand,
+            SceneUnitKind::MangonelWalk,
+            SceneUnitKind::MangonelAttack,
+            SceneUnitKind::MangonelDie,
+            SceneUnitKind::MangonelDecay,
+            SceneUnitKind::BatteringRamStand,
+            SceneUnitKind::BatteringRamWalk,
+            SceneUnitKind::BatteringRamAttack,
+            SceneUnitKind::BatteringRamDie,
+            SceneUnitKind::BatteringRamDecay,
+            SceneUnitKind::Stone,
+            SceneUnitKind::Galley,
+            SceneUnitKind::WarGalley,
+            SceneUnitKind::FireShip,
+            SceneUnitKind::DemolitionShip,
+            SceneUnitKind::TransportShip,
         ];
         ACTORS
             .get(usize::from(index))
@@ -86,7 +138,7 @@ impl SceneUnitKind {
             .unwrap_or(Self::Scout)
     }
     pub(in crate::game_renderer) fn actor_slot(self) -> Option<usize> {
-        if (Self::ArcherStand as u8..=Self::Javelin as u8).contains(&(self as u8)) {
+        if (Self::ArcherStand as u8..=Self::TransportShip as u8).contains(&(self as u8)) {
             return Some(50 + (self as usize - Self::ArcherStand as usize));
         }
         (self as u8)

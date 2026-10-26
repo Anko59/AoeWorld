@@ -39,11 +39,16 @@ pub const DARK_AGE: &[(&str, i32)] = &[
     ("Forage bush", 59),
     ("Gold mine", 66),
     ("Stone mine", 102),
+    ("Oak tree", 349),
+    ("Pine tree", 350),
+    ("Palm tree", 351),
+    ("Tree stump", 415),
+    ("Gather point flag", 720),
 ];
 
 #[path = "feudal.rs"]
 mod feudal;
-pub use feudal::{FEUDAL, FEUDAL_MILITARY};
+pub use feudal::{CASTLE, FEUDAL, FEUDAL_MILITARY};
 /// Villager variants share an internal-name stem; the suffix names the job.
 const JOBS: &[(&str, &str)] = &[
     ("BAS", "base"),
@@ -115,6 +120,7 @@ pub struct Table {
     pub buildings: Vec<super::BuildingComposition>,
     pub building_records: Vec<(i32, super::Building)>,
     pub terrains: Vec<super::Terrain>,
+    pub technologies: Vec<super::Technology>,
 }
 
 /// SLP resource ids of a classic DRS archive (graphics.drs).
@@ -184,7 +190,8 @@ fn family(file: &DatFile, unit: &Unit, pack: Option<&BTreeSet<i32>>) -> Vec<Grap
     let Some(stem) = stand.name.get(..stand.name.len().saturating_sub(2)) else {
         return Vec::new();
     };
-    if unit.kind != 80 || stem.len() < 4 {
+    let tree = matches!(unit.id, 349..=351);
+    if (!tree && unit.kind != 80) || stem.len() < 4 {
         return Vec::new();
     }
     file.graphics
@@ -279,9 +286,7 @@ enum Expect {
     Family(i32),
 }
 
-/// Sprite ids the existing catalog uses, with the DAT unit and role they
-/// should belong to. A `mismatch` is a finding about the catalog label, not a
-/// decoder failure: the DAT names are authoritative for what a sprite is.
+/// Catalog sprite ids with their DAT unit and role; the DAT is authoritative.
 const CHECKS: &[(&str, i32, Expect)] = &[
     ("Town Center (Dark Age main)", 891, Expect::Family(109)),
     ("Villager idle", 1479, Expect::Role(83, "stand")),
@@ -290,10 +295,12 @@ const CHECKS: &[(&str, i32, Expect)] = &[
     ("Scout walk", 3008, Expect::Role(448, "walk")),
     ("Wood chopping", 1535, Expect::Role(123, "task")),
     ("Wood carrying", 1536, Expect::Role(123, "task")),
-    ("Berry foraging", 1490, Expect::Role(120, "task")),
-    ("Food carrying", 1493, Expect::Role(120, "task")),
-    ("Gold mining", 1545, Expect::Role(579, "task")),
-    ("Ore carrying", 1552, Expect::Role(124, "task")),
+    ("Berry foraging", 2589, Expect::Role(120, "task")),
+    ("Food carrying", 2592, Expect::Role(120, "task")),
+    ("Farm tilling", 1512, Expect::Role(259, "task")),
+    ("Gold mining", 1560, Expect::Role(579, "task")),
+    ("Gold carrying", 2117, Expect::Role(579, "task")),
+    ("Stone carrying", 1552, Expect::Role(124, "task")),
     ("Stone mining", 1560, Expect::Role(124, "task")),
 ];
 
@@ -347,7 +354,7 @@ pub fn build(file: &DatFile, pack: Option<&BTreeSet<i32>>) -> Table {
         .collect();
     let mut rows: Vec<Row> = DARK_AGE
         .iter()
-        .chain(FEUDAL_MILITARY.iter().chain(FEUDAL))
+        .chain(FEUDAL_MILITARY.iter().chain(FEUDAL).chain(CASTLE))
         .map(|(label, id)| row(file, &cache, label, *id, pack))
         .collect();
     for unit in file.units.iter().filter(|u| u.kind == 70) {
@@ -383,6 +390,7 @@ pub fn build(file: &DatFile, pack: Option<&BTreeSet<i32>>) -> Table {
             .filter_map(|u| u.building.clone().map(|b| (u.id, b)))
             .collect(),
         terrains: file.terrains.clone(),
+        technologies: file.technologies.clone(),
         rows,
         checks: CHECKS
             .iter()
@@ -432,69 +440,4 @@ pub fn markdown(table: &Table) -> String {
     out
 }
 
-/// Compact terminal view: ids and counts only, no imagery.
-pub fn summary(table: &Table) -> String {
-    let r = &table.report;
-    let mut out = String::new();
-    if let Some(reason) = &r.stopped {
-        let _ = writeln!(out, "INCOMPLETE: {reason}\n");
-    }
-    let _ = write!(
-        out,
-        "{}: {} sounds, graphics at byte {}..{}, civilisation {:?} at {:?}, unit headers at {:?}, {} of {} unit slots parsed, stopped: {:?}\n\n",
-        table.version,
-        r.sounds,
-        r.graphics_offset,
-        r.graphics_end,
-        r.civilisation_name,
-        r.civilisation_offset,
-        r.unit_headers_offset,
-        r.units_parsed,
-        r.unit_slots,
-        r.stopped
-    );
-    for row in &table.rows {
-        let Some(name) = &row.internal_name else {
-            let _ = writeln!(
-                out,
-                "{:<24} unit {:>3} not in this dat",
-                row.label, row.unit
-            );
-            continue;
-        };
-        let _ = writeln!(
-            out,
-            "{:<24} unit {:>3} {:<7} hp {:>4} los {:>4} pack {}",
-            row.label,
-            row.unit,
-            name,
-            row.hit_points.unwrap_or(0),
-            row.line_of_sight.unwrap_or(0.0),
-            row.pack
-        );
-        for g in row
-            .graphics
-            .iter()
-            .filter(|g| !g.role.starts_with("task") || g.in_pack.is_some())
-        {
-            let _ = writeln!(
-                out,
-                "    {:<22} graphic {:>5} {:<9} SLP {:>5} {:>3}f x {}a  in pack {:?}",
-                g.role, g.graphic, g.name, g.slp, g.frames, g.angles, g.in_pack
-            );
-        }
-    }
-    out.push_str("\nCross-checks against the existing catalog\n");
-    for c in &table.checks {
-        let _ = writeln!(
-            out,
-            "  {:<8} {:<28} SLP {:>5}  expected {}  dat: {}",
-            c.status,
-            c.label,
-            c.slp,
-            c.expected,
-            c.dat_says.join("; ")
-        );
-    }
-    out
-}
+pub use super::table_details::summary;

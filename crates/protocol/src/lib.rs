@@ -1,20 +1,23 @@
 //! Bounded, versioned binary WebSocket contract.
 mod gameplay;
-pub use gameplay::FogState;
+pub use gameplay::MoveQueue;
 pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
+pub use gameplay::{FogState, Formation};
 pub use gameplay::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 
 use aoe_core::{EntityId, PlayerId, Position, Region, Tick};
 pub use gameplay::{
     Age, BuildingKind, CarriedResource, ClientMessage as GameplayClientMessage, CommandResult,
     ConstructionState, Error as GameplayError, GameplayBuildingState, GameplayPlayerState,
-    HitState, MAX_ACK_HISTORY, MAX_BUILD_GROUP, MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS,
+    GarrisonUnitState, HitState, MARKET_MAX_PRICE, MARKET_MIN_PRICE, MAX_ACK_HISTORY,
+    MAX_BUILD_GROUP, MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS, MAX_MATCH_POPULATION,
     MAX_MESSAGE as GAMEPLAY_MAX_MESSAGE, MAX_PENDING_COMMANDS_GLOBAL,
-    MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_POPULATION, MAX_RESOURCE_CHANGES,
-    MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MAX_TRAINING_QUEUE, MapMetadata, ResearchState,
-    ResourceAmount, ResourceKind, ResourceState, ResumeToken, Role as GameplayRole,
-    ServerMessage as GameplayServerMessage, Stockpile, Tech, TrainingState, UnitKind,
-    UnitState as GameplayUnitState, UnitTask, VERSION as GAMEPLAY_VERSION,
+    MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_POPULATION, MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES,
+    MAX_RETAINED_BUILDINGS, MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MAX_TRAINING_QUEUE,
+    MapMetadata, MarketPrices, RallyPoint, RallyTarget, ResearchState, ResourceAmount,
+    ResourceKind, ResourceState, ResumeToken, Role as GameplayRole,
+    ServerMessage as GameplayServerMessage, Stockpile, Tech, TradeResource, TrainingState,
+    UnitKind, UnitState as GameplayUnitState, UnitTask, VERSION as GAMEPLAY_VERSION,
     decode_client as decode_gameplay_client, decode_server as decode_gameplay_server,
     encode_client as encode_gameplay_client, encode_server as encode_gameplay_server,
 };

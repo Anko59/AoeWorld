@@ -42,9 +42,8 @@ fn missing_wildlife_art_keeps_neutral_animals_distinct_from_player_unit_markers(
             kind,
             id: EntityId(7),
             position: [10.5; 2],
-            moving: false,
+            visual: crate::SceneUnitVisual::new(false).with_selected(false),
             facing: 0,
-            selected: false,
             elevation_meters: 0.0,
         };
         let drawn = world_sprite_frames(&art(), &ground(), &[], &[unit], camera(1.0), 0);
@@ -115,6 +114,7 @@ fn camera(zoom: f64) -> SceneCamera {
 
 fn resource(kind: u8) -> SceneResource {
     SceneResource {
+        highlight: 0,
         id: u64::from(kind) + 1,
         position: [10.5; 2],
         kind,
@@ -206,9 +206,8 @@ fn units_are_drawn_at_the_same_native_scale() {
         kind: Default::default(),
         id: EntityId(7),
         position: [10.5; 2],
-        moving: false,
+        visual: crate::SceneUnitVisual::new(false).with_selected(false),
         facing: 0,
-        selected: false,
         elevation_meters: 0.0,
     };
     let drawn = world_sprite_frames(&art(), &ground(), &[], &[unit], camera(1.0), 0);
@@ -226,9 +225,8 @@ fn objects_share_one_clearance_that_covers_the_art_below_a_hotspot() {
         kind: Default::default(),
         id: EntityId(7),
         position: [10.25, 10.5],
-        moving: false,
+        visual: crate::SceneUnitVisual::new(false).with_selected(false),
         facing: 0,
-        selected: false,
         elevation_meters: 0.0,
     };
     // The deepest reviewed art: gold variant 3 reaches 32 native rows below

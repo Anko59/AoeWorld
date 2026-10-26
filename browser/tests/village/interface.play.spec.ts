@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { test } from "../../server.js";
+import { isolatedTest as test } from "../../server.js";
 import { forceCanvas } from "../rendering/backends.js";
 import { gameAssets } from "../game-assets.js";
 import {
@@ -83,7 +83,7 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
   const hash = process.env["AOE_E2E_LANDSCAPE_HASH"];
   if (!hash) throw new Error("Run through the Dockerized browser gate");
   const token = await page.evaluate(() =>
-    sessionStorage.getItem("aoeworld.resume-token"),
+    localStorage.getItem("aoeworld.resume-token"),
   );
   if (!token) throw new Error("Controller token missing");
   const opened = await page.request.post(`/maps/${hash}`, {
@@ -130,7 +130,16 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
     timeout: 32_000,
   });
   await page.keyboard.press("q");
-  await expect(page.locator("#connection")).toContainText("population limit");
+  // Orders beyond the cap are now prepaid and queued, then wait for housing.
+  // The training panel explains the wait without reporting a connection error.
+  await expect(page.locator("#stockpile-food")).toHaveText("100");
+  await expect(page.locator("#training-label")).toContainText(
+    "Waiting for housing",
+  );
+  await expect(page.locator("#selection-task")).toHaveText(
+    "Waiting for housing",
+  );
+  await expect(page.locator("#connection")).toHaveText("connected");
 
   await expect
     .poll(

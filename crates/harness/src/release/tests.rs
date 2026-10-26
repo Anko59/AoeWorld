@@ -7,6 +7,8 @@ struct FakeRuntime {
     dirty: Cell<bool>,
     wrong_branch: Cell<bool>,
     fail_copy: Cell<bool>,
+    remove_bundle_file_on_image_copy: Cell<bool>,
+    missing_shader_in: RefCell<Option<String>>,
 }
 
 impl Runtime for FakeRuntime {
@@ -29,7 +31,16 @@ impl Runtime for FakeRuntime {
                 "dev"
             }
             .to_owned()),
-            ("docker", ["create", ..]) => Ok("temporary-container".to_owned()),
+            ("docker", ["create", image]) => {
+                Ok(if image.contains("/server:") || *image == "sha256:server" {
+                    "server-container"
+                } else if image.contains("/browser:") || *image == "sha256:browser" {
+                    "browser-container"
+                } else {
+                    "temporary-container"
+                }
+                .to_owned())
+            }
             ("docker", ["image", "inspect", .., tag]) if tag.contains("/server:") => {
                 Ok("sha256:server".to_owned())
             }
@@ -51,11 +62,46 @@ impl Runtime for FakeRuntime {
         if program != "docker" {
             return Err("unexpected checked program".into());
         }
-        if let ["cp", _, directory] = args {
+        if let ["cp", source, directory] = args {
             if self.fail_copy.get() {
                 return Err("injected copy failure".into());
             }
             fs::write(Path::new(directory).join("index.html"), b"release bundle")?;
+            if source.starts_with("server-container") && self.remove_bundle_file_on_image_copy.get()
+            {
+                let calls = self.calls.borrow();
+                let artifact = calls
+                    .iter()
+                    .find(|call| {
+                        call.get(2)
+                            .is_some_and(|arg| arg.starts_with("temporary-container:"))
+                    })
+                    .ok_or("missing artifact export")?;
+                fs::remove_file(Path::new(&artifact[3]).join("index.html"))?;
+            }
+            if source.starts_with("browser-container") {
+                // Nginx includes an unrelated error page beside the copied web root.
+                fs::write(Path::new(directory).join("50x.html"), b"nginx error page")?;
+            }
+            fs::create_dir_all(Path::new(directory).join("pkg"))?;
+            for (name, shader) in ["ordinary", "mixing"]
+                .into_iter()
+                .zip(aoe_rendering::shader_data::browser_shaders())
+            {
+                if name == "mixing"
+                    && self
+                        .missing_shader_in
+                        .borrow()
+                        .as_ref()
+                        .is_some_and(|container| source.starts_with(container))
+                {
+                    continue;
+                }
+                fs::write(
+                    Path::new(directory).join(format!("pkg/{name}.wgsl")),
+                    shader,
+                )?;
+            }
         }
         Ok(())
     }
@@ -381,103 +427,5 @@ fn release_accepts_stable_git_fixture_and_verifies_copied_bytes() {
     assert_eq!(runtime.git(&["status", "--porcelain"]).expect("status"), "");
 }
 
-#[test]
-fn bundle_hash_changes_on_tamper() {
-    let directory = tempfile::tempdir().expect("tempdir");
-    fs::write(directory.path().join("index.html"), "original").expect("write");
-    let first = hash_bundle(directory.path()).expect("hash");
-    fs::write(directory.path().join("index.html"), "tampered").expect("write");
-    assert_ne!(first, hash_bundle(directory.path()).expect("hash"));
-}
-
-#[test]
-fn bundle_inventory_rejects_empty_and_symlinked_content() {
-    let empty = tempfile::tempdir().expect("directory");
-    assert!(hash_bundle(empty.path()).is_err());
-    let first = tempfile::tempdir().expect("first");
-    let second = tempfile::tempdir().expect("second");
-    for directory in [first.path(), second.path()] {
-        fs::create_dir(directory.join("nested")).expect("nested");
-    }
-    fs::write(first.path().join("index.html"), b"home").expect("first file");
-    fs::write(first.path().join("nested/app.js"), b"app").expect("nested file");
-    fs::write(second.path().join("nested/app.js"), b"app").expect("nested file");
-    fs::write(second.path().join("index.html"), b"home").expect("second file");
-    assert_eq!(
-        hash_bundle(first.path()).expect("first hash"),
-        hash_bundle(second.path()).expect("second hash")
-    );
-    #[cfg(unix)]
-    {
-        std::os::unix::fs::symlink("index.html", second.path().join("alias.html"))
-            .expect("symlink");
-        assert!(hash_bundle(second.path()).is_err());
-    }
-}
-
-#[test]
-fn release_evidence_rejects_wrong_revision_status_and_dirty_performance() {
-    let directory = tempfile::tempdir().expect("directory");
-    let path = directory.path().join("evidence.json");
-    fs::write(&path, br#"{"revision":"abc","result":"PASS"}"#).expect("E2E evidence");
-    assert_eq!(
-        evidence(&path, "abc", "result").expect("valid hash").len(),
-        64
-    );
-    assert!(evidence(&path, "other", "result").is_err());
-    fs::write(&path, br#"{"revision":"abc","result":"FAIL"}"#).expect("E2E fail");
-    assert!(evidence(&path, "abc", "result").is_err());
-    fs::write(
-        &path,
-        br#"{"revision":"abc","verdict":"PASS","dirty":true}"#,
-    )
-    .expect("dirty performance");
-    assert!(evidence(&path, "abc", "verdict").is_err());
-    fs::write(
-        &path,
-        br#"{"revision":"abc","verdict":"PASS","dirty":false}"#,
-    )
-    .expect("clean performance");
-    assert!(evidence(&path, "abc", "verdict").is_ok());
-}
-
-#[test]
-fn release_manifest_checks_format_tree_and_bundle_before_images() {
-    let directory = tempfile::tempdir().expect("directory");
-    let bundle = directory.path().join("bundle");
-    fs::create_dir(&bundle).expect("bundle");
-    fs::write(bundle.join("index.html"), b"original").expect("bundle file");
-    let revision = output("git", &["rev-parse", "HEAD"]).expect("revision");
-    let tree = output("git", &["rev-parse", "HEAD^{tree}"]).expect("tree");
-    let mut manifest = Manifest {
-        version: 2,
-        source_commit: revision,
-        source_tree: tree,
-        server_image_id: "sha256:server".to_owned(),
-        browser_image_id: "sha256:browser".to_owned(),
-        bundle_hash: hash_bundle(&bundle).expect("bundle hash"),
-        protocol_version: aoe_protocol::VERSION,
-        asset_pack_version: 1,
-        rustc: "test".to_owned(),
-        e2e_report_hash: "a".repeat(64),
-        perf_report_hash: "b".repeat(64),
-    };
-    let path = directory.path().join("manifest.json");
-    let write = |manifest: &Manifest| {
-        fs::write(&path, serde_json::to_vec(manifest).expect("JSON")).expect("manifest")
-    };
-    write(&manifest);
-    assert!(load_and_verify(&path).is_err());
-    manifest.version = 1;
-    manifest.source_commit = "invalid".to_owned();
-    write(&manifest);
-    assert!(load_and_verify(&path).is_err());
-    manifest.source_commit = output("git", &["rev-parse", "HEAD"]).expect("revision");
-    manifest.source_tree = "wrong".to_owned();
-    write(&manifest);
-    assert!(load_and_verify(&path).is_err());
-    manifest.source_tree = output("git", &["rev-parse", "HEAD^{tree}"]).expect("tree");
-    fs::write(bundle.join("index.html"), b"tampered").expect("tamper");
-    write(&manifest);
-    assert!(load_and_verify(&path).is_err());
-}
+#[path = "tests/content.rs"]
+mod content_tests;

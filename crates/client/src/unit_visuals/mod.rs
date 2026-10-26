@@ -1,10 +1,23 @@
 //! Pure choices from authoritative state; no client damage or lifetime timers.
+use crate::building_ui::content::sprites;
 pub(crate) use aoe_assets::catalog::units::Pose;
-use aoe_assets::catalog::units::SPRITES;
+use aoe_core::FIXED_SUBUNITS_PER_TILE;
 use aoe_protocol::{AnimalKind, AnimalState, AnimalTask, GameplayUnitState, UnitKind, UnitTask};
 
 pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> Pose {
     use Pose::*;
+    if let Some((_, pose)) = [
+        (UnitKind::Galley, Galley),
+        (UnitKind::WarGalley, WarGalley),
+        (UnitKind::FireShip, FireShip),
+        (UnitKind::DemolitionShip, DemolitionShip),
+        (UnitKind::TransportShip, TransportShip),
+    ]
+    .into_iter()
+    .find(|(kind, _)| *kind == u.kind)
+    {
+        return pose;
+    }
     if let Some(poses) = military_poses(u.kind) {
         return if u.hp == 0 {
             poses[3]
@@ -27,6 +40,9 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     }
     if u.task == UnitTask::Fishing && !u.moving {
         return FisherWork;
+    }
+    if u.task == UnitTask::Farming && !u.moving && u.hp > 0 {
+        return FarmerWork;
     }
     if u.hp == 0 {
         return match u.kind {
@@ -52,26 +68,29 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     if u.hunt_target.is_some() && u.task == UnitTask::Returning {
         return HunterCarry;
     }
+    let sheep = animal.is_some_and(|a| a.kind == AnimalKind::Sheep);
     if u.hunt_target.is_some() && u.task == UnitTask::Moving {
-        return if animal.is_some_and(|a| a.kind == AnimalKind::Sheep) {
-            ShepherdWalk
-        } else {
-            HunterWalk
-        };
+        return if sheep { ShepherdWalk } else { HunterWalk };
     }
     if u.hunt_target.is_some() && u.task == UnitTask::Gathering {
         return if !u.moving {
             Butcher
-        } else if animal.is_some_and(|a| a.kind == AnimalKind::Sheep) {
+        } else if sheep {
             ShepherdWalk
         } else {
             HunterWalk
         };
     }
+    let carcass = animal.is_some_and(|a| a.hp == 0);
+    // The work pose plays only while the hunter actually strikes or carves:
+    // a unit waiting for its route or still out of reach stands.
+    let working = !u.planning && (carcass || in_reach(u, animal));
     if u.task == UnitTask::Shepherding {
         return if u.moving {
             ShepherdWalk
-        } else if animal.is_some_and(|a| a.hp == 0) {
+        } else if !working {
+            ShepherdStand
+        } else if carcass {
             Butcher
         } else {
             ShepherdWork
@@ -80,13 +99,41 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     if u.task == UnitTask::Hunting {
         return if u.moving {
             HunterWalk
-        } else if animal.is_some_and(|a| a.hp == 0) {
+        } else if !working {
+            HunterStand
+        } else if carcass {
             Butcher
         } else {
             HunterAttack
         };
     }
-    VillagerAttack
+    if u.task == UnitTask::Attacking || u.hunt_target.is_none() {
+        VillagerAttack
+    } else if sheep {
+        ShepherdStand
+    } else {
+        HunterStand
+    }
+}
+
+/// A shepherd walking to its sheep (or to a sheep carcass) is drawn as an
+/// ordinary walking villager; the herding walk is for leading a living sheep.
+pub(crate) fn walks_as_villager(u: &GameplayUnitState, animal: Option<&AnimalState>) -> bool {
+    u.hunt_target.is_some()
+        && u.task == UnitTask::Moving
+        && animal.is_some_and(|a| a.kind == AnimalKind::Sheep)
+}
+
+/// The simulation's strike reach (`hunter_step`): one tile for a sheep, four
+/// for bow hunting.
+fn in_reach(u: &GameplayUnitState, animal: Option<&AnimalState>) -> bool {
+    animal.is_some_and(|a| {
+        let reach =
+            if a.kind == AnimalKind::Sheep { 1 } else { 4 } * i64::from(FIXED_SUBUNITS_PER_TILE);
+        let dx = i64::from(u.position.x) - i64::from(a.position.x);
+        let dy = i64::from(u.position.y) - i64::from(a.position.y);
+        dx * dx + dy * dy <= reach * reach
+    })
 }
 
 fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
@@ -102,6 +149,41 @@ fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
         UnitKind::Spearman => [SpearmanStand, SpearmanWalk, SpearmanAttack, SpearmanDie],
         UnitKind::ManAtArms => [ManAtArmsStand, ManAtArmsWalk, ManAtArmsAttack, ManAtArmsDie],
         UnitKind::Scout => [ScoutStand, ScoutWalk, ScoutAttack, ScoutDie],
+        UnitKind::LongSwordsman => [
+            LongSwordsmanStand,
+            LongSwordsmanWalk,
+            LongSwordsmanAttack,
+            LongSwordsmanDie,
+        ],
+        UnitKind::Pikeman => [PikemanStand, PikemanWalk, PikemanAttack, PikemanDie],
+        UnitKind::Crossbowman => [
+            CrossbowmanStand,
+            CrossbowmanWalk,
+            CrossbowmanAttack,
+            CrossbowmanDie,
+        ],
+        UnitKind::EliteSkirmisher => [
+            EliteSkirmisherStand,
+            EliteSkirmisherWalk,
+            EliteSkirmisherAttack,
+            EliteSkirmisherDie,
+        ],
+        UnitKind::Knight => [KnightStand, KnightWalk, KnightAttack, KnightDie],
+        UnitKind::LightCavalry => [
+            LightCavalryStand,
+            LightCavalryWalk,
+            LightCavalryAttack,
+            LightCavalryDie,
+        ],
+        UnitKind::Monk => [MonkStand, MonkWalk, MonkAttack, MonkDie],
+        UnitKind::Mangonel => [MangonelStand, MangonelWalk, MangonelAttack, MangonelDie],
+        UnitKind::BatteringRam => [
+            BatteringRamStand,
+            BatteringRamWalk,
+            BatteringRamAttack,
+            BatteringRamDie,
+        ],
+
         _ => return None,
     })
 }
@@ -173,6 +255,15 @@ fn decay_pair(pose: Pose) -> Option<(Pose, Pose)> {
         (SkirmisherDie, SkirmisherDecay),
         (SpearmanDie, SpearmanDecay),
         (ManAtArmsDie, ManAtArmsDecay),
+        (LongSwordsmanDie, LongSwordsmanDecay),
+        (PikemanDie, PikemanDecay),
+        (CrossbowmanDie, CrossbowmanDecay),
+        (EliteSkirmisherDie, EliteSkirmisherDecay),
+        (KnightDie, KnightDecay),
+        (LightCavalryDie, LightCavalryDecay),
+        (MonkDie, MonkDecay),
+        (MangonelDie, MangonelDecay),
+        (BatteringRamDie, BatteringRamDecay),
         (VillagerDie, VillagerDecay),
         (SheepDie, SheepDecay),
         (DeerDie, DeerDecay),
@@ -193,7 +284,7 @@ pub(crate) fn lifecycle_pose(pose: Pose, died: Option<aoe_core::Tick>, tick: u64
     let Some(died) = died else {
         return pose;
     };
-    let source = SPRITES[die as usize];
+    let source = sprites()[die as usize];
     if tick.saturating_sub(died.0).saturating_mul(1000)
         >= u64::from(hz.max(1)) * u64::from(source.millis) * u64::from(source.stride)
     {
@@ -210,7 +301,7 @@ pub(crate) fn packed_frame(
     tick: u64,
     hz: u32,
 ) -> u8 {
-    let source = SPRITES[pose as usize];
+    let source = sprites()[pose as usize];
     let millis = u64::from(source.millis) * u64::from(source.sample_step());
     let stride = u64::from(source.stride.div_ceil(source.sample_step()));
     let phase = if let Some(died) = death {
@@ -219,7 +310,7 @@ pub(crate) fn packed_frame(
         let delay = decay_pair(pose)
             .filter(|(_, decay)| *decay == pose)
             .map_or(0, |(die, _)| {
-                let s = SPRITES[die as usize];
+                let s = sprites()[die as usize];
                 u64::from(s.millis) * u64::from(s.stride)
             });
         (elapsed.saturating_sub(delay) / millis).min(stride - 1) as u8

@@ -15,7 +15,12 @@ mod elevation;
 mod fallback;
 mod geometry;
 mod landscape_dispatch;
+mod point_memo;
+mod walk_cache;
 pub use landscape_dispatch::LandscapePoint;
+pub use walk_cache::{
+    NavigationPhase, NavigationProbe, NavigationSpan, WALK_CACHE_MAX_BYTES, WalkCell,
+};
 pub(crate) mod landscape;
 #[path = "terrain/landscape/queries.rs"]
 mod landscape_queries;
@@ -161,6 +166,8 @@ pub struct MapChunkGenerator {
     provider_environment: Option<Arc<PreparedEnvironment>>,
     provider_compression: Option<Ratio>,
     river_queries: Arc<std::sync::Mutex<provider::rivers::Cache>>,
+    /// Memo of composed tile answers; every builder that changes inputs resets it.
+    derived: Arc<walk_cache::DerivedCaches>,
 }
 
 impl MapChunkGenerator {
@@ -178,6 +185,7 @@ impl MapChunkGenerator {
             provider_environment: None,
             provider_compression: None,
             river_queries: Arc::default(),
+            derived: Default::default(),
         }
     }
 
@@ -195,6 +203,7 @@ impl MapChunkGenerator {
             return Err(EnvironmentError::InvalidPyramid);
         }
         self.river_queries = Arc::default();
+        self.derived = Default::default();
         self.provider = Some(provider);
         self.provider_environment = Some(Arc::new(environment));
         self.provider_compression = Some(compression);
@@ -229,6 +238,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
+            derived: Default::default(),
         })
     }
 
@@ -265,6 +275,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
+            derived: Default::default(),
         })
     }
 
@@ -301,6 +312,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
+            derived: Default::default(),
         })
     }
 
@@ -336,6 +348,7 @@ impl MapChunkGenerator {
             provider_environment: self.provider_environment,
             provider_compression: self.provider_compression,
             river_queries: self.river_queries,
+            derived: Default::default(),
         })
     }
 
@@ -383,8 +396,8 @@ impl MapChunkGenerator {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<Tile>, EnvironmentPageError> {
-        self.landscape_point_with_cancel(tile, cancelled)
-            .map(|point| point.map(|point| point.tile.terrain))
+        self.memoized_point(tile, cancelled)
+            .map(|point| point.map(|(terrain, _)| terrain))
     }
 
     pub fn chunk(&self, x: i32, y: i32) -> Result<Chunk, EnvironmentPageError> {
@@ -410,42 +423,6 @@ impl MapChunkGenerator {
                 .map(|resource| resource.node)
                 .collect(),
         })
-    }
-
-    pub fn object_at(&self, tile: TileCoord) -> Option<ResourceNode> {
-        self.object_at_with_cancel(tile, &|| false).ok().flatten()
-    }
-
-    pub fn object_at_with_cancel(
-        &self,
-        tile: TileCoord,
-        cancelled: &dyn Fn() -> bool,
-    ) -> Result<Option<ResourceNode>, EnvironmentPageError> {
-        self.landscape_point_with_cancel(tile, cancelled)
-            .map(|point| point.and_then(|point| point.resource.map(|resource| resource.node)))
-    }
-
-    pub fn resource_by_id(&self, id: u64) -> Option<ResourceNode> {
-        self.resource_by_id_with_cancel(id, &|| false)
-            .ok()
-            .flatten()
-    }
-
-    pub fn resource_by_id_with_cancel(
-        &self,
-        id: u64,
-        cancelled: &dyn Fn() -> bool,
-    ) -> Result<Option<ResourceNode>, EnvironmentPageError> {
-        if cancelled() {
-            return Err(EnvironmentPageError::Cancelled);
-        }
-        if id & 1 != 0 || id >> 37 != 0 {
-            return Ok(None);
-        }
-        let tile = TileCoord::new(((id >> 1) & 0x3_ffff) as i32, (id >> 19) as i32);
-        Ok(self
-            .object_at_with_cancel(tile, cancelled)?
-            .filter(|node| node.id == id))
     }
 }
 

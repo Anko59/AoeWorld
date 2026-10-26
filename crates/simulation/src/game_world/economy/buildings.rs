@@ -1,5 +1,7 @@
 //! The single building data table: costs, times, hit points, sizes and roles.
 //! Values and data provenance: docs/economy.md. Times are seconds for one builder.
+#[path = "buildings/age.rs"]
+mod age;
 use super::{BuildingKind, Stockpile, UnitKind};
 use crate::Age;
 use aoe_map::ResourceKind;
@@ -27,7 +29,8 @@ pub struct BuildingRules {
     pub requires: Option<BuildingKind>,
     /// Villagers can construct it (the Town Center is placed by the start).
     pub buildable: bool,
-    /// Units cannot walk through it (farms are walked on).
+    /// Has movement collision; it can occupy only part of the placement
+    /// footprint. Farms have none.
     pub blocks: bool,
     /// Food a farm holds when complete.
     pub food: u16,
@@ -46,10 +49,16 @@ const NONE: [bool; 4] = [false; 4];
 const ALL: [bool; 4] = [true; 4];
 const NO_UNITS: &[UnitKind] = &[];
 const VILLAGERS: &[UnitKind] = &[UnitKind::Villager];
-const MILITIA: &[UnitKind] = &[UnitKind::Militia, UnitKind::Spearman, UnitKind::ManAtArms];
+const MILITIA: &[UnitKind] = &[
+    UnitKind::Militia,
+    UnitKind::Spearman,
+    UnitKind::ManAtArms,
+    UnitKind::LongSwordsman,
+    UnitKind::Pikeman,
+];
 
 /// Canonical order of `BuildingKind`.
-pub const BUILDING_RULES: [BuildingRules; 16] = [
+pub const BUILDING_RULES: [BuildingRules; 21] = [
     BuildingRules {
         kind: BuildingKind::TownCenter,
         cost: cost(0, 275, 0, 100),
@@ -62,10 +71,10 @@ pub const BUILDING_RULES: [BuildingRules; 16] = [
         accepts: ALL,
         trainable: VILLAGERS,
         requires: None,
-        buildable: false,
+        buildable: true,
         blocks: true,
         food: 0,
-        age: Age::Dark,
+        age: Age::Castle,
     },
     BuildingRules {
         kind: BuildingKind::House,
@@ -213,7 +222,14 @@ pub const BUILDING_RULES: [BuildingRules; 16] = [
         los: 8,
         population_support: 0,
         accepts: [true, false, false, false],
-        trainable: &[UnitKind::FishingShip],
+        trainable: &[
+            UnitKind::FishingShip,
+            UnitKind::Galley,
+            UnitKind::FireShip,
+            UnitKind::DemolitionShip,
+            UnitKind::TransportShip,
+            UnitKind::WarGalley,
+        ],
         requires: None,
         buildable: true,
         blocks: true,
@@ -230,7 +246,12 @@ pub const BUILDING_RULES: [BuildingRules; 16] = [
         los: 6,
         population_support: 0,
         accepts: NONE,
-        trainable: &[UnitKind::Archer, UnitKind::Skirmisher],
+        trainable: &[
+            UnitKind::Archer,
+            UnitKind::Skirmisher,
+            UnitKind::Crossbowman,
+            UnitKind::EliteSkirmisher,
+        ],
         requires: Some(BuildingKind::Barracks),
         buildable: true,
         blocks: true,
@@ -247,7 +268,7 @@ pub const BUILDING_RULES: [BuildingRules; 16] = [
         los: 6,
         population_support: 0,
         accepts: NONE,
-        trainable: &[UnitKind::Scout],
+        trainable: &[UnitKind::Scout, UnitKind::Knight, UnitKind::LightCavalry],
         requires: Some(BuildingKind::Barracks),
         buildable: true,
         blocks: true,
@@ -322,7 +343,93 @@ pub const BUILDING_RULES: [BuildingRules; 16] = [
         food: 0,
         age: Age::Dark,
     },
+    castle(
+        BuildingKind::Castle,
+        cost(0, 0, 0, 650),
+        200,
+        4800,
+        (4, 11),
+        &[],
+        None,
+    ),
+    castle(
+        BuildingKind::Monastery,
+        cost(0, 175, 0, 0),
+        40,
+        2100,
+        (3, 6),
+        &[UnitKind::Monk],
+        None,
+    ),
+    castle(
+        BuildingKind::University,
+        cost(0, 200, 0, 0),
+        60,
+        2100,
+        (4, 6),
+        &[],
+        None,
+    ),
+    castle(
+        BuildingKind::SiegeWorkshop,
+        cost(0, 200, 0, 0),
+        40,
+        1500,
+        (4, 6),
+        &[UnitKind::Mangonel, UnitKind::BatteringRam],
+        Some(BuildingKind::Blacksmith),
+    ),
+    BuildingRules {
+        kind: BuildingKind::Bridge,
+        cost: cost(0, 25, 0, 5),
+        build_seconds: 8,
+        max_hp: 1200,
+        side: 1,
+        depth: 1,
+        los: 4,
+        population_support: 0,
+        accepts: NONE,
+        trainable: NO_UNITS,
+        requires: None,
+        buildable: true,
+        blocks: true,
+        food: 0,
+        age: Age::Feudal,
+    },
 ];
+
+const fn castle(
+    kind: BuildingKind,
+    cost: Stockpile,
+    build_seconds: u32,
+    max_hp: u16,
+    shape: (i32, u8),
+    trainable: &'static [UnitKind],
+    requires: Option<BuildingKind>,
+) -> BuildingRules {
+    let (side, los) = shape;
+    BuildingRules {
+        kind,
+        cost,
+        build_seconds,
+        max_hp,
+        side,
+        depth: side,
+        los,
+        population_support: if matches!(kind, BuildingKind::Castle) {
+            20
+        } else {
+            0
+        },
+        accepts: NONE,
+        trainable,
+        requires,
+        buildable: true,
+        blocks: true,
+        food: 0,
+        age: Age::Castle,
+    }
+}
 
 /// The population ceiling regardless of houses.
 pub const MAX_POPULATION: u16 = 200;
@@ -332,21 +439,24 @@ pub const BUILD_WORK_PER_BASE_TICK: u64 = 3;
 pub const MAX_WALL_SEGMENTS: usize = 64;
 
 impl BuildingKind {
-    /// DE's upgraded unit records, plus the automatic palisade HP effect 293.
-    pub fn age_stats(self, age: Age) -> (u16, u8) {
-        if age == Age::Feudal {
-            use BuildingKind::*;
-            match self {
-                House => (750, 2),
-                LumberCamp | MiningCamp | Mill => (800, 6),
-                Barracks => (1500, 6),
-                PalisadeGate => (400, 6),
-                _ => (self.rules().max_hp, self.rules().los),
+    /// Movement collision is separate from the placement/selection footprint.
+    /// AoK DAT 109 is non-obstructing; its annex 618 has half extents (1,1)
+    /// at native NE/SE (1,-1), the NW 2x2 in our world axes. Annexes 619/620
+    /// are non-obstructing. Construction unit 621 blocks 4x4 until replaced.
+    pub(crate) fn collision_rect(
+        self,
+        footprint: aoe_core::TileRect,
+        complete: bool,
+    ) -> Option<aoe_core::TileRect> {
+        (self.rules().blocks && !(self == Self::Bridge && complete)).then(|| {
+            if self == Self::TownCenter && complete {
+                aoe_core::TileRect::from_xywh(footprint.min.x, footprint.min.y, 2, 2)
+            } else {
+                footprint
             }
-        } else {
-            (self.rules().max_hp, self.rules().los)
-        }
+        })
     }
+
     pub fn rules(self) -> &'static BuildingRules {
         &BUILDING_RULES[self as usize]
     }

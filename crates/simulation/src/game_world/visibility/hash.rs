@@ -16,6 +16,8 @@ impl Vision {
             }
             hash.update(&(player.remembered.len() as u64).to_le_bytes());
             for b in player.remembered.values() {
+                hash.update(&[b.farm_reseeds]);
+                super::super::economy::training::rally::hash_rally(hash, b.rally_point);
                 hash.update(&b.id.0.to_le_bytes());
                 hash.update(&b.player.0.to_le_bytes());
                 hash.update(&[
@@ -52,6 +54,10 @@ impl Vision {
                     hash.update(&e.progress_ticks.to_le_bytes());
                     hash.update(&e.total_ticks.to_le_bytes());
                 }
+            }
+            hash.update(&(player.ghost_order.len() as u64).to_le_bytes());
+            for id in &player.ghost_order {
+                hash.update(&id.0.to_le_bytes());
             }
             hash.update(&(player.resources.len() as u64).to_le_bytes());
             for (id, remaining) in &player.resources {

@@ -2,6 +2,30 @@ use super::Economy;
 
 impl Economy {
     pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
+        self.hash_garrisons(hash);
+        hash.update(&(self.cargo.len() as u64).to_le_bytes());
+        for (ship, ids) in &self.cargo {
+            hash.update(&ship.0.to_le_bytes());
+            hash.update(&(ids.len() as u64).to_le_bytes());
+            for id in ids {
+                hash.update(&id.0.to_le_bytes());
+            }
+        }
+        hash.update(&(self.embarked.len() as u64).to_le_bytes());
+        for (id, ship) in &self.embarked {
+            hash.update(&id.0.to_le_bytes());
+            hash.update(&ship.0.to_le_bytes());
+        }
+        hash.update(&self.scout_cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
+        hash.update(&(self.scout_searches.len() as u64).to_le_bytes());
+        for id in &self.scout_searches {
+            hash.update(&id.0.to_le_bytes());
+        }
+        hash.update(&(self.scouts.len() as u64).to_le_bytes());
+        for (id, job) in &self.scouts {
+            hash.update(&id.0.to_le_bytes());
+            job.update_hash(hash);
+        }
         hash.update(&(self.players.len() as u64).to_le_bytes());
         for player in self.players.values() {
             hash.update(&player.player.0.to_le_bytes());
@@ -17,6 +41,13 @@ impl Economy {
             hash.update(&player.population_cap.to_le_bytes());
             hash.update(&[player.age as u8]);
             hash.update(&player.researched.to_le_bytes());
+            for price in [
+                player.market_prices.wood,
+                player.market_prices.food,
+                player.market_prices.stone,
+            ] {
+                hash.update(&price.to_le_bytes());
+            }
         }
         hash.update(&(self.open_gates.len() as u64).to_le_bytes());
         for id in &self.open_gates {
@@ -24,6 +55,8 @@ impl Economy {
         }
         hash.update(&(self.buildings.len() as u64).to_le_bytes());
         for building in self.buildings.values() {
+            hash.update(&[building.farm_reseeds]);
+            super::training::rally::hash_rally(hash, building.rally_point);
             hash.update(&building.id.0.to_le_bytes());
             hash.update(&building.player.0.to_le_bytes());
             hash.update(&[building.kind as u8, building.age as u8]);
@@ -76,6 +109,9 @@ impl Economy {
                     .map_or(u64::MAX, |animal| u64::from(animal.0))
                     .to_le_bytes(),
             );
+            if task.animal.is_some() {
+                hash.update(&[task.carcass_kind.map_or(u8::MAX, |kind| kind as u8)]);
+            }
             hash.update(&task.tile.x.to_le_bytes());
             hash.update(&task.tile.y.to_le_bytes());
             hash.update(&[task.kind as u8, task.phase as u8]);
@@ -99,6 +135,16 @@ impl Economy {
                     hash.update(&[0]);
                 }
             }
+            match task.work_tile {
+                Some(tile) => {
+                    hash.update(&[1]);
+                    hash.update(&tile.x.to_le_bytes());
+                    hash.update(&tile.y.to_le_bytes());
+                }
+                None => {
+                    hash.update(&[0]);
+                }
+            }
             hash.update(&(task.failed_dropoffs.len() as u64).to_le_bytes());
             for tile in &task.failed_dropoffs {
                 hash.update(&tile.x.to_le_bytes());
@@ -111,6 +157,10 @@ impl Economy {
             hash.update(&id.0.to_le_bytes());
             hash.update(&task.building.0.to_le_bytes());
             hash.update(&[task.attempts]);
+            hash.update(&(task.queue.len() as u64).to_le_bytes());
+            for target in &task.queue {
+                hash.update(&target.0.to_le_bytes());
+            }
         }
         // Footprints are already hashed as buildings; depletion notifications
         // are a one-tick adapter outbox and do not affect authoritative rules.

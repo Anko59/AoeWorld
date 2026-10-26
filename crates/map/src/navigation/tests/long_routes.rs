@@ -5,7 +5,11 @@ use crate::{
     ordered_page_root, ordered_water_page_root,
 };
 
-fn flat_terrain_with_water_wall(width: i32, wall_x: i32, gap_y: i32) -> MapChunkGenerator {
+pub(crate) fn flat_terrain_with_water_wall(
+    width: i32,
+    wall_x: i32,
+    gap_y: i32,
+) -> MapChunkGenerator {
     let mut elevation_pages = Vec::new();
     let mut elevation_levels = Vec::new();
     let mut water_pages = Vec::new();
@@ -182,13 +186,23 @@ fn fixed_wall_without_a_gateway_is_proven_disconnected() {
     let destination = TileCoord::new(62, 32);
     let mut planner = RoutePlanner::new(origin, destination, 100_000);
     let overlay = ResourceOverlay::default();
+    let mut tiles = vec![origin];
     let result = loop {
         match planner.poll(&terrain, &overlay, 4_096, &|| false) {
             RoutePlannerPoll::Pending => {}
+            RoutePlannerPoll::Path(path) => {
+                assert_eq!(path.tiles.first(), tiles.last());
+                tiles.extend(path.tiles.into_iter().skip(1));
+            }
             outcome => break outcome,
         }
     };
     assert_eq!(result, RoutePlannerPoll::Unreachable);
+    assert_eq!(tiles.last(), Some(&TileCoord::new(31, 32)));
+    assert_eq!(
+        planner.certified_destination(),
+        Some(TileCoord::new(31, 32))
+    );
     assert!(planner.is_terminal());
     assert_eq!(
         planner.poll(&terrain, &overlay, 4_096, &|| false),

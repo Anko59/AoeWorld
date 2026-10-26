@@ -16,10 +16,26 @@ mod buildings;
 mod fishing;
 #[path = "manifest.rs"]
 mod manifest;
+#[cfg(test)]
+#[path = "tests/player_masks.rs"]
+mod player_mask_tests;
+mod resident;
+mod sink;
+mod streaming;
+pub use sink::RendererSink;
+#[cfg(test)]
+#[path = "tests/collected.rs"]
+mod collected;
+#[cfg(test)]
+pub(crate) use collected::CollectedAtlas;
+#[cfg(test)]
+#[path = "tests/resident.rs"]
+mod resident_tests;
 use aoe_rendering::{
-    AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_SIDE, GameArt, GameFrame,
-    TerrainTopology,
+    AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
+    GameArt, GameFrame, TerrainTopology,
 };
+pub(crate) use manifest::{decode_bounds, decode_chunk, decode_chunks};
 #[cfg(test)]
 #[path = "tests/building_sprites.rs"]
 mod building_sprite_tests;
@@ -42,10 +58,10 @@ use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-const ROLE_SLOTS: usize = AssetRole::VillagerMiningStone as usize + 1;
+const ROLE_SLOTS: usize = AssetRole::RallyFlag as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
-async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
+pub(crate) async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
     let window = web_sys::window().ok_or("No window")?;
     let response: Response = JsFuture::from(window.fetch_with_str(path))
         .await?
@@ -80,7 +96,7 @@ fn error(e: impl std::fmt::Display) -> JsValue {
 // Both the base pack and DE overlay share one JSON parser instantiation.
 #[inline(never)]
 fn decode_manifest(bytes: &[u8]) -> Result<Manifest, JsValue> {
-    serde_json::from_slice(bytes).map_err(error)
+    manifest::decode(bytes)
 }
 
 // Startup-only lists are bounded by reviewed catalogue frame counts (`MAX_REVIEWED_FRAMES`).
@@ -188,25 +204,20 @@ fn source_order(manifest: &Manifest, selected: &[usize]) -> Vec<usize> {
     order
 }
 
+// Aliased masked cells must be uploaded once: repeated coverage composition
+// would change their alpha. Shared cells deliberately retain distinct places.
+fn copy_order(manifest: &Manifest, selected: &[usize], placements: &[Placement]) -> Vec<usize> {
+    let mut order = source_order(manifest, selected);
+    order.retain(|&semantic| !placements[..semantic].contains(&placements[semantic]));
+    order
+}
+
 // Share startup lookup/copy code instead of specializing it for every role.
 #[inline(never)]
 fn group_frames(ranges: &RoleRanges, records: &[GameFrame], role: AssetRole) -> Vec<GameFrame> {
     match &ranges[role as usize] {
         Some(range) => records[range.clone()].to_vec(),
         None => Vec::new(),
-    }
-}
-
-// Keep bounded startup group construction shared across array lengths.
-#[inline(never)]
-fn fill_groups(
-    target: &mut [Vec<GameFrame>],
-    roles: &[AssetRole],
-    ranges: &RoleRanges,
-    records: &[GameFrame],
-) {
-    for (frames, role) in target.iter_mut().zip(roles) {
-        *frames = group_frames(ranges, records, *role);
     }
 }
 
@@ -223,8 +234,30 @@ pub(crate) fn team_colour() -> [u8; 3] {
     [colour[0], colour[1], colour[2]]
 }
 
+/// GPU sinks receive one finished page at a time. CPU sinks can expose the
+/// atlas they already retain, filled in source order before `finish`.
+pub trait AtlasSink {
+    /// Existing CPU destination storage; page-only sinks allocate no full atlas.
+    fn resident_buffer(&mut self) -> Result<Option<&mut [u8]>, String> {
+        Ok(None)
+    }
+    /// The zeroed buffer for page `index`; the loader fills it in place.
+    fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String>;
+    /// Hands the filled page over.
+    fn commit(&mut self, index: u32) -> Result<(), String>;
+    fn finish(&mut self) -> Result<(), String>;
+}
+
+/// Loads art and the whole atlas for tests that inspect packed texels.
+#[cfg(test)]
+pub(crate) async fn load_collected() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
+    let mut atlas = CollectedAtlas(Vec::new());
+    let (art, team) = load(&mut atlas).await?;
+    Ok((art, atlas.0, team))
+}
+
 #[inline(never)]
-pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
+pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValue> {
     let team = team_colour();
     let bytes = fetch("/asset-pack/manifest.json").await?;
     let mut manifest = decode_manifest(&bytes)?;
@@ -291,12 +324,36 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
             ranges[selection.role as usize] = Some(start..selected.len());
         }
     }
+    let rally_range = building_sprites::rally(&manifest, &mut selected, &mut domains)?;
     let actor_ranges = actors::select(&manifest, &mut selected, &mut domains)?;
+    let building_start = selected.len();
     buildings::select(&manifest, &mut selected, &mut domains)?;
     let building_ranges = building_sprites::select(&manifest, &mut selected, &mut domains)?;
     building_sprites::crop_farm(&mut manifest, &selected, &building_ranges)?;
     let fishing_ranges = fishing::select(&manifest, &mut selected, &mut domains)?;
-    // Validate count, source bounds, and all extents before pixel allocation.
+    let mut maskable = vec![false; selected.len()];
+    for role in aoe_assets::catalog::runtime::PLAYER_ROLES {
+        if let Some(range) = &ranges[role as usize] {
+            maskable[range.clone()].fill(true);
+        }
+    }
+    for (index, range) in actor_ranges.iter().enumerate() {
+        if aoe_assets::catalog::runtime::actor_maskable(index)
+            && let Some(range) = range
+        {
+            maskable[range.clone()].fill(true);
+        }
+    }
+    for index in building_start..maskable.len() {
+        maskable[index] = domains[index] == AtlasDomain::Objects;
+    }
+    for (domain, owned) in domains.iter_mut().zip(&maskable) {
+        if *domain == AtlasDomain::Objects && !owned {
+            *domain = AtlasDomain::Shared;
+        }
+    }
+    // Validate every source/extent before pixel allocation. Shared art has no
+    // team mask and may use unused terrain space inside the same five pages.
     let placements = placement::plan(&manifest, &selected, &domains)?;
     drop(domains);
     let records = selected
@@ -304,52 +361,11 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
         .zip(&placements)
         .map(|(&index, &placed)| placement::record(&manifest.frames[index], placed))
         .collect::<Vec<_>>();
-    let mut pixels = vec![0; GAME_ATLAS_BYTES];
-    // Every origin is reserved; explicit renderer white addressing uses page 2.
-    for origin in (0..GAME_ATLAS_BYTES).step_by(GAME_ATLAS_PAGE_BYTES) {
-        pixels[origin..origin + 4].copy_from_slice(&[255; 4]);
-    }
-    // A bounded index vector groups source pages without a map or page-ID-sized
-    // allocation. Grouping is for decoding only; records stay in semantic order.
-    let source_order = source_order(&manifest, &selected);
-    let mut start = 0;
-    while start < source_order.len() {
-        let source_page = manifest.frames[selected[source_order[start]]].page;
-        let atlas = &manifest.pages[usize::from(source_page)];
-        let mut end = start;
-        while end < source_order.len()
-            && manifest.frames[selected[source_order[end]]].page == source_page
-        {
-            end += 1;
-        }
-        // Decode one source sheet at a time: the transient peak beside the
-        // runtime atlas is one page plus its decoder, not all three sheets.
-        let group = &source_order[start..end];
-        for (plane, name) in [
-            (placement::Plane::Color, &atlas.color),
-            (placement::Plane::Player, &atlas.player),
-            (placement::Plane::Shadow, &atlas.shadow),
-        ] {
-            let source = page(name).await?;
-            for &semantic in group {
-                let frame = &manifest.frames[selected[semantic]];
-                placement::copy_plane(
-                    frame,
-                    placements[semantic],
-                    plane,
-                    &source,
-                    &mut pixels,
-                    actors::colour(&actor_ranges, semantic, team),
-                )?;
-            }
-        }
-        start = end;
-    }
     let group = |role| group_frames(&ranges, &records, role);
     let mut terrain: [Vec<GameFrame>; 12] = Default::default();
-    fill_groups(&mut terrain, &TERRAIN_ROLES, &ranges, &records);
+    actors::fill_groups(&mut terrain, &TERRAIN_ROLES, &ranges, &records);
     let mut village: [Vec<GameFrame>; 9] = Default::default();
-    fill_groups(
+    actors::fill_groups(
         &mut village,
         &[
             AssetRole::VillagerStanding,
@@ -358,8 +374,8 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
             AssetRole::VillagerCarryingWood,
             AssetRole::VillagerForaging,
             AssetRole::VillagerCarryingFood,
-            AssetRole::VillagerMiningGold,
-            AssetRole::VillagerCarryingOre,
+            AssetRole::VillagerCarryingGold,
+            AssetRole::VillagerCarryingStone,
             AssetRole::VillagerMiningStone,
         ],
         &ranges,
@@ -369,48 +385,71 @@ pub async fn load() -> Result<(GameArt, Vec<u8>, [u8; 3]), JsValue> {
     let foundation = buildings::foundation(&manifest, &selected, &records)?;
 
     atlas_budget(selected.len());
-    Ok((
-        GameArt {
-            actors: actors::resolve(&manifest, &selected, &records, &actor_ranges),
-            fishing: std::array::from_fn(|i| {
-                fishing_ranges[i]
-                    .as_ref()
-                    .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
-            }),
-            walking: group(AssetRole::CavalryWalking),
-            standing: group(AssetRole::CavalryStanding),
-            village,
-            compositions: buildings,
-            buildings: std::array::from_fn(|i| {
-                building_ranges[i]
-                    .as_ref()
-                    .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
-            }),
-            foundation,
-            grass: terrain[0].clone(),
-            terrain,
-            terrain_topology,
-            water_depth: std::array::from_fn(|slot| {
-                (group(WATER_DEPTH_ROLES[slot]), depth_topology[slot])
-            }),
-            resources: [
-                group(AssetRole::ForageBush),
-                group(AssetRole::WoodTree),
-                group(AssetRole::GoldDeposit),
-                group(AssetRole::StoneDeposit),
-            ],
-            tree_shadows: group(AssetRole::WoodTreeShadow),
-            tree_families: [group(AssetRole::TreeConifer), group(AssetRole::TreePalm)],
-            scenery: aoe_rendering::SceneryArt {
-                cliff_faces: group(AssetRole::CliffFace),
-                rocks: group(AssetRole::RockPile),
-                shrubs: group(AssetRole::Shrub),
-                stumps: group(AssetRole::DeadwoodStump),
-                snags: group(AssetRole::DeadwoodTree),
-                logs: group(AssetRole::DeadwoodLog),
-            },
+    let art = GameArt {
+        actors: actors::resolve(&manifest, &selected, &records, &actor_ranges),
+        fishing: std::array::from_fn(|i| {
+            fishing_ranges[i]
+                .as_ref()
+                .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
+        }),
+        walking: group(AssetRole::CavalryWalking),
+        standing: group(AssetRole::CavalryStanding),
+        village,
+        compositions: buildings,
+        buildings: std::array::from_fn(|i| {
+            let mut frames = building_ranges[i]
+                .as_ref()
+                .map_or_else(Vec::new, |r| records[r.clone()].to_vec());
+            // Scenario pieces span two source tiles. Half scale gives the
+            // buildable single-lane deck its one-tile cadence and width.
+            if (65..=70).contains(&i) {
+                for frame in &mut frames {
+                    frame.size = frame.size.map(|n| n * 0.5);
+                    frame.anchor = frame.anchor.map(|n| n * 0.5);
+                }
+            }
+            frames
+        }),
+        foundation,
+        grass: terrain[0].clone(),
+        terrain,
+        terrain_topology,
+        water_depth: std::array::from_fn(|slot| {
+            (group(WATER_DEPTH_ROLES[slot]), depth_topology[slot])
+        }),
+        resources: [
+            group(AssetRole::ForageBush),
+            group(AssetRole::WoodTree),
+            group(AssetRole::GoldDeposit),
+            group(AssetRole::StoneDeposit),
+        ],
+        tree_shadows: group(AssetRole::WoodTreeShadow),
+        tree_families: [group(AssetRole::TreeConifer), group(AssetRole::TreePalm)],
+        scenery: aoe_rendering::SceneryArt {
+            rally_flags: building_sprites::rally_frames(
+                &records,
+                rally_range,
+                group(AssetRole::RallyFlag),
+            ),
+            cliff_faces: group(AssetRole::CliffFace),
+            rocks: group(AssetRole::RockPile),
+            shrubs: group(AssetRole::Shrub),
+            stumps: group(AssetRole::DeadwoodStump),
+            snags: group(AssetRole::DeadwoodTree),
+            logs: group(AssetRole::DeadwoodLog),
         },
-        pixels,
+    };
+
+    streaming::Input {
+        manifest: &manifest,
+        selected: &selected,
+        placements: &placements,
+        maskable: &maskable,
+        actor_ranges: &actor_ranges,
+        art: &art,
         team,
-    ))
+    }
+    .upload(sink)
+    .await?;
+    Ok((art, team))
 }

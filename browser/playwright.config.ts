@@ -1,6 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 import { serverUrls } from "./server.js";
 
+// Keep preset viewports and browser identity, with the Linux browser's native UA.
+const nativeDevice = (name: "Desktop Chrome" | "Desktop Firefox") => {
+  const device = { ...devices[name] };
+  Reflect.deleteProperty(device, "userAgent");
+  return device;
+};
+
 // Projects differ only in how the browser draws the canvas. `webgpu` runs every
 // spec. `browser-defaults` and `canvas` run only the renderer-dependent specs
 // (renderer selection, fallbacks, pixel reads, per-project branches), so the
@@ -9,10 +16,13 @@ import { serverUrls } from "./server.js";
 // whole file names, never substrings (`play.spec.ts` alone must not match
 // every `*.play.spec.ts`).
 const rendererDependent = [
+  /[\\/]village[\\/]castle[\\/]castle\.play\.spec\.ts$/,
   /[\\/]play\.spec\.ts$/,
+  /[\\/]rendering[\\/]occlusion\.spec\.ts$/,
   /(?:^|[\\/.])shared-surfaces\.spec\.ts$/,
   /[\\/]source-creator\.spec\.ts$/,
   /[\\/]camera[\\/](?:hooks|navigation)\.play\.spec\.ts$/,
+  /[\\/]memory[\\/]exploration\.spec\.ts$/,
   /[\\/](?:rendering|assets)[\\/][^\\/]+\.play\.spec\.ts$/,
   /[\\/]landscape[\\/]forest\.play\.spec\.ts$/,
   /[\\/]village[\\/](?:selection|feudal)\.play\.spec\.ts$/,
@@ -20,6 +30,7 @@ const rendererDependent = [
 
 export default defineConfig({
   testDir: "./tests",
+  outputDir: "../.cache/playwright-results",
   timeout: 30_000,
   expect: { timeout: 10_000 },
   retries: 0,
@@ -29,12 +40,34 @@ export default defineConfig({
   workers: serverUrls().length,
   reporter: [["list"]],
   use: {
-    ...devices["Desktop Chrome"],
+    ...nativeDevice("Desktop Chrome"),
     baseURL: serverUrls()[0],
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
   projects: [
+    {
+      name: "firefox-webgpu",
+      testMatch: /[\\/]rendering[\\/]recovery[\\/]firefox\.play\.spec\.ts$/,
+      use: {
+        ...nativeDevice("Desktop Firefox"),
+        launchOptions: {
+          firefoxUserPrefs: {
+            "dom.webgpu.enabled": true,
+            "webgl.force-enabled": true,
+          },
+        },
+      },
+    },
+    {
+      name: "firefox-webgl2",
+      testMatch:
+        /[\\/]rendering[\\/](?:occlusion\.spec|(?:hover|ownership|startup|placement)\.play\.spec)\.ts$|[\\/]village[\\/](?:(?:input|formations)[\\/][^\\/]+|production[\\/](?:rally|reseed|auto-scout)|castle[\\/]castle)\.play\.spec\.ts$|[\\/]proofs[\\/]ui-panel\.spec\.ts$/,
+      use: {
+        ...nativeDevice("Desktop Firefox"),
+        launchOptions: { firefoxUserPrefs: { "webgl.force-enabled": true } },
+      },
+    },
     {
       name: "webgpu",
       use: {
@@ -56,7 +89,7 @@ export default defineConfig({
     {
       name: "canvas",
       testMatch:
-        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/](?:selection|feudal)\.play\.spec\.ts$/,
+        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/](?:selection|feudal|castle[\\/]castle)\.play\.spec\.ts$|[\\/]rendering[\\/](?:ownership|bigview|bigview-interaction|bigview-population)\.play\.spec\.ts$/,
       use: { launchOptions: { args: [] } },
     },
     {

@@ -1,5 +1,7 @@
 use super::*;
 use crate::{Tech, TileVisibility, UnitKind};
+mod foundations;
+mod placement;
 
 fn at(x: i32, y: i32) -> WorldPosition {
     WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap()
@@ -212,6 +214,18 @@ fn rejected_foundations_leave_all_visibility_and_memory_unchanged() {
             .find(|u| u.player == PlayerId(1) && u.kind == UnitKind::Villager)
             .unwrap()
             .id;
+        // Each player must survey its build tiles. Only the enclosed centre
+        // was explored by player 0, so the enclosing enemy walls stay unknown.
+        w.update_observer(
+            EntityId(9000),
+            Some((PlayerId(1), TileCoord::new(100, 100), 3)),
+        );
+        w.update_observer(EntityId(9000), None);
+        w.update_observer(
+            EntityId(9001),
+            Some((PlayerId(0), TileCoord::new(100, 100), 0)),
+        );
+        w.update_observer(EntityId(9001), None);
         for y in 99..=101 {
             for x in 99..=101 {
                 if (x, y) != (100, 100) {
@@ -220,6 +234,7 @@ fn rejected_foundations_leave_all_visibility_and_memory_unchanged() {
                         &[enemy_builder],
                         BuildingKind::PalisadeWall,
                         TileCoord::new(x, y),
+                        false,
                     )
                     .unwrap();
                 }
@@ -236,17 +251,17 @@ fn rejected_foundations_leave_all_visibility_and_memory_unchanged() {
         let overview = w.vision_overview(PlayerId(0));
         let stock = w.player_economy(PlayerId(0)).unwrap().stockpile;
         let tile = TileCoord::new(100, 100);
-        assert_eq!(w.visibility(PlayerId(0), tile), TileVisibility::Unexplored);
+        assert_eq!(w.visibility(PlayerId(0), tile), TileVisibility::Explored);
         assert!(
             w.known_buildings(PlayerId(0))
                 .iter()
                 .all(|b| b.player == PlayerId(0))
         );
         let result = if wall_order {
-            w.issue_build_wall(PlayerId(0), &[builder], tile, tile)
+            w.issue_build_wall(PlayerId(0), &[builder], tile, tile, false)
                 .map(|_| ())
         } else {
-            w.issue_build(PlayerId(0), &[builder], BuildingKind::Outpost, tile)
+            w.issue_build(PlayerId(0), &[builder], BuildingKind::Outpost, tile, false)
                 .map(|_| ())
         };
         assert_eq!(
@@ -262,29 +277,6 @@ fn rejected_foundations_leave_all_visibility_and_memory_unchanged() {
         assert_eq!(w.vision_storage(PlayerId(0)), storage);
         assert_eq!(w.vision_overview(PlayerId(0)), overview);
         assert_eq!(w.player_economy(PlayerId(0)).unwrap().stockpile, stock);
-    }
-}
-
-#[test]
-fn accepted_foundations_reveal_immediately_and_cancellation_keeps_exploration() {
-    use crate::BuildingKind;
-    for wall_order in [false, true] {
-        let mut w = world();
-        w.initialize_village(PlayerId(0), TileCoord::new(20, 20))
-            .unwrap();
-        let builder = w.units().find(|u| u.kind == UnitKind::Villager).unwrap().id;
-        let origin = TileCoord::new(100, 100);
-        let id = if wall_order {
-            w.issue_build_wall(PlayerId(0), &[builder], origin, origin)
-                .unwrap()[0]
-        } else {
-            w.issue_build(PlayerId(0), &[builder], BuildingKind::Outpost, origin)
-                .unwrap()
-        };
-        assert_eq!(w.visibility(PlayerId(0), origin), TileVisibility::Visible);
-        w.issue_cancel_construction(PlayerId(0), id).unwrap();
-        assert_eq!(w.visibility(PlayerId(0), origin), TileVisibility::Explored);
-        assert!(w.known_buildings(PlayerId(0)).iter().all(|b| b.id != id));
     }
 }
 
@@ -366,4 +358,38 @@ fn minimap_reveals_only_the_observed_tile_pixels_and_counts_shared_pixels() {
                 .all(|(_, state)| *state == 1)
         );
     }
+}
+
+#[test]
+fn a_moved_observer_bumps_its_owner_revision_through_the_edge_path() {
+    let mut w = world();
+    let id = w.spawn_villager(PlayerId(0), at(20, 20)).unwrap();
+    let before = w.player_vision_revision(PlayerId(0));
+    // Same owner and LOS: the update takes the disc-edge path.
+    w.update_observer(id, Some((PlayerId(0), TileCoord::new(21, 20), 3)));
+    assert_ne!(w.player_vision_revision(PlayerId(0)), before);
+    assert_eq!(
+        w.visibility(PlayerId(0), TileCoord::new(24, 20)),
+        TileVisibility::Visible
+    );
+    // An unchanged observer is a no-op and keeps the revision.
+    let moved = w.player_vision_revision(PlayerId(0));
+    assert!(!w.update_observer(id, Some((PlayerId(0), TileCoord::new(21, 20), 3))));
+    assert_eq!(w.player_vision_revision(PlayerId(0)), moved);
+}
+
+#[test]
+fn re_enabling_fog_bumps_the_revision_of_a_player_whose_observer_vanished() {
+    let mut w = world();
+    let id = w.spawn_villager(PlayerId(0), at(20, 20)).unwrap();
+    let enabled = w.player_vision_revision(PlayerId(0));
+    w.set_fog_disabled(true);
+    // The observer disappears while fog is off, so no update reaches vision.
+    w.remove_unit(id);
+    w.set_fog_disabled(false);
+    assert_ne!(
+        w.player_vision_revision(PlayerId(0)),
+        enabled,
+        "re-enabling fog cleared this player's sight and must bump it"
+    );
 }

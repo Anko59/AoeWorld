@@ -7,7 +7,7 @@ pub const MAX_GENERATED_TERRAIN_CACHE_BYTES: usize = 512 * 1024 * 1024;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub struct Usage {
     pub entries: usize,
-    pub decoded_bytes: usize,
+    pub resident_bytes: usize,
     pub limit_bytes: usize,
 }
 
@@ -21,14 +21,14 @@ pub struct Key {
 #[derive(Clone, Debug)]
 struct Entry {
     chunk: CompactChunk,
-    decoded_bytes: usize,
+    resident_bytes: usize,
     last_used: u64,
 }
 
 #[derive(Debug)]
 pub struct TerrainCache {
     entries: BTreeMap<Key, Entry>,
-    decoded_bytes: usize,
+    resident_bytes: usize,
     clock: u64,
     limit: usize,
 }
@@ -43,7 +43,7 @@ impl TerrainCache {
     fn with_limit(limit: usize) -> Self {
         Self {
             entries: BTreeMap::new(),
-            decoded_bytes: 0,
+            resident_bytes: 0,
             clock: 0,
             limit,
         }
@@ -57,24 +57,30 @@ impl TerrainCache {
     }
 
     pub fn insert(&mut self, key: Key, chunk: CompactChunk) {
-        let decoded_bytes = chunk.decoded_len().unwrap_or(0);
-        if decoded_bytes > self.limit {
+        // Charge retained hexadecimal capacity, keys, entries and conservative
+        // BTree node pointer slack, including empty payloads.
+        let resident_bytes = chunk.payload_hex.capacity()
+            + key.content_hash.capacity()
+            + size_of::<Key>()
+            + size_of::<Entry>()
+            + 4 * size_of::<usize>();
+        if resident_bytes > self.limit {
             return;
         }
         self.clock = self.next_clock();
         if let Some(previous) = self.entries.remove(&key) {
-            self.decoded_bytes = self.decoded_bytes.saturating_sub(previous.decoded_bytes);
+            self.resident_bytes = self.resident_bytes.saturating_sub(previous.resident_bytes);
         }
-        self.decoded_bytes = self.decoded_bytes.saturating_add(decoded_bytes);
+        self.resident_bytes = self.resident_bytes.saturating_add(resident_bytes);
         self.entries.insert(
             key,
             Entry {
                 chunk,
-                decoded_bytes,
+                resident_bytes,
                 last_used: self.clock,
             },
         );
-        while self.decoded_bytes > self.limit {
+        while self.resident_bytes > self.limit {
             let Some(key) = self
                 .entries
                 .iter()
@@ -84,7 +90,7 @@ impl TerrainCache {
                 break;
             };
             if let Some(entry) = self.entries.remove(&key) {
-                self.decoded_bytes = self.decoded_bytes.saturating_sub(entry.decoded_bytes);
+                self.resident_bytes = self.resident_bytes.saturating_sub(entry.resident_bytes);
             }
         }
     }
@@ -92,7 +98,7 @@ impl TerrainCache {
     pub fn usage(&self) -> Usage {
         Usage {
             entries: self.entries.len(),
-            decoded_bytes: self.decoded_bytes,
+            resident_bytes: self.resident_bytes,
             limit_bytes: self.limit,
         }
     }
@@ -103,43 +109,6 @@ impl TerrainCache {
     }
 }
 
+#[path = "terrain_cache/tests.rs"]
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn key(id: &str) -> Key {
-        Key {
-            content_hash: id.to_owned(),
-            x: 0,
-            y: 0,
-        }
-    }
-
-    fn chunk(bytes: usize) -> CompactChunk {
-        CompactChunk {
-            x: 0,
-            y: 0,
-            payload_hex: "00".repeat(bytes),
-        }
-    }
-
-    #[test]
-    fn evicts_the_least_recently_used_decoded_chunk() {
-        let mut cache = TerrainCache::with_limit(4);
-        cache.insert(key("first"), chunk(2));
-        cache.insert(key("second"), chunk(2));
-        assert_eq!(
-            cache.usage(),
-            Usage {
-                entries: 2,
-                decoded_bytes: 4,
-                limit_bytes: 4,
-            }
-        );
-        assert!(cache.get(&key("first")).is_some());
-        cache.insert(key("third"), chunk(2));
-        assert!(cache.get(&key("first")).is_some());
-        assert!(cache.get(&key("second")).is_none());
-        assert!(cache.get(&key("third")).is_some());
-    }
-}
+mod tests;

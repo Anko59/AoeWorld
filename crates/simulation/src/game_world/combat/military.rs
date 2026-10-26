@@ -3,30 +3,62 @@ use super::{BuildingAttack, DamageKind, UnitCombat, building_combat, unit_combat
 use crate::{BuildingKind, GameWorld, Tech, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
-pub fn researched_stats(kind: UnitKind, feudal: bool, researched: u32) -> UnitCombat {
-    let mut s = *unit_combat(kind);
+pub fn researched_stats(kind: UnitKind, feudal: bool, researched: u64) -> UnitCombat {
+    apply_research_stats(*unit_combat(kind), feudal, researched)
+}
+
+/// Apply effects to supplied base data, including the browser's runtime asset.
+pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u64) -> UnitCombat {
+    let kind = s.kind;
     let has = |t: Tech| researched & t.bit() != 0;
     let infantry = matches!(
         kind,
-        UnitKind::Militia | UnitKind::ManAtArms | UnitKind::Spearman
+        UnitKind::Militia
+            | UnitKind::ManAtArms
+            | UnitKind::Spearman
+            | UnitKind::LongSwordsman
+            | UnitKind::Pikeman
     );
-    let archer = matches!(kind, UnitKind::Archer | UnitKind::Skirmisher);
+    let archer = matches!(
+        kind,
+        UnitKind::Archer | UnitKind::Skirmisher | UnitKind::Crossbowman | UnitKind::EliteSkirmisher
+    );
+    let cavalry = matches!(
+        kind,
+        UnitKind::Scout | UnitKind::Knight | UnitKind::LightCavalry
+    );
     if kind == UnitKind::Scout && feudal {
         s.attack += 2;
-        s.los = 6;
+        s.los = if has(Tech::CastleAge) { 8 } else { 6 };
         s.speed_hundredths = Some(155);
     }
-    if has(Tech::Forging) && (infantry || kind == UnitKind::Scout) {
+    if has(Tech::Forging) && (infantry || cavalry) {
         s.attack += 1;
     }
     if (infantry && has(Tech::ScaleMailArmor))
-        || (kind == UnitKind::Scout && has(Tech::ScaleBardingArmor))
+        || (cavalry && has(Tech::ScaleBardingArmor))
         || (archer && has(Tech::PaddedArcherArmor))
     {
         s.melee_armour += 1;
         s.pierce_armour += 1;
     }
-    if archer && has(Tech::Fletching) {
+    if has(Tech::IronCasting) && (infantry || cavalry) {
+        s.attack += 2;
+    }
+    if infantry && has(Tech::ChainMailArmor)
+        || cavalry && has(Tech::ChainBardingArmor)
+        || archer && has(Tech::LeatherArcherArmor)
+    {
+        s.melee_armour += 1;
+        s.pierce_armour += 1;
+    }
+    if (archer || matches!(kind, UnitKind::Galley | UnitKind::WarGalley)) && has(Tech::BodkinArrow)
+    {
+        s.attack += 1;
+        s.range += 1;
+        s.los += 1;
+    }
+    if (archer || matches!(kind, UnitKind::Galley | UnitKind::WarGalley)) && has(Tech::Fletching) {
         s.attack += 1;
         s.range += 1;
         s.los += 1;
@@ -35,11 +67,26 @@ pub fn researched_stats(kind: UnitKind, feudal: bool, researched: u32) -> UnitCo
 }
 
 pub fn class_bonus(attacker: UnitKind, victim: UnitKind) -> u16 {
-    match (attacker, victim) {
-        (UnitKind::Spearman, UnitKind::Scout) => 15, // DE armour class 8, cavalry
-        (UnitKind::Skirmisher, UnitKind::Archer | UnitKind::Skirmisher) => 3, // class 15
-        (UnitKind::Skirmisher, UnitKind::Spearman) => 3, // class 27, spear line
-        (UnitKind::Archer, UnitKind::Spearman) => 3,
+    let cavalry = matches!(
+        victim,
+        UnitKind::Scout | UnitKind::Knight | UnitKind::LightCavalry
+    );
+    let archer = matches!(
+        victim,
+        UnitKind::Archer | UnitKind::Crossbowman | UnitKind::Skirmisher | UnitKind::EliteSkirmisher
+    );
+    let spear = matches!(victim, UnitKind::Spearman | UnitKind::Pikeman);
+    match attacker {
+        UnitKind::Spearman if cavalry => 15,
+        UnitKind::Pikeman if cavalry => 22,
+        UnitKind::Skirmisher if archer || spear => 3,
+        UnitKind::EliteSkirmisher if archer || spear => 4,
+        UnitKind::Archer | UnitKind::Crossbowman if spear => 3,
+        UnitKind::LightCavalry if victim == UnitKind::Monk => 10,
+        UnitKind::BatteringRam if matches!(victim, UnitKind::Mangonel | UnitKind::BatteringRam) => {
+            40
+        }
+        UnitKind::Mangonel if matches!(victim, UnitKind::Mangonel | UnitKind::BatteringRam) => 12,
         _ => 0,
     }
 }
@@ -55,7 +102,7 @@ impl GameWorld {
     }
     pub fn building_attack(&self, player: PlayerId, kind: BuildingKind) -> Option<BuildingAttack> {
         let mut s = if kind == BuildingKind::TownCenter {
-            // TC shoots only when garrisoned in DE; no garrison command exists yet.
+            // The firepower calculation supplies zero arrows without a garrison.
             BuildingAttack {
                 attack: 5,
                 kind: DamageKind::Pierce,
@@ -66,11 +113,16 @@ impl GameWorld {
         } else {
             building_combat(kind).attack?
         };
-        if self.has_researched(player, Tech::Fletching) {
-            s.attack += 1;
-            if kind != BuildingKind::TownCenter {
-                s.range += 1;
+        for tech in [Tech::Fletching, Tech::BodkinArrow] {
+            if self.has_researched(player, tech) {
+                s.attack += 1;
+                if kind != BuildingKind::TownCenter {
+                    s.range += 1;
+                }
             }
+        }
+        if self.has_researched(player, Tech::MurderHoles) && kind != BuildingKind::TownCenter {
+            s.min_range = 0;
         }
         Some(s)
     }

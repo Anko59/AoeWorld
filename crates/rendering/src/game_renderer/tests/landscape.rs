@@ -105,6 +105,7 @@ fn semantic_tree_families_share_healthy_broadleaf_draw_cull_and_shadow_fallback(
     for family in 0..=4 {
         for variant in 0..=255 {
             let resource = SceneResource {
+                highlight: 0,
                 id: 1,
                 position: [0.5; 2],
                 kind: 1,

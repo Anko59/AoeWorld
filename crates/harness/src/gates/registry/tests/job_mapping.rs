@@ -233,12 +233,17 @@ fn the_exhaustive_job_runs_after_merge_and_never_on_pull_requests() {
     assert!(!pr.gates.contains(&"test-exhaustive".into()));
     let ci = registry.plan(Cadence::Ci, &impact.suites).unwrap();
     assert!(ci.jobs["exhaustive"], "pushes to dev run the tier");
-    assert_eq!(registry.jobs["exhaustive"], ["test-exhaustive"]);
+    assert_eq!(
+        registry.jobs["exhaustive"],
+        ["test-exhaustive", "sdk-python-test"]
+    );
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let nightly = std::fs::read_to_string(root.join(".github/workflows/nightly.yml")).unwrap();
     assert!(nightly.contains("run: make test-exhaustive"));
     let workflow = std::fs::read_to_string(root.join(".github/workflows/ci.yml")).unwrap();
     assert!(workflow.contains("run: make test-exhaustive"));
+    assert!(workflow.contains("run: make sdk-python-test"));
+    assert!(nightly.contains("run: make sdk-python-test"));
 }
 
 #[test]

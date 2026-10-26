@@ -154,6 +154,7 @@ dependencies = [
  "aoe-core",
  "aoe-map",
  "aoe-protocol",
+ "aoe-rendering",
  "aoe-scenario",
  "aoe-server",
  "aoe-simulation",
@@ -182,6 +183,7 @@ version = "0.1.0"
 dependencies = [
  "aoe-core",
  "blake3",
+ "postcard",
  "serde",
  "serde_json",
  "thiserror",
@@ -208,6 +210,7 @@ dependencies = [
  "bytemuck",
  "js-sys",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
  "wgpu",
@@ -220,6 +223,26 @@ dependencies = [
  "aoe-core",
  "blake3",
  "serde",
+]
+
+[[package]]
+name = "aoe-sdk"
+version = "0.1.0"
+dependencies = [
+ "aoe-core",
+ "aoe-map",
+ "aoe-protocol",
+ "aoe-scenario",
+ "aoe-server",
+ "aoe-simulation",
+ "axum",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-tungstenite",
 ]
 
 [[package]]
@@ -255,6 +278,7 @@ dependencies = [
  "blake3",
  "criterion",
  "gungraun",
+ "rayon",
  "thiserror",
 ]
 
@@ -2378,9 +2402,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.53.2"
+version = "1.53.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044"
+checksum = "ce3335fa71841cda333a58d7615b03901380ecf09d59b3296d21f8bbac0dde4e"
 dependencies = [
  "bytes",
  "libc",

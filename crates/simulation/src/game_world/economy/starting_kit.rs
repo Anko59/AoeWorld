@@ -27,11 +27,16 @@ impl GameWorld {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return Ok(());
         };
-        // A restored game already contains its original kit, including exhausted nodes.
-        if overlay.starting_nodes().next().is_some() {
+        let center = TileCoord::new(footprint.min.x + 2, footprint.min.y + 2);
+        // A restored game already contains this village's original kit,
+        // including exhausted nodes. Another village's kit does not count: a
+        // match seats many villages in one world.
+        if overlay
+            .starting_nodes()
+            .any(|node| distance_squared(node.tile, center) <= (REACH as u64).pow(2))
+        {
             return Ok(());
         }
-        let center = TileCoord::new(footprint.min.x + 2, footprint.min.y + 2);
         let exits: Vec<_> = perimeter(footprint)
             .into_iter()
             .filter(|t| self.tile_passable(*t))
@@ -138,13 +143,34 @@ impl GameWorld {
         let Terrain::Map { generator, overlay } = &mut self.terrain else {
             unreachable!()
         };
+        let wanted = planned.len();
+        let mut inserted = 0_usize;
         for node in planned {
-            overlay
-                .insert_starting_resource(generator, node)
-                .map_err(|_| EconomyError::InvalidFootprint)?;
+            if overlay.insert_starting_resource(generator, node).is_err() {
+                break;
+            }
+            inserted += 1;
         }
-        self.resource_collision_changed();
+        // Nodes inserted so far are part of the world even when a later one was
+        // refused: the caches and collision state must see them either way.
+        if inserted > 0 {
+            if let Ok(cache) = self.resource_chunks.get_mut() {
+                cache.clear();
+            }
+            self.resource_collision_changed();
+        }
+        if inserted < wanted {
+            self.partial_kits += 1;
+            eprintln!("starting kit near {center:?} is partial: {inserted} of {wanted} nodes");
+            return Err(EconomyError::InvalidFootprint);
+        }
         Ok(())
+    }
+
+    /// How many villages of this world started with a kit that could not be
+    /// placed in full (genuinely impossible terrain; a healthy match has 0).
+    pub fn partial_starting_kits(&self) -> u64 {
+        self.partial_kits
     }
 
     fn starting_graph(&self, center: TileCoord, root: TileCoord) -> Graph {

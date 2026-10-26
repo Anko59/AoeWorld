@@ -1,6 +1,8 @@
 //! One projected terrain snapshot shared by rendering, contacts and picking.
 use super::*;
 use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
+#[path = "scene/bridges.rs"]
+mod bridges;
 #[path = "scene/projectiles.rs"]
 mod projectiles;
 
@@ -31,6 +33,11 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
     {
         return scene.clone();
     }
+    if super::super::strategic::active(client) {
+        let scene = Rc::new(PreparedScene::new(client.camera, Vec::new()));
+        *client.terrain_scene.borrow_mut() = Some(scene.clone());
+        return scene;
+    }
     let foundations = client
         .village
         .buildings
@@ -46,9 +53,8 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
             kind: building_kind(building),
             id: building.id,
             position: super::super::village::building_center(building),
-            moving: false,
+            visual: aoe_rendering::SceneUnitVisual::new(false).with_selected(false),
             facing: 0,
-            selected: false,
             elevation_meters: 0.0,
         })
         .collect::<Vec<_>>();
@@ -83,6 +89,20 @@ pub(in super::super) fn replace_buildings(
 }
 
 impl PreparedScene {
+    pub(crate) fn resident_bytes(&self) -> usize {
+        self.bucket_keys.resident_bytes()
+            + self.terrain.capacity() * size_of::<SceneTerrain>()
+            + self.decorations.capacity() * size_of::<SceneDecoration>()
+            + self.triangles.capacity() * size_of::<ProjectedSurfaceTriangle>()
+            + self.foundations.capacity() * size_of::<(aoe_rendering::SceneUnitKind, [f64; 2])>()
+            + self.buckets.capacity() * size_of::<Vec<usize>>()
+            + self
+                .buckets
+                .iter()
+                .map(|b| b.capacity() * size_of::<usize>())
+                .sum::<usize>()
+    }
+
     pub(super) fn new(camera: Camera, terrain: Vec<SceneTerrain>) -> Self {
         let triangles = aoe_rendering::projected_surface_triangles(
             &terrain,
@@ -200,6 +220,7 @@ pub(in super::super) fn units(
     let mut units = client
         .units
         .values()
+        .filter(|u| u.hp > 0 || !u.kind.is_naval())
         .filter(|u| {
             u.player == player
                 || client
@@ -211,8 +232,14 @@ pub(in super::super) fn units(
             let position = client.presentation.position(*unit);
             let mut kind = worker_kind(unit);
             let mut facing = unit.facing;
-            if unit.kind != aoe_protocol::UnitKind::Villager
+            let animal = unit
+                .hunt_target
+                .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
+            if crate::unit_visuals::walks_as_villager(unit, animal) {
+                kind = aoe_rendering::SceneUnitKind::Villager;
+            } else if unit.kind != aoe_protocol::UnitKind::Villager
                 || (unit.task == aoe_protocol::UnitTask::Fishing && !unit.moving)
+                || (unit.task == aoe_protocol::UnitTask::Farming && !unit.moving)
                 || unit.hp == 0
                 || matches!(
                     unit.task,
@@ -221,9 +248,6 @@ pub(in super::super) fn units(
                 || (unit.task == aoe_protocol::UnitTask::Attacking && !unit.moving)
                 || unit.hunt_target.is_some()
             {
-                let animal = unit
-                    .hunt_target
-                    .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
                 let pose = crate::unit_visuals::lifecycle_pose(
                     crate::unit_visuals::unit_pose(unit, animal),
                     unit.death_tick,
@@ -244,9 +268,12 @@ pub(in super::super) fn units(
                 kind,
                 id: unit.id,
                 position,
-                moving: unit.moving || position != unit.position.as_tiles(),
+                visual: aoe_rendering::SceneUnitVisual::new(
+                    unit.moving || position != unit.position.as_tiles(),
+                )
+                .with_player(Some(unit.player), player, client.team_colour, unit.hp > 0)
+                .with_selected(unit.hp > 0 && client.selected.units.contains(&unit.id)),
                 facing,
-                selected: unit.hp > 0 && client.selected.units.contains(&unit.id),
                 elevation_meters: scene
                     .height(position)
                     .unwrap_or_else(|| elevation_at_world(client, position)),
@@ -265,7 +292,9 @@ pub(in super::super) fn units(
             kind: aoe_rendering::SceneUnitKind::actor(pose as u8),
             id: animal.id,
             position,
-            moving: animal.moving,
+            visual: aoe_rendering::SceneUnitVisual::new(animal.moving)
+                .with_player(animal.owner, player, client.team_colour, animal.hp > 0)
+                .with_selected(client.selected.units.contains(&animal.id) && animal.hp > 0),
             facing: crate::unit_visuals::packed_frame(
                 pose,
                 animal.facing,
@@ -274,7 +303,6 @@ pub(in super::super) fn units(
                 client.village.tick.max(client.village.wildlife_tick),
                 client.config.tick_hz,
             ),
-            selected: client.selected.units.contains(&animal.id) && animal.hp > 0,
             elevation_meters: scene
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position)),
@@ -290,6 +318,10 @@ pub(in super::super) fn units(
         .map(|b| (b.footprint.min.x, b.footprint.min.y))
         .collect();
     for building in &client.village.buildings {
+        if building.kind == aoe_protocol::BuildingKind::Bridge {
+            bridges::append(client, scene, building, &mut units);
+            continue;
+        }
         let position = super::super::village::building_center(building);
         let gate_open = building.kind == aoe_protocol::BuildingKind::PalisadeGate
             && crate::building_ui::gate_sprite_slot(building.gate_open, building.progress_permille)
@@ -302,7 +334,9 @@ pub(in super::super) fn units(
             },
             id: building.id,
             position,
-            moving: false,
+            visual: aoe_rendering::SceneUnitVisual::new(false)
+                .with_player(Some(building.player), player, client.team_colour, false)
+                .with_selected(client.selected.has_building(building.id)),
             facing: if building.progress_permille < 1000 {
                 (u32::from(building.progress_permille) * 3 / 1000) as u8
             } else if building.kind == aoe_protocol::BuildingKind::PalisadeWall {
@@ -312,7 +346,6 @@ pub(in super::super) fn units(
             } else {
                 0
             },
-            selected: client.selected.building_id == Some(building.id),
             elevation_meters: scene
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position)),
@@ -342,7 +375,7 @@ pub(in super::super) fn units(
         units.insert(slot, unit);
     }
     for (building, expiry) in &client.village.rubble {
-        if *expiry <= client.village.tick {
+        if *expiry <= client.village.tick || building.kind == aoe_protocol::BuildingKind::Bridge {
             continue;
         }
         let position = super::super::village::building_center(building);
@@ -354,9 +387,8 @@ pub(in super::super) fn units(
             ) as u8),
             id: building.id,
             position,
-            moving: false,
+            visual: aoe_rendering::SceneUnitVisual::new(false).with_selected(false),
             facing: 0,
-            selected: false,
             elevation_meters: scene
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position)),
@@ -365,6 +397,7 @@ pub(in super::super) fn units(
         units.insert(slot, unit);
     }
     projectiles::append(client, scene, &mut units);
+    super::super::village::building_panel::preview(client, &mut units);
     units
 }
 
@@ -407,9 +440,7 @@ fn worker_kind(unit: &aoe_protocol::GameplayUnitState) -> aoe_rendering::SceneUn
     }
     match (unit.task, unit.gathering, unit.carried) {
         (UnitTask::Fishing, _, _) if !unit.moving => Art::VillagerFishing,
-        // The catalog has no farmer art: farming draws the foraging pose.
         (UnitTask::Building, _, _) if !unit.moving => Art::VillagerBuilding,
-        (UnitTask::Farming, _, _) => Art::VillagerForaging,
         (UnitTask::Gathering, Some(kind), _) => match kind {
             ResourceKind::Food => Art::VillagerForaging,
             ResourceKind::Wood => Art::VillagerChopping,

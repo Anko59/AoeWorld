@@ -5,11 +5,19 @@ const CHILD: &str = "AOE_BUNDLE_BUILD_FIXTURE";
 
 /// Runs `build_app` in a child test with a recording `docker`, over a tree whose
 /// client manifest is `manifest`, and returns the recorded command lines.
-fn recorded_build(test: &str, manifest: &str) -> Vec<String> {
+fn recorded_build(test: &str, manifest: &str, external_shaders: bool) -> Vec<String> {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
     fs::create_dir_all(root.join("crates/client")).unwrap();
     fs::write(root.join("crates/client/Cargo.toml"), manifest).unwrap();
+    if external_shaders {
+        fs::create_dir_all(root.join("crates/rendering/src/web")).unwrap();
+        fs::write(
+            root.join("crates/rendering/src/web/shaders.js"),
+            "runtime shader dependency",
+        )
+        .unwrap();
+    }
     let docker = root.join("docker");
     fs::write(
         &docker,
@@ -48,6 +56,7 @@ fn fresh_comparison_and_shared_server_builds_include_the_diagnostics_bundle() {
     let lines = recorded_build(
         "ship::compare::tests::build::fresh_comparison_and_shared_server_builds_include_the_diagnostics_bundle",
         "[package]\nname = \"aoe-client\"\n[features]\ndiagnostics = []\n",
+        true,
     );
     let diagnostics = lines
         .iter()
@@ -55,6 +64,11 @@ fn fresh_comparison_and_shared_server_builds_include_the_diagnostics_bundle() {
         .expect("fresh builds must generate the bundle imported by diagnostics.html");
     assert!(lines[diagnostics - 1].contains("--features diagnostics"));
     assert!(lines.iter().any(|line| line.contains("--out-dir web/pkg")));
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("assets browser-shaders"))
+    );
     let html = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/diagnostics.html"),
     )
@@ -70,6 +84,7 @@ fn a_merge_base_without_the_diagnostics_feature_builds_only_gameplay() {
     let lines = recorded_build(
         "ship::compare::tests::build::a_merge_base_without_the_diagnostics_feature_builds_only_gameplay",
         "[package]\nname = \"aoe-client\"\n",
+        false,
     );
     assert!(lines.iter().any(|line| line.contains("--out-dir web/pkg")));
     assert!(
@@ -78,4 +93,9 @@ fn a_merge_base_without_the_diagnostics_feature_builds_only_gameplay() {
             .any(|line| line.contains("--features diagnostics"))
     );
     assert!(!lines.iter().any(|line| line.contains("diagnostics-pkg")));
+    assert!(
+        !lines
+            .iter()
+            .any(|line| line.contains("assets browser-shaders"))
+    );
 }

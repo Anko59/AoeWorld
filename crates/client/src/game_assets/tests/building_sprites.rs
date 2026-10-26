@@ -107,7 +107,7 @@ fn layered_feudal_mill_avoids_repeating_the_body_in_the_fixed_object_atlas() {
 }
 
 #[wasm_bindgen_test]
-fn feudal_texture_sampling_preserves_native_geometry_and_source_bounds() {
+fn feudal_textures_pack_every_source_pixel_with_native_geometry_and_source_bounds() {
     let mut manifest = manifest_with("de/b_west_blacksmith_age2_x1.sld", 1);
     let frame = &mut manifest.frames[0];
     frame.width = 5;
@@ -115,7 +115,7 @@ fn feudal_texture_sampling_preserves_native_geometry_and_source_bounds() {
     frame.anchor_x = 4;
     frame.anchor_y = 2;
     let placed = placement::plan(&manifest, &[0], &[AtlasDomain::Objects]).unwrap()[0];
-    assert_eq!((placed.width, placed.height), (3, 2));
+    assert_eq!((placed.width, placed.height), (5, 3));
     let native = placement::record(&manifest.frames[0], placed);
     assert_eq!(native.size, [5., 3.]);
     assert_eq!(native.anchor, [4., 2.]);
@@ -136,17 +136,14 @@ fn feudal_texture_sampling_preserves_native_geometry_and_source_bounds() {
         [0; 3],
     )
     .unwrap();
-    for row in 0..2 {
-        for col in 0..3 {
+    for row in 0..3 {
+        for col in 0..5 {
             let at = ((usize::from(placed.y) + row) * GAME_ATLAS_SIDE as usize
                 + usize::from(placed.x)
                 + col)
                 * 4
                 + usize::from(placed.page) * GAME_ATLAS_PAGE_BYTES;
-            assert_eq!(
-                &pixels[at..at + 4],
-                &[(row * 2) as u8, (col * 2) as u8, 71, 255]
-            );
+            assert_eq!(&pixels[at..at + 4], &[row as u8, col as u8, 71, 255]);
         }
     }
     manifest.frames[0].x = 2046;
@@ -160,7 +157,7 @@ fn feudal_texture_sampling_preserves_native_geometry_and_source_bounds() {
 }
 
 #[wasm_bindgen_test]
-fn sampled_native_ambient_and_construction_texels_keep_native_geometry() {
+fn native_ambient_and_construction_texels_keep_native_geometry() {
     for source in [
         "graphics.drs:[32, 112, 108, 115]:4518",
         "graphics.drs:[32, 112, 108, 115]:4397",
@@ -174,9 +171,50 @@ fn sampled_native_ambient_and_construction_texels_keep_native_geometry() {
         f.anchor_x = -4;
         f.anchor_y = 8;
         let placed = placement::plan(&manifest, &[0], &[AtlasDomain::Objects]).unwrap()[0];
-        assert_eq!((placed.width, placed.height), (3, 2));
+        assert_eq!((placed.width, placed.height), (5, 3));
         let record = placement::record(&manifest.frames[0], placed);
         assert_eq!(record.size, [5.0, 3.0]);
         assert_eq!(record.anchor, [-4.0, 8.0]);
     }
+}
+
+#[wasm_bindgen_test]
+fn rally_flag_samples_the_licensed_loop_and_rejects_a_partial_group() {
+    let source = "de/b_misc_waypoint_flag_x1.sld";
+    let manifest = manifest_with(source, 90);
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
+    assert_eq!(
+        building_sprites::rally(&manifest, &mut selected, &mut domains).unwrap(),
+        Some(0..10)
+    );
+    assert_eq!(selected, (0..90).step_by(9).collect::<Vec<_>>());
+    assert_eq!(domains.len(), 10);
+    assert!(
+        building_sprites::rally(&manifest_with(source, 89), &mut Vec::new(), &mut Vec::new())
+            .is_err()
+    );
+}
+
+#[wasm_bindgen_test]
+fn native_bridge_pieces_borrow_unowned_space_without_team_mask_pages() {
+    let mut value = manifest::fixture();
+    let template = value["frames"][0].clone();
+    value["frames"] = [
+        "a_top", "a_middle", "a_bottom", "b_top", "b_middle", "b_bottom",
+    ]
+    .into_iter()
+    .map(|piece| {
+        let mut frame = template.clone();
+        frame["source"] = format!("de/s_bridge_{piece}_x1.sld").into();
+        frame["frame"] = 0.into();
+        frame
+    })
+    .collect::<Vec<_>>()
+    .into();
+    let manifest: Manifest = serde_json::from_value(value).unwrap();
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
+    let ranges = building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
+    assert_eq!(selected.len(), 6);
+    assert_eq!(domains, [AtlasDomain::Shared; 6]);
+    assert!(ranges[65..71].iter().all(Option::is_some));
 }

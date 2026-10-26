@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aoe-ai"
+version = "0.1.0"
+description = "A Dark and Feudal Age AoeWorld player written against the aoeworld Python SDK"
+requires-python = ">=3.9"
+dependencies = ["aoeworld"]
+
+[project.scripts]
+aoe-ai = "aoe_ai.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["aoe_ai*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

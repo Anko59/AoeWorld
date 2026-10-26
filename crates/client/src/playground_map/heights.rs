@@ -95,6 +95,15 @@ pub(crate) struct MapHeightBounds {
     probe_order: std::collections::VecDeque<(i32, i32)>,
 }
 
+impl MapHeightBounds {
+    pub(crate) fn memory_entries(&self) -> (usize, usize) {
+        (
+            self.probes.len(),
+            self.candidates.as_ref().map_or(0, |c| c.3.capacity()),
+        )
+    }
+}
+
 pub(super) fn ensure_bounds(
     shared: Rc<RefCell<Client>>,
     client: &mut Client,
@@ -108,8 +117,12 @@ pub(super) fn ensure_bounds(
     }
     client.terrain_bounds.pending = true;
     let connection = client.connection_id;
+    let shared = Rc::downgrade(&shared);
     spawn_local(async move {
         let result = fetch_bounds(hash).await;
+        let Some(shared) = shared.upgrade() else {
+            return;
+        };
         let mut client = shared.borrow_mut();
         if client.connection_id != connection || client.map_content_hash != Some(hash) {
             return;
@@ -152,27 +165,9 @@ async fn fetch_bounds(hash: [u8; 32]) -> Result<(i16, i16), JsValue> {
     )
 }
 
-// A typed projection avoids retaining a general JSON object tree in the
-// village bundle. Reject the same integer range, identity and order failures.
+// Browser JSON parsing preserves identity, range, order and duplicate guards.
 fn parse_bounds(body: &str, content_hash: &str) -> Result<(i16, i16), JsValue> {
-    if !body.trim_start().starts_with('{') {
-        return Err(JsValue::from_str("invalid map height bounds"));
-    }
-    #[derive(serde::Deserialize)]
-    struct Bounds {
-        content_hash: String,
-        minimum_height_level: i16,
-        maximum_height_level: i16,
-    }
-    let bounds: Bounds =
-        serde_json::from_str(body).map_err(|error| JsValue::from_str(&error.to_string()))?;
-    if bounds.minimum_height_level <= bounds.maximum_height_level
-        && bounds.content_hash == content_hash
-    {
-        Ok((bounds.minimum_height_level, bounds.maximum_height_level))
-    } else {
-        Err(JsValue::from_str("invalid map height bounds"))
-    }
+    crate::game_assets::decode_bounds(body, content_hash)
 }
 
 #[path = "heights/tests.rs"]
@@ -290,7 +285,10 @@ pub(super) fn request_candidates(client: &mut Client, budget: usize) -> Vec<(i32
 
 pub(in super::super) fn settle_counts(client: &mut Client) -> super::super::capture::ChunkCounts {
     use super::super::capture::ChunkCounts;
-    if client.surface_fixture || client.map_content_hash.is_none() {
+    if super::super::strategic::active(client)
+        || client.surface_fixture
+        || client.map_content_hash.is_none()
+    {
         return ChunkCounts::default();
     }
     // Waiting for verified height bounds cannot advertise an already settled map.

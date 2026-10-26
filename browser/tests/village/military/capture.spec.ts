@@ -66,8 +66,8 @@ test("capture real Feudal military and prepare its narrated showcase", async ({
     "../.cache/military-shots/atlas.json",
     JSON.stringify({
       frameCount,
-      pages: 4,
-      atlasBytes: 67108864,
+      pages: 5,
+      atlasBytes: 83886080,
       art: "native",
       renderer: "webgpu",
     }),

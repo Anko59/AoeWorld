@@ -10,18 +10,25 @@ use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, Tick};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod approach;
+#[path = "combat/castle/mod.rs"]
+mod castle;
 mod cost;
 mod hash;
 mod lifecycle;
 pub(crate) mod military;
 mod projectiles;
 mod table;
-mod tick;
+mod telemetry;
+pub(super) mod tick;
+pub use telemetry::CombatTelemetry;
 mod towers;
 
+#[cfg(test)]
+pub(crate) use approach::{FarAttack, MAX_FAR_SEARCHES_PER_TICK};
 pub(crate) use hash::hash_hit;
-pub use military::researched_stats;
+pub use military::{apply_research_stats, researched_stats};
 pub use projectiles::{Projectile, ProjectileKind};
+pub(super) use table::age_armour;
 pub use table::{
     BUILDING_COMBAT, BuildingAttack, BuildingCombat, DamageKind, UNIT_COMBAT, UnitCombat, UnitCost,
     UnitTraining, building_combat, damage_dealt, unit_combat,
@@ -43,21 +50,28 @@ pub struct HitRecord {
     pub tick: Tick,
 }
 
-/// Work done by the most recent `advance`; independent of the unit count.
+/// Attack and local healing work done by the most recent `advance`.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CombatStats {
     pub attackers: u32,
     pub hits: u32,
+    /// Spatial bucket entries examined to prepare healing candidates this tick.
+    pub healing_scanned_units: u64,
+    /// Wounded candidate entries considered by healers this tick.
+    pub healing_candidates: u64,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Attacker {
     pub(crate) target: EntityId,
     pub(crate) repath_tick: u64,
+    /// The firing tile of the last far search, while it can still be reused.
+    pub(crate) far: Option<approach::FarAttack>,
 }
 
 #[derive(Debug, Default)]
 pub(crate) struct Combat {
+    pub(crate) healers: BTreeSet<EntityId>,
     pub(crate) projectiles: BTreeMap<u64, Projectile>,
     pub(crate) next_projectile: u64,
     pub(crate) tower_ready: BTreeMap<EntityId, u64>,
@@ -65,11 +79,15 @@ pub(crate) struct Combat {
     /// `(tick at which the body is removed, unit)` in death order.
     pub(crate) dying: BTreeSet<(u64, EntityId)>,
     pub(crate) stats: CombatStats,
+    telemetry: telemetry::Telemetry,
+    /// Far firing-tile searches still allowed this tick.
+    pub(crate) far_searches: u32,
 }
 
 impl Combat {
     pub(crate) fn is_idle(&self) -> bool {
-        self.attackers.is_empty()
+        self.healers.is_empty()
+            && self.attackers.is_empty()
             && self.dying.is_empty()
             && self.tower_ready.is_empty()
             && self.projectiles.is_empty()
@@ -92,7 +110,7 @@ impl GameWorld {
     ) -> Result<(), EconomyError> {
         let unit = self
             .unit(id)
-            .filter(|unit| unit.hp > 0)
+            .filter(|unit| unit.hp > 0 && !self.embarked(unit.id))
             .ok_or(EconomyError::UnknownEntity)?;
         if unit.player != player {
             return Err(EconomyError::NotOwner);
@@ -111,11 +129,8 @@ impl GameWorld {
         let Some(&index) = self.lookup.get(&id) else {
             return Err(EconomyError::UnknownEntity);
         };
-        let range = i64::from(
-            self.unit_stats(id)
-                .ok_or(EconomyError::UnknownEntity)?
-                .range,
-        ) * MELEE_RANGE_SUBUNITS;
+        let range =
+            super::navy::attack_range(&self.unit_stats(id).ok_or(EconomyError::UnknownEntity)?);
         if goal.distance_squared(unit.position) <= range * range {
             self.stop_movement(index);
         } else if let Some(destination) = self.attack_destination(id, &goal)? {
@@ -132,6 +147,7 @@ impl GameWorld {
     /// Sets the attack target and the visible state. The hit rate belongs to
     /// the unit (`StoredUnit::next_hit_tick`), so no order sequence can speed it up.
     pub(crate) fn begin_attack(&mut self, id: EntityId, target: EntityId) {
+        self.cancel_auto_scout(id);
         let Some(&index) = self.lookup.get(&id) else {
             return;
         };
@@ -141,6 +157,7 @@ impl GameWorld {
             Attacker {
                 target,
                 repath_tick: self.tick.0.saturating_add(self.repath_ticks()),
+                far: None,
             },
         );
         let state = &mut self.units[index].state;

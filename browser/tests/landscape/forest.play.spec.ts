@@ -1,8 +1,12 @@
 import { expect, type Page } from "@playwright/test";
-import { test } from "../../server.js";
+import { test as preferredTest } from "../../server.js";
 import { PNG } from "pngjs";
 import { gameAssets } from "../game-assets.js";
-import { forceCanvas, forceWebGl } from "../rendering/backends.js";
+import {
+  fallbackTest,
+  forceCanvas,
+  forceWebGl,
+} from "../rendering/backends.js";
 
 async function primaryBluePosition(page: Page) {
   const image = PNG.sync.read(await page.locator("#scene").screenshot());
@@ -36,6 +40,7 @@ async function primaryBluePosition(page: Page) {
 }
 
 for (const backend of ["preferred", "webgl2", "canvas"] as const) {
+  const test = backend === "preferred" ? preferredTest : fallbackTest;
   test(`synthetic prepared forest serves metadata, draws and moves on ${backend}`, async ({
     page,
     request,
@@ -62,7 +67,7 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
       "aoe2-local",
     );
     const token = await page.evaluate(() =>
-      sessionStorage.getItem("aoeworld.resume-token"),
+      localStorage.getItem("aoeworld.resume-token"),
     );
     if (!token) throw new Error("Connected controller token absent");
     expect(token).toMatch(/^[0-9a-f]{48}$/i);
@@ -85,9 +90,9 @@ for (const backend of ["preferred", "webgl2", "canvas"] as const) {
     expect(packageResponse.ok()).toBeTruthy();
     const pkg = await packageResponse.json();
     expect(pkg.schema_version).toBe(1);
-    // Fishing changes the global generation recipe and package identity,
-    // including for this dry forest fixture; the package schema stays at 1.
-    expect(pkg.generation_recipe_version).toBe(2);
+    // Sea and river fish change the global generation recipe and package
+    // identity, including for this dry forest fixture; the schema stays at 1.
+    expect(pkg.generation_recipe_version).toBe(3);
     expect(pkg.request).not.toHaveProperty("detail_profile");
     expect(pkg.estimate.tiles_per_side).toBe(512);
     // Prepared-page tile labels may say SourceDerived; these samples are

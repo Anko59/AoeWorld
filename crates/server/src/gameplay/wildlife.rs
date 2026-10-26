@@ -25,6 +25,7 @@ pub(super) fn projectiles(
                 launched: world.tick(),
                 impact: p.impact,
                 kind: match p.kind {
+                    aoe_simulation::ProjectileKind::Stone => aoe_protocol::ProjectileKind::Stone,
                     aoe_simulation::ProjectileKind::Arrow => aoe_protocol::ProjectileKind::Arrow,
                     aoe_simulation::ProjectileKind::Javelin => {
                         aoe_protocol::ProjectileKind::Javelin
@@ -32,6 +33,9 @@ pub(super) fn projectiles(
                 },
             }
         })
+        // Projectiles are shown, never simulated, on the client: a crowded
+        // battle shows the first `MAX_PROJECTILES` rather than failing the frame.
+        .take(aoe_protocol::MAX_PROJECTILES)
         .collect()
 }
 

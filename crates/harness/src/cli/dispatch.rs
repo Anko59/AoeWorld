@@ -1,9 +1,9 @@
 use super::{Command, DevCommand};
 use crate::{
     agents, architecture, assets, coverage, dev, e2e, format_commands, fuzz, gates, hooks, ledger,
-    mutation, native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure, perf_size,
-    perf_soak, perf_stress, perf_timing, policy, process, qa, qa_mcp, release, release_promotion,
-    release_publish, repo_policy, review, ship, slots, timeline, wasm_test,
+    mutation, native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure, perf_scale,
+    perf_size, perf_soak, perf_stress, perf_timing, policy, process, qa, qa_mcp, release,
+    release_promotion, release_publish, repo_policy, review, ship, slots, timeline, wasm_test,
 };
 use std::{
     path::{Path, PathBuf},
@@ -40,6 +40,7 @@ pub(super) fn run(
                 process::run(tool, &["--version"], Duration::from_secs(10))?;
             }
         }
+        Command::SdkPython { action } => crate::sdk_python::run(action)?,
         Command::Recover => process::suspend::containers::recover()?,
         Command::Dev { command } => match command {
             DevCommand::Start => dev::start()?,
@@ -98,6 +99,7 @@ pub(super) fn run(
             slots::Config::load(Path::new("."), slots)?.cpus_per_slot()
         ),
         Command::TestWasm => wasm_test::run()?,
+        Command::TestWasmFocused => wasm_test::run_selected()?,
         Command::TestE2e => e2e::run()?,
         Command::TestCreatorSource => e2e::run_source()?,
         Command::TestGeographicMatrix => e2e::run_matrix()?,
@@ -112,6 +114,8 @@ pub(super) fn run(
         Command::PerfPressure => perf_pressure::run()?,
         Command::PerfStress => perf_stress::run()?,
         Command::PerfTimingReport => perf_timing::report()?,
+        Command::PerfScale(options) => perf_scale::run(options)?,
+        Command::ScaleMatch(options) => perf_scale::scale_match::run(options)?,
         Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,
         Command::PerfSoak30 => perf_soak::run(1_800, "soak-30")?,
         Command::PerfBaselinePropose => {

@@ -1,4 +1,5 @@
 mod barracks;
+mod castle;
 mod feudal;
 mod gates;
 mod research;
@@ -6,15 +7,20 @@ use super::*;
 use crate::{BuildingKind, CarriedResource, EconomyError, UnitKind, UnitTask, VILLAGE_RULES};
 use aoe_map::{ResourceKind, ResourceNode};
 
+#[path = "economy/navigation/bridges.rs"]
+mod bridges;
 mod buildings;
 mod construction;
 mod farming;
 mod fishing;
 pub(crate) mod fixture;
 mod gathering;
+mod market;
 mod rejections;
+#[path = "economy/navigation/resource_collision.rs"]
 mod resource_collision;
 mod training;
+#[path = "economy/navigation/village_routes.rs"]
 mod village_routes;
 
 fn village() -> (GameWorld, EntityId, EntityId) {
@@ -111,7 +117,10 @@ fn start_has_one_center_three_villagers_scout_and_standard_stockpile() {
     assert_eq!(ids.len(), 5, "buildings share the entity allocator");
     for y in building.footprint.min.y..building.footprint.max.y {
         for x in building.footprint.min.x..building.footprint.max.x {
-            assert!(!world.tile_passable(TileCoord::new(x, y)));
+            assert_eq!(
+                world.tile_passable(TileCoord::new(x, y)),
+                !(x < building.footprint.min.x + 2 && y < building.footprint.min.y + 2)
+            );
         }
     }
     for unit in world.units() {
@@ -156,9 +165,10 @@ fn village_search_is_bounded_and_moves_off_an_invalid_footprint() {
 }
 
 #[test]
-fn movement_routes_around_the_impassable_center_and_rejects_its_interior() {
+fn movement_routes_around_the_solid_center_annex_and_rejects_its_interior() {
     let (mut world, scout, center) = village();
     let footprint = world.building(center).unwrap().footprint;
+    let solid = aoe_core::TileRect::from_xywh(footprint.min.x, footprint.min.y, 2, 2);
     let inside = WorldPosition::from_tile_center(footprint.min).unwrap();
     assert_eq!(
         world.issue_move(scout, inside),
@@ -170,7 +180,7 @@ fn movement_routes_around_the_impassable_center_and_rejects_its_interior() {
         .unwrap();
     for _ in 0..1000 {
         world.advance();
-        assert!(!footprint.contains(world.unit(scout).unwrap().position.tile_floor()));
+        assert!(!solid.contains(world.unit(scout).unwrap().position.tile_floor()));
     }
     assert_eq!(world.unit(scout).unwrap().position.tile_floor(), target);
 }
@@ -180,10 +190,18 @@ fn villagers_move_at_point_eight_tiles_per_second_and_scout_keeps_its_speed() {
     let mut world = world();
     let start = WorldPosition::from_tile_center(TileCoord::new(20, 20)).unwrap();
     let villager = world.spawn_villager(PlayerId(0), start).unwrap();
-    let scout = world.spawn_unit(PlayerId(0), start).unwrap();
+    // Measure free speed on separate lanes. A stacked scout now yields to a
+    // villager in front; persistent overlap is covered by the spacing tests.
+    let scout_start = WorldPosition::from_tile_center(TileCoord::new(20, 24)).unwrap();
+    let scout = world.spawn_unit(PlayerId(0), scout_start).unwrap();
     let destination = WorldPosition::from_tile_center(TileCoord::new(60, 20)).unwrap();
     world.issue_move(villager, destination).unwrap();
-    world.issue_move(scout, destination).unwrap();
+    world
+        .issue_move(
+            scout,
+            WorldPosition::from_tile_center(TileCoord::new(60, 24)).unwrap(),
+        )
+        .unwrap();
     let scout_speed = world.config().move_speed_subunits_per_tick;
     advance(&mut world, 100);
     assert_eq!(world.unit(villager).unwrap().position.x - start.x, 4096);

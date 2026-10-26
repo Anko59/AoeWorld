@@ -4,6 +4,8 @@ The root page opens the cinematic once per browser session, then the main menu.
 `?skipIntro=1` opens the menu immediately; `?play=1` opens the game directly.
 Existing camera fragments also open the game directly, preserving capture links.
 `?introStills=1` keeps the cinematic timing but uses its animated poster fallback.
+The game renderer starts after the cinematic finishes or is skipped, so GPU
+recovery cannot replace the entry document during its playback.
 
 The opening preloads four muted, inline, non-looping clips. Each plays at normal
 speed; its final frame holds through the short crossfade. Posters remain beneath
@@ -26,20 +28,64 @@ centre is water. A bounded terrain wait reports an error with a route back to se
 
 The eight player colours are saved in session storage and passed to the game
 as `#playground data-player-colour` and the `--player-colour` CSS property.
-The own-unit and building minimap markers adopt that colour. Imported original
-unit and building sprite masks currently use blue.
+Units, buildings, hidden-unit contours and minimap markers use their owner's
+colour on WebGPU, WebGL2 and Canvas. Players 1–8 use blue, red, green, yellow,
+cyan, purple, grey and orange. Choosing a banner swaps that palette slot with
+the human's slot. Beyond eight, the palette cycles with alternating darker
+(9% per step) and lighter (7% per step) shades, repeating after 104 players;
+the supported 100-player match has 100 distinct RGB colours. Recolouring uses
+the imported player masks, preserving unmasked artwork and shadows.
+Selecting a foreign actor shows its player number and hides commands. Hostile
+selections have red rings; units grant vision and accept orders only for their
+owner.
 
 Artwork provenance is in `web/art/README.md`. The bundled Cinzel display font
 is from Google Fonts, under `FONT-LICENSE.txt`; screens need no external font
 request. Reduced-motion preferences disable pans, fades and bar animation.
 
 Browser specs in `browser/tests/start/` cover entry, requests, progress,
-errors, capture hooks and both requested desktop sizes. Their screenshots
+errors, reload resume, capture hooks and both requested desktop sizes. Their screenshots
 are written to `.cache/start-shots/`.
+
+**Opponents** sets 0 to 99 AI players (default 7, saved in session storage),
+each with the standard start and the default population cap. A server
+without an AI host (`AOE_AI_COMMAND`; `make dev` sets it) disables the
+setting, and the game is played alone. With opponents, once the map job has
+completed `web/start/skirmish.js` asks the server for the match
+(`POST /skirmish`) instead of activating the map, and loading shows the
+server's own phases with their counts: opening the prepared map, villages
+placed n/N, AI players seated n/M. Only then does the usual terrain wait
+start. Cancel and Quit to Main Menu call `POST /skirmish/stop`, which ends
+the AI processes; a new game or any other map replaces them too.
+
+**Returning resumes the match.** A tab holding a controller resume token (local
+storage, shared by tabs on this origin) first asks `GET /skirmish` before choosing
+the cinematic or the menu. When the server reports phase `ready`, the page skips
+both and opens the loading screen ("Returning to your game") on the usual
+terrain wait for that `content_hash`, then centres the Town Center. The game's
+socket sends the same token, so the server gives the tab its human seat back
+(the seat is reserved for 30 s after a disconnect). A closed tab can be replaced
+after that hold too, if nobody else took the seat. An unrelated world's token
+cannot claim a human seat or gain one through spectator promotion. The AI players keep playing
+throughout: the server stops them only after 5 minutes with nobody in the human
+seat. If this tab reconnects as an observer, or no match is running, the page
+falls back to the cinematic or menu as usual.
+
+The terrain wait has no wall-clock failure deadline: a ready, connected match
+keeps loading under CPU pressure. The scene's pending chunk count is shown as
+"Opening terrain · n chunks remaining"; retrying requests and a missing minimap
+have separate messages. Definitive preparation/activation errors still open the
+error screen. Both new games and reloads use this wait.
+
+The **France** preset is all of mainland France (46.6 N, 2.5 E) at the
+Country size, 960 km at 30:1 (16,000 tiles a side): the map of
+`make scale-match`. Its map job reuses the source-backed package when the
+server holds it and was started with that request in `AOE_PRESET_MAPS`;
+otherwise the server prepares it like any other request.
 
 Map size is a fixed choice rather than a free number. At the default 30:1
 compression, Large covers 480 km of real landscape (16 km / 8,000 tiles in game);
-Giant covers 1,920 km (64 km / 32,000 tiles). The estimate reflects custom
+Country covers 960 km (32 km / 16,000 tiles); Giant covers 1,920 km (64 km / 32,000 tiles). The estimate reflects custom
 compression. Tiny retains the 30 km preset used for geographic regressions.
 
 On load, a saved submission is resent once after the controller connects, using

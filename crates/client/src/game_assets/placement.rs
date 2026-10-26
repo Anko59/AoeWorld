@@ -24,6 +24,10 @@ pub(super) fn plan(
             .ok_or("Invalid sprite page")?;
         if u32::from(source.width) != GAME_ATLAS_SIDE
             || u32::from(source.height) != GAME_ATLAS_SIDE
+            || frame.width == 0
+            || frame.height == 0
+            || frame.width > aoe_assets::catalog::packing::MAX_FRAME_EXTENT
+            || frame.height > aoe_assets::catalog::packing::MAX_FRAME_EXTENT
             || u32::from(frame.x) + u32::from(frame.width) > GAME_ATLAS_SIDE
             || u32::from(frame.y) + u32::from(frame.height) > GAME_ATLAS_SIDE
         {
@@ -31,15 +35,48 @@ pub(super) fn plan(
         }
         extents[semantic] = FrameExtent {
             domain,
-            width: frame
-                .width
-                .div_ceil(aoe_assets::catalog::buildings::pixel_step(&frame.source)),
-            height: frame
-                .height
-                .div_ceil(aoe_assets::catalog::buildings::pixel_step(&frame.source)),
+            width: frame.width,
+            height: frame.height,
         };
     }
-    pack_frames(&extents[..selected.len()]).map_err(error)
+    // Keep every semantic frame, but store identical masked/terrain source cells
+    // once. Shared art remains separate because it may bake different colours.
+    let mut aliases = Vec::with_capacity(selected.len());
+    let mut unique = 0;
+    for (semantic, (&source, &domain)) in selected.iter().zip(domains).enumerate() {
+        let prior = (domain != AtlasDomain::Shared)
+            .then(|| {
+                selected[..semantic]
+                    .iter()
+                    .zip(&domains[..semantic])
+                    .position(|(&other, &kind)| source == other && domain == kind)
+            })
+            .flatten();
+        if let Some(prior) = prior {
+            aliases.push(aliases[prior]);
+        } else {
+            aliases.push(unique);
+            extents[unique] = extents[semantic];
+            unique += 1;
+        }
+    }
+    let placements = pack_frames(&extents[..unique]).map_err(|failure| {
+        let mut totals = [[0_u64; 2]; 3];
+        for f in &extents[..unique] {
+            let entry = &mut totals[f.domain as usize];
+            entry[0] += 1;
+            entry[1] += u64::from(f.width) * u64::from(f.height);
+        }
+        web_sys::console::error_1(
+            &format!(
+                "Atlas count/pixels: terrain={:?}, masked={:?}, unowned={:?}; {failure}",
+                totals[0], totals[1], totals[2]
+            )
+            .into(),
+        );
+        error(failure)
+    })?;
+    Ok(aliases.into_iter().map(|index| placements[index]).collect())
 }
 
 pub(super) fn record(frame: &FrameRecord, placed: Placement) -> GameFrame {
@@ -69,6 +106,12 @@ pub(super) enum Plane {
     Player,
     /// Fills only texels that are still transparent after colour and player.
     Shadow,
+    /// Owner-independent body alpha, with native RGB retained for composition.
+    PlayerCoverage,
+    /// Original base alpha in B, aligned to its colour page at page + 3.
+    MaskBase,
+    /// Player ramp in R and coverage weight in G; B keeps base alpha.
+    MaskPlayer,
 }
 
 /// Applies one plane. Running `Color`, `Player`, then `Shadow` reproduces the
@@ -82,12 +125,14 @@ pub(super) fn copy_plane(
     team: [u8; 3],
 ) -> Result<(), JsValue> {
     let side = GAME_ATLAS_SIDE as usize;
-    let step = aoe_assets::catalog::buildings::pixel_step(&frame.source);
-    if source.len() != GAME_ATLAS_PAGE_BYTES
-        || pixels.len() != GAME_ATLAS_BYTES
+    let mask = matches!(plane, Plane::MaskBase | Plane::MaskPlayer);
+    if (mask && !(5..8).contains(&placed.page))
+        || (!mask && placed.page >= 5)
+        || source.len() != GAME_ATLAS_PAGE_BYTES
+        || (pixels.len() != GAME_ATLAS_BYTES && pixels.len() != GAME_ATLAS_PAGE_BYTES)
         || usize::from(placed.page) >= GAME_ATLAS_BYTES / GAME_ATLAS_PAGE_BYTES
-        || placed.width != frame.width.div_ceil(step)
-        || placed.height != frame.height.div_ceil(step)
+        || placed.width != frame.width
+        || placed.height != frame.height
         || usize::from(frame.x) + usize::from(frame.width) > side
         || usize::from(frame.y) + usize::from(frame.height) > side
         || usize::from(placed.x) + usize::from(placed.width) > side
@@ -95,13 +140,15 @@ pub(super) fn copy_plane(
     {
         return Err(JsValue::from_str("Invalid atlas copy bounds"));
     }
-    let base = usize::from(placed.page) * GAME_ATLAS_PAGE_BYTES;
+    // A one-page buffer is the streamed destination page, addressed from zero.
+    let base = if pixels.len() == GAME_ATLAS_PAGE_BYTES {
+        0
+    } else {
+        usize::from(placed.page) * GAME_ATLAS_PAGE_BYTES
+    };
     for row in 0..usize::from(placed.height) {
         for col in 0..usize::from(placed.width) {
-            let from = ((usize::from(frame.y) + row * usize::from(step)) * side
-                + usize::from(frame.x)
-                + col * usize::from(step))
-                * 4;
+            let from = ((usize::from(frame.y) + row) * side + usize::from(frame.x) + col) * 4;
             let to =
                 base + ((usize::from(placed.y) + row) * side + usize::from(placed.x) + col) * 4;
             let mut value = [
@@ -111,6 +158,18 @@ pub(super) fn copy_plane(
                 source[from + 3],
             ];
             match plane {
+                Plane::MaskBase => value = [0, 0, value[3], 0],
+                Plane::MaskPlayer => value = [value[0], value[3], pixels[to + 2], 0],
+                Plane::PlayerCoverage => {
+                    let alpha = u32::from(value[3]);
+                    value = [
+                        pixels[to],
+                        pixels[to + 1],
+                        pixels[to + 2],
+                        ((alpha * 255 + u32::from(pixels[to + 3]) * (255 - alpha) + 127) / 255)
+                            as u8,
+                    ];
+                }
                 Plane::Color => {
                     // The trial's cliff palette is strongly orange. Keep its
                     // luminance relief and alpha, with a restrained warm stone

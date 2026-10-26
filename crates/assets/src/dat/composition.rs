@@ -130,6 +130,13 @@ impl DatFile {
         if id < 0 {
             return Ok(());
         }
+        // VER 5.7 University and Blacksmith animations include their bodies,
+        // whose delta refers back to the animation. Emit these known layers once.
+        if (id == 569 && chain.as_slice() == [569, 573])
+            || (id == 65 && chain.as_slice() == [65, 69])
+        {
+            return Ok(());
+        }
         if chain.contains(&id) || chain.len() >= 16 || out.len() >= 256 {
             return Err(crate::invalid(
                 "composition",
@@ -142,7 +149,7 @@ impl DatFile {
             .ok_or_else(|| crate::invalid("composition", 0, format!("missing graphic {id}")))?;
         chain.push(id);
         if graphic.slp_id >= 0 {
-            out.push(BuildingPart {
+            let part = BuildingPart {
                 graphic_id: id,
                 slp_id: graphic.slp_id,
                 source: format!("graphics.drs:[32, 112, 108, 115]:{}", graphic.slp_id),
@@ -154,7 +161,12 @@ impl DatFile {
                 offset,
                 misplacement,
                 layer: graphic.layer,
-            });
+            };
+            // Shared shadow/body deltas can be reached through both branches
+            // of the Castle composites. Identical placement emits one layer.
+            if !out.contains(&part) {
+                out.push(part);
+            }
         }
         for delta in &graphic.deltas {
             self.append_graphic(

@@ -27,7 +27,7 @@ impl GameWorld {
                 }
                 if let Some(node) = generator.object_at(tile)
                     && node.id != exclude
-                    && overlay.blocks_node(node)
+                    && overlay.resource_available(node)
                     && (node.object == ObjectKind::ShoreFish
                         || (naval && node.object == ObjectKind::DeepFish))
                     && (distance, node.id) < score
@@ -52,6 +52,9 @@ impl GameWorld {
                 origin.y.saturating_add(kind.rules().depth),
             ),
         );
+        if kind == BuildingKind::Bridge {
+            return Err(EconomyError::InvalidFootprint);
+        }
         if kind != BuildingKind::Dock {
             return self.validate_footprint(footprint);
         }
@@ -64,7 +67,7 @@ impl GameWorld {
             || footprint.max.y > self.config.height_tiles
             || self
                 .units()
-                .any(|u| footprint.contains(u.position.tile_floor()))
+                .any(|u| !self.embarked(u.id) && footprint.contains(u.position.tile_floor()))
             || self
                 .buildings()
                 .any(|b| super::placement::rects_overlap(b.footprint, footprint))
@@ -106,7 +109,7 @@ impl GameWorld {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        if kind != UnitKind::FishingShip {
+        if !kind.is_naval() {
             return self
                 .terrain
                 .passable_with_cancel(tile, self.config, cancelled);
@@ -119,14 +122,16 @@ impl GameWorld {
         };
         Ok(navigable(sample.water, sample.material)
             && !overlay.blocks_tile(tile)
+            && overlay.bridge_axis(tile).is_none()
             && node.is_none_or(|n| !overlay.blocks_node(n)))
     }
 
-    pub(crate) fn gather_capacity(&self, unit: &crate::GameUnit) -> u16 {
+    pub(crate) fn gather_capacity(&self, unit: &crate::GameUnit, farmer: bool) -> u16 {
         if unit.kind == UnitKind::FishingShip {
             15
         } else {
             self.villager_capacity(unit.player)
+                + u16::from(farmer && self.has_researched(unit.player, crate::Tech::HeavyPlow))
         }
     }
 

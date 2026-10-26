@@ -26,7 +26,9 @@ fn webgl_native_species_body_and_alpha_silhouette_pixels_and_removal() {
 fn webgl_dressing_anchor_pixels() {
     let (canvas, mut renderer) = target(&fixture::atlas());
     assert!(fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(19)]).is_empty());
-    for kind in [18, 20] {
+    assert!(fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(18)]).is_empty());
+    {
+        let kind = 20;
         let mut sprites = fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(kind)])
             .into_iter()
             .map(|(s, _, _, _)| s)

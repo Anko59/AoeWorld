@@ -1,5 +1,59 @@
 # 0004: WebGPU-first browser rendering
 
+## Hidden unit contours
+
+The WebGPU world pass also writes an R8Uint coverage attachment: one for an
+opaque upright resource/building fragment, zero for other final fragments.
+Alpha discard, ordinary depth and painter order determine that coverage, so
+transparent holes and equal-depth unit/building ties keep their normal pixels.
+Ground, farms, rubble, fish and separate generated shadows do not mark the mask;
+partially transparent native shadows fail its 0.8 alpha cutoff.
+
+A second pass loads world colour/depth and draws eligible, contiguous runs.
+Only living player-unit quads reach rasterization; greater-or-equal depth and
+the sampled mask restrict their 1.5 backing-pixel inner contour to hidden parts.
+Five bounded atlas-alpha taps find the edge, including mirrored rectangles.
+The existing scene builder supplies visible units only, so contours reveal no
+enemy outside current vision. Loaded own team colour and the player palette
+travel through spare object words in the unchanged 112-byte Sprite packet.
+
+Scene construction adds no CPU overlap queries, repacked sprites or second
+instance upload. The WebGPU mask costs one byte per backing pixel (4 MiB at the client's
+existing backing limit); resize replaces its texture/view and rebinds it. Its
+two persistent handles and the lazy contour pipeline/bind group are counted.
+WebGL2 uses the same final coverage bits and contour kernels. The world renders
+directly into the browser framebuffer, a coverage-only pass writes R8UI and
+Depth24, and contours load the browser framebuffer. This removes the owned
+full-resolution colour texture and final blit. The mask pass reuses the instance
+upload and painter order; it adds a world geometry draw without a second upload.
+The contour draw submits only eligible object runs from that same buffer,
+preserving order without processing the whole forest's vertices again.
+Coverage-only shader variants omit RGB output, pruning unused colour work while
+preserving alpha discard and depth.
+The targets allocate only when effects are present, resize in place and release
+after 60 consecutive rendered frames without effects, avoiding allocation churn
+when camera/hover changes briefly remove effects. Zero-size backing and disposal
+release immediately. Above one megapixel, coverage/depth use half-size axes
+with nearest coverage sampling; world colour and contour kernels remain at full
+resolution. They cost five bytes per coverage pixel (about 5 MiB at the existing
+backing ceiling), plus the browser's default framebuffer and driver storage.
+Canvas retains the contextual gather cursor. GPU pixel and browser tests establish coverage and
+ordering, not hardware frame cadence or finished RTS performance.
+
+Owner colours use three aligned player-mask pages beside the five colour pages:
+128 MiB of atlas storage, independent of player count. Each renderer composes
+the ramp, coverage weight and original base alpha before filtering and fog;
+unmasked blue artwork is preserved. WebGPU still streams one 16 MiB CPU page,
+while WebGL2 owns one 128 MiB WASM restoration source and Canvas retains raster
+source bytes. WebGL borrows that allocation instead of copying it into JS;
+restoration refreshes its typed view after WASM memory growth. Owner palette
+and selection flags keep `SceneUnit` at 32 bytes.
+CPU backends fill their existing full atlas in source order, decoding each
+source plane once for both colour and aligned masks. Repeating those decodes
+per destination page raised a measured native-pack load from 153 to 243 plane
+decodes when masks were added; source order requires 63. It adds no decoded-page
+cache or retained allocation. WebGPU keeps its one-page streaming budget.
+
 Use Rust/WASM with wgpu's WebGPU backend and instanced sprites as the preferred
 renderer. The client remains single threaded.
 
@@ -22,8 +76,21 @@ WebGL2 requires a 24-bit depth buffer and preserves the existing 64 MiB instance
 and 4,194,304-pixel backing limits. Instance uploads borrow a bounded WASM memory
 view for a synchronous graphics call; never retain the packet or await while
 using it. WebGL copies it into its instance buffer before the borrow ends,
-without another retained CPU packet. One additional owned 48 MiB source atlas supports
-context restoration without cloning on restore.
+without another retained CPU packet. Atlas upload completes each 16 MiB page
+before submitting the next: page-sized calls alone can still queue the full
+128 MiB atlas in driver transfer staging. This startup/restoration boundary
+uses a synchronous completion; ordinary frames do not wait on the GPU.
+The renderer retains its source atlas in
+WASM for context restoration without a second JS allocation. The shared depth
+normalizer requests coverage only for hover or a unit/occluder pair.
+Occlusion and hover share one R8UI mask and one 24-bit depth renderbuffer
+(four-byte storage): five owned bytes per active coverage pixel, counted once
+in GPU texture accounting. Large canvases halve only the coverage/depth axes.
+Resize replaces storage in the same objects without retaining old sizes; 60
+consecutive frames without effects delete them. Browser swapchains and
+driver overhead remain outside this logical accounting. The dense-forest RSS
+check retains dev's original 1 GiB ceiling, 64 MiB steady RSS growth limit and
+16 MiB steady WASM growth limit, with no allowance for coverage attachments.
 Restore shaders, buffers, texture, and atlas on the original canvas, then
 invalidate the frame cache so an idle scene also redraws. A lost/zero-size or
 skipped GPU frame is not a successful presentation: do not advance picking or
@@ -39,6 +106,29 @@ surfaces, transparent occluders, depth ties, native material blending/tints,
 mirrored units, and real movement, plus bound-context initialization failure and
 context loss/restoration. Synthetic pixel tests do not establish real-source
 frame cadence or dedicated-hardware performance; measure those separately.
+
+WebGPU initialization and unfinished queue/surface work have a five-second
+deadline. Uncaptured device errors, lost-device reasons and rejected queue
+promises go to the browser console. Gameplay checks health even when its frame
+cache or overview skips drawing. Recovery destroys the failed device and reloads
+with `renderer=webgl2`, preserving camera coordinates and the shared same-world
+seat credential while rebuilding canvas input handlers. Initialization failures
+select WebGL2 directly; Canvas remains the final compatibility tier.
+GPU owners retire on ordinary pagehide and Renderer Drop, including failed startup.
+Canvas repaints disjoint changed regions in original depth/alpha order, retaining
+at most 65,536 previous layers plus their fog values in its memory accounting.
+Before loading assets, an asynchronous canvas snapshot must reproduce a known
+startup clear in an 8×8 sample, within the same deadline. One snapshot/bitmap is
+transiently retained (each bounded by canvas backing size); it is never repeated
+per frame. Blank snapshots also select WebGL2 despite successful queue promises.
+At most two frames may be outstanding on either GPU tier; WebGL2 polls completion
+fences before instance uploads. WebGPU also bounds eight atlas-page uploads.
+Acquire its surface before creating/uploading frame instances, so failed acquisition
+cannot accumulate uploads. Completion callbacks retain scalar health state only.
+WebGPU uses core features/default limits and RGBA for Firefox presentation.
+Production rendering does not use `mapAsync`.
+Queue completion establishes GPU progress, not successful compositor display:
+Firefox/Linux PRIME/Wayland still requires visual qualification on that hardware.
 
 ## Immediate natural-surface appearance corrections
 
@@ -69,19 +159,20 @@ appearance, not its geometry or dedicated-source qualification.
 
 ## Bounded multi-atlas addressing
 
-Gameplay owns exactly three 2048-square RGBA pages (48 MiB base pixels): terrain
-0/1, objects/units/shadows 2. Source page numbers are never runtime page numbers.
+Gameplay owns eight 2048-square RGBA pages (128 MiB base pixels): terrain 0/1,
+objects/units/shadows 2–4, and aligned player masks 5–7. Source page numbers are
+never runtime page numbers.
 Required overflow fails; never discard visible trees or regroup painter order.
 Page and UV travel together through shared terrain samples and sprite frames.
 Selectors append at byte 96 of the 112-byte ABI (primary, two blends, appearance
-word); storage/attribute capacity remains derived from the unchanged 64 MiB cap.
+word); both GPU paths fetch instanced attributes under the same 64 MiB cap.
 Sprites without landscape appearance keep a zero fourth word.
 WebGPU uses D2Array, WebGL2 uses integer attribute 6 and TEXTURE_2D_ARRAY, and
 Canvas samples page-major pixels with lazily created per-page canvases.
 Diagnostic WebGPU still uses one 8-square layer (256 bytes), with actual texture
 size/layers reported separately from gameplay. GL/Canvas have no GPU counter
 observation API; unavailable measurements must not become fabricated counters.
-48 MiB is not total memory: source decode scratch, GL restoration ownership,
+128 MiB is not total memory: source decode scratch, GL restoration ownership,
 Canvas copies, transient uploads and presentation buffers remain separately real.
 Synthetic page/depth/blend/restoration pixels do not qualify France or hardware.
 
@@ -326,8 +417,8 @@ The production scene builder now appends the shared sprite emitter directly
 after surfaces and selection rings. It no longer materializes an intermediate
 object vector and then copies it into the WorldLayer vector. Resource-before-unit
 submission and the existing stable-index depth/type/id sort remain unchanged.
-The diagnostic terrain-frame helper, selection temporaries, integer sort sidecar and GPU
-instance vector still allocate; this is not whole-renderer allocation reuse.
+WebGPU reuses packet/range storage; other scene and sort buffers still allocate.
+[Measurements](../performance/webgpu-sprites.md) do not qualify hardware cadence.
 Bounded scene tests pin the final layer content over 72 cases (missing art,
 source ties, mirrors, boundary cameras, NaN depths) by digest and assert the
 stable depth/type/id order. An absolute allocation budget for a dense

@@ -1,12 +1,15 @@
 //! Dark Age combat: damage, time to kill, approach, retaliation and death.
+mod castle;
 use super::*;
 use crate::{BUILDING_COMBAT, DamageKind, EconomyError, UNIT_COMBAT, UnitTask, damage_dealt};
 
 mod approach;
 mod buildings;
+mod garrison;
 mod military;
 mod research_tests;
 mod scale;
+mod telemetry_tests;
 
 pub(super) fn at(x: i32, y: i32) -> WorldPosition {
     WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap()

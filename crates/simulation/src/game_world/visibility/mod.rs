@@ -1,26 +1,16 @@
-//! Sparse player knowledge. No allocation or iteration depends on map area.
-use super::{GameBuilding, GameWorld, UnitKind};
+//! Sparse player knowledge. Sight spreads through full-disc updates when an
+//! observer appears, dies or changes LOS, and through disc-edge diffs when it
+//! merely moves. Building memory consumes the sight flips separately. No
+//! allocation or iteration depends on map area.
+use super::{GameBuilding, GameUnit, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TileVisibility {
     Unexplored,
     Explored,
     Visible,
-}
-
-#[derive(Default, Debug)]
-struct PlayerVision {
-    // 32x32 bits, allocated only after a tile in the chunk was observed.
-    explored: BTreeMap<(i32, i32), [u64; 16]>,
-    // Only currently visible tiles carry reference counts. Overlapping LOS
-    // cannot turn a tile fogged when just one observer leaves.
-    visible: BTreeMap<TileCoord, u32>,
-    remembered: BTreeMap<EntityId, GameBuilding>,
-    tile_work: u64,
-    overview: BTreeMap<u16, u32>,
-    resources: BTreeMap<u64, u16>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -32,88 +22,39 @@ struct Observer {
 
 #[derive(Default, Debug)]
 pub(crate) struct Vision {
+    /// Diagnostic only; batch invocation counts do not enter replay state.
+    applications: u64,
     players: BTreeMap<PlayerId, PlayerVision>,
-    observers: BTreeMap<EntityId, Observer>,
+    observers: observers::Observers,
+    /// Building footprint tiles, for sight-gain and sight-loss events.
+    building_at_tile: HashMap<TileCoord, EntityId>,
+    building_watchers: BTreeMap<EntityId, Watched>,
     disabled: bool,
     revision: u64,
+    /// While a movement tick runs, observer changes queue here and apply per
+    /// player in parallel afterwards (see `batch.rs`).
+    batch: Option<Vec<change::Change>>,
 }
 
-fn address(tile: TileCoord) -> ((i32, i32), usize, u64) {
-    let index = (tile.y.rem_euclid(32) * 32 + tile.x.rem_euclid(32)) as usize;
-    (
-        (tile.x.div_euclid(32), tile.y.div_euclid(32)),
-        index / 64,
-        1 << (index % 64),
-    )
-}
+mod batch;
+mod change;
+mod observers;
 
-/// Every strategic pixel intersecting the tile, including tiles wider than a
-/// pixel on supported small maps. Shared pixels retain reference counts.
-fn pixels(tile: i32, axis: i32) -> std::ops::Range<i64> {
-    let (tile, axis) = (i64::from(tile), i64::from(axis));
-    tile * 256 / axis..((tile + 1) * 256 + axis - 1) / axis
-}
+#[path = "state.rs"]
+mod state;
+#[cfg(test)]
+mod tests;
+use state::PlayerVision;
 
-impl PlayerVision {
-    fn state(&self, tile: TileCoord) -> TileVisibility {
-        if self.visible.contains_key(&tile) {
-            return TileVisibility::Visible;
-        }
-        let (chunk, word, mask) = address(tile);
-        if self
-            .explored
-            .get(&chunk)
-            .is_some_and(|bits| bits[word] & mask != 0)
-        {
-            TileVisibility::Explored
-        } else {
-            TileVisibility::Unexplored
-        }
-    }
-}
-
-impl Vision {
-    fn apply(&mut self, observer: Observer, add: bool, width: i32, height: i32) {
-        let player = self.players.entry(observer.player).or_default();
-        let radius = i32::from(observer.los);
-        for dy in -radius..=radius {
-            for dx in -radius..=radius {
-                if dx * dx + dy * dy > radius * radius {
-                    continue;
-                }
-                let tile = TileCoord::new(observer.center.x + dx, observer.center.y + dy);
-                if tile.x < 0 || tile.y < 0 || tile.x >= width || tile.y >= height {
-                    continue;
-                }
-                player.tile_work += 1;
-                if add {
-                    *player.visible.entry(tile).or_default() += 1;
-                    let (chunk, word, mask) = address(tile);
-                    player.explored.entry(chunk).or_insert([0; 16])[word] |= mask;
-                } else if let Some(count) = player.visible.get_mut(&tile) {
-                    *count -= 1;
-                    if *count == 0 {
-                        player.visible.remove(&tile);
-                    }
-                } else {
-                    continue;
-                }
-                for y in pixels(tile.y, height) {
-                    for x in pixels(tile.x, width) {
-                        let pixel = (y * 256 + x) as u16;
-                        if add {
-                            *player.overview.entry(pixel).or_default() += 1;
-                        } else if let Some(total) = player.overview.get_mut(&pixel) {
-                            *total -= 1;
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+#[path = "watchers.rs"]
+mod watchers;
+use watchers::Watched;
 
 impl GameWorld {
+    pub(crate) fn building_at_tile(&self, tile: TileCoord) -> Option<EntityId> {
+        self.vision.building_at_tile.get(&tile).copied()
+    }
+
     pub fn visibility(&self, player: PlayerId, tile: TileCoord) -> TileVisibility {
         if self.vision.disabled {
             return TileVisibility::Visible;
@@ -132,11 +73,12 @@ impl GameWorld {
         if was_disabled && !disabled {
             self.vision.observers.clear();
             for vision in self.vision.players.values_mut() {
+                vision.revision += 1;
                 vision.visible.clear();
-                for count in vision.overview.values_mut() {
-                    *count = 0;
-                }
+                vision.visible_tiles = 0;
+                vision.overview.clear_counts();
             }
+            self.rebuild_building_sight_index();
             let units = self.units().map(|u| u.id).collect::<Vec<_>>();
             let buildings = self.buildings().map(|b| b.id).collect::<Vec<_>>();
             for id in units {
@@ -162,23 +104,40 @@ impl GameWorld {
     pub fn fog_disabled(&self) -> bool {
         self.vision.disabled
     }
+    pub fn vision_batch_applications(&self) -> u64 {
+        self.vision.applications
+    }
+
     pub fn vision_revision(&self) -> u64 {
         self.vision.revision
     }
+    /// Changes only when `player`'s own sight changes, so a viewer can skip
+    /// rebuilding its fog view when other players move. With fog disabled it
+    /// follows the global revision.
+    pub fn player_vision_revision(&self, player: PlayerId) -> u64 {
+        if self.vision.disabled {
+            return self.vision.revision;
+        }
+        self.vision.players.get(&player).map_or(0, |v| v.revision)
+    }
     pub fn vision_overview(&self, player: PlayerId) -> Vec<(u16, u8)> {
-        self.vision.players.get(&player).map_or_else(Vec::new, |v| {
-            v.overview
-                .iter()
-                .map(|(i, count)| (*i, if *count > 0 { 2 } else { 1 }))
-                .collect()
-        })
+        self.vision
+            .players
+            .get(&player)
+            .map_or_else(Vec::new, |v| v.overview.states().collect())
     }
 
     pub fn unit_visible_to(&self, player: PlayerId, id: EntityId) -> bool {
-        self.unit(id).is_some_and(|u| {
-            u.player == player
-                || self.visibility(player, u.position.tile_floor()) == TileVisibility::Visible
-        })
+        !self.embarked(id)
+            && self.unit(id).is_some_and(|u| {
+                u.player == player
+                    || self.visibility(player, u.position.tile_floor()) == TileVisibility::Visible
+            })
+    }
+
+    /// Local footprint lookup shared by visibility and area damage.
+    pub(crate) fn building_at(&self, tile: TileCoord) -> Option<EntityId> {
+        self.vision.building_at_tile.get(&tile).copied()
     }
 
     pub fn building_visible_to(&self, player: PlayerId, footprint: TileRect) -> bool {
@@ -212,7 +171,7 @@ impl GameWorld {
     /// bounded-cost regressions. Idle ticks perform no LOS tile work.
     pub fn vision_storage(&self, player: PlayerId) -> (usize, usize, u64) {
         self.vision.players.get(&player).map_or((0, 0, 0), |v| {
-            (v.explored.len(), v.visible.len(), v.tile_work)
+            (v.explored.len(), v.visible_tiles, v.tile_work)
         })
     }
 
@@ -229,91 +188,193 @@ impl GameWorld {
             center,
             los,
         });
-        if self.vision.observers.get(&id).copied() == observer {
+        if self.vision.observers.get(&id) == observer {
             return false;
         }
         self.vision.revision += 1;
-        if let Some(old) = self.vision.observers.remove(&id) {
-            self.vision.apply(
-                old,
-                false,
-                self.config.width_tiles,
-                self.config.height_tiles,
-            );
-        }
+        let old = self.vision.observers.remove(&id);
+        let changes = match (old, observer) {
+            (Some(old), Some(new)) if old.player == new.player && old.los == new.los => {
+                vec![change::Change::Edge { old, new }]
+            }
+            (old, new) => old
+                .map(|observer| change::Change::Disc {
+                    observer,
+                    add: false,
+                })
+                .into_iter()
+                .chain(new.map(|observer| change::Change::Disc {
+                    observer,
+                    add: true,
+                }))
+                .collect(),
+        };
         if let Some(new) = observer {
-            self.vision
-                .apply(new, true, self.config.width_tiles, self.config.height_tiles);
             self.vision.observers.insert(id, new);
-            self.observe_resource_disk(new);
         }
+        self.submit_vision_changes(changes);
         true
     }
 
-    pub(crate) fn update_unit_vision(&mut self, id: EntityId) {
-        let observer = self.unit(id).filter(|u| u.hp > 0).map(|u| {
-            let los = match u.kind {
-                UnitKind::Scout => {
-                    if self.has_researched(u.player, super::Tech::FeudalAge) {
-                        6
-                    } else {
-                        4
-                    }
+    /// What a unit currently observes: owner, tile and line of sight. Pure, so
+    /// the parallel movement proposal can compute it from a snapshot.
+    pub(crate) fn unit_observer(&self, u: &GameUnit) -> Option<(PlayerId, TileCoord, u8)> {
+        if self.embarked(u.id) {
+            return None;
+        }
+        Self::unit_observer_with(u, self.player_economy(u.player))
+    }
+
+    /// `unit_observer` for an already fetched owner economy.
+    pub(crate) fn unit_observer_with(
+        u: &GameUnit,
+        economy: Option<super::PlayerEconomy>,
+    ) -> Option<(PlayerId, TileCoord, u8)> {
+        if u.hp == 0 {
+            return None;
+        }
+        let researched = economy.map_or(0, |p| p.researched);
+        let los = match u.kind {
+            UnitKind::Scout => {
+                if researched & super::Tech::CastleAge.bit() != 0 {
+                    8
+                } else if researched & super::Tech::FeudalAge.bit() != 0 {
+                    6
+                } else {
+                    4
                 }
-                _ => self
-                    .unit_stats(u.id)
-                    .map_or(super::unit_combat(u.kind).los, |s| s.los),
-            };
-            (u.player, u.position.tile_floor(), los)
+            }
+            _ => {
+                super::combat::military::researched_stats(
+                    u.kind,
+                    economy.is_some_and(|p| p.age >= super::Age::Feudal),
+                    researched,
+                )
+                .los
+            }
+        };
+        Some((u.player, u.position.tile_floor(), los))
+    }
+
+    /// True when `update_unit_vision` would change the shared vision state for
+    /// a unit in this state; false means it is a no-op and may be skipped.
+    pub(crate) fn unit_vision_stale(
+        &self,
+        u: &GameUnit,
+        economy: Option<super::PlayerEconomy>,
+    ) -> bool {
+        if self.vision.disabled {
+            return false;
+        }
+        let observer = Self::unit_observer_with(u, economy).map(|(player, center, los)| Observer {
+            player,
+            center,
+            los,
         });
+        self.vision.observers.get(&u.id) != observer
+    }
+
+    pub(crate) fn update_unit_vision(&mut self, id: EntityId) {
+        let observer = self.unit(id).and_then(|u| self.unit_observer(&u));
         self.update_observer(id, observer);
     }
 
     pub(crate) fn update_building_vision(&mut self, id: EntityId) {
-        let observer = self.building(id).map(|b| {
-            (
-                b.player,
-                TileCoord::new(
-                    (b.footprint.min.x + b.footprint.max.x) / 2,
-                    (b.footprint.min.y + b.footprint.max.y) / 2,
-                ),
-                b.los,
-            )
-        });
+        let observer = self
+            .building(id)
+            .filter(|b| b.work_done > 0 || b.is_complete())
+            .map(|b| {
+                // Untouched foundations have no observer at all (even radius zero
+                // would reveal their centre). Worked buildings grow their radius
+                // with construction, rounded up to the next whole sight tile.
+                let los = if b.is_complete() {
+                    b.los
+                } else {
+                    (u64::from(b.los) * b.work_done).div_ceil(b.work_total.max(1)) as u8
+                };
+                (
+                    b.player,
+                    TileCoord::new(
+                        (b.footprint.min.x + b.footprint.max.x) / 2,
+                        (b.footprint.min.y + b.footprint.max.y) / 2,
+                    ),
+                    los,
+                )
+            });
         self.update_observer(id, observer);
     }
+    /// What `player` remembers of a building: its last observation.
+    pub fn remembered_building(&self, player: PlayerId, id: EntityId) -> Option<&GameBuilding> {
+        self.vision.players.get(&player)?.remembered.get(&id)
+    }
 
-    pub(crate) fn remember_visible_buildings(&mut self) {
-        if self.vision.disabled {
-            return;
-        }
-        let players = self.vision.players.keys().copied().collect::<Vec<_>>();
-        for player in players {
-            let visible = self
-                .buildings()
-                .filter(|b| b.player == player || self.building_visible_to(player, b.footprint))
-                .cloned()
-                .collect::<Vec<_>>();
-            let vanished = self.vision.players[&player]
-                .remembered
-                .values()
-                .filter(|b| {
-                    !self.economy.buildings.contains_key(&b.id)
-                        && (b.player == player || self.building_visible_to(player, b.footprint))
-                })
-                .map(|b| b.id)
-                .collect::<Vec<_>>();
-            let Some(vision) = self.vision.players.get_mut(&player) else {
-                continue;
-            };
-            let memory = &mut vision.remembered;
-            for id in vanished {
-                memory.remove(&id);
+    /// Takes, per player, the buildings whose memory changed since the last
+    /// call, in id order. A consumer that tracks `remembered_building` per
+    /// player needs to look at no other building.
+    pub fn take_remembered_building_changes(&mut self) -> BTreeMap<PlayerId, BTreeSet<EntityId>> {
+        self.vision
+            .players
+            .iter_mut()
+            .filter(|(_, vision)| !vision.changed.is_empty())
+            .map(|(player, vision)| (*player, std::mem::take(&mut vision.changed)))
+            .collect()
+    }
+
+    /// `player`'s knowledge of every tile in `rect`, row-major: 0 unexplored,
+    /// 1 explored, 2 visible; the same answers as `visibility` per tile
+    /// without a map lookup per tile. A world with fog disabled sees all.
+    pub fn visibility_tiles(&self, player: PlayerId, rect: TileRect) -> Vec<u8> {
+        let width = rect.width().max(0) as usize;
+        let mut tiles = vec![0; width * rect.height().max(0) as usize];
+        let Some(vision) = self
+            .vision
+            .players
+            .get(&player)
+            .filter(|_| !tiles.is_empty())
+        else {
+            return tiles;
+        };
+        let (first, last) = (
+            (rect.min.x.div_euclid(32), rect.min.y.div_euclid(32)),
+            (
+                (rect.max.x - 1).div_euclid(32),
+                (rect.max.y - 1).div_euclid(32),
+            ),
+        );
+        for chunk_y in first.1..=last.1 {
+            for chunk_x in first.0..=last.0 {
+                let Some(bits) = vision.explored.get(&(chunk_x, chunk_y)) else {
+                    continue;
+                };
+                for y in rect.min.y.max(chunk_y * 32)..rect.max.y.min(chunk_y * 32 + 32) {
+                    for x in rect.min.x.max(chunk_x * 32)..rect.max.x.min(chunk_x * 32 + 32) {
+                        let bit = ((y - chunk_y * 32) * 32 + (x - chunk_x * 32)) as usize;
+                        if bits[bit / 64] & (1 << (bit % 64)) != 0 {
+                            tiles[(y - rect.min.y) as usize * width + (x - rect.min.x) as usize] =
+                                1;
+                        }
+                    }
+                }
             }
-            for building in visible {
-                memory.insert(building.id, building);
+        }
+        for chunk_y in first.1..=last.1 {
+            for chunk_x in first.0..=last.0 {
+                let Some(counters) = vision.visible.get(&(chunk_x, chunk_y)) else {
+                    continue;
+                };
+                for y in rect.min.y.max(chunk_y * 32)..rect.max.y.min(chunk_y * 32 + 32) {
+                    for x in rect.min.x.max(chunk_x * 32)..rect.max.x.min(chunk_x * 32 + 32) {
+                        if counters.counts[((y - chunk_y * 32) * 32 + (x - chunk_x * 32)) as usize]
+                            > 0
+                        {
+                            tiles[(y - rect.min.y) as usize * width + (x - rect.min.x) as usize] =
+                                2;
+                        }
+                    }
+                }
             }
         }
+        tiles
     }
 }
 

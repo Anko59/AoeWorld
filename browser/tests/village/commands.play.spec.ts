@@ -1,7 +1,7 @@
 import { fiveVillagerFixture } from "./fixtures/village.js";
 import { activateSyntheticMap } from "../synthetic-map.js";
 import { expect } from "@playwright/test";
-import { test } from "../../server.js";
+import { isolatedTest as test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import {
   centerVillage,
@@ -21,7 +21,7 @@ test("villager resource cursors, live resource selection, grid and own minimap m
   const hash = process.env["AOE_E2E_LANDSCAPE_HASH"];
   if (!hash) throw new Error("Prepared landscape missing");
   const token = await page.evaluate(
-    () => sessionStorage.getItem("aoeworld.resume-token") ?? "",
+    () => localStorage.getItem("aoeworld.resume-token") ?? "",
   );
   expect(
     (
@@ -52,7 +52,11 @@ test("villager resource cursors, live resource selection, grid and own minimap m
     "data-command-cursor",
     "gather",
   );
-  await expect(page.locator("#resource-highlight")).toBeVisible();
+  await expect(page.locator("#resource-highlight")).toBeHidden();
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-resource-hovered",
+    "true",
+  );
   await page.mouse.click(tree.x, tree.y, { button: "right" });
   await expect(page.locator("#workers-wood")).toHaveText("1", {
     timeout: 35_000,
@@ -61,13 +65,26 @@ test("villager resource cursors, live resource selection, grid and own minimap m
   await expect(page.locator("#selection-name")).toHaveText("Tree");
   await expect(page.locator("#selection-load")).toContainText("remaining");
   const initial = await page.locator("#selection-load").innerText();
+  // The top bar counts the woodcutter from the order on, while it still
+  // walks to the tree, so the first chop may be further away.
   await expect(page.locator("#selection-load")).not.toHaveText(initial, {
-    timeout: 10_000,
+    timeout: 35_000,
   });
-  await expect(page.locator("#minimap-entities .minimap-unit")).toHaveCount(4);
-  await expect(page.locator("#minimap-entities .minimap-building")).toHaveCount(
-    1,
-  );
+  // Whole-world pixels may combine villagers and the Town Center. All
+  // authoritative actors must still contribute to the pixel counts.
+  const markerCount = (kind: string) =>
+    page
+      .locator("#minimap-entities rect")
+      .evaluateAll(
+        (nodes, key) =>
+          nodes.reduce(
+            (count, node) => count + Number(node.getAttribute(key)),
+            0,
+          ),
+        kind,
+      );
+  await expect.poll(() => markerCount("data-units")).toBe(4);
+  await expect.poll(() => markerCount("data-buildings")).toBe(1);
   await centerVillage(page, true);
   const idle = (await actors())
     .filter((actor) => actor.kind === "Villager")
@@ -111,7 +128,8 @@ test("villager cursors use composed passability for grass, water, cliffs and bui
     [8187, 8196, "move"],
     [8195, 8188, "forbidden"],
     [8188, 8188, "forbidden"],
-    [8192, 8192, "forbidden"],
+    // Villagers garrison in their own Town Center, as in AoE2.
+    [8192, 8192, "garrison"],
   ] as const) {
     await page.evaluate(
       ({ x, y }) => {

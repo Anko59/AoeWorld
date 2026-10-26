@@ -13,6 +13,17 @@ pub(crate) use instance_buffer::surface_instance;
 use instance_buffer::{InstanceBuffer, required_capacity};
 #[path = "web/draw.rs"]
 mod draw;
+#[path = "web/health.rs"]
+pub(crate) mod health;
+#[path = "web/occlusion.rs"]
+mod occlusion;
+#[path = "web/presentation.rs"]
+mod presentation;
+#[path = "web/shaders.rs"]
+mod shaders;
+#[path = "web/submit.rs"]
+mod submit;
+#[cfg(test)]
 use draw::draw_ranges;
 
 #[cfg(test)]
@@ -30,14 +41,36 @@ pub(crate) struct Sprite {
     pub(crate) depths: [f32; 4],
     pub(crate) terrain_blend: [[f32; 4]; 2],
     /// Primary, secondary, tertiary atlas layers. Surface w stores appearance;
-    /// quad w stores NEAREST_TERRAIN_QUAD or zero for filtered object sampling.
+    /// Quad w stores sampling/selection tags and occluder/unit-contour bits.
     pub(crate) pages: [u32; 4],
 }
 impl Sprite {
     pub(crate) const NEAREST_TERRAIN_QUAD: u32 = 1;
+    pub(crate) const OCCLUDER: u32 = 4;
+    pub(crate) const UNIT_CONTOUR: u32 = 8;
+
+    pub(crate) const PLAYER_MASK: u32 = 64;
+
+    pub(crate) fn with_owner(mut self, visual: crate::SceneUnitVisual) -> Self {
+        if let Some(colour) = visual.colour() {
+            self.pages[3] |= Self::PLAYER_MASK;
+            self.terrain_blend[1][..3].copy_from_slice(&colour.map(|c| f32::from(c) / 255.0));
+        }
+        self.with_unit_contour(visual.outline_colour())
+    }
+
+    pub(crate) fn with_unit_contour(mut self, colour: Option<[u8; 3]>) -> Self {
+        if let Some(colour) = colour {
+            self.pages[3] |= Self::UNIT_CONTOUR;
+            // Object quads leave terrain-blend words free; keep Sprite112 intact.
+            self.terrain_blend[0][..3].copy_from_slice(&colour.map(|c| f32::from(c) / 255.0));
+        }
+        self
+    }
 }
 
 pub struct Renderer {
+    pub(crate) health: health::Health,
     adapter_label: String,
     surface: wgpu::Surface<'static>,
     pub(crate) device: wgpu::Device,
@@ -45,10 +78,28 @@ pub struct Renderer {
     config: wgpu::SurfaceConfiguration,
     pub(crate) pipeline: wgpu::RenderPipeline,
     mixed_pipeline: Option<wgpu::RenderPipeline>,
+    mask: occlusion::Mask,
+    occlusion: Option<occlusion::Contour>,
+    has_occlusion: bool,
     draws: Vec<(std::ops::Range<u32>, bool)>,
+    contour_draws: Vec<std::ops::Range<u32>>,
+    pub(crate) staging: Vec<Sprite>,
     pub(crate) instances: InstanceBuffer,
     pub(crate) _atlas: wgpu::Texture,
     depth: wgpu::Texture,
+    depth_view: wgpu::TextureView,
+    page_retirement: Option<js_sys::Function>,
+}
+
+impl Drop for Renderer {
+    fn drop(&mut self) {
+        if let Some(detach) = &self.page_retirement {
+            let _ = detach.call0(&wasm_bindgen::JsValue::UNDEFINED);
+        }
+        // wgpu's browser Device drop is a no-op. Retire the device even when
+        // startup health fails or its initialization deadline cancels a future.
+        self.shutdown();
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -72,7 +123,19 @@ pub struct Counters {
 }
 
 impl Renderer {
+    pub(crate) fn memory_usage(&self) -> (usize, usize) {
+        (
+            self._atlas.width() as usize
+                * self._atlas.height() as usize
+                * self._atlas.depth_or_array_layers() as usize
+                * 4
+                + self.config.width as usize * self.config.height as usize * 5,
+            self.instances.bytes(),
+        )
+    }
+
     pub async fn new(canvas: HtmlCanvasElement) -> Result<Self, String> {
+        shaders::load().await?;
         let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
         descriptor.backends = wgpu::Backends::BROWSER_WEBGPU;
         let instance = wgpu::Instance::new(descriptor);
@@ -82,6 +145,7 @@ impl Renderer {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 compatible_surface: Some(&surface),
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 ..Default::default()
             })
             .await
@@ -92,11 +156,17 @@ impl Renderer {
             .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .map_err(|e| format!("WebGPU device: {e}"))?;
+        let health = health::Health::default();
+        health.install(&device);
         let width = canvas.width().max(1);
         let height = canvas.height().max(1);
-        let config = surface
+        let mut config = surface
             .get_default_config(&adapter, width, height)
             .ok_or("No compatible canvas format")?;
+        // Firefox/Wayland PRIME can advertise BGRA while its shared-texture
+        // presentation stays black without validation errors. Core RGBA takes
+        // Firefox's working presentation path, including on the discrete GPU.
+        config.format = wgpu::TextureFormat::Rgba8Unorm;
         surface.configure(&device, &config);
 
         let atlas = device.create_texture(&wgpu::TextureDescriptor {
@@ -162,16 +232,6 @@ impl Renderer {
             label: Some("sprites"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Texture {
@@ -197,7 +257,22 @@ impl Renderer {
             &sampler,
         );
         let depth = create_depth_texture(&device, width, height);
-        Ok(Self {
+        let depth_view = depth.create_view(&Default::default());
+        let mask = occlusion::Mask::new(&device, width, height);
+        // Rust clients can outlive their document through callback cycles.
+        // Release native GPU work on navigation, before browser context teardown.
+        let page_retirement = device
+            .as_webgpu()
+            .map(|device| presentation::retire_with_page(device.as_ref()));
+        web_sys::console::info_1(
+            &format!(
+                "WebGPU adapter {adapter_label}; canvas {:?}; core features/default limits",
+                config.format
+            )
+            .into(),
+        );
+        let mut renderer = Self {
+            health,
             adapter_label,
             surface,
             device,
@@ -205,15 +280,43 @@ impl Renderer {
             config,
             pipeline,
             mixed_pipeline: None,
+            mask,
+            occlusion: None,
+            has_occlusion: false,
             draws: Vec::new(),
+            contour_draws: Vec::new(),
+            staging: Vec::new(),
             instances,
             _atlas: atlas,
             depth,
-        })
+            depth_view,
+            page_retirement,
+        };
+        // Verify a known coloured clear before assets, fog or networking can
+        // legitimately leave the game black. Queue success alone is insufficient.
+        renderer.render_sprites_with_clear(&[], presentation::CLEAR)?;
+        if let Err(error) = health::within(presentation::check(canvas)).await {
+            renderer.shutdown();
+            return Err(error);
+        }
+        renderer.check_health()?;
+        Ok(renderer)
     }
 
     pub fn adapter_label(&self) -> &str {
         &self.adapter_label
+    }
+
+    pub fn check_health(&self) -> Result<(), String> {
+        self.health.check()
+    }
+
+    pub fn page_retired(&self) -> bool {
+        presentation::page_retired()
+    }
+
+    pub fn shutdown(&self) {
+        self.device.destroy();
     }
     pub fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 || (self.config.width == width && self.config.height == height)
@@ -225,6 +328,12 @@ impl Renderer {
         self.surface.configure(&self.device, &self.config);
         self.depth.destroy();
         self.depth = create_depth_texture(&self.device, width, height);
+        self.depth_view = self.depth.create_view(&Default::default());
+        self.mask.texture.destroy();
+        self.mask = occlusion::Mask::new(&self.device, width, height);
+        if let Some(contour) = &mut self.occlusion {
+            contour.rebind(&self.device, &self.mask.view);
+        }
     }
 
     pub fn render(
@@ -234,7 +343,8 @@ impl Renderer {
     ) -> Result<Counters, String> {
         let width = self.config.width as f32;
         let height = self.config.height as f32;
-        let mut sprites = Vec::new();
+        let mut sprites = std::mem::take(&mut self.staging);
+        sprites.clear();
         for entity in entities {
             let x = (entity.position.x as f32 - camera.x) * camera.zoom;
             let y = (entity.position.y as f32 - camera.y) * camera.zoom;
@@ -260,7 +370,9 @@ impl Renderer {
                 pages: [0; 4],
             });
         }
-        self.render_sprites(&sprites)
+        let result = self.render_instances(&mut sprites, [0.055, 0.08, 0.12, 1.0]);
+        self.staging = sprites;
+        result
     }
 
     pub(crate) fn render_sprites(&mut self, sprites: &[Sprite]) -> Result<Counters, String> {
@@ -275,136 +387,8 @@ impl Renderer {
         self.render_world_layers(&[], sprites, clear)
     }
 
-    pub(crate) fn render_world_layers(
-        &mut self,
-        surfaces: &[ProjectedSurfaceTriangle],
-        sprites: &[Sprite],
-        clear: [f64; 4],
-    ) -> Result<Counters, String> {
-        let required = required_capacity(surfaces, sprites)?;
-        self.instances.ensure_capacity(
-            required,
-            &self.device,
-            &self.pipeline.get_bind_group_layout(0),
-        )?;
-        let mut instances = Vec::with_capacity(required);
-        let width = self.config.width.max(1) as f64;
-        let height = self.config.height.max(1) as f64;
-        for triangle in surfaces {
-            instances.push(surface_instance(triangle, [width, height], 0.0));
-        }
-        instances.extend_from_slice(sprites);
-        normalize_depths(&mut instances);
-        self.draws = draw_ranges(&instances);
-        if self.mixed_pipeline.is_none() && self.draws.iter().any(|(_, mixed)| *mixed) {
-            self.mixed_pipeline = Some(draw::pipeline(
-                &self.device,
-                &self.pipeline.get_bind_group_layout(0),
-                self.config.format,
-                true,
-            ));
-        }
-        self.instances.write(&self.queue, &instances);
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                return Ok(Counters {
-                    did_present: false,
-                    visible: sprites.len(),
-                    draw_calls: 0,
-                    gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 7 + usize::from(self.mixed_pipeline.is_some()),
-                    atlas_pages: self._atlas.size().depth_or_array_layers as usize,
-                    atlas_uploads: 1,
-                    atlas_bytes: self._atlas.width() as usize
-                        * self._atlas.height() as usize
-                        * self._atlas.size().depth_or_array_layers as usize
-                        * 4,
-                });
-            }
-            wgpu::CurrentSurfaceTexture::Outdated => {
-                self.surface.configure(&self.device, &self.config);
-                return Ok(Counters {
-                    did_present: false,
-                    visible: sprites.len(),
-                    draw_calls: 0,
-                    gpu_buffer_bytes: self.instances.bytes(),
-                    persistent_gpu_resources: 7 + usize::from(self.mixed_pipeline.is_some()),
-                    atlas_pages: self._atlas.size().depth_or_array_layers as usize,
-                    atlas_uploads: 1,
-                    atlas_bytes: self._atlas.width() as usize
-                        * self._atlas.height() as usize
-                        * self._atlas.size().depth_or_array_layers as usize
-                        * 4,
-                });
-            }
-            wgpu::CurrentSurfaceTexture::Lost => {
-                return Err("WebGPU surface lost; reload to restore it".to_owned());
-            }
-            wgpu::CurrentSurfaceTexture::Validation => {
-                return Err("WebGPU surface validation failed".to_owned());
-            }
-        };
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let depth_view = self
-            .depth
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("sprites"),
-            });
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("world layers"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: clear[0],
-                            g: clear[1],
-                            b: clear[2],
-                            a: clear[3],
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
-            });
-            self.draw_on(&mut pass, instances.len() as u32);
-        }
-        self.queue.submit(Some(encoder.finish()));
-        self.queue.present(frame);
-        Ok(Counters {
-            did_present: true,
-            visible: sprites.len(),
-            draw_calls: self.draws.len(),
-            gpu_buffer_bytes: self.instances.bytes(),
-            persistent_gpu_resources: 7 + usize::from(self.mixed_pipeline.is_some()),
-            atlas_pages: self._atlas.size().depth_or_array_layers as usize,
-            atlas_uploads: 1,
-            atlas_bytes: self._atlas.width() as usize
-                * self._atlas.height() as usize
-                * self._atlas.size().depth_or_array_layers as usize
-                * 4,
-        })
-    }
     pub(crate) fn draw_on(&self, pass: &mut wgpu::RenderPass<'_>, count: u32) {
+        self.instances.set_on(pass);
         for (range, mixed) in &self.draws {
             assert!(range.end <= count, "draw exceeds instances");
             let pipeline = if *mixed {
@@ -413,15 +397,21 @@ impl Renderer {
                 &self.pipeline
             };
             pass.set_pipeline(pipeline);
-            self.instances.set_on(pass);
             pass.draw(0..6, range.clone());
         }
     }
 }
 
-pub(crate) fn normalize_depths(instances: &mut [Sprite]) {
+pub(crate) fn normalize_depths(instances: &mut [Sprite]) -> bool {
+    let (mut units, mut occluders) = (false, false);
     let mut range: Option<(f32, f32)> = None;
     for sprite in instances.iter() {
+        if sprite.color[3] >= 0.0 {
+            // H || (U && O) == (U || H) && (O || H): retain the existing
+            // two flag checks, including for units, with no hover-only scan.
+            units |= sprite.pages[3] & (Sprite::UNIT_CONTOUR | 48) != 0;
+            occluders |= sprite.pages[3] & (Sprite::OCCLUDER | 48) != 0;
+        }
         for depth in sprite.depths[..3].iter().copied() {
             if depth.is_finite() {
                 range = Some(match range {
@@ -456,6 +446,7 @@ pub(crate) fn normalize_depths(instances: &mut [Sprite]) {
             };
         }
     }
+    units && occluders
 }
 
 fn create_depth_texture(device: &wgpu::Device, width: u32, height: u32) -> wgpu::Texture {

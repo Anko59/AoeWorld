@@ -169,187 +169,104 @@ pub enum SceneUnitKind {
     ScoutWalk,
     Arrow,
     Javelin,
+    FarmerWork,
+    LongSwordsmanStand,
+    LongSwordsmanWalk,
+    LongSwordsmanAttack,
+    LongSwordsmanDie,
+    LongSwordsmanDecay,
+    PikemanStand,
+    PikemanWalk,
+    PikemanAttack,
+    PikemanDie,
+    PikemanDecay,
+    CrossbowmanStand,
+    CrossbowmanWalk,
+    CrossbowmanAttack,
+    CrossbowmanDie,
+    CrossbowmanDecay,
+    EliteSkirmisherStand,
+    EliteSkirmisherWalk,
+    EliteSkirmisherAttack,
+    EliteSkirmisherDie,
+    EliteSkirmisherDecay,
+    KnightStand,
+    KnightWalk,
+    KnightAttack,
+    KnightDie,
+    KnightDecay,
+    LightCavalryStand,
+    LightCavalryWalk,
+    LightCavalryAttack,
+    LightCavalryDie,
+    LightCavalryDecay,
+    MonkStand,
+    MonkWalk,
+    MonkAttack,
+    MonkDie,
+    MonkDecay,
+    MangonelStand,
+    MangonelWalk,
+    MangonelAttack,
+    MangonelDie,
+    MangonelDecay,
+    BatteringRamStand,
+    BatteringRamWalk,
+    BatteringRamAttack,
+    BatteringRamDie,
+    BatteringRamDecay,
+    Stone,
+    Galley,
+    WarGalley,
+    FireShip,
+    DemolitionShip,
+    TransportShip,
+    Castle,
+    Monastery,
+    University,
+    SiegeWorkshop,
+    RubbleCastle,
+    RubbleMonastery,
+    RubbleUniversity,
+    RubbleSiegeWorkshop,
+    ConstructionCastle,
+    ConstructionMonastery,
+    ConstructionUniversity,
+    ConstructionSiegeWorkshop,
+    CastleTownCenter,
+    CastleHouse,
+    CastleLumberCamp,
+    CastleMiningCamp,
+    CastleMill,
+    CastleBarracks,
+    CastleDock,
+    CastleArcheryRange,
+    CastleStable,
+    CastleBlacksmith,
+    CastleMarket,
+    CastleMonastery,
+    BridgeATop,
+    BridgeAMiddle,
+    BridgeABottom,
+    BridgeBTop,
+    BridgeBMiddle,
+    BridgeBBottom,
 }
 
 #[path = "scene_actors.rs"]
 mod actors;
 
-impl SceneUnitKind {
-    /// Map building roles to the atlas's semantic order.
-    pub fn building(slot: u8) -> Self {
-        use SceneUnitKind::*;
-        [
-            BuildingTownCenter,
-            House,
-            LumberCamp,
-            MiningCamp,
-            Mill,
-            Farm,
-            Barracks,
-            PalisadeWall,
-            Outpost,
-            Foundation1x1,
-            Foundation2x2,
-            Foundation3x3,
-            Foundation4x4,
-            RubbleTownCenter,
-            RubbleHouse,
-            RubbleLumberCamp,
-            RubbleMiningCamp,
-            RubbleMill,
-            RubbleFarm,
-            RubbleBarracks,
-            RubblePalisadeWall,
-            RubbleOutpost,
-            BuilderAtlas,
-            Dock,
-            FoundationDock,
-            RubbleDock,
-            ArcheryRange,
-            Stable,
-            Blacksmith,
-            Market,
-            WatchTower,
-            PalisadeGate,
-            RubbleArcheryRange,
-            RubbleStable,
-            RubbleBlacksmith,
-            RubbleMarket,
-            RubbleWatchTower,
-            RubblePalisadeGate,
-            FeudalTownCenter,
-            FeudalHouse,
-            FeudalMill,
-            FeudalBarracks,
-            OpenPalisadeGate,
-            GateFoundation,
-            FeudalDock,
-        ][usize::from(slot.min(44))]
-    }
-    pub(super) fn building_slot(self) -> Option<u8> {
-        match self {
-            Self::Dock => return Some(23),
-            Self::FoundationDock => return Some(24),
-            Self::RubbleDock => return Some(25),
-            Self::BuilderAtlas => return Some(22),
-            Self::FeudalLumberCamp => return Some(2),
-            Self::FeudalMiningCamp => return Some(3),
-            _ => {}
-        }
-        if self.is_foundation() {
-            return Some(match self.building_id()? {
-                109 | 71 | 84 => 12,
-                50 | 12 | 87 | 101 | 103 | 498 => 11,
-                72 | 598 | 79 => 9,
-                792 => 43,
-                133 => 24,
-                _ => 10,
-            });
-        }
-        (self as u8)
-            .checked_sub(Self::BuildingTownCenter as u8)
-            .filter(|slot| *slot <= 21)
-            .or_else(|| {
-                (self as u8)
-                    .checked_sub(Self::ArcheryRange as u8)
-                    .filter(|slot| *slot <= 18)
-                    .map(|slot| slot + 26)
-            })
-    }
-
-    pub fn foundation(id: i16) -> Self {
-        use SceneUnitKind::*;
-        match id {
-            45 => FoundationDock,
-            109 => ConstructionTownCenter,
-            70 => ConstructionHouse,
-            562 => ConstructionLumberCamp,
-            584 => ConstructionMiningCamp,
-            68 => ConstructionMill,
-            50 => ConstructionFarm,
-            12 => ConstructionBarracks,
-            72 => ConstructionPalisadeWall,
-            87 => ConstructionRange,
-            101 => ConstructionStable,
-            103 => ConstructionBlacksmith,
-            84 => ConstructionMarket,
-            79 => ConstructionTower,
-            792 => ConstructionGate,
-            71 => ConstructionFeudalTownCenter,
-            463 => ConstructionFeudalHouse,
-            129 => ConstructionFeudalMill,
-            563 => ConstructionFeudalLumberCamp,
-            585 => ConstructionFeudalMiningCamp,
-            498 => ConstructionFeudalBarracks,
-            133 => ConstructionFeudalDock,
-            _ => ConstructionOutpost,
-        }
-    }
-    pub(super) fn is_foundation(self) -> bool {
-        self == Self::FoundationDock
-            || (Self::ConstructionTownCenter as u8..=Self::ConstructionFeudalDock as u8)
-                .contains(&(self as u8))
-    }
-    pub fn building_id(self) -> Option<i32> {
-        use SceneUnitKind::*;
-        if self.is_foundation() && self != FoundationDock {
-            return [
-                109, 70, 562, 584, 68, 50, 12, 72, 598, 87, 101, 103, 84, 79, 792, 71, 463, 129,
-                563, 585, 498, 133,
-            ]
-            .get((self as u8 - Self::ConstructionTownCenter as u8) as usize)
-            .copied();
-        }
-        Some(match self {
-            TownCenter | BuildingTownCenter => 109,
-            House => 70,
-            LumberCamp => 562,
-            MiningCamp => 584,
-            Mill => 68,
-            Farm => 50,
-            Barracks => 12,
-            PalisadeWall => 72,
-            Outpost => 598,
-            Dock | FoundationDock => 45,
-            ArcheryRange => 87,
-            Stable => 101,
-            Blacksmith => 103,
-            Market => 84,
-            WatchTower => 79,
-            PalisadeGate | OpenPalisadeGate | GateFoundation => 792,
-            FeudalTownCenter => 71,
-            FeudalHouse => 463,
-            FeudalMill => 129,
-            FeudalLumberCamp => 563,
-            FeudalMiningCamp => 585,
-            FeudalBarracks => 498,
-            FeudalDock => 133,
-            _ => return None,
-        })
-    }
-    pub(super) fn building_side(self) -> Option<f64> {
-        if self == Self::TownCenter {
-            return Some(4.0);
-        }
-        let slot = self.building_slot()?;
-        Some(match slot {
-            0 | 12 | 13 | 29 | 31 | 35 | 37 | 38 | 42 | 43 => 4.0,
-            1..=4 | 10 | 14..=17 | 39 | 40 => 2.0,
-            5 | 6 | 11 | 18 | 19 | 23..=28 | 32..=34 | 41 | 44 => 3.0,
-            _ => 1.0,
-        })
-    }
-}
+#[path = "scene_types/buildings.rs"]
+mod buildings;
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct SceneUnit {
     pub kind: SceneUnitKind,
     pub id: EntityId,
     pub position: [f64; 2],
-    pub moving: bool,
+    pub visual: SceneUnitVisual,
     /// Unit direction, or construction stage/wall variant for a building.
     pub facing: u8,
-    pub selected: bool,
     pub elevation_meters: f64,
 }
 
@@ -407,6 +324,8 @@ impl SceneTerrainSurface {
 /// A resource node, or one piece of scenery when `kind` is a scenery kind.
 #[derive(Clone, Copy, PartialEq)]
 pub struct SceneResource {
+    /// 0 cursor only, 1 soft outline, 2 inner glow. Render-only state.
+    pub highlight: u8,
     pub id: u64,
     pub position: [f64; 2],
     pub kind: u8,
@@ -417,6 +336,9 @@ pub struct SceneResource {
 }
 
 impl SceneResource {
+    /// Render-only stages; never gatherable protocol resource kinds.
+    pub const CHOPPED_TREE: u8 = 4;
+    pub const TREE_STUMP: u8 = 5;
     /// Cliff anchor marker. Faces are terrain geometry, never object billboards.
     pub const CLIFF: u8 = 16;
     /// A loose rock; visual_variant selects its pile and size.
@@ -427,6 +349,7 @@ impl SceneResource {
     pub const GRASS: u8 = 19;
     /// Weathered stumps and fallen wood, purely visual.
     pub const DEADWOOD: u8 = 20;
+    pub const RALLY_FLAG: u8 = 21;
 }
 
 /// Pure visual dressing: never a resource, blocker, gatherable or economy actor.
@@ -438,3 +361,5 @@ pub struct SceneDecoration {
     pub orientation: u8,
     pub elevation_meters: f64,
 }
+
+pub use crate::player::SceneUnitVisual;

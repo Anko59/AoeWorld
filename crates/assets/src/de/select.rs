@@ -13,6 +13,71 @@ pub const FARM_TEXTURES: &[&str] = &["g_fm1", "g_fm2"];
 
 pub const SELECTION: &[Item] = &[
     Item {
+        building: "castle_dock",
+        role: "standing",
+        stem: "b_west_dock_age3",
+    },
+    Item {
+        building: "bridge_a",
+        role: "top",
+        stem: "s_bridge_a_top",
+    },
+    Item {
+        building: "bridge_a",
+        role: "middle",
+        stem: "s_bridge_a_middle",
+    },
+    Item {
+        building: "bridge_a",
+        role: "bottom",
+        stem: "s_bridge_a_bottom",
+    },
+    Item {
+        building: "bridge_b",
+        role: "top",
+        stem: "s_bridge_b_top",
+    },
+    Item {
+        building: "bridge_b",
+        role: "middle",
+        stem: "s_bridge_b_middle",
+    },
+    Item {
+        building: "bridge_b",
+        role: "bottom",
+        stem: "s_bridge_b_bottom",
+    },
+    Item {
+        building: "galley",
+        role: "standing",
+        stem: "u_shp_galley",
+    },
+    Item {
+        building: "war_galley",
+        role: "standing",
+        stem: "u_shp_war_galley",
+    },
+    Item {
+        building: "fire_ship",
+        role: "standing",
+        stem: "u_shp_fire_ship",
+    },
+    Item {
+        building: "demolition_ship",
+        role: "standing",
+        stem: "u_shp_demo_ship",
+    },
+    Item {
+        building: "transport_ship",
+        role: "standing",
+        stem: "u_shp_transport_ship",
+    },
+    Item {
+        building: "rally_point",
+        role: "flag",
+        stem: "b_misc_waypoint_flag",
+    },
+    Item {
         building: "house",
         role: "standing",
         stem: "b_dark_house_age1",

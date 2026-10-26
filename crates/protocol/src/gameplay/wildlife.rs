@@ -77,6 +77,14 @@ pub(super) fn validate_server(message: &ServerMessage) -> Result<(), Error> {
     Ok(())
 }
 pub(super) fn validate_client(message: &ClientMessage) -> Result<(), Error> {
+    if let ClientMessage::SetRallyOrder {
+        target: super::RallyTarget::Ground(p),
+        ..
+    } = message
+        && (p.x < 0 || p.y < 0)
+    {
+        return Err(Error::InvalidEconomyState);
+    }
     if let ClientMessage::HuntOrder { unit_ids, .. } = message
         && (unit_ids.is_empty()
             || unit_ids.len() > economy::MAX_BUILD_GROUP

@@ -2,6 +2,7 @@
 mod config;
 mod gameplay;
 mod gameplay_map;
+mod gameplay_match;
 mod gameplay_sessions;
 mod gameplay_transport;
 mod map_jobs;
@@ -12,7 +13,8 @@ mod page_residency;
 mod source_qualification;
 mod terrain_cache;
 pub use config::Config;
-pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError};
+pub use gameplay::{GameplayService, PersistedDepletion, ResourceLifecycleError, SlotInfo};
+pub use gameplay_match::MAX_MATCH_SLOTS;
 pub use map_store::MapStoreError;
 pub(crate) use map_store::{PageResidency, load as load_map_packages};
 pub use source_qualification::{
@@ -75,6 +77,10 @@ pub struct AppState {
     minimaps: Arc<Mutex<maps::MinimapCache>>,
     map_jobs: Arc<Mutex<map_jobs::Manager>>,
     gameplay: Arc<RwLock<GameplayService>>,
+    /// Secret for `POST /match`; without it match hosting is refused.
+    match_admin_token: Option<Arc<str>>,
+    tick_stats: Arc<gameplay_match::TickStats>,
+    skirmish: Arc<gameplay_match::Skirmish>,
 }
 
 impl AppState {
@@ -105,6 +111,9 @@ impl AppState {
             minimaps: Arc::new(Mutex::new(maps::MinimapCache::default())),
             map_jobs: Arc::new(Mutex::new(map_jobs)),
             gameplay: Arc::new(RwLock::new(GameplayService::new(config.scenario.seed))),
+            match_admin_token: Config::match_admin_token_from_env().map(Into::into),
+            tick_stats: Arc::default(),
+            skirmish: Arc::new(gameplay_match::Skirmish::from_env(config.bind.port())),
         })
     }
 
@@ -129,6 +138,12 @@ impl AppState {
         Ok(state)
     }
 
+    /// Enables `POST /match` for callers presenting this secret.
+    pub fn with_match_admin_token(mut self, token: impl Into<Arc<str>>) -> Self {
+        self.match_admin_token = Some(token.into());
+        self
+    }
+
     async fn ensure_diagnostic_world(&self) {
         let mut world = self.world.write().await;
         if world.is_none() {
@@ -145,12 +160,9 @@ impl AppState {
             if let Some(world) = self.world.write().await.as_mut() {
                 world.advance();
             }
-            self.gameplay.read().await.clone().tick().await;
-            if started.duration_since(scheduled) > self.tick_period
-                || started.elapsed() > self.tick_period
-            {
-                self.tick_deadline_misses.fetch_add(1, Ordering::Relaxed);
-            }
+            let gameplay = self.gameplay.read().await.clone();
+            gameplay.tick().await;
+            self.observe_tick(&gameplay, scheduled, started).await;
         }
     }
 
@@ -169,70 +181,9 @@ pub enum AppStateError {
     GameWorld(#[from] GameWorldError),
 }
 
-#[derive(Serialize)]
-struct Health {
-    status: &'static str,
-    build: String,
-    scenario: String,
-    tick: u64,
-    entities: usize,
-    loaded_chunks: usize,
-    tick_deadline_misses: u64,
-    terrain_cache: terrain_cache::Usage,
-    navigation_cache: NavigationCacheHealth,
-}
-
-#[derive(Serialize)]
-struct NavigationCacheHealth {
-    entries: usize,
-    /// Logical cached-outcome bytes; allocator and BTreeMap overhead is not
-    /// included, so this is an accounting budget rather than an RSS cap.
-    retained_bytes: usize,
-    /// Logical cached-outcome budget rather than a hard process-memory cap.
-    limit_bytes: usize,
-}
-
-impl From<aoe_simulation::NavigationCacheUsage> for NavigationCacheHealth {
-    fn from(value: aoe_simulation::NavigationCacheUsage) -> Self {
-        Self {
-            entries: value.entries,
-            retained_bytes: value.retained_bytes,
-            limit_bytes: value.limit_bytes,
-        }
-    }
-}
-
-async fn health(State(state): State<AppState>) -> Json<Health> {
-    let terrain_cache = state.terrain_cache.lock().await.usage();
-    let gameplay = state.gameplay.read().await.clone();
-    let navigation_cache = gameplay.navigation_cache_usage().await.into();
-    state.ensure_diagnostic_world().await;
-    let world_guard = state.world.read().await;
-    let Some(world) = world_guard.as_ref() else {
-        return Json(Health {
-            status: "unavailable",
-            build: state.build.to_string(),
-            scenario: state.diagnostic_scenario.name.to_owned(),
-            tick: 0,
-            entities: 0,
-            loaded_chunks: 0,
-            tick_deadline_misses: state.tick_deadline_misses(),
-            terrain_cache,
-            navigation_cache,
-        });
-    };
-    Json(Health {
-        status: "ok",
-        build: state.build.to_string(),
-        scenario: world.scenario().name.to_owned(),
-        tick: world.tick().0,
-        entities: world.entities().len(),
-        loaded_chunks: world.loaded_chunks(),
-        tick_deadline_misses: state.tick_deadline_misses(),
-        terrain_cache,
-        navigation_cache,
-    })
-}
+#[path = "gameplay/health.rs"]
+mod health;
+use health::{Health, health};
 
 #[derive(Deserialize)]
 struct ReplayQuery {
@@ -307,6 +258,8 @@ pub fn app(state: AppState) -> Router {
         .route("/scenario/{name}", post(select_scenario))
         .route("/ws", get(websocket))
         .route("/game/ws", get(gameplay_websocket))
+        .merge(gameplay_match::routes())
+        .merge(gameplay::arena::routes())
         .fallback_service(ServeDir::new("web").append_index_html_on_directories(true))
         .with_state(state);
     if let Some(pack) = asset_pack {

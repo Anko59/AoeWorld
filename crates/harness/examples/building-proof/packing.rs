@@ -7,8 +7,17 @@ use aoe_assets::{
 };
 use std::{collections::BTreeSet, fs, path::PathBuf};
 
+#[path = "reclaim.rs"]
+mod reclaim;
+use reclaim::Item;
+
 pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let mut manifest: Manifest = serde_json::from_slice(&fs::read(path.join("manifest.json"))?)?;
+    let mut dirs = manifest
+        .pages
+        .iter()
+        .map(|_| path.clone())
+        .collect::<Vec<_>>();
     let overlay = path.join("buildings/manifest.json");
     if overlay.is_file() {
         let mut extra: Manifest = serde_json::from_slice(&fs::read(overlay)?)?;
@@ -20,6 +29,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             return Err("invalid overlay manifest".into());
         }
         let offset = manifest.pages.len() as u16;
+        dirs.extend(extra.pages.iter().map(|_| path.join("buildings")));
         for frame in &mut extra.frames {
             if usize::from(frame.page) >= extra.pages.len() {
                 return Err("invalid overlay frame page".into());
@@ -31,7 +41,11 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut selected = BTreeSet::new();
     let mut extents = Vec::new();
-    let mut add = |source: String,
+    // Per-category (frames, runtime texels, native source pixels) for the report.
+    let mut items = Vec::<Item>::new();
+    let mut usage = std::collections::BTreeMap::<&'static str, [u64; 3]>::new();
+    let mut add = |kind: &'static str,
+                   source: String,
                    count: u32,
                    step: usize,
                    domain,
@@ -70,19 +84,31 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             if resident && (selected.insert((source.clone(), frame.frame)) || actor_copy) {
                 extents.push(FrameExtent {
                     domain,
-                    width: (if source == "de/g_fm1.dds" {
+                    width: if source == "de/g_fm1.dds" {
                         frame.width.min(256)
                     } else {
                         frame.width
-                    })
-                    .div_ceil(aoe_assets::catalog::buildings::pixel_step(&source)),
-                    height: (if source == "de/g_fm1.dds" {
+                    },
+                    height: if source == "de/g_fm1.dds" {
                         frame.height.min(256)
                     } else {
                         frame.height
-                    })
-                    .div_ceil(aoe_assets::catalog::buildings::pixel_step(&source)),
+                    },
                 });
+                let mut counted = frame.clone();
+                if source == "de/g_fm1.dds" {
+                    counted.width = counted.width.min(256);
+                    counted.height = counted.height.min(256);
+                }
+                items.push(Item {
+                    kind,
+                    frame: counted,
+                });
+                let last = extents.last().ok_or("extent")?;
+                let row = usage.entry(kind).or_default();
+                row[0] += 1;
+                row[1] += u64::from(last.width) * u64::from(last.height);
+                row[2] += u64::from(frame.width) * u64::from(frame.height);
             }
         }
         Ok(())
@@ -98,6 +124,11 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
             add(
+                if source.terrain_topology.is_some() {
+                    "terrain"
+                } else {
+                    "objects: resources and other"
+                },
                 identity,
                 source.frames,
                 match source.role {
@@ -122,6 +153,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         let identity = source.manifest_source();
         if manifest.frames.iter().any(|f| f.source == identity) {
             add(
+                "units",
                 identity,
                 source.frames(),
                 usize::from(source.sample_step()),
@@ -144,6 +176,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 .any(|s| s.id as i32 == slp)
         {
             add(
+                "terrain",
                 format!("terrain.drs:[32, 112, 108, 115]:{slp}"),
                 u32::from(building.foundation_size[0]) * u32::from(building.foundation_size[1]),
                 1,
@@ -153,13 +186,20 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 true,
             )?;
         }
-        for part in building
+        let complete = building.parts.len();
+        for (number, part) in building
             .parts
             .iter()
             .chain(&building.construction)
-            .filter(|p| p.available)
+            .enumerate()
+            .filter(|(_, p)| p.available)
         {
             add(
+                if number < complete {
+                    "buildings: DAT bodies"
+                } else {
+                    "construction: DAT stages"
+                },
                 part.source.clone(),
                 u32::from(part.frames) * u32::from(part.angles),
                 runtime::building_frame_step(
@@ -210,6 +250,12 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         add(
+            match item.slot {
+                26..=31 | 38..=41 | 44 => "buildings: Feudal supplemental",
+                32..=37 | 13..=21 | 42..=43 => "rubble and gate",
+                9..=12 | 24 => "construction: foundations",
+                _ => "buildings: Dark supplemental and ambient",
+            },
             item.source,
             item.frames,
             item.step,
@@ -227,6 +273,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         let source = format!("graphics.drs:[32, 112, 108, 115]:{id}");
         if manifest.frames.iter().any(|f| f.source == source) {
             add(
+                "fishing",
                 source,
                 frames,
                 step,
@@ -238,6 +285,10 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     println!("selected {} frames", extents.len());
+    println!("category | frames | runtime texels | native source pixels");
+    for (kind, [frames, texels, native]) in &usage {
+        println!("  {kind} | {frames} | {texels} | {native}");
+    }
     println!(
         "object pixels {}",
         extents
@@ -288,7 +339,32 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+    let mut by_source = std::collections::BTreeMap::<&str, (u64, u64)>::new();
+    for item in &items {
+        let row = by_source.entry(&item.frame.source).or_default();
+        row.0 += 1;
+        row.1 += u64::from(item.frame.width) * u64::from(item.frame.height);
+    }
+    let mut largest = by_source.into_iter().collect::<Vec<_>>();
+    largest.sort_by_key(|(_, (_, pixels))| std::cmp::Reverse(*pixels));
+    for (source, (frames, pixels)) in largest.iter().take(40) {
+        println!("source {source}: {frames} frames, {pixels} px");
+    }
+    reclaim::report(&items, &manifest.pages, &dirs)?;
     let placements = pack_frames(&extents)?;
+    let mut page_pixels = [[0_u64; 2]; PAGE_COUNT];
+    for (placed, extent) in placements.iter().zip(&extents) {
+        let row = &mut page_pixels[usize::from(placed.page)];
+        row[usize::from(extent.domain == AtlasDomain::Objects)] +=
+            u64::from(placed.width) * u64::from(placed.height);
+    }
+    let page_area = u64::from(PAGE_SIDE) * u64::from(PAGE_SIDE);
+    for (page, [terrain, objects]) in page_pixels.iter().enumerate() {
+        println!(
+            "page {page}: terrain {terrain} px, objects {objects} px, {:.1}% of {page_area}",
+            (terrain + objects) as f64 * 100.0 / page_area as f64
+        );
+    }
     println!(
         "packed {} frames in {PAGE_COUNT} pages ({ATLAS_BYTES} bytes)",
         placements.len()

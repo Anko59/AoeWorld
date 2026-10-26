@@ -6,6 +6,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "src/sprites.wgsl",
         "src/web/sampling.wgsl",
         "src/web/lighting.wgsl",
+        "src/web/occlusion.wgsl",
     ] {
         println!("cargo:rerun-if-changed={path}");
         template.push_str(&fs::read_to_string(path)?);

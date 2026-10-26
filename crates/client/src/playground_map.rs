@@ -98,13 +98,21 @@ pub(super) fn inspection_label(client: &Client) -> String {
         tile.water,
         tile.elevation_provenance,
         feedback::movement_label(
-            tile.passable,
+            tile.passable
+                || client.village.buildings.iter().any(|b| {
+                    b.kind == aoe_protocol::BuildingKind::Bridge
+                        && b.construction == aoe_protocol::ConstructionState::Complete
+                        && b.footprint.contains(aoe_core::TileCoord::new(x, y))
+                }),
             feedback::blocker_at(client, aoe_core::TileCoord::new(x, y))
         ),
     )
 }
 
 pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
+    if super::strategic::active(&shared.borrow()) {
+        return;
+    }
     let (connection_id, map_hash, requests) = {
         let mut client = shared.borrow_mut();
         let Some(content_hash) = client.map_content_hash else {
@@ -119,10 +127,14 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
     let content_hash = super::storage::hex(&map_hash);
     for request in requests {
         let (x, y) = request.coordinate;
-        let shared = shared.clone();
+        // Retired fetches must not keep their old client alive across await.
+        let shared = Rc::downgrade(&shared);
         let content_hash = content_hash.clone();
         spawn_local(async move {
             let result = fetch_chunk(&content_hash, x, y, request.handle.as_ref()).await;
+            let Some(shared) = shared.upgrade() else {
+                return;
+            };
             let mut client = shared.borrow_mut();
             if client.connection_id != connection_id
                 || client.map_content_hash != Some(map_hash)
@@ -229,6 +241,9 @@ pub(super) fn elevation_at_world(client: &Client, world: [f64; 2]) -> f64 {
 }
 
 pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> ScreenPoint {
+    if super::strategic::active(client) {
+        return super::strategic::screen_position(client, world);
+    }
     client.camera.world_to_screen_at_height(
         world,
         scene::prepare(client)
@@ -239,6 +254,9 @@ pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> ScreenPoint {
 
 #[inline(never)]
 pub(super) fn world_at_screen(client: &Client, screen: ScreenPoint) -> Option<[f64; 2]> {
+    if super::strategic::active(client) {
+        return Some(super::strategic::world_at_screen(client, screen));
+    }
     if client.map_content_hash.is_none() {
         return world_at_screen_with_height(client.camera, screen, |_, _| Some(0.0));
     }
@@ -440,6 +458,16 @@ async fn fetch_chunk(
 ) -> Result<CachedChunk, JsValue> {
     let window = web_sys::window().ok_or("No window")?;
     let options = RequestInit::new();
+    // Only a live human seat receives the server's camera priority. The
+    // server validates this token; spectators and AI traffic use the low lane.
+    if let Some(token) = super::storage::stored_token() {
+        let headers = web_sys::Headers::new()?;
+        headers.set(
+            "X-AoeWorld-Controller-Token",
+            &super::storage::hex(&token.0),
+        )?;
+        options.set_headers(&headers);
+    }
     if let Some(controller) = controller {
         options.set_signal(Some(&controller.signal()));
     }
@@ -452,9 +480,9 @@ async fn fetch_chunk(
         return Err(JsValue::from_str(&format!("HTTP {}", response.status())));
     }
     let body = JsFuture::from(response.text()?).await?;
-    let compact: CompactChunk =
-        serde_json::from_str(&body.as_string().ok_or("map chunk response was not text")?)
-            .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let compact = crate::game_assets::decode_chunk(
+        &body.as_string().ok_or("map chunk response was not text")?,
+    )?;
     let chunk =
         CachedChunk::decode(&compact).map_err(|error| JsValue::from_str(&error.to_string()))?;
     if chunk.coordinate() != (x, y) {

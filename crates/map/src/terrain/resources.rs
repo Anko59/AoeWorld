@@ -1,5 +1,5 @@
 use super::{MapChunkGenerator, ObjectKind, ResourceKind, ResourceNode, Tile, resource_id};
-use crate::Biome;
+use crate::{Biome, EnvironmentPageError};
 use aoe_core::TileCoord;
 
 const FORAGE_COLUMNS: i32 = 64;
@@ -260,3 +260,47 @@ fn suitable_ore(biome: Biome) -> bool {
 #[cfg(test)]
 #[path = "tests/resources.rs"]
 mod tests;
+
+impl MapChunkGenerator {
+    pub fn object_at(&self, tile: TileCoord) -> Option<ResourceNode> {
+        self.object_at_with_cancel(tile, &|| false).ok().flatten()
+    }
+
+    pub fn object_at_with_cancel(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<ResourceNode>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if let Some(cell) = self.static_navigation_cell(tile) {
+            return Ok(cell.and_then(|cell| cell.node));
+        }
+        self.memoized_point(tile, cancelled)
+            .map(|point| point.and_then(|(_, node)| node))
+    }
+
+    pub fn resource_by_id(&self, id: u64) -> Option<ResourceNode> {
+        self.resource_by_id_with_cancel(id, &|| false)
+            .ok()
+            .flatten()
+    }
+
+    pub fn resource_by_id_with_cancel(
+        &self,
+        id: u64,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<ResourceNode>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if id & 1 != 0 || id >> 37 != 0 {
+            return Ok(None);
+        }
+        let tile = TileCoord::new(((id >> 1) & 0x3_ffff) as i32, (id >> 19) as i32);
+        Ok(self
+            .object_at_with_cancel(tile, cancelled)?
+            .filter(|node| node.id == id))
+    }
+}

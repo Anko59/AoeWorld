@@ -1,10 +1,10 @@
 //! Placing foundations, villagers building them and finishing them.
 use super::{
-    BuildTask, BuildingKind, ConstructionState, EconomyError, MAX_BUILD_GROUP, MAX_BUILDERS,
-    MAX_ECONOMY_BUILDINGS, Stockpile, UnitKind, UnitTask,
+    BuildTask, BuildingKind, ConstructionState, EconomyError, MAX_BUILD_GROUP, Stockpile, UnitKind,
+    UnitTask,
     placement::{adjacent, distance_squared, perimeter, position},
 };
-use crate::{GameUnit, GameWorld};
+use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use aoe_map::ResourceKind;
 
@@ -12,6 +12,8 @@ use aoe_map::ResourceKind;
 const MAX_APPROACH_ATTEMPTS: u8 = 6;
 /// Perimeter tiles one approach tries before reporting failure.
 const APPROACH_TILE_TRIES: usize = 6;
+
+mod continuation;
 
 fn affordable(have: Stockpile, need: Stockpile) -> bool {
     have.food >= need.food
@@ -44,10 +46,13 @@ impl GameWorld {
         ids.sort_unstable();
         ids.dedup();
         if ids.is_empty() || ids.len() > MAX_BUILD_GROUP {
-            return Err(EconomyError::Capacity);
+            return Err(EconomyError::OrderTooLarge);
         }
         for id in &ids {
-            let unit = self.unit(*id).ok_or(EconomyError::UnknownEntity)?;
+            let unit = self
+                .unit(*id)
+                .filter(|u| u.hp > 0 && !self.embarked(u.id))
+                .ok_or(EconomyError::UnknownEntity)?;
             if unit.player != player {
                 return Err(EconomyError::NotOwner);
             }
@@ -55,13 +60,13 @@ impl GameWorld {
                 return Err(EconomyError::WrongUnitKind);
             }
         }
-        let others = self
-            .economy
-            .builders
-            .keys()
-            .filter(|id| !ids.contains(id))
+        // Builders already assigned elsewhere, counted from the group alone.
+        let reassigned = ids
+            .iter()
+            .filter(|id| self.economy.builders.contains_key(id))
             .count();
-        if others + ids.len() > MAX_BUILDERS {
+        let others = self.economy.builders.len() - reassigned;
+        if others + ids.len() > self.economy.limits.builders {
             return Err(EconomyError::Capacity);
         }
         Ok(ids)
@@ -77,17 +82,22 @@ impl GameWorld {
         if !rules.buildable {
             return Err(EconomyError::NotBuildable);
         }
-        if rules.age == crate::Age::Feudal && !self.is_feudal(player) {
-            return Err(EconomyError::RequiresFeudalAge);
-        }
+        self.require_age(player, rules.age)?;
         if let Some(required) = rules.requires
-            && !self.buildings().any(|building| {
-                building.player == player && building.kind == required && building.is_complete()
-            })
+            && !self
+                .player_buildings_of(player, required)
+                .any(|building| building.is_complete())
         {
             return Err(EconomyError::RequirementMissing);
         }
-        if self.economy.buildings.len() + segments as usize > MAX_ECONOMY_BUILDINGS {
+        if self.economy.buildings.len()
+            + if kind == BuildingKind::Bridge {
+                1
+            } else {
+                segments as usize
+            }
+            > self.economy.limits.buildings
+        {
             return Err(EconomyError::Capacity);
         }
         let cost = scaled(rules.cost, segments);
@@ -114,14 +124,20 @@ impl GameWorld {
     /// Order `builders` to build `kind` with its top-left tile at `origin`.
     /// The cost is charged when the foundation is placed. Walls use
     /// [`GameWorld::issue_build_wall`].
+    /// `queued` appends to each builder's active construction order.
     pub fn issue_build(
         &mut self,
         player: PlayerId,
         builders: &[EntityId],
         kind: BuildingKind,
         origin: TileCoord,
+        queued: bool,
     ) -> Result<EntityId, EconomyError> {
+        if kind == BuildingKind::Bridge {
+            return Err(EconomyError::InvalidFootprint);
+        }
         let builders = self.validate_builders(player, builders)?;
+        self.validate_build_queue(&builders, 1, queued)?;
         let cost = self.check_buildable(player, kind, 1)?;
         let side = kind.rules().side;
         let footprint = TileRect::new(
@@ -131,20 +147,19 @@ impl GameWorld {
                 origin.y.saturating_add(kind.rules().depth),
             ),
         );
+        self.validate_explored_footprint(player, footprint)?;
         self.validate_building_placement(kind, origin)?;
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
-        if !self.assign_builders(&builders, |_| id) {
+        if !self.assign_build_orders(&builders, &[id], queued) {
             let _ = self.issue_cancel_construction(player, id);
             return Err(crate::GameWorldError::Unreachable.into());
         }
-        self.update_building_vision(id);
         self.remember_visible_buildings();
         Ok(id)
     }
 
-    /// Send villagers to an existing unfinished foundation of `player`
-    /// (right-clicking it). Nothing is charged: the cost was paid on placement.
+    /// Resume a foundation or repair a damaged completed building of `player`.
     pub fn issue_construct(
         &mut self,
         player: PlayerId,
@@ -160,7 +175,7 @@ impl GameWorld {
         if state.player != player {
             return Err(EconomyError::NotOwner);
         }
-        if state.is_complete() {
+        if state.is_complete() && state.hp == state.max_hp {
             return Err(EconomyError::AlreadyComplete);
         }
         if self.assign_builders(&builders, |_| building) {
@@ -189,7 +204,7 @@ impl GameWorld {
             return Err(EconomyError::AlreadyComplete);
         }
         let (done, total) = (u128::from(state.work_done), u128::from(state.work_total));
-        let cost = state.kind.rules().cost;
+        let cost = state.construction_cost();
         let refund = |amount: u32| (u128::from(amount) * (total - done) / total.max(1)) as u32;
         let refund = Stockpile {
             food: refund(cost.food),
@@ -229,6 +244,7 @@ impl GameWorld {
                     BuildTask {
                         building,
                         attempts: 0,
+                        queue: Vec::new(),
                     },
                 );
                 if let Some(&index) = self.lookup.get(&builder) {
@@ -254,7 +270,14 @@ impl GameWorld {
             .tile_floor();
         let mut candidates = perimeter(footprint);
         candidates.retain(|tile| self.tile_passable(*tile));
-        candidates.sort_by_key(|tile| (distance_squared(origin, *tile), tile.y, tile.x));
+        candidates.sort_by_key(|tile| {
+            (
+                *tile != origin && self.work_spot_busy(*tile, id),
+                distance_squared(origin, *tile),
+                tile.y,
+                tile.x,
+            )
+        });
         if !candidates.is_empty() {
             let by = skip % candidates.len();
             candidates.rotate_left(by);
@@ -288,7 +311,7 @@ impl GameWorld {
 
     /// Advance every builder and foundation. Cost is bounded by the builders
     /// (at most `MAX_BUILDERS`) and, on completion, the buildings.
-    pub(super) fn advance_construction(&mut self, changed: &mut Vec<GameUnit>) {
+    pub(super) fn advance_construction(&mut self, changed: &mut Vec<EntityId>) {
         if self.economy.builders.is_empty() {
             return;
         }
@@ -296,36 +319,53 @@ impl GameWorld {
         let mut working = std::collections::BTreeMap::<EntityId, u64>::new();
         let mut touched = ids.clone();
         for id in ids {
-            let Some(task) = self.economy.builders.get(&id).copied() else {
+            let Some((target, attempts)) = self
+                .economy
+                .builders
+                .get(&id)
+                .map(|t| (t.building, t.attempts))
+            else {
                 continue;
             };
             let Some(&index) = self.lookup.get(&id) else {
                 self.economy.builders.remove(&id);
                 continue;
             };
-            let Some(building) = self.building(task.building) else {
-                self.release_builder(id);
+            let Some(building) = self.building(target) else {
+                self.next_queued_build(id);
                 continue;
             };
-            let (complete, footprint) = (building.is_complete(), building.footprint);
-            if complete {
-                self.release_builder(id);
+            let (healthy, footprint) = (
+                building.is_complete() && building.hp == building.max_hp,
+                building.footprint,
+            );
+            if healthy {
+                self.next_queued_build(id);
+                continue;
+            }
+            // The route chooses an approach, not a mandatory work spot. Start
+            // on first free contact. Settled builders retain their work spot
+            // when traffic or combat enters it.
+            if adjacent(footprint, self.units[index].state.position.tile_floor())
+                && (self.units[index].order.is_none() || self.arrival_position_free(index))
+            {
+                if self.units[index].order.is_some() || self.units[index].state.planning {
+                    self.stop_movement(index);
+                }
+                self.units[index].state.face_footprint(footprint);
+                self.units[index].state.task = UnitTask::Building;
+                *working.entry(target).or_insert(0) += 1;
                 continue;
             }
             if self.units[index].order.is_some() || self.units[index].state.planning {
                 continue;
             }
-            if adjacent(footprint, self.units[index].state.position.tile_floor()) {
-                self.units[index].state.task = UnitTask::Building;
-                *working.entry(task.building).or_insert(0) += 1;
-                continue;
-            }
-            if task.attempts >= MAX_APPROACH_ATTEMPTS {
-                self.release_builder(id);
+            if attempts >= MAX_APPROACH_ATTEMPTS {
+                self.next_queued_build(id);
                 continue;
             }
             let walking = self
-                .approach_building(id, footprint, usize::from(task.attempts))
+                .approach_building(id, footprint, usize::from(attempts))
                 .is_ok();
             if let Some(task) = self.economy.builders.get_mut(&id) {
                 task.attempts += 1;
@@ -335,13 +375,52 @@ impl GameWorld {
             }
         }
         for (building, count) in working {
-            if let Some(done) = self.add_work(building, count) {
+            if self.building(building).is_some_and(|b| b.is_complete()) {
+                self.repair_building(building, count);
+            } else if let Some(done) = self.add_work(building, count) {
                 touched.extend(done);
             }
+            self.update_building_vision(building);
         }
         touched.sort_unstable();
         touched.dedup();
-        changed.extend(touched.into_iter().filter_map(|id| self.unit(id)));
+        changed.extend(touched);
+    }
+
+    /// Integer repair work, priced at half the building's original cost for
+    /// a full HP bar. HP thresholds retain fractional resource costs without
+    /// introducing a clock or an unbounded per-builder accumulator.
+    fn repair_building(&mut self, id: EntityId, builders: u64) {
+        let Some(b) = self.economy.buildings.get(&id) else {
+            return;
+        };
+        let hp = u64::from(b.hp);
+        let max = u64::from(b.max_hp);
+        let next = (hp + ((builders + 2) * max / b.work_total.max(1)).max(1)).min(max);
+        let cost = b.construction_cost();
+        let charge = |amount| {
+            ((u64::from(amount) * next / (2 * max)) - (u64::from(amount) * hp / (2 * max))) as u32
+        };
+        let Some(player) = self.economy.players.get_mut(&b.player) else {
+            return;
+        };
+        let s = &mut player.stockpile;
+        let bill = super::Stockpile {
+            food: charge(cost.food),
+            wood: charge(cost.wood),
+            gold: charge(cost.gold),
+            stone: charge(cost.stone),
+        };
+        if s.food < bill.food || s.wood < bill.wood || s.gold < bill.gold || s.stone < bill.stone {
+            return;
+        }
+        s.food -= bill.food;
+        s.wood -= bill.wood;
+        s.gold -= bill.gold;
+        s.stone -= bill.stone;
+        if let Some(building) = self.economy.buildings.get_mut(&id) {
+            building.hp = next as u16;
+        }
     }
 
     /// `builders + 2` work per tick (one builder adds 3, matching the base
@@ -358,9 +437,18 @@ impl GameWorld {
         if building.work_done < building.work_total {
             return None;
         }
-        building.state = ConstructionState::Complete;
         let (kind, player, footprint) = (building.kind, building.player, building.footprint);
-        if kind == BuildingKind::WatchTower {
+        if kind == BuildingKind::Bridge && !self.complete_bridge(footprint) {
+            if let Some(building) = self.economy.buildings.get_mut(&id) {
+                building.work_done = building.work_total.saturating_sub(1);
+            }
+            return None;
+        }
+        self.economy.buildings.get_mut(&id)?.state = ConstructionState::Complete;
+        if kind == BuildingKind::TownCenter {
+            self.open_town_center_arches(footprint);
+        }
+        if matches!(kind, BuildingKind::WatchTower | BuildingKind::Castle) {
             self.combat.tower_ready.insert(id, 0);
         }
         self.refresh_population_cap(player);
@@ -372,8 +460,9 @@ impl GameWorld {
             .map(|(builder, _)| *builder)
             .collect::<Vec<_>>();
         for &builder in &finished {
-            self.release_builder(builder);
-            self.after_building(builder, player, id, kind, footprint);
+            if !self.next_queued_build(builder) && !self.continue_foundation(builder, player) {
+                self.after_building(builder, player, id, kind, footprint);
+            }
         }
         Some(finished)
     }
@@ -395,10 +484,6 @@ impl GameWorld {
             BuildingKind::Mill => &[ResourceKind::Food],
             BuildingKind::Farm => {
                 let _ = self.issue_farm(player, builder, id);
-                return;
-            }
-            BuildingKind::PalisadeWall => {
-                self.continue_wall(builder, player, footprint);
                 return;
             }
             _ => &[],

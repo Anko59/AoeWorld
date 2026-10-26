@@ -32,6 +32,19 @@ pub fn write_terrain_directory(art: &crate::GameArt, atlas: &mut [u8]) -> Result
     if atlas.len() != GAME_ATLAS_BYTES {
         return Err("Invalid game atlas size".into());
     }
+    write_rows(art, atlas)
+}
+
+/// The same directory written into page 0 alone, for a loader that streams
+/// the atlas one page at a time.
+pub fn write_terrain_directory_page(art: &crate::GameArt, page: &mut [u8]) -> Result<(), String> {
+    if page.len() != crate::GAME_ATLAS_PAGE_BYTES {
+        return Err("Invalid game atlas page size".into());
+    }
+    write_rows(art, page)
+}
+
+fn write_rows(art: &crate::GameArt, atlas: &mut [u8]) -> Result<(), String> {
     let mut table = vec![0_u8; (FIRST_FRAME - 1) * 4];
     let mut starts = [0_usize; 17];
     for material in 0..MATERIALS {

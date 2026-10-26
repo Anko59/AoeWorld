@@ -7,34 +7,42 @@ mod game_query;
 mod game_waypoints;
 mod game_world;
 pub use game_world::TileVisibility;
+pub use game_world::apply_research_stats;
+#[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
+pub use game_world::browser_content;
+pub use game_world::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
 mod movement_speed;
 mod navigation_cache;
 mod terrain;
 
 pub(crate) const MAX_ROUTE_WORK_PER_ORDER: u32 = aoe_map::MAX_ROUTE_PLANNER_WORK;
+// Eight executions keep global guidance ahead of the existing movement
+// lookahead while bounding cold preparation across every player's planners.
+pub(crate) const MAX_NAV_PREPARATIONS_PER_TICK: u32 = 8;
 pub(crate) const MAX_ROUTE_WORK_PER_TICK: u32 = 16_384;
 
 use aoe_core::{CHUNK_SIZE, EntityId, PlayerId, Position, Region, Tick};
 use aoe_scenario::Scenario;
 pub use game_query::GameQueryStats;
 pub use game_world::{
-    Age, BUILDING_COMBAT, BUILDING_RULES, BuildingAttack, BuildingCombat, BuildingKind,
-    BuildingRules, CORPSE_SECONDS, CarriedResource, CombatStats, ConstructionState, DYING_SECONDS,
-    DamageKind, EconomyError, FEUDAL_BUILDINGS, Facing, GameBuilding, GameUnit, GameWorld,
-    GameWorldError, HitRecord, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, MovementOrder,
-    PlayerEconomy, PreparedResourceDepletion, Projectile, ProjectileKind, ResearchEntry, Stockpile,
-    TECH_RULES, Tech, TechEffect, TechRequirement, TechRules, TrainingEntry, UNIT_COMBAT,
-    UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VILLAGE_RULES, VillageRules,
-    building_combat, damage_dealt, researched_stats, trainable_units, unit_combat,
-    villager_capacity,
+    ANIMALS_PER_PLAYER, AnimalKind, AnimalTask, GameAnimal, MAX_ANIMALS, WILDLIFE_RULES,
+    WildlifeRules, WildlifeStats,
 };
 pub use game_world::{
-    AnimalKind, AnimalTask, GameAnimal, MAX_ANIMALS, MAX_HUNTERS, WILDLIFE_RULES, WildlifeRules,
-    WildlifeStats,
+    Age, BUILDING_COMBAT, BUILDING_RULES, BUILDINGS_PER_PLAYER, BuildingAttack, BuildingCombat,
+    BuildingKind, BuildingRules, CORPSE_SECONDS, CarriedResource, CombatStats, CombatTelemetry,
+    ConstructionState, DYING_SECONDS, DamageKind, EconomyError, FEUDAL_BUILDINGS, Facing,
+    GameBuilding, GameUnit, GameWorld, GameWorldError, GarrisonedUnit, HitRecord, MARKET_RULES,
+    MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, MarketPrices, MovementOrder, PlanningProbe,
+    PlayerEconomy, PreparedResourceDepletion, Projectile, ProjectileKind, RallyPoint, RallyTarget,
+    ResearchEntry, RouteSchedulerStats, Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement,
+    TechRules, TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask,
+    UnitTraining, VILLAGE_RULES, VillageRules, WorldLimits, building_combat, damage_dealt,
+    researched_stats, trainable_units, unit_combat, villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::{BTreeMap, BTreeSet};
-pub use terrain::{StartSearchResult, Terrain, UniformGrass, destination_passable};
+pub use terrain::{LandMasses, StartSearchResult, Terrain, UniformGrass, destination_passable};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Entity {

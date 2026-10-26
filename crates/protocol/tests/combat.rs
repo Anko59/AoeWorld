@@ -29,6 +29,8 @@ fn unit(hp: u16, task: UnitTask, target: Option<EntityId>) -> GameplayUnitState 
         death_tick: None,
         hunt_target: None,
         death_hunt: None,
+        auto_scout: false,
+        cargo_count: 0,
     }
 }
 
@@ -48,6 +50,9 @@ fn center(hp: u16) -> GameplayBuildingState {
         max_hp: 2400,
         last_hit: None,
         gate_open: false,
+        rally_point: None,
+        farm_reseeds: 0,
+        garrison: Vec::new(),
         age: aoe_protocol::Age::Dark,
     }
 }
@@ -100,18 +105,23 @@ fn death_and_hunting_fields_are_appended_to_the_current_unit_wire() {
     let mut dying = unit(0, UnitTask::Dying, None);
     dying.death_tick = Some(Tick(41));
     let bytes = encode_gameplay_server(&tick_with(vec![dying], vec![])).unwrap();
-    assert_eq!(&bytes[bytes.len() - 8..], &[1, 41, 0, 0, 0, 0, 0, 0]);
+    // Current unit tails include auto-scout and the mandatory cargo_count byte.
+    // Extend each current suffix by cargo_count=0, preserving its option tags.
+    assert_eq!(&bytes[bytes.len() - 10..], &[1, 41, 0, 0, 0, 0, 0, 0, 0, 0]);
     round_trips(&tick_with(vec![dying], vec![]));
     dying.kind = UnitKind::Villager;
     dying.death_hunt = Some(aoe_protocol::AnimalKind::Sheep);
     let bytes = encode_gameplay_server(&tick_with(vec![dying], vec![])).unwrap();
-    assert_eq!(&bytes[bytes.len() - 9..], &[1, 41, 0, 1, 0, 0, 0, 0, 0]);
+    assert_eq!(
+        &bytes[bytes.len() - 11..],
+        &[1, 41, 0, 1, 0, 0, 0, 0, 0, 0, 0]
+    );
     round_trips(&tick_with(vec![dying], vec![]));
     let mut hunter = unit(25, UnitTask::Hunting, None);
     hunter.kind = UnitKind::Villager;
     hunter.hunt_target = Some(EntityId(9));
     let bytes = encode_gameplay_server(&tick_with(vec![hunter], vec![])).unwrap();
-    assert_eq!(&bytes[bytes.len() - 8..], &[0, 1, 9, 0, 0, 0, 0, 0]);
+    assert_eq!(&bytes[bytes.len() - 10..], &[0, 1, 9, 0, 0, 0, 0, 0, 0, 0]);
     round_trips(&tick_with(vec![hunter], vec![]));
 }
 
@@ -136,6 +146,7 @@ fn combat_state_round_trips_for_units_and_buildings() {
             population_cap: 0,
             age: aoe_protocol::Age::Dark,
             researched: 0,
+            market_prices: aoe_protocol::MarketPrices::default(),
         }],
         buildings: vec![center(1)],
     };

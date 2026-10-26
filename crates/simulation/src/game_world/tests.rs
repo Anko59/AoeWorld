@@ -1,64 +1,17 @@
 use super::*;
 use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
-use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, ResourceOverlay};
+use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, MovementOutcome, ResourceOverlay};
 
+mod formations;
+mod replay_pin;
+mod spacing;
 mod visibility;
+mod visibility_fanout;
+mod visibility_ghosts;
 mod visibility_resources;
 
 fn world() -> GameWorld {
     GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap()
-}
-
-#[test]
-fn fixed_speed_has_equal_distance_for_cardinal_and_diagonal_orders() {
-    let mut cardinal = world();
-    let mut diagonal = world();
-    let start = WorldPosition::new(10 * FIXED_SUBUNITS_PER_TILE, 10 * FIXED_SUBUNITS_PER_TILE);
-    let a = cardinal.spawn_unit(PlayerId(0), start).unwrap();
-    let b = diagonal.spawn_unit(PlayerId(0), start).unwrap();
-    cardinal
-        .issue_move(a, WorldPosition::new(start.x + 5_000, start.y))
-        .unwrap();
-    diagonal
-        .issue_move(b, WorldPosition::new(start.x + 5_000, start.y + 5_000))
-        .unwrap();
-    assert_eq!(cardinal.movement_order(a).unwrap().travelled, 0);
-    for _ in 0..8 {
-        cardinal.advance();
-        diagonal.advance();
-    }
-    assert_eq!(cardinal.movement_order(a).unwrap().travelled, 1_024);
-    assert_eq!(diagonal.movement_order(b).unwrap().travelled, 1_024);
-}
-
-#[test]
-fn exact_arrival_and_mid_move_redirection_are_deterministic() {
-    let mut first = world();
-    let mut second = world();
-    let start = WorldPosition::new(20_000, 20_000);
-    let a = first.spawn_unit(PlayerId(0), start).unwrap();
-    let b = second.spawn_unit(PlayerId(0), start).unwrap();
-    let target = WorldPosition::new(23_000, 24_000);
-    first.issue_move(a, target).unwrap();
-    second.issue_move(b, target).unwrap();
-    for _ in 0..100 {
-        first.advance();
-        second.advance();
-    }
-    assert_eq!(
-        first.unit(a),
-        second.unit(b).map(|unit| GameUnit { id: a, ..unit })
-    );
-    assert_eq!(
-        first.unit(a).unwrap().position,
-        WorldConfig::default().snap_ground_position(target)
-    );
-    assert!(!first.unit(a).unwrap().moving);
-    first
-        .issue_move(a, WorldPosition::new(25_000, 24_000))
-        .unwrap();
-    first.advance();
-    assert!(first.unit(a).unwrap().moving);
 }
 
 #[test]
@@ -240,7 +193,13 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
             let generator = generator.clone();
             (0..4).flat_map(move |x| generator.chunk(x, y).expect("fixture chunk").resources)
         })
-        .next()
+        // River fish can lead the resource list; this land-route test needs
+        // walkable ground beneath its resource blocker.
+        .find(|node| {
+            generator
+                .tile_at(node.tile)
+                .is_some_and(|tile| tile.passable)
+        })
         .expect("resource");
     let mut world = GameWorld::new(config).expect("world");
     let unit = world
@@ -270,7 +229,8 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
             .next_map_route(
                 TileCoord::new(0, 0),
                 TileCoord::new(0, 0),
-                crate::UnitKind::Scout
+                crate::UnitKind::Scout,
+                PlayerId(0)
             )
             .is_some()
     );
@@ -289,9 +249,12 @@ fn exhausting_a_resource_releases_its_blocking_tile() {
         .expect("final depletion");
     assert_eq!(final_depletion.remaining, 0);
     assert!(final_depletion.became_nonblocking);
-    assert_eq!(world.navigation_cache.entry_count(), 0);
-    assert_eq!(world.active_planner_count, 0);
-    assert_eq!(world.active_route_searches, 0);
+    // Only outcomes whose explored ground holds the opened tile are dropped:
+    // the cached route stays at (0, 0), so it stays unless the node is there.
+    let near = resource.tile.x < 4 && resource.tile.y < 4;
+    assert_eq!(world.navigation_cache.entry_count(), usize::from(!near));
+    // Opened ground keeps every planned route and search valid: they stay.
+    assert_eq!(world.route_accounting_error(), None);
     assert_ne!(world.canonical_hash(), partial_hash);
     assert!(world.terrain().passable(resource.tile, config));
 }
@@ -477,12 +440,21 @@ fn terminal_search_limit_stops_a_segment_after_resumable_polling() {
 }
 
 mod combat;
+#[path = "tests/movement/far_orders.rs"]
 mod far_orders;
+#[path = "tests/movement/physical_movement.rs"]
 mod physical_movement;
+#[path = "tests/movement/queue.rs"]
+mod queue;
 mod routes;
+mod scale_hooks;
+#[path = "tests/movement/stop.rs"]
 mod stop;
 mod wildlife;
 
 pub(crate) mod economy;
 
 mod starting_kit;
+
+#[path = "tests/navy/mod.rs"]
+mod navy;

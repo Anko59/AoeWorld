@@ -14,6 +14,7 @@ fn player() -> GameplayPlayerState {
         population_cap: 5,
         age: aoe_protocol::Age::Dark,
         researched: 0,
+        market_prices: aoe_protocol::MarketPrices::default(),
     }
 }
 fn building() -> GameplayBuildingState {
@@ -36,6 +37,9 @@ fn building() -> GameplayBuildingState {
         }],
         last_hit: None,
         gate_open: false,
+        rally_point: None,
+        farm_reseeds: 0,
+        garrison: Vec::new(),
         age: aoe_protocol::Age::Dark,
     }
 }
@@ -61,6 +65,8 @@ fn unit() -> GameplayUnitState {
         death_tick: None,
         hunt_target: None,
         death_hunt: None,
+        auto_scout: false,
+        cargo_count: 0,
     }
 }
 fn snapshot() -> GameplayServerMessage {
@@ -75,6 +81,7 @@ fn snapshot() -> GameplayServerMessage {
 
 #[test]
 fn economy_commands_have_current_golden_wire_and_roundtrip() {
+    // Current build orders append the Shift queue flag; ordinary orders pin false.
     for (message, bytes) in [
         (
             GameplayClientMessage::CancelTrainingOrder {
@@ -89,8 +96,9 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
                 builder_ids: vec![EntityId(3), EntityId(4)],
                 kind: BuildingKind::House,
                 origin: TileCoord::new(5, 6),
+                queued: false,
             },
-            vec![8, 8, 2, 3, 4, 1, 10, 12],
+            vec![8, 8, 2, 3, 4, 1, 10, 12, 0],
         ),
         (
             GameplayClientMessage::BuildWallOrder {
@@ -98,8 +106,9 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
                 builder_ids: vec![EntityId(3)],
                 from: TileCoord::new(5, 6),
                 to: TileCoord::new(5, 9),
+                queued: false,
             },
-            vec![9, 8, 1, 3, 10, 12, 10, 18],
+            vec![9, 8, 1, 3, 10, 12, 10, 18, 0],
         ),
         (
             GameplayClientMessage::CancelConstructionOrder {
@@ -152,7 +161,7 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
             kind: UnitKind::FishingShip
         }
     );
-    assert!(decode_gameplay_client(&[5, 9, 3, 8]).is_err());
+    assert!(decode_gameplay_client(&[5, 9, 3, 22]).is_err());
     assert!(decode_gameplay_client(&[4, 9, 3]).is_err());
     // A build order may name at most MAX_BUILD_GROUP villagers.
     let crowd = GameplayClientMessage::BuildOrder {
@@ -160,20 +169,24 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
         builder_ids: (0..=MAX_BUILD_GROUP as u32).map(EntityId).collect(),
         kind: BuildingKind::House,
         origin: TileCoord::new(1, 1),
+        queued: false,
     };
     assert!(decode_gameplay_client(&postcard::to_allocvec(&crowd).unwrap()).is_err());
 }
 
 #[test]
 fn full_economy_snapshot_and_delta_roundtrip() {
+    // The current unit schema appends a bounded Transport Ship cargo count;
+    // regenerate this snapshot pin for that intentional wire-format change.
     let snapshot = snapshot();
     let bytes = encode_gameplay_server(&snapshot).unwrap();
     assert_eq!(
         bytes,
+        // Combined wire adds cargo_count and the bounded garrison tail.
         vec![
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 25, 25, 0, 0, 0, 0,
-            0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232,
-            7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0, 0, 0
+            0, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 100, 100, 100, 1, 1, 0, 0, 10,
+            10, 18, 18, 1, 232, 7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0, 0, 0, 0, 0, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);
@@ -253,13 +266,14 @@ fn oversized_players_buildings_and_training_queues_fail_encode_and_decode() {
 #[test]
 fn invalid_load_progress_footprint_and_population_are_rejected() {
     let mut load = unit();
-    load.carried.as_mut().unwrap().amount = 14;
+    // Hand Cart plus Heavy Plow permits 21; 22 remains invalid.
+    load.carried.as_mut().unwrap().amount = 22;
     let mut progress = building();
     progress.training_queue[0].progress_ticks = 501;
     let mut footprint = building();
     footprint.footprint.max.x -= 1;
     let mut population = player();
-    population.population_cap = MAX_POPULATION + 1;
+    population.population_cap = MAX_MATCH_POPULATION + 1;
     for message in [
         GameplayServerMessage::Snapshot {
             revision: 1,
@@ -388,4 +402,37 @@ fn zero_load_gatherer_kind_roundtrips_without_terrain_or_inventory() {
         buildings: vec![],
     };
     assert!(encode_gameplay_server(&message).is_err());
+}
+
+#[test]
+fn castle_trainers_round_trip_rallies_but_castles_cannot_produce_units() {
+    for kind in [
+        BuildingKind::Monastery,
+        BuildingKind::SiegeWorkshop,
+        BuildingKind::Castle,
+    ] {
+        let mut b = building();
+        b.kind = kind;
+        b.age = Age::Castle;
+        b.training_queue.clear();
+        b.footprint = TileRect::from_xywh(5, 5, kind.side(), kind.depth());
+        let position = WorldPosition::new(3000, 3000);
+        b.rally_point = Some(RallyPoint {
+            position,
+            target: RallyTarget::Ground(position),
+        });
+        let frame = GameplayServerMessage::Snapshot {
+            revision: 1,
+            tick: Tick(0),
+            units: vec![],
+            players: vec![],
+            buildings: vec![b],
+        };
+        if kind == BuildingKind::Castle {
+            assert!(encode_gameplay_server(&frame).is_err());
+        } else {
+            let bytes = encode_gameplay_server(&frame).unwrap();
+            assert_eq!(decode_gameplay_server(&bytes).unwrap(), frame);
+        }
+    }
 }

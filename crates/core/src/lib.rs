@@ -1,15 +1,25 @@
 //! Configuration-independent values shared by diagnostics and gameplay.
+mod clamp;
 mod coordinates;
+mod formation;
+pub use formation::{Formation, MAX_FORMATION_MEMBERS};
 mod projection;
 
+pub use clamp::clamp_f64;
 pub use coordinates::*;
 pub use projection::{
-    Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint, inverse_project, project,
+    Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, MIN_CAMERA_ZOOM, ScreenPoint, inverse_project, project,
 };
 use serde::{Deserialize, Serialize};
 
 pub const CHUNK_SIZE: i32 = 64;
 pub const WORLD_LIMIT: i32 = 16_384;
+/// DE clamps every Market price (gold per 100 units) to this range; the
+/// simulation's trade rules and the protocol's price validation both read it.
+pub const MARKET_MIN_PRICE: u16 = 20;
+pub const MARKET_MAX_PRICE: u16 = 9999;
+/// Player movement destinations retained per unit, including the active one.
+pub const MAX_MOVE_DESTINATIONS: usize = 16;
 
 #[derive(
     Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize,

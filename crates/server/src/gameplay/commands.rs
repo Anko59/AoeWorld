@@ -6,7 +6,70 @@ use aoe_core::{EntityId, WorldPosition};
 use aoe_protocol::{CommandResult, GameplayRole, GameplayServerMessage};
 use std::time::Instant;
 
+/// Order budget of an AI slot (humans keep 10 per second, burst 20).
+const AI_ORDERS_PER_SECOND: f64 = 100.0;
+const AI_ORDER_BURST: f64 = 200.0;
+const AI_PENDING_COMMANDS: usize = 256;
+
+#[path = "commands/apply.rs"]
+mod apply;
+#[path = "commands/formations.rs"]
+mod formations;
+#[path = "commands/garrison.rs"]
+mod garrison;
+#[path = "commands/navy.rs"]
+mod navy;
+#[path = "commands/queue.rs"]
+mod queue;
+pub(super) use apply::apply;
+
 impl GameplayService {
+    pub async fn queue_auto_scout(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        enabled: bool,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::AutoScout { entity_id, enabled },
+        )
+        .await;
+    }
+    pub async fn queue_farm_reseed(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        add: bool,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::FarmReseed { building_id, add },
+        )
+        .await;
+    }
+    pub async fn queue_set_rally(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        target: aoe_protocol::RallyTarget,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::SetRally {
+                building_id,
+                target,
+            },
+        )
+        .await;
+    }
+
     pub async fn queue_stop(&self, session_id: u64, sequence: u64, entity_id: EntityId) {
         self.queue_command(session_id, sequence, PendingAction::Stop { entity_id })
             .await;
@@ -45,6 +108,25 @@ impl GameplayService {
             PendingAction::Move {
                 entity_id,
                 destination,
+                queued: false,
+            },
+        )
+        .await;
+    }
+    pub async fn queue_waypoint(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        destination: WorldPosition,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::Move {
+                entity_id,
+                destination,
+                queued: true,
             },
         )
         .await;
@@ -136,13 +218,36 @@ impl GameplayService {
         builder_ids: Vec<EntityId>,
         kind: aoe_protocol::BuildingKind,
         origin: aoe_core::TileCoord,
+        queued: bool,
     ) {
         let action = PendingAction::Build {
             builder_ids,
             kind,
             origin,
+            queued,
         };
         self.queue_command(session_id, sequence, action).await;
+    }
+    pub async fn queue_build_bridge(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        builder_ids: Vec<EntityId>,
+        from: aoe_core::TileCoord,
+        to: aoe_core::TileCoord,
+        queued: bool,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::BuildBridge {
+                builder_ids,
+                from,
+                to,
+                queued,
+            },
+        )
+        .await;
     }
     pub async fn queue_build_wall(
         &self,
@@ -151,11 +256,13 @@ impl GameplayService {
         builder_ids: Vec<EntityId>,
         from: aoe_core::TileCoord,
         to: aoe_core::TileCoord,
+        queued: bool,
     ) {
         let action = PendingAction::BuildWall {
             builder_ids,
             from,
             to,
+            queued,
         };
         self.queue_command(session_id, sequence, action).await;
     }
@@ -191,198 +298,31 @@ impl GameplayService {
         let action = PendingAction::Farm { entity_id, farm_id };
         self.queue_command(session_id, sequence, action).await;
     }
-    async fn queue_command(&self, session_id: u64, sequence: u64, action: PendingAction) {
-        let now = Instant::now();
-        let current_tick = self.world.read().await.tick();
-        let mut sessions = self.sessions.lock().await;
-        let global_pending = total_pending(&sessions);
-        let Some(session) = sessions.get_mut(&session_id) else {
-            return;
-        };
-        let mut result = None;
-        if session.role != GameplayRole::Controller {
-            result = Some(CommandResult::RejectedNotController);
-        } else if session.last_sequence.is_some_and(|last| sequence <= last)
-            || session.acknowledgements.contains(&sequence)
-        {
-            result = Some(CommandResult::RejectedSequence);
-        } else {
-            let elapsed = now
-                .duration_since(session.last_command_refill)
-                .as_secs_f64();
-            session.command_tokens = (session.command_tokens + elapsed * 10.0).min(20.0);
-            session.last_command_refill = now;
-            if session.command_tokens < 1.0
-                || session.pending.len() >= MAX_PENDING_COMMANDS_PER_CONNECTION
-            {
-                result = Some(if session.command_tokens < 1.0 {
-                    CommandResult::RejectedRateLimited
-                } else {
-                    CommandResult::RejectedQueueFull
-                });
-            } else if global_pending >= MAX_PENDING_COMMANDS_GLOBAL {
-                result = Some(CommandResult::RejectedQueueFull);
-            } else {
-                session.last_sequence = Some(sequence);
-                session.command_tokens -= 1.0;
-                session
-                    .pending
-                    .push_back(PendingCommand { sequence, action });
-            }
-        }
-        if let Some(result) = result {
-            let _ = session.sender.try_send(GameplayServerMessage::CommandAck {
-                sequence,
-                result,
-                applied_tick: current_tick,
-            });
-            session.acknowledgements.push_back(sequence);
-            while session.acknowledgements.len() > MAX_ACK_HISTORY {
-                session.acknowledgements.pop_front();
-            }
-        }
-    }
-}
-
-pub(super) fn apply(
-    world: &mut aoe_simulation::GameWorld,
-    player: aoe_core::PlayerId,
-    action: PendingAction,
-) -> CommandResult {
-    let result = match action {
-        PendingAction::Stop { entity_id } => world.issue_stop(player, entity_id),
-        PendingAction::Hunt {
-            unit_ids,
-            animal_id,
-        } => {
-            if !world.animal(animal_id).is_some_and(|a| {
-                a.owner == Some(player)
-                    || world.visibility(player, a.position.tile_floor())
-                        == aoe_simulation::TileVisibility::Visible
-            }) {
-                return CommandResult::RejectedInvalidTarget;
-            }
-            world.issue_hunt(player, &unit_ids, animal_id)
-        }
-        PendingAction::Move {
-            entity_id,
-            destination,
-        } => {
-            if world.animal(entity_id).is_some() {
-                return match world.issue_herd(player, entity_id, destination) {
-                    Ok(()) => CommandResult::Accepted,
-                    Err(aoe_simulation::EconomyError::NotOwner) => CommandResult::RejectedNotOwner,
-                    Err(_) => CommandResult::RejectedInvalidDestination,
-                };
-            }
-            let Some(unit) = world.unit(entity_id) else {
-                return CommandResult::RejectedUnknownEntity;
-            };
-            if unit.player != player {
-                return CommandResult::RejectedNotOwner;
-            }
-            if !world.config().valid_map_position(destination) {
-                return CommandResult::RejectedInvalidDestination;
-            }
-            world
-                .issue_move(entity_id, destination)
-                .map(|_| ())
-                .map_err(aoe_simulation::EconomyError::Movement)
-        }
-        PendingAction::Gather {
-            entity_id,
-            resource_id,
-        } => world.issue_gather(player, entity_id, resource_id),
-        PendingAction::Attack {
-            entity_id,
-            target_id,
-        } => {
-            let visible = world.unit_visible_to(player, target_id)
-                || world.animal(target_id).is_some_and(|animal| {
-                    animal.owner == Some(player)
-                        || world.visibility(player, animal.position.tile_floor())
-                            == aoe_simulation::TileVisibility::Visible
-                })
-                || world
-                    .building(target_id)
-                    .is_some_and(|b| world.building_visible_to(player, b.footprint));
-            if !visible {
-                return CommandResult::RejectedInvalidTarget;
-            }
-            world.issue_attack(player, entity_id, target_id)
-        }
-        PendingAction::CancelTraining { building_id } => {
-            world.issue_cancel_training(player, building_id)
-        }
-        PendingAction::Train { building_id, kind } => {
-            world.issue_train(player, building_id, super::economy::native_kind(kind))
-        }
-        PendingAction::Build {
-            builder_ids,
-            kind,
-            origin,
-        } => world
-            .issue_build(
-                player,
-                &builder_ids,
-                super::economy::native_building(kind),
-                origin,
-            )
-            .map(|_| ()),
-        PendingAction::BuildWall {
-            builder_ids,
-            from,
-            to,
-        } => world
-            .issue_build_wall(player, &builder_ids, from, to)
-            .map(|_| ()),
-        PendingAction::Construct {
-            builder_ids,
+    pub async fn queue_market_buy(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        resource: aoe_protocol::TradeResource,
+    ) {
+        let action = PendingAction::MarketBuy {
             building_id,
-        } => world.issue_construct(player, &builder_ids, building_id),
-        PendingAction::CancelConstruction { building_id } => {
-            world.issue_cancel_construction(player, building_id)
-        }
-        PendingAction::Farm { entity_id, farm_id } => world.issue_farm(player, entity_id, farm_id),
-        PendingAction::Research { building_id, tech } => {
-            world.issue_research(player, building_id, super::economy::native_tech(tech))
-        }
-        PendingAction::CancelResearch { building_id } => {
-            world.issue_cancel_research(player, building_id)
-        }
-    };
-    use aoe_simulation::{EconomyError as E, GameWorldError as W};
-    match result {
-        Ok(()) => CommandResult::Accepted,
-        Err(E::UnknownEntity | E::Movement(W::UnknownEntity)) => {
-            CommandResult::RejectedUnknownEntity
-        }
-        Err(E::InvalidTarget) => CommandResult::RejectedInvalidTarget,
-        Err(E::InsufficientResources) => CommandResult::RejectedInsufficientResources,
-        Err(E::NotOwner) => CommandResult::RejectedNotOwner,
-        Err(E::WrongUnitKind) => CommandResult::RejectedWrongUnitKind,
-        Err(E::InvalidResource) => CommandResult::RejectedInvalidResource,
-        Err(E::InsufficientFood) => CommandResult::RejectedInsufficientFood,
-        Err(E::PopulationCap) => CommandResult::RejectedPopulationCap,
-        Err(E::TrainingQueueFull) => CommandResult::RejectedTrainingQueueFull,
-        Err(E::NotBuildable) => CommandResult::RejectedNotBuildable,
-        Err(E::RequirementMissing) => CommandResult::RejectedRequirementMissing,
-        Err(E::InvalidFootprint) => CommandResult::RejectedInvalidPlacement,
-        Err(E::UnderConstruction) => CommandResult::RejectedUnderConstruction,
-        Err(E::AlreadyComplete) => CommandResult::RejectedAlreadyComplete,
-        Err(E::FarmUnavailable) => CommandResult::RejectedFarmUnavailable,
-        Err(E::NotResearchable) => CommandResult::RejectedNotResearchable,
-        Err(E::AlreadyResearched) => CommandResult::RejectedAlreadyResearched,
-        Err(E::ResearchBusy) => CommandResult::RejectedResearchBusy,
-        Err(E::RequiresFeudalAge) => CommandResult::RejectedRequiresFeudalAge,
-        Err(E::TechRequirementMissing) => CommandResult::RejectedTechRequirement,
-        Err(E::Capacity) => CommandResult::RejectedQueueFull,
-        Err(E::NoAttackPosition | E::Movement(W::Unreachable)) => {
-            CommandResult::RejectedUnreachable
-        }
-        Err(E::Movement(W::PathBudgetExceeded)) => CommandResult::RejectedPathBudgetExceeded,
-        Err(E::Movement(W::Environment(_))) => CommandResult::RejectedResourceUnavailable,
-        Err(_) => CommandResult::RejectedInvalidDestination,
+            resource,
+        };
+        self.queue_command(session_id, sequence, action).await;
+    }
+    pub async fn queue_market_sell(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        building_id: EntityId,
+        resource: aoe_protocol::TradeResource,
+    ) {
+        let action = PendingAction::MarketSell {
+            building_id,
+            resource,
+        };
+        self.queue_command(session_id, sequence, action).await;
     }
 }
 

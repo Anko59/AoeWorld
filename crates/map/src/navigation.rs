@@ -1,9 +1,17 @@
-use crate::{EdgePassability, GroundMaterial, MapChunkGenerator, ResourceOverlay};
+use crate::{EdgePassability, MapChunkGenerator, ResourceOverlay};
 use aoe_core::TileCoord;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
+mod hierarchy;
 mod planner;
+pub use hierarchy::NavigationSnapshot;
+pub(crate) use hierarchy::PortalCache;
+pub use hierarchy::{
+    DEFAULT_HIERARCHY_EXPANSIONS, HierarchicalOutcome, hierarchical_route,
+    hierarchical_route_with_overlay,
+};
+pub use hierarchy::{NAVIGATION_FORMAT_VERSION, NavigationChunk, navigation_checksum};
 pub use planner::{
     MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, ROUTE_LEG_COMMIT_WORK,
     ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain,
@@ -35,9 +43,15 @@ pub fn find_path(
     destination: TileCoord,
     max_expansions: u32,
 ) -> MovementOutcome {
-    find_path_with(terrain, origin, destination, max_expansions, None, |tile| {
-        walkable(terrain, tile)
-    })
+    find_path_with(
+        terrain,
+        origin,
+        destination,
+        max_expansions,
+        None,
+        None,
+        |tile| walkable(terrain, tile),
+    )
 }
 
 pub fn find_path_with_overlay(
@@ -47,9 +61,15 @@ pub fn find_path_with_overlay(
     destination: TileCoord,
     max_expansions: u32,
 ) -> MovementOutcome {
-    find_path_with(terrain, origin, destination, max_expansions, None, |tile| {
-        walkable_with_overlay(terrain, overlay, tile)
-    })
+    find_path_with(
+        terrain,
+        origin,
+        destination,
+        max_expansions,
+        None,
+        Some(overlay),
+        |tile| walkable_with_overlay(terrain, overlay, tile),
+    )
 }
 
 /// Finds either a complete route or the next deterministic fine-scale segment
@@ -83,13 +103,14 @@ fn find_path_with<F>(
     destination: TileCoord,
     max_expansions: u32,
     segment_tiles: Option<u32>,
+    overlay: Option<&ResourceOverlay>,
     passable: F,
 ) -> MovementOutcome
 where
     F: Fn(TileCoord) -> bool,
 {
     let outcome = search_path(origin, destination, max_expansions, &passable, |tile| {
-        neighbors(terrain, tile, &passable)
+        neighbors(terrain, tile, &passable, overlay)
     });
     segment_path(terrain, outcome, segment_tiles)
 }
@@ -210,10 +231,20 @@ fn segment_path(
     MovementOutcome::Path(path)
 }
 
-fn neighbors<F>(terrain: &MapChunkGenerator, tile: TileCoord, passable: &F) -> Vec<(TileCoord, u32)>
+fn neighbors<F>(
+    terrain: &MapChunkGenerator,
+    tile: TileCoord,
+    passable: &F,
+    overlay: Option<&ResourceOverlay>,
+) -> Vec<(TileCoord, u32)>
 where
     F: Fn(TileCoord) -> bool,
 {
+    let edge = |from, to| match overlay.and_then(|o| o.bridge_edge(from, to)) {
+        Some(true) => EdgePassability::Passable,
+        Some(false) => EdgePassability::Blocked,
+        None => terrain.edge_between(from, to),
+    };
     let mut result = Vec::with_capacity(8);
     for delta_y in -1..=1 {
         for delta_x in -1..=1 {
@@ -221,16 +252,12 @@ where
                 continue;
             }
             let next = TileCoord::new(tile.x + delta_x, tile.y + delta_y);
-            if !passable(next)
-                || !matches!(terrain.edge_between(tile, next), EdgePassability::Passable)
-            {
+            if !passable(next) || !matches!(edge(tile, next), EdgePassability::Passable) {
                 continue;
             }
             if delta_x != 0
                 && delta_y != 0
-                && !diagonal_clear(tile, delta_x, delta_y, passable, |from, to| {
-                    terrain.edge_between(from, to)
-                })
+                && !diagonal_clear(tile, delta_x, delta_y, passable, edge)
             {
                 continue;
             }
@@ -246,12 +273,14 @@ fn movement_cost(terrain: &MapChunkGenerator, from: TileCoord, to: TileCoord) ->
     } else {
         DIAGONAL_COST
     };
-    let multiplier = matches!(
-        terrain.tile_at(to).map(|sample| sample.material),
-        Some(GroundMaterial::Mud)
-    )
-    .then_some(3_u32)
-    .unwrap_or(2);
+    let multiplier = if terrain
+        .walk_at_with_cancel(to, &|| false)
+        .is_ok_and(|cell| cell.is_some_and(|cell| cell.mud))
+    {
+        3
+    } else {
+        2
+    };
     base * multiplier / 2
 }
 
@@ -276,8 +305,8 @@ where
 
 fn walkable(terrain: &MapChunkGenerator, tile: TileCoord) -> bool {
     terrain
-        .tile_and_node_with_cancel(tile, &|| false)
-        .is_ok_and(|pair| pair.is_some_and(|(sample, node)| sample.passable && node.is_none()))
+        .walk_at_with_cancel(tile, &|| false)
+        .is_ok_and(|cell| cell.is_some_and(|cell| cell.passable && cell.node.is_none()))
 }
 
 fn walkable_with_overlay(
@@ -286,14 +315,8 @@ fn walkable_with_overlay(
     tile: TileCoord,
 ) -> bool {
     terrain
-        .tile_and_node_with_cancel(tile, &|| false)
-        .is_ok_and(|pair| {
-            pair.is_some_and(|(sample, node)| {
-                !overlay.blocks_tile(tile)
-                    && sample.passable
-                    && node.is_none_or(|node| !overlay.blocks_node(node))
-            })
-        })
+        .route_walkable(overlay, tile, &|| false)
+        .unwrap_or(false)
 }
 
 fn heuristic(from: TileCoord, to: TileCoord) -> u64 {
@@ -334,101 +357,8 @@ impl PartialOrd for OpenNode {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn terrain() -> MapChunkGenerator {
-        MapChunkGenerator::new([0; 32], 0, 64)
-    }
-
-    fn neighboring_land() -> (TileCoord, TileCoord) {
-        for y in 1..63 {
-            for x in 1..62 {
-                let origin = TileCoord::new(x, y);
-                let destination = TileCoord::new(x + 1, y);
-                if walkable(&terrain(), origin)
-                    && walkable(&terrain(), destination)
-                    && matches!(
-                        terrain().edge_between(origin, destination),
-                        EdgePassability::Passable
-                    )
-                {
-                    return (origin, destination);
-                }
-            }
-        }
-        panic!("test terrain has no neighboring passable tiles");
-    }
-
-    fn resource() -> (MapChunkGenerator, crate::ResourceNode) {
-        let terrain = MapChunkGenerator::new([3; 32], 1, 128);
-        let node = (0..4)
-            .flat_map(|y| {
-                let terrain = terrain.clone();
-                (0..4).flat_map(move |x| terrain.chunk(x, y).expect("fixture chunk").resources)
-            })
-            .next()
-            .expect("test terrain resource");
-        (terrain, node)
-    }
-
-    #[test]
-    fn route_is_deterministic_and_bounded() {
-        let (origin, destination) = neighboring_land();
-        let first = find_path(&terrain(), origin, destination, 4_096);
-        let second = find_path(&terrain(), origin, destination, 4_096);
-        assert_eq!(first, second);
-        assert!(matches!(
-            find_path(&terrain(), origin, destination, 0),
-            MovementOutcome::BudgetExceeded
-        ));
-    }
-
-    #[test]
-    fn blocked_or_outside_destinations_are_rejected() {
-        assert_eq!(
-            find_path(
-                &terrain(),
-                TileCoord::new(2, 2),
-                TileCoord::new(-1, 2),
-                4_096
-            ),
-            MovementOutcome::InvalidDestination
-        );
-    }
-
-    #[test]
-    fn depleted_resources_become_route_destinations() {
-        let (terrain, node) = resource();
-        let mut overlay = ResourceOverlay::default();
-        assert_eq!(
-            find_path_with_overlay(&terrain, &overlay, node.tile, node.tile, 4_096),
-            MovementOutcome::InvalidDestination
-        );
-        overlay
-            .deplete(&terrain, node.id, node.initial_amount)
-            .expect("resource");
-        assert!(matches!(
-            find_path_with_overlay(&terrain, &overlay, node.tile, node.tile, 4_096),
-            MovementOutcome::Path(_)
-        ));
-    }
-
-    #[test]
-    fn diagonal_moves_require_clear_cardinal_edges() {
-        let origin = TileCoord::new(4, 4);
-        assert!(!diagonal_clear(origin, 1, 1, &|_| true, |from, to| {
-            if from == origin && to == TileCoord::new(5, 4) {
-                EdgePassability::Blocked
-            } else {
-                EdgePassability::Passable
-            }
-        },));
-        assert!(diagonal_clear(origin, 1, 1, &|_| true, |_, _| {
-            EdgePassability::Passable
-        },));
-    }
-}
+#[path = "navigation/tests/basic.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "navigation/tests/asymmetric.rs"]
@@ -445,3 +375,7 @@ mod long_routes_tests;
 #[cfg(test)]
 #[path = "navigation/tests/priority.rs"]
 mod priority_tests;
+
+#[cfg(test)]
+#[path = "navigation/tests/pocket.rs"]
+mod pocket_tests;

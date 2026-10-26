@@ -1,21 +1,35 @@
 use crate::{MapChunkGenerator, ResourceKind, ResourceNode};
 use aoe_core::{TileCoord, TileRect};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
+mod navigation;
 mod snapshot;
 mod starting;
 pub use snapshot::{RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange, ResourceOverlaySnapshot};
 
 /// Logical entry limit; allocator overhead is not included in this count.
-pub const MAX_RESOURCE_OVERLAY_CHANGES: usize = 65_536;
+/// Every depleted node keeps its entry, so the count only grows: 100 seats
+/// exhaust about 5 trees a second, which filled 65,536 in about 3.5 hours.
+/// 2^20 entries (about 24 MiB) last over 50 hours of such a match.
+pub const MAX_RESOURCE_OVERLAY_CHANGES: usize = 1 << 20;
+/// Starting resource nodes of a match: a kit is at most 31 nodes, so every
+/// village of 128 seats fits.
+pub const MAX_STARTING_NODES: usize = 4_096;
+/// Starting resource identities begin here (`ResourceNode::starting`).
+const STARTING_IDS: u64 = 1 << 37;
 /// Building collision tiles the overlay holds at once (towns, houses, walls).
-pub const MAX_OBSTACLE_TILES: u64 = 4_096;
+/// The simulation's building capacity is the real bound (at most 16 tiles a
+/// building: 128 seats x 8,192 buildings); this ceiling only keeps the set
+/// finite. 4,096 filled at about 100 buildings per seat in a 100-seat match.
+pub const MAX_OBSTACLE_TILES: u64 = 1 << 24;
+/// The largest footprint one building may add.
+pub const MAX_FOOTPRINT_TILES: u64 = 4_096;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ResourceOverlay {
     remaining: BTreeMap<u64, u16>,
     revision: u64,
-    obstacles: BTreeSet<TileCoord>,
+    navigation_state: Box<navigation::CollisionState>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,14 +67,20 @@ impl ResourceOverlay {
         if rect.min.x < 0
             || rect.min.y < 0
             || area == 0
-            || area > MAX_OBSTACLE_TILES
-            || (self.obstacles.len() as u64).saturating_add(area) > MAX_OBSTACLE_TILES
+            || area > MAX_FOOTPRINT_TILES
+            || (self.navigation_state.obstacles.len() as u64)
+                .saturating_add(self.bridge_tile_count() as u64)
+                .saturating_add(area)
+                > MAX_OBSTACLE_TILES
         {
             return Err(ResourceOverlayError::Capacity);
         }
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
-                self.obstacles.insert(TileCoord::new(x, y));
+                let tile = TileCoord::new(x, y);
+                if self.navigation_state.obstacles.insert(tile) {
+                    self.navigation_toggle(tile, 1, 0);
+                }
             }
         }
         Ok(())
@@ -70,23 +90,16 @@ impl ResourceOverlay {
     pub fn remove_footprint(&mut self, rect: TileRect) {
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
-                self.obstacles.remove(&TileCoord::new(x, y));
+                let tile = TileCoord::new(x, y);
+                if self.navigation_state.obstacles.remove(&tile) {
+                    self.navigation_toggle(tile, 1, 0);
+                }
             }
         }
     }
 
     pub fn blocks_tile(&self, tile: TileCoord) -> bool {
-        self.obstacles.contains(&tile)
-            || (!self.remaining.is_empty()
-                && [
-                    crate::ResourceKind::Food,
-                    crate::ResourceKind::Wood,
-                    crate::ResourceKind::Gold,
-                    crate::ResourceKind::Stone,
-                ]
-                .into_iter()
-                .filter_map(|kind| ResourceNode::starting_id(tile, kind))
-                .any(|id| self.remaining.get(&id).is_some_and(|amount| *amount > 0)))
+        self.collision_blocks_tile(tile)
     }
 
     /// Startup insertion is part of the initial snapshot, not a depletion revision.
@@ -95,7 +108,9 @@ impl ResourceOverlay {
         terrain: &MapChunkGenerator,
         node: ResourceNode,
     ) -> Result<(), ResourceOverlayError> {
-        if self.starting_nodes().count() >= 512
+        // Kits are bounded on their own so a small world can be filled; the
+        // count runs once per node at match creation only.
+        if self.remaining.range(STARTING_IDS..).count() >= MAX_STARTING_NODES
             || self.remaining.len() >= MAX_RESOURCE_OVERLAY_CHANGES
         {
             return Err(ResourceOverlayError::Capacity);
@@ -110,12 +125,13 @@ impl ResourceOverlay {
             return Err(ResourceOverlayError::InvalidSnapshot);
         }
         self.remaining.insert(node.id, node.initial_amount);
+        self.navigation_toggle(node.tile, 3, node.id);
         Ok(())
     }
 
     pub fn starting_nodes(&self) -> impl Iterator<Item = ResourceNode> + '_ {
         self.remaining
-            .range((1 << 37)..)
+            .range(STARTING_IDS..)
             .filter_map(|(id, _)| ResourceNode::starting_from_id(*id))
     }
 
@@ -191,19 +207,34 @@ impl ResourceOverlay {
         self.remaining(terrain, id).is_some_and(|amount| amount > 0)
     }
 
-    /// Applies overlay state to a resource that was already resolved by a
-    /// checked terrain query. This avoids resolving a provider-backed tile a
-    /// second time after its page handle has been validated.
+    /// Whether an already resolved node still has resources to gather.
+    /// Fish remain available even though they never block movement.
+    pub fn resource_available(&self, node: ResourceNode) -> bool {
+        self.changed_amount(node.id).unwrap_or(node.initial_amount) > 0
+    }
+
+    /// Navigation/placement collision for an already resolved resource.
+    /// Fish never block; gather targets use `resource_available` instead.
+    /// Avoids resolving a provider-backed tile again after validation.
     pub fn blocks_node(&self, node: ResourceNode) -> bool {
-        self.remaining
-            .get(&node.id)
-            .copied()
-            .unwrap_or(node.initial_amount)
-            > 0
+        self.collision_blocks_node(node)
     }
 
     pub fn deplete(
         &mut self,
+        terrain: &MapChunkGenerator,
+        id: u64,
+        requested: u16,
+    ) -> Result<Depletion, ResourceOverlayError> {
+        let depletion = self.plan_depletion(terrain, id, requested)?;
+        self.apply_depletion(&depletion);
+        Ok(depletion)
+    }
+
+    /// Validates a depletion without changing the overlay, so a caller can
+    /// decide whether to commit it without cloning the overlay first.
+    pub fn plan_depletion(
+        &self,
         terrain: &MapChunkGenerator,
         id: u64,
         requested: u16,
@@ -219,26 +250,48 @@ impl ResourceOverlay {
         let removed = previous.min(requested);
         let remaining = previous - removed;
         let became_nonblocking = previous > 0 && remaining == 0;
+        let mut revision = self.revision;
         if removed > 0 {
             if !self.remaining.contains_key(&id)
                 && self.remaining.len() >= MAX_RESOURCE_OVERLAY_CHANGES
             {
                 return Err(ResourceOverlayError::Capacity);
             }
-            let revision = self
-                .revision
+            revision = revision
                 .checked_add(1)
                 .ok_or(ResourceOverlayError::RevisionExhausted)?;
-            self.remaining.insert(id, remaining);
-            self.revision = revision;
         }
         Ok(Depletion {
             id,
             removed,
             remaining,
             became_nonblocking,
-            revision: self.revision,
+            revision,
         })
+    }
+
+    /// Applies a depletion returned by `plan_depletion` on this same overlay.
+    pub fn apply_depletion(&mut self, depletion: &Depletion) {
+        if depletion.became_nonblocking {
+            let id = depletion.id;
+            let tile = TileCoord::new(
+                ((id >> 1) & 0x3_ffff) as i32,
+                ((id >> 19) & 0x3_ffff) as i32,
+            );
+            self.navigation_toggle(
+                tile,
+                if ResourceNode::starting_from_id(id).is_some() {
+                    3
+                } else {
+                    2
+                },
+                id,
+            );
+        }
+        if depletion.removed > 0 {
+            self.remaining.insert(depletion.id, depletion.remaining);
+            self.revision = depletion.revision;
+        }
     }
 
     pub fn changed(&self) -> impl Iterator<Item = (u64, u16)> + '_ {

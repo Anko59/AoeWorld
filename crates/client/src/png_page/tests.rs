@@ -246,3 +246,20 @@ fn header_checks_dimensions_and_format_before_stream_decode() {
     header[25] = 2;
     assert!(validate_header(&header).is_err());
 }
+
+#[wasm_bindgen_test]
+async fn runtime_decoder_owns_compressed_input_before_wasm_memory_changes() {
+    use wasm_bindgen::JsCast;
+    let mut expected = vec![0; PIXEL_BYTES];
+    expected[..4].copy_from_slice(&[101, 17, 203, 128]);
+    let mut encoded = importer_page(&expected);
+    let pending = decode_page(&encoded);
+    // The runtime must have copied IDAT before returning its promise. Reusing
+    // input storage and growing memory invalidates any borrowed source view.
+    encoded.fill(0);
+    drop(encoded);
+    let memory = wasm_bindgen::memory().unchecked_into::<js_sys::WebAssembly::Memory>();
+    memory.grow(1);
+    let result = JsFuture::from(pending).await.unwrap();
+    assert_eq!(Uint8Array::new(&result).to_vec(), expected);
+}

@@ -20,12 +20,20 @@ mod init;
 #[path = "playground_map.rs"]
 mod map;
 use map::{state::Drag, ui::set_text};
+#[path = "playground_game/memory.rs"]
+mod memory;
 #[path = "playground_game/network.rs"]
 mod network;
+#[path = "playground_game/perf.rs"]
+mod perf;
+#[path = "playground_game/recovery.rs"]
+mod recovery;
 #[path = "playground_status.rs"]
 mod status;
 #[path = "playground_storage.rs"]
 mod storage;
+#[path = "playground_game/strategic.rs"]
+pub(super) mod strategic;
 #[path = "village/mod.rs"]
 mod village;
 use network::connect;
@@ -35,7 +43,9 @@ pub(super) struct Client {
     pub canvas: HtmlCanvasElement,
     pub renderer: GameRenderer,
     pub art: GameArt,
+    pub team_colour: [u8; 3],
     pub socket: Option<WebSocket>,
+    connection_callbacks: Option<network::ConnectionCallbacks>,
     pub connection_id: u64,
     pub camera: Camera,
     pub capture: capture::Capture,
@@ -65,6 +75,7 @@ pub(super) struct Client {
     pub selected: village::selection::Selection,
     pub village: village::Village,
     pub grid: bool,
+    pub hover_mode: u8,
     pub drag: Option<Drag>,
     pub pointer: Option<ScreenPoint>,
     pub last_frame: f64,
@@ -82,14 +93,20 @@ pub(super) fn resize(client: &mut Client) {
     let height = client.canvas.client_height().max(1) as f64;
     let ratio = web_sys::window().map_or(1.0, |window| window.device_pixel_ratio());
     let backing = controls::backing_size(width, height, ratio);
+    let viewport = [f64::from(backing[0]), f64::from(backing[1])];
+    let changed = client.canvas.width() != backing[0]
+        || client.canvas.height() != backing[1]
+        || client.camera.viewport != viewport;
     if client.canvas.width() != backing[0] {
         client.canvas.set_width(backing[0]);
     }
     if client.canvas.height() != backing[1] {
         client.canvas.set_height(backing[1]);
     }
-    client.camera.viewport = [f64::from(backing[0]), f64::from(backing[1])];
-    client.renderer.resize(backing[0], backing[1]);
+    client.camera.viewport = viewport;
+    if changed {
+        client.renderer.resize(backing[0], backing[1]);
+    }
     client.camera = client.camera.clamp_center(client.config);
 }
 
@@ -125,10 +142,7 @@ pub(super) fn subscribe(client: &mut Client) {
         region,
     };
     if let Ok(bytes) = encode_gameplay_client(&message)
-        && client
-            .socket
-            .as_ref()
-            .is_some_and(|socket| socket.send_with_u8_array(&bytes).is_ok())
+        && network::send(client, &bytes)
     {
         client.sent_region = Some(region);
         client.last_subscribe = now();
@@ -145,7 +159,14 @@ pub(super) fn position_at(client: &Client, id: EntityId) -> [f64; 2] {
         .unwrap_or_else(|| client.presentation.position(*state))
 }
 
-pub(super) fn remember(client: &mut Client, state: &GameplayUnitState, tick: u64) {
+pub(super) fn remember(client: &mut Client, state: &GameplayUnitState, tick: u64) -> bool {
+    if client.units.len() >= aoe_protocol::MAX_SUBSCRIBED_UNITS
+        && !client.units.contains_key(&state.id)
+    {
+        return false;
+    }
+    let owner = village::owner(client);
+    client.village.remember_idle(owner, state);
     let Client {
         units,
         presentation,
@@ -153,6 +174,7 @@ pub(super) fn remember(client: &mut Client, state: &GameplayUnitState, tick: u64
     } = client;
     presentation.remember(units.get(&state.id), state, tick);
     units.insert(state.id, *state);
+    true
 }
 
 pub(super) fn reconnect(shared: Rc<RefCell<Client>>) {
@@ -167,14 +189,21 @@ pub(super) fn center_on_primary(client: &mut Client) {
 }
 
 pub(super) fn send_order(client: &mut Client, point: ScreenPoint) {
-    village::orders::at_pointer(client, point);
+    village::orders::at_pointer(client, point, false);
 }
 
 fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let callback = Rc::new(RefCell::new(None::<Closure<dyn FnMut(f64)>>));
     let next = callback.clone();
     *callback.borrow_mut() = Some(Closure::new(move |time: f64| {
+        perf::perf_mark(0);
         let mut client = shared.borrow_mut();
+        if let Err(error) = recovery::check(&client.renderer) {
+            match recovery::restart(&client.renderer, Some(client.camera), &error) {
+                Ok(true) => return,
+                _ => client.status = error,
+            }
+        }
         resize(&mut client);
         let delta_ms = if client.last_frame == 0.0 {
             16.0
@@ -182,12 +211,14 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             (time - client.last_frame).clamp(0.0, 100.0)
         };
         client.last_frame = time;
+        client.resources.expire_effects(time);
         controls::edge_pan(&mut client, delta_ms);
         subscribe(&mut client);
         let canvas = matches!(&client.renderer, GameRenderer::Canvas { .. });
         client.presentation.advance(time, canvas);
         // Keep input, networking and the HUD live while the overview covers the scene.
-        if !controls::navigation::overview_active() {
+        let draw = perf::Scope::new(2);
+        if !controls::navigation::overview_active() && !strategic::render(&mut client) {
             let scene = map::scene::prepare(&client);
             let units = map::scene::units(&client, &scene);
             let camera = SceneCamera {
@@ -208,11 +239,21 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 animation,
                 grid,
             ) {
+                if matches!(
+                    recovery::restart(&client.renderer, Some(client.camera), &error),
+                    Ok(true)
+                ) {
+                    return;
+                }
                 client.status = error;
             }
         }
-        village::building_panel::preview(&client);
+        drop(draw);
+        let ui = perf::Scope::new(3);
+        controls::navigation::present(&client);
+        village::waypoints::present(&client);
         if time - client.village.last_hud >= 250.0 {
+            controls::groups::update(&client);
             client.village.last_hud = time;
             status::update(&client);
             village::hud::update(&client);
@@ -223,6 +264,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             client.camera.center[1],
         );
         capture::update(&mut client);
+        drop(ui);
         let surface_fixture = client.surface_fixture;
         drop(client);
         if !surface_fixture {

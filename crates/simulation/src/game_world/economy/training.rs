@@ -1,9 +1,11 @@
 use super::{
     EconomyError, TrainingEntry, UnitKind, VILLAGE_RULES,
-    placement::{perimeter, position},
+    placement::{distance_squared, perimeter, position},
 };
 use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId};
+
+pub(crate) mod rally;
 
 impl GameWorld {
     pub fn issue_train(
@@ -12,6 +14,8 @@ impl GameWorld {
         center: EntityId,
         kind: UnitKind,
     ) -> Result<(), EconomyError> {
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
+        let kind = kind.upgraded(researched);
         let building = self
             .economy
             .buildings
@@ -26,18 +30,14 @@ impl GameWorld {
         if !super::trainable_units(building.kind).contains(&kind) {
             return Err(EconomyError::WrongUnitKind);
         }
-        if matches!(
-            kind,
-            UnitKind::Archer
-                | UnitKind::Skirmisher
-                | UnitKind::Spearman
-                | UnitKind::Scout
-                | UnitKind::ManAtArms
-        ) && !self.is_feudal(player)
+        self.require_age(player, kind.required_age())?;
+        if kind
+            .required_tech()
+            .is_some_and(|tech| !self.has_researched(player, tech))
         {
-            return Err(EconomyError::RequiresFeudalAge);
+            return Err(EconomyError::TechRequirementMissing);
         }
-        if kind == UnitKind::ManAtArms && !self.has_researched(player, crate::Tech::ManAtArms) {
+        if kind == UnitKind::WarGalley && !self.has_researched(player, crate::Tech::WarGalley) {
             return Err(EconomyError::TechRequirementMissing);
         }
         if building.research.is_some()
@@ -50,14 +50,6 @@ impl GameWorld {
             .players
             .get(&player)
             .ok_or(EconomyError::NotOwner)?;
-        let reserved = self
-            .buildings()
-            .filter(|b| b.player == player)
-            .map(|b| b.training_queue.len())
-            .sum::<usize>();
-        if usize::from(state.population_used) + reserved >= usize::from(state.population_cap) {
-            return Err(EconomyError::PopulationCap);
-        }
         let seconds = if kind == UnitKind::Villager {
             if state.stockpile.food < VILLAGE_RULES.villager_food_cost {
                 return Err(EconomyError::InsufficientFood);
@@ -83,7 +75,7 @@ impl GameWorld {
         Ok(())
     }
 
-    /// Cancel the active entry, refund its food, and release its reserved slot.
+    /// Cancel the active entry and refund its prepaid cost.
     /// Repeating cancellation on an empty queue cannot create resources.
     pub fn issue_cancel_training(
         &mut self,
@@ -114,12 +106,27 @@ impl GameWorld {
         Ok(())
     }
 
-    pub(super) fn advance_training(&mut self, changed: &mut Vec<crate::GameUnit>) {
-        let centers = self.economy.buildings.keys().copied().collect::<Vec<_>>();
+    pub(super) fn advance_training(&mut self, changed: &mut Vec<EntityId>) {
+        let centers = self
+            .economy
+            .buildings
+            .iter()
+            .filter(|(_, building)| !building.training_queue.is_empty())
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
         for id in centers {
             let Some(building) = self.economy.buildings.get_mut(&id) else {
                 continue;
             };
+            // Housing blocks progress, while the prepaid queue remains intact.
+            if self
+                .economy
+                .players
+                .get(&building.player)
+                .is_none_or(|state| state.population_used >= state.population_cap)
+            {
+                continue;
+            }
             let Some(entry) = building.training_queue.front_mut() else {
                 continue;
             };
@@ -131,19 +138,29 @@ impl GameWorld {
             if entry.progress_ticks != entry.total_ticks {
                 continue;
             }
+            let rally = building.rally_point;
             let footprint = building.footprint;
             let player = building.player;
-            if self
-                .player_economy(player)
-                .is_none_or(|state| state.population_used >= state.population_cap)
-            {
-                continue;
-            }
-            let spawn = perimeter(footprint).into_iter().find(|tile| {
+            // The isometric screen's bottom tip is max/max (screen y grows
+            // with world x+y). A rally point takes priority over that exit.
+            let front = footprint.max;
+            let toward = rally.map_or(front, |rally| rally.position.tile_floor());
+            let mut exits = perimeter(footprint);
+            exits.sort_by_key(|tile| {
+                (
+                    distance_squared(*tile, toward),
+                    distance_squared(*tile, front),
+                    tile.y,
+                    tile.x,
+                )
+            });
+            let spawn = exits.into_iter().find(|tile| {
                 self.unit_tile_passable(kind, *tile, &|| false)
                     .unwrap_or(false)
                     && !self.economy.blocked_tiles.contains(tile)
-                    && !self.units().any(|u| u.position.tile_floor() == *tile)
+                    && !self
+                        .units()
+                        .any(|u| !self.embarked(u.id) && u.position.tile_floor() == *tile)
             });
             let Some(tile) = spawn else {
                 continue;
@@ -151,17 +168,16 @@ impl GameWorld {
             let Ok(position) = position(tile) else {
                 continue;
             };
-            let spawned = match kind {
-                UnitKind::Militia => self.spawn_militia(player, position),
-                _ => self.spawn_kind(player, kind, position),
-            };
+            let kind = kind.upgraded(self.player_economy(player).map_or(0, |p| p.researched));
+            let spawned = self.spawn_kind(player, kind, position);
             if let Ok(unit) = spawned {
                 if let Some(building) = self.economy.buildings.get_mut(&id) {
                     building.training_queue.pop_front();
                 }
-                if let Some(unit) = self.unit(unit) {
-                    changed.push(unit);
+                if let Some(rally) = rally {
+                    self.apply_rally(unit, rally);
                 }
+                changed.push(unit);
             }
         }
     }

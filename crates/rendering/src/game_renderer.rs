@@ -31,8 +31,9 @@ use world_sprites::world_sprite_frames;
 #[path = "game_renderer/tests/emission/direct_emission.rs"]
 mod direct_emission_tests;
 pub use world_sprites::{
-    scene_building_visible, scene_resource_animation_frame, scene_resource_frame,
-    scene_resource_presentation, scene_unit_bounds, scene_unit_depth, scene_unit_render_key,
+    scene_building_hit, scene_building_visible, scene_resource_animation_frame,
+    scene_resource_frame, scene_resource_presentation, scene_unit_bounds, scene_unit_depth,
+    scene_unit_render_key,
 };
 pub fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
     world_sprites::scene_unit_animates(art, unit, camera)
@@ -73,6 +74,9 @@ pub(crate) mod wear_fixture;
 pub(crate) mod relief_fixture;
 
 #[cfg(test)]
+#[path = "game_renderer/tests/canvas/alpha.rs"]
+mod canvas_alpha_tests;
+#[cfg(test)]
 mod tests;
 
 #[cfg(test)]
@@ -86,6 +90,9 @@ pub(crate) mod minification_tests;
 #[cfg(test)]
 #[path = "game_renderer/tests/webgl.rs"]
 mod webgl_tests;
+
+mod atlas_upload;
+pub use atlas_upload::AtlasUpload;
 
 pub enum GameRenderer {
     WebGpu(Box<Renderer>),
@@ -131,6 +138,22 @@ fn context(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, Strin
         .map_err(error)
 }
 
+/// Canvas already owns alpha compositing; keep float-to-CSS formatting out
+/// of the WASM bundle and restore the caller's drawing state after each fill.
+fn fill_solid(context: &CanvasRenderingContext2d, colour: [f32; 4], rect: [f64; 4]) {
+    let [r, g, b, a] = colour;
+    context.save();
+    context.set_fill_style_str(&format!(
+        "rgb({},{},{})",
+        (r * 255.0) as u8,
+        (g * 255.0) as u8,
+        (b * 255.0) as u8
+    ));
+    context.set_global_alpha(context.global_alpha() * f64::from(a.clamp(0.0, 1.0)));
+    context.fill_rect(rect[0], rect[1], rect[2], rect[3]);
+    context.restore();
+}
+
 impl GameRenderer {
     pub async fn new(canvas: HtmlCanvasElement) -> Result<(Self, HtmlCanvasElement), String> {
         Self::new_with_backend(canvas, None).await
@@ -140,11 +163,14 @@ impl GameRenderer {
         canvas: HtmlCanvasElement,
         backend: Option<&str>,
     ) -> Result<(Self, HtmlCanvasElement), String> {
-        if backend != Some("canvas")
-            && backend != Some("webgl2")
-            && let Ok(renderer) = Renderer::new(canvas.clone()).await
-        {
-            return Ok((Self::WebGpu(Box::new(renderer)), canvas));
+        if backend != Some("canvas") && backend != Some("webgl2") {
+            match crate::web::health::within(Renderer::new(canvas.clone())).await {
+                Ok(renderer) => return Ok((Self::WebGpu(Box::new(renderer)), canvas)),
+                Err(error) => web_sys::console::warn_1(
+                    &format!("WebGPU initialization failed: {error}; falling back to WebGL2")
+                        .into(),
+                ),
+            }
         }
         let replacement = replace_canvas(&canvas)?;
         if backend != Some("canvas")
@@ -183,10 +209,11 @@ impl GameRenderer {
         crate::write_terrain_directory(art, &mut pixels)?;
         match self {
             Self::WebGpu(renderer) => renderer.upload_game_atlas(&pixels),
-            Self::WebGl(renderer) => renderer.upload(&pixels),
+            Self::WebGl(renderer) => renderer.upload_owned(pixels),
             Self::Canvas {
                 atlas,
                 source_atlas,
+                presentation,
                 ..
             } => {
                 if pixels.len() != crate::GAME_ATLAS_BYTES {
@@ -194,6 +221,7 @@ impl GameRenderer {
                 }
                 *atlas = [None, None, None, None];
                 *source_atlas = pixels;
+                presentation.invalidate();
                 Ok(())
             }
         }
@@ -244,14 +272,7 @@ impl GameRenderer {
                     let w = f64::from(sprite.radius[0]) * width;
                     let h = f64::from(sprite.radius[1]) * height;
                     if sprite.color != [1.0; 4] {
-                        let [r, g, b, a] = sprite.color;
-                        context.set_fill_style_str(&format!(
-                            "rgba({},{},{},{a})",
-                            (r * 255.0) as u8,
-                            (g * 255.0) as u8,
-                            (b * 255.0) as u8
-                        ));
-                        context.fill_rect(x, y, w, h);
+                        fill_solid(context, sprite.color, [x, y, w, h]);
                         continue;
                     }
                     let [mut sx, sy, sw, sh] =
@@ -341,28 +362,30 @@ impl GameRenderer {
                 camera.center[1],
                 camera.focus_elevation_meters,
             ]);
-            let mut instances = layers
-                .iter()
-                .map(|layer| match layer {
-                    WorldLayer::Surface(triangle) => {
-                        let mut packet =
-                            crate::web::surface_instance(triangle, camera.viewport, depth_origin);
-                        fog::surface_packet(&mut packet, fog::vertices(triangle, light));
-                        packet
-                    }
-                    WorldLayer::Selection(sprite, depth) => {
-                        let mut sprite = *sprite;
-                        sprite.depths =
-                            game_grid::selection_instance_depths(&sprite, *depth, depth_origin);
-                        sprite
-                    }
-                    WorldLayer::Sprite(sprite, _, depth, _) => {
-                        let mut sprite = *sprite;
-                        sprite.depths = [(*depth - depth_origin) as f32; 4];
-                        sprite
-                    }
-                })
-                .collect::<Vec<_>>();
+            let mut instances = match self {
+                Self::WebGpu(renderer) => std::mem::take(&mut renderer.staging),
+                _ => Vec::new(),
+            };
+            instances.clear();
+            instances.extend(layers.iter().map(|layer| match layer {
+                WorldLayer::Surface(triangle) => {
+                    let mut packet =
+                        crate::web::surface_instance(triangle, camera.viewport, depth_origin);
+                    fog::surface_packet(&mut packet, fog::vertices(triangle, light));
+                    packet
+                }
+                WorldLayer::Selection(sprite, depth) => {
+                    let mut sprite = *sprite;
+                    sprite.depths =
+                        game_grid::selection_instance_depths(&sprite, *depth, depth_origin);
+                    sprite
+                }
+                WorldLayer::Sprite(sprite, _, depth, _) => {
+                    let mut sprite = *sprite;
+                    sprite.depths = [(*depth - depth_origin) as f32; 4];
+                    sprite
+                }
+            }));
             if grid {
                 instances.extend(game_grid::grid_sprites(
                     &fog::grid_segments(&layers, camera, light),
@@ -370,16 +393,20 @@ impl GameRenderer {
                 ));
             }
             return match self {
-                Self::WebGpu(renderer) => renderer
-                    .render_sprites_with_clear(
-                        &instances,
-                        if fog_active {
-                            [0.0, 0.0, 0.0, 1.0]
-                        } else {
-                            [0.16, 0.29, 0.14, 1.0]
-                        },
-                    )
-                    .map(|counters| counters.did_present),
+                Self::WebGpu(renderer) => {
+                    let result = renderer
+                        .render_instances(
+                            &mut instances,
+                            if fog_active {
+                                [0.0, 0.0, 0.0, 1.0]
+                            } else {
+                                [0.16, 0.29, 0.14, 1.0]
+                            },
+                        )
+                        .map(|counters| counters.did_present);
+                    renderer.staging = instances;
+                    result
+                }
                 Self::WebGl(renderer) => renderer.render_with_clear(&mut instances, fog_active),
                 _ => unreachable!(),
             };
@@ -454,6 +481,7 @@ fn new_atlas(canvas: &HtmlCanvasElement) -> Result<HtmlCanvasElement, String> {
     Ok(atlas)
 }
 
+#[derive(Clone, Copy)]
 enum WorldLayer {
     Surface(ProjectedSurfaceTriangle),
     Selection(Sprite, f64),

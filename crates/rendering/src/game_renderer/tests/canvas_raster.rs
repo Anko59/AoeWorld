@@ -1,5 +1,6 @@
 //! Exact pixel/depth parity against the current scalar oracle.
 use super::*;
+use crate::surface_mesh::SurfacePoint;
 use aoe_core::ScreenPoint;
 use wasm_bindgen_test::wasm_bindgen_test;
 

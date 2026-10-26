@@ -47,9 +47,11 @@ fn feudal_menu_gates_and_art_follow_the_owning_players_age() {
         B::Market,
         B::WatchTower,
     ] {
-        assert!(!build_enabled(kind, stock, u16::MAX, Age::Dark));
-        assert!(build_enabled(kind, stock, u16::MAX, Age::Feudal));
+        assert!(!build_enabled(kind, stock, u32::MAX, Age::Dark));
+        assert!(build_enabled(kind, stock, u32::MAX, Age::Feudal));
     }
+    assert!(!build_enabled(B::Castle, stock, u32::MAX, Age::Feudal));
+    assert!(build_enabled(B::Castle, stock, u32::MAX, Age::Castle));
     for kind in [B::TownCenter, B::House, B::Mill, B::Barracks, B::Dock] {
         assert_ne!(
             age_sprite_slot(kind, 1000, false, Age::Dark),
@@ -127,11 +129,35 @@ fn preview_checks_every_footprint_tile_and_map_bounds() {
 fn art_selection_distinguishes_every_kind_and_construction_stage() {
     for rule in aoe_simulation::BUILDING_RULES {
         let kind = B::ALL[rule.kind as usize];
+        if kind == B::Bridge {
+            assert_eq!(sprite_slot(kind, 1000, false), 66);
+            assert_eq!(sprite_slot(kind, 0, false), 9);
+            assert_eq!(sprite_slot(kind, 999, false), 9);
+            // Collapsed bridge decks emit no rubble; this slot is never drawn.
+            assert_eq!(sprite_slot(kind, 1000, true), 20);
+            continue;
+        }
         if kind == B::Dock {
             assert_eq!(sprite_slot(kind, 1000, false), 23);
             assert_eq!(sprite_slot(kind, 0, false), 24);
             assert_eq!(sprite_slot(kind, 999, false), 24);
             assert_eq!(sprite_slot(kind, 1000, true), 25);
+            continue;
+        }
+        // Combined catalog retains four Castle buildings before six bridge pieces.
+        if let Some((_, ready, rubble, foundation)) = [
+            (B::Castle, 45, 49, 12),
+            (B::Monastery, 46, 50, 11),
+            (B::University, 47, 51, 12),
+            (B::SiegeWorkshop, 48, 52, 12),
+        ]
+        .into_iter()
+        .find(|(entry, _, _, _)| *entry == kind)
+        {
+            assert_eq!(sprite_slot(kind, 1000, false), ready);
+            assert_eq!(sprite_slot(kind, 0, false), foundation);
+            assert_eq!(sprite_slot(kind, 999, false), foundation);
+            assert_eq!(sprite_slot(kind, 1000, true), rubble);
             continue;
         }
         assert_eq!(
@@ -197,4 +223,77 @@ fn palisade_frames_follow_the_projected_line_and_junctions() {
         2
     );
     assert_eq!(wall_frame(at, |_| false), 2);
+}
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn market_panel_enables_only_affordable_trades_at_a_completed_owned_market() {
+    use aoe_protocol::MarketPrices;
+    let prices = MarketPrices {
+        wood: 100,
+        food: 103,
+        stone: 90,
+    };
+    let have = Stockpile {
+        food: 99,
+        wood: 100,
+        gold: 130,
+        stone: 500,
+    };
+    // Buy costs price plus 30%: wood 130 is affordable, food 133 and stone 117
+    // (90 * 1.3) are judged against 130 gold: only food is not. Sell pays
+    // price minus 30%: 70, 72 (103 * 0.7 floored) and 63.
+    assert_eq!(
+        market_panel(true, prices, have),
+        [
+            100.0, 103.0, 90.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 130.0, 133.0, 117.0, 70.0, 72.0, 63.0
+        ]
+    );
+    // Not a completed owned Market: prices and amounts stay visible, every
+    // button is off.
+    assert_eq!(
+        market_panel(false, prices, have),
+        [
+            100.0, 103.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 130.0, 133.0, 117.0, 70.0, 72.0, 63.0
+        ]
+    );
+}
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn market_rules_and_protocol_share_one_price_clamp() {
+    let rules = aoe_simulation::MARKET_RULES;
+    assert_eq!(rules.min_price, aoe_protocol::MARKET_MIN_PRICE);
+    assert_eq!(rules.max_price, aoe_protocol::MARKET_MAX_PRICE);
+    // Trades clamp to the same range the protocol validates against.
+    assert_eq!(rules.lower(rules.min_price), aoe_protocol::MARKET_MIN_PRICE);
+    assert_eq!(rules.raise(rules.max_price), aoe_protocol::MARKET_MAX_PRICE);
+}
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn town_center_menu_requires_castle_age_and_full_wood_and_stone_cost() {
+    let stock = Stockpile {
+        wood: 275,
+        stone: 100,
+        ..Default::default()
+    };
+    for age in [aoe_protocol::Age::Dark, aoe_protocol::Age::Feudal] {
+        assert!(!build_enabled(B::TownCenter, stock, 0, age));
+    }
+    assert!(build_enabled(
+        B::TownCenter,
+        stock,
+        0,
+        aoe_protocol::Age::Castle
+    ));
+    assert!(!build_enabled(
+        B::TownCenter,
+        Stockpile { stone: 99, ..stock },
+        0,
+        aoe_protocol::Age::Castle
+    ));
+    assert!(!build_enabled(
+        B::TownCenter,
+        Stockpile { wood: 274, ..stock },
+        0,
+        aoe_protocol::Age::Castle
+    ));
 }

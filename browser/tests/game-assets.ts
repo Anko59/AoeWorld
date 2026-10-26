@@ -172,6 +172,8 @@ const terrainSources = new Map<number, TerrainSource>([
 export async function gameAssets(
   page: Page,
   forceSynthetic = false,
+  additionalSprites: readonly (readonly [number, number])[] = [],
+  omitSprites: readonly number[] = [],
 ): Promise<string> {
   if (!forceSynthetic) {
     const response = await page.request.get("/asset-pack/manifest.json");
@@ -213,12 +215,18 @@ export async function gameAssets(
   const frames = [
     ["graphics", 3008, 50],
     ["graphics", 3004, 50],
+    ...additionalSprites.map(([id, count]) => ["graphics", id, count]),
     ...[15008, 15007, 15000, 15010, 15018, 15002, 15016].map((id) => [
       "terrain",
       id,
       100,
     ]),
     ["graphics", 435, 4],
+    // Current resource roles need opaque bodies for CI silhouette proofs.
+    // These generated pixels contain no original game assets.
+    ["graphics", 2560, 4],
+    ["graphics", 4479, 7],
+    ["graphics", 4482, 7],
     ["graphics", 4652, 14],
     ["graphics", 2296, 14],
     ...[
@@ -231,6 +239,7 @@ export async function gameAssets(
       [444, 5],
       [449, 5],
       [446, 5],
+      [4480, 10],
       [3575, 140],
       [3980, 75],
       [376, 1],
@@ -241,6 +250,7 @@ export async function gameAssets(
       [2089, 50],
     ].map(([id, count]) => ["graphics", id, count]),
   ].flatMap(([archive, id, count]) => {
+    if (omitSprites.includes(Number(id))) return [];
     const source = terrainSources.get(Number(id));
     return Array.from({ length: Number(count) }, (_, frame) => ({
       source: `${archive}.drs:[32, 112, 108, 115]:${id}`,

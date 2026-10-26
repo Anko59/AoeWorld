@@ -5,159 +5,65 @@ use serde::{
     de::{SeqAccess, Visitor},
 };
 use std::fmt;
+#[path = "economy/bounds.rs"]
+mod bounds;
+pub(super) use bounds::*;
 
-pub const MAX_ECONOMY_PLAYERS: usize = 16;
-pub const MAX_ECONOMY_BUILDINGS: usize = 256;
+pub const MAX_ECONOMY_PLAYERS: usize = 128;
+/// Buildings one message may carry. Larger own/remembered or fog-disabled
+/// views are synchronized over several deliveries, within the same frame cap.
+pub const MAX_ECONOMY_BUILDINGS: usize = 16_384;
+/// A complete retained view may span messages, up to 128 seats at 8,192 each.
+pub const MAX_RETAINED_BUILDINGS: usize = MAX_ECONOMY_PLAYERS * 8_192;
 /// Villagers one build order may name.
 pub const MAX_BUILD_GROUP: usize = 32;
 /// The population ceiling, however many houses stand.
 pub const MAX_POPULATION: u16 = 200;
-pub const MAX_TRAINING_QUEUE: usize = 5;
+/// The most a match rule may raise the population ceiling to; a wire state
+/// above it is invalid.
+pub const MAX_MATCH_POPULATION: u16 = 5_000;
+pub const MAX_TRAINING_QUEUE: usize = 15;
 
+/// A Market commodity; wood, food and stone trade for gold.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum UnitKind {
-    Villager,
-    Scout,
-    Militia,
-    FishingShip,
-    Archer,
-    Skirmisher,
-    Spearman,
-    ManAtArms,
+pub enum TradeResource {
+    Wood,
+    Food,
+    Stone,
 }
-impl UnitKind {
-    pub const ALL: [Self; 8] = [
-        Self::Villager,
-        Self::Scout,
-        Self::Militia,
-        Self::FishingShip,
-        Self::Archer,
-        Self::Skirmisher,
-        Self::Spearman,
-        Self::ManAtArms,
-    ];
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum BuildingKind {
-    TownCenter,
-    House,
-    LumberCamp,
-    MiningCamp,
-    Mill,
-    Farm,
-    Barracks,
-    PalisadeWall,
-    Outpost,
-    Dock,
-    ArcheryRange,
-    Stable,
-    Blacksmith,
-    Market,
-    WatchTower,
-    PalisadeGate,
-}
-impl BuildingKind {
-    pub const ALL: [Self; 16] = [
-        Self::TownCenter,
-        Self::House,
-        Self::LumberCamp,
-        Self::MiningCamp,
-        Self::Mill,
-        Self::Farm,
-        Self::Barracks,
-        Self::PalisadeWall,
-        Self::Outpost,
-        Self::Dock,
-        Self::ArcheryRange,
-        Self::Stable,
-        Self::Blacksmith,
-        Self::Market,
-        Self::WatchTower,
-        Self::PalisadeGate,
-    ];
-    /// Footprint side in tiles; the single wire-level size table.
-    pub const fn side(self) -> i32 {
+impl TradeResource {
+    pub const ALL: [Self; 3] = [Self::Wood, Self::Food, Self::Stone];
+    /// The stockpile the commodity moves.
+    pub const fn kind(self) -> ResourceKind {
         match self {
-            Self::TownCenter | Self::Market | Self::PalisadeGate => 4,
-            Self::House | Self::LumberCamp | Self::MiningCamp | Self::Mill => 2,
-            Self::Farm
-            | Self::Barracks
-            | Self::Dock
-            | Self::ArcheryRange
-            | Self::Stable
-            | Self::Blacksmith => 3,
-            Self::PalisadeWall | Self::Outpost | Self::WatchTower => 1,
-        }
-    }
-    pub const fn depth(self) -> i32 {
-        if matches!(self, Self::PalisadeGate) {
-            1
-        } else {
-            self.side()
+            Self::Wood => ResourceKind::Wood,
+            Self::Food => ResourceKind::Food,
+            Self::Stone => ResourceKind::Stone,
         }
     }
 }
-/// The player's age; Feudal gates buildings and economy research.
+pub use aoe_core::{MARKET_MAX_PRICE, MARKET_MIN_PRICE};
+/// A player's Market commodity prices, in gold per 100 units.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Age {
-    Dark,
-    Feudal,
+pub struct MarketPrices {
+    pub wood: u16,
+    pub food: u16,
+    pub stone: u16,
 }
-/// A technology; bit `1 << tech as u8` of `GameplayPlayerState::researched`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Tech {
-    Loom,
-    TownWatch,
-    FeudalAge,
-    DoubleBitAxe,
-    HorseCollar,
-    GoldMining,
-    StoneMining,
-    Wheelbarrow,
-    ManAtArms,
-    Forging,
-    ScaleMailArmor,
-    ScaleBardingArmor,
-    Fletching,
-    PaddedArcherArmor,
-}
-impl Tech {
-    pub const ALL: [Tech; 14] = [
-        Tech::Loom,
-        Tech::TownWatch,
-        Tech::FeudalAge,
-        Tech::DoubleBitAxe,
-        Tech::HorseCollar,
-        Tech::GoldMining,
-        Tech::StoneMining,
-        Tech::Wheelbarrow,
-        Tech::ManAtArms,
-        Tech::Forging,
-        Tech::ScaleMailArmor,
-        Tech::ScaleBardingArmor,
-        Tech::Fletching,
-        Tech::PaddedArcherArmor,
-    ];
-    pub const fn building(self) -> BuildingKind {
-        match self {
-            Self::Loom | Self::TownWatch | Self::FeudalAge | Self::Wheelbarrow => {
-                BuildingKind::TownCenter
-            }
-            Self::DoubleBitAxe => BuildingKind::LumberCamp,
-            Self::HorseCollar => BuildingKind::Mill,
-            Self::GoldMining | Self::StoneMining => BuildingKind::MiningCamp,
-            Self::ManAtArms => BuildingKind::Barracks,
-            Self::Forging
-            | Self::ScaleMailArmor
-            | Self::ScaleBardingArmor
-            | Self::Fletching
-            | Self::PaddedArcherArmor => BuildingKind::Blacksmith,
+impl Default for MarketPrices {
+    /// DE starts every commodity at 100 gold per 100 units.
+    fn default() -> Self {
+        Self {
+            wood: 100,
+            food: 100,
+            stone: 100,
         }
     }
-    pub const fn bit(self) -> u32 {
-        1 << self as u8
-    }
 }
+
+mod kinds;
+pub use kinds::{Age, BuildingKind, Tech, UnitKind};
+
 /// A foundation is built by villagers; only a complete building works.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ConstructionState {
@@ -210,7 +116,9 @@ pub struct GameplayPlayerState {
     pub population_cap: u16,
     pub age: Age,
     /// Bit `1 << tech as u8` is set once researched.
-    pub researched: u32,
+    pub researched: u64,
+    /// The player's Market commodity prices, in gold per 100 units.
+    pub market_prices: MarketPrices,
 }
 /// The most recent damage taken. A client plays a hit reaction when `tick`
 /// is newer than the one it last saw, and a swing for `attacker`.
@@ -256,20 +164,33 @@ pub struct GameplayBuildingState {
     /// Age at the last observation; fog memory must not use the owner's live age.
     pub age: Age,
     pub gate_open: bool,
+    pub rally_point: Option<super::RallyPoint>,
+    pub farm_reseeds: u8,
+    #[serde(deserialize_with = "super::garrison::bounded_garrison")]
+    pub garrison: Vec<super::GarrisonUnitState>,
 }
 
+fn valid_prices(prices: MarketPrices) -> bool {
+    [prices.wood, prices.food, prices.stone]
+        .iter()
+        .all(|price| (MARKET_MIN_PRICE..=MARKET_MAX_PRICE).contains(price))
+}
 fn valid_research(player: &GameplayPlayerState) -> bool {
     let known = Tech::ALL.iter().fold(0, |bits, tech| bits | tech.bit());
     player.researched & !known == 0
-        && (player.age == Age::Feudal || player.researched & !Tech::Loom.bit() == 0)
-        && (player.age == Age::Feudal) == (player.researched & Tech::FeudalAge.bit() != 0)
+        && (player.age >= Age::Feudal || player.researched & !Tech::Loom.bit() == 0)
+        && (player.age >= Age::Feudal) == (player.researched & Tech::FeudalAge.bit() != 0)
+        && (player.age == Age::Castle) == (player.researched & Tech::CastleAge.bit() != 0)
+        && (player.age == Age::Castle
+            || player.researched & Tech::ALL[15..].iter().fold(0, |bits, t| bits | t.bit()) == 0)
+        && valid_prices(player.market_prices)
 }
 pub(super) fn valid_players(players: &[GameplayPlayerState]) -> bool {
     players.len() <= MAX_ECONOMY_PLAYERS
         && players.iter().all(valid_research)
         && players
             .iter()
-            .all(|player| player.population_cap <= MAX_POPULATION)
+            .all(|player| player.population_cap <= MAX_MATCH_POPULATION)
         && players
             .windows(2)
             .all(|pair| pair[0].player < pair[1].player)
@@ -277,14 +198,48 @@ pub(super) fn valid_players(players: &[GameplayPlayerState]) -> bool {
 pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
     buildings.len() <= MAX_ECONOMY_BUILDINGS
         && buildings.iter().all(|building| {
-            building.footprint.min.x >= 0
+            if !super::automation::valid_reseeds(building) || !super::garrison::valid(building) {
+                return false;
+            }
+            building.rally_point.is_none_or(|r| {
+                r.position.x >= 0
+                    && r.position.y >= 0
+                    && !matches!(
+                        building.kind,
+                        BuildingKind::House
+                            | BuildingKind::Farm
+                            | BuildingKind::Mill
+                            | BuildingKind::LumberCamp
+                            | BuildingKind::MiningCamp
+                            | BuildingKind::Bridge
+                            | BuildingKind::PalisadeWall
+                            | BuildingKind::PalisadeGate
+                            | BuildingKind::Outpost
+                            | BuildingKind::Blacksmith
+                            | BuildingKind::Market
+                            | BuildingKind::WatchTower
+                            | BuildingKind::University
+                            | BuildingKind::Castle
+                    )
+                    && match r.target {
+                        super::RallyTarget::Ground(p) => p == r.position,
+                        _ => true,
+                    }
+            }) && building.footprint.min.x >= 0
                 && building.footprint.min.y >= 0
                 && building.hp > 0
                 && (!building.gate_open
                     || (building.kind == BuildingKind::PalisadeGate
                         && building.construction == ConstructionState::Complete))
-                && building.footprint.width() == building.kind.side()
-                && building.footprint.height() == building.kind.depth()
+                && if building.kind == BuildingKind::Bridge {
+                    (building.footprint.width() == 1
+                        && (3..=42).contains(&building.footprint.height()))
+                        || (building.footprint.height() == 1
+                            && (3..=42).contains(&building.footprint.width()))
+                } else {
+                    building.footprint.width() == building.kind.side()
+                        && building.footprint.height() == building.kind.depth()
+                }
                 && building.progress_permille <= 1000
                 && (building.construction == ConstructionState::Complete)
                     == (building.progress_permille == 1000)
@@ -308,14 +263,36 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                             | (BuildingKind::Barracks, UnitKind::Militia)
                             | (
                                 BuildingKind::Barracks,
-                                UnitKind::Spearman | UnitKind::ManAtArms
+                                UnitKind::Spearman
+                                    | UnitKind::ManAtArms
+                                    | UnitKind::LongSwordsman
+                                    | UnitKind::Pikeman
                             )
                             | (
                                 BuildingKind::ArcheryRange,
-                                UnitKind::Archer | UnitKind::Skirmisher
+                                UnitKind::Archer
+                                    | UnitKind::Skirmisher
+                                    | UnitKind::Crossbowman
+                                    | UnitKind::EliteSkirmisher
                             )
-                            | (BuildingKind::Stable, UnitKind::Scout)
-                            | (BuildingKind::Dock, UnitKind::FishingShip)
+                            | (
+                                BuildingKind::Stable,
+                                UnitKind::Scout | UnitKind::Knight | UnitKind::LightCavalry
+                            )
+                            | (BuildingKind::Monastery, UnitKind::Monk)
+                            | (
+                                BuildingKind::SiegeWorkshop,
+                                UnitKind::Mangonel | UnitKind::BatteringRam
+                            )
+                            | (
+                                BuildingKind::Dock,
+                                UnitKind::FishingShip
+                                    | UnitKind::Galley
+                                    | UnitKind::FireShip
+                                    | UnitKind::DemolitionShip
+                                    | UnitKind::TransportShip
+                                    | UnitKind::WarGalley
+                            )
                     ) && entry.total_ticks > 0
                         && entry.progress_ticks <= entry.total_ticks
                 })
@@ -324,7 +301,10 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
 }
 pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
     units.iter().all(|unit| {
-        unit.facing < 8
+        unit.cargo_count <= 5
+            && (unit.cargo_count == 0 || (unit.kind == UnitKind::TransportShip && unit.hp > 0))
+            && unit.facing < 8
+            && super::automation::valid_auto_scout(unit)
             && unit.max_hp > 0
             && unit.hp <= unit.max_hp
             && unit.death_tick.is_none_or(|_| unit.hp == 0)
@@ -349,7 +329,8 @@ pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
             && unit.carried.is_none_or(|load| {
                 load.amount > 0
                     && match unit.kind {
-                        UnitKind::Villager => load.amount <= 13,
+                        // Hand Cart and Wheelbarrow give 20; Heavy Plow adds one for farmers.
+                        UnitKind::Villager => load.amount <= 21,
                         UnitKind::FishingShip => {
                             load.kind == ResourceKind::Food && load.amount <= 15
                         }
@@ -360,54 +341,4 @@ pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
                 || matches!(unit.kind, UnitKind::Villager | UnitKind::FishingShip)
                     && unit.gathering == Some(ResourceKind::Food))
     })
-}
-
-pub(super) fn bounded<'de, D: Deserializer<'de>, T: Deserialize<'de>, const LIMIT: usize>(
-    deserializer: D,
-) -> Result<Vec<T>, D::Error> {
-    struct Items<T, const N: usize>(std::marker::PhantomData<T>);
-    impl<'de, T: Deserialize<'de>, const N: usize> Visitor<'de> for Items<T, N> {
-        type Value = Vec<T>;
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(formatter, "at most {N} economy entries")
-        }
-        fn visit_seq<A: SeqAccess<'de>>(self, mut sequence: A) -> Result<Self::Value, A::Error> {
-            if sequence.size_hint().is_some_and(|size| size > N) {
-                return Err(serde::de::Error::custom("economy collection exceeds limit"));
-            }
-            let mut items = Vec::new();
-            while items.len() < N {
-                match sequence.next_element()? {
-                    Some(item) => items.push(item),
-                    None => return Ok(items),
-                }
-            }
-            if sequence.next_element::<serde::de::IgnoredAny>()?.is_some() {
-                return Err(serde::de::Error::custom("economy collection exceeds limit"));
-            }
-            Ok(items)
-        }
-    }
-    deserializer.deserialize_seq(Items::<T, LIMIT>(std::marker::PhantomData))
-}
-pub(super) fn bounded_players<'de, D: Deserializer<'de>>(
-    d: D,
-) -> Result<Vec<GameplayPlayerState>, D::Error> {
-    bounded::<D, _, MAX_ECONOMY_PLAYERS>(d)
-}
-pub(super) fn bounded_buildings<'de, D: Deserializer<'de>>(
-    d: D,
-) -> Result<Vec<GameplayBuildingState>, D::Error> {
-    bounded::<D, _, MAX_ECONOMY_BUILDINGS>(d)
-}
-pub(super) fn bounded_builders<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::Error> {
-    bounded::<D, _, MAX_BUILD_GROUP>(d)
-}
-pub(super) fn bounded_building_removals<'de, D: Deserializer<'de>>(
-    d: D,
-) -> Result<Vec<EntityId>, D::Error> {
-    bounded::<D, _, MAX_ECONOMY_BUILDINGS>(d)
-}
-fn bounded_training<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<TrainingState>, D::Error> {
-    bounded::<D, _, MAX_TRAINING_QUEUE>(d)
 }

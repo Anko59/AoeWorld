@@ -399,3 +399,6 @@ fn identical_origin_and_destination_emit_one_tile_path() {
         RoutePlannerPoll::Complete
     );
 }
+
+#[path = "pocket_budget.rs"]
+mod pocket_budget;

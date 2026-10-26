@@ -120,7 +120,7 @@ fn native_tree_family_rectangles_preserve_outside_and_negative_anchors() {
 }
 
 #[wasm_bindgen_test]
-fn equal_uv_on_four_pages_copy_masks_alpha_and_keep_source_ids_separate() {
+fn equal_uv_on_five_pages_copy_masks_alpha_and_keep_source_ids_separate() {
     let mut manifest = fixture();
     let frame = &mut manifest.frames[0];
     // This ID is deliberately unrelated to runtime page 0/1/2: copying only
@@ -136,7 +136,7 @@ fn equal_uv_on_four_pages_copy_masks_alpha_and_keep_source_ids_separate() {
     color[4..8].copy_from_slice(&[99, 99, 99, 99]);
     shadow[8..12].copy_from_slice(&[1, 2, 3, 80]);
     let mut addresses = Vec::new();
-    for page in 0..4 {
+    for page in 0..5 {
         color[..4].copy_from_slice(&[page as u8 + 10, 20, 30, 120]);
         let placed = Placement {
             page,
@@ -164,7 +164,7 @@ fn equal_uv_on_four_pages_copy_masks_alpha_and_keep_source_ids_separate() {
             .all(|pair| pair[0].uv == pair[1].uv && pair[0].page != pair[1].page)
     );
     let bad = Placement {
-        page: 4,
+        page: 5,
         x: 2,
         y: 2,
         width: 3,
@@ -398,4 +398,93 @@ fn dressing_catalog_prefixes_preserve_native_signed_hotspots_and_object_page() {
         assert_eq!(frame.atlas.page, 2);
         assert_eq!(frame.anchor, anchor.map(|v| v as f32));
     }
+}
+
+/// The former half-resolution sources (Feudal trial SLPs, shared construction
+/// and ambient layers) must keep one atlas texel per source pixel.
+#[wasm_bindgen_test]
+fn formerly_halved_sources_plan_and_copy_at_full_native_resolution() {
+    for id in [
+        24, 1009, 2278, 2655, 2235, 133, 741, 737, 733, 895, 903, 3600, 4616, 380, 388, 93, 4518,
+        4520, 236, 239, 4397,
+    ] {
+        let mut manifest = fixture();
+        let frame = &mut manifest.frames[0];
+        frame.source = format!("graphics.drs:[32, 112, 108, 115]:{id}");
+        (frame.x, frame.y, frame.width, frame.height) = (4, 3, 5, 3);
+        let place = plan(&manifest, &[0], &[AtlasDomain::Objects]).unwrap()[0];
+        assert_eq!((place.width, place.height), (5, 3), "SLP {id}");
+        let mut source = vec![0; GAME_ATLAS_PAGE_BYTES];
+        for row in 0..3_usize {
+            for col in 0..5_usize {
+                let at = ((3 + row) * GAME_ATLAS_SIDE as usize + 4 + col) * 4;
+                source[at..at + 4].copy_from_slice(&[1 + col as u8, 1 + row as u8, id as u8, 255]);
+            }
+        }
+        let mut pixels = vec![0; GAME_ATLAS_BYTES];
+        copy_plane(
+            &manifest.frames[0],
+            place,
+            Plane::Color,
+            &source,
+            &mut pixels,
+            [65, 145, 245],
+        )
+        .unwrap();
+        for row in 0..3_usize {
+            for col in 0..5_usize {
+                let at = usize::from(place.page) * GAME_ATLAS_PAGE_BYTES
+                    + ((usize::from(place.y) + row) * GAME_ATLAS_SIDE as usize
+                        + usize::from(place.x)
+                        + col)
+                        * 4;
+                assert_eq!(
+                    &pixels[at..at + 4],
+                    &[1 + col as u8, 1 + row as u8, id as u8, 255],
+                    "SLP {id} texel {col},{row}"
+                );
+            }
+        }
+        // A copy rectangle that still assumed two source pixels per texel fails.
+        let mut halved = place;
+        halved.width = 3;
+        assert!(
+            copy_plane(
+                &manifest.frames[0],
+                halved,
+                Plane::Color,
+                &source,
+                &mut pixels,
+                [65, 145, 245]
+            )
+            .is_err()
+        );
+    }
+}
+
+#[wasm_bindgen_test]
+fn repeated_masked_frames_share_storage_and_upload_once_within_the_fixed_budget() {
+    let mut manifest = fixture();
+    manifest.frames[0].width = 1800;
+    manifest.frames[0].height = 1800;
+    let selected = [0; 6];
+    let domains = [
+        AtlasDomain::Objects,
+        AtlasDomain::Objects,
+        AtlasDomain::Objects,
+        AtlasDomain::Terrain,
+        AtlasDomain::Shared,
+        AtlasDomain::Shared,
+    ];
+    let places = plan(&manifest, &selected, &domains).unwrap();
+    assert_eq!(places.len(), 6, "all semantic entries survive");
+    assert_eq!(copy_order(&manifest, &selected, &places), [0, 3, 4, 5]);
+    assert_eq!(places[0], places[1]);
+    assert_eq!(places[1], places[2]);
+    assert_eq!(places[0].page, 2);
+    assert_eq!(places[3].page, 0);
+    assert_ne!(
+        places[4], places[5],
+        "unmasked entries can bake different colours"
+    );
 }

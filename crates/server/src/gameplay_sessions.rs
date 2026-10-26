@@ -9,6 +9,7 @@ impl GameplayService {
 
     /// Ends all sessions bound to this world before a replacement is activated.
     pub async fn retire(&self, replacement_world_id: u64) {
+        self.cancel_preparation();
         let mut ownership = self.ownership.lock().await;
         let mut sessions = self.sessions.lock().await;
         for session in sessions.values() {
@@ -17,16 +18,20 @@ impl GameplayService {
             });
         }
         sessions.clear();
-        ownership.controller = None;
+        for slot in &mut ownership.slots {
+            slot.lease = None;
+        }
     }
 
     pub async fn disconnect(&self, session_id: u64) {
         let mut ownership = self.ownership.lock().await;
         let mut sessions = self.sessions.lock().await;
         let removed = sessions.remove(&session_id);
-        if removed.is_some_and(|session| session.role == GameplayRole::Controller)
-            && let Some(lease) = ownership
-                .controller
+        if let Some(index) = removed
+            .filter(|session| session.role == GameplayRole::Controller)
+            .and_then(|session| session.slot)
+            && let Some(lease) = ownership.slots[index]
+                .lease
                 .as_mut()
                 .filter(|lease| lease.session_id == session_id)
         {
@@ -34,13 +39,35 @@ impl GameplayService {
         }
     }
 
-    /// Returns whether a current gameplay controller owns this resume token.
+    /// Slot occupancy for a match host: AI slots holding a live connection,
+    /// AI slots in all, and whether any human slot holds one.
+    pub(crate) async fn presence(&self) -> (usize, usize, bool) {
+        let ownership = self.ownership.lock().await;
+        let (mut live_ai, mut ai, mut human) = (0, 0, false);
+        for slot in &ownership.slots {
+            let live = slot
+                .lease
+                .is_some_and(|lease| lease.disconnected_at.is_none());
+            if slot.human {
+                human |= live;
+            } else {
+                ai += 1;
+                live_ai += usize::from(live);
+            }
+        }
+        (live_ai, ai, human)
+    }
+
+    /// Returns whether a connected controller of a human slot owns this token.
+    /// AI slots never authorize server administration.
     pub async fn is_controller(&self, token: ResumeToken) -> bool {
-        self.ownership
-            .lock()
-            .await
-            .controller
-            .is_some_and(|lease| lease.token == token && lease.disconnected_at.is_none())
+        self.ownership.lock().await.slots.iter().any(|slot| {
+            slot.human
+                && slot.token == token
+                && slot
+                    .lease
+                    .is_some_and(|lease| lease.disconnected_at.is_none())
+        })
     }
 
     pub(super) async fn send_to(&self, session_id: u64, message: GameplayServerMessage) {

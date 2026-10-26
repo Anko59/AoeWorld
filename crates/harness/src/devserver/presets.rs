@@ -14,6 +14,7 @@ pub(crate) const PRESETS: &[(&str, f64, f64)] = &[
     ("alps", 46.6, 10.5),
     ("brittany", 48.39, -4.49),
     ("finland", 61.5, 25.5),
+    ("france", 46.6, 2.5),
 ];
 
 /// The setup form's map sizes in kilometres (`#start-size`).
@@ -21,6 +22,7 @@ pub(crate) const SIZES: &[(&str, u64)] = &[
     ("tiny", 30),
     ("small", 120),
     ("large", 480),
+    ("country", 960),
     ("giant", 1920),
 ];
 
@@ -60,14 +62,17 @@ fn named(text: &str) -> Result<Value> {
     let (preset, size) = text
         .split_once(':')
         .ok_or_else(|| format!("preset `{text}`: use <preset>:<size>, e.g. finland:tiny"))?;
-    let (_, latitude, longitude) = PRESETS
-        .iter()
-        .find(|(id, ..)| *id == preset)
-        .ok_or_else(|| format!("preset `{preset}`: use paris, alps, brittany or finland"))?;
+    let (_, latitude, longitude) =
+        PRESETS
+            .iter()
+            .find(|(id, ..)| *id == preset)
+            .ok_or_else(|| {
+                format!("preset `{preset}`: use paris, alps, brittany, finland or france")
+            })?;
     let (_, km) = SIZES
         .iter()
         .find(|(id, _)| *id == size)
-        .ok_or_else(|| format!("size `{size}`: use tiny, small, large or giant"))?;
+        .ok_or_else(|| format!("size `{size}`: use tiny, small, large, country or giant"))?;
     Ok(request(
         degrees_e7(*latitude),
         degrees_e7(*longitude),

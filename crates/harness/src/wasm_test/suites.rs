@@ -51,6 +51,43 @@ pub(crate) fn packages() -> Vec<&'static str> {
     packages
 }
 
+pub(super) fn focused_arguments(package: &str, filter: &str) -> Result<Vec<String>> {
+    if filter.trim().is_empty() {
+        return Err("AOE_WASM_TEST_FILTER must name a test or module".into());
+    }
+    let suite = SUITES
+        .iter()
+        .find(|suite| suite.package == package && suite.target == ["--lib"])
+        .ok_or("AOE_WASM_TEST_PACKAGE must be aoe-client or aoe-rendering")?;
+    let mut arguments = suite.cargo_arguments();
+    arguments.extend(["--".into(), filter.into()]);
+    Ok(arguments)
+}
+
+/// Developer-selected tests use the same driver, capabilities and deadline.
+/// They do not write the full-suite PASS report.
+pub(crate) fn run_selected() -> Result<()> {
+    let package = std::env::var("AOE_WASM_TEST_PACKAGE")?;
+    let filter = std::env::var("AOE_WASM_TEST_FILTER")?;
+    let arguments = focused_arguments(&package, &filter)?;
+    let root = std::env::current_dir()?.canonicalize()?;
+    let port = unused_port()?;
+    let _driver = start_driver(port)?;
+    let remote = format!("http://127.0.0.1:{port}/");
+    let capabilities = root.join("browser/webdriver.json");
+    let capabilities = capabilities
+        .to_str()
+        .ok_or("non-UTF-8 WebDriver configuration path")?;
+    let arguments = arguments.iter().map(String::as_str).collect::<Vec<_>>();
+    crate::process::run_with_env(
+        "cargo",
+        &arguments,
+        &runner_environment(&remote, capabilities),
+        CARGO_DEADLINE,
+    )?;
+    Ok(())
+}
+
 /// What one suite printed and how it ended.
 pub(crate) struct SuiteRun {
     pub(crate) package: &'static str,

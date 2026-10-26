@@ -1,7 +1,6 @@
 //! Per-tick attack resolution for units that hold an attack order.
-use super::{Attacker, HitRecord, MELEE_RANGE_SUBUNITS, damage_dealt, unit_combat};
-use crate::game_world::facing_for;
-use crate::{GameUnit, GameWorld, UnitTask};
+use super::{Attacker, HitRecord, MELEE_RANGE_SUBUNITS, unit_combat};
+use crate::{GameWorld, UnitTask};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, Tick, TileRect, WorldPosition};
 
 /// What an attacker is walking to and hitting.
@@ -26,7 +25,7 @@ impl Goal {
         };
         (x - cx) * (x - cx) + (y - cy) * (y - cy)
     }
-    pub(super) fn centre(&self) -> WorldPosition {
+    pub(in crate::game_world) fn centre(&self) -> WorldPosition {
         match *self {
             Goal::Unit(at) => at,
             Goal::Building(rect) => WorldPosition::new(
@@ -41,7 +40,8 @@ impl GameWorld {
     /// A live unit or building of another player, else `None`.
     pub(crate) fn attack_goal(&self, target: EntityId, attacker: PlayerId) -> Option<Goal> {
         if let Some(unit) = self.unit(target) {
-            return (unit.hp > 0 && unit.player != attacker).then_some(Goal::Unit(unit.position));
+            return (unit.hp > 0 && unit.player != attacker && !self.embarked(target))
+                .then_some(Goal::Unit(unit.position));
         }
         if let Some(animal) = self.animal(target) {
             return (animal.hp > 0).then_some(Goal::Unit(animal.position));
@@ -53,8 +53,9 @@ impl GameWorld {
             .map(|building| Goal::Building(building.footprint))
     }
 
-    pub(crate) fn advance_combat(&mut self, changed: &mut Vec<GameUnit>) {
+    pub(crate) fn advance_combat(&mut self, changed: &mut Vec<EntityId>) {
         self.combat.stats = Default::default();
+        self.combat.far_searches = super::approach::MAX_FAR_SEARCHES_PER_TICK;
         self.advance_projectiles(changed);
         let now = self.tick.0;
         while let Some(&(due, id)) = self.combat.dying.first() {
@@ -71,9 +72,10 @@ impl GameWorld {
             self.step_attacker(id, now, changed);
         }
         self.advance_towers(changed);
+        self.advance_healing(changed);
     }
 
-    fn step_attacker(&mut self, id: EntityId, now: u64, changed: &mut Vec<GameUnit>) {
+    fn step_attacker(&mut self, id: EntityId, now: u64, changed: &mut Vec<EntityId>) {
         let (Some(&index), Some(attacker)) = (
             self.lookup.get(&id),
             self.combat.attackers.get(&id).copied(),
@@ -87,14 +89,15 @@ impl GameWorld {
             self.end_attack(id, changed);
             return;
         };
-        if unit_combat(before.kind).attack_kind == super::DamageKind::Pierce
+        if (unit_combat(before.kind).attack_kind == super::DamageKind::Pierce
+            || before.kind == crate::UnitKind::Mangonel)
             && !self.target_visible_to(before.player, attacker.target)
         {
             self.end_attack(id, changed);
             return;
         }
         let stats = self.unit_stats(id).unwrap_or(*unit_combat(before.kind));
-        let range = i64::from(stats.range) * MELEE_RANGE_SUBUNITS;
+        let range = super::super::navy::attack_range(&stats);
         let distance = goal.distance_squared(before.position);
         if distance > range * range {
             self.approach(id, index, attacker, goal, now, changed);
@@ -108,13 +111,11 @@ impl GameWorld {
         if self.units[index].order.is_some() || before.moving || before.planning {
             self.stop_movement(index);
         }
-        let (centre, position) = (goal.centre(), before.position);
         let state = &mut self.units[index].state;
-        state.facing = facing_for(
-            i64::from(centre.x) - i64::from(position.x),
-            i64::from(centre.y) - i64::from(position.y),
-            state.facing,
-        );
+        match goal {
+            Goal::Unit(target) => state.face_towards(target),
+            Goal::Building(footprint) => state.face_footprint(footprint),
+        }
         state.task = UnitTask::Attacking;
         if now >= self.units[index].next_hit_tick {
             self.units[index].next_hit_tick = now + u64::from(self.attack_period_ticks(&before));
@@ -123,7 +124,7 @@ impl GameWorld {
         if let Some(&index) = self.lookup.get(&id)
             && self.units[index].state != before
         {
-            changed.push(self.units[index].state);
+            changed.push(self.units[index].state.id);
         }
     }
 
@@ -134,7 +135,7 @@ impl GameWorld {
         attacker: Attacker,
         goal: Goal,
         now: u64,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) {
         let before = self.units[index].state;
         let order = self.units[index].order;
@@ -142,16 +143,72 @@ impl GameWorld {
             self.end_attack(id, changed);
             return;
         }
-        // The firing-position search runs only when the repath timer expires.
-        if now >= attacker.repath_tick {
+        // The firing-position search runs only when the repath timer expires,
+        // and never while the current route is still being searched: a new
+        // order would restart that search, and a chase whose search needs
+        // longer than the repath interval would never move at all.
+        if now >= attacker.repath_tick && !self.waiting_for_route(index) {
             let next_repath = now.saturating_add(self.repath_ticks());
             if let Some(entry) = self.combat.attackers.get_mut(&id) {
                 entry.repath_tick = next_repath;
             }
-            let destination = self.attack_destination(id, &goal).ok().flatten();
+            let centre = goal.centre().tile_floor();
+            let from = self.units[index].state.position.tile_floor();
+            let reusable = attacker.far.filter(|far| {
+                far.centre == centre
+                    && i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
+                        > super::approach::FAR_REUSE_TILES
+            });
+            // A search for a target beyond the local search's reach ends in the
+            // far fallback, first search or repeat; both spend the budget.
+            let counts_as_far = attacker.far.is_some()
+                || i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
+                    > super::approach::FAR_REUSE_TILES;
+            let destination = if let Some(far) = reusable {
+                Some(far.destination)
+            } else if counts_as_far && self.combat.far_searches == 0 {
+                // Over this tick's budget: keep walking and look again next tick.
+                if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                    entry.repath_tick = now.saturating_add(1);
+                }
+                self.units[index].state.task = UnitTask::Attacking;
+                if self.units[index].state != before {
+                    changed.push(self.units[index].state.id);
+                }
+                return;
+            } else {
+                let search = self.attack_search(id, &goal).ok();
+                if counts_as_far {
+                    self.combat.far_searches -= 1;
+                }
+                let far = search
+                    .as_ref()
+                    .filter(|search| search.far)
+                    .and_then(|search| search.destination)
+                    .map(|destination| super::approach::FarAttack {
+                        centre,
+                        destination,
+                    });
+                if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                    entry.far = far;
+                }
+                search.and_then(|search| search.destination)
+            };
+            // A far chase follows its target loosely: it is re-planned once
+            // the target has moved more than a quarter of the remaining way.
+            // Re-planning every attacker each second toward a target a few
+            // tiles off was most of the route demand of a 99-AI match.
+            let here = self.units[index].state.position.tile_floor();
             let stale = match (order, destination) {
                 (None, _) => true,
-                (Some(order), Some(at)) => order.target_tile != at.tile_floor(),
+                (Some(order), Some(at)) => {
+                    let to = at.tile_floor();
+                    let moved = (order.target_tile.x - to.x)
+                        .abs()
+                        .max((order.target_tile.y - to.y).abs());
+                    let remaining = (here.x - to.x).abs().max((here.y - to.y).abs());
+                    moved > (remaining / 4).max(0)
+                }
                 (Some(_), None) => true,
             };
             if stale {
@@ -163,7 +220,7 @@ impl GameWorld {
         }
         self.units[index].state.task = UnitTask::Attacking;
         if self.units[index].state != before {
-            changed.push(self.units[index].state);
+            changed.push(self.units[index].state.id);
         }
     }
 
@@ -172,7 +229,7 @@ impl GameWorld {
         id: EntityId,
         destination: Option<WorldPosition>,
         now: u64,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) {
         let Some(at) = destination else {
             self.end_attack(id, changed);
@@ -191,7 +248,7 @@ impl GameWorld {
     }
 
     /// Stops the attack: the target is gone, unreachable or friendly.
-    pub(crate) fn end_attack(&mut self, id: EntityId, changed: &mut Vec<GameUnit>) {
+    pub(crate) fn end_attack(&mut self, id: EntityId, changed: &mut Vec<EntityId>) {
         self.combat.attackers.remove(&id);
         let Some(&index) = self.lookup.get(&id) else {
             return;
@@ -206,10 +263,10 @@ impl GameWorld {
                 UnitTask::Idle
             };
         }
-        changed.push(self.units[index].state);
+        changed.push(self.units[index].state.id);
     }
 
-    fn strike(&mut self, attacker_id: EntityId, target: EntityId, changed: &mut Vec<GameUnit>) {
+    fn strike(&mut self, attacker_id: EntityId, target: EntityId, changed: &mut Vec<EntityId>) {
         let Some(&attacker_index) = self.lookup.get(&attacker_id) else {
             return;
         };
@@ -218,9 +275,38 @@ impl GameWorld {
             .unwrap_or(*unit_combat(self.units[attacker_index].state.kind));
         let bonus = self
             .unit(target)
-            .map_or(0, |u| super::military::class_bonus(stats.kind, u.kind));
+            .map_or(0, |u| super::military::class_bonus(stats.kind, u.kind))
+            + self.naval_damage_bonus(stats.kind, target);
+        if stats.kind == crate::UnitKind::DemolitionShip {
+            self.detonate(attacker_id, target, changed);
+            return;
+        }
+        if stats.kind == crate::UnitKind::FireShip {
+            self.resolve_hit(
+                (attacker_id, self.units[attacker_index].state.player),
+                target,
+                stats.attack,
+                bonus,
+                stats.attack_kind,
+                changed,
+            );
+            return;
+        }
+        if stats.kind == crate::UnitKind::Mangonel {
+            self.launch_projectile(
+                attacker_id,
+                target,
+                stats.attack,
+                bonus,
+                super::ProjectileKind::Stone,
+            );
+            return;
+        }
         if stats.attack_kind == super::DamageKind::Pierce {
-            let kind = if stats.kind == crate::UnitKind::Skirmisher {
+            let kind = if matches!(
+                stats.kind,
+                crate::UnitKind::Skirmisher | crate::UnitKind::EliteSkirmisher
+            ) {
                 super::ProjectileKind::Javelin
             } else {
                 super::ProjectileKind::Arrow
@@ -229,7 +315,7 @@ impl GameWorld {
             return;
         }
         self.resolve_hit(
-            attacker_id,
+            (attacker_id, self.units[attacker_index].state.player),
             target,
             stats.attack,
             bonus,
@@ -239,22 +325,23 @@ impl GameWorld {
     }
 
     /// Both melee and tower arrows share armour, death and retaliation logic.
-    pub(super) fn resolve_hit(
+    pub(in crate::game_world) fn resolve_hit(
         &mut self,
-        attacker_id: EntityId,
+        source: (EntityId, PlayerId),
         target: EntityId,
         attack: u16,
         bonus: u16,
         kind: super::DamageKind,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) {
+        let (attacker_id, attacker_player) = source;
         let hit = HitRecord {
             attacker: attacker_id,
             tick: Tick(self.tick.0),
         };
         self.combat.stats.hits += 1;
         if let Some(&victim_index) = self.lookup.get(&target) {
-            if self.units[victim_index].state.hp == 0 {
+            if self.units[victim_index].state.hp == 0 || self.embarked(target) {
                 return;
             }
             let (melee, pierce) = self.unit_armour(target).unwrap_or_default();
@@ -262,27 +349,82 @@ impl GameWorld {
             let damage = super::table::damage_with_bonus(attack, kind, melee, pierce, bonus);
             victim.hp = victim.hp.saturating_sub(damage);
             victim.last_hit = Some(hit);
-            let (hp, victim_id) = (victim.hp, victim.id);
+            let (hp, victim_id, victim_player) = (victim.hp, victim.id, victim.player);
+            self.record_combat_hit(
+                Some(attacker_player),
+                victim_player,
+                kind == super::DamageKind::Pierce,
+                hp == 0,
+            );
             if hp == 0 {
                 self.kill_unit(victim_index);
                 self.finish_target_attack(attacker_id, target, changed);
-            } else if self.can_retaliate(victim_index) {
+            } else if self
+                .unit(attacker_id)
+                .is_some_and(|a| a.player != self.units[victim_index].state.player)
+                && self.can_retaliate(victim_index)
+            {
                 self.begin_attack(victim_id, attacker_id);
             }
-            changed.push(self.units[victim_index].state);
+            changed.push(self.units[victim_index].state.id);
         } else if self.animal(target).is_some() {
             if self.strike_animal(target, attacker_id, attack) {
                 self.finish_target_attack(attacker_id, target, changed);
             }
         } else if let Some(building) = self.building(target) {
-            let armour = super::table::age_armour(building.kind, self.is_feudal(building.player));
+            let armour = super::table::age_armour(building.kind, building.age);
+            let masonry = self.has_researched(building.player, crate::Tech::Masonry)
+                && !matches!(
+                    building.kind,
+                    crate::BuildingKind::Farm
+                        | crate::BuildingKind::PalisadeWall
+                        | crate::BuildingKind::PalisadeGate
+                );
+            let class_armour = if building.kind == crate::BuildingKind::Castle {
+                8
+            } else {
+                0
+            } + if masonry { 3 } else { 0 };
+            let building_bonus =
+                self.unit(attacker_id)
+                    .map_or(bonus.saturating_sub(class_armour), |u| match u.kind {
+                        crate::UnitKind::BatteringRam => 150_u16.saturating_sub(class_armour),
+                        crate::UnitKind::Mangonel => bonus.saturating_sub(class_armour),
+                        // Standard-building class 21 is distinct from the siege
+                        // building class 11 armour improved by Masonry.
+                        crate::UnitKind::LongSwordsman => 3,
+                        crate::UnitKind::Pikeman => 1,
+                        _ => bonus,
+                    });
+            let damage = super::table::damage_with_bonus(
+                attack,
+                kind,
+                armour.melee_armour + i16::from(masonry),
+                armour.pierce_armour + u16::from(masonry),
+                building_bonus,
+            );
             let Some(building) = self.economy.buildings.get_mut(&target) else {
                 return;
             };
-            let damage = damage_dealt(attack, kind, armour.melee_armour, armour.pierce_armour);
             building.hp = building.hp.saturating_sub(damage);
             building.last_hit = Some(hit);
-            if building.hp == 0 {
+            let occupants: Vec<_> = building.garrison.iter().map(|g| g.unit.id).collect();
+            let (building_kind, footprint) = (building.kind, building.footprint);
+            let (player, killed) = (building.player, building.hp == 0);
+            self.record_combat_hit(
+                Some(attacker_player),
+                player,
+                kind == super::DamageKind::Pierce,
+                killed,
+            );
+            if killed {
+                // Ejection restores map units during this hit. Include their
+                // identities in the ordinary delta for simulation consumers.
+                changed.extend(occupants);
+                if building_kind == crate::BuildingKind::Bridge {
+                    let rect = footprint;
+                    changed.extend(self.query(rect).0.into_iter().map(|u| u.id));
+                }
                 self.destroy_building(target);
                 self.finish_target_attack(attacker_id, target, changed);
             }
@@ -293,7 +435,7 @@ impl GameWorld {
         &mut self,
         attacker: EntityId,
         target: EntityId,
-        changed: &mut Vec<GameUnit>,
+        changed: &mut Vec<EntityId>,
     ) {
         if self
             .combat

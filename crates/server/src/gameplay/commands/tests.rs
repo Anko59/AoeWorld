@@ -2,6 +2,224 @@ use super::*;
 use aoe_core::Seed;
 use tokio::sync::mpsc;
 
+#[test]
+fn garrison_orders_and_occupant_views_share_ownership_and_fog_rules() {
+    use aoe_core::PlayerId;
+    let (mut world, _) = aoe_simulation::GameWorld::default_with_village(Seed(7));
+    let center = world.buildings().next().unwrap().id;
+    let worker = world
+        .units()
+        .find(|u| u.kind == aoe_simulation::UnitKind::Villager)
+        .unwrap()
+        .id;
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(1),
+            PendingAction::Garrison {
+                entity_id: worker,
+                building_id: center
+            }
+        ),
+        CommandResult::RejectedNotOwner
+    );
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(0),
+            PendingAction::Garrison {
+                entity_id: worker,
+                building_id: center
+            }
+        ),
+        CommandResult::Accepted
+    );
+    for _ in 0..400 {
+        world.advance();
+        if world.unit(worker).is_none() {
+            break;
+        }
+    }
+    assert!(world.unit(worker).is_none());
+    let native = world.building(center).unwrap();
+    let own = crate::gameplay::economy::wire_building_state(native, Some(PlayerId(0)));
+    let enemy = crate::gameplay::economy::wire_building_state(native, Some(PlayerId(1)));
+    assert_eq!(own.garrison[0].id, worker);
+    assert!(
+        enemy.garrison.is_empty(),
+        "enemy memory never discloses occupants"
+    );
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(1),
+            PendingAction::Ungarrison {
+                building_id: center,
+                entity_id: None
+            }
+        ),
+        CommandResult::RejectedNotOwner
+    );
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(0),
+            PendingAction::Ungarrison {
+                building_id: center,
+                entity_id: Some(worker)
+            }
+        ),
+        CommandResult::Accepted
+    );
+    assert!(world.unit(worker).is_some());
+}
+
+#[test]
+fn queued_build_actions_keep_the_first_foundation_active_and_charge_each_one() {
+    use aoe_core::{PlayerId, TileCoord, WorldConfig, WorldPosition};
+    use aoe_simulation::{BuildingKind, GameWorld};
+    let player = PlayerId(0);
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    world
+        .initialize_village(player, TileCoord::new(20, 20))
+        .unwrap();
+    let worker = world
+        .spawn_villager(
+            player,
+            WorldPosition::from_tile_center(TileCoord::new(99, 100)).unwrap(),
+        )
+        .unwrap();
+    // Another villager surveys both sites without receiving a build order.
+    world
+        .spawn_villager(
+            player,
+            WorldPosition::from_tile_center(TileCoord::new(103, 102)).unwrap(),
+        )
+        .unwrap();
+    for origin in [TileCoord::new(100, 100), TileCoord::new(100, 103)] {
+        assert_eq!(
+            apply(
+                &mut world,
+                player,
+                PendingAction::Build {
+                    builder_ids: vec![worker],
+                    kind: aoe_protocol::BuildingKind::House,
+                    origin,
+                    queued: true,
+                }
+            ),
+            CommandResult::Accepted
+        );
+    }
+    assert_eq!(world.player_economy(player).unwrap().stockpile.wood, 150);
+    let sites = world
+        .buildings()
+        .filter(|b| b.kind == BuildingKind::House)
+        .map(|b| b.id)
+        .collect::<Vec<_>>();
+    assert_eq!(sites.len(), 2);
+    for _ in 0..1600 {
+        world.advance();
+        if !world.building(sites[0]).unwrap().is_complete() {
+            assert_eq!(
+                world.building(sites[1]).unwrap().progress_permille(),
+                0,
+                "the server must preserve the queue flag instead of replacing the first job"
+            );
+        }
+        if world.building(sites[1]).unwrap().is_complete() {
+            assert!(world.building(sites[0]).unwrap().is_complete());
+            return;
+        }
+    }
+    panic!("server-applied construction queue did not finish");
+}
+
+#[test]
+fn formation_commands_validate_ownership_and_share_the_queued_route() {
+    use aoe_core::{Formation, PlayerId, TileCoord, WorldConfig};
+    let mut w =
+        aoe_simulation::GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let ids = (0..3)
+        .map(|n| {
+            w.spawn_unit(
+                PlayerId(0),
+                WorldPosition::from_tile_center(TileCoord::new(20 + n, 20)).unwrap(),
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
+    let destination = WorldPosition::from_tile_center(TileCoord::new(60, 20)).unwrap();
+    let action = PendingAction::Formation {
+        unit_ids: ids.clone(),
+        formation: Formation::Line,
+        destination: Some(destination),
+        queued: false,
+        attack_move: false,
+    };
+    let before = w.canonical_hash();
+    assert_eq!(
+        apply(&mut w, PlayerId(1), action.clone()),
+        CommandResult::RejectedNotOwner
+    );
+    assert_eq!(w.canonical_hash(), before);
+    assert_eq!(apply(&mut w, PlayerId(0), action), CommandResult::Accepted);
+    let next = WorldPosition::from_tile_center(TileCoord::new(60, 40)).unwrap();
+    assert_eq!(
+        apply(
+            &mut w,
+            PlayerId(0),
+            PendingAction::Formation {
+                unit_ids: ids.clone(),
+                formation: Formation::Line,
+                destination: Some(next),
+                queued: true,
+                attack_move: false
+            }
+        ),
+        CommandResult::Accepted
+    );
+    for id in ids {
+        assert_eq!(w.move_destinations(id), vec![destination, next]);
+    }
+}
+
+#[test]
+fn build_orders_report_unexplored_placement_without_mutating_the_world() {
+    use aoe_core::{PlayerId, TileCoord, WorldConfig};
+    use aoe_simulation::{GameWorld, UnitKind};
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    world
+        .initialize_village(PlayerId(0), TileCoord::new(20, 20))
+        .unwrap();
+    let builder = world
+        .units()
+        .find(|u| u.kind == UnitKind::Villager)
+        .unwrap()
+        .id;
+    let before = world.canonical_hash();
+    for action in [
+        PendingAction::Build {
+            builder_ids: vec![builder],
+            kind: aoe_protocol::BuildingKind::House,
+            origin: TileCoord::new(100, 100),
+            queued: false,
+        },
+        PendingAction::BuildWall {
+            builder_ids: vec![builder],
+            from: TileCoord::new(100, 100),
+            to: TileCoord::new(101, 100),
+            queued: false,
+        },
+    ] {
+        assert_eq!(
+            apply(&mut world, PlayerId(0), action),
+            CommandResult::RejectedUnexploredPlacement
+        );
+        assert_eq!(world.canonical_hash(), before);
+    }
+}
+
 #[tokio::test]
 async fn queue_move_rejects_unknown_and_non_controller_sessions_then_deduplicates_sequences() {
     let service = GameplayService::new(Seed(1));
@@ -85,6 +303,7 @@ fn stop_command_applies_to_owned_sheep_and_preserves_typed_rejections() {
             PendingAction::Move {
                 entity_id: sheep,
                 destination: at(110),
+                queued: false,
             }
         ),
         CommandResult::Accepted
@@ -180,6 +399,7 @@ fn a_wall_order_at_the_coordinate_limit_is_rejected_as_invalid_placement() {
             builder_ids: vec![villager],
             from: aoe_core::TileCoord::new(i32::MAX, 3),
             to: aoe_core::TileCoord::new(i32::MAX, 5),
+            queued: false,
         },
     );
     assert_eq!(result, CommandResult::RejectedInvalidPlacement);
@@ -191,13 +411,24 @@ fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
     use aoe_simulation::GameWorld;
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    world
+        .initialize_village(PlayerId(0), TileCoord::new(20, 20))
+        .unwrap();
+    world.set_fog_disabled(true);
+    let builder = world.spawn_villager(PlayerId(0), at(110, 110)).unwrap();
     let attacker = world.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
     let target = world.spawn_villager(PlayerId(1), at(106, 100)).unwrap();
-    // Four non-overlapping footprints enclose all eight neighboring tiles.
-    // Their vision also keeps the target visible to the commanding player.
-    for (x, y) in [(96, 97), (100, 96), (101, 100), (97, 101)] {
+    // Four solid house foundations enclose all eight neighboring tiles.
+    // Completed Town Centers have open arches, so cannot serve as solid walls.
+    for (x, y) in [(98, 99), (100, 98), (101, 100), (99, 101)] {
         world
-            .place_town_center(PlayerId(0), TileCoord::new(x, y))
+            .issue_build(
+                PlayerId(0),
+                &[builder],
+                aoe_simulation::BuildingKind::House,
+                TileCoord::new(x, y),
+                false,
+            )
             .unwrap();
     }
     let before = world.canonical_hash();
@@ -213,4 +444,42 @@ fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
         CommandResult::RejectedUnreachable,
     );
     assert_eq!(world.canonical_hash(), before);
+}
+
+#[test]
+fn a_full_world_reports_a_world_limit_and_an_empty_group_a_too_large_order() {
+    // The owner's report: build orders after Feudal Age answered "The order
+    // queue is full" because the world's building capacity was reached.
+    let (mut world, _) = aoe_simulation::GameWorld::default_with_village(Seed(1));
+    let player = aoe_core::PlayerId(0);
+    let villager = world
+        .units()
+        .find(|unit| unit.kind == aoe_simulation::UnitKind::Villager)
+        .unwrap()
+        .id;
+    let origin = world
+        .buildings()
+        .next()
+        .map(|building| {
+            aoe_core::TileCoord::new(building.footprint.max.x + 3, building.footprint.min.y)
+        })
+        .unwrap();
+    world.set_limits(aoe_simulation::WorldLimits {
+        buildings: world.buildings().count(),
+        ..world.limits()
+    });
+    let build = |builder_ids| PendingAction::Build {
+        builder_ids,
+        kind: aoe_protocol::BuildingKind::House,
+        origin,
+        queued: false,
+    };
+    assert_eq!(
+        apply(&mut world, player, build(vec![villager])),
+        CommandResult::RejectedWorldLimit
+    );
+    assert_eq!(
+        apply(&mut world, player, build(Vec::new())),
+        CommandResult::RejectedOrderTooLarge
+    );
 }

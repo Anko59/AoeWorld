@@ -6,7 +6,6 @@ use aoe_map::{Depletion, ResourceOverlay, ResourceOverlayError, ResourceOverlayS
 /// The server can persist `snapshot()` before calling the infallible commit.
 pub struct PreparedResourceDepletion<'a> {
     world: &'a mut GameWorld,
-    overlay: ResourceOverlay,
     depletion: Depletion,
     previous_revision: u64,
 }
@@ -17,16 +16,24 @@ impl PreparedResourceDepletion<'_> {
     }
 
     pub fn snapshot(&self, content_hash: [u8; 32]) -> ResourceOverlaySnapshot {
-        self.overlay.snapshot(content_hash)
+        // Built on demand: most consumers never persist, and cloning the
+        // overlay for each harvest would cost O(touched resources) per hit.
+        let Terrain::Map { overlay, .. } = &self.world.terrain else {
+            unreachable!("prepared mutation exclusively borrows a map world");
+        };
+        let mut next = overlay.clone();
+        next.apply_depletion(&self.depletion);
+        next.snapshot(content_hash)
     }
 
     pub fn commit(self) -> Depletion {
         let Terrain::Map { overlay, .. } = &mut self.world.terrain else {
             unreachable!("prepared mutation exclusively borrows a map world");
         };
-        *overlay = self.overlay;
+        overlay.apply_depletion(&self.depletion);
         if self.depletion.became_nonblocking {
-            self.world.resource_collision_changed();
+            self.world
+                .collision_opened(resource_area(self.depletion.id));
         }
         self.world
             .record_observed_resource(self.depletion.id, self.depletion.remaining);
@@ -66,6 +73,9 @@ impl GameWorld {
         let replacement =
             ResourceOverlay::from_snapshot(snapshot, content_hash, generator, cancelled)?;
         *overlay = replacement;
+        if let Ok(cache) = self.resource_chunks.get_mut() {
+            cache.clear();
+        }
         self.navigation_cache.clear();
         Ok(())
     }
@@ -79,11 +89,9 @@ impl GameWorld {
             return Err(ResourceOverlayError::UnknownResource);
         };
         let previous_revision = overlay.revision();
-        let mut replacement = overlay.clone();
-        let depletion = replacement.deplete(generator, id, requested)?;
+        let depletion = overlay.plan_depletion(generator, id, requested)?;
         Ok(PreparedResourceDepletion {
             world: self,
-            overlay: replacement,
             depletion,
             previous_revision,
         })
@@ -96,6 +104,62 @@ impl GameWorld {
             self.units[index].last_movement_error = None;
         }
     }
+
+    /// Ground became walkable (a resource exhausted, a building removed, a
+    /// gate opened). Keep planned routes and searches unless the opening
+    /// can invalidate a suspended reverse flood's sealed-destination proof.
+    /// Restart those planners through the scheduler's normal budget; clearing
+    /// every planner whenever a tree fell caused the long-game freeze.
+    pub(crate) fn collision_opened(&mut self, area: aoe_core::TileRect) {
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|probe| probe.cache_span());
+        self.navigation_cache.invalidate(area);
+        for index in 0..self.units.len() {
+            if self.units[index]
+                .planner
+                .as_ref()
+                .is_some_and(|planner| planner.opening_invalidates_proof(area))
+            {
+                self.clear_planner(index);
+            }
+            self.units[index].last_movement_error = None;
+            // Opened ground can make a refused target reachable.
+            self.units[index].unreachable_memo = None;
+        }
+    }
+
+    /// `area` became blocked (a building placed, a gate closed): only the
+    /// planners whose search or planned route touches it are planned again.
+    pub(crate) fn collision_closed(&mut self, area: aoe_core::TileRect) {
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|probe| probe.cache_span());
+        self.navigation_cache.invalidate(area);
+        for index in 0..self.units.len() {
+            if self.units[index]
+                .planner
+                .as_ref()
+                .is_some_and(|planner| planner.touches(area))
+            {
+                self.clear_planner(index);
+            }
+            self.units[index].last_movement_error = None;
+        }
+    }
+}
+
+/// The ground a resource node blocks: its tile (natural and starting node
+/// identities both encode it), with a tile of margin.
+pub(crate) fn resource_area(id: u64) -> aoe_core::TileRect {
+    let x = ((id >> 1) & 0x3_ffff) as i32;
+    let y = ((id >> 19) & 0x3_ffff) as i32;
+    aoe_core::TileRect::new(
+        aoe_core::TileCoord::new(x - 1, y - 1),
+        aoe_core::TileCoord::new(x + 2, y + 2),
+    )
 }
 
 #[cfg(test)]

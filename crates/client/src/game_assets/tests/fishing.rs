@@ -137,8 +137,9 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
     buildings::select(&manifest, &mut selected, &mut domains).unwrap();
     building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
     fishing::select(&manifest, &mut selected, &mut domains).unwrap();
-    // The eight static TC entries are now selected through DAT recipes.
-    assert_eq!(selected.len(), 4620);
+    // Combined Castle poses add 365 cells to the naval/DAT/rally selection;
+    // the Castle camp fallback slots reuse two available DE camp cells.
+    assert_eq!(selected.len(), 5062);
     assert!(selected.len() <= MAX_SELECTED_FRAMES);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)

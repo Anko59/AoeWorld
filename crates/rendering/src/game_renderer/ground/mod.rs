@@ -29,6 +29,9 @@ pub fn apply_building_foundations(
     let foundations = units
         .iter()
         .filter_map(|unit| {
+            if unit.visual.ghost() {
+                return None;
+            }
             let id = unit.kind.building_id()?;
             let building = art.compositions.iter().find(|b| b.unit_id == id);
             let side = unit.kind.building_side().unwrap_or(1.0) as f32;
@@ -49,12 +52,14 @@ pub fn apply_building_foundations(
             } else {
                 building.and_then(|b| b.foundation_material).unwrap_or(2)
             };
+            // A farm being built shows its own DAT foundation terrain (the
+            // ploughed field, terrain 7) without crops; built farms add them.
             let crops = id == 50 && !unit.kind.is_foundation();
             Some(Foundation {
                 lower,
                 upper,
                 apron: dirt,
-                material: if crops {
+                material: if id == 50 {
                     building.and_then(|b| b.foundation_material).unwrap_or(2)
                 } else {
                     dirt
@@ -119,7 +124,7 @@ impl Foundation {
 impl BuildingGround {
     pub(super) fn new(units: &[SceneUnit], camera: SceneCamera) -> Self {
         let mut centers = Vec::new();
-        for unit in units {
+        for unit in units.iter().filter(|u| !u.visual.ghost()) {
             if unit.kind == SceneUnitKind::TownCenter {
                 centers.push(unit.position);
             }
@@ -136,7 +141,7 @@ impl BuildingGround {
         ];
         let farms = units
             .iter()
-            .filter(|u| u.kind == SceneUnitKind::Farm)
+            .filter(|u| u.kind == SceneUnitKind::Farm && !u.visual.ghost())
             // Cull once per redraw, before every terrain triangle tests candidates.
             // Include the full projected 3x3 footprint, even with its center offscreen.
             .filter(|u| {
