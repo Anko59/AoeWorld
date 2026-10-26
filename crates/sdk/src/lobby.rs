@@ -74,7 +74,8 @@ pub struct MatchInfo {
 }
 
 /// `POST /match`: replaces the running game on `url` with a new match.
-/// `admin_token` is the server's `AOE_MATCH_TOKEN`.
+/// `admin_token` is the server's `AOE_MATCH_TOKEN`. Fresh maps use their seed
+/// for both terrain and village placement, so a seeded match is reproducible.
 pub async fn start_match(
     url: &str,
     admin_token: &str,
@@ -84,12 +85,15 @@ pub async fn start_match(
     let endpoint = Endpoint::parse(url)?;
     let body = match map {
         MatchMap::Package(hash) => serde_json::json!({"map_hash": hash, "slots": slots}),
-        MatchMap::Request(request) => serde_json::json!({"map": request, "slots": slots}),
+        MatchMap::Request(request) => {
+            serde_json::json!({"map": request, "seed": request.seed, "slots": slots})
+        }
         MatchMap::Flat {
             tiles_per_side,
             seed,
         } => serde_json::json!({
             "flat": {"tiles_per_side": tiles_per_side, "seed": seed},
+            "seed": seed,
             "slots": slots,
         }),
     };

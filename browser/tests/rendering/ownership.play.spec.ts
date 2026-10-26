@@ -37,6 +37,16 @@ test("each owner colours its mask and minimap; foreign selections have no comman
   await activateSyntheticMap(page, () => false);
   await freshHud(page);
   const image = PNG.sync.read(await page.locator("#scene").screenshot());
+  // Pixel aggregation intentionally combines owners at whole-world scale.
+  // Zoom the minimap to inspect the individual owner colours at village scale.
+  const map = await page.locator("#minimap-map").boundingBox();
+  if (!map) throw new Error("Minimap missing");
+  await page.mouse.move(map.x + map.width / 2, map.y + map.height / 2);
+  await page.mouse.wheel(0, -5000);
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-minimap-zoom",
+    "1024",
+  );
   const all = await actors(page);
   for (let id = 0; id < 8; id++) {
     const actor = all.find((a) => a.id === id);

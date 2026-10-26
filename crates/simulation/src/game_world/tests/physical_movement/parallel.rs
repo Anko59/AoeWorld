@@ -1,3 +1,4 @@
+// Regenerated for bounded obstruction state, arrival hysteresis and unchanged-wait suppression.
 //! Auto-scout flags and retained frontier state deliberately extend replay hashes
 //! and change digests; current pins are regenerated, with thread checks retained.
 //! The parallel proposal phase must reproduce the sequential engine bit for
@@ -27,6 +28,9 @@
 // Combined Castle bundle: u64 research, healers, garrisons, queued builders and
 // cargo/embarked maps extend current state. Regenerate the same scenario; all
 // independent replay, thread equality and emitted-change assertions remain.
+// Swept unit obstruction, bounded local refinement and reachable arrival slots
+// deliberately change routes, timing and neighbour-index order. Regenerate the
+// current pins; keep the same workload and every complete thread comparison.
 use super::*;
 use aoe_map::{MapPackage, MapRequest};
 
@@ -162,9 +166,9 @@ fn parallel_movement_matches_the_pinned_sequential_replay() {
 // Regenerate the current combined replay for retained detours, open TC arches,
 // drop-off work state, prepaid reseeds and auto-scout state. Keep every
 // sequential/parallel equality assertion and the existing scenario unchanged.
-const PINNED_FINAL_HASH: &str = "6619d857662788d79bdd54f70fb0845d7a93cdf68b09499d2ffcaea94ff9da3e";
+const PINNED_FINAL_HASH: &str = "8a42b80bcd09fa2347058df404272210643a429b9dcc761cd4422ea376449cd8";
 const PINNED_CHANGE_DIGEST: &str =
-    "19e97a35767f422063d4c6a1868a4cd9365b8293c6683105755af5bed8811f6b";
+    "b753afc4726f1222d4a9f903b5c86ba6abe6adbae5f58b02cc3f15585432a65a";
 
 #[test]
 fn parallel_movement_with_buildings_matches_the_pinned_sequential_replay() {
@@ -184,9 +188,9 @@ fn parallel_movement_with_buildings_matches_the_pinned_sequential_replay() {
 // The tests above retain complete 1/2/6-thread equality checks.
 // Cargo/embarked maps extend canonical state; the emitted-change digest stays.
 const PINNED_BUILDINGS_HASH: &str =
-    "55d82f0894f68063f4b9477136b43a2aa4bb114dfae7b4231a065221b1f592f8";
+    "adcc3c5c0532b3f450b771c063d69a5656934add6af254fe0ea70398d261a743";
 const PINNED_BUILDINGS_DIGEST: &str =
-    "0514a1a3b7dc0ca6a5a51269de231c0af434781a8a787787e122497ccfa6dd55";
+    "4694825603fc6a75af7fd584e98a4f33a8640e5342b160b645ccb698ec6af4be";
 
 fn waiting_fixture() -> (GameWorld, EntityId) {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");

@@ -133,17 +133,19 @@ async fn economy_updates_reach_controller_and_spectator_and_resync_is_complete()
         .queue_train(id, 2, buildings[0].id, UnitKind::Villager)
         .await;
     service.tick().await;
+    // The current prepaid queue accepts beyond housing capacity. Resync must
+    // include both paid entries, rather than the former population rejection.
     assert!(drain(&mut controller).iter().any(|message| matches!(
         message,
         GameplayServerMessage::CommandAck {
             sequence: 2,
-            result: CommandResult::RejectedPopulationCap,
+            result: CommandResult::Accepted,
             ..
         }
     )));
     drain(&mut observer);
     service.resync(spectator, 2).await;
-    assert!(drain(&mut observer).iter().any(|message| matches!(message, GameplayServerMessage::Snapshot { revision:2, units, players, buildings, .. } if units.len() == 4 && players[0].stockpile.food == 150 && buildings[0].training_queue[0].progress_ticks == 2)));
+    assert!(drain(&mut observer).iter().any(|message| matches!(message, GameplayServerMessage::Snapshot { revision:2, units, players, buildings, .. } if units.len() == 4 && players[0].stockpile.food == 100 && buildings[0].training_queue.len() == 2 && buildings[0].training_queue[0].progress_ticks == 2 && buildings[0].training_queue[1].progress_ticks == 0)));
 }
 
 /// Drains `rx` between ticks until a delta carries the changed economy, so a

@@ -50,10 +50,10 @@ fn dressing(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
     let variant = usize::from(resource.visual_variant) + usize::from(resource.visual_family);
     let scenery = &art.scenery;
     match resource.kind {
-        SceneResource::SHRUB if scenery.shrubs.len() == 6 => Some(scenery.shrubs[3 + variant % 3]),
         // The pack's yellow patches read as ore, and its tan clumps as stumps.
-        // Keep meadow dressing out of the resource silhouette vocabulary.
-        SceneResource::GRASS => None,
+        // Suppress Mediterranean shrubs through the same path as meadow grass.
+        // These decorative plants must not resemble gatherable resources.
+        SceneResource::GRASS | SceneResource::SHRUB => None,
         SceneResource::DEADWOOD if scenery.stumps.len() == 3 && scenery.logs.len() == 2 => {
             // Decoration uses cut stumps and fallen logs, never upright snags
             // whose silhouettes look like harvestable trees.

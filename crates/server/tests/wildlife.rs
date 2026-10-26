@@ -135,7 +135,10 @@ async fn wildlife_hunting_scenario_over_the_wire() {
             break;
         }
     }
-    assert!(accepted && owned && dead && gathered && delivered);
+    assert!(
+        accepted && owned && dead && gathered && delivered,
+        "accepted={accepted} owned={owned} dead={dead} gathered={gathered} delivered={delivered}; {log:?}"
+    );
     // Spectator and sequencing checks share the existing bounded command path.
     let (tx, mut observer) = mpsc::channel(16);
     let (spectator, _) = service.register(None, tx).await;

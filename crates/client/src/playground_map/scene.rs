@@ -33,6 +33,11 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
     {
         return scene.clone();
     }
+    if super::super::strategic::active(client) {
+        let scene = Rc::new(PreparedScene::new(client.camera, Vec::new()));
+        *client.terrain_scene.borrow_mut() = Some(scene.clone());
+        return scene;
+    }
     let foundations = client
         .village
         .buildings
@@ -331,7 +336,7 @@ pub(in super::super) fn units(
             position,
             visual: aoe_rendering::SceneUnitVisual::new(false)
                 .with_player(Some(building.player), player, client.team_colour, false)
-                .with_selected(client.selected.building_id == Some(building.id)),
+                .with_selected(client.selected.has_building(building.id)),
             facing: if building.progress_permille < 1000 {
                 (u32::from(building.progress_permille) * 3 / 1000) as u8
             } else if building.kind == aoe_protocol::BuildingKind::PalisadeWall {

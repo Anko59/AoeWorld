@@ -285,7 +285,10 @@ pub(super) fn request_candidates(client: &mut Client, budget: usize) -> Vec<(i32
 
 pub(in super::super) fn settle_counts(client: &mut Client) -> super::super::capture::ChunkCounts {
     use super::super::capture::ChunkCounts;
-    if client.surface_fixture || client.map_content_hash.is_none() {
+    if super::super::strategic::active(client)
+        || client.surface_fixture
+        || client.map_content_hash.is_none()
+    {
         return ChunkCounts::default();
     }
     // Waiting for verified height bounds cannot advertise an already settled map.

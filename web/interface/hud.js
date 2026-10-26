@@ -44,12 +44,16 @@ export function initInterface() {
       text(`stockpile-${resource}`,state.stockpile[index]); text(`workers-${resource}`,state.workers[index]);
     });
     text('population',state.population.join('/'));
+    text('idle-villager-count',state.idleVillagers);
+    byId('idle-villagers').disabled=state.idleVillagers===0;
+    text('idle-military-count',state.idleMilitary);
+    byId('idle-military').disabled=state.idleMilitary===0;
     const minutes=Math.floor(state.seconds/60), seconds=state.seconds%60;
     text('game-clock',`${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`);
     text('connection',state.status);
     byId('game-notice').classList.toggle('connected',state.status==='connected');
     const selected=state.selected, count=selected.length, first=selected[0];
-    const building=count===1 && buildingKinds.includes(first.kind);
+    const building=count>0 && selected.every(actor=>buildingKinds.includes(actor.kind));
     const owned=count>0 && selected.every(actor=>actor.owned);
     const units=owned && !building;
     const military=units && count>1 && selected.every(u=>['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits].includes(u.kind));
@@ -64,7 +68,7 @@ export function initInterface() {
     for (const id of ['train-villager','move-units','stop-units','cancel-training']) byId(id).disabled=state.observer;
     const actions=building?1:units?2:0;
     empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
-    text('command-context',count>1?`${count} units`:first?.name ?? 'Select a unit');
+    text('command-context',count>1?`${count} ${building?'buildings':'units'}`:first?.name ?? 'Select a unit');
     text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Shift: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
     show('observer-label',state.observer);
     show('selection-health',count===1);
@@ -74,7 +78,7 @@ export function initInterface() {
       text('unit-hp',`${first.hp} / ${first.maxHp} HP`);
       byId('selection-health').value=first.hp; byId('selection-health').max=Math.max(1,first.maxHp);
       text('unit-combat',`Attack ${first.attack} · Armour ${first.melee} / ${first.pierce} · Range ${first.range}`);
-      const groupName=selected.every(unit=>unit.kind===first.kind)?`${first.name}s`:'units';
+      const groupName=selected.every(unit=>unit.kind===first.kind)?(building&&first.name.endsWith('s')?first.name:building&&first.name.endsWith('y')?`${first.name.slice(0,-1)}ies`:`${first.name}s`):'units';
       text('selection-name',count>1?`${count} ${groupName} selected`:first.name);
       text('selection-task',count===1?building?(state.queue.length?'Training':'Building'): `${first.task}${first.resource && first.task==='Gathering'?' '+first.resource:''}`:'Right-click to give this group an order');
       text('selection-load',['Sheep','Deer','Boar','Wolf'].includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/${first.capacity} ${first.resource}`:building?first.kind==='Castle'?'Supports 20 population':castleKinds.includes(first.kind)?'':'Resource drop-off · supports 5 population':'');
@@ -102,7 +106,9 @@ export function initInterface() {
     const tasks=['Idle','Moving','Gathering','Carrying','Returning to drop-off','Attacking','Dying','Building','Farming','Hunting','Shepherding','Fishing','Idle','Fleeing','Attacking','Dying','Carcass'];
     const resources=['food','wood','gold','stone',''];
     const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],observer:values[11]===1,art:values[12]===1,status,actors:[],selected:[],queue:[],resources:[]};
-    let at=16;
+    state.idleVillagers=values[16];
+    state.idleMilitary=values[17];
+    let at=18;
     for (let index=0;index<values[13];index++,at+=18) {
       const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity,range,player,owned]=values.subarray(at,at+18);
       state.actors.push({id,player,owned:!!owned,kind:kinds[kind],x,y,selected:!!selected,hp,maxHp,head,task:tasks[task],load:kind===1 && amount?[resources[resource],amount]:null});

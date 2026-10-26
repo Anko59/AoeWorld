@@ -136,6 +136,10 @@ impl fmt::Display for RouteMetrics {
 pub trait PlanningProbe: std::fmt::Debug + Send + Sync {
     fn begin(&self);
     fn end(&self);
+    /// Optional inclusive movement spans. The adapter owns clocks and storage.
+    fn movement_span(&self, _name: &'static str) -> Option<Box<dyn aoe_map::NavigationSpan>> {
+        None
+    }
     fn cache_span(&self) -> Option<Box<dyn aoe_map::NavigationSpan>> {
         None
     }

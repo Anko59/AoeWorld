@@ -82,6 +82,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
         client.status = "connecting".to_owned();
         client.order_feedback.clear();
+        client.village.pending_training.clear();
         client.sent_region = None;
         client.connection_id
     };
@@ -199,9 +200,17 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.units = resident;
                 client.village.move_queues.clear();
                 client.village.players = players;
+                client.village.idle_villagers.clear();
+                client.village.idle_military.clear();
+                let owner = village::owner(&client);
+                let Client { units, village, .. } = &mut *client;
+                for unit in units.values() {
+                    village.remember_idle(owner, unit);
+                }
                 client.village.rubble.retain(|(_, until)| *until > tick.0);
                 map::scene::replace_buildings(&mut client, buildings);
                 client.village.tick = tick.0;
+                client.village.pending_training.observe(tick.0);
                 if !client.village.focused {
                     client.village.focused = true;
                     if !capture::current().has_camera() {
@@ -240,6 +249,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     return;
                 }
                 client.village.tick = tick.0;
+                client.village.pending_training.observe(tick.0);
                 for player in changed_players {
                     client.village.players.retain(|p| p.player != player.player);
                     client.village.players.push(player);
@@ -264,6 +274,8 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 }
                 map::scene::replace_buildings(&mut client, buildings);
                 for id in removals {
+                    client.village.idle_villagers.remove(id);
+                    client.village.idle_military.remove(id);
                     client.units.remove(&id);
                     client.selected.units.retain(|selected| *selected != id);
                     client.presentation.remove(id);
@@ -352,6 +364,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             Ok(GameplayServerMessage::WorldReset { .. }) => {
                 client.order_feedback.clear();
+                client.village.pending_training.clear();
                 clear_world(&mut client);
                 client.role = None;
                 client.primary = None;
@@ -366,8 +379,17 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.status = "map changed; reconnecting".to_owned();
             }
             Ok(GameplayServerMessage::CommandAck {
-                sequence, result, ..
+                sequence,
+                result,
+                applied_tick,
             }) => {
+                let observed = client.village.tick;
+                client.village.pending_training.acknowledge(
+                    sequence,
+                    result,
+                    applied_tick.0,
+                    observed,
+                );
                 client.status = client
                     .order_feedback
                     .acknowledge(sequence, result)

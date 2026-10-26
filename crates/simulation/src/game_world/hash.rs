@@ -139,6 +139,17 @@ impl GameWorld {
                 hash.update(&tile.y.to_le_bytes());
             }
             hash.update(&[u8::from(unit.fast_route_tried)]);
+            if let Some(obstruction) = unit.obstruction {
+                hash.update(&[1]);
+                hash.update(&obstruction.goal.x.to_le_bytes());
+                hash.update(&obstruction.goal.y.to_le_bytes());
+                hash.update(&obstruction.remaining.to_le_bytes());
+                hash.update(&obstruction.blocked.to_le_bytes());
+                hash.update(&obstruction.last_tick.to_le_bytes());
+                hash.update(&obstruction.search_tick.to_le_bytes());
+            } else {
+                hash.update(&[0]);
+            }
             match unit.unreachable_memo {
                 None => hash.update(&[0]),
                 Some((from, to, at)) => {

@@ -270,7 +270,14 @@ impl GameWorld {
             .tile_floor();
         let mut candidates = perimeter(footprint);
         candidates.retain(|tile| self.tile_passable(*tile));
-        candidates.sort_by_key(|tile| (distance_squared(origin, *tile), tile.y, tile.x));
+        candidates.sort_by_key(|tile| {
+            (
+                *tile != origin && self.work_spot_busy(*tile, id),
+                distance_squared(origin, *tile),
+                tile.y,
+                tile.x,
+            )
+        });
         if !candidates.is_empty() {
             let by = skip % candidates.len();
             candidates.rotate_left(by);
@@ -336,13 +343,21 @@ impl GameWorld {
                 self.next_queued_build(id);
                 continue;
             }
-            if self.units[index].order.is_some() || self.units[index].state.planning {
-                continue;
-            }
-            if adjacent(footprint, self.units[index].state.position.tile_floor()) {
+            // The route chooses an approach, not a mandatory work spot. Start
+            // on first free contact. Settled builders retain their work spot
+            // when traffic or combat enters it.
+            if adjacent(footprint, self.units[index].state.position.tile_floor())
+                && (self.units[index].order.is_none() || self.arrival_position_free(index))
+            {
+                if self.units[index].order.is_some() || self.units[index].state.planning {
+                    self.stop_movement(index);
+                }
                 self.units[index].state.face_footprint(footprint);
                 self.units[index].state.task = UnitTask::Building;
                 *working.entry(target).or_insert(0) += 1;
+                continue;
+            }
+            if self.units[index].order.is_some() || self.units[index].state.planning {
                 continue;
             }
             if attempts >= MAX_APPROACH_ATTEMPTS {

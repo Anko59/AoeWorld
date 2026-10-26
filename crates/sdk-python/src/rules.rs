@@ -1,5 +1,5 @@
 //! The game's public cost and time tables, for planning.
-use crate::enums::{BuildingKind, Tech, UnitKind};
+use crate::enums::{Age, BuildingKind, Tech, UnitKind};
 use pyo3::prelude::*;
 
 type Cost = (u32, u32, u32, u32);
@@ -37,6 +37,18 @@ fn building_population(kind: BuildingKind) -> u16 {
 #[pyfunction]
 fn building_requires(kind: BuildingKind) -> Option<BuildingKind> {
     aoe_sdk::rules::building_requires(kind.into()).map(Into::into)
+}
+
+/// Whether villagers may construct this kind at all.
+#[pyfunction]
+fn building_buildable(kind: BuildingKind) -> bool {
+    aoe_sdk::rules::building_buildable(kind.into())
+}
+
+/// Earliest age in which villagers may construct this kind.
+#[pyfunction]
+fn building_required_age(kind: BuildingKind) -> Age {
+    aoe_sdk::rules::building_required_age(kind.into()).into()
 }
 
 /// Units a completed building can train.
@@ -77,6 +89,8 @@ pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(building_size, module)?)?;
     module.add_function(wrap_pyfunction!(building_population, module)?)?;
     module.add_function(wrap_pyfunction!(building_requires, module)?)?;
+    module.add_function(wrap_pyfunction!(building_buildable, module)?)?;
+    module.add_function(wrap_pyfunction!(building_required_age, module)?)?;
     module.add_function(wrap_pyfunction!(trainable, module)?)?;
     module.add_function(wrap_pyfunction!(unit_cost, module)?)?;
     module.add_function(wrap_pyfunction!(train_seconds, module)?)?;

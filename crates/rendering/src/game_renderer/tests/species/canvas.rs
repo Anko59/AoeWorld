@@ -52,7 +52,9 @@ fn canvas_dressing_anchor_pixels() {
     let (canvas, context) = target_canvas().unwrap();
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
     assert!(fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(19)]).is_empty());
-    for kind in [18, 20] {
+    assert!(fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(18)]).is_empty());
+    {
+        let kind = 20;
         let drawn = fixture::drawn(&fixture::dressing_art(), &[fixture::dressing(kind)]);
         assert!(!drawn.is_empty());
         let layers = drawn

@@ -9,7 +9,7 @@ transparent holes and equal-depth unit/building ties keep their normal pixels.
 Ground, farms, rubble, fish and separate generated shadows do not mark the mask;
 partially transparent native shadows fail its 0.8 alpha cutoff.
 
-A second pass loads world colour/depth and draws the same instance buffer once.
+A second pass loads world colour/depth and draws eligible, contiguous runs.
 Only living player-unit quads reach rasterization; greater-or-equal depth and
 the sampled mask restrict their 1.5 backing-pixel inner contour to hidden parts.
 Five bounded atlas-alpha taps find the edge, including mirrored rectangles.
@@ -17,7 +17,7 @@ The existing scene builder supplies visible units only, so contours reveal no
 enemy outside current vision. Loaded own team colour and the player palette
 travel through spare object words in the unchanged 112-byte Sprite packet.
 
-Scene construction adds no CPU overlap queries, unit traversal, packet list or
+Scene construction adds no CPU overlap queries, repacked sprites or second
 instance upload. The WebGPU mask costs one byte per backing pixel (4 MiB at the client's
 existing backing limit); resize replaces its texture/view and rebinds it. Its
 two persistent handles and the lazy contour pipeline/bind group are counted.
@@ -165,7 +165,7 @@ never runtime page numbers.
 Required overflow fails; never discard visible trees or regroup painter order.
 Page and UV travel together through shared terrain samples and sprite frames.
 Selectors append at byte 96 of the 112-byte ABI (primary, two blends, appearance
-word); storage/attribute capacity remains derived from the unchanged 64 MiB cap.
+word); both GPU paths fetch instanced attributes under the same 64 MiB cap.
 Sprites without landscape appearance keep a zero fourth word.
 WebGPU uses D2Array, WebGL2 uses integer attribute 6 and TEXTURE_2D_ARRAY, and
 Canvas samples page-major pixels with lazily created per-page canvases.
@@ -417,8 +417,8 @@ The production scene builder now appends the shared sprite emitter directly
 after surfaces and selection rings. It no longer materializes an intermediate
 object vector and then copies it into the WorldLayer vector. Resource-before-unit
 submission and the existing stable-index depth/type/id sort remain unchanged.
-The diagnostic terrain-frame helper, selection temporaries, integer sort sidecar and GPU
-instance vector still allocate; this is not whole-renderer allocation reuse.
+WebGPU reuses packet/range storage; other scene and sort buffers still allocate.
+[Measurements](../performance/webgpu-sprites.md) do not qualify hardware cadence.
 Bounded scene tests pin the final layer content over 72 cases (missing art,
 source ties, mirrors, boundary cameras, NaN depths) by digest and assert the
 stable depth/type/id order. An absolute allocation budget for a dense

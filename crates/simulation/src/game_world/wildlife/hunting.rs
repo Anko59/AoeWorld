@@ -201,7 +201,15 @@ impl GameWorld {
             .is_some_and(|&index| self.waiting_for_route(index));
         if self.tick.0 >= job.repath_tick && !waiting {
             job.repath_tick = self.tick.0.saturating_add(self.repath_ticks());
-            if self.issue_task_move(id, to).is_err() {
+            let to = self.config.snap_ground_position(to);
+            // Keep the retained detour and its obstruction allowance while
+            // prey stays in the same tile. Restarting each chase interval can
+            // turn the hunter back before it ever clears a crowded doorway.
+            if self
+                .movement_order(id)
+                .is_none_or(|order| order.destination != to)
+                && self.issue_task_move(id, to).is_err()
+            {
                 return false;
             }
         }

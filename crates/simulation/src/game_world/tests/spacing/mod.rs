@@ -1,8 +1,10 @@
 //! Soft unit collision must preserve passage while ending persistent stacks.
 use super::*;
 
+mod avoidance;
 mod following_tests;
 mod performance;
+mod settling;
 
 fn at(x: i32, y: i32) -> WorldPosition {
     WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap()

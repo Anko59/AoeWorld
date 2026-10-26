@@ -96,6 +96,7 @@ impl GameWorld {
             formation: None,
             state,
             order: None,
+            obstruction: None,
             bucket,
             bucket_slot,
             wildlife_slot: usize::MAX,

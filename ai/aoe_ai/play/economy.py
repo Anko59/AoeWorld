@@ -67,13 +67,14 @@ class EconomyManager:
             self.train_villagers(ctx)
 
     def work(self, ctx: Context) -> None:
-        """Put idle villagers to work."""
+        """Put idle villagers to work and repair imbalanced live jobs."""
         if ctx.economy is None or ctx.home is None:
             return
         self.forget_farmers(ctx)
         self.drop_stuck_hunts(ctx)
         self.castle_food(ctx)
         self.assign_idle(ctx)
+        self.rebalance(ctx)
         queue_reseeds(ctx)
 
     def castle_food(self, ctx: Context) -> None:
@@ -189,6 +190,32 @@ class EconomyManager:
                     break
             else:
                 self.explore(ctx, villager)
+
+    def rebalance(self, ctx: Context) -> None:
+        """Rallied and reassigned workers need not fall idle to change resources.
+
+        Move at most one empty-handed worker, leaving a one-worker margin so
+        rounding and the next spawn cannot bounce workers between jobs.
+        """
+        counts, shares = self.counts(ctx), self.shares(ctx)
+        total = max(1, len(ctx.villagers))
+        gaps = {key: shares[key] * total - counts[key] for key in KEYS}
+        target = max(gaps, key=gaps.get)
+        source = min(gaps, key=gaps.get)
+        if gaps[target] <= 1 or gaps[source] >= -1:
+            return
+        pause = ASSIGN_PAUSE_SECONDS * ctx.world.tick_hz
+        for worker in ctx.villagers:
+            if (worker.gathering != KEYS[source] or worker.carrying is not None
+                    or worker.task in (UnitTask.HUNTING, UnitTask.FARMING, UnitTask.BUILDING)
+                    or worker.id in ctx.busy or worker.id in ctx.board.builders
+                    or worker.id in ctx.board.farmers.values()
+                    or ctx.tick - ctx.board.assigned.get(worker.id, -pause) < pause):
+                continue
+            if self.send(ctx, worker, target):
+                ctx.board.assigned[worker.id] = ctx.tick
+                ctx.board.bump("workers_rebalanced")
+                return
 
     def send(self, ctx: Context, villager: Any, key: str) -> bool:
         if key == "FOOD":

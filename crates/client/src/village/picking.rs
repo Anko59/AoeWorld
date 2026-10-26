@@ -17,6 +17,9 @@ pub(in super::super) fn unit(client: &Client, point: ScreenPoint) -> Option<Enti
 }
 
 fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(EntityId, bool, bool)> {
+    if crate::playground::game::strategic::active(client) {
+        return None;
+    }
     let building = building_target(client, point);
     let resource = resource_target(client, point);
     let scene = map::scene::prepare(client);
@@ -139,6 +142,9 @@ fn in_front(a: (f64, u64), b: (f64, u64)) -> bool {
 }
 
 fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId)> {
+    if crate::playground::game::strategic::active(client) {
+        return None;
+    }
     let scene = map::scene::prepare(client);
     let terrain_depth = aoe_rendering::surface_depth_at(&scene.triangles, point);
     let camera = SceneCamera {
@@ -216,6 +222,51 @@ pub(in super::super) fn double_click(client: &mut Client, unit: EntityId) {
     client.selected.same_kind(candidates, owner(client), kind);
 }
 
+pub(in super::super) fn double_building(client: &mut Client) {
+    let Some(building) = client.village.buildings.iter().find(|b| {
+        Some(b.id) == client.selected.building_id && b.player == owner(client) && b.hp > 0
+    }) else {
+        return;
+    };
+    let (kind, primary) = (building.kind, building.id);
+    let scale = client.camera.viewport[1] / f64::from(client.canvas.client_height().max(1));
+    let camera = SceneCamera {
+        center: client.camera.center,
+        zoom: client.camera.zoom,
+        viewport: client.camera.viewport,
+        focus_elevation_meters: client.camera.focus_elevation_meters,
+    };
+    let scene = map::scene::prepare(client);
+    // Intersect actual sprite bounds so a partially visible roof also counts.
+    let visible = map::scene::units(client, &scene)
+        .into_iter()
+        .filter_map(|unit| {
+            let p = map::screen_position(client, unit.position);
+            let bounds = aoe_rendering::scene_unit_bounds(
+                &client.art,
+                unit,
+                camera,
+                (client.last_frame / 100.0) as usize,
+            )
+            .unwrap_or([p.x, p.y, p.x, p.y]);
+            (bounds[2] >= 0.0
+                && bounds[3] >= 54.0 * scale
+                && bounds[0] < client.camera.viewport[0]
+                && bounds[1] < client.camera.viewport[1] - 208.0 * scale)
+                .then_some(unit.id)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    let candidates = client
+        .village
+        .buildings
+        .iter()
+        .map(|b| (b.id, b.player, b.kind, b.hp > 0 && visible.contains(&b.id)))
+        .collect::<Vec<_>>();
+    client
+        .selected
+        .same_buildings(candidates, owner(client), kind, primary);
+}
+
 /// The resource under the pointer, unless a nearer cliff face hides it. The
 /// same frontmost-surface test as `passable` keeps gather feedback and orders
 /// from reaching a resource behind an occluding cliff.
@@ -231,6 +282,9 @@ pub(in super::super) fn resource(
 }
 
 fn resource_target(client: &Client, point: ScreenPoint) -> Option<(f64, u64, ResourceKind)> {
+    if crate::playground::game::strategic::active(client) {
+        return None;
+    }
     let (id, kind, world) = resource_unchecked(client, point)?;
     let scene = map::scene::prepare(client);
     let height = scene

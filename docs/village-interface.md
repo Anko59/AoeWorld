@@ -115,3 +115,15 @@ costs and prerequisites enforced by the server. Camps and the Mill offer the
 Wheelbarrow. Construction and research can
 be cancelled from the panel. Building art is described in
 [Dark Age building art](assets/buildings.md).
+
+Production lines show one current training entry. Research replaces the lesser
+unit in that command slot, including Militia → Man-at-Arms → Long Swordsman,
+Archer → Crossbowman, Spearman → Pikeman, Skirmisher → Elite Skirmisher,
+Scout Cavalry → Light Cavalry and Galley → War Galley. Knight remains its own
+Castle Age line. A researched technology gives its slot to its next step, or
+leaves the panel when its line is complete.
+
+Double-click an owned building to select its kind throughout the visible play
+area. Group training uses the eligible selected building with the fewest queued
+units, with entity ID breaking ties. Pending clicks count until acknowledged
+state arrives, so a burst of clicks also spreads work between buildings.

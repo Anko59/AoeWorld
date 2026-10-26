@@ -2,6 +2,20 @@
 use super::*;
 
 impl GameWorld {
+    pub(super) fn at_dropoff(&self, unit: crate::GameUnit, task: &GatherTask) -> bool {
+        task.dropoff
+            .and_then(|id| self.building(id))
+            .is_some_and(|building| {
+                building.player == unit.player
+                    && building.is_complete()
+                    && building.kind.accepts(task.kind)
+                    && super::super::placement::adjacent(
+                        building.footprint,
+                        unit.position.tile_floor(),
+                    )
+            })
+    }
+
     pub(super) fn begin_return(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
         let Some(unit) = self.unit(id) else {
             return false;
@@ -32,7 +46,14 @@ impl GameWorld {
                     && !self.economy.blocked_tiles.contains(tile)
                     && !task.failed_dropoffs.contains(tile)
             });
-            tiles.sort_by_key(|tile| (distance_squared(from, *tile), tile.y, tile.x));
+            tiles.sort_by_key(|tile| {
+                (
+                    self.work_spot_busy(*tile, id),
+                    distance_squared(from, *tile),
+                    tile.y,
+                    tile.x,
+                )
+            });
             candidates.extend(tiles.into_iter().map(|tile| (building, tile)));
         }
         for &(center, tile) in &candidates {

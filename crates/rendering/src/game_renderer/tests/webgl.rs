@@ -11,6 +11,8 @@ mod effects;
 mod filter_pixels;
 #[path = "webgl_floor.rs"]
 mod floor_pixels;
+#[path = "effects/idle.rs"]
+mod idle;
 #[path = "species/webgl.rs"]
 mod species_pixels;
 #[path = "tiling/webgl.rs"]
@@ -270,7 +272,7 @@ fn atlas(texels: &[[u8; 4]]) -> Vec<u8> {
 
 fn pixel(canvas: &HtmlCanvasElement, x: u32, y: u32) -> [u8; 4] {
     let mut result = [0; 4];
-    // Synchronous read immediately after render: preserveDrawingBuffer is false.
+    // Read the submitted packet synchronously, before any subsequent draw.
     webgl_test_pixel(canvas, x, y, &mut result).expect("actual rendered WebGL2 pixel");
     result
 }

@@ -89,28 +89,20 @@ export function updateDetails(values) {
   const panel = byId('minimap');
   const world = [Number(panel.dataset.worldWidth), Number(panel.dataset.worldHeight)];
   if (!world.every(value => value > 0)) return;
-  let at = 9, actors = '', resources = '';
+  window.aoeNavigation?.actors(values.subarray(9, 9 + values[6] * 5));
+  let at = 9 + values[6] * 5, resources = '';
   const point = () => [values[at+1]/world[0]*256, values[at+2]/world[1]*256];
-  for (let index=0; index<values[6]; index++,at+=5) {
-    const [x,y] = point();
-    const fill=`rgb(${[(values[at+4]>>16)&255,(values[at+4]>>8)&255,values[at+4]&255].join(',')})`;
-    const owner=`data-player="${values[at+3]}" fill="${fill}"`;
-    actors += values[at] === 1
-      ? `<rect ${owner} class="minimap-building" x="${x-5}" y="${y-5}" width="10" height="10"/>`
-      : `<circle ${owner} class="minimap-unit" cx="${x}" cy="${y}" r="3.5"/>`;
-  }
   for (let index=0; index<values[7]; index++,at+=3) {
     const [x,y] = point();
     const colour = ['#ce4d59', '', '#f2cf50', '#c4c8d0'][values[at]];
-    resources += `<circle cx="${x}" cy="${y}" r="2" fill="${colour}"/>`;
+    resources += `<circle cx="${x}" cy="${y}" r="${Math.min(2, 128 / Math.max(...world))}" fill="${colour}"/>`;
   }
   const targets = [];
   for (; at+3<values.length; at+=4) targets.push({kind:values[at], x:values[at+1], y:values[at+2], distance:values[at+3]});
   byId('scene').dataset.resourceTargets = JSON.stringify(targets);
   byId('scene').dataset.hudRevision = String(Number(byId('scene').dataset.hudRevision ?? 0) + 1);
-  const signature = actors + '|' + resources;
+  const signature = resources;
   if (signature !== markers) {
-    byId('minimap-entities').innerHTML = actors;
     byId('minimap-resources').innerHTML = resources;
     markers = signature;
   }

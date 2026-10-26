@@ -110,6 +110,9 @@ pub(super) fn inspection_label(client: &Client) -> String {
 }
 
 pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
+    if super::strategic::active(&shared.borrow()) {
+        return;
+    }
     let (connection_id, map_hash, requests) = {
         let mut client = shared.borrow_mut();
         let Some(content_hash) = client.map_content_hash else {
@@ -238,6 +241,9 @@ pub(super) fn elevation_at_world(client: &Client, world: [f64; 2]) -> f64 {
 }
 
 pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> ScreenPoint {
+    if super::strategic::active(client) {
+        return super::strategic::screen_position(client, world);
+    }
     client.camera.world_to_screen_at_height(
         world,
         scene::prepare(client)
@@ -248,6 +254,9 @@ pub(super) fn screen_position(client: &Client, world: [f64; 2]) -> ScreenPoint {
 
 #[inline(never)]
 pub(super) fn world_at_screen(client: &Client, screen: ScreenPoint) -> Option<[f64; 2]> {
+    if super::strategic::active(client) {
+        return Some(super::strategic::world_at_screen(client, screen));
+    }
     if client.map_content_hash.is_none() {
         return world_at_screen_with_height(client.camera, screen, |_, _| Some(0.0));
     }

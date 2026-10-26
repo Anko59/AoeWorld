@@ -57,7 +57,9 @@ for (const resumed of [false, true]) {
           content_hash: "b".repeat(64),
         });
       }
-      nav.frame(
+      // The renderer publishes markers after applying input and drawing.
+      // frame() only consumes navigation input since the canvas sync split.
+      nav.present(
         new Float64Array([256, 256, 64, 64, 64, 64, 1200, 800, 1, 0, 1]),
       );
       void nav.map(new Uint8Array(32).fill(187));

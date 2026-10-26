@@ -27,6 +27,8 @@ fn snapshot_preserves_counts_and_renderer_pair_schema() {
             u32::MAX as usize,
             20,
             21,
+            22,
+            23,
         ],
         renderer: [
             ("cpu_atlas", 0),
@@ -62,6 +64,8 @@ fn snapshot_preserves_counts_and_renderer_pair_schema() {
             "outgoing_message_bytes": u32::MAX,
             "control_group_members": 20,
             "move_queue_bytes": 21,
+            "selected_building_bytes": 22,
+            "pending_training_bytes": 23,
             "renderer": [
                 ["cpu_atlas", 0],
                 ["gpu_atlas", 83_886_080],

@@ -48,16 +48,63 @@ export function decodeMinimap(buffer) {
   return { samples, rgba };
 }
 
-// Pointer position inside the letterboxed square map → clamped world tile
-// position. The raster always spans the whole world on both axes.
-export function minimapWorldPoint(rect, clientX, clientY, world) {
+// Normalized isometric map coordinates, before the SVG square's letterboxing.
+export function minimapProject(point, world, view = { zoom: 1, center: world.map(v => v / 2) }) {
+  const dx = (point[0] - view.center[0]) / world[0];
+  const dy = (point[1] - view.center[1]) / world[1];
+  return [128 + 128 * view.zoom * (dx - dy), 128 + 128 * view.zoom * (dx + dy)];
+}
+
+export function minimapWorldPoint(rect, clientX, clientY, world,
+  view = { zoom: 1, center: world.map(v => v / 2) }) {
   const side = Math.min(rect.width, rect.height);
   if (!(side > 0)) return null;
-  const left = rect.left + (rect.width - side) / 2;
-  const top = rect.top + (rect.height - side) / 2;
-  // Invert the same translate/rotate/scale used by #minimap-frame.
-  const x = (clientX - left) / side - 0.5;
-  const y = (clientY - top) / side - 0.5;
-  return [Math.max(0, Math.min(world[0] - 1, (x + y + 0.5) * world[0])),
-    Math.max(0, Math.min(world[1] - 1, (y - x + 0.5) * world[1]))];
+  const x = ((clientX - rect.left - (rect.width - side) / 2) / side - 0.5) / view.zoom;
+  const y = ((clientY - rect.top - (rect.height - side) / 2) / side - 0.5) / view.zoom;
+  return [Math.max(0, Math.min(world[0] - 1, view.center[0] + (x + y) * world[0])),
+    Math.max(0, Math.min(world[1] - 1, view.center[1] + (y - x) * world[1]))];
+}
+
+// Five-number actor records: kind (unit/building), world x/y, owner, packed RGB.
+// Work is proportional to the received actors and occupied screen pixels, never
+// world area. Ties choose the smaller owner id, independent of arrival order.
+export function aggregatePixels(actors, project, width, height, cell = 1) {
+  const pixels = new Map();
+  for (let at = 0; at + 4 < actors.length; at += 5) {
+    const kind = actors[at], wx = actors[at + 1], wy = actors[at + 2];
+    const owner = actors[at + 3], colour = actors[at + 4];
+    if (![kind, wx, wy, owner, colour].every(Number.isFinite)) continue;
+    const [sx, sy] = project([wx, wy]);
+    if (sx < 0 || sy < 0 || sx >= width || sy >= height) continue;
+    const x = Math.floor(sx / cell), y = Math.floor(sy / cell);
+    const key = y * Math.ceil(width / cell) + x;
+    let pixel = pixels.get(key);
+    if (!pixel) {
+      pixel = { key, x: (x + .5) * cell, y: (y + .5) * cell, count: 0,
+        units: 0, buildings: 0, world: [0, 0], owners: new Map() };
+      pixels.set(key, pixel);
+    }
+    pixel.count++;
+    pixel[kind === 1 ? 'buildings' : 'units']++;
+    pixel.world[0] += wx; pixel.world[1] += wy;
+    const vote = pixel.owners.get(owner) ?? { count: 0, colour };
+    vote.count++;
+    pixel.owners.set(owner, vote);
+  }
+  return [...pixels.values()].sort((a, b) => a.key - b.key).map(pixel => {
+    const [owner, vote] = [...pixel.owners].sort((a, b) => b[1].count - a[1].count || a[0] - b[0])[0];
+    delete pixel.owners;
+    return { ...pixel, owner, colour: vote.colour, world: pixel.world.map(v => v / pixel.count) };
+  });
+}
+
+export function aggregateActors(actors, world, view, side) {
+  side = Math.max(1, Math.min(2048, Math.floor(side)));
+  const project = point => minimapProject(point, world, view).map(v => v * side / 256);
+  return aggregatePixels(actors, project, side, side).map(pixel => ({ ...pixel,
+    size: Math.max(.65, Math.min(5, (pixel.buildings ? 4 : 2) * side * view.zoom / Math.max(...world))) }));
+}
+
+export function actorColour(colour) {
+  return `rgb(${[(colour >> 16) & 255, (colour >> 8) & 255, colour & 255].join(',')})`;
 }

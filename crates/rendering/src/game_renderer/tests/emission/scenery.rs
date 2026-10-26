@@ -213,3 +213,20 @@ fn yellow_dressing_is_never_presented_as_a_gold_like_object() {
         assert!(scene_resource_frame(&art, resource).is_none());
     }
 }
+
+#[wasm_bindgen_test]
+fn mediterranean_dressing_plants_are_suppressed_like_meadow_grass() {
+    let art = crate::game_renderer::species_fixture::dressing_art();
+    for family in [SceneResource::SHRUB, SceneResource::GRASS] {
+        for variant in 0..=255 {
+            let mut resource = piece(0);
+            resource.kind = family;
+            resource.visual_variant = variant;
+            assert!(scene_resource_frame(&art, resource).is_none());
+            assert!(world_sprite_frames(&art, &[], &[resource], &[], camera(), 0).is_empty());
+        }
+    }
+    let mut wood = piece(0);
+    wood.kind = SceneResource::DEADWOOD;
+    assert!(scene_resource_frame(&art, wood).is_some());
+}

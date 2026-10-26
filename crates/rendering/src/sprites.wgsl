@@ -7,7 +7,6 @@ struct Sprite {
     terrain_blend: array<vec4<f32>, 2>,
     pages: vec4<u32>,
 };
-@group(0) @binding(0) var<storage, read> sprites: array<Sprite>;
 @group(0) @binding(1) var sprite_atlas: texture_2d_array<f32>;
 @group(0) @binding(2) var sprite_sampler: sampler;
 struct VertexOutput {
@@ -75,11 +74,10 @@ fn sheet(material: u32) -> vec4<f32> {
     return vec4<f32>(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + b.y * 256.0, b.z + b.w * 256.0);
 }
 
-fn sprite_vertex(vertex: u32, instance: u32) -> VertexOutput {
+fn sprite_vertex(vertex: u32, sprite: Sprite) -> VertexOutput {
     let corners = array<vec2<f32>, 6>(
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0),
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
-    let sprite = sprites[instance];
     var out: VertexOutput;
     out.fog = 1.0;
     out.pages = sprite.pages;

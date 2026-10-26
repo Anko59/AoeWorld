@@ -110,7 +110,14 @@ test("authoritative isometric game renders, selects, orders, and survives reload
       }),
     ).toBeGreaterThan(0.85);
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.wheel(0, 5_000);
+    // Keep this terrain/fog pixel proof in the detailed view (~25% zoom).
+    // Extreme wheel zoom now replaces it with the separate strategic canvas.
+    await page.mouse.wheel(0, 1_200);
+    await expect(page.locator("#minimap")).not.toHaveAttribute(
+      "data-zoom",
+      "1.5",
+    );
+    await expect(canvas).toHaveAttribute("data-lod", "sprites");
     await page.waitForTimeout(100);
     expect(await bluePixels(canvas)).toBeGreaterThan(10);
     const zoomed = PNG.sync.read(await canvas.screenshot());

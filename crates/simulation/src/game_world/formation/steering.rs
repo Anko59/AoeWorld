@@ -32,6 +32,15 @@ impl GameWorld {
             let mut assembled = true;
             let (speed, denom) = group.speed;
             let navigating = self.units[self.lookup[&leader]].order.is_some();
+            self.update_formation_column(&mut group, navigating, &mut steering_work);
+            if !navigating && !group.column {
+                self.settle_formation_slots(&mut group, &mut steering_work);
+            }
+            let column = if group.column {
+                self.formation_column_targets(&group)
+            } else {
+                Vec::new()
+            };
             for turn in 0..group.members.len() {
                 let at = (self.tick.0 as usize * 64 + turn) % group.members.len();
                 let member = &mut group.members[at];
@@ -39,11 +48,17 @@ impl GameWorld {
                     continue;
                 };
                 let unit = self.units[index].state;
-                let desired = layout::oriented(group.anchor, member.offset, group.heading);
+                let desired = column.get(at).copied().unwrap_or_else(|| {
+                    layout::oriented(group.anchor, member.offset, group.heading)
+                });
                 let key = (
                     unit.position.tile_floor(),
                     group.anchor.tile_floor(),
-                    group.heading,
+                    if group.column {
+                        group.travel_heading
+                    } else {
+                        group.heading
+                    },
                 );
                 let goal = match member.cache {
                     Some((a, b, h, goal)) if (a, b, h) == key => goal,
@@ -56,7 +71,8 @@ impl GameWorld {
                         let mut work = direct_allowance;
                         let goal = if self.formation_line_clear(unit.position, desired, &mut work) {
                             Goal::Slot
-                        } else if self.formation_line_clear(unit.position, group.anchor, &mut work)
+                        } else if !group.column
+                            && self.formation_line_clear(unit.position, group.anchor, &mut work)
                         {
                             Goal::Squeeze
                         } else {
@@ -99,7 +115,11 @@ impl GameWorld {
                         };
                         steering_work -= spent;
                         self.route_metrics.formation_steering_work += u64::from(spent);
-                        member.cache = Some((key.0, key.1, key.2, goal));
+                        member.cache = if matches!(goal, Goal::Hold) {
+                            None
+                        } else {
+                            Some((key.0, key.1, key.2, goal))
+                        };
                         goal
                     }
                 };
@@ -107,12 +127,12 @@ impl GameWorld {
                     Goal::Slot => desired,
                     Goal::Squeeze => group.anchor,
                     Goal::Trail(p) => p,
-                    Goal::Hold => group.anchor,
+                    Goal::Hold => unit.position,
                 };
                 let credit = member.carry + speed;
                 let budget = (credit / denom).min(512) as i32;
                 member.carry = credit % denom;
-                let next = self.formation_local_step(unit.position, target, budget);
+                let next = self.formation_local_step(index, target, budget, &mut member.detour);
                 if next == unit.position && next != target {
                     member.cache = None;
                 }
@@ -154,9 +174,14 @@ impl GameWorld {
                     changed.push(member.id);
                 }
             }
-            group.ready |= assembled;
-            if !navigating && assembled {
-                group.settled = true;
+            // Assemble on the march once slots are within the local cohesion
+            // radius; one unfinished slot must not freeze the whole route.
+            group.ready |= assembled || self.formation_slots_close(&group);
+            if !navigating {
+                // Anchor arrival completes a waypoint even inside a passage.
+                // At the final destination, settle in the current shape: a
+                // blocked wide frontage must not keep a column active forever.
+                group.settled = assembled;
                 self.next_formation_order(leader, &mut group);
             }
             self.formations.insert(leader, group);
@@ -165,33 +190,34 @@ impl GameWorld {
 
     fn formation_local_step(
         &self,
-        from: WorldPosition,
+        index: usize,
         to: WorldPosition,
         budget: i32,
+        detour: &mut VecDeque<WorldPosition>,
     ) -> WorldPosition {
-        let dx = i64::from(to.x) - i64::from(from.x);
-        let dy = i64::from(to.y) - i64::from(from.y);
-        let length = (dx * dx + dy * dy).isqrt().max(1);
-        let step = i64::from(budget).min(length);
-        let x = (dx * step / length) as i32;
-        let y = (dy * step / length) as i32;
-        let mut work = 3;
-        for (x, y) in [(x, y), (x, 0), (0, y)] {
-            let next = if step >= length
-                && (x, y) == ((dx * step / length) as i32, (dy * step / length) as i32)
-            {
-                to
-            } else {
-                WorldPosition::new(from.x + x, from.y + y)
-            };
-            if self.formation_line_clear(from, next, &mut work) {
-                return next;
-            }
+        let from = self.units[index].state.position;
+        while detour.front().is_some_and(|&p| p == from) {
+            detour.pop_front();
         }
-        from
+        let target = detour.front().copied().unwrap_or(to);
+        let proposed = local_step(from, target, budget);
+        if !self.local_unit_step_clear(index, from, proposed)
+            && self.local_retry(self.units[index].state.id)
+            && let Some(path) = self.local_unit_route(index, to)
+            && !path.is_empty()
+        {
+            *detour = path;
+        }
+        let target = detour.front().copied().unwrap_or(to);
+        self.avoid_unit_step(index, local_step(from, target, budget))
     }
 
-    fn formation_line_clear(&self, from: WorldPosition, to: WorldPosition, work: &mut u32) -> bool {
+    pub(super) fn formation_line_clear(
+        &self,
+        from: WorldPosition,
+        to: WorldPosition,
+        work: &mut u32,
+    ) -> bool {
         if !self.config.valid_ground_position(to) {
             return false;
         }
@@ -220,5 +246,19 @@ impl GameWorld {
             previous = tile;
         }
         true
+    }
+}
+
+fn local_step(from: WorldPosition, to: WorldPosition, budget: i32) -> WorldPosition {
+    let dx = i64::from(to.x) - i64::from(from.x);
+    let dy = i64::from(to.y) - i64::from(from.y);
+    let length = (dx * dx + dy * dy).isqrt().max(1);
+    let step = i64::from(budget).min(length);
+    let x = (dx * step / length) as i32;
+    let y = (dy * step / length) as i32;
+    if step >= length {
+        to
+    } else {
+        WorldPosition::new(from.x + x, from.y + y)
     }
 }

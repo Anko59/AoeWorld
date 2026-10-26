@@ -267,3 +267,33 @@ fn market_rules_and_protocol_share_one_price_clamp() {
     assert_eq!(rules.lower(rules.min_price), aoe_protocol::MARKET_MIN_PRICE);
     assert_eq!(rules.raise(rules.max_price), aoe_protocol::MARKET_MAX_PRICE);
 }
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn town_center_menu_requires_castle_age_and_full_wood_and_stone_cost() {
+    let stock = Stockpile {
+        wood: 275,
+        stone: 100,
+        ..Default::default()
+    };
+    for age in [aoe_protocol::Age::Dark, aoe_protocol::Age::Feudal] {
+        assert!(!build_enabled(B::TownCenter, stock, 0, age));
+    }
+    assert!(build_enabled(
+        B::TownCenter,
+        stock,
+        0,
+        aoe_protocol::Age::Castle
+    ));
+    assert!(!build_enabled(
+        B::TownCenter,
+        Stockpile { stone: 99, ..stock },
+        0,
+        aoe_protocol::Age::Castle
+    ));
+    assert!(!build_enabled(
+        B::TownCenter,
+        Stockpile { wood: 274, ..stock },
+        0,
+        aoe_protocol::Age::Castle
+    ));
+}

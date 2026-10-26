@@ -362,28 +362,30 @@ impl GameRenderer {
                 camera.center[1],
                 camera.focus_elevation_meters,
             ]);
-            let mut instances = layers
-                .iter()
-                .map(|layer| match layer {
-                    WorldLayer::Surface(triangle) => {
-                        let mut packet =
-                            crate::web::surface_instance(triangle, camera.viewport, depth_origin);
-                        fog::surface_packet(&mut packet, fog::vertices(triangle, light));
-                        packet
-                    }
-                    WorldLayer::Selection(sprite, depth) => {
-                        let mut sprite = *sprite;
-                        sprite.depths =
-                            game_grid::selection_instance_depths(&sprite, *depth, depth_origin);
-                        sprite
-                    }
-                    WorldLayer::Sprite(sprite, _, depth, _) => {
-                        let mut sprite = *sprite;
-                        sprite.depths = [(*depth - depth_origin) as f32; 4];
-                        sprite
-                    }
-                })
-                .collect::<Vec<_>>();
+            let mut instances = match self {
+                Self::WebGpu(renderer) => std::mem::take(&mut renderer.staging),
+                _ => Vec::new(),
+            };
+            instances.clear();
+            instances.extend(layers.iter().map(|layer| match layer {
+                WorldLayer::Surface(triangle) => {
+                    let mut packet =
+                        crate::web::surface_instance(triangle, camera.viewport, depth_origin);
+                    fog::surface_packet(&mut packet, fog::vertices(triangle, light));
+                    packet
+                }
+                WorldLayer::Selection(sprite, depth) => {
+                    let mut sprite = *sprite;
+                    sprite.depths =
+                        game_grid::selection_instance_depths(&sprite, *depth, depth_origin);
+                    sprite
+                }
+                WorldLayer::Sprite(sprite, _, depth, _) => {
+                    let mut sprite = *sprite;
+                    sprite.depths = [(*depth - depth_origin) as f32; 4];
+                    sprite
+                }
+            }));
             if grid {
                 instances.extend(game_grid::grid_sprites(
                     &fog::grid_segments(&layers, camera, light),
@@ -391,16 +393,20 @@ impl GameRenderer {
                 ));
             }
             return match self {
-                Self::WebGpu(renderer) => renderer
-                    .render_sprites_with_clear(
-                        &instances,
-                        if fog_active {
-                            [0.0, 0.0, 0.0, 1.0]
-                        } else {
-                            [0.16, 0.29, 0.14, 1.0]
-                        },
-                    )
-                    .map(|counters| counters.did_present),
+                Self::WebGpu(renderer) => {
+                    let result = renderer
+                        .render_instances(
+                            &mut instances,
+                            if fog_active {
+                                [0.0, 0.0, 0.0, 1.0]
+                            } else {
+                                [0.16, 0.29, 0.14, 1.0]
+                            },
+                        )
+                        .map(|counters| counters.did_present);
+                    renderer.staging = instances;
+                    result
+                }
                 Self::WebGl(renderer) => renderer.render_with_clear(&mut instances, fog_active),
                 _ => unreachable!(),
             };

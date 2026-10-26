@@ -132,7 +132,8 @@ fn assert_broadleaf_fallback(art: &GameArt, family: u8) {
 #[wasm_bindgen_test]
 fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() {
     let mut art = fixture::dressing_art();
-    for (kind, count) in [(18, 3), (20, 5)] {
+    {
+        let (kind, count) = (20, 5);
         let frames = (0..count)
             .map(|i| GameFrame {
                 anchor: [-3.0, 25.0],
@@ -140,18 +141,9 @@ fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() 
                 ..fixture::frame(i * 16)
             })
             .collect::<Vec<_>>();
-        match kind {
-            18 => {
-                art.scenery.shrubs = std::iter::repeat_n(fixture::frame(1900), 3)
-                    .chain(frames.clone())
-                    .collect()
-            }
-            _ => {
-                art.scenery.stumps = frames[..3].to_vec();
-                art.scenery.logs = frames[3..5].to_vec();
-                art.scenery.snags = vec![fixture::frame(1984)];
-            }
-        }
+        art.scenery.stumps = frames[..3].to_vec();
+        art.scenery.logs = frames[3..5].to_vec();
+        art.scenery.snags = vec![fixture::frame(1984)];
         let mut seen = vec![false; count];
         for variant in 0..=255 {
             for orientation in 0..8 {
@@ -187,7 +179,7 @@ fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() 
     art.walking = vec![fixture::frame(640); 50];
     art.standing = art.walking.clone();
     let resources = [
-        fixture::dressing(18),
+        fixture::dressing(20),
         SceneResource {
             id: 9,
             ..fixture::resource(0, 0)

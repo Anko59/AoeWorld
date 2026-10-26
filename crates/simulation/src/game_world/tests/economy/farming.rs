@@ -167,8 +167,11 @@ fn a_farmers_return_trip_goes_to_the_dropoff_the_shared_rule_names() {
         .unwrap();
     finish(&mut world, far, 800);
     let footprint = world.building(mill).unwrap().footprint;
+    // Perimeter contact can deliver a load while the second Mill is built.
+    // Observe a new deposit, rather than food from that already finished trip.
+    let food_before = stock(&world).0;
     let mut ticks = 0;
-    while stock(&world).0 == 0 {
+    while stock(&world).0 == food_before {
         world.advance();
         ticks += 1;
         assert!(ticks < 6000, "the first load should be delivered");

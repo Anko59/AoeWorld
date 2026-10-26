@@ -58,3 +58,140 @@ fn retained_buildings_can_span_multiple_bounded_messages() {
         merge_buildings(&retained, &[building(MAX_ECONOMY_BUILDINGS)], &[]).expect("another batch");
     assert_eq!(merged.len(), MAX_ECONOMY_BUILDINGS + 1);
 }
+
+fn rich_player(researched: u64) -> aoe_protocol::GameplayPlayerState {
+    aoe_protocol::GameplayPlayerState {
+        player: PlayerId(0),
+        age: aoe_protocol::Age::Castle,
+        researched,
+        stockpile: aoe_protocol::Stockpile {
+            food: 10000,
+            wood: 10000,
+            gold: 10000,
+            stone: 10000,
+        },
+        population_used: 5,
+        population_cap: 5,
+        market_prices: Default::default(),
+    }
+}
+
+#[wasm_bindgen_test]
+fn training_buttons_allow_fifteen_entries_even_at_the_population_cap() {
+    use crate::building_ui::availability::training;
+    let mut b = building(1);
+    let player = rich_player(0);
+    for _ in 0..15 {
+        assert_eq!(
+            training(
+                &b,
+                Some(&player),
+                PlayerId(0),
+                aoe_protocol::UnitKind::Villager
+            )
+            .number(),
+            1.0
+        );
+        b.training_queue.push(aoe_protocol::TrainingState {
+            kind: aoe_protocol::UnitKind::Villager,
+            progress_ticks: 0,
+            total_ticks: 500,
+        });
+    }
+    assert_eq!(
+        training(
+            &b,
+            Some(&player),
+            PlayerId(0),
+            aoe_protocol::UnitKind::Villager
+        )
+        .number(),
+        10.0
+    );
+}
+
+#[wasm_bindgen_test]
+fn production_lines_expose_only_the_current_unit_and_next_technology() {
+    use crate::building_ui::{
+        availability::{primary_training, research, training},
+        content,
+    };
+    use aoe_protocol::{Tech, UnitKind};
+    let mut b = building(1);
+    b.kind = BuildingKind::Barracks;
+    for (mask, current, next) in [
+        (0, UnitKind::Militia, Some(Tech::ManAtArms)),
+        (
+            Tech::ManAtArms.bit(),
+            UnitKind::ManAtArms,
+            Some(Tech::LongSwordsman),
+        ),
+        (
+            Tech::ManAtArms.bit() | Tech::LongSwordsman.bit(),
+            UnitKind::LongSwordsman,
+            None,
+        ),
+    ] {
+        let player = rich_player(mask);
+        assert_eq!(primary_training(&b, Some(&player)), current);
+        for unit in [
+            UnitKind::Militia,
+            UnitKind::ManAtArms,
+            UnitKind::LongSwordsman,
+        ] {
+            assert_eq!(
+                training(&b, Some(&player), PlayerId(0), unit).number() == 1.0,
+                unit == current
+            );
+        }
+        for tech in [Tech::ManAtArms, Tech::LongSwordsman] {
+            let status = research(
+                &b,
+                Some(&player),
+                PlayerId(0),
+                u32::MAX,
+                false,
+                &content::rules().techs[tech as usize],
+            )
+            .number();
+            assert_eq!(status == 1.0, Some(tech) == next);
+            if Some(tech) != next {
+                assert!(status == 0.0 || status == 3.0);
+            }
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn age_technology_line_exposes_only_its_current_step() {
+    use crate::building_ui::{availability::research, content};
+    use aoe_protocol::{Age, Tech};
+    let b = building(1);
+    for (age, mask, next) in [
+        (Age::Dark, 0, Some(Tech::FeudalAge)),
+        (Age::Feudal, Tech::FeudalAge.bit(), Some(Tech::CastleAge)),
+        (
+            Age::Castle,
+            Tech::FeudalAge.bit() | Tech::CastleAge.bit(),
+            None,
+        ),
+    ] {
+        let mut player = rich_player(mask);
+        player.age = age;
+        for tech in [Tech::FeudalAge, Tech::CastleAge] {
+            let status = research(
+                &b,
+                Some(&player),
+                PlayerId(0),
+                u32::MAX,
+                false,
+                &content::rules().techs[tech as usize],
+            )
+            .number();
+            assert_eq!(status == 1.0, Some(tech) == next);
+            if Some(tech) != next {
+                assert!(status == 0.0 || status == 3.0);
+            }
+        }
+    }
+}

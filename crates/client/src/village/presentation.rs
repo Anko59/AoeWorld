@@ -47,6 +47,11 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         );
     }
 
+    // Strategic actors update at HUD cadence. Never inspect resident resources
+    // or build a detailed picking scene for a distant overview.
+    if crate::playground::game::strategic::active(client) {
+        return values;
+    }
     let focus = client.selected.units.iter().find_map(|id| {
         client
             .units

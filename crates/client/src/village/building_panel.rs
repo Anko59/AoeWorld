@@ -1,10 +1,7 @@
 //! Bounded numeric building presentation; no DOM rules duplicate the simulation.
 use super::{Client, construction, orders::send, owner};
 use crate::{
-    building_ui::{
-        self,
-        availability::{self, Availability},
-    },
+    building_ui::{self, availability},
     playground::game::map,
 };
 use aoe_protocol::{ConstructionState, GameplayClientMessage as Message, Tech};
@@ -28,13 +25,6 @@ pub(super) fn update(client: &Client) {
         .players
         .iter()
         .find(|p| p.player == owner(client));
-    let reserved = client
-        .village
-        .buildings
-        .iter()
-        .filter(|b| b.player == owner(client))
-        .map(|b| b.training_queue.len())
-        .sum::<usize>();
     let completed = construction::completed(client);
     // age, selected kind, hp, max hp, construction, food, research kind/progress,
     // research availability, build availability entries, trained kind.
@@ -46,11 +36,7 @@ pub(super) fn update(client: &Client) {
     if let Some(p) = player {
         v[0] = p.age as u8 as f64;
     }
-    let b = client
-        .village
-        .buildings
-        .iter()
-        .find(|b| Some(b.id) == client.selected.building_id);
+    let b = super::production::selected(client);
     if let Some(b) = b {
         v[1] = b.kind as u8 as f64;
         v[2] = f64::from(b.hp);
@@ -70,23 +56,19 @@ pub(super) fn update(client: &Client) {
                 availability::research(b, player, owner(client), completed, duplicate, r).number();
         }
     }
-    for r in &building_ui::content::rules().buildings[1..] {
-        let kind = KINDS[r.kind as usize];
+    for kind in KINDS.into_iter().skip(1).chain(std::iter::once(KINDS[0])) {
         v.push(f64::from(u8::from(construction::enabled(client, kind, 1))));
     }
     v.push(
         b.and_then(|b| b.training_queue.first())
             .map_or(0.0, |e| e.kind as u8 as f64),
     );
-    let train = b.map_or(Availability::Unavailable, |b| {
-        availability::training(
-            b,
-            player,
-            owner(client),
-            reserved,
-            availability::primary_training(b, player),
-        )
-    });
+    let train = super::production::availability(
+        client,
+        b.map_or(aoe_protocol::UnitKind::Villager, |b| {
+            availability::primary_training(b, player)
+        }),
+    );
     v.push(train.number());
     let foundations: Vec<_> = client
         .village
@@ -101,9 +83,7 @@ pub(super) fn update(client: &Client) {
         v.extend_from_slice(&[p.x * scale, p.y * scale, f64::from(b.progress_permille)]);
     }
     for kind in aoe_protocol::UnitKind::ALL {
-        let ready = b.map_or(Availability::Unavailable, |b| {
-            availability::training(b, player, owner(client), reserved, kind)
-        });
+        let ready = super::production::availability(client, kind);
         v.push(ready.number());
     }
     v.push(b.map_or(aoe_protocol::UnitKind::Militia, |b| {
@@ -138,6 +118,10 @@ pub(super) fn update(client: &Client) {
     v.extend(super::automation::state(client));
     super::garrison::present(client);
     v.extend(super::navy::state(client));
+    v.push(f64::from(u8::from(
+        b.is_some_and(|b| !b.training_queue.is_empty())
+            && player.is_some_and(|p| p.population_used >= p.population_cap),
+    )));
     buildings_update(&v);
 }
 
@@ -233,14 +217,14 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             return;
         }
         let code = code as usize;
-        let build_count = KINDS.len() - 1;
+        let build_count = KINDS.len();
         let research_end = build_count + Tech::ALL.len();
         if action == 0 && code == research_end + 4 {
             super::automation::toggle(&mut client);
             return;
         }
         if action == 0 && code < build_count {
-            construction::arm(&mut client, KINDS[code + 1]);
+            construction::arm(&mut client, KINDS[(code + 1) % KINDS.len()]);
             return;
         }
         if action == 1 {
@@ -249,7 +233,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             return;
         }
-        let Some(building_id) = client.selected.building_id else {
+        let Some(building_id) = super::production::selected(&client).map(|b| b.id) else {
             return;
         };
         if !client

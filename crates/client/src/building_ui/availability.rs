@@ -19,7 +19,6 @@ pub(crate) enum Availability {
     Wood,
     Gold,
     Stone,
-    Population,
     QueueFull,
     Construction,
     Requirement,
@@ -76,17 +75,20 @@ pub(crate) fn research(
     if p.researched & (1_u64 << r.tech) != 0 {
         return Availability::Researched;
     }
+    // A line exposes only its next technology; a completed step disappears.
+    // Age advancement uses an age prerequisite rather than requires_tech.
+    if (r.tech == Tech::CastleAge as u8 && (p.age as u8) < r.age)
+        || r.requires_tech
+            .is_some_and(|tech| p.researched & (1_u64 << tech) == 0)
+    {
+        return Availability::Unavailable;
+    }
     if (p.age as u8) < r.age {
         return if r.age == aoe_simulation::Age::Castle as u8 {
             Availability::RequiresCastle
         } else {
             Availability::RequiresFeudal
         };
-    }
-    if let Some(tech) = r.requires_tech
-        && p.researched & (1_u64 << tech) == 0
-    {
-        return Availability::Requirement;
     }
     if b.research.is_some() || duplicate {
         return Availability::ResearchBusy;
@@ -104,7 +106,6 @@ pub(crate) fn training(
     b: &GameplayBuildingState,
     player: Option<&GameplayPlayerState>,
     owner: PlayerId,
-    reserved: usize,
     kind: UnitKind,
 ) -> Availability {
     let unit = &super::content::rules().units[kind as usize];
@@ -117,6 +118,13 @@ pub(crate) fn training(
     let Some(p) = player else {
         return Availability::NotOwner;
     };
+    if unit.superseded(p.researched)
+        || unit
+            .requires_tech
+            .is_some_and(|t| p.researched & (1_u64 << t) == 0)
+    {
+        return Availability::Unavailable;
+    }
     if (p.age as u8) < unit.age {
         return if unit.age == aoe_simulation::Age::Castle as u8 {
             Availability::RequiresCastle
@@ -124,23 +132,11 @@ pub(crate) fn training(
             Availability::RequiresFeudal
         };
     }
-    if unit
-        .requires_tech
-        .is_some_and(|t| p.researched & (1_u64 << t) == 0)
-    {
-        return Availability::Requirement;
-    }
-    if unit.superseded(p.researched) {
-        return Availability::Unavailable;
-    }
     if b.research.is_some() {
         return Availability::ResearchBusy;
     }
     if b.training_queue.len() >= aoe_protocol::MAX_TRAINING_QUEUE {
         return Availability::QueueFull;
-    }
-    if usize::from(p.population_used) + reserved >= usize::from(p.population_cap) {
-        return Availability::Population;
     }
     let need = if kind == UnitKind::Villager {
         Stockpile {

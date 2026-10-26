@@ -233,6 +233,8 @@ impl GameWorld {
                 (self.lookup.get(&id), self.economy.gatherers.get(&id))
                 && task.phase != GatherPhase::WaitingDropoff
                 && self.units[index].order.is_some()
+                && !(task.phase == GatherPhase::Returning
+                    && self.at_dropoff(self.units[index].state, task))
                 && !(task.phase == GatherPhase::Approaching
                     && self.units[index].last_movement_error.is_some())
             {
@@ -278,7 +280,10 @@ impl GameWorld {
         if task.phase == GatherPhase::WaitingDropoff {
             return self.tick.0 < task.retry_tick || self.begin_return(id, task);
         }
-        if self.units[index].order.is_some() {
+        if self.units[index].order.is_some()
+            && !(task.phase == GatherPhase::Returning
+                && self.at_dropoff(self.units[index].state, task))
+        {
             return true;
         }
         if task.phase == GatherPhase::Approaching && self.units[index].last_movement_error.is_some()
@@ -287,19 +292,20 @@ impl GameWorld {
         }
         if task.phase == GatherPhase::Returning {
             let unit = self.units[index].state;
-            let adjacent = task
-                .dropoff
-                .and_then(|id| self.building(id))
-                .is_some_and(|center| {
-                    center.player == unit.player
-                        && perimeter(center.footprint).contains(&unit.position.tile_floor())
-                });
-            if !adjacent {
+            if !self.at_dropoff(unit, task) {
                 if let Some(tile) = task.return_target.take() {
                     task.failed_dropoffs.insert(tile);
                 }
                 return self.begin_return(id, task);
             }
+            // Contact with any side finishes the trip, including a route whose
+            // original endpoint was on another side of the building.
+            self.clear_planner(index);
+            self.units[index].order = None;
+            self.units[index].route.clear();
+            self.units[index].state.moving = false;
+            self.units[index].state.planning = false;
+            self.refresh_spacing_order(id);
             if let Some(load) = unit.carried
                 && let Some(player) = self.economy.players.get_mut(&unit.player)
             {
@@ -441,12 +447,16 @@ impl GameWorld {
         if unit.position != centre {
             return;
         }
-        let state = &mut self.units[index].state;
-        state.previous_position = unit.position;
-        state.position = aoe_core::WorldPosition::new(
+        let position = aoe_core::WorldPosition::new(
             centre.x + dx.signum() * WORK_STEP,
             centre.y + dy.signum() * WORK_STEP,
         );
+        if !self.local_unit_step_clear(index, unit.position, position) {
+            return;
+        }
+        let state = &mut self.units[index].state;
+        state.previous_position = unit.position;
+        state.position = position;
         let moved = *state;
         self.track_unit_step(id, stand, &moved);
     }

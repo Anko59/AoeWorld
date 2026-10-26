@@ -9,6 +9,132 @@ use crate::game_world::tests::economy::fixture;
 mod facing;
 mod replacement;
 
+#[test]
+fn returning_workers_deposit_on_every_side_before_finishing_an_old_target_order() {
+    use super::super::BuildingKind;
+    let template = fresh_task();
+    for kind in [
+        BuildingKind::TownCenter,
+        BuildingKind::LumberCamp,
+        BuildingKind::MiningCamp,
+        BuildingKind::Mill,
+        BuildingKind::Dock,
+    ] {
+        let resource = match kind {
+            BuildingKind::LumberCamp => ResourceKind::Wood,
+            BuildingKind::MiningCamp => ResourceKind::Gold,
+            _ => ResourceKind::Food,
+        };
+        let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
+        // The common return/deposit code must use each kind's full footprint.
+        let rect = aoe_core::TileRect::from_xywh(128, 128, kind.rules().side, kind.rules().depth);
+        let center = world
+            .insert_building(PlayerId(0), kind, rect, true)
+            .unwrap();
+        for tile in perimeter(rect) {
+            let worker = world
+                .spawn_villager(PlayerId(0), position(tile).unwrap())
+                .unwrap();
+            let mut task = template.clone();
+            task.kind = resource;
+            // Even if the old trip targeted the opposite side, touching any
+            // perimeter point must deposit immediately, without walking around.
+            let target = if tile.y == rect.max.y {
+                rect.min.y - 1
+            } else {
+                rect.max.y
+            };
+            let target = TileCoord::new(rect.max.x, target);
+            world
+                .issue_task_move(worker, position(target).unwrap())
+                .unwrap();
+            task.phase = GatherPhase::Returning;
+            task.dropoff = Some(center);
+            task.return_target = Some(target);
+            let index = world.lookup[&worker];
+            world.units[index].state.carried = Some(CarriedResource {
+                kind: resource,
+                amount: 10,
+            });
+            let before = world.player_economy(PlayerId(0)).unwrap().stockpile;
+            world.economy.gatherers.insert(worker, task);
+            world.advance_gathering(&mut |_| true, &mut Vec::new());
+            assert!(
+                world.unit(worker).unwrap().carried.is_none(),
+                "{kind:?} at {tile:?}"
+            );
+            let mut expected = before;
+            expected.deposit(CarriedResource {
+                kind: resource,
+                amount: 10,
+            });
+            assert_eq!(
+                world.player_economy(PlayerId(0)).unwrap().stockpile,
+                expected
+            );
+            assert!(world.economy.gatherers.get(&worker).is_none_or(|task| {
+                task.phase == GatherPhase::Approaching && task.return_target.is_none()
+            }));
+            assert_ne!(
+                world.movement_order(worker).map(|order| order.target_tile),
+                Some(target),
+                "Deposit must cancel the old return trip before resuming work"
+            );
+            world.remove_unit(worker);
+        }
+    }
+}
+
+#[test]
+fn return_target_is_the_nearest_reachable_point_on_each_buildings_perimeter() {
+    use super::super::BuildingKind;
+    let template = fresh_task();
+    for kind in [
+        BuildingKind::TownCenter,
+        BuildingKind::LumberCamp,
+        BuildingKind::MiningCamp,
+        BuildingKind::Mill,
+        BuildingKind::Dock,
+    ] {
+        let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
+        let rect = aoe_core::TileRect::from_xywh(128, 128, kind.rules().side, kind.rules().depth);
+        let center = world
+            .insert_building(PlayerId(0), kind, rect, true)
+            .unwrap();
+        for start in [
+            TileCoord::new(rect.min.x - 8, rect.min.y),
+            TileCoord::new(rect.min.x, rect.min.y - 8),
+            TileCoord::new(rect.max.x + 8, rect.max.y - 1),
+            TileCoord::new(rect.max.x - 1, rect.max.y + 8),
+        ] {
+            let worker = world
+                .spawn_villager(PlayerId(0), position(start).unwrap())
+                .unwrap();
+            let mut task = template.clone();
+            task.kind = match kind {
+                BuildingKind::LumberCamp => ResourceKind::Wood,
+                BuildingKind::MiningCamp => ResourceKind::Gold,
+                _ => ResourceKind::Food,
+            };
+            // Shore fishermen can use a Dock too.
+            task.fish = (kind == BuildingKind::Dock).then_some(aoe_map::ObjectKind::ShoreFish);
+            assert!(world.begin_return(worker, &mut task));
+            assert_eq!(task.dropoff, Some(center));
+            let target = task.return_target.unwrap();
+            assert_eq!(
+                distance_squared(start, target),
+                perimeter(rect)
+                    .into_iter()
+                    .map(|p| distance_squared(start, p))
+                    .min()
+                    .unwrap(),
+                "{kind:?} from {start:?} chose {target:?}"
+            );
+            world.remove_unit(worker);
+        }
+    }
+}
+
 fn resource_mainland() -> (GameWorld, ResourceNode) {
     let (package, pages, water) = fixture::flat_fixture(false);
     let mut world =

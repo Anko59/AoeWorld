@@ -1,6 +1,6 @@
 """A failed job can leave an unemployed villager holding its last load."""
 
-from aoeworld import BuildingKind, CommandResult, ResourceKind, UnitTask
+from aoeworld import Age, BuildingKind, CommandResult, ResourceKind, UnitTask
 
 from aoe_ai import Brain
 from aoe_ai.blackboard import Blackboard
@@ -9,7 +9,7 @@ from aoe_ai.context import Context
 from aoe_ai.play.constructor import Constructor
 from aoe_ai.play.economy import EconomyManager
 from aoe_ai.play.reseeding import queue_reseeds
-from fakes import FakeClient, FakeWorld, base, building, decision, node, order_result, unit
+from fakes import FakeClient, FakeWorld, base, building, decision, economy, node, order_result, unit
 
 
 def test_ai_prepays_reseeds_only_with_farms_and_spare_wood():
@@ -121,3 +121,41 @@ def test_a_worker_without_a_farm_job_releases_its_old_plot():
     ctx.board.farmers[farm.id] = worker.id
     EconomyManager(Constructor()).forget_farmers(ctx)
     assert farm.id not in ctx.board.farmers
+
+
+def test_live_food_jobs_rebalance_to_wood_without_interrupting_loaded_returns():
+    units, buildings = base(28)
+    workers = units[:-1]
+    for worker in workers:
+        worker.task, worker.idle = UnitTask.GATHERING, False
+        worker.gathering = ResourceKind.FOOD
+    workers[-1].gathering = ResourceKind.WOOD
+    workers[0].task, workers[0].moving = UnitTask.RETURNING, True
+    workers[0].carrying = (ResourceKind.FOOD, 10)
+    wood = node(900, ResourceKind.WOOD, (53, 53))
+    food = node(901, ResourceKind.FOOD, (52, 48))
+    world = FakeWorld(units, buildings, nodes=[wood, food],
+                      eco=economy(food=273, wood=14, gold=580, population=36,
+                                  cap=50, age=Age.FEUDAL))
+    ctx = Context(FakeClient(), decision(world), Blackboard(), Config())
+    # Seed 1 held 27 live food jobs and one wood job for eight minutes. Idle-only
+    # allocation never repaired that shortage, leaving its Feudal army at seven.
+    EconomyManager(Constructor()).work(ctx)
+    reassigned = ctx.client.named("gather")
+    assert len(reassigned) == 1, "rebalance one worker per decision"
+    assert reassigned[0][1] == wood.id
+    assert reassigned[0][0] not in (workers[0].id, workers[-1].id)
+
+
+def test_rebalancing_waits_for_excess_food_workers_to_finish_their_loads():
+    units, buildings = base(28)
+    for worker in units[:-1]:
+        worker.task, worker.idle, worker.moving = UnitTask.RETURNING, False, True
+        worker.gathering = ResourceKind.FOOD
+        worker.carrying = (ResourceKind.FOOD, 10)
+    world = FakeWorld(units, buildings, nodes=[node(900, ResourceKind.WOOD, (53, 53))],
+                      eco=economy(food=273, wood=14, gold=580, population=36,
+                                  cap=50, age=Age.FEUDAL))
+    ctx = Context(FakeClient(), decision(world), Blackboard(), Config())
+    EconomyManager(Constructor()).work(ctx)
+    assert ctx.client.calls == [], "loaded returns must complete before reallocation"

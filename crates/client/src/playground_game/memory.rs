@@ -15,7 +15,8 @@ const count_names = [
   'height_candidates', 'terrain_requests', 'scene_bytes', 'render_frame_bytes',
   'fog_bytes', 'units', 'unit_bytes', 'interpolation_bytes', 'buildings_and_ghosts',
   'animals', 'projectiles', 'resource_entries', 'resource_bytes', 'stump_effects',
-  'outgoing_message_bytes', 'control_group_members', 'move_queue_bytes'
+  'outgoing_message_bytes', 'control_group_members', 'move_queue_bytes',
+  'selected_building_bytes', 'pending_training_bytes'
 ];
 export function snapshot_json(backend, counts, names, renderer) {
   const value = {backend};
@@ -35,7 +36,7 @@ extern "C" {
 
 struct Snapshot {
     backend: &'static str,
-    counts: [usize; 21],
+    counts: [usize; 23],
     renderer: [(&'static str, usize); 5],
 }
 
@@ -86,7 +87,8 @@ pub fn client_memory_snapshot() -> Result<String, JsValue> {
                 scene_bytes,
                 client
                     .rendered_frame
-                    .resident_bytes(map::scene::PreparedScene::resident_bytes),
+                    .resident_bytes(map::scene::PreparedScene::resident_bytes)
+                    + client.renderer.frame_staging_bytes(),
                 client.fog.resident_bytes(),
                 client.units.len(),
                 client.units.len() * std::mem::size_of::<aoe_protocol::GameplayUnitState>(),
@@ -110,6 +112,8 @@ pub fn client_memory_snapshot() -> Result<String, JsValue> {
                                 * std::mem::size_of::<aoe_core::WorldPosition>()
                         })
                         .sum::<usize>(),
+                client.selected.buildings.capacity() * std::mem::size_of::<aoe_core::EntityId>(),
+                client.village.pending_training.resident_bytes(),
             ],
             renderer: client.renderer.memory_usage(),
         };

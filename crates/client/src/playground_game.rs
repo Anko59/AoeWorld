@@ -32,6 +32,8 @@ mod recovery;
 mod status;
 #[path = "playground_storage.rs"]
 mod storage;
+#[path = "playground_game/strategic.rs"]
+pub(super) mod strategic;
 #[path = "village/mod.rs"]
 mod village;
 use network::connect;
@@ -91,14 +93,20 @@ pub(super) fn resize(client: &mut Client) {
     let height = client.canvas.client_height().max(1) as f64;
     let ratio = web_sys::window().map_or(1.0, |window| window.device_pixel_ratio());
     let backing = controls::backing_size(width, height, ratio);
+    let viewport = [f64::from(backing[0]), f64::from(backing[1])];
+    let changed = client.canvas.width() != backing[0]
+        || client.canvas.height() != backing[1]
+        || client.camera.viewport != viewport;
     if client.canvas.width() != backing[0] {
         client.canvas.set_width(backing[0]);
     }
     if client.canvas.height() != backing[1] {
         client.canvas.set_height(backing[1]);
     }
-    client.camera.viewport = [f64::from(backing[0]), f64::from(backing[1])];
-    client.renderer.resize(backing[0], backing[1]);
+    client.camera.viewport = viewport;
+    if changed {
+        client.renderer.resize(backing[0], backing[1]);
+    }
     client.camera = client.camera.clamp_center(client.config);
 }
 
@@ -157,6 +165,8 @@ pub(super) fn remember(client: &mut Client, state: &GameplayUnitState, tick: u64
     {
         return false;
     }
+    let owner = village::owner(client);
+    client.village.remember_idle(owner, state);
     let Client {
         units,
         presentation,
@@ -207,8 +217,8 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let canvas = matches!(&client.renderer, GameRenderer::Canvas { .. });
         client.presentation.advance(time, canvas);
         // Keep input, networking and the HUD live while the overview covers the scene.
-        if !controls::navigation::overview_active() {
-            let _draw = perf::Scope::new(2);
+        let draw = perf::Scope::new(2);
+        if !controls::navigation::overview_active() && !strategic::render(&mut client) {
             let scene = map::scene::prepare(&client);
             let units = map::scene::units(&client, &scene);
             let camera = SceneCamera {
@@ -238,7 +248,9 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.status = error;
             }
         }
+        drop(draw);
         let ui = perf::Scope::new(3);
+        controls::navigation::present(&client);
         village::waypoints::present(&client);
         if time - client.village.last_hud >= 250.0 {
             controls::groups::update(&client);

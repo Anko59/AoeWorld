@@ -18,9 +18,10 @@ impl GameWorld {
                 g.facing as u8,
                 u8::from(g.ready),
                 u8::from(g.settled),
+                u8::from(g.column),
                 u8::from(g.attack_move),
             ]);
-            for p in [g.anchor, g.heading, g.destination] {
+            for p in [g.anchor, g.heading, g.travel_heading, g.destination] {
                 point(hash, p);
             }
             hash.update(&g.speed.0.to_le_bytes());
@@ -40,6 +41,11 @@ impl GameWorld {
                 point(hash, m.offset);
                 hash.update(&m.carry.to_le_bytes());
                 hash.update(&(m.probe as u64).to_le_bytes());
+                hash.update(&(m.detour.len() as u64).to_le_bytes());
+                for tile in &m.detour {
+                    hash.update(&tile.x.to_le_bytes());
+                    hash.update(&tile.y.to_le_bytes());
+                }
                 if let Some((a, b, h, goal)) = m.cache {
                     hash.update(&[1]);
                     for t in [a, b] {

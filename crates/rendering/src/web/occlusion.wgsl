@@ -6,9 +6,23 @@ struct WorldFragment {
     @location(0) color: vec4<f32>,
     @location(1) occluder: u32,
 };
+// Same seven attributes and 112-byte packet as the WebGL2 instance stream.
+struct InstanceInput {
+    @location(0) position_radius: vec4<f32>,
+    @location(1) color: vec4<f32>,
+    @location(2) uv: vec4<f32>,
+    @location(3) depths: vec4<f32>,
+    @location(4) blend0: vec4<f32>,
+    @location(5) blend1: vec4<f32>,
+    @location(6) pages: vec4<u32>,
+};
+fn instance_sprite(input: InstanceInput) -> Sprite {
+    return Sprite(input.position_radius.xy, input.position_radius.zw, input.color,
+        input.uv, input.depths, array<vec4<f32>, 2>(input.blend0, input.blend1), input.pages);
+}
 @vertex
-fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> VertexOutput {
-    return sprite_vertex(vertex, instance);
+fn vs_main(@builtin(vertex_index) vertex: u32, input: InstanceInput) -> VertexOutput {
+    return sprite_vertex(vertex, instance_sprite(input));
 }
 @fragment
 fn fs_main(in: VertexOutput) -> WorldFragment {
@@ -18,10 +32,10 @@ fn fs_main(in: VertexOutput) -> WorldFragment {
     return WorldFragment(color, select(0u, 1u, tall) | select(0u, 2u, hovered));
 }
 @vertex
-fn vs_unit_contour(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> VertexOutput {
-    let sprite = sprites[instance];
+fn vs_unit_contour(@builtin(vertex_index) vertex: u32, input: InstanceInput) -> VertexOutput {
+    let sprite = instance_sprite(input);
     if sprite.color.w >= 0.0 && (sprite.pages.w & 56u) != 0u {
-        return sprite_vertex(vertex, instance);
+        return sprite_vertex(vertex, sprite);
     }
     var out: VertexOutput;
     out.clip = vec4<f32>(2.0, 2.0, 2.0, 1.0);

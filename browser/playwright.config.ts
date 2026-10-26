@@ -89,7 +89,7 @@ export default defineConfig({
     {
       name: "canvas",
       testMatch:
-        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/](?:selection|feudal|castle[\\/]castle)\.play\.spec\.ts$|[\\/]rendering[\\/]ownership\.play\.spec\.ts$/,
+        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/](?:selection|feudal|castle[\\/]castle)\.play\.spec\.ts$|[\\/]rendering[\\/](?:ownership|bigview|bigview-interaction|bigview-population)\.play\.spec\.ts$/,
       use: { launchOptions: { args: [] } },
     },
     {

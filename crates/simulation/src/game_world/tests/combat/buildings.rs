@@ -110,7 +110,7 @@ fn militia_cost_is_paid_all_or_nothing_and_refunded_on_cancel() {
 }
 
 #[test]
-fn population_may_exceed_the_cap_after_a_town_center_falls_but_training_is_refused() {
+fn population_may_exceed_the_cap_after_a_town_center_falls_and_training_waits() {
     let (mut world, ours, _) = two_centers();
     let second = world
         .place_town_center(PlayerId(0), TileCoord::new(60, 100))
@@ -128,7 +128,7 @@ fn population_may_exceed_the_cap_after_a_town_center_falls_but_training_is_refus
     ticks_until(&mut world, 400, |w| w.building(ours).is_none());
     let economy = world.player_economy(PlayerId(0)).unwrap();
     assert_eq!((economy.population_used, economy.population_cap), (7, 5));
-    // Existing units survive; only new training is blocked.
+    // Existing units survive; prepaid training waits for replacement housing.
     assert_eq!(world.units().filter(|u| u.player == PlayerId(0)).count(), 7);
     world
         .economy
@@ -137,10 +137,14 @@ fn population_may_exceed_the_cap_after_a_town_center_falls_but_training_is_refus
         .unwrap()
         .stockpile
         .food = 500;
-    assert!(matches!(
-        world.issue_train(PlayerId(0), second, UnitKind::Villager),
-        Err(EconomyError::PopulationCap)
-    ));
+    world
+        .issue_train(PlayerId(0), second, UnitKind::Villager)
+        .unwrap();
+    advance(&mut world, 500);
+    assert_eq!(world.units().filter(|u| u.player == PlayerId(0)).count(), 7);
+    let queue = &world.building(second).unwrap().training_queue;
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue[0].progress_ticks, 0);
 }
 
 #[test]

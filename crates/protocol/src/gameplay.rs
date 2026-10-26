@@ -28,7 +28,7 @@ pub use wildlife::*;
 
 pub const VERSION: u16 = 2;
 /// One gameplay frame: room for the largest combined tick (16,384 units and
-/// 16,384 buildings with full training queues, about 1.8 MiB).
+/// 16,384 buildings with full fifteen-unit training queues).
 pub const MAX_MESSAGE: usize = 4 * 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;

@@ -109,6 +109,7 @@ pub(crate) struct StoredUnit {
     pub(crate) formation: Option<EntityId>,
     pub(crate) state: GameUnit,
     pub(crate) order: Option<MovementOrder>,
+    pub(crate) obstruction: Option<movement_step::Obstruction>,
     pub(crate) bucket: ChunkCoord,
     pub(crate) bucket_slot: usize,
     pub(crate) wildlife_slot: usize,

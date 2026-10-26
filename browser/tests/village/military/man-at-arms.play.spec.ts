@@ -100,8 +100,8 @@ test("Barracks explains the upgrade gate and researches existing and future Men-
         (await actors(page)).filter((a) => a.kind === "ManAtArms").length,
     )
     .toBe(4);
-  await expect(upgrade).toBeDisabled();
-  await expect(upgrade).toHaveAttribute("title", /Already researched/);
+  await expect(upgrade).toBeHidden();
+  await expect(page.locator("#research-long-swordsman")).toBeVisible();
   await expect(train).toBeEnabled();
   await expect(train).toHaveAttribute("title", /Train Man-at-Arms/);
   await expect(train).toContainText("Man-at-Arms");

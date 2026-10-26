@@ -19,7 +19,7 @@ pub(super) fn send(client: &mut Client, message: Message) {
 }
 
 pub(in super::super) fn train(client: &mut Client, cancel: bool) {
-    let Some(id) = client.selected.building_id else {
+    let Some(id) = super::production::selected(client).map(|building| building.id) else {
         return;
     };
     if !client
@@ -30,57 +30,38 @@ pub(in super::super) fn train(client: &mut Client, cancel: bool) {
     {
         return;
     }
-    let sequence = client.next_sequence;
-    send(
-        client,
-        if cancel {
-            Message::CancelTrainingOrder {
-                sequence,
-                building_id: id,
-            }
-        } else {
-            Message::TrainOrder {
-                sequence,
-                building_id: id,
-                kind: client.village.buildings.iter().find(|b| b.id == id).map_or(
-                    UnitKind::Villager,
-                    |b| {
-                        crate::building_ui::availability::primary_training(
-                            b,
-                            client
-                                .village
-                                .players
-                                .iter()
-                                .find(|p| p.player == owner(client)),
-                        )
-                    },
-                ),
-            }
-        },
-    );
-}
-
-pub(super) fn train_kind(client: &mut Client, kind: UnitKind) {
-    let Some(building_id) = client.selected.building_id else {
-        return;
-    };
-    if !client
-        .village
-        .buildings
-        .iter()
-        .any(|b| b.id == building_id && b.player == owner(client))
-    {
+    if !cancel {
+        let kind = client
+            .village
+            .buildings
+            .iter()
+            .find(|b| b.id == id)
+            .map(|b| {
+                crate::building_ui::availability::primary_training(
+                    b,
+                    client
+                        .village
+                        .players
+                        .iter()
+                        .find(|p| p.player == owner(client)),
+                )
+            })
+            .unwrap_or(UnitKind::Villager);
+        super::production::train(client, kind);
         return;
     }
     let sequence = client.next_sequence;
     send(
         client,
-        Message::TrainOrder {
+        Message::CancelTrainingOrder {
             sequence,
-            building_id,
-            kind,
+            building_id: id,
         },
     );
+}
+
+pub(super) fn train_kind(client: &mut Client, kind: UnitKind) {
+    super::production::train(client, kind);
 }
 
 pub(in super::super) fn stop(client: &mut Client) {

@@ -238,6 +238,9 @@ async function selectAndMove(page: Page, movementPixelTimeout = 10_000) {
     .toBeGreaterThan(10);
   const before = await horsePixels(page);
   await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
+  await expect(page.locator("#selection-name")).toHaveText("Scout Cavalry");
+  // This ground tile is occupied by a starting villager. The scout must
+  // choose a nearby arrival instead of cancelling the order at its origin.
   await canvas.click({
     position: { x: box.width / 2 + 110, y: box.height / 2 + 30 },
     button: "right",

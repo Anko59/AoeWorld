@@ -71,10 +71,10 @@ pub const BUILDING_RULES: [BuildingRules; 21] = [
         accepts: ALL,
         trainable: VILLAGERS,
         requires: None,
-        buildable: false,
+        buildable: true,
         blocks: true,
         food: 0,
-        age: Age::Dark,
+        age: Age::Castle,
     },
     BuildingRules {
         kind: BuildingKind::House,

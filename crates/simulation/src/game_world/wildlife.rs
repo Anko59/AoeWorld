@@ -75,10 +75,10 @@ enum HuntStage {
 /// nearby units through point lookups instead of scanning the population.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CellUnit {
-    id: EntityId,
-    position: WorldPosition,
+    pub(super) id: EntityId,
+    pub(super) position: WorldPosition,
     player: PlayerId,
-    kind: UnitKind,
+    pub(super) kind: UnitKind,
     alive: bool,
 }
 
@@ -152,6 +152,18 @@ impl GameWorld {
         at: WorldPosition,
         salt: u64,
     ) -> impl Iterator<Item = EntityId> + '_ {
+        self.spacing_units(at, salt, EntityId(u32::MAX))
+            .map(|unit| unit.id)
+    }
+
+    /// Reuse the live cell mirror directly; isolated actors create no windows
+    /// and candidates need no second random lookup into the population store.
+    pub(super) fn spacing_units(
+        &self,
+        at: WorldPosition,
+        salt: u64,
+        except: EntityId,
+    ) -> impl Iterator<Item = &CellUnit> + '_ {
         let tile = at.tile_floor();
         let min = cell_of(TileCoord::new(tile.x - 1, tile.y - 1));
         let max = cell_of(TileCoord::new(tile.x + 1, tile.y + 1));
@@ -170,7 +182,10 @@ impl GameWorld {
                     .unit_cells
                     .get(&unit_key((x, y)))
                     .map_or(&[][..], Vec::as_slice);
-                let start = (salt % units.len().max(1) as u64) as usize;
+                if units.is_empty() || (units.len() == 1 && units[0].id == except) {
+                    continue;
+                }
+                let start = (salt % units.len() as u64) as usize;
                 let limit = units.len().min(32);
                 let first = limit.min(units.len() - start);
                 if first > 0 {
@@ -195,13 +210,14 @@ impl GameWorld {
                 }
                 let unit = &units[offset];
                 offset += 1;
-                if unit.alive
+                if unit.id != except
+                    && unit.alive
                     && unit.position.x >= min_x
                     && unit.position.x <= max_x
                     && unit.position.y >= min_y
                     && unit.position.y <= max_y
                 {
-                    return Some(unit.id);
+                    return Some(unit);
                 }
             }
             None

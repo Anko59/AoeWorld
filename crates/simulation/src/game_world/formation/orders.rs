@@ -88,6 +88,7 @@ impl GameWorld {
                 carry: 0,
                 probe: 0,
                 cache: None,
+                detour: VecDeque::new(),
             })
             .collect();
         let mut group = Group {
@@ -95,16 +96,25 @@ impl GameWorld {
             members,
             anchor: origin,
             heading,
+            travel_heading: heading,
             facing,
             speed: (0, 1),
             ready: false,
             settled: false,
+            column: false,
+            column_order: Vec::new(),
+            member_lookup: Default::default(),
             destination,
             queue: VecDeque::new(),
             attack_move,
             trail: VecDeque::from([origin]),
         };
         group.speed = self.group_speed(&group);
+        let positions = ids
+            .iter()
+            .map(|id| self.units[self.lookup[id]].state.position)
+            .collect::<Vec<_>>();
+        group.assign_offsets(&positions);
         self.formations.insert(leader, group);
         self.install_formation_route(
             index,
@@ -177,6 +187,18 @@ impl GameWorld {
                     destination.x - group.anchor.x,
                     destination.y - group.anchor.y,
                 );
+                group.travel_heading = group.heading;
+                group.facing = facing_for(
+                    i64::from(group.heading.x),
+                    i64::from(group.heading.y),
+                    group.facing,
+                );
+                let positions = group
+                    .members
+                    .iter()
+                    .map(|m| self.units[self.lookup[&m.id]].state.position)
+                    .collect::<Vec<_>>();
+                group.assign_offsets(&positions);
                 group.settled = false;
                 group.ready = false;
                 self.install_formation_route(

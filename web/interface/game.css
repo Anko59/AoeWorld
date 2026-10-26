@@ -17,6 +17,8 @@ button:disabled { color:#9b9f8e; opacity:.55; cursor:default; }
 .counter small { display:block; font-size:9px; letter-spacing:.07em; color:var(--muted); }
 .worker-count { align-self:flex-end; display:flex; gap:1px; font-size:10px; color:#c4c7b3; margin:0 0 4px -4px; }
 .worker-count .icon { width:12px; height:12px; opacity:.8; }
+#idle-villagers,#idle-military { display:flex; align-items:center; gap:4px; white-space:nowrap; }
+#idle-villagers .icon,#idle-military .icon { width:20px; height:20px; }
 .population { margin-left:3px; border-left:1px solid #77745a; padding-left:13px; min-width:91px; }
 #age { color:#e3cda0; font:19px Georgia,serif; white-space:nowrap; letter-spacing:.04em; }
 #age>span { display:inline-grid; place-items:center; border:1px solid #988254; width:24px; height:28px; margin-right:7px; font-size:17px; }
@@ -62,8 +64,8 @@ kbd { font:10px system-ui; position:absolute; right:3px; top:1px; color:#f5e1a5;
 progress { width:100%; height:9px; display:block; border:1px solid #9b8b61; background:#19231b; accent-color:#bba15e; }
 progress::-webkit-progress-bar { background:#19231b; }
 progress::-webkit-progress-value { background:linear-gradient(90deg,#8b9b62,#dec58b); }
-#training-queue { display:flex; gap:4px; margin-top:5px; }
-#training-queue .unit-token { width:28px; height:28px; }
+#training-queue { display:flex; flex-wrap:nowrap; gap:1px; margin-top:5px; }
+#training-queue .unit-token { flex:1 1 0; min-width:0; max-width:30px; width:28px; height:28px; }
 #training-queue .icon { width:23px; height:23px; }
 #minimap { position:relative; padding-left:16px; border-left:1px solid #86826688; min-width:0; }
 #minimap-title { position:relative; height:12px; margin:0 0 4px; font-size:9px; line-height:12px; color:#c0c5ab; }
@@ -97,7 +99,7 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 @media(max-width:950px) { #top-bar { gap:8px; } #age { display:none; } #top-bar { grid-template-columns:1fr auto; } #top-bar button:disabled { display:none; } #bottom-panel { grid-template-columns:260px 1fr 195px; gap:12px; padding-left:12px; padding-right:12px; } #commands { padding-right:12px; } #selection-portrait { width:55px; height:65px; } #selection-portrait .icon { width:45px; height:45px; } #selection h1 { font-size:19px; } .crest { display:none; } #selection-empty { padding-left:0; } }
 
 #map-navigation .icon { width:18px; height:18px; }
-#minimap-entities { fill:var(--player-colour,#006dff); stroke:#101e25; stroke-width:.7; pointer-events:none; }
+#minimap-entities { fill:var(--player-colour,#006dff); stroke:none; pointer-events:none; }
 #minimap-primary { opacity:0; }
 #scene[data-command-cursor=move] { cursor:url('/interface/cursors.svg') 12 12, crosshair; }
 #scene[data-command-cursor=gather] { cursor:url('/interface/gather.svg') 12 12, pointer; }
@@ -189,7 +191,7 @@ html[data-interface-art=original] .unit-token { width:36px; height:36px; border:
 html[data-interface-art=original] #selection[data-count]:not([data-count="1"]) #portrait-frame { display:none; }
 html[data-interface-art=original] #selection[data-count]:not([data-count="1"]) #selection-task { display:none; }
 html[data-interface-art=original] #training { margin-top:6px; }
-html[data-interface-art=original] #training-queue { gap:3px; margin-top:4px; }
+html[data-interface-art=original] #training-queue { gap:1px; margin-top:4px; }
 html[data-interface-art=original] #training-queue .unit-token { width:30px; height:30px; }
 html[data-interface-art=original] #training-progress { height:7px; }
 html[data-interface-art=original] .queue-heading { font-size:10px; margin-bottom:3px; }
@@ -228,3 +230,10 @@ html[data-interface-art=original] #top-bar .counter, html[data-interface-art=ori
 .formation-command[aria-pressed="true"] { outline:2px solid #f4d577; outline-offset:-3px; background-color:#584620; }
 #command-grid .formation-icon { width:29px; height:24px; margin:0 auto 8px; fill:#f2dca0; color:#f2dca0; filter:drop-shadow(0 1px #000); }
 #command-grid .formation-name { bottom:2px; font-size:8px; font-weight:600; letter-spacing:-.1px; white-space:nowrap; }
+
+#minimap-zoom { position:absolute; right:0; top:0; padding:0 4px; font:10px monospace; z-index:1; }
+#minimap.expanded #minimap-zoom { right:85px; top:6px; }
+#strategic-scene { position:fixed; inset:0; width:100%; height:100%; pointer-events:none; }
+html[data-lod=map] #unit-health-bars,html[data-lod=map] #carried-loads,
+html[data-lod=markers] #unit-health-bars,html[data-lod=markers] #carried-loads { display:none; }
+#strategic-label { position:fixed; top:64px; right:12px; pointer-events:none; padding:5px 9px; background:#142019ee; color:#e9efdb; font:12px monospace; z-index:1; }

@@ -18,6 +18,12 @@ use crate::{GameUnit, GameWorld, MovementOrder, UnitTask};
 use aoe_core::{ChunkCoord, EntityId, PlayerId, WorldPosition};
 use aoe_map::RoutePlanner;
 
+mod avoidance;
+mod lookahead;
+mod refinement;
+mod settling;
+pub(crate) use settling::Obstruction;
+
 /// A proposed tick of one mover.
 pub(crate) struct FastStep {
     state: GameUnit,
@@ -88,6 +94,9 @@ impl GameWorld {
     /// `movers[(start + turn) % movers.len()]`.
     pub(crate) fn propose_steps(&self, movers: &[EntityId], start: usize) -> Vec<Option<FastStep>> {
         let count = movers.len();
+        if count == 0 {
+            return Vec::new();
+        }
         let tables = Tables::build(self);
         par_map(count, |turn| {
             self.propose_step(movers[(start + turn) % count], &tables)
@@ -99,6 +108,9 @@ impl GameWorld {
     fn propose_step(&self, id: EntityId, tables: &Tables) -> Option<FastStep> {
         let index = *self.lookup.get(&id)?;
         let stored = &self.units[index];
+        if stored.obstruction.is_some_and(|o| o.blocked >= 16) {
+            return None;
+        }
         if stored.formation.is_some() {
             return None;
         }
@@ -111,14 +123,24 @@ impl GameWorld {
             return None;
         }
         let mut state = stored.state;
+        if self.arrival_slot_occupied(index) {
+            return None;
+        }
         let economy = tables.economy(self, state.player);
         let (speed, denominator) = self.movement_speed_with(state.kind, economy);
         let following = self.following_unit(index);
-        let speed = if following { 0 } else { speed };
+        let speed = if following && !self.local_retry(id) {
+            0
+        } else {
+            speed
+        };
         let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
         order.speed_carry = 0;
         let remaining = order.segment_length.saturating_sub(order.travelled);
         let step = u128::from(remaining).min(speed_budget / u128::from(denominator)) as u32;
+        if step > 512 {
+            return None;
+        }
         order.travelled += step;
         speed_budget -= u128::from(step) * u128::from(denominator);
         let arrived = order.travelled >= order.segment_length;
@@ -128,6 +150,9 @@ impl GameWorld {
             interpolate(order, order.travelled)
         };
         let (previous_tile, tile) = (state.position.tile_floor(), position.tile_floor());
+        if !self.local_unit_step_clear(index, state.position, position) {
+            return None;
+        }
         if !matches!(
             self.unit_step_clear(state.kind, previous_tile, tile),
             Ok(true)
@@ -253,10 +278,19 @@ impl GameWorld {
         let Some(&index) = self.lookup.get(&id) else {
             return false;
         };
-        if step.following != self.following_unit(index) {
+        if step.following != self.following_unit(index)
+            || self.arrival_slot_occupied(index)
+            || !self.local_unit_step_clear(
+                index,
+                self.units[index].state.position,
+                step.state.position,
+            )
+        {
             return false;
         }
         let stored = &mut self.units[index];
+        let state_changed = stored.state != step.state;
+        let position_changed = stored.state.position != step.state.position;
         let previous_tile = stored.state.position.tile_floor();
         if step.state.planning && !stored.state.planning {
             stored.planning_since = self.tick.0;
@@ -266,9 +300,15 @@ impl GameWorld {
         if step.pops > 0 {
             stored.route.pop_front();
         }
+        if step.following {
+            self.record_unit_obstruction(index);
+        }
+        self.observe_unit_progress(index);
         // Wildlife's unit cells follow every step, before vision, as in the
         // sequential path.
-        self.track_unit_step(id, previous_tile, &step.state);
+        if position_changed {
+            self.track_unit_step(id, previous_tile, &step.state);
+        }
         if step.vision_stale {
             self.update_unit_vision(id);
         }
@@ -278,7 +318,9 @@ impl GameWorld {
         if step.keeps_moving {
             still_moving.push(id);
         }
-        changed.push(step.state.id);
+        if state_changed {
+            changed.push(step.state.id);
+        }
         true
     }
 }
