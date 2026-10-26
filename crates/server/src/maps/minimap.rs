@@ -13,7 +13,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use std::{
-    collections::VecDeque,
+    collections::{BTreeSet, VecDeque},
     sync::{Arc, atomic::Ordering},
     time::Duration,
 };
@@ -77,6 +77,8 @@ pub(crate) enum MinimapError {
 #[derive(Debug, Default)]
 pub(crate) struct MinimapCache {
     entries: VecDeque<(String, Arc<[u8]>)>,
+    /// Rasters still computing after a request hit its deadline.
+    pending: BTreeSet<String>,
 }
 
 impl MinimapCache {
@@ -326,29 +328,48 @@ pub(in crate::maps) async fn minimap(
     let mut cache = state.minimaps.lock().await;
     let raster = if let Some(raster) = cache.get(&content_hash) {
         raster
+    } else if cache.pending.contains(&content_hash) {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
     } else {
-        let (_cancellation_guard, cancelled) = request_cancellation();
+        let (cancellation_guard, cancelled) = request_cancellation();
         let provider = page_residency(&state, &package, cancelled.clone())
             .await
             .map_err(|_| StatusCode::NOT_FOUND)?;
-        // The deadline is enforced here rather than in the sampling loop:
-        // returning drops the guard, which cancels the blocking task.
-        let task = tokio::task::spawn_blocking(move || {
+        let mut task = tokio::task::spawn_blocking(move || {
             package_minimap(&package, provider, &|| cancelled.load(Ordering::Acquire))
         });
-        let raster: Arc<[u8]> = tokio::time::timeout(MINIMAP_TIME_BUDGET, task)
-            .await
-            .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .map_err(|error| match error {
-                MinimapError::Page(EnvironmentPageError::Cancelled) => {
-                    StatusCode::SERVICE_UNAVAILABLE
-                }
-                _ => StatusCode::NOT_FOUND,
-            })?
-            .into();
-        cache.insert(content_hash, raster.clone());
-        raster
+        match tokio::time::timeout(MINIMAP_TIME_BUDGET, &mut task).await {
+            Ok(joined) => {
+                let raster: Arc<[u8]> = joined
+                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                    .map_err(|error| match error {
+                        MinimapError::Page(EnvironmentPageError::Cancelled) => {
+                            StatusCode::SERVICE_UNAVAILABLE
+                        }
+                        _ => StatusCode::NOT_FOUND,
+                    })?
+                    .into();
+                cache.insert(content_hash, raster.clone());
+                raster
+            }
+            Err(_) => {
+                // A busy server can need longer than one request's budget; keep
+                // computing once in the background so a retry finds it cached
+                // instead of restarting the work from zero.
+                cache.pending.insert(content_hash.clone());
+                let minimaps = state.minimaps.clone();
+                tokio::spawn(async move {
+                    let _guard = cancellation_guard;
+                    let result = task.await;
+                    let mut cache = minimaps.lock().await;
+                    cache.pending.remove(&content_hash);
+                    if let Ok(Ok(raster)) = result {
+                        cache.insert(content_hash, raster.into());
+                    }
+                });
+                return Err(StatusCode::SERVICE_UNAVAILABLE);
+            }
+        }
     };
     drop(cache);
     Ok((
