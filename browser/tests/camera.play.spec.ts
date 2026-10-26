@@ -43,7 +43,11 @@ test("camera keys follow screen directions and recenter finds the horse", async 
     await expect.poll(() => cameraPosition(page)).toEqual(origin);
     await page.mouse.move(box.width / 2, box.height / 2);
   }
-  await page.mouse.wheel(0, 5_000);
+  // Extreme zoom now fits and centers the whole world. Exercise panning at
+  // gameplay zoom instead, where there is still off-screen ground to reveal.
+  await page.mouse.wheel(0, 900);
+  await expect(page.locator("#minimap")).not.toHaveAttribute("data-zoom", "1");
+  await expect(canvas).toHaveAttribute("data-lod", "sprites");
   await page.keyboard.press("ArrowRight");
   await expect
     .poll(async () => (await cameraPosition(page))[0])

@@ -25,9 +25,11 @@ fn screen(client: &Client, position: [f64; 2]) -> [f64; 2] {
 
 pub(in super::super) fn update(client: &Client) {
     let owner = owner(client);
+    let overview = crate::playground::game::strategic::active(client);
     // Header: four stockpiles, used/cap, four worker counts, clock, observing,
-    // native-art flag, then actor/queue/resource counts. Actor records contain
-    // eighteen numbers; queue records contain progress, total and unit kind.
+    // native-art flag, actor/queue/resource counts, and the two idle counts.
+    // Actor records contain eighteen numbers; queue records contain progress,
+    // total and unit kind.
     // Decode immediately in JS; never retain a view of WASM memory.
     let scene = map::scene::prepare(client);
     let camera = aoe_rendering::SceneCamera {
@@ -36,37 +38,41 @@ pub(in super::super) fn update(client: &Client) {
         viewport: client.camera.viewport,
         focus_elevation_meters: client.camera.focus_elevation_meters,
     };
-    let heads = map::scene::units(client, &scene)
-        .into_iter()
-        .filter(|u| u.visual.selected())
-        .filter_map(|u| {
-            aoe_rendering::scene_unit_bounds(
-                &client.art,
-                u,
-                camera,
-                (client.last_frame / 100.0) as usize,
-            )
-            .map(|bounds| {
-                (
-                    u.id,
-                    (bounds[1] - 5.0) * f64::from(client.canvas.client_height())
-                        / f64::from(client.canvas.height()),
+    let heads = if overview {
+        Vec::new()
+    } else {
+        map::scene::units(client, &scene)
+            .into_iter()
+            .filter(|u| u.visual.selected())
+            .filter_map(|u| {
+                aoe_rendering::scene_unit_bounds(
+                    &client.art,
+                    u,
+                    camera,
+                    (client.last_frame / 100.0) as usize,
                 )
+                .map(|bounds| {
+                    (
+                        u.id,
+                        (bounds[1] - 5.0) * f64::from(client.canvas.client_height())
+                            / f64::from(client.canvas.height()),
+                    )
+                })
             })
-        })
-        .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+    };
     let head = |id, y| {
         heads
             .iter()
             .find(|(key, _)| *key == id)
             .map_or(y - 42.0 * client.camera.zoom, |(_, top)| *top)
     };
-    let mut values = vec![0.0; 16];
+    let mut values = vec![0.0; 18];
+    values[16] = client.village.idle_villagers.len() as f64;
+    values[17] = client.village.idle_military.len() as f64;
     values[10] = (client.village.tick / u64::from(client.config.tick_hz.max(1))) as f64;
     values[11] = flag(client.role != Some(GameplayRole::Controller));
     values[12] = flag(!client.art.village[0].is_empty());
-    values[13] =
-        (client.units.len() + client.village.buildings.len() + client.village.animals.len()) as f64;
     if let Some(player) = client.village.players.iter().find(|p| p.player == owner) {
         let s = player.stockpile;
         values[..6].copy_from_slice(&[
@@ -80,11 +86,8 @@ pub(in super::super) fn update(client: &Client) {
     }
     for unit in client.units.values() {
         let selected = client.selected.units.contains(&unit.id);
-        let position = position_at(client, unit.id);
-        let [x, y] = screen(client, position);
-        let resource = unit.carried.map(|load| load.kind).or(unit.gathering);
         if unit.player == owner
-            && unit.kind == UnitKind::Villager
+            && matches!(unit.kind, UnitKind::Villager | UnitKind::FishingShip)
             && let Some(kind) = worker_resource(unit)
         {
             values[6 + match kind {
@@ -94,6 +97,15 @@ pub(in super::super) fn update(client: &Client) {
                 ResourceKind::Stone => 3,
             }] += 1.0;
         }
+        // Keep global worker totals, but only serialize selected actor details
+        // in strategic views. The minimap/cluster stream remains complete.
+        if overview && !selected {
+            continue;
+        }
+        values[13] += 1.0;
+        let position = position_at(client, unit.id);
+        let [x, y] = screen(client, position);
+        let resource = unit.carried.map(|load| load.kind).or(unit.gathering);
         let base = crate::building_ui::content::rules().units[unit.kind as usize].combat;
         let p = client
             .village
@@ -153,13 +165,17 @@ pub(in super::super) fn update(client: &Client) {
         ]);
     }
     for building in &client.village.buildings {
+        if overview && !client.selected.has_building(building.id) {
+            continue;
+        }
+        values[13] += 1.0;
         let [x, y] = screen(client, building_center(building));
         values.extend_from_slice(&[
             f64::from(building.id.0),
             2.0 + building.kind as u8 as f64,
             x,
             y,
-            flag(client.selected.building_id == Some(building.id)),
+            flag(client.selected.has_building(building.id)),
             if building.training_queue.is_empty() {
                 5.0
             } else {
@@ -180,6 +196,10 @@ pub(in super::super) fn update(client: &Client) {
         ]);
     }
     for animal in &client.village.animals {
+        if overview && !client.selected.units.contains(&animal.id) {
+            continue;
+        }
+        values[13] += 1.0;
         let [x, y] = screen(client, animal.position.as_tiles());
         let (kind, hp, attack) = match animal.kind {
             aoe_protocol::AnimalKind::Sheep => {
@@ -237,14 +257,30 @@ pub(in super::super) fn update(client: &Client) {
 }
 
 pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
+    for (id, military) in [("idle-villagers", false), ("idle-military", true)] {
+        let finder = shared.clone();
+        let callback = wasm_bindgen::closure::Closure::<dyn FnMut()>::new(move || {
+            super::selection::idle(&mut finder.borrow_mut(), military);
+        });
+        shared
+            .borrow()
+            .document
+            .get_element_by_id(id)
+            .ok_or("idle finder button missing")?
+            .add_event_listener_with_callback(
+                "click",
+                wasm_bindgen::JsCast::unchecked_ref(callback.as_ref()),
+            )?;
+        callback.forget();
+    }
     super::building_panel::install(shared)
 }
 
-/// Villagers working a resource, including farmers standing on a farm.
-/// The resource a villager's job gathers, as AoE2's top-bar counts it: every
+/// Villagers and Fishing Ships working a resource, including farming.
+/// The resource a worker's job gathers, as AoE2's top-bar counts it: every
 /// stage of the job (walking to the resource, working, carrying it back or
 /// waiting for a drop-off) and every food job (forager, hunter, shepherd,
-/// fisherman, farmer). Idle, building, fighting and dead villagers count for
+/// fisherman, farmer). Idle, building, fighting and dead workers count for
 /// nothing, whatever they carry.
 pub(super) fn worker_resource(unit: &aoe_protocol::GameplayUnitState) -> Option<ResourceKind> {
     if unit.hp == 0

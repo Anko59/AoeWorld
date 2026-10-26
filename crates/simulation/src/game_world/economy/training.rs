@@ -1,6 +1,6 @@
 use super::{
     EconomyError, TrainingEntry, UnitKind, VILLAGE_RULES,
-    placement::{perimeter, position},
+    placement::{distance_squared, perimeter, position},
 };
 use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId};
@@ -50,14 +50,6 @@ impl GameWorld {
             .players
             .get(&player)
             .ok_or(EconomyError::NotOwner)?;
-        let reserved = self
-            .buildings()
-            .filter(|b| b.player == player)
-            .map(|b| b.training_queue.len())
-            .sum::<usize>();
-        if usize::from(state.population_used) + reserved >= usize::from(state.population_cap) {
-            return Err(EconomyError::PopulationCap);
-        }
         let seconds = if kind == UnitKind::Villager {
             if state.stockpile.food < VILLAGE_RULES.villager_food_cost {
                 return Err(EconomyError::InsufficientFood);
@@ -83,7 +75,7 @@ impl GameWorld {
         Ok(())
     }
 
-    /// Cancel the active entry, refund its food, and release its reserved slot.
+    /// Cancel the active entry and refund its prepaid cost.
     /// Repeating cancellation on an empty queue cannot create resources.
     pub fn issue_cancel_training(
         &mut self,
@@ -126,6 +118,15 @@ impl GameWorld {
             let Some(building) = self.economy.buildings.get_mut(&id) else {
                 continue;
             };
+            // Housing blocks progress, while the prepaid queue remains intact.
+            if self
+                .economy
+                .players
+                .get(&building.player)
+                .is_none_or(|state| state.population_used >= state.population_cap)
+            {
+                continue;
+            }
             let Some(entry) = building.training_queue.front_mut() else {
                 continue;
             };
@@ -140,13 +141,20 @@ impl GameWorld {
             let rally = building.rally_point;
             let footprint = building.footprint;
             let player = building.player;
-            if self
-                .player_economy(player)
-                .is_none_or(|state| state.population_used >= state.population_cap)
-            {
-                continue;
-            }
-            let spawn = perimeter(footprint).into_iter().find(|tile| {
+            // The isometric screen's bottom tip is max/max (screen y grows
+            // with world x+y). A rally point takes priority over that exit.
+            let front = footprint.max;
+            let toward = rally.map_or(front, |rally| rally.position.tile_floor());
+            let mut exits = perimeter(footprint);
+            exits.sort_by_key(|tile| {
+                (
+                    distance_squared(*tile, toward),
+                    distance_squared(*tile, front),
+                    tile.y,
+                    tile.x,
+                )
+            });
+            let spawn = exits.into_iter().find(|tile| {
                 self.unit_tile_passable(kind, *tile, &|| false)
                     .unwrap_or(false)
                     && !self.economy.blocked_tiles.contains(tile)

@@ -30,6 +30,7 @@ mod unit_visuals;
 
 pub mod fog;
 pub mod resource_state;
+pub mod strategic;
 
 #[cfg(any(all(target_arch = "wasm32", not(feature = "diagnostics")), test))]
 #[path = "playground_map/requests.rs"]

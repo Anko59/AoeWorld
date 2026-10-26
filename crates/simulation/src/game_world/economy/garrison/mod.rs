@@ -126,6 +126,7 @@ impl GameWorld {
         }
         candidates.sort_by_key(|tile| {
             (
+                self.work_spot_busy(*tile, id),
                 distance_squared(actor.position.tile_floor(), *tile),
                 tile.y,
                 tile.x,

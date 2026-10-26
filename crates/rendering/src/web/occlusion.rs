@@ -1,4 +1,4 @@
-//! GPU-only coverage: one byte per backing pixel and one extra instanced draw.
+//! GPU-only coverage: one byte per backing pixel and eligible contour runs.
 use super::{Renderer, draw, instance_buffer::InstanceBuffer};
 
 pub(super) struct Mask {
@@ -72,11 +72,18 @@ impl Contour {
     pub(super) fn rebind(&mut self, device: &wgpu::Device, mask: &wgpu::TextureView) {
         self.bind_group = Self::group(device, &self.pipeline.get_bind_group_layout(1), mask);
     }
-    fn draw(&self, pass: &mut wgpu::RenderPass<'_>, instances: &InstanceBuffer, count: u32) {
+    fn draw(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        instances: &InstanceBuffer,
+        ranges: &[std::ops::Range<u32>],
+    ) {
         pass.set_pipeline(&self.pipeline);
         instances.set_on(pass);
         pass.set_bind_group(1, &self.bind_group, &[]);
-        pass.draw(0..6, 0..count);
+        for range in ranges {
+            pass.draw(0..6, range.clone());
+        }
     }
 }
 
@@ -89,7 +96,7 @@ impl Renderer {
         count: u32,
         clear: wgpu::Color,
     ) {
-        let depth = self.depth.create_view(&Default::default());
+        let depth = &self.depth_view;
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("world colour and occlusion coverage"),
@@ -101,7 +108,7 @@ impl Renderer {
                     )),
                 ],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth,
+                    view: depth,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: wgpu::StoreOp::Store,
@@ -122,7 +129,7 @@ impl Renderer {
                 label: Some("hidden units and resource hover contours"),
                 color_attachments: &[Some(attachment(view, wgpu::LoadOp::Load))],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth,
+                    view: depth,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
@@ -131,7 +138,7 @@ impl Renderer {
                 }),
                 ..Default::default()
             });
-            contour.draw(&mut pass, &self.instances, count);
+            contour.draw(&mut pass, &self.instances, &self.contour_draws);
         }
     }
 }

@@ -135,6 +135,15 @@ pub fn building_buildable(kind: BuildingKind) -> bool {
     native_building(kind).rules().buildable
 }
 
+/// Earliest age in which villagers may construct this kind.
+pub fn building_required_age(kind: BuildingKind) -> crate::Age {
+    match native_building(kind).rules().age {
+        sim::Age::Dark => crate::Age::Dark,
+        sim::Age::Feudal => crate::Age::Feudal,
+        sim::Age::Castle => crate::Age::Castle,
+    }
+}
+
 /// Units a completed building of this kind can train.
 pub fn trainable(building: BuildingKind) -> Vec<UnitKind> {
     sim::trainable_units(native_building(building))

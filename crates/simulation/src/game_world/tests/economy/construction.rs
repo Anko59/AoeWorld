@@ -1,6 +1,7 @@
 //! Construction speed, builders and palisade walls.
 use super::{buildings::*, *};
 
+mod approach;
 mod continuation;
 
 fn at(x: i32, y: i32) -> TileCoord {

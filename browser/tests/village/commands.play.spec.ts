@@ -70,10 +70,21 @@ test("villager resource cursors, live resource selection, grid and own minimap m
   await expect(page.locator("#selection-load")).not.toHaveText(initial, {
     timeout: 35_000,
   });
-  await expect(page.locator("#minimap-entities .minimap-unit")).toHaveCount(4);
-  await expect(page.locator("#minimap-entities .minimap-building")).toHaveCount(
-    1,
-  );
+  // Whole-world pixels may combine villagers and the Town Center. All
+  // authoritative actors must still contribute to the pixel counts.
+  const markerCount = (kind: string) =>
+    page
+      .locator("#minimap-entities rect")
+      .evaluateAll(
+        (nodes, key) =>
+          nodes.reduce(
+            (count, node) => count + Number(node.getAttribute(key)),
+            0,
+          ),
+        kind,
+      );
+  await expect.poll(() => markerCount("data-units")).toBe(4);
+  await expect.poll(() => markerCount("data-buildings")).toBe(1);
   await centerVillage(page, true);
   const idle = (await actors())
     .filter((actor) => actor.kind === "Villager")

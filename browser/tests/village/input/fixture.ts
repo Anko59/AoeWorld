@@ -1,6 +1,10 @@
 import { expect, type Page, type WebSocketRoute } from "@playwright/test";
 import { gameAssets } from "../../game-assets.js";
-import { scoutCombat, villagerCombat } from "../../wire/combat.js";
+import {
+  militiaCombat,
+  scoutCombat,
+  villagerCombat,
+} from "../../wire/combat.js";
 import {
   darkAgeState,
   feudalAgeState,
@@ -69,7 +73,13 @@ export async function inputFixture(
   cursorCatalog = false,
   viewer: 0 | 1 = 0,
   observe?: (bytes: Buffer, socket: WebSocketRoute) => void,
-  options: { carried?: boolean; query?: string; cargo?: number } = {},
+  options: {
+    carried?: boolean;
+    query?: string;
+    cargo?: number;
+    player?: number[];
+    military?: boolean;
+  } = {},
 ) {
   const navy =
     options.cargo === undefined ? undefined : { cargo: options.cargo };
@@ -139,7 +149,11 @@ export async function inputFixture(
         0,
         ...(options.carried && id === 2 ? [1, 1, 7] : [0]),
         0,
-        ...(kind === 1 ? scoutCombat : villagerCombat),
+        ...(kind === 1
+          ? scoutCombat
+          : kind === 2
+            ? militiaCombat
+            : villagerCombat),
       ];
       socket.send(
         Buffer.from([
@@ -149,21 +163,29 @@ export async function inputFixture(
           navy ? 5 : 4,
           ...unit(0, 8192.5, 8192.5, 1),
           ...unit(2, 8194.5, 8194.5, 0),
-          ...unit(3, 8196.5, 8194.5, 0),
-          ...unit(4, 8189.5, 8192.5, 0, viewer === 0 ? 1 : 0),
+          ...unit(3, 8196.5, 8194.5, options.military ? 2 : 0),
+          ...unit(
+            4,
+            8189.5,
+            8192.5,
+            options.military ? 1 : 0,
+            viewer === 0 ? 1 : 0,
+          ),
           ...(navy
             ? [...unit(5, 8193.5, 8194.5, 20).slice(0, -1), navy.cargo]
             : []),
           1,
-          viewer,
-          ...uint(2000),
-          ...uint(2000),
-          100,
-          ...uint(2000),
-          3,
-          20,
-          ...(navy ? feudalAgeState : darkAgeState),
-          ...marketPrices,
+          ...(options.player ?? [
+            viewer,
+            ...uint(2000),
+            ...uint(2000),
+            100,
+            ...uint(2000),
+            3,
+            20,
+            ...(navy ? feudalAgeState : darkAgeState),
+            ...marketPrices,
+          ]),
           buildings.length,
           ...buildings.flat(),
         ]),

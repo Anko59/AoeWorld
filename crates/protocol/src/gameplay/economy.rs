@@ -22,7 +22,7 @@ pub const MAX_POPULATION: u16 = 200;
 /// The most a match rule may raise the population ceiling to; a wire state
 /// above it is invalid.
 pub const MAX_MATCH_POPULATION: u16 = 5_000;
-pub const MAX_TRAINING_QUEUE: usize = 5;
+pub const MAX_TRAINING_QUEUE: usize = 15;
 
 /// A Market commodity; wood, food and stone trade for gold.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

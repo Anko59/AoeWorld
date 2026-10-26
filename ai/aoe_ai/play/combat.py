@@ -23,8 +23,11 @@ class CombatManager:
             return
         self.note_threats(ctx)
         self.protect_workers(ctx)
+        self.recover_marches(ctx)
         army = [u for u in ctx.army if u.alive and u.id not in ctx.busy]
         mem = ctx.board
+        if not army and any(u.alive for u in ctx.army):
+            return
         if self.defend(ctx, army):
             return
         if mem.attacking:
@@ -34,6 +37,32 @@ class CombatManager:
             mem.attack_launch_size = len(army)
             mem.bump("attacks_launched")
             self.attack(ctx, army)
+
+    def recover_marches(self, ctx: Context) -> None:
+        """Release accepted routes that stopped making observable progress.
+
+        Formation members can remain MOVING while waiting on one another.
+        Stop only stationary soldiers after the normal stall interval, letting
+        the next decision plan a fresh route without interrupting a working one.
+        """
+        mem = ctx.board
+        live = {u.id for u in ctx.army if u.alive}
+        mem.march_progress = {i: p for i, p in mem.march_progress.items() if i in live}
+        stall = ctx.config.march_stall_seconds * ctx.world.tick_hz
+        for unit in ctx.army:
+            if not unit.moving or unit.attack_target is not None or unit.id in ctx.busy:
+                mem.march_progress.pop(unit.id, None)
+                continue
+            tile, since = mem.march_progress.get(unit.id, (unit.tile, ctx.tick))
+            if dist(tile, unit.tile) >= 2:
+                tile, since = unit.tile, ctx.tick
+            mem.march_progress[unit.id] = (tile, since)
+            if ctx.tick - since >= stall:
+                ctx.order("stop", unit.id)
+                mem.march_progress.pop(unit.id, None)
+                mem.marched.pop(unit.id, None)
+                mem.march_goal = None
+                mem.bump("marches_recovered")
 
     # ----- defence ---------------------------------------------------------
     def protect_workers(self, ctx: Context) -> None:
@@ -274,6 +303,7 @@ class CombatManager:
                 continue
             for unit in members:
                 mem.marched[unit.id] = ctx.tick
+                mem.march_progress[unit.id] = (unit.tile, ctx.tick)
             if len(members) > 1:
                 ctx.order("formation_move", [u.id for u in members], *target,
                           getattr(Formation, ctx.config.army_formation))

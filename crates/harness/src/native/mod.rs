@@ -18,6 +18,10 @@ const ARGS: &[&str] = &[
     "never",
 ];
 const BUDGET: Duration = Duration::from_secs(600);
+/// The workspace suite compiles and runs ~3,400 tests in one cargo call; cold
+/// four-core CI runners need ~10-14 minutes for both, so 600 s failed every run.
+/// The test set is unchanged; only the wall-clock allowance grows.
+const UNIT_BUDGET: Duration = Duration::from_secs(1200);
 
 /// Preserve the existing test set and deadline. Explicit reporter arguments
 /// override inherited Nextest reporter settings, without increasing capture size.
@@ -26,7 +30,7 @@ const BUDGET: Duration = Duration::from_secs(600);
 pub(crate) fn run_in(root: &Path, environment: &[(&str, &str)]) -> Result<(), ProcessError> {
     let exclude = tiers::exclude();
     let args = [ARGS, &["-E", exclude.as_str()]].concat();
-    process::run_in(root, "cargo", &args, environment, BUDGET)
+    process::run_in(root, "cargo", &args, environment, UNIT_BUDGET)
 }
 
 /// Budget of the source-qualification tier, which `test_unit` excludes.

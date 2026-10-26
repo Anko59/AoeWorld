@@ -71,7 +71,7 @@ fn the_rules_table_holds_the_dark_age_values_in_kind_order() {
         );
         assert!(rules.buildable);
     }
-    assert!(!TownCenter.rules().buildable);
+    assert!(TownCenter.rules().buildable);
     assert_eq!(Farm.rules().requires, Some(Mill));
     assert_eq!(Farm.rules().food, 175);
     assert_eq!(Outpost.rules().los, 10);
@@ -186,7 +186,7 @@ fn invalid_placements_and_orders_are_refused_atomically() {
             vec![villager],
             BuildingKind::TownCenter,
             at(150, 150),
-            EconomyError::NotBuildable,
+            EconomyError::RequiresCastleAge,
         ),
         (
             PlayerId(0),
@@ -344,12 +344,9 @@ fn houses_raise_the_population_cap_by_five_up_to_two_hundred() {
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
     let builder = villager_at(&mut world, 99, 100);
-    let before = world.canonical_hash();
-    assert_eq!(
-        world.issue_train(PlayerId(0), center, UnitKind::Villager),
-        Err(EconomyError::PopulationCap)
-    );
-    assert_eq!(world.canonical_hash(), before);
+    world
+        .issue_train(PlayerId(0), center, UnitKind::Villager)
+        .unwrap();
     let house = world
         .issue_build(
             PlayerId(0),

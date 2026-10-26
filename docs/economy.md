@@ -68,14 +68,13 @@ A deposit or a new order clears the trip's failed choices. Changing resource
 kind discards the carried load; a plain Move cancels the job while keeping the
 load.
 
-Train commands require an owned, completed building that trains the unit, enough resources, a free population
-slot and space in its bounded queue. Acceptance pays the unit cost and reserves the
-population slot; population used continues to count living units. Only the
-front entry advances. A completed entry waits for a free passable perimeter
-tile and does not pay again. New villagers use the shared entity allocator.
-Cancelling the active training entry refunds its cost and releases its reserved
-population slot; cancelling an empty queue cannot create resources. Death, rally
-points and saved village state are not part of the economy.
+Train commands require an owned, completed building that trains the unit,
+enough resources and space in its fifteen-unit queue. Acceptance pays the unit
+cost, even when population is at the cap; population used counts living units.
+Only the front entry advances, and housing pauses that progress until there is
+room. A completed entry waits for a free passable perimeter tile without paying
+again. New villagers use the shared entity allocator. Cancelling the active
+entry refunds its cost; cancelling an empty queue cannot create resources.
 
 Gameplay protocol 2 is the only current wire. Gather, Train and CancelTraining share Move's
 bounded per-session/global command queue, sequencing and role checks. Snapshot

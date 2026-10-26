@@ -21,6 +21,8 @@ export function initFogMap(svg) {
     previous.set(pixels);
     previousLength = pixels.length;
     previousDisabled = disabled;
+    draw.disabled = disabled;
+    draw.revision++;
     layer.style.display = disabled ? 'none' : '';
     svg.dataset.fog = disabled ? 'disabled' : 'enabled';
     if (disabled || !context || !data) return;
@@ -28,6 +30,9 @@ export function initFogMap(svg) {
     for (const pixel of pixels) data.data[(pixel & 65535) * 4 + 3] = pixel >>> 16 === 2 ? 0 : 140;
     context.putImageData(data, 0, 0);
   };
+  draw.canvas = canvas;
+  draw.revision = 0;
+  draw.disabled = false;
   draw(false, []);
   return draw;
 }

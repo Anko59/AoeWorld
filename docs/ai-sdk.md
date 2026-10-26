@@ -320,6 +320,9 @@ before idle workers use the decision's bounded route-query budget.
 At the configured 28-villager Castle preparation threshold, enough gold shifts
 the target allocation toward food;
 empty-handed miners are redirected one per decision, preserving loaded returns.
+Live resource jobs also rebalance one empty-handed worker per decision toward
+the target shares. Rally orders and resource changes can otherwise leave every
+worker busy while a wood shortage prevents army production.
 Villager queues drain and optional upgrades wait during this preparation;
 military production is funded before extra farms until the configured Feudal
 army minimum is met, then the age receives the food reserve. After reaching
@@ -337,7 +340,10 @@ tile; builders leave them at work, and refused farms cool down instead of
 trapping idle workers in repeated assignments. Nearby
 soldiers or the scout protect workers from wolves and attacking boars; without
 them, nearby workers fight together. Marching soldiers engage visible enemies,
-and a refused attack cools down for that soldier and target while alternatives
+and soldiers whose accepted movement makes no progress for the configured
+stall interval stop and receive a fresh route on a later decision. A `MOVING`
+task alone does not prove progress; working routes are left to finish.
+A refused attack cools down for that soldier and target while alternatives
 are tried. A fogged building remains a target until its destruction is observed;
 standing nearby alone does not establish that it is gone.
 Tunables are in `config.py`. `python -m aoe_ai --help` lists the launcher modes.
@@ -370,9 +376,11 @@ driver (`ai/aoe_ai/arena.py`) advances it with the admin-token call
 protocol, same SDK, same fog-filtered view, and `decision_hz` counts game
 seconds. The driver steps one decision period, waits until every bot has its
 decision, lets them decide, then steps again; the step waits for the orders the
-bots sent, and the real-time order budgets (server and client) are lifted. A
-seed repeats exactly in practice (same result twice on this machine); the
-exceptions are two benign races, a bot whose map window moved during a step (the
+bots sent, and the real-time order budgets (server and client) are lifted.
+Fresh flat and generated SDK matches send the terrain seed as the top-level
+village-layout seed too. Previously only terrain was seeded, so same-seed
+comparisons could place villages differently and did not isolate gameplay
+changes. Remaining timing differences include a bot whose map window moved during a step (the
 driver then adds a tick) and wildlife updates reaching a bot within a few
 milliseconds of its poll. A game finishes in a fraction of its length, but the
 wall time still grows with the armies and the machine's load.

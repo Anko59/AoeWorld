@@ -8,7 +8,7 @@ mod projection;
 pub use clamp::clamp_f64;
 pub use coordinates::*;
 pub use projection::{
-    Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint, inverse_project, project,
+    Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, MIN_CAMERA_ZOOM, ScreenPoint, inverse_project, project,
 };
 use serde::{Deserialize, Serialize};
 

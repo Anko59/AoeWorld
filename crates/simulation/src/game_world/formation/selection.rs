@@ -78,6 +78,10 @@ impl GameWorld {
         form: Formation,
     ) -> Result<(), EconomyError> {
         let (ids, centroid) = self.formation_members(player, ids)?;
+        let positions = ids
+            .iter()
+            .map(|id| self.units[self.lookup[id]].state.position)
+            .collect::<Vec<_>>();
         if let Some(group) = self.formations.get_mut(&ids[0])
             && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
         {
@@ -85,9 +89,12 @@ impl GameWorld {
             for (member, offset) in group.members.iter_mut().zip(layout::slots(form, ids.len())) {
                 member.offset = offset;
                 member.cache = None;
+                member.detour.clear();
                 member.probe = 0;
             }
             group.ready = false;
+            group.column = false;
+            group.assign_offsets(&positions);
             group.settled = false;
             return Ok(());
         }

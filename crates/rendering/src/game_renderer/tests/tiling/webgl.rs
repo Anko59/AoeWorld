@@ -295,7 +295,7 @@ async fn webgl_pixels_survive_repeated_renderer_recreation() -> Result<(), JsVal
                 "renderer recreation {iteration}: Drop must retire the owned context"
             )));
         }
-        // Keep render/readback synchronous (preserveDrawingBuffer is false),
+        // Keep render/readback synchronous to observe this exact packet,
         // then let WebDriver scrape progress between full-atlas recreations.
         browser_turn().await;
     }

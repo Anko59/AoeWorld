@@ -55,6 +55,8 @@ class Blackboard:
     march_since: int = 0
     #: soldier id -> tick of its last march order
     marched: dict[int, int] = field(default_factory=dict)
+    #: soldier id -> (last progress tile, tick); MOVING alone is not progress.
+    march_progress: dict[int, tuple[Tile, int]] = field(default_factory=dict)
     #: villager id -> (resource node, tick) of its last gather order
     gather_sent: dict[int, tuple[int, int]] = field(default_factory=dict)
     #: scout id -> the waypoint it was last sent to

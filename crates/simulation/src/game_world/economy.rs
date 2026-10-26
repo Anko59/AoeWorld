@@ -253,7 +253,7 @@ pub const VILLAGE_RULES: VillageRules = VillageRules {
     },
     villager_food_cost: 50,
     villager_training_seconds: 25,
-    training_queue_limit: 5,
+    training_queue_limit: 15,
     replacement_radius_tiles: 10,
     start_search_radius_tiles: 32,
 };

@@ -22,7 +22,11 @@ function uint(value: number): number[] {
   return bytes;
 }
 /** Authoritative tasks independent of camera terrain and retained inventory. */
-export async function workerFixture(page: Page, feudal = false) {
+export async function workerFixture(
+  page: Page,
+  feudal = false,
+  fishing = false,
+) {
   await page.routeWebSocket("**/game/ws", (socket) => {
     socket.onMessage((message) => {
       const bytes =
@@ -68,7 +72,7 @@ export async function workerFixture(page: Page, feudal = false) {
         kind,
         task,
         ...load,
-        ...(task === 2 ? [1, 2] : [0]),
+        ...(fishing && kind === 3 ? [1, 0] : task === 2 ? [1, 2] : [0]),
         ...(kind === 1
           ? scoutCombat
           : kind === 3
@@ -86,7 +90,9 @@ export async function workerFixture(page: Page, feudal = false) {
           ...unit(0, 8192.5, 8192.5, feudal ? 2 : 1, 0, [0]),
           ...unit(2, 12000.5, 12000.5, 0, 2, [0]),
           ...unit(3, 8193.5, 8192.5, 0, 3, [1, 1, feudal ? 13 : 3]),
-          ...(feudal ? unit(4, 8190.5, 8194.5, 3, 3, [1, 0, 15]) : []),
+          ...(feudal
+            ? unit(4, 8190.5, 8194.5, 3, fishing ? 4 : 3, [1, 0, 15])
+            : []),
           1,
           0,
           ...uint(200),

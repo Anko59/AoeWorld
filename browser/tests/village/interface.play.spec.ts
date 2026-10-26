@@ -130,7 +130,16 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
     timeout: 32_000,
   });
   await page.keyboard.press("q");
-  await expect(page.locator("#connection")).toContainText("population limit");
+  // Orders beyond the cap are now prepaid and queued, then wait for housing.
+  // The training panel explains the wait without reporting a connection error.
+  await expect(page.locator("#stockpile-food")).toHaveText("100");
+  await expect(page.locator("#training-label")).toContainText(
+    "Waiting for housing",
+  );
+  await expect(page.locator("#selection-task")).toHaveText(
+    "Waiting for housing",
+  );
+  await expect(page.locator("#connection")).toHaveText("connected");
 
   await expect
     .poll(

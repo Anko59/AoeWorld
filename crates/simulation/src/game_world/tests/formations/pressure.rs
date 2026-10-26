@@ -320,14 +320,22 @@ fn formations_queued_attack_move_starts_combat_on_its_own_leg() {
         true,
     )
     .unwrap();
+    let mut started_queued_leg = false;
     for _ in 0..150 {
         w.advance();
+        if w.route_scheduler_stats().metrics.orders == 2 {
+            started_queued_leg = true;
+            break;
+        }
+        assert_eq!(
+            w.formation(ids[0]),
+            Some(Formation::Line),
+            "the first leg is an ordinary move"
+        );
+        let unit = w.unit(enemy).unwrap();
+        assert_eq!(unit.hp, unit.max_hp, "no combat before the queued leg");
     }
-    assert_eq!(
-        w.formation(ids[0]),
-        Some(Formation::Line),
-        "the first leg is an ordinary move"
-    );
+    assert!(started_queued_leg, "anchor must finish the first leg");
     for _ in 0..200 {
         w.advance();
     }

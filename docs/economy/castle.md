@@ -121,3 +121,10 @@ ignored `web/pkg/*.wgsl`. WebGPU loads these exact build-assembled sources
 before pipeline creation; WebGL2 retains its own shaders and needs no download.
 Native and browser tests use the same generated modules, with no alternate
 shader implementation.
+
+Villagers can construct additional Town Centers from Castle Age for 275 wood
+and 100 stone, with a 4×4 footprint and 150-second base build time. The economic
+build menu offers Town Center (C). Placement uses the ordinary explored-land,
+resource, occupancy and bounds checks; completing it opens the arches and adds
+five housing. AI clients use the existing build order and can query
+`building_buildable` and `building_required_age` in both Rust and Python.

@@ -1,7 +1,7 @@
 //! Presentation and input only; the server owns the village economy.
 use super::Client;
 use aoe_core::PlayerId;
-use aoe_protocol::{GameplayBuildingState, GameplayPlayerState};
+use aoe_protocol::{GameplayBuildingState, GameplayPlayerState, UnitKind};
 
 pub(super) mod automation;
 pub(super) mod building_panel;
@@ -12,17 +12,22 @@ pub(super) mod navy;
 pub(super) mod orders;
 pub(super) mod picking;
 pub(super) mod presentation;
+#[path = "production/mod.rs"]
+pub(super) mod production;
 pub(super) mod rally;
 pub(super) mod selection;
 pub(super) mod waypoints;
 
 #[derive(Default)]
 pub(crate) struct Village {
+    pub idle_villagers: selection::IdleFinder,
+    pub idle_military: selection::IdleFinder,
     pub viewer: std::cell::Cell<Option<PlayerId>>,
     pub move_queues: Vec<aoe_protocol::MoveQueue>,
     pub players: Vec<GameplayPlayerState>,
     pub buildings: Vec<GameplayBuildingState>,
     pub tick: u64,
+    pub pending_training: production::PendingTraining,
     pub last_hud: f64,
     pub move_cursor: bool,
     pub garrison_cursor: bool,
@@ -40,6 +45,23 @@ pub(crate) struct Village {
     pub projectiles: Vec<aoe_protocol::ProjectileState>,
     pub projectile_tick: u64,
     pub gate_art: std::cell::RefCell<crate::building_ui::GateArt>,
+}
+
+impl Village {
+    pub fn remember_idle(&mut self, owner: PlayerId, unit: &aoe_protocol::GameplayUnitState) {
+        self.idle_villagers.update(
+            unit,
+            unit.player == owner && unit.kind == UnitKind::Villager,
+        );
+        self.idle_military.update(
+            unit,
+            unit.player == owner
+                && !matches!(
+                    unit.kind,
+                    UnitKind::Villager | UnitKind::FishingShip | UnitKind::TransportShip
+                ),
+        );
+    }
 }
 
 #[inline(never)]

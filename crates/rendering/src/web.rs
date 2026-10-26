@@ -23,6 +23,7 @@ mod presentation;
 mod shaders;
 #[path = "web/submit.rs"]
 mod submit;
+#[cfg(test)]
 use draw::draw_ranges;
 
 #[cfg(test)]
@@ -81,9 +82,12 @@ pub struct Renderer {
     occlusion: Option<occlusion::Contour>,
     has_occlusion: bool,
     draws: Vec<(std::ops::Range<u32>, bool)>,
+    contour_draws: Vec<std::ops::Range<u32>>,
+    pub(crate) staging: Vec<Sprite>,
     pub(crate) instances: InstanceBuffer,
     pub(crate) _atlas: wgpu::Texture,
     depth: wgpu::Texture,
+    depth_view: wgpu::TextureView,
     page_retirement: Option<js_sys::Function>,
 }
 
@@ -228,16 +232,6 @@ impl Renderer {
             label: Some("sprites"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: true },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Texture {
@@ -263,6 +257,7 @@ impl Renderer {
             &sampler,
         );
         let depth = create_depth_texture(&device, width, height);
+        let depth_view = depth.create_view(&Default::default());
         let mask = occlusion::Mask::new(&device, width, height);
         // Rust clients can outlive their document through callback cycles.
         // Release native GPU work on navigation, before browser context teardown.
@@ -289,9 +284,12 @@ impl Renderer {
             occlusion: None,
             has_occlusion: false,
             draws: Vec::new(),
+            contour_draws: Vec::new(),
+            staging: Vec::new(),
             instances,
             _atlas: atlas,
             depth,
+            depth_view,
             page_retirement,
         };
         // Verify a known coloured clear before assets, fog or networking can
@@ -330,6 +328,7 @@ impl Renderer {
         self.surface.configure(&self.device, &self.config);
         self.depth.destroy();
         self.depth = create_depth_texture(&self.device, width, height);
+        self.depth_view = self.depth.create_view(&Default::default());
         self.mask.texture.destroy();
         self.mask = occlusion::Mask::new(&self.device, width, height);
         if let Some(contour) = &mut self.occlusion {
@@ -344,7 +343,8 @@ impl Renderer {
     ) -> Result<Counters, String> {
         let width = self.config.width as f32;
         let height = self.config.height as f32;
-        let mut sprites = Vec::new();
+        let mut sprites = std::mem::take(&mut self.staging);
+        sprites.clear();
         for entity in entities {
             let x = (entity.position.x as f32 - camera.x) * camera.zoom;
             let y = (entity.position.y as f32 - camera.y) * camera.zoom;
@@ -370,7 +370,9 @@ impl Renderer {
                 pages: [0; 4],
             });
         }
-        self.render_sprites(&sprites)
+        let result = self.render_instances(&mut sprites, [0.055, 0.08, 0.12, 1.0]);
+        self.staging = sprites;
+        result
     }
 
     pub(crate) fn render_sprites(&mut self, sprites: &[Sprite]) -> Result<Counters, String> {
@@ -386,6 +388,7 @@ impl Renderer {
     }
 
     pub(crate) fn draw_on(&self, pass: &mut wgpu::RenderPass<'_>, count: u32) {
+        self.instances.set_on(pass);
         for (range, mixed) in &self.draws {
             assert!(range.end <= count, "draw exceeds instances");
             let pipeline = if *mixed {
@@ -394,7 +397,6 @@ impl Renderer {
                 &self.pipeline
             };
             pass.set_pipeline(pipeline);
-            self.instances.set_on(pass);
             pass.draw(0..6, range.clone());
         }
     }

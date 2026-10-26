@@ -24,7 +24,7 @@ MILITARY = (
 
 #: Buildings that accept each resource as a drop-off.
 #: Orders whose first argument names the unit(s) given work.
-UNIT_ORDERS = frozenset({"gather", "hunt", "farm", "build", "build_bridge", "construct", "move", "formation_move", "attack"})
+UNIT_ORDERS = frozenset({"gather", "hunt", "farm", "build", "build_bridge", "construct", "move", "formation_move", "attack", "stop"})
 
 DROPOFFS = {
     ResourceKind.FOOD: (BuildingKind.TOWN_CENTER, BuildingKind.MILL),

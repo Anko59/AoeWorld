@@ -49,6 +49,14 @@ impl AtlasUpload {
 }
 
 impl GameRenderer {
+    /// Reused frame packets and draw ranges, separate from atlas/GPU payload.
+    pub fn frame_staging_bytes(&self) -> usize {
+        match self {
+            Self::WebGpu(renderer) => renderer.staging_bytes(),
+            _ => 0,
+        }
+    }
+
     /// Owned payload only; excludes driver overhead and browser swapchains.
     pub fn memory_usage(&self) -> [(&'static str, usize); 5] {
         let (textures, buffers, wasm_atlas, js_atlas, raster) = match self {

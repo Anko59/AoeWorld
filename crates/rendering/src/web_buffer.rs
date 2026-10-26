@@ -15,8 +15,6 @@ pub(crate) const MAX_CAPACITY: usize =
 pub(crate) struct InstanceBuffer {
     buffer: Buffer,
     bind_group: BindGroup,
-    _atlas_view: TextureView,
-    _sampler: Sampler,
     capacity: usize,
 }
 
@@ -28,12 +26,10 @@ impl InstanceBuffer {
         sampler: &Sampler,
     ) -> Self {
         let buffer = create_buffer(device, INITIAL_CAPACITY);
-        let bind_group = create_bind_group(device, layout, &buffer, atlas_view, sampler);
+        let bind_group = create_bind_group(device, layout, atlas_view, sampler);
         Self {
             buffer,
             bind_group,
-            _atlas_view: atlas_view.clone(),
-            _sampler: sampler.clone(),
             capacity: INITIAL_CAPACITY,
         }
     }
@@ -42,18 +38,14 @@ impl InstanceBuffer {
         &mut self,
         required: usize,
         device: &Device,
-        layout: &BindGroupLayout,
     ) -> Result<(), String> {
         validate_capacity(required)?;
         if required <= self.capacity {
             return Ok(());
         }
         let buffer = create_buffer(device, required);
-        let bind_group =
-            create_bind_group(device, layout, &buffer, &self._atlas_view, &self._sampler);
         self.buffer.destroy();
         self.buffer = buffer;
-        self.bind_group = bind_group;
         self.capacity = required;
         Ok(())
     }
@@ -72,19 +64,12 @@ impl InstanceBuffer {
         atlas_view: &TextureView,
         sampler: &Sampler,
     ) {
-        self._atlas_view = atlas_view.clone();
-        self._sampler = sampler.clone();
-        self.bind_group = create_bind_group(
-            device,
-            layout,
-            &self.buffer,
-            &self._atlas_view,
-            &self._sampler,
-        );
+        self.bind_group = create_bind_group(device, layout, atlas_view, sampler);
     }
 
     pub(crate) fn set_on(&self, pass: &mut wgpu::RenderPass<'_>) {
         pass.set_bind_group(0, &self.bind_group, &[]);
+        pass.set_vertex_buffer(0, self.buffer.slice(..));
     }
 
     #[cfg(test)]
@@ -125,7 +110,7 @@ fn create_buffer(device: &Device, capacity: usize) -> Buffer {
     device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("sprite instances"),
         size: (capacity * std::mem::size_of::<Sprite>()) as u64,
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     })
 }
@@ -133,7 +118,6 @@ fn create_buffer(device: &Device, capacity: usize) -> Buffer {
 fn create_bind_group(
     device: &Device,
     layout: &BindGroupLayout,
-    buffer: &Buffer,
     atlas_view: &TextureView,
     sampler: &Sampler,
 ) -> BindGroup {
@@ -141,10 +125,6 @@ fn create_bind_group(
         label: Some("sprite data"),
         layout,
         entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            },
             wgpu::BindGroupEntry {
                 binding: 1,
                 resource: wgpu::BindingResource::TextureView(atlas_view),

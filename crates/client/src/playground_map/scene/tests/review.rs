@@ -214,6 +214,7 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
             units: vec![id],
             building_id: None,
             resource_id: None,
+            buildings: Vec::new(),
         },
         village: Default::default(),
         grid: false,

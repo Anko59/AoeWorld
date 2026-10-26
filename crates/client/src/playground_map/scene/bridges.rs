@@ -65,7 +65,7 @@ pub(super) fn append(
                     client.team_colour,
                     false,
                 )
-                .with_selected(client.selected.building_id == Some(building.id)),
+                .with_selected(client.selected.has_building(building.id)),
             facing: (u32::from(building.progress_permille) * 3 / 1000).min(2) as u8,
             elevation_meters: scene
                 .height(position)

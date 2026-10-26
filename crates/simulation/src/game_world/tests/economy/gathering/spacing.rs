@@ -77,5 +77,16 @@ fn gatherers_choose_distinct_available_work_tiles_around_one_tree() {
             .iter()
             .all(|t| t.x.abs_diff(node.tile.x) <= 1 && t.y.abs_diff(node.tile.y) <= 1)
     );
-    assert!(ids.iter().all(|&id| w.unit(id).unwrap().carried.is_some()));
+    assert!(
+        ids.iter().all(|&id| w.unit(id).unwrap().carried.is_some()),
+        "{:?}",
+        ids.iter()
+            .map(|id| (
+                w.unit(*id),
+                w.movement_order(*id),
+                w.units[w.lookup[id]].last_movement_error,
+                w.units[w.lookup[id]].obstruction
+            ))
+            .collect::<Vec<_>>()
+    );
 }

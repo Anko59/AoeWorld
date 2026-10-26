@@ -1,6 +1,7 @@
 //! `perf-scale`: headless authoritative-tick benchmark at the promised scale
 //! (100 players, about 100,000 units, a 16,000-tile France-sized map).
 mod driver;
+mod movement;
 pub(crate) mod scale_match;
 mod server;
 mod stats;
@@ -16,8 +17,9 @@ use stats::{Series, memory, round};
 use std::{fs, path::PathBuf, process::Command, time::Instant};
 use world::{BoxError, Built, Params, Player};
 
-const PHASES: [&str; 9] = [
+const PHASES: [&str; 10] = [
     "movement_and_path_planning",
+    "spacing",
     "wildlife",
     "combat",
     "construction_and_gates",
@@ -66,6 +68,9 @@ pub struct Options {
     /// Drop the driver's attack orders (used by the pinned-hash scenario).
     #[arg(long)]
     skip_attacks: bool,
+    /// Inclusive movement subspans (adds clock/atomic overhead to each query).
+    #[arg(long)]
+    profile_movement: bool,
     #[arg(long, default_value = "reports/scale/perf-scale.json")]
     out: PathBuf,
 }
@@ -113,7 +118,7 @@ fn run_ticks(
             last = now;
         });
         let end = Instant::now();
-        spent[8] += (end - last).as_nanos();
+        spent[PHASES.len() - 1] += (end - last).as_nanos();
         run.orders.push_ms((ordered - begin).as_nanos());
         run.total.push_ms((end - ordered).as_nanos());
         run.with_orders.push_ms((end - begin).as_nanos());
@@ -202,10 +207,29 @@ fn census(world: &GameWorld, built_players: &[Player]) -> Value {
     let mut tasks = std::collections::BTreeMap::<String, u64>::new();
     let mut moving = 0u64;
     let mut kinds = std::collections::BTreeMap::<String, u64>::new();
+    let mut movers = std::collections::BTreeMap::<String, u64>::new();
     for unit in world.units() {
         *tasks.entry(format!("{:?}", unit.task)).or_default() += 1;
         *kinds.entry(format!("{:?}", unit.kind)).or_default() += 1;
         moving += u64::from(unit.moving || unit.planning);
+        if let Some(order) = world.movement_order(unit.id) {
+            let distance = unit
+                .position
+                .x
+                .abs_diff(order.destination.x)
+                .max(unit.position.y.abs_diff(order.destination.y))
+                / 1024;
+            let blocked = world.movement_obstruction_ticks(unit.id).unwrap_or(0);
+            *movers
+                .entry(format!(
+                    "{:?} gather={} distance={} blocked={}",
+                    unit.task,
+                    world.gather_target(unit.id).is_some(),
+                    if distance <= 3 { "near" } else { "far" },
+                    if blocked >= 16 { "stalled" } else { "recent" }
+                ))
+                .or_default() += 1;
+        }
     }
     let tile_work: u64 = built_players
         .iter()
@@ -224,6 +248,7 @@ fn census(world: &GameWorld, built_players: &[Player]) -> Value {
         "units_by_kind": kinds,
         "units_moving_or_planning": moving,
         "active_movers": world.active_mover_count(),
+        "mover_census": movers,
         "occupied_spatial_chunks": world.occupied_chunk_count(),
         "combat": format!("{:?}", world.combat_stats()),
         "vision_tile_touches_total": tile_work,
@@ -269,6 +294,10 @@ pub fn run(options: Options) -> Result<(), BoxError> {
         json!({ "blake3": hex(&hash), "ms": round(hashed.elapsed().as_secs_f64() * 1e3) })
     };
     eprintln!("perf-scale: built, {initial_census}");
+    let movement_probe = std::sync::Arc::new(movement::MovementProbe::default());
+    if options.profile_movement {
+        world.set_planning_probe(movement_probe.clone());
+    }
 
     let tick_hz = world.config().tick_hz;
     let mut driver = Driver::new(
@@ -286,6 +315,7 @@ pub fn run(options: Options) -> Result<(), BoxError> {
         options.hash_every,
     );
     let census_after = census(&world, &players);
+    let movement_fog_on = movement_probe.drain();
     eprintln!("perf-scale: fog-on done, {}", fog_on.with_orders.summary());
 
     world.set_fog_disabled(true);
@@ -301,6 +331,7 @@ pub fn run(options: Options) -> Result<(), BoxError> {
         fog_off.with_orders.summary()
     );
     let after_fog_off = census(&world, &players);
+    let movement_fog_off = movement_probe.drain();
 
     let server = if options.server_ticks > 0 {
         world.set_fog_disabled(false);
@@ -347,6 +378,8 @@ pub fn run(options: Options) -> Result<(), BoxError> {
         "initial_hash": initial_hash,
         "simulation_fog_on": fog_on.json(),
         "simulation_fog_off": fog_off.json(),
+        "movement_profile": { "enabled": options.profile_movement,
+            "fog_on": movement_fog_on, "fog_off": movement_fog_off },
         "server": server,
     });
     if let Some(parent) = options.out.parent() {

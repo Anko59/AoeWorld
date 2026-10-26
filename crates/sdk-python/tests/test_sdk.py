@@ -307,3 +307,11 @@ def test_rally_round_trip_survives_reconnecting(server, secret):
         decision = resumed.wait_decision(timeout=10)
         assert decision.world.town_center().rally_resource == node.id
         assert decision.world.town_center().rally_position == node.tile
+
+
+def test_town_center_construction_rules_are_exposed():
+    assert aoeworld.building_buildable(BuildingKind.TOWN_CENTER)
+    assert aoeworld.building_required_age(BuildingKind.TOWN_CENTER) == aoeworld.Age.CASTLE
+    assert aoeworld.building_cost(BuildingKind.TOWN_CENTER) == (0, 275, 0, 100)
+    assert aoeworld.build_seconds(BuildingKind.TOWN_CENTER) == 150
+    assert aoeworld.building_population(BuildingKind.TOWN_CENTER) == 5

@@ -12,7 +12,9 @@ export class AoeWebGl {
         this.shaderSources = sources;
         const gl = canvas.getContext('webgl2', {
             alpha: false, antialias: false, depth: true, stencil: false,
-            premultipliedAlpha: false, preserveDrawingBuffer: false,
+            // The client skips unchanged frames. Retain their pixels after
+            // compositing so idle scenes and late captures keep the last draw.
+            premultipliedAlpha: false, preserveDrawingBuffer: true,
         });
         if (!gl) throw new Error('WebGL2 unavailable');
         this.gl = gl;

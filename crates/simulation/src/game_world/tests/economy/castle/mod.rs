@@ -317,3 +317,55 @@ fn a_completed_castle_provides_twenty_population_slots_from_the_dat() {
         before + 20
     );
 }
+
+#[test]
+fn castle_villagers_build_additional_town_centers_with_normal_placement_rules() {
+    let (mut w, _) = rich_feudal();
+    // Ordinary sight covers the whole site; construction still checks exploration.
+    let worker = w
+        .spawn_villager(
+            PlayerId(0),
+            WorldPosition::from_tile_center(TileCoord::new(99, 102)).unwrap(),
+        )
+        .unwrap();
+    w.spawn_kind(
+        PlayerId(0),
+        UnitKind::Scout,
+        WorldPosition::from_tile_center(TileCoord::new(104, 101)).unwrap(),
+    )
+    .unwrap();
+    let at = TileCoord::new(100, 100);
+    let before = w.canonical_hash();
+    assert_eq!(
+        w.issue_build(PlayerId(0), &[worker], BuildingKind::TownCenter, at, false),
+        Err(EconomyError::RequiresCastleAge)
+    );
+    assert_eq!(w.canonical_hash(), before);
+    w.complete_research(PlayerId(0), Tech::CastleAge, &mut Vec::new());
+    let before = w.player_economy(PlayerId(0)).unwrap().stockpile;
+    let id = w
+        .issue_build(PlayerId(0), &[worker], BuildingKind::TownCenter, at, false)
+        .unwrap();
+    let after = w.player_economy(PlayerId(0)).unwrap().stockpile;
+    assert_eq!(
+        (before.wood - after.wood, before.stone - after.stone),
+        (275, 100)
+    );
+    assert_eq!(
+        w.building(id).unwrap().footprint,
+        aoe_core::TileRect::from_xywh(100, 100, 4, 4)
+    );
+    let accepted = w.canonical_hash();
+    assert!(
+        w.issue_build(PlayerId(0), &[worker], BuildingKind::TownCenter, at, false)
+            .is_err()
+    );
+    assert_eq!(w.canonical_hash(), accepted);
+    advance(&mut w, 5000);
+    assert!(w.building(id).unwrap().is_complete());
+    assert_eq!(
+        w.player_buildings_of(PlayerId(0), BuildingKind::TownCenter)
+            .count(),
+        2
+    );
+}

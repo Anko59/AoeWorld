@@ -55,7 +55,7 @@ fn render(placed: &Placed) -> (HtmlCanvasElement, WebGlRenderer) {
 
 fn pixel(canvas: &HtmlCanvasElement, x: u32, y: u32) -> [u8; 4] {
     let mut result = [0; 4];
-    // Synchronous read immediately after render: preserveDrawingBuffer is false.
+    // Read the submitted packet synchronously, before any subsequent draw.
     webgl_minification_pixel(canvas, x, y, &mut result).expect("actual rendered WebGL2 pixel");
     result
 }

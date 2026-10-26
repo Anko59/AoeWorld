@@ -156,3 +156,71 @@ def test_distributed_army_reserves_land_queries_for_its_shared_march():
     group, = client.named("formation_move")
     assert group[0] == list(range(300,328))
     assert ctx._land_queries <= ctx.config.land_queries_per_decision
+
+
+@pytest.mark.parametrize("known_building", [False, True])
+def test_stationary_moving_army_recovers_after_the_stall_deadline(known_building):
+    units, buildings = base(3)
+    army = [unit(300+i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(2)]
+    target = building(901, BuildingKind.HOUSE, tile=(250, 250), mine=False, visible=False)
+    board = Blackboard(attacking=True, attack_launch_size=len(army))
+    config = Config()
+
+    def step(tick):
+        world = FakeWorld(units + army, buildings, tick=tick,
+                          enemy_buildings=[target] if known_building else [])
+        client = FakeClient()
+        CombatManager().step(Context(client, decision(world), board, config))
+        return client.calls
+
+    assert step(100), "start an ordinary shared march"
+    for soldier in army:
+        soldier.task, soldier.idle, soldier.moving = UnitTask.MOVING, False, True
+    assert step(100 + config.march_pause_seconds * 20 + 1) == []
+    # Seed 3's accepted marches reported MOVING at identical tiles for thirteen
+    # minutes. That task flag alone must not prevent bounded route recovery.
+    deadline = 100 + config.march_stall_seconds * 20 + 1
+    recovery = step(deadline) + step(deadline + config.march_pause_seconds * 20)
+    assert recovery, "a stationary MOVING army must receive a recovery order"
+    recovered = set()
+    for name, args in recovery:
+        if name == "formation_move":
+            recovered.update(args[0])
+        elif name in ("move", "stop"):
+            recovered.add(args[0])
+    assert recovered == {soldier.id for soldier in army}
+    # Once the accepted stop is reflected in the snapshot, recovery must resume
+    # the march rather than leave the army idle or abandon its remembered enemy.
+    for soldier in army:
+        soldier.task, soldier.idle, soldier.moving = UnitTask.IDLE, True, False
+    resumed = step(deadline + config.march_pause_seconds * 20 + 10)
+    marching = set()
+    for name, args in resumed:
+        if name == "formation_move":
+            marching.update(args[0])
+        elif name == "move":
+            marching.add(args[0])
+    assert marching == {soldier.id for soldier in army}
+    if known_building:
+        assert target.id not in board.cleared
+        assert board.attack_target == target.id
+
+
+def test_a_moving_army_keeps_its_route_while_it_is_making_progress():
+    units, buildings = base(3)
+    army = [unit(300+i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(2)]
+    board = Blackboard(attacking=True, attack_launch_size=len(army))
+    config = Config()
+    for index in range(4):
+        world = FakeWorld(units + army, buildings,
+                          tick=100 + index * (config.march_stall_seconds * 20 // 2))
+        client = FakeClient()
+        CombatManager().step(Context(client, decision(world), board, config))
+        if index == 0:
+            assert client.named("formation_move")
+        else:
+            assert client.calls == [], "progress must preserve the accepted route"
+        for soldier in army:
+            soldier.tile = (soldier.tile[0] + 10, soldier.tile[1] + 10)
+            soldier.x, soldier.y = soldier.tile
+            soldier.task, soldier.idle, soldier.moving = UnitTask.MOVING, False, True

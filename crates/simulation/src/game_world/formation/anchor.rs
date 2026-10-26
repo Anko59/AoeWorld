@@ -105,8 +105,7 @@ impl GameWorld {
                         );
                         let dx = i64::from(heading.x);
                         let dy = i64::from(heading.y);
-                        group.heading = heading;
-                        group.facing = facing_for(dx, dy, group.facing);
+                        group.travel_heading = heading;
                         order = MovementOrder {
                             origin: order.waypoint,
                             waypoint: next,
@@ -132,7 +131,19 @@ impl GameWorld {
 }
 
 impl GameWorld {
-    fn formation_cohesive(&self, group: &Group) -> bool {
+    pub(super) fn formation_cohesive(&self, group: &Group) -> bool {
+        if group.column {
+            let mut previous = group.anchor;
+            return group.column_order.iter().all(|&at| {
+                let m = &group.members[at];
+                self.unit(m.id).is_none_or(|u| {
+                    let dx = i64::from(u.position.x) - i64::from(previous.x);
+                    let dy = i64::from(u.position.y) - i64::from(previous.y);
+                    previous = u.position;
+                    dx * dx + dy * dy <= (6 * 1024_i64).pow(2)
+                })
+            });
+        }
         group.members.iter().all(|m| {
             self.unit(m.id).is_none_or(|u| {
                 let dx = i64::from(u.position.x) - i64::from(group.anchor.x);

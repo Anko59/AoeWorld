@@ -5,9 +5,9 @@ with ``POST /match/step``. The bots connect through the same protocol and SDK as
 in a real match and see the same fog-filtered view, and they keep their
 ``decision_hz`` in *game* time: the driver steps one decision period, waits until
 every bot has its decision, lets them all decide, then steps again. Orders sent
-at tick *t* are applied on the first tick after it. A run for one seed repeats
-exactly (see ``docs/ai-sdk.md``), and N game minutes take a small fraction of N
-whatever else the machine is doing.
+at tick *t* are applied on the first tick after it. A seed fixes terrain and
+village placement; view-delivery timing can still change decisions (see
+``docs/ai-sdk.md``). Wall time depends on armies and machine load.
 """
 
 from __future__ import annotations

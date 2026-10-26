@@ -62,6 +62,13 @@ impl GameWorld {
         self.begin_vision_batch();
         let mut proposals = self.propose_steps(&movers, start);
         for turn in 0..mover_count {
+            let id = movers[(start + turn) % mover_count];
+            if let Some(&index) = self.lookup.get(&id)
+                && self.settle_obstructed_unit(index)
+            {
+                changed.push(id);
+                continue;
+            }
             if let Some(step) = proposals[turn].take()
                 && self.apply_step(step, &mut still_moving, &mut changed)
             {
@@ -75,13 +82,24 @@ impl GameWorld {
             if self.advance_formation_anchor(index, &mut still_moving) {
                 continue;
             }
+            self.replace_occupied_arrival(index);
             let Some(mut order) = self.units[index].order else {
                 continue;
             };
-            self.units[index].state.previous_position = self.units[index].state.position;
             let unit = self.units[index].state;
+            self.units[index].state.previous_position = unit.position;
             let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
-            let speed = if self.following_unit(index) { 0 } else { speed };
+            // Brief yielding must not freeze a cycle of followers forever;
+            // retry with swept clearance on a deterministic eight-tick cadence.
+            let following = self.following_unit(index);
+            if following {
+                self.record_unit_obstruction(index);
+            }
+            let speed = if following && !self.local_retry(id) {
+                0
+            } else {
+                speed
+            };
             let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
             order.speed_carry = 0;
             let mut current_position = self.units[index].state.position;
@@ -89,15 +107,23 @@ impl GameWorld {
 
             for _ in 0..MAX_WAYPOINTS_PER_TICK {
                 let remaining = order.segment_length.saturating_sub(order.travelled);
-                let step = u128::from(remaining).min(speed_budget / u128::from(denominator)) as u32;
+                let step = u128::from(remaining)
+                    .min(speed_budget / u128::from(denominator))
+                    .min(512) as u32;
                 order.travelled += step;
                 speed_budget -= u128::from(step) * u128::from(denominator);
-                let arrived = order.travelled >= order.segment_length;
-                let position = if arrived {
+                let proposed = if order.travelled >= order.segment_length {
                     order.waypoint
                 } else {
                     interpolate(order, order.travelled)
                 };
+                let (position, skipped) =
+                    self.refine_occupied_step(index, &mut order, proposed, step);
+                let detoured = !skipped && position != proposed;
+                let arrived = skipped || (!detoured && order.travelled >= order.segment_length);
+                if skipped {
+                    speed_budget += u128::from(step) * u128::from(denominator);
+                }
                 let previous_tile = current_position.tile_floor();
                 let tile = position.tile_floor();
                 let terrain_ok =
@@ -145,7 +171,10 @@ impl GameWorld {
                 }
                 current_position = position;
                 if !arrived {
-                    order.speed_carry = speed_budget as u64;
+                    if !detoured && speed_budget >= u128::from(denominator) {
+                        continue;
+                    }
+                    order.speed_carry = (speed_budget % u128::from(denominator)) as u64;
                     self.units[index].state.moving = true;
                     self.units[index].state.planning = false;
                     self.units[index].order = Some(order);
@@ -201,10 +230,10 @@ impl GameWorld {
                         break;
                     }
                     SegmentAdvance::Next(next) => {
-                        let dx = i64::from(next.x) - i64::from(order.waypoint.x);
-                        let dy = i64::from(next.y) - i64::from(order.waypoint.y);
+                        let dx = i64::from(next.x) - i64::from(current_position.x);
+                        let dy = i64::from(next.y) - i64::from(current_position.y);
                         order = MovementOrder {
-                            origin: order.waypoint,
+                            origin: current_position,
                             waypoint: next,
                             segment_length: segment_length(dx, dy),
                             travelled: 0,
@@ -250,7 +279,10 @@ impl GameWorld {
                     crate::UnitTask::Idle
                 };
             }
-            changed.push(self.units[index].state.id);
+            if self.units[index].state != unit {
+                changed.push(id);
+            }
+            self.observe_unit_progress(index);
         }
         still_moving.sort_unstable();
         self.active_movers = still_moving;
@@ -344,48 +376,6 @@ impl GameWorld {
         }
     }
 
-    /// Plans the leg after the one each moving unit is walking, from what
-    /// the waiting units left of the tick budget, so a walking unit does not
-    /// pause between legs. A search that fails here is reported when the unit
-    /// has used the segments already planned.
-    fn plan_routes_ahead(&mut self, movers: &[EntityId], start: usize, mut budget: u32) {
-        let wanting = (0..movers.len())
-            .map(|turn| movers[(start + turn) % movers.len()])
-            .filter_map(|id| self.lookup.get(&id).copied())
-            .filter(|&index| {
-                self.units[index].order.is_some()
-                    && self.units[index]
-                        .planner
-                        .as_ref()
-                        .is_some_and(RoutePlanner::wants_lookahead)
-            })
-            .collect::<Vec<_>>();
-        for (turn, &index) in wanting.iter().enumerate() {
-            if budget == 0 {
-                break;
-            }
-            if self.planner_capacity_exhausted(index) || self.lookahead_jumps_queue(index) {
-                continue;
-            }
-            let share = (budget / (wanting.len() - turn) as u32).clamp(1, MAX_ROUTE_WORK_PER_ORDER);
-            let Some(mut planner) = self.take_planner(index) else {
-                continue;
-            };
-            let work_before = planner.work();
-            let kind = self.units[index].state.kind;
-            let certified_before = planner.certified_destination();
-            self.plan_world_route_ahead(&mut planner, share, &|| false, kind);
-            if certified_before.is_none() && planner.certified_destination().is_some() {
-                self.route_metrics
-                    .sample("certified-nearest", kind, &planner);
-            }
-            let spent = planner.work().saturating_sub(work_before);
-            self.route_metrics.lookahead_work += u64::from(spent);
-            budget -= spent.min(budget);
-            self.store_planner(index, Some(planner));
-        }
-    }
-
     /// A planner rarely needs its whole share for one leg; what it did not
     /// spend returns to the tick budget for the movers after it.
     fn refund_unused_planning(&mut self, budget: u32, work_before: u32, planner: &RoutePlanner) {
@@ -394,32 +384,6 @@ impl GameWorld {
             .planning_budget
             .saturating_add(budget.saturating_sub(spent))
             .min(MAX_ROUTE_WORK_PER_TICK);
-    }
-
-    /// A new leg search planned ahead would take a slot its player's waiting
-    /// units queue for.
-    fn lookahead_jumps_queue(&self, index: usize) -> bool {
-        self.units[index].planner.as_ref().is_some_and(|planner| {
-            !planner.requires_search_slot()
-                && self.route_queued.contains(&(
-                    self.units[index].state.player,
-                    crate::game_world::far_route(planner.origin(), planner.destination()),
-                ))
-        })
-    }
-
-    fn planner_capacity_exhausted(&self, index: usize) -> bool {
-        let own_planner = usize::from(self.units[index].planner.is_some());
-        let own_search = usize::from(
-            self.units[index]
-                .planner
-                .as_ref()
-                .is_some_and(RoutePlanner::requires_search_slot),
-        );
-        let far = self.units[index].planner.as_ref().is_some_and(|planner| {
-            crate::game_world::far_route(planner.origin(), planner.destination())
-        });
-        self.route_capacity_exhausted(self.units[index].state.player, own_planner, own_search, far)
     }
 
     pub(crate) fn clear_planner(&mut self, index: usize) {

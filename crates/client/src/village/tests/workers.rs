@@ -3,7 +3,7 @@ use aoe_core::{EntityId, PlayerId, WorldPosition};
 use aoe_protocol::{CarriedResource, GameplayUnitState, ResourceKind, UnitKind, UnitTask};
 use wasm_bindgen_test::wasm_bindgen_test;
 
-fn villager(task: UnitTask) -> GameplayUnitState {
+pub(super) fn villager(task: UnitTask) -> GameplayUnitState {
     GameplayUnitState {
         id: EntityId(1),
         player: PlayerId(0),

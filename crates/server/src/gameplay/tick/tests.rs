@@ -38,23 +38,24 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
         .collect()
 }
 
-/// Current per-session wire digests. TC arches now permit movement through
-/// the open footprint, changing routes, fog and message counts intentionally.
-/// Re-pin the same scenario; all sight and replay assertions remain in force.
-/// The merged wire also appends prepaid Mill reseeds and unit auto-scout flags.
-/// Regenerate the combined stream, retaining the same scenario and sight rules.
-/// Garrison state appends a bounded occupant list to each building, including
-/// one zero byte for empty shelters. Re-pinned from the observed current stream:
-/// message counts are unchanged; only the intentionally extended wire bytes differ.
-/// Combined current wire includes both unit cargo_count and building garrison;
-/// regenerate digests together while retaining all six message counts and sight checks.
+/// Current per-session wire digests include prepaid Mill reseeds, auto-scout,
+/// unit cargo_count and building garrisons; routes pass through open TC arches.
+/// The playtest bundle deposits carried loads on contact with any building side,
+/// cancelling return movement earlier. Swept avoidance, nearest-free arrivals,
+/// bounded retries and unchanged-wait suppression further change movement/fog
+/// timing. Regenerate all six combined streams for the same 400-tick scenario.
+/// In this combination sessions 1 and 4 change from 171/410 to 245/422 messages;
+/// the other four counts and digests remain unchanged from the playtest bundle.
+/// Regenerated from `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server
+/// AOE_NATIVE_TEST_FILTER='test(per_session_messages_match_the_pinned_stream)'`;
+/// keep the scenario, all six sessions and every visibility assertion unchanged.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 3005636157879186137),
-    (409, 2077369462262814347),
+    (407, 10222491968877725009),
+    (245, 16007369301885903178),
     (51, 14100784394782800172),
     (168, 8194618264119467797),
-    (410, 4020680386403049499),
-    (407, 4771060826993518798),
+    (422, 1005210721453389037),
+    (407, 13037734391478091236),
 ];
 
 #[tokio::test(flavor = "multi_thread")]

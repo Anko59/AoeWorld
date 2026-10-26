@@ -58,7 +58,7 @@ test("camera fragment parser preserves decimals, invalid parts, and zoom limits"
   }
   expect(parsed.zoomOnly).toEqual([null, null, 2, 0]);
   expect(parsed.high).toEqual([-500, 9999999, 3, 0]);
-  expect(parsed.low).toEqual([null, null, 0.25, 0]);
+  expect(parsed.low).toEqual([null, null, 1 / 4096, 0]);
   expect(parsed.unrelated).toEqual([null, null, null, 0]);
   expect(parsed.renderers).toEqual([
     [null, null, null, 0],

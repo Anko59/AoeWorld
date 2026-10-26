@@ -1,4 +1,4 @@
-//! Soft collision: keep passage open, but do not let crowds persist as one sprite.
+//! Fallback separation and convoy spacing; movement does the primary avoidance.
 use super::{GameWorld, GameWorldError};
 use aoe_core::{ChunkCoord, EntityId, TileCoord, WorldPosition};
 
@@ -10,7 +10,7 @@ pub(crate) use destinations::Destinations;
 mod idle;
 pub(crate) use idle::IdleSpacing;
 
-const SPACING: i64 = 768; // three quarters of a tile; crossing never hard-blocks
+const SPACING: i64 = 768; // convoy/idle spacing; swept movement clearance is separate
 const PUSH: i64 = 32; // at most 45 subunits diagonally, once per four ticks
 
 // Even two pushes cannot turn a nonadjacent-tile pair into an overlap.
@@ -36,11 +36,17 @@ impl GameWorld {
         }
     }
 
-    /// Pause only a follower in the same heading octant. Opposing/perpendicular
-    /// traffic is permeable. The id breaks an exact tie, so one leader proceeds.
+    /// Pause only a follower in the same heading octant. Other traffic uses
+    /// swept local avoidance. The id breaks a tie, so one leader proceeds.
     /// Waiting discards this tick's whole speed credit instead of banking a dash.
     pub(crate) fn following_unit(&self, index: usize) -> bool {
         let unit = &self.units[index].state;
+        // Work approaches already have distinct reserved spots. Let their
+        // swept local refinement fan out instead of queuing every worker
+        // behind the first shared route edge from a stacked spawn/drop-off.
+        if self.has_work_task(unit.id) {
+            return false;
+        }
         let Some(order) = self.units[index].order.as_ref() else {
             return false;
         };

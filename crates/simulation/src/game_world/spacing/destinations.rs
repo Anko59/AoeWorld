@@ -1,7 +1,8 @@
 //! Derived destination occupancy, updated by order issuance and changed movers.
 //! It carries no gameplay state: every lookup validates against the live order.
 use super::*;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 
 #[derive(Debug, Default)]
 pub(crate) struct Destinations {
@@ -55,6 +56,23 @@ impl GameWorld {
         id: EntityId,
         click: WorldPosition,
     ) -> Result<WorldPosition, GameWorldError> {
+        self.destination_slot(id, click, false)
+    }
+
+    pub(crate) fn free_arrival_destination(
+        &self,
+        id: EntityId,
+        click: WorldPosition,
+    ) -> Result<WorldPosition, GameWorldError> {
+        self.destination_slot(id, click, true)
+    }
+
+    fn destination_slot(
+        &self,
+        id: EntityId,
+        click: WorldPosition,
+        occupants: bool,
+    ) -> Result<WorldPosition, GameWorldError> {
         let unit = self.unit(id).ok_or(GameWorldError::UnknownEntity)?;
         let click = self.config.snap_ground_position(click);
         let target = click.tile_floor();
@@ -63,26 +81,36 @@ impl GameWorld {
         {
             return Err(GameWorldError::InvalidPosition);
         }
-        if !self.destination_reserved(target, id) {
+        let busy = |tile| {
+            if occupants {
+                // Replacing an occupied short order with its own tile cancels
+                // it before the mover takes a step. Seek another arrival;
+                // bounded obstruction settling handles a truly boxed-in unit.
+                tile == unit.position.tile_floor() || self.work_spot_busy(tile, id)
+            } else {
+                self.destination_reserved(tile, id)
+            }
+        };
+        if !busy(target) {
             return Ok(click);
         }
         // Walk outward from the click, rather than jumping over walls to a
         // geometrically near but disconnected tile. Both the frontier and the
         // visited set are bounded by the 17x17 local square.
-        let mut frontier = VecDeque::from([target]);
+        let mut frontier = BinaryHeap::from([Reverse((0, target))]);
         let mut visited = BTreeSet::from([target]);
-        while let Some(tile) = frontier.pop_front() {
-            if !self.destination_reserved(tile, id) {
+        while let Some(Reverse((_, tile))) = frontier.pop() {
+            if !busy(tile) {
                 return WorldPosition::from_tile_center(tile).map_err(Into::into);
             }
             for (dx, dy) in [
-                (-1, -1),
-                (0, -1),
-                (1, -1),
                 (-1, 0),
+                (0, -1),
                 (1, 0),
-                (-1, 1),
                 (0, 1),
+                (-1, -1),
+                (1, -1),
+                (-1, 1),
                 (1, 1),
             ] {
                 let next = TileCoord::new(tile.x + dx, tile.y + dy);
@@ -100,7 +128,9 @@ impl GameWorld {
                     && self.unit_step_clear(unit.kind, tile, next)?
                 {
                     visited.insert(next);
-                    frontier.push_back(next);
+                    let dx = next.x - target.x;
+                    let dy = next.y - target.y;
+                    frontier.push(Reverse((dx * dx + dy * dy, next)));
                 }
             }
         }
@@ -119,6 +149,35 @@ impl GameWorld {
                             u.hp > 0 && !u.moving && !u.planning && u.position.tile_floor() == tile
                         })
                 })
+            })
+    }
+
+    /// The actor already occupies this spot. A future arrival reservation
+    /// cannot make it keep walking; that arrival must find another free slot.
+    pub(crate) fn arrival_position_free(&self, index: usize) -> bool {
+        self.arrival_point_free(index, self.units[index].state.position)
+    }
+
+    pub(crate) fn arrival_point_free(&self, index: usize, at: WorldPosition) -> bool {
+        let unit = self.units[index].state;
+        !self.local_position_occupied(index, at)
+            && !self
+                .spacing_units(at, u64::from(unit.id.0), unit.id)
+                .any(|other| {
+                    other.kind.is_naval() == unit.kind.is_naval()
+                        && other.position.tile_floor() == at.tile_floor()
+                })
+    }
+
+    pub(crate) fn arrival_tile_has_idle(&self, index: usize, at: WorldPosition) -> bool {
+        let unit = self.units[index].state;
+        self.spacing_units(at, u64::from(unit.id.0), unit.id)
+            .any(|other| {
+                let state = self.units[self.lookup[&other.id]].state;
+                other.kind.is_naval() == unit.kind.is_naval()
+                    && other.position.tile_floor() == at.tile_floor()
+                    && !state.moving
+                    && !state.planning
             })
     }
 }

@@ -1,3 +1,4 @@
+// Regenerated for bounded obstruction state, arrival hysteresis and unchanged-wait suppression.
 //! Replay pins for the wildlife and vision phases: a fixed scenario whose
 //! canonical hashes include the current authoritative state schema.
 //! Rally points add an explicit optional field to live and remembered buildings;
@@ -52,24 +53,27 @@ fn pinned_replay_world() -> GameWorld {
 /// TC collision now uses its NW 2x2 annex, and the obsolete unproven-approach
 /// flag is removed from planner state. Near detour guidance and retained
 /// searches deliberately change timing; regenerate these current checkpoints.
+/// Unit obstruction and local refinement now route around stationary workers
+/// and preserve reachable arrival slots. Regenerate for that intentional route
+/// and timing change; both independent runs still agree at every tick.
 #[test]
 fn wildlife_and_fog_replay_hashes_stay_pinned() {
     const PINS: [(&str, &str); 4] = [
         (
             "100",
-            "ec4e2c3638434e6026511011734329ad48e17ec0e171b01c9699212c4d009493",
+            "06938adf18fe315aeefbbbcb7a0f7853f095913448613beac31d1e78b0e4d649",
         ),
         (
             "200",
-            "4ae6b7c0dfcc4bc8ffde23e4626f1e3ecfdc4785db0888274960607b2333f197",
+            "d301e1fed80c38c67fe70f8bcca0ca11d28a92a1f57006e74ab2aa7a97110c3a",
         ),
         (
             "300",
-            "6957e348bb8eb44caaaf4f1548a9e22f0676ef69d464143562cf71dffddaf331",
+            "0bf354e3b9791bd16b22bb923ae208a5697cbacbc9dfff7874c10037324b5937",
         ),
         (
             "400",
-            "aa17054be71585d96b0d6508c4532ca45ca92f39b24f0771834897b19cad9bd8",
+            "f2dc34995fbeb368d338babc9f79ec8d81933ec86d7e91968286854c96ff5995",
         ),
     ];
     let mut checkpoints = Vec::new();

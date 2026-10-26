@@ -58,6 +58,7 @@ impl GameWorld {
             self.clear_planner(index);
             self.units[index].last_movement_error = None;
             self.units[index].order = None;
+            self.units[index].obstruction = None;
             self.units[index].route.clear();
             self.units[index].state.moving = false;
             self.units[index].state.planning = false;
@@ -85,6 +86,7 @@ impl GameWorld {
         let dy = i64::from(waypoint.y) - i64::from(origin.y);
         let unit = &mut self.units[index];
         unit.last_movement_error = None;
+        unit.obstruction = None;
         unit.state.previous_position = origin;
         unit.state.facing = facing_for(dx, dy, unit.state.facing);
         unit.state.moving = !planning;

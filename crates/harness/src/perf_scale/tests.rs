@@ -24,6 +24,7 @@ fn smoke_options(out: PathBuf) -> Options {
         subscribers: 4,
         idle_world: false,
         skip_attacks: false,
+        profile_movement: true,
         out,
     }
 }
@@ -44,6 +45,21 @@ fn the_smoke_run_writes_a_valid_report_whose_phases_add_up() {
     assert_eq!(report["simulation_fog_off"]["ticks"], 4);
     assert!(report["census"]["initial"]["units"].as_u64().unwrap() >= 400);
     assert!(report["terrain_probe"]["cold_point_query_us_per_tile"].is_number());
+    assert!(report["simulation_fog_on"]["phases"]["spacing"].is_object());
+    assert_eq!(
+        report["simulation_fog_on"]["phases"]
+            .as_object()
+            .unwrap()
+            .len(),
+        10
+    );
+    assert_eq!(report["movement_profile"]["enabled"], true);
+    assert!(
+        report["movement_profile"]["fog_on"]["avoidance_query"]["calls"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
     let server = &report["server"];
     assert_eq!(server["with_sessions_fog_on"]["sessions"], 4);
     assert_eq!(server["baseline_no_sessions_tick"]["samples"], 3);
@@ -75,6 +91,29 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
     assert_eq!(run.json()["tick_budget_ms"], run.budget_ms);
 }
 
+#[test]
+fn scale_tail_movers_have_a_bounded_obstruction_budget() {
+    let mut built = world::build(&Params {
+        players: 4,
+        units_per_player: 1000,
+        side_tiles: 16_000,
+        seed: 1,
+        fight_pairs_size: 12,
+        idle: false,
+    })
+    .unwrap();
+    let mut driver = Driver::new(1, 4, 3.0, 20);
+    run_ticks(&mut built.world, &mut built.players, &mut driver, 600, 0);
+    eprintln!("tail census: {}", census(&built.world, &built.players));
+    let out =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../reports/scale/settling-tail.json");
+    fs::create_dir_all(out.parent().unwrap()).unwrap();
+    fs::write(out, census(&built.world, &built.players).to_string()).unwrap();
+    for unit in built.world.units() {
+        assert!(built.world.movement_obstruction_ticks(unit.id).unwrap_or(0) <= 128);
+    }
+}
+
 /// Re-pinned when route searches became a per-player fair pass run before
 /// units move (see `route_scheduler`): legs are found on different ticks.
 /// Re-pinned again when gatherers began to step up against their node and
@@ -98,18 +137,29 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
 /// the scenario, checkpoints and limits remain unchanged.
 /// Castle Age widens research bits, adds the ordered healer index and refines
 /// gather credits. Regenerate current hashes for those deliberate state changes.
+/// Unit obstruction, bounded local refinement and reachable arrival slots
+/// intentionally change paths, work timing and neighbour-index order. Regenerate
+/// these current checkpoints with the same workload, seed and assertions.
+/// Combined with perimeter-contact drop-off, these timings also change worker
+/// stockpiles; bounded worker corner escapes also change retained routes.
+/// Regenerate all three current pins from `make test-native-focused
+/// AOE_NATIVE_TEST_PACKAGE=aoe-harness AOE_NATIVE_TEST_FILTER='test(perf_scale::)'`.
+/// Keep the same 300-tick workload and checkpoints.
+/// Builders now use exact-position corner exits and start on first free
+/// perimeter contact, deliberately changing construction timing and routes.
+/// Regenerate only the current output hashes.
 const PINNED_HASHES: [(u64, &str); 3] = [
     (
         100,
-        "4d8997ddc44b76d1854d778a97fda39e95d66d57c0f0da3491f355e322922cb3",
+        "844e3accd86b0a7948a2d0577cf4a1c23d65bd1df29b9f6a49c4eae5e6947fd9",
     ),
     (
         200,
-        "bd8019702b6f8a31de0cb93579d8b9704a34ebb0b276da9de3d488bf108de687",
+        "82cc3808a5a2a1316e16a4b067dd50274b96b9dbd40d75f2e7effb4030f3992a",
     ),
     (
         300,
-        "8c04465c3befc4a6f1473554df4c15e6c262db892e17a967e6549437deacd913",
+        "9c0d8e6bdf39a3f9b7e7305696872a4121c524af9a06e664eebf56a003a3b361",
     ),
 ];
 

@@ -49,6 +49,7 @@ impl GameWorld {
 
     /// Drops the unit's route and order without touching its task.
     pub(crate) fn stop_movement(&mut self, index: usize) {
+        self.units[index].obstruction = None;
         let id = self.units[index].state.id;
         self.break_formation(id);
         self.destinations.remove(id);

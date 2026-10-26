@@ -4,6 +4,8 @@ use super::*;
 use aoe_core::{Formation, MAX_FORMATION_MEMBERS, MAX_MOVE_DESTINATIONS};
 
 mod anchor;
+mod arrival;
+mod column;
 mod combat;
 mod hash;
 pub(super) mod layout;
@@ -20,6 +22,7 @@ pub(crate) struct Member {
     probe: usize,
     /// A tile-pair visibility result; immediate steps are always revalidated.
     cache: Option<(TileCoord, TileCoord, WorldPosition, steering::Goal)>,
+    detour: VecDeque<WorldPosition>,
 }
 
 #[derive(Debug)]
@@ -27,11 +30,19 @@ pub(crate) struct Group {
     form: Formation,
     members: Vec<Member>,
     anchor: WorldPosition,
+    /// Stable order orientation; tile refinement must not rotate the whole army.
     heading: WorldPosition,
+    /// Current anchor path leg, used while following a column around bends.
+    travel_heading: WorldPosition,
     facing: Facing,
     speed: (u64, u64),
     ready: bool,
     settled: bool,
+    column: bool,
+    /// Derived solely from the hashed member offsets and ids, rebuilt on orders.
+    column_order: Vec<usize>,
+    /// Point lookups only; member storage always remains in canonical id order.
+    member_lookup: std::collections::HashMap<EntityId, usize>,
     destination: WorldPosition,
     queue: VecDeque<(WorldPosition, bool)>,
     attack_move: bool,
