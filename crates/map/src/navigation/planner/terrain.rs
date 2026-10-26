@@ -1,10 +1,21 @@
 //! Terrain queries shared by the incremental planner's map and uniform worlds.
-use crate::{
-    EdgePassability, EnvironmentPageError, GroundMaterial, MapChunkGenerator, ResourceOverlay,
-};
+use crate::{EdgePassability, EnvironmentPageError, MapChunkGenerator, ResourceOverlay};
 use aoe_core::TileCoord;
 
+/// Ground a route search reads. Answers must not change during one poll (a
+/// poll memoizes them), and a step's cost may depend only on its target tile
+/// and on whether the step is diagonal.
 pub trait RouteTerrain {
+    /// Static map guidance is optional for other movement domains.
+    /// Reserve one logical chunk preparation, independently of physical cache hits.
+    fn prepare_navigation_chunk(&self) -> bool {
+        true
+    }
+
+    fn route_generator(&self) -> Option<&MapChunkGenerator> {
+        None
+    }
+
     fn route_walkable(
         &self,
         overlay: &ResourceOverlay,
@@ -19,6 +30,22 @@ pub trait RouteTerrain {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError>;
 
+    fn route_overlay_edge_clear(
+        &self,
+        overlay: &ResourceOverlay,
+        from: TileCoord,
+        to: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        match overlay.bridge_edge(from, to) {
+            Some(clear) => Ok(clear),
+            None => self.route_edge_clear(from, to, cancelled),
+        }
+    }
+
     fn route_step_cost(
         &self,
         from: TileCoord,
@@ -28,18 +55,22 @@ pub trait RouteTerrain {
 }
 
 impl RouteTerrain for MapChunkGenerator {
+    fn route_generator(&self) -> Option<&MapChunkGenerator> {
+        Some(self)
+    }
+
     fn route_walkable(
         &self,
         overlay: &ResourceOverlay,
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError> {
-        let Some((sample, object)) = self.tile_and_node_with_cancel(tile, cancelled)? else {
+        let Some(cell) = self.walk_at_with_cancel(tile, cancelled)? else {
             return Ok(false);
         };
         Ok(!overlay.blocks_tile(tile)
-            && sample.passable
-            && object.is_none_or(|node| !overlay.blocks_node(node)))
+            && (cell.passable || overlay.bridge_axis(tile).is_some())
+            && cell.node.is_none_or(|node| !overlay.blocks_node(node)))
     }
 
     fn route_edge_clear(
@@ -65,11 +96,10 @@ impl RouteTerrain for MapChunkGenerator {
         } else {
             super::super::DIAGONAL_COST
         };
-        let multiplier = if matches!(
-            self.tile_at_with_cancel(to, cancelled)?
-                .map(|sample| sample.material),
-            Some(GroundMaterial::Mud)
-        ) {
+        let multiplier = if self
+            .walk_at_with_cancel(to, cancelled)?
+            .is_some_and(|cell| cell.mud)
+        {
             3
         } else {
             2

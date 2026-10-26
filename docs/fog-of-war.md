@@ -18,7 +18,9 @@ scans or allocates the map. The 256x256 strategic overview is also sparse.
 
 Resource observation probes five possible overlay identities per revealed tile,
 without fetching terrain pages. Depletion updates only players currently seeing
-that tile. Resource memory is bounded by the overlay's existing 65,536 entries.
+that tile. Resource memory is bounded by the overlay's 1,048,576 entries. Reconnect
+snapshots use pages of at most 65,536 amounts; the browser publishes the
+assembled snapshot atomically.
 Buildings retain their last observed state and age variant until revisited; an unseen
 destruction stays remembered. Owned building destruction is known immediately.
 The existing building count bounds building-state refresh work each tick.
@@ -34,8 +36,11 @@ delivery revisions and instrumentation counters do not enter the replay hash.
 
 ## Authority and wire
 
-The current single-controller service projects the primary unit's player view
-for controllers and spectators. Simulation knowledge is independent per player.
+Each slot's controller receives its own player's view; spectators see the first
+slot's. Simulation knowledge is independent per player, and each player has its
+own vision revision, so a viewer rebuilds its fog view only when its own sight
+changes. A rebuilt view whose region, tiles and overview equal what the client
+already holds is not sent again (the client ignores the tick it was built at).
 Snapshots, ticks, reconnects and wildlife replacements exclude unseen opponents
 and neutral animals. Owned units remain known offscreen. Buildings in fog use
 the simulation's remembered snapshots; resource amounts never advance unseen.
@@ -52,7 +57,7 @@ Ground illumination uses the existing surface mesh and interpolates shared
 vertex levels for soft edges. GPU fog uses the spare high atlas-page byte in
 the existing 112-byte packet; Canvas uses the same levels. Remembered buildings
 and resources are dimmed. The strategic map overlays the same three states.
-Fog shares the current four-page unit-animation atlas and existing WASM gzip gate.
+Fog shares the current five-page unit-animation atlas and existing WASM gzip gate.
 
 ## Values and sources
 

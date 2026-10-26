@@ -6,12 +6,19 @@ use aoe_core::TileCoord;
 mod hash;
 #[path = "planner/legs.rs"]
 mod legs;
+#[path = "planner/memo.rs"]
+mod memo;
+#[path = "planner/pocket.rs"]
+mod pocket;
+use pocket::POCKET_CHECK_WORK;
 #[path = "planner/reconstruction.rs"]
 mod reconstruction;
 #[path = "planner/search.rs"]
 mod search;
 use reconstruction::{ReconstructionPhase, ReconstructionState};
 use search::SearchState;
+#[path = "planner/guidance.rs"]
+mod guidance;
 mod terrain;
 pub use terrain::RouteTerrain;
 
@@ -37,6 +44,7 @@ const MAX_SEGMENT_STEPS: usize = 32;
 pub struct RoutePlanner {
     origin: TileCoord,
     destination: TileCoord,
+    resolved_destination: Option<TileCoord>,
     max_work: u32,
     work: u32,
     /// Where the planned route ends and the next leg search starts.
@@ -44,6 +52,17 @@ pub struct RoutePlanner {
     leg_work: u32,
     /// Closed tile nearest the destination in this leg, with its heuristic.
     leg_best: Option<(TileCoord, u64)>,
+    /// The sealed-destination proof has run (see `pocket`).
+    pocket_checked: bool,
+    pocket: Option<pocket::Proof>,
+    guidance_checked: bool,
+    guidance: std::collections::VecDeque<TileCoord>,
+    hierarchy: Option<super::hierarchy::Search>,
+    resolution: Option<super::hierarchy::Resolution>,
+    components_checked: bool,
+    /// Smallest box holding every tile this planner expanded or flooded
+    /// (diagnostic and cache scope only; derived from the search history).
+    bounds: Option<(TileCoord, TileCoord)>,
     expansions: u32,
     validation_step: u8,
     search: Option<SearchState>,
@@ -94,11 +113,20 @@ impl RoutePlanner {
         Self {
             origin,
             destination,
+            resolved_destination: None,
             max_work: max_work.min(MAX_ROUTE_PLANNER_WORK),
             work: 0,
             leg_origin: origin,
             leg_work: 0,
             leg_best: None,
+            pocket_checked: false,
+            pocket: None,
+            guidance_checked: false,
+            guidance: Default::default(),
+            hierarchy: None,
+            resolution: None,
+            components_checked: false,
+            bounds: None,
             expansions: 0,
             validation_step: 0,
             search: None,
@@ -118,8 +146,37 @@ impl RoutePlanner {
         self.expansions
     }
 
+    pub fn origin(&self) -> TileCoord {
+        self.origin
+    }
+
+    pub fn destination(&self) -> TileCoord {
+        self.destination
+    }
+
+    /// Nearest endpoint certified by the prepared live land components.
+    pub fn certified_destination(&self) -> Option<TileCoord> {
+        self.resolved_destination
+    }
+
     pub fn work(&self) -> u32 {
         self.work
+    }
+
+    /// Endpoint preparation is separate from a hard local tile search.
+    pub fn has_endpoint_refinement(&self) -> bool {
+        self.components_checked
+    }
+
+    /// Global guidance has its own bounded work and expansion limits. A local
+    /// search waiting for it has not exhausted its local progress allowance.
+    pub fn preparing_guidance(&self) -> bool {
+        self.hierarchy.is_some() || self.resolution.is_some()
+    }
+
+    /// Work spent on the leg being searched now (reset when a leg commits).
+    pub fn leg_work(&self) -> u32 {
+        self.leg_work
     }
 
     pub fn peak_retained_entries(&self) -> usize {
@@ -137,7 +194,125 @@ impl RoutePlanner {
         self.terminal.is_none()
             && (self.route_directions.is_none()
                 || self.search.is_some()
+                || self.hierarchy.is_some()
+                || self.resolution.is_some()
                 || self.reconstruction.is_some())
+    }
+
+    /// True when any tile of `area` is part of this planner's retained
+    /// state: a searched tile, a tile being reconstructed, or a tile of the
+    /// planned route not yet emitted. A planner that does not touch a newly
+    /// blocked area stays exact; one that does must be planned again.
+    pub fn touches(&self, area: aoe_core::TileRect) -> bool {
+        let inside = |tile: TileCoord| {
+            tile.x >= area.min.x
+                && tile.x < area.max.x
+                && tile.y >= area.min.y
+                && tile.y < area.max.y
+        };
+        if self
+            .pocket
+            .as_ref()
+            .is_some_and(|proof| proof.touches(area))
+        {
+            return true;
+        }
+        if self
+            .resolution
+            .as_ref()
+            .is_some_and(|resolution| resolution.touches(area))
+            || self
+                .hierarchy
+                .as_ref()
+                .is_some_and(|search| search.touches(area))
+            || self.guidance.iter().any(|tile| {
+                let x = tile.x.div_euclid(crate::CHUNK_TILES) * crate::CHUNK_TILES;
+                let y = tile.y.div_euclid(crate::CHUNK_TILES) * crate::CHUNK_TILES;
+                x < area.max.x
+                    && y < area.max.y
+                    && x + crate::CHUNK_TILES > area.min.x
+                    && y + crate::CHUNK_TILES > area.min.y
+            })
+        {
+            return true;
+        }
+        if self.search.as_ref().is_some_and(|search| {
+            (area.min.y..area.max.y).any(|y| {
+                (area.min.x..area.max.x).any(|x| search.records.contains_key(&TileCoord::new(x, y)))
+            })
+        }) {
+            return true;
+        }
+        if self.reconstruction.as_ref().is_some_and(|reconstruction| {
+            reconstruction
+                .reverse_tiles
+                .iter()
+                .any(|tile| inside(*tile))
+        }) {
+            return true;
+        }
+        let Some(directions) = self.route_directions.as_ref() else {
+            return false;
+        };
+        let mut at = self.route_position;
+        if inside(at) {
+            return true;
+        }
+        directions.iter().skip(self.route_cursor).any(|direction| {
+            let (dx, dy) = search::neighbor_offset(*direction);
+            at = TileCoord::new(at.x + dx, at.y + dy);
+            inside(at)
+        })
+    }
+
+    /// The area whose ground this planner's result depends on: every tile it
+    /// expanded or flooded, grown by the two tiles a step rule can read
+    /// around one. Ground changes outside it cannot change the result.
+    pub fn explored_area(&self) -> aoe_core::TileRect {
+        let (mut min, mut max) = self.bounds.unwrap_or((self.origin, self.origin));
+        for tile in [self.origin, self.destination] {
+            min = TileCoord::new(min.x.min(tile.x), min.y.min(tile.y));
+            max = TileCoord::new(max.x.max(tile.x), max.y.max(tile.y));
+        }
+        aoe_core::TileRect::new(
+            TileCoord::new(min.x - 2, min.y - 2),
+            TileCoord::new(max.x + 3, max.y + 3),
+        )
+    }
+
+    /// A suspended reverse flood may have rejected newly walkable ground.
+    /// Callers must restart that planner before it can prove a stale seal.
+    /// The padded bounds include rejected neighbours; overlap is checked
+    /// in constant time without polling or scanning the retained frontier.
+    pub fn opening_invalidates_proof(&self, area: aoe_core::TileRect) -> bool {
+        self.pocket
+            .as_ref()
+            .is_some_and(|proof| proof.opening_touches(area))
+    }
+
+    fn include_bounds(&mut self, tile: TileCoord) {
+        let (min, max) = self.bounds.get_or_insert((tile, tile));
+        *min = TileCoord::new(min.x.min(tile.x), min.y.min(tile.y));
+        *max = TileCoord::new(max.x.max(tile.x), max.y.max(tile.y));
+    }
+
+    /// Drops the frontier of the leg being searched; the next poll searches
+    /// that leg again from its start. Planned segments are kept. A caller
+    /// that cannot grant a search slot uses this to hold only the compact
+    /// route continuation.
+    pub fn abandon_leg_search(&mut self) {
+        self.pocket = None;
+        if self.resolution.take().is_some() {
+            self.components_checked = false;
+        }
+        self.hierarchy = None;
+        if self.guidance.is_empty() {
+            self.guidance_checked = false;
+        }
+        self.search = None;
+        self.reconstruction = None;
+        self.leg_work = 0;
+        self.leg_best = None;
     }
 
     pub fn has_route_continuation(&self) -> bool {
@@ -193,40 +368,6 @@ impl RoutePlanner {
         self.emit_segment()
     }
 
-    fn emit_segment(&mut self) -> RoutePlannerPoll {
-        let Some(directions) = self.route_directions.as_ref() else {
-            return RoutePlannerPoll::Pending;
-        };
-        if self.route_cursor >= directions.len() {
-            self.terminal.get_or_insert(Terminal::Complete);
-            return RoutePlannerPoll::Complete;
-        }
-        let end = self
-            .route_cursor
-            .saturating_add(MAX_SEGMENT_STEPS)
-            .min(directions.len());
-        let mut tiles = Vec::with_capacity(end - self.route_cursor + 1);
-        tiles.push(self.route_position);
-        let mut cost = 0_u64;
-        for (index, direction) in directions
-            .iter()
-            .enumerate()
-            .take(end)
-            .skip(self.route_cursor)
-        {
-            let (dx, dy) = search::neighbor_offset(*direction);
-            self.route_position =
-                TileCoord::new(self.route_position.x + dx, self.route_position.y + dy);
-            tiles.push(self.route_position);
-            cost = cost.saturating_add(u64::from(self.route_costs[index]));
-        }
-        self.route_cursor = end;
-        if self.route_cursor == directions.len() && self.leg_origin == self.destination {
-            self.terminal.get_or_insert(Terminal::Complete);
-        }
-        RoutePlannerPoll::Path(Path { tiles, cost })
-    }
-
     fn retained_entries(&self) -> usize {
         self.search
             .as_ref()
@@ -246,6 +387,22 @@ impl RoutePlanner {
             }))
             .saturating_add(self.route_directions.as_ref().map_or(0, Vec::len))
             .saturating_add(self.route_costs.len())
+            .saturating_add(self.guidance.len())
+            .saturating_add(
+                self.pocket
+                    .as_ref()
+                    .map_or(0, |proof| proof.retained_entries()),
+            )
+            .saturating_add(
+                self.resolution
+                    .as_ref()
+                    .map_or(0, |resolution| resolution.retained_entries()),
+            )
+            .saturating_add(
+                self.hierarchy
+                    .as_ref()
+                    .map_or(0, |search| search.retained_entries()),
+            )
     }
 
     fn update_peak_retained_entries(&mut self) {
@@ -255,6 +412,9 @@ impl RoutePlanner {
     /// Ends the search. Planned segments not yet emitted stay valid: `poll`
     /// hands them out before it reports the terminal result.
     fn finish_terminal(&mut self, terminal: Terminal) -> RoutePlannerPoll {
+        self.pocket = None;
+        self.resolution = None;
+        self.hierarchy = None;
         self.search = None;
         self.reconstruction = None;
         self.leg_best = None;

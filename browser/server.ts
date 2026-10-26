@@ -28,3 +28,27 @@ export const test = base.extend({
     await use(url);
   },
 });
+
+// A long-lived SwiftShader worker can stall Browser.setDownloadBehavior when
+// the next context is created after a rendering-heavy spec. Give the affected
+// village flow its own browser lifetime, preserving renderer flags and traces.
+export const isolatedTest = test.extend({
+  browser: [
+    async (
+      { playwright, browserName, launchOptions, headless, channel },
+      use,
+    ) => {
+      const browser = await playwright[browserName].launch({
+        ...launchOptions,
+        headless,
+        channel,
+      });
+      try {
+        await use(browser);
+      } finally {
+        await browser.close();
+      }
+    },
+    { scope: "worker" },
+  ],
+});

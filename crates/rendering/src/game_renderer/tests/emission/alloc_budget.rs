@@ -98,6 +98,7 @@ fn dense_scene_build_heap_traffic_old_vs_direct() {
     // 4,000 trees (family art, shadows + bodies) and 500 units, 100 selected.
     let resources = (0..4000)
         .map(|i| SceneResource {
+            highlight: 0,
             id: i as u64,
             position: at(i, 64),
             kind: 1,
@@ -111,9 +112,8 @@ fn dense_scene_build_heap_traffic_old_vs_direct() {
             kind: Default::default(),
             id: EntityId(i as u32),
             position: at(i * 7 + 3, 23),
-            moving: i % 2 == 0,
+            visual: crate::SceneUnitVisual::new(i % 2 == 0).with_selected(i % 5 == 0),
             facing: (i % 8) as u8,
-            selected: i % 5 == 0,
             elevation_meters: 0.0,
         })
         .collect::<Vec<_>>();

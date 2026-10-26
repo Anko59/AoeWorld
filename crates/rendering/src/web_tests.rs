@@ -7,8 +7,12 @@ use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 mod atlas_pages;
 #[path = "web/tests/draw_ranges.rs"]
 mod draw_range_tests;
+#[path = "web/tests/frame_budget.rs"]
+mod frame_budget;
 #[path = "web/tests/grid.rs"]
 mod grid;
+#[path = "web/tests/occlusion.rs"]
+mod occlusion;
 #[path = "web/tests/shader_cost.rs"]
 mod shader_cost;
 #[path = "web/tests/species.rs"]

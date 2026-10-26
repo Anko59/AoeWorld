@@ -45,14 +45,17 @@ pub use land_use::{
     ordered_land_use_page_root,
 };
 pub use navigation::{
-    MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_SEGMENT_TILES, MAX_ROUTE_TILES,
-    MovementOutcome, Path, ROUTE_LEG_COMMIT_WORK, ROUTE_LEG_PROGRESS_TILES, RoutePlanner,
-    RoutePlannerPoll, RouteTerrain, find_path, find_path_segment_with_overlay,
-    find_path_with_overlay,
+    DEFAULT_HIERARCHY_EXPANSIONS, HierarchicalOutcome, MAX_ROUTE_PLANNER_NODES,
+    MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_SEGMENT_TILES, MAX_ROUTE_TILES, MovementOutcome,
+    NAVIGATION_FORMAT_VERSION, NavigationChunk, NavigationSnapshot, Path, ROUTE_LEG_COMMIT_WORK,
+    ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain, find_path,
+    find_path_segment_with_overlay, find_path_with_overlay, hierarchical_route,
+    hierarchical_route_with_overlay, navigation_checksum,
 };
 pub use overlay::{
-    Depletion, MAX_RESOURCE_OVERLAY_CHANGES, RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange,
-    ResourceOverlay, ResourceOverlayError, ResourceOverlaySnapshot,
+    Depletion, MAX_OBSTACLE_TILES, MAX_RESOURCE_OVERLAY_CHANGES, MAX_STARTING_NODES,
+    RESOURCE_OVERLAY_SCHEMA_VERSION, ResourceChange, ResourceOverlay, ResourceOverlayError,
+    ResourceOverlaySnapshot,
 };
 pub use package::{
     EnvironmentalProvenance, LayerProvenance, MapPackage, MapPackageError, PreparationNote,
@@ -63,8 +66,9 @@ pub use terrain::{
     Chunk, DecorationFamily, EcologicalPalette, EdgePassability, GroundMaterial,
     LandscapeAppearance, LandscapeChunk, LandscapeDecoration, LandscapePoint, LandscapePolicy,
     LandscapeResource, LandscapeSample, LandscapeTile, MapChunkGenerator, NativeExposure,
-    NativeHeightBand, ObjectKind, Provenance, ResourceKind, ResourceNode, ResourceVisualFamily,
-    SurfaceDiagonal, SurfaceKind, Tile, TileSurface, WaterKind,
+    NativeHeightBand, NavigationPhase, NavigationProbe, NavigationSpan, ObjectKind, Provenance,
+    ResourceKind, ResourceNode, ResourceVisualFamily, SurfaceDiagonal, SurfaceKind, Tile,
+    TileSurface, WALK_CACHE_MAX_BYTES, WalkCell, WaterKind,
 };
 pub use wire::{CHUNK_FORMAT_VERSION, CompactChunk, CompactChunkError, MAX_DECODED_CHUNK_BYTES};
 
@@ -79,4 +83,4 @@ pub const REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR: u32 = 6;
 pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
 /// The only deterministic generation recipe: the composed landscape. It is part
 /// of canonical package identity; packages naming any other value are rejected.
-pub const GENERATION_RECIPE_VERSION: u16 = 2;
+pub const GENERATION_RECIPE_VERSION: u16 = 3;

@@ -1,5 +1,30 @@
 # Performance evidence
 
+## Shared formation movement
+
+`make test-formations-perf` uses release optimization to compare 200 individually
+ordered militia with the same army ordered as one Line formation on the same
+synthetic 4,096-tile map.
+Fog is disabled to isolate movement. Both armies remain in transit during the
+200 sampled ticks after 800 warm-up ticks; order issuance and initial assembly
+are excluded. The output reports route requests, actual fresh route searches
+(including scheduler restarts), and movement-phase mean, median and p95.
+`make test-formations` additionally covers one-tile obstruction squeeze/re-form,
+slowest-member speed, deterministic replay, queued turns and combat modes,
+posture changes, fog batching, and 4,096-member local-work bounds.
+
+Members never create route planners. One group leader carries the centroid's
+ordinary scheduler state and portal guidance. Local steering shares at most
+16,384 cached visibility tile probes per tick across all groups, plus up to
+three immediate-step probes per member; cached rays span at most 96 tiles.
+Groups rotate their starting member and group each tick to avoid starvation.
+Shared breadcrumbs retain at most 128 tile crossings. Nearby AI march groups
+also share their public land queries instead of spending one per soldier.
+
+Elapsed times on this shared machine are informational. Lower route-search
+counts do not establish a p95 timing improvement, finished RTS performance,
+or Firefox/GTX 1660 Ti hardware qualification.
+
 `make perf-smoke` runs the 8-client, 8,000-entity scenario through the
 authoritative gameplay WebSocket at `/game/ws`, using the production
 `GameWorld`. `make perf-ci` adds the 64-client, 128,000-entity
@@ -29,6 +54,10 @@ snapshot latency, missed offer deadline, maximum response backlog, server tick
 deadline misses, four reconnects under load, and a paused slow reader. Hosted
 timing samples are informational; missing scheduled work or protocol responses
 fail the workload.
+
+`make perf-scale` is the headless 100-player, 100,000-unit tick and server
+fan-out measurement; its numbers and hot spots are in
+[scale measurements](scale/measurements.md).
 
 `make perf-timing` runs pinned Criterion 0.8.2 benchmarks for a synthetic
 simulation tick, viewport query, 1,000-entity snapshot encode/decode, and
@@ -64,6 +93,65 @@ original-catalog qualification remains unavailable on this trial: its optional
 rock 15033 and snow 15026 sheets are absent. Portable complete-catalog tests
 and this real available-source measurement are separate evidence.
 
+## Native building atlas
+
+Every building, construction and ambient source packs at full native resolution
+(one atlas texel per source pixel); the half-resolution policy is removed. Measured
+on 2026-10-21 with `make building-proof` on trial pack
+`80d86805bb0ae23d78d26bc64904b068337323d9d18a3d2b1098ecc11dccdc60` merged with its
+DE overlay (4,868 selected frames, 1,310 of them terrain). Run it on a pack
+directory without symlinked overlay targets (the container does not mount them;
+a missing overlay silently drops the `de/` sources and 22 frames).
+
+| Object-domain texels | Frames | Half resolution | Native |
+|---|---|---|---|
+| Buildings: DAT bodies | 167 | 1,074,659 | 2,556,865 |
+| Construction: DAT stages | 15 | 129,827 | 516,263 |
+| Construction: fallback foundations | 3 | 32,736 | 130,944 |
+| Rubble and Palisade Gate | 19 | 374,896 | 763,216 |
+| Feudal supplemental | 1 | 6,888 | 27,552 |
+| Dark supplemental and ambient | 77 | 135,687 | 135,687 |
+| Fishing | 56 | 79,144 | 79,144 |
+| Units | 2,448 | 3,729,060 | 3,729,060 |
+| Resources and other objects | 772 | 2,011,223 | 2,011,223 |
+| Object total | 3,558 | 7,508,584 | 9,884,418 |
+
+Terrain (its own domain) stays 6,226,430 texels in 1,310 frames. Two object pages
+hold 8,388,608 texels, so native resolution overflows them by 1,495,810 texels.
+Before the budget moved, the old four pages packed at 82.9, 67.1, 90.7 and 88.3%.
+
+Lossless reclaim was measured first (`make building-proof` prints it): tight
+bounding boxes over the colour, player and shadow planes of every selected frame
+remove 542,542 texels (17,196 from building bodies, 8,552 from construction
+stages), and sharing frames with identical content removes 149,155 more (138,387 in
+unit cells, whose team colour the runtime bakes differently per owner). No mirrored
+pairs exist. Even with all of it the object domain needs about 9.26M texels, above
+the 8.39M of two pages, and a packer that lets objects borrow the terrain pages'
+spare rows still overflowed in the browser (the real client selects 9,713,951
+object texels). So the budget moved: `PAGE_COUNT` 4 to 5, terrain keeps pages 0-1
+and objects take pages 2-4. The packer, the 5,120-entry limit and the 2048 page
+side are unchanged. After the change: pages 2-4 pack at 90.6, 92.2 and 52.9%
+(9,884,418 of 12,582,912 texels, 2,698,494 free), terrain pages at 82.9 and 67.1%.
+
+Cost of the page: CPU atlas storage and GPU texture payload grow from 67,108,864
+to 83,886,080 bytes (+16,777,216 bytes, +25%; a 2048x2048x5 RGBA8 array texture
+and one 80 MiB WASM buffer). It is the texel payload only, not a measurement of
+driver overhead or dedicated VRAM. The download is unchanged: the source pages
+already held full-resolution texels and the old sampling skipped them. Start-up
+copies 2.4M more texels (about 9.5 MB); that was not timed separately. The WASM
+gzip cap and baseline are unchanged. The two ground sheets this trial lacks (rock
+15033, snow 15026, about 950,000 terrain texels) fit the terrain domain's 2,096,642
+spare texels by area; no pack with them was available to prove it.
+
+Streaming (2026-10-22): the client loader no longer builds the 80 MiB atlas in
+WASM memory. It fills one 16 MiB page buffer at a time and hands each page to
+the renderer: WebGPU writes it straight into the texture and reuses the buffer,
+so the CPU atlas never exists; WebGL2 and Canvas gather the pages they must keep
+(restoration copy, raster source). A source sheet that feeds several pages is
+decoded again for each. On the memory spec's webgpu project WASM linear memory
+fell from 115.25 to 51.25 MiB and the largest summed Chromium resident size from
+about 834 to about 741 MiB (single local runs, noisy by tens of MiB).
+
 Dedicated machines can submit `reports/perf/hardware-environment.json` and
 `reports/perf/hardware-samples.json` to `make perf-hardware-check` (or pass
 `--environment`, `--samples`, and `--baseline` paths to the Rust CLI). The
@@ -97,8 +185,18 @@ E2E checks exercise the resulting shipped bundle. The gameplay bundle is
 `web/pkg`; the diagnostics app uses `web/diagnostics-pkg`, including its replay
 verification kernel. Both are built by `make build-wasm`, and `make perf-wasm-cap`
 requires both optimized gzip artifacts to fit the same unchanged baseline cap.
-`make perf-wasm-functions` writes per-function Binaryen metrics under `.cache/`
+`make perf-wasm-functions` writes per-function Binaryen metrics to
+`reports/perf/wasm-functions.txt`
 for diagnosing size growth; it does not change the baseline.
+
+`make build-wasm` also emits the current build-assembled WGSL programs into
+ignored `web/pkg/*.wgsl`. WebGPU downloads and validates both before creating
+pipelines; download/validation failures follow the normal WebGL2/Canvas recovery
+path and its initialization deadline. Native generation and browser unit tests
+use the same shader templates. Production WASM contains only the loader.
+Recovery URL serialization and startup diagnostics run in JavaScript: formatting
+the live camera's floats in Rust would retain its full decimal formatter solely
+for a browser navigation. Camera, seat and unknown fragment fields are preserved.
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot
@@ -136,6 +234,24 @@ On 2026-10-20, the same source tree measured 287584 B with Rust 1.93.1 and
 284927 B with Rust 1.99.1 (-0.924%), so the WASM baseline stays at 287702 B;
 only its toolchain identity changes. Diagnostics measured 84358 B and 83308 B,
 respectively, and retain the shared gameplay cap.
+
+On 2026-10-24, PR #567's
+[target-performance report](https://github.com/Anko59/AoeWorld/actions/runs/40073429466)
+at merge revision `67f1947dabe77cd8d86c544aa776a30564107bef` measured gameplay
+WASM at 302106 B: 19 B above the unchanged 302087 B cap (287702 B + 5%).
+All twelve instruction/allocation comparisons passed. The corresponding head
+`a4920de316ec43e661ffc3e6f8d1bd3e6920e24a` passed local `make perf-ci` at
+302032 B, leaving only 55 B; the local/CI size difference was 74 B.
+The memory diagnostic serializer constructed a second nineteen-element array
+of keys and counter values on each observation. Keeping the keys in static
+storage and serializing a compact counter array in place reduced local
+`make perf-ci` to 301791 B (-241 B), leaving 296 B under the same cap.
+The JSON fields, integer values and renderer pairs are unchanged and covered
+by a browser WASM regression test. The diagnostic bundle remains 84994 B.
+No baseline or threshold changed; these are bundle sizes, not gameplay timing
+or dedicated Firefox/GTX 1660 Ti qualification. `make perf-ci` now prints every
+comparison's metric, observed value, baseline, allowance and verdict, and
+includes the same rows in its Markdown report.
 
 The instruction baselines below were re-taken for the toolchain change, same tree,
 using `make perf-instructions` with Gungraun 0.19.4 and Valgrind 3.19.0:
@@ -197,3 +313,51 @@ chunk. Raw samples and provenance go to `reports/perf/map-chunk.json` and `.md`.
 Package loading and warmup are excluded; this does not qualify server paging
 or dedicated hardware. Without `AOE_MAP_SAMPLES`, the existing five-chunk
 fallback sampling remains available.
+
+## Live game measurements
+
+Use the authenticated [admin endpoints](admin.md) while a game is running.
+`GET /admin/perf` computes nearest-rank `p50_us`, `p95_us`, and `max_us` for
+`total`, simulation `advance`, scheduler `late`, `planning`, and every recorded
+named phase. `top_phases` lists the five named phases with highest p95. Timings
+are microseconds. Nested navigation spans and `fanout_wait` overlap other
+phases: do not add all phases together. The window is the most recent sixty
+wall-clock seconds, capped at 1,200 completed ticks (one minute at 20 Hz).
+`samples` is its actual size; an idle/stopped server's window eventually empties.
+`tick_hz` is the configured rate; `tick_rate` measures completion intervals in
+the sampled window (zero with fewer than two samples). `missed_ticks` counts
+samples whose total or schedule lateness exceeded the tick period;
+`missed_total` is the process timing recorder's cumulative missed count. A
+new match's first recorded tick discards the previous match's window.
+
+`gameplay_memory`, `terrain_cache` and `snapshot_store` reuse `/health`'s live
+structure accounting without initializing the diagnostic world. Retained/cache
+bytes describe logical capacities, **not RSS**, allocator slack, stacks or
+in-flight allocations. Compare process/container RSS separately. Quantiles and
+summaries run on request; the tick records only its existing phase counters
+and a timestamp.
+
+In the game, append `?perf=1` to the URL or press **F3** or **Ctrl+right-click** on the scene to toggle the overlay.
+Shift+right-click remains a queued movement order.
+`window.aoePerformance` exposes `enabled`, `frameMs`, `cpuMs` (`decode`, `upload`,
+`draw`, `ui`), `gpuMs`, `gpuStatus`, `frames`, `totalsMs`, and `enable(bool)`.
+Each frame publishes the preceding frame interval and CPU sections accumulated
+since its start. Decode includes wire conversion and applying received state;
+draw includes scene preparation and CPU render submission; UI includes HUD
+presentation. Upload measures synchronous GPU buffer/texture API calls and is
+subtracted from enclosing CPU sections. Totals help inspect sections that run
+less often than frames. Browser clock resolution may round short sections to
+zero. Disabled sampling performs no clock reads or GPU queries.
+
+WebGL2 reports asynchronous GPU elapsed time only when
+`EXT_disjoint_timer_query_webgl2` is available, keeping at most one pending
+query and rejecting disjoint clocks. Canvas and WebGPU without enabled
+`timestamp-query` report `gpuMs: null` with the reason in `gpuStatus`; queue
+completion is never presented as GPU elapsed time. CPU submission time is not
+GPU time. This instrumentation does not qualify Firefox/Linux/GTX 1660 Ti
+performance; test the owner's actual match and hardware before claiming FPS.
+
+The bottom-right **Carry indicators** button beside grid, or **L**, toggles
+resource-load badges. The preference is stored per browser as
+`aoeworld.carryIndicators`; it still works in memory when storage is denied.
+Hotkeys ignore text inputs, editable fields and open dialogs.

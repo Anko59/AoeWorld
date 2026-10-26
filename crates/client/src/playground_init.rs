@@ -1,5 +1,5 @@
 use super::{Client, animate, connect, controls, resize};
-use crate::game_assets::load;
+use crate::game_assets::{AtlasSink, RendererSink, load};
 use aoe_core::{Camera, WorldConfig};
 use aoe_rendering::GameRenderer;
 use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
@@ -7,22 +7,40 @@ use wasm_bindgen::{JsCast, JsValue};
 use web_sys::{Document, HtmlCanvasElement};
 
 pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
+    super::recovery::report();
     let canvas: HtmlCanvasElement = document
         .get_element_by_id("scene")
         .ok_or("No canvas")?
         .dyn_into()?;
+    crate::building_ui::content::load().await?;
     let backend = super::capture::current().renderer();
     let (mut renderer, canvas) = GameRenderer::new_with_backend(canvas, backend)
         .await
         .map_err(|error| JsValue::from_str(&error))?;
-    let (art, pixels, colour) = load().await?;
-    renderer
-        .upload_game_atlas(&art, pixels)
-        .map_err(|error| JsValue::from_str(&error))?;
+    let assets = load(&mut RendererSink::new(&mut renderer)).await;
+    if let Err(error) = super::recovery::check(&renderer) {
+        super::recovery::restart(&renderer, None, &error)?;
+        return Ok(());
+    }
+    let (art, colour) = assets?;
     if let Some(element) = document.get_element_by_id("playground") {
         let _ = element.set_attribute("data-renderer", renderer.backend());
         let _ = element.set_attribute("data-assets", "aoe2-local");
         let _ = element.set_attribute("data-art-colour", &format!("{colour:?}"));
+    }
+    let query = web_sys::window()
+        .and_then(|w| w.location().search().ok())
+        .and_then(|query| web_sys::UrlSearchParams::new_with_str(&query).ok());
+    let hover_mode = match query.and_then(|query| query.get("hover")).as_deref() {
+        Some("cursor") => 0,
+        Some("glow") => 2,
+        _ => 1,
+    };
+    if let Some(element) = document.get_element_by_id("playground") {
+        let _ = element.set_attribute(
+            "data-hover-mode",
+            ["cursor", "outline", "glow"][hover_mode as usize],
+        );
     }
     let config = WorldConfig::default();
     let shared = Rc::new(RefCell::new(Client {
@@ -30,7 +48,9 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         canvas,
         renderer,
         art,
+        team_colour: colour,
         socket: None,
+        connection_callbacks: None,
         connection_id: 0,
         camera: Camera {
             center: [
@@ -68,6 +88,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         selected: Default::default(),
         village: Default::default(),
         grid: false,
+        hover_mode,
         drag: None,
         pointer: None,
         last_frame: 0.0,
@@ -84,6 +105,53 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
     Ok(())
 }
 
+struct SharedSink<'a> {
+    shared: &'a Rc<RefCell<Client>>,
+    upload: Option<aoe_rendering::AtlasUpload>,
+}
+
+impl<'a> SharedSink<'a> {
+    fn new(shared: &'a Rc<RefCell<Client>>) -> Self {
+        Self {
+            shared,
+            upload: None,
+        }
+    }
+}
+
+impl AtlasSink for SharedSink<'_> {
+    fn resident_buffer(&mut self) -> Result<Option<&mut [u8]>, String> {
+        if self.upload.is_none() {
+            self.upload = Some(self.shared.borrow_mut().renderer.begin_game_atlas()?);
+        }
+        Ok(self
+            .upload
+            .as_mut()
+            .ok_or("No atlas upload")?
+            .resident_buffer())
+    }
+    fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String> {
+        if self.upload.is_none() {
+            self.upload = Some(self.shared.borrow_mut().renderer.begin_game_atlas()?);
+        }
+        self.upload
+            .as_mut()
+            .ok_or("No atlas upload")?
+            .page_buffer(index)
+    }
+    fn commit(&mut self, index: u32) -> Result<(), String> {
+        let upload = self.upload.as_mut().ok_or("No atlas upload")?;
+        self.shared
+            .borrow_mut()
+            .renderer
+            .write_game_atlas_page(upload, index)
+    }
+    fn finish(&mut self) -> Result<(), String> {
+        let upload = self.upload.take().ok_or("No atlas pages written")?;
+        self.shared.borrow_mut().renderer.finish_game_atlas(upload)
+    }
+}
+
 // One serialized reload follows setup colour changes. Existing renderers keep
 // the same fixed atlas allocation; no per-frame recolouring or extra pages.
 fn install_colour(shared: Rc<RefCell<Client>>, colour: [u8; 3]) -> Result<(), JsValue> {
@@ -98,18 +166,17 @@ fn install_colour(shared: Rc<RefCell<Client>>, colour: [u8; 3]) -> Result<(), Js
         busy.set(true);
         wasm_bindgen_futures::spawn_local(async move {
             loop {
-                match load().await {
-                    Ok((art, pixels, colour)) => {
+                // The client is borrowed only while a page is handed over, never
+                // across a decode await, so rendering continues on the old atlas.
+                match load(&mut SharedSink::new(&shared)).await {
+                    Ok((art, colour)) => {
                         let mut client = shared.borrow_mut();
-                        if let Err(error) = client.renderer.upload_game_atlas(&art, pixels) {
-                            client.status = error;
-                            break;
-                        }
                         if let Some(element) = client.document.get_element_by_id("playground") {
                             let _ =
                                 element.set_attribute("data-art-colour", &format!("{colour:?}"));
                         }
                         client.art = art;
+                        client.team_colour = colour;
                         client.rendered_frame.clear();
                         loaded.set(colour);
                     }

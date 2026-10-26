@@ -43,9 +43,28 @@ impl GameWorld {
         );
         hash.update(&self.tick.0.to_le_bytes());
         hash.update(&(self.planning_cursor as u64).to_le_bytes());
+        self.idle_spacing.update_hash(&mut hash);
         hash.update(&(self.active_planner_count as u64).to_le_bytes());
         hash.update(&(self.active_route_searches as u64).to_le_bytes());
         hash.update(&self.planning_budget.to_le_bytes());
+        hash.update(
+            &self
+                .navigation_preparation_budget
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .to_le_bytes(),
+        );
+        hash.update(&self.fast_route_budget.to_le_bytes());
+        hash.update(&(self.route_queued.len() as u64).to_le_bytes());
+        for (player, far) in &self.route_queued {
+            hash.update(&player.0.to_le_bytes());
+            hash.update(&[u8::from(*far)]);
+        }
+        hash.update(&(self.fast_route_spent.len() as u64).to_le_bytes());
+        for (player, spent) in &self.fast_route_spent {
+            hash.update(&player.0.to_le_bytes());
+            hash.update(&spent.to_le_bytes());
+        }
         self.terrain.update_mutable_state_hash(&mut hash);
         hash.update(&self.next_entity_id.to_le_bytes());
         self.economy.update_hash(&mut hash);
@@ -54,6 +73,13 @@ impl GameWorld {
         self.vision.update_hash(&mut hash);
         for unit in &self.units {
             hash.update(&unit.state.id.0.to_le_bytes());
+            // Both cyclic neighbour windows carry mutable sampling order.
+            hash.update(&self.followers.sampling_slot(unit.state.id).to_le_bytes());
+            let wildlife_slot = match unit.wildlife_slot {
+                usize::MAX => u64::MAX,
+                slot => slot as u64,
+            };
+            hash.update(&wildlife_slot.to_le_bytes());
             hash.update(&unit.state.player.0.to_le_bytes());
             hash.update(&unit.state.position.x.to_le_bytes());
             hash.update(&unit.state.position.y.to_le_bytes());
@@ -66,6 +92,7 @@ impl GameWorld {
                 unit.state.kind as u8,
                 unit.state.task as u8,
             ]);
+            hash.update(&[u8::from(unit.state.auto_scout)]);
             hash.update(&unit.next_hit_tick.to_le_bytes());
             hash.update(&unit.state.hp.to_le_bytes());
             hash.update(&unit.state.max_hp.to_le_bytes());
@@ -111,6 +138,28 @@ impl GameWorld {
                 hash.update(&tile.x.to_le_bytes());
                 hash.update(&tile.y.to_le_bytes());
             }
+            hash.update(&[u8::from(unit.fast_route_tried)]);
+            if let Some(obstruction) = unit.obstruction {
+                hash.update(&[1]);
+                hash.update(&obstruction.goal.x.to_le_bytes());
+                hash.update(&obstruction.goal.y.to_le_bytes());
+                hash.update(&obstruction.remaining.to_le_bytes());
+                hash.update(&obstruction.blocked.to_le_bytes());
+                hash.update(&obstruction.last_tick.to_le_bytes());
+                hash.update(&obstruction.search_tick.to_le_bytes());
+            } else {
+                hash.update(&[0]);
+            }
+            match unit.unreachable_memo {
+                None => hash.update(&[0]),
+                Some((from, to, at)) => {
+                    hash.update(&[1]);
+                    for value in [from.x, from.y, to.x, to.y] {
+                        hash.update(&value.to_le_bytes());
+                    }
+                    hash.update(&at.to_le_bytes())
+                }
+            };
             if let Some(planner) = &unit.planner {
                 hash.update(&[1]);
                 planner.update_hash(&mut hash);
@@ -123,6 +172,19 @@ impl GameWorld {
                 hash.update(&[0, 0]);
             }
         }
+        if !self.move_queues.is_empty() {
+            hash.update(b"player move queues\0");
+            hash.update(&(self.move_queues.len() as u64).to_le_bytes());
+            for (id, queue) in &self.move_queues {
+                hash.update(&id.0.to_le_bytes());
+                hash.update(&(queue.len() as u64).to_le_bytes());
+                for point in queue {
+                    hash.update(&point.x.to_le_bytes());
+                    hash.update(&point.y.to_le_bytes());
+                }
+            }
+        }
+        self.hash_formations(&mut hash);
         *hash.finalize().as_bytes()
     }
 

@@ -36,7 +36,8 @@ impl Fragment {
         for axis in 0..2 {
             if self.0[axis].is_finite() {
                 let extent = [config.width_tiles, config.height_tiles][axis];
-                camera.center[axis] = self.0[axis].clamp(0.0, f64::from(extent) - 1.0);
+                camera.center[axis] =
+                    aoe_core::clamp_f64(self.0[axis], 0.0, f64::from(extent) - 1.0);
             }
         }
         camera.clamp_center(config)

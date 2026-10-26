@@ -11,6 +11,11 @@ pub struct WorldKeyIndex {
     slots: Vec<u32>,
 }
 impl WorldKeyIndex {
+    pub fn resident_bytes(&self) -> usize {
+        self.keys.capacity() * std::mem::size_of::<[i32; 2]>()
+            + self.slots.capacity() * std::mem::size_of::<u32>()
+    }
+
     fn hash(key: [i32; 2]) -> usize {
         let mut value =
             (key[0] as u32).wrapping_mul(0x9e3779b9) ^ (key[1] as u32).wrapping_mul(0x85ebca6b);

@@ -183,8 +183,9 @@ M5 bounded snapshot foundations are reviewed in
 [PR #28](https://github.com/Anko59/AoeWorld/pull/28), revision
 `adf1b4d450916df1411c11e2620e8ba5776ca159`. Schema/map identity, canonical
 resource IDs, amounts and revision history are validated before replacement.
-Decoding and mutation cap changed resources at 65,536 logical entries; provider,
-capacity and revision errors leave state intact. Independent review, hooks,
+Decoding and mutation enforce a logical-entry bound; provider, capacity and
+revision errors leave state intact. The current bound and paged synchronization
+contract are in [the workflow](workflow.md#mutable-resource-snapshots). Independent review, hooks,
 map-test, preflight (333 native tests), and clean pre-push preflight passed.
 Disk persistence and reconnect/delta consumers remain required.
 
@@ -205,7 +206,7 @@ M5 resource synchronization is reviewed in
 [PR #30](https://github.com/Anko59/AoeWorld/pull/30), revision
 `356a9a0259a0f29e37f937262f294dbdd9f0dfa4`. The gameplay protocol sends bounded sparse
 resets and exact-revision deltas, using a 1,024-entry server journal and full
-reset when history is unavailable. The client retains at most 65,536 amounts
+reset when history is unavailable. The client retains bounded amounts
 outside immutable chunk residency and filters exhausted sprites on both
 backends. Malformed/discontinuous updates close the stream and clear state;
 empty advancing deltas and increasing known amounts are rejected atomically.

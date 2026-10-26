@@ -1,42 +1,55 @@
-use super::{AnimalKind, AnimalTask, StoredAnimal, cell, distance, radius};
-use crate::{DamageKind, GameUnit, GameWorld, HitRecord, UnitKind, damage_dealt};
+use super::{AnimalKind, AnimalTask, StoredAnimal, cell, distance, radius, unit_key};
+use crate::{DamageKind, GameWorld, HitRecord, UnitKind, damage_dealt};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, WorldPosition};
 use std::collections::BTreeMap;
 
 impl GameWorld {
-    pub(crate) fn advance_wildlife(&mut self, changed: &mut Vec<GameUnit>) {
+    pub(crate) fn advance_wildlife(&mut self, changed: &mut Vec<EntityId>) {
         self.wildlife.stats = Default::default();
         self.advance_hunters(changed);
-        // Reverse the local animal index from units. No live animal outside
-        // these cells is visited, even when the logical world is enormous.
-        let mut nearby: BTreeMap<EntityId, Option<GameUnit>> =
+        // Animal-driven: each animal probes the unit cell grid around itself.
+        // An animal no unit can reach through its nine-cell neighbourhood is
+        // never visited, so idle populations cost nothing.
+        let mut nearby: BTreeMap<EntityId, Option<EntityId>> =
             self.wildlife.engaged.iter().map(|id| (*id, None)).collect();
-        if !self.wildlife.cells.is_empty() {
-            for unit in self.units.iter().filter(|u| u.state.hp > 0) {
-                let (cx, cy) = cell(unit.state.position);
-                for y in cy - 1..=cy + 1 {
-                    for x in cx - 1..=cx + 1 {
-                        self.wildlife.stats.cells += 1;
-                        if let Some(ids) = self.wildlife.cells.get(&(x, y)) {
-                            for id in ids {
-                                self.wildlife.stats.candidate_pairs += 1;
-                                let closest = nearby.entry(*id).or_default();
-                                let a = self.wildlife.animals[id].state;
-                                let u = unit.state;
-                                let score = |u: GameUnit| {
-                                    (distance(u.position, a.position), u.player, u.id)
-                                };
-                                if (a.kind != AnimalKind::Wolf || u.kind == UnitKind::Villager)
-                                    && distance(u.position, a.position)
-                                        <= radius(i64::from(a.kind.rules().sight_tiles))
-                                    && closest.is_none_or(|old| score(u) < score(old))
-                                {
-                                    *closest = Some(u);
-                                }
-                            }
+        let ids = self.wildlife.animals.keys().copied().collect::<Vec<_>>();
+        for id in ids {
+            let a = self.wildlife.animals[&id].state;
+            // Carcasses remain in the food-search index but never run animal
+            // AI; their state belongs to the decay clock.
+            if a.hp == 0 {
+                continue;
+            }
+            let (cx, cy) = cell(a.position);
+            let wolf = a.kind == AnimalKind::Wolf;
+            let sight = radius(i64::from(a.kind.rules().sight_tiles));
+            let mut closest: Option<(i64, aoe_core::PlayerId, EntityId)> = None;
+            let mut probed = false;
+            for y in cy - 1..=cy + 1 {
+                for x in cx - 1..=cx + 1 {
+                    let Some(units) = self.wildlife.unit_cells.get(&unit_key((x, y))) else {
+                        continue;
+                    };
+                    for unit in units {
+                        if !unit.alive {
+                            continue;
+                        }
+                        probed = true;
+                        self.wildlife.stats.candidate_pairs += 1;
+                        let gap = distance(unit.position, a.position);
+                        let score = (gap, unit.player, unit.id);
+                        if (!wolf || unit.kind == UnitKind::Villager)
+                            && gap <= sight
+                            && closest.is_none_or(|old| score < old)
+                        {
+                            closest = Some(score);
                         }
                     }
                 }
+            }
+            if probed {
+                self.wildlife.stats.cells += 9;
+                nearby.insert(id, closest.map(|(_, _, unit)| unit));
             }
         }
         for (id, nearest) in nearby {
@@ -46,7 +59,7 @@ impl GameWorld {
             self.wildlife.stats.animal_steps += 1;
             a.state.moving = false;
             let old_cell = cell(a.state.position);
-            let nearest = nearest.and_then(|u| self.unit(u.id)).filter(|u| u.hp > 0);
+            let nearest = nearest.and_then(|u| self.unit(u)).filter(|u| u.hp > 0);
             match a.state.kind {
                 AnimalKind::Sheep => {
                     if a.state.owner.is_none() {
@@ -80,7 +93,7 @@ impl GameWorld {
                     if a.state
                         .target
                         .and_then(|id| self.unit(id))
-                        .is_none_or(|u| u.hp == 0)
+                        .is_none_or(|u| u.hp == 0 || self.embarked(u.id))
                     {
                         a.state.target = nearest.map(|u| u.id);
                     }
@@ -113,11 +126,12 @@ impl GameWorld {
         self.advance_carcasses();
     }
 
-    fn animal_attack(&mut self, a: &mut StoredAnimal, changed: &mut Vec<GameUnit>) {
+    fn animal_attack(&mut self, a: &mut StoredAnimal, changed: &mut Vec<EntityId>) {
         let rules = a.state.kind.rules();
         a.cooldown = a.cooldown.saturating_sub(1);
         let target = a.state.target.and_then(|id| self.unit(id)).filter(|u| {
             u.hp > 0
+                && !self.embarked(u.id)
                 && (rules.chase_tiles == 0
                     || distance(u.position, a.home) <= radius(i64::from(rules.chase_tiles)))
         });
@@ -155,10 +169,12 @@ impl GameWorld {
             attacker: a.state.id,
             tick: self.tick,
         });
-        if unit.hp == 0 {
+        let (victim, killed) = (unit.player, unit.hp == 0);
+        self.record_combat_hit(None, victim, false, killed);
+        if killed {
             self.kill_unit(index);
         }
-        changed.push(self.units[index].state);
+        changed.push(self.units[index].state.id);
         a.cooldown = (self.config.tick_hz * rules.attack_period_centiseconds / 100).max(1);
     }
 
@@ -189,7 +205,9 @@ impl GameWorld {
             if !self.config.valid_ground_position(next)
                 || !self.tile_passable(tile)
                 || !self.building_step_clear(old, tile)
-                || !self.terrain.crossable(old, tile, self.config)
+                // A map's edge rule blocks a tile against itself: a step
+                // inside one tile has no edge to cross.
+                || (old != tile && !self.terrain.crossable(old, tile, self.config))
                 || (old.x != tile.x
                     && old.y != tile.y
                     && (!self.tile_passable(aoe_core::TileCoord::new(old.x, tile.y))

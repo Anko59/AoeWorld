@@ -1,16 +1,21 @@
 //! Bounded numeric building presentation; no DOM rules duplicate the simulation.
 use super::{Client, construction, orders::send, owner};
-use crate::{building_ui, playground::game::map};
+use crate::{
+    building_ui::{self, availability},
+    playground::game::map,
+};
 use aoe_protocol::{ConstructionState, GameplayClientMessage as Message, Tech};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
 #[wasm_bindgen(
-    inline_js = "export function buildings_update(v) { window.aoeBuildings?.update(v); } export function placement_update(v) { window.aoeBuildings?.preview(v); }"
+    inline_js = "export function buildings_update(v) { window.aoeBuildings?.update(v); } export function placement_update(v) { window.aoeBuildings?.preview(v); } export function buildings_bind(callback) { window.aoeBuildings.bind(callback); }"
 )]
 extern "C" {
     fn buildings_update(v: &[f64]);
     fn placement_update(v: &[f64]);
+    #[wasm_bindgen(catch)]
+    fn buildings_bind(callback: &js_sys::Function) -> Result<(), JsValue>;
 }
 
 #[inline(never)]
@@ -20,6 +25,7 @@ pub(super) fn update(client: &Client) {
         .players
         .iter()
         .find(|p| p.player == owner(client));
+    let completed = construction::completed(client);
     // age, selected kind, hp, max hp, construction, food, research kind/progress,
     // research availability, build availability entries, trained kind.
     let mut v = vec![0.0; 8 + Tech::ALL.len()];
@@ -30,11 +36,7 @@ pub(super) fn update(client: &Client) {
     if let Some(p) = player {
         v[0] = p.age as u8 as f64;
     }
-    let b = client
-        .village
-        .buildings
-        .iter()
-        .find(|b| Some(b.id) == client.selected.building_id);
+    let b = super::production::selected(client);
     if let Some(b) = b {
         v[1] = b.kind as u8 as f64;
         v[2] = f64::from(b.hp);
@@ -45,87 +47,29 @@ pub(super) fn update(client: &Client) {
             v[6] = r.tech as u8 as f64;
             v[7] = r.progress_ticks as f64 / (r.total_ticks as f64).max(1.0);
         }
-        for (i, r) in aoe_simulation::TECH_RULES.iter().enumerate() {
-            let requirement = match r.requires {
-                aoe_simulation::TechRequirement::None => true,
-                aoe_simulation::TechRequirement::Age(age) => {
-                    age == aoe_simulation::Age::Dark
-                        || player.is_some_and(|p| p.age == aoe_protocol::Age::Feudal)
-                }
-                aoe_simulation::TechRequirement::BuildingKinds { count, kinds } => {
-                    kinds
-                        .iter()
-                        .filter(|k| construction::completed(client) & (1 << **k as u8) != 0)
-                        .count()
-                        >= count
-                }
-            };
-            let enabled = r.building as u8 == b.kind as u8
-                && b.player == owner(client)
-                && b.construction == ConstructionState::Complete
-                && b.training_queue.is_empty()
-                && b.research.is_none()
-                && requirement
-                && player.is_some_and(|p| {
-                    p.researched & (1 << i) == 0
-                        && building_ui::affordable(p.stockpile, building_ui::stock(r.cost))
-                })
-                && !client.village.buildings.iter().any(|b| {
-                    b.player == owner(client) && b.research.is_some_and(|r| r.tech as usize == i)
-                });
-            v[8 + i] = f64::from(u8::from(enabled));
+        for (i, r) in building_ui::content::rules().techs.iter().enumerate() {
+            let duplicate = client.village.buildings.iter().any(|b| {
+                b.player == owner(client)
+                    && b.research.is_some_and(|entry| entry.tech as usize == i)
+            });
+            v[8 + i] =
+                availability::research(b, player, owner(client), completed, duplicate, r).number();
         }
     }
-    for r in &aoe_simulation::BUILDING_RULES[1..] {
-        let kind = KINDS[r.kind as usize];
+    for kind in KINDS.into_iter().skip(1).chain(std::iter::once(KINDS[0])) {
         v.push(f64::from(u8::from(construction::enabled(client, kind, 1))));
     }
     v.push(
         b.and_then(|b| b.training_queue.first())
             .map_or(0.0, |e| e.kind as u8 as f64),
     );
-    let train_enabled = b.is_some_and(|b| {
-        let rules = building_ui::rules(b.kind);
-        let cost = if b.kind == aoe_protocol::BuildingKind::TownCenter {
-            aoe_protocol::Stockpile {
-                food: aoe_simulation::VILLAGE_RULES.villager_food_cost,
-                ..Default::default()
-            }
-        } else {
-            let c = aoe_simulation::GameWorld::unit_training(
-                if b.kind == aoe_protocol::BuildingKind::Dock {
-                    aoe_simulation::UnitKind::FishingShip
-                } else {
-                    aoe_simulation::UnitKind::Militia
-                },
-            )
-            .map(|t| t.cost)
-            .unwrap_or_default();
-            aoe_protocol::Stockpile {
-                food: c.food,
-                wood: c.wood,
-                gold: c.gold,
-                stone: c.stone,
-            }
-        };
-        let reserved = client
-            .village
-            .buildings
-            .iter()
-            .filter(|v| v.player == owner(client))
-            .map(|v| v.training_queue.len())
-            .sum::<usize>();
-        b.player == owner(client)
-            && b.construction == ConstructionState::Complete
-            && !rules.trainable.is_empty()
-            && b.research.is_none()
-            && b.training_queue.len() < aoe_protocol::MAX_TRAINING_QUEUE
-            && player.is_some_and(|p| {
-                building_ui::affordable(p.stockpile, cost)
-                    && usize::from(p.population_used) + reserved < usize::from(p.population_cap)
-            })
-    });
-    v.push(f64::from(u8::from(train_enabled)));
+    let train = super::production::availability(
+        client,
+        b.map_or(aoe_protocol::UnitKind::Villager, |b| {
+            availability::primary_training(b, player)
+        }),
+    );
+    v.push(train.number());
     let foundations: Vec<_> = client
         .village
         .buildings
@@ -139,166 +83,211 @@ pub(super) fn update(client: &Client) {
         v.extend_from_slice(&[p.x * scale, p.y * scale, f64::from(b.progress_permille)]);
     }
     for kind in aoe_protocol::UnitKind::ALL {
-        let ready = b.is_some_and(|b| {
-            let native = aoe_simulation::UNIT_COMBAT[kind as usize].kind;
-            let r = building_ui::rules(b.kind);
-            let cost = aoe_simulation::GameWorld::unit_training(native).map(|t| t.cost);
-            b.player == owner(client)
-                && b.progress_permille == 1000
-                && b.research.is_none()
-                && b.training_queue.len() < aoe_protocol::MAX_TRAINING_QUEUE
-                && r.trainable.contains(&native)
-                && player.is_some_and(|p| {
-                    p.age == aoe_protocol::Age::Feudal
-                        && (kind != aoe_protocol::UnitKind::ManAtArms
-                            || p.researched & Tech::ManAtArms.bit() != 0)
-                        && cost.is_some_and(|c| {
-                            building_ui::affordable(
-                                p.stockpile,
-                                aoe_protocol::Stockpile {
-                                    food: c.food,
-                                    wood: c.wood,
-                                    gold: c.gold,
-                                    stone: c.stone,
-                                },
-                            )
-                        })
-                        && usize::from(p.population_used)
-                            + client
-                                .village
-                                .buildings
-                                .iter()
-                                .filter(|b| b.player == p.player)
-                                .map(|b| b.training_queue.len())
-                                .sum::<usize>()
-                            < usize::from(p.population_cap)
-                })
-        });
-        v.push(f64::from(u8::from(ready)));
+        let ready = super::production::availability(client, kind);
+        v.push(ready.number());
     }
+    v.push(b.map_or(aoe_protocol::UnitKind::Militia, |b| {
+        availability::primary_training(b, player)
+    }) as u8 as f64);
+    let market = b.is_some_and(|b| {
+        b.kind == aoe_protocol::BuildingKind::Market
+            && b.player == owner(client)
+            && b.construction == ConstructionState::Complete
+    });
+    v.extend(match player {
+        Some(p) => building_ui::market_panel(market, p.market_prices, p.stockpile),
+        None => [0.0; 15],
+    });
+    let reseeds = b.map_or(0, |b| b.farm_reseeds);
+    let mill = b.is_some_and(|b| {
+        b.kind == aoe_protocol::BuildingKind::Mill
+            && b.player == owner(client)
+            && b.construction == ConstructionState::Complete
+    });
+    let cost = building_ui::rules(aoe_protocol::BuildingKind::Farm)
+        .cost
+        .wood;
+    v.extend([
+        f64::from(reseeds),
+        f64::from(u8::from(
+            mill && reseeds < 99 && player.is_some_and(|p| p.stockpile.wood >= cost),
+        )),
+        f64::from(u8::from(mill && reseeds > 0)),
+        f64::from(cost),
+    ]);
+    v.extend(super::automation::state(client));
+    super::garrison::present(client);
+    v.extend(super::navy::state(client));
     v.push(f64::from(u8::from(
-        player.is_some_and(|p| p.researched & Tech::ManAtArms.bit() != 0),
+        b.is_some_and(|b| !b.training_queue.is_empty())
+            && player.is_some_and(|p| p.population_used >= p.population_cap),
     )));
     buildings_update(&v);
 }
 
-pub(super) const KINDS: [aoe_protocol::BuildingKind; 16] = aoe_protocol::BuildingKind::ALL;
+pub(super) const KINDS: [aoe_protocol::BuildingKind; 21] = aoe_protocol::BuildingKind::ALL;
 
 #[inline(never)]
-pub(in super::super) fn preview(client: &Client) {
-    let mut v = Vec::new();
+pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::SceneUnit>) {
+    let mut state = Vec::new();
     if let Some(kind) = client.village.placement
         && let Some(at) = client.pointer.and_then(|p| construction::origin(client, p))
     {
         let tiles = construction::tiles(client, at).unwrap_or_default();
-        let valid = !tiles.is_empty()
-            && construction::enabled(client, kind, tiles.len() as u32)
-            && tiles.iter().all(|t| construction::valid(client, kind, *t));
-        v.push(f64::from(u8::from(valid)));
-        let side = f64::from(kind.side());
-        let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
-        for t in tiles {
-            for (dx, dy) in [
-                (0.0, 0.0),
-                (side, 0.0),
-                (side, f64::from(kind.depth())),
-                (0.0, f64::from(kind.depth())),
-            ] {
-                let p = map::screen_position(client, [f64::from(t.x) + dx, f64::from(t.y) + dy]);
-                v.extend_from_slice(&[p.x * scale, p.y * scale]);
-            }
+        let valid = construction::span_valid(client, kind, &tiles);
+        state.push(f64::from(u8::from(valid)));
+        let age = client
+            .village
+            .players
+            .iter()
+            .find(|p| p.player == owner(client))
+            .map_or(aoe_protocol::Age::Dark, |p| p.age);
+        for (index, t) in tiles.iter().enumerate() {
+            let position = [
+                f64::from(t.x) + f64::from(kind.side()) / 2.0,
+                f64::from(t.y) + f64::from(kind.depth()) / 2.0,
+            ];
+            units.push(aoe_rendering::SceneUnit {
+                kind: aoe_rendering::SceneUnitKind::building(building_ui::age_sprite_slot(
+                    kind, 1000, false, age,
+                ) as u8),
+                id: aoe_core::EntityId((1 << 31) + index as u32),
+                position,
+                visual: aoe_rendering::SceneUnitVisual::new(false)
+                    .with_player(
+                        Some(owner(client)),
+                        owner(client),
+                        client.team_colour,
+                        false,
+                    )
+                    .with_ghost(valid),
+                facing: if kind == aoe_protocol::BuildingKind::PalisadeWall {
+                    building_ui::wall_frame(*t, |p| tiles.contains(&p))
+                } else {
+                    0
+                },
+                elevation_meters: map::elevation_at_world(client, position),
+            });
         }
     }
-    placement_update(&v);
+    placement_update(&state);
 }
 
+// Numeric UI actions are wired in the DOM module that creates the buttons.
+// Ownership, availability and ordinary protocol encoding stay in Rust.
 #[inline(never)]
 pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
-    for (i, id) in [
-        "build-house",
-        "build-lumber-camp",
-        "build-mining-camp",
-        "build-mill",
-        "build-farm",
-        "build-barracks",
-        "build-palisade-wall",
-        "build-outpost",
-        "build-dock",
-        "build-archery-range",
-        "build-stable",
-        "build-blacksmith",
-        "build-market",
-        "build-watch-tower",
-        "build-palisade-gate",
-        "research-loom",
-        "research-town-watch",
-        "research-feudal-age",
-        "research-double-bit-axe",
-        "research-horse-collar",
-        "research-gold-mining",
-        "research-stone-mining",
-        "research-wheelbarrow",
-        "research-man-at-arms",
-        "research-forging",
-        "research-scale-mail-armor",
-        "research-scale-barding-armor",
-        "research-fletching",
-        "research-padded-archer-armor",
-        "cancel-construction",
-        "cancel-research",
-    ]
-    .iter()
-    .enumerate()
-    {
-        let Some(button) = shared.borrow().document.get_element_by_id(id) else {
-            continue;
-        };
-        let target = shared.clone();
-        let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
-            let mut client = target.borrow_mut();
-            if i < 15 {
-                construction::arm(&mut client, KINDS[i + 1]);
-                return;
+    super::garrison::install(shared.clone())?;
+    // The DOM owns button identities; one bounded callback dispatches ordinary
+    // orders. Keep the research/build/unit tables out of a second string list.
+    let callback = Closure::<dyn FnMut(u32, u32)>::new(move |action, code| {
+        let mut client = shared.borrow_mut();
+        if action == 5 {
+            super::orders::formation(&mut client, code);
+            return;
+        }
+        if action == 6 {
+            client.village.garrison_cursor = false;
+            client.village.unload_cursor = false;
+            client.village.attack_move = true;
+            client.village.move_cursor = true;
+            let _ = client
+                .canvas
+                .set_attribute("data-order-mode", "attack-move");
+            return;
+        }
+        if action == 4 {
+            super::navy::arm_unload(&mut client);
+            return;
+        }
+        if action == 3 {
+            match code {
+                0 => super::orders::train(&mut client, false),
+                1 => super::orders::stop(&mut client),
+                2 => {
+                    client.village.garrison_cursor = false;
+                    client.village.unload_cursor = false;
+                    client.village.attack_move = false;
+                    client.village.move_cursor = true;
+                    let _ = client.canvas.set_attribute("data-order-mode", "move");
+                }
+                3 => super::orders::train(&mut client, true),
+                _ => (),
             }
-            let Some(building_id) = client.selected.building_id else {
-                return;
-            };
-            let sequence = client.next_sequence;
-            let message = match i {
-                15..=28 => Message::ResearchOrder {
-                    sequence,
-                    building_id,
-                    tech: Tech::ALL[i - 15],
-                },
-                29 => Message::CancelConstructionOrder {
-                    sequence,
-                    building_id,
-                },
-                _ => Message::CancelResearch {
-                    sequence,
-                    building_id,
-                },
-            };
-            send(&mut client, message);
-        });
-        button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
-        callback.forget();
-    }
-    for (id, kind) in [
-        ("train-archer", aoe_protocol::UnitKind::Archer),
-        ("train-skirmisher", aoe_protocol::UnitKind::Skirmisher),
-        ("train-spearman", aoe_protocol::UnitKind::Spearman),
-        ("train-scout", aoe_protocol::UnitKind::Scout),
-    ] {
-        let Some(button) = shared.borrow().document.get_element_by_id(id) else {
-            continue;
+            return;
+        }
+        let code = code as usize;
+        let build_count = KINDS.len();
+        let research_end = build_count + Tech::ALL.len();
+        if action == 0 && code == research_end + 4 {
+            super::automation::toggle(&mut client);
+            return;
+        }
+        if action == 0 && code < build_count {
+            construction::arm(&mut client, KINDS[(code + 1) % KINDS.len()]);
+            return;
+        }
+        if action == 1 {
+            if let Some(&kind) = aoe_protocol::UnitKind::ALL.get(code) {
+                super::orders::train_kind(&mut client, kind);
+            }
+            return;
+        }
+        let Some(building_id) = super::production::selected(&client).map(|b| b.id) else {
+            return;
         };
-        let target = shared.clone();
-        let callback = Closure::<dyn FnMut(web_sys::Event)>::new(move |_| {
-            super::orders::train_kind(&mut target.borrow_mut(), kind);
-        });
-        button.add_event_listener_with_callback("click", callback.as_ref().unchecked_ref())?;
-        callback.forget();
-    }
+        if !client
+            .village
+            .buildings
+            .iter()
+            .any(|b| b.id == building_id && b.player == owner(&client))
+        {
+            return;
+        }
+        let sequence = client.next_sequence;
+        let message = if action == 0 {
+            match code {
+                i if i < research_end => Message::ResearchOrder {
+                    sequence,
+                    building_id,
+                    tech: Tech::ALL[i - build_count],
+                },
+                i if i == research_end => Message::CancelConstructionOrder {
+                    sequence,
+                    building_id,
+                },
+                i if i == research_end + 1 => Message::CancelResearch {
+                    sequence,
+                    building_id,
+                },
+                i if i == research_end + 2 || i == research_end + 3 => Message::FarmReseedOrder {
+                    sequence,
+                    building_id,
+                    add: i == research_end + 2,
+                },
+                _ => return,
+            }
+        } else if action == 2 && code < 6 {
+            let resource = aoe_protocol::TradeResource::ALL[code % 3];
+            if code < 3 {
+                Message::MarketBuy {
+                    sequence,
+                    building_id,
+                    resource,
+                }
+            } else {
+                Message::MarketSell {
+                    sequence,
+                    building_id,
+                    resource,
+                }
+            }
+        } else {
+            return;
+        };
+        send(&mut client, message);
+    });
+    buildings_bind(callback.as_ref().unchecked_ref())?;
+    callback.forget();
     Ok(())
 }

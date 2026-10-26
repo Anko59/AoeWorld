@@ -1,6 +1,7 @@
 //! Terrain and object sprites: bounded pixel-quadrant box samples.
 //! Terrain retains nearest coverage; sprites take the average coverage.
 use super::*;
+use crate::web::Sprite;
 
 pub(super) fn gradients(plane: &RasterPlane, uv: [[f64; 2]; 3]) -> [[f64; 2]; 2] {
     [plane.x, plane.y].map(|weights| {
@@ -94,7 +95,7 @@ pub(super) fn sprite_offsets(uv: [f32; 4], size: [f64; 2]) -> Option<[[f64; 2]; 
 /// contribute no colour; a fully transparent footprint keeps `center`.
 pub(super) fn sprite_sample(
     atlas: &[u8],
-    page: u32,
+    sprite: Sprite,
     uv: [f32; 4],
     texture: [f64; 2],
     offsets: &[[f64; 2]; 4],
@@ -113,9 +114,13 @@ pub(super) fn sprite_sample(
     let mut sums = [0_u32; 4];
     for offset in offsets {
         let point: [f64; 2] = std::array::from_fn(|axis| {
-            (texture[axis] * side + offset[axis] * side).clamp(lo[axis], hi[axis])
+            aoe_core::clamp_f64(
+                texture[axis] * side + offset[axis] * side,
+                lo[axis],
+                hi[axis],
+            )
         });
-        let tap = sample_atlas(atlas, page, point[0], point[1]);
+        let tap = owner_sample(atlas, sprite, point[0], point[1]);
         for channel in 0..3 {
             sums[channel] += u32::from(tap[channel]) * u32::from(tap[3]);
         }
@@ -136,3 +141,14 @@ pub(super) fn sprite_sample(
 #[path = "filter/tests.rs"]
 #[cfg(test)]
 mod tests;
+
+/// Recolour only imported player-mask pixels, before the box kernel.
+pub(super) fn owner_sample(atlas: &[u8], sprite: Sprite, x: f64, y: f64) -> [u8; 4] {
+    let base = sample_atlas(atlas, sprite.pages[0], x, y);
+    if sprite.pages[3] & Sprite::PLAYER_MASK == 0 {
+        return base;
+    }
+    let mask = sample_atlas(atlas, sprite.pages[0] + 3, x, y);
+    let colour = std::array::from_fn(|i| (sprite.terrain_blend[1][i] * 255.0).round() as u8);
+    crate::player::player_texel(base, mask, colour)
+}

@@ -36,8 +36,8 @@ simulation; the absent trial sheep attack 3623 is not selected.
 The actor selection has 2,540 frames, alongside the base catalogue's 2,361
 full-prefix frames and the bounded building subset. The runtime validates at
 most 5,120 selected frames before pixel allocation. Terrain keeps pages 0–1;
-objects use pages 2–3 of four 2048-square RGBA pages (64 MiB). All backends
-account for the fourth page. Source PNGs are decoded one at a time.
+objects use pages 2–4 of five 2048-square RGBA pages (80 MiB). All backends
+account for the fifth page. Source PNGs are decoded one at a time.
 Sheep have player-mask pixels: owned sheep use the selected player ramp;
 neutral sheep get separate grey-ramp copies of their four animation groups.
 

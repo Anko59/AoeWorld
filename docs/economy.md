@@ -1,5 +1,7 @@
 # Village economy
 
+[Buildable bridges](economy/bridges.md) describe the Feudal crossing extension, costs, navigation and native art IDs.
+
 The authoritative rules live in
 [`VILLAGE_RULES`](../crates/simulation/src/game_world/economy.rs).
 It is the current gameplay table for starting resources, villagers, footprint,
@@ -29,6 +31,11 @@ a start with no room for a kit begins with an empty or partial one. Activation
 is refused when no footprint has enough reachable free perimeter tiles for the
 starting villagers, plus the scout when it must leave its found position.
 Restored overlays retain the original kit, including exhausted nodes.
+Starting nodes share the overlay's 1,048,576-entry limit and have a separate
+4,096-node startup bound. A 100-slot match needs 3,100 nodes for full kits.
+A kit that still cannot be placed in full (genuinely impossible terrain, or
+the overlay limit) is counted per world (`GameWorld::partial_starting_kits`),
+logged, and reported by `POST /match` as `partial_starting_kits`.
 
 Starting resources are authoritative overlay entries: bit 37 marks their
 identity, bits 38–39 select the kind, and the remaining coordinate fields match
@@ -48,6 +55,11 @@ Full loads and loads from exhausted nodes return to the nearest reachable owned
 Town Center perimeter. Deposits change only the matching resource stockpile.
 The job resumes the same node; after exhaustion it searches for a same-kind
 node within the rules table's Euclidean radius around the exhausted node.
+Wood, gold and stone replacements rank that local work area from the perimeter
+of the drop-off actually used, with resource identity breaking ties. A bounded
+1,024-tile land flood excludes disconnected work spots before at most eight
+route admissions. This keeps the worker in its reachable forest or deposit area
+while preferring the side nearest its Lumber Camp, Mining Camp or Town Center.
 Without a replacement or after a terminal resource-route failure it becomes
 idle. A return trip remembers failed perimeter tiles and tries other owned
 drop-off tiles. Exhausting them ends the job while preserving the carried load.
@@ -56,14 +68,13 @@ A deposit or a new order clears the trip's failed choices. Changing resource
 kind discards the carried load; a plain Move cancels the job while keeping the
 load.
 
-Train commands require an owned, completed building that trains the unit, enough resources, a free population
-slot and space in its bounded queue. Acceptance pays the unit cost and reserves the
-population slot; population used continues to count living units. Only the
-front entry advances. A completed entry waits for a free passable perimeter
-tile and does not pay again. New villagers use the shared entity allocator.
-Cancelling the active training entry refunds its cost and releases its reserved
-population slot; cancelling an empty queue cannot create resources. Death, rally
-points and saved village state are not part of the economy.
+Train commands require an owned, completed building that trains the unit,
+enough resources and space in its fifteen-unit queue. Acceptance pays the unit
+cost, even when population is at the cap; population used counts living units.
+Only the front entry advances, and housing pauses that progress until there is
+room. A completed entry waits for a free passable perimeter tile without paying
+again. New villagers use the shared entity allocator. Cancelling the active
+entry refunds its cost; cancelling an empty queue cannot create resources.
 
 Gameplay protocol 2 is the only current wire. Gather, Train and CancelTraining share Move's
 bounded per-session/global command queue, sequencing and role checks. Snapshot
@@ -107,16 +118,29 @@ tests and wire follow. Values are Age of Empires II: Definitive Edition's.
 | Outpost | 25 wood, 5 stone | 15 s | 500 | 1x1 | line of sight 10 |
 
 Build and BuildWall orders name villagers and a tile. The server validates the
-footprint (inside the map, passable, free of resources, units and buildings),
+footprint (every tile explored by the owner, inside the map, passable, free of resources, units and buildings),
 the owner, the requirement and the cost, then charges the cost and creates a
 foundation (`ConstructionState::UnderConstruction`, hp 1 growing with progress).
 A foundation blocks movement like the finished building (a farm never does).
+An untouched foundation gives no sight, though its owner still knows it exists.
+Sight starts with the first builder's work and grows with construction progress
+to the building's LOS (radius rounded up to whole tiles). Fog toggles and LOS
+research use the same rule. Orders on never-seen ground return
+`RejectedUnexploredPlacement`; explored grey fog permits placement.
 Builders walk to a tile beside it; each tick the foundation gains `builders + 2`
 of `3 x base seconds x tick rate` work, the AoE II rule `base x 3 / (n + 2)`: one
-builder takes the base time, three take three fifths of it. Builders stop on
-completion; beside a new camp or mill they gather the nearest matching resource,
-the builder of a farm farms it, and a palisade builder continues to unfinished
-segments within eight tiles (the nearest four are tried). A Move order
+builder takes the base time, three take three fifths of it. On completion, builders follow their queued foundations first, then seek the
+nearest unfinished owned foundation within ten tiles of their position. Distance
+is measured to the nearest footprint tile; ties use entity ID, and the nearest
+four approaches are tried. Without another foundation, builders beside a new
+camp or mill gather the nearest matching resource, and farm builders farm.
+Holding Shift while placing keeps the same building armed and appends orders
+(up to 32 pending foundations per builder). Each accepted foundation is charged
+immediately; a refused placement leaves existing work and queues intact.
+Releasing Shift, right-clicking, Escape, or losing window focus ends repeated
+placement. Ghosts use the building sprite at half opacity, tinted red for an
+invalid footprint; farms use their crop field and walls their segment sprites.
+A Move order
 abandons construction; `ConstructOrder` sends villagers back to an unfinished
 foundation the player owns, at no charge. Cancelling a
 foundation refunds the cost in proportion to the work not yet done (all of it
@@ -131,9 +155,17 @@ owned building that accepts its load (`nearest_dropoff`).
 A farm holds 175 food from placement, but only a completed one can be worked,
 by one villager standing on it (`UnitTask::Farming`, food rate as gathering). It
 returns each 10-food load to the nearest food drop-off, and when the 175th
-unit is delivered the farm building is removed (a removal on the wire). A farm
+unit is delivered the farm building is removed unless a reseed is prepaid. A farm
 with no food left is also removed when its farmer is ordered away (Move, build,
 farm or gather) before delivering; a farm with food left stays workable.
+An owned completed Mill holds up to 99 prepaid reseeds. Add pays the Farm's
+60 wood cost immediately; remove refunds it. After delivering the final load,
+the same farmer consumes one entry from the nearest owned Mill with a queue,
+rebuilds the farm in place over the normal 15 seconds, then resumes farming.
+The rebuilt farm uses the owner's current farm-food technology. Destroying a
+Mill loses its unused queue. The Mill panel displays the server's queue count
+and add/remove availability; `FarmReseedOrder` and `farm_reseeds` carry it over
+the ordinary authenticated protocol and reconnect snapshots.
 Per-tick cost is bounded by builders and gatherers (at most 80 each) and the
 building count (at most 256); placement and completion alone scan buildings.
 
@@ -142,6 +174,16 @@ Wire: `BuildOrder`, `BuildWallOrder`, `ConstructOrder`, `CancelConstructionOrder
 each building state carries `construction`, `progress_permille`, `hp`, `max_hp`,
 `los` and `food_remaining`; `UnitTask` gains `Building` and `Farming`. Hit
 points are authoritative state for the combat track to change.
+
+Auto-scout is a per-cavalry toggle (Scout Cavalry is the current mounted kind).
+It finds the nearest reachable explored land frontier by integer walking cost,
+with tile coordinates breaking ties, then uses ordinary authoritative movement.
+Searches use only explored terrain, respect water, cliffs and building corners,
+and remember failed targets. A fair cursor admits eight jobs per tick, at most
+128 heap pops per job. Sixteen searches may retain up to 65,536 visited tiles
+each; searches without a frontier sleep until the player's vision changes.
+Move, Stop, attack, death and removal clear the toggle and its search memory.
+The cavalry command panel shows the server's toggle, including mixed groups.
 
 Start activation also surveys the whole map on a bounded coarse lattice,
 ranking connected sampled lowlands before elevation and centre distance.
@@ -259,3 +301,15 @@ values and reproducible coast scenario are documented there.
 economy research, age gating, age-up art, the accelerated local demo and limits.
 The [Feudal military](military.md) adds rosters, attack classes, delayed ranged
 hits, Blacksmith equipment and native unit/projectile art.
+
+Hunters and shepherds reuse the ten-tile replacement radius after exhausting
+an animal, including after returning food when its carcass has disappeared.
+Shepherds choose owned sheep; hunters choose deer or boar, alive or as carcasses.
+They use the existing wildlife cell index, rank by squared distance then entity
+identity, and never switch to berries or other food professions. Carcasses stay
+indexed until removed; only visible prey or owned sheep can be selected. The
+simulation reports local search cell/candidate counts in `WildlifeStats`.
+
+The [Castle Age](economy/castle.md) adds the next generic age, defensive Castle,
+Monastery, University, Siege Workshop, unit lines, economic and military research,
+local deterministic splash, healing and Ballistics.

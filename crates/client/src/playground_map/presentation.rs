@@ -22,6 +22,17 @@ pub(crate) struct Presentation {
 }
 
 impl Presentation {
+    pub(crate) fn resident_bytes(&self) -> usize {
+        self.history
+            .values()
+            .map(|h| {
+                std::mem::size_of::<aoe_core::EntityId>()
+                    + std::mem::size_of_val(h)
+                    + h.capacity() * std::mem::size_of::<Sample>()
+            })
+            .sum()
+    }
+
     pub(crate) fn reset(&mut self, tick_hz: u32) {
         *self = Self {
             tick_hz: f64::from(tick_hz.clamp(1, 60)),
@@ -57,8 +68,11 @@ impl Presentation {
         self.last_draw = Some(time);
         if let Some((latest, received)) = self.anchor {
             let elapsed = (time - received).max(0.0);
-            let target =
-                (latest as f64 + elapsed * self.tick_hz / 1_000.0 - 2.0).clamp(0.0, latest as f64);
+            let target = aoe_core::clamp_f64(
+                latest as f64 + elapsed * self.tick_hz / 1_000.0 - 2.0,
+                0.0,
+                latest as f64,
+            );
             self.tick = self.tick.max(target);
         }
     }

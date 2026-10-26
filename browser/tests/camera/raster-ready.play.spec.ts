@@ -17,7 +17,7 @@ async function openMap(page: Page): Promise<string> {
       method: "POST",
       headers: {
         "x-aoeworld-controller-token":
-          sessionStorage.getItem("aoeworld.resume-token") ?? "",
+          localStorage.getItem("aoeworld.resume-token") ?? "",
       },
     });
     if (!response.ok) throw new Error(await response.text());

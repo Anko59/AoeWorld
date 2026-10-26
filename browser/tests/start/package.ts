@@ -4,7 +4,7 @@ import { expect, type Page } from "@playwright/test";
 // map-creation UI in the game. Player map creation is covered by setup specs.
 export async function activatePackage(page: Page, hash: string) {
   const token = await page.evaluate(
-    () => sessionStorage.getItem("aoeworld.resume-token") ?? "",
+    () => localStorage.getItem("aoeworld.resume-token") ?? "",
   );
   const response = await page.request.post(`/maps/${hash}`, {
     headers: { "X-AoeWorld-Controller-Token": token },

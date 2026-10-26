@@ -7,6 +7,15 @@ SLOT_ENV := \
   -e HOME \
   -e DE_DIR \
   -e HARNESS_TEST_FILTER \
+  -e CARGO_INCREMENTAL \
+  -e CARGO_PROFILE_DEV_DEBUG \
+  -e CARGO_PROFILE_TEST_DEBUG \
+  -e AOE_GAME_TEST_FILTER \
+  -e AOE_UI_PROOF_PROJECT \
+  -e AOE_NATIVE_TEST_FILTER \
+  -e AOE_NATIVE_TEST_PACKAGE \
+  -e AOE_WASM_TEST_FILTER \
+  -e AOE_WASM_TEST_PACKAGE \
   -e HARNESS_DUEL_BASE \
   -e HARNESS_DUEL_REVISION \
   -e AOE_SOURCE_QUAL_PACKAGE_DIRECTORY \
@@ -31,6 +40,16 @@ SLOT_ENV := \
   -e AOE_MAP_HYDROLOGY_MODE \
   -e AOE_POLISH_SOURCE_URL \
   -e AOE_POLISH_SOURCE_HASH \
+  -e PERF_SCALE_ARGS \
+  -e SCALE_MATCH_ARGS \
+  -e AOE_ARENA \
+  -e AOE_SCENARIO \
+  -e AOE_OPEN_MAP_PACKAGE \
+  -e AOE_FOG_DISABLED \
+  -e AOE_FOG_SHOWCASE \
+  -e AOE_MATCH_TOKEN \
+  -e AOE_PRESET_MAPS \
+  -e DEV_PORT \
   -e GIT_INDEX_FILE \
   -e RUST_TEST_THREADS \
   -e NEXTEST_TEST_THREADS \
@@ -102,6 +121,30 @@ perf-timing-steps:
 	@$(DOCKER_RUN) cargo bench --locked -p aoe-assets --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-timing-report
 
+# Headless 100-player, 100,000-unit tick benchmark; PERF_SCALE_ARGS passes harness flags
+# (for example `PERF_SCALE_ARGS="--players 8 --ticks 100" make perf-scale`).
+perf-scale: tools slot-bootstrap
+	@$(SLOT_RUN) perf-scale -- make --no-print-directory perf-scale-steps
+
+perf-scale-steps:
+	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-scale $(PERF_SCALE_ARGS)
+
+# A tiny run (4 players, 2,000 units, 50 ticks) that executes the whole benchmark path.
+perf-scale-smoke: tools slot-bootstrap
+	@$(SLOT_RUN) perf-scale-smoke -- make --no-print-directory perf-scale-smoke-steps
+
+perf-scale-smoke-steps:
+	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-scale --players 4 --units-per-player 500 --side-tiles 4000 --ticks 50 --fog-off-ticks 10 --server-ticks 5 --subscribers 4 --out reports/perf/perf-scale-smoke.json
+
+# Per-function Binaryen metrics retain the names in wasm-bindgen's output.
+.PHONY: perf-wasm-functions perf-wasm-functions-steps
+perf-wasm-functions: build-wasm analysis-tools slot-bootstrap
+	@$(SLOT_RUN) perf-wasm-functions -- make --no-print-directory perf-wasm-functions-steps
+
+perf-wasm-functions-steps:
+	@mkdir -p reports/perf
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) wasm-opt web/pkg/aoe_client_bg.wasm --func-metrics -o /dev/null > reports/perf/wasm-functions.txt
+
 perf-wasm-size: build-wasm analysis-tools slot-bootstrap
 	@$(SLOT_RUN) perf-wasm-size -- make --no-print-directory perf-wasm-size-steps
 
@@ -123,6 +166,7 @@ build-wasm: slot-bootstrap
 	@$(SLOT_RUN) build-wasm -- make --no-print-directory build-wasm-steps
 
 build-wasm-steps:
+	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- assets browser-shaders
 	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client
 	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
 	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client --features diagnostics
@@ -135,6 +179,14 @@ test-e2e: disk-precheck slot-bootstrap
 test-e2e-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_SPECS -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
+
+# Keep the memory investigation serial, including its nested builds. Existing
+# guards validate the inherited slot; every gate keeps its normal checks.
+.PHONY: test-client-memory
+test-client-memory: export AOE_E2E_WORKERS := 1
+test-client-memory: disk-precheck slot-bootstrap
+	$(if $(strip $(AOE_E2E_SPECS)),,$(error test-client-memory requires focused AOE_E2E_SPECS))
+	@$(SLOT_RUN) test-client-memory -- make --no-print-directory -j1 test-unit test-wasm test-e2e
 
 .PHONY: \
   test-harness \
@@ -153,6 +205,14 @@ test-harness-steps:
 
 test-unit-steps:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
+
+# Focused iteration; the full test-unit gate remains unchanged.
+.PHONY: test-game-focused test-game-focused-steps
+test-game-focused: slot-bootstrap
+	@$(SLOT_RUN) test-game-focused -- make --no-print-directory test-game-focused-steps
+
+test-game-focused-steps:
+	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-core -p aoe-assets -p aoe-simulation --no-tests fail --no-fail-fast -E $(call MOUNT_QUOTE,$(AOE_GAME_TEST_FILTER))
 
 .PHONY: test-assets-de test-assets-de-steps
 test-assets-de: slot-bootstrap
@@ -182,6 +242,13 @@ test-exhaustive-steps:
 
 test-wasm-steps:
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm
+
+.PHONY: test-wasm-focused test-wasm-focused-steps
+test-wasm-focused: disk-precheck browser-tools orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) test-wasm-focused -- make --no-print-directory test-wasm-focused-steps
+
+test-wasm-focused-steps:
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_WASM_TEST_PACKAGE -e AOE_WASM_TEST_FILTER $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm-focused
 
 # Heavy work outside the registry: each target takes a slot under its own name, so `aoe-harness slot`
 # queues it like a gate. The steps run inside the slot; nested calls inherit it.
@@ -219,6 +286,16 @@ test-placement-coverage-steps:
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(TMP_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov run --locked -p aoe-harness --no-report -- test-placement
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov report --lcov --output-path reports/placement/coverage.lcov
 
+.PHONY: test-native-focused test-native-focused-steps
+# A developer-selected Nextest filter keeps iteration inside the shared heavy slot.
+test-native-focused: slot-bootstrap
+	@$(SLOT_RUN) test-native-focused -- make --no-print-directory test-native-focused-steps
+
+test-native-focused-steps:
+	@test -n "$$AOE_NATIVE_TEST_FILTER"
+	@test -n "$$AOE_NATIVE_TEST_PACKAGE"
+	@$(DOCKER_RUN) cargo nextest run --locked -p "$$AOE_NATIVE_TEST_PACKAGE" --no-tests fail --no-fail-fast -E "$$AOE_NATIVE_TEST_FILTER"
+
 test-harness-focused: slot-bootstrap
 	@$(SLOT_RUN) test-harness-focused -- make --no-print-directory test-harness-focused-steps
 
@@ -240,12 +317,13 @@ test-country-source-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_ASSET_PACK $(ROOT_MOUNTS) $(SOURCE_QUAL_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --release --locked -p aoe-harness -- source-country-probe --package-directory '$(AOE_SOURCE_QUAL_PACKAGE_DIRECTORY)' --content-hash '$(AOE_SOURCE_QUAL_CONTENT_HASH)' --browser
 
-dev-build: slot-bootstrap
+dev-build: slot-bootstrap sdk-python-tools
 	@$(SLOT_RUN) dev-build -- make --no-print-directory dev-build-steps
 
 dev-build-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-geodata --bin aoe-map-worker
+	@make --no-print-directory sdk-python-steps
 
 # Single-command and release-compile targets: the slot is taken before the first container, so
 # every container they start is capped (the audit in slots/tests/makefile.rs lists the exemptions).
@@ -335,7 +413,61 @@ perf-soak-30-steps:
   perf-soak-30 \
   perf-instructions \
   perf-timing \
+  perf-scale \
+  perf-scale-smoke \
   perf-wasm-size \
   perf-baseline-propose \
   perf-comment \
   perf-hardware-check
+
+.PHONY: test-navigation test-navigation-steps
+.PHONY: test-auto-scout test-auto-scout-steps
+test-auto-scout: disk-precheck slot-bootstrap
+	@$(SLOT_RUN) test-auto-scout -- make --no-print-directory test-auto-scout-steps
+
+test-auto-scout-steps:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-simulation --lib game_world::economy::scouting::tests -- --show-output
+
+.PHONY: test-economy-automation test-economy-automation-steps
+test-economy-automation: disk-precheck slot-bootstrap
+	@$(SLOT_RUN) test-economy-automation -- make --no-print-directory test-economy-automation-steps
+
+test-economy-automation-steps: disk-precheck
+	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-simulation -p aoe-protocol -p aoe-sdk -p aoe-server -p aoe-harness --no-fail-fast --no-tests fail --failure-output final -E 'package(aoe-protocol) | package(aoe-sdk) | test(gathering) | test(farming) | test(scouting) | test(garrison) | test(pinned) | test(per_session_messages_match_the_pinned_stream)'
+
+test-navigation: slot-bootstrap
+	@$(SLOT_RUN) test-navigation -- make --no-print-directory test-navigation-steps
+
+test-navigation-steps:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map navigation::hierarchy::prepared::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map navigation::hierarchy::static_data::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-simulation game_cache::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map navigation::hierarchy::tests::static_data
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map pocket
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server map_store::navigation::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server map_store::navigation::shared::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server gameplay::probe::tests
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server complete_static_navigation_never_queues_cold_move_preparation
+	@$(DOCKER_RUN) cargo test --locked -p aoe-server a_job_for_a_stored_preset_publishes_navigation_without_a_worker
+	@$(DOCKER_RUN) cargo test --locked -p aoe-simulation pinned
+
+.PHONY: test-bridges test-bridges-steps
+test-bridges: slot-bootstrap
+	@$(SLOT_RUN) test-bridges -- make --no-print-directory test-bridges-steps
+
+test-bridges-steps:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map -p aoe-simulation -p aoe-protocol -p aoe-sdk -p aoe-assets bridge
+.PHONY: test-formations test-formations-steps
+test-formations: slot-bootstrap
+	@$(SLOT_RUN) test-formations -- make --no-print-directory test-formations-steps
+
+test-formations-steps:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-simulation -p aoe-protocol -p aoe-sdk -p aoe-server --lib formation -- --nocapture
+	@$(DOCKER_RUN) cargo test --locked -p aoe-sdk --lib
+
+.PHONY: test-formations-perf test-formations-perf-steps
+test-formations-perf: slot-bootstrap
+	@$(SLOT_RUN) test-formations-perf -- make --no-print-directory test-formations-perf-steps
+
+test-formations-perf-steps:
+	@$(DOCKER_RUN) cargo test --locked --release -p aoe-simulation --lib formations_measure_warm -- --nocapture

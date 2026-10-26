@@ -21,7 +21,7 @@ mod skirts;
 use skirts::{Edge, SkirtSurface, append_edge_skirt};
 pub(crate) mod mix;
 pub(crate) mod relief;
-pub use directory::write_terrain_directory;
+pub use directory::{write_terrain_directory, write_terrain_directory_page};
 pub use lod::projected_surface_triangles;
 
 #[cfg(test)]

@@ -7,6 +7,10 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 const SAMPLE_BUDGET: usize = 12_000;
 const SITE_BUDGET: usize = 384;
+/// The immediate clearing: squared distance of the sites scored first, and the
+/// reach of the walkable region that suffices to survey it.
+const CORE_D2: u64 = 36;
+const CORE_REGION: i32 = 12;
 type Samples = BTreeMap<TileCoord, Option<(Tile, Option<ResourceNode>)>>;
 
 impl GameWorld {
@@ -18,24 +22,53 @@ impl GameWorld {
         let Terrain::Map { generator, .. } = &self.terrain else {
             return Ok(());
         };
+        let mut samples = Samples::new();
+        // The immediate clearing first. An inland site there is the village the
+        // ideal point asked for, and surveying only its surroundings composes
+        // a few chunks instead of the sixteen of the whole search radius, which
+        // dominated placing a hundred seats. Coast and cliff fall through.
+        let near = self.start_region(start, CORE_REGION);
+        let mut core: Vec<TileCoord> = candidates
+            .iter()
+            .copied()
+            .filter(|tile| distance_squared(*tile, start) <= CORE_D2 && near.contains(tile))
+            .collect();
+        let scores = self.score_sites(generator, &core, &mut samples)?;
+        if scores.values().any(|(shore, _)| !shore) {
+            sort_by_score(&mut core, &scores);
+            *candidates = core;
+            return Ok(());
+        }
         // Local tree/shore ranking must not jump across water or cliffs into
         // a disconnected bowl after the global survey selected a valley.
-        let reachable = self.start_region(start);
+        let reachable = self.start_region(start, VILLAGE_RULES.start_search_radius_tiles + 4);
         candidates.retain(|tile| reachable.contains(tile));
-        let side = VILLAGE_RULES.town_center_side;
-        let mut samples = Samples::new();
-        let mut scores = BTreeMap::new();
         // Fine search in the immediate clearing, then a four-tile grid through
         // the full 32-tile radius. Unscored tiles remain a deterministic fallback.
-        for origin in candidates
+        let sites: Vec<TileCoord> = candidates
             .iter()
             .copied()
             .filter(|tile| {
-                distance_squared(*tile, start) <= 36
+                distance_squared(*tile, start) <= CORE_D2
                     || ((tile.x - start.x) % 4 == 0 && (tile.y - start.y) % 4 == 0)
             })
             .take(SITE_BUDGET)
-        {
+            .collect();
+        let scores = self.score_sites(generator, &sites, &mut samples)?;
+        sort_by_score(candidates, &scores);
+        Ok(())
+    }
+
+    /// Shore and wood in view of each site whose footprint is free.
+    fn score_sites(
+        &self,
+        generator: &aoe_map::MapChunkGenerator,
+        sites: &[TileCoord],
+        samples: &mut Samples,
+    ) -> Result<BTreeMap<TileCoord, (bool, bool)>, EconomyError> {
+        let side = VILLAGE_RULES.town_center_side;
+        let mut scores = BTreeMap::new();
+        for origin in sites.iter().copied() {
             let rect = TileRect::new(
                 origin,
                 TileCoord::new(origin.x.saturating_add(side), origin.y.saturating_add(side)),
@@ -78,22 +111,36 @@ impl GameWorld {
                 }
             }
             scores.insert(origin, (shore, wood == 0));
+            // The ranking key prefers inland sites with wood in view, then the
+            // earliest candidate. Candidates are scored in that order, so the
+            // first such site is the final winner: scoring the rest of the
+            // 384 (about 12,000 point samples) cannot change the choice.
+            if !shore && wood > 0 {
+                break;
+            }
             if samples.len() == SAMPLE_BUDGET {
                 break;
             }
         }
-        let original: BTreeMap<_, _> = candidates
-            .iter()
-            .enumerate()
-            .map(|(i, t)| (*t, i))
-            .collect();
-        candidates.sort_by_key(|tile| {
-            let (shore, no_wood) = scores.get(tile).copied().unwrap_or((true, true));
-            (!scores.contains_key(tile), shore, no_wood, original[tile])
-        });
-        Ok(())
+        Ok(scores)
     }
-    fn start_region(&self, start: TileCoord) -> BTreeSet<TileCoord> {
+}
+
+/// Inland sites with wood in view first, then the nearest candidates.
+fn sort_by_score(candidates: &mut [TileCoord], scores: &BTreeMap<TileCoord, (bool, bool)>) {
+    let original: BTreeMap<_, _> = candidates
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (*t, i))
+        .collect();
+    candidates.sort_by_key(|tile| {
+        let (shore, no_wood) = scores.get(tile).copied().unwrap_or((true, true));
+        (!scores.contains_key(tile), shore, no_wood, original[tile])
+    });
+}
+
+impl GameWorld {
+    fn start_region(&self, start: TileCoord, radius: i32) -> BTreeSet<TileCoord> {
         let mut seeds = (-3_i32..=3)
             .flat_map(|dy| {
                 (-3_i32..=3).map(move |dx| {
@@ -105,7 +152,6 @@ impl GameWorld {
         let Some(root) = seeds.into_iter().find(|tile| self.tile_passable(*tile)) else {
             return BTreeSet::new();
         };
-        let radius = VILLAGE_RULES.start_search_radius_tiles + 4;
         let mut reached = BTreeSet::from([root]);
         let mut queue = VecDeque::from([root]);
         while let Some(tile) = queue.pop_front() {

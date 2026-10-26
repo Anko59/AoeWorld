@@ -3,6 +3,63 @@ use aoe_protocol::{GameplayServerMessage, decode_gameplay_server};
 use js_sys::Uint8Array;
 use web_sys::{Event, MessageEvent};
 
+#[path = "network/tests.rs"]
+#[cfg(test)]
+mod tests;
+
+pub(super) struct ConnectionCallbacks {
+    socket: WebSocket,
+    _onopen: Closure<dyn FnMut(Event)>,
+    _onmessage: Closure<dyn FnMut(MessageEvent)>,
+    _onclose: Closure<dyn FnMut(Event)>,
+}
+
+impl Drop for ConnectionCallbacks {
+    fn drop(&mut self) {
+        self.socket.set_onopen(None);
+        self.socket.set_onmessage(None);
+        self.socket.set_onclose(None);
+        let _ = self.socket.close();
+    }
+}
+
+fn incoming_bytes(data: &JsValue) -> Result<Vec<u8>, &'static str> {
+    let buffer = data
+        .dyn_ref::<js_sys::ArrayBuffer>()
+        .ok_or("non-binary game frame; reconnect required")?;
+    if buffer.byte_length() as usize > aoe_protocol::GAMEPLAY_MAX_MESSAGE {
+        return Err("protocol frame too large; reconnect required");
+    }
+    Ok(Uint8Array::new(buffer).to_vec())
+}
+
+fn send_bytes(socket: &WebSocket, bytes: &[u8]) -> Result<(), &'static str> {
+    const BUDGET: usize = 1024 * 1024;
+    if (socket.buffered_amount() as usize).saturating_add(bytes.len()) > BUDGET {
+        let _ = socket.close();
+        return Err("connection stalled; reconnect required");
+    }
+    if socket.ready_state() != WebSocket::OPEN {
+        return Err("connection closed; reconnect required");
+    }
+    socket
+        .send_with_u8_array(bytes)
+        .map_err(|_| "send failed; reconnect required")
+}
+
+pub(super) fn send(client: &mut Client, bytes: &[u8]) -> bool {
+    let Some(socket) = client.socket.clone() else {
+        return false;
+    };
+    match send_bytes(&socket, bytes) {
+        Ok(()) => true,
+        Err(message) => {
+            reconnect(client, message);
+            false
+        }
+    }
+}
+
 pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let location = shared
         .borrow()
@@ -18,17 +75,22 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     socket.set_binary_type(web_sys::BinaryType::Arraybuffer);
     let id = {
         let mut client = shared.borrow_mut();
+        client.connection_callbacks.take();
         client.connection_id = client.connection_id.saturating_add(1);
         if let Some(old) = client.socket.replace(socket.clone()) {
             let _ = old.close();
         }
         client.status = "connecting".to_owned();
         client.order_feedback.clear();
+        client.village.pending_training.clear();
         client.sent_region = None;
         client.connection_id
     };
-    let opened = shared.clone();
+    let opened = Rc::downgrade(&shared);
     let onopen = Closure::<dyn FnMut(Event)>::new(move |_| {
+        let Some(opened) = opened.upgrade() else {
+            return;
+        };
         let client = &mut *opened.borrow_mut();
         if client.connection_id != id {
             return;
@@ -39,22 +101,28 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             resume_token: client.token,
         };
         if let Ok(bytes) = encode_gameplay_client(&hello) {
-            let _ = client
-                .socket
-                .as_ref()
-                .and_then(|socket| socket.send_with_u8_array(&bytes).ok());
+            let _ = send(client, &bytes);
         }
     });
     socket.set_onopen(Some(onopen.as_ref().unchecked_ref()));
-    onopen.forget();
 
-    let received = shared.clone();
+    let received = Rc::downgrade(&shared);
     let onmessage = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
+        let Some(received) = received.upgrade() else {
+            return;
+        };
         let mut client = received.borrow_mut();
         if client.connection_id != id {
             return;
         }
-        let bytes = Uint8Array::new(&event.data()).to_vec();
+        let _decode = super::perf::Scope::new(1);
+        let bytes = match incoming_bytes(&event.data()) {
+            Ok(bytes) => bytes,
+            Err(message) => {
+                reconnect(&mut client, message);
+                return;
+            }
+        };
         match decode_gameplay_server(&bytes) {
             Ok(GameplayServerMessage::Welcome {
                 width_tiles,
@@ -92,6 +160,15 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 capture::world_received(&mut client, map_changed);
                 subscribe(&mut client);
             }
+            Ok(GameplayServerMessage::MoveQueues {
+                revision,
+                tick,
+                queues,
+            }) => {
+                if revision == client.revision && tick.0 >= client.village.tick {
+                    client.village.move_queues = queues;
+                }
+            }
             Ok(GameplayServerMessage::Snapshot {
                 revision,
                 tick,
@@ -121,10 +198,19 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     presentation.remember(units.get(&unit.id), unit, tick.0);
                 }
                 client.units = resident;
+                client.village.move_queues.clear();
                 client.village.players = players;
+                client.village.idle_villagers.clear();
+                client.village.idle_military.clear();
+                let owner = village::owner(&client);
+                let Client { units, village, .. } = &mut *client;
+                for unit in units.values() {
+                    village.remember_idle(owner, unit);
+                }
                 client.village.rubble.retain(|(_, until)| *until > tick.0);
                 map::scene::replace_buildings(&mut client, buildings);
                 client.village.tick = tick.0;
+                client.village.pending_training.observe(tick.0);
                 if !client.village.focused {
                     client.village.focused = true;
                     if !capture::current().has_camera() {
@@ -163,6 +249,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     return;
                 }
                 client.village.tick = tick.0;
+                client.village.pending_training.observe(tick.0);
                 for player in changed_players {
                     client.village.players.retain(|p| p.player != player.player);
                     client.village.players.push(player);
@@ -187,17 +274,23 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 }
                 map::scene::replace_buildings(&mut client, buildings);
                 for id in removals {
+                    client.village.idle_villagers.remove(id);
+                    client.village.idle_military.remove(id);
                     client.units.remove(&id);
                     client.selected.units.retain(|selected| *selected != id);
                     client.presentation.remove(id);
                 }
                 for unit in &changed_units {
-                    remember(&mut client, unit, tick.0);
+                    if !remember(&mut client, unit, tick.0) {
+                        reconnect(&mut client, "unit table full; reconnect required");
+                        return;
+                    }
                 }
             }
             Ok(GameplayServerMessage::Tick { .. }) => {}
             Ok(GameplayServerMessage::ResourceState(state)) => {
-                if state.subscription_revision == client.revision && !client.resources.apply(state)
+                if state.subscription_revision == client.revision
+                    && !client.resources.apply_at(state, super::now())
                 {
                     reconnect(
                         &mut client,
@@ -271,6 +364,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             Ok(GameplayServerMessage::WorldReset { .. }) => {
                 client.order_feedback.clear();
+                client.village.pending_training.clear();
                 clear_world(&mut client);
                 client.role = None;
                 client.primary = None;
@@ -285,8 +379,17 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.status = "map changed; reconnecting".to_owned();
             }
             Ok(GameplayServerMessage::CommandAck {
-                sequence, result, ..
+                sequence,
+                result,
+                applied_tick,
             }) => {
+                let observed = client.village.tick;
+                client.village.pending_training.acknowledge(
+                    sequence,
+                    result,
+                    applied_tick.0,
+                    observed,
+                );
                 client.status = client
                     .order_feedback
                     .acknowledge(sequence, result)
@@ -301,10 +404,12 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
     });
     socket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
-    onmessage.forget();
 
-    let closed = shared.clone();
+    let closed = Rc::downgrade(&shared);
     let onclose = Closure::<dyn FnMut(Event)>::new(move |_| {
+        let Some(closed) = closed.upgrade() else {
+            return;
+        };
         let client = &mut *closed.borrow_mut();
         if client.connection_id == id {
             client.status = "reconnecting".to_owned();
@@ -312,7 +417,12 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
     });
     socket.set_onclose(Some(onclose.as_ref().unchecked_ref()));
-    onclose.forget();
+    shared.borrow_mut().connection_callbacks = Some(ConnectionCallbacks {
+        socket,
+        _onopen: onopen,
+        _onmessage: onmessage,
+        _onclose: onclose,
+    });
     Ok(())
 }
 
@@ -321,13 +431,18 @@ pub(super) fn merge_buildings(
     changed: &[aoe_protocol::GameplayBuildingState],
     removals: &[aoe_core::EntityId],
 ) -> Option<Vec<aoe_protocol::GameplayBuildingState>> {
-    let mut merged = retained.to_vec();
-    merged.retain(|building| !removals.contains(&building.id));
-    for building in changed {
-        merged.retain(|existing| existing.id != building.id);
-        merged.push(building.clone());
+    let mut merged = retained
+        .iter()
+        .map(|b| (b.id, b))
+        .collect::<BTreeMap<_, _>>();
+    for id in removals {
+        merged.remove(id);
     }
-    (merged.len() <= aoe_protocol::MAX_ECONOMY_BUILDINGS).then_some(merged)
+    for b in changed {
+        merged.insert(b.id, b);
+    }
+    (merged.len() <= aoe_protocol::MAX_RETAINED_BUILDINGS)
+        .then(|| merged.into_values().cloned().collect())
 }
 
 fn reconnect(client: &mut Client, status: &str) {

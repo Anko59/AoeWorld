@@ -1,5 +1,7 @@
 #[path = "economy/feudal.rs"]
 mod feudal;
+#[path = "economy/market.rs"]
+mod market;
 #[path = "economy/military.rs"]
 mod military;
 #[path = "economy/techs.rs"]
@@ -70,13 +72,25 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
         .find(|unit| unit.kind == UnitKind::Villager)
         .unwrap();
     let start = villager.position.tile_floor();
+    // Wolves and boars hunt now that animals move, and the wildlife seeding
+    // puts them 9 to 16 tiles east of the village. The economy under test must
+    // not be a predator's meal, so work a tree well away from that side.
+    let predators = [
+        TileCoord::new(start.x + 16, start.y),
+        TileCoord::new(start.x + 9, start.y + 3),
+    ];
     let mut resources = Vec::new();
     for y in 0..side {
         for x in 0..side {
             if let Some(node) = generator.object_at(TileCoord::new(x, y))
                 && node.kind == ResourceKind::Wood
             {
-                resources.push(node);
+                let safe = predators
+                    .iter()
+                    .all(|wild| wild.x.abs_diff(x).pow(2) + wild.y.abs_diff(y).pow(2) > 12 * 12);
+                if safe {
+                    resources.push(node);
+                }
             }
         }
     }

@@ -1,5 +1,7 @@
 // The strategic map is one bounded raster per map; it never requests detailed world chunks.
-import { MAX_MINIMAP_BYTES, decodeMinimap, minimapWorldPoint } from '/minimap.js';
+import { MAX_MINIMAP_BYTES, decodeMinimap } from '/minimap.js';
+import { initStrategic } from '/navigation/strategic.js';
+import { initMinimapView } from '/navigation/view.js';
 import { initFogMap } from '/navigation/fog.js';
 
 const MAX_NUMBER_TEXT = 64;
@@ -17,7 +19,7 @@ export function parseCameraFragment(hash) {
       const number = text.length <= MAX_NUMBER_TEXT && text.trim() === text
         && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text) ? Number(text) : NaN;
       values[index] = Number.isFinite(number)
-        ? (index === 2 ? Math.max(0.25, Math.min(3, number)) : number) : NaN;
+        ? (index === 2 ? Math.max(1 / 4096, Math.min(3, number)) : number) : NaN;
     } else if (key === 'renderer') {
       values[3] = Math.max(0, ['', 'webgpu', 'webgl2', 'canvas'].indexOf(text));
     }
@@ -36,14 +38,17 @@ export function initNavigation() {
   const viewport = document.getElementById('minimap-viewport');
   const fog = initFogMap(svg);
   const keys = new Set();
+  const groups = Array.from({ length: 10 }, () => new Set());
+  const groupPositions = new Map();
+  let groupTap = null;
   const output = new Float64Array([0, 0, NaN, NaN]);
   let world = [1, 1];
   let center = [0, 0];
   let pending = [NaN, NaN];
   let expanded = false;
-  let dragging = null;
   let mapHash = null;
   let request = null;
+  let retryTimer;
   let samples = 0;
   let panImpulse = [0, 0];
 
@@ -86,8 +91,8 @@ export function initNavigation() {
     return target instanceof Element && !!target.closest('input,textarea,select,[contenteditable]');
   }
   function direction(key) {
-    return { ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0],
-      ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1] }[key];
+    return { ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+      ArrowUp: [0, -1], ArrowDown: [0, 1] }[key];
   }
   document.addEventListener('keydown', event => {
     if (document.querySelector("dialog[open]") || editable(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
@@ -112,25 +117,12 @@ export function initNavigation() {
     keys.delete(event.key.length === 1 ? event.key.toLowerCase() : event.key);
   });
   function stopPanning() { keys.clear(); panImpulse = [0, 0]; }
-  window.addEventListener('blur', () => { stopPanning(); dragging = null; });
+  window.addEventListener('blur', () => { stopPanning(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) stopPanning(); });
   document.addEventListener('focusin', event => { if (editable(event.target)) stopPanning(); });
 
-  function target(event) {
-    // SVG uses a square meet viewport, including letterboxing when expanded.
-    pending = minimapWorldPoint(svg.getBoundingClientRect(), event.clientX, event.clientY, world) ?? pending;
-  }
-  svg.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    dragging = event.pointerId;
-    svg.setPointerCapture(event.pointerId);
-    target(event);
-  });
-  svg.addEventListener('pointermove', event => { if (dragging === event.pointerId) target(event); });
-  for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-    svg.addEventListener(name, () => { dragging = null; });
-  }
+  const view = initMinimapView(svg, panel, point => { if (point) pending = point; });
+  const strategic = initStrategic(fog, view);
   svg.addEventListener('keydown', event => {
     const delta = direction(event.key);
     if (!delta) return;
@@ -139,13 +131,22 @@ export function initNavigation() {
     pending = [center[0] + delta[0] * world[0] / 40, center[1] + delta[1] * world[1] / 40];
   });
 
+  function attribute(element, name, value) {
+    value = String(value);
+    if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+  }
+  function datum(name, value) {
+    value = String(value);
+    if (panel.dataset[name] !== value) panel.dataset[name] = value;
+  }
   function marker(element, point) {
     const valid = point.every(Number.isFinite);
     element.hidden = !valid;
-    element.setAttribute('visibility', valid ? 'visible' : 'hidden');
+    attribute(element, 'visibility', valid ? 'visible' : 'hidden');
     if (!valid) return;
-    element.setAttribute('cx', String(Math.max(0, Math.min(256, point[0] / world[0] * 256))));
-    element.setAttribute('cy', String(Math.max(0, Math.min(256, point[1] / world[1] * 256))));
+    attribute(element, 'r', 2 / view.state().zoom);
+    attribute(element, 'cx', Math.max(0, Math.min(256, point[0] / world[0] * 256)));
+    attribute(element, 'cy', Math.max(0, Math.min(256, point[1] / world[1] * 256)));
   }
 
   async function changeMap(hashBytes) {
@@ -153,17 +154,26 @@ export function initNavigation() {
       ? Array.from(hashBytes, byte => byte.toString(16).padStart(2, '0')).join('') : '';
     if (hash === mapHash) return;
     mapHash = hash;
+    clearTimeout(retryTimer);
     fog(false, []);
     panel.dataset.mapHash = hash;
     rasterState('pending');
     stopPanning();
+    view.reset();
+    view.actors([]);
+    strategic.terrain(null);
     pending = [NaN, NaN];
     request?.abort();
     request = null;
     image.removeAttribute('href');
     samples = 0;
     overview(expanded);
-    if (!hash) return;
+    if (hash) await loadRaster(hash);
+  }
+
+  async function loadRaster(hash) {
+    // Retry only the raster: a transient failure must retain camera and fog.
+    rasterState('pending');
     const controller = new AbortController();
     request = controller;
     const timeout = setTimeout(() => controller.abort(), 45000);
@@ -182,6 +192,7 @@ export function initNavigation() {
       context.putImageData(new ImageData(raster.rgba, raster.samples, raster.samples), 0, 0);
       await drawRaster(canvas.toDataURL(), controller.signal);
       if (mapHash !== hash || request !== controller) return;
+      strategic.terrain(canvas);
       samples = raster.samples;
       overview(expanded);
       rasterState('ready');
@@ -191,6 +202,9 @@ export function initNavigation() {
         samples = 0;
         overview(expanded);
         rasterState('failed');
+        retryTimer = setTimeout(() => {
+          if (mapHash === hash && request === null) void loadRaster(hash);
+        }, 5000);
       }
       if (error.name !== 'AbortError') console.warn('Minimap terrain unavailable; using schematic', error);
     } finally {
@@ -199,23 +213,69 @@ export function initNavigation() {
     }
   }
 
+  function groupsUpdate(positions, selected = []) {
+    const tracked = new Set([...groups.flatMap(group => [...group]), ...selected]);
+    for (let i = 0; i < positions.length; i += 3) {
+      const [id, x, y] = positions.subarray(i, i + 3);
+      if (!tracked.has(id)) continue;
+      if (Number.isFinite(x) && Number.isFinite(y)) groupPositions.set(id, [x, y]);
+      else {
+        groupPositions.delete(id);
+        groups.forEach(group => group.delete(id));
+      }
+    }
+  }
+
   window.aoeNavigation = {
+    clearGroups() {
+      groups.forEach(group => group.clear());
+      groupTap = null;
+      groupPositions.clear();
+    },
+    groupMembers: () => groups.reduce((count, group) => count + group.size, 0),
+    groupsUpdate,
+    group(action, selected, positions) {
+      groupsUpdate(positions, selected);
+      const index = action % 10;
+      const operation = Math.floor(action / 10);
+      if (operation >= 2) {
+        if (operation === 2) groups[index].clear();
+        for (const id of selected) if (groupPositions.has(id)) groups[index].add(id);
+        const tracked = new Set(groups.flatMap(group => [...group]));
+        for (const id of groupPositions.keys()) if (!tracked.has(id)) groupPositions.delete(id);
+        groupTap = null;
+        return [];
+      }
+      const members = [...groups[index]].sort((a, b) => a - b);
+      const now = performance.now();
+      if (members.length && groupTap?.index === index && now - groupTap.time <= 350) {
+        const sum = members.reduce((sum, id) => {
+          const p = groupPositions.get(id);
+          return [sum[0] + p[0], sum[1] + p[1]];
+        }, [0, 0]);
+        pending = sum.map(value => value / members.length);
+      }
+      groupTap = { index, time: now };
+      return members;
+    },
     fog,
+    actors: view.actors,
+    strategic,
     overview: () => expanded,
     fragment: () => parseCameraFragment(location.hash),
     map: changeMap,
-    frame(state) {
+    present(state) {
       if (state.length !== 11 || !Array.from(state.slice(0, 4)).every(Number.isFinite)) {
-        output.set([0, 0, NaN, NaN]);
-        return output;
+        return;
       }
       world = [Math.max(1, state[0]), Math.max(1, state[1])];
       center = [state[2], state[3]];
-      panel.dataset.worldWidth = String(world[0]);
-      panel.dataset.worldHeight = String(world[1]);
-      panel.dataset.cameraX = String(center[0]);
-      panel.dataset.cameraY = String(center[1]);
-      panel.dataset.zoom = String(state[8]);
+      view.update(world, center);
+      datum('worldWidth', world[0]);
+      datum('worldHeight', world[1]);
+      datum('cameraX', center[0]);
+      datum('cameraY', center[1]);
+      datum('zoom', state[8]);
       marker(camera, center);
       marker(primary, [state[4], state[5]]);
       const points = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => {
@@ -224,7 +284,13 @@ export function initNavigation() {
         return [Math.max(0, Math.min(256, (center[0] + dx + dy) / world[0] * 256)),
           Math.max(0, Math.min(256, (center[1] - dx + dy) / world[1] * 256))].join(',');
       });
-      viewport.setAttribute('points', points.join(' '));
+      attribute(viewport, 'points', points.join(' '));
+    },
+    frame(state) {
+      if (state.length !== 11 || !Array.from(state.slice(0, 4)).every(Number.isFinite)) {
+        output.set([0, 0, NaN, NaN]);
+        return output;
+      }
       let delta = [0, 0];
       for (const key of keys) {
         const vector = direction(key);

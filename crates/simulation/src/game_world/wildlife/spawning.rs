@@ -1,4 +1,4 @@
-use super::{AnimalKind, AnimalTask, GameAnimal, MAX_ANIMALS, StoredAnimal, cell};
+use super::{AnimalKind, AnimalTask, GameAnimal, StoredAnimal, cell};
 use crate::{EconomyError, GameWorld};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 
@@ -8,7 +8,7 @@ impl GameWorld {
         kind: AnimalKind,
         at: WorldPosition,
     ) -> Result<EntityId, EconomyError> {
-        if self.wildlife.animals.len() >= MAX_ANIMALS {
+        if self.wildlife.animals.len() >= self.economy.limits.animals {
             return Err(EconomyError::Capacity);
         }
         if !self.config.valid_ground_position(at) || !self.tile_passable(at.tile_floor()) {

@@ -13,7 +13,7 @@ mod terrain_overlay_state;
 
 #[path = "start_search.rs"]
 mod start_search;
-pub use start_search::StartSearchResult;
+pub use start_search::{LandMasses, StartSearchResult};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct UniformGrass {
@@ -89,6 +89,18 @@ impl Terrain {
         })
     }
 
+    /// Conservative: `true` proves that every tile within `radius` of `tile` is
+    /// lake or ocean, from coarse hydrology alone (no chunk composition, a few
+    /// microseconds). `false` proves nothing.
+    pub fn open_water_certain(&self, tile: TileCoord, radius: i32) -> bool {
+        match self {
+            Self::Uniform(_) => false,
+            Self::Map { generator, .. } => generator
+                .open_water_certain_near(tile, radius, &|| false)
+                .unwrap_or(false),
+        }
+    }
+
     pub fn passable(&self, tile: TileCoord, config: WorldConfig) -> bool {
         match self {
             Self::Uniform(_) => {
@@ -115,14 +127,12 @@ impl Terrain {
                 && tile.x < config.width_tiles
                 && tile.y < config.height_tiles),
             Self::Map { generator, overlay } => {
-                let Some((sample, object)) =
-                    generator.tile_and_node_with_cancel(tile, cancelled)?
-                else {
+                let Some(cell) = generator.walk_at_with_cancel(tile, cancelled)? else {
                     return Ok(false);
                 };
                 Ok(destination_passable(
-                    sample.passable,
-                    object.is_some_and(|node| overlay.blocks_node(node)),
+                    cell.passable || overlay.bridge_axis(tile).is_some(),
+                    cell.node.is_some_and(|node| overlay.blocks_node(node)),
                     overlay.blocks_tile(tile),
                 ))
             }
@@ -156,10 +166,14 @@ impl Terrain {
                                 EdgePassability::Passable
                             )
                             && generator
-                                .object_at_with_cancel(to, cancelled)?
+                                .walk_at_with_cancel(to, cancelled)?
+                                .and_then(|cell| cell.node)
                                 .is_none_or(|node| !overlay.blocks_node(node)),
                     )
                 };
+                if let Some(clear) = overlay.bridge_edge(from, to) {
+                    return Ok(clear && self.passable_with_cancel(to, config, cancelled)?);
+                }
                 if !step_clear(from, to)? {
                     return Ok(false);
                 }
@@ -273,6 +287,28 @@ impl Terrain {
         }
     }
 
+    /// Plans over 32 x 32 chunk portals; see [`aoe_map::hierarchical_route`].
+    /// Uniform worlds have no obstacles and return `None`. A provider failure
+    /// is reported as `None` too: the caller then plans optimistically.
+    pub fn hierarchical_route(
+        &self,
+        origin: TileCoord,
+        destination: TileCoord,
+        max_expansions: u32,
+    ) -> Option<aoe_map::HierarchicalOutcome> {
+        let Self::Map { generator, overlay } = self else {
+            return None;
+        };
+        aoe_map::hierarchical_route_with_overlay(
+            generator,
+            overlay,
+            origin,
+            destination,
+            max_expansions,
+        )
+        .ok()
+    }
+
     /// Counts a connected walkable component without allocating map-scale
     /// state. Callers choose the stopping threshold (for example 256 tiles
     /// for a playable starting area).
@@ -367,102 +403,4 @@ pub const fn destination_passable(ground: bool, resource: bool, building: bool) 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aoe_core::Seed;
-
-    #[test]
-    fn reachable_tiles_stops_at_the_requested_bound() {
-        let config = WorldConfig::new(64, 64, Seed(1)).expect("config");
-        assert_eq!(
-            Terrain::uniform(1).reachable_tiles(TileCoord::new(32, 32), config, 256),
-            256
-        );
-    }
-
-    #[test]
-    fn start_selection_uses_center_distance_then_canonical_tile_order() {
-        let config = WorldConfig::new(64, 64, Seed(1)).expect("config");
-        assert_eq!(
-            Terrain::uniform(1).starting_tile(config),
-            Some(TileCoord::new(31, 31))
-        );
-    }
-
-    #[test]
-    fn uniform_terrain_bounds_material_queries_and_chunk_rows() {
-        let config = WorldConfig::new(40, 32, Seed(3)).expect("config");
-        let grass = UniformGrass::new(9);
-        assert_eq!(grass.material_at(TileCoord::new(-1, 0), config), None);
-        assert_eq!(grass.material_at(TileCoord::new(0, -1), config), None);
-        assert_eq!(grass.material_at(TileCoord::new(40, 0), config), None);
-        assert_eq!(grass.material_at(TileCoord::new(0, 32), config), None);
-        let material = grass
-            .material_at(TileCoord::new(7, 5), config)
-            .expect("material");
-        assert_eq!(
-            material,
-            grass
-                .material_at(TileCoord::new(7, 5), config)
-                .expect("stable")
-        );
-
-        let terrain = Terrain::uniform(9);
-        assert!(!terrain.has_map_navigation());
-        assert!(terrain.passable(TileCoord::new(0, 0), config));
-        assert!(!terrain.passable(TileCoord::new(-1, 0), config));
-        assert!(terrain.crossable(TileCoord::new(0, 0), TileCoord::new(1, 1), config));
-        assert_eq!(
-            terrain.route(TileCoord::new(0, 0), TileCoord::new(1, 1)),
-            None
-        );
-        assert_eq!(
-            terrain.route_outcome(TileCoord::new(0, 0), TileCoord::new(1, 1)),
-            None
-        );
-        assert_eq!(
-            terrain.route_segment(TileCoord::new(0, 0), TileCoord::new(1, 1)),
-            None
-        );
-        assert!(
-            terrain
-                .route_planner(TileCoord::new(0, 0), TileCoord::new(1, 1), 8)
-                .is_none()
-        );
-        let mut planner = RoutePlanner::new(TileCoord::new(0, 0), TileCoord::new(1, 1), 8);
-        assert!(
-            terrain
-                .poll_route_planner(&mut planner, 8, &|| false)
-                .is_none()
-        );
-
-        let passability = terrain
-            .chunk_passability_with_cancel(0, 0, config, &|| false)
-            .expect("uniform chunk");
-        assert!(passability.iter().all(|passable| *passable));
-        let outside = terrain
-            .chunk_passability_with_cancel(-1, 0, config, &|| false)
-            .expect("outside chunk");
-        assert!(outside.iter().all(|passable| !*passable));
-    }
-
-    #[test]
-    fn map_terrain_reports_outside_tiles_and_empty_edge_chunks() {
-        let package = aoe_map::MapPackage::new(1, aoe_map::MapRequest::default(), Vec::new())
-            .expect("package");
-        let config = package.request.estimate().expect("estimate").tiles_per_side;
-        let width = i32::try_from(config).expect("bounded width");
-        let world_config = WorldConfig::new(width, width, Seed(1)).expect("config");
-        let terrain = Terrain::from_package(&package);
-        assert!(!terrain.passable(TileCoord::new(-1, 0), world_config,));
-        assert_eq!(
-            terrain.chunk_passability_with_cancel(
-                (width + CHUNK_TILES - 1) / CHUNK_TILES,
-                0,
-                world_config,
-                &|| false,
-            ),
-            Ok(vec![false; (CHUNK_TILES * CHUNK_TILES) as usize])
-        );
-    }
-}
+mod tests;

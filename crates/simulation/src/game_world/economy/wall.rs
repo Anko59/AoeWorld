@@ -1,15 +1,7 @@
 //! Palisade walls: a line of 1x1 segments laid by one order.
-use super::{
-    BuildTask, BuildingKind, EconomyError, MAX_WALL_SEGMENTS, UnitTask, placement::distance_squared,
-};
+use super::{BuildingKind, EconomyError, MAX_WALL_SEGMENTS, placement::distance_squared};
 use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
-
-/// A finished palisade segment sends its builders to unfinished neighbours
-/// within this Chebyshev distance (nearest four tried).
-const WALL_CONTINUE_RADIUS: i32 = 8;
-/// Unfinished neighbours a builder tries before it gives up and idles.
-const WALL_CONTINUE_TRIES: usize = 4;
 
 /// Tiles on the straight (Bresenham) line between two tiles, ends included.
 pub(super) fn line_tiles(from: TileCoord, to: TileCoord) -> Vec<TileCoord> {
@@ -39,18 +31,21 @@ pub(super) fn line_tiles(from: TileCoord, to: TileCoord) -> Vec<TileCoord> {
 impl GameWorld {
     /// Lay a palisade of 1x1 segments along the line `from..=to` and send the
     /// builders to the nearest segments. Returns the segment ids in line order.
+    /// With `queued`, builders follow the segments in line order after existing work.
     pub fn issue_build_wall(
         &mut self,
         player: PlayerId,
         builders: &[EntityId],
         from: TileCoord,
         to: TileCoord,
+        queued: bool,
     ) -> Result<Vec<EntityId>, EconomyError> {
         let builders = self.validate_builders(player, builders)?;
         let tiles = line_tiles(from, to);
         if tiles.len() > MAX_WALL_SEGMENTS {
-            return Err(EconomyError::Capacity);
+            return Err(EconomyError::OrderTooLarge);
         }
+        self.validate_build_queue(&builders, tiles.len(), queued)?;
         let kind = BuildingKind::PalisadeWall;
         let cost = self.check_buildable(player, kind, tiles.len() as u32)?;
         let rects = tiles
@@ -64,6 +59,7 @@ impl GameWorld {
             .collect::<Vec<_>>();
         // Validate every segment before placing any, so a refusal changes nothing.
         for rect in &rects {
+            self.validate_explored_footprint(player, *rect)?;
             self.validate_footprint(*rect)?;
         }
         let mut ids = Vec::new();
@@ -97,75 +93,23 @@ impl GameWorld {
                 (*id, nearest(tile))
             })
             .collect::<Vec<_>>();
-        if !self.assign_builders(&builders, |builder| {
-            targets
-                .iter()
-                .find(|(id, _)| *id == builder)
-                .map_or(ids[0], |(_, target)| *target)
-        }) {
+        let assigned = if queued {
+            self.assign_build_orders(&builders, &ids, true)
+        } else {
+            self.assign_builders(&builders, |builder| {
+                targets
+                    .iter()
+                    .find(|(id, _)| *id == builder)
+                    .map_or(ids[0], |(_, target)| *target)
+            })
+        };
+        if !assigned {
             for id in &ids {
                 let _ = self.issue_cancel_construction(player, *id);
             }
             return Err(crate::GameWorldError::Unreachable.into());
         }
-        for id in &ids {
-            self.update_building_vision(*id);
-        }
         self.remember_visible_buildings();
         Ok(ids)
-    }
-
-    pub(super) fn continue_wall(
-        &mut self,
-        builder: EntityId,
-        player: PlayerId,
-        finished: TileRect,
-    ) {
-        let mut next = self
-            .buildings()
-            .filter(|b| {
-                b.player == player
-                    && b.kind == BuildingKind::PalisadeWall
-                    && !b.is_complete()
-                    && b.footprint.min.x.abs_diff(finished.min.x) <= WALL_CONTINUE_RADIUS as u32
-                    && b.footprint.min.y.abs_diff(finished.min.y) <= WALL_CONTINUE_RADIUS as u32
-            })
-            .map(|b| {
-                (
-                    distance_squared(b.footprint.min, finished.min),
-                    b.id,
-                    b.footprint,
-                )
-            })
-            .collect::<Vec<_>>();
-        next.sort_by_key(|(distance, id, _)| (*distance, *id));
-        let nearest = next.first().map(|(_, building, _)| *building);
-        for (_, building, footprint) in next.into_iter().take(WALL_CONTINUE_TRIES) {
-            if self.approach_building(builder, footprint, 0).is_err() {
-                continue;
-            }
-            self.economy.builders.insert(
-                builder,
-                BuildTask {
-                    building,
-                    attempts: 0,
-                },
-            );
-            if let Some(&index) = self.lookup.get(&builder) {
-                self.units[index].state.task = UnitTask::Moving;
-            }
-            return;
-        }
-        // Every approach failed this tick (for instance the path budget was
-        // spent): stay assigned to the nearest segment and retry next tick.
-        if let Some(building) = nearest {
-            self.economy.builders.insert(
-                builder,
-                BuildTask {
-                    building,
-                    attempts: 1,
-                },
-            );
-        }
     }
 }

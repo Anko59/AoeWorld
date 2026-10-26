@@ -1,5 +1,7 @@
 use crate::{TileCoord, TileRect, WorldConfig};
 
+pub const MIN_CAMERA_ZOOM: f64 = 1.0 / 4096.0;
+
 pub const ISO_TILE_WIDTH: f64 = 128.0;
 pub const ISO_TILE_HEIGHT: f64 = 64.0;
 pub const ISO_ELEVATION_METER_HEIGHT: f64 = ISO_TILE_HEIGHT / 2.0;
@@ -70,7 +72,7 @@ impl Camera {
 
     pub fn zoom_around(mut self, pointer: ScreenPoint, zoom: f64) -> Self {
         let before = self.screen_to_world_at_height(pointer, self.focus_elevation_meters);
-        self.zoom = zoom.clamp(0.25, 3.0);
+        self.zoom = zoom.clamp(MIN_CAMERA_ZOOM, 3.0);
         let after = self.screen_to_world_at_height(pointer, self.focus_elevation_meters);
         self.center[0] += before[0] - after[0];
         self.center[1] += before[1] - after[1];
@@ -109,6 +111,14 @@ impl Camera {
             .fold(f64::NEG_INFINITY, f64::max);
         let width = f64::from(config.width_tiles);
         let height = f64::from(config.height_tiles);
+        // Once the entire isometric world fits, keep it centered rather than
+        // alternately clamping opposite edges and pinning it to a corner.
+        if (width + height) * ISO_TILE_WIDTH * 0.5 * self.zoom <= self.viewport[0]
+            && (width + height) * ISO_TILE_HEIGHT * 0.5 * self.zoom <= self.viewport[1]
+        {
+            self.center = [width * 0.5, height * 0.5];
+            return self;
+        }
         if min_x < 0.0 {
             self.center[0] -= min_x;
         }
@@ -121,8 +131,8 @@ impl Camera {
         if max_y > height {
             self.center[1] -= max_y - height;
         }
-        self.center[0] = self.center[0].clamp(0.0, width);
-        self.center[1] = self.center[1].clamp(0.0, height);
+        self.center[0] = crate::clamp_f64(self.center[0], 0.0, width);
+        self.center[1] = crate::clamp_f64(self.center[1], 0.0, height);
         self
     }
 

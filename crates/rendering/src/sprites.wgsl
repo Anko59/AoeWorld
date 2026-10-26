@@ -7,7 +7,6 @@ struct Sprite {
     terrain_blend: array<vec4<f32>, 2>,
     pages: vec4<u32>,
 };
-@group(0) @binding(0) var<storage, read> sprites: array<Sprite>;
 @group(0) @binding(1) var sprite_atlas: texture_2d_array<f32>;
 @group(0) @binding(2) var sprite_sampler: sampler;
 struct VertexOutput {
@@ -75,12 +74,10 @@ fn sheet(material: u32) -> vec4<f32> {
     return vec4<f32>(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + b.y * 256.0, b.z + b.w * 256.0);
 }
 
-@vertex
-fn vs_main(@builtin(vertex_index) vertex: u32, @builtin(instance_index) instance: u32) -> VertexOutput {
+fn sprite_vertex(vertex: u32, sprite: Sprite) -> VertexOutput {
     let corners = array<vec2<f32>, 6>(
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0), vec2<f32>(1.0, 1.0),
         vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, 1.0), vec2<f32>(-1.0, 1.0));
-    let sprite = sprites[instance];
     var out: VertexOutput;
     out.fog = 1.0;
     out.pages = sprite.pages;
@@ -295,8 +292,7 @@ fn junction_water(word: u32) -> f32 {
 }
 // #endif
 
-@fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn world_colour(in: VertexOutput) -> vec4<f32> {
     let dx = dpdx(in.uv);
     let dy = dpdy(in.uv);
     let dx2 = dpdx(in.uv2);
@@ -310,13 +306,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         return in.color;
     }
     if in.solid == 0u {
+        if (in.pages.w & 128u) != 0u && dot(abs((in.uv - in.rect.xy) / in.rect.zw - vec2<f32>(0.5)), vec2<f32>(1.0)) > 0.5 { discard; }
+        let owner = vec4<f32>(in.rect3.rgb, select(0.0, 1.0, (in.pages.w & 64u) != 0u));
         var texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
+        texel = owner_texel(texel, in.uv, i32(in.pages.x), owner);
         // Quad pages.w bit 0 marks nearest-sampled terrain, not an object.
         if (in.pages.w & 1u) == 0u {
-            let average = box_average(in.uv, i32(in.pages.x), in.rect, dx, dy);
+            let average = box_average(in.uv, i32(in.pages.x), in.rect, dx, dy, owner);
             if average.a >= 0.0 { texel = average; }
         }
         if texel.a <= 0.0 { discard; }
+        if in.color.r > 1.0 { texel.r = min(texel.r, 1.0 / in.color.r); }
         return texel * in.color;
     }
     if in.solid == 2u { return vec4<f32>(in.color.rgb * (1.0 + in.shade * 0.04) * in.fog, in.color.a); }

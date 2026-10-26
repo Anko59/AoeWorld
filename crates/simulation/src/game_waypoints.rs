@@ -43,6 +43,7 @@ impl GameWorld {
             self.units[index].route.clear();
             self.units[index].state.moving = false;
             self.units[index].state.planning = false;
+            self.index_destination(id);
             return Ok(false);
         }
 
@@ -75,6 +76,7 @@ impl GameWorld {
                 .unwrap_or_else(|index| index);
             self.active_movers.insert(insert_at, id);
         }
+        self.index_destination(id);
         Ok(true)
     }
 

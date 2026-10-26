@@ -34,6 +34,7 @@ impl RoutePlanner {
     pub(super) fn advance_reconstruction(
         &mut self,
         cancelled: &dyn Fn() -> bool,
+        map_guidance: bool,
     ) -> Result<(), Terminal> {
         if cancelled() {
             return Err(Terminal::Environment(EnvironmentPageError::Cancelled));
@@ -58,7 +59,7 @@ impl RoutePlanner {
                         reconstruction.phase = ReconstructionPhase::Convert { next_index };
                     }
                     if next_index == 0 {
-                        self.complete_reconstruction()?;
+                        self.complete_reconstruction(map_guidance)?;
                     }
                     return Ok(());
                 }
@@ -91,7 +92,7 @@ impl RoutePlanner {
             }
             ReconstructionPhase::Convert { next_index } => {
                 if next_index == 0 {
-                    self.complete_reconstruction()?;
+                    self.complete_reconstruction(map_guidance)?;
                     return Ok(());
                 }
                 let Some(reconstruction) = self.reconstruction.as_ref() else {
@@ -131,7 +132,7 @@ impl RoutePlanner {
                 self.work = self.work.saturating_add(1);
                 self.update_peak_retained_entries();
                 if next_index == 1 {
-                    self.complete_reconstruction()?;
+                    self.complete_reconstruction(map_guidance)?;
                 }
             }
         }
@@ -143,7 +144,7 @@ impl RoutePlanner {
     }
 
     /// Joins the finished leg to the planned route and drops its frontier.
-    fn complete_reconstruction(&mut self) -> Result<(), Terminal> {
+    fn complete_reconstruction(&mut self, map_guidance: bool) -> Result<(), Terminal> {
         let Some(reconstruction) = self.reconstruction.take() else {
             return Err(Terminal::Unreachable);
         };
@@ -159,9 +160,19 @@ impl RoutePlanner {
         self.route_costs.extend(reconstruction.costs);
         self.route_directions = Some(directions);
         self.route_cursor = 0;
+        // An unfinished reverse proof belongs to the leg's original origin.
+        // A budget-limited partial leg must not resume it from a new origin.
+        // A completed seal keeps its bounds until the nearest-point trip ends,
+        // so opening its entrance can still invalidate that proof.
+        if !self.pocket_checked {
+            self.pocket = None;
+        }
         self.leg_origin = leg_end;
         self.leg_work = 0;
         self.leg_best = None;
+        if map_guidance && self.guidance.is_empty() {
+            self.guidance_checked = false;
+        }
         self.search = None;
         self.update_peak_retained_entries();
         if self.retained_entries() > MAX_ROUTE_PLANNER_NODES {

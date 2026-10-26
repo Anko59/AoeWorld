@@ -6,7 +6,7 @@ use aoe_core::{Seed, Tick, WorldConfig};
 use aoe_map::EnvironmentPageProvider;
 use aoe_map::{ElevationPage, HistoricalLandUsePage, MapPackage, PotentialBiomePage, WaterPage};
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 impl GameWorld {
     pub fn from_map(package: MapPackage) -> Result<Self, GameWorldError> {
@@ -23,14 +23,28 @@ impl GameWorld {
             wildlife: Default::default(),
             vision: Default::default(),
             units: Vec::new(),
-            lookup: BTreeMap::new(),
+            lookup: crate::game_world::UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            move_queues: BTreeMap::new(),
+            formations: BTreeMap::new(),
+            destinations: Default::default(),
+            idle_spacing: Default::default(),
+            followers: Default::default(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
+            navigation_preparation_budget: Mutex::new(crate::MAX_NAV_PREPARATIONS_PER_TICK),
+            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
+            fast_route_spent: BTreeMap::new(),
             navigation_cache: NavigationCache::default(),
+            resource_chunks: Mutex::new(Default::default()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
+            partial_kits: 0,
+            route_slots: BTreeMap::new(),
+            route_metrics: Default::default(),
+            planning_probe: None,
+            route_queued: Default::default(),
         })
     }
 
@@ -61,14 +75,28 @@ impl GameWorld {
             wildlife: Default::default(),
             vision: Default::default(),
             units: Vec::new(),
-            lookup: BTreeMap::new(),
+            lookup: crate::game_world::UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            move_queues: BTreeMap::new(),
+            formations: BTreeMap::new(),
+            destinations: Default::default(),
+            idle_spacing: Default::default(),
+            followers: Default::default(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
+            navigation_preparation_budget: Mutex::new(crate::MAX_NAV_PREPARATIONS_PER_TICK),
+            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
+            fast_route_spent: BTreeMap::new(),
             navigation_cache: NavigationCache::default(),
+            resource_chunks: Mutex::new(Default::default()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
+            partial_kits: 0,
+            route_slots: BTreeMap::new(),
+            route_metrics: Default::default(),
+            planning_probe: None,
+            route_queued: Default::default(),
         })
     }
 
@@ -90,14 +118,28 @@ impl GameWorld {
             wildlife: Default::default(),
             vision: Default::default(),
             units: Vec::new(),
-            lookup: BTreeMap::new(),
+            lookup: crate::game_world::UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            move_queues: BTreeMap::new(),
+            formations: BTreeMap::new(),
+            destinations: Default::default(),
+            idle_spacing: Default::default(),
+            followers: Default::default(),
             planning_budget: MAX_ROUTE_WORK_PER_TICK,
+            navigation_preparation_budget: Mutex::new(crate::MAX_NAV_PREPARATIONS_PER_TICK),
+            fast_route_budget: crate::game_movement::MAX_FAST_ROUTE_WORK_PER_TICK,
+            fast_route_spent: BTreeMap::new(),
             navigation_cache: NavigationCache::default(),
+            resource_chunks: Mutex::new(Default::default()),
             planning_cursor: 0,
             active_planner_count: 0,
             active_route_searches: 0,
+            partial_kits: 0,
+            route_slots: BTreeMap::new(),
+            route_metrics: Default::default(),
+            planning_probe: None,
+            route_queued: Default::default(),
         })
     }
 }

@@ -183,15 +183,18 @@ test("whole-map navigation jumps locally, returns home, and held keys release", 
   const left = bounds.x + (bounds.width - side) / 2;
   const top = bounds.y + (bounds.height - side) / 2;
   await page.mouse.move(left + side * 0.5, top + side * 0.5);
+  const beforeDrag = await position(page);
+  const transform = await page
+    .locator("#minimap-view")
+    .getAttribute("transform");
   await page.mouse.down();
   await page.mouse.move(left + side * 0.6, top + side * 0.45, { steps: 4 });
   await page.mouse.up();
-  await expect
-    .poll(async () => {
-      const [x, y] = await position(page);
-      return Math.abs(x - 9011.2) < 40 && Math.abs(y - 5734.4) < 40;
-    })
-    .toBe(true);
+  await expect(page.locator("#minimap-view")).not.toHaveAttribute(
+    "transform",
+    transform ?? "",
+  );
+  expect(await position(page)).toEqual(beforeDrag);
   await page.getByRole("button", { name: "Close map overview" }).click();
   await expect(page.locator("#minimap")).not.toHaveClass(/expanded/);
   await page.keyboard.press("Home");

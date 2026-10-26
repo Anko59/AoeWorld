@@ -1,0 +1,21 @@
+[build-system]
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
+
+[project]
+name = "aoeworld"
+version = "0.1.0"
+description = "Write AoeWorld AI players in Python"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+classifiers = ["Programming Language :: Rust", "Typing :: Typed"]
+
+[tool.maturin]
+module-name = "aoeworld._native"
+python-source = "python"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]

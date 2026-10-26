@@ -1,4 +1,4 @@
-//! Pure, bounded startup placement for the four-page gameplay atlas.
+//! Pure, bounded startup placement for the five-page gameplay atlas.
 //!
 //! This module allocates only owned placement metadata, never pixel storage.
 //! The caller owns exactly `ATLAS_BYTES` RGBA8 bytes in page-major order and
@@ -7,11 +7,12 @@
 //! addresses, not source-manifest page IDs. No painter-order regrouping.
 
 use std::fmt;
+mod dense;
 
 pub const PAGE_SIDE: u16 = 2048;
-pub const PAGE_COUNT: usize = 4;
+pub const PAGE_COUNT: usize = 5;
 pub const PAGE_BYTES: usize = PAGE_SIDE as usize * PAGE_SIDE as usize * 4;
-pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 67,108,864 bytes.
+pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 83,886,080 bytes.
 pub const MAX_SELECTED_FRAMES: usize = 5120;
 pub const MAX_FRAME_EXTENT: u16 = PAGE_SIDE - 4;
 // Rows and columns 0–1 stay unallocated on every page. The renderer stores its
@@ -19,11 +20,13 @@ pub const MAX_FRAME_EXTENT: u16 = PAGE_SIDE - 4;
 const START: u16 = 2;
 const GAP: u16 = 1;
 
-/// Terrain owns pages 0–1. All units, resources, objects and shadows own pages 2–3.
+/// Terrain and team-masked objects retain their page domains. Unowned art can
+/// also use spare terrain space; it never needs an aligned player-mask page.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AtlasDomain {
     Terrain,
     Objects,
+    Shared,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -124,16 +127,17 @@ fn pack_with_allocator(
         }
         indices[slot] = index as u16;
     }
-    let mut cursors = [Cursor::new(); PAGE_COUNT];
+    let mut cursors: [Page; PAGE_COUNT] = std::array::from_fn(|_| Page::new());
     for &index in &indices[..frames.len()] {
         let index = usize::from(index);
         let frame = frames[index];
-        let pages = match frame.domain {
-            AtlasDomain::Terrain => 0..2,
-            AtlasDomain::Objects => 2..4,
+        let (pages, spare) = match frame.domain {
+            AtlasDomain::Terrain => (0..2, 0..0),
+            AtlasDomain::Objects => (2..PAGE_COUNT, 0..0),
+            AtlasDomain::Shared => (2..PAGE_COUNT, 0..2),
         };
         let mut placed = false;
-        for page in pages {
+        for page in pages.chain(spare) {
             if let Some((x, y)) = cursors[page].place(frame.width, frame.height) {
                 placements[index] = Placement {
                     page: page as u16,
@@ -147,10 +151,10 @@ fn pack_with_allocator(
             }
         }
         if !placed {
-            return Err(PackingError::DomainOverflow {
-                index,
-                domain: frame.domain,
-            });
+            // Shelf holes can contain enough area but no sufficiently tall
+            // rectangle. Retry the same bounded pages with maximal free regions.
+            dense::pack(frames, &indices[..frames.len()], &mut placements)?;
+            break;
         }
     }
     Ok(placements)
@@ -180,9 +184,49 @@ fn validate(frames: &[FrameExtent]) -> Result<(), PackingError> {
 
 fn precedes(frames: &[FrameExtent], a: usize, b: usize) -> bool {
     let (a_frame, b_frame) = (frames[a], frames[b]);
+    // Reserve terrain and team-mask domains before unowned art borrows holes.
+    if a_frame.domain != b_frame.domain {
+        return (a_frame.domain as u8) < b_frame.domain as u8;
+    }
     a_frame.height > b_frame.height
         || (a_frame.height == b_frame.height && a_frame.width > b_frame.width)
         || (a_frame.height == b_frame.height && a_frame.width == b_frame.width && a < b)
+}
+
+struct Page {
+    active: Cursor,
+    shelves: Vec<Cursor>,
+}
+
+impl Page {
+    fn new() -> Self {
+        Self {
+            active: Cursor::new(),
+            shelves: Vec::new(),
+        }
+    }
+
+    fn place(&mut self, width: u16, height: u16) -> Option<(u16, u16)> {
+        // Height-sorted input can fill the remaining width of older, taller
+        // rows. A single cursor discarded these holes whenever it wrapped.
+        // At most 1022 rows fit on a page: < 6 KiB of live row metadata per
+        // page, no additional colour/mask pages or decoded pixel buffers.
+        for shelf in &mut self.shelves {
+            if height <= shelf.row_height
+                && u32::from(shelf.x) + u32::from(width) + u32::from(GAP) < u32::from(PAGE_SIDE)
+            {
+                let origin = (shelf.x, shelf.y);
+                shelf.x += width + GAP;
+                return Some(origin);
+            }
+        }
+        let previous = self.active;
+        let origin = self.active.place(width, height)?;
+        if self.active.y != previous.y && previous.row_height != 0 {
+            self.shelves.push(previous);
+        }
+        Some(origin)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

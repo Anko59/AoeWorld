@@ -1,5 +1,17 @@
 # Testing
 
+For bounded core/asset/simulation iteration, use `make test-game-focused
+AOE_GAME_TEST_FILTER='test(catalog::packing)|test(browser_content)'` (on one
+line). It takes the shared heavy slot and fails if the filter selects no tests;
+`make test-unit` remains the full native gate.
+If another shared-machine cleanup removes active incremental files, use the
+command prefix `CARGO_INCREMENTAL=0`; Make forwards it through Docker and nested
+slot commands without changing the target directory or the checks.
+On a disk-constrained shared checkout, `CARGO_PROFILE_DEV_DEBUG=0` and
+`CARGO_PROFILE_TEST_DEBUG=0` omit compiler debug symbols while preserving
+assertions, overflow checks and the same test selection. Make forwards these
+optional Cargo settings too; use the normal target directory.
+
 Use `make fmt-check`, `make structure-check`, `make lint`, and `make test-unit`
 (`make lint` also compiles the test targets of the wasm32 packages `make test-wasm` runs, so wasm-only test code cannot break unnoticed; clippy is not denied for wasm32 yet)
 for focused checks. `make pre-commit` runs static gates; `make preflight` adds
@@ -18,6 +30,13 @@ tests and says so. The first and last lines of the run, and so the gate
 evidence, show `test-unit: N of M crates (changed: a, b; dependents: c, d)`.
 CI (`GITHUB_ACTIONS=true`), nightly, a plain `make test-unit` and `AOE_TEST_ALL=1`
 always run the full suite.
+
+For local iteration, `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation
+AOE_NATIVE_TEST_FILTER='test(navy::)'` runs a Nextest filter inside the shared heavy
+slot. `make test-wasm-focused AOE_WASM_TEST_PACKAGE=aoe-client
+AOE_WASM_TEST_FILTER=dead_naval_units` runs matching library tests with the same
+browser runner, capabilities and deadline as `test-wasm`. These developer-selected
+runs do not replace the full gates or write their PASS reports.
 
 CI runs `make preflight` as two parallel legs of its `static` job (#388):
 `make preflight-checks` (`deny`, `build-wasm`, the static checks and clippy) and

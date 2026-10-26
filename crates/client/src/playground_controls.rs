@@ -4,6 +4,8 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{Event, PointerEvent, WheelEvent};
 
+#[path = "playground_controls/groups.rs"]
+pub(super) mod groups;
 #[path = "playground_controls/navigation.rs"]
 pub(super) mod navigation;
 
@@ -33,10 +35,14 @@ fn pixel_scale(client: &Client) -> f64 {
     f64::from(client.canvas.width()) / f64::from(client.canvas.client_width().max(1))
 }
 
-fn point(client: &Client, event: &PointerEvent) -> ScreenPoint {
+fn point(client: &mut Client, event: &PointerEvent) -> ScreenPoint {
+    // Layout can change between animation callbacks. Synchronize projection
+    // and backing pixels before retaining a pointer for the next frame.
+    super::resize(client);
     let bounds = client.canvas.get_bounding_client_rect();
     ScreenPoint {
-        x: (f64::from(event.client_x()) - bounds.left()) * pixel_scale(client),
+        x: (f64::from(event.client_x()) - bounds.left()) * f64::from(client.canvas.width())
+            / bounds.width().max(1.0),
         y: (f64::from(event.client_y()) - bounds.top()) * f64::from(client.canvas.height())
             / bounds.height().max(1.0),
     }
@@ -149,22 +155,25 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         event.prevent_default();
         let mut client = down.borrow_mut();
         let _ = client.canvas.focus();
-        let target = point(&client, &event);
+        let target = point(&mut client, &event);
         if event.button() == 2 && client.village.placement.is_some() {
             super::village::construction::cancel(&mut client);
             return;
         }
         if event.button() == 2 {
-            send_order(&mut client, target);
+            super::village::orders::at_pointer(&mut client, target, event.shift_key());
             return;
         }
         if event.button() == 0 && client.village.placement.is_some() {
             let _ = client.canvas.set_pointer_capture(event.pointer_id());
-            super::village::construction::place(&mut client, target, false);
+            super::village::construction::place(&mut client, target, false, event.shift_key());
             return;
         }
         if event.button() == 0 && client.village.move_cursor {
             send_order(&mut client, target);
+            return;
+        }
+        if event.button() == 0 && super::strategic::focus(&mut client, target) {
             return;
         }
         let middle = event.button() == 1;
@@ -185,7 +194,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let moving = shared.clone();
     let onmove = Closure::<dyn FnMut(PointerEvent)>::new(move |event: PointerEvent| {
         let mut client = moving.borrow_mut();
-        let target = point(&client, &event);
+        let target = point(&mut client, &event);
         client.pointer = Some(target);
         let (start, center, middle) = {
             let Some(drag) = client.drag.as_mut() else {
@@ -218,7 +227,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let released = shared.clone();
     let onup = Closure::<dyn FnMut(PointerEvent)>::new(move |event: PointerEvent| {
         let mut client = released.borrow_mut();
-        let target = point(&client, &event);
+        let target = point(&mut client, &event);
         if event.type_() == "pointercancel" {
             client.drag = None;
             super::village::construction::cancel(&mut client);
@@ -229,9 +238,15 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let _ = client.canvas.release_pointer_capture(event.pointer_id());
             return;
         }
+        if client.village.garrison_cursor {
+            client.drag = None;
+            super::village::garrison::interact(&mut client, target);
+            let _ = client.canvas.release_pointer_capture(event.pointer_id());
+            return;
+        }
         if client.village.placement.is_some() {
             client.drag = None;
-            super::village::construction::place(&mut client, target, true);
+            super::village::construction::place(&mut client, target, true, event.shift_key());
             let _ = client.canvas.release_pointer_capture(event.pointer_id());
             return;
         }
@@ -256,9 +271,11 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let doubled = shared.clone();
     let ondouble = Closure::<dyn FnMut(PointerEvent)>::new(move |event: PointerEvent| {
         let mut client = doubled.borrow_mut();
-        let target = point(&client, &event);
+        let target = point(&mut client, &event);
         if let Some(unit) = pick(&client, target) {
             super::village::picking::double_click(&mut client, unit);
+        } else {
+            super::village::picking::double_building(&mut client);
         }
     });
     canvas.add_event_listener_with_callback("dblclick", ondouble.as_ref().unchecked_ref())?;
@@ -280,9 +297,11 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let onwheel = Closure::<dyn FnMut(WheelEvent)>::new(move |event: WheelEvent| {
         event.prevent_default();
         let mut client = zoomed.borrow_mut();
+        super::resize(&mut client);
         let bounds = client.canvas.get_bounding_client_rect();
         let target = ScreenPoint {
-            x: (f64::from(event.client_x()) - bounds.left()) * pixel_scale(&client),
+            x: (f64::from(event.client_x()) - bounds.left()) * f64::from(client.canvas.width())
+                / bounds.width().max(1.0),
             y: (f64::from(event.client_y()) - bounds.top()) * f64::from(client.canvas.height())
                 / bounds.height().max(1.0),
         };
@@ -310,18 +329,25 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let mut client = keyed.borrow_mut();
         match action {
             1 => {
-                if client.village.placement.is_some() {
+                if client.village.placement.is_some() || client.village.garrison_cursor {
                     super::village::construction::cancel(&mut client);
                 } else {
                     client.selected = Default::default();
                 }
                 client.village.move_cursor = false;
+                client.village.unload_cursor = false;
+                client.village.attack_move = false;
                 client.drag = None;
+            }
+            6 if client.village.repeat_placement => {
+                super::village::construction::cancel(&mut client)
             }
             2 => toggle_grid(&mut client),
             3 => center_on_primary(&mut client),
             4 => super::village::orders::train(&mut client, false),
             5 => super::village::orders::focus_town_center(&mut client, true),
+            7 | 8 => super::village::selection::idle(&mut client, action == 8),
+            10..=39 => groups::key(&mut client, action),
             _ => return,
         }
         subscribe(&mut client);
@@ -330,6 +356,13 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         .borrow()
         .document
         .add_event_listener_with_callback("keydown", onkey.as_ref().unchecked_ref())?;
+    shared
+        .borrow()
+        .document
+        .add_event_listener_with_callback("keyup", onkey.as_ref().unchecked_ref())?;
+    if let Some(window) = web_sys::window() {
+        window.add_event_listener_with_callback("blur", onkey.as_ref().unchecked_ref())?;
+    }
     onkey.forget();
 
     for (id, action) in [
@@ -361,94 +394,5 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aoe_core::{Seed, project};
-    use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
-
-    wasm_bindgen_test_configure!(run_in_browser);
-
-    #[wasm_bindgen_test]
-    fn backing_resolution_stays_bounded_on_large_high_dpi_screens() {
-        for (width, height, ratio) in [
-            (3840.0, 2160.0, 2.0),
-            (8000.0, 1000.0, 3.0),
-            (1280.0, 720.0, 1.0),
-        ] {
-            let [w, h] = backing_size(width, height, ratio);
-            assert!(u64::from(w) * u64::from(h) <= MAX_BACKING_PIXELS as u64);
-            assert!(w <= MAX_BACKING_AXIS as u32 && h <= MAX_BACKING_AXIS as u32);
-            assert!((f64::from(w) / width - f64::from(h) / height).abs() < 0.002);
-        }
-        assert_eq!(backing_size(1280.0, 720.0, 1.0), [1280, 720]);
-    }
-
-    #[wasm_bindgen_test]
-    fn wheel_zoom_preserves_finite_nonfinite_and_clamped_pointer_zoom() {
-        let camera = Camera {
-            center: [256.0, 256.0],
-            zoom: 1.0,
-            viewport: [1280.0, 720.0],
-            focus_elevation_meters: 12.0,
-        };
-        let pointer = ScreenPoint { x: 384.0, y: 216.0 };
-        for delta in [
-            -1e6,
-            -480.0,
-            -16.0,
-            -0.0,
-            0.0,
-            16.0,
-            480.0,
-            1e6,
-            f64::NEG_INFINITY,
-            f64::INFINITY,
-            f64::NAN,
-        ] {
-            let old_zoom = camera.zoom * (-delta * 0.0015).exp();
-            let new_zoom = wheel_zoom(camera.zoom, delta);
-            if old_zoom.is_nan() {
-                assert!(new_zoom.is_nan());
-                assert!(camera.zoom_around(pointer, new_zoom).zoom.is_nan());
-                continue;
-            }
-            if old_zoom.is_infinite() {
-                assert_eq!(new_zoom, old_zoom);
-            } else {
-                assert!((new_zoom - old_zoom).abs() <= old_zoom.abs() * 1e-14);
-            }
-            let old = camera.zoom_around(pointer, old_zoom);
-            let new = camera.zoom_around(pointer, new_zoom);
-            assert!((new.zoom - old.zoom).abs() < 1e-13);
-            assert!((0.25..=3.0).contains(&new.zoom));
-            let before = camera.screen_to_world_at_height(pointer, 12.0);
-            let after = new.screen_to_world_at_height(pointer, 12.0);
-            for axis in 0..2 {
-                assert!((new.center[axis] - old.center[axis]).abs() < 1e-10);
-                assert!((after[axis] - before[axis]).abs() < 1e-10);
-            }
-        }
-    }
-
-    #[wasm_bindgen_test]
-    fn camera_pan_moves_in_the_requested_screen_direction() {
-        let config = WorldConfig::new(512, 512, Seed(1)).unwrap();
-        let camera = Camera {
-            center: [256.0, 256.0],
-            zoom: 1.0,
-            viewport: [1280.0, 720.0],
-            focus_elevation_meters: 0.0,
-        };
-        let initial = project(camera.center);
-
-        let left = pan_camera(camera, config, [-60.0, 0.0]);
-        let right = pan_camera(camera, config, [60.0, 0.0]);
-        let up = pan_camera(camera, config, [0.0, -60.0]);
-        let down = pan_camera(camera, config, [0.0, 60.0]);
-
-        assert!(project(left.center).x < initial.x);
-        assert!(project(right.center).x > initial.x);
-        assert!(project(up.center).y < initial.y);
-        assert!(project(down.center).y > initial.y);
-    }
-}
+#[path = "playground_controls/tests/camera_tests.rs"]
+mod tests;

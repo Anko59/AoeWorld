@@ -67,7 +67,7 @@ fn source_point(
             .iter()
             .map(|p| p[axis])
             .fold(f64::NEG_INFINITY, f64::max);
-        value.clamp(lo + 0.000001, hi - 0.000001)
+        aoe_core::clamp_f64(value, lo + 0.000001, hi - 0.000001)
     })
 }
 

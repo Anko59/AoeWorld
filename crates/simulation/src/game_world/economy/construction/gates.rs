@@ -50,7 +50,11 @@ impl GameWorld {
             if let Some(gate) = self.economy.buildings.get_mut(&id) {
                 gate.gate_open = open;
             }
-            self.resource_collision_changed();
+            if open {
+                self.collision_opened(rect);
+            } else {
+                self.collision_closed(rect);
+            }
         }
     }
 }

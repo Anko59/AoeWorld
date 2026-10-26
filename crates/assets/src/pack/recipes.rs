@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub fn encode(buildings: &[BuildingComposition], frames: &[FrameRecord]) -> Result<String, Error> {
-    if buildings.len() > 32 {
+    if buildings.len() > crate::catalog::GAMEPLAY_BUILDING_IDS.len() {
         return Err(invalid("recipes", 0, "too many buildings"));
     }
     let mut bytes = vec![buildings.len() as u8];

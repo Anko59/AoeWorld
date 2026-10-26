@@ -1,6 +1,8 @@
 mod dispatch;
 
-use crate::{agents, assets, e2e, gates, ledger, mutation, native, qa, review, ship, slots};
+use crate::{
+    agents, assets, e2e, gates, ledger, mutation, native, perf_scale, qa, review, ship, slots,
+};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -81,6 +83,7 @@ enum Command {
         argv: Vec<String>,
     },
     TestWasm,
+    TestWasmFocused,
     TestE2e,
     TestCreatorSource,
     TestGeographicMatrix,
@@ -95,6 +98,10 @@ enum Command {
     PerfPressure,
     PerfStress,
     PerfTimingReport,
+    /// Headless 100-player, 100,000-unit tick and server fan-out measurement.
+    PerfScale(perf_scale::Options),
+    /// The real server at scale: one human, Python AIs, a population cap, a browser frame rate.
+    ScaleMatch(perf_scale::scale_match::Options),
     #[command(name = "perf-soak-10")]
     PerfSoak10,
     #[command(name = "perf-soak-30")]
@@ -150,6 +157,11 @@ enum Command {
         previous: Option<PathBuf>,
     },
     RepoPolicyCheck,
+    /// Build or test the Python bindings of the AI SDK (`make sdk-python`, `make sdk-python-test`).
+    SdkPython {
+        #[command(subcommand)]
+        action: crate::sdk_python::Action,
+    },
     SourceCountryProbe(e2e::CountryProbeArgs),
     SourceQualify {
         #[arg(long)]

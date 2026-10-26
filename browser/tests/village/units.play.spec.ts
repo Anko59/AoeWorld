@@ -22,10 +22,14 @@ test("an owned sheep stops herding when Stop is pressed", async ({
   page,
   request,
 }) => {
+  test.setTimeout(120_000);
   expect((await request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page);
   await page.goto("/?play=1#zoom=.45");
-  await expect(page.locator("#connection")).toHaveText("connected");
+  // The native pack loads before the socket connects, as in the Militia test.
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 60_000,
+  });
   await centerVillage(page);
   await freshHud(page);
   const neutral = (await actors(page)).find(
@@ -65,6 +69,27 @@ test("an owned sheep stops herding when Stop is pressed", async ({
   expect(
     Math.hypot(stopped.x - destination.x, stopped.y - destination.y),
   ).toBeGreaterThan(20);
+});
+
+test("a shepherd counts as a food villager from the order on", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(150_000);
+  expect((await request.post("/maps/reset")).status()).toBe(204);
+  await gameAssets(page);
+  await page.goto("/?play=1#zoom=.45");
+  // The native pack loads before the socket connects, as in the Militia test.
+  await expect(page.locator("#connection")).toHaveText("connected", {
+    timeout: 60_000,
+  });
+  await centerVillage(page);
+  await freshHud(page);
+  await expect(page.locator("#workers-food")).toHaveText("0");
+  await click(page, "Villager");
+  await click(page, "Sheep", "right");
+  // A shepherd is a food villager before any carcass is worked.
+  await expect(page.locator("#workers-food")).toHaveText("1");
 });
 
 test("private native gameplay captures and prepares the units showcase", async ({
@@ -173,13 +198,25 @@ test("train Militia, attack a sheep, and hunt and butcher a deer through right-c
     .toBe(true);
   await click(page, "Villager");
   await expect(page.locator("#selection-name")).toHaveText("Villager");
-  const deer = await click(page, "Deer", "right");
-  await expect(page.locator("#selection-task")).toContainText("Hunting");
+  // Fleeing deer can leave the scout's line of sight, and fog then removes
+  // them from the HUD between a read and the click; retry the order until a
+  // visible deer takes it.
+  await expect(async () => {
+    await click(page, "Deer", "right");
+    await expect(page.locator("#selection-task")).toContainText("Hunting", {
+      timeout: 2_000,
+    });
+  }).toPass({ timeout: 25_000 });
+  // Herd deer overlap on screen, so the right-click may pick a neighbour of
+  // the deer the helper aimed at. Only this villager hunts, so any slain deer
+  // is its kill.
   await expect
-    .poll(async () => (await actors(page)).find((a) => a.id === deer.id)?.hp, {
-      timeout: 70_000,
-    })
-    .toBe(0);
+    .poll(
+      async () =>
+        (await actors(page)).some((a) => a.kind === "Deer" && a.hp === 0),
+      { timeout: 70_000 },
+    )
+    .toBe(true);
   await expect(page.locator("#selection-task")).toContainText("Hunting");
   await expect(page.locator("#selection-load")).toContainText("food", {
     timeout: 15_000,

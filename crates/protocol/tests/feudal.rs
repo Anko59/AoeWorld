@@ -20,15 +20,17 @@ fn feudal_build_and_research_orders_and_age_rejection_have_appended_goldens() {
                 builder_ids: vec![EntityId(2)],
                 kind,
                 origin: TileCoord::new(10, 20),
+                queued: false,
             };
             let bytes = encode_gameplay_client(&order).unwrap();
             assert_eq!(decode_gameplay_client(&bytes).unwrap(), order);
             bytes
         })
         .collect();
+    // Shift placement adds a queue boolean to the current build wire.
     let expected: Vec<_> = cases
         .iter()
-        .map(|&(_, index)| vec![8, 1, 1, 2, index, 20, 40])
+        .map(|&(_, index)| vec![8, 1, 1, 2, index, 20, 40, 0])
         .collect();
     assert_eq!(actual, expected, "current codec bytes: {actual:?}");
     for (tech, index) in [
@@ -69,6 +71,7 @@ fn dark_players_cannot_claim_feudal_techs_and_wheelbarrow_loads_round_trip() {
         population_cap: 5,
         age: Age::Dark,
         researched: Tech::DoubleBitAxe.bit(),
+        market_prices: aoe_protocol::MarketPrices::default(),
     };
     let mut snapshot = GameplayServerMessage::Snapshot {
         revision: 1,
@@ -104,6 +107,8 @@ fn dark_players_cannot_claim_feudal_techs_and_wheelbarrow_loads_round_trip() {
         death_tick: None,
         hunt_target: None,
         death_hunt: None,
+        auto_scout: false,
+        cargo_count: 0,
     });
     let bytes = encode_gameplay_server(&snapshot).unwrap();
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);

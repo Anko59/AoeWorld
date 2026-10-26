@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 aoe-assets = { path = "../assets" }
 aoe-core.workspace = true
+aoe-rendering = { path = "../rendering" }
 aoe-map.workspace = true
 aoe-scenario.workspace = true
 aoe-simulation.workspace = true

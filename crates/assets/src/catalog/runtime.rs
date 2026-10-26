@@ -13,6 +13,25 @@ pub struct RuntimeSpriteSource {
     pub terrain_topology: Option<TerrainFrameTopology>,
 }
 
+pub const PLAYER_ROLES: [AssetRole; 11] = [
+    AssetRole::CavalryStanding,
+    AssetRole::CavalryWalking,
+    AssetRole::VillagerStanding,
+    AssetRole::VillagerWalking,
+    AssetRole::VillagerChopping,
+    AssetRole::VillagerCarryingWood,
+    AssetRole::VillagerForaging,
+    AssetRole::VillagerCarryingFood,
+    AssetRole::VillagerCarryingGold,
+    AssetRole::VillagerCarryingStone,
+    AssetRole::VillagerMiningStone,
+];
+
+pub fn actor_maskable(index: usize) -> bool {
+    let neutral = super::units::Pose::NeutralSheepStand as usize;
+    !(neutral..neutral + 4).contains(&index)
+}
+
 impl RuntimeSpriteSource {
     pub fn manifest_source(self) -> String {
         format!("{}:[32, 112, 108, 115]:{}", self.archive, self.id)
@@ -62,11 +81,14 @@ pub const FISHING: [(usize, u32, u32, usize); 7] = [
 
 /// Keep standing wall damage cells and sample the ambient Dock wake. The
 /// 60-cell, 150ms native wake keeps its nine-second loop at 30 cells, 300ms.
-/// Static art, construction angles and the 200ms Mill sails stay complete.
+/// Castle Mill/Blacksmith ambient layers keep two poses; their large native
+/// rectangles otherwise exhaust the object pages. Construction stays complete.
 pub fn building_frame_step(unit_id: i32, frames: u16, angles: u16, seconds: f32) -> usize {
     if unit_id == 72 && frames > 0 {
         usize::from(frames)
-    } else if matches!(unit_id, 45 | 133)
+    } else if matches!(unit_id, 130 | 18) && angles == 1 && frames > 1 && seconds > 0.0 {
+        usize::from(frames.div_ceil(2))
+    } else if matches!(unit_id, 45 | 133 | 47)
         && angles == 1
         && frames > 1
         && frames.is_multiple_of(2)

@@ -101,31 +101,8 @@ async fn gpu_pixel(renderer: &Renderer, count: usize) -> [u8; 4] {
         mapped_at_creation: false,
     });
     let view = target.create_view(&Default::default());
-    let depth = renderer.depth.create_view(&Default::default());
     let mut encoder = renderer.device.create_command_encoder(&Default::default());
-    {
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &depth,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            ..Default::default()
-        });
-        renderer.draw_on(&mut pass, count as u32);
-    }
+    renderer.encode_world(&mut encoder, &view, count as u32, wgpu::Color::BLACK);
     encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
             texture: &target,

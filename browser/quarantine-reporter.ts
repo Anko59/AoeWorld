@@ -12,6 +12,8 @@ import type {
 
 function steps(items: TestStep[]): unknown[] {
   return items.map((step) => ({
+    title: step.title,
+    duration: step.duration,
     category: step.category,
     error: step.error ?? null,
     steps: steps(step.steps),
@@ -43,7 +45,9 @@ export default class QuarantineReporter implements Reporter {
         project: test.parent.project()?.name ?? "unknown",
       };
     }
-    config.metadata.aoeQuarantine = this.evidence;
+    // Projects inherit this object; mutating it repeats the entire step tree in
+    // both JSON project lists. Keep the complete evidence once at config level.
+    config.metadata = { ...config.metadata, aoeQuarantine: this.evidence };
   }
 
   onTestEnd(test: TestCase, result: TestResult): void {

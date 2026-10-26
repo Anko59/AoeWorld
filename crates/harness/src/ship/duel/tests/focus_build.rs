@@ -15,6 +15,12 @@ fn focused_browser_build_generates_the_diagnostics_bundle() {
         "[package]\nname = \"aoe-client\"\n[features]\ndiagnostics = []\n",
     )
     .unwrap();
+    fs::create_dir_all(root.join("crates/rendering/src/web")).unwrap();
+    fs::write(
+        root.join("crates/rendering/src/web/shaders.js"),
+        "runtime shader dependency",
+    )
+    .unwrap();
     for program in ["cargo", "wasm-bindgen"] {
         let path = root.join(program);
         fs::write(&path, "#!/bin/sh\nprintf '%s %s\\n' \"$0\" \"$*\" >> \"$AOE_FOCUSED_BUILD_FIXTURE/commands\"\n").unwrap();
@@ -34,4 +40,9 @@ fn focused_browser_build_generates_the_diagnostics_bundle() {
         .expect("focused E2E builds must serve diagnostics.html on a fresh tree");
     assert!(lines[diagnostics - 1].contains("--features diagnostics"));
     assert!(lines.iter().any(|line| line.contains("--out-dir web/pkg")));
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("assets browser-shaders"))
+    );
 }

@@ -31,6 +31,10 @@ fn object<'a>(value: &'a mut Value, section: &str) -> &'a mut Map<String, Value>
 }
 
 fn reject_like_original(bytes: &[u8]) {
+    assert!(
+        super::super::decode_manifest(bytes).is_err(),
+        "startup decoder accepted invalid metadata"
+    );
     let optimized = serde_json::from_slice::<Manifest>(bytes).err().unwrap();
     let original = serde_json::from_slice::<OriginalManifest>(bytes)
         .err()
@@ -100,4 +104,48 @@ fn used_fields_and_page_dimension_guards_preserve_the_original_shape() {
         std::mem::size_of::<FrameRecord>() < std::mem::size_of::<aoe_assets::pack::FrameRecord>()
     );
     assert!(std::mem::size_of::<AtlasPage>() < std::mem::size_of::<aoe_assets::pack::AtlasPage>());
+}
+
+#[wasm_bindgen_test]
+fn startup_manifest_projection_preserves_current_fields_and_integer_bounds() {
+    let bytes = serde_json::to_vec(&fixture()).unwrap();
+    let projected = super::super::decode_manifest(&bytes).unwrap();
+    assert_eq!(projected.frames[0].anchor_y, 2);
+    assert_eq!(projected.pages[0].width, 2048);
+    assert_eq!(projected.building_data, "00");
+    for (section, field, too_large) in [
+        ("root", "version", 65536_i64),
+        ("frame", "frame", 4294967296),
+        ("frame", "anchor_x", 2147483648),
+        ("frame", "x", 65536),
+    ] {
+        for invalid in [
+            Value::Null,
+            serde_json::json!(too_large),
+            serde_json::json!("1"),
+            serde_json::json!(1.5),
+        ] {
+            let mut value = fixture();
+            object(&mut value, section).insert(field.into(), invalid);
+            assert!(super::super::decode_manifest(&serde_json::to_vec(&value).unwrap()).is_err());
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn browser_chunk_projection_rejects_wrong_types_ranges_and_duplicate_fields() {
+    let chunk = super::decode_chunk(r#"{"x":-2,"y":7,"payload_hex":"abcd"}"#).unwrap();
+    assert_eq!(
+        (chunk.x, chunk.y, chunk.payload_hex.as_str()),
+        (-2, 7, "abcd")
+    );
+    for invalid in [
+        r#"{"x":0,"x":1,"y":2,"payload_hex":"00"}"#,
+        r#"{"x":2147483648,"y":0,"payload_hex":"00"}"#,
+        r#"{"x":0.5,"y":0,"payload_hex":"00"}"#,
+        r#"{"x":0,"y":0,"payload_hex":null}"#,
+        r#"[0,0,"00"]"#,
+    ] {
+        assert!(super::decode_chunk(invalid).is_err());
+    }
 }

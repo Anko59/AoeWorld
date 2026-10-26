@@ -12,7 +12,11 @@ pub use fish::scene_resource_animation_frame;
 
 #[path = "village/bounds.rs"]
 mod bounds;
-pub use bounds::{scene_building_visible, scene_unit_bounds, scene_unit_render_key};
+use bounds::object_depth;
+pub use bounds::{
+    scene_building_hit, scene_building_visible, scene_unit_bounds, scene_unit_depth,
+    scene_unit_render_key,
+};
 
 /// Fallback broadleaf selection retains its paired shadow index.
 fn scene_resource_index(resource: SceneResource, count: usize) -> Option<usize> {
@@ -39,7 +43,12 @@ pub(super) fn resource_presentation_at(
     if resource.kind == 0 && matches!(resource.visual_family, 5 | 6) {
         return fish::frame(art, resource, animation).map(|f| (f, None));
     }
-    if resource.kind >= SceneResource::CLIFF {
+    if resource.kind >= SceneResource::CLIFF
+        || matches!(
+            resource.kind,
+            SceneResource::CHOPPED_TREE | SceneResource::TREE_STUMP
+        )
+    {
         return scenery::frame(art, resource).map(|frame| (frame, None));
     }
     if resource.kind == 1 {
@@ -95,6 +104,8 @@ pub(super) fn world_sprite_frames(
     result
 }
 
+// Keep the shared object pass out of the large backend packet builders.
+#[inline(never)]
 pub(super) fn emit_world_sprite_frames(
     art: &GameArt,
     terrain: &[SceneTerrain],
@@ -134,6 +145,10 @@ pub(super) fn emit_world_sprite_frames(
                 continue;
             };
             let depth = object_depth(object);
+            if resource.kind == SceneResource::RALLY_FLAG && art.scenery.rally_flags.is_empty() {
+                scenery::emit_flag(resource, camera, depth, &mut emit);
+                continue;
+            }
             if let Some(shadow_frame) = paired_shadow {
                 if let Some(sprite) = scene_sprite(
                     shadow_frame,
@@ -157,9 +172,15 @@ pub(super) fn emit_world_sprite_frames(
             ) {
                 emit((sprite, shadow_frame, depth, object.stable_id()));
             }
-            if let Some(sprite) =
+            if let Some(mut sprite) =
                 scene_sprite(frame, resource.position, resource.elevation_meters, camera)
             {
+                if resource.kind <= SceneResource::CHOPPED_TREE
+                    && !(resource.kind == 0 && matches!(resource.visual_family, 5 | 6))
+                {
+                    sprite.pages[3] |= Sprite::OCCLUDER;
+                }
+                sprite.pages[3] |= u32::from(resource.highlight & 3) << 4;
                 emit((
                     sprite,
                     scaled(frame, camera.zoom as f32),
@@ -171,7 +192,23 @@ pub(super) fn emit_world_sprite_frames(
         };
         let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
         if unit.kind.building_side().is_some() {
-            village::building(art, unit, camera, animation, &mut emit);
+            village::building(art, unit, camera, animation, &mut |(
+                mut sprite,
+                frame,
+                depth,
+                id,
+            )| {
+                if unit.visual.ghost() {
+                    sprite.color = if unit.visual.invalid_ghost() {
+                        [3.0, 0.2, 0.2, 0.5]
+                    } else {
+                        [1.0, 1.0, 1.0, 0.5]
+                    };
+                } else if unit.kind.building_id().is_some_and(|id| id != 50) {
+                    sprite.pages[3] |= Sprite::OCCLUDER;
+                }
+                emit((sprite, frame, depth, id));
+            });
             continue;
         }
         let Some((frames, stride, animated)) = village::frames(art, unit) else {
@@ -235,7 +272,8 @@ pub(super) fn emit_world_sprite_frames(
                 depths: [0.0; 4],
                 terrain_blend: [[0.0; 4]; 2],
                 pages: [frame.atlas.page, 0, 0, 0],
-            };
+            }
+            .with_owner(unit.visual);
             let mut scaled_frame = frame;
             scaled_frame.size = scaled_frame.size.map(|value| value * scale);
             scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
@@ -257,29 +295,6 @@ fn world_frame(frame: GameFrame) -> GameFrame {
         frame,
         aoe_core::ISO_TILE_WIDTH as f32 / crate::terrain::TERRAIN_NATIVE_DIAMOND_WIDTH,
     )
-}
-
-/// Depth by which an object clears the ground it stands on. A frame reaches
-/// below its hotspot (a gold pile by half its height), where flat ground is
-/// nearer the viewer by one depth unit per 32 pixels; the tallest reviewed
-/// overhang is 43 pixels. One shared offset keeps objects ordered among
-/// themselves, and a one-level rise in front (two units) still hides them.
-const GROUND_CLEARANCE: f64 = 1.5;
-
-/// The rendered body depth, including clearance below the native hotspot.
-pub fn scene_unit_depth(unit: SceneUnit) -> f64 {
-    object_depth(WorldObject::Unit(unit))
-}
-
-fn object_depth(object: WorldObject) -> f64 {
-    let position = object.position();
-    // The native Town Center reaches 64 source pixels below its anchor, farther
-    // than a tree/unit. Its front foundation must clear its own flat footprint.
-    let clearance = match object {
-        WorldObject::Unit(unit) if unit.kind.building_side().is_some() => 3.0,
-        _ => GROUND_CLEARANCE,
-    };
-    surface_depth([position[0], position[1], object.elevation_meters()]) + clearance
 }
 
 #[derive(Clone, Copy)]

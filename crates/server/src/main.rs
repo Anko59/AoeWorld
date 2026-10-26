@@ -22,7 +22,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let listener = tokio::net::TcpListener::bind(config.bind).await?;
     tracing::info!(address = %config.bind, scenario = config.scenario.name, "AoeWorld listening");
-    tokio::spawn(state.clone().run_ticks());
+    if !Config::arena_from_env() {
+        tokio::spawn(state.clone().run_ticks());
+    }
     axum::serve(listener, app(state))
         .with_graceful_shutdown(shutdown_signal())
         .await?;

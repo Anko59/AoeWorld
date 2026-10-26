@@ -26,11 +26,20 @@ impl MapChunkGenerator {
         if tile.x < 0 || tile.y < 0 || tile.x >= self.width_tiles || tile.y >= self.width_tiles {
             return Ok(None);
         }
-        if self.provider.is_some() {
-            provider::sample_base_tile(self, tile, cancelled).map(Some)
-        } else {
-            Ok(Some(self.sample_base_tile(tile)))
+        if let Ok(memo) = self.derived.point.lock()
+            && let Some(base) = memo.get_base(tile)
+        {
+            return Ok(base);
         }
+        let base = if self.provider.is_some() {
+            provider::sample_base_tile(self, tile, cancelled).map(Some)?
+        } else {
+            Some(self.sample_base_tile(tile))
+        };
+        if let Ok(mut memo) = self.derived.point.lock() {
+            memo.insert_base(tile, base);
+        }
+        Ok(base)
     }
 
     /// Shaped physical water kind without elevation, biome or composition;
@@ -86,7 +95,7 @@ impl MapChunkGenerator {
 
     /// Conservative depth test: `true` proves that every tile within
     /// `radius` tiles is lake or ocean water, without sampling those tiles.
-    pub(super) fn open_water_certain_near(
+    pub fn open_water_certain_near(
         &self,
         tile: TileCoord,
         radius: i32,
@@ -113,15 +122,40 @@ impl MapChunkGenerator {
         tile: TileCoord,
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<(Tile, Option<ResourceNode>)>, EnvironmentPageError> {
-        self.landscape_point_with_cancel(tile, cancelled)
+        self.memoized_point(tile, cancelled)
+    }
+
+    /// The terrain and resource of one tile, memoized per generator. A hit
+    /// still honours cancellation first; errors are never stored.
+    pub(super) fn memoized_point(
+        &self,
+        tile: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<(Tile, Option<ResourceNode>)>, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        if let Some(point) = self.resident_point(tile) {
+            return Ok(point);
+        }
+        if let Ok(memo) = self.derived.point.lock()
+            && let Some(point) = memo.get(tile)
+        {
+            return Ok(point);
+        }
+        let _span = self.measure_navigation(crate::NavigationPhase::TerrainPoint);
+        let point = self
+            .landscape_point_with_cancel(tile, cancelled)?
             .map(|point| {
-                point.map(|point| {
-                    (
-                        point.tile.terrain,
-                        point.resource.map(|resource| resource.node),
-                    )
-                })
-            })
+                (
+                    point.tile.terrain,
+                    point.resource.map(|resource| resource.node),
+                )
+            });
+        if let Ok(mut memo) = self.derived.point.lock() {
+            memo.insert(tile, point);
+        }
+        Ok(point)
     }
 
     /// One bounded shared source evaluation; trees/resources and terrain are the

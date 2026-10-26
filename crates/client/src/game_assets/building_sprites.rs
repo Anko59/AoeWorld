@@ -51,8 +51,8 @@ pub(super) fn select(
     manifest: &Manifest,
     selected: &mut Vec<usize>,
     domains: &mut Vec<AtlasDomain>,
-) -> Result<[Option<std::ops::Range<usize>>; 45], JsValue> {
-    let mut ranges: [Option<std::ops::Range<usize>>; 45] = std::array::from_fn(|_| None);
+) -> Result<[Option<std::ops::Range<usize>>; 71], JsValue> {
+    let mut ranges: [Option<std::ops::Range<usize>>; 71] = std::array::from_fn(|_| None);
     let plan = aoe_assets::catalog::buildings::supplemental(
         |source| source_present(manifest, source),
         |id| native(manifest, id),
@@ -77,11 +77,7 @@ pub(super) fn select(
         let start = selected.len();
         for index in frames.into_iter().step_by(item.step).take(item.take) {
             selected.push(index);
-            domains.push(if item.slot == 5 {
-                AtlasDomain::Terrain
-            } else {
-                AtlasDomain::Objects
-            });
+            domains.push(aoe_assets::catalog::buildings::domain(item.slot));
         }
         if let Some(range) = &mut ranges[item.slot] {
             range.end = selected.len();
@@ -98,7 +94,7 @@ pub(super) fn select(
 pub(super) fn crop_farm(
     manifest: &mut Manifest,
     selected: &[usize],
-    ranges: &[Option<std::ops::Range<usize>>; 45],
+    ranges: &[Option<std::ops::Range<usize>>; 71],
 ) -> Result<(), JsValue> {
     if let Some(range) = &ranges[5] {
         for semantic in range.clone() {
@@ -141,4 +137,35 @@ fn native_stages(manifest: &Manifest, side: f32) -> bool {
         }
     }
     found
+}
+
+/// The licensed DE install supplies the waypoint flag absent from the trial.
+/// Sample its 90-cell loop into ten cells; classic MFLAG remains the base pack.
+pub(super) fn rally(
+    manifest: &Manifest,
+    selected: &mut Vec<usize>,
+    domains: &mut Vec<AtlasDomain>,
+) -> Result<Option<std::ops::Range<usize>>, JsValue> {
+    let source = "de/b_misc_waypoint_flag_x1.sld";
+    let Some(frames) = source_frames(manifest, source, 90) else {
+        if source_present(manifest, source) {
+            return Err(error("Corrupt rally flag art"));
+        }
+        return Ok(None);
+    };
+    if selected.len() > MAX_SELECTED_FRAMES - 10 {
+        return Err(error("Too many selected flag frames"));
+    }
+    let start = selected.len();
+    selected.extend(frames.into_iter().step_by(9));
+    domains.extend(std::iter::repeat_n(AtlasDomain::Objects, 10));
+    Ok(Some(start..selected.len()))
+}
+
+pub(super) fn rally_frames(
+    records: &[GameFrame],
+    range: Option<std::ops::Range<usize>>,
+    classic: Vec<GameFrame>,
+) -> Vec<GameFrame> {
+    range.map_or(classic, |r| records[r].to_vec())
 }

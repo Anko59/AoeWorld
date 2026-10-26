@@ -28,7 +28,7 @@ pub(super) use routes::routes;
 
 const CONTROLLER_TOKEN_HEADER: &str = "x-aoeworld-controller-token";
 const PREVIEW_SAMPLES_PER_AXIS: u16 = 16;
-struct RequestCancellation(Arc<AtomicBool>);
+pub(crate) struct RequestCancellation(Arc<AtomicBool>);
 
 impl Drop for RequestCancellation {
     fn drop(&mut self) {
@@ -36,12 +36,12 @@ impl Drop for RequestCancellation {
     }
 }
 
-fn request_cancellation() -> (RequestCancellation, Arc<AtomicBool>) {
+pub(crate) fn request_cancellation() -> (RequestCancellation, Arc<AtomicBool>) {
     let cancelled = Arc::new(AtomicBool::new(false));
     (RequestCancellation(cancelled.clone()), cancelled)
 }
 
-fn controller_token(headers: &HeaderMap) -> Option<ResumeToken> {
+pub(crate) fn controller_token(headers: &HeaderMap) -> Option<ResumeToken> {
     let value = headers.get(CONTROLLER_TOKEN_HEADER)?.to_str().ok()?;
     if value.len() != 48 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return None;
@@ -393,6 +393,7 @@ pub(super) async fn package(
 pub(super) async fn chunk(
     Path((content_hash, x, y)): Path<(String, i32, i32)>,
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<CompactChunk>, StatusCode> {
     let cache_key = terrain_cache::Key {
         content_hash: content_hash.clone(),
@@ -402,6 +403,14 @@ pub(super) async fn chunk(
     if let Some(chunk) = state.terrain_cache.lock().await.get(&cache_key) {
         return Ok(Json(chunk));
     }
+    let gameplay = state.gameplay.read().await.clone();
+    if let Some(chunk) = gameplay.initial_terrain_chunk(&cache_key) {
+        return Ok(Json(chunk));
+    }
+    let human = match controller_token(&headers) {
+        Some(token) => gameplay.is_controller(token).await,
+        None => false,
+    };
     let package = state
         .map_packages
         .read()
@@ -418,21 +427,22 @@ pub(super) async fn chunk(
     let provider = page_residency(&state, &package, cancelled.clone())
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
-    let chunk = tokio::task::spawn_blocking(move || {
-        let generator = if let Some(provider) = provider {
-            package
-                .generator_with_page_provider(provider)
-                .map_err(|_| StatusCode::NOT_FOUND)?
-        } else {
-            package.generator()
-        };
-        let scene = generator
-            .landscape_chunk_with_cancel(x, y, &|| cancelled.load(Ordering::Acquire))
-            .map_err(|_| StatusCode::NOT_FOUND)?;
-        CompactChunk::encode(&scene).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
-    })
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+    let chunk = gameplay
+        .prepare_terrain(human, move || {
+            let generator = if let Some(provider) = provider {
+                package
+                    .generator_with_page_provider(provider)
+                    .map_err(|_| StatusCode::NOT_FOUND)?
+            } else {
+                package.generator()
+            };
+            let scene = generator
+                .landscape_chunk_with_cancel(x, y, &|| cancelled.load(Ordering::Acquire))
+                .map_err(|_| StatusCode::NOT_FOUND)?;
+            CompactChunk::encode(&scene).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+        })
+        .await
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)??;
     state
         .terrain_cache
         .lock()
@@ -441,7 +451,7 @@ pub(super) async fn chunk(
     Ok(Json(chunk))
 }
 
-async fn page_residency(
+pub(crate) async fn page_residency(
     state: &AppState,
     package: &MapPackage,
     cancelled: Arc<AtomicBool>,

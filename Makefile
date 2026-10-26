@@ -11,6 +11,7 @@ POLICY_IMAGE := aoeworld/policy:0.20.2
 COVERAGE_IMAGE := aoeworld/coverage:0.9.1
 FUZZ_IMAGE := aoeworld/fuzz:nightly-2026-09-01-0.13.2
 MUTATION_IMAGE := aoeworld/mutation:27.1.0
+SDK_IMAGE := aoeworld/sdk-python:1.15.0
 # CI sets e.g. type=gha,version=2 to reuse BuildKit layers; empty keeps local builds unchanged.
 DOCKER_BUILD_CACHE ?=
 COMMA := ,
@@ -27,7 +28,7 @@ HARNESS_CARGO_CACHE ?= $(GIT_COMMON)/aoe-cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
 # Expose the cache at its host path too: harness commands start sibling containers.
 CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo) $(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(HARNESS_CARGO_CACHE))) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
-HEAVY_ENV := -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e GITHUB_ACTIONS -e CI -e AOE_DISK_FLOOR_GIB -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
+HEAVY_ENV := -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e CARGO_INCREMENTAL -e CARGO_PROFILE_DEV_DEBUG -e CARGO_PROFILE_TEST_DEBUG -e GITHUB_ACTIONS -e CI -e AOE_DISK_FLOOR_GIB -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
 # The CPUs each slot gives its containers: gates/heavy.json cores shared among its slots. The
 # harness that holds the slot computes the count and exports it as AOE_SLOT_CPUS beside
 # AOE_HEAVY_SLOT; make only expands that variable, so there is no host binary to find. A container
@@ -123,7 +124,7 @@ SOURCE_QUAL_RUN := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID)
 SOURCE_QUAL_GEOGRAPHIC_ARGS := $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY),--geographic-package-directory '$(AOE_SOURCE_QUAL_GEOGRAPHIC_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH),--geographic-content-hash '$(AOE_SOURCE_QUAL_GEOGRAPHIC_CONTENT_HASH)')
 SOURCE_QUAL_SCALE_ARGS := $(if $(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY),--scale-512-package-directory '$(AOE_SOURCE_QUAL_512_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_512_CONTENT_HASH),--scale-512-content-hash '$(AOE_SOURCE_QUAL_512_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY),--scale-16384-package-directory '$(AOE_SOURCE_QUAL_16384_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_16384_CONTENT_HASH),--scale-16384-content-hash '$(AOE_SOURCE_QUAL_16384_CONTENT_HASH)') $(if $(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY),--scale-262144-package-directory '$(AOE_SOURCE_QUAL_262144_PACKAGE_DIRECTORY)') $(if $(AOE_SOURCE_QUAL_262144_CONTENT_HASH),--scale-262144-content-hash '$(AOE_SOURCE_QUAL_262144_CONTENT_HASH)')
 BROWSER_RUN := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --ipc host --user $(UID):$(GID) -e HOME=$(ROOT)/.cache/browser-home $(ROOT_MOUNTS) -w $(ROOT)/browser $(BROWSER_IMAGE)
-DEV_ORCH_BASE := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_SCENARIO -e AOE_ASSET_PACK -e AOE_OPEN_MAP_PACKAGE -e AOE_FOG_DISABLED -e AOE_FOG_SHOWCASE -e DEV_PORT $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT)
+DEV_ORCH_BASE := docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_SCENARIO -e AOE_ASSET_PACK -e AOE_OPEN_MAP_PACKAGE -e AOE_FOG_DISABLED -e AOE_FOG_SHOWCASE -e AOE_MATCH_TOKEN -e AOE_ARENA -e AOE_PRESET_MAPS -e DEV_PORT $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT)
 DEV_ORCH_RUN := $(DEV_ORCH_BASE) $(ORCH_IMAGE)
 HARNESS_EVIDENCE_DIR ?= /tmp/aoeworld-harness-evidence
 HARNESS_CADENCE ?= edit
@@ -196,7 +197,7 @@ doctor:
 recover:
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- recover
 
-include make/agents.mk make/ship.mk make/qualification.mk make/heavy.mk make/phony.mk make/help.mk make/assets.mk make/geodata.mk make/release.mk
+include make/agents.mk make/ship.mk make/qualification.mk make/heavy.mk make/phony.mk make/help.mk make/assets.mk make/geodata.mk make/release.mk make/sdk.mk
 
 structure-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- structure-check

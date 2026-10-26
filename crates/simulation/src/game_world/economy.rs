@@ -11,29 +11,42 @@ mod dropoff;
 mod farm;
 #[path = "economy/fishing/mod.rs"]
 mod fishing;
+#[path = "economy/garrison/mod.rs"]
+mod garrison;
 #[path = "economy/construction/gates.rs"]
 mod gates;
 mod gathering;
+pub use garrison::GarrisonedUnit;
 mod hash;
+mod market;
 mod movement;
 mod navigation;
 pub(crate) mod placement;
+mod scouting;
 mod start_site;
 mod starting_kit;
 mod tick;
-mod training;
+pub use tick::TickPhase;
+pub(crate) mod training;
+pub use training::rally::{RallyPoint, RallyTarget};
+#[path = "economy/construction/bridge.rs"]
+mod bridge;
 mod wall;
 
 pub use buildings::{
     BUILDING_RULES, BuildingRules, MAX_POPULATION, MAX_WALL_SEGMENTS, trainable_units,
 };
+pub use market::{MARKET_RULES, MarketPrices};
 
-pub const MAX_ECONOMY_PLAYERS: usize = 16;
-pub const MAX_ECONOMY_BUILDINGS: usize = 256;
-/// Villagers one build order or one world may assign to construction.
+pub const MAX_ECONOMY_PLAYERS: usize = 128;
+/// Buildings (each wall segment is one) a seat may add to the world at the
+/// shipped 200 population: about 40 houses, 100 farms, the production and
+/// economy buildings, towers and several hundred wall segments.
+pub const BUILDINGS_PER_PLAYER: usize = 1_024;
+/// The most buildings per seat whatever the population ceiling.
+pub const MAX_BUILDINGS_PER_PLAYER: usize = 8_192;
+/// Villagers one build order may assign to construction.
 pub const MAX_BUILD_GROUP: usize = 32;
-pub const MAX_BUILDERS: usize = 80;
-pub const MAX_GATHERERS: usize = 80;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -46,8 +59,35 @@ pub enum UnitKind {
     Skirmisher,
     Spearman,
     ManAtArms,
+    LongSwordsman,
+    Pikeman,
+    Crossbowman,
+    EliteSkirmisher,
+    Knight,
+    LightCavalry,
+    Monk,
+    Mangonel,
+    BatteringRam,
+    Galley,
+    FireShip,
+    DemolitionShip,
+    TransportShip,
+    WarGalley,
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+impl UnitKind {
+    pub const fn is_naval(self) -> bool {
+        matches!(
+            self,
+            Self::FishingShip
+                | Self::Galley
+                | Self::FireShip
+                | Self::DemolitionShip
+                | Self::TransportShip
+                | Self::WarGalley
+        )
+    }
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum BuildingKind {
     TownCenter,
@@ -66,6 +106,11 @@ pub enum BuildingKind {
     Market,
     WatchTower,
     PalisadeGate,
+    Castle,
+    Monastery,
+    University,
+    SiegeWorkshop,
+    Bridge,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -123,7 +168,9 @@ pub struct PlayerEconomy {
     pub population_cap: u16,
     pub age: super::Age,
     /// Bit `1 << tech as u8` is set once researched.
-    pub researched: u32,
+    pub researched: u64,
+    /// The player's Market commodity prices, in gold per 100 units.
+    pub market_prices: MarketPrices,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TrainingEntry {
@@ -153,6 +200,10 @@ pub struct GameBuilding {
     pub research: Option<super::ResearchEntry>,
     /// Authoritative gate state, also retained in fog observations.
     pub gate_open: bool,
+    pub rally_point: Option<RallyPoint>,
+    /// Prepaid farm rebuilds held by a Mill (at most 99).
+    pub farm_reseeds: u8,
+    pub garrison: Vec<GarrisonedUnit>,
 }
 impl GameBuilding {
     /// Construction progress in thousandths, 1000 once complete.
@@ -202,7 +253,7 @@ pub const VILLAGE_RULES: VillageRules = VillageRules {
     },
     villager_food_cost: 50,
     villager_training_seconds: 25,
-    training_queue_limit: 5,
+    training_queue_limit: 15,
     replacement_radius_tiles: 10,
     start_search_radius_tiles: 32,
 };
@@ -211,6 +262,8 @@ pub const VILLAGE_RULES: VillageRules = VillageRules {
 pub enum EconomyError {
     #[error("entity does not exist")]
     UnknownEntity,
+    #[error("the building garrison is full")]
+    GarrisonFull,
     #[error("entity belongs to another player")]
     NotOwner,
     #[error("this unit kind cannot perform that command")]
@@ -231,6 +284,8 @@ pub enum EconomyError {
     InsufficientResources,
     #[error("town center footprint or spawn perimeter is unsuitable")]
     InvalidFootprint,
+    #[error("building footprint contains unexplored terrain")]
+    UnexploredFootprint,
     #[error("the building is already complete")]
     AlreadyComplete,
     #[error("that building kind cannot be constructed")]
@@ -249,10 +304,18 @@ pub enum EconomyError {
     TechRequirementMissing,
     #[error("the farm is exhausted or already worked")]
     FarmUnavailable,
-    #[error("bounded village state is full")]
+    #[error("a world-wide capacity is reached")]
     Capacity,
+    /// An order's unit group is empty, repeats a unit or exceeds
+    /// `MAX_BUILD_GROUP`, or a wall exceeds `MAX_WALL_SEGMENTS`.
+    #[error("the order's group or wall length is outside its bounds")]
+    OrderTooLarge,
     #[error("requires Feudal Age")]
     RequiresFeudalAge,
+    #[error("requires Castle Age")]
+    RequiresCastleAge,
+    #[error("trading needs a completed Market")]
+    NoMarket,
     #[error("player already has a starting village")]
     AlreadyStarted,
     #[error("village movement failed: {0}")]
@@ -261,13 +324,76 @@ pub enum EconomyError {
 
 #[derive(Debug, Default)]
 pub(crate) struct Economy {
+    pub(crate) garrison_orders: BTreeMap<EntityId, EntityId>,
+    pub(crate) garrison_reservations: BTreeMap<EntityId, u8>,
+    pub(crate) occupied_garrisons: BTreeSet<EntityId>,
+    pub(crate) ejections: BTreeMap<EntityId, (TileRect, Vec<GarrisonedUnit>)>,
+    pub(crate) cargo: BTreeMap<EntityId, Vec<EntityId>>,
+    pub(crate) embarked: BTreeMap<EntityId, EntityId>,
     pub(crate) players: BTreeMap<PlayerId, PlayerEconomy>,
     pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
+    /// Every building per player and kind, ascending by id: drop-off
+    /// candidates, housing and requirements read one player's buildings
+    /// without scanning the world. Maintained as buildings are placed and
+    /// removed; completion is checked per query.
+    pub(crate) dropoffs: BTreeMap<(PlayerId, BuildingKind), Vec<EntityId>>,
     pub(crate) blocked_tiles: BTreeSet<TileCoord>,
     pub(crate) open_gates: BTreeSet<EntityId>,
+    pub(crate) scouts: BTreeMap<EntityId, scouting::AutoScout>,
+    pub(crate) scout_searches: BTreeSet<EntityId>,
+    pub(crate) scout_cursor: Option<EntityId>,
     pub(crate) gatherers: BTreeMap<EntityId, GatherTask>,
     pub(crate) builders: BTreeMap<EntityId, BuildTask>,
     pub(crate) depletions: Vec<aoe_map::Depletion>,
+    pub(crate) limits: WorldLimits,
+}
+
+/// World-wide capacity limits, sized per seat: a world of `players` seats
+/// whose players may each reach `population` never fills them in play.
+/// Workers (gatherers, builders, hunters) are units, so one per unit of
+/// population covers every seat; buildings get `BUILDINGS_PER_PLAYER` per seat.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WorldLimits {
+    pub players: usize,
+    pub buildings: usize,
+    pub gatherers: usize,
+    pub builders: usize,
+    pub hunters: usize,
+    pub animals: usize,
+    /// Arrows and javelins in flight; a shot past it is not launched.
+    pub projectiles: usize,
+    /// The population ceiling of one player, however many houses stand.
+    pub population: u16,
+}
+
+impl WorldLimits {
+    /// The limits of a match of `players` seats whose players may each reach
+    /// `population`. Buildings per seat grow with a ceiling above the shipped
+    /// 200 (up to `MAX_BUILDINGS_PER_PLAYER`); workers are one per unit of
+    /// population. Never below the limits of a 16-seat world.
+    pub fn for_match(players: usize, population: u16) -> Self {
+        let seats = players.clamp(16, usize::from(u16::MAX));
+        let units = usize::from(population).max(usize::from(MAX_POPULATION));
+        let per_seat = (BUILDINGS_PER_PLAYER * units / usize::from(MAX_POPULATION))
+            .min(MAX_BUILDINGS_PER_PLAYER);
+        Self {
+            players: MAX_ECONOMY_PLAYERS.max(players),
+            buildings: seats * per_seat,
+            gatherers: seats * units,
+            builders: seats * units,
+            hunters: seats * units,
+            animals: seats * super::ANIMALS_PER_PLAYER,
+            // A shot lands before its shooter's next, so one per unit.
+            projectiles: seats * units,
+            population,
+        }
+    }
+}
+
+impl Default for WorldLimits {
+    fn default() -> Self {
+        Self::for_match(MAX_ECONOMY_PLAYERS, MAX_POPULATION)
+    }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum GatherPhase {
@@ -283,8 +409,12 @@ pub(crate) struct GatherTask {
     farm: Option<EntityId>,
     /// Set for a wildlife carcass rather than a map node or farm.
     pub(crate) animal: Option<EntityId>,
+    /// Retain the food profession even after an exhausted carcass is removed.
+    carcass_kind: Option<crate::AnimalKind>,
     fish: Option<aoe_map::ObjectKind>,
     tile: TileCoord,
+    /// Last reached work spot: certifies the local area after a long return.
+    work_tile: Option<TileCoord>,
     kind: ResourceKind,
     phase: GatherPhase,
     credits: u64,
@@ -295,15 +425,45 @@ pub(crate) struct GatherTask {
 }
 
 /// A villager assigned to a foundation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct BuildTask {
     pub(crate) building: EntityId,
     pub(crate) attempts: u8,
+    pub(crate) queue: Vec<EntityId>,
 }
 
 impl super::GameWorld {
+    pub fn limits(&self) -> WorldLimits {
+        self.economy.limits
+    }
+    /// Replace the capacity limits (scale measurements only).
+    pub fn set_limits(&mut self, limits: WorldLimits) {
+        self.economy.limits = limits;
+    }
     pub fn buildings(&self) -> impl Iterator<Item = &GameBuilding> {
         self.economy.buildings.values()
+    }
+    /// One player's buildings, kind by kind, from the per-player index.
+    pub(crate) fn player_buildings(&self, player: PlayerId) -> impl Iterator<Item = &GameBuilding> {
+        self.economy
+            .dropoffs
+            .range((player, BuildingKind::TownCenter)..)
+            .take_while(move |((owner, _), _)| *owner == player)
+            .flat_map(|(_, ids)| ids.iter())
+            .filter_map(|id| self.economy.buildings.get(id))
+    }
+    /// One player's buildings of one kind, ascending by id.
+    pub(crate) fn player_buildings_of(
+        &self,
+        player: PlayerId,
+        kind: BuildingKind,
+    ) -> impl Iterator<Item = &GameBuilding> {
+        self.economy
+            .dropoffs
+            .get(&(player, kind))
+            .into_iter()
+            .flatten()
+            .filter_map(|id| self.economy.buildings.get(id))
     }
     pub fn building(&self, id: EntityId) -> Option<&GameBuilding> {
         self.economy.buildings.get(&id)
@@ -316,6 +476,16 @@ impl super::GameWorld {
     }
     pub fn gathering_kind(&self, id: EntityId) -> Option<ResourceKind> {
         self.economy.gatherers.get(&id).map(|task| task.kind)
+    }
+    /// Every gatherer in id order with its resource kind and the carcass it
+    /// works, if any; one pass instead of a lookup per unit.
+    pub fn gatherers(
+        &self,
+    ) -> impl Iterator<Item = (EntityId, ResourceKind, Option<EntityId>)> + '_ {
+        self.economy
+            .gatherers
+            .iter()
+            .map(|(id, task)| (*id, task.kind, task.animal))
     }
     pub fn gather_target(&self, id: EntityId) -> Option<u64> {
         self.economy.gatherers.get(&id).map(|task| task.node)

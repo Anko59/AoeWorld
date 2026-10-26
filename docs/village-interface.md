@@ -14,8 +14,24 @@ double-click a unit to select every owned unit of that kind on screen. A group
 can contain both villagers and the scout. Right-clicking a resource tells its
 villagers to gather; the scout keeps its current order. Right-clicking ground
 moves the group. Move in the command panel arms a destination click; Stop
-cancels the job using a Move to each unit's current authoritative position.
-Carried loads remain governed by the simulation's Move rules.
+cancels each unit's current job and queued destinations. Carried loads remain
+governed by the simulation's Stop rules.
+
+Arrow keys pan the camera; alphabetic keys are reserved for commands. B opens
+economic buildings, then A places a Farm when a completed Mill is available.
+Ctrl+0–9 assigns owned living units to a local control group; 0–9 recalls it,
+a second tap within 350 ms centers its centroid, and Shift+number adds the
+current selection to that group. Editable fields and dialogs keep their keys.
+Shift+right-click queues up to sixteen movement destinations, including the
+active leg. Numbered flags and connecting lines show the authoritative queue
+for selected units. Plain orders and Stop replace or clear it. A blocked leg
+is skipped when reached; later valid destinations still execute deterministically.
+
+Selected production buildings show their rally flag in every renderer, even
+without optional flag art or beyond explored terrain. A local pack's original
+hammer and sword cursors indicate construction/repair and hunting/attack;
+authored cursors cover packs without those sheets. Right-clicking a damaged
+own building repairs it, charging half its original cost over a full HP bar.
 
 Click the Town Center footprint (or press H to select and center it), then press
 Q or click Train Villager. The cost is fifty food and the authoritative training
@@ -48,6 +64,32 @@ and fixture art do not qualify real-map play or finished RTS performance.
 
 Village command feedback uses the simulation destination rule and composed terrain.
 Resource hover highlights a gatherable node; selecting it shows remaining stock.
+The WebGPU default is a narrow, warm silhouette rim with the contextual gather
+cursor. `?hover=cursor` shows only that cursor, `?hover=outline` selects the
+default rim explicitly, and `?hover=glow` uses a wider inner glow. Invalid or
+absent flags select outline. The old ground circle is removed. Compatibility
+backends retain contextual cursors. Selection ellipses are unchanged.
+
+Classic AoE2's contextual gather cursors are the reference (moderate confidence
+about hover-only decoration, based on prior play rather than a running classic
+executable). DE definitely offers configurable hover highlights: its
+[official accessibility guide](https://www.ageofempires.com/age-ii-de-accessibility/)
+lists Off, Only Selections, Only Hovers and All. Confidence is high in that
+setting's existence; this prototype does not claim to reproduce DE's exact
+shader. DAT sprite outline masks alone cannot establish a hover interaction.
+
+The effects reuse the final visible coverage attachment and existing instanced
+contour pass. Cursor-only does not activate that pass. Outline/glow affect only
+the hovered sprite's visible opaque silhouette, preserving its interior,
+transparent holes and shadows. Hover picking stays on the existing four-Hz HUD
+path; there is no new per-frame unit traversal or sprite packet allocation.
+
+`browser/tests/proofs/hover-options.spec.ts` exercises all three resource kinds
+and modes. Without local configuration it uses synthetic art; an ignored
+`.cache/hover-options/capture.json` containing
+`{"url":"http://127.0.0.1:8121/"}` switches it to an already running native-pack
+`make dev` instance. The proof retains nine screenshots and served build IDs
+under `.cache/hover-options/`; these files must never enter Git.
 The minimap uses a diamond frame with own units, buildings and visible deposits.
 Grid remains available through its minimap button and G. Selection ellipses use
 a continuous constant-pixel stroke across all renderers and zoom levels.
@@ -73,3 +115,15 @@ costs and prerequisites enforced by the server. Camps and the Mill offer the
 Wheelbarrow. Construction and research can
 be cancelled from the panel. Building art is described in
 [Dark Age building art](assets/buildings.md).
+
+Production lines show one current training entry. Research replaces the lesser
+unit in that command slot, including Militia → Man-at-Arms → Long Swordsman,
+Archer → Crossbowman, Spearman → Pikeman, Skirmisher → Elite Skirmisher,
+Scout Cavalry → Light Cavalry and Galley → War Galley. Knight remains its own
+Castle Age line. A researched technology gives its slot to its next step, or
+leaves the panel when its line is complete.
+
+Double-click an owned building to select its kind throughout the visible play
+area. Group training uses the eligible selected building with the fewest queued
+units, with entity ID breaking ties. Pending clicks count until acknowledged
+state arrives, so a burst of clicks also spreads work between buildings.

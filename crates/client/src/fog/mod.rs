@@ -7,6 +7,12 @@ pub struct Fog {
 }
 
 impl Fog {
+    pub fn resident_bytes(&self) -> usize {
+        self.state.as_ref().map_or(0, |s| {
+            s.tiles.capacity() + s.overview.capacity() * std::mem::size_of::<(u16, u8)>()
+        })
+    }
+
     pub fn apply(&mut self, state: FogState) -> bool {
         if !state.valid() {
             return false;

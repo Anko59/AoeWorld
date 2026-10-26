@@ -66,7 +66,7 @@ test("private native-art interface capture: start, wood, training and five-villa
     JSON.stringify(await (await page.request.get(`/maps/${hash}`)).json()),
   );
   const token = await page.evaluate(() =>
-    sessionStorage.getItem("aoeworld.resume-token"),
+    localStorage.getItem("aoeworld.resume-token"),
   );
   if (!token) throw new Error("Controller token missing");
   expect(

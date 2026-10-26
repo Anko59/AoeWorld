@@ -1,4 +1,8 @@
 //! Browser mocks share these current wire fragments with the Rust codec.
+//! Building fragments append the current bounded garrison list.
+//! Empty tails are regenerated for the intentional building-state extension.
+//! Unit fragments append the authoritative Transport Ship cargo count.
+//! These pins intentionally change with the single current naval state schema.
 use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect, WorldPosition};
 use aoe_protocol::{
     BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState,
@@ -73,6 +77,8 @@ fn browser_unit_combat_fragments_match_the_current_codec() {
             death_tick: None,
             hunt_target: None,
             death_hunt: None,
+            auto_scout: false,
+            cargo_count: 0,
         };
         let mut expected = vec![
             1, 1, 0, 1, 7, 1, 128, 32, 128, 64, 0, 0, 2, kind as u8, 0, 0, 0,
@@ -96,6 +102,9 @@ fn browser_building_combat_fragment_matches_the_current_codec() {
         last_hit: None,
         age: aoe_protocol::Age::Dark,
         gate_open: false,
+        rally_point: None,
+        farm_reseeds: 0,
+        garrison: Vec::new(),
         construction: ConstructionState::Complete,
         progress_permille: 1000,
         los: 8,
@@ -117,6 +126,9 @@ fn browser_dock_fragment_matches_current_codec() {
         kind: BuildingKind::Dock,
         age: aoe_protocol::Age::Dark,
         gate_open: false,
+        rally_point: None,
+        farm_reseeds: 0,
+        garrison: Vec::new(),
         footprint: TileRect::new(TileCoord::new(5, 5), TileCoord::new(8, 8)),
         training_queue: vec![],
         hp: 1800,
@@ -150,6 +162,7 @@ fn snapshot() -> GameplayServerMessage {
             population_cap: 10,
             age: aoe_protocol::Age::Dark,
             researched: 0,
+            market_prices: aoe_protocol::MarketPrices::default(),
         }],
         buildings: vec![GameplayBuildingState {
             id: EntityId(1),
@@ -167,6 +180,9 @@ fn snapshot() -> GameplayServerMessage {
             last_hit: None,
             age: aoe_protocol::Age::Dark,
             gate_open: false,
+            rally_point: None,
+            farm_reseeds: 0,
+            garrison: Vec::new(),
         }],
     }
 }
@@ -177,6 +193,9 @@ fn browser_bytes() -> Vec<u8> {
         1, 0, 200, 1, 200, 1, 100, 200, 1, 6, 10, // Player and stockpile.
     ];
     bytes.extend(hex(include_str!("../../../browser/tests/wire/player.hex")));
+    bytes.extend(hex(include_str!(
+        "../../../browser/tests/wire/market-prices.hex"
+    ))); // Market prices: 100 gold per 100 units each.
     bytes.extend([
         1, 1, 0, 0, // Building count, id, player, TownCenter.
         252, 127, 252, 127, 132, 128, 1, 132, 128, 1, // Footprint.
@@ -227,7 +246,7 @@ fn browser_feudal_player_fragment_matches_the_current_codec() {
         } else {
             include_str!("../../../browser/tests/wire/feudal-player.hex")
         });
-        expected.splice(15..17, fragment);
+        expected.splice(15..17, fragment); // Age and researched only.
         assert_wire(message, expected);
     }
 }

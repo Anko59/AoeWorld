@@ -1,5 +1,4 @@
-use crate::gameplay::{ControllerLease, GameplayService, Ownership, Session};
-use aoe_core::EntityId;
+use crate::gameplay::{Access, ControllerLease, GameplayService, Ownership, Session};
 use aoe_protocol::{
     GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage, ResumeToken,
     decode_gameplay_client, encode_gameplay_server,
@@ -10,7 +9,9 @@ use std::{collections::BTreeMap, time::Duration};
 use tokio::{sync::mpsc, time::timeout};
 
 const LEASE_RESERVATION: Duration = Duration::from_secs(30);
-const SEND_TIMEOUT: Duration = Duration::from_millis(500);
+/// How long one socket write may take before the peer counts as gone: long
+/// enough for a bot busy deciding, short enough to free a dead connection.
+const SEND_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
     let (mut sink, mut stream) = socket.split();
@@ -18,23 +19,39 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
     let Some(Ok(Message::Binary(bytes))) = hello.ok().flatten() else {
         return;
     };
-    let Ok(GameplayClientMessage::Hello {
-        version: GAMEPLAY_VERSION,
-        resume_token,
-    }) = decode_gameplay_client(&bytes)
-    else {
+    let access = match decode_gameplay_client(&bytes) {
+        Ok(GameplayClientMessage::Hello {
+            version: GAMEPLAY_VERSION,
+            resume_token,
+        }) => Access::Hello(resume_token),
+        Ok(GameplayClientMessage::JoinSlot {
+            version: GAMEPLAY_VERSION,
+            token,
+        }) => Access::Join(token),
+        _ => {
+            let _ = send_socket(
+                &mut sink,
+                GameplayServerMessage::Error {
+                    code: 426,
+                    message: "gameplay protocol version or hello mismatch".to_owned(),
+                },
+            )
+            .await;
+            return;
+        }
+    };
+    let (sender, mut receiver) = mpsc::channel(64);
+    let Ok((session_id, welcome)) = service.register_access(access, sender.clone()).await else {
         let _ = send_socket(
             &mut sink,
             GameplayServerMessage::Error {
-                code: 426,
-                message: "gameplay protocol version or hello mismatch".to_owned(),
+                code: 403,
+                message: "unknown slot token".to_owned(),
             },
         )
         .await;
         return;
     };
-    let (sender, mut receiver) = mpsc::channel(64);
-    let (session_id, welcome) = service.register(resume_token, sender.clone()).await;
     if sender.send(welcome).await.is_err() {
         return;
     }
@@ -44,28 +61,44 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
             outgoing = receiver.recv() => {
                 let Some(message) = outgoing else { break };
                 let reset = matches!(message, GameplayServerMessage::WorldReset { .. });
-                if send_socket(&mut sink, message).await.is_err() || reset { break }
+                if send_socket(&mut sink, message).await.is_err() {
+                    tracing::warn!(session_id, "gameplay session dropped: a socket write failed or timed out");
+                    break;
+                }
+                if reset { break }
             }
             incoming = stream.next() => {
                 let Some(Ok(Message::Binary(bytes))) = incoming else { break };
                 match decode_gameplay_client(&bytes) {
                     Ok(GameplayClientMessage::Subscribe { revision, region }) => service.subscribe(session_id, revision, region).await,
+                    Ok(GameplayClientMessage::FormationOrder { sequence, unit_ids, formation, destination, queued, attack_move }) => service.queue_formation(session_id, sequence, unit_ids, formation, destination, queued, attack_move).await,
                     Ok(GameplayClientMessage::MoveOrder { sequence, entity_id, destination }) => service.queue_move(session_id, sequence, entity_id, destination).await,
+                    Ok(GameplayClientMessage::QueueMoveOrder { sequence, entity_id, destination }) => service.queue_waypoint(session_id, sequence, entity_id, destination).await,
                     Ok(GameplayClientMessage::StopOrder { sequence, entity_id }) => service.queue_stop(session_id, sequence, entity_id).await,
                     Ok(GameplayClientMessage::GatherOrder { sequence, entity_id, resource_id }) => service.queue_gather(session_id, sequence, entity_id, resource_id).await,
                     Ok(GameplayClientMessage::CancelTrainingOrder { sequence, building_id }) => service.queue_cancel_training(session_id, sequence, building_id).await,
+                    Ok(GameplayClientMessage::GarrisonOrder { sequence, entity_id, building_id }) => service.queue_garrison(session_id, sequence, entity_id, building_id).await,
+                    Ok(GameplayClientMessage::UngarrisonOrder { sequence, building_id, entity_id }) => service.queue_ungarrison(session_id, sequence, building_id, entity_id).await,
+                    Ok(GameplayClientMessage::AutoScoutOrder { sequence, entity_id, enabled }) => service.queue_auto_scout(session_id, sequence, entity_id, enabled).await,
+                    Ok(GameplayClientMessage::SetRallyOrder { sequence, building_id, target }) => service.queue_set_rally(session_id, sequence, building_id, target).await,
+                    Ok(GameplayClientMessage::FarmReseedOrder { sequence, building_id, add }) => service.queue_farm_reseed(session_id, sequence, building_id, add).await,
                     Ok(GameplayClientMessage::TrainOrder { sequence, building_id, kind }) => service.queue_train(session_id, sequence, building_id, kind).await,
                     Ok(GameplayClientMessage::AttackOrder { sequence, entity_id, target_id }) => service.queue_attack(session_id, sequence, entity_id, target_id).await,
-                    Ok(GameplayClientMessage::BuildOrder { sequence, builder_ids, kind, origin }) => service.queue_build(session_id, sequence, builder_ids, kind, origin).await,
-                    Ok(GameplayClientMessage::BuildWallOrder { sequence, builder_ids, from, to }) => service.queue_build_wall(session_id, sequence, builder_ids, from, to).await,
+                    Ok(GameplayClientMessage::BuildOrder { sequence, builder_ids, kind, origin, queued }) => service.queue_build(session_id, sequence, builder_ids, kind, origin, queued).await,
+                    Ok(GameplayClientMessage::BuildWallOrder { sequence, builder_ids, from, to, queued }) => service.queue_build_wall(session_id, sequence, builder_ids, from, to, queued).await,
+                    Ok(GameplayClientMessage::BuildBridgeOrder { sequence, builder_ids, from, to, queued }) => service.queue_build_bridge(session_id, sequence, builder_ids, from, to, queued).await,
                     Ok(GameplayClientMessage::CancelConstructionOrder { sequence, building_id }) => service.queue_cancel_construction(session_id, sequence, building_id).await,
                     Ok(GameplayClientMessage::ConstructOrder { sequence, builder_ids, building_id }) => service.queue_construct(session_id, sequence, builder_ids, building_id).await,
                     Ok(GameplayClientMessage::FarmOrder { sequence, entity_id, farm_id }) => service.queue_farm(session_id, sequence, entity_id, farm_id).await,
                     Ok(GameplayClientMessage::ResearchOrder { sequence, building_id, tech }) => service.queue_research(session_id, sequence, building_id, tech).await,
                     Ok(GameplayClientMessage::CancelResearch { sequence, building_id }) => service.queue_cancel_research(session_id, sequence, building_id).await,
                     Ok(GameplayClientMessage::HuntOrder { sequence, unit_ids, animal_id }) => service.queue_hunt(session_id, sequence, unit_ids, animal_id).await,
+                    Ok(GameplayClientMessage::MarketBuy { sequence, building_id, resource }) => service.queue_market_buy(session_id, sequence, building_id, resource).await,
+                    Ok(GameplayClientMessage::MarketSell { sequence, building_id, resource }) => service.queue_market_sell(session_id, sequence, building_id, resource).await,
+                    Ok(GameplayClientMessage::LoadOrder { sequence, unit_ids, transport_id }) => service.queue_load(session_id, sequence, unit_ids, transport_id).await,
+                    Ok(GameplayClientMessage::UnloadOrder { sequence, transport_id, destination }) => service.queue_unload(session_id, sequence, transport_id, destination).await,
                     Ok(GameplayClientMessage::Resync { revision }) => service.resync(session_id, revision).await,
-                    Ok(GameplayClientMessage::Hello { .. }) | Err(_) => {
+                    Ok(GameplayClientMessage::Hello { .. } | GameplayClientMessage::JoinSlot { .. }) | Err(_) => {
                         let _ = send_socket(&mut sink, GameplayServerMessage::Error { code: 400, message: "invalid gameplay request".to_owned() }).await;
                         break;
                     }
@@ -87,117 +120,80 @@ where
         .map_err(|_| ())
 }
 
+/// Gives every human slot whose controller stayed away past the lease to the
+/// oldest eligible spectator, under a fresh token. Without a successor, the
+/// same-world credential remains valid for a new tab returning to its seat.
+/// AI slots are never reassigned: only their token reaches them.
 pub(super) fn promote_expired(
     ownership: &mut Ownership,
     sessions: &mut BTreeMap<u64, Session>,
     world_id: u64,
-    primary_unit_id: EntityId,
 ) {
-    let expired = ownership.controller.is_some_and(|lease| {
-        lease
-            .disconnected_at
-            .is_some_and(|at| at.elapsed() >= LEASE_RESERVATION)
-    });
-    if !expired {
-        return;
-    }
-    let next = sessions
-        .iter()
-        .filter(|(_, session)| session.role == GameplayRole::Spectator)
-        .min_by_key(|(_, session)| session.connected_at)
-        .map(|(id, _)| *id);
-    if let Some(session_id) = next {
+    for index in 0..ownership.slots.len() {
+        let slot = &ownership.slots[index];
+        let expired = slot.human
+            && slot.lease.is_some_and(|lease| {
+                lease
+                    .disconnected_at
+                    .is_some_and(|at| at.elapsed() >= LEASE_RESERVATION)
+            });
+        if !expired {
+            continue;
+        }
+        let next = sessions
+            .iter()
+            .filter(|(_, session)| {
+                session.role == GameplayRole::Spectator && session.may_claim_human_seat
+            })
+            .min_by_key(|(_, session)| session.connected_at)
+            .map(|(id, _)| *id);
+        let Some(session_id) = next else {
+            // No successor took the seat. A returning tab may resume this
+            // exact world/slot; tokens never match an unrelated world's slots.
+            ownership.slots[index].lease = None;
+            continue;
+        };
         let token = make_token(world_id, ownership.next_token);
         ownership.next_token = ownership.next_token.wrapping_add(1);
+        let slot = &mut ownership.slots[index];
+        slot.token = token;
+        slot.lease = Some(ControllerLease {
+            session_id,
+            disconnected_at: None,
+        });
         if let Some(session) = sessions.get_mut(&session_id) {
             session.role = GameplayRole::Controller;
             session.token = Some(token);
+            session.slot = Some(index);
+            session.ai = false;
+            if session.viewer != slot.player {
+                session.change_viewer(slot.player);
+            }
+            session.primary_unit_id = slot.primary_unit_id;
             let _ = session.sender.try_send(GameplayServerMessage::RoleChange {
                 role: GameplayRole::Controller,
-                primary_unit_id,
+                primary_unit_id: slot.primary_unit_id,
                 resume_token: Some(token),
             });
         }
-        ownership.controller = Some(ControllerLease {
-            session_id,
-            token,
-            disconnected_at: None,
-        });
-    } else {
-        ownership.controller = None;
     }
 }
 
+/// An unpredictable 192-bit token. `world_id` and `counter` only diversify the
+/// hasher input; the secrecy comes from the per-hasher random keys.
 pub(super) fn make_token(world_id: u64, counter: u64) -> ResumeToken {
-    let mut state = world_id ^ counter.rotate_left(17) ^ 0x9e3779b97f4a7c15;
+    use std::hash::{BuildHasher, Hasher};
     let mut bytes = [0_u8; 24];
-    for byte in &mut bytes {
-        state ^= state << 7;
-        state ^= state >> 9;
-        state ^= state << 8;
-        *byte = state as u8;
+    for (index, chunk) in bytes.chunks_mut(8).enumerate() {
+        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+        hasher.write_u64(world_id);
+        hasher.write_u64(counter);
+        hasher.write_u64(index as u64);
+        chunk.copy_from_slice(&hasher.finish().to_le_bytes());
     }
     ResumeToken(bytes)
 }
 
+#[path = "gameplay_transport/tests.rs"]
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use aoe_core::Seed;
-    use std::time::Instant;
-
-    #[tokio::test]
-    async fn expired_controller_promotes_the_oldest_spectator_and_can_fall_empty() {
-        let service = GameplayService::new(Seed(1));
-        let (old_tx, _old_rx) = mpsc::channel(8);
-        let (old_id, _) = service.register(None, old_tx).await;
-        let (next_tx, mut next_rx) = mpsc::channel(8);
-        let (next_id, _) = service.register(None, next_tx).await;
-
-        let mut ownership = service.ownership.lock().await;
-        let mut sessions = service.sessions.lock().await;
-        sessions.remove(&old_id);
-        let expired_at = Instant::now()
-            .checked_sub(LEASE_RESERVATION)
-            .unwrap_or_else(Instant::now);
-        ownership.controller = Some(ControllerLease {
-            session_id: old_id,
-            token: make_token(service.world_id, ownership.next_token),
-            disconnected_at: Some(expired_at),
-        });
-
-        promote_expired(&mut ownership, &mut sessions, service.world_id, EntityId(7));
-        assert_eq!(
-            sessions.get(&next_id).map(|session| session.role),
-            Some(GameplayRole::Controller)
-        );
-        assert_eq!(
-            ownership.controller.as_ref().map(|lease| lease.session_id),
-            Some(next_id)
-        );
-        assert!(matches!(
-            next_rx.try_recv().expect("role change"),
-            GameplayServerMessage::RoleChange {
-                role: GameplayRole::Controller,
-                primary_unit_id: EntityId(7),
-                resume_token: Some(_),
-            }
-        ));
-
-        ownership.controller = Some(ControllerLease {
-            session_id: next_id,
-            token: make_token(service.world_id, ownership.next_token),
-            disconnected_at: Some(expired_at),
-        });
-        sessions.clear();
-        promote_expired(&mut ownership, &mut sessions, service.world_id, EntityId(7));
-        assert!(ownership.controller.is_none());
-    }
-
-    #[test]
-    fn token_generation_is_deterministic_for_world_and_counter() {
-        assert_eq!(make_token(42, 7), make_token(42, 7));
-        assert_ne!(make_token(42, 7), make_token(42, 8));
-        assert_ne!(make_token(42, 7), make_token(43, 7));
-    }
-}
+mod tests;

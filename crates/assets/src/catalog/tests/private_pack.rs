@@ -12,10 +12,20 @@ use std::io::Read;
 
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 
+#[path = "private_castle.rs"]
+mod castle;
 #[path = "private_selection.rs"]
 mod selection;
 
-fn reviewed_sources() -> impl Iterator<Item = (String, u32, AtlasDomain, usize)> {
+fn reviewed_sources() -> impl Iterator<
+    Item = (
+        String,
+        u32,
+        AtlasDomain,
+        usize,
+        Option<super::units::ActorSource>,
+    ),
+> {
     REQUIRED_RENDER_SOURCES
         .iter()
         .chain(&OPTIONAL_RESOURCE_SOURCES)
@@ -26,22 +36,30 @@ fn reviewed_sources() -> impl Iterator<Item = (String, u32, AtlasDomain, usize)>
                 s.frames,
                 if s.terrain_topology.is_some() {
                     AtlasDomain::Terrain
-                } else {
+                } else if super::runtime::PLAYER_ROLES.contains(&s.role) {
                     AtlasDomain::Objects
+                } else {
+                    AtlasDomain::Shared
                 },
                 match s.role {
                     super::AssetRole::CavalryStanding => 10,
                     super::AssetRole::VillagerStanding => 15,
                     _ => 1,
                 },
+                None,
             )
         })
-        .chain(super::units::SPRITES.iter().map(|s| {
+        .chain(super::units::SPRITES.iter().enumerate().map(|(index, s)| {
             (
                 s.manifest_source(),
                 s.frames(),
-                AtlasDomain::Objects,
+                if super::runtime::actor_maskable(index) {
+                    AtlasDomain::Objects
+                } else {
+                    AtlasDomain::Shared
+                },
                 usize::from(s.sample_step()),
+                Some(*s),
             )
         }))
 }
@@ -56,7 +74,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     // Validate complete prefixes, then pack the client's actual selection:
     // compact idle facings and the sampled native actor/projectile cells.
     // Neutral/owned palette copies still occupy separate semantic entries.
-    for (identity, count, domain, step) in reviewed_sources() {
+    for (identity, count, domain, step, actor) in reviewed_sources() {
         let mut frames = manifest
             .frames
             .iter()
@@ -71,9 +89,9 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         {
             return Err(format!("missing or duplicate reviewed prefix: {identity}"));
         }
-        let actor = super::units::SPRITES
-            .iter()
-            .find(|s| s.manifest_source() == identity);
+        // Castle Light Cavalry shares SLP 3008 with the base cavalry role.
+        // Sampling belongs to this semantic entry, never to its first matching
+        // source identity: the base walking role still selects all 50 cells.
         let drawn = actor.map(|source| {
             (0..5)
                 .flat_map(|row| {
@@ -81,7 +99,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
                         .step_by(usize::from(source.sample_step()))
                         .map(move |phase| source.source_frame(row, phase) as u32)
                 })
-                .collect::<std::collections::BTreeSet<_>>()
+                .collect::<Vec<_>>()
         });
         for (number, frame) in frames.into_iter().enumerate() {
             let page = manifest
@@ -95,12 +113,16 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             {
                 return Err("invalid source rectangle".into());
             }
-            if drawn
+            // The one-cell stone is copied into five semantic facing rows,
+            // exactly as the loader does; all five occupy the unchanged budget.
+            let copies = drawn
                 .as_ref()
-                .map_or(number % step == 0, |cells| cells.contains(&frame.frame))
-            {
+                .map_or(usize::from(number % step == 0), |cells| {
+                    cells.iter().filter(|&&cell| cell == frame.frame).count()
+                });
+            for _ in 0..copies {
                 selected.insert((frame.source.clone(), frame.frame));
-                counts[usize::from(domain == AtlasDomain::Objects)] += 1;
+                counts[usize::from(domain != AtlasDomain::Terrain)] += 1;
                 extents.push(FrameExtent {
                     domain,
                     width: frame.width,
@@ -115,7 +137,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         .sum::<usize>();
     // 45 cavalry idle and 70 villager idle cells are not drawn.
     if extents.len() != MAX_REVIEWED_FRAMES as usize + actor_count - 115
-        || counts != [1474, 887 + actor_count - 115]
+        || counts != [1474, 897 + actor_count - 115]
     {
         return Err("incomplete semantic selection".into());
     }
@@ -167,12 +189,8 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
                 }
                 extents.push(FrameExtent {
                     domain: AtlasDomain::Objects,
-                    width: frame
-                        .width
-                        .div_ceil(super::buildings::pixel_step(&frame.source)),
-                    height: frame
-                        .height
-                        .div_ceil(super::buildings::pixel_step(&frame.source)),
+                    width: frame.width,
+                    height: frame.height,
                 });
                 counts[1] += 1;
             }
@@ -220,7 +238,8 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     for (index, (frame, placed)) in extents.iter().zip(&placements).enumerate() {
         let correct_domain = match frame.domain {
             AtlasDomain::Terrain => placed.page < 2,
-            AtlasDomain::Objects => (2..4).contains(&placed.page),
+            AtlasDomain::Objects => (2..5).contains(&placed.page),
+            AtlasDomain::Shared => placed.page < PAGE_COUNT as u16,
         };
         if !correct_domain
             || placed.width != frame.width
@@ -243,7 +262,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             }
         }
     }
-    if MAX_SELECTED_FRAMES != 5120 || PAGE_COUNT != 4 || ATLAS_BYTES != 67_108_864 {
+    if MAX_SELECTED_FRAMES != 5120 || PAGE_COUNT != 5 || ATLAS_BYTES != 83_886_080 {
         return Err("physical budget changed".into());
     }
     Ok((counts[0], counts[1]))
@@ -282,12 +301,13 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        2160,
-        "military and projectile cells included"
+        2590,
+        // Castle adds 365 sampled cells; the five naval bodies add 25 more.
+        "military, Castle, projectile and farmer cells included"
     );
     assert_eq!(
         prove(&manifest).unwrap(),
-        (1474, 887 + actor_frames() - 115)
+        (1474, 897 + actor_frames() - 115)
     );
     let saved = manifest.frames[0].clone();
     manifest.frames[0].frame = 1;
@@ -330,7 +350,7 @@ fn synthetic_manifest() -> Manifest {
         buildings: Vec::new(),
         building_data: "00".into(),
     };
-    for (identity, count, _, _) in reviewed_sources() {
+    for (identity, count, _, _, _) in reviewed_sources() {
         // Neutral sheep reuse each owned source with another runtime palette.
         // A source manifest contains those frames once.
         if manifest.frames.iter().any(|f| f.source == identity) {
@@ -400,7 +420,7 @@ fn full_catalog_with_native_mill_dock_and_farm_fits_runtime_budget() {
     }
     assert_eq!(
         prove(&manifest).unwrap(),
-        (1510, 887 + actor_frames() - 115 + 74)
+        (1510, 897 + actor_frames() - 115 + 74)
     );
 }
 
@@ -439,7 +459,7 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
     }
     assert_eq!(
         prove(&manifest).unwrap(),
-        (1474, 887 + actor_frames() - 115 + 15)
+        (1474, 897 + actor_frames() - 115 + 15)
     );
     for index in manifest.frames.len() - 15..manifest.frames.len() {
         let mut bad = manifest.clone();

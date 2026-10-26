@@ -1,3 +1,4 @@
+mod continuation;
 use super::*;
 use crate::{AnimalKind, AnimalTask, EconomyError, UnitTask, WILDLIFE_RULES};
 
@@ -62,13 +63,21 @@ fn shepherd_slaughters_sheep_and_delivers_all_100_food() {
     let sheep = w.spawn_animal(AnimalKind::Sheep, at(101, 100)).unwrap();
     w.advance();
     w.issue_hunt(PlayerId(0), &[worker], sheep).unwrap();
+    // The villager walks to the living sheep (its route starts on the order's
+    // tick), then herds it: never the hunting pose, and herding is shown.
+    let mut herded = false;
     for _ in 0..20 * 450 {
         w.advance();
         let shepherd = w.unit(worker).unwrap();
         if shepherd.moving && shepherd.carried.is_none() && w.hunting_target(worker).is_some() {
-            assert_eq!(shepherd.task, UnitTask::Shepherding);
+            assert!(matches!(
+                shepherd.task,
+                UnitTask::Moving | UnitTask::Shepherding
+            ));
+            herded |= shepherd.task == UnitTask::Shepherding;
         }
     }
+    assert!(herded, "the shepherd never herded while it walked");
     assert!(
         w.animal(sheep).is_none(),
         "the harvested carcass disappears after its decay time"
@@ -108,9 +117,10 @@ fn deer_six_tiles_away_keeps_hunting_task_in_approach_updates() {
 
 #[test]
 fn hunters_keep_their_profession_when_distant_prey_becomes_a_carcass() {
+    // A shepherd herds only while leading a living sheep; it walks to a carcass.
     for (kind, task) in [
         (AnimalKind::Deer, UnitTask::Hunting),
-        (AnimalKind::Sheep, UnitTask::Shepherding),
+        (AnimalKind::Sheep, UnitTask::Moving),
     ] {
         let mut w = world();
         let worker = w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
@@ -126,10 +136,10 @@ fn hunters_keep_their_profession_when_distant_prey_becomes_a_carcass() {
 }
 
 #[test]
-fn hunters_and_shepherds_keep_their_profession_while_walking_to_distant_animals() {
+fn hunters_keep_their_profession_and_shepherds_walk_to_distant_animals() {
     for (kind, task) in [
         (AnimalKind::Deer, UnitTask::Hunting),
-        (AnimalKind::Sheep, UnitTask::Shepherding),
+        (AnimalKind::Sheep, UnitTask::Moving),
     ] {
         let mut w = world();
         let worker = w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
@@ -305,7 +315,7 @@ fn hunting_rejects_scouts_dead_workers_duplicates_and_owned_enemy_sheep() {
     );
     assert_eq!(
         w.issue_hunt(PlayerId(1), &[enemy, enemy], sheep),
-        Err(EconomyError::Capacity)
+        Err(EconomyError::OrderTooLarge)
     );
     let wolf = w.spawn_animal(AnimalKind::Wolf, at(104, 100)).unwrap();
     assert_eq!(

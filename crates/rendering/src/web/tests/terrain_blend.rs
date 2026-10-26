@@ -228,6 +228,7 @@ pub(super) async fn surface_renderer() -> Renderer {
     atlas[page_bytes * 2..page_bytes * 2 + 12]
         .copy_from_slice(&[0, 0, 255, 255, 255, 255, 0, 255, 0, 0, 0, 128]);
     atlas[page_bytes * 3..page_bytes * 3 + 4].copy_from_slice(&[255, 0, 255, 255]);
+    atlas[page_bytes * 4..page_bytes * 4 + 4].copy_from_slice(&[255, 128, 0, 255]);
     surface_renderer_with_atlas(&atlas).await
 }
 
@@ -247,6 +248,9 @@ pub(super) async fn surface_renderer_with_atlas(atlas: &[u8]) -> Renderer {
     assert_eq!(diagnostic.atlas_pages, 1);
     assert_eq!(diagnostic.atlas_bytes, 8 * 8 * 4);
     renderer.upload_game_atlas(atlas).unwrap();
+    // Setup must finish before probes consume the two outstanding-frame slots.
+    // Keep every shader pixel, draw-count and resource assertion unchanged.
+    super::submitted_frame(&renderer).await;
     renderer
 }
 
@@ -337,33 +341,8 @@ pub(super) async fn read_pixels_with_clear<const N: usize>(
         mapped_at_creation: false,
     });
     let view = target.create_view(&Default::default());
-    let depth = renderer.depth.create_view(&Default::default());
     let mut encoder = renderer.device.create_command_encoder(&Default::default());
-    {
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("splat test pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(clear),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &depth,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            ..Default::default()
-        });
-        // Read the same ordered program runs that production submits.
-        renderer.draw_on(&mut pass, count);
-    }
+    renderer.encode_world(&mut encoder, &view, count, clear);
     for (index, point) in points.iter().enumerate() {
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {

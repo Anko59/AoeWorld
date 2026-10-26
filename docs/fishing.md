@@ -3,11 +3,12 @@
 Fishing uses Food stockpiles and the same transactional depletion overlay as
 other resources. Shore fish sit in water next to walkable land; stationary
 deep fish sit beyond the shallow and medium rim. Placement uses a separate
-coordinate hash, shares the shoreline memo, and never scans the world. Rivers,
-fords, marsh shallows and water strips less than twenty-three tiles across cannot
-receive shore fish. Deep fish require the existing deep-water classification.
-Package generation recipe 2 is the only current recipe; regenerate local
-packages rather than keeping a reader for recipe 1. Current-output map pins
+coordinate hash, shares the shoreline memo, and never scans the world. River and lake banks receive shore fish at the same seeded density as coasts,
+including narrow channels. Fords and marsh shallows remain excluded. River
+channel fish require two wet tiles in each cardinal direction; lake and sea
+deep fish retain the deep-water classification and eleven-tile wet clearance.
+Package generation recipe 3 is the only current recipe; regenerate local
+packages rather than keeping a reader for superseded recipes. Current-output map pins
 are regenerated when the recipe changes.
 
 The Dock requires a free 3×3 footprint containing both land and navigable water.
@@ -74,7 +75,7 @@ The extracted DE unit 45 supplies the implemented Dock LOS 8. This task does
 not implement the naval update's Dock garrison/arrows or whaling mechanics.
 
 The loader keeps bounded sampled fish and fisherman animation rows
-in the fixed four-page atlas and retains complete source validation. Ship idle,
+in the fixed five-page atlas and retains complete source validation. Ship idle,
 move and fishing graphics each have one native frame per facing. Fish animate
 independently of moving units, including while the camera is stationary.
 Ships and fishermen use the shared native actor path, including packed phase,

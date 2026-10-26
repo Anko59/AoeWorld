@@ -1,7 +1,139 @@
+use super::super::VILLAGE_RULES;
+use super::chunks::{BLOCK_TILES, HISTORY_VISITS};
 use super::*;
 use aoe_core::{Seed, TileRect, WorldConfig, WorldPosition};
+use aoe_map::ResourceNode;
 
 use crate::game_world::tests::economy::fixture;
+
+mod facing;
+mod replacement;
+
+#[test]
+fn returning_workers_deposit_on_every_side_before_finishing_an_old_target_order() {
+    use super::super::BuildingKind;
+    let template = fresh_task();
+    for kind in [
+        BuildingKind::TownCenter,
+        BuildingKind::LumberCamp,
+        BuildingKind::MiningCamp,
+        BuildingKind::Mill,
+        BuildingKind::Dock,
+    ] {
+        let resource = match kind {
+            BuildingKind::LumberCamp => ResourceKind::Wood,
+            BuildingKind::MiningCamp => ResourceKind::Gold,
+            _ => ResourceKind::Food,
+        };
+        let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
+        // The common return/deposit code must use each kind's full footprint.
+        let rect = aoe_core::TileRect::from_xywh(128, 128, kind.rules().side, kind.rules().depth);
+        let center = world
+            .insert_building(PlayerId(0), kind, rect, true)
+            .unwrap();
+        for tile in perimeter(rect) {
+            let worker = world
+                .spawn_villager(PlayerId(0), position(tile).unwrap())
+                .unwrap();
+            let mut task = template.clone();
+            task.kind = resource;
+            // Even if the old trip targeted the opposite side, touching any
+            // perimeter point must deposit immediately, without walking around.
+            let target = if tile.y == rect.max.y {
+                rect.min.y - 1
+            } else {
+                rect.max.y
+            };
+            let target = TileCoord::new(rect.max.x, target);
+            world
+                .issue_task_move(worker, position(target).unwrap())
+                .unwrap();
+            task.phase = GatherPhase::Returning;
+            task.dropoff = Some(center);
+            task.return_target = Some(target);
+            let index = world.lookup[&worker];
+            world.units[index].state.carried = Some(CarriedResource {
+                kind: resource,
+                amount: 10,
+            });
+            let before = world.player_economy(PlayerId(0)).unwrap().stockpile;
+            world.economy.gatherers.insert(worker, task);
+            world.advance_gathering(&mut |_| true, &mut Vec::new());
+            assert!(
+                world.unit(worker).unwrap().carried.is_none(),
+                "{kind:?} at {tile:?}"
+            );
+            let mut expected = before;
+            expected.deposit(CarriedResource {
+                kind: resource,
+                amount: 10,
+            });
+            assert_eq!(
+                world.player_economy(PlayerId(0)).unwrap().stockpile,
+                expected
+            );
+            assert!(world.economy.gatherers.get(&worker).is_none_or(|task| {
+                task.phase == GatherPhase::Approaching && task.return_target.is_none()
+            }));
+            assert_ne!(
+                world.movement_order(worker).map(|order| order.target_tile),
+                Some(target),
+                "Deposit must cancel the old return trip before resuming work"
+            );
+            world.remove_unit(worker);
+        }
+    }
+}
+
+#[test]
+fn return_target_is_the_nearest_reachable_point_on_each_buildings_perimeter() {
+    use super::super::BuildingKind;
+    let template = fresh_task();
+    for kind in [
+        BuildingKind::TownCenter,
+        BuildingKind::LumberCamp,
+        BuildingKind::MiningCamp,
+        BuildingKind::Mill,
+        BuildingKind::Dock,
+    ] {
+        let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(1)).unwrap()).unwrap();
+        let rect = aoe_core::TileRect::from_xywh(128, 128, kind.rules().side, kind.rules().depth);
+        let center = world
+            .insert_building(PlayerId(0), kind, rect, true)
+            .unwrap();
+        for start in [
+            TileCoord::new(rect.min.x - 8, rect.min.y),
+            TileCoord::new(rect.min.x, rect.min.y - 8),
+            TileCoord::new(rect.max.x + 8, rect.max.y - 1),
+            TileCoord::new(rect.max.x - 1, rect.max.y + 8),
+        ] {
+            let worker = world
+                .spawn_villager(PlayerId(0), position(start).unwrap())
+                .unwrap();
+            let mut task = template.clone();
+            task.kind = match kind {
+                BuildingKind::LumberCamp => ResourceKind::Wood,
+                BuildingKind::MiningCamp => ResourceKind::Gold,
+                _ => ResourceKind::Food,
+            };
+            // Shore fishermen can use a Dock too.
+            task.fish = (kind == BuildingKind::Dock).then_some(aoe_map::ObjectKind::ShoreFish);
+            assert!(world.begin_return(worker, &mut task));
+            assert_eq!(task.dropoff, Some(center));
+            let target = task.return_target.unwrap();
+            assert_eq!(
+                distance_squared(start, target),
+                perimeter(rect)
+                    .into_iter()
+                    .map(|p| distance_squared(start, p))
+                    .min()
+                    .unwrap(),
+                "{kind:?} from {start:?} chose {target:?}"
+            );
+            world.remove_unit(worker);
+        }
+    }
+}
 
 fn resource_mainland() -> (GameWorld, ResourceNode) {
     let (package, pages, water) = fixture::flat_fixture(false);
@@ -69,11 +201,10 @@ fn return_world(start: TileCoord, isolated: TileCoord) -> (GameWorld, EntityId) 
     });
     let mut task = fresh_task();
     world.begin_return(villager, &mut task);
-    assert!(
-        world.unit(villager).unwrap().planning,
-        "initial search must defer beyond 16384 work"
-    );
-    assert_eq!(
+    // The closest perimeter tile is sealed off: the planner's sealed-
+    // destination proof refuses it when the order is issued (it used to be a
+    // search of the whole map), so the trip takes the next tile at once.
+    assert_ne!(
         world.movement_order(villager).unwrap().target_tile,
         isolated
     );
@@ -143,7 +274,7 @@ fn exhausted_return_choices_stop_searching_and_keep_the_load() {
 }
 
 #[test]
-fn replacement_search_checks_starting_history_once_per_search() {
+fn replacement_search_builds_each_touched_block_once_then_reuses_it() {
     let (mut world, node) = resource_mainland();
     let Terrain::Map { generator, overlay } = &mut world.terrain else {
         unreachable!()
@@ -174,18 +305,28 @@ fn replacement_search_checks_starting_history_once_per_search() {
     assert_eq!(history, 400, "fixture must place the full starting history");
 
     let radius = VILLAGE_RULES.replacement_radius_tiles;
-    let candidates = (-radius..=radius)
-        .flat_map(|dy| (-radius..=radius).map(move |dx| (dx, dy)))
-        .filter(|(dx, dy)| dx * dx + dy * dy <= radius * radius)
-        .count();
+    // The node itself is the exact match, so the search stops after the
+    // block that holds it and reads only that block's history.
+    let block = (
+        node.tile.x.div_euclid(BLOCK_TILES),
+        node.tile.y.div_euclid(BLOCK_TILES),
+    );
+    let span = TileCoord::new(block.0 * BLOCK_TILES, block.1 * BLOCK_TILES);
+    let until = TileCoord::new(span.x + BLOCK_TILES - 1, span.y + BLOCK_TILES - 1);
+    let within_touched_block = overlay.starting_nodes_in(span, until).count();
     HISTORY_VISITS.with(|visits| visits.set(0));
     let found = world.nearest_resource(node.tile, ResourceKind::Wood, radius, None);
-    let visits = HISTORY_VISITS.with(|visits| visits.get());
+    let cold = HISTORY_VISITS.with(|visits| visits.get());
     assert_eq!(found.map(|found| found.id), Some(node.id));
-    assert!(
-        visits <= candidates,
-        "one replacement search touched {visits} history entries for {candidates} candidate tiles"
+    assert_eq!(
+        cold, within_touched_block,
+        "a cold search reads the touched block's history once, not once per tile"
     );
+    HISTORY_VISITS.with(|visits| visits.set(0));
+    let again = world.nearest_resource(node.tile, ResourceKind::Wood, radius, None);
+    let warm = HISTORY_VISITS.with(|visits| visits.get());
+    assert_eq!(again.map(|found| found.id), Some(node.id));
+    assert_eq!(warm, 0, "a warm search reuses the built block lists");
 }
 
 #[test]
@@ -221,11 +362,13 @@ fn deferred_unreachable_resource_ends_the_gather_job() {
     let villager = world
         .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(start).unwrap())
         .unwrap();
-    world.issue_gather(PlayerId(0), villager, node.id).unwrap();
-    assert!(
-        world.unit(villager).unwrap().planning,
-        "mainland search must exceed the initial budget"
-    );
+    // Every tile around the node is sealed off: the sealed-destination proof
+    // refuses the job when it is issued, or its search ends soon after.
+    if world.issue_gather(PlayerId(0), villager, node.id).is_err() {
+        assert!(world.gather_target(villager).is_none());
+        assert!(world.movement_order(villager).is_none());
+        return;
+    }
     for _ in 0..256 {
         world.advance();
         if world.gather_target(villager).is_none() {

@@ -51,3 +51,25 @@ test-assets-pack: slot-bootstrap
 
 test-assets-pack-steps:
 	@$(subst $(TOOL_IMAGE),-e $(call MOUNT_QUOTE,AOE_REVIEWED_PACK_MANIFEST=$(ROOT)/$(AOE_ASSET_PACK)/manifest.json) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo nextest run --locked -p aoe-assets --run-ignored only --no-tests fail --success-output immediate -E 'test(original_manifest_all_reviewed_frames_fit_fixed_atlas)'
+
+.PHONY: test-assets-ui test-assets-ui-steps ui-proof ui-proof-steps
+test-assets-ui: slot-bootstrap
+	@$(SLOT_RUN) test-assets-ui -- make --no-print-directory test-assets-ui-steps
+
+test-assets-ui-steps:
+	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-assets --no-tests fail -E 'test(interface_)'
+
+# Local screenshots stay ignored; the spec requires .cache/ui/proof.json.
+ui-proof: browser-deps slot-bootstrap
+	@$(SLOT_RUN) ui-proof -- make --no-print-directory ui-proof-steps
+
+AOE_UI_PROOF_PROJECT ?= webgpu
+ui-proof-steps:
+	@$(BROWSER_RUN) xvfb-run -a npx playwright test tests/proofs/ui-panel.spec.ts --project=$(call MOUNT_QUOTE,$(AOE_UI_PROOF_PROJECT)) --output=../.cache/ui/playwright-results
+
+.PHONY: test-assets-ui-local test-assets-ui-local-steps
+test-assets-ui-local: slot-bootstrap
+	@$(SLOT_RUN) test-assets-ui-local -- make --no-print-directory test-assets-ui-local-steps
+
+test-assets-ui-local-steps:
+	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-assets --run-ignored only --no-tests fail -E 'test(interface_trial_dat_icon_ids)'

@@ -4,25 +4,27 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 15;
+pub const VERSION: u8 = 19;
 
 pub mod buildings;
 pub mod candidates;
+pub mod interface;
 pub mod packing;
 pub mod runtime;
 mod topology;
+pub mod trees;
 pub mod units;
 mod village;
 pub use topology::TerrainFrameTopology;
 
-/// Reviewed selection ceiling, not an increase to the fixed four-page atlas.
-pub const MAX_REVIEWED_FRAMES: u32 = 2_361;
+/// Reviewed selection ceiling, not an increase to the fixed five-page atlas.
+pub const MAX_REVIEWED_FRAMES: u32 = 2_371;
 
 /// Buildings represented by the current gameplay protocol. Other DAT recipes
 /// remain available to offline tools without occupying the live match atlas.
-pub const GAMEPLAY_BUILDING_IDS: [i32; 23] = [
+pub const GAMEPLAY_BUILDING_IDS: [i32; 39] = [
     109, 70, 68, 562, 584, 50, 12, 72, 598, 45, 87, 101, 103, 84, 79, 792, 71, 463, 129, 563, 585,
-    498, 133,
+    498, 133, 82, 104, 209, 49, 141, 464, 564, 586, 130, 132, 47, 10, 86, 18, 116, 31,
 ];
 
 /// Paving and gravel are not mountain ground.
@@ -68,9 +70,10 @@ pub enum AssetRole {
     VillagerCarryingWood,
     VillagerForaging,
     VillagerCarryingFood,
-    VillagerMiningGold,
-    VillagerCarryingOre,
+    VillagerCarryingGold,
+    VillagerCarryingStone,
     VillagerMiningStone,
+    RallyFlag,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -171,7 +174,7 @@ pub const REQUIRED_RENDER_SOURCES: [SpriteSource; 7] = [
 /// Reviewed resource art that a renderer loads when its local pack provides
 /// it. Its absence never prevents synthetic fixtures or partial local packs
 /// from starting.
-pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 22] = [
+pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 23] = [
     // Visually reviewed in the local trial viewer: fourteen distinct standing
     // broadleaf-tree variants with their original hotspots intact.
     SpriteSource {
@@ -296,6 +299,14 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 22] = [
     village::SOURCES[6],
     village::SOURCES[7],
     village::SOURCES[8],
+    SpriteSource {
+        role: AssetRole::RallyFlag,
+        archive: "graphics.drs",
+        id: 4480,
+        frames: 10,
+        interpretation: "DAT unit 720 FLAGM, graphic 4351 FLAGM_NN: gather-point flag",
+        terrain_topology: None,
+    },
 ];
 
 /// Native Forest/g_for (terrain record 10) maps to SLP 15011. Load only

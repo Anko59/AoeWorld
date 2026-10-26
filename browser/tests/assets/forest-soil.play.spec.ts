@@ -300,7 +300,7 @@ test("explicit original forest soil appears on actual source terrain across thre
       if (resume)
         await page.addInitScript(({ origin, token }) => {
           if (location.origin === origin)
-            sessionStorage.setItem("aoeworld.resume-token", token);
+            localStorage.setItem("aoeworld.resume-token", token);
         }, resume);
       if (backend === "webgl2") await forceWebGl(page);
       if (backend === "canvas2d") await forceCanvas(page);
@@ -391,7 +391,7 @@ test("explicit original forest soil appears on actual source terrain across thre
       expect(healthResponse.ok()).toBe(true);
       const health = await healthResponse.json();
       const token = await page.evaluate(() =>
-        sessionStorage.getItem("aoeworld.resume-token"),
+        localStorage.getItem("aoeworld.resume-token"),
       );
       if (token) resume = { origin: new URL(page.url()).origin, token };
       expect(fetched.size).toBeLessThanOrEqual(1024);

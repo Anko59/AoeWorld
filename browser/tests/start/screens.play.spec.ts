@@ -61,6 +61,7 @@ for (const viewport of [
       "Tiny · 30 km square",
       "Small · 120 km square",
       "Large · 480 km square",
+      "Country · 960 km square",
       "Giant · 1,920 km square",
     ]);
     await expect(page.locator("#skirmish-estimate")).toContainText(

@@ -28,33 +28,33 @@ pub(super) const SOURCES: [SpriteSource; 9] = [
     ),
     village(
         AssetRole::VillagerForaging,
-        1490,
+        2589,
         75,
-        "male villager foraging berries: five facing rows of fifteen frames",
+        "male forager picking berries (DAT unit 120 VMFOR task): five rows of fifteen frames",
     ),
     village(
         AssetRole::VillagerCarryingFood,
-        1493,
+        2592,
         75,
-        "male villager carrying a food bag: five facing rows of fifteen frames",
+        "male forager carrying berries (DAT unit 120 VMFOR carrying): five rows of fifteen frames",
     ),
     village(
-        AssetRole::VillagerMiningGold,
-        1545,
+        AssetRole::VillagerCarryingGold,
+        2117,
         75,
-        "male gold miner swinging a pick: five facing rows of fifteen frames",
+        "male gold miner carrying gold (DAT unit 579 VMGLD_CN): five rows of fifteen frames",
     ),
     village(
-        AssetRole::VillagerCarryingOre,
+        AssetRole::VillagerCarryingStone,
         1552,
         75,
-        "male villager carrying ore: shared gold and stone load, five rows of fifteen frames",
+        "male stone miner carrying stone (DAT unit 124 VMMIN_CN): five rows of fifteen frames",
     ),
     village(
         AssetRole::VillagerMiningStone,
         1560,
         75,
-        "male stone miner swinging a pick: five facing rows of fifteen frames",
+        "miner's pick, shared by gold (unit 579) and stone (unit 124) miners: 5x15 frames",
     ),
 ];
 

@@ -48,12 +48,12 @@ fn parse_token(value: String) -> Option<ResumeToken> {
 }
 
 pub(super) fn stored_token() -> Option<ResumeToken> {
-    let storage = web_sys::window()?.session_storage().ok()??;
+    let storage = web_sys::window()?.local_storage().ok()??;
     parse_token(storage.get_item("aoeworld.resume-token").ok()??)
 }
 
 pub(super) fn save_token(token: Option<ResumeToken>) {
-    let Some(storage) = web_sys::window().and_then(|window| window.session_storage().ok()?) else {
+    let Some(storage) = web_sys::window().and_then(|window| window.local_storage().ok()?) else {
         return;
     };
     match token {

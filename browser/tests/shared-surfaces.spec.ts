@@ -49,7 +49,11 @@ test("dense resources cover the viewport after zoom and pan", async ({
     return Math.min(...counts);
   };
   await expect.poll(quadrantCounts).toBeGreaterThan(100);
-  await page.mouse.wheel(0, 5_000);
+  // Resource sprites belong to gameplay zoom (~25% here). Extreme zoom now
+  // shows strategic clusters instead; bigview specs exercise that LOD switch.
+  await page.mouse.wheel(0, 900);
+  await expect(page.locator("#minimap")).not.toHaveAttribute("data-zoom", "1");
+  await expect(canvas).toHaveAttribute("data-lod", "sprites");
   await expect.poll(quadrantCounts).toBeGreaterThan(100);
   for (const key of ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"]) {
     await page.keyboard.press(key);

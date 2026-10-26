@@ -2,16 +2,19 @@
 // module directly: no unregistered transitive shader/JS asset imports.
 const SIDE = 2048;
 const STRIDE = 112;
-const PAGES = 4;
+const PAGES = 8;
 const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_PIXELS = 4194304;
+const COVERAGE_IDLE_FRAMES = 60;
 
 export class AoeWebGl {
     constructor(canvas, sources) {
         this.shaderSources = sources;
         const gl = canvas.getContext('webgl2', {
             alpha: false, antialias: false, depth: true, stencil: false,
-            premultipliedAlpha: false, preserveDrawingBuffer: false,
+            // The client skips unchanged frames. Retain their pixels after
+            // compositing so idle scenes and late captures keep the last draw.
+            premultipliedAlpha: false, preserveDrawingBuffer: true,
         });
         if (!gl) throw new Error('WebGL2 unavailable');
         this.gl = gl;
@@ -22,13 +25,19 @@ export class AoeWebGl {
         this.shaders = [];
         this.programs = [];
         this.atlasPixels = null;
+        this.atlasMemory = null;
         this.restoreError = null;
         this.initialize();
         this.onLost = event => event.preventDefault();
         this.onRestored = () => {
             try {
                 this.initialize();
-                if (this.atlasPixels) this.upload(this.atlasPixels);
+                if (this.atlasPixels) {
+                    const pixels = this.atlasPixels.buffer === this.atlasMemory.buffer
+                        ? this.atlasPixels
+                        : new Uint8Array(this.atlasMemory.buffer, this.atlasOffset, SIDE * SIDE * PAGES * 4);
+                    this.upload(pixels, this.atlasMemory);
+                }
                 canvas.dispatchEvent(new Event('aoe-renderer-restored'));
             } catch (error) {
                 this.restoreError = error;
@@ -36,10 +45,14 @@ export class AoeWebGl {
         };
         canvas.addEventListener('webglcontextlost', this.onLost);
         canvas.addEventListener('webglcontextrestored', this.onRestored);
+        this.onPageHide = event => { if (!event.persisted) this.dispose(); };
+        window.addEventListener('pagehide', this.onPageHide);
     }
 
     initialize() {
         const gl = this.gl;
+        // A restored context invalidates all sync objects from its lost lifetime.
+        this.pendingFrames = [];
         this.bufferBytes = 0;
         this.atlasReady = false;
         this.shaders = [];
@@ -52,7 +65,7 @@ export class AoeWebGl {
                 gl.getParameter(gl.DEPTH_BITS) < 24) {
                 throw new Error('WebGL2 sprite/depth limits unavailable');
             }
-            this.maxBackingSide = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+            this.maxBackingSide = Math.min(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), gl.getParameter(gl.MAX_TEXTURE_SIZE));
             this.maxViewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
             for (const sources of this.shaderSources) {
                 const program = gl.createProgram();
@@ -80,6 +93,7 @@ export class AoeWebGl {
                 this.shaders = [];
                 gl.useProgram(program);
                 gl.uniform1i(gl.getUniformLocation(program, 'atlas'), 0);
+                gl.uniform1i(gl.getUniformLocation(program, 'mask'), 1);
             }
             this.vao = gl.createVertexArray();
             this.buffer = gl.createBuffer();
@@ -105,12 +119,74 @@ export class AoeWebGl {
             gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
             gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, SIDE, SIDE, PAGES);
+            this.coverage = null;
+            this.mask = null;
+            this.depth = null;
+            this.coverageSize = [0, 0];
+            this.coverageIdleFrames = 0;
             this.resize(this.canvas.width, this.canvas.height);
             this.check();
         } catch (error) {
             this.dispose();
             throw error;
         }
+    }
+
+    createCoverage() {
+        const gl = this.gl;
+        this.coverage = gl.createFramebuffer();
+        this.mask = gl.createTexture();
+        this.depth = gl.createRenderbuffer();
+        if (!this.coverage || !this.mask || !this.depth)
+            throw new Error('WebGL2 coverage allocation failed');
+    }
+
+    releaseCoverage() {
+        const gl = this.gl;
+        if (this.coverage) gl.deleteFramebuffer(this.coverage);
+        if (this.mask) gl.deleteTexture(this.mask);
+        if (this.depth) gl.deleteRenderbuffer(this.depth);
+        this.coverage = this.mask = this.depth = null;
+        this.coverageSize = [0, 0];
+        this.coverageIdleFrames = 0;
+    }
+
+    resizeCoverage(width, height) {
+        if (!width || !height) {
+            this.releaseCoverage();
+            return;
+        }
+        // Only coverage is downsampled. World colour and the contour's alpha
+        // kernel still render at the canvas resolution, without a colour copy.
+        const scale = width * height > 1048576 ? 2 : 1;
+        width = Math.ceil(width / scale);
+        height = Math.ceil(height / scale);
+        const [previousWidth, previousHeight] = this.coverageSize;
+        if (previousWidth === width && previousHeight === height) return;
+        if (!this.coverage) this.createCoverage();
+        const gl = this.gl;
+        // Replace storage in the same objects; never retain old backing sizes.
+        gl.bindTexture(gl.TEXTURE_2D, this.mask);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8UI, width, height, 0, gl.RED_INTEGER, gl.UNSIGNED_BYTE, null);
+        gl.bindRenderbuffer(gl.RENDERBUFFER, this.depth);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.coverage);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, this.mask, 0);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.depth);
+        gl.drawBuffers([gl.NONE, gl.COLOR_ATTACHMENT1]);
+        if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE)
+            throw new Error('WebGL2 coverage framebuffer incomplete');
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        this.coverageSize = [width, height];
+    }
+
+    get textureBytes() {
+        // R8UI + DEPTH_COMPONENT24 (four-byte storage), shared by both effects.
+        // Excludes the browser framebuffer and driver overhead.
+        return this.disposed ? 0 : SIDE * SIDE * PAGES * 4 +
+            this.coverageSize[0] * this.coverageSize[1] * 5;
     }
 
     check() {
@@ -134,10 +210,11 @@ export class AoeWebGl {
         this.validateSize(width, height);
         if (this.canvas.width !== width) this.canvas.width = width;
         if (this.canvas.height !== height) this.canvas.height = height;
+        if (this.coverage) this.resizeCoverage(width, height);
         this.check();
     }
 
-    upload(pixels) {
+    upload(pixels, memory) {
         this.check();
         if (pixels.byteLength !== SIDE * SIDE * 4 * PAGES) throw new Error('Invalid WebGL2 atlas size');
         const gl = this.gl;
@@ -149,18 +226,23 @@ export class AoeWebGl {
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
         gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-        // Layer-sized uploads bound browser transfer staging to one page.
+        // A page-sized call alone does not bound driver staging: all eight
+        // transfers can remain queued together. Complete each startup/restore
+        // page before lending the next, so at most one 16 MiB transfer is live.
         for (let layer = 0; layer < PAGES; layer++) {
             gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, SIDE, SIDE, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels, layer * SIDE * SIDE * 4);
+            gl.finish();
         }
         this.check();
         this.atlasReady = true;
-        // The only retained atlas copy (48 MiB) permits device-context
-        // restoration; the WASM source vector is released after upload.
+        // Borrow the renderer-owned WASM source, avoiding a second 128 MiB
+        // restoration copy. Its offset survives detachment on memory.grow.
         this.atlasPixels = pixels;
+        this.atlasMemory = memory;
+        this.atlasOffset = pixels.byteOffset;
     }
 
-    render(instances, black) {
+    render(instances, black, effects) {
         if (this.restoreError) throw this.restoreError;
         if (!this.disposed && this.gl.isContextLost()) return false;
         this.check();
@@ -170,7 +252,35 @@ export class AoeWebGl {
         }
         const gl = this.gl;
         this.validateSize(this.canvas.width, this.canvas.height);
-        if (!this.canvas.width || !this.canvas.height) return false;
+        if (!this.canvas.width || !this.canvas.height) {
+            this.releaseCoverage();
+            return false;
+        }
+        // Do not enqueue another packet behind a busy software or hardware GPU.
+        // Poll without blocking the page, before any instance-buffer upload.
+        while (this.pendingFrames.length) {
+            const sync = this.pendingFrames[0];
+            const status = gl.clientWaitSync(sync, 0, 0);
+            if (status === gl.TIMEOUT_EXPIRED) break;
+            if (status === gl.WAIT_FAILED) throw new Error('WebGL2 frame completion failed');
+            gl.deleteSync(sync);
+            this.pendingFrames.shift();
+        }
+        if (this.pendingFrames.length >= 2) return false;
+        const count = instances.byteLength / STRIDE;
+        const words = new DataView(instances.buffer, instances.byteOffset, instances.byteLength);
+        // Shared Rust normalization selects hover, or units AND occluders.
+        // An unoccluded unit needs no coverage backing or second pass.
+        if (effects) {
+            this.coverageIdleFrames = 0;
+            this.resizeCoverage(this.canvas.width, this.canvas.height);
+        } else if (this.coverage && ++this.coverageIdleFrames >= COVERAGE_IDLE_FRAMES) {
+            // Camera/hover changes can briefly remove all effects. Keep one
+            // size-bounded backing through those gaps instead of reallocating
+            // and synchronously validating a framebuffer on the next frame.
+            this.releaseCoverage();
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.bindVertexArray(this.vao);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
         if (instances.byteLength > this.bufferBytes) {
@@ -193,24 +303,67 @@ export class AoeWebGl {
         gl.blendEquation(gl.FUNC_ADD);
         gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.colorMask(true, true, true, true);
-        gl.clearColor(...(black ? [0, 0, 0, 1] : [.16, .29, .14, 1]));
+        const clear = black ? [0, 0, 0, 1] : [.16, .29, .14, 1];
         gl.clearDepth(1);
+        gl.clearColor(...clear);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        const count = instances.byteLength / STRIDE;
-        const words = new DataView(instances.buffer, instances.byteOffset, instances.byteLength);
-        // Contiguous runs, never material regrouping: painter/depth/alpha order
-        // is identical to Rust/WebGPU, including sprites between mixed faces.
+        this.drawWorld(words, count);
+        if (effects) {
+            // Coverage/depth only: the default framebuffer already owns the
+            // full-resolution world colour and depth used by the contour pass.
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.coverage);
+            gl.viewport(0, 0, ...this.coverageSize);
+            gl.clearBufferuiv(gl.COLOR, 1, [0, 0, 0, 0]);
+            gl.clear(gl.DEPTH_BUFFER_BIT);
+            this.drawWorld(words, count, true);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, this.mask);
+            gl.depthFunc(gl.GEQUAL);
+            gl.depthMask(false);
+            gl.useProgram(this.programs[2]);
+            gl.uniform2f(gl.getUniformLocation(this.programs[2], 'maskScale'),
+                this.coverageSize[0] / this.canvas.width, this.coverageSize[1] / this.canvas.height);
+            this.drawContours(words, count);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            gl.activeTexture(gl.TEXTURE0);
+        }
+        const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        if (!sync) throw new Error('WebGL2 frame completion unavailable');
+        this.pendingFrames.push(sync);
+        gl.flush();
+        this.check();
+        return true;
+    }
+
+    drawWorld(words, count, coverage = false) {
+        const gl = this.gl;
+        // Contiguous runs preserve painter/depth/alpha order in both passes,
+        // including sprites between mixed faces. Reuse the one instance upload.
         for (let first = 0; first < count;) {
             const mixed = mixing(words, first);
             let end = first + 1;
             while (end < count && mixing(words, end) === mixed) end++;
-            gl.useProgram(this.programs[mixed ? 1 : 0]);
+            gl.useProgram(this.programs[(mixed ? 1 : 0) + (coverage ? 3 : 0)]);
             this.offset(first);
             gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, end - first);
             first = end;
         }
-        this.check();
-        return true;
+    }
+
+    drawContours(words, count) {
+        // The contour shader rejects terrain and unrelated objects. Submit
+        // only eligible runs from the same buffer, preserving painter order
+        // without a second packet allocation/upload or forest-wide vertex work.
+        for (let first = 0; first < count;) {
+            if (!contour(words, first)) { first++; continue; }
+            let end = first + 1;
+            while (end < count && contour(words, end)) end++;
+            this.offset(first);
+            this.gl.drawArraysInstanced(this.gl.TRIANGLES, 0, 6, end - first);
+            first = end;
+        }
     }
 
     offset(first) {
@@ -226,14 +379,19 @@ export class AoeWebGl {
     dispose() {
         if (this.disposed) return;
         const gl = this.gl;
+        window.removeEventListener('pagehide', this.onPageHide);
+        for (const sync of this.pendingFrames) gl.deleteSync(sync);
+        this.pendingFrames = [];
         for (const shader of this.shaders) gl.deleteShader(shader);
         for (const program of this.programs) gl.deleteProgram(program);
         if (this.buffer) gl.deleteBuffer(this.buffer);
         if (this.texture) gl.deleteTexture(this.texture);
         if (this.vao) gl.deleteVertexArray(this.vao);
+        this.releaseCoverage();
         this.canvas.removeEventListener('webglcontextlost', this.onLost);
         this.canvas.removeEventListener('webglcontextrestored', this.onRestored);
         this.atlasPixels = null;
+        this.atlasMemory = null;
         this.disposed = true;
         this.bufferBytes = 0;
         // Deleting objects leaves the context and driver caches alive until GC.
@@ -244,6 +402,12 @@ export class AoeWebGl {
 
 // Sprite112 graphics tags, mirrored by web/draw.rs. Unsigned conversion has
 // Rust's saturating f32-cast semantics; generated packets are small integers.
+function contour(words, instance) {
+    const at = instance * STRIDE;
+    return !(words.getFloat32(at + 28, true) < 0) &&
+        (words.getUint32(at + 108, true) & 56) !== 0;
+}
+
 function mixing(words, instance) {
     const at = instance * STRIDE;
     const uint = value => Math.max(0, Math.min(4294967295, Math.trunc(value))) || 0;

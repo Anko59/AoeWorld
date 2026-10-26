@@ -130,16 +130,18 @@ const FOREST_ROUTES: (usize, &str) = (
     "112e4fe0358ffbe1f4bd82013d9cfaea9d7f1998a3bd9edb2d617ee9a84af4b0",
 );
 
+// River fish add current resource records and visual families to wire and scene
+// content. Regenerate these pins for the combined generation recipe.
 // Current generation bytes pin the only live wire format. Drawn-sheet variety
 // changes these digests without changing the flat forest route pin.
 const FALLBACK_DIGESTS: [&str; 3] = [
-    "ee7655d59bf5b03996cd87f992591974bd7dd6c366916dd891f3089381f798e2",
-    "27e41bad552b4be29aab53d040c94006838f8535ec27452a556ed57f3d8ef578",
-    "4cef4ba2534f3241317133baea7a830966588ff0dafbfff92911891895f9a7b6",
+    "17bb790a52a28e4460fc9e9b41ae3a84971e5732d8c866b87ba85bdbfd1fef91",
+    "a489374a8b97973de566f73c2b01352bb5356b198ab9fa360c1abdf23bb289de",
+    "02ecdf2c1d7b0341ec02d675c09bb996ca143140554770a6430192a07155e883",
 ];
 // Current latitude/elevation ground cover changes the default package.
 const DEFAULT_PACKAGE_DIGEST: &str =
-    "7fcd500889e7e0b113cf69959c7f7f9c1a33c591f512a3c2331a6b47406e0277";
+    "5c1dbce816f3c3d635da2fd602c50e3105bba8d8984e7b4805b25cbf594ba3c5";
 
 /// Regression pin of the current generation on scene content rather than
 /// transport bytes, so a wire-format change alone cannot move it. Regenerate
@@ -157,7 +159,7 @@ fn default_package_generated_scene_content_is_pinned() {
     }
     assert_eq!(
         digest.finalize().to_hex().as_str(),
-        "1afae3ec104b7728ff69e4ce4b2a2c86a4014922064273c9de466e3f7aa76f01"
+        "f5e6f9c455455d35b70bb4816e2f1ad38ac7667e0b8af82ab403ad510b314ce1"
     );
 }
 

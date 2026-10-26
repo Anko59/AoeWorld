@@ -57,13 +57,7 @@ impl GameplayService {
         let Some(revision) = world.resource_revision() else {
             return;
         };
-        let vision_revision = world.vision_revision();
-        let player = super::super::fog::viewer(&world, self.primary_unit_id);
-        let known = world
-            .known_resource_amounts(player)
-            .into_iter()
-            .map(|(id, remaining)| ResourceAmount { id, remaining })
-            .collect::<Vec<_>>();
+        let mut known_by = BTreeMap::<aoe_core::PlayerId, Vec<ResourceAmount>>::new();
         let mut sessions = self.sessions.lock().await;
         let failed = {
             let journal = self
@@ -73,17 +67,37 @@ impl GameplayService {
             let mut failed = Vec::new();
             let mut snapshot = None;
             for (id, session) in sessions.iter_mut() {
+                if session
+                    .subscription_delivery
+                    .as_ref()
+                    .is_some_and(|d| d.pending())
+                {
+                    continue;
+                }
                 let Some(subscription) = session.subscription else {
                     continue;
                 };
+                let vision_revision = world.player_vision_revision(session.viewer);
                 if session.resource_revision == Some(revision)
                     && session.resource_vision_revision == Some(vision_revision)
                 {
                     continue;
                 }
+                let known = known_by.entry(session.viewer).or_insert_with(|| {
+                    // With fog disabled the shared snapshot/journal is authoritative;
+                    // do not retain a million-entry fog-memory copy for every seat.
+                    if world.fog_disabled() {
+                        return Vec::new();
+                    }
+                    world
+                        .known_resource_amounts(session.viewer)
+                        .into_iter()
+                        .map(|(id, remaining)| ResourceAmount { id, remaining })
+                        .collect()
+                });
                 if !world.fog_disabled()
                     && session.resource_revision.is_some()
-                    && session.resident_resources == known
+                    && session.resident_resources == *known
                 {
                     // Keep the last delivered resource revision: a later delta
                     // must still start at the revision the client received.
@@ -104,10 +118,13 @@ impl GameplayService {
                         })
                         .copied()
                         .collect::<Vec<_>>();
-                    let from_revision = session
-                        .resource_revision
-                        .filter(|from| *from < revision && !changes.is_empty());
+                    let from_revision = session.resource_revision.filter(|from| {
+                        *from < revision
+                            && !changes.is_empty()
+                            && changes.len() <= aoe_protocol::MAX_RESOURCE_CHANGES
+                    });
                     ResourceState {
+                        snapshot_page: None,
                         subscription_revision: subscription.revision,
                         from_revision,
                         revision,
@@ -119,6 +136,7 @@ impl GameplayService {
                     }
                 } else if let Some(changes) = delta {
                     ResourceState {
+                        snapshot_page: None,
                         subscription_revision: subscription.revision,
                         from_revision: session.resource_revision,
                         revision,
@@ -133,6 +151,7 @@ impl GameplayService {
                         continue;
                     };
                     ResourceState {
+                        snapshot_page: None,
                         subscription_revision: subscription.revision,
                         from_revision: None,
                         revision,
@@ -146,16 +165,22 @@ impl GameplayService {
                             .collect(),
                     }
                 };
-                if session
-                    .sender
-                    .try_send(GameplayServerMessage::ResourceState(state))
-                    .is_ok()
-                {
-                    session.resource_revision = Some(revision);
-                    session.resource_vision_revision = Some(vision_revision);
-                    session.resident_resources = known.clone();
-                } else {
-                    failed.push(*id);
+                // A full queue skips this publication: the next one is computed
+                // against what the session last received. Only a closed queue ends it.
+                let frames = snapshot_frames(state);
+                // Reserve all pages before publishing any: queue pressure never
+                // leaves a client with an incomplete snapshot followed by deltas.
+                match session.sender.try_reserve_many(frames.len()) {
+                    Ok(permits) => {
+                        for (permit, state) in permits.zip(frames) {
+                            permit.send(GameplayServerMessage::ResourceState(state));
+                        }
+                        session.resource_revision = Some(revision);
+                        session.resource_vision_revision = Some(vision_revision);
+                        session.resident_resources = known.clone();
+                    }
+                    Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {}
+                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => failed.push(*id),
                 }
             }
             failed
@@ -168,29 +193,29 @@ impl GameplayService {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    fn change(revision: u64) -> aoe_map::Depletion {
-        aoe_map::Depletion {
-            id: 2,
-            removed: 1,
-            remaining: 10,
-            became_nonblocking: false,
-            revision,
-        }
+/// A complete overlay is retained data, not a single wire frame. Keep the
+/// message bound unchanged and carry explicit offsets for atomic reassembly.
+fn snapshot_frames(state: ResourceState) -> Vec<ResourceState> {
+    let limit = aoe_protocol::MAX_RESOURCE_CHANGES;
+    if state.changes.len() <= limit {
+        return vec![state];
     }
-    #[test]
-    fn retained_journal_deduplicates_and_lag_requires_snapshot() {
-        let mut journal = Journal::default();
-        for revision in 1..=1025 {
-            journal.record(change(revision));
-        }
-        assert_eq!(journal.changes.len(), MAX_JOURNAL_CHANGES);
-        assert!(journal.since(0, 1025).is_none());
-        assert_eq!(journal.since(1, 1025).unwrap().len(), 1);
-        assert!(journal.since(1025, 1025).is_none());
-        journal.record(change(1027));
-        assert!(journal.since(1025, 1027).is_none());
-    }
+    debug_assert!(state.from_revision.is_none());
+    let total = state.changes.len() as u32;
+    state
+        .changes
+        .chunks(limit)
+        .enumerate()
+        .map(|(page, changes)| ResourceState {
+            subscription_revision: state.subscription_revision,
+            from_revision: None,
+            revision: state.revision,
+            changes: changes.to_vec(),
+            snapshot_page: Some(((page * limit) as u32, total)),
+        })
+        .collect()
 }
+
+#[path = "feed/tests.rs"]
+#[cfg(test)]
+mod tests;

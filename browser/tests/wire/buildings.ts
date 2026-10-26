@@ -9,10 +9,12 @@ function fragment(name: string): number[] {
 }
 
 // After footprint: construction, progress, hp, max_hp, los, food_remaining,
-// training_queue, research, last_hit, observed age, gate_open (complete, healthy and idle).
+// training_queue, research, last_hit, observed age, gate_open, rally_point, prepaid farm_reseeds, bounded garrison list (complete, healthy and idle).
 export const townCenterState = fragment("town-center.hex");
 // After population_cap: age (Dark), researched (empty bitset).
 export const darkAgeState = fragment("player.hex");
+// After researched: the three Market prices (wood, food, stone), 100 gold each.
+export const marketPrices = fragment("market-prices.hex");
 export const dockState = fragment("dock.hex");
 export const fishingShipState = fragment("fishing-ship.hex");
 // Feudal Age researched, every other technology still available.

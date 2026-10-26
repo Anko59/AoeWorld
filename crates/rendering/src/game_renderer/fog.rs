@@ -44,7 +44,11 @@ pub(super) fn shade_objects(
             levels.resources.push(ResourceFactor {
                 body: frame_key(body),
                 shadow: shadow.map(frame_key),
-                light: light(r.position),
+                light: if r.kind == SceneResource::RALLY_FLAG {
+                    1.0
+                } else {
+                    light(r.position)
+                },
                 next: levels.entries[slot].resource,
             });
             levels.entries[slot].resource = levels.resources.len();
@@ -66,7 +70,7 @@ pub(super) fn shade_objects(
             }
         }
         let slot = levels.index(u64::from(u.id.0));
-        levels.entries[slot].unit = factor;
+        levels.entries[slot].unit = if u.visual.ghost() { 1.0 } else { factor };
     }
     for layer in layers {
         if let WorldLayer::Sprite(sprite, frame, _, id) = layer {

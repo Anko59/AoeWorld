@@ -1,7 +1,12 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
-import { scoutCombat, villagerCombat } from "../../wire/combat.js";
+import {
+  scoutCombat,
+  villagerCombat,
+  militiaCombat,
+} from "../../wire/combat.js";
 import {
   darkAgeState,
+  marketPrices,
   feudalAgeState,
   townCenterState,
   fishingShipState,
@@ -25,6 +30,8 @@ export async function fiveVillagerFixture(
   observe?: (bytes: Buffer, socket: WebSocketRoute) => void,
   snapshotTick: () => number = () => 0,
   feudal = false,
+  military = false,
+  militaryKind = 2,
 ) {
   await page.routeWebSocket("**/game/ws", (socket) => {
     socket.onMessage((message) => {
@@ -73,7 +80,9 @@ export async function fiveVillagerFixture(
           ? fishingShipState
           : kind === 1
             ? scoutCombat
-            : villagerCombat),
+            : kind === 2
+              ? militiaCombat
+              : villagerCombat),
       ];
       const units = [
         unit(0, 8195.5, 8190.5, 1),
@@ -84,7 +93,7 @@ export async function fiveVillagerFixture(
           [-4, 5],
           [-3, 5],
         ].map(([x = 0, y = 0], index) =>
-          unit(index + 2, 8192.5 + x, 8192.5 + y),
+          unit(index + 2, 8192.5 + x, 8192.5 + y, military ? militaryKind : 0),
         ),
       ].flat();
       socket.send(
@@ -103,6 +112,7 @@ export async function fiveVillagerFixture(
           6,
           10,
           ...(feudal ? feudalAgeState : darkAgeState),
+          ...marketPrices,
           1,
           1,
           0,

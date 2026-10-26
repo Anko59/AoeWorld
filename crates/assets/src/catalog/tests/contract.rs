@@ -1,6 +1,32 @@
 use super::*;
 
 #[test]
+fn chopped_trees_follow_each_species_dat_reference_and_use_reviewed_art() {
+    for (stage, (unit, full)) in trees::STAGES
+        .iter()
+        .zip([(349, 4652), (350, 4654), (351, 4653)])
+    {
+        assert_eq!((stage.unit, stage.full_slp), (unit, full));
+        assert_eq!(
+            (
+                stage.chopped_graphic,
+                stage.chopped_slp,
+                stage.stump_unit,
+                stage.stump_slp
+            ),
+            (1699, 1252, 415, 1035)
+        );
+        for id in [stage.full_slp, stage.chopped_slp, stage.stump_slp] {
+            assert!(
+                OPTIONAL_RESOURCE_SOURCES
+                    .iter()
+                    .any(|source| source.id == id)
+            );
+        }
+    }
+}
+
+#[test]
 fn mountain_snow_source_is_ground_art_instead_of_cracked_ice() {
     let source = REQUIRED_RENDER_SOURCES
         .iter()
@@ -59,7 +85,8 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
             .chain(OPTIONAL_TERRAIN_SOURCES.iter())
             .all(|source| source.frames > 0)
     );
-    assert_eq!(VERSION, 15);
+    // Castle poses, architecture and deduplicated composite recipes extend the catalog.
+    assert_eq!(VERSION, 19);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
@@ -176,11 +203,12 @@ fn reviewed_resource_sources_preserve_semantic_order_and_frame_counts() {
             (AssetRole::VillagerWalking as usize, 1484, 75),
             (AssetRole::VillagerChopping as usize, 1535, 75),
             (AssetRole::VillagerCarryingWood as usize, 1536, 75),
-            (AssetRole::VillagerForaging as usize, 1490, 75),
-            (AssetRole::VillagerCarryingFood as usize, 1493, 75),
-            (AssetRole::VillagerMiningGold as usize, 1545, 75),
-            (AssetRole::VillagerCarryingOre as usize, 1552, 75),
+            (AssetRole::VillagerForaging as usize, 2589, 75),
+            (AssetRole::VillagerCarryingFood as usize, 2592, 75),
+            (AssetRole::VillagerCarryingGold as usize, 2117, 75),
+            (AssetRole::VillagerCarryingStone as usize, 1552, 75),
             (AssetRole::VillagerMiningStone as usize, 1560, 75),
+            (AssetRole::RallyFlag as usize, 4480, 10),
         ]
     );
 }
@@ -229,7 +257,7 @@ fn village_art_is_optional_and_uses_reviewed_directional_prefixes() {
 
 #[test]
 fn resource_specific_worker_sets_are_selected_from_the_local_pack() {
-    for id in [1490, 1493, 1545, 1552, 1560] {
+    for id in [2589, 2592, 2117, 1552, 1560] {
         let source = OPTIONAL_RESOURCE_SOURCES
             .iter()
             .find(|source| source.id == id)
@@ -237,4 +265,100 @@ fn resource_specific_worker_sets_are_selected_from_the_local_pack() {
         assert_eq!(source.frames, 75);
         assert_eq!(source.archive, "graphics.drs");
     }
+}
+
+#[test]
+fn rally_flag_uses_the_dat_movement_flag_group() {
+    let flag = OPTIONAL_RESOURCE_SOURCES
+        .iter()
+        .find(|s| s.role == AssetRole::RallyFlag)
+        .unwrap();
+    assert_eq!(
+        (flag.archive, flag.id, flag.frames),
+        ("graphics.drs", 4480, 10)
+    );
+    assert!(flag.terrain_topology.is_none());
+}
+#[test]
+fn bridge_catalog_selects_only_the_six_native_scenario_pieces() {
+    let plan = crate::catalog::buildings::supplemental(
+        |s| s.starts_with("de/"),
+        |_| false,
+        |_| false,
+        |_| false,
+    );
+    let bridges: Vec<_> = plan.iter().filter(|item| item.slot >= 65).collect();
+    assert_eq!(bridges.len(), 6);
+    for (item, stem) in bridges.iter().zip([
+        "s_bridge_a_top",
+        "s_bridge_a_middle",
+        "s_bridge_a_bottom",
+        "s_bridge_b_top",
+        "s_bridge_b_middle",
+        "s_bridge_b_bottom",
+    ]) {
+        assert_eq!(item.source, format!("de/{stem}_x1.sld"));
+        assert_eq!((item.frames, item.take), (1, 1));
+        assert!(item.resident);
+        assert!(
+            !item.required,
+            "missing private art keeps the semantic fallback"
+        );
+    }
+}
+
+#[test]
+fn bridge_catalog_prefers_original_slps_when_available() {
+    let plan = crate::catalog::buildings::supplemental(|_| true, |_| false, |_| false, |_| false);
+    for (item, slp) in plan
+        .iter()
+        .filter(|item| item.slot >= 65)
+        .zip([3688, 3690, 3692, 3694, 3696, 3698])
+    {
+        assert_eq!(
+            item.source,
+            format!("graphics.drs:[32, 112, 108, 115]:{slp}")
+        );
+    }
+}
+
+#[test]
+fn castle_supplemental_slots_keep_distinct_families_and_de_fallback() {
+    let plan = crate::catalog::buildings::supplemental(|_| true, |_| false, |_| false, |_| false);
+    for (slot, slp) in [(45, 305), (46, 281), (49, 931)] {
+        let items: Vec<_> = plan.iter().filter(|item| item.slot == slot).collect();
+        assert_eq!(items.len(), 1, "one Castle family per slot {slot}");
+        assert_eq!(
+            items[0].source,
+            format!("graphics.drs:[32, 112, 108, 115]:{slp}")
+        );
+    }
+    let plan = crate::catalog::buildings::supplemental(
+        |source| source.starts_with("de/"),
+        |_| false,
+        |_| false,
+        |_| false,
+    );
+    let castle = plan.iter().find(|item| item.slot == 45).unwrap();
+    assert_eq!(castle.source, "de/b_west_castle_age3_x1.sld");
+    let rubble = plan.iter().find(|item| item.slot == 49).unwrap();
+    assert_eq!(rubble.source, "de/b_west_castle_age3_rubble_x1.sld");
+}
+
+#[test]
+fn castle_dock_uses_licensed_de_art_when_the_trial_lacks_its_slp() {
+    assert!(
+        crate::de::SELECTION
+            .iter()
+            .any(|item| item.stem == "b_west_dock_age3")
+    );
+    let plan = crate::catalog::buildings::supplemental(
+        |source| source.starts_with("de/"),
+        |_| false,
+        |_| false,
+        |_| false,
+    );
+    let dock = plan.iter().find(|item| item.slot == 59).unwrap();
+    assert_eq!(dock.source, "de/b_west_dock_age3_x1.sld");
+    assert_eq!((dock.frames, dock.take), (1, usize::MAX));
 }

@@ -1,12 +1,34 @@
 use super::{
-    BuildingKind, ConstructionState, EconomyError, GameBuilding, MAX_ECONOMY_BUILDINGS,
-    MAX_ECONOMY_PLAYERS, MAX_POPULATION, PlayerEconomy, Stockpile, VILLAGE_RULES,
+    BuildingKind, ConstructionState, EconomyError, GameBuilding, MarketPrices, PlayerEconomy,
+    Stockpile, VILLAGE_RULES,
 };
 use crate::{GameWorld, GameWorldError, Terrain, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
 use std::collections::{BTreeSet, VecDeque};
 
 impl GameWorld {
+    /// Player orders need tile-exact exploration of the entire footprint.
+    /// Check knowledge before terrain/occupancy to avoid probing black ground.
+    pub(super) fn validate_explored_footprint(
+        &self,
+        player: PlayerId,
+        footprint: TileRect,
+    ) -> Result<(), EconomyError> {
+        if !footprint.valid(self.config.width_tiles, self.config.height_tiles) {
+            return Err(EconomyError::InvalidFootprint);
+        }
+        for y in footprint.min.y..footprint.max.y {
+            for x in footprint.min.x..footprint.max.x {
+                if self.visibility(player, TileCoord::new(x, y))
+                    == crate::TileVisibility::Unexplored
+                {
+                    return Err(EconomyError::UnexploredFootprint);
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn tile_passable(&self, tile: TileCoord) -> bool {
         !self.economy.blocked_tiles.contains(&tile) && self.terrain.passable(tile, self.config)
     }
@@ -21,9 +43,9 @@ impl GameWorld {
 
     pub(super) fn validate_footprint(&self, footprint: TileRect) -> Result<(), EconomyError> {
         if !footprint.valid(self.config.width_tiles, self.config.height_tiles)
-            || self
-                .units()
-                .any(|unit| footprint.contains(unit.position.tile_floor()))
+            || self.units().any(|unit| {
+                !self.embarked(unit.id) && footprint.contains(unit.position.tile_floor())
+            })
         {
             return Err(EconomyError::InvalidFootprint);
         }
@@ -48,14 +70,8 @@ impl GameWorld {
                 {
                     return Err(EconomyError::InvalidFootprint);
                 }
-                if let Terrain::Map { generator, .. } = &self.terrain
-                    && generator
-                        .object_at_with_cancel(tile, &|| false)
-                        .map_err(GameWorldError::Environment)?
-                        .is_some()
-                {
-                    return Err(EconomyError::InvalidFootprint);
-                }
+                // Live passability already includes the resource overlay.
+                // Immutable node records remain present after exhaustion.
             }
         }
         Ok(())
@@ -66,9 +82,9 @@ impl GameWorld {
         player: PlayerId,
         origin: TileCoord,
     ) -> Result<EntityId, EconomyError> {
-        if self.economy.buildings.len() >= MAX_ECONOMY_BUILDINGS
+        if self.economy.buildings.len() >= self.economy.limits.buildings
             || (!self.economy.players.contains_key(&player)
-                && self.economy.players.len() >= MAX_ECONOMY_PLAYERS)
+                && self.economy.players.len() >= self.economy.limits.players)
         {
             return Err(EconomyError::Capacity);
         }
@@ -83,7 +99,7 @@ impl GameWorld {
 
     /// Create a building (or foundation) after its footprint was validated.
     /// Nothing is charged here; the caller owns the cost. Foundations reveal
-    /// only after the caller accepts their builder approaches.
+    /// only after a builder contributes construction work.
     pub(in crate::game_world) fn insert_building(
         &mut self,
         player: PlayerId,
@@ -98,27 +114,39 @@ impl GameWorld {
         let age = self
             .player_economy(player)
             .map_or(crate::Age::Dark, |p| p.age);
-        let (max_hp, los) = kind.age_stats(age);
-        if rules.blocks
+        let (mut max_hp, los) = kind.age_stats(age);
+        if !matches!(
+            kind,
+            BuildingKind::Farm | BuildingKind::PalisadeWall | BuildingKind::PalisadeGate
+        ) && self.has_researched(player, crate::Tech::Masonry)
+        {
+            max_hp += max_hp / 10;
+        }
+        let collision = kind.collision_rect(footprint, complete);
+        if let Some(rect) = collision
             && let Terrain::Map { overlay, .. } = &mut self.terrain
         {
             overlay
-                .add_footprint(footprint)
+                .add_footprint(rect)
                 .map_err(|_| EconomyError::Capacity)?;
         }
         let id = self.allocate_entity_id()?;
-        if rules.blocks {
-            for y in footprint.min.y..footprint.max.y {
-                for x in footprint.min.x..footprint.max.x {
+        if let Some(rect) = collision {
+            for y in rect.min.y..rect.max.y {
+                for x in rect.min.x..rect.max.x {
                     self.economy.blocked_tiles.insert(TileCoord::new(x, y));
                 }
             }
         }
-        let population_used = self
-            .units()
-            .filter(|unit| unit.player == player)
-            .count()
-            .min(u16::MAX as usize) as u16;
+        // Counting a player's units walks every unit: only a new player needs it.
+        let population_used = if self.economy.players.contains_key(&player) {
+            0
+        } else {
+            self.units()
+                .filter(|unit| unit.player == player)
+                .count()
+                .min(u16::MAX as usize) as u16
+        };
         self.economy.players.entry(player).or_insert(PlayerEconomy {
             player,
             stockpile: Stockpile::default(),
@@ -126,10 +154,16 @@ impl GameWorld {
             population_cap: 0,
             age: crate::Age::Dark,
             researched: 0,
+            market_prices: MarketPrices::default(),
         });
         let work_total = u64::from(rules.build_seconds)
             * u64::from(self.config.tick_hz)
-            * super::buildings::BUILD_WORK_PER_BASE_TICK;
+            * super::buildings::BUILD_WORK_PER_BASE_TICK
+            * if kind == BuildingKind::Bridge {
+                (footprint.width().max(footprint.height()) - 2) as u64
+            } else {
+                1
+            };
         self.economy.buildings.insert(
             id,
             GameBuilding {
@@ -151,36 +185,59 @@ impl GameWorld {
                 max_hp,
                 los: los
                     .saturating_add(self.researched_los_bonus(player))
-                    .saturating_add(u8::from(
-                        self.has_researched(player, crate::Tech::Fletching)
-                            && matches!(kind, BuildingKind::TownCenter | BuildingKind::WatchTower),
-                    )),
+                    .saturating_add(
+                        if matches!(
+                            kind,
+                            BuildingKind::TownCenter
+                                | BuildingKind::WatchTower
+                                | BuildingKind::Castle
+                        ) {
+                            u8::from(self.has_researched(player, crate::Tech::Fletching))
+                                + u8::from(self.has_researched(player, crate::Tech::BodkinArrow))
+                        } else {
+                            0
+                        },
+                    ),
                 research: None,
                 gate_open: false,
+                rally_point: None,
                 food_remaining: (kind == BuildingKind::Farm).then(|| self.farm_food(player)),
+                farm_reseeds: 0,
+                garrison: Vec::new(),
             },
         );
+        let bucket = self.economy.dropoffs.entry((player, kind)).or_default();
+        let at = bucket.binary_search(&id).unwrap_or_else(|at| at);
+        bucket.insert(at, id);
+        if complete && matches!(kind, BuildingKind::Castle | BuildingKind::WatchTower) {
+            self.combat.tower_ready.insert(id, 0);
+        }
         self.refresh_population_cap(player);
+        self.index_new_building(id, player, footprint);
         if complete {
+            if matches!(kind, BuildingKind::WatchTower | BuildingKind::Castle) {
+                self.combat.tower_ready.insert(id, 0);
+            }
             self.update_building_vision(id);
             self.remember_visible_buildings();
         }
         if rules.blocks {
-            self.resource_collision_changed();
+            self.collision_closed(footprint);
         }
         Ok(id)
     }
 
-    /// Housing: the supporting completed buildings, capped at 200.
+    /// Housing: the supporting completed buildings, capped at the match's
+    /// population ceiling (200 unless the match sets another).
     pub(super) fn refresh_population_cap(&mut self, player: PlayerId) {
+        // Only the player's own buildings, through the per-kind index: a
+        // whole-world scan here ran on every placement in a 100-seat world.
         let cap = self
-            .economy
-            .buildings
-            .values()
-            .filter(|building| building.player == player && building.is_complete())
+            .player_buildings(player)
+            .filter(|building| building.is_complete())
             .map(|building| u32::from(building.kind.rules().population_support))
             .sum::<u32>()
-            .min(u32::from(MAX_POPULATION)) as u16;
+            .min(u32::from(self.economy.limits.population)) as u16;
         if let Some(state) = self.economy.players.get_mut(&player) {
             state.population_cap = cap;
         }
@@ -191,23 +248,56 @@ impl GameWorld {
         let Some(building) = self.economy.buildings.remove(&id) else {
             return;
         };
-        if building.kind.rules().blocks {
-            for y in building.footprint.min.y..building.footprint.max.y {
-                for x in building.footprint.min.x..building.footprint.max.x {
+        if building.kind == BuildingKind::Bridge && building.is_complete() {
+            self.remove_bridge_deck(building.footprint);
+        }
+        self.forget_building(id, building.footprint);
+        if let Some(bucket) = self
+            .economy
+            .dropoffs
+            .get_mut(&(building.player, building.kind))
+            && let Ok(at) = bucket.binary_search(&id)
+        {
+            bucket.remove(at);
+        }
+        if let Some(rect) = building
+            .kind
+            .collision_rect(building.footprint, building.is_complete())
+        {
+            for y in rect.min.y..rect.max.y {
+                for x in rect.min.x..rect.max.x {
                     self.economy.blocked_tiles.remove(&TileCoord::new(x, y));
                 }
             }
             if let Terrain::Map { overlay, .. } = &mut self.terrain {
-                overlay.remove_footprint(building.footprint);
+                overlay.remove_footprint(rect);
             }
-            self.resource_collision_changed();
+            self.collision_opened(building.footprint);
         }
+        self.release_destroyed_garrison(id, building.footprint, building.garrison, &mut Vec::new());
         self.economy.open_gates.remove(&id);
         self.combat.tower_ready.remove(&id);
         self.refresh_population_cap(building.player);
-        if self.update_observer(id, None) {
-            self.remember_visible_buildings();
+        self.update_observer(id, None);
+        self.remember_visible_buildings();
+    }
+
+    pub(super) fn open_town_center_arches(&mut self, footprint: TileRect) {
+        let Some(solid) = BuildingKind::TownCenter.collision_rect(footprint, true) else {
+            return;
+        };
+        for y in footprint.min.y..footprint.max.y {
+            for x in footprint.min.x..footprint.max.x {
+                let tile = TileCoord::new(x, y);
+                if !solid.contains(tile) {
+                    self.economy.blocked_tiles.remove(&tile);
+                    if let Terrain::Map { overlay, .. } = &mut self.terrain {
+                        overlay.remove_footprint(TileRect::from_xywh(x, y, 1, 1));
+                    }
+                }
+            }
         }
+        self.collision_opened(footprint);
     }
 
     /// Bounded local placement around the certified start, favoring inland
@@ -217,12 +307,12 @@ impl GameWorld {
         player: PlayerId,
         start: TileCoord,
     ) -> Result<EntityId, EconomyError> {
-        if self.buildings().any(|building| building.player == player) {
+        if self.player_buildings(player).next().is_some() {
             return Err(EconomyError::AlreadyStarted);
         }
-        if self.economy.buildings.len() >= MAX_ECONOMY_BUILDINGS
+        if self.economy.buildings.len() >= self.economy.limits.buildings
             || (!self.economy.players.contains_key(&player)
-                && self.economy.players.len() >= MAX_ECONOMY_PLAYERS)
+                && self.economy.players.len() >= self.economy.limits.players)
             || self
                 .next_entity_id
                 .saturating_add(u64::from(VILLAGE_RULES.starting_villagers) + 1)
@@ -301,10 +391,16 @@ impl GameWorld {
         {
             self.spawn_villager(player, position(tile)?)?;
         }
-        self.initialize_starting_kit(
+        // The village already stands (Town Center, villagers): a kit that cannot
+        // be placed in full must not fail the start, or a host that retries
+        // another site would meet `AlreadyStarted` with a half-made village.
+        match self.initialize_starting_kit(
             TileRect::new(origin, TileCoord::new(origin.x + side, origin.y + side)),
             scout_tile,
-        )?;
+        ) {
+            Ok(()) | Err(EconomyError::InvalidFootprint) => {}
+            Err(error) => return Err(error),
+        }
         self.initialize_wildlife(TileCoord::new(origin.x + side / 2, origin.y + side / 2));
         self.remember_visible_resources();
         Ok(scout)

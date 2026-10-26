@@ -32,10 +32,10 @@ fn ordinary_compilation_source_has_no_ground_mixing_path() {
             !source
                 .lines()
                 .any(|line| line.trim_start().starts_with("//")),
-            "embedded shaders retain comment-only lines"
+            "generated shaders retain comment-only lines"
         );
         assert!(!source.contains(", ") && !source.contains(": "));
-        let fragment = source.split("fn fs_main(").nth(1).unwrap();
+        let fragment = source.split("fn world_colour(").nth(1).unwrap();
         let sprite = fragment
             .split("if in.solid == 0u {")
             .nth(1)
@@ -49,5 +49,18 @@ fn ordinary_compilation_source_has_no_ground_mixing_path() {
         }
         assert!(sprite.contains("if texel.a <= 0.0 { discard; }"));
         assert!(sprite.contains("return texel * in.color;"));
+    }
+}
+
+#[wasm_bindgen_test]
+fn runtime_shaders_reject_partial_or_invalid_assets() {
+    let valid = crate::shader_data::browser_shaders().map(str::to_owned);
+    assert!(crate::web::shaders::validate(&valid).is_ok());
+    for invalid in [
+        [String::new(), valid[1].clone()],
+        [valid[0].clone(), "invalid WGSL".to_owned()],
+        ["x".repeat(65537), valid[1].clone()],
+    ] {
+        assert!(crate::web::shaders::validate(&invalid).is_err());
     }
 }

@@ -158,6 +158,16 @@ flat in vec4 vRect3;
 in float vShade;
 in float vFog;
 out vec4 result;
+vec4 ownerSample(vec2 uv, uint page) {
+    vec4 base = textureLod(atlas, vec3(uv, float(page)), 0.0);
+    if ((vPages.w & 64u) == 0u) return base;
+    vec4 mask = floor(textureLod(atlas, vec3(uv, float(page + 3u)), 0.0) * 255.0 + .5);
+    if (mask.g == 0.0) return base;
+    float foreground = mask.g * 255.0, background = mask.b * (255.0 - mask.g);
+    vec3 ramp = floor(floor(vRect3.rgb * 255.0 + .5) * (.65 + min(mask.r, 7.0) / 7.0 * .35));
+    base.rgb = floor((ramp * foreground + floor(base.rgb * 255.0 + .5) * background) / (foreground + background) + .5) / 255.0;
+    return base;
+}
 vec4 boxAverage(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
     vec2 size = vec2(textureSize(atlas, 0).xy);
     vec2 px = dx * size, py = dy * size;
@@ -171,7 +181,7 @@ vec4 boxAverage(vec2 uv, uint page, vec4 rect, vec2 dx, vec2 dy) {
     vec4 sum = vec4(0);
     for (int i=0; i<4; i++) {
         float sx = (i & 2) != 0 ? 1.0 : -1.0, sy = (i & 1) != 0 ? 1.0 : -1.0;
-        vec4 tap = floor(textureLod(atlas, vec3(clamp(uv + .25 * (sx * dx + sy * dy), lo, hi), float(page)), 0.0) * 255.0 + .5);
+        vec4 tap = floor(ownerSample(clamp(uv + .25 * (sx * dx + sy * dy), lo, hi), page) * 255.0 + .5);
         sum += vec4(tap.rgb * tap.a, tap.a);
     }
     if (sum.a == 0.0) return vec4(-1.0);
@@ -328,13 +338,15 @@ void main() {
         result = vColor; return;
     }
     if (vSolid == 0u) {
-        vec4 texel = textureLod(atlas, vec3(vUv, float(vPages.x)), 0.0);
+        if ((vPages.w & 128u) != 0u && dot(abs((vUv - vRect.xy) / vRect.zw - .5), vec2(1)) > .5) discard;
+        vec4 texel = ownerSample(vUv, vPages.x);
         // Quad pages.w bit 0 marks nearest-sampled terrain, not an object.
         if ((vPages.w & 1u) == 0u) {
             vec4 average = boxAverage(vUv, vPages.x, vRect, dx, dy);
             if (average.a >= 0.0) texel = average;
         }
         if (texel.a <= 0.0) discard;
+        if (vColor.r > 1.0) texel.r = min(texel.r, 1.0 / vColor.r);
         result = texel * vColor;
         return;
     }

@@ -26,7 +26,7 @@ test("villager build menu places a House and watches authoritative completion", 
   const actors = async () =>
     JSON.parse(
       (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
-    ) as { kind: string; x: number; y: number }[];
+    ) as { kind: string; x: number; y: number; task?: string }[];
   await mkdir("../.cache/client-shots", { recursive: true });
   await writeFile(
     "../.cache/client-shots/start-actors.json",
@@ -42,8 +42,12 @@ test("villager build menu places a House and watches authoritative completion", 
   ).toBe(false);
   const worker = (await actors()).find((a) => a.kind === "Villager");
   if (!worker) throw new Error("Starting villager missing");
-  const selectWorker = async (nth: number, boxed = false) => {
-    const worker = (await actors()).filter((a) => a.kind === "Villager")[nth];
+  const selectWorker = async (nth: number | "Farming", boxed = false) => {
+    const villagers = (await actors()).filter((a) => a.kind === "Villager");
+    const worker =
+      nth === "Farming"
+        ? villagers.find((a) => a.task === "Farming")
+        : villagers[nth];
     if (!worker) throw new Error("Builder missing");
     if (boxed) {
       // A stationary farmer can share ground with a foreground sheep.
@@ -68,7 +72,7 @@ test("villager build menu places a House and watches authoritative completion", 
   expect(frameCount).toBeLessThanOrEqual(5120);
   await writeFile(
     "../.cache/client-shots/atlas.json",
-    JSON.stringify({ assets, frameCount, pages: 4, atlasBytes: 67108864 }),
+    JSON.stringify({ assets, frameCount, pages: 5, atlasBytes: 83886080 }),
   );
   await page.screenshot({ path: "../.cache/client-shots/build-menu.png" });
   await page.locator("#build-house").click();
@@ -167,7 +171,18 @@ test("villager build menu places a House and watches authoritative completion", 
   await expect(page.locator("#workers-food")).toHaveText("1", {
     timeout: 15_000,
   });
-  await selectWorker(1, true);
+  // The top bar counts the farmer from the order on, while it still walks;
+  // box-select it only once it stands at work, not where it was a frame ago.
+  await expect
+    .poll(
+      async () =>
+        (await actors()).some(
+          (a) => a.kind === "Villager" && a.task === "Farming",
+        ),
+      { timeout: 60_000 },
+    )
+    .toBe(true);
+  await selectWorker("Farming", true);
   await page.locator("#stop-units").click();
   await expect(page.locator("#workers-food")).toHaveText("0");
   const farm = (await actors()).find((a) => a.kind === "Farm");

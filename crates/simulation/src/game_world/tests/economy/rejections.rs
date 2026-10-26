@@ -9,7 +9,13 @@ fn at(x: i32, y: i32) -> TileCoord {
 fn sealed_builder(world: &mut GameWorld) -> (EntityId, EntityId) {
     let builder = villager_at(world, 150, 150);
     let house = world
-        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(152, 150))
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(152, 150),
+            false,
+        )
         .unwrap();
     for (dx, dy) in [
         (-1, -1),
@@ -53,7 +59,13 @@ fn a_rejected_build_order_keeps_the_builders_current_task() {
     let count = world.buildings().count();
     assert!(
         world
-            .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(160, 160))
+            .issue_build(
+                PlayerId(0),
+                &[builder],
+                BuildingKind::House,
+                at(160, 160),
+                false
+            )
             .is_err()
     );
     assert_eq!(

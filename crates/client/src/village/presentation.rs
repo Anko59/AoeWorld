@@ -5,6 +5,7 @@ use crate::resource_state::ResourceStateCache;
 use aoe_core::{ScreenPoint, TileCoord};
 use aoe_protocol::UnitKind;
 pub(in super::super) fn values(client: &Client) -> Vec<f64> {
+    super::rally::present(client);
     let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
     let owner = owner(client);
     let mut values = vec![0.0; 9];
@@ -14,31 +15,58 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             .as_ref()
             .is_some_and(|s| s.ready_state() == web_sys::WebSocket::OPEN),
     ));
-    // Header: connection, selected kind/remaining, cursor, highlight center,
-    // actor count, resource count, highlight width. Own actors are world triples.
+    // Header: connection, selected kind/remaining, cursor (6-9: gather fish,
+    // forage, chop, mine), highlight center,
+    // actor count, resource count, highlight width. Actor records append owner and RGB to world triples.
     values[1] = -1.0;
     for u in client.units.values() {
-        if u.player == owner {
+        let position = u.position.as_tiles();
+        if u.hp > 0
+            && (u.player == owner || client.fog.state(position.map(|p| p.floor() as i32)) == 2)
+        {
             values[6] += 1.0;
-            marker(&mut values, 0.0, u.position.as_tiles());
+            actor_marker(
+                &mut values,
+                0.0,
+                position,
+                u.player,
+                owner,
+                client.team_colour,
+            );
         }
     }
     for b in &client.village.buildings {
-        if b.player == owner {
-            values[6] += 1.0;
-            marker(&mut values, 1.0, building_center(b));
-        }
+        values[6] += 1.0;
+        actor_marker(
+            &mut values,
+            1.0,
+            building_center(b),
+            b.player,
+            owner,
+            client.team_colour,
+        );
     }
 
+    // Strategic actors update at HUD cadence. Never inspect resident resources
+    // or build a detailed picking scene for a distant overview.
+    if crate::playground::game::strategic::active(client) {
+        return values;
+    }
     let focus = client.selected.units.iter().find_map(|id| {
         client
             .units
             .get(id)
-            .filter(|u| matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip))
+            .filter(|u| {
+                u.player == owner && matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip)
+            })
             .map(|u| u.position.as_tiles())
     });
     let villager = focus.is_some();
-    let hover = if villager && !client.village.move_cursor {
+    let hover = if villager
+        && !client.village.move_cursor
+        && client.village.placement.is_none()
+        && client.drag.is_none()
+    {
         client
             .pointer
             .and_then(|p| super::picking::resource(client, p))
@@ -62,6 +90,8 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         0.0
     };
     if !client.village.move_cursor
+        && client.village.placement.is_none()
+        && client.drag.is_none()
         && client.selected.units.iter().any(|id| {
             client
                 .units
@@ -72,11 +102,29 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
     {
         let actor = super::picking::actor(client, point);
         if actor.is_some_and(|a| a.1) {
-            values[3] = if villager { 5.0 } else { 4.0 };
+            values[3] = if !super::construction::builders(client).is_empty() {
+                5.0
+            } else {
+                4.0
+            };
         } else if actor.is_some_and(|a| a.2)
             || super::picking::enemy_building(client, point).is_some()
         {
             values[3] = 4.0;
+        } else if let Some(building) = super::garrison::target(client, point) {
+            values[3] = if building.garrison.len() < usize::from(building.kind.garrison_capacity())
+            {
+                11.0
+            } else {
+                3.0
+            };
+        } else if !super::construction::builders(client).is_empty()
+            && super::construction::target(client, point).is_some_and(|b| {
+                b.construction == aoe_protocol::ConstructionState::UnderConstruction
+                    || b.hp < b.max_hp
+            })
+        {
+            values[3] = 10.0;
         }
     }
     // Starting-kit nodes live in the resource overlay, not in terrain chunks.
@@ -121,6 +169,9 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             }
         }
         let highlighted = hover.is_some_and(|(id, _)| id == node.id);
+        if highlighted && values[3] == 1.0 {
+            values[3] = gather_cursor(node.object, node.kind);
+        }
         if node.kind as u8 == 1 && !highlighted {
             continue;
         }
@@ -147,7 +198,27 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             values.extend_from_slice(&[kind as f64, p.x * scale, p.y * scale, distance]);
         }
     }
+    client.village.hovered_resource.set(
+        hover
+            .filter(|_| (6.0..=9.0).contains(&values[3]))
+            .map(|(id, _)| id),
+    );
     values
+}
+
+/// The gather cursor names the work, as AoE2's do: a fishing hook over fish
+/// (never a builder's hammer), a basket over berries, an axe over trees and a
+/// pick over gold and stone.
+pub(in super::super) fn gather_cursor(
+    object: aoe_map::ObjectKind,
+    kind: aoe_map::ResourceKind,
+) -> f64 {
+    match (object, kind) {
+        (aoe_map::ObjectKind::ShoreFish | aoe_map::ObjectKind::DeepFish, _) => 6.0,
+        (_, aoe_map::ResourceKind::Food) => 7.0,
+        (_, aoe_map::ResourceKind::Wood) => 8.0,
+        _ => 9.0,
+    }
 }
 
 /// HUD tags distinguish food objects without changing their stockpile kind.
@@ -173,16 +244,26 @@ pub(super) fn starting_selection(id: u64, resources: &ResourceStateCache) -> Opt
 }
 
 fn passable(client: &Client, point: ScreenPoint) -> bool {
-    if client.map_content_hash.is_some()
+    let Some(p) = map::world_at_screen(client, point) else {
+        return false;
+    };
+    let tile = TileCoord::new(p[0].floor() as i32, p[1].floor() as i32);
+    let occupant = client
+        .village
+        .buildings
+        .iter()
+        .find(|b| b.footprint.contains(tile));
+    let bridge = occupant.is_some_and(|b| {
+        b.kind == aoe_protocol::BuildingKind::Bridge
+            && b.construction == aoe_protocol::ConstructionState::Complete
+    });
+    if !bridge
+        && client.map_content_hash.is_some()
         && aoe_rendering::surface_hit_at(&map::scene::prepare(client).triangles, point)
             .is_none_or(|hit| !hit.1)
     {
         return false;
     }
-    let Some(p) = map::world_at_screen(client, point) else {
-        return false;
-    };
-    let tile = TileCoord::new(p[0].floor() as i32, p[1].floor() as i32);
     let terrain = map::terrain_tile(client, tile.x, tile.y);
     // Orders are accepted independently per unit: a mixed selection can move
     // wherever at least one living owned unit's domain permits it.
@@ -190,31 +271,40 @@ fn passable(client: &Client, point: ScreenPoint) -> bool {
         client.units.get(id).is_some_and(|u| {
             u.player == owner(client)
                 && u.hp > 0
-                && if u.kind == UnitKind::FishingShip {
-                    terrain.is_some_and(|t| {
-                        matches!(
-                            t.water,
-                            aoe_map::WaterKind::Ocean
-                                | aoe_map::WaterKind::Lake
-                                | aoe_map::WaterKind::River
-                        ) && t.material != aoe_map::GroundMaterial::Ford
-                    })
+                && if u.kind.is_naval() {
+                    !bridge
+                        && terrain.is_some_and(|t| {
+                            matches!(
+                                t.water,
+                                aoe_map::WaterKind::Ocean
+                                    | aoe_map::WaterKind::Lake
+                                    | aoe_map::WaterKind::River
+                            ) && t.material != aoe_map::GroundMaterial::Ford
+                        })
                 } else {
-                    terrain.map_or(client.map_content_hash.is_none(), |t| t.passable)
+                    bridge || terrain.map_or(client.map_content_hash.is_none(), |t| t.passable)
                 }
         })
     });
     let resource = map::feedback::blocker_at(client, tile).is_some();
-    let building = client.village.buildings.iter().any(|b| {
-        tile.x >= b.footprint.min.x
-            && tile.y >= b.footprint.min.y
-            && tile.x < b.footprint.max.x
-            && tile.y < b.footprint.max.y
-    });
+    let building = occupant.is_some() && !bridge;
     aoe_simulation::destination_passable(ground, resource, building)
 }
 
 #[inline(never)]
 fn marker(values: &mut Vec<f64>, kind: f64, position: [f64; 2]) {
     values.extend_from_slice(&[kind, position[0], position[1]]);
+}
+
+fn actor_marker(
+    values: &mut Vec<f64>,
+    kind: f64,
+    position: [f64; 2],
+    player: aoe_core::PlayerId,
+    owner: aoe_core::PlayerId,
+    team: [u8; 3],
+) {
+    marker(values, kind, position);
+    let [r, g, b] = aoe_rendering::player_colour(player, owner, team).map(u32::from);
+    values.extend_from_slice(&[f64::from(player.0), f64::from(r << 16 | g << 8 | b)]);
 }

@@ -2,6 +2,62 @@ use super::*;
 use aoe_rendering::{GameArt, GameFrame, SceneCamera, resource_sprite_bounds};
 
 #[wasm_bindgen_test]
+fn partly_depleted_trees_select_species_chopped_art_until_exhaustion() {
+    use aoe_protocol::{ResourceAmount, ResourceState};
+    let mut art = resource_art(frame());
+    let chopped = GameFrame {
+        atlas: aoe_rendering::AtlasAddress::new(2, [0.5, 0.0, 0.01, 0.01]),
+        ..frame()
+    };
+    art.scenery.logs = vec![chopped; 2];
+    art.scenery.stumps = vec![frame(); 3];
+    let node = ResourceNode::starting(
+        aoe_core::TileCoord::new(12, 13),
+        aoe_map::ResourceKind::Wood,
+    )
+    .unwrap();
+    let mut cache = crate::resource_state::ResourceStateCache::default();
+    let state = |from, revision, remaining| ResourceState {
+        snapshot_page: None,
+        subscription_revision: 1,
+        from_revision: from,
+        revision,
+        changes: vec![ResourceAmount {
+            id: node.id,
+            remaining,
+        }],
+    };
+    assert!(cache.apply_at(state(None, 0, node.initial_amount), 0.0));
+    assert_eq!(
+        super::super::resources::scene_kind(&node, &cache, 0.0),
+        Some(1)
+    );
+    assert!(cache.apply_at(state(Some(0), 1, node.initial_amount - 1), 0.0));
+    for family in 0..=4 {
+        let resource = SceneResource {
+            kind: super::super::resources::scene_kind(&node, &cache, 0.0).unwrap(),
+            visual_family: family,
+            ..resource_at_sprite_center(test_camera().0, frame(), node.id, [640.0, 360.0])
+        };
+        let (body, shadow) = aoe_rendering::scene_resource_presentation(&art, resource).unwrap();
+        assert_eq!(body.atlas, chopped.atlas);
+        assert!(
+            shadow.is_none(),
+            "chopped bodies cannot retain a full-tree shadow"
+        );
+    }
+    assert!(cache.apply_at(state(Some(1), 2, 0), 100.0));
+    assert_eq!(
+        super::super::resources::scene_kind(&node, &cache, 3099.0),
+        Some(SceneResource::TREE_STUMP)
+    );
+    assert_eq!(
+        super::super::resources::scene_kind(&node, &cache, 3100.0),
+        None
+    );
+}
+
+#[wasm_bindgen_test]
 fn native_species_resource_state_depletion_precedes_actual_viewport_selection() {
     use aoe_protocol::{ResourceAmount, ResourceState};
     let (camera, scene) = test_camera();
@@ -23,6 +79,7 @@ fn native_species_resource_state_depletion_precedes_actual_viewport_selection() 
     });
     let mut cache = crate::resource_state::ResourceStateCache::default();
     assert!(cache.apply(ResourceState {
+        snapshot_page: None,
         subscription_revision: 1,
         from_revision: None,
         revision: 2,
@@ -63,6 +120,7 @@ fn native_species_resource_state_depletion_precedes_actual_viewport_selection() 
         );
     }
     assert!(cache.apply(ResourceState {
+        snapshot_page: None,
         subscription_revision: 1,
         from_revision: Some(2),
         revision: 3,
@@ -143,6 +201,7 @@ fn resource_at_sprite_center(
         y: center[1] + (f64::from(frame.anchor[1]) - f64::from(frame.size[1]) * 0.5) * camera.zoom,
     };
     SceneResource {
+        highlight: 0,
         id,
         position: camera.screen_to_world_at_height(contact_screen, 0.0),
         kind: 0,

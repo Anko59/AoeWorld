@@ -36,9 +36,8 @@ fn town_center_ellipse_lower_arc_is_drawn_over_flat_ground_on_canvas() {
         kind: SceneUnitKind::TownCenter,
         id: aoe_core::EntityId(1),
         position: [8.0, 8.0],
-        moving: false,
+        visual: crate::SceneUnitVisual::new(false).with_selected(true),
         facing: 0,
-        selected: true,
         elevation_meters: 0.0,
     };
     let surfaces = projected_surface_triangles(&flat_field(16), camera);
@@ -93,4 +92,40 @@ fn canvas_scans_only_the_ellipse_bounding_box_not_twice_its_size() {
     // Radii are [24, 8] pixels plus the one-pixel stroke half width.
     assert!(bounds[2] - bounds[0] <= 2 * 25 + 2, "{bounds:?}");
     assert!(bounds[3] - bounds[1] <= 2 * 9 + 2, "{bounds:?}");
+}
+
+#[wasm_bindgen_test]
+fn canvas_selection_uses_packet_colour_including_hostile_red() {
+    let document = web_sys::window().unwrap().document().unwrap();
+    let canvas = document
+        .create_element("canvas")
+        .unwrap()
+        .dyn_into::<web_sys::HtmlCanvasElement>()
+        .unwrap();
+    canvas.set_width(160);
+    canvas.set_height(80);
+    let context = crate::game_renderer::context(&canvas).unwrap();
+    let camera = SceneCamera {
+        center: [8.0; 2],
+        zoom: 1.0,
+        viewport: [160.0, 80.0],
+        focus_elevation_meters: 0.0,
+    };
+    let (mut packet, depth) = crate::game_grid::selection_ring(camera, [8.0; 2], 0.0)[0];
+    let mut presentation = CanvasPresentation::new(160, 80);
+    for colour in [[245_u8, 65, 65, 255], [50, 190, 65, 255]] {
+        packet.color = colour.map(|c| f32::from(c) / 255.0);
+        canvas_depth::render_canvas_world(
+            &canvas,
+            &context,
+            &[],
+            &mut presentation,
+            &[WorldLayer::Selection(packet, depth)],
+            camera,
+            false,
+        )
+        .unwrap();
+        let at = (48 * 160 + 80) * 4;
+        assert_eq!(&presentation.color_buffer[at..at + 4], &colour);
+    }
 }

@@ -1,7 +1,7 @@
 // Setup owns map preparation. Uncertain acceptance keeps the ORIGINAL key.
 // The stated recovery bound (web/start/README.md): a stalled probe releases setup.
 const RECOVERY_TIMEOUT_MS = 10_000;
-export function initMapJobs({ readJson, controllerHeaders, onStart, onProgress, onActivated, onError, onSettled, onCancelable, onCancelled, onRecovering }) {
+export function initMapJobs({ readJson, controllerHeaders, activate, onStart, onProgress, onActivated, onError, onSettled, onCancelable, onCancelled, onRecovering }) {
   const storageKey = 'aoeworld.map-creation-job';
   let acceptedId = null, submission = null, busy = false, cancelable = false, recovered = false;
   try {
@@ -57,6 +57,11 @@ export function initMapJobs({ readJson, controllerHeaders, onStart, onProgress, 
       await new Promise(resolve => setTimeout(resolve, 250));
     }
   };
+  const activatePackage = async hash => {
+    const response = await fetch(`/maps/${encodeURIComponent(hash)}`, { method: 'POST', headers: controllerHeaders() });
+    if (response.status >= 400 && response.status < 500) remember(null);
+    return readJson(response);
+  };
   const run = async request => {
     if (busy) return;
     busy = true;
@@ -65,10 +70,12 @@ export function initMapJobs({ readJson, controllerHeaders, onStart, onProgress, 
       await submit(request);
       const completed = await waitForJob();
       if (!completed) return;
-      const response = await fetch(`/maps/${encodeURIComponent(completed.content_hash)}`, { method: 'POST', headers: controllerHeaders() });
-      if (response.status >= 400 && response.status < 500) remember(null);
-      const value = await readJson(response);
+      // A skirmish with AI opponents builds its match through `activate`;
+      // otherwise the package itself is activated. Null means cancelled.
+      const custom = activate?.(completed.content_hash);
+      const value = custom === undefined ? await activatePackage(completed.content_hash) : await custom;
       remember(null);
+      if (!value) { onCancelled?.(); return; }
       onActivated?.(value);
     } catch (error) {
       onError?.(error.message || 'Unable to prepare this map.', pending());
