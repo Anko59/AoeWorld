@@ -120,15 +120,6 @@ impl Search {
         .max(self.peak_entries)
     }
 
-    pub(crate) fn poll(
-        &mut self,
-        generator: &MapChunkGenerator,
-        remaining: &mut u32,
-        cancelled: &dyn Fn() -> bool,
-    ) -> Result<Option<HierarchicalOutcome>> {
-        self.poll_overlay(generator, &ResourceOverlay::default(), remaining, cancelled)
-    }
-
     pub(crate) fn poll_overlay(
         &mut self,
         generator: &MapChunkGenerator,

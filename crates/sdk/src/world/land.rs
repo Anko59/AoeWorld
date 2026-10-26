@@ -52,7 +52,7 @@ impl World {
             .and_then(|path| path.last().copied())
     }
 
-    fn in_bounds(&self, tile: TileCoord) -> bool {
+    pub(super) fn in_bounds(&self, tile: TileCoord) -> bool {
         tile.x >= 0 && tile.y >= 0 && tile.x < self.width && tile.y < self.height
     }
 
@@ -74,13 +74,17 @@ impl World {
     }
 
     fn known_land(&self, tile: TileCoord) -> bool {
-        self.in_bounds(tile)
-            && self.fog.explored_exactly(tile)
-            && self.catalog.passable(tile) == Some(true)
+        self.in_bounds(tile) && self.fog.explored_exactly(tile) && self.passable(tile) == Some(true)
     }
 
     fn land_step(&self, from: TileCoord, to: TileCoord) -> bool {
-        if !self.known_land(to) || !self.catalog.land_edge(from, to) {
+        if !self.known_land(to) {
+            return false;
+        }
+        if let Some(clear) = self.bridges.bridge_edge(from, to) {
+            return clear;
+        }
+        if !self.catalog.land_edge(from, to) {
             return false;
         }
         if from.x != to.x && from.y != to.y {

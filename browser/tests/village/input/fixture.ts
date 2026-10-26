@@ -1,7 +1,11 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page, type WebSocketRoute } from "@playwright/test";
 import { gameAssets } from "../../game-assets.js";
 import { scoutCombat, villagerCombat } from "../../wire/combat.js";
-import { darkAgeState, marketPrices } from "../../wire/buildings.js";
+import {
+  darkAgeState,
+  feudalAgeState,
+  marketPrices,
+} from "../../wire/buildings.js";
 import { disabledFog } from "../../wire/fog.js";
 import { chunks } from "../../rendering/fixtures/hover.js";
 import { freshHud } from "../fixtures/resources.js";
@@ -53,6 +57,7 @@ export function building(
     0,
     0,
     0, // Prepaid Mill reseeds follow the rally point in the current wire.
+    0, // Current building state appends its bounded garrison list.
   ];
 }
 
@@ -62,7 +67,12 @@ export async function inputFixture(
   renderer: string,
   buildings: number[][] = [],
   cursorCatalog = false,
+  viewer: 0 | 1 = 0,
+  observe?: (bytes: Buffer, socket: WebSocketRoute) => void,
+  options: { carried?: boolean; query?: string; cargo?: number } = {},
 ) {
+  const navy =
+    options.cargo === undefined ? undefined : { cargo: options.cargo };
   const commands: number[][] = [];
   await gameAssets(page, true);
   if (cursorCatalog) {
@@ -77,7 +87,7 @@ export async function inputFixture(
     };
     await page.route("**/asset-pack/interface.json", (route) =>
       route.fulfill({
-        json: { commands: { attack: art, "build-cursor": art } },
+        json: { commands: { attack: art, "build-cursor": art, garrison: art } },
       }),
     );
   }
@@ -85,6 +95,7 @@ export async function inputFixture(
     socket.onMessage((message) => {
       const bytes =
         typeof message === "string" ? Buffer.from(message) : message;
+      observe?.(bytes, socket);
       if (bytes[0] === 0)
         socket.send(
           Buffer.from([
@@ -116,7 +127,7 @@ export async function inputFixture(
         x: number,
         y: number,
         kind: number,
-        player = 0,
+        player = viewer,
       ) => [
         id,
         player,
@@ -126,7 +137,7 @@ export async function inputFixture(
         0,
         kind,
         0,
-        0,
+        ...(options.carried && id === 2 ? [1, 1, 7] : [0]),
         0,
         ...(kind === 1 ? scoutCombat : villagerCombat),
       ];
@@ -135,20 +146,23 @@ export async function inputFixture(
           1,
           ...revision,
           0,
-          4,
+          navy ? 5 : 4,
           ...unit(0, 8192.5, 8192.5, 1),
           ...unit(2, 8194.5, 8194.5, 0),
           ...unit(3, 8196.5, 8194.5, 0),
-          ...unit(4, 8189.5, 8192.5, 0, 1),
+          ...unit(4, 8189.5, 8192.5, 0, viewer === 0 ? 1 : 0),
+          ...(navy
+            ? [...unit(5, 8193.5, 8194.5, 20).slice(0, -1), navy.cargo]
+            : []),
           1,
-          0,
+          viewer,
           ...uint(2000),
           ...uint(2000),
           100,
           ...uint(2000),
           3,
           20,
-          ...darkAgeState,
+          ...(navy ? feudalAgeState : darkAgeState),
           ...marketPrices,
           buildings.length,
           ...buildings.flat(),
@@ -176,7 +190,10 @@ export async function inputFixture(
       socket.send(disabledFog(revision));
     });
   });
-  await page.goto(`/?play=1#x=8192.5&y=8192.5&zoom=.6&renderer=${renderer}`);
+  const preference = renderer === "canvas2d" ? "canvas" : renderer;
+  await page.goto(
+    `/?play=1${options.query ?? ""}#x=8192.5&y=8192.5&zoom=.6&renderer=${preference}`,
+  );
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 60_000,
   });
@@ -184,12 +201,23 @@ export async function inputFixture(
     "data-renderer",
     renderer,
   );
+  const terrain = chunks().map((chunk) => {
+    if (!navy) return chunk;
+    const bytes = Buffer.from(chunk.payload_hex, "hex");
+    for (let i = 0; i < 1024; i++) {
+      const x = chunk.x * 32 + (i % 32);
+      const y = chunk.y * 32 + Math.floor(i / 32);
+      if (x === 8193 && y >= 8186 && y <= 8201)
+        bytes.writeUInt32LE(11 | (3 << 12), 7 + i * 35 + 14);
+    }
+    return { ...chunk, payload_hex: bytes.toString("hex") };
+  });
   await page.evaluate(async (payload) => {
     const game = await import(
       new URL("/pkg/aoe_client.js", location.href).href
     );
     game.activate_surface_fixture("04".repeat(32), payload);
-  }, JSON.stringify(chunks()));
+  }, JSON.stringify(terrain));
   await page.keyboard.press("Home");
   await freshHud(page);
   return commands;

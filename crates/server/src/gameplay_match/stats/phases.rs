@@ -65,6 +65,11 @@ impl Phases {
 
 #[derive(Clone, Default)]
 pub(super) struct Micros([u64; NAMES.len()]);
+impl Micros {
+    pub(super) fn values(&self) -> impl Iterator<Item = (&'static str, u64)> + '_ {
+        NAMES.iter().copied().zip(self.0)
+    }
+}
 impl Serialize for Micros {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(Some(NAMES.len()))?;

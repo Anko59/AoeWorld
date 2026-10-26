@@ -45,11 +45,11 @@ pub use http::Endpoint;
 pub use lobby::{MatchInfo, MatchMap, SlotAssignment, SlotKind, start_match};
 pub use model::{
     Age, Animal, AnimalKind, AnimalTask, Building, BuildingKind, CarriedResource, CommandResult,
-    ConstructionState, Economy, MarketPrices, Projectile, RallyPoint, RallyTarget, ResourceKind,
-    ResourceNode, Stockpile, Tech, TradeResource, Unit, UnitKind, UnitTask, Visibility,
-    distance_squared,
+    ConstructionState, Economy, GarrisonUnitState, MarketPrices, Projectile, RallyPoint,
+    RallyTarget, ResourceKind, ResourceNode, Stockpile, Tech, TradeResource, Unit, UnitKind,
+    UnitTask, Visibility, distance_squared,
 };
 pub use orders::Order;
 pub use world::World;
 
-pub use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
+pub use aoe_core::{EntityId, Formation, PlayerId, TileCoord, TileRect, WorldPosition};

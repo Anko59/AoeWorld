@@ -25,6 +25,8 @@ macro_rules! mirror {
     };
 }
 
+mirror!(Formation, aoe_sdk::Formation, [Line, Box, Staggered, Flank]);
+
 mirror!(
     UnitKind,
     aoe_sdk::UnitKind,
@@ -36,7 +38,21 @@ mirror!(
         Archer,
         Skirmisher,
         Spearman,
-        ManAtArms
+        ManAtArms,
+        LongSwordsman,
+        Pikeman,
+        Crossbowman,
+        EliteSkirmisher,
+        Knight,
+        LightCavalry,
+        Monk,
+        Mangonel,
+        BatteringRam,
+        Galley,
+        FireShip,
+        DemolitionShip,
+        TransportShip,
+        WarGalley,
     ]
 );
 mirror!(
@@ -58,7 +74,12 @@ mirror!(
         Blacksmith,
         Market,
         WatchTower,
-        PalisadeGate
+        PalisadeGate,
+        Castle,
+        Monastery,
+        University,
+        SiegeWorkshop,
+        Bridge,
     ]
 );
 mirror!(
@@ -84,10 +105,30 @@ mirror!(
         ScaleMailArmor,
         ScaleBardingArmor,
         Fletching,
-        PaddedArcherArmor
+        PaddedArcherArmor,
+        CastleAge,
+        LongSwordsman,
+        Pikeman,
+        Crossbowman,
+        EliteSkirmisher,
+        LightCavalry,
+        HandCart,
+        TownPatrol,
+        IronCasting,
+        ChainMailArmor,
+        ChainBardingArmor,
+        BodkinArrow,
+        LeatherArcherArmor,
+        HeavyPlow,
+        BowSaw,
+        GoldShaftMining,
+        Masonry,
+        Ballistics,
+        MurderHoles,
+        WarGalley,
     ]
 );
-mirror!(Age, aoe_sdk::Age, [Dark, Feudal]);
+mirror!(Age, aoe_sdk::Age, [Dark, Feudal, Castle]);
 mirror!(
     UnitTask,
     aoe_sdk::UnitTask,
@@ -153,11 +194,14 @@ mirror!(
         RejectedNoMarket,
         RejectedWorldLimit,
         RejectedOrderTooLarge,
-        RejectedUnexploredPlacement
+        RejectedUnexploredPlacement,
+        RejectedRequiresCastleAge,
+        RejectedGarrisonFull
     ]
 );
 
 pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<Formation>()?;
     module.add_class::<UnitKind>()?;
     module.add_class::<BuildingKind>()?;
     module.add_class::<ResourceKind>()?;

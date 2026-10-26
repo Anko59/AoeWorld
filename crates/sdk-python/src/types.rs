@@ -20,6 +20,7 @@ pub struct Unit {
     pub max_hp: u16,
     pub moving: bool,
     pub auto_scout: bool,
+    pub cargo_count: u8,
     pub idle: bool,
     pub alive: bool,
     pub military: bool,
@@ -61,6 +62,7 @@ impl From<aoe_sdk::Unit> for Unit {
             max_hp: unit.state.max_hp,
             moving: unit.state.moving,
             auto_scout: unit.state.auto_scout,
+            cargo_count: unit.state.cargo_count,
             idle: unit.idle(),
             alive: unit.alive(),
             military: unit.is_military(),
@@ -92,6 +94,9 @@ pub struct Building {
     pub visible: bool,
     pub queue_length: usize,
     pub farm_reseeds: u8,
+    pub garrison_capacity: u8,
+    /// Occupants as (id, kind, hp, max_hp), visible to the owner only.
+    pub garrison: Vec<(u32, UnitKind, u16, u16)>,
     pub rally_position: Option<(i32, i32)>,
     pub rally_resource: Option<u64>,
     pub rally_building: Option<u32>,
@@ -133,6 +138,8 @@ impl From<aoe_sdk::Building> for Building {
             visible: building.visible,
             queue_length: building.state.training_queue.len(),
             farm_reseeds: building.state.farm_reseeds,
+            garrison_capacity: building.kind().garrison_capacity(),
+            garrison: building.state.garrison.iter().map(|u| (u.id.0, u.kind.into(), u.hp, u.max_hp)).collect(),
             rally_position: building.state.rally_point.map(|r| {
                 let t = r.position.tile_floor();
                 (t.x, t.y)

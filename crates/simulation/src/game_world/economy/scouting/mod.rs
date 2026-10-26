@@ -81,7 +81,7 @@ enum Poll {
 
 impl UnitKind {
     pub fn is_cavalry(self) -> bool {
-        self == Self::Scout
+        matches!(self, Self::Scout | Self::Knight | Self::LightCavalry)
     }
 }
 
@@ -95,7 +95,7 @@ impl GameWorld {
     ) -> Result<(), EconomyError> {
         let unit = self
             .unit(id)
-            .filter(|u| u.hp > 0)
+            .filter(|u| u.hp > 0 && !self.embarked(u.id))
             .ok_or(EconomyError::UnknownEntity)?;
         if unit.player != player {
             return Err(EconomyError::NotOwner);

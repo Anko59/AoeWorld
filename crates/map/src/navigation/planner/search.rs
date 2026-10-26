@@ -126,18 +126,24 @@ impl<'a> ExpansionContext<'a> {
             true
         };
         if !checked_walkable(self.terrain, self.overlay, next, self.cancelled)?
-            || !self
-                .terrain
-                .route_edge_clear(active.tile, next, self.cancelled)?
+            || !self.terrain.route_overlay_edge_clear(
+                self.overlay,
+                active.tile,
+                next,
+                self.cancelled,
+            )?
             || !diagonal_ok
         {
             return Ok(());
         }
         if let Some(snapshot) = self.proof_overlay
             && (!checked_walkable(self.terrain, snapshot, next, self.cancelled)?
-                || !self
-                    .terrain
-                    .route_edge_clear(next, active.tile, self.cancelled)?
+                || !self.terrain.route_overlay_edge_clear(
+                    snapshot,
+                    next,
+                    active.tile,
+                    self.cancelled,
+                )?
                 || (delta_x != 0
                     && delta_y != 0
                     && (!diagonal_clear_checked(
@@ -257,8 +263,8 @@ fn diagonal_clear_checked(
     let vertical = TileCoord::new(tile.x, tile.y + delta_y);
     Ok(checked_walkable(terrain, overlay, horizontal, cancelled)?
         && checked_walkable(terrain, overlay, vertical, cancelled)?
-        && terrain.route_edge_clear(tile, horizontal, cancelled)?
-        && terrain.route_edge_clear(tile, vertical, cancelled)?)
+        && terrain.route_overlay_edge_clear(overlay, tile, horizontal, cancelled)?
+        && terrain.route_overlay_edge_clear(overlay, tile, vertical, cancelled)?)
 }
 
 #[path = "search/tests.rs"]

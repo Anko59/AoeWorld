@@ -64,6 +64,8 @@ impl GameWorld {
         if self.economy.gatherers.is_empty()
             && self.combat.is_idle()
             && self.economy.builders.is_empty()
+            && self.economy.garrison_orders.is_empty()
+            && self.economy.ejections.is_empty()
             && self.economy.buildings.is_empty()
             && self.wildlife.is_idle()
         {
@@ -73,6 +75,7 @@ impl GameWorld {
             }
             return self.collect_changed(changed);
         }
+        self.advance_garrisons(&mut changed);
         self.advance_combat(&mut changed);
         probe(TickPhase::Combat);
         self.advance_construction(&mut changed);

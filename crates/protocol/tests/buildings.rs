@@ -36,6 +36,7 @@ fn building() -> GameplayBuildingState {
         gate_open: false,
         rally_point: None,
         farm_reseeds: 0,
+        garrison: Vec::new(),
         age: aoe_protocol::Age::Dark,
     }
 }
@@ -54,6 +55,61 @@ fn farm(construction: ConstructionState, permille: u16) -> GameplayBuildingState
         training_queue: vec![],
         ..building()
     }
+}
+
+#[test]
+fn garrison_occupants_are_bounded_alive_sorted_and_eligible() {
+    let mut center = building();
+    center.garrison = vec![GarrisonUnitState {
+        id: EntityId(7),
+        kind: UnitKind::Villager,
+        hp: 10,
+        max_hp: 25,
+    }];
+    let snapshot = |b| GameplayServerMessage::Snapshot {
+        revision: 1,
+        tick: Tick(0),
+        units: vec![],
+        players: vec![],
+        buildings: vec![b],
+    };
+    let valid = snapshot(center.clone());
+    let bytes = encode_gameplay_server(&valid).unwrap();
+    assert_eq!(decode_gameplay_server(&bytes).unwrap(), valid);
+    // The current building tail appends the occupant list and its compact records.
+    assert!(bytes.ends_with(&[1, 7, 0, 10, 25]));
+    for invalid in [
+        GarrisonUnitState {
+            hp: 0,
+            ..center.garrison[0]
+        },
+        GarrisonUnitState {
+            hp: 26,
+            ..center.garrison[0]
+        },
+        GarrisonUnitState {
+            kind: UnitKind::Scout,
+            ..center.garrison[0]
+        },
+        GarrisonUnitState {
+            id: center.id,
+            ..center.garrison[0]
+        },
+    ] {
+        let mut b = center.clone();
+        b.garrison = vec![invalid];
+        assert!(encode_gameplay_server(&snapshot(b.clone())).is_err());
+        assert!(decode_gameplay_server(&postcard::to_allocvec(&snapshot(b)).unwrap()).is_err());
+    }
+    center.garrison = (0..21)
+        .map(|id| GarrisonUnitState {
+            id: EntityId(id + 2),
+            kind: UnitKind::Villager,
+            hp: 25,
+            max_hp: 25,
+        })
+        .collect();
+    assert!(decode_gameplay_server(&postcard::to_allocvec(&snapshot(center)).unwrap()).is_err());
 }
 
 #[test]

@@ -17,7 +17,7 @@ const UNREACHABLE_MEMO_TICKS: u64 = 200;
 /// Where a new order starts: the first waypoint, the planned tiles after it,
 /// the planner that continues the route, whether it still waits for one, and
 /// whether its fast attempt was made in full.
-type OrderRoute = (
+pub(crate) type OrderRoute = (
     WorldPosition,
     VecDeque<aoe_core::TileCoord>,
     Option<RoutePlanner>,
@@ -32,7 +32,7 @@ impl GameWorld {
         destination: WorldPosition,
     ) -> Result<bool, GameWorldError> {
         let index = *self.lookup.get(&id).ok_or(GameWorldError::UnknownEntity)?;
-        if self.units[index].state.hp == 0 {
+        if self.units[index].state.hp == 0 || self.embarked(id) {
             return Err(GameWorldError::UnknownEntity);
         }
         let destination = self.config.snap_ground_position(destination);
@@ -53,6 +53,7 @@ impl GameWorld {
             return Err(GameWorldError::Unreachable);
         }
         if origin == destination {
+            self.break_formation(id);
             self.move_queues.remove(&id);
             self.clear_planner(index);
             self.units[index].last_movement_error = None;
@@ -67,7 +68,7 @@ impl GameWorld {
         // while the new route is planned, and it comes back if that fails.
         let previous = self.take_planner(index);
         let (waypoint, route, planner, planning, fast_tried) =
-            match self.order_route(index, destination) {
+            match self.order_route(index, origin, destination) {
                 Ok(route) => route,
                 Err(error) => {
                     self.store_planner(index, previous);
@@ -78,6 +79,7 @@ impl GameWorld {
                 }
             };
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
+        self.break_formation(id);
         self.move_queues.remove(&id);
         let dx = i64::from(waypoint.x) - i64::from(origin.x);
         let dy = i64::from(waypoint.y) - i64::from(origin.y);
@@ -128,12 +130,12 @@ impl GameWorld {
             })
     }
 
-    fn order_route(
+    pub(crate) fn order_route(
         &mut self,
         index: usize,
+        origin: WorldPosition,
         destination: WorldPosition,
     ) -> Result<OrderRoute, GameWorldError> {
-        let origin = self.units[index].state.position;
         let (kind, player) = (self.units[index].state.kind, self.units[index].state.player);
         let target_tile = destination.tile_floor();
         Ok(

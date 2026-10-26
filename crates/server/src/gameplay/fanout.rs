@@ -22,6 +22,7 @@ pub(super) struct View {
     pub session_id: u64,
     pub subscription: Subscription,
     pub vision: Option<u64>,
+    pub fog_disabled: Option<bool>,
     pub viewer: PlayerId,
     pub primary: EntityId,
     pub ai: bool,
@@ -59,6 +60,7 @@ pub(super) struct SessionBuild {
 
 pub(super) struct Built {
     pub tick: Tick,
+    pub fog_disabled: bool,
     pub frame: UnitFrame,
     pub viewers: BTreeMap<PlayerId, ViewerState>,
     pub sessions: Vec<SessionBuild>,
@@ -73,7 +75,8 @@ fn viewer_states(
 ) -> BTreeMap<PlayerId, ViewerState> {
     let mut rebuild = BTreeMap::<PlayerId, bool>::new();
     for view in views {
-        *rebuild.entry(view.viewer).or_default() |= view.rebuild;
+        *rebuild.entry(view.viewer).or_default() |=
+            view.rebuild || view.fog_disabled != Some(world.fog_disabled());
     }
     let disabled = world.fog_disabled();
     let mut everything = None;
@@ -131,13 +134,16 @@ fn build_session(
     let vision = viewers.get(&view.viewer)?.vision;
     let tick = world.tick();
     // An AI gets a changed fog view at most once a second.
-    let fog = (view.vision != Some(vision) && (!view.ai || tick.0.is_multiple_of(AI_FOG_TICKS)))
-        .then(|| {
-            (
-                super::fog::state(world, view.viewer, revision, region),
-                vision,
-            )
-        });
+    let mode_changed = view.fog_disabled != Some(world.fog_disabled());
+    let fog = (mode_changed
+        || (view.vision != Some(vision)
+            && (view.vision.is_none() || !view.ai || tick.0.is_multiple_of(AI_FOG_TICKS))))
+    .then(|| {
+        (
+            super::fog::state(world, view.viewer, revision, region),
+            vision,
+        )
+    });
     let lens = Lens {
         viewer: view.viewer,
         primary: view.primary,
@@ -222,6 +228,7 @@ pub(super) fn build(
     let done = started.elapsed();
     Some(Built {
         tick: world.tick(),
+        fog_disabled: world.fog_disabled(),
         frame,
         viewers,
         sessions,

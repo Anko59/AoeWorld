@@ -1,11 +1,23 @@
 //! Pure choices from authoritative state; no client damage or lifetime timers.
+use crate::building_ui::content::sprites;
 pub(crate) use aoe_assets::catalog::units::Pose;
-use aoe_assets::catalog::units::SPRITES;
 use aoe_core::FIXED_SUBUNITS_PER_TILE;
 use aoe_protocol::{AnimalKind, AnimalState, AnimalTask, GameplayUnitState, UnitKind, UnitTask};
 
 pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> Pose {
     use Pose::*;
+    if let Some((_, pose)) = [
+        (UnitKind::Galley, Galley),
+        (UnitKind::WarGalley, WarGalley),
+        (UnitKind::FireShip, FireShip),
+        (UnitKind::DemolitionShip, DemolitionShip),
+        (UnitKind::TransportShip, TransportShip),
+    ]
+    .into_iter()
+    .find(|(kind, _)| *kind == u.kind)
+    {
+        return pose;
+    }
     if let Some(poses) = military_poses(u.kind) {
         return if u.hp == 0 {
             poses[3]
@@ -137,6 +149,41 @@ fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
         UnitKind::Spearman => [SpearmanStand, SpearmanWalk, SpearmanAttack, SpearmanDie],
         UnitKind::ManAtArms => [ManAtArmsStand, ManAtArmsWalk, ManAtArmsAttack, ManAtArmsDie],
         UnitKind::Scout => [ScoutStand, ScoutWalk, ScoutAttack, ScoutDie],
+        UnitKind::LongSwordsman => [
+            LongSwordsmanStand,
+            LongSwordsmanWalk,
+            LongSwordsmanAttack,
+            LongSwordsmanDie,
+        ],
+        UnitKind::Pikeman => [PikemanStand, PikemanWalk, PikemanAttack, PikemanDie],
+        UnitKind::Crossbowman => [
+            CrossbowmanStand,
+            CrossbowmanWalk,
+            CrossbowmanAttack,
+            CrossbowmanDie,
+        ],
+        UnitKind::EliteSkirmisher => [
+            EliteSkirmisherStand,
+            EliteSkirmisherWalk,
+            EliteSkirmisherAttack,
+            EliteSkirmisherDie,
+        ],
+        UnitKind::Knight => [KnightStand, KnightWalk, KnightAttack, KnightDie],
+        UnitKind::LightCavalry => [
+            LightCavalryStand,
+            LightCavalryWalk,
+            LightCavalryAttack,
+            LightCavalryDie,
+        ],
+        UnitKind::Monk => [MonkStand, MonkWalk, MonkAttack, MonkDie],
+        UnitKind::Mangonel => [MangonelStand, MangonelWalk, MangonelAttack, MangonelDie],
+        UnitKind::BatteringRam => [
+            BatteringRamStand,
+            BatteringRamWalk,
+            BatteringRamAttack,
+            BatteringRamDie,
+        ],
+
         _ => return None,
     })
 }
@@ -208,6 +255,15 @@ fn decay_pair(pose: Pose) -> Option<(Pose, Pose)> {
         (SkirmisherDie, SkirmisherDecay),
         (SpearmanDie, SpearmanDecay),
         (ManAtArmsDie, ManAtArmsDecay),
+        (LongSwordsmanDie, LongSwordsmanDecay),
+        (PikemanDie, PikemanDecay),
+        (CrossbowmanDie, CrossbowmanDecay),
+        (EliteSkirmisherDie, EliteSkirmisherDecay),
+        (KnightDie, KnightDecay),
+        (LightCavalryDie, LightCavalryDecay),
+        (MonkDie, MonkDecay),
+        (MangonelDie, MangonelDecay),
+        (BatteringRamDie, BatteringRamDecay),
         (VillagerDie, VillagerDecay),
         (SheepDie, SheepDecay),
         (DeerDie, DeerDecay),
@@ -228,7 +284,7 @@ pub(crate) fn lifecycle_pose(pose: Pose, died: Option<aoe_core::Tick>, tick: u64
     let Some(died) = died else {
         return pose;
     };
-    let source = SPRITES[die as usize];
+    let source = sprites()[die as usize];
     if tick.saturating_sub(died.0).saturating_mul(1000)
         >= u64::from(hz.max(1)) * u64::from(source.millis) * u64::from(source.stride)
     {
@@ -245,7 +301,7 @@ pub(crate) fn packed_frame(
     tick: u64,
     hz: u32,
 ) -> u8 {
-    let source = SPRITES[pose as usize];
+    let source = sprites()[pose as usize];
     let millis = u64::from(source.millis) * u64::from(source.sample_step());
     let stride = u64::from(source.stride.div_ceil(source.sample_step()));
     let phase = if let Some(died) = death {
@@ -254,7 +310,7 @@ pub(crate) fn packed_frame(
         let delay = decay_pair(pose)
             .filter(|(_, decay)| *decay == pose)
             .map_or(0, |(die, _)| {
-                let s = SPRITES[die as usize];
+                let s = sprites()[die as usize];
                 u64::from(s.millis) * u64::from(s.stride)
             });
         (elapsed.saturating_sub(delay) / millis).min(stride - 1) as u8

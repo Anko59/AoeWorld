@@ -1,5 +1,5 @@
 use super::*;
-use aoe_assets::catalog::units::SPRITES;
+use crate::building_ui::content::sprites;
 
 pub(super) fn colour(
     ranges: &[Option<std::ops::Range<usize>>],
@@ -26,7 +26,7 @@ pub(super) fn select(
     domains: &mut Vec<AtlasDomain>,
 ) -> Result<Vec<Option<std::ops::Range<usize>>>, JsValue> {
     let mut ranges = Vec::new();
-    for source in SPRITES {
+    for &source in sprites() {
         let identity = source.manifest_source();
         let Some(frames) = source_frames(manifest, &identity, source.frames()) else {
             if source_present(manifest, &identity) {

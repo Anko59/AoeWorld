@@ -2,6 +2,104 @@ use super::super::*;
 use crate::navigation::long_routes_tests::flat_terrain_with_water_wall;
 
 #[test]
+fn bridge_updates_persisted_components_portals_and_axis_edges_locally() {
+    use crate::{RoutePlanner, RoutePlannerPoll, RouteTerrain};
+    let source = flat_terrain_with_water_wall(64, 32, -1);
+    let chunks = (0..2)
+        .flat_map(|y| (0..2).map(move |x| (x, y)))
+        .map(|(x, y)| {
+            source
+                .prepare_static_navigation_chunk(x, y, &|| false)
+                .unwrap()
+        })
+        .collect();
+    let terrain = flat_terrain_with_water_wall(64, 32, -1);
+    terrain.install_static_navigation(chunks).unwrap();
+    assert_eq!(terrain.walk_cache_usage(), (0, 0));
+    let mut overlay = ResourceOverlay::default();
+    let (from, to) = (TileCoord::new(29, 20), TileCoord::new(35, 20));
+    terrain.prepare_navigation(&overlay, &|| false).unwrap();
+    assert_ne!(
+        terrain
+            .navigation_destination(&overlay, from, to, &|| false)
+            .unwrap(),
+        Some(to)
+    );
+    let rect = aoe_core::TileRect::from_xywh(31, 20, 3, 1);
+    let snapshot = overlay.navigation_snapshot();
+    let distant_stamp = overlay.navigation_key((3, 3));
+    overlay.add_bridge(rect).unwrap();
+    assert_eq!(
+        snapshot.bridge_axis(TileCoord::new(32, 20)),
+        None,
+        "pinned searches retain their own deck state"
+    );
+    assert_eq!(
+        overlay.navigation_key((3, 3)),
+        distant_stamp,
+        "unaffected chunk fingerprints stay reusable"
+    );
+    terrain.prepare_navigation(&overlay, &|| false).unwrap();
+    assert_eq!(
+        terrain
+            .navigation_destination(&overlay, from, to, &|| false)
+            .unwrap(),
+        Some(to)
+    );
+    let deck = TileCoord::new(32, 20);
+    assert!(matches!(
+        super::super::hierarchical_route_with_overlay(&terrain, &overlay, from, to, 256).unwrap(),
+        HierarchicalOutcome::Path { .. }
+    ));
+    assert!(matches!(
+        crate::find_path_with_overlay(&terrain, &overlay, from, to, 4096),
+        crate::MovementOutcome::Path(_)
+    ));
+    assert!(terrain.route_walkable(&overlay, deck, &|| false).unwrap());
+    assert_eq!(
+        overlay.bridge_edge(TileCoord::new(31, 20), deck),
+        Some(true)
+    );
+    assert_eq!(
+        overlay.bridge_edge(TileCoord::new(31, 19), deck),
+        Some(false)
+    );
+    assert_eq!(
+        overlay.bridge_edge(TileCoord::new(32, 19), deck),
+        Some(false)
+    );
+    let mut planner = RoutePlanner::new(from, to, 65_536);
+    let mut crossed = false;
+    for _ in 0..128 {
+        match planner.poll(&terrain, &overlay, 2_048, &|| false) {
+            RoutePlannerPoll::Pending => {}
+            RoutePlannerPoll::Path(path) => {
+                crossed |= path.tiles.contains(&deck);
+                if planner.is_terminal() {
+                    break;
+                }
+            }
+            other => panic!("bridge route failed: {other:?}"),
+        }
+    }
+    assert!(crossed, "the route must cross the only connecting bridge");
+    overlay.remove_bridge(rect);
+    terrain.prepare_navigation(&overlay, &|| false).unwrap();
+    assert!(!terrain.route_walkable(&overlay, deck, &|| false).unwrap());
+    assert_ne!(
+        terrain
+            .navigation_destination(&overlay, from, to, &|| false)
+            .unwrap(),
+        Some(to)
+    );
+    assert_eq!(
+        terrain.walk_cache_usage(),
+        (0, 0),
+        "dynamic graphs use persisted walk data"
+    );
+}
+
+#[test]
 fn persisted_static_navigation_matches_cold_routes_and_dynamic_collision() {
     let original = flat_terrain_with_water_wall(64, 32, 5);
     let loaded = flat_terrain_with_water_wall(64, 32, 5);

@@ -47,178 +47,9 @@ pub struct UnitCombat {
     pub training: Option<UnitTraining>,
 }
 
-/// Indexed by `UnitKind as usize`; a test pins the order.
-pub const UNIT_COMBAT: [UnitCombat; 8] = [
-    UnitCombat {
-        kind: UnitKind::Villager,
-        hp: 25,
-        attack: 3,
-        attack_kind: DamageKind::Melee,
-        melee_armour: 0,
-        pierce_armour: 0,
-        attack_period_centiseconds: 200,
-        speed_hundredths: None,
-        range: 1,
-        min_range: 0,
-        los: 4,
-        training: None,
-    },
-    UnitCombat {
-        kind: UnitKind::Scout,
-        hp: 45,
-        attack: 3,
-        attack_kind: DamageKind::Melee,
-        melee_armour: 0,
-        pierce_armour: 2,
-        attack_period_centiseconds: 200,
-        speed_hundredths: Some(120),
-        range: 1,
-        min_range: 0,
-        los: 4,
-        training: Some(UnitTraining {
-            cost: UnitCost {
-                food: 80,
-                wood: 0,
-                gold: 0,
-                stone: 0,
-            },
-            seconds: 30,
-        }),
-    },
-    UnitCombat {
-        kind: UnitKind::Militia,
-        hp: 40,
-        attack: 4,
-        attack_kind: DamageKind::Melee,
-        melee_armour: 0,
-        pierce_armour: 1,
-        attack_period_centiseconds: 200,
-        speed_hundredths: Some(90),
-        range: 1,
-        min_range: 0,
-        los: 4,
-        training: Some(UnitTraining {
-            cost: UnitCost {
-                food: 50,
-                wood: 0,
-                gold: 20,
-                stone: 0,
-            },
-            seconds: 21,
-        }),
-    },
-    UnitCombat {
-        kind: UnitKind::FishingShip,
-        // Current DE naval balance: update 169123; sources in docs/fishing.md.
-        hp: 50,
-        attack: 0,
-        attack_kind: DamageKind::Melee,
-        melee_armour: 1,
-        pierce_armour: 1,
-        attack_period_centiseconds: 200,
-        speed_hundredths: None,
-        range: 0,
-        min_range: 0,
-        los: 5,
-        training: Some(UnitTraining {
-            cost: UnitCost {
-                food: 0,
-                wood: 75,
-                gold: 0,
-                stone: 0,
-            },
-            seconds: 40,
-        }),
-    },
-    UnitCombat {
-        kind: UnitKind::Archer,
-        hp: 30,
-        attack: 4,
-        attack_kind: DamageKind::Pierce,
-        melee_armour: 0,
-        pierce_armour: 0,
-        range: 4,
-        min_range: 0,
-        los: 6,
-        attack_period_centiseconds: 200,
-        speed_hundredths: Some(96),
-        training: Some(UnitTraining {
-            cost: UnitCost {
-                food: 0,
-                wood: 25,
-                gold: 45,
-                stone: 0,
-            },
-            seconds: 35,
-        }),
-    },
-    UnitCombat {
-        kind: UnitKind::Skirmisher,
-        hp: 30,
-        attack: 2,
-        attack_kind: DamageKind::Pierce,
-        melee_armour: 0,
-        pierce_armour: 3,
-        range: 4,
-        min_range: 1,
-        los: 6,
-        attack_period_centiseconds: 300,
-        speed_hundredths: Some(96),
-        training: Some(UnitTraining {
-            cost: UnitCost {
-                food: 25,
-                wood: 35,
-                gold: 0,
-                stone: 0,
-            },
-            seconds: 26,
-        }),
-    },
-    UnitCombat {
-        kind: UnitKind::Spearman,
-        hp: 45,
-        attack: 3,
-        attack_kind: DamageKind::Melee,
-        melee_armour: 0,
-        pierce_armour: 0,
-        range: 1,
-        min_range: 0,
-        los: 4,
-        attack_period_centiseconds: 300,
-        speed_hundredths: Some(100),
-        training: Some(UnitTraining {
-            cost: UnitCost {
-                food: 35,
-                wood: 25,
-                gold: 0,
-                stone: 0,
-            },
-            seconds: 22,
-        }),
-    },
-    UnitCombat {
-        kind: UnitKind::ManAtArms,
-        hp: 45,
-        attack: 6,
-        attack_kind: DamageKind::Melee,
-        melee_armour: 0,
-        pierce_armour: 1,
-        range: 1,
-        min_range: 0,
-        los: 4,
-        attack_period_centiseconds: 200,
-        speed_hundredths: Some(96),
-        training: Some(UnitTraining {
-            cost: UnitCost {
-                food: 50,
-                wood: 0,
-                gold: 20,
-                stone: 0,
-            },
-            seconds: 21,
-        }),
-    },
-];
+#[path = "table/units.rs"]
+mod units;
+pub use units::UNIT_COMBAT;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BuildingAttack {
@@ -252,7 +83,7 @@ const fn armour(kind: BuildingKind, melee_armour: i16, pierce_armour: u16) -> Bu
 /// House -2 melee: official AoE II DE update 56005:
 /// https://www.ageofempires.com/news/aoeii_de_update_56005/
 /// Farm and Outpost really have 0/0; these are not placeholders.
-pub const BUILDING_COMBAT: [BuildingCombat; 16] = [
+pub const BUILDING_COMBAT: [BuildingCombat; 21] = [
     armour(BuildingKind::TownCenter, 3, 5),
     armour(BuildingKind::House, -2, 7),
     armour(BuildingKind::LumberCamp, 0, 7),
@@ -278,11 +109,25 @@ pub const BUILDING_COMBAT: [BuildingCombat; 16] = [
         ..armour(BuildingKind::WatchTower, 1, 7)
     },
     armour(BuildingKind::PalisadeGate, 0, 0),
+    BuildingCombat {
+        attack: Some(BuildingAttack {
+            attack: 11,
+            kind: DamageKind::Pierce,
+            min_range: 1,
+            range: 8,
+            period_centiseconds: 200,
+        }),
+        ..armour(BuildingKind::Castle, 8, 11)
+    },
+    armour(BuildingKind::Monastery, 2, 9),
+    armour(BuildingKind::University, 2, 9),
+    armour(BuildingKind::SiegeWorkshop, 1, 8),
+    armour(BuildingKind::Bridge, 2, 5),
 ];
 
-pub(crate) fn age_armour(kind: BuildingKind, feudal: bool) -> BuildingCombat {
+pub(crate) fn age_armour(kind: BuildingKind, age: crate::Age) -> BuildingCombat {
     let mut stats = *building_combat(kind);
-    if feudal
+    if age >= crate::Age::Feudal
         && matches!(
             kind,
             BuildingKind::TownCenter
@@ -291,6 +136,20 @@ pub(crate) fn age_armour(kind: BuildingKind, feudal: bool) -> BuildingCombat {
                 | BuildingKind::MiningCamp
                 | BuildingKind::Mill
                 | BuildingKind::Barracks
+        )
+    {
+        let bonus = if age == crate::Age::Castle { 2 } else { 1 };
+        stats.melee_armour += bonus;
+        stats.pierce_armour += bonus as u16;
+    }
+    if age == crate::Age::Castle
+        && matches!(
+            kind,
+            BuildingKind::ArcheryRange
+                | BuildingKind::Stable
+                | BuildingKind::Blacksmith
+                | BuildingKind::Market
+                | BuildingKind::Dock
         )
     {
         stats.melee_armour += 1;

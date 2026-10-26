@@ -1,3 +1,9 @@
+// Combined Castle bundle: u64 research, healer/garrison indexes, queued builders
+// and cargo/embarked maps extend current authoritative state. Re-pin the same
+// workload; retain checkpoints, change digests and all independent replay checks.
+// Castle Age widens researched bits to u64 and hashes the ordered healer index;
+// Gather credits now use millionths for exact stacked mining upgrades.
+// Regenerate current checkpoints for these deliberate state-schema changes.
 use super::*;
 
 /// Replay pin: villagers gather every resource through several drop-off
@@ -80,7 +86,9 @@ fn gathering_and_dropoffs_replay_to_pinned_hashes() {
                             .unwrap(),
                     )
                     .ok()?;
-                world.issue_build(PlayerId(0), &[worker], kind, spot).ok()
+                world
+                    .issue_build(PlayerId(0), &[worker], kind, spot, false)
+                    .ok()
             })
             .expect("room for the camp");
         buildings::finish(&mut world, placed, 1_600);
@@ -138,11 +146,13 @@ fn gathering_and_dropoffs_replay_to_pinned_hashes() {
 /// authoritative schema, so these checkpoints are regenerated with that state.
 /// The merged open TC arches and retained detour planner change routes and
 /// planner hashes too; regenerate the same six checkpoints for their combination.
+/// Transport cargo and embarked-unit maps extend canonical economy state,
+/// including empty maps; regenerate these six pins without changing the run.
 const GATHER_REPLAY_PINS: [&str; 6] = [
-    "77d09f7643707edab058b064e87b157ec7d9d03081bd3f776b4212d0e70b703d",
-    "54d462ec74971a3fb28e8839d9a6de88b4a105ce9e25337c09836c52e90aea0d",
-    "18b0b4c51ff797f44feb86edf13652520bb3a3d8ad617ce14019f9ff0e29d96a",
-    "cf61ac4c77d12d6981a8800b285b913f88df7a605aff2db016b9424abe4d20c8",
-    "e8c2c75a9cdcc2d0d47db029d75e4782ea6f884af4e47f111d411b0480554afe",
-    "4c5700a91fda2a313f3777ec19be0e2846bebbeaececcfa2092d5535cf85d7c9",
+    "a0dfe90ef1738761e79a89585a1ab20a8269b07255b603cabb49806c75b32d1b",
+    "42b1b53ca780690020353376317d558222e078d8c34b211526fea49007f1fbd0",
+    "6ebf87f18f2242cb3c82330bd81eb8474b3db12b4bf921479bb2294670d1ee7a",
+    "fd12ae7eb5e1a0e015423eced4f72e587d8d4d6c54477ce6930e37240421752a",
+    "d82dc0b093a8a7f71c2e48ce5f9decb0998a47320cc1967d25692ea45cd79191",
+    "0c50ebd68991895664b785c5da27be0bcbb8e89b006103f777ef3d3b110419b7",
 ];

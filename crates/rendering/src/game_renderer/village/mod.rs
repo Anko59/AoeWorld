@@ -147,6 +147,47 @@ pub(super) fn building(
     animation: usize,
     emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
 ) {
+    if unit.visual.ghost() && unit.kind == SceneUnitKind::Farm {
+        // Farms are terrain, not scaffolding. Draw their native crop diamonds
+        // as translucent sprites without mutating the cached ground mesh.
+        for y in -1..=1 {
+            for x in -1..=1 {
+                let position = [
+                    unit.position[0] + f64::from(x),
+                    unit.position[1] + f64::from(y),
+                ];
+                let tile = position.map(|v| v.floor() as i32);
+                let native =
+                    crate::surface_mesh::terrain_texture_frame(art, 17, tile).or_else(|| {
+                        let mut frame = *art.buildings[5].first()?;
+                        frame.atlas.uv[0] += frame.atlas.uv[2] * (x + 1) as f32 / 3.0;
+                        frame.atlas.uv[1] += frame.atlas.uv[3] * (y + 1) as f32 / 3.0;
+                        frame.atlas.uv[2] /= 3.0;
+                        frame.atlas.uv[3] /= 3.0;
+                        Some(frame)
+                    });
+                if let Some(mut frame) = native {
+                    frame.size = [
+                        aoe_core::ISO_TILE_WIDTH as f32,
+                        aoe_core::ISO_TILE_HEIGHT as f32,
+                    ];
+                    frame.anchor = frame.size.map(|v| v / 2.0);
+                    if let Some(mut sprite) =
+                        scene_sprite(frame, position, unit.elevation_meters, camera)
+                    {
+                        sprite.pages[3] |= 128; // Crop the native terrain diamond on every backend.
+                        emit((
+                            sprite,
+                            scaled(frame, camera.zoom as f32),
+                            object_depth(WorldObject::Unit(unit)),
+                            u64::from(unit.id.0),
+                        ));
+                    }
+                }
+            }
+        }
+        return;
+    }
     let Some(building) = art
         .compositions
         .iter()
@@ -250,7 +291,11 @@ pub(super) fn sprite_building(
         let frame = world_frame(frames[index]);
         if let Some(sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
             emit((
-                sprite.with_owner(unit.visual),
+                if (65..=70).contains(&art_slot) {
+                    sprite.with_unit_contour(unit.visual.outline_colour())
+                } else {
+                    sprite.with_owner(unit.visual)
+                },
                 scaled(frame, camera.zoom as f32),
                 object_depth(WorldObject::Unit(unit)),
                 u64::from(unit.id.0),

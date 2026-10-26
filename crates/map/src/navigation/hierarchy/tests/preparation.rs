@@ -24,10 +24,12 @@ fn france_sized_collision_snapshot_does_not_rebuild_terrain() {
 #[test]
 fn prepared_navigation_keeps_only_pinned_collision_without_resource_amounts() {
     let generator = MapChunkGenerator::new([3; 32], 1, 128);
+    // This checks pinned collision: the first generated node may be nonblocking fish.
     let node = (0..4)
         .flat_map(|y| (0..4).map(move |x| (x, y)))
-        .find_map(|(x, y)| generator.chunk(x, y).unwrap().resources.into_iter().next())
-        .expect("fixture resource");
+        .flat_map(|(x, y)| generator.chunk(x, y).unwrap().resources)
+        .find(|node| node.object == crate::ObjectKind::Tree)
+        .expect("fixture blocking tree");
     let mut overlay = ResourceOverlay::default();
     overlay
         .deplete(&generator, node.id, node.initial_amount - 1)

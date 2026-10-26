@@ -6,6 +6,7 @@ use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, Tick, WorldPosition}
 pub enum ProjectileKind {
     Arrow,
     Javelin,
+    Stone,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -76,7 +77,7 @@ impl GameWorld {
         if !self.target_visible_to(player, target) {
             return;
         }
-        let Some(to) = self.attack_goal(target, player).map(|g| g.centre()) else {
+        let Some(mut to) = self.attack_goal(target, player).map(|g| g.centre()) else {
             return;
         };
         let dx = i64::from(to.x) - i64::from(from.x);
@@ -84,10 +85,32 @@ impl GameWorld {
         let distance = (dx * dx + dy * dy) as u64;
         let distance = distance.isqrt() + u64::from(distance.isqrt().pow(2) < distance);
         // Licensed DE projectiles 363, 365 and 504 all move at 7 tiles/s.
-        let speed = 70;
+        let speed = if kind == ProjectileKind::Stone {
+            35
+        } else {
+            70
+        };
         let ticks = (distance * u64::from(self.config.tick_hz) * 10)
             .div_ceil(speed * FIXED_SUBUNITS_PER_TILE as u64)
             .max(1);
+        if kind != ProjectileKind::Stone
+            && self.has_researched(player, crate::Tech::Ballistics)
+            && let Some(u) = self.unit(target).filter(|u| u.moving)
+        {
+            let lead = |now: i32, previous: i32, limit: i32| {
+                (i64::from(now) + (i64::from(now) - i64::from(previous)) * ticks as i64)
+                    .clamp(0, i64::from(limit) * i64::from(FIXED_SUBUNITS_PER_TILE) - 1)
+                    as i32
+            };
+            to = WorldPosition::new(
+                lead(u.position.x, u.previous_position.x, self.config.width_tiles),
+                lead(
+                    u.position.y,
+                    u.previous_position.y,
+                    self.config.height_tiles,
+                ),
+            );
+        }
         let id = self.combat.next_projectile;
         let Some(next) = id.checked_add(1) else {
             return;
@@ -120,14 +143,22 @@ impl GameWorld {
             .collect();
         for id in due {
             if let Some(p) = self.combat.projectiles.remove(&id) {
-                self.resolve_hit(
-                    p.attacker,
-                    p.target,
-                    p.attack,
-                    p.bonus,
-                    super::DamageKind::Pierce,
-                    changed,
-                );
+                if p.kind == ProjectileKind::Stone {
+                    self.resolve_splash(p, changed);
+                } else if self.unit(p.target).is_none_or(|u| {
+                    let dx = i64::from(u.position.x) - i64::from(p.to.x);
+                    let dy = i64::from(u.position.y) - i64::from(p.to.y);
+                    dx * dx + dy * dy <= i64::from(FIXED_SUBUNITS_PER_TILE / 2).pow(2)
+                }) {
+                    self.resolve_hit(
+                        (p.attacker, p.player),
+                        p.target,
+                        p.attack,
+                        p.bonus,
+                        super::DamageKind::Pierce,
+                        changed,
+                    );
+                }
             }
         }
     }

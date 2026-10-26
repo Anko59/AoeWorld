@@ -114,6 +114,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         if client.connection_id != id {
             return;
         }
+        let _decode = super::perf::Scope::new(1);
         let bytes = match incoming_bytes(&event.data()) {
             Ok(bytes) => bytes,
             Err(message) => {

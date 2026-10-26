@@ -7,7 +7,7 @@ pub(super) fn select(
     selected: &mut Vec<usize>,
     domains: &mut Vec<AtlasDomain>,
 ) -> Result<(), JsValue> {
-    if manifest.buildings.len() > 32 {
+    if manifest.buildings.len() > aoe_assets::catalog::GAMEPLAY_BUILDING_IDS.len() {
         return Err(error("too many building recipes"));
     }
     for (slot, building) in manifest.buildings.iter().enumerate() {

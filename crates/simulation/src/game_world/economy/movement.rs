@@ -28,7 +28,7 @@ impl GameWorld {
         let researched = economy.map_or(0, |p| p.researched);
         let stats = super::super::combat::military::researched_stats(
             kind,
-            economy.is_some_and(|p| p.age == crate::Age::Feudal),
+            economy.is_some_and(|p| p.age >= crate::Age::Feudal),
             researched,
         );
         if let Some(hundredths) = stats.speed_hundredths {

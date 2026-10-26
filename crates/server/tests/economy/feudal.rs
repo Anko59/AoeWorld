@@ -42,7 +42,14 @@ async fn feudal_demo_rejects_dark_building_then_builds_and_researches_over_the_w
     // Entire footprint inside the Town Center's explored disc.
     let at = TileCoord::new(134, 133);
     service
-        .queue_build(session, 1, vec![worker], BuildingKind::Blacksmith, at)
+        .queue_build(
+            session,
+            1,
+            vec![worker],
+            BuildingKind::Blacksmith,
+            at,
+            false,
+        )
         .await;
     service.tick().await;
     assert!(drain(&mut rx).iter().any(|m| matches!(
@@ -72,7 +79,14 @@ async fn feudal_demo_rejects_dark_building_then_builds_and_researches_over_the_w
     }
     assert!(feudal);
     service
-        .queue_build(session, 3, vec![worker], BuildingKind::Blacksmith, at)
+        .queue_build(
+            session,
+            3,
+            vec![worker],
+            BuildingKind::Blacksmith,
+            at,
+            false,
+        )
         .await;
     let mut complete = false;
     for _ in 0..100 {

@@ -124,6 +124,10 @@ impl World {
         self.inner.loaded_chunks()
     }
     /// Whether ground units can stand on the tile; `None` until its map chunk loaded.
+    fn find_bridge_site(&self, x: i32, y: i32, tx: i32, ty: i32) -> Option<((i32, i32), (i32, i32))> {
+        self.inner.find_bridge_site(TileCoord::new(x, y), TileCoord::new(tx, ty))
+            .map(|(a, b)| ((a.x, a.y), (b.x, b.y)))
+    }
     fn passable(&self, x: i32, y: i32) -> Option<bool> {
         self.inner.passable(TileCoord::new(x, y))
     }

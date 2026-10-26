@@ -21,6 +21,37 @@ subunits (1,024 per tile), active destination first. The Rust counterparts are
 `Order::QueueMove` and `World::move_queue`. The queue holds at most sixteen
 destinations per unit. Stop and accepted replacement orders clear it.
 
+`Order::Garrison { unit, building }` walks a unit into an eligible owned shelter;
+`Order::Ungarrison { building, unit: None }` ejects all, or `Some(id)` ejects one.
+`Building::garrison()` exposes owner-visible occupant records and
+`garrison_capacity()` gives the limit. Occupants leave map-unit queries while
+remaining in the player's population.
+Python uses `client.garrison(unit, building)` and
+`client.ungarrison(building, unit=None)`; `Building.garrison` contains
+`(id, kind, hp, max_hp)` tuples. The server enforces [shelter rules](garrison.md)
+and ownership through the ordinary command queue.
+`Client.formation_move(units, x, y, Formation.LINE, queued=False,
+attack_move=False)` sends one military group command. `Formation` also offers
+`BOX`, `STAGGERED` and `FLANK`; Rust sends `Order::FormationMove`. A group can
+contain up to 4,096 owned military units. It assembles around its centroid,
+moves at its slowest member's speed, and shares one budgeted route and portal
+guidance. Members squeeze locally at obstructions and spread back into slots
+on open ground. `queued=True` appends a shared destination (sixteen including
+the active leg); `World.move_queue` exposes those points for every member.
+`Client.set_formation(units, Formation.BOX)` rearranges immediately and keeps
+its route and queued points. Rust uses `Order::SetFormation`. Stop, a replacement
+individual order or an attack breaks the group. An
+attack-move advances until it can engage a visible nearby enemy.
+
+```python
+army = [u.id for u in world.my_units() if u.kind == aoeworld.UnitKind.SPEARMAN]
+client.formation_move(army, 120, 90, aoeworld.Formation.STAGGERED)
+client.formation_move(army, 140, 110, aoeworld.Formation.STAGGERED, queued=True)
+```
+
+The example AI groups nearby marching soldiers using `Config.army_formation`
+(default `"LINE"`) and `march_group_tiles`; stragglers take their own local hops.
+
 Layers, each testable on its own:
 
 | Layer | Where | What it adds |
@@ -282,6 +313,17 @@ it raises the Barracks; in Feudal Age the Archery Range, the Blacksmith, Double-
 Axe, Horse Collar (once farming), Wheelbarrow, Gold Mining and the Blacksmith
 upgrades, and an army from every Barracks and Range. No unit is trained in the
 Dark Age: its food belongs to villagers and the age.
+From the start of Feudal, the next unpaid Castle prerequisite keeps its wood
+budget ahead of extra farms, reseeds and army spending. Paid foundations and
+pending build orders do not reserve that cost twice. Existing soldiers rally
+before idle workers use the decision's bounded route-query budget.
+At the configured 28-villager Castle preparation threshold, enough gold shifts
+the target allocation toward food;
+empty-handed miners are redirected one per decision, preserving loaded returns.
+Villager queues drain and optional upgrades wait during this preparation;
+military production is funded before extra farms until the configured Feudal
+army minimum is met, then the age receives the food reserve. After reaching
+Castle Age, Crossbowman and Pikeman upgrades precede optional Feudal upgrades.
 
 Robustness: every order is remembered until its verdict arrives; a refused
 node, animal or site is never tried again, a refused unit kind is substituted

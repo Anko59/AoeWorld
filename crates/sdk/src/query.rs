@@ -136,7 +136,7 @@ impl World {
 
     /// Every node the slot has been told about: map chunks plus the starting
     /// kit, which only the resource feed describes.
-    fn nodes(&self) -> impl Iterator<Item = crate::catalog::Node> + '_ {
+    pub(crate) fn nodes(&self) -> impl Iterator<Item = crate::catalog::Node> + '_ {
         let starting = self
             .amounts
             .range(crate::catalog::STARTING_ID_BASE..)
@@ -180,7 +180,11 @@ impl World {
 
     /// Whether ground units can stand on `tile`; `None` until its map chunk loaded.
     pub fn passable(&self, tile: TileCoord) -> Option<bool> {
-        self.catalog.passable(tile)
+        if self.bridges.bridge_axis(tile).is_some() {
+            Some(true)
+        } else {
+            self.catalog.passable(tile)
+        }
     }
 
     /// Chunks of map data the SDK has read so far.
@@ -199,6 +203,9 @@ impl World {
         max_radius: i32,
         gap: i32,
     ) -> Option<TileCoord> {
+        if kind == BuildingKind::Bridge {
+            return None;
+        }
         let side = kind.side();
         let depth = kind.depth();
         let blocked: Vec<TileRect> = self
@@ -218,7 +225,7 @@ impl World {
                     }
                     let origin = TileCoord::new(near.x + dx, near.y + dy);
                     let rect = TileRect::from_xywh(origin.x, origin.y, side, depth);
-                    if self.site_is_free(rect, gap, &blocked) {
+                    if self.site_is_free(kind, rect, gap, &blocked) {
                         return Some(origin);
                     }
                 }
@@ -227,7 +234,13 @@ impl World {
         None
     }
 
-    fn site_is_free(&self, rect: TileRect, gap: i32, blocked: &[TileRect]) -> bool {
+    fn site_is_free(
+        &self,
+        kind: BuildingKind,
+        rect: TileRect,
+        gap: i32,
+        blocked: &[TileRect],
+    ) -> bool {
         if rect.min.x < 2
             || rect.min.y < 2
             || rect.max.x > self.width - 2
@@ -235,13 +248,29 @@ impl World {
         {
             return false;
         }
+        let (mut dry, mut wet) = (false, false);
         for y in rect.min.y..rect.max.y {
             for x in rect.min.x..rect.max.x {
                 let tile = TileCoord::new(x, y);
-                if !self.fog.explored_exactly(tile) || self.catalog.passable(tile) != Some(true) {
+                if !self.fog.explored_exactly(tile) {
+                    return false;
+                }
+                if kind == BuildingKind::Dock {
+                    let Some((land, water)) = self.catalog.dock_terrain(tile) else {
+                        return false;
+                    };
+                    if !land && !water {
+                        return false;
+                    }
+                    dry |= land;
+                    wet |= water;
+                } else if self.catalog.passable(tile) != Some(true) {
                     return false;
                 }
             }
+        }
+        if kind == BuildingKind::Dock && !(dry && wet) {
+            return false;
         }
         let grown = TileRect::new(
             TileCoord::new(rect.min.x - gap, rect.min.y - gap),

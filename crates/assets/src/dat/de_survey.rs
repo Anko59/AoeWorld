@@ -10,6 +10,10 @@ mod military;
 pub use military::ProjectileSource;
 
 const BUILDINGS: &[(i16, i32, &str)] = &[
+    (82, 5142, "CSTL"),
+    (104, 5138, "CRCH"),
+    (209, 5176, "UNIV"),
+    (49, 5169, "SIWS"),
     (87, 5128, "ARRG"),
     (101, 5171, "STBL"),
     (103, 5131, "BLAC"),
@@ -33,6 +37,25 @@ const BUILDINGS: &[(i16, i32, &str)] = &[
     (598, 5504, ""),
 ];
 const TECHS: &[(i16, i32)] = &[
+    (102, 7102),
+    (207, 7204),
+    (197, 7176),
+    (100, 7100),
+    (98, 7098),
+    (254, 7261),
+    (249, 7246),
+    (280, 7282),
+    (68, 7068),
+    (76, 7076),
+    (82, 7082),
+    (200, 7150),
+    (212, 7209),
+    (13, 7013),
+    (203, 7190),
+    (182, 7180),
+    (50, 7050),
+    (93, 7093),
+    (321, 7321),
     (202, 7189),
     (14, 7014),
     (55, 7055),
@@ -48,6 +71,15 @@ const TECHS: &[(i16, i32)] = &[
     (211, 7208),
 ];
 const SOLDIERS: &[(i16, i32)] = &[
+    (77, 5081),
+    (358, 5408),
+    (24, 5084),
+    (6, 5087),
+    (38, 5068),
+    (546, 5444),
+    (125, 5099),
+    (280, 5095),
+    (35, 5094),
     (4, 5083),
     (7, 5088),
     (93, 5078),
@@ -70,9 +102,11 @@ pub struct Building {
     pub attacks: Vec<(i16, i16)>,
     pub armours: Vec<(i16, i16)>,
     pub range: f32,
+    pub blast_width: f32,
     pub min_range: f32,
     pub reload: f32,
     pub cost: Vec<(i16, i16, i16)>,
+    pub resource_storage: Vec<(i16, f32, u8)>,
     pub build_seconds: i16,
     /// Builder location, DE grid button index and hotkey action id.
     pub build_location: i16,
@@ -138,7 +172,10 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
     if hp <= 0 || !los.is_finite() || collision.iter().any(|v| !v.is_finite() || *v <= 0.) {
         return Err(r.fail("invalid building dimensions or stats"));
     }
-    r.pos = at + 136 + 21;
+    r.pos = at + 136;
+    let resource_storage = (0..3)
+        .map(|_| Ok((r.i16()?, r.f32()?, r.u8()?)))
+        .collect::<Result<Vec<_>, Error>>()?;
     let n = usize::from(r.u8()?);
     r.bounded(n, 32, "damage graphics")?;
     r.skip(n * 5 + 22)?;
@@ -163,7 +200,7 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
     let armours = pairs(&mut r)?;
     r.skip(6)?;
     let range = r.f32()?;
-    r.skip(4)?;
+    let blast_width = r.f32()?;
     let reload = r.f32()?;
     let projectile = r.i16()?;
     r.skip(18)?;
@@ -186,7 +223,7 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
         }
     }
     if build_seconds <= 0
-        || [range, reload, min_range]
+        || [range, reload, min_range, blast_width]
             .iter()
             .any(|v| !v.is_finite() || *v < 0.)
     {
@@ -205,9 +242,11 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
         attacks,
         armours,
         range,
+        blast_width,
         min_range,
         reload,
         cost,
+        resource_storage,
         build_seconds,
         build_location,
         button,

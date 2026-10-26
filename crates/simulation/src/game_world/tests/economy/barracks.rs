@@ -9,7 +9,13 @@ fn a_barracks_trains_a_militia_end_to_end() {
     set_stock(&mut world, 500, 500, 100, 0);
     assert_eq!(
         trainable_units(BuildingKind::Barracks),
-        &[UnitKind::Militia, UnitKind::Spearman, UnitKind::ManAtArms]
+        &[
+            UnitKind::Militia,
+            UnitKind::Spearman,
+            UnitKind::ManAtArms,
+            UnitKind::LongSwordsman,
+            UnitKind::Pikeman
+        ]
     );
     world
         .economy
@@ -24,6 +30,7 @@ fn a_barracks_trains_a_militia_end_to_end() {
             &[worker],
             BuildingKind::Barracks,
             TileCoord::new(100, 100),
+            false,
         )
         .unwrap();
     assert_eq!(
@@ -89,6 +96,7 @@ fn dark_age_militia_research_in_feudal_and_train_men_at_arms() {
             &[worker],
             BuildingKind::Barracks,
             TileCoord::new(100, 100),
+            false,
         )
         .unwrap();
     finish(&mut w, barracks, 1200);
@@ -113,6 +121,7 @@ fn dark_age_militia_research_in_feudal_and_train_men_at_arms() {
             &[builder],
             BuildingKind::Mill,
             TileCoord::new(120, 100),
+            false,
         )
         .unwrap();
     finish(&mut w, mill, 1000);

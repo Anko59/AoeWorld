@@ -6,7 +6,7 @@ from __future__ import annotations
 import math
 from typing import Any, Optional
 
-from aoeworld import AnimalKind, AnimalTask
+from aoeworld import AnimalKind, AnimalTask, Formation
 
 from ..context import Context
 from ..geometry import Tile, centroid, clamp_tile, dist, nearest
@@ -172,17 +172,22 @@ class CombatManager:
             mem.cleared.add(building.id)
             mem.bump("targets_unreachable")
             return
+        marching: dict[Tile, list] = {}
         for unit in army:
             if not unit.idle or unit.id in ctx.busy:
                 continue
-            target = self.target_building(ctx, unit.tile, unit.id)
+            # Shared-origin queries are cached; each march group checks its hop.
+            # Per-soldier origins would exhaust the public query budget here.
+            target = self.target_building(ctx, middle, unit.id)
             if target is None:
                 continue
             if target.visible and dist(unit.tile, target.center) <= cfg.march_hop_tiles:
                 ctx.order("attack", unit.id, target.id)
             else:
-                goal = target.center if target.visible else self.approach(ctx, target, unit.tile)
-                self.march(ctx, [unit], unit.tile, goal)
+                goal = target.center if target.visible else self.approach(ctx, target, middle)
+                marching.setdefault(goal, []).append(unit)
+        for goal, members in marching.items():
+            self.march(ctx, members, middle, goal)
 
     def approach(self, ctx: Context, building: Any, origin: Tile) -> Tile:
         """A tile just outside the building toward `origin`: a move onto the
@@ -251,14 +256,26 @@ class CombatManager:
         return ctx.tick - mem.march_since > ctx.config.march_stall_seconds * ctx.world.tick_hz
 
     def march(self, ctx: Context, army: list, middle: Tile, goal: Tile) -> None:
-        """Idle soldiers walk the next hop toward `goal`, each at most once per
-        `march_pause_seconds` (one that stopped short is not re-sent at once)."""
+        """Nearby soldiers share one short land hop and one server route.
+        Stragglers form separate groups so assembly stays local."""
         mem = ctx.board
         pause = ctx.config.march_pause_seconds * ctx.world.tick_hz
+        groups: dict[Tile, list] = {}
+        side = ctx.config.march_group_tiles
         for unit in army:
             if unit.idle and unit.id not in ctx.busy and ctx.tick - mem.marched.get(unit.id, -pause) >= pause:
-                x, y = ctx.land_hop(unit.tile, goal)
-                if (x, y) == unit.tile:
-                    continue
+                key = (unit.tile[0] // side, unit.tile[1] // side)
+                groups.setdefault(key, []).append(unit)
+        for members in groups.values():
+            members.sort(key=lambda u: u.id)
+            origin = centroid([u.tile for u in members]) or middle
+            target = ctx.land_hop(origin, goal)
+            if target == origin:
+                continue
+            for unit in members:
                 mem.marched[unit.id] = ctx.tick
-                ctx.order("move", unit.id, x, y)
+            if len(members) > 1:
+                ctx.order("formation_move", [u.id for u in members], *target,
+                          getattr(Formation, ctx.config.army_formation))
+            else:
+                ctx.order("move", members[0].id, *target)

@@ -12,7 +12,7 @@ use std::{
 
 mod retry;
 mod suites;
-pub(crate) use suites::{SUITES, SuiteRun, packages, run_focused};
+pub(crate) use suites::{SUITES, SuiteRun, packages, run_focused, run_selected};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 

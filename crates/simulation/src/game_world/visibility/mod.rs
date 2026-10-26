@@ -22,6 +22,8 @@ struct Observer {
 
 #[derive(Default, Debug)]
 pub(crate) struct Vision {
+    /// Diagnostic only; batch invocation counts do not enter replay state.
+    applications: u64,
     players: BTreeMap<PlayerId, PlayerVision>,
     observers: observers::Observers,
     /// Building footprint tiles, for sight-gain and sight-loss events.
@@ -49,6 +51,10 @@ mod watchers;
 use watchers::Watched;
 
 impl GameWorld {
+    pub(crate) fn building_at_tile(&self, tile: TileCoord) -> Option<EntityId> {
+        self.vision.building_at_tile.get(&tile).copied()
+    }
+
     pub fn visibility(&self, player: PlayerId, tile: TileCoord) -> TileVisibility {
         if self.vision.disabled {
             return TileVisibility::Visible;
@@ -98,6 +104,10 @@ impl GameWorld {
     pub fn fog_disabled(&self) -> bool {
         self.vision.disabled
     }
+    pub fn vision_batch_applications(&self) -> u64 {
+        self.vision.applications
+    }
+
     pub fn vision_revision(&self) -> u64 {
         self.vision.revision
     }
@@ -118,10 +128,16 @@ impl GameWorld {
     }
 
     pub fn unit_visible_to(&self, player: PlayerId, id: EntityId) -> bool {
-        self.unit(id).is_some_and(|u| {
-            u.player == player
-                || self.visibility(player, u.position.tile_floor()) == TileVisibility::Visible
-        })
+        !self.embarked(id)
+            && self.unit(id).is_some_and(|u| {
+                u.player == player
+                    || self.visibility(player, u.position.tile_floor()) == TileVisibility::Visible
+            })
+    }
+
+    /// Local footprint lookup shared by visibility and area damage.
+    pub(crate) fn building_at(&self, tile: TileCoord) -> Option<EntityId> {
+        self.vision.building_at_tile.get(&tile).copied()
     }
 
     pub fn building_visible_to(&self, player: PlayerId, footprint: TileRect) -> bool {
@@ -203,6 +219,9 @@ impl GameWorld {
     /// What a unit currently observes: owner, tile and line of sight. Pure, so
     /// the parallel movement proposal can compute it from a snapshot.
     pub(crate) fn unit_observer(&self, u: &GameUnit) -> Option<(PlayerId, TileCoord, u8)> {
+        if self.embarked(u.id) {
+            return None;
+        }
         Self::unit_observer_with(u, self.player_economy(u.player))
     }
 
@@ -217,7 +236,9 @@ impl GameWorld {
         let researched = economy.map_or(0, |p| p.researched);
         let los = match u.kind {
             UnitKind::Scout => {
-                if researched & super::Tech::FeudalAge.bit() != 0 {
+                if researched & super::Tech::CastleAge.bit() != 0 {
+                    8
+                } else if researched & super::Tech::FeudalAge.bit() != 0 {
                     6
                 } else {
                     4
@@ -226,7 +247,7 @@ impl GameWorld {
             _ => {
                 super::combat::military::researched_stats(
                     u.kind,
-                    economy.is_some_and(|p| p.age == super::Age::Feudal),
+                    economy.is_some_and(|p| p.age >= super::Age::Feudal),
                     researched,
                 )
                 .los

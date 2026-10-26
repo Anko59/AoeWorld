@@ -2,6 +2,114 @@ import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
 import { building, inputFixture, screen, selectWorker } from "./fixture.js";
 
+test("a nonzero player keeps ownership after its primary scout enters a Castle", async ({
+  page,
+}, info) => {
+  test.setTimeout(90_000);
+  const castle = building(20, 16, 8197, 8188, 4, 900, true, 1);
+  let revision: number[] = [1];
+  await inputFixture(
+    page,
+    info.project.name === "webgpu" ? "webgpu" : "webgl2",
+    [castle],
+    false,
+    1,
+    (bytes, socket) => {
+      if (bytes[0] === 1) {
+        revision = [];
+        for (const byte of bytes.subarray(1)) {
+          revision.push(byte);
+          if (byte < 128) break;
+        }
+      }
+      if (bytes[0] === 25)
+        socket.send(
+          Buffer.from([
+            2,
+            ...revision,
+            1,
+            0,
+            1,
+            0,
+            0,
+            1,
+            ...castle.slice(0, -1),
+            1,
+            0,
+            1,
+            45,
+            45,
+            0,
+          ]),
+        );
+    },
+  );
+  await page.mouse.click(640, 360);
+  await expect(page.locator("#selection-name")).toContainText("Scout");
+  await page.locator("#garrison").click();
+  const center = screen(8199, 8190);
+  await page.mouse.click(center.x, center.y);
+  await page.mouse.click(center.x, center.y);
+  await expect(page.locator("#selection-name")).toHaveText("Castle");
+  await expect(page.locator("#selection")).toHaveAttribute(
+    "data-owned",
+    "true",
+  );
+  await expect(page.locator("#garrison-count")).toHaveText("1 / 20");
+  await expect(page.locator("#ungarrison")).toBeEnabled();
+});
+
+test("an enemy inside a friendly shelter keeps the attack cursor and order", async ({
+  page,
+}, info) => {
+  test.setTimeout(90_000);
+  const commands = await inputFixture(
+    page,
+    info.project.name === "webgpu" ? "webgpu" : "webgl2",
+    [building(20, 0, 8188, 8191, 4)],
+    true,
+  );
+  await selectWorker(page);
+  const enemy = screen(8189.5, 8192.5);
+  await page.mouse.move(enemy.x, enemy.y);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-command-cursor",
+    "attack",
+  );
+  await page.mouse.click(enemy.x, enemy.y, { button: "right" });
+  await expect.poll(() => commands.at(-1)?.[0]).toBe(7);
+  expect(commands.at(-1)?.at(-1)).toBe(4);
+});
+
+test("a full shelter shows its capacity and receives a garrison order", async ({
+  page,
+}, info) => {
+  test.setTimeout(90_000);
+  const full = [
+    ...building(20, 0, 8197, 8188, 4).slice(0, -1),
+    15,
+    ...Array.from({ length: 15 }, (_, i) => [40 + i, 0, 25, 25]).flat(),
+  ];
+  const commands = await inputFixture(
+    page,
+    info.project.name === "webgpu" ? "webgpu" : "webgl2",
+    [full],
+  );
+  const center = screen(8199, 8190);
+  await page.mouse.click(center.x, center.y);
+  await expect(page.locator("#garrison-count")).toHaveText("15 / 15");
+  await expect(page.locator("#garrison-units button")).toHaveCount(15);
+  await selectWorker(page);
+  await page.mouse.move(center.x, center.y);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-command-cursor",
+    "forbidden",
+  );
+  await page.mouse.click(center.x, center.y, { button: "right" });
+  await expect.poll(() => commands.at(-1)?.[0]).toBe(25);
+  expect(commands.at(-1)?.at(-1)).toBe(20);
+});
+
 test("villagers see build and repair cursors and send construction commands", async ({
   page,
 }, info) => {

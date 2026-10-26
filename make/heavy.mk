@@ -7,6 +7,15 @@ SLOT_ENV := \
   -e HOME \
   -e DE_DIR \
   -e HARNESS_TEST_FILTER \
+  -e CARGO_INCREMENTAL \
+  -e CARGO_PROFILE_DEV_DEBUG \
+  -e CARGO_PROFILE_TEST_DEBUG \
+  -e AOE_GAME_TEST_FILTER \
+  -e AOE_UI_PROOF_PROJECT \
+  -e AOE_NATIVE_TEST_FILTER \
+  -e AOE_NATIVE_TEST_PACKAGE \
+  -e AOE_WASM_TEST_FILTER \
+  -e AOE_WASM_TEST_PACKAGE \
   -e HARNESS_DUEL_BASE \
   -e HARNESS_DUEL_REVISION \
   -e AOE_SOURCE_QUAL_PACKAGE_DIRECTORY \
@@ -197,6 +206,14 @@ test-harness-steps:
 test-unit-steps:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-unit
 
+# Focused iteration; the full test-unit gate remains unchanged.
+.PHONY: test-game-focused test-game-focused-steps
+test-game-focused: slot-bootstrap
+	@$(SLOT_RUN) test-game-focused -- make --no-print-directory test-game-focused-steps
+
+test-game-focused-steps:
+	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-core -p aoe-assets -p aoe-simulation --no-tests fail --no-fail-fast -E $(call MOUNT_QUOTE,$(AOE_GAME_TEST_FILTER))
+
 .PHONY: test-assets-de test-assets-de-steps
 test-assets-de: slot-bootstrap
 	@$(SLOT_RUN) test-assets-de -- make --no-print-directory test-assets-de-steps
@@ -225,6 +242,13 @@ test-exhaustive-steps:
 
 test-wasm-steps:
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm
+
+.PHONY: test-wasm-focused test-wasm-focused-steps
+test-wasm-focused: disk-precheck browser-tools orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) test-wasm-focused -- make --no-print-directory test-wasm-focused-steps
+
+test-wasm-focused-steps:
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_WASM_TEST_PACKAGE -e AOE_WASM_TEST_FILTER $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm-focused
 
 # Heavy work outside the registry: each target takes a slot under its own name, so `aoe-harness slot`
 # queues it like a gate. The steps run inside the slot; nested calls inherit it.
@@ -261,6 +285,16 @@ test-placement-coverage-steps:
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(TMP_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov nextest --locked -p aoe-harness --no-report -E 'test(gates::placement::tests::)'
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(TMP_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov run --locked -p aoe-harness --no-report -- test-placement
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov report --lcov --output-path reports/placement/coverage.lcov
+
+.PHONY: test-native-focused test-native-focused-steps
+# A developer-selected Nextest filter keeps iteration inside the shared heavy slot.
+test-native-focused: slot-bootstrap
+	@$(SLOT_RUN) test-native-focused -- make --no-print-directory test-native-focused-steps
+
+test-native-focused-steps:
+	@test -n "$$AOE_NATIVE_TEST_FILTER"
+	@test -n "$$AOE_NATIVE_TEST_PACKAGE"
+	@$(DOCKER_RUN) cargo nextest run --locked -p "$$AOE_NATIVE_TEST_PACKAGE" --no-tests fail --no-fail-fast -E "$$AOE_NATIVE_TEST_FILTER"
 
 test-harness-focused: slot-bootstrap
 	@$(SLOT_RUN) test-harness-focused -- make --no-print-directory test-harness-focused-steps
@@ -399,7 +433,7 @@ test-economy-automation: disk-precheck slot-bootstrap
 	@$(SLOT_RUN) test-economy-automation -- make --no-print-directory test-economy-automation-steps
 
 test-economy-automation-steps: disk-precheck
-	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-simulation -p aoe-protocol -p aoe-sdk -p aoe-server -p aoe-harness --no-fail-fast --no-tests fail --failure-output final -E 'package(aoe-protocol) | package(aoe-sdk) | test(gathering) | test(farming) | test(scouting) | test(pinned) | test(per_session_messages_match_the_pinned_stream)'
+	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-simulation -p aoe-protocol -p aoe-sdk -p aoe-server -p aoe-harness --no-fail-fast --no-tests fail --failure-output final -E 'package(aoe-protocol) | package(aoe-sdk) | test(gathering) | test(farming) | test(scouting) | test(garrison) | test(pinned) | test(per_session_messages_match_the_pinned_stream)'
 
 test-navigation: slot-bootstrap
 	@$(SLOT_RUN) test-navigation -- make --no-print-directory test-navigation-steps
@@ -416,3 +450,24 @@ test-navigation-steps:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-server complete_static_navigation_never_queues_cold_move_preparation
 	@$(DOCKER_RUN) cargo test --locked -p aoe-server a_job_for_a_stored_preset_publishes_navigation_without_a_worker
 	@$(DOCKER_RUN) cargo test --locked -p aoe-simulation pinned
+
+.PHONY: test-bridges test-bridges-steps
+test-bridges: slot-bootstrap
+	@$(SLOT_RUN) test-bridges -- make --no-print-directory test-bridges-steps
+
+test-bridges-steps:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-map -p aoe-simulation -p aoe-protocol -p aoe-sdk -p aoe-assets bridge
+.PHONY: test-formations test-formations-steps
+test-formations: slot-bootstrap
+	@$(SLOT_RUN) test-formations -- make --no-print-directory test-formations-steps
+
+test-formations-steps:
+	@$(DOCKER_RUN) cargo test --locked -p aoe-simulation -p aoe-protocol -p aoe-sdk -p aoe-server --lib formation -- --nocapture
+	@$(DOCKER_RUN) cargo test --locked -p aoe-sdk --lib
+
+.PHONY: test-formations-perf test-formations-perf-steps
+test-formations-perf: slot-bootstrap
+	@$(SLOT_RUN) test-formations-perf -- make --no-print-directory test-formations-perf-steps
+
+test-formations-perf-steps:
+	@$(DOCKER_RUN) cargo test --locked --release -p aoe-simulation --lib formations_measure_warm -- --nocapture

@@ -50,7 +50,7 @@ pub use navigation::{
     NAVIGATION_FORMAT_VERSION, NavigationChunk, NavigationSnapshot, Path, ROUTE_LEG_COMMIT_WORK,
     ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain, find_path,
     find_path_segment_with_overlay, find_path_with_overlay, hierarchical_route,
-    navigation_checksum,
+    hierarchical_route_with_overlay, navigation_checksum,
 };
 pub use overlay::{
     Depletion, MAX_OBSTACLE_TILES, MAX_RESOURCE_OVERLAY_CHANGES, MAX_STARTING_NODES,
@@ -83,4 +83,4 @@ pub const REFERENCE_WALK_METERS_PER_SECOND_DENOMINATOR: u32 = 6;
 pub const CAVALRY_METERS_PER_SECOND: u32 = 3;
 /// The only deterministic generation recipe: the composed landscape. It is part
 /// of canonical package identity; packages naming any other value are rejected.
-pub const GENERATION_RECIPE_VERSION: u16 = 2;
+pub const GENERATION_RECIPE_VERSION: u16 = 3;

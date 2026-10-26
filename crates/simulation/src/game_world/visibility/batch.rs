@@ -64,6 +64,7 @@ impl GameWorld {
     }
 
     fn apply_vision_changes(&mut self, changes: Vec<Change>) {
+        self.vision.applications += 1;
         let mut jobs: Vec<Job> = Vec::new();
         let mut slot_of = BTreeMap::new();
         for change in changes {

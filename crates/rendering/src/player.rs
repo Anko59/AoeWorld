@@ -76,6 +76,19 @@ mod tests;
 #[repr(transparent)]
 pub struct SceneUnitVisual(u16);
 impl SceneUnitVisual {
+    /// Placement previews share native sprites without changing scene layout.
+    pub fn with_ghost(mut self, valid: bool) -> Self {
+        self.0 = (self.0 & !4096) | 2048 | u16::from(!valid) << 12;
+        self
+    }
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn ghost(self) -> bool {
+        self.0 & 2048 != 0
+    }
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn invalid_ghost(self) -> bool {
+        self.0 & 4096 != 0
+    }
     pub fn new(moving: bool) -> Self {
         Self(u16::from(moving))
     }

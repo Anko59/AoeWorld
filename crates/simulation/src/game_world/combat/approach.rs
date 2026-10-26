@@ -63,7 +63,7 @@ impl GameWorld {
     ) -> Result<AttackSearch, GameWorldError> {
         let unit = self.unit(id).ok_or(GameWorldError::UnknownEntity)?;
         let stats = self.unit_stats(id).ok_or(GameWorldError::UnknownEntity)?;
-        let range = i64::from(stats.range) * MELEE_RANGE_SUBUNITS;
+        let range = super::super::navy::attack_range(&stats);
         let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
         let origin = unit.position.tile_floor();
         let estimate = |at: WorldPosition| {
@@ -203,7 +203,7 @@ impl GameWorld {
             .abs()
             .max((i64::from(origin.y) - i64::from(centre.y)).abs())
             <= HIERARCHY_PROOF_TILES;
-        let prove = near && kind != crate::UnitKind::FishingShip;
+        let prove = near && !kind.is_naval();
         pick_firing_tile(
             candidates,
             prove,

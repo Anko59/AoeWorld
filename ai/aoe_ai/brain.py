@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any, Optional
 
 import aoeworld
-from aoeworld import CommandResult
+from aoeworld import CommandResult, UnitKind
 
 from .play.combat import CombatManager
+from .play import buildorder
 from .config import Config
 from .play.constructor import Constructor
 from .context import Context
@@ -15,8 +16,10 @@ from .geometry import dist
 from .play.economy import EconomyManager
 from .blackboard import Blackboard
 from .play.military import MilitaryManager
+from .play.naval import NavalManager
 from .play.research import ResearchManager
 from .play.scouting import ScoutManager
+from .play.bridges import BridgeManager
 
 #: Refusals that mean "this target will never work for this unit".
 HOPELESS = (
@@ -42,8 +45,10 @@ class Brain:
         self.research = ResearchManager()
         self.economy = EconomyManager(self.constructor)
         self.military = MilitaryManager()
+        self.naval = NavalManager(self.constructor)
         self.scouts = ScoutManager()
         self.combat = CombatManager()
+        self.bridges = BridgeManager()
 
     def on_tick(self, client: Any, decision: Any) -> None:
         self.decide(client, decision)
@@ -52,6 +57,9 @@ class Brain:
         ctx = Context(client, decision, self.board, self.config)
         self.absorb(ctx)
         self.note_damage(ctx)
+        if ctx.castle:
+            castle_units = sum(u.kind in (UnitKind.KNIGHT, UnitKind.LIGHT_CAVALRY, UnitKind.CROSSBOWMAN, UnitKind.ELITE_SKIRMISHER, UnitKind.PIKEMAN, UnitKind.LONG_SWORDSMAN, UnitKind.MANGONEL, UnitKind.BATTERING_RAM) for u in ctx.army)
+            ctx.board.stats["castle_units_peak"] = max(ctx.board.stats.get("castle_units_peak", 0), castle_units)
         ctx.board.stats["army_peak"] = max(ctx.board.stats.get("army_peak", 0), len(ctx.army))
         ctx.board.stats["villagers_peak"] = max(ctx.board.stats.get("villagers_peak", 0), len(ctx.villagers))
         if ctx.economy is None:
@@ -59,12 +67,28 @@ class Brain:
         # Priority order = spending order.
         self.constructor.refresh(ctx)
         self.research.step(ctx)
+        self.bridges.step(ctx)
         self.combat.step(ctx)
+        # Rally existing soldiers before idle workers consume the shared route
+        # query budget. Queue spending follows the preparation priority below.
+        self.military.rally(ctx)
         self.economy.produce(ctx)
         self.constructor.houses(ctx)
+        if (ctx.feudal and not ctx.castle
+                and buildorder.castle_requirement_kinds(ctx) < 2):
+            self.constructor.production(ctx)
+            # Protect the next unpaid prerequisite before lower-priority
+            # spending, without freezing surplus wood behind paid foundations.
+            ctx.spent[1] += buildorder.castle_prerequisite_wood(ctx)
+        forming_army = (buildorder.wants_castle_food(ctx)
+                        and ctx.board.stats.get("army_peak", 0) < ctx.config.castle_army_min)
+        if forming_army:
+            self.military.train(ctx)
         self.economy.work(ctx)
         self.constructor.step(ctx)
-        self.military.step(ctx)
+        if not forming_army:
+            self.military.train(ctx)
+        self.naval.step(ctx)
         self.scouts.step(ctx)
         self.board.bump("decisions")
 
@@ -114,7 +138,7 @@ class Brain:
                 mem.bump("buildings_completed")
             elif event.kind == "age_advanced":
                 mem.bump("ages")
-                mem.stats.setdefault("feudal_tick", ctx.tick)
+                mem.stats.setdefault("castle_tick" if ctx.castle else "feudal_tick", ctx.tick)
                 mem.blocked_units.clear()
 
     def on_rejected(self, ctx: Context, tracked: Any, result: Any) -> None:
@@ -123,8 +147,9 @@ class Brain:
         if result == CommandResult.REJECTED_WORLD_LIMIT:
             # The world is full, not the site or target: wait, then try again.
             mem.cool("world-limit:" + name, ctx.tick, ctx.config.world_limit_wait_seconds * ctx.world.tick_hz)
-            if name == "build":
-                mem.plans = [p for p in mem.plans if p.tile != (args[2], args[3])]
+            if name in ("build", "build_bridge"):
+                tile = (args[2], args[3]) if name == "build" else (min(args[1], args[3]), min(args[2], args[4]))
+                mem.plans = [p for p in mem.plans if p.tile != tile]
                 for builder in args[0]:
                     mem.builders.pop(builder, None)
             return
@@ -139,7 +164,12 @@ class Brain:
             mem.plans = [p for p in mem.plans if p.tile != (x, y)]
             for builder in args[0]:
                 mem.builders.pop(builder, None)
-        elif name == "move" and result in (
+        elif name == "build_bridge":
+            start = (min(args[1], args[3]), min(args[2], args[4]))
+            mem.plans = [p for p in mem.plans if p.kind != aoeworld.BuildingKind.BRIDGE or p.tile != start]
+            for builder in args[0]:
+                mem.builders.pop(builder, None)
+        elif name in ("move", "formation_move") and result in (
             CommandResult.REJECTED_INVALID_DESTINATION,
             CommandResult.REJECTED_UNREACHABLE,
         ):
@@ -147,7 +177,8 @@ class Brain:
                 mem.bad_moves.clear()  # bounded: forget the oldest lessons at once
             mem.bad_moves.add((args[1], args[2]))
             # An explicit refusal permits a different hop immediately.
-            mem.marched.pop(args[0], None)
+            for unit in args[0] if name == "formation_move" else [args[0]]:
+                mem.marched.pop(unit, None)
         elif name == "hunt" and result in HOPELESS:
             mem.bad_resources.add(args[1])
         elif name == "attack" and result in HOPELESS + (

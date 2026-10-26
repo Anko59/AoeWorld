@@ -1,5 +1,30 @@
 # Performance evidence
 
+## Shared formation movement
+
+`make test-formations-perf` uses release optimization to compare 200 individually
+ordered militia with the same army ordered as one Line formation on the same
+synthetic 4,096-tile map.
+Fog is disabled to isolate movement. Both armies remain in transit during the
+200 sampled ticks after 800 warm-up ticks; order issuance and initial assembly
+are excluded. The output reports route requests, actual fresh route searches
+(including scheduler restarts), and movement-phase mean, median and p95.
+`make test-formations` additionally covers one-tile obstruction squeeze/re-form,
+slowest-member speed, deterministic replay, queued turns and combat modes,
+posture changes, fog batching, and 4,096-member local-work bounds.
+
+Members never create route planners. One group leader carries the centroid's
+ordinary scheduler state and portal guidance. Local steering shares at most
+16,384 cached visibility tile probes per tick across all groups, plus up to
+three immediate-step probes per member; cached rays span at most 96 tiles.
+Groups rotate their starting member and group each tick to avoid starvation.
+Shared breadcrumbs retain at most 128 tile crossings. Nearby AI march groups
+also share their public land queries instead of spending one per soldier.
+
+Elapsed times on this shared machine are informational. Lower route-search
+counts do not establish a p95 timing improvement, finished RTS performance,
+or Firefox/GTX 1660 Ti hardware qualification.
+
 `make perf-smoke` runs the 8-client, 8,000-entity scenario through the
 authoritative gameplay WebSocket at `/game/ws`, using the production
 `GameWorld`. `make perf-ci` adds the 64-client, 128,000-entity
@@ -288,3 +313,50 @@ chunk. Raw samples and provenance go to `reports/perf/map-chunk.json` and `.md`.
 Package loading and warmup are excluded; this does not qualify server paging
 or dedicated hardware. Without `AOE_MAP_SAMPLES`, the existing five-chunk
 fallback sampling remains available.
+
+## Live game measurements
+
+Use the authenticated [admin endpoints](admin.md) while a game is running.
+`GET /admin/perf` computes nearest-rank `p50_us`, `p95_us`, and `max_us` for
+`total`, simulation `advance`, scheduler `late`, `planning`, and every recorded
+named phase. `top_phases` lists the five named phases with highest p95. Timings
+are microseconds. Nested navigation spans and `fanout_wait` overlap other
+phases: do not add all phases together. The window is the most recent sixty
+wall-clock seconds, capped at 1,200 completed ticks (one minute at 20 Hz).
+`samples` is its actual size; an idle/stopped server's window eventually empties.
+`tick_hz` is the configured rate; `tick_rate` measures completion intervals in
+the sampled window (zero with fewer than two samples). `missed_ticks` counts
+samples whose total or schedule lateness exceeded the tick period;
+`missed_total` is the process timing recorder's cumulative missed count. A
+new match's first recorded tick discards the previous match's window.
+
+`gameplay_memory`, `terrain_cache` and `snapshot_store` reuse `/health`'s live
+structure accounting without initializing the diagnostic world. Retained/cache
+bytes describe logical capacities, **not RSS**, allocator slack, stacks or
+in-flight allocations. Compare process/container RSS separately. Quantiles and
+summaries run on request; the tick records only its existing phase counters
+and a timestamp.
+
+In the game, append `?perf=1` to the URL or press **F3** to toggle the overlay.
+`window.aoePerformance` exposes `enabled`, `frameMs`, `cpuMs` (`decode`, `upload`,
+`draw`, `ui`), `gpuMs`, `gpuStatus`, `frames`, `totalsMs`, and `enable(bool)`.
+Each frame publishes the preceding frame interval and CPU sections accumulated
+since its start. Decode includes wire conversion and applying received state;
+draw includes scene preparation and CPU render submission; UI includes HUD
+presentation. Upload measures synchronous GPU buffer/texture API calls and is
+subtracted from enclosing CPU sections. Totals help inspect sections that run
+less often than frames. Browser clock resolution may round short sections to
+zero. Disabled sampling performs no clock reads or GPU queries.
+
+WebGL2 reports asynchronous GPU elapsed time only when
+`EXT_disjoint_timer_query_webgl2` is available, keeping at most one pending
+query and rejecting disjoint clocks. Canvas and WebGPU without enabled
+`timestamp-query` report `gpuMs: null` with the reason in `gpuStatus`; queue
+completion is never presented as GPU elapsed time. CPU submission time is not
+GPU time. This instrumentation does not qualify Firefox/Linux/GTX 1660 Ti
+performance; test the owner's actual match and hardware before claiming FPS.
+
+The bottom-right **Carry indicators** button beside grid, or **L**, toggles
+resource-load badges. The preference is stored per browser as
+`aoeworld.carryIndicators`; it still works in memory when storage is denied.
+Hotkeys ignore text inputs, editable fields and open dialogs.

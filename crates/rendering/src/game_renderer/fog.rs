@@ -70,7 +70,7 @@ pub(super) fn shade_objects(
             }
         }
         let slot = levels.index(u64::from(u.id.0));
-        levels.entries[slot].unit = factor;
+        levels.entries[slot].unit = if u.visual.ghost() { 1.0 } else { factor };
     }
     for layer in layers {
         if let WorldLayer::Sprite(sprite, frame, _, id) = layer {

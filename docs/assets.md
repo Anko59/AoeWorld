@@ -53,13 +53,22 @@ are not qualified as a seamless periodic sheet. Metadata-free material 6 selecti
 Four optional ground-variety sheets, each a reviewed 10×10 periodic montage, add
 grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
-The periodic groups retain all 100 frames. Catalog v17's base selects 2,371 frames (including ten gather-point flag cells):
+The periodic groups retain all 100 frames. The base selects 2,371 frames (including ten gather-point flag cells):
 1,474 terrain and 897 objects including village art and cliff faces 226. The
-[unit and wildlife selection](assets/units.md) adds 2,540 frames. DAT building
+[unit and wildlife selection](assets/units.md) adds 2,590 semantic frames. DAT building
 recipes add their selected native frames, including animated Mill layers,
 static House variants and construction/wall angles. Runtime packing uses five
 2048² RGBA pages/80 MiB, terrain on pages 0–1 and objects on pages 2–4,
-with a 5,120-entry frame metadata cap.
+with a 5,120-entry frame metadata cap. Repeated masked or terrain source cells
+share storage while keeping every semantic entry; uploads copy each shared
+rectangle once to preserve alpha. Unmasked cells can bake different colors and
+retain separate rectangles. Owner-independent bridges can borrow spare terrain
+space through the shared domain. A bounded MaxRects retry recovers fragmented
+space when the initial shelf layout fails, with the same page and gutter limits. PNG validation caches only bounded
+metadata keyed by native SHA-256 digests of complete source bytes; repeated
+WebGPU passes still decode one source plane at a time, without a pixel cache.
+Regenerate local packs after catalog changes:
+stale DAT recipes can exhaust the atlas through fallback art selection.
 The gather-point flag uses DAT unit 720 / SLP 4480 when present. The trial
 archives omit it; the licensed DE overlay supplies `b_misc_waypoint_flag_x1.sld`,
 sampled from 90 to ten cells in the same bounded object atlas.
@@ -123,6 +132,12 @@ These are metadata, not committed pixels. Missing village groups draw simple sem
 a present incomplete group remains a pack error. The native metadata packing
 proof covers the full base and actor prefixes plus DAT building and foundation
 frames in the same five-page atlas.
+The startup packer reuses unused row widths beside taller frames before opening
+another row. Castle content must fit the existing colour and aligned mask pages;
+the 5,120-frame ceiling and pixel allocations stay fixed. Retired-row metadata
+is bounded by the 2,048-pixel page height (at most 6 KiB capacity per page).
+Unowned resource/neutral art may borrow spare terrain space after terrain and
+masked objects have reserved their domains; team-masked art stays on pages 2–4.
 Yellow wildflower 2561 and tan reed 4584 dressing are omitted because their
 silhouettes read as gold and deadwood. Footprint wear modulates existing terrain
 colors without additional faces. [Unit and wildlife art](assets/units.md) records
@@ -173,3 +188,10 @@ The overlay also includes [Feudal building and age-up art](economy/feudal.md).
 The Stable uses the measured 14-byte SLD header; other selected SLDs use 16.
 `make assets-dat-table-de` surveys licensed DE numeric rules into ignored local
 output, separately from the trial sprite table.
+
+Atlas PNG decoding lives in the [browser runtime decoder](../crates/client/src/png_page/decoder.js).
+It keeps the 32 MiB input limit, fixed 2048-square RGBA8 dimensions, chunk CRCs,
+contiguous IDAT checks, bounded browser zlib streaming, all five PNG filters and
+Adam7 passes. It copies compressed input before yielding, so freeing the source
+or growing WASM memory cannot invalidate a pending decode. Exact unpremultiplied
+RGBA bytes return to Rust; canvas colour conversion does not enter this path.

@@ -162,7 +162,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         }
         if event.button() == 0 && client.village.placement.is_some() {
             let _ = client.canvas.set_pointer_capture(event.pointer_id());
-            super::village::construction::place(&mut client, target, false);
+            super::village::construction::place(&mut client, target, false, event.shift_key());
             return;
         }
         if event.button() == 0 && client.village.move_cursor {
@@ -231,9 +231,15 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let _ = client.canvas.release_pointer_capture(event.pointer_id());
             return;
         }
+        if client.village.garrison_cursor {
+            client.drag = None;
+            super::village::garrison::interact(&mut client, target);
+            let _ = client.canvas.release_pointer_capture(event.pointer_id());
+            return;
+        }
         if client.village.placement.is_some() {
             client.drag = None;
-            super::village::construction::place(&mut client, target, true);
+            super::village::construction::place(&mut client, target, true, event.shift_key());
             let _ = client.canvas.release_pointer_capture(event.pointer_id());
             return;
         }
@@ -312,13 +318,18 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let mut client = keyed.borrow_mut();
         match action {
             1 => {
-                if client.village.placement.is_some() {
+                if client.village.placement.is_some() || client.village.garrison_cursor {
                     super::village::construction::cancel(&mut client);
                 } else {
                     client.selected = Default::default();
                 }
                 client.village.move_cursor = false;
+                client.village.unload_cursor = false;
+                client.village.attack_move = false;
                 client.drag = None;
+            }
+            6 if client.village.repeat_placement => {
+                super::village::construction::cancel(&mut client)
             }
             2 => toggle_grid(&mut client),
             3 => center_on_primary(&mut client),
@@ -333,6 +344,13 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         .borrow()
         .document
         .add_event_listener_with_callback("keydown", onkey.as_ref().unchecked_ref())?;
+    shared
+        .borrow()
+        .document
+        .add_event_listener_with_callback("keyup", onkey.as_ref().unchecked_ref())?;
+    if let Some(window) = web_sys::window() {
+        window.add_event_listener_with_callback("blur", onkey.as_ref().unchecked_ref())?;
+    }
     onkey.forget();
 
     for (id, action) in [

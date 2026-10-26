@@ -133,6 +133,7 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
     use CommandResult::*;
     match result {
         Accepted => "connected",
+        RejectedGarrisonFull => "Cannot garrison: that building is full.",
         RejectedNotController => "Cannot give orders: this session is observing the game.",
         RejectedUnknownEntity => "Cannot give orders: the unit is no longer available.",
         RejectedSequence => "The order could not be confirmed. Please try again.",
@@ -156,6 +157,7 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
         RejectedNotResearchable => "That building cannot research that technology.",
         RejectedAlreadyResearched => "That technology is already researched.",
         RejectedResearchBusy => "That research is already underway or the building is busy.",
+        RejectedRequiresCastleAge => "Requires Castle Age.",
         RejectedRequiresFeudalAge => "Requires Feudal Age.",
         RejectedNoMarket => "Trading needs a completed Market of yours.",
         RejectedWorldLimit => "The world has reached its limit for that order.",

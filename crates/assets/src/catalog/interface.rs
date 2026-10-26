@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// Increment when the exported interface selection or crops change.
-pub const VERSION: u8 = 5;
+pub const VERSION: u8 = 6;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct IconSource {
@@ -110,7 +110,8 @@ fn crop(mut art: Art, x: u16, y: u16, width: u16, height: u16) -> Result<Art, Er
 pub fn build(dat: &DatFile, manifest: &Manifest) -> Result<Interface, Error> {
     let mut catalog = Interface::default();
     for id in super::GAMEPLAY_BUILDING_IDS.into_iter().chain([
-        83, 293, 448, 74, 75, 4, 7, 93, 13, 594, 65, 48, 126, 59, 66, 102, 349, 53,
+        83, 293, 448, 74, 75, 4, 7, 93, 13, 594, 65, 48, 126, 59, 66, 102, 349, 53, 77, 358, 24, 6,
+        38, 546, 125, 280, 35, 539, 529, 527, 545, 21,
     ]) {
         if let Some(source) = unit_icon(dat, id)
             && let Some(art) = art(manifest, source.slp, source.frame)?
@@ -118,7 +119,10 @@ pub fn build(dat: &DatFile, manifest: &Manifest) -> Result<Interface, Error> {
             catalog.units.insert(id, art);
         }
     }
-    for id in [22, 8, 101, 202, 14, 55, 278, 213, 222, 67, 74, 81, 199, 211] {
+    for id in [
+        22, 8, 101, 202, 14, 55, 278, 213, 222, 67, 74, 81, 199, 211, 102, 207, 197, 100, 98, 254,
+        249, 280, 68, 76, 82, 200, 212, 13, 203, 182, 50, 93, 321, 34,
+    ] {
         if let Some(tech) = dat.technologies.iter().find(|t| t.id == id)
             && let Ok(frame) = u32::try_from(tech.icon_id)
             && let Some(art) = art(manifest, 50729, frame)?

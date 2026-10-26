@@ -50,7 +50,7 @@ impl GameWorld {
                 let node = overlay
                     .resource_by_id_with_cancel(generator, id, &|| false)
                     .map_err(GameWorldError::Environment)?
-                    .filter(|n| overlay.blocks_node(*n))
+                    .filter(|n| overlay.resource_available(*n))
                     .ok_or(EconomyError::InvalidResource)?;
                 if self.visibility(player, node.tile) == TileVisibility::Unexplored {
                     return Err(EconomyError::InvalidResource);

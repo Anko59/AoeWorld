@@ -1,7 +1,7 @@
 //! Resource nodes read from public map chunks, the same terrain the browser
 //! downloads. A node is exposed to a bot only once its tile is explored.
 use aoe_core::TileCoord;
-use aoe_map::{CompactChunk, LandscapeChunk, ResourceKind as MapKind};
+use aoe_map::{CompactChunk, GroundMaterial, LandscapeChunk, ResourceKind as MapKind, WaterKind};
 use aoe_protocol::ResourceKind;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -39,7 +39,15 @@ fn map_kind(kind: MapKind) -> ResourceKind {
     }
 }
 
-type GroundChunk = Box<[(bool, i16); 1024]>;
+#[derive(Clone, Copy, Debug, Default)]
+struct Ground {
+    passable: bool,
+    height: i16,
+    water: bool,
+    dry: bool,
+    navigable: bool,
+}
+type GroundChunk = Box<[Ground; 1024]>;
 
 #[derive(Clone, Debug, Default)]
 pub struct ResourceCatalog {
@@ -71,12 +79,20 @@ impl ResourceCatalog {
     pub(crate) fn insert(&mut self, chunk: &CompactChunk) -> Result<(), String> {
         let landscape: LandscapeChunk = chunk.decode().map_err(|error| error.to_string())?;
         self.loaded.insert((landscape.x, landscape.y));
-        let mut walkable = Box::new([(false, 0); 1024]);
+        let mut walkable = Box::new([Ground::default(); 1024]);
         for tile in &landscape.tiles {
-            walkable[(tile.tile.y.rem_euclid(32) * 32 + tile.tile.x.rem_euclid(32)) as usize] = (
-                tile.terrain.passable && tile.terrain.surface.walkable(),
-                tile.terrain.game_height_level,
-            );
+            walkable[(tile.tile.y.rem_euclid(32) * 32 + tile.tile.x.rem_euclid(32)) as usize] =
+                Ground {
+                    passable: tile.terrain.passable && tile.terrain.surface.walkable(),
+                    height: tile.terrain.game_height_level,
+                    water: tile.terrain.water != WaterKind::None
+                        && tile.terrain.material != GroundMaterial::Ford,
+                    dry: tile.terrain.water == WaterKind::None && tile.terrain.passable,
+                    navigable: matches!(
+                        tile.terrain.water,
+                        WaterKind::River | WaterKind::Lake | WaterKind::Ocean
+                    ) && tile.terrain.material != GroundMaterial::Ford,
+                };
         }
         self.passable.insert((landscape.x, landscape.y), walkable);
         for resource in &landscape.resources {
@@ -103,9 +119,18 @@ impl ResourceCatalog {
             Some(chunk[(tile.y.rem_euclid(32) * 32 + tile.x.rem_euclid(32)) as usize])
         };
         match (sample(from), sample(to)) {
-            (Some((true, a)), Some((true, b))) => (i32::from(a) - i32::from(b)).abs() <= 1,
+            (Some(a), Some(b)) if a.passable && b.passable => {
+                (i32::from(a.height) - i32::from(b.height)).abs() <= 1
+            }
             _ => false,
         }
+    }
+
+    pub(crate) fn water(&self, tile: TileCoord) -> Option<bool> {
+        let chunk = self
+            .passable
+            .get(&(tile.x.div_euclid(32), tile.y.div_euclid(32)))?;
+        Some(chunk[(tile.y.rem_euclid(32) * 32 + tile.x.rem_euclid(32)) as usize].water)
     }
 
     pub fn loaded_chunks(&self) -> usize {
@@ -117,6 +142,14 @@ impl ResourceCatalog {
         let chunk = self
             .passable
             .get(&(tile.x.div_euclid(32), tile.y.div_euclid(32)))?;
-        Some(chunk[(tile.y.rem_euclid(32) * 32 + tile.x.rem_euclid(32)) as usize].0)
+        Some(chunk[(tile.y.rem_euclid(32) * 32 + tile.x.rem_euclid(32)) as usize].passable)
+    }
+
+    pub(crate) fn dock_terrain(&self, tile: TileCoord) -> Option<(bool, bool)> {
+        let chunk = self
+            .passable
+            .get(&(tile.x.div_euclid(32), tile.y.div_euclid(32)))?;
+        let ground = chunk[(tile.y.rem_euclid(32) * 32 + tile.x.rem_euclid(32)) as usize];
+        Some((ground.dry, ground.navigable))
     }
 }

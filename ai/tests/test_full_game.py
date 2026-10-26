@@ -31,3 +31,13 @@ def test_bots_reach_feudal_build_an_army_and_land_an_attack_on_every_seed():
             assert bot["feudal_minute"] is not None, result
             assert bot["army_peak"] >= SOLDIERS, result
         assert any(bot["attacks_landed"] > 0 for bot in result["bots"]), f"no attack landed: {result}"
+
+
+def test_one_bot_reaches_castle_and_fields_castle_units_through_the_public_sdk():
+    binary = Path(os.environ.get("AOE_SERVER_BIN", ROOT / "target" / "debug" / "aoe-server"))
+    result = run_seeds(binary, ROOT, [1], bots=1, minutes=30, size=300)[0]
+    print(result, flush=True)
+    bot = result["bots"][0]
+    assert bot["errors"] == 0, result
+    assert bot["castle_minute"] is not None, result
+    assert bot["castle_units_peak"] > 0, result

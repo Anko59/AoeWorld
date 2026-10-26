@@ -1,6 +1,8 @@
 //! Construction speed, builders and palisade walls.
 use super::{buildings::*, *};
 
+mod continuation;
+
 fn at(x: i32, y: i32) -> TileCoord {
     TileCoord::new(x, y)
 }
@@ -10,7 +12,13 @@ fn a_house_takes_twenty_five_seconds_with_one_builder() {
     let (mut world, _, _) = village();
     let builder = villager_at(&mut world, 99, 100);
     let id = world
-        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     advance(&mut world, 499);
     assert!(!world.building(id).unwrap().is_complete());
@@ -32,7 +40,13 @@ fn right_click_repairs_a_damaged_own_building_and_releases_the_builder() {
     let (mut world, _, _) = village();
     let builder = villager_at(&mut world, 99, 100);
     let house = world
-        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     finish(&mut world, house, 700);
     world.economy.buildings.get_mut(&house).unwrap().hp -= 20;
@@ -44,6 +58,7 @@ fn right_click_repairs_a_damaged_own_building_and_releases_the_builder() {
             &[replay_builder],
             BuildingKind::House,
             at(100, 100),
+            false,
         )
         .unwrap();
     finish(&mut replay, replay_house, 700);
@@ -80,7 +95,13 @@ fn three_builders_take_base_times_three_over_five() {
         villager_at(&mut world, 100, 99),
     ];
     let id = world
-        .issue_build(PlayerId(0), &builders, BuildingKind::House, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &builders,
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     assert_eq!(finish(&mut world, id, 600), 300);
     for builder in builders {
@@ -94,7 +115,13 @@ fn builders_walk_to_the_foundation_before_adding_progress() {
     let builder = villager_at(&mut world, 90, 100);
     fixture::survey(&mut world, PlayerId(0), at(100, 100), 0);
     let id = world
-        .issue_build(PlayerId(0), &[builder], BuildingKind::Outpost, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::Outpost,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     advance(&mut world, 20);
     assert_eq!(world.building(id).unwrap().progress_permille(), 0);
@@ -111,7 +138,13 @@ fn a_move_order_abandons_construction_and_the_foundation_stays() {
     let (mut world, _, _) = village();
     let builder = villager_at(&mut world, 99, 100);
     let id = world
-        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     advance(&mut world, 100);
     let progress = world.building(id).unwrap().progress_permille();
@@ -142,7 +175,13 @@ fn construction_adds_hit_points_without_healing_combat_damage() {
     let (mut world, _, _) = village();
     let builder = villager_at(&mut world, 99, 100);
     let id = world
-        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     advance(&mut world, 250);
     let before = world.building(id).unwrap().hp;
@@ -162,7 +201,13 @@ fn construct_orders_reject_complete_foreign_and_missing_buildings() {
     let (mut world, _, center) = village();
     let builder = villager_at(&mut world, 99, 100);
     let house = world
-        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     let other = villager_at(&mut world, 99, 101);
     let stranger = world
@@ -212,7 +257,7 @@ fn wall_ring(world: &mut GameWorld, builders: &[EntityId]) -> Vec<EntityId> {
     ] {
         ids.extend(
             world
-                .issue_build_wall(PlayerId(0), builders, from, to)
+                .issue_build_wall(PlayerId(0), builders, from, to, false)
                 .unwrap(),
         );
     }
@@ -225,7 +270,7 @@ fn palisade_segments_cost_two_wood_each_and_take_six_seconds_per_tile() {
     let builder = villager_at(&mut world, 99, 99);
     fixture::survey(&mut world, PlayerId(0), at(102, 100), 2);
     let ids = world
-        .issue_build_wall(PlayerId(0), &[builder], at(100, 100), at(104, 100))
+        .issue_build_wall(PlayerId(0), &[builder], at(100, 100), at(104, 100), false)
         .unwrap();
     assert_eq!(ids.len(), 5);
     assert_eq!(stock(&world).1, 190);
@@ -248,11 +293,11 @@ fn palisade_segments_cost_two_wood_each_and_take_six_seconds_per_tile() {
     // Too long, or any segment invalid: nothing is placed or charged.
     let before = world.canonical_hash();
     assert_eq!(
-        world.issue_build_wall(PlayerId(0), &[builder], at(0, 10), at(100, 10)),
+        world.issue_build_wall(PlayerId(0), &[builder], at(0, 10), at(100, 10), false),
         Err(EconomyError::OrderTooLarge)
     );
     assert_eq!(
-        world.issue_build_wall(PlayerId(0), &[builder], at(102, 98), at(102, 102)),
+        world.issue_build_wall(PlayerId(0), &[builder], at(102, 98), at(102, 102), false),
         Err(EconomyError::InvalidFootprint),
         "the line crosses an existing segment"
     );
@@ -333,7 +378,7 @@ fn a_wall_makes_the_route_longer_but_not_impossible() {
             let builder = villager_at(&mut world, 99, 94);
             fixture::survey(&mut world, PlayerId(0), at(100, 100), 5);
             let ids = world
-                .issue_build_wall(PlayerId(0), &[builder], at(100, 95), at(100, 105))
+                .issue_build_wall(PlayerId(0), &[builder], at(100, 95), at(100, 105), false)
                 .unwrap();
             let mut guard = 0;
             while !ids
@@ -377,14 +422,14 @@ fn coordinates_at_the_integer_limit_are_rejected_without_panicking() {
         (at(i32::MIN, i32::MIN), at(i32::MIN, i32::MIN + 2)),
     ] {
         assert_eq!(
-            world.issue_build_wall(PlayerId(0), &[builder], from, to),
+            world.issue_build_wall(PlayerId(0), &[builder], from, to, false),
             Err(EconomyError::InvalidFootprint),
             "{from:?} to {to:?}"
         );
     }
     for origin in [at(i32::MAX, i32::MAX), at(i32::MAX, 5), at(i32::MIN, 5)] {
         assert_eq!(
-            world.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin),
+            world.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin, false),
             Err(EconomyError::InvalidFootprint)
         );
     }

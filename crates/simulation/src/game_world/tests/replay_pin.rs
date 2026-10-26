@@ -8,6 +8,12 @@
 //! extend the authoritative schema again; regenerate the current pins.
 //! The merged retained-detour planner and open TC arches change routes and
 //! planner hashes too; regenerate this combined schema with the same scenario.
+// Castle Age widens researched bits to u64 and hashes the ordered healer index;
+// Gather credits now use millionths for exact stacked mining upgrades.
+// Regenerate current checkpoints for these deliberate state-schema changes.
+// Combined Castle bundle: u64 research, healers, garrisons, queued builders and
+// cargo/embarked maps extend current state. Regenerate the same scenario; all
+// independent replay, thread equality and emitted-change assertions remain.
 use super::*;
 
 fn at(x: i32, y: i32) -> WorldPosition {
@@ -51,19 +57,19 @@ fn wildlife_and_fog_replay_hashes_stay_pinned() {
     const PINS: [(&str, &str); 4] = [
         (
             "100",
-            "5645a0e52b025a900eae98199f7310685f354119c7661932dda9e53371efc77d",
+            "ec4e2c3638434e6026511011734329ad48e17ec0e171b01c9699212c4d009493",
         ),
         (
             "200",
-            "9e4280f11814fcba85379a90807f2c1675130322d555eb2fe1320a116b124179",
+            "4ae6b7c0dfcc4bc8ffde23e4626f1e3ecfdc4785db0888274960607b2333f197",
         ),
         (
             "300",
-            "db5c72fb9b1c17f1dd227b5cf5f4f167fa5dfe2aa10cf74b29f12296b47387e0",
+            "6957e348bb8eb44caaaf4f1548a9e22f0676ef69d464143562cf71dffddaf331",
         ),
         (
             "400",
-            "949a22460fbe9ae269298fc3e9bc9e69b84ce9e27e782ebc5cfb3961c1be3c0c",
+            "aa17054be71585d96b0d6508c4532ca45ca92f39b24f0771834897b19cad9bd8",
         ),
     ];
     let mut checkpoints = Vec::new();

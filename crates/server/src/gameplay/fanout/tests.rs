@@ -2,6 +2,9 @@ use super::*;
 use aoe_core::{Seed, TileCoord, TileRect, WorldConfig, WorldPosition};
 use aoe_simulation::{GameWorld, RallyTarget};
 
+#[path = "tests/navy.rs"]
+mod navy;
+
 #[test]
 fn queued_destinations_are_private_to_the_owning_viewer_even_with_fog_disabled() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
@@ -43,6 +46,7 @@ fn rally_is_private_in_fog_and_a_hundred_no_fog_viewers_share_one_building_map()
                 region: TileRect::new(TileCoord::new(0, 0), TileCoord::new(256, 256)),
             },
             vision: None,
+            fog_disabled: None,
             viewer: PlayerId(player),
             primary: EntityId(0),
             ai: true,
@@ -75,7 +79,7 @@ fn rally_is_private_in_fog_and_a_hundred_no_fog_viewers_share_one_building_map()
 }
 
 #[tokio::test]
-async fn building_views_stream_past_one_message_and_reconnect_without_oversized_frames() {
+async fn owned_buildings_stream_past_one_message_and_reconnect_without_oversized_frames() {
     use aoe_protocol::{GameplayServerMessage as M, MAX_ECONOMY_BUILDINGS, encode_gameplay_server};
     use aoe_simulation::WorldLimits;
     let mut world = GameWorld::new(WorldConfig::new(1024, 1024, Seed(0)).unwrap()).unwrap();
@@ -85,7 +89,10 @@ async fn building_views_stream_past_one_message_and_reconnect_without_oversized_
     for raw in 0..=MAX_ECONOMY_BUILDINGS {
         let at = TileCoord::new(4 + (raw % 200) as i32 * 5, 4 + (raw / 200) as i32 * 5);
         world
-            .place_town_center(PlayerId((raw % 100) as u16), at)
+            // Owned buildings stay available off camera. Enemy buildings now
+            // follow camera bounds while fog is disabled; the separate camera
+            // regression below covers that intentional policy change.
+            .place_town_center(PlayerId(0), at)
             .unwrap();
     }
     let primary = world
@@ -130,6 +137,81 @@ async fn building_views_stream_past_one_message_and_reconnect_without_oversized_
             assert_eq!(held.len(), MAX_ECONOMY_BUILDINGS + 1);
         }
         service.disconnect(id).await;
+    }
+}
+
+#[tokio::test]
+async fn fog_disabled_enemy_buildings_follow_camera_and_reenable_removes_hidden_entities() {
+    use aoe_protocol::{GameplayServerMessage as M, encode_gameplay_server};
+    let mut world = GameWorld::new(WorldConfig::new(1024, 1024, Seed(7)).unwrap()).unwrap();
+    let own = world
+        .place_town_center(PlayerId(0), TileCoord::new(12, 12))
+        .unwrap();
+    let near = world
+        .place_town_center(PlayerId(1), TileCoord::new(40, 40))
+        .unwrap();
+    let far = world
+        .place_town_center(PlayerId(1), TileCoord::new(900, 900))
+        .unwrap();
+    let primary = world
+        .spawn_unit(
+            PlayerId(0),
+            WorldPosition::from_tile_center(TileCoord::new(8, 8)).unwrap(),
+        )
+        .unwrap();
+    let hidden = world
+        .spawn_unit(
+            PlayerId(1),
+            WorldPosition::from_tile_center(TileCoord::new(44, 44)).unwrap(),
+        )
+        .unwrap();
+    world.set_fog_disabled(true);
+    let service = super::super::GameplayService::from_scale_world(world, primary);
+    for _ in 0..2 {
+        let (sender, mut rx) = tokio::sync::mpsc::channel(64);
+        let (id, _) = service.register(None, sender).await;
+        for (revision, region, visible, absent) in [
+            (1, TileRect::from_xywh(32, 32, 32, 32), near, far),
+            (2, TileRect::from_xywh(896, 896, 32, 32), far, near),
+            (3, TileRect::from_xywh(32, 32, 32, 32), near, far),
+        ] {
+            service.subscribe(id, revision, region).await;
+            let mut snapshot = false;
+            while let Ok(message) = rx.try_recv() {
+                encode_gameplay_server(&message).expect("camera snapshots are bounded");
+                if let M::Snapshot { buildings, .. } = message {
+                    assert_eq!(buildings.len(), 2, "owned plus camera enemy building");
+                    assert!(buildings.iter().any(|b| b.id == own));
+                    assert!(buildings.iter().any(|b| b.id == visible));
+                    assert!(buildings.iter().all(|b| b.id != absent));
+                    snapshot = true;
+                }
+            }
+            assert!(snapshot);
+        }
+        service.set_fog_disabled(false).await;
+        service.tick().await;
+        let mut removed_unit = false;
+        let mut removed_building = false;
+        while let Ok(message) = rx.try_recv() {
+            encode_gameplay_server(&message).expect("fog removals are bounded");
+            if let M::Tick {
+                removals,
+                building_removals,
+                ..
+            } = message
+            {
+                removed_unit |= removals.contains(&hidden);
+                removed_building |= building_removals.contains(&near);
+                assert!(!building_removals.contains(&own));
+            }
+        }
+        assert!(
+            removed_unit && removed_building,
+            "fog reenable removes entities never explored by the viewer"
+        );
+        service.disconnect(id).await;
+        service.set_fog_disabled(true).await;
     }
 }
 
@@ -199,6 +281,7 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
         session_id: id,
         subscription: session.subscription.unwrap(),
         vision: None,
+        fog_disabled: None,
         viewer: session.viewer,
         primary,
         ai: false,

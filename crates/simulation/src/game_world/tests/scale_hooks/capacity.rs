@@ -103,7 +103,7 @@ fn a_hundred_feudal_villages_fit_and_building_orders_still_succeed() {
         let origin = TileCoord::new(ox + 110, oy + 100);
         super::super::economy::fixture::survey(&mut world, *player, origin, 2);
         let house = world
-            .issue_build(*player, &[*villager], BuildingKind::House, origin)
+            .issue_build(*player, &[*villager], BuildingKind::House, origin, false)
             .unwrap_or_else(|error| panic!("house of {player:?}: {error:?}"));
         assert_eq!(world.building(house).unwrap().player, *player);
     }
@@ -143,12 +143,19 @@ fn a_full_world_refuses_as_a_world_limit() {
             player,
             &[villager],
             BuildingKind::House,
-            TileCoord::new(110, 100)
+            TileCoord::new(110, 100),
+            false
         ),
         Err(EconomyError::Capacity)
     );
     assert_eq!(
-        world.issue_build(player, &[], BuildingKind::House, TileCoord::new(110, 100)),
+        world.issue_build(
+            player,
+            &[],
+            BuildingKind::House,
+            TileCoord::new(110, 100),
+            false
+        ),
         Err(EconomyError::OrderTooLarge)
     );
 }

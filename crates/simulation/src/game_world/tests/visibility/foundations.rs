@@ -13,11 +13,17 @@ fn untouched_foundations_have_no_observer_even_after_fog_is_reenabled() {
         w.update_observer(EntityId(9000), None);
         let before = w.vision_storage(PlayerId(0));
         let id = if wall {
-            w.issue_build_wall(PlayerId(0), &[builder], origin, origin)
+            w.issue_build_wall(PlayerId(0), &[builder], origin, origin, false)
                 .unwrap()[0]
         } else {
-            w.issue_build(PlayerId(0), &[builder], BuildingKind::Outpost, origin)
-                .unwrap()
+            w.issue_build(
+                PlayerId(0),
+                &[builder],
+                BuildingKind::Outpost,
+                origin,
+                false,
+            )
+            .unwrap()
         };
         w.issue_stop(PlayerId(0), builder).unwrap();
         assert_eq!(w.building(id).unwrap().work_done, 0);
@@ -44,6 +50,7 @@ fn first_build_work_starts_sight_and_construction_grows_it_to_building_los() {
             &[builder],
             BuildingKind::Outpost,
             TileCoord::new(100, 100),
+            false,
         )
         .unwrap();
     assert_eq!(w.building(id).unwrap().work_done, 0);
@@ -97,6 +104,7 @@ fn construction_sight_replays_deterministically() {
             &[builder],
             BuildingKind::Outpost,
             TileCoord::new(100, 100),
+            false,
         )
         .unwrap();
         w

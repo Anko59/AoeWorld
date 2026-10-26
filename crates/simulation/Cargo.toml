@@ -5,6 +5,11 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+# Native canonical data is also available to browser-test fixtures, never the
+# production client bundle. Runtime consumers use BrowserContent::decode.
+content-source = []
+
 [dependencies]
 aoe-core.workspace = true
 aoe-map.workspace = true

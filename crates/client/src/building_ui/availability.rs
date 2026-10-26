@@ -3,7 +3,7 @@
 use super::{rules, stock};
 use aoe_core::PlayerId;
 use aoe_protocol::{
-    Age, ConstructionState, GameplayBuildingState, GameplayPlayerState, Stockpile, Tech, UnitKind,
+    ConstructionState, GameplayBuildingState, GameplayPlayerState, Stockpile, Tech, UnitKind,
 };
 
 #[derive(Clone, Copy)]
@@ -24,7 +24,7 @@ pub(crate) enum Availability {
     Construction,
     Requirement,
     NotOwner,
-    RequiresManAtArms,
+    RequiresCastle,
 }
 impl Availability {
     pub(crate) fn number(self) -> f64 {
@@ -60,11 +60,11 @@ pub(crate) fn research(
     b: &GameplayBuildingState,
     player: Option<&GameplayPlayerState>,
     owner: PlayerId,
-    completed: u16,
+    completed: u32,
     duplicate: bool,
-    r: &aoe_simulation::TechRules,
+    r: &aoe_simulation::BrowserTech,
 ) -> Availability {
-    if r.building as u8 != b.kind as u8 {
+    if r.building != b.kind as u8 {
         return Availability::Unavailable;
     }
     if let Some(reason) = owned_complete(b, owner) {
@@ -73,13 +73,20 @@ pub(crate) fn research(
     let Some(p) = player else {
         return Availability::NotOwner;
     };
-    if p.researched & r.tech.bit() != 0 {
+    if p.researched & (1_u64 << r.tech) != 0 {
         return Availability::Researched;
     }
-    if r.requires == aoe_simulation::TechRequirement::Age(aoe_simulation::Age::Feudal)
-        && p.age != Age::Feudal
+    if (p.age as u8) < r.age {
+        return if r.age == aoe_simulation::Age::Castle as u8 {
+            Availability::RequiresCastle
+        } else {
+            Availability::RequiresFeudal
+        };
+    }
+    if let Some(tech) = r.requires_tech
+        && p.researched & (1_u64 << tech) == 0
     {
-        return Availability::RequiresFeudal;
+        return Availability::Requirement;
     }
     if b.research.is_some() || duplicate {
         return Availability::ResearchBusy;
@@ -87,13 +94,7 @@ pub(crate) fn research(
     if !b.training_queue.is_empty() {
         return Availability::TrainingBusy;
     }
-    if let aoe_simulation::TechRequirement::BuildingKinds { count, kinds } = r.requires
-        && kinds
-            .iter()
-            .filter(|k| completed & (1 << **k as u8) != 0)
-            .count()
-            < count
-    {
+    if (completed & r.building_kinds).count_ones() < u32::from(r.building_count) {
         return Availability::Requirement;
     }
     cost(p.stockpile, stock(r.cost))
@@ -106,8 +107,8 @@ pub(crate) fn training(
     reserved: usize,
     kind: UnitKind,
 ) -> Availability {
-    let native = aoe_simulation::UNIT_COMBAT[kind as usize].kind;
-    if !rules(b.kind).trainable.contains(&native) {
+    let unit = &super::content::rules().units[kind as usize];
+    if !rules(b.kind).trains(kind as u8) {
         return Availability::Unavailable;
     }
     if let Some(reason) = owned_complete(b, owner) {
@@ -116,19 +117,21 @@ pub(crate) fn training(
     let Some(p) = player else {
         return Availability::NotOwner;
     };
-    if matches!(
-        kind,
-        UnitKind::Archer
-            | UnitKind::Skirmisher
-            | UnitKind::Spearman
-            | UnitKind::Scout
-            | UnitKind::ManAtArms
-    ) && p.age != Age::Feudal
-    {
-        return Availability::RequiresFeudal;
+    if (p.age as u8) < unit.age {
+        return if unit.age == aoe_simulation::Age::Castle as u8 {
+            Availability::RequiresCastle
+        } else {
+            Availability::RequiresFeudal
+        };
     }
-    if kind == UnitKind::ManAtArms && p.researched & Tech::ManAtArms.bit() == 0 {
-        return Availability::RequiresManAtArms;
+    if unit
+        .requires_tech
+        .is_some_and(|t| p.researched & (1_u64 << t) == 0)
+    {
+        return Availability::Requirement;
+    }
+    if unit.superseded(p.researched) {
+        return Availability::Unavailable;
     }
     if b.research.is_some() {
         return Availability::ResearchBusy;
@@ -141,11 +144,11 @@ pub(crate) fn training(
     }
     let need = if kind == UnitKind::Villager {
         Stockpile {
-            food: aoe_simulation::VILLAGE_RULES.villager_food_cost,
+            food: super::content::rules().villager_food,
             ..Default::default()
         }
     } else {
-        let Some(t) = aoe_simulation::GameWorld::unit_training(native) else {
+        let Some(t) = unit.combat.training else {
             return Availability::Unavailable;
         };
         Stockpile {
@@ -164,7 +167,9 @@ pub(crate) fn primary_training(
 ) -> UnitKind {
     match b.kind {
         aoe_protocol::BuildingKind::Barracks => {
-            if player.is_some_and(|p| p.researched & Tech::ManAtArms.bit() != 0) {
+            if player.is_some_and(|p| p.researched & Tech::LongSwordsman.bit() != 0) {
+                UnitKind::LongSwordsman
+            } else if player.is_some_and(|p| p.researched & Tech::ManAtArms.bit() != 0) {
                 UnitKind::ManAtArms
             } else {
                 UnitKind::Militia

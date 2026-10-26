@@ -1,5 +1,7 @@
 # Village economy
 
+[Buildable bridges](economy/bridges.md) describe the Feudal crossing extension, costs, navigation and native art IDs.
+
 The authoritative rules live in
 [`VILLAGE_RULES`](../crates/simulation/src/game_world/economy.rs).
 It is the current gameplay table for starting resources, villagers, footprint,
@@ -128,10 +130,18 @@ research use the same rule. Orders on never-seen ground return
 `RejectedUnexploredPlacement`; explored grey fog permits placement.
 Builders walk to a tile beside it; each tick the foundation gains `builders + 2`
 of `3 x base seconds x tick rate` work, the AoE II rule `base x 3 / (n + 2)`: one
-builder takes the base time, three take three fifths of it. Builders stop on
-completion; beside a new camp or mill they gather the nearest matching resource,
-the builder of a farm farms it, and a palisade builder continues to unfinished
-segments within eight tiles (the nearest four are tried). A Move order
+builder takes the base time, three take three fifths of it. On completion, builders follow their queued foundations first, then seek the
+nearest unfinished owned foundation within ten tiles of their position. Distance
+is measured to the nearest footprint tile; ties use entity ID, and the nearest
+four approaches are tried. Without another foundation, builders beside a new
+camp or mill gather the nearest matching resource, and farm builders farm.
+Holding Shift while placing keeps the same building armed and appends orders
+(up to 32 pending foundations per builder). Each accepted foundation is charged
+immediately; a refused placement leaves existing work and queues intact.
+Releasing Shift, right-clicking, Escape, or losing window focus ends repeated
+placement. Ghosts use the building sprite at half opacity, tinted red for an
+invalid footprint; farms use their crop field and walls their segment sprites.
+A Move order
 abandons construction; `ConstructOrder` sends villagers back to an unfinished
 foundation the player owns, at no charge. Cancelling a
 foundation refunds the cost in proportion to the work not yet done (all of it
@@ -300,3 +310,7 @@ They use the existing wildlife cell index, rank by squared distance then entity
 identity, and never switch to berries or other food professions. Carcasses stay
 indexed until removed; only visible prey or owned sheep can be selected. The
 simulation reports local search cell/candidate counts in `WildlifeStats`.
+
+The [Castle Age](economy/castle.md) adds the next generic age, defensive Castle,
+Monastery, University, Siege Workshop, unit lines, economic and military research,
+local deterministic splash, healing and Ballistics.

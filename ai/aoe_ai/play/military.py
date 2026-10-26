@@ -5,34 +5,31 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from aoeworld import BuildingKind, UnitKind, trainable, unit_cost
+from aoeworld import BuildingKind, Tech, UnitKind, trainable, unit_cost
+from . import buildorder
 
 from ..context import Context
 from ..geometry import Tile, clamp_tile, dist
 
-TRAINERS = (BuildingKind.BARRACKS, BuildingKind.ARCHERY_RANGE)
+TRAINERS = (BuildingKind.BARRACKS, BuildingKind.ARCHERY_RANGE, BuildingKind.STABLE)
 #: What stands in for a kind the age does not allow yet.
 SUBSTITUTE = {UnitKind.SPEARMAN: UnitKind.MILITIA}
 MIX_KINDS = {
     "SPEARMAN": UnitKind.SPEARMAN,
     "ARCHER": UnitKind.ARCHER,
     "SKIRMISHER": UnitKind.SKIRMISHER,
+    "KNIGHT": UnitKind.KNIGHT,
 }
 
 
 class MilitaryManager:
-    def step(self, ctx: Context) -> None:
-        if ctx.economy is None or ctx.home is None:
-            return
-        self.train(ctx)
-        self.rally(ctx)
-
     # ----- training --------------------------------------------------------
     def composition(self, ctx: Context) -> dict[UnitKind, int]:
         have = {kind: 0 for kind in MIX_KINDS.values()}
         for unit in ctx.army:
             # Militia stand in for spearmen until the age allows them.
             kind = UnitKind.SPEARMAN if unit.kind == UnitKind.MILITIA else unit.kind
+            kind = {UnitKind.CROSSBOWMAN: UnitKind.ARCHER, UnitKind.PIKEMAN: UnitKind.SPEARMAN}.get(kind, kind)
             if kind in have:
                 have[kind] += 1
         for building in ctx.buildings:
@@ -46,9 +43,15 @@ class MilitaryManager:
         return have
 
     def train(self, ctx: Context) -> None:
-        if not ctx.feudal or len(ctx.villagers) < ctx.config.army_min_villagers:
+        if ctx.home is None or ctx.saving_castle or not ctx.feudal or len(ctx.villagers) < ctx.config.army_min_villagers:
             return
-        mix = ctx.config.army_mix
+        # Let wood accumulate for the second distinct Feudal building before
+        # production consumes every 25/35-wood increment.
+        if (not ctx.castle and len(ctx.villagers) >= ctx.config.castle_villagers
+                and buildorder.castle_requirement_kinds(ctx) < 2):
+            return
+        mix = dict(ctx.config.army_mix)
+        mix["KNIGHT"] = ctx.config.castle_knight_weight
         have = self.composition(ctx)
         for building in ctx.buildings:
             if building.kind not in TRAINERS or not building.complete:
@@ -63,7 +66,8 @@ class MilitaryManager:
             ctx.spend(unit_cost(choice))
             ctx.order("train", building.id, choice)
             ctx.queued += 1
-            have[UnitKind.SPEARMAN if choice == UnitKind.MILITIA else choice] += 1
+            bucket = {UnitKind.MILITIA: UnitKind.SPEARMAN, UnitKind.PIKEMAN: UnitKind.SPEARMAN, UnitKind.CROSSBOWMAN: UnitKind.ARCHER}.get(choice, choice)
+            have[bucket] += 1
             ctx.board.bump("army_queued")
 
     def pick(self, ctx: Context, building: Any, have: dict, mix: dict) -> Optional[UnitKind]:
@@ -83,6 +87,13 @@ class MilitaryManager:
 
     def allowed(self, ctx: Context, kind: UnitKind) -> Optional[UnitKind]:
         """`kind`, or a stand-in while the server has refused it for the age."""
+        if kind == UnitKind.KNIGHT and not ctx.castle:
+            return None
+        if ctx.castle:
+            for base, tech, upgraded in [(UnitKind.ARCHER, Tech.CROSSBOWMAN, UnitKind.CROSSBOWMAN),
+                                          (UnitKind.SPEARMAN, Tech.PIKEMAN, UnitKind.PIKEMAN)]:
+                if kind == base and ctx.economy.has_researched(tech):
+                    return upgraded
         blocked = ctx.board.blocked_units
         if str(kind) not in blocked:
             return kind
@@ -112,7 +123,7 @@ class MilitaryManager:
         return clamp_tile(point, ctx.world.map_size)
 
     def rally(self, ctx: Context) -> None:
-        if ctx.board.attacking:
+        if ctx.home is None or ctx.board.attacking:
             return
         point = self.rally_point(ctx)
         sent = 0

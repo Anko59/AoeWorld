@@ -25,6 +25,7 @@ pub(super) fn projectiles(
                 launched: world.tick(),
                 impact: p.impact,
                 kind: match p.kind {
+                    aoe_simulation::ProjectileKind::Stone => aoe_protocol::ProjectileKind::Stone,
                     aoe_simulation::ProjectileKind::Arrow => aoe_protocol::ProjectileKind::Arrow,
                     aoe_simulation::ProjectileKind::Javelin => {
                         aoe_protocol::ProjectileKind::Javelin

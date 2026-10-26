@@ -147,6 +147,7 @@ fn view(session_id: u64, session: &Session) -> Option<View> {
         session_id,
         subscription,
         vision: session.vision_revision,
+        fog_disabled: session.resident_fog.as_ref().map(|fog| fog.disabled),
         viewer: session.viewer,
         primary: session.primary_unit_id,
         ai: session.ai,

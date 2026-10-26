@@ -1,10 +1,12 @@
 //! Configuration-independent values shared by diagnostics and gameplay.
+mod clamp;
 mod coordinates;
-mod numeric;
+mod formation;
+pub use formation::{Formation, MAX_FORMATION_MEMBERS};
 mod projection;
 
+pub use clamp::clamp_f64;
 pub use coordinates::*;
-pub use numeric::clamp_f64;
 pub use projection::{
     Camera, ISO_TILE_HEIGHT, ISO_TILE_WIDTH, ScreenPoint, inverse_project, project,
 };

@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
 pub(crate) enum AssetCommand {
-    /// Emit the current GPU programs into the ignored browser bundle.
+    /// Generate the current browser rules, art metadata and GPU programs.
     BrowserShaders,
     Inspect {
         input: Option<PathBuf>,
@@ -61,7 +61,21 @@ pub(crate) fn browser_shaders() -> impl Iterator<Item = (&'static str, &'static 
 pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error>> {
     match command {
         AssetCommand::BrowserShaders => {
+            let actors: Vec<_> = aoe_assets::catalog::units::SPRITES
+                .iter()
+                .map(|s| {
+                    [
+                        s.id,
+                        u32::from(s.stride),
+                        u32::from(s.millis),
+                        u32::from(s.phases),
+                    ]
+                })
+                .collect();
+            let content =
+                serde_json::json!({"rules": aoe_simulation::browser_content(), "actors": actors});
             std::fs::create_dir_all("web/pkg")?;
+            std::fs::write("web/pkg/content.json", serde_json::to_vec(&content)?)?;
             for (name, source) in browser_shaders() {
                 std::fs::write(format!("web/pkg/{name}.wgsl"), source)?;
             }

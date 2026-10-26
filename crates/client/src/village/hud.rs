@@ -94,15 +94,15 @@ pub(in super::super) fn update(client: &Client) {
                 ResourceKind::Stone => 3,
             }] += 1.0;
         }
-        let native = aoe_simulation::UNIT_COMBAT[unit.kind as usize].kind;
+        let base = crate::building_ui::content::rules().units[unit.kind as usize].combat;
         let p = client
             .village
             .players
             .iter()
             .find(|p| p.player == unit.player);
-        let stats = aoe_simulation::researched_stats(
-            native,
-            p.is_some_and(|p| p.age == aoe_protocol::Age::Feudal),
+        let stats = aoe_simulation::apply_research_stats(
+            base,
+            p.is_some_and(|p| p.age >= aoe_protocol::Age::Feudal),
             p.map_or(0, |p| p.researched),
         );
         let loom = client
@@ -119,7 +119,10 @@ pub(in super::super) fn update(client: &Client) {
                 UnitKind::Villager => 1.0,
                 UnitKind::Militia => 2.0 + aoe_protocol::BuildingKind::ALL.len() as f64,
                 UnitKind::FishingShip => 3.0 + aoe_protocol::BuildingKind::ALL.len() as f64,
-                _ => 24.0 + (unit.kind as u8 - UnitKind::Archer as u8) as f64,
+                _ => {
+                    8.0 + aoe_protocol::BuildingKind::ALL.len() as f64
+                        + (unit.kind as u8 - UnitKind::Archer as u8) as f64
+                }
             },
             x,
             y,
@@ -136,14 +139,13 @@ pub(in super::super) fn update(client: &Client) {
             f64::from(if unit.kind == UnitKind::FishingShip {
                 15
             } else {
-                aoe_simulation::villager_capacity(
-                    client
-                        .village
-                        .players
-                        .iter()
-                        .find(|p| p.player == unit.player)
-                        .map_or(0, |p| p.researched),
-                )
+                let researched = p.map_or(0, |p| p.researched);
+                let capacity = crate::building_ui::content::rules().villager_capacity(researched)
+                    + u16::from(
+                        unit.task == UnitTask::Farming
+                            && researched & aoe_protocol::Tech::HeavyPlow.bit() != 0,
+                    );
+                capacity.max(unit.carried.map_or(0, |load| load.amount))
             }),
             f64::from(stats.range),
             f64::from(unit.player.0),

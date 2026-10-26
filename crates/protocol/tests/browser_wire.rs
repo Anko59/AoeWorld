@@ -1,5 +1,8 @@
 //! Browser mocks share these current wire fragments with the Rust codec.
-//! Building fragments include the new authoritative prepaid reseed count.
+//! Building fragments append the current bounded garrison list.
+//! Empty tails are regenerated for the intentional building-state extension.
+//! Unit fragments append the authoritative Transport Ship cargo count.
+//! These pins intentionally change with the single current naval state schema.
 use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect, WorldPosition};
 use aoe_protocol::{
     BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState,
@@ -75,6 +78,7 @@ fn browser_unit_combat_fragments_match_the_current_codec() {
             hunt_target: None,
             death_hunt: None,
             auto_scout: false,
+            cargo_count: 0,
         };
         let mut expected = vec![
             1, 1, 0, 1, 7, 1, 128, 32, 128, 64, 0, 0, 2, kind as u8, 0, 0, 0,
@@ -100,6 +104,7 @@ fn browser_building_combat_fragment_matches_the_current_codec() {
         gate_open: false,
         rally_point: None,
         farm_reseeds: 0,
+        garrison: Vec::new(),
         construction: ConstructionState::Complete,
         progress_permille: 1000,
         los: 8,
@@ -123,6 +128,7 @@ fn browser_dock_fragment_matches_current_codec() {
         gate_open: false,
         rally_point: None,
         farm_reseeds: 0,
+        garrison: Vec::new(),
         footprint: TileRect::new(TileCoord::new(5, 5), TileCoord::new(8, 8)),
         training_queue: vec![],
         hp: 1800,
@@ -176,6 +182,7 @@ fn snapshot() -> GameplayServerMessage {
             gate_open: false,
             rally_point: None,
             farm_reseeds: 0,
+            garrison: Vec::new(),
         }],
     }
 }

@@ -43,13 +43,18 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// Re-pin the same scenario; all sight and replay assertions remain in force.
 /// The merged wire also appends prepaid Mill reseeds and unit auto-scout flags.
 /// Regenerate the combined stream, retaining the same scenario and sight rules.
+/// Garrison state appends a bounded occupant list to each building, including
+/// one zero byte for empty shelters. Re-pinned from the observed current stream:
+/// message counts are unchanged; only the intentionally extended wire bytes differ.
+/// Combined current wire includes both unit cargo_count and building garrison;
+/// regenerate digests together while retaining all six message counts and sight checks.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 12576066171330405047),
-    (409, 18016452352948481079),
-    (51, 15140963984619083848),
-    (168, 16130475816194725269),
-    (410, 17060129097136812851),
-    (407, 8990576408232183146),
+    (407, 3005636157879186137),
+    (409, 2077369462262814347),
+    (51, 14100784394782800172),
+    (168, 8194618264119467797),
+    (410, 4020680386403049499),
+    (407, 4771060826993518798),
 ];
 
 #[tokio::test(flavor = "multi_thread")]

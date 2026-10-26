@@ -338,6 +338,7 @@ void main() {
         result = vColor; return;
     }
     if (vSolid == 0u) {
+        if ((vPages.w & 128u) != 0u && dot(abs((vUv - vRect.xy) / vRect.zw - .5), vec2(1)) > .5) discard;
         vec4 texel = ownerSample(vUv, vPages.x);
         // Quad pages.w bit 0 marks nearest-sampled terrain, not an object.
         if ((vPages.w & 1u) == 0u) {
@@ -345,6 +346,7 @@ void main() {
             if (average.a >= 0.0) texel = average;
         }
         if (texel.a <= 0.0) discard;
+        if (vColor.r > 1.0) texel.r = min(texel.r, 1.0 / vColor.r);
         result = texel * vColor;
         return;
     }

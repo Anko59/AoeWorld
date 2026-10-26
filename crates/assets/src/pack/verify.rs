@@ -101,7 +101,7 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
         {
             return Err(invalid("manifest", 0, "invalid DAT foundation topology"));
         }
-        if manifest.buildings.len() > 32
+        if manifest.buildings.len() > crate::catalog::GAMEPLAY_BUILDING_IDS.len()
             || !unit_ids.insert(building.unit_id)
             || building
                 .footprint

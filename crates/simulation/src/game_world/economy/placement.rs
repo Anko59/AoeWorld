@@ -9,7 +9,6 @@ use std::collections::{BTreeSet, VecDeque};
 impl GameWorld {
     /// Player orders need tile-exact exploration of the entire footprint.
     /// Check knowledge before terrain/occupancy to avoid probing black ground.
-    /// Scenario initialization uses `validate_footprint` directly.
     pub(super) fn validate_explored_footprint(
         &self,
         player: PlayerId,
@@ -44,9 +43,9 @@ impl GameWorld {
 
     pub(super) fn validate_footprint(&self, footprint: TileRect) -> Result<(), EconomyError> {
         if !footprint.valid(self.config.width_tiles, self.config.height_tiles)
-            || self
-                .units()
-                .any(|unit| footprint.contains(unit.position.tile_floor()))
+            || self.units().any(|unit| {
+                !self.embarked(unit.id) && footprint.contains(unit.position.tile_floor())
+            })
         {
             return Err(EconomyError::InvalidFootprint);
         }
@@ -71,14 +70,8 @@ impl GameWorld {
                 {
                     return Err(EconomyError::InvalidFootprint);
                 }
-                if let Terrain::Map { generator, .. } = &self.terrain
-                    && generator
-                        .object_at_with_cancel(tile, &|| false)
-                        .map_err(GameWorldError::Environment)?
-                        .is_some()
-                {
-                    return Err(EconomyError::InvalidFootprint);
-                }
+                // Live passability already includes the resource overlay.
+                // Immutable node records remain present after exhaustion.
             }
         }
         Ok(())
@@ -121,7 +114,14 @@ impl GameWorld {
         let age = self
             .player_economy(player)
             .map_or(crate::Age::Dark, |p| p.age);
-        let (max_hp, los) = kind.age_stats(age);
+        let (mut max_hp, los) = kind.age_stats(age);
+        if !matches!(
+            kind,
+            BuildingKind::Farm | BuildingKind::PalisadeWall | BuildingKind::PalisadeGate
+        ) && self.has_researched(player, crate::Tech::Masonry)
+        {
+            max_hp += max_hp / 10;
+        }
         let collision = kind.collision_rect(footprint, complete);
         if let Some(rect) = collision
             && let Terrain::Map { overlay, .. } = &mut self.terrain
@@ -158,7 +158,12 @@ impl GameWorld {
         });
         let work_total = u64::from(rules.build_seconds)
             * u64::from(self.config.tick_hz)
-            * super::buildings::BUILD_WORK_PER_BASE_TICK;
+            * super::buildings::BUILD_WORK_PER_BASE_TICK
+            * if kind == BuildingKind::Bridge {
+                (footprint.width().max(footprint.height()) - 2) as u64
+            } else {
+                1
+            };
         self.economy.buildings.insert(
             id,
             GameBuilding {
@@ -180,23 +185,39 @@ impl GameWorld {
                 max_hp,
                 los: los
                     .saturating_add(self.researched_los_bonus(player))
-                    .saturating_add(u8::from(
-                        self.has_researched(player, crate::Tech::Fletching)
-                            && matches!(kind, BuildingKind::TownCenter | BuildingKind::WatchTower),
-                    )),
+                    .saturating_add(
+                        if matches!(
+                            kind,
+                            BuildingKind::TownCenter
+                                | BuildingKind::WatchTower
+                                | BuildingKind::Castle
+                        ) {
+                            u8::from(self.has_researched(player, crate::Tech::Fletching))
+                                + u8::from(self.has_researched(player, crate::Tech::BodkinArrow))
+                        } else {
+                            0
+                        },
+                    ),
                 research: None,
                 gate_open: false,
                 rally_point: None,
                 food_remaining: (kind == BuildingKind::Farm).then(|| self.farm_food(player)),
                 farm_reseeds: 0,
+                garrison: Vec::new(),
             },
         );
         let bucket = self.economy.dropoffs.entry((player, kind)).or_default();
         let at = bucket.binary_search(&id).unwrap_or_else(|at| at);
         bucket.insert(at, id);
+        if complete && matches!(kind, BuildingKind::Castle | BuildingKind::WatchTower) {
+            self.combat.tower_ready.insert(id, 0);
+        }
         self.refresh_population_cap(player);
         self.index_new_building(id, player, footprint);
         if complete {
+            if matches!(kind, BuildingKind::WatchTower | BuildingKind::Castle) {
+                self.combat.tower_ready.insert(id, 0);
+            }
             self.update_building_vision(id);
             self.remember_visible_buildings();
         }
@@ -227,6 +248,9 @@ impl GameWorld {
         let Some(building) = self.economy.buildings.remove(&id) else {
             return;
         };
+        if building.kind == BuildingKind::Bridge && building.is_complete() {
+            self.remove_bridge_deck(building.footprint);
+        }
         self.forget_building(id, building.footprint);
         if let Some(bucket) = self
             .economy
@@ -250,6 +274,7 @@ impl GameWorld {
             }
             self.collision_opened(building.footprint);
         }
+        self.release_destroyed_garrison(id, building.footprint, building.garrison, &mut Vec::new());
         self.economy.open_gates.remove(&id);
         self.combat.tower_ready.remove(&id);
         self.refresh_population_cap(building.player);

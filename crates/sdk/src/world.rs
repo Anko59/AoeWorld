@@ -14,6 +14,7 @@ use std::{
     sync::Arc,
 };
 
+mod bridges;
 mod land;
 
 /// Bound on remembered dying units (an event dedup set, not game state).
@@ -35,6 +36,7 @@ pub struct World {
     pub(crate) subscription: u64,
     pub(crate) units: BTreeMap<EntityId, GameplayUnitState>,
     pub(crate) buildings: BTreeMap<EntityId, GameplayBuildingState>,
+    pub(crate) bridges: aoe_map::ResourceOverlay,
     pub(crate) animals: BTreeMap<EntityId, Animal>,
     pub(crate) projectiles: Vec<Projectile>,
     move_queues: Vec<aoe_protocol::MoveQueue>,
@@ -81,6 +83,7 @@ impl World {
             subscription: 0,
             units: BTreeMap::new(),
             buildings: BTreeMap::new(),
+            bridges: Default::default(),
             animals: BTreeMap::new(),
             projectiles: Vec::new(),
             move_queues: Vec::new(),
@@ -116,6 +119,10 @@ impl World {
                 self.tick = tick.0;
                 self.units = units.into_iter().map(|u| (u.id, u)).collect();
                 self.move_queues.clear();
+                self.bridges = Default::default();
+                for b in &buildings {
+                    bridges::update(&mut self.bridges, None, Some(b));
+                }
                 self.buildings = buildings.into_iter().map(|b| (b.id, b)).collect();
                 self.dying_seen = self
                     .units
@@ -154,6 +161,7 @@ impl World {
                 }
                 for id in building_removals {
                     if let Some(old) = self.buildings.remove(&id) {
+                        bridges::update(&mut self.bridges, Some(&old), None);
                         events.push(Event::BuildingDestroyed {
                             id,
                             kind: old.kind,
@@ -250,6 +258,7 @@ impl World {
     fn apply_building(&mut self, building: GameplayBuildingState, events: &mut Vec<Event>) {
         let mine = Some(building.player) == self.me;
         let old = self.buildings.insert(building.id, building.clone());
+        bridges::update(&mut self.bridges, old.as_ref(), Some(&building));
         if !mine {
             return;
         }

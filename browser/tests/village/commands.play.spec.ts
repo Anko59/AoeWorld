@@ -117,7 +117,8 @@ test("villager cursors use composed passability for grass, water, cliffs and bui
     [8187, 8196, "move"],
     [8195, 8188, "forbidden"],
     [8188, 8188, "forbidden"],
-    [8192, 8192, "forbidden"],
+    // Villagers garrison in their own Town Center, as in AoE2.
+    [8192, 8192, "garrison"],
   ] as const) {
     await page.evaluate(
       ({ x, y }) => {

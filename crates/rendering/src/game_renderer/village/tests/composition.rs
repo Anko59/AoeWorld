@@ -3,6 +3,69 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn placement_ghost_preserves_native_parts_and_tints_only_invalid_sites() {
+    let art = art();
+    let mut original = unit(SceneUnitKind::TownCenter);
+    original.visual = original
+        .visual
+        .with_owner(Some([65, 145, 245]), false, false);
+    let normal = super::super::world_sprite_frames(&art, &[], &[], &[original], camera(), 0);
+    for valid in [true, false] {
+        let ghost = SceneUnit {
+            visual: original.visual.with_ghost(!valid).with_ghost(valid),
+            ..original
+        };
+        let frames = super::super::world_sprite_frames(&art, &[], &[], &[ghost], camera(), 0);
+        assert_eq!(frames.len(), normal.len());
+        for ((sprite, frame, _, _), (body, native, _, _)) in frames.iter().zip(&normal) {
+            assert_eq!(frame.atlas, native.atlas);
+            assert_eq!(frame.anchor, native.anchor);
+            assert_eq!(
+                sprite.color,
+                if valid {
+                    [1.0, 1.0, 1.0, 0.5]
+                } else {
+                    [3.0, 0.2, 0.2, 0.5]
+                }
+            );
+            assert_eq!(sprite.pages[3] & Sprite::OCCLUDER, 0);
+            assert_eq!(sprite.pages[3] & Sprite::PLAYER_MASK, Sprite::PLAYER_MASK);
+            assert_eq!(sprite.terrain_blend[1], body.terrain_blend[1]);
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn farm_ghost_draws_nine_native_crop_tiles_without_painting_ground() {
+    let mut art = art();
+    art.foundation.0 = vec![art.compositions[0].parts[0].frame];
+    let farm = SceneUnit {
+        visual: crate::SceneUnitVisual::new(false).with_ghost(true),
+        ..unit(SceneUnitKind::Farm)
+    };
+    let frames = super::super::world_sprite_frames(&art, &[], &[], &[farm], camera(), 0);
+    assert_eq!(frames.len(), 9);
+    assert!(
+        frames
+            .iter()
+            .all(|(s, f, _, _)| s.color[3] == 0.5 && f.atlas == art.foundation.0[0].atlas)
+    );
+    assert!(frames.iter().all(|(s, _, _, _)| s.pages[3] & 128 != 0));
+    let mut ground = vec![SceneTerrain {
+        position: farm.position,
+        material: 0,
+        elevation_meters: 0.0,
+        surface: SceneTerrainSurface::flat(0.0),
+        appearance: None,
+    }];
+    crate::apply_building_foundations(&mut ground, &art, &[farm]);
+    assert_eq!(
+        ground[0].material, 0,
+        "previews never paint the cached terrain"
+    );
+}
+
+#[wasm_bindgen_test]
 fn remembered_town_center_keeps_every_dat_part_and_native_anchor_in_fog() {
     let art = art();
     let units = [unit(SceneUnitKind::TownCenter)];
@@ -238,4 +301,93 @@ fn native_building_parts_keep_owner_masks_and_a_hostile_red_selection() {
     }
     assert_eq!(bodies, art.compositions[0].parts.len());
     assert_eq!(rings, 1);
+}
+#[wasm_bindgen_test]
+fn bridge_scenario_pieces_use_independent_native_art_slots() {
+    for slot in 65..71 {
+        let kind = SceneUnitKind::building(slot);
+        assert_eq!(kind.building_slot(), Some(slot));
+        assert_eq!(kind.building_side(), Some(1.0));
+        assert!(!kind.is_foundation());
+        let mut deck = unit(kind);
+        let mut actor = unit(SceneUnitKind::Villager);
+        deck.position = [4.0, 4.0];
+        actor.position = deck.position;
+        assert!(super::super::scene_unit_depth(deck) < super::super::scene_unit_depth(actor));
+    }
+}
+
+#[wasm_bindgen_test]
+fn bridge_handrails_follow_the_span_axis() {
+    // AoK A is 2x3 along Y; B is 3x2 along X. Rails follow that long axis.
+    for (along_x, expected) in [
+        (
+            true,
+            [
+                SceneUnitKind::BridgeBTop,
+                SceneUnitKind::BridgeBMiddle,
+                SceneUnitKind::BridgeBBottom,
+            ],
+        ),
+        (
+            false,
+            [
+                SceneUnitKind::BridgeATop,
+                SceneUnitKind::BridgeAMiddle,
+                SceneUnitKind::BridgeABottom,
+            ],
+        ),
+    ] {
+        for (piece, kind) in expected.into_iter().enumerate() {
+            assert_eq!(SceneUnitKind::bridge(along_x, piece as u8), kind);
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn shared_bridge_art_never_samples_an_unrelated_owner_mask_page() {
+    let mut art = art();
+    for slot in 65..71 {
+        for page in 0..5 {
+            let mut frame = art.village[0][0];
+            frame.atlas.page = page;
+            art.buildings[slot] = vec![frame];
+            let mut deck = unit(SceneUnitKind::building(slot as u8));
+            deck.visual = deck.visual.with_owner(Some([65, 145, 245]), false, true);
+            let frames = super::super::world_sprite_frames(&art, &[], &[], &[deck], camera(), 0);
+            assert_eq!(frames.len(), 1);
+            let sprite = frames[0].0;
+            assert_eq!(
+                sprite.pages[3] & Sprite::PLAYER_MASK,
+                0,
+                "unowned bridge slot {slot} on colour page {page}"
+            );
+            assert_ne!(
+                sprite.pages[3] & Sprite::UNIT_CONTOUR,
+                0,
+                "selection contour survives without owner recolouring"
+            );
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn castle_buildings_clear_their_foundations_while_only_bridges_stay_below_actors() {
+    let dark = unit(SceneUnitKind::BuildingTownCenter);
+    let feudal = unit(SceneUnitKind::FeudalTownCenter);
+    let expected = super::super::scene_unit_depth(dark);
+    assert_eq!(super::super::scene_unit_depth(feudal), expected);
+    for slot in 45..65 {
+        let building = unit(SceneUnitKind::building(slot));
+        assert_eq!(
+            super::super::scene_unit_depth(building),
+            expected,
+            "Castle building slot {slot} must clear its own foundation like Dark Age art"
+        );
+    }
+    let actor = unit(SceneUnitKind::Villager);
+    for slot in 65..71 {
+        let bridge = unit(SceneUnitKind::building(slot));
+        assert!(super::super::scene_unit_depth(bridge) < super::super::scene_unit_depth(actor));
+    }
 }

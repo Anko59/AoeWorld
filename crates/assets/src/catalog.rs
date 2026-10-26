@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 17;
+pub const VERSION: u8 = 19;
 
 pub mod buildings;
 pub mod candidates;
@@ -22,9 +22,9 @@ pub const MAX_REVIEWED_FRAMES: u32 = 2_371;
 
 /// Buildings represented by the current gameplay protocol. Other DAT recipes
 /// remain available to offline tools without occupying the live match atlas.
-pub const GAMEPLAY_BUILDING_IDS: [i32; 23] = [
+pub const GAMEPLAY_BUILDING_IDS: [i32; 39] = [
     109, 70, 68, 562, 584, 50, 12, 72, 598, 45, 87, 101, 103, 84, 79, 792, 71, 463, 129, 563, 585,
-    498, 133,
+    498, 133, 82, 104, 209, 49, 141, 464, 564, 586, 130, 132, 47, 10, 86, 18, 116, 31,
 ];
 
 /// Paving and gravel are not mountain ground.

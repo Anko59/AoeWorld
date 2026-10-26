@@ -161,6 +161,7 @@ impl Driver {
                     &builders,
                     BuildingKind::House,
                     position.tile_floor(),
+                    false,
                 )
                 .map(|_| ());
             if result.is_ok() {

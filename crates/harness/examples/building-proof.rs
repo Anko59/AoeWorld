@@ -381,6 +381,7 @@ async fn village(url: &str, build: bool, full: bool) -> Result<(), Box<dyn std::
                         builder_ids: builders.clone(),
                         kind,
                         origin,
+                        queued: false,
                     })?
                     .into(),
                 ))

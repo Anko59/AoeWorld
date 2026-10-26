@@ -30,6 +30,22 @@ pub trait RouteTerrain {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<bool, EnvironmentPageError>;
 
+    fn route_overlay_edge_clear(
+        &self,
+        overlay: &ResourceOverlay,
+        from: TileCoord,
+        to: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<bool, EnvironmentPageError> {
+        if cancelled() {
+            return Err(EnvironmentPageError::Cancelled);
+        }
+        match overlay.bridge_edge(from, to) {
+            Some(clear) => Ok(clear),
+            None => self.route_edge_clear(from, to, cancelled),
+        }
+    }
+
     fn route_step_cost(
         &self,
         from: TileCoord,
@@ -53,7 +69,7 @@ impl RouteTerrain for MapChunkGenerator {
             return Ok(false);
         };
         Ok(!overlay.blocks_tile(tile)
-            && cell.passable
+            && (cell.passable || overlay.bridge_axis(tile).is_some())
             && cell.node.is_none_or(|node| !overlay.blocks_node(node)))
     }
 

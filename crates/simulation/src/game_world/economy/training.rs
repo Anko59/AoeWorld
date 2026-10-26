@@ -14,13 +14,8 @@ impl GameWorld {
         center: EntityId,
         kind: UnitKind,
     ) -> Result<(), EconomyError> {
-        // The Militia line has one current trainable identity after its upgrade.
-        let kind =
-            if kind == UnitKind::Militia && self.has_researched(player, crate::Tech::ManAtArms) {
-                UnitKind::ManAtArms
-            } else {
-                kind
-            };
+        let researched = self.player_economy(player).map_or(0, |p| p.researched);
+        let kind = kind.upgraded(researched);
         let building = self
             .economy
             .buildings
@@ -35,18 +30,14 @@ impl GameWorld {
         if !super::trainable_units(building.kind).contains(&kind) {
             return Err(EconomyError::WrongUnitKind);
         }
-        if matches!(
-            kind,
-            UnitKind::Archer
-                | UnitKind::Skirmisher
-                | UnitKind::Spearman
-                | UnitKind::Scout
-                | UnitKind::ManAtArms
-        ) && !self.is_feudal(player)
+        self.require_age(player, kind.required_age())?;
+        if kind
+            .required_tech()
+            .is_some_and(|tech| !self.has_researched(player, tech))
         {
-            return Err(EconomyError::RequiresFeudalAge);
+            return Err(EconomyError::TechRequirementMissing);
         }
-        if kind == UnitKind::ManAtArms && !self.has_researched(player, crate::Tech::ManAtArms) {
+        if kind == UnitKind::WarGalley && !self.has_researched(player, crate::Tech::WarGalley) {
             return Err(EconomyError::TechRequirementMissing);
         }
         if building.research.is_some()
@@ -159,7 +150,9 @@ impl GameWorld {
                 self.unit_tile_passable(kind, *tile, &|| false)
                     .unwrap_or(false)
                     && !self.economy.blocked_tiles.contains(tile)
-                    && !self.units().any(|u| u.position.tile_floor() == *tile)
+                    && !self
+                        .units()
+                        .any(|u| !self.embarked(u.id) && u.position.tile_floor() == *tile)
             });
             let Some(tile) = spawn else {
                 continue;
@@ -167,10 +160,8 @@ impl GameWorld {
             let Ok(position) = position(tile) else {
                 continue;
             };
-            let spawned = match kind {
-                UnitKind::Militia => self.spawn_militia(player, position),
-                _ => self.spawn_kind(player, kind, position),
-            };
+            let kind = kind.upgraded(self.player_economy(player).map_or(0, |p| p.researched));
+            let spawned = self.spawn_kind(player, kind, position);
             if let Ok(unit) = spawned {
                 if let Some(building) = self.economy.buildings.get_mut(&id) {
                     building.training_queue.pop_front();

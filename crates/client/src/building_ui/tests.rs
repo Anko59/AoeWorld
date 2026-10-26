@@ -47,9 +47,11 @@ fn feudal_menu_gates_and_art_follow_the_owning_players_age() {
         B::Market,
         B::WatchTower,
     ] {
-        assert!(!build_enabled(kind, stock, u16::MAX, Age::Dark));
-        assert!(build_enabled(kind, stock, u16::MAX, Age::Feudal));
+        assert!(!build_enabled(kind, stock, u32::MAX, Age::Dark));
+        assert!(build_enabled(kind, stock, u32::MAX, Age::Feudal));
     }
+    assert!(!build_enabled(B::Castle, stock, u32::MAX, Age::Feudal));
+    assert!(build_enabled(B::Castle, stock, u32::MAX, Age::Castle));
     for kind in [B::TownCenter, B::House, B::Mill, B::Barracks, B::Dock] {
         assert_ne!(
             age_sprite_slot(kind, 1000, false, Age::Dark),
@@ -127,11 +129,35 @@ fn preview_checks_every_footprint_tile_and_map_bounds() {
 fn art_selection_distinguishes_every_kind_and_construction_stage() {
     for rule in aoe_simulation::BUILDING_RULES {
         let kind = B::ALL[rule.kind as usize];
+        if kind == B::Bridge {
+            assert_eq!(sprite_slot(kind, 1000, false), 66);
+            assert_eq!(sprite_slot(kind, 0, false), 9);
+            assert_eq!(sprite_slot(kind, 999, false), 9);
+            // Collapsed bridge decks emit no rubble; this slot is never drawn.
+            assert_eq!(sprite_slot(kind, 1000, true), 20);
+            continue;
+        }
         if kind == B::Dock {
             assert_eq!(sprite_slot(kind, 1000, false), 23);
             assert_eq!(sprite_slot(kind, 0, false), 24);
             assert_eq!(sprite_slot(kind, 999, false), 24);
             assert_eq!(sprite_slot(kind, 1000, true), 25);
+            continue;
+        }
+        // Combined catalog retains four Castle buildings before six bridge pieces.
+        if let Some((_, ready, rubble, foundation)) = [
+            (B::Castle, 45, 49, 12),
+            (B::Monastery, 46, 50, 11),
+            (B::University, 47, 51, 12),
+            (B::SiegeWorkshop, 48, 52, 12),
+        ]
+        .into_iter()
+        .find(|(entry, _, _, _)| *entry == kind)
+        {
+            assert_eq!(sprite_slot(kind, 1000, false), ready);
+            assert_eq!(sprite_slot(kind, 0, false), foundation);
+            assert_eq!(sprite_slot(kind, 999, false), foundation);
+            assert_eq!(sprite_slot(kind, 1000, true), rubble);
             continue;
         }
         assert_eq!(

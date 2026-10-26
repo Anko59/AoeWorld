@@ -45,20 +45,14 @@ pub(in super::super) fn train(client: &mut Client, cancel: bool) {
                 kind: client.village.buildings.iter().find(|b| b.id == id).map_or(
                     UnitKind::Villager,
                     |b| {
-                        if b.kind == aoe_protocol::BuildingKind::Barracks {
-                            if client.village.players.iter().any(|p| {
-                                p.player == owner(client)
-                                    && p.researched & aoe_protocol::Tech::ManAtArms.bit() != 0
-                            }) {
-                                UnitKind::ManAtArms
-                            } else {
-                                UnitKind::Militia
-                            }
-                        } else if b.kind == aoe_protocol::BuildingKind::Dock {
-                            UnitKind::FishingShip
-                        } else {
-                            UnitKind::Villager
-                        }
+                        crate::building_ui::availability::primary_training(
+                            b,
+                            client
+                                .village
+                                .players
+                                .iter()
+                                .find(|p| p.player == owner(client)),
+                        )
                     },
                 ),
             }
@@ -90,6 +84,10 @@ pub(super) fn train_kind(client: &mut Client, kind: UnitKind) {
 }
 
 pub(in super::super) fn stop(client: &mut Client) {
+    client.village.garrison_cursor = false;
+    client.village.move_cursor = false;
+    client.village.attack_move = false;
+    let _ = client.canvas.set_attribute("data-order-mode", "");
     for id in client.selected.units.clone() {
         let owned = client
             .units
@@ -121,6 +119,10 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
     if client.selected.building_id.is_some() && super::rally::at_pointer(client, point) {
         return;
     }
+    let forced_move = queued || client.village.move_cursor;
+    if super::navy::at_pointer(client, point, forced_move) {
+        return;
+    }
     let actor = super::picking::actor(client, point);
     let enemy = actor
         .filter(|a| a.2)
@@ -130,7 +132,8 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
     if !queued
         && enemy.is_none()
         && animal.is_none()
-        && super::construction::interact(client, point)
+        && (super::garrison::interact(client, point)
+            || super::construction::interact(client, point))
     {
         return;
     }
@@ -182,7 +185,28 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
                     && u.player == owner(client)
             })
         });
+    let mut military = military(client);
+    if group_gathers {
+        military.retain(|id| client.units[id].kind != UnitKind::Scout);
+    }
+    let formation_move = military.len() > 1
+        && (queued || client.village.move_cursor || (enemy.is_none() && animal.is_none()));
+    if formation_move {
+        let sequence = client.next_sequence;
+        let message = Message::FormationOrder {
+            sequence,
+            unit_ids: military.clone(),
+            formation: client.village.formation,
+            destination: Some(destination),
+            queued,
+            attack_move: client.village.attack_move,
+        };
+        send(client, message);
+    }
     for id in client.selected.units.clone() {
+        if formation_move && military.binary_search(&id).is_ok() {
+            continue;
+        }
         let Some(unit) = client
             .units
             .get(&id)
@@ -234,6 +258,7 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         client.order_feedback.record(sequence, blocker);
     }
     client.village.move_cursor = false;
+    client.village.attack_move = false;
     let _ = client.canvas.set_attribute("data-order-mode", "");
 }
 
@@ -250,5 +275,50 @@ pub(in super::super) fn focus_town_center(client: &mut Client, select: bool) {
         if select {
             client.selected.building(id);
         }
+    }
+}
+
+fn military(client: &Client) -> Vec<aoe_core::EntityId> {
+    let mut military = client
+        .selected
+        .units
+        .iter()
+        .copied()
+        .filter(|id| {
+            client.units.get(id).is_some_and(|u| {
+                u.hp > 0
+                    && u.player == owner(client)
+                    && u.kind != UnitKind::Villager
+                    && !u.kind.is_naval()
+            })
+        })
+        .take(aoe_core::MAX_FORMATION_MEMBERS)
+        .collect::<Vec<_>>();
+    military.sort_unstable();
+    military
+}
+
+pub(super) fn formation(client: &mut Client, index: u32) {
+    let form = [
+        aoe_core::Formation::Line,
+        aoe_core::Formation::Box,
+        aoe_core::Formation::Staggered,
+        aoe_core::Formation::Flank,
+    ][index as usize];
+    client.village.formation = form;
+    let unit_ids = military(client);
+    if unit_ids.len() > 1 {
+        let sequence = client.next_sequence;
+        send(
+            client,
+            Message::FormationOrder {
+                sequence,
+                unit_ids,
+                formation: form,
+                destination: None,
+                queued: false,
+                attack_move: false,
+            },
+        );
     }
 }

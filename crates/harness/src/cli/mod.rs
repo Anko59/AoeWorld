@@ -83,6 +83,7 @@ enum Command {
         argv: Vec<String>,
     },
     TestWasm,
+    TestWasmFocused,
     TestE2e,
     TestCreatorSource,
     TestGeographicMatrix,

@@ -67,7 +67,7 @@ async fn the_town_center_researches_loom_and_gates_town_watch_over_the_wire() {
     service.queue_research(id, again, center, Tech::Loom).await;
     let cancel_at = 40;
     let (mut gold, mut food, mut age) = (100_u32, 200_u32, Age::Dark);
-    let (mut hp, mut los, mut researched) = (vec![(25, 25); 3], 8_u8, 0_u32);
+    let (mut hp, mut los, mut researched) = (vec![(25, 25); 3], 8_u8, 0_u64);
     let mut stage = 0;
     let mut rejected = Vec::new();
     for tick in 1..=2400_u32 {

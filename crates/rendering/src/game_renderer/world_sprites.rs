@@ -14,7 +14,8 @@ pub use fish::scene_resource_animation_frame;
 mod bounds;
 use bounds::object_depth;
 pub use bounds::{
-    scene_building_visible, scene_unit_bounds, scene_unit_depth, scene_unit_render_key,
+    scene_building_hit, scene_building_visible, scene_unit_bounds, scene_unit_depth,
+    scene_unit_render_key,
 };
 
 /// Fallback broadleaf selection retains its paired shadow index.
@@ -197,7 +198,13 @@ pub(super) fn emit_world_sprite_frames(
                 depth,
                 id,
             )| {
-                if unit.kind.building_id().is_some_and(|id| id != 50) {
+                if unit.visual.ghost() {
+                    sprite.color = if unit.visual.invalid_ghost() {
+                        [3.0, 0.2, 0.2, 0.5]
+                    } else {
+                        [1.0, 1.0, 1.0, 0.5]
+                    };
+                } else if unit.kind.building_id().is_some_and(|id| id != 50) {
                     sprite.pages[3] |= Sprite::OCCLUDER;
                 }
                 emit((sprite, frame, depth, id));

@@ -5,6 +5,8 @@ use aoe_protocol::{
     GameplayServerMessage as M, GameplayUnitState, HitState, MarketPrices, Stockpile,
 };
 
+#[path = "dock.rs"]
+mod dock;
 #[path = "land.rs"]
 mod land;
 
@@ -76,6 +78,7 @@ fn unit(id: u32, player: PlayerId, kind: UnitKind) -> GameplayUnitState {
         hunt_target: None,
         death_hunt: None,
         auto_scout: false,
+        cargo_count: 0,
     }
 }
 
@@ -102,10 +105,11 @@ fn building(id: u32, player: PlayerId, state: ConstructionState) -> GameplayBuil
         gate_open: false,
         rally_point: None,
         farm_reseeds: 0,
+        garrison: Vec::new(),
     }
 }
 
-fn player(researched: u32, age: aoe_protocol::Age) -> GameplayPlayerState {
+fn player(researched: u64, age: aoe_protocol::Age) -> GameplayPlayerState {
     GameplayPlayerState {
         player: ME,
         stockpile: Stockpile {

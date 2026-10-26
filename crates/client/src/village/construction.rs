@@ -23,7 +23,7 @@ pub(super) fn builders(client: &Client) -> Vec<EntityId> {
 }
 
 #[inline(never)]
-pub(super) fn completed(client: &Client) -> u16 {
+pub(super) fn completed(client: &Client) -> u32 {
     client
         .village
         .buildings
@@ -44,6 +44,7 @@ pub(super) fn enabled(client: &Client, kind: BuildingKind, count: u32) -> bool {
     };
     let mut cost = building_ui::stock(building_ui::rules(kind).cost);
     cost.wood = cost.wood.saturating_mul(count);
+    cost.stone = cost.stone.saturating_mul(count);
     client.role == Some(GameplayRole::Controller)
         && client.selected.units.iter().any(|id| {
             client
@@ -60,15 +61,21 @@ pub(super) fn arm(client: &mut Client, kind: BuildingKind) {
     if !enabled(client, kind, 1) {
         return;
     }
+    client.village.garrison_cursor = false;
     client.village.placement = Some(kind);
+    client.village.repeat_placement = false;
     client.village.wall_start = None;
     client.village.move_cursor = false;
+    client.village.unload_cursor = false;
+    client.village.attack_move = false;
     let _ = client.canvas.set_attribute("data-order-mode", "build");
 }
 
 #[inline(never)]
 pub(in super::super) fn cancel(client: &mut Client) {
+    client.village.garrison_cursor = false;
     client.village.placement = None;
+    client.village.repeat_placement = false;
     client.village.wall_start = None;
     let _ = client.canvas.set_attribute("data-order-mode", "");
 }
@@ -91,21 +98,27 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
                 return false;
             }
             let ground = map::terrain_tile(client, tile.x, tile.y).map_or(
-                client.map_content_hash.is_none() && kind != BuildingKind::Dock,
+                client.map_content_hash.is_none()
+                    && !matches!(kind, BuildingKind::Dock | BuildingKind::Bridge),
                 |t| {
-                    let wet = matches!(
+                    let wet = (matches!(
                         t.water,
                         aoe_map::WaterKind::Lake
                             | aoe_map::WaterKind::Ocean
                             | aoe_map::WaterKind::River
-                    ) && t.material != aoe_map::GroundMaterial::Ford;
+                    ) || kind == BuildingKind::Bridge
+                        && t.water == aoe_map::WaterKind::Shallow)
+                        && t.material != aoe_map::GroundMaterial::Ford;
                     water |= wet;
                     land |= t.passable && t.water == aoe_map::WaterKind::None;
-                    t.passable || (kind == BuildingKind::Dock && wet)
+                    t.passable || (matches!(kind, BuildingKind::Dock | BuildingKind::Bridge) && wet)
                 },
             );
             ground
-                && map::feedback::blocker_at(client, tile).is_none()
+                // Fish remain gather targets, but do not collide with Docks or decks.
+                && map::feedback::blocker_at(client, tile).is_none_or(|object| {
+                    matches!(object, aoe_map::ObjectKind::ShoreFish | aoe_map::ObjectKind::DeepFish)
+                })
                 && !client
                     .units
                     .values()
@@ -123,7 +136,11 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
 
 #[inline(never)]
 pub(super) fn tiles(client: &Client, at: TileCoord) -> Option<Vec<TileCoord>> {
-    if client.village.placement == Some(BuildingKind::PalisadeWall) {
+    if client.village.placement == Some(BuildingKind::Bridge) {
+        let from = client.village.wall_start.unwrap_or(at);
+        aoe_simulation::GameWorld::bridge_footprint(from, at)?;
+        building_ui::wall_tiles(from, at)
+    } else if client.village.placement == Some(BuildingKind::PalisadeWall) {
         building_ui::wall_tiles(client.village.wall_start.unwrap_or(at), at)
     } else {
         Some(vec![at])
@@ -131,14 +148,45 @@ pub(super) fn tiles(client: &Client, at: TileCoord) -> Option<Vec<TileCoord>> {
 }
 
 #[inline(never)]
-pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: bool) {
+pub(super) fn span_valid(client: &Client, kind: BuildingKind, tiles: &[TileCoord]) -> bool {
+    let bridge = kind == BuildingKind::Bridge;
+    let count = if bridge {
+        tiles.len().saturating_sub(2)
+    } else {
+        tiles.len()
+    };
+    count > 0
+        && enabled(client, kind, count as u32)
+        && tiles.iter().enumerate().all(|(i, tile)| {
+            valid(client, kind, *tile)
+                && (!bridge
+                    || map::terrain_tile(client, tile.x, tile.y).is_some_and(|t| {
+                        if i == 0 || i + 1 == tiles.len() {
+                            t.passable && t.water == aoe_map::WaterKind::None
+                        } else {
+                            t.water != aoe_map::WaterKind::None
+                                && t.material != aoe_map::GroundMaterial::Ford
+                        }
+                    }))
+        })
+}
+
+#[inline(never)]
+pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: bool, shift: bool) {
     let Some(kind) = client.village.placement else {
         return;
     };
+    client.village.repeat_placement |= shift;
+    if release
+        && (!matches!(kind, BuildingKind::PalisadeWall | BuildingKind::Bridge)
+            || client.village.wall_start.is_none())
+    {
+        return;
+    }
     let Some(at) = origin(client, point) else {
         return;
     };
-    if kind == BuildingKind::PalisadeWall {
+    if matches!(kind, BuildingKind::PalisadeWall | BuildingKind::Bridge) {
         if !release && client.village.wall_start.is_none() {
             client.village.wall_start = Some(at);
             return;
@@ -152,18 +200,26 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
     let Some(tiles) = tiles(client, at) else {
         return;
     };
-    if !enabled(client, kind, tiles.len() as u32) || !tiles.iter().all(|t| valid(client, kind, *t))
-    {
+    if !span_valid(client, kind, &tiles) {
         return;
     }
     let sequence = client.next_sequence;
     let builder_ids = builders(client);
-    let message = if kind == BuildingKind::PalisadeWall {
+    let message = if kind == BuildingKind::Bridge {
+        Message::BuildBridgeOrder {
+            sequence,
+            builder_ids,
+            from: client.village.wall_start.unwrap_or(at),
+            to: at,
+            queued: shift,
+        }
+    } else if kind == BuildingKind::PalisadeWall {
         Message::BuildWallOrder {
             sequence,
             builder_ids,
             from: client.village.wall_start.unwrap_or(at),
             to: at,
+            queued: shift,
         }
     } else {
         Message::BuildOrder {
@@ -171,10 +227,16 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
             builder_ids,
             kind,
             origin: at,
+            queued: shift,
         }
     };
     send(client, message);
-    cancel(client);
+    if shift {
+        client.village.repeat_placement = true;
+        client.village.wall_start = None;
+    } else {
+        cancel(client);
+    }
 }
 
 /// Foundations take precedence over gather/move; completed farms receive a farmer.

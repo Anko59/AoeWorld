@@ -269,7 +269,14 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
         }
         if stage == 0 && stock >= 240 {
             service
-                .queue_build(session, 3, vec![workers[1]], BuildingKind::Dock, site)
+                .queue_build(
+                    session,
+                    3,
+                    vec![workers[1]],
+                    BuildingKind::Dock,
+                    site,
+                    false,
+                )
                 .await;
             stage = 1;
         }

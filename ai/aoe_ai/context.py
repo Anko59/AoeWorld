@@ -17,11 +17,14 @@ MILITARY = (
     UnitKind.ARCHER,
     UnitKind.SKIRMISHER,
     UnitKind.MAN_AT_ARMS,
+    UnitKind.LONG_SWORDSMAN, UnitKind.PIKEMAN, UnitKind.CROSSBOWMAN,
+    UnitKind.ELITE_SKIRMISHER, UnitKind.KNIGHT, UnitKind.LIGHT_CAVALRY,
+    UnitKind.MANGONEL, UnitKind.BATTERING_RAM,
 )
 
 #: Buildings that accept each resource as a drop-off.
 #: Orders whose first argument names the unit(s) given work.
-UNIT_ORDERS = frozenset({"gather", "hunt", "farm", "build", "construct", "move", "attack"})
+UNIT_ORDERS = frozenset({"gather", "hunt", "farm", "build", "build_bridge", "construct", "move", "formation_move", "attack"})
 
 DROPOFFS = {
     ResourceKind.FOOD: (BuildingKind.TOWN_CENTER, BuildingKind.MILL),
@@ -56,6 +59,7 @@ class Context:
         self.spent = [0, 0, 0, 0]
         #: Set by a manager that needs the Town Center's queue to drain.
         self.hold_town_center = False
+        self.saving_castle = False
         #: Units that already got an order this decision.
         self.busy: set[int] = set()
         self._resources: dict[Any, list] = {}
@@ -104,7 +108,11 @@ class Context:
     # ----- queries ---------------------------------------------------------
     @property
     def feudal(self) -> bool:
-        return self.economy is not None and self.economy.age == aoeworld.Age.FEUDAL
+        return self.economy is not None and self.economy.age in (aoeworld.Age.FEUDAL, aoeworld.Age.CASTLE)
+
+    @property
+    def castle(self) -> bool:
+        return self.economy is not None and self.economy.age == aoeworld.Age.CASTLE
 
     def count(self, kind: BuildingKind, complete: bool = False) -> int:
         return sum(1 for b in self.buildings if b.kind == kind and (b.complete or not complete))

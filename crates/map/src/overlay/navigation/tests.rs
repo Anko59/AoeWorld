@@ -3,6 +3,26 @@ use crate::{Depletion, ObjectKind, ResourceKind};
 use aoe_core::TileRect;
 use std::sync::Arc;
 
+#[test]
+fn bridge_and_foundation_reservations_share_the_fixed_collision_capacity() {
+    let mut overlay = ResourceOverlay::default();
+    // Exercise admission at the logical cap without allocating sixteen
+    // million tree entries. No runtime or physical-memory claim is made.
+    overlay.navigation_state.snapshot.bridge_tiles = super::super::MAX_OBSTACLE_TILES as usize;
+    assert_eq!(
+        overlay.add_footprint(TileRect::from_xywh(1, 1, 1, 1)),
+        Err(super::super::ResourceOverlayError::Capacity)
+    );
+    assert_eq!(
+        overlay.add_bridge(TileRect::from_xywh(1, 1, 3, 1)),
+        Err(super::super::ResourceOverlayError::Capacity)
+    );
+    assert_eq!(
+        overlay.bridge_tile_count() as u64,
+        super::super::MAX_OBSTACLE_TILES
+    );
+}
+
 fn tree(tile: TileCoord) -> ResourceNode {
     ResourceNode {
         id: ((tile.y as u64) << 19) | ((tile.x as u64) << 1),
@@ -22,6 +42,23 @@ fn exhaust(overlay: &mut ResourceOverlay, node: ResourceNode) {
         became_nonblocking: true,
         revision: overlay.revision() + 1,
     });
+}
+
+#[test]
+fn nonblocking_fish_remain_available_until_exhausted() {
+    for object in [ObjectKind::ShoreFish, ObjectKind::DeepFish] {
+        let mut overlay = ResourceOverlay::default();
+        let node = ResourceNode {
+            kind: ResourceKind::Food,
+            object,
+            ..tree(TileCoord::new(12, 12))
+        };
+        assert!(!overlay.blocks_node(node));
+        assert!(overlay.resource_available(node));
+        exhaust(&mut overlay, node);
+        assert!(!overlay.blocks_node(node));
+        assert!(!overlay.resource_available(node));
+    }
 }
 
 #[test]
@@ -108,4 +145,26 @@ fn navigation_snapshots_pin_building_and_starting_resource_collision() {
     assert!(!cleared.blocks_tile(starting.tile));
     assert!(!cleared.blocks_node(starting));
     assert!(cleared.remaining.is_empty());
+}
+
+#[test]
+fn bridge_completion_requires_the_reserved_span_and_keeps_failed_attempts_atomic() {
+    let rect = aoe_core::TileRect::from_xywh(7, 9, 6, 1);
+    let gap = aoe_core::TileRect::from_xywh(9, 9, 1, 1);
+    let mut overlay = super::super::ResourceOverlay::default();
+    overlay.add_footprint(rect).unwrap();
+    overlay.remove_footprint(gap);
+    let before = overlay.clone();
+    assert!(!overlay.complete_bridge(rect));
+    assert_eq!(overlay, before);
+    overlay.add_footprint(gap).unwrap();
+    assert!(overlay.complete_bridge(rect));
+    for x in 7..13 {
+        let tile = aoe_core::TileCoord::new(x, 9);
+        assert!(!overlay.blocks_tile(tile));
+        assert_eq!(
+            overlay.bridge_axis(tile),
+            (8..12).contains(&x).then_some(true)
+        );
+    }
 }

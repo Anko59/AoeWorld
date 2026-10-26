@@ -308,6 +308,7 @@ fn world_colour(in: VertexOutput) -> vec4<f32> {
         return in.color;
     }
     if in.solid == 0u {
+        if (in.pages.w & 128u) != 0u && dot(abs((in.uv - in.rect.xy) / in.rect.zw - vec2<f32>(0.5)), vec2<f32>(1.0)) > 0.5 { discard; }
         let owner = vec4<f32>(in.rect3.rgb, select(0.0, 1.0, (in.pages.w & 64u) != 0u));
         var texel = textureSampleLevel(sprite_atlas, sprite_sampler, in.uv, i32(in.pages.x), 0.0);
         texel = owner_texel(texel, in.uv, i32(in.pages.x), owner);
@@ -317,6 +318,7 @@ fn world_colour(in: VertexOutput) -> vec4<f32> {
             if average.a >= 0.0 { texel = average; }
         }
         if texel.a <= 0.0 { discard; }
+        if in.color.r > 1.0 { texel.r = min(texel.r, 1.0 / in.color.r); }
         return texel * in.color;
     }
     if in.solid == 2u { return vec4<f32>(in.color.rgb * (1.0 + in.shade * 0.04) * in.fog, in.color.a); }

@@ -69,7 +69,13 @@ async fn settle(fixture: &mut Fixture, clients: &mut [Buildings], ticks: usize) 
 async fn assert_converged(fixture: &Fixture, clients: &[Buildings]) {
     for (index, client) in clients.iter().enumerate() {
         let viewer = fixture.viewers[index];
-        let truth = known(fixture, viewer).await;
+        let mut truth = known(fixture, viewer).await;
+        if fixture.service.world.read().await.fog_disabled() {
+            let sessions = fixture.service.sessions.lock().await;
+            let region = sessions[&fixture.ids[index]].subscription.unwrap().region;
+            // Fog-off delivery retains owned buildings and camera-local enemies.
+            truth.retain(|_, state| economy::building_in_camera(state, viewer, region));
+        }
         for id in client.keys().chain(truth.keys()) {
             assert_eq!(
                 client
@@ -139,7 +145,7 @@ async fn start_house(fixture: &Fixture) -> EntityId {
     for (dx, dy) in offsets {
         let at = TileCoord::new(home.x + dx, home.y + dy);
         let kind = aoe_simulation::BuildingKind::House;
-        if let Ok(id) = world.issue_build(PlayerId(0), &workers, kind, at) {
+        if let Ok(id) = world.issue_build(PlayerId(0), &workers, kind, at, false) {
             return id;
         }
     }

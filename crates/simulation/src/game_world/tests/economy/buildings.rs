@@ -1,6 +1,8 @@
 //! The building rules table, placement, refunds, housing, drop-off, barracks
 //! and the outpost.
 use super::*;
+
+mod finalization;
 use crate::{BUILDING_RULES, ConstructionState, MAX_POPULATION, trainable_units};
 
 pub(super) fn set_stock(world: &mut GameWorld, food: u32, wood: u32, gold: u32, stone: u32) {
@@ -102,7 +104,13 @@ fn foundation_is_charged_on_placement_and_starts_at_zero_progress() {
     let (mut world, _, _) = village();
     let builder = villager_at(&mut world, 99, 100);
     let id = world
-        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     assert_eq!(stock(&world), (200, 175, 100, 200));
     let house = world.building(id).unwrap();
@@ -121,7 +129,13 @@ fn invalid_placements_and_orders_are_refused_atomically() {
     let villager = villager_at(&mut world, 99, 100);
     let tc = world.building(center).unwrap().footprint;
     world
-        .issue_build(PlayerId(0), &[villager], BuildingKind::House, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[villager],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     let stranger = world
         .spawn_villager(
@@ -212,7 +226,7 @@ fn invalid_placements_and_orders_are_refused_atomically() {
     ];
     for (player, builders, kind, origin, expected) in cases {
         assert_eq!(
-            world.issue_build(player, &builders, kind, origin),
+            world.issue_build(player, &builders, kind, origin, false),
             Err(expected),
             "{kind:?} at {origin:?}"
         );
@@ -221,7 +235,13 @@ fn invalid_placements_and_orders_are_refused_atomically() {
     set_stock(&mut world, 0, 24, 0, 0);
     let poor = world.canonical_hash();
     assert_eq!(
-        world.issue_build(PlayerId(0), &[villager], BuildingKind::House, at(150, 150)),
+        world.issue_build(
+            PlayerId(0),
+            &[villager],
+            BuildingKind::House,
+            at(150, 150),
+            false
+        ),
         Err(EconomyError::InsufficientResources)
     );
     set_stock(&mut world, 0, 100, 0, 4);
@@ -230,7 +250,8 @@ fn invalid_placements_and_orders_are_refused_atomically() {
             PlayerId(0),
             &[villager],
             BuildingKind::Outpost,
-            at(150, 150)
+            at(150, 150),
+            false
         ),
         Err(EconomyError::InsufficientResources),
         "the outpost needs 5 stone"
@@ -250,6 +271,7 @@ fn cancelling_before_progress_refunds_everything_and_frees_the_site() {
             &[builder],
             BuildingKind::Barracks,
             at(100, 100),
+            false,
         )
         .unwrap();
     assert_eq!(stock(&world).1, 25);
@@ -274,6 +296,7 @@ fn cancelling_before_progress_refunds_everything_and_frees_the_site() {
             &[builder],
             BuildingKind::Barracks,
             at(100, 100),
+            false,
         )
         .unwrap();
 }
@@ -288,6 +311,7 @@ fn cancelling_after_progress_refunds_only_the_undone_share() {
             &[builder],
             BuildingKind::LumberCamp,
             at(100, 100),
+            false,
         )
         .unwrap();
     // One builder needs 35 s = 700 ticks; stop at 350 ticks (half done).
@@ -297,7 +321,13 @@ fn cancelling_after_progress_refunds_only_the_undone_share() {
     world.issue_cancel_construction(PlayerId(0), id).unwrap();
     assert_eq!(stock(&world).1, 100 + 50);
     let id = world
-        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     finish(&mut world, id, 600);
     assert_eq!(
@@ -321,7 +351,13 @@ fn houses_raise_the_population_cap_by_five_up_to_two_hundred() {
     );
     assert_eq!(world.canonical_hash(), before);
     let house = world
-        .issue_build(PlayerId(0), &[builder], BuildingKind::House, at(100, 100))
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
         .unwrap();
     finish(&mut world, house, 700);
     let player = world.player_economy(PlayerId(0)).unwrap();
@@ -335,7 +371,7 @@ fn houses_raise_the_population_cap_by_five_up_to_two_hundred() {
         let (x, y) = (110 + (index % 11) * 3, 110 + (index / 11) * 3);
         let worker = villager_at(&mut world, x - 1, y);
         let id = world
-            .issue_build(PlayerId(0), &[worker], BuildingKind::House, at(x, y))
+            .issue_build(PlayerId(0), &[worker], BuildingKind::House, at(x, y), false)
             .unwrap();
         world.economy.buildings.get_mut(&id).unwrap().work_done =
             world.building(id).unwrap().work_total - 3;
@@ -353,7 +389,13 @@ fn houses_raise_the_population_cap_by_five_up_to_two_hundred() {
     // a cancelled foundation never changed the cap.
     let extra = villager_at(&mut world, 200, 200);
     let spare = world
-        .issue_build(PlayerId(0), &[extra], BuildingKind::House, at(201, 200))
+        .issue_build(
+            PlayerId(0),
+            &[extra],
+            BuildingKind::House,
+            at(201, 200),
+            false,
+        )
         .unwrap();
     world.issue_cancel_construction(PlayerId(0), spare).unwrap();
     assert_eq!(
@@ -374,7 +416,7 @@ fn the_nearest_dropoff_depends_on_the_resource_kind() {
     ] {
         let worker = villager_at(&mut world, x - 1, 100);
         let id = world
-            .issue_build(PlayerId(0), &[worker], kind, at(x, 100))
+            .issue_build(PlayerId(0), &[worker], kind, at(x, 100), false)
             .unwrap();
         if camps.is_empty() {
             // Under construction a camp is not a drop-off yet.
@@ -411,73 +453,4 @@ fn the_nearest_dropoff_depends_on_the_resource_kind() {
         None,
         "another player's buildings never count"
     );
-}
-
-#[test]
-fn barracks_accepts_only_militia_and_requires_completion() {
-    let (mut world, _, _) = village();
-    set_stock(&mut world, 500, 500, 0, 0);
-    assert_eq!(
-        trainable_units(BuildingKind::TownCenter),
-        &[UnitKind::Villager]
-    );
-    assert_eq!(
-        trainable_units(BuildingKind::Barracks),
-        &[UnitKind::Militia, UnitKind::Spearman, UnitKind::ManAtArms]
-    );
-    let worker = villager_at(&mut world, 99, 100);
-    let barracks = world
-        .issue_build(PlayerId(0), &[worker], BuildingKind::Barracks, at(100, 100))
-        .unwrap();
-    assert_eq!(
-        world.issue_train(PlayerId(0), barracks, UnitKind::Villager),
-        Err(EconomyError::UnderConstruction)
-    );
-    finish(&mut world, barracks, 1200);
-    assert!(world.building(barracks).unwrap().training_queue.is_empty());
-    assert_eq!(
-        world.issue_train(PlayerId(0), barracks, UnitKind::Villager),
-        Err(EconomyError::WrongUnitKind)
-    );
-}
-
-#[test]
-fn an_outpost_has_a_large_line_of_sight_and_costs_wood_and_stone() {
-    let (mut world, _, _) = village();
-    let worker = villager_at(&mut world, 99, 100);
-    let id = world
-        .issue_build(PlayerId(0), &[worker], BuildingKind::Outpost, at(100, 100))
-        .unwrap();
-    assert_eq!(stock(&world), (200, 175, 100, 195));
-    let outpost = world.building(id).unwrap();
-    assert_eq!((outpost.los, outpost.max_hp), (10, 500));
-    assert_eq!(
-        world
-            .building(world.buildings().next().unwrap().id)
-            .unwrap()
-            .los,
-        8
-    );
-    // 15 s = 300 ticks for one builder.
-    assert_eq!(finish(&mut world, id, 400), 300);
-    assert_eq!(world.building(id).unwrap().hp, 500);
-}
-
-#[test]
-fn identical_build_orders_replay_to_the_same_hash() {
-    fn run() -> [u8; 32] {
-        let (mut world, _, _) = village();
-        let a = villager_at(&mut world, 99, 100);
-        let b = villager_at(&mut world, 99, 101);
-        world
-            .issue_build(PlayerId(0), &[a, b], BuildingKind::House, at(100, 100))
-            .unwrap();
-        fixture::survey(&mut world, PlayerId(0), at(112, 100), 2);
-        world
-            .issue_build_wall(PlayerId(0), &[b], at(110, 100), at(114, 100))
-            .unwrap();
-        advance(&mut world, 900);
-        world.canonical_hash()
-    }
-    assert_eq!(run(), run());
 }

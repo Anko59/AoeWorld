@@ -2,6 +2,20 @@ use super::Economy;
 
 impl Economy {
     pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
+        self.hash_garrisons(hash);
+        hash.update(&(self.cargo.len() as u64).to_le_bytes());
+        for (ship, ids) in &self.cargo {
+            hash.update(&ship.0.to_le_bytes());
+            hash.update(&(ids.len() as u64).to_le_bytes());
+            for id in ids {
+                hash.update(&id.0.to_le_bytes());
+            }
+        }
+        hash.update(&(self.embarked.len() as u64).to_le_bytes());
+        for (id, ship) in &self.embarked {
+            hash.update(&id.0.to_le_bytes());
+            hash.update(&ship.0.to_le_bytes());
+        }
         hash.update(&self.scout_cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
         hash.update(&(self.scout_searches.len() as u64).to_le_bytes());
         for id in &self.scout_searches {
@@ -143,6 +157,10 @@ impl Economy {
             hash.update(&id.0.to_le_bytes());
             hash.update(&task.building.0.to_le_bytes());
             hash.update(&[task.attempts]);
+            hash.update(&(task.queue.len() as u64).to_le_bytes());
+            for target in &task.queue {
+                hash.update(&target.0.to_le_bytes());
+            }
         }
         // Footprints are already hashed as buildings; depletion notifications
         // are a one-tick adapter outbox and do not affect authoritative rules.

@@ -9,6 +9,37 @@ fn id(n: u32) -> EntityId {
 fn all_orders() -> Vec<Order> {
     let tile = TileCoord::new(10, 20);
     vec![
+        Order::Garrison {
+            unit: id(2),
+            building: id(7),
+        },
+        Order::Ungarrison {
+            building: id(7),
+            unit: None,
+        },
+        Order::Ungarrison {
+            building: id(7),
+            unit: Some(id(2)),
+        },
+        Order::Load {
+            units: vec![id(1), id(2)],
+            transport: id(3),
+        },
+        Order::Unload {
+            transport: id(3),
+            to: tile,
+        },
+        Order::SetFormation {
+            units: vec![id(1), id(2)],
+            formation: crate::Formation::Box,
+        },
+        Order::FormationMove {
+            units: vec![id(1), id(2)],
+            formation: crate::Formation::Line,
+            to: tile,
+            queued: false,
+            attack_move: true,
+        },
         Order::AutoScout {
             unit: id(1),
             enabled: true,
@@ -34,6 +65,11 @@ fn all_orders() -> Vec<Order> {
             builders: vec![id(3), id(4)],
             kind: BuildingKind::House,
             origin: tile,
+        },
+        Order::BuildBridge {
+            builders: vec![id(3)],
+            from: tile,
+            to: TileCoord::new(14, 20),
         },
         Order::BuildWall {
             builders: vec![id(3)],
@@ -99,6 +135,31 @@ fn all_orders() -> Vec<Order> {
 }
 
 #[test]
+fn bridge_order_uses_the_same_bounded_wire_as_the_browser() {
+    let order = Order::BuildBridge {
+        builders: vec![id(3)],
+        from: TileCoord::new(10, 20),
+        to: TileCoord::new(14, 20),
+    }
+    .message(9)
+    .unwrap();
+    assert_eq!(
+        order,
+        M::BuildBridgeOrder {
+            sequence: 9,
+            builder_ids: vec![id(3)],
+            from: TileCoord::new(10, 20),
+            to: TileCoord::new(14, 20),
+            queued: false,
+        }
+    );
+    assert_eq!(
+        decode_gameplay_client(&encode_gameplay_client(&order).unwrap()).unwrap(),
+        order
+    );
+}
+
+#[test]
 fn every_order_maps_to_a_wire_message_that_round_trips() {
     let orders = all_orders();
     let mut seen = std::collections::BTreeSet::new();
@@ -109,10 +170,42 @@ fn every_order_maps_to_a_wire_message_that_round_trips() {
         assert_eq!(decode_gameplay_client(&bytes).unwrap(), message);
         seen.insert(bytes[0]);
     }
-    // Move, Stop, Gather, Build, BuildWall, Construct, CancelConstruction, Farm,
+    // Move, Stop, Gather, Build, BuildBridge, BuildWall, Construct, CancelConstruction, Farm,
     // Training, construction, combat, rally, queued moves, reseeds and auto-scout
-    // all retain distinct ordinary authenticated wire variants.
-    assert_eq!(seen.len(), 20, "distinct wire variants: {seen:?}");
+    // Garrison and Ungarrison add two ordinary authenticated wire variants;
+    // selective and all-unit ejection use the same current Ungarrison order.
+    // Bridge, garrison/ejection, load/unload and formation share the current combined wire.
+    assert_eq!(seen.len(), 26, "distinct wire variants: {seen:?}");
+}
+
+#[test]
+fn shelter_orders_keep_the_selected_unit_and_building_identifiers() {
+    assert_eq!(
+        Order::Garrison {
+            unit: id(7),
+            building: id(9)
+        }
+        .message(3),
+        Some(M::GarrisonOrder {
+            sequence: 3,
+            entity_id: id(7),
+            building_id: id(9)
+        })
+    );
+    for unit in [None, Some(id(7))] {
+        assert_eq!(
+            Order::Ungarrison {
+                building: id(9),
+                unit
+            }
+            .message(4),
+            Some(M::UngarrisonOrder {
+                sequence: 4,
+                building_id: id(9),
+                entity_id: unit
+            })
+        );
+    }
 }
 
 #[test]
@@ -145,5 +238,27 @@ fn a_tile_move_targets_the_tile_centre_and_stop_keeps_its_unit() {
         }
         .message(1)
         .is_none()
+    );
+}
+
+#[test]
+fn formation_move_uses_one_group_command_with_queue_and_combat_flags() {
+    let order = Order::FormationMove {
+        units: vec![id(1), id(2)],
+        formation: crate::Formation::Staggered,
+        to: TileCoord::new(5, 6),
+        queued: true,
+        attack_move: false,
+    };
+    assert_eq!(
+        order.message(7),
+        Some(M::FormationOrder {
+            sequence: 7,
+            unit_ids: vec![id(1), id(2)],
+            formation: crate::Formation::Staggered,
+            destination: Some(WorldPosition::new(5632, 6656)),
+            queued: true,
+            attack_move: false
+        })
     );
 }

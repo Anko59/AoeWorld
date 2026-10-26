@@ -5,8 +5,15 @@
 use super::{EconomyError, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
+mod castle;
+mod content;
 mod effects;
 mod table;
+mod upgrades;
+
+#[cfg(any(not(target_arch = "wasm32"), feature = "content-source"))]
+pub use content::browser_content;
+pub use content::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
 
 pub use effects::villager_capacity;
 pub(crate) use effects::villager_speed_percent;
@@ -21,6 +28,17 @@ pub struct ResearchEntry {
 }
 
 impl GameWorld {
+    pub(crate) fn require_age(&self, player: PlayerId, age: Age) -> Result<(), EconomyError> {
+        if self.player_economy(player).is_some_and(|p| p.age >= age) {
+            return Ok(());
+        }
+        Err(if age == Age::Castle {
+            EconomyError::RequiresCastleAge
+        } else {
+            EconomyError::RequiresFeudalAge
+        })
+    }
+
     pub fn has_researched(&self, player: PlayerId, tech: Tech) -> bool {
         self.economy
             .players
@@ -54,9 +72,7 @@ impl GameWorld {
         if self.has_researched(player, tech) {
             return Err(EconomyError::AlreadyResearched);
         }
-        if rules.requires == TechRequirement::Age(Age::Feudal) && !self.is_feudal(player) {
-            return Err(EconomyError::RequiresFeudalAge);
-        }
+        self.require_age(player, rules.age)?;
         let busy = site.research.is_some() || !site.training_queue.is_empty();
         let duplicate = self
             .economy
@@ -130,8 +146,8 @@ impl GameWorld {
     fn requirement_met(&self, player: PlayerId, requirement: TechRequirement) -> bool {
         match requirement {
             TechRequirement::None => true,
-            TechRequirement::Age(Age::Dark) => true,
-            TechRequirement::Age(Age::Feudal) => self.is_feudal(player),
+            TechRequirement::Age(age) => self.require_age(player, age).is_ok(),
+            TechRequirement::Technology(tech) => self.has_researched(player, tech),
             TechRequirement::BuildingKinds { count, kinds } => {
                 kinds
                     .iter()

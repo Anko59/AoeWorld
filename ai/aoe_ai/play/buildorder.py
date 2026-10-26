@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from aoeworld import BuildingKind, Tech
+from aoeworld import BuildingKind, Tech, building_cost
 
 from ..context import Context
 
@@ -24,6 +24,8 @@ FEUDAL_REQUIREMENT = (
 )
 
 DARK, ADVANCE, FEUDAL = "dark", "advance", "feudal"
+CASTLE_ADVANCE, CASTLE = "castle-advance", "castle"
+CASTLE_REQUIREMENT = (BuildingKind.ARCHERY_RANGE, BuildingKind.STABLE, BuildingKind.BLACKSMITH, BuildingKind.MARKET)
 
 
 def requirement_kinds(ctx: Context) -> int:
@@ -31,12 +33,40 @@ def requirement_kinds(ctx: Context) -> int:
     return len({b.kind for b in ctx.buildings if b.complete and b.kind in FEUDAL_REQUIREMENT})
 
 
+def castle_requirement_kinds(ctx: Context) -> int:
+    return len({b.kind for b in ctx.buildings if b.complete and b.kind in CASTLE_REQUIREMENT})
+
+
+def castle_prerequisite_wood(ctx: Context) -> int:
+    """Protect the next prerequisite's budget as soon as Feudal begins.
+
+    Paid foundations and pending orders already reserve their own cost. Rich
+    stockpiles can still feed farms and soldiers above this bounded reserve.
+    """
+    if not ctx.feudal or ctx.castle or castle_requirement_kinds(ctx) >= 2:
+        return 0
+    placed = {b.kind for b in ctx.buildings} | {p.kind for p in ctx.board.plans}
+    if len(placed.intersection(CASTLE_REQUIREMENT)) >= 2:
+        return 0
+    missing = (k for k in (BuildingKind.ARCHERY_RANGE, BuildingKind.BLACKSMITH) if k not in placed)
+    return min(building_cost(k)[1] for k in missing) + ctx.config.wood_reserve
+
+
 def stage(ctx: Context) -> str:
+    if ctx.castle:
+        return CASTLE
     if ctx.feudal:
-        return FEUDAL
+        ready = castle_requirement_kinds(ctx) >= 2
+        return CASTLE_ADVANCE if (ready and len(ctx.villagers) >= ctx.config.castle_villagers
+                                  and ctx.board.stats.get("army_peak", 0) >= ctx.config.castle_army_min) else FEUDAL
     if len(ctx.villagers) >= ctx.config.feudal_villagers and requirement_kinds(ctx) >= 2:
         return ADVANCE
     return DARK
+
+
+def wants_castle_food(ctx: Context) -> bool:
+    """Prepare the age's food while the Feudal army finishes forming."""
+    return ctx.feudal and not ctx.castle and len(ctx.villagers) >= ctx.config.castle_villagers
 
 
 def wants_loom(ctx: Context) -> bool:
@@ -54,22 +84,24 @@ def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
         if ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE:
             return [(BuildingKind.BARRACKS, 1)]
         return []
-    # Production capacity is what limits an army: a second Barracks comes
-    # before the Blacksmith, and the second range once the economy is large.
+    # Finish the Blacksmith before expanding production so the second Castle
+    # prerequisite does not compete with another Barracks for construction wood.
     wants = [
         (BuildingKind.BARRACKS, 1),
         (BuildingKind.ARCHERY_RANGE, 1),
     ]
+    wants.append((BuildingKind.BLACKSMITH, 1))
     if len(ctx.villagers) >= 22:
         wants.append((BuildingKind.BARRACKS, ctx.config.max_barracks))
-    wants.append((BuildingKind.BLACKSMITH, 1))
     if len(ctx.villagers) >= 26:
         wants.append((BuildingKind.ARCHERY_RANGE, ctx.config.max_ranges))
+    if ctx.castle or (ctx.center is not None and ctx.center.researching == Tech.CASTLE_AGE):
+        wants.insert(2, (BuildingKind.STABLE, 1))
     return wants
 
 
 #: A building that must be finished before another can be placed.
-PREREQUISITE = {BuildingKind.ARCHERY_RANGE: BuildingKind.BARRACKS}
+PREREQUISITE = {BuildingKind.ARCHERY_RANGE: BuildingKind.BARRACKS, BuildingKind.STABLE: BuildingKind.BARRACKS}
 
 
 # ----- technologies -------------------------------------------------------
@@ -101,4 +133,8 @@ UPGRADES: tuple[tuple[Tech, BuildingKind, Callable[[Context], bool]], ...] = (
 def wanted_upgrades(ctx: Context) -> list[tuple[Tech, BuildingKind]]:
     if not ctx.feudal:
         return []
-    return [(tech, kind) for tech, kind, when in UPGRADES if when(ctx)]
+    upgrades = [(tech, kind) for tech, kind, when in UPGRADES if when(ctx)]
+    if ctx.castle:
+        upgrades = [(Tech.CROSSBOWMAN, BuildingKind.ARCHERY_RANGE),
+                    (Tech.PIKEMAN, BuildingKind.BARRACKS)] + upgrades
+    return upgrades

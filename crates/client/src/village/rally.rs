@@ -13,14 +13,10 @@ pub(super) fn at_pointer(client: &mut Client, point: ScreenPoint) -> bool {
     else {
         return false;
     };
-    if !matches!(
-        building.kind,
-        aoe_protocol::BuildingKind::TownCenter
-            | aoe_protocol::BuildingKind::Barracks
-            | aoe_protocol::BuildingKind::ArcheryRange
-            | aoe_protocol::BuildingKind::Stable
-            | aoe_protocol::BuildingKind::Dock
-    ) {
+    if !aoe_protocol::UnitKind::ALL
+        .iter()
+        .any(|kind| crate::building_ui::rules(building.kind).trains(*kind as u8))
+    {
         return false;
     }
     let id = building.id;

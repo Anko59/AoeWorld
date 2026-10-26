@@ -342,6 +342,10 @@ pub(super) fn raster_sprite(
                 continue;
             }
             let texture_u = u + source_width * horizontal;
+            if sprite.pages[3] & 128 != 0 && (horizontal - 0.5).abs() + (vertical - 0.5).abs() > 0.5
+            {
+                continue;
+            }
             let mut source = filter::owner_sample(
                 atlas,
                 sprite,

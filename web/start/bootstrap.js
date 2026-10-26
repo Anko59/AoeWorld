@@ -4,6 +4,8 @@ import { initNavigation } from '/navigation.js';
 import { initStartSequence } from '/start/sequence.js';
 import { initMapJobs } from '/map-jobs.js';
 import { initSkirmish } from '/start/skirmish.js';
+import { initDevTools } from '/dev/tools.js';
+initDevTools();
 initInterface();
 initNavigation();
 const readJson = async response => {

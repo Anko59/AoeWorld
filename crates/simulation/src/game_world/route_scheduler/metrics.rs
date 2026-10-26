@@ -33,6 +33,10 @@ fn distance_bucket(tiles: i32) -> usize {
 pub struct RouteMetrics {
     /// Orders that reached route planning.
     pub orders: u64,
+    /// Fresh route planners that performed work; excludes continuations and cache hits.
+    pub searches_started: u64,
+    /// Slot-visibility tile probes, globally bounded by the formation tick allowance.
+    pub formation_steering_work: u64,
     /// Orders answered when issued (path, cache or fast local search).
     pub solved_at_issue: u64,
     pub cache_hits: u64,
@@ -103,10 +107,12 @@ impl fmt::Display for RouteMetrics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "orders={} at_issue={} cache_hits={} fast={} deferred={:?} no_slot={} \
+            "orders={} starts={} steering={} at_issue={} cache_hits={} fast={} deferred={:?} no_slot={} \
              work issue={} fair={} ahead={} refusals={} found={:?} failed={:?} stuck={} yielded={} approached={} \
              samples={:?}",
             self.orders,
+            self.searches_started,
+            self.formation_steering_work,
             self.solved_at_issue,
             self.cache_hits,
             self.fast_path,

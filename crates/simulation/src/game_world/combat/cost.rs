@@ -57,11 +57,8 @@ impl GameWorld {
         player: PlayerId,
         position: WorldPosition,
     ) -> Result<EntityId, crate::GameWorldError> {
-        let kind = if self.has_researched(player, crate::Tech::ManAtArms) {
-            UnitKind::ManAtArms
-        } else {
-            UnitKind::Militia
-        };
+        let kind =
+            UnitKind::Militia.upgraded(self.player_economy(player).map_or(0, |p| p.researched));
         self.spawn_kind(player, kind, position)
     }
 }

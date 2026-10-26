@@ -2,6 +2,14 @@
 
 from typing import Callable, Optional, Sequence, Tuple
 
+class Formation:
+    LINE: Formation
+    BOX: Formation
+    STAGGERED: Formation
+    FLANK: Formation
+    def __int__(self) -> int: ...
+    def __hash__(self) -> int: ...
+
 class UnitKind:
     VILLAGER: UnitKind
     SCOUT: UnitKind
@@ -11,6 +19,20 @@ class UnitKind:
     SKIRMISHER: UnitKind
     SPEARMAN: UnitKind
     MAN_AT_ARMS: UnitKind
+    LONG_SWORDSMAN: UnitKind
+    PIKEMAN: UnitKind
+    CROSSBOWMAN: UnitKind
+    ELITE_SKIRMISHER: UnitKind
+    KNIGHT: UnitKind
+    LIGHT_CAVALRY: UnitKind
+    MONK: UnitKind
+    MANGONEL: UnitKind
+    BATTERING_RAM: UnitKind
+    GALLEY: UnitKind
+    FIRE_SHIP: UnitKind
+    DEMOLITION_SHIP: UnitKind
+    TRANSPORT_SHIP: UnitKind
+    WAR_GALLEY: UnitKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 
@@ -30,7 +52,13 @@ class BuildingKind:
     BLACKSMITH: BuildingKind
     MARKET: BuildingKind
     WATCH_TOWER: BuildingKind
+    CASTLE: BuildingKind
+    BRIDGE: BuildingKind
     PALISADE_GATE: BuildingKind
+    CASTLE: BuildingKind
+    MONASTERY: BuildingKind
+    UNIVERSITY: BuildingKind
+    SIEGE_WORKSHOP: BuildingKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 
@@ -64,12 +92,33 @@ class Tech:
     SCALE_BARDING_ARMOR: Tech
     FLETCHING: Tech
     PADDED_ARCHER_ARMOR: Tech
+    CASTLE_AGE: Tech
+    LONG_SWORDSMAN: Tech
+    PIKEMAN: Tech
+    CROSSBOWMAN: Tech
+    ELITE_SKIRMISHER: Tech
+    LIGHT_CAVALRY: Tech
+    HAND_CART: Tech
+    TOWN_PATROL: Tech
+    IRON_CASTING: Tech
+    CHAIN_MAIL_ARMOR: Tech
+    CHAIN_BARDING_ARMOR: Tech
+    BODKIN_ARROW: Tech
+    LEATHER_ARCHER_ARMOR: Tech
+    HEAVY_PLOW: Tech
+    BOW_SAW: Tech
+    GOLD_SHAFT_MINING: Tech
+    MASONRY: Tech
+    BALLISTICS: Tech
+    MURDER_HOLES: Tech
+    WAR_GALLEY: Tech
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 
 class Age:
     DARK: Age
     FEUDAL: Age
+    CASTLE: Age
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 
@@ -146,7 +195,9 @@ class CommandResult:
     REJECTED_NO_MARKET: CommandResult
     REJECTED_WORLD_LIMIT: CommandResult
     REJECTED_ORDER_TOO_LARGE: CommandResult
+    REJECTED_GARRISON_FULL: CommandResult
     REJECTED_UNEXPLORED_PLACEMENT: CommandResult
+    REJECTED_REQUIRES_CASTLE_AGE: CommandResult
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 
@@ -167,6 +218,7 @@ class Unit:
     max_hp: int
     moving: bool
     auto_scout: bool
+    cargo_count: int
     idle: bool
     alive: bool
     military: bool
@@ -194,6 +246,8 @@ class Building:
     visible: bool
     queue_length: int
     farm_reseeds: int
+    garrison_capacity: int
+    garrison: list[tuple[int, UnitKind, int, int]]
     rally_position: Optional[tuple[int, int]]
     rally_resource: Optional[int]
     rally_building: Optional[int]
@@ -288,6 +342,7 @@ class World:
     def visibility(self, x: int, y: int) -> Visibility: ...
     @property
     def loaded_chunks(self) -> int: ...
+    def find_bridge_site(self, x: int, y: int, tx: int, ty: int) -> Optional[tuple[tuple[int, int], tuple[int, int]]]: ...
     def passable(self, x: int, y: int) -> Optional[bool]: ...
     def land_route(self, x: int, y: int, tx: int, ty: int) -> Optional[list[tuple[int, int]]]: ...
     def land_frontier(self, x: int, y: int, tx: int, ty: int) -> Optional[tuple[int, int]]: ...
@@ -325,16 +380,23 @@ class Client:
     def close(self) -> None: ...
     def move(self, unit: int, x: int, y: int) -> int: ...
     def stop(self, unit: int) -> int: ...
+    def load(self, unit_ids: Sequence[int], transport_id: int) -> int: ...
+    def unload(self, transport_id: int, x: int, y: int) -> int: ...
     def set_rally(self, building: int, x: int, y: int) -> int: ...
+    def set_formation(self, units: Sequence[int], formation: Formation) -> int: ...
+    def formation_move(self, units: Sequence[int], x: int, y: int, formation: Formation = ..., *, queued: bool = False, attack_move: bool = False) -> int: ...
     def queue_move(self, unit: int, x: int, y: int) -> int: ...
     def set_rally_resource(self, building: int, resource: int) -> int: ...
     def set_rally_building(self, building: int, target: int) -> int: ...
     def set_rally_animal(self, building: int, animal: int) -> int: ...
     def gather(self, unit: int, resource: int) -> int: ...
     def build(self, builders: Sequence[int], kind: BuildingKind, x: int, y: int) -> int: ...
+    def build_bridge(self, builders: Sequence[int], x1: int, y1: int, x2: int, y2: int) -> int: ...
     def build_wall(self, builders: Sequence[int], x1: int, y1: int, x2: int, y2: int) -> int: ...
     def construct(self, builders: Sequence[int], building: int) -> int: ...
     def cancel_construction(self, building: int) -> int: ...
+    def garrison(self, unit: int, building: int) -> int: ...
+    def ungarrison(self, building: int, unit: Optional[int] = None) -> int: ...
     def auto_scout(self, unit: int, enabled: bool = True) -> int: ...
     def farm(self, unit: int, farm: int) -> int: ...
     def farm_reseed(self, building: int, add: bool = True) -> int: ...

@@ -61,7 +61,7 @@ use web_sys::Response;
 const ROLE_SLOTS: usize = AssetRole::RallyFlag as usize + 1;
 type RoleRanges = [Option<std::ops::Range<usize>>; ROLE_SLOTS];
 
-async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
+pub(crate) async fn fetch(path: &str) -> Result<Vec<u8>, JsValue> {
     let window = web_sys::window().ok_or("No window")?;
     let response: Response = JsFuture::from(window.fetch_with_str(path))
         .await?
@@ -204,6 +204,14 @@ fn source_order(manifest: &Manifest, selected: &[usize]) -> Vec<usize> {
     order
 }
 
+// Aliased masked cells must be uploaded once: repeated coverage composition
+// would change their alpha. Shared cells deliberately retain distinct places.
+fn copy_order(manifest: &Manifest, selected: &[usize], placements: &[Placement]) -> Vec<usize> {
+    let mut order = source_order(manifest, selected);
+    order.retain(|&semantic| !placements[..semantic].contains(&placements[semantic]));
+    order
+}
+
 // Share startup lookup/copy code instead of specializing it for every role.
 #[inline(never)]
 fn group_frames(ranges: &RoleRanges, records: &[GameFrame], role: AssetRole) -> Vec<GameFrame> {
@@ -323,30 +331,14 @@ pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValu
     let building_ranges = building_sprites::select(&manifest, &mut selected, &mut domains)?;
     building_sprites::crop_farm(&mut manifest, &selected, &building_ranges)?;
     let fishing_ranges = fishing::select(&manifest, &mut selected, &mut domains)?;
-    // Validate count, source bounds, and all extents before pixel allocation.
-    let placements = placement::plan(&manifest, &selected, &domains)?;
     let mut maskable = vec![false; selected.len()];
-    for role in [
-        AssetRole::CavalryStanding,
-        AssetRole::CavalryWalking,
-        AssetRole::VillagerStanding,
-        AssetRole::VillagerWalking,
-        AssetRole::VillagerChopping,
-        AssetRole::VillagerCarryingWood,
-        AssetRole::VillagerForaging,
-        AssetRole::VillagerCarryingFood,
-        AssetRole::VillagerCarryingGold,
-        AssetRole::VillagerCarryingStone,
-        AssetRole::VillagerMiningStone,
-    ] {
+    for role in aoe_assets::catalog::runtime::PLAYER_ROLES {
         if let Some(range) = &ranges[role as usize] {
             maskable[range.clone()].fill(true);
         }
     }
     for (index, range) in actor_ranges.iter().enumerate() {
-        use aoe_assets::catalog::units::Pose;
-        if !(Pose::NeutralSheepStand as usize..Pose::NeutralSheepStand as usize + 4)
-            .contains(&index)
+        if aoe_assets::catalog::runtime::actor_maskable(index)
             && let Some(range) = range
         {
             maskable[range.clone()].fill(true);
@@ -355,6 +347,14 @@ pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValu
     for index in building_start..maskable.len() {
         maskable[index] = domains[index] == AtlasDomain::Objects;
     }
+    for (domain, owned) in domains.iter_mut().zip(&maskable) {
+        if *domain == AtlasDomain::Objects && !owned {
+            *domain = AtlasDomain::Shared;
+        }
+    }
+    // Validate every source/extent before pixel allocation. Shared art has no
+    // team mask and may use unused terrain space inside the same five pages.
+    let placements = placement::plan(&manifest, &selected, &domains)?;
     drop(domains);
     let records = selected
         .iter()
@@ -397,9 +397,18 @@ pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValu
         village,
         compositions: buildings,
         buildings: std::array::from_fn(|i| {
-            building_ranges[i]
+            let mut frames = building_ranges[i]
                 .as_ref()
-                .map_or_else(Vec::new, |r| records[r.clone()].to_vec())
+                .map_or_else(Vec::new, |r| records[r.clone()].to_vec());
+            // Scenario pieces span two source tiles. Half scale gives the
+            // buildable single-lane deck its one-tile cadence and width.
+            if (65..=70).contains(&i) {
+                for frame in &mut frames {
+                    frame.size = frame.size.map(|n| n * 0.5);
+                    frame.anchor = frame.anchor.map(|n| n * 0.5);
+                }
+            }
+            frames
         }),
         foundation,
         grass: terrain[0].clone(),

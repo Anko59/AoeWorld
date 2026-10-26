@@ -20,6 +20,12 @@ def play(world, config=None, events=(), brain=None):
     return brain, client
 
 
+def army_moves(client):
+    """Expand the current grouped wire command for per-member destination checks."""
+    return client.named("move") + [(unit, args[1], args[2])
+        for args in client.named("formation_move") for unit in args[0]]
+
+
 def test_the_town_center_queue_is_kept_full_while_food_lasts():
     units, buildings = base(5)
     world = FakeWorld(units, buildings, eco=economy(food=500, population=6, cap=15))
@@ -190,7 +196,7 @@ def test_a_strong_army_attacks_the_nearest_known_enemy_building():
     world = FakeWorld(units + army, buildings, enemy_buildings=[far, near], eco=economy(population=25, cap=40))
     brain, client = play(world, config=Config(march_hop_tiles=10_000))
     assert brain.board.attacking and brain.board.attack_target == 901
-    moves = [a for a in client.named("move") if a[0] >= 300]
+    moves = [a for a in army_moves(client) if a[0] >= 300]
     assert len(moves) == 14 and all(dist((a[1], a[2]), near.center) <= 6 for a in moves)
     # Once the target is in sight the army hits it instead of walking.
     near.visible = True
@@ -261,17 +267,17 @@ def test_feudal_age_adds_a_range_then_a_blacksmith_and_economy_upgrades():
     kinds = [a[1] for a in client.named("build")]
     assert BuildingKind.ARCHERY_RANGE in kinds
     assert client.named("research") == [(601, Tech.DOUBLE_BIT_AXE)]
-    # A second Barracks (production capacity) comes before the Blacksmith.
+    # Finish the second distinct Feudal kind before duplicating production.
     brain.board.plans.clear()
     buildings.append(building(602, BuildingKind.ARCHERY_RANGE, tile=(64, 50)))
     brain.board.cooldowns.clear()
     _, client = play(FakeWorld(units, buildings, eco=eco), brain=brain)
-    assert BuildingKind.BARRACKS in [a[1] for a in client.named("build")]
+    assert BuildingKind.BLACKSMITH in [a[1] for a in client.named("build")]
     brain.board.plans.clear()
-    buildings.append(building(603, BuildingKind.BARRACKS, tile=(68, 50)))
+    buildings.append(building(603, BuildingKind.BLACKSMITH, tile=(68, 50)))
     brain.board.cooldowns.clear()
     _, client = play(FakeWorld(units, buildings, eco=eco), brain=brain)
-    assert BuildingKind.BLACKSMITH in [a[1] for a in client.named("build")]
+    assert BuildingKind.BARRACKS in [a[1] for a in client.named("build")]
 
 
 def test_sheep_come_before_berries_and_a_villager_that_stays_idle_is_not_spammed():
@@ -305,7 +311,7 @@ def test_the_army_walks_to_a_tile_beside_the_enemy_building_not_onto_it():
     army = [unit(300 + i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(12)]
     target = building(901, BuildingKind.BARRACKS, tile=(150, 120), mine=False, visible=False)
     _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[target]), config=Config(march_hop_tiles=10_000))
-    moves = [a for a in client.named("move") if a[0] >= 300]
+    moves = [a for a in army_moves(client) if a[0] >= 300]
     assert moves and all(dist((a[1], a[2]), target.center) in range(2, 6) for a in moves)
     assert all((a[1], a[2]) != target.center for a in moves)
 
@@ -358,7 +364,7 @@ def test_an_army_marches_to_a_far_target_in_short_hops():
     army = [unit(300 + i, UnitKind.SPEARMAN, tile=(60, 60)) for i in range(14)]
     far = building(900, BuildingKind.HOUSE, tile=(250, 250), mine=False, visible=False)
     _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=economy(population=25, cap=40)))
-    moves = [a for a in client.named("move") if a[0] >= 300]
+    moves = [a for a in army_moves(client) if a[0] >= 300]
     assert len(moves) == 14 and len({(a[1], a[2]) for a in moves}) == 1, moves
     stop = (moves[0][1], moves[0][2])
     assert abs(dist(stop, (60, 60)) - 48) <= 2 and dist(stop, far.center) < dist((60, 60), far.center), moves
@@ -370,10 +376,10 @@ def test_an_army_that_gets_no_nearer_gives_its_target_up_and_waits_between_order
     far = building(900, BuildingKind.HOUSE, tile=(250, 250), mine=False, visible=False)
     eco = economy(population=25, cap=40)
     brain, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=eco, tick=100))
-    assert len([a for a in client.named("move") if a[0] >= 300]) == 14
+    assert len([a for a in army_moves(client) if a[0] >= 300]) == 14
     # Idle again a second later (stopped short): not re-sent at once.
     _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=eco, tick=120), brain=brain)
-    assert [a for a in client.named("move") if a[0] >= 300] == []
+    assert [a for a in army_moves(client) if a[0] >= 300] == []
     # A minute on and no nearer: the building is given up.
     play(FakeWorld(units + army, buildings, enemy_buildings=[far], eco=eco, tick=100 + 61 * 20), brain=brain)
     assert 900 in brain.board.cleared
@@ -425,7 +431,7 @@ def test_each_straggler_marches_in_a_short_land_hop():
     _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far],
                                eco=economy(population=27, cap=40)))
     origins = {u.id: u.tile for u in army}
-    moves = [a for a in client.named("move") if a[0] in origins]
+    moves = [a for a in army_moves(client) if a[0] in origins]
     assert moves and all(dist(origins[a[0]], (a[1], a[2])) <= 48 for a in moves)
 
 
@@ -436,7 +442,7 @@ def test_a_visible_distant_building_still_uses_short_march_hops():
     _, client = play(FakeWorld(units + army, buildings, enemy_buildings=[far],
                                eco=economy(population=27, cap=40)))
     assert [a for a in client.named("attack") if a[0] >= 300] == []
-    moves = [a for a in client.named("move") if a[0] >= 300]
+    moves = [a for a in army_moves(client) if a[0] >= 300]
     assert moves and all(dist((60, 60), (a[1], a[2])) <= 48 for a in moves)
 
 
@@ -457,10 +463,10 @@ def test_far_defenders_use_short_hops_and_keep_their_pause():
     world = lambda tick: FakeWorld(units + army, buildings, enemies=[foe], tick=tick,
                                    eco=economy(population=27, cap=40))
     brain, client = play(world(100))
-    assert len([a for a in client.named("move") if a[0] >= 300]) == 14
+    assert len([a for a in army_moves(client) if a[0] >= 300]) == 14
     assert client.named("attack") == []
     _, client = play(world(120), brain=brain)
-    assert [a for a in client.named("move") if a[0] >= 300] == []
+    assert [a for a in army_moves(client) if a[0] >= 300] == []
 
 
 def test_disconnected_land_queries_are_bounded_and_retried_after_the_cooldown():

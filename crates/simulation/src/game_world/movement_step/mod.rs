@@ -99,6 +99,9 @@ impl GameWorld {
     fn propose_step(&self, id: EntityId, tables: &Tables) -> Option<FastStep> {
         let index = *self.lookup.get(&id)?;
         let stored = &self.units[index];
+        if stored.formation.is_some() {
+            return None;
+        }
         let mut order = stored.order?;
         if stored
             .planner

@@ -11,9 +11,12 @@ mod dropoff;
 mod farm;
 #[path = "economy/fishing/mod.rs"]
 mod fishing;
+#[path = "economy/garrison/mod.rs"]
+mod garrison;
 #[path = "economy/construction/gates.rs"]
 mod gates;
 mod gathering;
+pub use garrison::GarrisonedUnit;
 mod hash;
 mod market;
 mod movement;
@@ -26,6 +29,8 @@ mod tick;
 pub use tick::TickPhase;
 pub(crate) mod training;
 pub use training::rally::{RallyPoint, RallyTarget};
+#[path = "economy/construction/bridge.rs"]
+mod bridge;
 mod wall;
 
 pub use buildings::{
@@ -54,6 +59,33 @@ pub enum UnitKind {
     Skirmisher,
     Spearman,
     ManAtArms,
+    LongSwordsman,
+    Pikeman,
+    Crossbowman,
+    EliteSkirmisher,
+    Knight,
+    LightCavalry,
+    Monk,
+    Mangonel,
+    BatteringRam,
+    Galley,
+    FireShip,
+    DemolitionShip,
+    TransportShip,
+    WarGalley,
+}
+impl UnitKind {
+    pub const fn is_naval(self) -> bool {
+        matches!(
+            self,
+            Self::FishingShip
+                | Self::Galley
+                | Self::FireShip
+                | Self::DemolitionShip
+                | Self::TransportShip
+                | Self::WarGalley
+        )
+    }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u8)]
@@ -74,6 +106,11 @@ pub enum BuildingKind {
     Market,
     WatchTower,
     PalisadeGate,
+    Castle,
+    Monastery,
+    University,
+    SiegeWorkshop,
+    Bridge,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -131,7 +168,7 @@ pub struct PlayerEconomy {
     pub population_cap: u16,
     pub age: super::Age,
     /// Bit `1 << tech as u8` is set once researched.
-    pub researched: u32,
+    pub researched: u64,
     /// The player's Market commodity prices, in gold per 100 units.
     pub market_prices: MarketPrices,
 }
@@ -166,6 +203,7 @@ pub struct GameBuilding {
     pub rally_point: Option<RallyPoint>,
     /// Prepaid farm rebuilds held by a Mill (at most 99).
     pub farm_reseeds: u8,
+    pub garrison: Vec<GarrisonedUnit>,
 }
 impl GameBuilding {
     /// Construction progress in thousandths, 1000 once complete.
@@ -224,6 +262,8 @@ pub const VILLAGE_RULES: VillageRules = VillageRules {
 pub enum EconomyError {
     #[error("entity does not exist")]
     UnknownEntity,
+    #[error("the building garrison is full")]
+    GarrisonFull,
     #[error("entity belongs to another player")]
     NotOwner,
     #[error("this unit kind cannot perform that command")]
@@ -272,6 +312,8 @@ pub enum EconomyError {
     OrderTooLarge,
     #[error("requires Feudal Age")]
     RequiresFeudalAge,
+    #[error("requires Castle Age")]
+    RequiresCastleAge,
     #[error("trading needs a completed Market")]
     NoMarket,
     #[error("player already has a starting village")]
@@ -282,6 +324,12 @@ pub enum EconomyError {
 
 #[derive(Debug, Default)]
 pub(crate) struct Economy {
+    pub(crate) garrison_orders: BTreeMap<EntityId, EntityId>,
+    pub(crate) garrison_reservations: BTreeMap<EntityId, u8>,
+    pub(crate) occupied_garrisons: BTreeSet<EntityId>,
+    pub(crate) ejections: BTreeMap<EntityId, (TileRect, Vec<GarrisonedUnit>)>,
+    pub(crate) cargo: BTreeMap<EntityId, Vec<EntityId>>,
+    pub(crate) embarked: BTreeMap<EntityId, EntityId>,
     pub(crate) players: BTreeMap<PlayerId, PlayerEconomy>,
     pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
     /// Every building per player and kind, ascending by id: drop-off
@@ -377,10 +425,11 @@ pub(crate) struct GatherTask {
 }
 
 /// A villager assigned to a foundation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct BuildTask {
     pub(crate) building: EntityId,
     pub(crate) attempts: u8,
+    pub(crate) queue: Vec<EntityId>,
 }
 
 impl super::GameWorld {

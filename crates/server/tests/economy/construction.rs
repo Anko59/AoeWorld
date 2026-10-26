@@ -55,6 +55,7 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
             villagers.clone(),
             BuildingKind::House,
             house_at,
+            false,
         )
         .await;
     let mut seen = std::collections::BTreeMap::<aoe_core::EntityId, GameplayBuildingState>::new();
@@ -145,6 +146,7 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
                     villagers.clone(),
                     BuildingKind::Farm,
                     farm_at,
+                    false,
                 )
                 .await;
             service
@@ -154,6 +156,7 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
                     villagers.clone(),
                     BuildingKind::Mill,
                     mill_at,
+                    false,
                 )
                 .await;
         }
@@ -166,6 +169,7 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
                     villagers.clone(),
                     BuildingKind::Farm,
                     farm_at,
+                    false,
                 )
                 .await;
             // Wood is short for a barracks: 175 needed.
@@ -176,6 +180,7 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
                     villagers.clone(),
                     BuildingKind::Barracks,
                     TileCoord::new(tc.min.x, tc.max.y + 6),
+                    false,
                 )
                 .await;
         }

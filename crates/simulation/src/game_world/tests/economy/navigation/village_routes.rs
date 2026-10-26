@@ -58,7 +58,8 @@ fn town_center_arches_accept_and_cross_center_destinations() {
                 PlayerId(0),
                 &[builder],
                 BuildingKind::House,
-                TileCoord::new(66, 66)
+                TileCoord::new(66, 66),
+                false
             ),
             Err(EconomyError::InvalidFootprint),
             "open arches still reserve the placement footprint"

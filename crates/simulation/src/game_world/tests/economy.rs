@@ -1,4 +1,5 @@
 mod barracks;
+mod castle;
 mod feudal;
 mod gates;
 mod research;
@@ -6,6 +7,8 @@ use super::*;
 use crate::{BuildingKind, CarriedResource, EconomyError, UnitKind, UnitTask, VILLAGE_RULES};
 use aoe_map::{ResourceKind, ResourceNode};
 
+#[path = "economy/navigation/bridges.rs"]
+mod bridges;
 mod buildings;
 mod construction;
 mod farming;

@@ -194,3 +194,27 @@ fn rally_flag_samples_the_licensed_loop_and_rejects_a_partial_group() {
             .is_err()
     );
 }
+
+#[wasm_bindgen_test]
+fn native_bridge_pieces_borrow_unowned_space_without_team_mask_pages() {
+    let mut value = manifest::fixture();
+    let template = value["frames"][0].clone();
+    value["frames"] = [
+        "a_top", "a_middle", "a_bottom", "b_top", "b_middle", "b_bottom",
+    ]
+    .into_iter()
+    .map(|piece| {
+        let mut frame = template.clone();
+        frame["source"] = format!("de/s_bridge_{piece}_x1.sld").into();
+        frame["frame"] = 0.into();
+        frame
+    })
+    .collect::<Vec<_>>()
+    .into();
+    let manifest: Manifest = serde_json::from_value(value).unwrap();
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
+    let ranges = building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
+    assert_eq!(selected.len(), 6);
+    assert_eq!(domains, [AtlasDomain::Shared; 6]);
+    assert!(ranges[65..71].iter().all(Option::is_some));
+}

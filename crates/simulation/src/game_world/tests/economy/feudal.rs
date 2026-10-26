@@ -15,7 +15,7 @@ fn built(world: &mut GameWorld, kind: BuildingKind, x: i32) -> EntityId {
     let worker = villager_at(world, x - 1, 100);
     fixture::survey(world, PlayerId(0), at(x + 1, 101), 3);
     let id = world
-        .issue_build(PlayerId(0), &[worker], kind, at(x, 100))
+        .issue_build(PlayerId(0), &[worker], kind, at(x, 100), false)
         .unwrap();
     finish(world, id, 4000);
     id
@@ -40,7 +40,7 @@ fn feudal_buildings_are_age_gated_atomically_then_build_with_de_stats() {
     for kind in [ArcheryRange, Stable, Blacksmith, Market, WatchTower] {
         let before = world.canonical_hash();
         assert_eq!(
-            world.issue_build(PlayerId(0), &[worker], kind, at(150, 100)),
+            world.issue_build(PlayerId(0), &[worker], kind, at(150, 100), false),
             Err(EconomyError::RequiresFeudalAge)
         );
         assert_eq!(world.canonical_hash(), before);
@@ -74,8 +74,13 @@ fn feudal_buildings_are_age_gated_atomically_then_build_with_de_stats() {
         assert_eq!(
             r.trainable,
             match kind {
-                ArcheryRange => &[UnitKind::Archer, UnitKind::Skirmisher][..],
-                Stable => &[UnitKind::Scout][..],
+                ArcheryRange => &[
+                    UnitKind::Archer,
+                    UnitKind::Skirmisher,
+                    UnitKind::Crossbowman,
+                    UnitKind::EliteSkirmisher
+                ][..],
+                Stable => &[UnitKind::Scout, UnitKind::Knight, UnitKind::LightCavalry][..],
                 _ => &[][..],
             }
         );
@@ -84,7 +89,7 @@ fn feudal_buildings_are_age_gated_atomically_then_build_with_de_stats() {
         fixture::survey(&mut world, PlayerId(0), at(x + 1, 101), 3);
         let before = stock(&world);
         let id = world
-            .issue_build(PlayerId(0), &[worker], kind, at(x, 100))
+            .issue_build(PlayerId(0), &[worker], kind, at(x, 100), false)
             .unwrap();
         assert_eq!(
             stock(&world),
@@ -97,7 +102,7 @@ fn feudal_buildings_are_age_gated_atomically_then_build_with_de_stats() {
         );
         assert!(
             world
-                .issue_build(PlayerId(0), &[worker], kind, at(x, 100))
+                .issue_build(PlayerId(0), &[worker], kind, at(x, 100), false)
                 .is_err()
         );
         finish(&mut world, id, seconds * 20 + 30);
@@ -179,7 +184,13 @@ fn horse_collar_adds_seventy_five_food_only_to_farms_placed_after_research() {
     assert_eq!(world.building(old).unwrap().food_remaining, before);
     let farmer = villager_at(&mut world, 119, 100);
     let farm = world
-        .issue_build(PlayerId(0), &[farmer], BuildingKind::Farm, at(120, 100))
+        .issue_build(
+            PlayerId(0),
+            &[farmer],
+            BuildingKind::Farm,
+            at(120, 100),
+            false,
+        )
         .unwrap();
     assert_eq!(world.building(farm).unwrap().food_remaining, Some(250));
 }
@@ -298,7 +309,13 @@ fn age_up_updates_existing_damaged_new_and_unfinished_building_stats() {
     advance(&mut world, 2599);
     let worker = villager_at(&mut world, 129, 100);
     let foundation = world
-        .issue_build(PlayerId(0), &[worker], BuildingKind::House, at(130, 100))
+        .issue_build(
+            PlayerId(0),
+            &[worker],
+            BuildingKind::House,
+            at(130, 100),
+            false,
+        )
         .unwrap();
     world.advance();
     let h = world.building(house).unwrap();
@@ -317,7 +334,7 @@ fn age_up_updates_existing_damaged_new_and_unfinished_building_stats() {
     assert_eq!(world.building(later).unwrap().max_hp, 750);
 }
 
-fn worker_player(world: &mut GameWorld, researched: u32) {
+fn worker_player(world: &mut GameWorld, researched: u64) {
     world.economy.players.insert(
         PlayerId(0),
         crate::PlayerEconomy {

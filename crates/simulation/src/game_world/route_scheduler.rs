@@ -282,6 +282,9 @@ impl GameWorld {
         } else {
             let result = self.poll_world_route_planner(&mut planner, allowance, &|| false, kind);
             let spent = planner.work().saturating_sub(work_before);
+            if work_before == 0 && spent > 0 {
+                self.route_metrics.searches_started += 1;
+            }
             self.route_metrics.fair_work += u64::from(spent);
             (result, spent)
         };
