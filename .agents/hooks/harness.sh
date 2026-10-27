@@ -5,7 +5,7 @@
 # judge it. Until origin/dev has this adapter, it is built from this checkout and
 # labelled a non-authoritative bootstrap.
 #   harness.sh <claude|codex|dsh|pi> <session-start|pre-tool-use|post-tool-use|stop|pre-compact>
-#   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-calibrate|review-pr|issue|next|ledger|usage|compare|dev-server|dev-server-status|dev-server-stop|showcase|showcase-check|showcase-session|nightly-triage|metric-regressions|carry-review|update-prs|metrics
+#   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-pr|issue|next|ledger|usage|compare|dev-server|dev-server-status|dev-server-stop|showcase|showcase-check|showcase-session|nightly-triage|metric-regressions|carry-review|update-prs|metrics
 #   harness.sh build
 set -u
 probe=crates/harness/src/agents/runtime.rs
@@ -18,7 +18,6 @@ case ${1:-} in
       duel) probe=crates/harness/src/ship/duel/mod.rs ;;
       ship|ship-status|describe-check|level-floor|level-stats) probe=crates/harness/src/ship/mod.rs ;;
       review|review-floor) probe=crates/harness/src/review/mod.rs ;;
-      review-calibrate) probe=crates/harness/src/review/calibrate/mod.rs ;;
       review-pr) probe=crates/harness/src/ship/review_pr.rs ;;
       issue|next) probe=crates/harness/src/ship/issues.rs ;;
       compare) probe=crates/harness/src/ship/compare/mod.rs ;;
@@ -32,7 +31,7 @@ case ${1:-} in
       update-prs) probe=crates/harness/src/ship/postpush/update.rs ;;
       metrics) probe=crates/harness/src/ship/metrics/snapshot.rs ;;
       ledger|usage) probe=crates/harness/src/ledger/mod.rs ;;
-      *) echo "harness.sh exec: duel, ship, ship-status, describe-check, review, review-floor, level-floor, level-stats, review-calibrate, review-pr, issue, next, ledger, usage, compare, dev-server, dev-server-status, dev-server-stop, showcase, showcase-check, showcase-session, nightly-triage, metric-regressions, carry-review, update-prs or metrics only" >&2; exit 2 ;;
+      *) echo "harness.sh exec: duel, ship, ship-status, describe-check, review, review-floor, level-floor, level-stats, review-pr, issue, next, ledger, usage, compare, dev-server, dev-server-status, dev-server-stop, showcase, showcase-check, showcase-session, nightly-triage, metric-regressions, carry-review, update-prs or metrics only" >&2; exit 2 ;;
     esac
     runtime=claude event=exec ;;
   *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | exec ship | build" >&2; exit 2 ;;
@@ -69,6 +68,6 @@ if [ "$event" = exec ]; then
   esac
   cd "$root" && exec "$binary" "$2"
 fi
-# A caller that judges another checkout (review-calibrate case repositories)
+# A caller that judges another checkout
 # names it in AOE_AGENT_HOOK_ROOT; the judge binary still comes from this one.
 AOE_AGENT_HOOK_ROOT=${AOE_AGENT_HOOK_ROOT:-$root} AOE_AGENT_HOOK_JUDGE=$judge exec "$binary" agent-hook --runtime "$runtime" "$event"

@@ -13,7 +13,7 @@ use std::{
 /// socket name and the nested build directories always fit.
 const SOCKET_ROOT_LIMIT: usize = 60;
 
-/// A deep checkout (the nightly mutation run copies the tree) would push the
+/// A deep checkout could push the
 /// socket past the limit; the system temp directory is short.
 fn socket_root(candidate: std::path::PathBuf) -> std::path::PathBuf {
     if candidate.as_os_str().len() > SOCKET_ROOT_LIMIT {

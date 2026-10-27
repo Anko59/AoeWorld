@@ -2,6 +2,9 @@
 use proc_macro2::{Delimiter, TokenStream, TokenTree};
 use syn::{parse::Parser, spanned::Spanned};
 
+#[cfg(test)]
+mod tests;
+
 fn mentions_test(tokens: TokenStream) -> bool {
     fn positive(meta: syn::Meta) -> bool {
         match meta {

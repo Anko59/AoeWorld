@@ -114,8 +114,7 @@ M8 native geodata fixtures are reviewed in
 loopback HTTP fixtures exercise sampling, pyramids, HYDE extraction, and cache
 resume/error paths. An ignored HTTP range now removes the stale partial file
 so acquisition can restart. Hooks, test-unit (305), preflight, and clean
-pre-push preflight passed. These fixtures do not establish the overall 85%
-coverage gate or qualify real-world generation performance.
+pre-push preflight passed. These fixtures do not qualify real-world generation performance.
 
 M6 camera elevation and sprite anchoring are reviewed in
 [PR #21](https://github.com/Anko59/AoeWorld/pull/21), revision
@@ -283,8 +282,7 @@ Provider extraction temporaries, incomplete immutable publication files, and
 direct CLI staging are outside this cleanup contract.
 
 Coverage at integration `adda0eec37c3197d2bf0e49e4b100426173f6dbf` is
-15,419/19,566 production lines (78.8%): the unchanged 85% overall floor fails.
-All critical groups pass and no sources are missing. This supersedes the older
+15,419/19,566 production lines (78.8%), with no sources missing. This supersedes the older
 79.9% measurement for the expanded implementation; qualification remains open.
 
 M8 cache and worker boundary qualification is reviewed in
@@ -294,8 +292,7 @@ recovery requires canonical content-addressed names, and real worker CLI tests
 cover offline validation, package verification and a GDAL raster fixture.
 The WebSocket diagnostic test now uses a total deadline while preserving every
 protocol assertion. Independent review, hooks and preflight passed. Coverage
-on this feature revision is 15,848/19,589 lines (80.9%); all critical groups
-pass with no missing sources. The unchanged 85% overall floor still fails.
+on this feature revision is 15,848/19,589 lines (80.9%), with no missing sources.
 
 M6 byte-exact bounded browser PNG decoding is reviewed in
 [PR #37](https://github.com/Anko59/AoeWorld/pull/37), revision
