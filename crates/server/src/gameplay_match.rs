@@ -165,7 +165,7 @@ pub(crate) struct MatchRequest {
     /// A flat synthetic ground (see `flat.rs`), the usual place for AI tests.
     flat: Option<flat::FlatMap>,
     slots: Vec<SlotKind>,
-    /// The most population any player may reach (5 to 5,000, default 200).
+    /// The most population any player may reach (5 to 5,000, default 1000).
     /// World capacities for buildings and workers grow in proportion.
     population_cap: Option<u16>,
     /// Extra villagers and militia every player starts with.

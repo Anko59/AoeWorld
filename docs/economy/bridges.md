@@ -6,11 +6,14 @@ between two explored land banks. Two clicks also set the endpoints. Escape
 cancels placement. The preview uses resident, explored terrain; the server
 validates and charges the complete order atomically.
 
-A span follows either world tile axis, with one to forty water tiles between
-its land endpoints (three to forty-two footprint tiles). Every interior tile
-must be lake, ocean, river or shallow water; fords, intermediate islands, resources,
-units, other buildings, unexplored tiles and occupied bridge spans are refused.
-Diagonal and bent spans are refused. Reversed drags have identical footprints.
+A straight drag may follow any angle. The canonical integer raster contains
+one to forty water deck cells between walkable dry land endpoints, including
+across one-, two- and three-tile streams. Lake, ocean, river, coastal shallows
+and wadeable marsh may support the deck. Intermediate islands, live resources,
+units, other buildings, unexplored cells and occupied spans are refused.
+Reversed drags produce identical cells. The ghost follows the whole line,
+including an invalid span, and marks invalid cells red. Only those raster cells
+are reserved; land inside the enclosing rectangle remains usable.
 
 The cost is **25 wood and 5 stone per water tile**, with **8 seconds of work per
 water tile** for one villager. A four-tile crossing costs 100 wood and 20 stone
@@ -21,11 +24,12 @@ Cancellation refunds unfinished work proportionally; repair costs half the
 whole span's original cost for a full HP bar.
 
 Foundations block passage. Completion opens the deck for land units, along its
-axis only. Land units enter and leave at the banks; lateral and diagonal entry
-or exit on the water deck is forbidden. Ships cannot pass through a completed
+raster line only. Land units enter and leave at the banks; diagonal steps
+between consecutive deck cells work without requiring water beside the deck
+to become land. Lateral entry or exit is forbidden. Ships cannot pass through a completed
 deck. Destroying the bridge removes the entire crossing; land units on its
-water deck die and their deaths appear in that tick's updates. Units on its
-land endpoints survive.
+blocking-water deck die and their deaths appear in that tick's updates.
+Units on its land endpoints or naturally wadeable marsh survive.
 
 Navigation keeps the immutable package snapshot. Sparse, copy-on-write deck
 entries participate in existing chunk collision fingerprints. Completion and
@@ -60,7 +64,8 @@ Only identifiers and importer code are tracked; pixels and packs remain private.
 
 A pieces follow world Y; B pieces follow world X.
 DE pack sources are `de/<stem>_x1.sld`, frame 0. Runtime slots 45–50 retain six
-frames in the existing atlas. The source pieces are displayed at half scale
+frames in the existing atlas. Raster cells use the closest dominant native
+axis family. The source pieces are displayed at half scale
 for the single-lane tile cadence; the deck renders behind crossing actors.
 Missing art retains semantic markers. Import with `make assets-import-de`;
 verify DAT identifiers with `make test-assets-dat`. `make test-bridges` covers

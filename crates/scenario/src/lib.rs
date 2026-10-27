@@ -14,6 +14,21 @@ pub struct Scenario {
     pub hotspot_entities: u32,
 }
 
+// The recipe is part of the workload identity: changing actors, routes or
+// camera work intentionally requires a new measured baseline, not an engine pin.
+pub const LATE_GAME_RECIPE: &str = "castle;80-villagers;60-army;192-tile-marches;12-formation;1-explorer;2-ships;southern-sea;1-monk;1-wounded-knight;1-garrison-archer;1-tower;25-blocked-barracks;200-queues;100-loom;384-warm;128-sample;3-runs;100-cameras-192x128;400-pans";
+
+pub const LATE_GAME: Scenario = Scenario {
+    version: 1,
+    name: "late-game",
+    seed: Seed(41),
+    world_size: 16_384,
+    active_extent: 16_384,
+    players: 100,
+    entities: 14_000,
+    hotspot_entities: 0,
+};
+
 pub const SMOKE: Scenario = Scenario {
     version: 1,
     name: "smoke",
@@ -137,6 +152,9 @@ impl Scenario {
         hasher.update(&self.players.to_le_bytes());
         hasher.update(&self.entities.to_le_bytes());
         hasher.update(&self.hotspot_entities.to_le_bytes());
+        if self == LATE_GAME {
+            hasher.update(LATE_GAME_RECIPE.as_bytes());
+        }
         hasher.finalize().to_hex().to_string()
     }
 }
@@ -144,6 +162,7 @@ impl Scenario {
 pub fn named(name: &str) -> Option<Scenario> {
     match name {
         "smoke" => Some(SMOKE),
+        "late-game" => Some(LATE_GAME),
         "target-distributed" => Some(TARGET_DISTRIBUTED),
         "target-hotspot" => Some(TARGET_HOTSPOT),
         "network-pressure" => Some(NETWORK_PRESSURE),

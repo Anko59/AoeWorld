@@ -1,9 +1,11 @@
-//! Bounded, immediate boarding at a bank; carried units retain their identity.
+//! Shore rendezvous and boarding; carried units retain their identity.
 use crate::{EconomyError, GameWorld, UnitKind, UnitTask, unit_combat};
 use aoe_core::{ChunkCoord, EntityId, PlayerId, TileCoord, WorldPosition};
 use std::collections::BTreeSet;
 
 mod combat;
+mod journeys;
+pub(crate) use journeys::Journey;
 mod stats;
 pub(super) use stats::NAVAL;
 pub(super) use stats::attack_range;
@@ -69,13 +71,32 @@ impl GameWorld {
             if unit.player != player {
                 return Err(EconomyError::NotOwner);
             }
-            if unit.kind.is_naval() {
+            if unit.kind.is_naval() || unit.kind == UnitKind::Vassal {
                 return Err(EconomyError::WrongUnitKind);
             }
-            if unit.hp == 0 || self.embarked(id) || !adjacent(unit.position.tile_floor(), bank) {
+            if unit.hp == 0 || self.embarked(id) {
                 return Err(EconomyError::InvalidTarget);
             }
             passengers.push((id, index, unit.position));
+        }
+        if passengers
+            .iter()
+            .any(|(_, _, at)| !adjacent(at.tile_floor(), bank))
+        {
+            let (land, water) = self
+                .boarding_shore(passengers[0].2.tile_floor(), bank)
+                .ok_or(EconomyError::InvalidTarget)?;
+            self.queue_transport_journey(
+                transport,
+                Journey {
+                    player,
+                    passengers: canonical.into_iter().collect(),
+                    land,
+                    water,
+                    unloading: false,
+                },
+            );
+            return Ok(());
         }
         for (id, index, at) in passengers {
             self.stop_unit_orders(index);
@@ -102,15 +123,26 @@ impl GameWorld {
     ) -> Result<(), EconomyError> {
         let bank = self.validate_transport(player, transport)?;
         let at = WorldPosition::from_tile_center(tile).map_err(|_| EconomyError::InvalidTarget)?;
-        if !adjacent(bank, tile)
-            || !self.config.valid_ground_position(at)
-            || self.economy.blocked_tiles.contains(&tile)
-            || !self
-                .unit_tile_passable(UnitKind::Villager, tile, &|| false)
-                .map_err(crate::GameWorldError::Environment)?
-        {
+        if !self.config.valid_ground_position(at) || self.economy.blocked_tiles.contains(&tile) {
             return Err(EconomyError::InvalidTarget);
         }
+        let water = self
+            .unloading_shore(tile, bank)
+            .ok_or(EconomyError::InvalidTarget)?;
+        if !adjacent(bank, tile) {
+            self.queue_transport_journey(
+                transport,
+                Journey {
+                    player,
+                    passengers: Vec::new(),
+                    land: tile,
+                    water,
+                    unloading: true,
+                },
+            );
+            return Ok(());
+        }
+        self.cancel_transport_journey(transport);
         let ids = self.economy.cargo.remove(&transport).unwrap_or_default();
         for id in ids {
             self.economy.embarked.remove(&id);
@@ -131,6 +163,7 @@ impl GameWorld {
     }
 
     pub(crate) fn sink_cargo(&mut self, transport: EntityId) {
+        self.cancel_transport_journey(transport);
         let ids = self.economy.cargo.remove(&transport).unwrap_or_default();
         for id in ids {
             // Keep dead passengers hidden until their normal corpse removal.

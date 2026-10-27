@@ -76,9 +76,9 @@ class Blackboard:
     bad_moves: set[tuple[int, int]] = field(default_factory=set)
     #: Failed public land queries are retried after a short bounded cooldown.
     land_failures: dict[tuple[tuple[int, int], tuple[int, int]], int] = field(default_factory=dict)
-    #: villager id -> tick of its last job, animal id -> hunt orders given.
+    #: villager id -> tick of its last job, (villager, animal) -> hunt orders given.
     assigned: dict[int, int] = field(default_factory=dict)
-    hunt_tries: dict[int, int] = field(default_factory=dict)
+    hunt_tries: dict[tuple[int, int], int] = field(default_factory=dict)
     #: villager id -> animal it was sent after; animal id -> ((hp, meat), tick it last changed).
     hunters: dict[int, int] = field(default_factory=dict)
     hunt_watch: dict[int, tuple[tuple[int, int], int]] = field(default_factory=dict)

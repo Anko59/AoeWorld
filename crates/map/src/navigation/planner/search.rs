@@ -259,6 +259,11 @@ fn diagonal_clear_checked(
     delta_y: i32,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<bool, Terminal> {
+    if let Some(clear) =
+        overlay.bridge_edge(tile, TileCoord::new(tile.x + delta_x, tile.y + delta_y))
+    {
+        return Ok(clear);
+    }
     let horizontal = TileCoord::new(tile.x + delta_x, tile.y);
     let vertical = TileCoord::new(tile.x, tile.y + delta_y);
     Ok(checked_walkable(terrain, overlay, horizontal, cancelled)?

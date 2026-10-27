@@ -117,10 +117,17 @@ fn checkout_policies_and_synthetic_protocol_smoke_execute_through_cli() {
         &std::fs::read(root().join("reports/perf/smoke.json")).expect("report"),
     )
     .expect("JSON report");
-    assert_eq!(report["workloads"][0]["total_entities"], 8_000);
-    assert_eq!(report["workloads"][0]["clients_connected"], 8);
-    assert_eq!(report["workloads"][0]["snapshots"], 8);
-    assert_eq!(report["workloads"][0]["deltas"], 16);
+    // perf-smoke also runs the generated late game; pin the synthetic smoke itself.
+    let smoke = report["workloads"]
+        .as_array()
+        .expect("workloads")
+        .iter()
+        .find(|w| w["scenario"] == "smoke")
+        .expect("synthetic smoke workload");
+    assert_eq!(smoke["total_entities"], 8_000);
+    assert_eq!(smoke["clients_connected"], 8);
+    assert_eq!(smoke["snapshots"], 8);
+    assert_eq!(smoke["deltas"], 16);
 
     invoke(&["release-verify"], false);
     invoke(&["release-rehearse"], false);

@@ -24,6 +24,7 @@ fn building(id: u32, x: i32, y: i32) -> GameplayBuildingState {
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
     }
 }
 
@@ -92,6 +93,59 @@ fn click(client: &mut Client, offset: [f64; 2]) {
     };
     let unit = picking::unit(client, point);
     picking::click(client, point, unit);
+}
+
+#[wasm_bindgen_test]
+async fn house_picking_keeps_the_displayed_workers_bounds_and_depth_until_the_next_frame() {
+    for (displayed, incoming, foreground) in [
+        (TileCoord::new(101, 101), TileCoord::new(98, 98), true),
+        (TileCoord::new(98, 98), TileCoord::new(101, 101), false),
+    ] {
+        let mut client = fixture(1.0).await;
+        client.art.compositions[0].unit_id = 70;
+        client.art.compositions[0].footprint = [2.0; 2];
+        client.art.village[0] = client.art.standing.clone();
+        client.village.buildings[0].kind = BuildingKind::House;
+        client.village.buildings[0].footprint = TileRect::from_xywh(99, 99, 2, 2);
+        let worker = client.units.get_mut(&EntityId(1)).unwrap();
+        worker.kind = aoe_protocol::UnitKind::Villager;
+        worker.position = WorldPosition::from_tile_center(displayed).unwrap();
+        client.canvas.set_width(1280);
+        client.canvas.set_height(720);
+        let scene = prepare(&client);
+        let actors = units(&client, &scene);
+        let camera = SceneCamera {
+            center: client.camera.center,
+            zoom: client.camera.zoom,
+            viewport: client.camera.viewport,
+            focus_elevation_meters: client.camera.focus_elevation_meters,
+        };
+        assert!(
+            crate::playground::game::map::render_cache::render_if_changed(
+                &mut client,
+                &scene,
+                &actors,
+                &[],
+                camera,
+                0,
+                false,
+            )
+            .unwrap()
+        );
+
+        // A network/interpolation update can arrive while the GPU throttles
+        // submissions. AoE2 picking must still follow the displayed worker,
+        // including its body rectangle and roof ordering, not only its feet.
+        client.units.get_mut(&EntityId(1)).unwrap().position =
+            WorldPosition::from_tile_center(incoming).unwrap();
+        click(&mut client, [0.0, 20.0]);
+        if foreground {
+            assert_eq!(client.selected.units, [EntityId(1)]);
+        } else {
+            assert_eq!(client.selected.building_id, Some(EntityId(8)));
+        }
+        client.canvas.remove();
+    }
 }
 
 #[wasm_bindgen_test]

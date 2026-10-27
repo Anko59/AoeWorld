@@ -54,10 +54,10 @@ frames of 97×49 in the same x-major, reversed-y layout as the land sheets.
 
 | Sheet | Look | Scene material | Used for |
 | --- | --- | --- | --- |
-| Water 15002 (required) | Light turquoise | 10, 12 | Shallow rim of lakes and seas, river margins, shallow source water, and playable Ford crossings |
+| Water 15002 (required) | Light turquoise | 10 | Shallow rim of lakes and seas, river margins and shallow source water |
 | Water 15016 (optional) | Medium blue | 5 | Water five to seven tiles from land at most; midstream river water |
 | Water 15015 (optional) | Dark blue | 11 | Open water beyond the medium reach |
-| Shallows 15014 (optional) | Green marsh with lilies | — | Imported, not selected for Ford crossings |
+| Shallows 15014 (optional) | Green marsh with lilies | 12 | Walkable Ford crossings; AoK DAT terrain 4 (`g_sha`) |
 
 Generated river fords use the light shallow Water 15002 sheet where local
 slopes permit crossing; marsh flecks no longer obscure the crossing. A ford

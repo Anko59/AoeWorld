@@ -46,7 +46,7 @@ pub fn write_terrain_directory_page(art: &crate::GameArt, page: &mut [u8]) -> Re
 
 fn write_rows(art: &crate::GameArt, atlas: &mut [u8]) -> Result<(), String> {
     let mut table = vec![0_u8; (FIRST_FRAME - 1) * 4];
-    let mut starts = [0_usize; 17];
+    let mut starts = [0_usize; 18];
     for material in 0..MATERIALS {
         let Some((group, frames, topology)) = terrain_group(art, material as u8) else {
             continue;

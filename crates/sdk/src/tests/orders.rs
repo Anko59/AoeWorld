@@ -262,3 +262,30 @@ fn formation_move_uses_one_group_command_with_queue_and_combat_flags() {
         })
     );
 }
+
+#[test]
+fn vassal_rules_and_train_order_share_the_server_roster() {
+    use crate::{BuildingKind, UnitKind, rules};
+    assert_eq!(
+        rules::trainable(BuildingKind::Castle),
+        vec![UnitKind::Vassal]
+    );
+    let cost = rules::unit_cost(UnitKind::Vassal);
+    assert_eq!(
+        (cost.food, cost.wood, cost.gold, cost.stone),
+        (1000, 0, 1000, 0)
+    );
+    assert_eq!(rules::unit_train_seconds(UnitKind::Vassal), 60);
+    assert_eq!(
+        Order::Train {
+            building: id(9),
+            kind: UnitKind::Vassal
+        }
+        .message(3),
+        Some(M::TrainOrder {
+            sequence: 3,
+            building_id: id(9),
+            kind: UnitKind::Vassal
+        })
+    );
+}

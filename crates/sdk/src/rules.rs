@@ -63,6 +63,7 @@ fn native_unit(kind: UnitKind) -> sim::UnitKind {
         UnitKind::DemolitionShip => sim::UnitKind::DemolitionShip,
         UnitKind::TransportShip => sim::UnitKind::TransportShip,
         UnitKind::WarGalley => sim::UnitKind::WarGalley,
+        UnitKind::Vassal => sim::UnitKind::Vassal,
     }
 }
 

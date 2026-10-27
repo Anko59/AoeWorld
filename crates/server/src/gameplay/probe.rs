@@ -68,6 +68,16 @@ impl FanoutTiming {
 }
 
 impl GameplayService {
+    /// Read-only inspection for the in-process scale driver, outside tick
+    /// timing. No game state or transport authority can be changed here.
+    pub async fn inspect_scale_world<R>(
+        &self,
+        inspect: impl FnOnce(&aoe_simulation::GameWorld) -> R,
+    ) -> R {
+        let world = self.world.read().await;
+        inspect(&world)
+    }
+
     pub(crate) async fn memory_usage(&self) -> MemoryUsage {
         let worlds = WORLDS
             .lock()
@@ -117,6 +127,12 @@ impl GameplayService {
             };
         }
         usage
+    }
+
+    /// Direct benchmarks drain the same phase spans as `/match/stats` after
+    /// each tick. Navigation spans are inclusive and can overlap in parallel.
+    pub fn take_tick_phase_micros(&self) -> std::collections::BTreeMap<&'static str, u64> {
+        self.probe.take_phase_micros()
     }
 
     pub fn last_fanout_timing(&self) -> FanoutTiming {

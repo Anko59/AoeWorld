@@ -105,7 +105,9 @@ impl GameWorld {
             let keep = self.hunter_step(id, &mut job);
             if keep {
                 self.wildlife.hunts.insert(id, job);
-            } else if !self.economy.gatherers.contains_key(&id) {
+            } else if !self.economy.gatherers.contains_key(&id)
+                && !self.wildlife.hunts.contains_key(&id)
+            {
                 let index = self.lookup[&id];
                 self.stop_movement(index);
                 self.units[index].state.task = if self.units[index].state.carried.is_some() {

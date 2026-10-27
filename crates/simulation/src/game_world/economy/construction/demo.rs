@@ -4,6 +4,20 @@ use crate::{BuildingKind, EconomyError, GameWorld, Stockpile};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 
 impl GameWorld {
+    /// Local Castle economy fixture; production, garrison and management use
+    /// exactly the same orders as a match. The existing demo clock runs 4x.
+    pub fn vassal_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+        let (mut world, primary) = Self::military_demo(seed)?;
+        world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
+        world.insert_building(
+            PlayerId(0),
+            BuildingKind::Castle,
+            TileRect::from_xywh(139, 134, 4, 4),
+            true,
+        )?;
+        Ok((world, primary))
+    }
+
     /// Four-times-clock military playground; commands remain authoritative.
     pub fn military_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         let mut config =

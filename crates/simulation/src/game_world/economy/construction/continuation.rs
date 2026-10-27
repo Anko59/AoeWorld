@@ -1,11 +1,94 @@
 //! Bounded build orders and deterministic local continuation.
 use super::*;
+use std::collections::BTreeMap;
 
 const MAX_BUILD_QUEUE: usize = 32;
 const CONTINUE_RADIUS: i32 = 10;
 const CONTINUE_TRIES: usize = 4;
 
+#[cfg(test)]
+thread_local! {
+    pub(super) static COMPLETION_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 impl GameWorld {
+    /// Completed farms keep their builder across transient route/spot refusals.
+    /// Spread retries over game seconds so a completion wave has bounded work.
+    pub(super) fn retry_completed_farm(&mut self, worker: EntityId, farm: EntityId) -> bool {
+        let Some(player) = self
+            .building(farm)
+            .filter(|b| b.kind == BuildingKind::Farm)
+            .map(|b| b.player)
+        else {
+            return false;
+        };
+        if self
+            .economy
+            .builders
+            .get(&worker)
+            .is_some_and(|job| !job.queue.is_empty())
+        {
+            if !self.next_queued_build(worker) {
+                self.finish_farm_builder(worker, player, farm);
+            }
+            return true;
+        }
+        let period = u64::from(self.config.tick_hz);
+        if self.tick.0 % period == u64::from(worker.0) % period {
+            self.finish_farm_builder(worker, player, farm);
+        }
+        true
+    }
+
+    pub(super) fn finish_farm_builder(
+        &mut self,
+        worker: EntityId,
+        player: PlayerId,
+        farm: EntityId,
+    ) {
+        self.release_builder(worker);
+        if let Err(EconomyError::Movement(_)) = self.issue_farm(player, worker, farm) {
+            self.economy.builders.insert(
+                worker,
+                BuildTask {
+                    building: farm,
+                    attempts: 0,
+                    queue: Vec::new(),
+                },
+            );
+        }
+    }
+
+    /// Complete every site before choosing follow-up jobs. One membership
+    /// pass replaces a full builder scan per simultaneously completed farm.
+    pub(super) fn finish_builders(
+        &mut self,
+        completed: &BTreeMap<EntityId, (PlayerId, BuildingKind, TileRect)>,
+        touched: &mut Vec<EntityId>,
+    ) {
+        let finished = self
+            .economy
+            .builders
+            .iter()
+            .filter_map(|(id, job)| {
+                #[cfg(test)]
+                COMPLETION_VISITS.with(|visits| visits.set(visits.get() + 1));
+                completed
+                    .contains_key(&job.building)
+                    .then_some((*id, job.building))
+            })
+            .collect::<Vec<_>>();
+        for (builder, building) in finished {
+            let (player, kind, footprint) = completed[&building];
+            if !self.next_queued_build(builder)
+                && (kind == BuildingKind::Farm || !self.continue_foundation(builder, player))
+            {
+                self.after_building(builder, player, building, kind, footprint);
+            }
+            touched.push(builder);
+        }
+    }
+
     pub(in super::super) fn validate_build_queue(
         &self,
         builders: &[EntityId],
@@ -36,6 +119,7 @@ impl GameWorld {
         for &builder in builders {
             if queued && let Some(task) = self.economy.builders.get_mut(&builder) {
                 task.queue.extend_from_slice(targets);
+                self.player_override(builder);
                 any = true;
             } else if self.assign_builders(&[builder], |_| targets[0])
                 && let Some(task) = self.economy.builders.get_mut(&builder)
@@ -130,5 +214,37 @@ impl GameWorld {
             return true;
         }
         false
+    }
+}
+
+impl GameWorld {
+    /// What a builder does next: farm its farm, gather beside a new camp,
+    /// continue along a palisade, or stand idle.
+    pub(super) fn after_building(
+        &mut self,
+        builder: EntityId,
+        player: PlayerId,
+        id: EntityId,
+        kind: BuildingKind,
+        footprint: TileRect,
+    ) {
+        let radius = super::super::VILLAGE_RULES.replacement_radius_tiles;
+        let wanted: &[ResourceKind] = match kind {
+            BuildingKind::LumberCamp => &[ResourceKind::Wood],
+            BuildingKind::MiningCamp => &[ResourceKind::Gold, ResourceKind::Stone],
+            BuildingKind::Mill => &[ResourceKind::Food],
+            BuildingKind::Farm => {
+                self.finish_farm_builder(builder, player, id);
+                return;
+            }
+            _ => &[],
+        };
+        for resource in wanted {
+            if let Some(node) = self.nearest_resource(footprint.min, *resource, radius, None)
+                && self.issue_gather(player, builder, node.id).is_ok()
+            {
+                return;
+            }
+        }
     }
 }

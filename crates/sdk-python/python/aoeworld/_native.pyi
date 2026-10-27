@@ -33,6 +33,7 @@ class UnitKind:
     DEMOLITION_SHIP: UnitKind
     TRANSPORT_SHIP: UnitKind
     WAR_GALLEY: UnitKind
+    VASSAL: UnitKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 
@@ -196,6 +197,9 @@ class CommandResult:
     REJECTED_WORLD_LIMIT: CommandResult
     REJECTED_ORDER_TOO_LARGE: CommandResult
     REJECTED_GARRISON_FULL: CommandResult
+    REJECTED_VASSAL_EXISTS: CommandResult
+    REJECTED_VASSAL_LEASH: CommandResult
+    REJECTED_VASSAL_HOME: CommandResult
     REJECTED_UNEXPLORED_PLACEMENT: CommandResult
     REJECTED_REQUIRES_CASTLE_AGE: CommandResult
     def __int__(self) -> int: ...
@@ -219,6 +223,8 @@ class Unit:
     moving: bool
     auto_scout: bool
     cargo_count: int
+    home_castle: Optional[int]
+    managed_by: Optional[int]
     idle: bool
     alive: bool
     military: bool

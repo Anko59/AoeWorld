@@ -5,6 +5,8 @@ use aoe_core::{ChunkCoord, EntityId, TileCoord, WorldPosition};
 mod cells;
 mod followers;
 pub(crate) use followers::Followers;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use followers::Snapshot;
 mod destinations;
 pub(crate) use destinations::Destinations;
 mod idle;
@@ -40,21 +42,40 @@ impl GameWorld {
     /// swept local avoidance. The id breaks a tie, so one leader proceeds.
     /// Waiting discards this tick's whole speed credit instead of banking a dash.
     pub(crate) fn following_unit(&self, index: usize) -> bool {
+        let Some(test) = self.following_probe(index) else {
+            return false;
+        };
+        let unit = &self.units[index].state;
+        let salt = self.tick.0.wrapping_add(u64::from(unit.id.0));
+        self.followers
+            .any_neighbour(unit.position.tile_floor(), salt, unit.id, test)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn following_unit_in(&self, index: usize, neighbours: &Snapshot) -> bool {
+        let Some(test) = self.following_probe(index) else {
+            return false;
+        };
+        let unit = &self.units[index].state;
+        let salt = self.tick.0.wrapping_add(u64::from(unit.id.0));
+        neighbours.any_neighbour(unit.position.tile_floor(), salt, unit.id, test)
+    }
+
+    fn following_probe(&self, index: usize) -> Option<impl FnMut(EntityId) -> bool + '_> {
         let unit = &self.units[index].state;
         // Work approaches already have distinct reserved spots. Let their
         // swept local refinement fan out instead of queuing every worker
         // behind the first shared route edge from a stacked spawn/drop-off.
+        // Keep the same predicate for live and dense follower snapshots.
         if self.has_work_task(unit.id) {
-            return false;
+            return None;
         }
-        let Some(order) = self.units[index].order.as_ref() else {
-            return false;
-        };
+        let order = self.units[index].order.as_ref()?;
         if order.origin == order.waypoint {
-            return false;
+            return None;
         }
         let mut direction = None;
-        let is_leader = |id| {
+        let is_leader = move |id| {
             if id == unit.id {
                 return false;
             }
@@ -80,9 +101,7 @@ impl GameWorld {
             let ahead = dx * direction.0 + dy * direction.1;
             ahead > 0 || (ahead == 0 && id < unit.id)
         };
-        let salt = self.tick.0.wrapping_add(u64::from(unit.id.0));
-        self.followers
-            .any_neighbour(unit.position.tile_floor(), salt, unit.id, is_leader)
+        Some(is_leader)
     }
 
     pub(crate) fn advance_spacing(&mut self, changed: &mut Vec<EntityId>) {
@@ -200,7 +219,8 @@ impl GameWorld {
     fn separation_clear(&self, index: usize, at: WorldPosition) -> bool {
         let unit = self.units[index].state;
         let tile = at.tile_floor();
-        if !self.config.valid_ground_position(at)
+        if !self.vassal_position_allowed(unit.id, at)
+            || !self.config.valid_ground_position(at)
             || !self.building_step_clear(unit.position.tile_floor(), tile)
             || !self
                 .unit_step_clear(unit.kind, unit.position.tile_floor(), tile)

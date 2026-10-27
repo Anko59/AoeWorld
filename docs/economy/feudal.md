@@ -105,6 +105,32 @@ to whole hundredths. Existing and future villagers use the researched effects.
 Horse Collar does not replenish existing farms. Town Watch is now correctly
 age-gated too; Loom stays available in Dark Age.
 
+The numeric survey also records each villager profession's `work_rate` and
+`resource_capacity`. The licensed VER 8.9 source has BLAKE3
+`ee111552cc11cfbf535a5e4bc28adb7137ce4b2eee68fd2faf3bac96f9235c9e`.
+Base work rates are wood 0.39, gold 0.38, stone 0.36, berries 0.31, sheep 0.33
+and hunt 0.41 resources/game-second. Hunters carry 35; other land gatherers
+carry 10 before research. Wheelbarrow and Hand Cart multiply the profession's
+capacity, including hunters, without changing its work rate or resetting work.
+The current wire admits food loads through 67, including a hunter stopped while
+carrying; oversized food and non-food loads still fail encode and decode.
+
+Farmers (DAT 259/214) work at 0.53 food/s; FARM (50) produces food at 0.40/s
+and has a 15-food storage capacity.
+The simulation accrues that production lazily in integer credits, including
+untended time and return trips, bounded by 15 and the farm's remaining food. A ready
+farmer waits for production and retains at most one ready work cycle. Rebuilding
+starts a new production clock; harvesting an older farm can use its stored food
+at the farmer's full work rate. Production state participates in replay hashes
+and is removed with its farm. Transport time still changes delivered income.
+
+Stacked Gold Mining/Gold Shaft Mining yields 0.50255 gold/s (30.153/minute of
+uninterrupted work). Converting that exact rational into millionth credits uses
+u64 arithmetic: the former intermediate multiplication overflowed u32. Focused
+tests measure one minute of work for each implemented economy technology and
+100 complete delivery trips for carrying technologies; they retain unfinished
+gather cycles across research.
+
 ## Age-up and art
 
 Feudal upgrades existing and future House HP to 750, camp/Mill HP to 800 and

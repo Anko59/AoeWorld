@@ -312,10 +312,16 @@ class EconomyManager:
         return self.send_to_farm(ctx, villager)
 
     def hunt(self, ctx: Context, villager: Any, animal: Any) -> bool:
-        """Hunt order that gives up on an animal nobody manages to finish."""
+        """Hunt order that gives up on an animal one villager cannot finish.
+
+        The count is per villager: a quarried animal is picked by every idle
+        worker within the same second, so counting orders alone would write
+        off a herd beside the Town Center after a dozen villagers had each
+        been sent at it once."""
         tries = ctx.board.hunt_tries
-        tries[animal.id] = tries.get(animal.id, 0) + 1
-        if tries[animal.id] > HUNT_TRIES:
+        key = (villager.id, animal.id)
+        tries[key] = tries.get(key, 0) + 1
+        if tries[key] > HUNT_TRIES:
             ctx.board.bad_resources.add(animal.id)
             ctx.board.bump("hunts_abandoned")
         ctx.order("hunt", [villager.id], animal.id)
@@ -358,6 +364,9 @@ class EconomyManager:
                 and a.food_remaining > 0
                 and dist(a.tile, ctx.home) <= ctx.config.hunt_distance
                 and a.id not in ctx.board.bad_resources
+                # One hunter per quarry: the rest of a herd, or the wood and
+                # gold behind it, needs workers too.
+                and a.id not in ctx.board.hunters.values()
             ]
             found = nearest(animals, ctx.home)
             if found is not None:

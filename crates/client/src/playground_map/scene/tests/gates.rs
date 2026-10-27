@@ -50,6 +50,7 @@ async fn zoomed_gate_culling_keeps_overlapping_sprite_and_skips_offscreen_sprite
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
     });
     for (open, progress) in [(false, 1000), (true, 1000), (false, 500)] {
         client.village.buildings[0].gate_open = open;

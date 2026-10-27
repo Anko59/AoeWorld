@@ -254,6 +254,7 @@ pub(in super::super) fn update(client: &Client) {
     let details = super::presentation::values(client);
     village_update(&values, map::feedback::connection_label(client), &details);
     super::building_panel::update(client);
+    super::vassal::present(client);
 }
 
 pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {

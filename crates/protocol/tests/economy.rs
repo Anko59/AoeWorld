@@ -1,6 +1,9 @@
 use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect, WorldPosition};
 use aoe_protocol::*;
 
+#[path = "economy/hunting.rs"]
+mod hunting;
+
 fn player() -> GameplayPlayerState {
     GameplayPlayerState {
         player: PlayerId(0),
@@ -40,6 +43,7 @@ fn building() -> GameplayBuildingState {
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
         age: aoe_protocol::Age::Dark,
     }
 }
@@ -67,6 +71,8 @@ fn unit() -> GameplayUnitState {
         death_hunt: None,
         auto_scout: false,
         cargo_count: 0,
+        home_castle: None,
+        managed_by: None,
     }
 }
 fn snapshot() -> GameplayServerMessage {
@@ -161,7 +167,8 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
             kind: UnitKind::FishingShip
         }
     );
-    assert!(decode_gameplay_client(&[5, 9, 3, 22]).is_err());
+    // Vassal is current discriminator 22; 23 is the first unknown unit kind.
+    assert!(decode_gameplay_client(&[5, 9, 3, 23]).is_err());
     assert!(decode_gameplay_client(&[4, 9, 3]).is_err());
     // A build order may name at most MAX_BUILD_GROUP villagers.
     let crowd = GameplayClientMessage::BuildOrder {
@@ -176,17 +183,18 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
 
 #[test]
 fn full_economy_snapshot_and_delta_roundtrip() {
-    // The current unit schema appends a bounded Transport Ship cargo count;
-    // regenerate this snapshot pin for that intentional wire-format change.
+    // The combined bundle appends water bridge spans and Vassal home/control
+    // IDs. This pin is regenerated from the current codec; retain both roundtrips.
     let snapshot = snapshot();
     let bytes = encode_gameplay_server(&snapshot).unwrap();
     assert_eq!(
         bytes,
-        // Combined wire adds cargo_count and the bounded garrison tail.
+        // Includes cargo_count, garrison and the optional bridge span.
         vec![
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 25, 25, 0, 0, 0, 0,
-            0, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 100, 100, 100, 1, 1, 0, 0, 10,
-            10, 18, 18, 1, 232, 7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0, 0, 0, 0, 0, 0
+            0, 0, 0, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 100, 100, 100, 1, 1, 0,
+            0, 10, 10, 18, 18, 1, 232, 7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0, 0, 0, 0,
+            0, 0, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);
@@ -405,7 +413,7 @@ fn zero_load_gatherer_kind_roundtrips_without_terrain_or_inventory() {
 }
 
 #[test]
-fn castle_trainers_round_trip_rallies_but_castles_cannot_produce_units() {
+fn castle_age_rallies_round_trip_but_castles_reject_rallies() {
     for kind in [
         BuildingKind::Monastery,
         BuildingKind::SiegeWorkshop,

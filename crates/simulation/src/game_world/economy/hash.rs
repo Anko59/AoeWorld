@@ -3,6 +3,30 @@ use super::Economy;
 impl Economy {
     pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
         self.hash_garrisons(hash);
+        // Pending rendezvous affect future movement and must participate in replay.
+        if !self.transport_journeys.is_empty() {
+            hash.update(b"shore-rendezvous");
+            hash.update(&(self.transport_journeys.len() as u64).to_le_bytes());
+        }
+        for (ship, job) in &self.transport_journeys {
+            hash.update(&ship.0.to_le_bytes());
+            hash.update(&job.player.0.to_le_bytes());
+            hash.update(&[u8::from(job.unloading), job.passengers.len() as u8]);
+            for id in &job.passengers {
+                hash.update(&id.0.to_le_bytes());
+            }
+            for coord in [job.land.x, job.land.y, job.water.x, job.water.y] {
+                hash.update(&coord.to_le_bytes());
+            }
+        }
+        self.hash_vassal_manager(hash);
+        hash.update(&(self.vassal_homes.len() as u64).to_le_bytes());
+        for (id, home) in &self.vassal_homes {
+            hash.update(&id.0.to_le_bytes());
+            hash.update(&home.castle.0.to_le_bytes());
+            hash.update(&home.center.x.to_le_bytes());
+            hash.update(&home.center.y.to_le_bytes());
+        }
         hash.update(&(self.cargo.len() as u64).to_le_bytes());
         for (ship, ids) in &self.cargo {
             hash.update(&ship.0.to_le_bytes());
@@ -56,10 +80,21 @@ impl Economy {
         hash.update(&(self.buildings.len() as u64).to_le_bytes());
         for building in self.buildings.values() {
             hash.update(&[building.farm_reseeds]);
+            if let Some(span) = building.bridge_span {
+                for c in [span.from.x, span.from.y, span.to.x, span.to.y] {
+                    hash.update(&c.to_le_bytes());
+                }
+            }
             super::training::rally::hash_rally(hash, building.rally_point);
             hash.update(&building.id.0.to_le_bytes());
             hash.update(&building.player.0.to_le_bytes());
             hash.update(&[building.kind as u8, building.age as u8]);
+            if building.kind == super::BuildingKind::Farm {
+                hash.update(&[u8::from(self.farm_production.contains_key(&building.id))]);
+                if let Some(production) = self.farm_production.get(&building.id) {
+                    production.update_hash(hash);
+                }
+            }
             for coord in [
                 building.footprint.min.x,
                 building.footprint.min.y,
@@ -114,7 +149,7 @@ impl Economy {
             }
             hash.update(&task.tile.x.to_le_bytes());
             hash.update(&task.tile.y.to_le_bytes());
-            hash.update(&[task.kind as u8, task.phase as u8]);
+            hash.update(&[task.kind as u8, task.phase as u8, task.approach_failures]);
             hash.update(&task.credits.to_le_bytes());
             match task.dropoff {
                 Some(id) => {

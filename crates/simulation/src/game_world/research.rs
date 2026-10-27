@@ -16,7 +16,7 @@ pub use content::browser_content;
 pub use content::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
 
 pub use effects::villager_capacity;
-pub(crate) use effects::villager_speed_percent;
+pub(crate) use effects::{carry_capacity, villager_speed_percent};
 pub use table::{Age, FEUDAL_BUILDINGS, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules};
 
 /// The technology a building is researching, in game ticks.
@@ -76,8 +76,9 @@ impl GameWorld {
         let busy = site.research.is_some() || !site.training_queue.is_empty();
         let duplicate = self
             .economy
-            .buildings
-            .values()
+            .active_research
+            .iter()
+            .filter_map(|id| self.economy.buildings.get(id))
             .any(|b| b.player == player && b.research.is_some_and(|r| r.tech == tech));
         if busy || duplicate {
             return Err(EconomyError::ResearchBusy);
@@ -110,6 +111,7 @@ impl GameWorld {
                 progress_ticks: 0,
                 total_ticks,
             });
+            self.economy.active_research.insert(building);
         }
         Ok(())
     }
@@ -132,6 +134,7 @@ impl GameWorld {
         let Some(entry) = site.research.take() else {
             return Ok(());
         };
+        self.economy.active_research.remove(&building);
         let refund = entry.tech.rules().cost;
         if let Some(state) = self.economy.players.get_mut(&player) {
             let stock = &mut state.stockpile;
@@ -165,8 +168,21 @@ impl GameWorld {
 
     /// Advance every research by one tick and apply those that finish.
     pub(super) fn advance_research(&mut self, changed: &mut Vec<EntityId>) {
+        #[cfg(test)]
+        {
+            self.economy.tick_work.research_buildings = self.economy.active_research.len();
+        }
         let mut finished = Vec::new();
-        for (id, building) in &mut self.economy.buildings {
+        let active = self
+            .economy
+            .active_research
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        for id in active {
+            let Some(building) = self.economy.buildings.get_mut(&id) else {
+                continue;
+            };
             let Some(entry) = &mut building.research else {
                 continue;
             };
@@ -175,8 +191,9 @@ impl GameWorld {
                 .saturating_add(1)
                 .min(entry.total_ticks);
             if entry.progress_ticks == entry.total_ticks {
-                finished.push((*id, building.player, entry.tech));
+                finished.push((id, building.player, entry.tech));
                 building.research = None;
+                self.economy.active_research.remove(&id);
             }
         }
         for (_, player, tech) in finished {

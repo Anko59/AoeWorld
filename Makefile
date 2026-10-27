@@ -356,3 +356,10 @@ repo-policy-check:
 .PHONY: cargo-fetch
 cargo-fetch:
 	@$(DOCKER_RUN) cargo fetch --locked --config net.offline=false
+
+# Resolve intentional dependency edits; checks continue to require --locked.
+CARGO_PIN_PACKAGE ?=
+CARGO_PIN_VERSION ?=
+.PHONY: cargo-pin
+cargo-pin:
+	@$(DOCKER_RUN) cargo update --package '$(CARGO_PIN_PACKAGE)' --precise '$(CARGO_PIN_VERSION)' --config net.offline=false

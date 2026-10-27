@@ -15,6 +15,7 @@ fn movement_error_code(error: GameWorldError) -> u8 {
         GameWorldError::StartSearchLimit => 9,
         GameWorldError::EntityIdExhausted => 10,
         GameWorldError::InvalidTerrain => 11,
+        GameWorldError::VassalLeash => 12,
         GameWorldError::Environment(error) => {
             20 + match error {
                 aoe_map::EnvironmentPageError::Missing => 0,

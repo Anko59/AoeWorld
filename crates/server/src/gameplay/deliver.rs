@@ -2,7 +2,7 @@
 //! This is the only fan-out step that holds the session lock.
 use super::Session;
 use super::fanout::{AI_HEARTBEAT_TICKS, Buildings, Built, SessionBuild, ViewerState};
-use aoe_core::EntityId;
+use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{FogState, GameplayServerMessage, GameplayUnitState};
 use std::collections::{BTreeMap, BTreeSet};
 use tokio::sync::mpsc::error::TrySendError;
@@ -15,7 +15,12 @@ struct UnitDiff {
     same_ids: bool,
 }
 
-fn diff_units(resident: &[GameplayUnitState], current: &[u32], built: &Built) -> UnitDiff {
+fn diff_units(
+    resident: &[GameplayUnitState],
+    current: &[u32],
+    built: &Built,
+    viewer: PlayerId,
+) -> UnitDiff {
     let mut diff = UnitDiff {
         changed: Vec::new(),
         removals: Vec::new(),
@@ -23,16 +28,16 @@ fn diff_units(resident: &[GameplayUnitState], current: &[u32], built: &Built) ->
     };
     let mut old = resident.iter().peekable();
     for slot in current {
-        let now = built.frame.state(*slot);
+        let now = built.frame.state(*slot).for_viewer(viewer);
         while let Some(before) = old.next_if(|before| before.id < now.id) {
             diff.removals.push(before.id);
             diff.same_ids = false;
         }
         match old.next_if(|before| before.id == now.id) {
-            Some(before) if before == now => {}
-            Some(_) => diff.changed.push(*now),
+            Some(before) if before == &now => {}
+            Some(_) => diff.changed.push(now),
             None => {
-                diff.changed.push(*now);
+                diff.changed.push(now);
                 diff.same_ids = false;
             }
         }
@@ -49,6 +54,7 @@ fn patch_units(
     diff: &UnitDiff,
     current: &[u32],
     built: &Built,
+    viewer: PlayerId,
 ) {
     if diff.same_ids {
         for unit in &diff.changed {
@@ -59,7 +65,7 @@ fn patch_units(
     } else {
         *resident = current
             .iter()
-            .map(|slot| *built.frame.state(*slot))
+            .map(|slot| built.frame.state(*slot).for_viewer(viewer))
             .collect();
     }
 }
@@ -169,7 +175,7 @@ fn deliver_tick(
     {
         return false;
     }
-    let diff = diff_units(&session.resident, slots, built);
+    let diff = diff_units(&session.resident, slots, built, session.viewer);
     let changed_players = viewer
         .players
         .iter()
@@ -249,7 +255,7 @@ fn deliver_tick(
     if !send(session, message, failed, id) {
         return false;
     }
-    patch_units(&mut session.resident, &diff, slots, built);
+    patch_units(&mut session.resident, &diff, slots, built, session.viewer);
     if session.resident_players != viewer.players {
         session.resident_players = viewer.players.clone();
     }

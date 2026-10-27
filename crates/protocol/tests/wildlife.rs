@@ -197,6 +197,8 @@ fn hunting_tasks_require_villagers_and_food_loads() {
         death_hunt: None,
         auto_scout: false,
         cargo_count: 0,
+        home_castle: None,
+        managed_by: None,
     };
     for invalid in [
         GameplayUnitState {

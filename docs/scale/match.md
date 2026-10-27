@@ -47,10 +47,10 @@ an original-art pack (`AOE_ASSET_PACK=local-assets/packs/<hash>`).
 
 `POST /match` accepts (see [the AI SDK](../ai-sdk.md)):
 
-* `population_cap` (5 to 5,000, default 200, the AoE rule): the most population
+* `population_cap` (5 to 5,000, default 1,000): the most population
   any player reaches however many houses stand. World capacities are sized
-  from the seats and this cap ([capacities](capacity.md)): 1,024 buildings per
-  seat (more above cap 200) and one worker per unit of population.
+  from the seats and this cap ([capacities](capacity.md)): 5,120 buildings per
+  seat at cap 1,000 and one worker per unit of population.
   100 players x 1,000 = 100,000 units.
 * `start_units: {"villagers": n, "militia": m}`: the scenario hook. After the
   standard start kit (Town Center, villagers, scout) every player gets `n`

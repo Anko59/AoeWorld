@@ -226,8 +226,8 @@ contract locally when supplied the manifest and job results.
 
 **Sharded browser suite (#388).** The Playwright suite ran on one serial worker
 and took 19.5 of 20 minutes on the 4-core runner, behind `browser-check` and
-`test-wasm` in the same job. CI now runs it as the `e2e` job, a matrix of three
-parallel jobs, `AOE_E2E_SHARD=1/3`, `2/3` and `3/3`, beside the `browser` job
+`test-wasm` in the same job. CI now runs it as the `e2e` job, a matrix of four
+parallel jobs, `AOE_E2E_SHARD=1/4` to `4/4`, beside the `browser` job
 (`browser-check`, `test-wasm`). The registry's `e2e` job holds `test-e2e`, so it
 is selected exactly when that gate is, and `required` takes the matrix result,
 which is success only when every shard passed. Each shard builds its own server

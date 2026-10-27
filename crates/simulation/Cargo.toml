@@ -22,7 +22,9 @@ rayon = "1.12"
 
 [dev-dependencies]
 criterion = "=0.8.2"
-gungraun = "=0.19.4"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+gungraun = { version = "=0.19.4", features = ["client_requests"] }
 
 [[bench]]
 name = "instructions"
@@ -30,4 +32,8 @@ harness = false
 
 [[bench]]
 name = "timings"
+harness = false
+
+[[bench]]
+name = "late_game_instructions"
 harness = false

@@ -1,7 +1,7 @@
 //! Trial DAT measurements plus current DE overrides (see docs/fishing.md).
 use crate::{BuildingKind, EconomyError, GameWorld, GameWorldError, Terrain, UnitKind};
 use aoe_core::{TileCoord, TileRect};
-use aoe_map::{EnvironmentPageError, GroundMaterial, ObjectKind, WaterKind};
+use aoe_map::{EnvironmentPageError, ObjectKind, WaterKind};
 pub(super) mod navigation;
 
 impl GameWorld {
@@ -82,7 +82,7 @@ impl GameWorld {
                     .tile_at_with_cancel(tile, &|| false)
                     .map_err(GameWorldError::Environment)?
                     .ok_or(EconomyError::InvalidFootprint)?;
-                let wet = navigable(sample.water, sample.material);
+                let wet = navigable(sample.water);
                 if overlay.blocks_tile(tile)
                     || (!wet && !sample.passable)
                     || generator
@@ -120,9 +120,9 @@ impl GameWorld {
         let Some((sample, node)) = generator.tile_and_node_with_cancel(tile, cancelled)? else {
             return Ok(false);
         };
-        Ok(navigable(sample.water, sample.material)
+        Ok(navigable(sample.water)
             && !overlay.blocks_tile(tile)
-            && overlay.bridge_axis(tile).is_none()
+            && overlay.bridge_connections(tile).is_none()
             && node.is_none_or(|n| !overlay.blocks_node(n)))
     }
 
@@ -132,6 +132,23 @@ impl GameWorld {
         } else {
             self.villager_capacity(unit.player)
                 + u16::from(farmer && self.has_researched(unit.player, crate::Tech::HeavyPlow))
+        }
+    }
+
+    pub(super) fn gather_task_capacity(
+        &self,
+        unit: &crate::GameUnit,
+        task: &super::GatherTask,
+    ) -> u16 {
+        if matches!(
+            task.carcass_kind,
+            Some(crate::AnimalKind::Deer | crate::AnimalKind::Boar)
+        ) {
+            let researched = self.player_economy(unit.player).map_or(0, |p| p.researched);
+            // DAT VMHUN/VFHUN carry 35, rather than the other professions' 10.
+            crate::game_world::research::carry_capacity(researched, 35)
+        } else {
+            self.gather_capacity(unit, task.farm.is_some())
         }
     }
 
@@ -146,7 +163,6 @@ impl GameWorld {
     }
 }
 
-pub(super) fn navigable(water: WaterKind, material: GroundMaterial) -> bool {
-    matches!(water, WaterKind::Ocean | WaterKind::Lake | WaterKind::River)
-        && material != GroundMaterial::Ford
+pub(super) fn navigable(water: WaterKind) -> bool {
+    water != WaterKind::None
 }

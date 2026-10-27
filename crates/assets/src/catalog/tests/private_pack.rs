@@ -301,8 +301,9 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        2590,
-        // Castle adds 365 sampled cells; the five naval bodies add 25 more.
+        2625,
+        // Castle adds 365 sampled cells; navy adds 25 and King poses add 35.
+        // This current-content count changes deliberately; fixed atlas caps do not.
         "military, Castle, projectile and farmer cells included"
     );
     assert_eq!(

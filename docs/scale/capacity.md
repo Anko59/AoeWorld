@@ -1,10 +1,10 @@
 # World capacities at 100 players
 
 Every fixed bound in the simulation, map, server and protocol that a match of
-100 seats at population cap 200 (about 20,000 units, France 16,000 x 16,000
+100 seats at population cap 1000 (about 100,000 units, France 16,000 x 16,000
 tiles) can reach in play, whether it is per world or per seat, and what happens
 when it is reached. Sizes are set in `WorldLimits::for_match(seats, population)`
-(`crates/simulation/src/game_world/economy.rs`); the match creation passes the
+(`crates/simulation/src/game_world/economy/limits/mod.rs`); the match creation passes the
 slot count and the population cap.
 
 ## The playtest failure
@@ -40,13 +40,13 @@ limit (it is not a bad site) and stops placing buildings for
 
 ## Simulation and map
 
-"Reached?" is for 100 seats, cap 200, several hours, with the new sizes.
+"Reached?" describes storage headroom for 100 seats, cap 1000; it is not a runtime qualification.
 
 | Capacity | Before | Now | Scope | When reached | Reached? |
 |---|---|---|---|---|---|
-| Buildings (each wall segment is one) | 4,096 | 1,024 per seat (x cap/200, at most 8,192 per seat): 102,400 | world, sized per seat | `Capacity` on build, wall, Town Center | no: a walled Feudal village is ~135 |
+| Buildings (each wall segment is one) | 4,096 | 1,024 x cap/200 per seat (at most 8,192): 512,000 at cap 1000 | world, sized per seat | `Capacity` on build, wall, Town Center | no: a walled Feudal village is ~135 |
 | Building collision tiles (`MAX_OBSTACLE_TILES`) | 4,096 | 2^24; buildings x 16 bound it | world | `Capacity` on build; a gate stays open | no |
-| Gatherers | 8,192 | seats x population: 20,000 | world | `Capacity` on gather/farm | no: one per unit |
+| Gatherers | 8,192 | seats x population: 100,000 | world | `Capacity` on gather/farm | no: one per unit |
 | Builders | 2,048 | seats x population | world | `Capacity` | no |
 | Hunters | 2,048 | seats x population | world | `Capacity` | no |
 | Animals | 4,096 | 32 per seat: 3,200 | world | `Capacity`; start kit skips | no: 15 per village, no respawn |
@@ -89,6 +89,22 @@ the existing 65,536-entry wire bound. The browser assembles a complete snapshot
 atomically, and the server reserves all pages before queue publication. These
 are capacity/correctness bounds, not long-session performance qualification.
 
+## Population 1000
+
+The shipped default is 1,000 per seat. Houses still support five and Castles
+twenty, capped by the match ceiling. Gatherers, builders, hunters and projectiles
+scale to 100,000 at 100 seats; buildings retain the 200-population provisioning
+ratio (5,120 per seat), rather than accidentally dividing by the new default.
+The 2^24 collision-tile bound covers 128 seats at the 8,192-building maximum.
+The 5,000 optional match ceiling and existing bounded wire deliveries remain.
+Own units (at most 1,000 under the default rules) fit the 16,384-unit message
+bound. A camera containing more than that many foreign units still receives
+the explicit 413 refusal; this cap change does not qualify such crowded views.
+
+The capacity tests exercise housing through 1,000 and reservation of the last
+slot, plus the 100-seat storage arithmetic. The historical runs below used cap
+200; they do not demonstrate 100,000-unit RTS performance.
+
 ## Per-tick and per-order cost
 
 The capacities are bounds, not allocations: memory and tick cost follow what is
@@ -96,6 +112,10 @@ actually built. Whole-world scans removed on the order path: housing on every
 placement, the build requirement check, and the builder and hunter capacity
 checks now read one player's buildings (the per-player, per-kind index) or the
 order's own group. `advance_training` visits only buildings with a queue.
+Training spawn occupancy and placement occupancy now use spatial buckets and
+the existing full-footprint building tile index, including Farms and TC arches.
+The Vassal phase has [fixed admission budgets](../economy/vassal.md), separate
+from the ordinary shared route budgets.
 Remaining O(buildings) per-tick scans: research, gates, the watched-building
 memory refresh. In a debug build 13,600 buildings and 31,000 collision tiles
 advance 20 ticks in about 120 ms; the long match below gives release numbers.

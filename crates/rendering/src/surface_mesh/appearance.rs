@@ -270,7 +270,7 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
 }
 
 /// Frames and topology: terrain groups 0–11, grass fallback 12,
-/// optional water depth sheets 13–15, and the DAT foundation sheet 16.
+/// optional water/ice sheets 13–15, DAT foundation 16, and marsh shallows 17.
 pub(crate) fn terrain_group(
     art: &GameArt,
     material: u8,
@@ -281,18 +281,19 @@ pub(crate) fn terrain_group(
     // Snow and rock own distinct native sheets; ice is an optional water sheet.
     // Missing forest art uses dirt uniformly: no 8×8 parity substitution.
     // Water classes: the light shallow sheet is terrain group 5; medium,
-    // deep use their optional sheets; fords always use the light shallow
-    // sheet. The optional marsh sheet's green flecks obscure the crossing.
+    // deep and walkable marsh use their optional sheets. AoK terrain 4
+    // (Shallows / g_sha, SLP 15014) distinguishes water that can be waded.
     let depth = match material {
         5 => Some(0),
         11 => Some(1),
         8 => Some(2),
+        12 => Some(3),
         _ => None,
     }
     .filter(|slot: &usize| !art.water_depth[*slot].0.is_empty());
     if let Some(slot) = depth {
         let sheet = &art.water_depth[slot];
-        return Some((13 + slot, &sheet.0, sheet.1));
+        return Some((if slot == 3 { 17 } else { 13 + slot }, &sheet.0, sheet.1));
     }
     let material = usize::from(match material {
         7 if !art.terrain[11].is_empty() => 11,

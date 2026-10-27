@@ -9,6 +9,8 @@ use aoe_protocol::{
 mod dock;
 #[path = "land.rs"]
 mod land;
+#[path = "vassal.rs"]
+mod vassal;
 
 const ME: PlayerId = PlayerId(3);
 const FOE: PlayerId = PlayerId(4);
@@ -79,6 +81,8 @@ fn unit(id: u32, player: PlayerId, kind: UnitKind) -> GameplayUnitState {
         death_hunt: None,
         auto_scout: false,
         cargo_count: 0,
+        home_castle: None,
+        managed_by: None,
     }
 }
 
@@ -106,6 +110,7 @@ fn building(id: u32, player: PlayerId, state: ConstructionState) -> GameplayBuil
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
     }
 }
 

@@ -93,6 +93,13 @@ enum Command {
     FuzzSmoke,
     FuzzNightly,
     PerfSmoke,
+    /// Three late-game profiles; optionally check replays and collect instructions in the same slot.
+    PerfLateGame {
+        #[arg(long)]
+        check: bool,
+        #[arg(long)]
+        instructions: bool,
+    },
     PerfCi,
     PerfFull,
     PerfPressure,

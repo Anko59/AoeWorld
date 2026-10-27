@@ -141,3 +141,15 @@ fn replacing_match_clears_old_perf_window_and_preserves_cursor_and_misses() {
     );
     assert!(stats.page(page.next).ticks.is_empty());
 }
+
+#[test]
+fn direct_benchmark_reads_the_real_server_phases_once_per_tick() {
+    let probe = TickProbe::default();
+    probe.phase("movement", Duration::from_micros(31));
+    probe.phase("session_views", Duration::from_micros(7));
+    let first = probe.take_phase_micros();
+    assert_eq!(first["movement"], 31);
+    assert_eq!(first["session_views"], 7);
+    assert_eq!(first.len(), 30);
+    assert!(probe.take_phase_micros().values().all(|value| *value == 0));
+}

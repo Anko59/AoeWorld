@@ -59,6 +59,8 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
         world.hunting_target(unit.id),
     );
     state.cargo_count = world.transport_cargo(unit.id).len() as u8;
+    state.home_castle = world.vassal_castle(unit.id);
+    state.managed_by = world.vassal_controller(unit.id);
     state
 }
 /// A unit as the wire sees it, given the two facts only the economy knows.
@@ -98,6 +100,8 @@ pub(super) fn wire_unit(
         hunt_target,
         auto_scout: unit.auto_scout,
         cargo_count: 0,
+        home_castle: None,
+        managed_by: None,
         death_hunt: unit.death_hunt.map(|kind| match kind {
             aoe_simulation::AnimalKind::Sheep => aoe_protocol::AnimalKind::Sheep,
             aoe_simulation::AnimalKind::Deer => aoe_protocol::AnimalKind::Deer,
@@ -226,6 +230,7 @@ pub(super) fn wire_building_state(
         player: state.player,
         kind: wire_building(state.kind),
         footprint: state.footprint,
+        bridge_span: state.bridge_span,
         construction: match state.state {
             aoe_simulation::ConstructionState::UnderConstruction => {
                 ConstructionState::UnderConstruction
@@ -306,6 +311,7 @@ impl GameplayService {
                         aoe_simulation::TickPhase::Construction => "construction",
                         aoe_simulation::TickPhase::Gathering => "gathering",
                         aoe_simulation::TickPhase::ResearchTraining => "research_training",
+                        aoe_simulation::TickPhase::VassalEconomy => "vassal_economy",
                         aoe_simulation::TickPhase::BuildingMemory => "building_memory",
                         aoe_simulation::TickPhase::Changed => "changed",
                     };

@@ -180,7 +180,7 @@ impl World {
 
     /// Whether ground units can stand on `tile`; `None` until its map chunk loaded.
     pub fn passable(&self, tile: TileCoord) -> Option<bool> {
-        if self.bridges.bridge_axis(tile).is_some() {
+        if self.bridges.bridge_connections(tile).is_some() {
             Some(true)
         } else {
             self.catalog.passable(tile)

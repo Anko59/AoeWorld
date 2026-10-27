@@ -41,6 +41,20 @@ impl GameWorld {
     }
 
     pub(super) fn advance_carcasses(&mut self) {
+        if self
+            .wildlife
+            .due
+            .first()
+            .is_none_or(|(due, _)| *due > self.tick.0)
+        {
+            return;
+        }
+        let hunted = self
+            .wildlife
+            .hunts
+            .values()
+            .map(|job| job.animal)
+            .collect::<std::collections::BTreeSet<_>>();
         while let Some(&(due, id)) = self.wildlife.due.first() {
             if due > self.tick.0 {
                 break;
@@ -50,9 +64,9 @@ impl GameWorld {
             let attended = self
                 .economy
                 .gatherers
-                .values()
-                .any(|t| t.animal == Some(id))
-                || self.wildlife.hunts.values().any(|t| t.animal == id);
+                .count_target(crate::game_world::economy::WorkTarget::Animal(id))
+                > 0
+                || hunted.contains(&id);
             let Some(a) = self.wildlife.animals.get_mut(&id) else {
                 continue;
             };

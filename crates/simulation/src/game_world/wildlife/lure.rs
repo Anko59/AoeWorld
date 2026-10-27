@@ -29,8 +29,13 @@ impl GameWorld {
                     && self.issue_task_move(id, to).is_ok()
                 {
                     job.stage = HuntStage::Lead(to);
-                    // No arrival yet: the stall deadline starts on arrival.
-                    job.repath_tick = u64::MAX;
+                    // The walking budget: ten seconds plus three per tile.
+                    // Arrival shortens it to the one-second stall wait.
+                    let tiles = (distance(u.position, to) / radius(1)).unsigned_abs();
+                    job.repath_tick = self
+                        .tick
+                        .0
+                        .saturating_add(u64::from(self.config.tick_hz) * (10 + 3 * tiles));
                     // The lead route has not moved yet. Keep its walk pose
                     // until the movement phase starts it, rather than showing
                     // a strike with the stale approach facing for one tick.
@@ -52,8 +57,21 @@ impl GameWorld {
                 {
                     self.units[index].state.face_towards(a.position);
                 }
-                if arrived && job.repath_tick == u64::MAX {
-                    job.repath_tick = self.tick.0.saturating_add(u64::from(self.config.tick_hz));
+                // A lead that never reaches its drop-off (a crowd or an
+                // unreachable goal) would hold the shepherd for ever; past its
+                // walking budget it slaughters the sheep where it stands.
+                if !arrived && self.tick.0 >= job.repath_tick {
+                    self.stop_movement(index);
+                    self.units[index].state.task = UnitTask::Shepherding;
+                    job.stage = HuntStage::Kill;
+                    job.repath_tick = self.tick.0;
+                    self.follow(job.animal, None);
+                    return true;
+                }
+                if arrived {
+                    job.repath_tick = job
+                        .repath_tick
+                        .min(self.tick.0.saturating_add(u64::from(self.config.tick_hz)));
                 }
                 // At the drop-off the sheep is slaughtered once it has caught
                 // up, or where it stalled behind an obstacle.

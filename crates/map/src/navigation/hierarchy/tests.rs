@@ -138,6 +138,7 @@ fn portals_of(count: usize) -> Arc<ChunkPortals> {
         labels: super::grid::Labels::Empty,
         components: 0,
         links: Vec::new(),
+        packed: None,
     })
 }
 
@@ -410,3 +411,4 @@ fn opening_ground_during_an_abstract_search_keeps_its_portal_snapshot_valid() {
         "{outcome:?}"
     );
 }
+mod mapped;

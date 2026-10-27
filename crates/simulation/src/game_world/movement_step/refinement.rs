@@ -51,6 +51,7 @@ impl GameWorld {
             }
             if let Ok(point) = WorldPosition::from_tile_center(tile)
                 && !self.position_occupied(index, point, stationary_only)
+                && (!stationary_only || !self.work_spot_busy(tile, self.units[index].state.id))
             {
                 goal = point;
                 pops = n + 1;
@@ -180,6 +181,9 @@ impl GameWorld {
                 !WorldPosition::from_tile_center(point).is_ok_and(|p| {
                     self.config.valid_ground_position(p)
                         && !self.position_occupied(index, p, stationary_only)
+                        // A work approach must route around the other workers'
+                        // reserved arrivals before they become stationary walls.
+                        && (!stationary_only || !self.work_spot_busy(point, unit.id))
                 })
             })
         };

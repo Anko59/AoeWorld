@@ -27,7 +27,7 @@ impl GameWorld {
             if self.embarked(id) {
                 return Err(EconomyError::InvalidTarget);
             }
-            if unit.kind == UnitKind::Villager || unit.kind.is_naval() {
+            if matches!(unit.kind, UnitKind::Villager | UnitKind::Vassal) || unit.kind.is_naval() {
                 return Err(EconomyError::WrongUnitKind);
             }
             x += i64::from(unit.position.x);

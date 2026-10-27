@@ -276,3 +276,24 @@ pub fn age_sprite_slot(
         sprite_slot(kind, progress, rubble)
     }
 }
+
+/// Share cap ordering between the ghost and the completed native sprite deck.
+pub fn bridge_piece(tiles: &[TileCoord], index: usize) -> aoe_rendering::SceneUnitKind {
+    let Some((&first, &last)) = tiles.first().zip(tiles.last()) else {
+        return aoe_rendering::SceneUnitKind::bridge(true, 1);
+    };
+    let along_x = first.x.abs_diff(last.x) >= first.y.abs_diff(last.y);
+    let reverse = if along_x {
+        first.x > last.x
+    } else {
+        first.y > last.y
+    };
+    let piece = if index == 0 {
+        0
+    } else if index + 1 == tiles.len() {
+        2
+    } else {
+        1
+    };
+    aoe_rendering::SceneUnitKind::bridge(along_x, if reverse { 2 - piece } else { piece })
+}

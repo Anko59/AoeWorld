@@ -53,6 +53,7 @@ mirror!(
         DemolitionShip,
         TransportShip,
         WarGalley,
+        Vassal,
     ]
 );
 mirror!(
@@ -196,7 +197,10 @@ mirror!(
         RejectedOrderTooLarge,
         RejectedUnexploredPlacement,
         RejectedRequiresCastleAge,
-        RejectedGarrisonFull
+        RejectedGarrisonFull,
+        RejectedVassalExists,
+        RejectedVassalLeash,
+        RejectedVassalHome
     ]
 );
 

@@ -69,6 +69,10 @@ fn a_full_worksite_stops_an_obstructed_approach_without_endless_sidestep_attempt
     if let Terrain::Map { generator, overlay } = &mut w.terrain {
         overlay.insert_starting_resource(generator, node).unwrap();
     }
+    // Work-slot admission refuses a site whose perimeter is already full, so
+    // the crowd closes it after the approach was admitted.
+    let worker = w.spawn_villager(PlayerId(0), at(35, 30)).unwrap();
+    w.issue_gather(PlayerId(0), worker, node.id).unwrap();
     for (dx, dy) in [
         (-1, -1),
         (0, -1),
@@ -81,8 +85,6 @@ fn a_full_worksite_stops_an_obstructed_approach_without_endless_sidestep_attempt
     ] {
         w.spawn_villager(PlayerId(0), at(40 + dx, 30 + dy)).unwrap();
     }
-    let worker = w.spawn_villager(PlayerId(0), at(35, 30)).unwrap();
-    w.issue_gather(PlayerId(0), worker, node.id).unwrap();
     for _ in 0..160 {
         w.advance_movement();
     }

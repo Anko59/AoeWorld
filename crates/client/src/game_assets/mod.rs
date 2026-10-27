@@ -180,9 +180,13 @@ const TERRAIN_ROLES: [AssetRole; 12] = [
     AssetRole::Snow,
 ];
 
-/// Optional water sheets in renderer order: medium, deep, frozen.
-const WATER_DEPTH_ROLES: [AssetRole; 3] =
-    [AssetRole::WaterMedium, AssetRole::WaterDeep, AssetRole::Ice];
+/// Optional water sheets in renderer order: medium, deep, frozen, wadeable marsh.
+const WATER_DEPTH_ROLES: [AssetRole; 4] = [
+    AssetRole::WaterMedium,
+    AssetRole::WaterDeep,
+    AssetRole::Ice,
+    AssetRole::Shallows,
+];
 
 fn renderer_topology(topology: TerrainFrameTopology) -> TerrainTopology {
     match topology {
@@ -275,7 +279,7 @@ pub async fn load(sink: &mut dyn AtlasSink) -> Result<(GameArt, [u8; 3]), JsValu
     let mut selected = Vec::new();
     let mut domains = Vec::new();
     let mut terrain_topology = [None; 12];
-    let mut depth_topology = [None; 3];
+    let mut depth_topology = [None; 4];
     // Catalog roles are bounded, not a dynamic startup search tree. The browser
     // oracle covers every selected role.
     let mut ranges: RoleRanges = std::array::from_fn(|_| None);

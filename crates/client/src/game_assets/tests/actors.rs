@@ -92,3 +92,52 @@ fn repeated_scout_cells_are_static_but_changed_pixels_and_hotspots_keep_the_loop
         "hotspot motion is visible animation even with identical pixels"
     );
 }
+
+#[wasm_bindgen_test]
+fn vassal_king_groups_select_bounded_native_facings_and_refuse_partial_art() {
+    let poses = [
+        Pose::KingStand,
+        Pose::KingWalk,
+        Pose::KingDie,
+        Pose::KingDecay,
+    ];
+    let mut value = manifest::fixture();
+    let template = value["frames"][0].clone();
+    value["frames"] = poses
+        .into_iter()
+        .flat_map(|pose| {
+            let source = SPRITES[pose as usize];
+            let template = template.clone();
+            (0..source.frames()).map(move |frame| {
+                let mut cell = template.clone();
+                cell["source"] = source.manifest_source().into();
+                cell["frame"] = frame.into();
+                cell
+            })
+        })
+        .collect::<Vec<_>>()
+        .into();
+    let manifest: Manifest = serde_json::from_value(value.clone()).unwrap();
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
+    let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
+    assert_eq!(selected.len(), 35);
+    for pose in poses {
+        let source = SPRITES[pose as usize];
+        let range = ranges[pose as usize].clone().unwrap();
+        let actual: Vec<_> = selected[range]
+            .iter()
+            .map(|&i| manifest.frames[i].frame)
+            .collect();
+        let expected: Vec<_> = (0..5)
+            .flat_map(|row| {
+                (0..usize::from(source.stride))
+                    .step_by(usize::from(source.sample_step()))
+                    .map(move |phase| source.source_frame(row, phase) as u32)
+            })
+            .collect();
+        assert_eq!(actual, expected);
+    }
+    value["frames"].as_array_mut().unwrap().pop();
+    let partial: Manifest = serde_json::from_value(value).unwrap();
+    assert!(actors::select(&partial, &mut Vec::new(), &mut Vec::new()).is_err());
+}

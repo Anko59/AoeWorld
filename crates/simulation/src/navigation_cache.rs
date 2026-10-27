@@ -1,6 +1,9 @@
 use aoe_core::{TileCoord, TileRect};
 use aoe_map::MovementOutcome;
-use std::{collections::BTreeMap, mem::size_of};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    mem::size_of,
+};
 
 pub(crate) const MAX_NAVIGATION_CACHE_BYTES: usize = 128 * 1024 * 1024;
 /// Entries retained at once: a ground change scans them all, so the count,
@@ -11,7 +14,7 @@ pub(crate) const MAX_NAVIGATION_CACHE_ENTRIES: usize = 8_192;
 pub struct NavigationCacheUsage {
     pub entries: usize,
     /// Logical bytes charged for cached outcomes. This includes the modeled
-    /// entry and path payload but excludes allocator and BTreeMap overhead.
+    /// entry, recency key and path payload but excludes allocator/tree overhead.
     pub retained_bytes: usize,
     /// Logical payload budget; this is not a hard resident-process cap.
     pub limit_bytes: usize,
@@ -35,8 +38,8 @@ struct Entry {
 }
 
 /// Bounded, non-canonical cache of already-planned map segments. Its byte
-/// limit accounts for logical entry and path payload bytes; allocator and
-/// BTreeMap metadata remain outside the reported budget. An entry records the
+/// limit accounts for logical entry, recency key and path payload bytes;
+/// allocator and tree metadata remain outside the reported budget. An entry records the
 /// planner work its outcome cost and answers only a caller that could afford
 /// that work; the caller charges it, so a hit and a fresh search leave the
 /// same canonical planning budget. A ground change drops only the entries
@@ -44,7 +47,11 @@ struct Entry {
 /// the same ground and prove the same outcome.
 #[derive(Debug)]
 pub(crate) struct NavigationCache {
+    #[cfg(test)]
+    eviction_candidates: usize,
     entries: BTreeMap<Key, Entry>,
+    /// Same ordering as the old eviction scan, including saturated-clock ties.
+    recency: BTreeSet<(u64, Key)>,
     retained_bytes: usize,
     clock: u64,
     limit_bytes: usize,
@@ -59,7 +66,10 @@ impl Default for NavigationCache {
 impl NavigationCache {
     fn with_limit(limit_bytes: usize) -> Self {
         Self {
+            #[cfg(test)]
+            eviction_candidates: 0,
             entries: BTreeMap::new(),
+            recency: BTreeSet::new(),
             retained_bytes: 0,
             clock: 0,
             limit_bytes,
@@ -80,7 +90,13 @@ impl NavigationCache {
             })
             .filter(|entry| entry.work <= budget)
             .map(|entry| {
+                let key = Key {
+                    origin,
+                    destination,
+                };
+                self.recency.remove(&(entry.last_used, key));
                 entry.last_used = self.clock;
+                self.recency.insert((entry.last_used, key));
                 (entry.outcome.clone(), entry.work)
             })
     }
@@ -106,17 +122,17 @@ impl NavigationCache {
         }
         self.clock = self.clock.saturating_add(1);
         if let Some(previous) = self.entries.remove(&key) {
+            self.recency.remove(&(previous.last_used, key));
             self.retained_bytes = self.retained_bytes.saturating_sub(previous.bytes);
         }
         while self.retained_bytes.saturating_add(bytes) > self.limit_bytes
             || self.entries.len() >= MAX_NAVIGATION_CACHE_ENTRIES
         {
-            let Some(eviction) = self
-                .entries
-                .iter()
-                .min_by_key(|(key, entry)| (entry.last_used, **key))
-                .map(|(key, _)| *key)
-            else {
+            #[cfg(test)]
+            {
+                self.eviction_candidates += 1;
+            }
+            let Some(eviction) = self.recency.pop_first().map(|(_, key)| key) else {
                 break;
             };
             if let Some(removed) = self.entries.remove(&eviction) {
@@ -124,6 +140,7 @@ impl NavigationCache {
             }
         }
         self.retained_bytes = self.retained_bytes.saturating_add(bytes);
+        self.recency.insert((self.clock, key));
         self.entries.insert(
             key,
             Entry {
@@ -145,10 +162,11 @@ impl NavigationCache {
                 && changed.min.y < area.max.y
         };
         let mut freed = 0;
-        self.entries.retain(|_, entry| {
+        self.entries.retain(|key, entry| {
             let keep = !overlaps(&entry.area);
             if !keep {
                 freed += entry.bytes;
+                self.recency.remove(&(entry.last_used, *key));
             }
             keep
         });
@@ -157,6 +175,7 @@ impl NavigationCache {
 
     pub(crate) fn clear(&mut self) {
         self.entries.clear();
+        self.recency.clear();
         self.retained_bytes = 0;
     }
 
@@ -181,7 +200,9 @@ fn outcome_bytes(outcome: &MovementOutcome) -> usize {
         | MovementOutcome::Unreachable
         | MovementOutcome::BudgetExceeded => 0,
     };
-    size_of::<Entry>().saturating_add(path_bytes)
+    size_of::<Entry>()
+        .saturating_add(size_of::<(u64, Key)>())
+        .saturating_add(path_bytes)
 }
 
 #[cfg(test)]

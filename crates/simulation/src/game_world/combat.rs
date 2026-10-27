@@ -140,6 +140,7 @@ impl GameWorld {
         }
         self.stop_gathering(id);
         self.economy.builders.remove(&id);
+        self.cancel_transport_journey(id);
         self.begin_attack(id, target);
         Ok(())
     }

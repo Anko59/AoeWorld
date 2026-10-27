@@ -3,9 +3,18 @@ use crate::navigation::long_routes_tests::flat_terrain_with_water_wall;
 
 #[test]
 fn bridge_updates_persisted_components_portals_and_axis_edges_locally() {
+    bridge_updates_static_navigation(false);
+}
+
+#[test]
+fn bridge_updates_packed_navigation_after_construction_and_destruction() {
+    bridge_updates_static_navigation(true);
+}
+
+fn bridge_updates_static_navigation(packed: bool) {
     use crate::{RoutePlanner, RoutePlannerPoll, RouteTerrain};
     let source = flat_terrain_with_water_wall(64, 32, -1);
-    let chunks = (0..2)
+    let chunks: Vec<_> = (0..2)
         .flat_map(|y| (0..2).map(move |x| (x, y)))
         .map(|(x, y)| {
             source
@@ -14,7 +23,26 @@ fn bridge_updates_persisted_components_portals_and_axis_edges_locally() {
         })
         .collect();
     let terrain = flat_terrain_with_water_wall(64, 32, -1);
-    terrain.install_static_navigation(chunks).unwrap();
+    if packed {
+        // The combined water/navp path reads immutable packed cells while the
+        // bridge overlay invalidates only affected components and portal rows.
+        let mut bytes = Vec::new();
+        let records = chunks
+            .iter()
+            .map(|chunk| {
+                let start = bytes.len();
+                bytes.extend(chunk.encode().unwrap());
+                start..bytes.len()
+            })
+            .collect();
+        let snapshot =
+            NavigationSnapshot::from_storage(2, Arc::new(bytes), records, &|| false).unwrap();
+        terrain
+            .install_navigation_snapshot(Arc::new(snapshot))
+            .unwrap();
+    } else {
+        terrain.install_static_navigation(chunks).unwrap();
+    }
     assert_eq!(terrain.walk_cache_usage(), (0, 0));
     let mut overlay = ResourceOverlay::default();
     let (from, to) = (TileCoord::new(29, 20), TileCoord::new(35, 20));
@@ -28,9 +56,11 @@ fn bridge_updates_persisted_components_portals_and_axis_edges_locally() {
     let rect = aoe_core::TileRect::from_xywh(31, 20, 3, 1);
     let snapshot = overlay.navigation_snapshot();
     let distant_stamp = overlay.navigation_key((3, 3));
-    overlay.add_bridge(rect).unwrap();
+    let span = aoe_core::BridgeSpan::new(rect.min, TileCoord::new(rect.max.x - 1, rect.max.y - 1))
+        .unwrap();
+    overlay.add_bridge(span).unwrap();
     assert_eq!(
-        snapshot.bridge_axis(TileCoord::new(32, 20)),
+        snapshot.bridge_connections(TileCoord::new(32, 20)),
         None,
         "pinned searches retain their own deck state"
     );
@@ -83,7 +113,7 @@ fn bridge_updates_persisted_components_portals_and_axis_edges_locally() {
         }
     }
     assert!(crossed, "the route must cross the only connecting bridge");
-    overlay.remove_bridge(rect);
+    overlay.remove_bridge(span);
     terrain.prepare_navigation(&overlay, &|| false).unwrap();
     assert!(!terrain.route_walkable(&overlay, deck, &|| false).unwrap());
     assert_ne!(
@@ -236,4 +266,63 @@ fn dynamic_chunk_rebuilds_use_only_the_loaded_static_snapshot() {
     );
     assert_eq!(provider.0.load(std::sync::atomic::Ordering::Relaxed), 0);
     assert_eq!(loaded.walk_cache_usage(), (0, 0));
+}
+
+#[test]
+fn diagonal_bridge_updates_persisted_chunk_corner_routes_and_destruction() {
+    use crate::{RoutePlanner, RoutePlannerPoll};
+    use aoe_core::BridgeSpan;
+    let terrain = flat_terrain_with_water_wall(64, 32, -1);
+    let chunks = (0..2)
+        .flat_map(|y| (0..2).map(move |x| (x, y)))
+        .map(|(x, y)| {
+            terrain
+                .prepare_static_navigation_chunk(x, y, &|| false)
+                .unwrap()
+        })
+        .collect();
+    terrain.install_static_navigation(chunks).unwrap();
+    let mut overlay = ResourceOverlay::default();
+    let (from, to) = (TileCoord::new(30, 30), TileCoord::new(34, 34));
+    let span = BridgeSpan::new(TileCoord::new(31, 31), TileCoord::new(33, 33)).unwrap();
+    let before = overlay.navigation_snapshot();
+    overlay.add_bridge_foundation(span).unwrap();
+    assert!(
+        !overlay.blocks_tile(TileCoord::new(31, 33)),
+        "bounding-box land stays free"
+    );
+    assert!(overlay.complete_bridge(span));
+    terrain.prepare_navigation(&overlay, &|| false).unwrap();
+    assert_eq!(
+        terrain
+            .navigation_destination(&overlay, from, to, &|| false)
+            .unwrap(),
+        Some(to)
+    );
+    assert_eq!(before.bridge_connections(TileCoord::new(32, 32)), None);
+    assert_eq!(
+        overlay.bridge_edge(TileCoord::new(31, 31), TileCoord::new(32, 32)),
+        Some(true)
+    );
+    assert_eq!(
+        overlay.bridge_edge(TileCoord::new(31, 32), TileCoord::new(32, 32)),
+        Some(false)
+    );
+    assert!(matches!(
+        crate::find_path_with_overlay(&terrain, &overlay, from, to, 4096),
+        crate::MovementOutcome::Path(_)
+    ));
+    let mut planner = RoutePlanner::new(from, to, 4096);
+    assert!(matches!(
+        planner.poll(&terrain, &overlay, 4096, &|| false),
+        RoutePlannerPoll::Path(_)
+    ));
+    overlay.remove_bridge(span);
+    terrain.prepare_navigation(&overlay, &|| false).unwrap();
+    assert_ne!(
+        terrain
+            .navigation_destination(&overlay, from, to, &|| false)
+            .unwrap(),
+        Some(to)
+    );
 }

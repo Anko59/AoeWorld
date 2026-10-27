@@ -23,17 +23,17 @@ fn tile(x: i32, y: i32, material: u8, kind: u8) -> SceneTerrain {
 }
 
 #[wasm_bindgen_test]
-fn depth_sheets_and_shallow_fords_share_textured_fallback() {
+fn walkable_shallows_use_native_marsh_sheet_with_a_textured_fallback() {
     let art = fixture::art(true);
     let sheet = |art: &GameArt, material| terrain_texture_frame(art, material, [3, 4]).unwrap();
     assert_eq!(sheet(&art, SHALLOW).atlas, art.terrain[5][0].atlas);
     assert_eq!(sheet(&art, MEDIUM).atlas, art.water_depth[0].0[0].atlas);
     assert_eq!(sheet(&art, DEEP).atlas, art.water_depth[1].0[0].atlas);
-    assert_eq!(sheet(&art, FORD).atlas, sheet(&art, SHALLOW).atlas);
+    assert_eq!(sheet(&art, FORD).atlas, art.water_depth[3].0[0].atlas);
     assert_ne!(
         sheet(&art, FORD).atlas,
-        art.water_depth[2].0[0].atlas,
-        "marsh art has green flecks"
+        sheet(&art, SHALLOW).atlas,
+        "walkable water must be visibly different from blocking shallow water"
     );
     let classes = [SHALLOW, MEDIUM, DEEP].map(|material| sheet(&art, material).atlas);
     for (index, class) in classes.iter().enumerate() {

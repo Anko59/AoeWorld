@@ -315,6 +315,53 @@ fn rally_trained_villager_gathers_the_resource() {
 }
 
 #[test]
+fn rally_to_an_exhausted_node_assigns_new_villagers_the_nearest_same_kind() {
+    for kind in [
+        ResourceKind::Wood,
+        ResourceKind::Food,
+        ResourceKind::Gold,
+        ResourceKind::Stone,
+    ] {
+        let (package, pages, water) = fixture::flat_fixture(false);
+        let mut world =
+            GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
+        world
+            .initialize_village(PlayerId(0), TileCoord::new(64, 64))
+            .unwrap();
+        let center = world.buildings().next().unwrap().id;
+        let old = world
+            .starting_resources()
+            .into_iter()
+            .find(|n| n.kind == kind)
+            .unwrap();
+        world.set_fog_disabled(true);
+        world
+            .issue_set_rally(PlayerId(0), center, crate::RallyTarget::Resource(old.id))
+            .unwrap();
+        let Terrain::Map { generator, overlay } = &mut world.terrain else {
+            unreachable!()
+        };
+        overlay
+            .deplete(generator, old.id, old.initial_amount)
+            .unwrap();
+        let next = world
+            .nearest_resource(old.tile, kind, 10, Some(old.id))
+            .unwrap();
+        world
+            .issue_train(PlayerId(0), center, UnitKind::Villager)
+            .unwrap();
+        advance(&mut world, 500);
+        let trained = world.units().max_by_key(|u| u.id).unwrap().id;
+        assert_eq!(world.gather_target(trained), Some(next.id), "{kind:?}");
+        advance(&mut world, 1000);
+        assert!(
+            world.resource_remaining(next.id).unwrap() < next.initial_amount,
+            "{kind:?}"
+        );
+    }
+}
+
+#[test]
 fn rally_to_a_friendly_foundation_sends_the_trained_villager_to_build() {
     let (mut world, _, center) = village();
     fixture::survey(&mut world, PlayerId(0), TileCoord::new(75, 70), 2);
@@ -401,92 +448,4 @@ fn rally_accepts_a_remembered_resource_but_rejects_an_unexplored_one() {
     );
 }
 
-#[test]
-fn fifteen_unit_limit_is_per_building_and_cancellation_refunds_a_housed_wait() {
-    let (mut world, _, first) = village();
-    let second = world
-        .insert_building(
-            PlayerId(0),
-            BuildingKind::TownCenter,
-            aoe_core::TileRect::from_xywh(90, 90, 4, 4),
-            true,
-        )
-        .unwrap();
-    let player = world.economy.players.get_mut(&PlayerId(0)).unwrap();
-    player.population_cap = 4;
-    player.stockpile.food = 1500;
-    for center in [first, second] {
-        for _ in 0..15 {
-            world
-                .issue_train(PlayerId(0), center, UnitKind::Villager)
-                .unwrap();
-        }
-        let full = world.canonical_hash();
-        assert_eq!(
-            world.issue_train(PlayerId(0), center, UnitKind::Villager),
-            Err(EconomyError::TrainingQueueFull)
-        );
-        assert_eq!(world.canonical_hash(), full);
-    }
-    advance(&mut world, 600);
-    for center in [first, second] {
-        let queue = &world.building(center).unwrap().training_queue;
-        assert_eq!(queue.len(), 15);
-        assert_eq!(queue[0].progress_ticks, 0);
-    }
-    world.issue_cancel_training(PlayerId(0), second).unwrap();
-    assert_eq!(
-        world.player_economy(PlayerId(0)).unwrap().stockpile.food,
-        50
-    );
-    assert_eq!(world.building(second).unwrap().training_queue.len(), 14);
-    // Bundled behavior: both full queues resume when one house slot opens,
-    // but only one may spawn, at its front. The other retains its partial work.
-    world
-        .economy
-        .players
-        .get_mut(&PlayerId(0))
-        .unwrap()
-        .population_cap = 5;
-    advance(&mut world, 499);
-    for center in [first, second] {
-        assert_eq!(
-            world.building(center).unwrap().training_queue[0].progress_ticks,
-            499
-        );
-    }
-    world.advance();
-    let spawned = world.units().max_by_key(|u| u.id).unwrap();
-    let spawned_id = spawned.id;
-    assert_eq!(
-        spawned.position.tile_floor(),
-        world.building(first).unwrap().footprint.max
-    );
-    assert_eq!(world.building(first).unwrap().training_queue.len(), 14);
-    assert_eq!(
-        world.building(second).unwrap().training_queue[0].progress_ticks,
-        499
-    );
-    advance(&mut world, 600);
-    assert_eq!(
-        world.player_economy(PlayerId(0)).unwrap().population_used,
-        5
-    );
-    assert_eq!(
-        world.building(first).unwrap().training_queue[0].progress_ticks,
-        0
-    );
-    // Death frees population immediately; removing an index entry alone does not.
-    world.kill_unit(world.lookup[&spawned_id]);
-    world.advance();
-    assert_eq!(world.building(second).unwrap().training_queue.len(), 13);
-    assert_eq!(
-        world
-            .units()
-            .max_by_key(|u| u.id)
-            .unwrap()
-            .position
-            .tile_floor(),
-        world.building(second).unwrap().footprint.max
-    );
-}
+mod queues;

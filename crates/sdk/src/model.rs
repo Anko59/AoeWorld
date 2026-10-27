@@ -31,6 +31,12 @@ impl Unit {
     pub fn tile(&self) -> TileCoord {
         self.state.position.tile_floor()
     }
+    pub fn home_castle(&self) -> Option<EntityId> {
+        self.state.home_castle
+    }
+    pub fn managed_by(&self) -> Option<EntityId> {
+        self.state.managed_by
+    }
     pub fn cargo_count(&self) -> u8 {
         self.state.cargo_count
     }
@@ -44,7 +50,11 @@ impl Unit {
     pub fn is_military(&self) -> bool {
         !matches!(
             self.state.kind,
-            UnitKind::Villager | UnitKind::Scout | UnitKind::FishingShip | UnitKind::TransportShip
+            UnitKind::Villager
+                | UnitKind::Scout
+                | UnitKind::FishingShip
+                | UnitKind::TransportShip
+                | UnitKind::Vassal
         )
     }
     /// Hit points as a fraction of the maximum, in `0.0..=1.0`.

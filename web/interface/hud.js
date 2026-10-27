@@ -1,6 +1,7 @@
 import { castleUnits, castleUnitNames, castleKinds } from '/interface/castle.js';
 import { initBuildings, buildingKinds, buildingNames } from '/interface/buildings.js';
 import { initArt, icon as packIcon, entityIcon, setEntityIcon } from '/interface/ui-art.js';
+import { initVassal } from '/interface/vassal/panel.js';
 import { updateDetails } from '/interface/details.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
@@ -12,6 +13,7 @@ const attribute = (node,name,value) => { if (node.getAttribute(name) !== value) 
 
 export function initInterface() {
   initBuildings();
+  initVassal();
   byId('move-units').querySelector('.icon').outerHTML=packIcon('commands','move','move');
   byId('stop-units').querySelector('.icon').outerHTML=packIcon('commands','stop','stop');
   initArt();
@@ -69,7 +71,7 @@ export function initInterface() {
     const actions=building?1:units?2:0;
     empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
     text('command-context',count>1?`${count} ${building?'buildings':'units'}`:first?.name ?? 'Select a unit');
-    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Shift: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
+    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Shift: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='Vassal'?'Garrison in its home Castle · 100-tile leash':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
     show('observer-label',state.observer);
     show('selection-health',count===1);
     show('unit-hp',count===1 && !building); show('unit-combat',count===1 && !building);
@@ -102,7 +104,7 @@ export function initInterface() {
     }
   };
   window.aoeInterface = { details: updateDetails, numeric(values,status) {
-    const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'], names=['Scout Cavalry','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley'];
+    const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley','Vassal'], names=['Scout Cavalry','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal'];
     const tasks=['Idle','Moving','Gathering','Carrying','Returning to drop-off','Attacking','Dying','Building','Farming','Hunting','Shepherding','Fishing','Idle','Fleeing','Attacking','Dying','Carcass'];
     const resources=['food','wood','gold','stone',''];
     const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],observer:values[11]===1,art:values[12]===1,status,actors:[],selected:[],queue:[],resources:[]};

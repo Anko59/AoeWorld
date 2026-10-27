@@ -145,6 +145,20 @@ impl GameWorld {
     }
 
     pub(crate) fn work_separation_clear(&self, id: aoe_core::EntityId, tile: TileCoord) -> bool {
+        let unit = self.unit(id);
+        if unit.is_some_and(|u| u.position.tile_floor() != tile)
+            && (self.economy.gatherers.contains_key(&id) || self.economy.builders.contains_key(&id))
+            && self.work_spot_busy(tile, id)
+        {
+            return false;
+        }
+        if unit.is_some_and(|u| u.task == super::UnitTask::Building)
+            && let Some(job) = self.economy.builders.get(&id)
+            && let Some(building) = self.building(job.building)
+            && !super::placement::adjacent(building.footprint, tile)
+        {
+            return false;
+        }
         self.economy.gatherers.get(&id).is_none_or(|task| {
             !matches!(
                 task.phase,

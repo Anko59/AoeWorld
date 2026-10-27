@@ -1,6 +1,6 @@
 //! Parse exact Gungraun JSON samples and compare reviewed microbench baselines.
 use crate::perf::{Comparison, compare};
-use aoe_scenario::SMOKE;
+use aoe_scenario::{LATE_GAME, SMOKE};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeMap, error::Error, fs, path::Path};
@@ -13,6 +13,7 @@ struct Baseline {
     valgrind: String,
     allow_aslr: bool,
     smoke_workload_hash: String,
+    late_game_workload_hash: String,
     instructions: BTreeMap<String, u64>,
     allocation_bytes: BTreeMap<String, u64>,
     allocation_count: BTreeMap<String, u64>,
@@ -101,8 +102,8 @@ fn observed_samples_at(
 }
 
 fn proposal(observed: &BTreeMap<String, Metrics>) -> Result<Baseline, Box<dyn Error>> {
-    if observed.len() != 4 {
-        return Err("initial proposal requires four benchmark cases".into());
+    if observed.len() != 5 {
+        return Err("initial proposal requires five benchmark cases".into());
     }
     Ok(Baseline {
         version: 1,
@@ -111,6 +112,7 @@ fn proposal(observed: &BTreeMap<String, Metrics>) -> Result<Baseline, Box<dyn Er
         valgrind: "3.19.0".into(),
         allow_aslr: true,
         smoke_workload_hash: SMOKE.workload_hash(),
+        late_game_workload_hash: LATE_GAME.workload_hash(),
         instructions: observed
             .iter()
             .map(|(name, value)| (name.clone(), value.instructions))
@@ -153,12 +155,14 @@ fn compare_observed(
     baseline: Baseline,
     observed: BTreeMap<String, Metrics>,
 ) -> Result<Vec<Comparison>, Box<dyn Error>> {
-    if baseline.version != 1
+    if baseline.instructions.len() != 5
+        || baseline.version != 1
         || baseline.toolchain != "rustc 1.99.1"
         || baseline.gungraun != "0.19.4"
         || baseline.valgrind != "3.19.0"
         || !baseline.allow_aslr
         || baseline.smoke_workload_hash != SMOKE.workload_hash()
+        || baseline.late_game_workload_hash != LATE_GAME.workload_hash()
     {
         return Err("microbenchmark baseline identity is incompatible".into());
     }
@@ -210,131 +214,4 @@ fn comparisons_at(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::perf::Verdict;
-
-    fn line(name: &str, instructions: u64) -> String {
-        serde_json::json!({
-            "version": "6",
-            "module_path": name,
-            "profiles": [
-                {
-                    "tool": "Callgrind",
-                    "summaries": {"total": {"summary": {
-                        "Callgrind": {"Ir": {"metrics": {"Both": [{"Int": instructions}]}}}
-                    }}}
-                },
-                {
-                    "tool": "DHAT",
-                    "summaries": {"total": {"summary": {
-                        "Dhat": {
-                            "TotalBytes": {"metrics": {"Both": [{"Int": 80}]}},
-                            "TotalBlocks": {"metrics": {"Both": [{"Int": 2}]}}
-                        }
-                    }}}
-                }
-            ]
-        })
-        .to_string()
-    }
-
-    #[test]
-    fn missing_samples_cannot_pass() {
-        assert!(sample("{\"version\":\"6\",\"module_path\":\"x\"}").is_err());
-        assert!(
-            sample(&line("kernel", 100).replace("\"version\":\"6\"", "\"version\":\"5\"")).is_err()
-        );
-        let (name, counts) = sample(&line("kernel", 100)).expect("sample");
-        assert_eq!(name, "kernel");
-        assert_eq!(
-            (
-                counts.instructions,
-                counts.allocation_bytes,
-                counts.allocation_count
-            ),
-            (100, 80, 2)
-        );
-
-        let temp = tempfile::NamedTempFile::new().expect("file");
-        assert!(samples(temp.path()).is_err());
-        fs::write(
-            temp.path(),
-            format!("{}\n{}\n", line("same", 100), line("same", 100)),
-        )
-        .expect("samples");
-        assert!(samples(temp.path()).is_err());
-    }
-
-    #[test]
-    fn baseline_identity_case_set_and_regressions_are_checked() {
-        let mut observed = BTreeMap::new();
-        for name in ["a", "b", "c", "d"] {
-            observed.insert(
-                name.to_owned(),
-                Metrics {
-                    instructions: 100,
-                    allocation_bytes: 80,
-                    allocation_count: 2,
-                },
-            );
-        }
-        assert!(proposal(&BTreeMap::new()).is_err());
-        let baseline = proposal(&observed).expect("proposal");
-        assert!(compare_observed(baseline, BTreeMap::new()).is_err());
-
-        let mut baseline = proposal(&observed).expect("proposal");
-        baseline.toolchain = "different".to_owned();
-        assert!(compare_observed(baseline, observed.clone()).is_err());
-
-        let baseline = proposal(&observed).expect("proposal");
-        observed.get_mut("a").expect("case").instructions = 106;
-        let results = compare_observed(baseline, observed).expect("comparison");
-        assert_eq!(results.len(), 12);
-        assert_eq!(results[0].verdict, Verdict::Regression);
-        assert!(
-            results[1..]
-                .iter()
-                .all(|item| item.verdict == Verdict::Pass)
-        );
-    }
-
-    #[test]
-    fn proposal_reads_both_suite_files_without_changing_baseline() {
-        let temp = tempfile::tempdir().expect("directory");
-        let simulation = temp.path().join("simulation.ndjson");
-        let protocol = temp.path().join("protocol.ndjson");
-        let assets = temp.path().join("assets.ndjson");
-        let baseline = temp.path().join("baseline.json");
-        let proposed = temp.path().join("proposal/micro.json");
-        fs::write(
-            &simulation,
-            format!("{}\n{}\n", line("a", 100), line("b", 100)),
-        )
-        .expect("simulation samples");
-        fs::write(&protocol, format!("{}\n", line("c", 100))).expect("protocol samples");
-        fs::write(&assets, format!("{}\n", line("d", 100))).expect("asset samples");
-        assert_eq!(
-            observed_samples_at(&simulation, &protocol, &assets)
-                .expect("samples")
-                .len(),
-            4
-        );
-        let original =
-            proposal(&observed_samples_at(&simulation, &protocol, &assets).expect("samples"))
-                .expect("baseline");
-        let original_bytes = serde_json::to_vec(&original).expect("JSON");
-        fs::write(&baseline, &original_bytes).expect("baseline");
-        propose_at(&simulation, &protocol, &assets, &proposed).expect("proposal");
-        assert_eq!(fs::read(&baseline).expect("baseline"), original_bytes);
-        assert_eq!(
-            comparisons_at(&baseline, &simulation, &protocol, &assets)
-                .expect("comparison")
-                .len(),
-            12
-        );
-        assert!(proposed.is_file());
-        fs::write(&protocol, format!("{}\n", line("a", 100))).expect("duplicate");
-        assert!(observed_samples_at(&simulation, &protocol, &assets).is_err());
-    }
-}
+mod tests;

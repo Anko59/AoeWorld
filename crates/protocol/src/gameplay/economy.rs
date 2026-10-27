@@ -18,7 +18,7 @@ pub const MAX_RETAINED_BUILDINGS: usize = MAX_ECONOMY_PLAYERS * 8_192;
 /// Villagers one build order may name.
 pub const MAX_BUILD_GROUP: usize = 32;
 /// The population ceiling, however many houses stand.
-pub const MAX_POPULATION: u16 = 200;
+pub const MAX_POPULATION: u16 = 1_000;
 /// The most a match rule may raise the population ceiling to; a wire state
 /// above it is invalid.
 pub const MAX_MATCH_POPULATION: u16 = 5_000;
@@ -168,6 +168,15 @@ pub struct GameplayBuildingState {
     pub farm_reseeds: u8,
     #[serde(deserialize_with = "super::garrison::bounded_garrison")]
     pub garrison: Vec<super::GarrisonUnitState>,
+    /// Canonical endpoints of the raster span; absent for ordinary buildings.
+    pub bridge_span: Option<aoe_core::BridgeSpan>,
+}
+
+impl GameplayBuildingState {
+    pub fn contains_tile(&self, tile: aoe_core::TileCoord) -> bool {
+        self.bridge_span
+            .map_or_else(|| self.footprint.contains(tile), |span| span.contains(tile))
+    }
 }
 
 fn valid_prices(prices: MarketPrices) -> bool {
@@ -232,12 +241,12 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                     || (building.kind == BuildingKind::PalisadeGate
                         && building.construction == ConstructionState::Complete))
                 && if building.kind == BuildingKind::Bridge {
-                    (building.footprint.width() == 1
-                        && (3..=42).contains(&building.footprint.height()))
-                        || (building.footprint.height() == 1
-                            && (3..=42).contains(&building.footprint.width()))
+                    building
+                        .bridge_span
+                        .is_some_and(|span| span.valid() && span.footprint() == building.footprint)
                 } else {
-                    building.footprint.width() == building.kind.side()
+                    building.bridge_span.is_none()
+                        && building.footprint.width() == building.kind.side()
                         && building.footprint.height() == building.kind.depth()
                 }
                 && building.progress_permille <= 1000
@@ -259,7 +268,8 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                 && building.training_queue.iter().all(|entry| {
                     matches!(
                         (building.kind, entry.kind),
-                        (BuildingKind::TownCenter, UnitKind::Villager)
+                        (BuildingKind::Castle, UnitKind::Vassal)
+                            | (BuildingKind::TownCenter, UnitKind::Villager)
                             | (BuildingKind::Barracks, UnitKind::Militia)
                             | (
                                 BuildingKind::Barracks,
@@ -301,7 +311,12 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
 }
 pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
     units.iter().all(|unit| {
-        unit.cargo_count <= 5
+        unit.home_castle
+            .is_none_or(|id| unit.kind == UnitKind::Vassal && unit.hp > 0 && id != unit.id)
+            && unit
+                .managed_by
+                .is_none_or(|id| unit.kind == UnitKind::Villager && unit.hp > 0 && id != unit.id)
+            && unit.cargo_count <= 5
             && (unit.cargo_count == 0 || (unit.kind == UnitKind::TransportShip && unit.hp > 0))
             && unit.facing < 8
             && super::automation::valid_auto_scout(unit)
@@ -329,8 +344,16 @@ pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
             && unit.carried.is_none_or(|load| {
                 load.amount > 0
                     && match unit.kind {
-                        // Hand Cart and Wheelbarrow give 20; Heavy Plow adds one for farmers.
-                        UnitKind::Villager => load.amount <= 21,
+                        // Hunters start at 35; DAT carry upgrades ceil to 67.
+                        // A stopped hunter keeps that food even without a job.
+                        UnitKind::Villager => {
+                            let limit = if load.kind == ResourceKind::Food {
+                                67
+                            } else {
+                                21
+                            };
+                            load.amount <= limit
+                        }
                         UnitKind::FishingShip => {
                             load.kind == ResourceKind::Food && load.amount <= 15
                         }

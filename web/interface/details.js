@@ -1,4 +1,5 @@
 import { icon } from '/interface/ui-art.js';
+import { transportHint } from '/interface/navy/indicators.js';
 // Presentation only; authoritative values and the simulation's movement rule
 // arrive with the four-Hz HUD update. No canvas frame loop or terrain guesses.
 const byId = id => document.getElementById(id);
@@ -79,8 +80,9 @@ export function updateDetails(values) {
     byId('selected-icons').replaceChildren();
     byId('command-context').textContent = kinds[values[1]];
   }
-  const cursor = ['', 'gather', 'move', 'forbidden', 'attack', 'hunt', 'gather', 'gather', 'gather', 'gather', 'build', 'garrison'][values[3]];
+  const cursor = ['', 'gather', 'move', 'forbidden', 'attack', 'hunt', 'gather', 'gather', 'gather', 'gather', 'build', 'garrison', 'board'][values[3]];
   byId('scene').dataset.commandCursor = cursor;
+  transportHint(cursor === 'board');
   byId('scene').dataset.gatherKind = ['fish', 'forage', 'chop', 'mine'][values[3] - 6] ?? '';
   // GPU backends follow the sprite silhouette; Canvas keeps the
   // contextual gather cursor. The former ground ellipse is no longer drawn.

@@ -101,14 +101,7 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
                 client.map_content_hash.is_none()
                     && !matches!(kind, BuildingKind::Dock | BuildingKind::Bridge),
                 |t| {
-                    let wet = (matches!(
-                        t.water,
-                        aoe_map::WaterKind::Lake
-                            | aoe_map::WaterKind::Ocean
-                            | aoe_map::WaterKind::River
-                    ) || kind == BuildingKind::Bridge
-                        && t.water == aoe_map::WaterKind::Shallow)
-                        && t.material != aoe_map::GroundMaterial::Ford;
+                    let wet = t.water != aoe_map::WaterKind::None;
                     water |= wet;
                     land |= t.passable && t.water == aoe_map::WaterKind::None;
                     t.passable || (matches!(kind, BuildingKind::Dock | BuildingKind::Bridge) && wet)
@@ -122,13 +115,8 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
                 && !client
                     .units
                     .values()
-                    .any(|u| u.position.tile_floor() == tile)
-                && !client.village.buildings.iter().any(|b| {
-                    tile.x >= b.footprint.min.x
-                        && tile.y >= b.footprint.min.y
-                        && tile.x < b.footprint.max.x
-                        && tile.y < b.footprint.max.y
-                })
+                    .any(|u| u.hp > 0 && u.position.tile_floor() == tile)
+                && !client.village.buildings.iter().any(|b| b.contains_tile(tile))
         },
     );
     valid && (kind != BuildingKind::Dock || land && water)
@@ -138,8 +126,7 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
 pub(super) fn tiles(client: &Client, at: TileCoord) -> Option<Vec<TileCoord>> {
     if client.village.placement == Some(BuildingKind::Bridge) {
         let from = client.village.wall_start.unwrap_or(at);
-        aoe_simulation::GameWorld::bridge_footprint(from, at)?;
-        building_ui::wall_tiles(from, at)
+        aoe_core::raster_bridge_line(from, at)
     } else if client.village.placement == Some(BuildingKind::PalisadeWall) {
         building_ui::wall_tiles(client.village.wall_start.unwrap_or(at), at)
     } else {
@@ -148,6 +135,24 @@ pub(super) fn tiles(client: &Client, at: TileCoord) -> Option<Vec<TileCoord>> {
 }
 
 #[inline(never)]
+pub(super) fn tile_valid(
+    client: &Client,
+    kind: BuildingKind,
+    tiles: &[TileCoord],
+    i: usize,
+) -> bool {
+    let tile = tiles[i];
+    valid(client, kind, tile)
+        && (kind != BuildingKind::Bridge
+            || map::terrain_tile(client, tile.x, tile.y).is_some_and(|t| {
+                if i == 0 || i + 1 == tiles.len() {
+                    t.passable && t.water == aoe_map::WaterKind::None
+                } else {
+                    t.water != aoe_map::WaterKind::None
+                }
+            }))
+}
+
 pub(super) fn span_valid(client: &Client, kind: BuildingKind, tiles: &[TileCoord]) -> bool {
     let bridge = kind == BuildingKind::Bridge;
     let count = if bridge {
@@ -156,19 +161,13 @@ pub(super) fn span_valid(client: &Client, kind: BuildingKind, tiles: &[TileCoord
         tiles.len()
     };
     count > 0
+        && (!bridge
+            || tiles
+                .first()
+                .zip(tiles.last())
+                .is_some_and(|(&from, &to)| aoe_core::BridgeSpan::new(from, to).is_some()))
         && enabled(client, kind, count as u32)
-        && tiles.iter().enumerate().all(|(i, tile)| {
-            valid(client, kind, *tile)
-                && (!bridge
-                    || map::terrain_tile(client, tile.x, tile.y).is_some_and(|t| {
-                        if i == 0 || i + 1 == tiles.len() {
-                            t.passable && t.water == aoe_map::WaterKind::None
-                        } else {
-                            t.water != aoe_map::WaterKind::None
-                                && t.material != aoe_map::GroundMaterial::Ford
-                        }
-                    }))
-        })
+        && (0..tiles.len()).all(|i| tile_valid(client, kind, tiles, i))
 }
 
 #[inline(never)]

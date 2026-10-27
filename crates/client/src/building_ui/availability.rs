@@ -24,6 +24,7 @@ pub(crate) enum Availability {
     Requirement,
     NotOwner,
     RequiresCastle,
+    UniqueUnit,
 }
 impl Availability {
     pub(crate) fn number(self) -> f64 {
@@ -172,6 +173,7 @@ pub(crate) fn primary_training(
             }
         }
         aoe_protocol::BuildingKind::Dock => UnitKind::FishingShip,
+        aoe_protocol::BuildingKind::Castle => UnitKind::Vassal,
         _ => UnitKind::Villager,
     }
 }

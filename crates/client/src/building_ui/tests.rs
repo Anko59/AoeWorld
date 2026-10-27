@@ -297,3 +297,20 @@ fn town_center_menu_requires_castle_age_and_full_wood_and_stone_cost() {
         aoe_protocol::Age::Castle
     ));
 }
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn bridge_caps_follow_the_native_axis_even_when_the_raster_slopes_backwards() {
+    use aoe_rendering::SceneUnitKind as K;
+    for (end, first, last) in [
+        (TileCoord::new(32, 17), K::BridgeBTop, K::BridgeBBottom),
+        (TileCoord::new(31, 17), K::BridgeABottom, K::BridgeATop),
+        (TileCoord::new(31, 23), K::BridgeATop, K::BridgeABottom),
+    ] {
+        let from = TileCoord::new(29, 20);
+        for (a, b) in [(from, end), (end, from)] {
+            let tiles = aoe_core::raster_bridge_line(a, b).unwrap();
+            assert_eq!(bridge_piece(&tiles, 0), first);
+            assert_eq!(bridge_piece(&tiles, tiles.len() - 1), last);
+        }
+    }
+}

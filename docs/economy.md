@@ -51,14 +51,24 @@ depletion transaction. Stored-map services persist that transaction before
 committing it or adding to the carried load. A refused save discards the failed
 attempt's credits and pauses retries for one game second.
 
+Gather jobs reserve their node while approaching, working and returning. Trees
+take at most two workers; one-tile ore deposits and berry bushes have eight
+perimeter slots, deer four, and sheep/boar eight. Blocked or occupied tiles can
+reduce those limits. Assignment and replacement prefer available same-kind
+nodes; failed deferred approaches trigger at most eight replacement searches,
+using locally certified work tiles. Cancellation and death release reservations. Counts use
+an index by target, and work-tile occupancy uses the existing exact tile index.
+
 Full loads and loads from exhausted nodes return to the nearest reachable owned
 Town Center perimeter. Deposits change only the matching resource stockpile.
 The job resumes the same node; after exhaustion it searches for a same-kind
 node within the rules table's Euclidean radius around the exhausted node.
-Wood, gold and stone replacements rank that local work area from the perimeter
+Wood, gold, stone and berry replacements rank that local work area from the perimeter
 of the drop-off actually used, with resource identity breaking ties. A bounded
 1,024-tile land flood excludes disconnected work spots before at most eight
-route admissions. This keeps the worker in its reachable forest or deposit area
+node attempts, each with at most eight perimeter-route admissions, also capped
+by the shared route budget. This keeps the worker in its reachable forest or
+deposit area
 while preferring the side nearest its Lumber Camp, Mining Camp or Town Center.
 Without a replacement or after a terminal resource-route failure it becomes
 idle. A return trip remembers failed perimeter tiles and tries other owned
@@ -75,6 +85,11 @@ Only the front entry advances, and housing pauses that progress until there is
 room. A completed entry waits for a free passable perimeter tile without paying
 again. New villagers use the shared entity allocator. Cancelling the active
 entry refunds its cost; cancelling an empty queue cannot create resources.
+New workers follow the production building's rally point. An exhausted resource
+node falls back to the nearest node of the same object kind within ten tiles,
+then uses ordinary gather admission and its work-slot reservations. Animal
+rallies retain their food profession after the carcass disappears and search
+the same bounded wildlife cells; shepherds and hunters do not switch professions.
 
 Gameplay protocol 2 is the only current wire. Gather, Train and CancelTraining share Move's
 bounded per-session/global command queue, sequencing and role checks. Snapshot
@@ -129,8 +144,9 @@ research use the same rule. Orders on never-seen ground return
 `RejectedUnexploredPlacement`; explored grey fog permits placement.
 Builders walk to a tile beside it; each tick the foundation gains `builders + 2`
 of `3 x base seconds x tick rate` work, the AoE II rule `base x 3 / (n + 2)`: one
-builder takes the base time, three take three fifths of it. On completion, builders follow their queued foundations first, then seek the
-nearest unfinished owned foundation within ten tiles of their position. Distance
+builder takes the base time, three take three fifths of it. On completion, builders follow their queued foundations first. A farm builder
+then farms its completed farm; other builders seek the nearest unfinished owned
+foundation within ten tiles of their position. Distance
 is measured to the nearest footprint tile; ties use entity ID, and the nearest
 four approaches are tried. Without another foundation, builders beside a new
 camp or mill gather the nearest matching resource, and farm builders farm.
@@ -153,7 +169,9 @@ whose table lists the unit (`trainable_units`); the Barracks trains Militia
 owned building that accepts its load (`nearest_dropoff`).
 
 A farm holds 175 food from placement, but only a completed one can be worked,
-by one villager standing on it (`UnitTask::Farming`, food rate as gathering). It
+by one villager standing on it (`UnitTask::Farming`). Farmers work at 0.53 food/s
+against the farm's separate 0.40 food/s production; see the DAT audit in
+[Feudal economy](economy/feudal.md#technologies). It
 returns each 10-food load to the nearest food drop-off, and when the 175th
 unit is delivered the farm building is removed unless a reseed is prepaid. A farm
 with no food left is also removed when its farmer is ordered away (Move, build,
@@ -162,12 +180,20 @@ An owned completed Mill holds up to 99 prepaid reseeds. Add pays the Farm's
 60 wood cost immediately; remove refunds it. After delivering the final load,
 the same farmer consumes one entry from the nearest owned Mill with a queue,
 rebuilds the farm in place over the normal 15 seconds, then resumes farming.
+This completion follows the same farm-first rule: nearby foundations cannot
+take the farmer away and interrupt subsequent prepaid reseeds. The queue remains
+finite and consumes exactly one prepaid entry per rebuild.
 The rebuilt farm uses the owner's current farm-food technology. Destroying a
 Mill loses its unused queue. The Mill panel displays the server's queue count
 and add/remove availability; `FarmReseedOrder` and `farm_reseeds` carry it over
 the ordinary authenticated protocol and reconnect snapshots.
-Per-tick cost is bounded by builders and gatherers (at most 80 each) and the
-building count (at most 256); placement and completion alone scan buildings.
+Per-tick job work scales with active builders and gatherers. Slot lookups are
+indexed; replacement keeps the ten-tile, 1,024-flood-tile and eight-node bounds
+(at most eight perimeter admissions per node).
+Simultaneous construction completions collect builder memberships once, rather
+than scanning every builder per completed site. Synthetic tests cover 100 seats'
+20,000 reservations and 20,000 completion memberships; they do not qualify full
+RTS performance or dedicated hardware.
 
 Wire: `BuildOrder`, `BuildWallOrder`, `ConstructOrder`, `CancelConstructionOrder` and
 `FarmOrder`;
@@ -313,3 +339,6 @@ simulation reports local search cell/candidate counts in `WildlifeStats`.
 The [Castle Age](economy/castle.md) adds the next generic age, defensive Castle,
 Monastery, University, Siege Workshop, unit lines, economic and military research,
 local deterministic splash, healing and Ballistics.
+
+The original [Vassal](economy/vassal.md) is trained at a Castle and has a fixed
+100-tile home radius; the default population ceiling is 1,000 per player.

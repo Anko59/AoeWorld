@@ -1,4 +1,13 @@
+// Rebased onto #573: its avoidance, arrival slots, settling and contact drop-off
+// now combine with eco2 reservations (reservation-aware refinement, staged
+// transport boarding). Regenerated the observed current hashes with the same
+// scenarios via `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation`.
 // Regenerated for bounded obstruction state, arrival hysteresis and unchanged-wait suppression.
+// Combined bundle: Vassal economy state, water geometry and eco2 job rules
+// regenerate current replay pins. Retain all scenarios and thread comparisons.
+// The Vassal manager adds its fair cursor, active index and controlled jobs
+// to canonical state. Regenerate current pins for this intentional schema
+// change; independent runs, thread equality and emitted-change pins stay intact.
 //! Replay pins for the wildlife and vision phases: a fixed scenario whose
 //! canonical hashes include the current authoritative state schema.
 //! Rally points add an explicit optional field to live and remembered buildings;
@@ -15,6 +24,9 @@
 // Combined Castle bundle: u64 research, healers, garrisons, queued builders and
 // cargo/embarked maps extend current state. Regenerate the same scenario; all
 // independent replay, thread equality and emitted-change assertions remain.
+// Vassal home bindings add an ordered map (including its empty length) to
+// canonical economy state. Regenerate the current pins; keep the scenario and
+// every independent replay assertion unchanged.
 use super::*;
 
 fn at(x: i32, y: i32) -> WorldPosition {
@@ -61,19 +73,19 @@ fn wildlife_and_fog_replay_hashes_stay_pinned() {
     const PINS: [(&str, &str); 4] = [
         (
             "100",
-            "06938adf18fe315aeefbbbcb7a0f7853f095913448613beac31d1e78b0e4d649",
+            "c384bae1f10f4cf240fbaeb8d9018b2506bca302b5ce4f995ba637a2e354b460",
         ),
         (
             "200",
-            "d301e1fed80c38c67fe70f8bcca0ca11d28a92a1f57006e74ab2aa7a97110c3a",
+            "7db5ab596ddc481d052fe91d40ac3df85e95247db220ec4a647382d91169f5c1",
         ),
         (
             "300",
-            "0bf354e3b9791bd16b22bb923ae208a5697cbacbc9dfff7874c10037324b5937",
+            "ae9f5b3a15095ae70f80e4edd8a7e773b239677db4e3122c08a2eb3cebc8b6db",
         ),
         (
             "400",
-            "f2dc34995fbeb368d338babc9f79ec8d81933ec86d7e91968286854c96ff5995",
+            "2b50998bfec973b3404f2fcb0bd41bb3557085ab435687437e696021b44abf0f",
         ),
     ];
     let mut checkpoints = Vec::new();

@@ -10,11 +10,12 @@ pub(super) fn append(
     building: &GameplayBuildingState,
     units: &mut Vec<SceneUnit>,
 ) {
-    let rect = building.footprint;
-    let horizontal = rect.height() == 1;
-    let length = rect.width().max(rect.height()).min(42);
-    let first = [f64::from(rect.min.x) + 0.5, f64::from(rect.min.y) + 0.5];
-    let last = [f64::from(rect.max.x) - 0.5, f64::from(rect.max.y) - 0.5];
+    let Some(span) = building.bridge_span else {
+        return;
+    };
+    let tiles = span.tiles();
+    let first = [f64::from(span.from.x) + 0.5, f64::from(span.from.y) + 0.5];
+    let last = [f64::from(span.to.x) + 0.5, f64::from(span.to.y) + 0.5];
     // Cull a whole span before allocating its pieces. Native bridge sprites
     // stay within the atlas page; this conservative margin covers their anchors.
     let a = super::super::screen_position(client, first);
@@ -35,24 +36,12 @@ pub(super) fn append(
     };
     let insert = units.partition_point(|other| other.id <= building.id);
     let before = units.len();
-    for offset in 0..length {
-        let position = [
-            first[0] + if horizontal { f64::from(offset) } else { 0.0 },
-            first[1] + if horizontal { 0.0 } else { f64::from(offset) },
-        ];
+    for (offset, tile) in tiles.iter().enumerate() {
+        let position = [f64::from(tile.x) + 0.5, f64::from(tile.y) + 0.5];
         let kind = if building.progress_permille < 1000 {
             SceneUnitKind::building(9)
         } else {
-            SceneUnitKind::bridge(
-                horizontal,
-                if offset == 0 {
-                    0
-                } else if offset + 1 == length {
-                    2
-                } else {
-                    1
-                },
-            )
+            crate::building_ui::bridge_piece(&tiles, offset)
         };
         let unit = SceneUnit {
             kind,

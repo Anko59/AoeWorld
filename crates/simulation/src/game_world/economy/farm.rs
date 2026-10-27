@@ -4,6 +4,14 @@ use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::ResourceKind;
 
+// Licensed DE DAT: VMFAR/VFFAR work at .53, FARM produces at .40 food/s.
+pub(super) const FARMER_WORK_HUNDREDTHS: u16 = 53;
+pub(super) const FARM_PRODUCTION_HUNDREDTHS: u16 = 40;
+pub(super) const FARM_STORAGE_CAPACITY: u16 = 15;
+
+mod production;
+pub(crate) use production::FarmProduction;
+
 impl GameWorld {
     /// Prepay one reseed at an owned completed Mill, or cancel and refund one.
     pub fn issue_farm_reseed(
@@ -136,8 +144,8 @@ impl GameWorld {
             || self
                 .economy
                 .gatherers
-                .iter()
-                .any(|(worker, task)| task.farm == Some(farm) && *worker != id)
+                .occupied(super::gathering::WorkTarget::Farm(farm), id)
+                > 0
         {
             return Err(EconomyError::FarmUnavailable);
         }
@@ -155,21 +163,10 @@ impl GameWorld {
         Ok(())
     }
 
-    /// Take one food from a farm, returning what is left.
-    pub(super) fn deplete_farm(&mut self, farm: EntityId) -> Option<u16> {
-        let food = self
-            .economy
-            .buildings
-            .get_mut(&farm)?
-            .food_remaining
-            .as_mut()?;
-        *food = food.saturating_sub(1);
-        Some(*food)
-    }
-
     /// End `id`'s gather job. A farm whose last food is already on the farmer
     /// would otherwise linger empty and unworkable, so it is removed here.
     pub(crate) fn stop_gathering(&mut self, id: EntityId) {
+        self.player_override(id);
         self.cancel_garrison_order(id);
         self.move_queues.remove(&id);
         self.cancel_hunt(id);

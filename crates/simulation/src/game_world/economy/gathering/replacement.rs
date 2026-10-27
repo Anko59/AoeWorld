@@ -33,9 +33,15 @@ impl GameWorld {
                             .iter()
                             .copied()
                             .filter(|n| {
-                                n.id != task.node
+                                self.managed_target_allowed(
+                                    id,
+                                    position(n.tile).unwrap_or(unit.position),
+                                ) && n.id != task.node
                                     && n.kind == task.kind
+                                    && (n.kind != ResourceKind::Food
+                                        || n.object == aoe_map::ObjectKind::ForageBush)
                                     && overlay.resource_available(*n)
+                                    && self.node_has_work_slot(n.id, n.kind, id)
                                     && distance_squared(n.tile, task.tile) <= (radius as u64).pow(2)
                             }),
                     );
@@ -61,6 +67,20 @@ impl GameWorld {
         let work = task
             .work_tile
             .filter(|tile| self.tile_passable(*tile))
+            .or_else(|| {
+                // A first order may come from across the map. Certify the
+                // clicked work area locally; route admission still starts at
+                // the actual worker, with the same eight-node bound.
+                perimeter(aoe_core::TileRect::from_xywh(
+                    task.tile.x,
+                    task.tile.y,
+                    1,
+                    1,
+                ))
+                .into_iter()
+                .filter(|tile| self.tile_passable(*tile))
+                .min_by_key(|tile| (distance_squared(from, *tile), tile.y, tile.x))
+            })
             .unwrap_or(from);
         let mut seen = BTreeSet::from([work]);
         let mut queue = VecDeque::from([work]);
@@ -97,7 +117,10 @@ impl GameWorld {
                 continue;
             }
             attempts += 1;
-            if self.approach_resource(id, node.tile).is_ok() {
+            if self
+                .approach_resource_in(id, node.tile, Some(&seen))
+                .is_ok()
+            {
                 task.node = node.id;
                 task.tile = node.tile;
                 task.fish = self.fish_object(node.id);

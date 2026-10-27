@@ -17,7 +17,7 @@ struct CollisionChunk {
     stamp: [u8; 32],
     occupied: BTreeMap<TileCoord, u8>,
     depleted: BTreeSet<u64>,
-    bridges: BTreeMap<TileCoord, bool>,
+    bridges: BTreeMap<TileCoord, u16>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -95,8 +95,8 @@ impl ResourceOverlay {
                 .chunk(chunk)
                 .is_some_and(|c| !c.bridges.is_empty())
     }
-    /// Axis of a completed deck tile: true for the world X axis.
-    pub fn bridge_axis(&self, tile: TileCoord) -> Option<bool> {
+    /// Neighbour direction bits of a completed raster deck tile.
+    pub fn bridge_connections(&self, tile: TileCoord) -> Option<u16> {
         if self.navigation_state.snapshot.bridge_tiles == 0 {
             return None;
         }
@@ -108,90 +108,6 @@ impl ResourceOverlay {
             .copied()
     }
 
-    /// Overrides terrain edges touching a bridge. Banks are ordinary land;
-    /// only the water deck is restricted, preventing lateral/diagonal entry.
-    pub fn bridge_edge(&self, from: TileCoord, to: TileCoord) -> Option<bool> {
-        let a = self.bridge_axis(from);
-        let b = self.bridge_axis(to);
-        let axis = a.or(b)?;
-        Some(
-            a.zip(b).is_none_or(|(a, b)| a == b)
-                && if axis {
-                    from.y == to.y && from.x.abs_diff(to.x) == 1
-                } else {
-                    from.x == to.x && from.y.abs_diff(to.y) == 1
-                },
-        )
-    }
-
-    /// Full one-tile-wide footprint, including the two land endpoints.
-    /// Only changed chunks and their border neighbours acquire new stamps.
-    pub fn add_bridge(
-        &mut self,
-        rect: aoe_core::TileRect,
-    ) -> Result<(), super::ResourceOverlayError> {
-        let deck = bridge_deck(rect).ok_or(super::ResourceOverlayError::InvalidSnapshot)?;
-        let count = u64::try_from(deck.width().max(deck.height())).unwrap_or(u64::MAX);
-        if (self.bridge_tile_count() as u64)
-            .saturating_add(self.navigation_state.obstacles.len() as u64)
-            .saturating_add(count)
-            > super::MAX_OBSTACLE_TILES
-        {
-            return Err(super::ResourceOverlayError::Capacity);
-        }
-        for y in deck.min.y..deck.max.y {
-            for x in deck.min.x..deck.max.x {
-                if self.bridge_axis(TileCoord::new(x, y)).is_some() {
-                    return Err(super::ResourceOverlayError::InvalidSnapshot);
-                }
-            }
-        }
-        self.toggle_bridge(deck, rect.height() == 1);
-        Ok(())
-    }
-
-    /// Atomically replace a reserved foundation with its deck. Reserving the
-    /// full span already accounts for more cells than the completed deck.
-    pub fn complete_bridge(&mut self, rect: aoe_core::TileRect) -> bool {
-        let Some(deck) = bridge_deck(rect) else {
-            return false;
-        };
-        for y in rect.min.y..rect.max.y {
-            for x in rect.min.x..rect.max.x {
-                let tile = TileCoord::new(x, y);
-                if !self.navigation_state.obstacles.contains(&tile)
-                    || self.bridge_axis(tile).is_some()
-                {
-                    return false;
-                }
-            }
-        }
-        self.remove_footprint(rect);
-        self.toggle_bridge(deck, rect.height() == 1);
-        true
-    }
-
-    pub fn remove_bridge(&mut self, rect: aoe_core::TileRect) {
-        if let Some(deck) = bridge_deck(rect) {
-            let axis = rect.height() == 1;
-            for y in deck.min.y..deck.max.y {
-                for x in deck.min.x..deck.max.x {
-                    let tile = TileCoord::new(x, y);
-                    if self.bridge_axis(tile) == Some(axis) {
-                        self.navigation_toggle(tile, if axis { 4 } else { 5 }, 0);
-                    }
-                }
-            }
-        }
-    }
-
-    fn toggle_bridge(&mut self, deck: aoe_core::TileRect, axis: bool) {
-        for y in deck.min.y..deck.max.y {
-            for x in deck.min.x..deck.max.x {
-                self.navigation_toggle(TileCoord::new(x, y), if axis { 4 } else { 5 }, 0);
-            }
-        }
-    }
     /// Capture collision only, sharing its table independently of resource
     /// history. Later writes copy the fixed table, one shard and one chunk.
     pub(crate) fn navigation_snapshot(&self) -> Self {
@@ -225,7 +141,7 @@ impl ResourceOverlay {
         hash.update(&tile.y.to_le_bytes());
         let change = hash.finalize();
         let snapshot = &mut self.navigation_state.snapshot;
-        if domain == 4 || domain == 5 {
+        if domain == 4 {
             if snapshot
                 .chunk(key(tile))
                 .is_some_and(|chunk| chunk.bridges.contains_key(&tile))
@@ -236,9 +152,9 @@ impl ResourceOverlay {
             }
         }
         let chunk = snapshot.chunk_mut(key(tile));
-        if domain == 4 || domain == 5 {
+        if domain == 4 {
             if chunk.bridges.remove(&tile).is_none() {
-                chunk.bridges.insert(tile, domain == 4);
+                chunk.bridges.insert(tile, identity as u16);
             }
         } else if domain == 2 {
             chunk.depleted.insert(identity);
@@ -323,23 +239,6 @@ impl ResourceOverlay {
             }
         }
     }
-}
-
-fn bridge_deck(rect: aoe_core::TileRect) -> Option<aoe_core::TileRect> {
-    if rect.min.x < 0 || rect.min.y < 0 {
-        return None;
-    }
-    let mut deck = rect;
-    if rect.height() == 1 && (3..=42).contains(&rect.width()) {
-        deck.min.x += 1;
-        deck.max.x -= 1;
-    } else if rect.width() == 1 && (3..=42).contains(&rect.height()) {
-        deck.min.y += 1;
-        deck.max.y -= 1;
-    } else {
-        return None;
-    }
-    Some(deck)
 }
 
 #[cfg(test)]

@@ -61,6 +61,14 @@ Layers, each testable on its own:
 | Python bindings | `crates/sdk-python` (`aoeworld`) | the SDK for Python, GIL released while waiting |
 | Example AI | `ai/` (`aoe_ai`) | a Dark and Feudal Age player and a many-bot host |
 
+`UnitKind.VASSAL` (Rust `UnitKind::Vassal`) trains at a Castle with
+`client.train(castle.id, aoeworld.UnitKind.VASSAL)`. Garrison it in that Castle
+with the normal command to activate the [domain economy](economy/vassal.md).
+`Unit.home_castle` identifies its home, and a Villager's `Unit.managed_by`
+identifies its controlling Vassal. Both are optional entity IDs, visible only to
+the owner. The Rust getters return `Option<EntityId>`; Python returns `int | None`.
+Manual worker orders release management until the worker becomes idle.
+
 ## Slots, tokens and what a slot sees
 
 A match has *N* slots numbered from 0; slot *i* controls player *i* and nothing
@@ -98,7 +106,7 @@ the same value in `X-AoeWorld-Admin-Token`.
 
 Optional match rules (both validated, defaults keep the shipped game):
 
-* `"population_cap": 5..5000` (default 200): the ceiling on any player's
+* `"population_cap": 5..5000` (default 1000): the ceiling on any player's
   population; the world's capacities are sized per seat from it (see
   [capacities](scale/capacity.md)). 100 players x 1,000 = 100,000 units.
 * `"start_units": {"villagers": n, "militia": m}`: extra units every player

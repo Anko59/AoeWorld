@@ -25,6 +25,7 @@ fn building(id: usize) -> GameplayBuildingState {
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
         age: aoe_protocol::Age::Dark,
     }
 }

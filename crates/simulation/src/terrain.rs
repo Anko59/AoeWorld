@@ -131,7 +131,7 @@ impl Terrain {
                     return Ok(false);
                 };
                 Ok(destination_passable(
-                    cell.passable || overlay.bridge_axis(tile).is_some(),
+                    cell.passable || overlay.bridge_connections(tile).is_some(),
                     cell.node.is_some_and(|node| overlay.blocks_node(node)),
                     overlay.blocks_tile(tile),
                 ))

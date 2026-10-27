@@ -1,4 +1,16 @@
 // Regenerated for bounded obstruction state, arrival hysteresis and unchanged-wait suppression.
+// Combined bundle: Vassal economy state, water geometry and eco2 job rules
+// regenerate current replay pins. Retain all scenarios and thread comparisons.
+// The Vassal manager adds its fair cursor, active index and controlled jobs
+// to canonical state. Regenerate current pins for this intentional schema
+// change; independent runs, thread equality and emitted-change pins stay intact.
+// Vassal home bindings add an ordered map to canonical economy state,
+// including the empty map length. Regenerate current hashes for this deliberate
+// schema change; preserve the scenarios, emitted changes and replay comparisons.
+// Rebased onto #573: its avoidance, arrival slots, settling and contact drop-off
+// now combine with eco2 reservations (reservation-aware refinement, staged
+// transport boarding). Regenerated the observed current hashes with the same
+// scenarios via `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation`.
 //! Auto-scout flags and retained frontier state deliberately extend replay hashes
 //! and change digests; current pins are regenerated, with thread checks retained.
 //! The parallel proposal phase must reproduce the sequential engine bit for
@@ -166,7 +178,7 @@ fn parallel_movement_matches_the_pinned_sequential_replay() {
 // Regenerate the current combined replay for retained detours, open TC arches,
 // drop-off work state, prepaid reseeds and auto-scout state. Keep every
 // sequential/parallel equality assertion and the existing scenario unchanged.
-const PINNED_FINAL_HASH: &str = "8a42b80bcd09fa2347058df404272210643a429b9dcc761cd4422ea376449cd8";
+const PINNED_FINAL_HASH: &str = "fef78f2af05f3a428f269f6e02fdcc9be9f52be297aaf81042a271990f4c1f08";
 const PINNED_CHANGE_DIGEST: &str =
     "b753afc4726f1222d4a9f903b5c86ba6abe6adbae5f58b02cc3f15585432a65a";
 
@@ -188,7 +200,7 @@ fn parallel_movement_with_buildings_matches_the_pinned_sequential_replay() {
 // The tests above retain complete 1/2/6-thread equality checks.
 // Cargo/embarked maps extend canonical state; the emitted-change digest stays.
 const PINNED_BUILDINGS_HASH: &str =
-    "adcc3c5c0532b3f450b771c063d69a5656934add6af254fe0ea70398d261a743";
+    "1dd958d17ccd2357c17a20283fcbe7357924f9b36478695cfe4027889bd1d2e4";
 const PINNED_BUILDINGS_DIGEST: &str =
     "4694825603fc6a75af7fd584e98a4f33a8640e5342b160b645ccb698ec6af4be";
 
@@ -261,4 +273,50 @@ fn proposal_rechecks_following_after_an_earlier_mover_changes_spacing() {
     assert!(!world.following_unit(index));
     assert!(!world.apply_step(proposal, &mut Vec::new(), &mut Vec::new()));
     assert_eq!(world.unit(follower).unwrap().position, position);
+}
+
+#[test]
+fn a_walking_unit_with_pending_lookahead_still_gets_a_pure_proposal() {
+    let (mut world, id) = waiting_fixture();
+    let origin = TileCoord::new(10, 10);
+    let target = TileCoord::new(60, 10);
+    let mut planner = aoe_map::RoutePlanner::new(origin, target, crate::MAX_ROUTE_WORK_PER_ORDER);
+    let path = loop {
+        match world.poll_world_route_planner(&mut planner, 1_024, &|| false, UnitKind::Scout) {
+            aoe_map::RoutePlannerPoll::Path(path) => break path,
+            aoe_map::RoutePlannerPoll::Pending => assert!(planner.work() < 16_384),
+            other => panic!("expected a first leg: {other:?}"),
+        }
+    };
+    assert!(planner.wants_lookahead());
+    let index = world.lookup[&id];
+    let waypoint = WorldPosition::from_tile_center(path.tiles[1]).unwrap();
+    let destination = WorldPosition::from_tile_center(target).unwrap();
+    world.units[index].route = path.tiles.into_iter().skip(2).collect();
+    world.units[index].order = Some(MovementOrder {
+        origin: world.units[index].state.position,
+        waypoint,
+        destination,
+        target_tile: target,
+        segment_length: 1_024,
+        travelled: 0,
+        speed_carry: 0,
+    });
+    world.store_planner(index, Some(planner));
+    let hash = world.canonical_hash();
+    let proposal = world.propose_steps(&[id], 0).pop().unwrap();
+    assert!(
+        proposal.is_some(),
+        "lookahead is a separate pass after movement"
+    );
+    assert_eq!(world.canonical_hash(), hash, "proposals must remain pure");
+    assert!(world.apply_step(proposal.unwrap(), &mut Vec::new(), &mut Vec::new()));
+    assert!(world.unit(id).unwrap().position.x > 10 * 1_024 + 512);
+    assert!(
+        world.units[index]
+            .planner
+            .as_ref()
+            .unwrap()
+            .wants_lookahead()
+    );
 }

@@ -10,13 +10,12 @@
 //! rejected at apply); they run
 //! the sequential path in the same order, so they consume the shared planning
 //! budget exactly as before.
-use super::parallel::par_map;
+use super::parallel::par_map_into;
 use super::{facing_for, interpolate};
 use crate::PlayerEconomy;
 use crate::game_path::{next_waypoint, segment_length};
 use crate::{GameUnit, GameWorld, MovementOrder, UnitTask};
 use aoe_core::{ChunkCoord, EntityId, PlayerId, WorldPosition};
-use aoe_map::RoutePlanner;
 
 mod avoidance;
 mod lookahead;
@@ -25,7 +24,9 @@ mod settling;
 pub(crate) use settling::Obstruction;
 
 /// A proposed tick of one mover.
+#[derive(Debug)]
 pub(crate) struct FastStep {
+    index: usize,
     state: GameUnit,
     order: Option<MovementOrder>,
     /// Route tiles consumed from the front of the unit's route.
@@ -38,6 +39,7 @@ pub(crate) struct FastStep {
 }
 
 /// Per-tick dense lookups that replace ordered-map reads on the per-mover path.
+#[derive(Debug, Default)]
 struct Tables {
     /// Owner economy by player id; players past the table use the map.
     economies: Vec<Option<PlayerEconomy>>,
@@ -47,16 +49,17 @@ struct Tables {
 }
 
 impl Tables {
-    fn build(world: &GameWorld) -> Self {
-        let mut economies = Vec::new();
+    fn refresh(&mut self, world: &GameWorld) {
+        self.economies.clear();
         for economy in world.players().filter(|p| usize::from(p.player.0) < 4_096) {
             let at = usize::from(economy.player.0);
-            if at >= economies.len() {
-                economies.resize(at + 1, None);
+            if at >= self.economies.len() {
+                self.economies.resize(at + 1, None);
             }
-            economies[at] = Some(economy);
+            self.economies[at] = Some(economy);
         }
-        let mut busy = vec![false; world.next_entity_id as usize];
+        self.busy.clear();
+        self.busy.resize(world.next_entity_id as usize, false);
         let jobs = world
             .economy
             .gatherers
@@ -65,11 +68,10 @@ impl Tables {
             .chain(world.combat.attackers.keys())
             .chain(world.economy.builders.keys());
         for id in jobs {
-            if let Some(slot) = busy.get_mut(id.0 as usize) {
+            if let Some(slot) = self.busy.get_mut(id.0 as usize) {
                 *slot = true;
             }
         }
-        Self { economies, busy }
     }
 
     fn economy(&self, world: &GameWorld, player: PlayerId) -> Option<PlayerEconomy> {
@@ -84,6 +86,30 @@ impl Tables {
     }
 }
 
+/// Non-canonical high-water buffers shared by successive movement ticks.
+#[derive(Debug, Default)]
+pub(crate) struct Scratch {
+    pub(crate) movers: Vec<EntityId>,
+    pub(crate) proposals: Vec<Option<FastStep>>,
+    tables: Tables,
+    #[cfg(not(target_arch = "wasm32"))]
+    jobs: Vec<usize>,
+    #[cfg(not(target_arch = "wasm32"))]
+    turns: Vec<usize>,
+    #[cfg(not(target_arch = "wasm32"))]
+    followers: super::spacing::Snapshot,
+}
+
+impl Scratch {
+    pub(crate) fn take_step(&mut self, turn: usize) -> Option<FastStep> {
+        #[cfg(not(target_arch = "wasm32"))]
+        let slot = *self.turns.get(turn)?;
+        #[cfg(target_arch = "wasm32")]
+        let slot = turn;
+        self.proposals.get_mut(slot)?.take()
+    }
+}
+
 enum Next {
     Segment(WorldPosition),
     Waiting,
@@ -92,21 +118,86 @@ enum Next {
 impl GameWorld {
     /// Proposals in rotation order: entry `turn` belongs to
     /// `movers[(start + turn) % movers.len()]`.
-    pub(crate) fn propose_steps(&self, movers: &[EntityId], start: usize) -> Vec<Option<FastStep>> {
+    pub(crate) fn propose_steps_into(
+        &self,
+        movers: &[EntityId],
+        start: usize,
+        scratch: &mut Scratch,
+    ) {
         let count = movers.len();
         if count == 0 {
-            return Vec::new();
+            scratch.proposals.clear();
+            return;
         }
-        let tables = Tables::build(self);
-        par_map(count, |turn| {
-            self.propose_step(movers[(start + turn) % count], &tables)
-        })
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Scratch {
+                jobs,
+                turns,
+                followers,
+                tables,
+                proposals,
+                ..
+            } = scratch;
+            jobs.clear();
+            turns.clear();
+            turns.resize(count, usize::MAX);
+
+            // Only ordered movers enter the immutable proposal batch.
+            for turn in 0..count {
+                let id = movers[(start + turn) % count];
+                if let Some(&index) = self.lookup.get(&id)
+                    && self.units[index].order.is_some()
+                {
+                    turns[turn] = jobs.len();
+                    jobs.push(index);
+                }
+            }
+            if jobs.is_empty() {
+                proposals.clear();
+                return;
+            }
+            let dense = followers.refresh(
+                &self.followers,
+                self.config.width_tiles,
+                self.config.height_tiles,
+            );
+            tables.refresh(self);
+            par_map_into(jobs.len(), proposals, |slot| {
+                let index = jobs[slot];
+                let following = if dense {
+                    self.following_unit_in(index, followers)
+                } else {
+                    self.following_unit(index)
+                };
+                self.propose_step(index, tables, following)
+            });
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            scratch.tables.refresh(self);
+            let Scratch {
+                tables, proposals, ..
+            } = scratch;
+            par_map_into(count, proposals, |turn| {
+                let index = *self.lookup.get(&movers[(start + turn) % count])?;
+                self.propose_step(index, tables, self.following_unit(index))
+            });
+        }
+    }
+
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(crate) fn propose_steps(&self, movers: &[EntityId], start: usize) -> Vec<Option<FastStep>> {
+        let mut scratch = Scratch::default();
+        self.propose_steps_into(movers, start, &mut scratch);
+        (0..movers.len())
+            .map(|turn| scratch.take_step(turn))
+            .collect()
     }
 
     /// The single-position-update cases of the sequential waypoint loop. `None`
     /// hands the unit to the sequential path.
-    fn propose_step(&self, id: EntityId, tables: &Tables) -> Option<FastStep> {
-        let index = *self.lookup.get(&id)?;
+    fn propose_step(&self, index: usize, tables: &Tables, following: bool) -> Option<FastStep> {
         let stored = &self.units[index];
         if stored.obstruction.is_some_and(|o| o.blocked >= 16) {
             return None;
@@ -115,20 +206,13 @@ impl GameWorld {
             return None;
         }
         let mut order = stored.order?;
-        if stored
-            .planner
-            .as_ref()
-            .is_some_and(RoutePlanner::wants_lookahead)
-        {
-            return None;
-        }
         let mut state = stored.state;
         if self.arrival_slot_occupied(index) {
             return None;
         }
+        let id = state.id;
         let economy = tables.economy(self, state.player);
         let (speed, denominator) = self.movement_speed_with(state.kind, economy);
-        let following = self.following_unit(index);
         let speed = if following && !self.local_retry(id) {
             0
         } else {
@@ -149,6 +233,9 @@ impl GameWorld {
         } else {
             interpolate(order, order.travelled)
         };
+        if !self.vassal_position_allowed(id, position) {
+            return None;
+        }
         let (previous_tile, tile) = (state.position.tile_floor(), position.tile_floor());
         if !self.local_unit_step_clear(index, state.position, position) {
             return None;
@@ -232,6 +319,7 @@ impl GameWorld {
             };
         }
         Some(FastStep {
+            index,
             vision_stale: self.unit_vision_stale(&state, economy),
             bucket: ChunkCoord::from_position(position),
             state,
@@ -275,9 +363,12 @@ impl GameWorld {
         changed: &mut Vec<EntityId>,
     ) -> bool {
         let id = step.state.id;
-        let Some(&index) = self.lookup.get(&id) else {
+        // Movement never inserts/removes unit slots. Keep a defensive check
+        // for callers retaining a proposal across a separate world mutation.
+        let index = step.index;
+        if self.units.get(index).is_none_or(|unit| unit.state.id != id) {
             return false;
-        };
+        }
         if step.following != self.following_unit(index)
             || self.arrival_slot_occupied(index)
             || !self.local_unit_step_clear(
@@ -324,3 +415,6 @@ impl GameWorld {
         true
     }
 }
+
+#[cfg(test)]
+mod tests;

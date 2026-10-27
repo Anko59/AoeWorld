@@ -6,7 +6,10 @@ use crate::{GameWorld, GameWorldError, PreparedResourceDepletion, Terrain};
 use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::ResourceKind;
 
+mod approach;
 mod chunks;
+mod jobs;
+pub(crate) use jobs::{Gatherers, WorkTarget};
 mod replacement;
 mod returning;
 
@@ -25,19 +28,29 @@ impl GameWorld {
         {
             return Err(EconomyError::Capacity);
         }
-        let a = *self.animal(animal).ok_or(EconomyError::InvalidResource)?;
+        let mut a = *self.animal(animal).ok_or(EconomyError::InvalidResource)?;
         if a.hp > 0 || a.task != crate::AnimalTask::Carcass || a.food_remaining == 0 {
             return Err(EconomyError::InvalidResource);
         }
-        self.begin_gather(id, 0, a.position.tile_floor(), ResourceKind::Food, None)?;
-        if let Some(task) = self.economy.gatherers.get_mut(&id) {
-            task.animal = Some(animal);
-            task.carcass_kind = Some(a.kind);
-            task.fish = None;
+        let player = self.unit(id).ok_or(EconomyError::UnknownEntity)?.player;
+        if !self.animal_has_work_slot(a.id, a.kind, id)
+            || !self.resource_has_work_spot(id, a.position.tile_floor())
+        {
+            a = self
+                .next_food_animal(player, a.position.tile_floor(), a.kind, a.id, id)
+                .ok_or(EconomyError::InvalidResource)?;
+            if a.hp > 0 || a.task != crate::AnimalTask::Carcass {
+                self.issue_hunt(player, &[id], a.id)?;
+                return Ok(());
+            }
         }
+        let mut task = GatherTask::new(0, a.position.tile_floor(), ResourceKind::Food, None);
+        task.animal = Some(a.id);
+        task.carcass_kind = Some(a.kind);
+        self.begin_gather_task(id, task)?;
         let index = self.lookup[&id];
         if self.units[index].state.task == UnitTask::Moving {
-            self.units[index].state.task = self.carcass_walk_task(animal);
+            self.units[index].state.task = self.carcass_walk_task(a.id);
         }
         Ok(())
     }
@@ -107,6 +120,10 @@ impl GameWorld {
         {
             return Err(EconomyError::InvalidResource);
         }
+        if self.economy.vassals.automatic && !self.managed_target_allowed(id, position(node.tile)?)
+        {
+            return Err(EconomyError::InvalidResource);
+        }
         // A refused order leaves the unit's current job alone.
         self.begin_gather(id, node.id, node.tile, node.kind, None)?;
         self.economy.builders.remove(&id);
@@ -122,7 +139,30 @@ impl GameWorld {
         kind: ResourceKind,
         farm: Option<EntityId>,
     ) -> Result<(), EconomyError> {
-        self.approach_resource(id, tile)?;
+        let mut task = GatherTask::new(node, tile, kind, farm);
+        if farm.is_none() {
+            task.fish = self.fish_object(node);
+        }
+        self.begin_gather_task(id, task)
+    }
+
+    fn begin_gather_task(
+        &mut self,
+        id: EntityId,
+        mut task: GatherTask,
+    ) -> Result<(), EconomyError> {
+        let farm = task.farm;
+        if task.farm.is_none() && task.animal.is_none() && task.fish.is_none() {
+            if (!self.node_has_work_slot(task.node, task.kind, id)
+                || self.approach_resource(id, task.tile).is_err())
+                && !self.replacement_resource(id, &mut task)
+            {
+                return Err(EconomyError::InvalidResource);
+            }
+        } else {
+            self.approach_resource(id, task.tile)?;
+        }
+        self.player_override(id);
         self.cancel_garrison_order(id);
         self.cancel_hunt(id);
         self.cancel_attack(id);
@@ -133,37 +173,17 @@ impl GameWorld {
         if self.units[index]
             .state
             .carried
-            .is_some_and(|load| load.kind != kind)
+            .is_some_and(|load| load.kind != task.kind)
         {
             self.units[index].state.carried = None;
         }
-        let mut task = GatherTask {
-            work_tile: None,
-            node,
-            farm,
-            animal: None,
-            carcass_kind: None,
-            fish: if farm.is_none() {
-                self.fish_object(node)
-            } else {
-                None
-            },
-            tile,
-            kind,
-            phase: GatherPhase::Approaching,
-            credits: 0,
-            dropoff: None,
-            return_target: None,
-            failed_dropoffs: Default::default(),
-            retry_tick: 0,
-        };
         self.units[index].state.task = if self.units[index].state.carried.is_some() {
             UnitTask::Carrying
         } else {
             UnitTask::Moving
         };
         let keep = self.units[index].state.carried.is_none_or(|load| {
-            load.amount < self.gather_capacity(&self.units[index].state, task.farm.is_some())
+            load.amount < self.gather_task_capacity(&self.units[index].state, &task)
         }) || self.begin_return(id, &mut task);
         if keep {
             self.economy.gatherers.insert(id, task);
@@ -176,47 +196,6 @@ impl GameWorld {
             self.remove_spent_farm(old);
         }
         Ok(())
-    }
-
-    pub(super) fn approach_resource(
-        &mut self,
-        id: EntityId,
-        target: TileCoord,
-    ) -> Result<(), EconomyError> {
-        let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
-        let mut candidates = perimeter(aoe_core::TileRect::new(
-            target,
-            TileCoord::new(target.x + 1, target.y + 1),
-        ));
-        candidates.retain(|tile| {
-            self.unit_tile_passable(unit.kind, *tile, &|| false)
-                .unwrap_or(false)
-                && !self.economy.blocked_tiles.contains(tile)
-        });
-        candidates.sort_by_key(|tile| {
-            (
-                self.work_spot_busy(*tile, id),
-                distance_squared(unit.position.tile_floor(), *tile),
-                tile.y,
-                tile.x,
-            )
-        });
-        let mut failure = GameWorldError::Unreachable;
-        for tile in candidates {
-            match self.issue_task_move(id, position(tile)?) {
-                Ok(_) => return Ok(()),
-                Err(error) => {
-                    failure = error;
-                    if matches!(
-                        error,
-                        GameWorldError::PathBudgetExceeded | GameWorldError::Environment(_)
-                    ) {
-                        break;
-                    }
-                }
-            }
-        }
-        Err(failure.into())
     }
 
     pub(super) fn advance_gathering(
@@ -288,7 +267,14 @@ impl GameWorld {
         }
         if task.phase == GatherPhase::Approaching && self.units[index].last_movement_error.is_some()
         {
-            return false;
+            if task.farm.is_some() || task.fish.is_some() || task.approach_failures >= 8 {
+                return false;
+            }
+            task.approach_failures += 1;
+            if task.animal.is_some() {
+                return self.replacement_animal(id, task);
+            }
+            return self.replacement_resource(id, task);
         }
         if task.phase == GatherPhase::Returning {
             let unit = self.units[index].state;
@@ -320,6 +306,7 @@ impl GameWorld {
             return self.resume_resource(id, task);
         }
         if task.phase == GatherPhase::Approaching && task.farm.is_none() {
+            task.approach_failures = 0;
             task.work_tile = Some(tile);
             self.step_up_to_work(id, index, task.tile);
         }
@@ -347,7 +334,7 @@ impl GameWorld {
         };
         if remaining == 0
             || self.units[index].state.carried.is_some_and(|load| {
-                load.amount >= self.gather_capacity(&self.units[index].state, task.farm.is_some())
+                load.amount >= self.gather_task_capacity(&self.units[index].state, task)
             })
         {
             if self.units[index].state.carried.is_some() {
@@ -363,16 +350,17 @@ impl GameWorld {
             (Some(aoe_map::ObjectKind::DeepFish), UnitKind::FishingShip) => 416500,
             (Some(aoe_map::ObjectKind::ShoreFish), UnitKind::FishingShip) => 238000,
             (Some(_), _) => 430000,
+            _ if task.farm.is_some() => u64::from(super::farm::FARMER_WORK_HUNDREDTHS) * 10_000,
             _ => task.animal.and_then(|id| self.animal(id)).map_or_else(
                 || {
                     let (numerator, denominator) =
                         self.gather_rate(self.units[index].state.player, task.kind);
-                    numerator * 10_000 / denominator
+                    u64::from(numerator) * 10_000 / u64::from(denominator)
                 },
-                |a| u32::from(a.kind.rules().gather_hundredths) * 10_000,
+                |a| u64::from(a.kind.rules().gather_hundredths) * 10_000,
             ),
         };
-        task.credits += u64::from(rate);
+        task.credits += rate;
         // Millionths retain stacked 1.15 * 1.15 = 1.3225 exactly.
         let threshold = u64::from(self.config.tick_hz) * 1_000_000;
         if task.credits < threshold {
@@ -386,6 +374,12 @@ impl GameWorld {
                 task.farm.and_then(|farm| self.deplete_farm(farm))
             };
             let Some(left) = left else {
+                if task.farm.is_some() {
+                    // Work can be ready before FARM has produced its next
+                    // food. Keep one ready cycle, not an unbounded work bank.
+                    task.credits = threshold;
+                    return true;
+                }
                 return false;
             };
             let amount = self.units[index]
@@ -397,9 +391,7 @@ impl GameWorld {
                 kind: task.kind,
                 amount,
             });
-            if amount >= self.gather_capacity(&self.units[index].state, task.farm.is_some())
-                || left == 0
-            {
+            if amount >= self.gather_task_capacity(&self.units[index].state, task) || left == 0 {
                 return self.begin_return(id, task);
             }
             return true;
@@ -425,7 +417,7 @@ impl GameWorld {
                 amount,
             });
             self.economy.depletions.push(depletion);
-            if amount >= self.gather_capacity(&self.units[index].state, task.farm.is_some())
+            if amount >= self.gather_task_capacity(&self.units[index].state, task)
                 || depletion.remaining == 0
             {
                 return self.begin_return(id, task);

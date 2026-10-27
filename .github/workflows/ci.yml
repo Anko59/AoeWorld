@@ -104,15 +104,15 @@ jobs:
         with: { name: wasm-browser-report, path: reports/wasm/, retention-days: 7, if-no-files-found: ignore }
 
   e2e:
-    # The Playwright suite in three parallel shards (#388): the same make
-    # test-e2e, with AOE_E2E_SHARD naming one part. The job's result is
+    # The Playwright suite in four parallel shards (#388; three hit 2400 s): the
+    # same make test-e2e, with AOE_E2E_SHARD naming one part. The job's result is
     # success only when every shard passed, and `required` checks that result.
     needs: select
     if: ${{ needs.select.outputs.e2e == 'true' }}
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -121,7 +121,7 @@ jobs:
       - run: make bootstrap
       - run: make test-e2e
         env:
-          AOE_E2E_SHARD: ${{ matrix.shard }}/3
+          AOE_E2E_SHARD: ${{ matrix.shard }}/4
           # One worker on the 4-core runner: software (SwiftShader) rendering is
           # CPU-bound, and three servers per shard timed out heavy specs (#457).
           AOE_E2E_WORKERS: '1'

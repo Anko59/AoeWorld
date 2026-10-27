@@ -125,3 +125,36 @@ fn animals_walk_on_map_terrain_herded_sheep_follow_and_deer_flee() {
     assert_eq!(w.animal(sheep).unwrap().position, at(x, y), "herded sheep");
     assert_ne!(w.animal(deer).unwrap().position, deer_start, "deer flee");
 }
+
+/// A lead route that never finishes once held the shepherd in Shepherding for
+/// ever beside a live sheep, where no client could reassign it (#591). The
+/// shepherd here is pinned in place, as a crowd pins it in a real match.
+#[test]
+fn a_stalled_lead_slaughters_the_sheep_where_the_shepherd_stands() {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    w.place_town_center(PlayerId(0), TileCoord::new(95, 95))
+        .unwrap();
+    let worker = w.spawn_villager(PlayerId(0), at(118, 97)).unwrap();
+    let sheep = w.spawn_animal(AnimalKind::Sheep, at(117, 97)).unwrap();
+    w.advance();
+    w.issue_hunt(PlayerId(0), &[worker], sheep).unwrap();
+    let mut pinned = None;
+    let mut slaughtered = None;
+    for tick in 0..20 * 300 {
+        w.advance();
+        if pinned.is_none() && phase(&w, worker, sheep) == "herd" {
+            pinned = Some(w.unit(worker).unwrap().position);
+        }
+        if let Some(position) = pinned {
+            let index = w.lookup[&worker];
+            w.units[index].state.position = position;
+        }
+        if w.animal(sheep).is_some_and(|a| a.hp == 0) {
+            slaughtered = Some(tick);
+            break;
+        }
+    }
+    assert!(pinned.is_some(), "the shepherd never started leading");
+    let tick = slaughtered.expect("the pinned shepherd held its sheep for ever");
+    assert!(tick < 20 * 120, "slaughtered only at tick {tick}");
+}

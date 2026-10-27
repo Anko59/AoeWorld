@@ -55,12 +55,15 @@ impl GameWorld {
         } else {
             (start + 1) % mover_count
         };
-        let mut still_moving = Vec::with_capacity(movers.len());
+        let mut scratch = std::mem::take(&mut self.movement_scratch);
+        let mut still_moving = std::mem::take(&mut scratch.movers);
+        still_moving.clear();
+        still_moving.reserve(movers.len());
         changed.reserve(movers.len());
         // Pure proposals in parallel, then the shared writes in rotation
         // order; a proposal whose assumption fails runs the sequential path.
         self.begin_vision_batch();
-        let mut proposals = self.propose_steps(&movers, start);
+        self.propose_steps_into(&movers, start, &mut scratch);
         for turn in 0..mover_count {
             let id = movers[(start + turn) % mover_count];
             if let Some(&index) = self.lookup.get(&id)
@@ -69,7 +72,7 @@ impl GameWorld {
                 changed.push(id);
                 continue;
             }
-            if let Some(step) = proposals[turn].take()
+            if let Some(step) = scratch.take_step(turn)
                 && self.apply_step(step, &mut still_moving, &mut changed)
             {
                 continue;
@@ -123,6 +126,12 @@ impl GameWorld {
                 let arrived = skipped || (!detoured && order.travelled >= order.segment_length);
                 if skipped {
                     speed_budget += u128::from(step) * u128::from(denominator);
+                }
+                if !self.vassal_position_allowed(id, position) {
+                    self.stop_unit_orders(index);
+                    self.units[index].last_movement_error = Some(GameWorldError::VassalLeash);
+                    finished = true;
+                    break;
                 }
                 let previous_tile = current_position.tile_floor();
                 let tile = position.tile_floor();
@@ -290,6 +299,8 @@ impl GameWorld {
         self.flush_vision_batch();
         self.engage_formations(&mut changed);
         self.plan_routes_ahead(&movers, start, lookahead_budget);
+        scratch.movers = movers;
+        self.movement_scratch = scratch;
         self.resume_queued_moves(&mut changed);
         self.tick.0 = self.tick.0.saturating_add(1);
         changed

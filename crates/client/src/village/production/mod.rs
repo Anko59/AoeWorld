@@ -55,6 +55,7 @@ fn shortest<'a>(
     owner: PlayerId,
     kind: UnitKind,
     pending: &PendingTraining,
+    occupied_home: impl Fn(&GameplayBuildingState) -> bool,
 ) -> Option<&'a GameplayBuildingState> {
     if !pending.can_send() {
         return None;
@@ -64,6 +65,7 @@ fn shortest<'a>(
         .filter(|b| {
             b.hp > 0
                 && selected.has_building(b.id)
+                && (kind != UnitKind::Vassal || (!occupied_home(b) && pending.count(b.id) == 0))
                 && b.training_queue.len() + pending.count(b.id) < aoe_protocol::MAX_TRAINING_QUEUE
                 && matches!(
                     availability::training(b, player, owner, kind),
@@ -105,7 +107,21 @@ fn target(client: &Client, kind: UnitKind) -> Option<&GameplayBuildingState> {
         owner(client),
         kind,
         &client.village.pending_training,
+        |b| has_vassal(client, b),
     )
+}
+
+/// A Castle owns at most one Vassal: queued, garrisoned or alive in the field.
+fn has_vassal(client: &Client, castle: &GameplayBuildingState) -> bool {
+    castle
+        .training_queue
+        .iter()
+        .any(|e| e.kind == UnitKind::Vassal)
+        || castle.garrison.iter().any(|g| g.kind == UnitKind::Vassal)
+        || client
+            .units
+            .values()
+            .any(|u| u.kind == UnitKind::Vassal && u.hp > 0 && u.home_castle == Some(castle.id))
 }
 
 fn blocked_reason(
@@ -134,6 +150,11 @@ pub(super) fn availability(client: &Client, kind: UnitKind) -> Availability {
     let Some(building) = selected(client) else {
         return Availability::Unavailable;
     };
+    if kind == UnitKind::Vassal
+        && (has_vassal(client, building) || client.village.pending_training.count(building.id) > 0)
+    {
+        return Availability::UniqueUnit;
+    }
     blocked_reason(
         building,
         client

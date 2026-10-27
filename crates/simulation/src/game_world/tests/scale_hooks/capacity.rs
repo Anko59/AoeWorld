@@ -1,4 +1,4 @@
-//! A 100-seat match at the shipped 200 population with Feudal-sized villages:
+//! A 100-seat match at the shipped 1000 population with Feudal-sized villages:
 //! the world capacities hold, and placing a building still works.
 //!
 //! The owner's report: "The order queue is full" on every build order soon
@@ -163,10 +163,11 @@ fn a_full_world_refuses_as_a_world_limit() {
 #[test]
 fn match_limits_cover_every_seat_at_its_population() {
     let limits = WorldLimits::for_match(100, MAX_POPULATION);
-    assert_eq!(limits.buildings, 100 * crate::BUILDINGS_PER_PLAYER);
-    assert_eq!(limits.gatherers, 100 * 200);
-    assert_eq!(limits.builders, 100 * 200);
-    assert_eq!(limits.hunters, 100 * 200);
+    assert_eq!(MAX_POPULATION, 1_000);
+    assert_eq!(limits.buildings, 100 * 5_120);
+    assert_eq!(limits.gatherers, 100 * 1_000);
+    assert_eq!(limits.builders, 100 * 1_000);
+    assert_eq!(limits.hunters, 100 * 1_000);
     assert_eq!(limits.animals, 100 * crate::ANIMALS_PER_PLAYER);
     // The overlay's collision ceiling holds every building of the largest world.
     let largest = WorldLimits::for_match(crate::game_world::economy::MAX_ECONOMY_PLAYERS, 5_000);

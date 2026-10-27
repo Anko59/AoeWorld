@@ -7,6 +7,8 @@ use aoe_map::ResourceNode;
 use crate::game_world::tests::economy::fixture;
 
 mod facing;
+mod occupancy;
+mod rates;
 mod replacement;
 
 #[test]

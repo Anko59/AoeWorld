@@ -17,8 +17,13 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, BinaryHeap, HashMap};
 use std::sync::{Arc, OnceLock};
 mod grid;
+mod snapshot;
 mod static_data;
-pub use static_data::NavigationSnapshot;
+pub use snapshot::NavigationSnapshot;
+mod packed;
+pub use packed::NavigationStorage;
+mod graph;
+use graph::ChunkPortals;
 pub use static_data::{NAVIGATION_FORMAT_VERSION, NavigationChunk, navigation_checksum};
 mod prepared;
 pub(crate) use prepared::{Resolution, ResolutionOutcome};
@@ -48,29 +53,6 @@ struct Portal {
     cross: TileCoord,
     crossing_cost: u32,
     bidirectional: bool,
-}
-
-#[derive(Debug)]
-pub(crate) struct ChunkPortals {
-    portals: Vec<Portal>,
-    /// Filled on the first route through this chunk, after connectivity queries.
-    costs: OnceLock<Vec<Vec<Option<u32>>>>,
-    labels: grid::Labels,
-    components: u16,
-    links: Vec<(u16, u16)>,
-}
-
-impl ChunkPortals {
-    fn bytes(&self) -> usize {
-        let count = self.portals.capacity();
-        std::mem::size_of::<Self>()
-            + count * std::mem::size_of::<Portal>()
-            + count * count * std::mem::size_of::<Option<u32>>()
-            + self.labels.bytes()
-            + self.links.capacity() * std::mem::size_of::<(u16, u16)>()
-            + count * std::mem::size_of::<Vec<Option<u32>>>()
-            + 64
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -192,7 +174,7 @@ impl Ground<'_> {
 
     fn is_open(&self, tile: TileCoord) -> Result<bool> {
         Ok(self.open(tile)?.is_some_and(|cell| {
-            (cell.passable || self.overlay.bridge_axis(tile).is_some())
+            (cell.passable || self.overlay.bridge_connections(tile).is_some())
                 && !self.overlay.blocks_tile(tile)
                 && cell.node.is_none_or(|node| !self.overlay.blocks_node(node))
         }))
@@ -215,6 +197,9 @@ impl Ground<'_> {
     fn diagonal_transition(&self, from: TileCoord, to: TileCoord) -> Result<Option<u32>> {
         if !self.is_open(from)? || !self.is_open(to)? || !self.edge(from, to)? {
             return Ok(None);
+        }
+        if self.overlay.bridge_edge(from, to) == Some(true) {
+            return Ok(Some(step_cost(from, to, false)));
         }
         let corners = [TileCoord::new(to.x, from.y), TileCoord::new(from.x, to.y)];
         for corner in corners {
@@ -278,6 +263,7 @@ impl Ground<'_> {
                 labels: grid::Labels::Empty,
                 components: 0,
                 links: Vec::new(),
+                packed: None,
             });
         }
         let mut portals = Vec::new();
@@ -358,6 +344,7 @@ impl Ground<'_> {
             labels,
             components,
             links,
+            packed: None,
         })
     }
 
@@ -367,9 +354,9 @@ impl Ground<'_> {
         }
         let stamp = self.overlay.navigation_key(key);
         if stamp == ResourceOverlay::default().navigation_key(key)
-            && let Some(chunk) = self.generator.static_navigation_chunk(key)
+            && let Some(graph) = self.generator.static_navigation_graph(key)
         {
-            return Ok(Arc::clone(&chunk.graph));
+            return Ok(graph);
         }
         if let Ok(mut cache) = self.generator.portal_cache().lock()
             && let Some(found) = cache.chunk(key, stamp)
@@ -383,19 +370,10 @@ impl Ground<'_> {
         Ok(built)
     }
 
-    fn row<'a>(
-        &self,
-        key: Key,
-        chunk: &'a ChunkPortals,
-        source: TileCoord,
-    ) -> Result<&'a [Option<u32>]> {
-        let Some(from) = chunk
-            .portals
-            .iter()
-            .position(|portal| portal.tile == source)
-        else {
-            return Ok(&[]);
-        };
+    fn ensure_costs(&self, key: Key, chunk: &ChunkPortals) -> Result<()> {
+        if chunk.packed.is_some() {
+            return Ok(());
+        }
         if chunk.costs.get().is_none() {
             let _span = self
                 .generator
@@ -422,12 +400,7 @@ impl Ground<'_> {
             }
             let _ = chunk.costs.set(costs);
         }
-        chunk
-            .costs
-            .get()
-            .and_then(|costs| costs.get(from))
-            .map(Vec::as_slice)
-            .ok_or(EnvironmentPageError::Unavailable)
+        Ok(())
     }
 }
 

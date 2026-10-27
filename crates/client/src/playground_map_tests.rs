@@ -17,6 +17,7 @@ fn snow_ice_mud_and_shallows_have_distinct_scene_materials() {
         GroundMaterial::Ice,
         GroundMaterial::Mud,
         GroundMaterial::Shore,
+        GroundMaterial::Ford,
     ];
     for (index, material) in materials.iter().enumerate() {
         for other in &materials[..index] {

@@ -1,8 +1,9 @@
 //! Authoritative village rules and bounded integer economy state.
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use aoe_map::ResourceKind;
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
 
+mod benchmark;
 mod buildings;
 mod construction;
 #[path = "economy/construction/demo.rs"]
@@ -16,21 +17,32 @@ mod garrison;
 #[path = "economy/construction/gates.rs"]
 mod gates;
 mod gathering;
+#[path = "economy/construction/insert.rs"]
+mod insertion;
 pub use garrison::GarrisonedUnit;
+pub(crate) use gathering::WorkTarget;
 mod hash;
+mod limits;
 mod market;
+pub(crate) use limits::MAX_ECONOMY_PLAYERS;
+pub use limits::{BUILDINGS_PER_PLAYER, WorldLimits};
 mod movement;
 mod navigation;
 pub(crate) mod placement;
 mod scouting;
 mod start_site;
 mod starting_kit;
+#[path = "economy/state/mod.rs"]
+mod state;
 mod tick;
+pub(crate) use state::Economy;
 pub use tick::TickPhase;
 pub(crate) mod training;
 pub use training::rally::{RallyPoint, RallyTarget};
 #[path = "economy/construction/bridge.rs"]
 mod bridge;
+mod vassal;
+pub use vassal::{VASSAL_RULES, VassalRules, VassalWork};
 mod wall;
 
 pub use buildings::{
@@ -38,13 +50,6 @@ pub use buildings::{
 };
 pub use market::{MARKET_RULES, MarketPrices};
 
-pub const MAX_ECONOMY_PLAYERS: usize = 128;
-/// Buildings (each wall segment is one) a seat may add to the world at the
-/// shipped 200 population: about 40 houses, 100 farms, the production and
-/// economy buildings, towers and several hundred wall segments.
-pub const BUILDINGS_PER_PLAYER: usize = 1_024;
-/// The most buildings per seat whatever the population ceiling.
-pub const MAX_BUILDINGS_PER_PLAYER: usize = 8_192;
 /// Villagers one build order may assign to construction.
 pub const MAX_BUILD_GROUP: usize = 32;
 
@@ -73,6 +78,7 @@ pub enum UnitKind {
     DemolitionShip,
     TransportShip,
     WarGalley,
+    Vassal,
 }
 impl UnitKind {
     pub const fn is_naval(self) -> bool {
@@ -204,6 +210,7 @@ pub struct GameBuilding {
     /// Prepaid farm rebuilds held by a Mill (at most 99).
     pub farm_reseeds: u8,
     pub garrison: Vec<GarrisonedUnit>,
+    pub bridge_span: Option<aoe_core::BridgeSpan>,
 }
 impl GameBuilding {
     /// Construction progress in thousandths, 1000 once complete.
@@ -260,6 +267,10 @@ pub const VILLAGE_RULES: VillageRules = VillageRules {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum EconomyError {
+    #[error("this Castle already has a Vassal or one in training")]
+    VassalExists,
+    #[error("a Vassal can garrison only in its home Castle")]
+    VassalHome,
     #[error("entity does not exist")]
     UnknownEntity,
     #[error("the building garrison is full")]
@@ -322,79 +333,6 @@ pub enum EconomyError {
     Movement(#[from] super::GameWorldError),
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct Economy {
-    pub(crate) garrison_orders: BTreeMap<EntityId, EntityId>,
-    pub(crate) garrison_reservations: BTreeMap<EntityId, u8>,
-    pub(crate) occupied_garrisons: BTreeSet<EntityId>,
-    pub(crate) ejections: BTreeMap<EntityId, (TileRect, Vec<GarrisonedUnit>)>,
-    pub(crate) cargo: BTreeMap<EntityId, Vec<EntityId>>,
-    pub(crate) embarked: BTreeMap<EntityId, EntityId>,
-    pub(crate) players: BTreeMap<PlayerId, PlayerEconomy>,
-    pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
-    /// Every building per player and kind, ascending by id: drop-off
-    /// candidates, housing and requirements read one player's buildings
-    /// without scanning the world. Maintained as buildings are placed and
-    /// removed; completion is checked per query.
-    pub(crate) dropoffs: BTreeMap<(PlayerId, BuildingKind), Vec<EntityId>>,
-    pub(crate) blocked_tiles: BTreeSet<TileCoord>,
-    pub(crate) open_gates: BTreeSet<EntityId>,
-    pub(crate) scouts: BTreeMap<EntityId, scouting::AutoScout>,
-    pub(crate) scout_searches: BTreeSet<EntityId>,
-    pub(crate) scout_cursor: Option<EntityId>,
-    pub(crate) gatherers: BTreeMap<EntityId, GatherTask>,
-    pub(crate) builders: BTreeMap<EntityId, BuildTask>,
-    pub(crate) depletions: Vec<aoe_map::Depletion>,
-    pub(crate) limits: WorldLimits,
-}
-
-/// World-wide capacity limits, sized per seat: a world of `players` seats
-/// whose players may each reach `population` never fills them in play.
-/// Workers (gatherers, builders, hunters) are units, so one per unit of
-/// population covers every seat; buildings get `BUILDINGS_PER_PLAYER` per seat.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct WorldLimits {
-    pub players: usize,
-    pub buildings: usize,
-    pub gatherers: usize,
-    pub builders: usize,
-    pub hunters: usize,
-    pub animals: usize,
-    /// Arrows and javelins in flight; a shot past it is not launched.
-    pub projectiles: usize,
-    /// The population ceiling of one player, however many houses stand.
-    pub population: u16,
-}
-
-impl WorldLimits {
-    /// The limits of a match of `players` seats whose players may each reach
-    /// `population`. Buildings per seat grow with a ceiling above the shipped
-    /// 200 (up to `MAX_BUILDINGS_PER_PLAYER`); workers are one per unit of
-    /// population. Never below the limits of a 16-seat world.
-    pub fn for_match(players: usize, population: u16) -> Self {
-        let seats = players.clamp(16, usize::from(u16::MAX));
-        let units = usize::from(population).max(usize::from(MAX_POPULATION));
-        let per_seat = (BUILDINGS_PER_PLAYER * units / usize::from(MAX_POPULATION))
-            .min(MAX_BUILDINGS_PER_PLAYER);
-        Self {
-            players: MAX_ECONOMY_PLAYERS.max(players),
-            buildings: seats * per_seat,
-            gatherers: seats * units,
-            builders: seats * units,
-            hunters: seats * units,
-            animals: seats * super::ANIMALS_PER_PLAYER,
-            // A shot lands before its shooter's next, so one per unit.
-            projectiles: seats * units,
-            population,
-        }
-    }
-}
-
-impl Default for WorldLimits {
-    fn default() -> Self {
-        Self::for_match(MAX_ECONOMY_PLAYERS, MAX_POPULATION)
-    }
-}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum GatherPhase {
     Approaching,
@@ -417,6 +355,7 @@ pub(crate) struct GatherTask {
     work_tile: Option<TileCoord>,
     kind: ResourceKind,
     phase: GatherPhase,
+    approach_failures: u8,
     credits: u64,
     dropoff: Option<EntityId>,
     return_target: Option<TileCoord>,

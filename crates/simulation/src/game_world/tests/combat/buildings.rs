@@ -170,7 +170,13 @@ fn attack_and_construct_orders_replace_each_other_without_resuming_old_work() {
     advance(&mut world, 2);
     assert_eq!(world.unit(builder).unwrap().task, UnitTask::Building);
     let work = world.building(house).unwrap().work_done;
-    let enemy = world.spawn_militia(PlayerId(1), at(99, 100)).unwrap();
+    // Keep the attacker off the builder's reserved work tile. This exercises
+    // order replacement rather than forcing an occupied-work-spot reroute.
+    let enemy = world.spawn_militia(PlayerId(1), at(99, 99)).unwrap();
+    assert_ne!(
+        world.unit(enemy).unwrap().position.tile_floor(),
+        world.unit(builder).unwrap().position.tile_floor()
+    );
     world.issue_attack(PlayerId(0), builder, enemy).unwrap();
     assert!(!world.economy.builders.contains_key(&builder));
     advance(&mut world, 2);
@@ -205,7 +211,12 @@ fn working_builders_do_not_retaliate_and_death_releases_their_job() {
         )
         .unwrap();
     advance(&mut world, 2);
-    let enemy = world.spawn_militia(PlayerId(1), at(99, 100)).unwrap();
+    // Adjacent combat must not rely on spawning both units on one work tile.
+    let enemy = world.spawn_militia(PlayerId(1), at(99, 99)).unwrap();
+    assert_ne!(
+        world.unit(enemy).unwrap().position.tile_floor(),
+        world.unit(builder).unwrap().position.tile_floor()
+    );
     world.issue_attack(PlayerId(1), enemy, builder).unwrap();
     world.advance();
     assert_eq!(world.unit(builder).unwrap().task, UnitTask::Building);

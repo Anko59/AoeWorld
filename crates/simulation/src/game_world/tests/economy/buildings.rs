@@ -337,9 +337,9 @@ fn cancelling_after_progress_refunds_only_the_undone_share() {
 }
 
 #[test]
-fn houses_raise_the_population_cap_by_five_up_to_two_hundred() {
+fn houses_raise_the_population_cap_by_five_up_to_one_thousand() {
     let (mut world, _, center) = village();
-    set_stock(&mut world, 5000, 5000, 0, 0);
+    set_stock(&mut world, 10000, 10000, 0, 0);
     world
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
@@ -362,9 +362,9 @@ fn houses_raise_the_population_cap_by_five_up_to_two_hundred() {
     world
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
-    // 45 houses would give 230; the ceiling is 200.
+    // 205 houses would give 1030; the current ceiling is 1000.
     let mut houses = vec![house];
-    for index in 0..44 {
+    for index in 0..204 {
         let (x, y) = (110 + (index % 11) * 3, 110 + (index / 11) * 3);
         let worker = villager_at(&mut world, x - 1, y);
         let id = world

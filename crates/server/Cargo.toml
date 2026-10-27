@@ -13,6 +13,7 @@ aoe-simulation.workspace = true
 aoe-protocol.workspace = true
 axum = { version = "0.8", features = ["ws"] }
 futures-util = "0.3"
+rayon = "1.12"
 serde.workspace = true
 serde_json = "1.0"
 thiserror.workspace = true
@@ -20,10 +21,11 @@ tokio = { version = "1.47", features = ["macros", "rt-multi-thread", "net", "syn
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower-http = { version = "0.6", features = ["fs"] }
+memmap2 = "0.9.12"
+tempfile = "3"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.31", features = ["signal", "process"] }
+nix = { version = "0.31", features = ["signal", "process", "fs"] }
 
 [dev-dependencies]
-tempfile = "3"
 tokio-tungstenite = "0.29"

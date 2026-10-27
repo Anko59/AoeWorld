@@ -31,47 +31,44 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
         viewport: client.camera.viewport,
         focus_elevation_meters: client.camera.focus_elevation_meters,
     };
-    let units = client.units.values().filter(|u| u.hp > 0).map(|u| {
-        (
-            u.id,
-            false,
-            u.player != owner(client),
-            position_at(client, u.id),
-        )
-    });
+    let units = client
+        .units
+        .values()
+        .filter(|u| u.hp > 0)
+        .map(|u| (u.id, false, u.player != owner(client)));
     let animals = client
         .village
         .animals
         .iter()
         .filter(|_| !units_only)
         .filter(|a| a.hp > 0 || a.food_remaining > 0)
-        .map(|a| (a.id, true, false, a.position.as_tiles()));
+        .map(|a| (a.id, true, false));
     units
         .chain(animals)
-        .filter_map(|(id, animal, enemy, world)| {
-            let screen = map::screen_position(client, world);
+        .filter_map(|(id, animal, enemy)| {
+            // Keep bounds and roof ordering on the same submitted pose as the
+            // hotspot. New simulation poses may still be waiting for the GPU.
+            let unit = client.rendered_frame.unit(id).or_else(|| {
+                rendered
+                    .binary_search_by_key(&id, |u| u.id)
+                    .ok()
+                    .map(|index| rendered[index])
+            })?;
+            let screen = map::screen_position(client, unit.position);
             let fallback = [
                 screen.x - 7.0 * client.camera.zoom,
                 screen.y - 30.0 * client.camera.zoom,
                 screen.x + 7.0 * client.camera.zoom,
                 screen.y + 2.0 * client.camera.zoom,
             ];
-            let bounds = rendered
-                .binary_search_by_key(&id, |u| u.id)
-                .ok()
-                .and_then(|index| {
-                    aoe_rendering::scene_unit_bounds(
-                        &client.art,
-                        rendered[index],
-                        camera,
-                        (client.last_frame / 100.0) as usize,
-                    )
-                })
-                .unwrap_or(fallback);
-            let depth = rendered
-                .binary_search_by_key(&id, |unit| unit.id)
-                .ok()
-                .map(|index| aoe_rendering::scene_unit_depth(rendered[index]))?;
+            let bounds = aoe_rendering::scene_unit_bounds(
+                &client.art,
+                unit,
+                camera,
+                (client.last_frame / 100.0) as usize,
+            )
+            .unwrap_or(fallback);
+            let depth = aoe_rendering::scene_unit_depth(unit);
             let key = (depth, u64::from(id.0));
             (building.is_none_or(|(d, id)| in_front(key, (d, u64::from(id.0))))
                 // As in AoE2, the player's own units win over a resource

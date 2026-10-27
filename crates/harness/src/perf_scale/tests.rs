@@ -41,17 +41,20 @@ fn the_smoke_run_writes_a_valid_report_whose_phases_add_up() {
     let on = &report["simulation_fog_on"];
     assert_eq!(on["ticks"], 12);
     assert_eq!(on["tick_budget_ms"], 50.0);
+    for phase in ["unit_spacing", "vassal_economy", "idle_tail"] {
+        assert!(on["phases"][phase]["mean_ms"].is_number(), "{phase}");
+    }
     assert_eq!(on["hashes"].as_array().unwrap().len(), 2);
     assert_eq!(report["simulation_fog_off"]["ticks"], 4);
     assert!(report["census"]["initial"]["units"].as_u64().unwrap() >= 400);
     assert!(report["terrain_probe"]["cold_point_query_us_per_tile"].is_number());
-    assert!(report["simulation_fog_on"]["phases"]["spacing"].is_object());
+    assert!(report["simulation_fog_on"]["phases"]["unit_spacing"].is_object());
     assert_eq!(
         report["simulation_fog_on"]["phases"]
             .as_object()
             .unwrap()
             .len(),
-        10
+        TickPhase::Changed as usize + 2
     );
     assert_eq!(report["movement_profile"]["enabled"], true);
     assert!(
@@ -78,6 +81,11 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
     .unwrap();
     let mut driver = Driver::new(2, built.players.len(), 3.0, built.world.config().tick_hz);
     let run = run_ticks(&mut built.world, &mut built.players, &mut driver, 6, 0);
+    assert_eq!(PHASES[TickPhase::Spacing as usize], "unit_spacing");
+    assert_eq!(PHASES[TickPhase::VassalEconomy as usize], "vassal_economy");
+    assert_eq!(PHASES[TickPhase::Changed as usize], "result_collation");
+    assert_eq!(PHASES.last(), Some(&"idle_tail"));
+    assert_eq!(run.phases.len(), TickPhase::Changed as usize + 2);
     let phases: f64 = run.phases.iter().flat_map(|s| s.0.iter()).sum();
     let total: f64 = run.total.0.iter().sum();
     assert!(
@@ -148,18 +156,26 @@ fn scale_tail_movers_have_a_bounded_obstruction_budget() {
 /// Builders now use exact-position corner exits and start on first free
 /// perimeter contact, deliberately changing construction timing and routes.
 /// Regenerate only the current output hashes.
+// The current Vassal home/control maps and retained manager cursors extend
+// canonical state even in a world without Vassals. Re-pin the same workload,
+// seed, checkpoints and independent replay/thread assertions for that schema.
+// Bundled gatherer/builder reservations, the Vassal economy phase and walking
+// proposals change work assignment, canonical state and route timing. Regenerate
+// with the command above after their behaviour and replay/thread checks pass.
+// Rebasing these reservations onto avoidance, arrival slots and contact
+// drop-off combines both behaviours; regenerate with the command above.
 const PINNED_HASHES: [(u64, &str); 3] = [
     (
         100,
-        "844e3accd86b0a7948a2d0577cf4a1c23d65bd1df29b9f6a49c4eae5e6947fd9",
+        "833472100cd475f676fe2274a68ad8245971092ff8873f4d9225e8a833d4d2a8",
     ),
     (
         200,
-        "82cc3808a5a2a1316e16a4b067dd50274b96b9dbd40d75f2e7effb4030f3992a",
+        "46e447b7ec5e78f954f205e3f903fb0ec9688ba42b73108dcab38105f7ff8467",
     ),
     (
         300,
-        "9c0d8e6bdf39a3f9b7e7305696872a4121c524af9a06e664eebf56a003a3b361",
+        "17aef54e943664f1f7874a9dab57f64e8971f910224e7044ebe84fe307fbf48a",
     ),
 ];
 

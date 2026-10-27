@@ -2,7 +2,7 @@ use crate::{BuildingKind, GameWorld, Tech, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
 impl UnitKind {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 23] = [
         Self::Villager,
         Self::Scout,
         Self::Militia,
@@ -25,6 +25,7 @@ impl UnitKind {
         Self::DemolitionShip,
         Self::TransportShip,
         Self::WarGalley,
+        Self::Vassal,
     ];
     /// The single current identity of each production line.
     pub fn upgraded(self, researched: u64) -> Self {

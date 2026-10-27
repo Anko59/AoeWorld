@@ -62,6 +62,7 @@ export function building(
     0,
     0, // Prepaid Mill reseeds follow the rally point in the current wire.
     0, // Current building state appends its bounded garrison list.
+    0, // Only bridges carry raster endpoints.
   ];
 }
 
@@ -138,23 +139,31 @@ export async function inputFixture(
         y: number,
         kind: number,
         player = viewer,
-      ) => [
-        id,
-        player,
-        ...position(x, y),
-        0,
-        0,
-        0,
-        kind,
-        0,
-        ...(options.carried && id === 2 ? [1, 1, 7] : [0]),
-        0,
-        ...(kind === 1
-          ? scoutCombat
-          : kind === 2
-            ? militiaCombat
-            : villagerCombat),
-      ];
+        cargo = 0,
+      ) => {
+        const combat =
+          kind === 1
+            ? scoutCombat
+            : kind === 2
+              ? militiaCombat
+              : villagerCombat;
+        // Combined wire: cargo_count precedes the optional Vassal home/control IDs.
+        return [
+          id,
+          player,
+          ...position(x, y),
+          0,
+          0,
+          0,
+          kind,
+          0,
+          ...(options.carried && id === 2 ? [1, 1, 7] : [0]),
+          0,
+          ...combat.slice(0, -3),
+          cargo,
+          ...combat.slice(-2),
+        ];
+      };
       socket.send(
         Buffer.from([
           1,
@@ -171,9 +180,7 @@ export async function inputFixture(
             options.military ? 1 : 0,
             viewer === 0 ? 1 : 0,
           ),
-          ...(navy
-            ? [...unit(5, 8193.5, 8194.5, 20).slice(0, -1), navy.cargo]
-            : []),
+          ...(navy ? unit(5, 8193.5, 8194.5, 20, viewer, navy.cargo) : []),
           1,
           ...(options.player ?? [
             viewer,

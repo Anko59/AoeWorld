@@ -1,3 +1,4 @@
+import { transportLoads } from '/interface/navy/indicators.js';
 import { initGarrison } from '/interface/garrison/panel.js';
 import { castleKinds, castleNames, castleCommands, castleTechs, castleTraining, castleUnitNames } from '/interface/castle.js';
 import { icon, entityIcon, setEntityIcon, techIds, trainingKinds } from '/interface/ui-art.js';
@@ -6,7 +7,7 @@ const byId = id => document.getElementById(id);
 export const buildingKinds = ['TownCenter','House','LumberCamp','MiningCamp','Mill','Farm','Barracks','PalisadeWall','Outpost','Dock','ArcheryRange','Stable','Blacksmith','Market','WatchTower','PalisadeGate',...castleKinds,'Bridge'];
 export const buildingNames = ['Town Center','House','Lumber Camp','Mining Camp','Mill','Farm','Barracks','Palisade Wall','Outpost','Dock','Archery Range','Stable','Blacksmith','Market','Watch Tower','Palisade Gate',...castleNames,'Bridge'];
 // Codes are emitted by Rust building_ui::availability, where the rules live.
-const disabledReasons=['Unavailable','','requires Feudal Age','Already researched','Research in progress','Wait for the training queue to finish','Not enough food','Not enough wood','Not enough gold','Not enough stone','Training queue is full','Building is under construction','Requires prerequisite buildings or technology','Select your own building','requires Castle Age'];
+const disabledReasons=['Unavailable','','requires Feudal Age','Already researched','Research in progress','Wait for the training queue to finish','Not enough food','Not enough wood','Not enough gold','Not enough stone','Training queue is full','Building is under construction','Requires prerequisite buildings or technology','Select your own building','requires Castle Age','A Vassal already belongs to this Castle'];
 const action=(button,label,code,observer)=>{const reason=observer?'Observer mode':disabledReasons[code]??disabledReasons[0];button.disabled=code!==1||observer;button.title=label+(reason?` · ${reason}`:'');button.setAttribute('aria-label',button.title);};
 const commands = [
   ['house','House','Q','25 wood'], ['lumber-camp','Lumber Camp','R','100 wood'],
@@ -135,7 +136,7 @@ export function initBuildings() {
       navalTrain.forEach(({button,kind:unit,name,cost})=>{button.hidden=!owned||kind!==9||v[4]<1000||v[availability+unit]===0;action(button,`Train ${name} · ${cost}`,v[availability+unit],!byId('observer-label').hidden);});
       const market=availability+trainingKinds.length+1;
       const reseed=market+15;
-      const transport=v[reseed+6]??0,cargo=v[reseed+7]??0;unload.hidden=!transport;unload.disabled=cargo===0||!byId('observer-label').hidden;unload.title='Right-click an adjacent bank after choosing Unload';if(transport)byId('selection-load').textContent=`${cargo}/5 passengers`;
+      const transport=v[reseed+6]??0,cargo=v[reseed+7]??0;unload.hidden=!transport;unload.disabled=cargo===0||!byId('observer-label').hidden;unload.title='Right-click a shore to sail there and unload';if(transport)byId('selection-load').textContent=`${cargo}/5 passengers`;transportLoads(v.slice(reseed+8));
       const cavalry=v[reseed+4]??0,scouting=v[reseed+5]??0;autoScout.hidden=cavalry===0;autoScout.disabled=!byId('observer-label').hidden;autoScout.setAttribute('aria-pressed',scouting===0?'false':scouting===cavalry?'true':'mixed');autoScout.querySelector('.command-label').textContent=scouting===cavalry&&cavalry>0?'Stop auto-scout':'Auto-scout';
       reseedQueue.hidden=kind!==4||!owned;byId('farm-reseed-count').textContent=String(v[reseed]??0);
       reseedButtons.forEach((button,i)=>{button.hidden=!owned||kind!==4||v[4]<1000;button.disabled=v[reseed+1+i]!==1||!byId('observer-label').hidden;button.title=i===0?`Queue farm reseed · ${v[reseed+3]} wood`:`Remove farm reseed · refund ${v[reseed+3]} wood`;button.setAttribute('aria-label',button.title);});
@@ -143,12 +144,12 @@ export function initBuildings() {
       byId('market-prices')&&(byId('market-prices').textContent=kind===13&&v[4]>=1000?`Prices per 100: wood ${v[market]} · food ${v[market+1]} · stone ${v[market+2]} gold`:'');
       techs.forEach((b,i)=>{b.hidden=!owned||kind!==sites[i]||v[8+i]===0||v[8+i]===3;action(b,`Research ${research[i]}${i===8?' · Upgrades existing and future Militia':''}`,v[8+i],!byId('observer-label').hidden);});
       const train=byId('train-villager');
-      const unitNames=['Villager','Scout Cavalry','Militia','Fishing Ship','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley'];
+      const unitNames=['Villager','Scout Cavalry','Militia','Fishing Ship','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal'];
       const infantry=unitNames[v[availability+trainingKinds.length]]??'Militia';
       if(selected){train.hidden=!owned||![0,6,9].includes(kind)||v[4]<1000;action(train,kind===9?'Train Fishing Ship, 75 wood, Q':kind===6?`Train ${infantry}, 50 food, 20 gold, Q`:'Train Villager, 50 food, Q',v[trainEnabled],!byId('observer-label').hidden);trainingName.hidden=kind!==6;trainingName.textContent=infantry;setEntityIcon(trainIcon,kind===9?'FishingShip':kind===6?trainingKinds[v[availability+trainingKinds.length]]:'Villager');train.querySelector('.cost').textContent=kind===9?'75 W':kind===6?'50 F · 20 G':'50';}
       const labels=Array.from({length:v[foundationCount]??0},(_,i)=>{const at=foundationCount+1+i*3;return `<span style="left:${v[at]}px;top:${v[at+1]}px">${Math.floor(v[at+2]/10)}%<progress max="1000" value="${v[at+2]}"></progress></span>`;}).join('');
       if(labels!==previousLabels){progressLabels.innerHTML=labels;previousLabels=labels;}
-      if(selected){if(owned)byId('command-hint').textContent=v[4]<1000?'Right-click this foundation with villagers to resume construction':kind===0?'Q: train a villager · research below':kind===9?'Q: train a Fishing Ship · 75 wood':kind===6?`Q: train ${infantry} · 50 food, 20 gold`:kind===5?'Right-click this Farm with a villager to work it':[10,11].includes(kind)?'Train military units below':kind===12?'Research equipment for your army':'Select villagers to gather or build';byId('selection-task').textContent=v[4]<1000?'Under construction':v[6]>=0?'Researching':byId('training').hidden===false?`Training ${unitNames[v[trainKind]]}`:'Ready';byId('selection-load').textContent=['Resource drop-off · supports 5 population','Supports 5 population','Wood drop-off','Gold and stone drop-off','Food drop-off','Food production','Trains infantry','Blocks movement','Scouts the surrounding area','Fish drop-off · trains fishing, transport and war ships','Trains Archers and Skirmishers','Trains Scout Cavalry','Upgrades infantry, cavalry and archers','Market · buy and sell wood, food and stone for gold','Arrow defence · 5 pierce attack · range 1–8','Opens for nearby friendly units','Arrow defence · 11 pierce attack · five arrows','Trains Monks · nearby injured units heal automatically','Research building and ranged upgrades','Trains Mangonels and Battering Rams','Connects land across water · crossing along its length only'][kind];}
+      if(selected){if(owned)byId('command-hint').textContent=v[4]<1000?'Right-click this foundation with villagers to resume construction':kind===0?'Q: train a villager · research below':kind===9?'Q: train a Fishing Ship · 75 wood':kind===6?`Q: train ${infantry} · 50 food, 20 gold`:kind===16?'Train one Vassal · garrison it here to manage the economy':kind===5?'Right-click this Farm with a villager to work it':[10,11].includes(kind)?'Train military units below':kind===12?'Research equipment for your army':'Select villagers to gather or build';byId('selection-task').textContent=v[4]<1000?'Under construction':v[6]>=0?'Researching':byId('training').hidden===false?`Training ${unitNames[v[trainKind]]}`:'Ready';byId('selection-load').textContent=['Resource drop-off · supports 5 population','Supports 5 population','Wood drop-off','Gold and stone drop-off','Food drop-off','Food production','Trains infantry','Blocks movement','Scouts the surrounding area','Fish drop-off · trains fishing, transport and war ships','Trains Archers and Skirmishers','Trains Scout Cavalry','Upgrades infantry, cavalry and archers','Market · buy and sell wood, food and stone for gold','Arrow defence · 5 pierce attack · range 1–8','Opens for nearby friendly units','Arrow defence · 11 pierce attack · five arrows','Trains Monks · nearby injured units heal automatically','Research building and ranged upgrades','Trains Mangonels and Battering Rams','Connects land across water · crossing along its length only'][kind];}
       byId('building-hp').textContent=`${v[2]} / ${v[3]} HP`;
       byId('building-status').textContent=v[4]<1000?`Constructing · ${Math.floor(v[4]/10)}%`:v[5]>=0?`Complete · ${v[5]} food remaining`:'Complete';
       byId('construction-progress').hidden=v[4]>=1000;byId('construction-progress').value=v[4];
@@ -173,6 +174,8 @@ export function initBuildings() {
     preview(v) {
       const signature=Array.from(v).join(','); if(signature===lastPreview)return; lastPreview=signature;
       byId('scene').dataset.placementValid=String(v.length>0&&v[0]===1);
+      byId('scene').dataset.placementCount=String(v[1]??0);
+      byId('scene').dataset.placementInvalid=String(v[2]??0);
     },
   };
 }

@@ -4,6 +4,54 @@ use super::{buildings::*, *};
 mod approach;
 mod continuation;
 
+#[test]
+fn six_builders_reserve_distinct_perimeter_tiles_before_and_after_arrival() {
+    use std::collections::BTreeSet;
+    let (mut world, _, _) = village();
+    let builders = (0..6)
+        .map(|i| villager_at(&mut world, 97, 98 + i))
+        .collect::<Vec<_>>();
+    let house = world
+        .issue_build(
+            PlayerId(0),
+            &builders,
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
+        .unwrap();
+    let destinations = builders
+        .iter()
+        .map(|id| {
+            world.movement_order(*id).map_or_else(
+                || world.unit(*id).unwrap().position.tile_floor(),
+                |o| o.target_tile,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        destinations.len(),
+        builders.len(),
+        "reserve before the next tick"
+    );
+    for _ in 0..220 {
+        world.advance();
+        let working = builders
+            .iter()
+            .filter_map(|id| {
+                let u = world.unit(*id).unwrap();
+                (u.task == UnitTask::Building).then_some(u.position.tile_floor())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(working.iter().collect::<BTreeSet<_>>().len(), working.len());
+        if working.len() == builders.len() {
+            return;
+        }
+        assert!(!world.building(house).unwrap().is_complete());
+    }
+    panic!("all six builders must reach their own perimeter tile");
+}
+
 fn at(x: i32, y: i32) -> TileCoord {
     TileCoord::new(x, y)
 }

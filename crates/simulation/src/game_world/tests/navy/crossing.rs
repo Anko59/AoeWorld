@@ -22,7 +22,15 @@ impl EnvironmentPageProvider for Pages {
     }
 }
 
-fn river() -> GameWorld {
+pub(super) fn river() -> GameWorld {
+    river_width(10 * 256)
+}
+
+fn river_width(width_units: u16) -> GameWorld {
+    river_channels(width_units, false)
+}
+
+pub(super) fn river_channels(width_units: u16, separate_stream: bool) -> GameWorld {
     let (package, elevation, mut water) = economy::fixture::flat_fixture(true);
     let mut environment = package.environment;
     for page in &mut water {
@@ -40,6 +48,23 @@ fn river() -> GameWorld {
     }
     // Same typed, ten-tile mapped channel as map's river-fish fixture. It
     // reaches beyond both map edges, so a land route cannot walk around it.
+    let mut segments = vec![RiverSegment {
+        start: [128 * 256, -256],
+        end: [128 * 256, 258 * 256],
+        width_units,
+        station_start: 0,
+        station_end: 259 * 256,
+        source_delta: [0, 259 * 256],
+        source_station_delta: 259 * 256,
+    }];
+    if separate_stream {
+        segments.push(RiverSegment {
+            start: [116 * 256, -256],
+            end: [116 * 256, 258 * 256],
+            width_units: 4 * 256,
+            ..segments[0]
+        });
+    }
     let evidence = HydrologyEvidencePage {
         level: 0,
         x: 0,
@@ -49,15 +74,7 @@ fn river() -> GameWorld {
         kind: vec![HydrologyKind::NoEvidence as u8; 1089],
         method: vec![0; 1089],
         water_model: None,
-        river_segments: vec![RiverSegment {
-            start: [128 * 256, -256],
-            end: [128 * 256, 258 * 256],
-            width_units: 10 * 256,
-            station_start: 0,
-            station_end: 259 * 256,
-            source_delta: [0, 259 * 256],
-            source_station_delta: 259 * 256,
-        }],
+        river_segments: segments,
     };
     let cover = ModernLandCoverPage {
         level: 0,
@@ -105,40 +122,7 @@ fn river() -> GameWorld {
 #[test]
 fn transport_carries_a_land_army_from_the_west_bank_to_the_east_bank() {
     let mut world = river();
-    let (west, west_water, east_water, east) = (20..230)
-        .find_map(|y| {
-            let wet = (110..146)
-                .filter(|&x| {
-                    let Terrain::Map { generator, .. } = world.terrain() else {
-                        unreachable!()
-                    };
-                    generator
-                        .tile_at(TileCoord::new(x, y))
-                        .is_some_and(|tile| tile.water == WaterKind::River)
-                })
-                .collect::<Vec<_>>();
-            let (&first, &last) = (wet.first()?, wet.last()?);
-            let west = TileCoord::new(first - 1, y);
-            let east = TileCoord::new(last + 1, y);
-            (first < 128
-                && last > 128
-                && world.tile_passable(west)
-                && world.tile_passable(east)
-                && (first..=last).all(|x| {
-                    world
-                        .unit_tile_passable(UnitKind::TransportShip, TileCoord::new(x, y), &|| {
-                            false
-                        })
-                        .unwrap()
-                }))
-            .then_some((
-                west,
-                TileCoord::new(first, y),
-                TileCoord::new(last, y),
-                east,
-            ))
-        })
-        .expect("river needs a clear crossing between two passable dry banks");
+    let (west, west_water, east_water, east) = banks(&world);
     assert!(west.x < 128 && east.x > 128);
     let transport = ship(&mut world, UnitKind::TransportShip, west_water, 0);
     let mut army = Vec::new();
@@ -184,4 +168,73 @@ fn transport_carries_a_land_army_from_the_west_bank_to_the_east_bank() {
             Err(GameWorldError::InvalidPosition)
         );
     }
+}
+
+#[test]
+fn ships_sail_along_shallows_while_land_units_wade_across_them() {
+    let mut world = river_width(2 * 256);
+    // Find an unobstructed wet lane; both movement domains use these same
+    // composed Ford tiles, with their original river water classification.
+    let (start, end, west, east) = (30..210)
+        .find_map(|y| {
+            let start = TileCoord::new(128, y);
+            let end = TileCoord::new(128, y + 4);
+            let west = TileCoord::new(124, y);
+            let east = TileCoord::new(132, y);
+            let Terrain::Map { generator, .. } = world.terrain() else {
+                unreachable!()
+            };
+            ((y..=y + 4).all(|y| {
+                generator
+                    .tile_at(TileCoord::new(128, y))
+                    .is_some_and(|t| t.material == GroundMaterial::Ford && t.passable)
+                    && generator.object_at(TileCoord::new(128, y)).is_none()
+            }) && (124..=132).all(|x| world.tile_passable(TileCoord::new(x, y))))
+            .then_some((start, end, west, east))
+        })
+        .expect("clear wadeable stream");
+    let boat = ship(&mut world, UnitKind::TransportShip, start, 0);
+    let walker = world.spawn_militia(PlayerId(0), at(west)).unwrap();
+    world.issue_move(boat, at(end)).unwrap();
+    world.issue_move(walker, at(east)).unwrap();
+    advance(&mut world, 400);
+    assert_eq!(world.unit(boat).unwrap().position, at(end));
+    assert_eq!(world.unit(walker).unwrap().position, at(east));
+}
+
+pub(super) fn banks(world: &GameWorld) -> (TileCoord, TileCoord, TileCoord, TileCoord) {
+    (20..230)
+        .find_map(|y| {
+            let wet = (110..146)
+                .filter(|&x| {
+                    let Terrain::Map { generator, .. } = world.terrain() else {
+                        unreachable!()
+                    };
+                    generator
+                        .tile_at(TileCoord::new(x, y))
+                        .is_some_and(|tile| tile.water == WaterKind::River)
+                })
+                .collect::<Vec<_>>();
+            let (&first, &last) = (wet.first()?, wet.last()?);
+            let west = TileCoord::new(first - 1, y);
+            let east = TileCoord::new(last + 1, y);
+            (first < 128
+                && last > 128
+                && world.tile_passable(west)
+                && world.tile_passable(east)
+                && (first..=last).all(|x| {
+                    world
+                        .unit_tile_passable(UnitKind::TransportShip, TileCoord::new(x, y), &|| {
+                            false
+                        })
+                        .unwrap()
+                }))
+            .then_some((
+                west,
+                TileCoord::new(first, y),
+                TileCoord::new(last, y),
+                east,
+            ))
+        })
+        .expect("river needs a clear crossing between two passable dry banks")
 }

@@ -9,6 +9,7 @@ use aoe_protocol::{
     AnimalState, FogState, GameplayBuildingState, GameplayPlayerState, ProjectileState,
 };
 use aoe_simulation::GameWorld;
+use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -59,6 +60,8 @@ pub(super) struct SessionBuild {
 }
 
 pub(super) struct Built {
+    #[cfg(test)]
+    workers: Vec<std::thread::ThreadId>,
     pub tick: Tick,
     pub fog_disabled: bool,
     pub frame: UnitFrame,
@@ -198,13 +201,15 @@ pub(super) fn build(
     let viewers = viewer_states(world, views, changes);
     let viewers_done = started.elapsed();
     let distinct = viewers.keys().copied().collect::<Vec<_>>();
-    let threads = std::thread::available_parallelism()
-        .map_or(1, |n| n.get())
-        .min(8);
+    let threads = rayon::current_num_threads().min(8);
     let frame = UnitFrame::build(world, &distinct, threads)?;
     let frame_done = started.elapsed();
     let threads = threads.min(views.len() / 8 + 1);
+    #[cfg(test)]
+    let workers = std::sync::Mutex::new(Vec::new());
     let work = |part: &[View]| {
+        #[cfg(test)]
+        workers.lock().unwrap().push(std::thread::current().id());
         let mut scratch = Scratch::default();
         part.iter()
             .filter_map(|view| build_session(world, &frame, &viewers, view, &mut scratch))
@@ -214,19 +219,21 @@ pub(super) fn build(
         work(views)
     } else {
         let size = views.len().div_ceil(threads);
-        std::thread::scope(|scope| {
-            let handles = views
-                .chunks(size)
-                .map(|part| scope.spawn(|| work(part)))
-                .collect::<Vec<_>>();
-            handles
-                .into_iter()
-                .flat_map(|handle| handle.join().unwrap_or_default())
-                .collect()
-        })
+        views
+            .par_chunks(size)
+            .map(|part| {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(part)))
+                    .unwrap_or_default()
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .flatten()
+            .collect()
     };
     let done = started.elapsed();
     Some(Built {
+        #[cfg(test)]
+        workers: workers.into_inner().unwrap(),
         tick: world.tick(),
         fog_disabled: world.fog_disabled(),
         frame,

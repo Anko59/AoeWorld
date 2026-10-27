@@ -1,8 +1,13 @@
 //! Browser mocks share these current wire fragments with the Rust codec.
-//! Building fragments append the current bounded garrison list.
+//! Building fragments append the current bounded garrison list and bridge span.
 //! Empty tails are regenerated for the intentional building-state extension.
 //! Unit fragments append the authoritative Transport Ship cargo count.
+//! These pins intentionally append absent spans for ordinary buildings; angled
+//! bridges now carry their exact endpoints in the single current wire schema.
 //! These pins intentionally change with the single current naval state schema.
+//! Unit tails now append the two optional Vassal identifiers. Regenerate the
+//! current empty fragments for this deliberate schema change, preserving codec
+//! roundtrips and the browser mocks that consume these same fragments.
 use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect, WorldPosition};
 use aoe_protocol::{
     BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState,
@@ -79,6 +84,8 @@ fn browser_unit_combat_fragments_match_the_current_codec() {
             death_hunt: None,
             auto_scout: false,
             cargo_count: 0,
+            home_castle: None,
+            managed_by: None,
         };
         let mut expected = vec![
             1, 1, 0, 1, 7, 1, 128, 32, 128, 64, 0, 0, 2, kind as u8, 0, 0, 0,
@@ -105,6 +112,7 @@ fn browser_building_combat_fragment_matches_the_current_codec() {
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
         construction: ConstructionState::Complete,
         progress_permille: 1000,
         los: 8,
@@ -129,6 +137,7 @@ fn browser_dock_fragment_matches_current_codec() {
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
         footprint: TileRect::new(TileCoord::new(5, 5), TileCoord::new(8, 8)),
         training_queue: vec![],
         hp: 1800,
@@ -183,6 +192,7 @@ fn snapshot() -> GameplayServerMessage {
             rally_point: None,
             farm_reseeds: 0,
             garrison: Vec::new(),
+            bridge_span: None,
         }],
     }
 }
