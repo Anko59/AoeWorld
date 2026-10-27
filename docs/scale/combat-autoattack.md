@@ -84,7 +84,7 @@ it does not perform all-pairs searches.
 
 Pursuit/accepted order searches share sixteen admissions per simulation tick.
 Local searches retain/expand at most 1,024 tiles; far fallback uses at most four
-256-expansion hierarchy proofs. Over-budget valid orders defer pursuit rather
+1,024-expansion hierarchy proofs. Over-budget valid orders defer pursuit rather
 than blocking admission. An unreachable initial validation remains atomic;
 failed validations are bounded per command and by server admission. Unchanged
 targets retain routes and cooldowns. Full routing stays with the existing
@@ -171,7 +171,27 @@ Dockerized checks completed during implementation:
 
 The first final preflight stopped before native tests on new production
 `unwrap()` calls; both were replaced with checked handling. The second final
-`AOE_TEST_ALL=1 make preflight` is pending at this report's preparation.
+`AOE_TEST_ALL=1 make preflight` passed static checks, then ran the full native
+suite once: **3,483 passed, 19 failed, 18 skipped**. It did not complete
+successfully. The CLI smoke case, including `perf-smoke`, passed.
+
+Eighteen failures concerned current-output pins, Castle rally expectations,
+quiet timing/visibility/routing fixtures now affected by combat, the idle
+military phase, and far-search caching/validation. Current pins were regenerated
+for the stance/targeting schema; thread comparisons and activity floors remain.
+Quiet fixtures explicitly suppress fighting. Only movement test fixtures/pins
+changed; movement, spacing and formation algorithms remain untouched.
+
+The far-search regression exposed near-goal cache reuse bypassing far-search
+bookkeeping. Cache reuse is now restricted to nearby goals; far goals retain
+their explicit cache and four-search budget. A 1,024-expansion proof allowance
+retains bounded sealed-pocket validation. The paired benchmark samples above
+precede this final repair; no final-repair timing claim is made. Focused repair
+checks are recorded in the final handoff. The full suite is not repeated,
+respecting the owner's single-run rule.
+
+The stored-minimap raster test exceeded its existing time budget with a local
+real package present. That unrelated threshold is unchanged.
 
 The exact original 100-session incident, original match-state replay, real-map
 AI combat with a watched browser recording, Python integration suite, and

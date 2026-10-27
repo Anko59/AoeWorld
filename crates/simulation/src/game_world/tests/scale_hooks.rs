@@ -90,7 +90,8 @@ fn probe_reports_ordered_phases_and_changes_nothing() {
 #[test]
 fn idle_ticks_report_only_the_early_phases() {
     let mut w = world();
-    w.spawn_unit(PlayerId(0), at(100, 100)).unwrap();
+    // Idle military must run acquisition; an idle civilian has no combat work.
+    w.spawn_villager(PlayerId(0), at(100, 100)).unwrap();
     let mut phases = Vec::new();
     w.advance_with_probe(&mut |_| true, &mut |phase| phases.push(phase));
     assert_eq!(

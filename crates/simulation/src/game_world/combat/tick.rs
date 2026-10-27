@@ -176,41 +176,42 @@ impl GameWorld {
             let counts_as_far = attacker.far.is_some()
                 || i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
                     > super::approach::FAR_REUSE_TILES;
-            let destination = if attacker.goal_tile == Some(centre) && order.is_some() {
-                order.map(|o| o.destination)
-            } else if let Some(far) = reusable {
-                Some(far.destination)
-            } else if (counts_as_far && self.combat.far_searches == 0)
-                || !self.reserve_pursuit_search(id)
-            {
-                // Over this tick's budget: keep walking and look again next tick.
-                if let Some(entry) = self.combat.attackers.get_mut(&id) {
-                    entry.repath_tick = now.saturating_add(1);
-                }
-                self.units[index].state.task = UnitTask::Attacking;
-                if self.units[index].state != before {
-                    changed.push(self.units[index].state.id);
-                }
-                return;
-            } else {
-                let search = self.attack_search(id, &goal).ok();
-                if counts_as_far {
-                    self.combat.far_searches -= 1;
-                }
-                let far = search
-                    .as_ref()
-                    .filter(|search| search.far)
-                    .and_then(|search| search.destination)
-                    .map(|destination| super::approach::FarAttack {
-                        centre,
-                        destination,
-                    });
-                if let Some(entry) = self.combat.attackers.get_mut(&id) {
-                    entry.far = far;
-                    entry.goal_tile = Some(centre);
-                }
-                search.and_then(|search| search.destination)
-            };
+            let destination =
+                if !counts_as_far && attacker.goal_tile == Some(centre) && order.is_some() {
+                    order.map(|o| o.destination)
+                } else if let Some(far) = reusable {
+                    Some(far.destination)
+                } else if (counts_as_far && self.combat.far_searches == 0)
+                    || !self.reserve_pursuit_search(id)
+                {
+                    // Over this tick's budget: keep walking and look again next tick.
+                    if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                        entry.repath_tick = now.saturating_add(1);
+                    }
+                    self.units[index].state.task = UnitTask::Attacking;
+                    if self.units[index].state != before {
+                        changed.push(self.units[index].state.id);
+                    }
+                    return;
+                } else {
+                    let search = self.attack_search(id, &goal).ok();
+                    if counts_as_far {
+                        self.combat.far_searches -= 1;
+                    }
+                    let far = search
+                        .as_ref()
+                        .filter(|search| search.far)
+                        .and_then(|search| search.destination)
+                        .map(|destination| super::approach::FarAttack {
+                            centre,
+                            destination,
+                        });
+                    if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                        entry.far = far;
+                        entry.goal_tile = Some(centre);
+                    }
+                    search.and_then(|search| search.destination)
+                };
             // A far chase follows its target loosely: it is re-planned once
             // the target has moved more than a quarter of the remaining way.
             // Re-planning every attacker each second toward a target a few

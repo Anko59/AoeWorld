@@ -158,6 +158,10 @@ fn castle_age_enables_war_galley_and_upgrades_existing_queued_and_future_ships()
         TileCoord::new(water.x + 3, water.y),
         0,
     );
+    // Research timing is measured without the two idle fleets fighting.
+    for unit in &mut world.units {
+        unit.state.stance = aoe_core::CombatStance::NoAttack;
+    }
     for _ in 0..2 {
         world
             .issue_train(PlayerId(0), training_dock, UnitKind::Galley)

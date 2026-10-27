@@ -37,6 +37,9 @@ test("server validation and disconnect reasons stay visible with a reload link",
   await expect(
     page.getByRole("alert").filter({ hasText: message }),
   ).toBeVisible();
+  await expect(page.locator("#game-error-message")).toContainText(
+    "Invalid server game state",
+  );
   await expect(page.getByRole("link", { name: "Reload game" })).toHaveAttribute(
     "href",
     /./,

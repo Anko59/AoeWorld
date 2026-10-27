@@ -267,6 +267,7 @@ fn watch_tower_shoots_enemies_with_pierce_armour_range_minimum_and_reload() {
         )
         .unwrap();
     let friend = villager_at(&mut world, 132, 100);
+    world.units[world.lookup[&enemy]].state.stance = aoe_core::CombatStance::NoAttack;
     world.advance();
     assert_eq!(world.unit(enemy).unwrap().hp, 40, "arrow must travel first");
     advance(&mut world, 20);
@@ -289,6 +290,9 @@ fn watch_tower_shoots_enemies_with_pierce_armour_range_minimum_and_reload() {
             WorldPosition::from_tile_center(at(139, 100)).unwrap(),
         )
         .unwrap();
+    for id in [too_close, too_far] {
+        world.units[world.lookup[&id]].state.stance = aoe_core::CombatStance::NoAttack;
+    }
     advance(&mut world, 40);
     assert_eq!(world.unit(too_close).unwrap().hp, 40);
     assert_eq!(world.unit(too_far).unwrap().hp, 40);

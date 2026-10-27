@@ -16,7 +16,7 @@ const HIERARCHY_PROOF_TILES: i64 = 400;
 /// sealed pocket costs a bounded number of abstract searches.
 const MAX_HIERARCHY_PROOFS: u32 = 4;
 /// Combat only proves a candidate; the route scheduler owns full route work.
-const ATTACK_HIERARCHY_EXPANSIONS: u32 = 256;
+const ATTACK_HIERARCHY_EXPANSIONS: u32 = 1_024;
 pub(super) const MAX_ATTACK_SEARCHES_PER_TICK: u32 = 16;
 const NEIGHBOURS: [(i32, i32); 8] = [
     (0, -1),

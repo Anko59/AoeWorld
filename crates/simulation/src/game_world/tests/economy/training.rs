@@ -231,6 +231,10 @@ fn blocked_spawn_waits_without_losing_the_completed_villager_or_food() {
             }
         }
     }
+    // This fixture measures occupied exits, with no fighting or escape orders.
+    for unit in &mut world.units {
+        unit.state.stance = aoe_core::CombatStance::NoAttack;
+    }
     let count = world.unit_count();
     world
         .issue_train(PlayerId(0), center, UnitKind::Villager)

@@ -269,6 +269,8 @@ fn cancelling_an_entrance_during_a_reverse_flood_keeps_the_move_reachable() {
         let id = world
             .spawn_unit(PlayerId(player), tile_position(198, 200))
             .expect("unit");
+        // Keep this routing fixture's hundred owners peaceful after arrival.
+        world.units[world.lookup[&id]].state.stance = aoe_core::CombatStance::NoAttack;
         assert_eq!(world.issue_move(id, destination), Ok(true));
         units.push(id);
     }

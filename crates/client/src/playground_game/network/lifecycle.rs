@@ -2,13 +2,18 @@
 use super::*;
 
 pub(super) fn record_close(client: &mut Client, event: &Event) {
-    if client.last_error.is_none() {
-        let reason = js_sys::Reflect::get(&event, &JsValue::from_str("reason"))
-            .ok()
-            .and_then(|v| v.as_string())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "The connection to the server was lost.".to_owned());
-        client.last_error = Some(reason);
+    let reason = js_sys::Reflect::get(&event, &JsValue::from_str("reason"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "The connection to the server was lost.".to_owned());
+    match &mut client.last_error {
+        Some(error) if !error.contains(&reason) => {
+            error.push(' ');
+            error.push_str(&reason);
+        }
+        Some(_) => {}
+        None => client.last_error = Some(reason),
     }
 }
 

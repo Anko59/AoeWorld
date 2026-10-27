@@ -414,7 +414,7 @@ fn zero_load_gatherer_kind_roundtrips_without_terrain_or_inventory() {
 }
 
 #[test]
-fn castle_age_rallies_round_trip_but_castles_reject_rallies() {
+fn castle_age_production_buildings_round_trip_rallies() {
     for kind in [
         BuildingKind::Monastery,
         BuildingKind::SiegeWorkshop,
@@ -437,11 +437,7 @@ fn castle_age_rallies_round_trip_but_castles_reject_rallies() {
             players: vec![],
             buildings: vec![b],
         };
-        if kind == BuildingKind::Castle {
-            assert!(encode_gameplay_server(&frame).is_err());
-        } else {
-            let bytes = encode_gameplay_server(&frame).unwrap();
-            assert_eq!(decode_gameplay_server(&bytes).unwrap(), frame);
-        }
+        let bytes = encode_gameplay_server(&frame).unwrap();
+        assert_eq!(decode_gameplay_server(&bytes).unwrap(), frame);
     }
 }
