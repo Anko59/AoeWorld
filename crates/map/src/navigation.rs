@@ -5,13 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 mod hierarchy;
 mod planner;
-pub use hierarchy::NavigationSnapshot;
 pub(crate) use hierarchy::PortalCache;
 pub use hierarchy::{
     DEFAULT_HIERARCHY_EXPANSIONS, HierarchicalOutcome, hierarchical_route,
     hierarchical_route_with_overlay,
 };
 pub use hierarchy::{NAVIGATION_FORMAT_VERSION, NavigationChunk, navigation_checksum};
+pub use hierarchy::{NavigationSnapshot, NavigationStorage};
 pub use planner::{
     MAX_ROUTE_PLANNER_NODES, MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_TILES, ROUTE_LEG_COMMIT_WORK,
     ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain,
@@ -257,6 +257,7 @@ where
             }
             if delta_x != 0
                 && delta_y != 0
+                && overlay.and_then(|o| o.bridge_edge(tile, next)) != Some(true)
                 && !diagonal_clear(tile, delta_x, delta_y, passable, edge)
             {
                 continue;

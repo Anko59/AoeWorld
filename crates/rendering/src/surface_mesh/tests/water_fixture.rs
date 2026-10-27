@@ -15,7 +15,7 @@ pub(crate) const CLASSES: [(u8, [u8; 4]); 4] = [
     (SHALLOW, [60, 190, 200, 255]),
     (MEDIUM, [20, 90, 180, 255]),
     (DEEP, [5, 40, 120, 255]),
-    (FORD, [60, 190, 200, 255]),
+    (FORD, [70, 150, 90, 255]),
 ];
 const LAND: [u8; 4] = [200, 40, 160, 255];
 pub(crate) const PROBES: [[u32; 2]; 3] = [[32, 48], [80, 48], [48, 48]];
@@ -40,11 +40,7 @@ fn frame(index: usize) -> GameFrame {
 
 pub(crate) fn atlas() -> Vec<u8> {
     let mut atlas = vec![0; crate::GAME_ATLAS_BYTES];
-    let colors = CLASSES
-        .iter()
-        .enumerate()
-        .map(|(i, class)| if i == 3 { [70, 150, 90, 255] } else { class.1 })
-        .chain([LAND]);
+    let colors = CLASSES.iter().map(|class| class.1).chain([LAND]);
     for (index, color) in colors.enumerate() {
         for y in 0..4 {
             for x in 0..4 {
@@ -56,8 +52,8 @@ pub(crate) fn atlas() -> Vec<u8> {
     atlas
 }
 
-/// Shallow water and fords use the required water sheet. Optional medium,
-/// deep and unused marsh sheets keep distinct colours to detect a wrong slot.
+/// Shallow water uses the required sheet. Medium, deep and walkable marsh
+/// own separate sheets; the unrelated ice slot must never become a ford.
 /// `depth` false models a pack without those optional sheets.
 pub(crate) fn art(depth: bool) -> GameArt {
     GameArt {
@@ -74,7 +70,7 @@ pub(crate) fn art(depth: bool) -> GameArt {
         terrain_topology: [None; 12],
         water_depth: std::array::from_fn(|slot| {
             if depth {
-                (vec![frame(slot + 1)], None)
+                (vec![frame([1, 2, 4, 3][slot])], None)
             } else {
                 (Vec::new(), None)
             }

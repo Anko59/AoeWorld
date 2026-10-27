@@ -39,6 +39,7 @@ async fn stationary_wall_corner_projections_reuse_the_prepared_foundation_key() 
             rally_point: None,
             farm_reseeds: 0,
             garrison: Vec::new(),
+            bridge_span: None,
         })
         .collect();
     let scene = prepare(&client);
@@ -117,6 +118,7 @@ fn building_family_uses_its_observed_age_including_construction() {
             rally_point: None,
             farm_reseeds: 0,
             garrison: Vec::new(),
+            bridge_span: None,
         };
         assert_eq!(building_kind(&building).building_id(), Some(dark));
         building.age = aoe_protocol::Age::Feudal;

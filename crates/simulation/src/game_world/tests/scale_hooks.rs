@@ -16,12 +16,13 @@ fn default_limits_equal_the_shipped_caps() {
         world().limits(),
         WorldLimits {
             players: MAX_ECONOMY_PLAYERS,
-            buildings: MAX_ECONOMY_PLAYERS * crate::BUILDINGS_PER_PLAYER,
-            gatherers: MAX_ECONOMY_PLAYERS * 200,
-            builders: MAX_ECONOMY_PLAYERS * 200,
-            hunters: MAX_ECONOMY_PLAYERS * 200,
+            // Retain the 200-population provisioning ratio at the new 1000 cap.
+            buildings: MAX_ECONOMY_PLAYERS * crate::BUILDINGS_PER_PLAYER * 5,
+            gatherers: MAX_ECONOMY_PLAYERS * 1000,
+            builders: MAX_ECONOMY_PLAYERS * 1000,
+            hunters: MAX_ECONOMY_PLAYERS * 1000,
             animals: MAX_ANIMALS,
-            projectiles: MAX_ECONOMY_PLAYERS * 200,
+            projectiles: MAX_ECONOMY_PLAYERS * 1000,
             population: MAX_POPULATION,
         }
     );

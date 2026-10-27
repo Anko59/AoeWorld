@@ -198,6 +198,9 @@ pub(in crate::gameplay) fn apply(
         Err(E::UnknownEntity | E::Movement(W::UnknownEntity)) => {
             CommandResult::RejectedUnknownEntity
         }
+        Err(E::VassalExists) => CommandResult::RejectedVassalExists,
+        Err(E::VassalHome) => CommandResult::RejectedVassalHome,
+        Err(E::Movement(W::VassalLeash)) => CommandResult::RejectedVassalLeash,
         Err(E::GarrisonFull) => CommandResult::RejectedGarrisonFull,
         Err(E::InvalidTarget) => CommandResult::RejectedInvalidTarget,
         Err(E::InsufficientResources) => CommandResult::RejectedInsufficientResources,

@@ -6,32 +6,47 @@
 /// Movers (or other items) per work unit. A fixed constant: it only sets the
 /// task granularity, never a result.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) const SHARD: usize = 512;
+pub(crate) const SHARD: usize = 128;
 
 /// `f(0..count)` collected in index order.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn par_map<T: Send>(count: usize, f: impl Fn(usize) -> T + Sync + Send) -> Vec<T> {
+pub(crate) fn par_map_into<T: Send>(
+    count: usize,
+    out: &mut Vec<T>,
+    f: impl Fn(usize) -> T + Sync + Send,
+) {
     use rayon::prelude::*;
-    if count < 2 * SHARD {
-        return (0..count).map(f).collect();
+    if count < 2 * SHARD || rayon::current_num_threads() == 1 {
+        out.clear();
+        out.extend((0..count).map(f));
+        return;
     }
     (0..count)
         .into_par_iter()
         .with_min_len(SHARD)
         .map(f)
-        .collect()
+        .collect_into_vec(out);
 }
 
 #[cfg(target_arch = "wasm32")]
-pub(crate) fn par_map<T: Send>(count: usize, f: impl Fn(usize) -> T + Sync + Send) -> Vec<T> {
-    (0..count).map(f).collect()
+pub(crate) fn par_map_into<T: Send>(
+    count: usize,
+    out: &mut Vec<T>,
+    f: impl Fn(usize) -> T + Sync + Send,
+) {
+    out.clear();
+    out.extend((0..count).map(f));
 }
 
 /// Runs `f` on every item, each on its own task.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn par_each_mut<T: Send>(items: &mut [T], f: impl Fn(&mut T) + Sync + Send) {
     use rayon::prelude::*;
-    items.par_iter_mut().for_each(f);
+    if rayon::current_num_threads() == 1 {
+        items.iter_mut().for_each(f);
+    } else {
+        items.par_iter_mut().for_each(f);
+    }
 }
 
 #[cfg(target_arch = "wasm32")]

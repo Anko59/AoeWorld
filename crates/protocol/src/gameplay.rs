@@ -71,6 +71,20 @@ pub struct UnitState {
     /// Authoritative cavalry exploration toggle.
     pub auto_scout: bool,
     pub cargo_count: u8,
+    /// Owner-only home of a living Vassal.
+    pub home_castle: Option<EntityId>,
+    /// Owner-only ID of the Vassal currently managing this villager.
+    pub managed_by: Option<EntityId>,
+}
+
+impl UnitState {
+    pub fn for_viewer(mut self, viewer: PlayerId) -> Self {
+        if self.player != viewer {
+            self.home_castle = None;
+            self.managed_by = None;
+        }
+        self
+    }
 }
 
 mod commands;
@@ -121,6 +135,9 @@ pub enum CommandResult {
     RejectedUnexploredPlacement,
     RejectedRequiresCastleAge,
     RejectedGarrisonFull,
+    RejectedVassalExists,
+    RejectedVassalLeash,
+    RejectedVassalHome,
 }
 
 /// Immutable physical properties of the active geographic map. The package

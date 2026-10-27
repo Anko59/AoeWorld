@@ -31,10 +31,14 @@ impl<S> RenderFrameCache<S> {
     }
 
     pub(crate) fn position(&self, id: aoe_core::EntityId) -> Option<[f64; 2]> {
+        self.unit(id).map(|unit| unit.position)
+    }
+
+    pub(crate) fn unit(&self, id: aoe_core::EntityId) -> Option<SceneUnit> {
         // Scene units preserve the authoritative BTreeMap's entity-ID order.
         let units = &self.previous.as_ref()?.units;
         let index = units.binary_search_by_key(&id, |unit| unit.id).ok()?;
-        Some(units[index].position)
+        Some(units[index])
     }
 
     pub(crate) fn clear(&mut self) {

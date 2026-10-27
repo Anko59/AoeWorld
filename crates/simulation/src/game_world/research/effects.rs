@@ -5,8 +5,11 @@ use aoe_core::{EntityId, PlayerId};
 
 /// Shared simulation/client presentation of the effects' integer carry limit.
 pub fn villager_capacity(researched: u64) -> u16 {
-    let base = u32::from(crate::VILLAGE_RULES.villager_capacity);
-    (base * villager_economy_modifiers(researched).0).div_ceil(10_000) as u16
+    carry_capacity(researched, crate::VILLAGE_RULES.villager_capacity)
+}
+
+pub(crate) fn carry_capacity(researched: u64, base: u16) -> u16 {
+    (u32::from(base) * villager_economy_modifiers(researched).0).div_ceil(10_000) as u16
 }
 
 /// Walking speed percent of villagers with these technologies.

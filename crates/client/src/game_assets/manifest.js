@@ -70,7 +70,7 @@ export function parse_content(bytes) {
   const data = document(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   const rules = array(data.rules).map(i32);
   const actors = array(data.actors);
-  if (actors.length !== 126) throw Error('invalid actor content count');
+  if (actors.length !== 130) throw Error('invalid actor content count');
   const words = actors.flatMap(actor => {
     const row = array(actor);
     if (row.length !== 4) throw Error('invalid actor content record');

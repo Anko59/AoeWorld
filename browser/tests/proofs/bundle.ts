@@ -41,6 +41,8 @@ export async function bundleProof(page: Page, url: string, film = false) {
     0,
     0,
     cargo,
+    0, // Combined wire: no Vassal home Castle.
+    0, // Combined wire: no Vassal manager.
   ];
   const building = (
     id: number,
@@ -74,6 +76,9 @@ export async function bundleProof(page: Page, url: string, film = false) {
     0,
     garrison.length,
     ...garrison.flat(),
+    ...(kind === 20
+      ? [1, ...sint(x), ...sint(y), ...sint(x + w - 1), ...sint(y + h - 1)]
+      : [0]),
   ];
   const units = [
     unit(0, 1, 8192.5, 8192.5, 45),

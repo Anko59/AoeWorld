@@ -69,7 +69,7 @@ impl RouteTerrain for MapChunkGenerator {
             return Ok(false);
         };
         Ok(!overlay.blocks_tile(tile)
-            && (cell.passable || overlay.bridge_axis(tile).is_some())
+            && (cell.passable || overlay.bridge_connections(tile).is_some())
             && cell.node.is_none_or(|node| !overlay.blocks_node(node)))
     }
 

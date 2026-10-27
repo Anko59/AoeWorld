@@ -45,6 +45,17 @@ impl GameWorld {
         radius: i32,
         exclude: Option<u64>,
     ) -> Option<ResourceNode> {
+        self.nearest_resource_matching(origin, kind, radius, exclude, |_| true)
+    }
+
+    pub(crate) fn nearest_resource_matching(
+        &self,
+        origin: TileCoord,
+        kind: ResourceKind,
+        radius: i32,
+        exclude: Option<u64>,
+        accept: impl Fn(&ResourceNode) -> bool,
+    ) -> Option<ResourceNode> {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return None;
         };
@@ -98,6 +109,7 @@ impl GameWorld {
                             || node.kind != kind
                             || Some(node.id) == exclude
                             || !overlay.resource_available(*node)
+                            || !accept(node)
                             || (distance, node.id) >= score
                         {
                             continue;

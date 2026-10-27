@@ -33,7 +33,7 @@ there is no unrelated sprite substitution. Every listed source is present in
 the local trial, so no DE unit import is needed. Sheep do not attack in this
 simulation; the absent trial sheep attack 3623 is not selected.
 
-The actor selection has 2,540 frames, alongside the base catalogue's 2,361
+The actor selection has 2,625 frames, alongside the base catalogue's 2,371
 full-prefix frames and the bounded building subset. The runtime validates at
 most 5,120 selected frames before pixel allocation. Terrain keeps pages 0–1;
 objects use pages 2–4 of five 2048-square RGBA pages (80 MiB). All backends
@@ -45,3 +45,8 @@ The existing cursor importer has no native game cursor export. Attack and hunt
 therefore use the browser crosshair fallback, with distinct semantic cursor
 states. HP and combat statistics come from authoritative HP and the current
 simulation combat table; selected living actors receive health bars.
+
+The original Vassal uses the King (DAT unit 434) and four explicitly selected
+licensed DE King poses because the trial archives omit its original SLPs.
+The 35 selected cells retain DAT timing within the existing atlas budget;
+see [the Vassal](../economy/vassal.md) for source identities and gameplay rules.

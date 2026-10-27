@@ -238,6 +238,10 @@ enum PendingAction {
 }
 
 impl GameplayService {
+    pub fn vassal_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::vassal_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
     pub fn military_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::military_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
@@ -394,7 +398,7 @@ impl GameplayService {
             .collect::<BTreeMap<_, _>>();
         let units = units
             .iter()
-            .map(|unit| unit_state(&world, unit))
+            .map(|unit| unit_state(&world, unit).for_viewer(player))
             .collect::<Vec<_>>();
         let snapshot = GameplayServerMessage::Snapshot {
             revision,

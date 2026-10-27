@@ -30,48 +30,20 @@ pub(super) enum Labels {
     Empty,
     Open,
     Tiles(Box<[u16; CELLS]>),
-    Runs(Box<[(u16, u16)]>),
 }
 impl Labels {
     pub(super) fn bytes(&self) -> usize {
         match self {
             Self::Tiles(_) => std::mem::size_of::<[u16; CELLS]>(),
-            Self::Runs(runs) => std::mem::size_of_val(runs.as_ref()),
             Self::Empty | Self::Open => 0,
         }
     }
 
-    pub(super) fn from_runs(runs: Vec<(u16, u16)>) -> Self {
-        match runs.as_slice() {
-            [(_, 0)] => Self::Empty,
-            [(_, 1)] => Self::Open,
-            _ if runs.len() * size_of::<(u16, u16)>() < size_of::<[u16; CELLS]>() => {
-                Self::Runs(runs.into_boxed_slice())
-            }
-            _ => {
-                let mut labels = Box::new([0; CELLS]);
-                let mut start = 0;
-                for (end, label) in runs {
-                    labels[start..usize::from(end)].fill(label);
-                    start = usize::from(end);
-                }
-                Self::Tiles(labels)
-            }
-        }
-    }
-
     pub(super) fn iter(&self) -> impl Iterator<Item = &u16> {
-        let mut run = 0;
         (0..CELLS).map(move |at| match self {
             Self::Empty => &0,
             Self::Open => &1,
             Self::Tiles(labels) => &labels[at],
-            Self::Runs(runs) => {
-                while usize::from(runs[run].0) <= at {
-                    run += 1;
-                }
-                &runs[run].1
-            }
         })
     }
 }
@@ -83,7 +55,6 @@ impl std::ops::Index<usize> for Labels {
             Self::Empty => &0,
             Self::Open => &1,
             Self::Tiles(labels) => &labels[at],
-            Self::Runs(runs) => &runs[runs.partition_point(|(end, _)| usize::from(*end) <= at)].1,
         }
     }
 }
@@ -116,7 +87,7 @@ impl Grid {
         for (at, cell) in cells.iter().enumerate() {
             let tile = tile(key, at);
             grid.open[at] = cell.is_some_and(|cell| {
-                (cell.passable || ground.overlay.bridge_axis(tile).is_some())
+                (cell.passable || ground.overlay.bridge_connections(tile).is_some())
                     && !ground.overlay.blocks_tile(tile)
                     && cell
                         .node
@@ -153,7 +124,7 @@ impl Grid {
                 if !grid.open[next] || !edge(at, next) {
                     continue;
                 }
-                if dx != 0 && dy != 0 {
+                if dx != 0 && dy != 0 && ground.overlay.bridge_edge(from, to) != Some(true) {
                     let horizontal = index(TileCoord::new(to.x, from.y));
                     let vertical = index(TileCoord::new(from.x, to.y));
                     if !grid.open[horizontal]

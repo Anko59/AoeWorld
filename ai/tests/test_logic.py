@@ -294,6 +294,22 @@ def test_sheep_come_before_berries_and_a_villager_that_stays_idle_is_not_spammed
     assert client.named("hunt") == [] and client.named("gather") == []
 
 
+def test_idle_hunters_take_one_quarry_each_and_never_write_off_a_fresh_herd():
+    units, buildings = base(8)
+    herd = [animal(900, (46, 50), kind=AnimalKind.SHEEP), animal(901, (45, 51), kind=AnimalKind.SHEEP)]
+    world = FakeWorld(units, buildings, animals=herd, eco=economy(population=9, cap=30))
+    brain, client = play(world)
+    targets = [args[1] for args in client.named("hunt")]
+    assert sorted(targets) == [900, 901], targets
+    # Every idle villager in turn is sent at the only quarry for a few
+    # seconds; nobody has failed yet, so the sheep stays worth hunting.
+    for _ in range(8):
+        world.tick += world.tick_hz
+        _, client = play(world, brain=brain)
+        assert not {900, 901} & brain.board.bad_resources, brain.board.hunt_tries
+    assert client.named("hunt"), "the herd is still worth hunting"
+
+
 def test_outnumbered_at_home_the_villagers_beside_a_raider_walk_to_the_town_center():
     units, buildings = base(6)
     raiders = [unit(800 + i, UnitKind.SPEARMAN, tile=(51, 51 + i), mine=False) for i in range(3)]

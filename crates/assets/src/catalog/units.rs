@@ -132,6 +132,10 @@ pub enum Pose {
     FireShip,
     DemolitionShip,
     TransportShip,
+    KingStand,
+    KingWalk,
+    KingDie,
+    KingDecay,
 }
 
 // The owner's licensed DE pack supplies sixteen directions starting east;
@@ -167,6 +171,11 @@ impl ActorSource {
         }
     }
     pub const fn frames(self) -> u32 {
+        match self.id {
+            1767 => return 961,
+            1771 | 1764 | 1768 => return 481,
+            _ => {}
+        }
         if self.id >= 100_000 {
             return 16;
         }
@@ -181,6 +190,15 @@ impl ActorSource {
         self.stride.div_ceil(self.sample_step()) as usize * 5
     }
     pub const fn source_frame(self, row: usize, phase: usize) -> usize {
+        // The original DAT supplies timing; the trial omits the King pixels.
+        // Its licensed DE West European King supplies the same four poses,
+        // with 16 direction blocks and 60/30 cells per direction.
+        match self.id {
+            1767 => return (4 + row * 2) * 60 + phase * 10,
+            1771 | 1764 => return (4 + row * 2) * 30 + phase * 3,
+            1768 => return (4 + row * 2) * 30 + phase * 6,
+            _ => {}
+        }
         if self.id >= 100_000 {
             return 4 + row * 2;
         }
@@ -192,6 +210,16 @@ impl ActorSource {
         }
     }
     pub fn manifest_source(self) -> String {
+        let king = match self.id {
+            1767 => Some("idle"),
+            1771 => Some("walk"),
+            1764 => Some("death"),
+            1768 => Some("decay"),
+            _ => None,
+        };
+        if let Some(pose) = king {
+            return format!("de/u_king_west_{pose}A_x1.sld");
+        }
         if let Some((_, name)) = NAVY.iter().find(|(id, _)| *id == self.id) {
             return format!("de/u_shp_{name}_x1.sld");
         }
@@ -207,7 +235,7 @@ const fn sprite(id: u32, stride: u8, millis: u16) -> ActorSource {
     }
 }
 
-pub const SPRITES: [ActorSource; 126] = [
+pub const SPRITES: [ActorSource; 130] = [
     sprite(993, 6, 1000),
     sprite(997, 12, 70),
     sprite(987, 10, 100),
@@ -339,6 +367,30 @@ pub const SPRITES: [ActorSource; 126] = [
     sprite(100_529, 1, 200),
     sprite(100_527, 1, 200),
     sprite(100_545, 1, 200),
+    ActorSource {
+        id: 1767,
+        stride: 6,
+        millis: 200,
+        phases: 2,
+    },
+    ActorSource {
+        id: 1771,
+        stride: 10,
+        millis: 70,
+        phases: 2,
+    },
+    ActorSource {
+        id: 1764,
+        stride: 10,
+        millis: 100,
+        phases: 2,
+    },
+    ActorSource {
+        id: 1768,
+        stride: 5,
+        millis: 6000,
+        phases: 1,
+    },
 ];
 
 #[cfg(test)]

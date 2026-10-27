@@ -47,9 +47,9 @@ pub use land_use::{
 pub use navigation::{
     DEFAULT_HIERARCHY_EXPANSIONS, HierarchicalOutcome, MAX_ROUTE_PLANNER_NODES,
     MAX_ROUTE_PLANNER_WORK, MAX_ROUTE_SEGMENT_TILES, MAX_ROUTE_TILES, MovementOutcome,
-    NAVIGATION_FORMAT_VERSION, NavigationChunk, NavigationSnapshot, Path, ROUTE_LEG_COMMIT_WORK,
-    ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain, find_path,
-    find_path_segment_with_overlay, find_path_with_overlay, hierarchical_route,
+    NAVIGATION_FORMAT_VERSION, NavigationChunk, NavigationSnapshot, NavigationStorage, Path,
+    ROUTE_LEG_COMMIT_WORK, ROUTE_LEG_PROGRESS_TILES, RoutePlanner, RoutePlannerPoll, RouteTerrain,
+    find_path, find_path_segment_with_overlay, find_path_with_overlay, hierarchical_route,
     hierarchical_route_with_overlay, navigation_checksum,
 };
 pub use overlay::{
@@ -66,9 +66,9 @@ pub use terrain::{
     Chunk, DecorationFamily, EcologicalPalette, EdgePassability, GroundMaterial,
     LandscapeAppearance, LandscapeChunk, LandscapeDecoration, LandscapePoint, LandscapePolicy,
     LandscapeResource, LandscapeSample, LandscapeTile, MapChunkGenerator, NativeExposure,
-    NativeHeightBand, NavigationPhase, NavigationProbe, NavigationSpan, ObjectKind, Provenance,
-    ResourceKind, ResourceNode, ResourceVisualFamily, SurfaceDiagonal, SurfaceKind, Tile,
-    TileSurface, WALK_CACHE_MAX_BYTES, WalkCell, WaterKind,
+    NativeHeightBand, NavigationPhase, NavigationProbe, NavigationSpan, NavigationTarget,
+    ObjectKind, Provenance, ResourceKind, ResourceNode, ResourceVisualFamily, SurfaceDiagonal,
+    SurfaceKind, Tile, TileSurface, WALK_CACHE_MAX_BYTES, WalkCell, WaterKind,
 };
 pub use wire::{CHUNK_FORMAT_VERSION, CompactChunk, CompactChunkError, MAX_DECODED_CHUNK_BYTES};
 

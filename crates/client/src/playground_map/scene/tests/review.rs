@@ -207,6 +207,8 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
                 death_hunt: None,
                 auto_scout: false,
                 cargo_count: 0,
+                home_castle: None,
+                managed_by: None,
             },
         )]),
         presentation: Default::default(),
@@ -363,6 +365,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
     });
     let rendered = |client: &Client| {
         units(client, &scene)
@@ -402,6 +405,7 @@ async fn authoritative_gate_stays_open_when_the_holding_enemy_is_not_resident() 
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
     });
     for _ in 0..20 {
         let gate = units(&client, &scene)

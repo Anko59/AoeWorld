@@ -37,6 +37,7 @@ fn building() -> GameplayBuildingState {
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
         age: aoe_protocol::Age::Dark,
     }
 }
@@ -76,8 +77,9 @@ fn garrison_occupants_are_bounded_alive_sorted_and_eligible() {
     let valid = snapshot(center.clone());
     let bytes = encode_gameplay_server(&valid).unwrap();
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), valid);
-    // The current building tail appends the occupant list and its compact records.
-    assert!(bytes.ends_with(&[1, 7, 0, 10, 25]));
+    // The current tail includes occupants, then the optional raster bridge span
+    // (None for this Town Center); keep the exact current wire pinned.
+    assert!(bytes.ends_with(&[1, 7, 0, 10, 25, 0]));
     for invalid in [
         GarrisonUnitState {
             hp: 0,

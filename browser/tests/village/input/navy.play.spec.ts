@@ -46,6 +46,14 @@ test("land units right-click a Transport Ship to send a bounded load order", asy
   });
   await selectWorker(page);
   const ship = screen(8193.5, 8194.5);
+  await page.mouse.move(ship.x, ship.y);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-command-cursor",
+    "board",
+  );
+  await expect(page.locator("#transport-hint")).toHaveText(
+    "Board Transport Ship",
+  );
   await page.mouse.click(ship.x, ship.y, { button: "right" });
   await expect
     .poll(() => commands.find((bytes) => bytes[0] === 27)?.slice(2))
@@ -62,12 +70,30 @@ test("Transport Ship displays passengers and unloads onto the chosen bank", asyn
   await page.mouse.click(ship.x, ship.y);
   await expect(page.locator("#selection-name")).toHaveText("Transport Ship");
   await expect(page.locator("#selection-load")).toHaveText("2/5 passengers");
+  await expect(page.locator('.transport-load[data-ship="5"]')).toHaveText(
+    "2/5",
+  );
   await expect(page.locator("#unload-transport")).toBeEnabled();
   await page.locator("#unload-transport").click();
   await expect(page.locator("#scene")).toHaveAttribute(
     "data-order-mode",
     "unload",
   );
+  const bank = screen(8194.5, 8194.5);
+  await page.mouse.click(bank.x, bank.y, { button: "right" });
+  await expect
+    .poll(() => commands.find((bytes) => bytes[0] === 28)?.[2])
+    .toBe(5);
+});
+
+test("loaded Transport Ship right-clicks a shore to unload without arming a command", async ({
+  page,
+}) => {
+  const commands = await inputFixture(page, "webgl2", [], false, 0, undefined, {
+    cargo: 2,
+  });
+  const ship = screen(8193.5, 8194.5);
+  await page.mouse.click(ship.x, ship.y);
   const bank = screen(8194.5, 8194.5);
   await page.mouse.click(bank.x, bank.y, { button: "right" });
   await expect

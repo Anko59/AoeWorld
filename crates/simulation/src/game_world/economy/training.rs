@@ -3,7 +3,7 @@ use super::{
     placement::{distance_squared, perimeter, position},
 };
 use crate::GameWorld;
-use aoe_core::{EntityId, PlayerId};
+use aoe_core::{ChunkCoord, EntityId, PlayerId, SPATIAL_CHUNK_TILES};
 
 pub(crate) mod rally;
 
@@ -29,6 +29,16 @@ impl GameWorld {
         }
         if !super::trainable_units(building.kind).contains(&kind) {
             return Err(EconomyError::WrongUnitKind);
+        }
+        if kind == UnitKind::Vassal
+            && (building.training_queue.iter().any(|e| e.kind == kind)
+                || self
+                    .economy
+                    .vassal_homes
+                    .values()
+                    .any(|home| home.castle == center))
+        {
+            return Err(EconomyError::VassalExists);
         }
         self.require_age(player, kind.required_age())?;
         if kind
@@ -71,6 +81,7 @@ impl GameWorld {
                 progress_ticks: 0,
                 total_ticks: u64::from(self.config.tick_hz) * u64::from(seconds),
             });
+            self.economy.active_training.insert(center);
         }
         Ok(())
     }
@@ -93,6 +104,9 @@ impl GameWorld {
         let Some(entry) = building.training_queue.pop_front() else {
             return Ok(());
         };
+        if building.training_queue.is_empty() {
+            self.economy.active_training.remove(&center);
+        }
         if entry.kind == UnitKind::Villager {
             if let Some(state) = self.economy.players.get_mut(&player) {
                 state.stockpile.food = state
@@ -107,12 +121,16 @@ impl GameWorld {
     }
 
     pub(super) fn advance_training(&mut self, changed: &mut Vec<EntityId>) {
+        #[cfg(test)]
+        {
+            self.economy.tick_work.training_buildings = self.economy.active_training.len();
+            self.economy.tick_work.spawn_units = 0;
+        }
         let centers = self
             .economy
-            .buildings
+            .active_training
             .iter()
-            .filter(|(_, building)| !building.training_queue.is_empty())
-            .map(|(id, _)| *id)
+            .copied()
             .collect::<Vec<_>>();
         for id in centers {
             let Some(building) = self.economy.buildings.get_mut(&id) else {
@@ -154,14 +172,35 @@ impl GameWorld {
                     tile.x,
                 )
             });
+            #[cfg(test)]
+            let mut inspected = 0;
             let spawn = exits.into_iter().find(|tile| {
                 self.unit_tile_passable(kind, *tile, &|| false)
                     .unwrap_or(false)
                     && !self.economy.blocked_tiles.contains(tile)
                     && !self
-                        .units()
-                        .any(|u| !self.embarked(u.id) && u.position.tile_floor() == *tile)
+                        .chunks
+                        .get(&ChunkCoord {
+                            x: tile.x.div_euclid(SPATIAL_CHUNK_TILES),
+                            y: tile.y.div_euclid(SPATIAL_CHUNK_TILES),
+                        })
+                        .into_iter()
+                        .flatten()
+                        .any(|id| {
+                            #[cfg(test)]
+                            {
+                                inspected += 1;
+                            }
+                            !self.embarked(*id)
+                                && self
+                                    .unit(*id)
+                                    .is_some_and(|u| u.position.tile_floor() == *tile)
+                        })
             });
+            #[cfg(test)]
+            {
+                self.economy.tick_work.spawn_units += inspected;
+            }
             let Some(tile) = spawn else {
                 continue;
             };
@@ -171,8 +210,14 @@ impl GameWorld {
             let kind = kind.upgraded(self.player_economy(player).map_or(0, |p| p.researched));
             let spawned = self.spawn_kind(player, kind, position);
             if let Ok(unit) = spawned {
+                if kind == UnitKind::Vassal {
+                    self.bind_vassal(unit, id, footprint);
+                }
                 if let Some(building) = self.economy.buildings.get_mut(&id) {
                     building.training_queue.pop_front();
+                    if building.training_queue.is_empty() {
+                        self.economy.active_training.remove(&id);
+                    }
                 }
                 if let Some(rally) = rally {
                     self.apply_rally(unit, rally);

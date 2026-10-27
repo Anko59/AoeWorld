@@ -138,18 +138,10 @@ impl GameWorld {
     }
 
     /// Work spots prefer unreserved adjacent tiles, then distance and tile order.
-    /// Idle workers are found in the existing local grid, including those whose
-    /// approach order has just completed. No population-wide scan is needed.
+    /// Exact idle-tile membership includes workers whose approach just ended.
+    /// Crowded cells cannot hide a worker behind a sampled neighbour window.
     pub(crate) fn work_spot_busy(&self, tile: TileCoord, except: EntityId) -> bool {
-        self.destination_reserved(tile, except)
-            || WorldPosition::from_tile_center(tile).is_ok_and(|at| {
-                self.spacing_neighbours(at, u64::from(except.0)).any(|id| {
-                    id != except
-                        && self.unit(id).is_some_and(|u| {
-                            u.hp > 0 && !u.moving && !u.planning && u.position.tile_floor() == tile
-                        })
-                })
-            })
+        self.destination_reserved(tile, except) || self.idle_spacing.occupied(tile, except)
     }
 
     /// The actor already occupies this spot. A future arrival reservation

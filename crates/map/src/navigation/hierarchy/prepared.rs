@@ -98,7 +98,7 @@ impl Atlas {
             return Ok(None);
         }
         let chunk = self.chunk(generator, key, cancelled)?;
-        let label = chunk.labels[grid::index(origin)];
+        let label = chunk.label(grid::index(origin));
         if label == 0 {
             return Ok(None);
         }

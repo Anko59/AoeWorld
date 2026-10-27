@@ -22,6 +22,7 @@ fn bridge_snapshots_accept_only_bounded_single_lane_footprints() {
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
     };
     for (width, height, valid) in [
         (3, 1, true),
@@ -33,8 +34,13 @@ fn bridge_snapshots_accept_only_bounded_single_lane_footprints() {
         (43, 1, false),
         (2, 2, false),
         (1, 43, false),
+        (3, 3, true),
+        (42, 42, true),
+        (2, 3, true),
     ] {
         building.footprint = TileRect::from_xywh(1, 1, width, height);
+        building.bridge_span =
+            aoe_core::BridgeSpan::new(building.footprint.min, TileCoord::new(width, height));
         let message = ServerMessage::Snapshot {
             revision: 1,
             tick: Tick(1),
@@ -73,4 +79,22 @@ fn bridge_order_has_bounded_builders_and_current_golden_wire() {
         queued: false,
     };
     assert!(decode_client(&encode_client(&too_many).unwrap()).is_err());
+}
+
+#[test]
+fn bridge_endpoint_wire_preserves_negative_slopes_and_rejects_noncanonical_endpoints() {
+    let span = aoe_core::BridgeSpan::new(TileCoord::new(4, 8), TileCoord::new(7, 5)).unwrap();
+    // The current bridge field is Some followed by canonical from/to coordinates.
+    let bytes = postcard::to_allocvec(&Some(span)).unwrap();
+    assert_eq!(bytes, [1, 8, 16, 14, 10]);
+    assert_eq!(
+        postcard::from_bytes::<Option<aoe_core::BridgeSpan>>(&bytes).unwrap(),
+        Some(span)
+    );
+    assert_eq!(span.footprint(), TileRect::from_xywh(4, 5, 4, 4));
+    let reversed = aoe_core::BridgeSpan {
+        from: span.to,
+        to: span.from,
+    };
+    assert!(!reversed.valid());
 }

@@ -12,6 +12,8 @@ pub enum RallyTarget {
 pub struct RallyPoint {
     pub target: RallyTarget,
     pub position: aoe_core::WorldPosition,
+    // Keep the food profession even after wildlife removes the empty carcass.
+    animal_kind: Option<crate::AnimalKind>,
 }
 
 use super::super::{
@@ -85,6 +87,10 @@ impl GameWorld {
         } else {
             target
         };
+        let animal_kind = match target {
+            RallyTarget::Animal(id) => self.animal(id).map(|a| a.kind),
+            _ => None,
+        };
         self.economy
             .buildings
             .get_mut(&id)
@@ -92,6 +98,7 @@ impl GameWorld {
             .rally_point = Some(RallyPoint {
             target,
             position: point,
+            animal_kind,
         });
         Ok(())
     }
@@ -104,10 +111,10 @@ impl GameWorld {
             RallyTarget::Resource(node)
                 if matches!(unit.kind, UnitKind::Villager | UnitKind::FishingShip) =>
             {
-                self.issue_gather(unit.player, id, node).is_ok()
+                self.gather_at_rally(id, node)
             }
             RallyTarget::Animal(animal) if unit.kind == UnitKind::Villager => {
-                self.issue_hunt(unit.player, &[id], animal).is_ok()
+                self.hunt_at_rally(id, animal, rally)
             }
             RallyTarget::Building(target) if unit.kind == UnitKind::Villager => {
                 match self.building(target).filter(|b| b.player == unit.player) {
@@ -159,6 +166,60 @@ impl GameWorld {
         };
         let _ = self.issue_move(id, destination);
     }
+
+    fn hunt_at_rally(&mut self, id: EntityId, animal: EntityId, rally: RallyPoint) -> bool {
+        let Some(unit) = self.unit(id) else {
+            return false;
+        };
+        if self.issue_hunt(unit.player, &[id], animal).is_ok() {
+            return true;
+        }
+        if self.animal(animal).is_some_and(|a| a.food_remaining > 0) {
+            return false;
+        }
+        let Some(kind) = rally.animal_kind else {
+            return false;
+        };
+        self.next_food_animal(unit.player, rally.position.tile_floor(), kind, animal, id)
+            .is_some_and(|next| self.issue_hunt(unit.player, &[id], next.id).is_ok())
+    }
+
+    fn gather_at_rally(&mut self, id: EntityId, node: u64) -> bool {
+        let Some(unit) = self.unit(id) else {
+            return false;
+        };
+        if self.issue_gather(unit.player, id, node).is_ok() {
+            return true;
+        }
+        if self.resource_remaining(node) != Some(0) {
+            return false;
+        }
+        let Terrain::Map { generator, overlay } = &self.terrain else {
+            return false;
+        };
+        let Some(old) = overlay
+            .resource_by_id_with_cancel(generator, node, &|| false)
+            .ok()
+            .flatten()
+        else {
+            return false;
+        };
+        let next = if matches!(
+            old.object,
+            aoe_map::ObjectKind::ShoreFish | aoe_map::ObjectKind::DeepFish
+        ) {
+            self.nearest_fish(id, old.tile, old.id)
+        } else {
+            self.nearest_resource_matching(
+                old.tile,
+                old.kind,
+                super::super::VILLAGE_RULES.replacement_radius_tiles,
+                Some(old.id),
+                |node| node.object == old.object,
+            )
+        };
+        next.is_some_and(|next| self.issue_gather(unit.player, id, next.id).is_ok())
+    }
 }
 
 pub(crate) fn hash_rally(hash: &mut blake3::Hasher, rally: Option<RallyPoint>) {
@@ -177,4 +238,10 @@ pub(crate) fn hash_rally(hash: &mut blake3::Hasher, rally: Option<RallyPoint>) {
     };
     hash.update(&[tag]);
     hash.update(&id.to_le_bytes());
+    if matches!(r.target, RallyTarget::Animal(_)) {
+        hash.update(&[r.animal_kind.map_or(u8::MAX, |kind| kind as u8)]);
+    }
 }
+
+#[cfg(test)]
+mod tests;

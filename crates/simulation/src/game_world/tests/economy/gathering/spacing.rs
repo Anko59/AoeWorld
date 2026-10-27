@@ -1,7 +1,9 @@
 use super::*;
 
 #[test]
-fn gatherers_choose_distinct_available_work_tiles_around_one_tree() {
+fn gatherers_choose_distinct_available_work_tiles_in_a_deposit_area() {
+    // Trees now take at most two workers; the six-worker case belongs on a
+    // larger deposit. The separate occupancy tests require lumberjack fan-out.
     let (package, pages, water) = fixture::flat_fixture(false);
     let generator = package
         .generator_with_environment(pages.clone(), water.clone(), Vec::new(), Vec::new())
@@ -12,7 +14,7 @@ fn gatherers_choose_distinct_available_work_tiles_around_one_tree() {
         .flat_map(|y| (0..8).map(move |x| (x, y)))
         .flat_map(|(x, y)| generator.chunk(x, y).unwrap().resources)
         .find(|node| {
-            node.kind == ResourceKind::Wood
+            node.kind == ResourceKind::Gold
                 && crate::game_world::economy::placement::perimeter(TileRect::new(
                     node.tile,
                     TileCoord::new(node.tile.x + 1, node.tile.y + 1),
@@ -22,7 +24,7 @@ fn gatherers_choose_distinct_available_work_tiles_around_one_tree() {
                 .count()
                     >= 4
         })
-        .expect("tree with at least four accessible work spots");
+        .expect("deposit with at least four accessible work spots");
     let initial = crate::game_world::economy::placement::perimeter(TileRect::new(
         node.tile,
         TileCoord::new(node.tile.x + 1, node.tile.y + 1),
@@ -71,12 +73,22 @@ fn gatherers_choose_distinct_available_work_tiles_around_one_tree() {
         .iter()
         .map(|&id| w.unit(id).unwrap().position.tile_floor())
         .collect::<BTreeSet<_>>();
-    assert_eq!(tiles.len(), ids.len());
-    assert!(
-        tiles
-            .iter()
-            .all(|t| t.x.abs_diff(node.tile.x) <= 1 && t.y.abs_diff(node.tile.y) <= 1)
+    assert_eq!(
+        tiles.len(),
+        ids.len(),
+        "workers: {:?}",
+        ids.iter()
+            .map(|id| (w.unit(*id), w.movement_order(*id), w.gather_target(*id)))
+            .collect::<Vec<_>>()
     );
+    for id in &ids {
+        let target = generator
+            .resource_by_id(w.gather_target(*id).expect("every worker keeps a job"))
+            .unwrap();
+        let tile = w.unit(*id).unwrap().position.tile_floor();
+        assert!(tile.x.abs_diff(target.tile.x) <= 1 && tile.y.abs_diff(target.tile.y) <= 1);
+        assert_eq!(target.kind, ResourceKind::Gold);
+    }
     assert!(
         ids.iter().all(|&id| w.unit(id).unwrap().carried.is_some()),
         "{:?}",

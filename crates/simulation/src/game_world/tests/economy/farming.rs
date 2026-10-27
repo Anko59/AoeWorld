@@ -58,6 +58,67 @@ fn a_farm_needs_a_completed_mill_and_holds_one_hundred_seventy_five_food() {
 }
 
 #[test]
+fn farm_builder_farms_instead_of_automatically_taking_a_nearby_foundation() {
+    let (mut world, farmer, _, farm) = mill_and_farm();
+    let helper = villager_at(&mut world, 107, 104);
+    let house = world
+        .issue_build(
+            PlayerId(0),
+            &[helper],
+            BuildingKind::House,
+            at(108, 104),
+            false,
+        )
+        .unwrap();
+    world
+        .issue_move(
+            helper,
+            WorldPosition::from_tile_center(at(115, 110)).unwrap(),
+        )
+        .unwrap();
+    finish(&mut world, farm, 700);
+    advance(&mut world, 150);
+    assert_eq!(world.unit(farmer).unwrap().task, UnitTask::Farming);
+    assert!(!world.building(house).unwrap().is_complete());
+    assert!(!world.economy.builders.contains_key(&farmer));
+    assert!(
+        world
+            .building(farm)
+            .unwrap()
+            .footprint
+            .contains(world.unit(farmer).unwrap().position.tile_floor())
+    );
+}
+
+#[test]
+fn a_farm_builder_waits_for_a_work_tile_instead_of_losing_its_farm_job() {
+    let (mut world, farmer, _, farm) = mill_and_farm();
+    let mut blockers = Vec::new();
+    let rect = world.building(farm).unwrap().footprint;
+    for tile in crate::game_world::economy::placement::perimeter(aoe_core::TileRect::from_xywh(
+        rect.min.x + 1,
+        rect.min.y + 1,
+        1,
+        1,
+    )) {
+        blockers.push(
+            world
+                .spawn_villager(PlayerId(1), WorldPosition::from_tile_center(tile).unwrap())
+                .unwrap(),
+        );
+    }
+    finish(&mut world, farm, 700);
+    assert_eq!(world.gather_target(farmer), None);
+    assert!(world.economy.builders.contains_key(&farmer));
+    for id in blockers {
+        world.remove_unit(id);
+    }
+    advance(&mut world, 200);
+    assert_eq!(world.unit(farmer).unwrap().task, UnitTask::Farming);
+    assert_eq!(world.gathering_kind(farmer), Some(ResourceKind::Food));
+}
+
+#[test]
 fn a_farm_takes_one_farmer_depletes_and_is_removed_when_exhausted() {
     let (mut world, worker, mill, farm) = mill_and_farm();
     finish(&mut world, farm, 700);
@@ -82,6 +143,10 @@ fn a_farm_takes_one_farmer_depletes_and_is_removed_when_exhausted() {
     assert_eq!(world.unit(worker).unwrap().task, UnitTask::Idle);
     assert!(world.unit(worker).unwrap().carried.is_none());
     assert!(world.building(mill).is_some());
+    assert!(
+        world.economy.farm_production.is_empty(),
+        "spent farm production must be released"
+    );
     assert_eq!(
         world.issue_farm(PlayerId(0), second, farm),
         Err(EconomyError::UnknownEntity)
@@ -274,6 +339,48 @@ fn queued_reseed_rebuilds_once_and_keeps_the_same_farmer() {
         }
     }
     panic!("same farmer must rebuild and resume without another order");
+}
+
+#[test]
+fn prepaid_reseeding_keeps_the_farmer_across_three_full_cycles_near_other_work() {
+    let (mut world, farmer, mill, farm) = mill_and_farm();
+    finish(&mut world, farm, 700);
+    for _ in 0..3 {
+        world.issue_farm_reseed(PlayerId(0), mill, true).unwrap();
+    }
+    let paid_wood = stock(&world).1;
+    let house = world
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::House,
+            aoe_core::TileRect::from_xywh(108, 104, 2, 2),
+            false,
+        )
+        .unwrap();
+    let mut cycles = 0;
+    let mut rebuilding = false;
+    for _ in 0..65_000 {
+        world.advance();
+        let b = world
+            .building(farm)
+            .expect("a prepaid farm must stay available");
+        rebuilding |= !b.is_complete();
+        if rebuilding && world.unit(farmer).unwrap().task == UnitTask::Farming {
+            cycles += 1;
+            rebuilding = false;
+            assert_eq!(world.building(mill).unwrap().farm_reseeds, 3 - cycles);
+            assert_eq!(stock(&world).0, 175 * u32::from(cycles));
+            assert_eq!(stock(&world).1, paid_wood);
+            assert_eq!(world.building(house).unwrap().work_done, 0);
+            if cycles == 3 {
+                return;
+            }
+        }
+    }
+    panic!(
+        "reseeding stopped after {cycles} cycles: {:?}",
+        world.unit(farmer)
+    );
 }
 
 #[test]

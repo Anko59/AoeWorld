@@ -1,4 +1,8 @@
 use super::*;
+use std::time::Duration;
+mod fixture;
+mod mapped;
+mod performance;
 
 #[test]
 fn persisted_navigation_loads_without_terrain_composition_and_rejects_corruption() {
@@ -22,8 +26,15 @@ fn persisted_navigation_loads_without_terrain_composition_and_rejects_corruption
     assert!(read(&path, [42; 32], 2, &|| true).is_err());
     let mut bytes = fs::read(&path).unwrap();
     *bytes.last_mut().unwrap() ^= 1;
-    fs::write(&path, bytes).unwrap();
+    let replacement = path.with_extension("corrupt");
+    fs::write(&replacement, bytes).unwrap();
+    fs::rename(replacement, &path).unwrap();
     assert!(read(&path, [42; 32], 2, &|| false).is_err());
+    // Replacing the pathname must not invalidate a live mapping of its inode.
+    assert_eq!(
+        loaded.walk_at_with_cancel(aoe_core::TileCoord::new(32, 32), &|| false),
+        generator.walk_at_with_cancel(aoe_core::TileCoord::new(32, 32), &|| false)
+    );
 }
 
 #[test]
@@ -58,7 +69,12 @@ fn concurrent_package_preparation_publishes_one_complete_snapshot() {
         .filter(|path| path.extension().is_some_and(|ext| ext == "bin"))
         .collect();
     assert_eq!(files.len(), 1);
-    assert_eq!(read(&files[0], [42; 32], 2, &|| false).unwrap().len(), 4);
+    assert_eq!(
+        read(&files[0], [42; 32], 2, &|| false)
+            .unwrap()
+            .chunk_count(),
+        4
+    );
 }
 
 #[test]
@@ -82,7 +98,7 @@ fn simultaneous_worlds_share_one_verified_package_snapshot() {
 }
 
 #[test]
-fn creator_large_uncompressed_map_uses_lazy_navigation_without_baking() {
+fn creator_map_exceeding_the_index_budget_keeps_lazy_navigation() {
     let directory = tempfile::tempdir().unwrap();
     let request = aoe_map::MapRequest {
         requested_side_meters: 480_000,
@@ -110,9 +126,12 @@ fn creator_large_uncompressed_map_uses_lazy_navigation_without_baking() {
 }
 
 #[test]
-fn eager_navigation_stops_at_its_retained_memory_budget() {
+fn streamed_navigation_stops_at_its_storage_budget() {
     let generator = MapChunkGenerator::new([7; 32], 7, 33);
-    let error = build(&generator, 2, 2, 1, &|| false).unwrap_err();
-    assert!(error.contains("navigation memory budget"), "{error}");
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("bounded.bin");
+    let error = stream::build(&generator, 2, 2, &path, [8; 32], 1, &|| false).unwrap_err();
+    assert!(error.contains("navigation storage budget"), "{error}");
+    assert!(!path.exists());
     assert!(!generator.has_static_navigation());
 }

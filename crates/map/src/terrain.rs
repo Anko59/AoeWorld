@@ -19,7 +19,8 @@ mod point_memo;
 mod walk_cache;
 pub use landscape_dispatch::LandscapePoint;
 pub use walk_cache::{
-    NavigationPhase, NavigationProbe, NavigationSpan, WALK_CACHE_MAX_BYTES, WalkCell,
+    NavigationPhase, NavigationProbe, NavigationSpan, NavigationTarget, WALK_CACHE_MAX_BYTES,
+    WalkCell,
 };
 pub(crate) mod landscape;
 #[path = "terrain/landscape/queries.rs"]

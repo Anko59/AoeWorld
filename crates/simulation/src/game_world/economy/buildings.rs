@@ -349,7 +349,7 @@ pub const BUILDING_RULES: [BuildingRules; 21] = [
         200,
         4800,
         (4, 11),
-        &[],
+        &[UnitKind::Vassal],
         None,
     ),
     castle(
@@ -432,7 +432,7 @@ const fn castle(
 }
 
 /// The population ceiling regardless of houses.
-pub const MAX_POPULATION: u16 = 200;
+pub const MAX_POPULATION: u16 = 1_000;
 /// The AoE II rule: n builders take `base * 3 / (n + 2)`.
 pub const BUILD_WORK_PER_BASE_TICK: u64 = 3;
 /// Longest palisade a single order may lay down.

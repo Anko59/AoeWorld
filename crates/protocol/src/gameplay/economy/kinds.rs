@@ -24,9 +24,10 @@ pub enum UnitKind {
     DemolitionShip,
     TransportShip,
     WarGalley,
+    Vassal,
 }
 impl UnitKind {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 23] = [
         Self::Villager,
         Self::Scout,
         Self::Militia,
@@ -49,6 +50,7 @@ impl UnitKind {
         Self::DemolitionShip,
         Self::TransportShip,
         Self::WarGalley,
+        Self::Vassal,
     ];
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

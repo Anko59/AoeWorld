@@ -67,6 +67,9 @@ impl GameWorld {
         if !shelter.kind.admits(actor.kind) {
             return Err(EconomyError::WrongUnitKind);
         }
+        if actor.kind == UnitKind::Vassal && self.vassal_castle(unit) != Some(building) {
+            return Err(EconomyError::VassalHome);
+        }
         let reserved = usize::from(
             self.economy
                 .garrison_reservations
@@ -214,6 +217,7 @@ impl GameWorld {
                     heal_at,
                 },
             );
+            self.set_vassal_active(id, unit.kind == UnitKind::Vassal);
             self.economy.occupied_garrisons.insert(building);
             self.combat.tower_ready.entry(building).or_insert(0);
         }

@@ -93,6 +93,18 @@ original-catalog qualification remains unavailable on this trial: its optional
 rock 15033 and snow 15026 sheets are absent. Portable complete-catalog tests
 and this real available-source measurement are separate evidence.
 
+The [generated late-game workload](scale/late-game.md) adds 100 seats and
+14,000 units with gathering/drop-off trips, full production queues, research,
+idle and marching armies, and wildlife. It runs in `perf-smoke` and `perf-ci`;
+`make perf-late-game` isolates its three repetitions. Reports include every
+simulation and fan-out phase's raw samples, p50/p95 and median run percentiles.
+Its instruction baseline was re-taken on 2026-10-26 at 143,767,781 (from the
+pre-optimisation 240,341,066) with `make perf-baseline-propose`, so the 5% gate
+guards the active worksets, route-cache index and walking proposals; viewport
+queries were re-taken at 183,030 (from 257,593) for the ordered collection; the late
+game's allocation count was re-taken at 5,671 (from 4,733) for the Vassal economy
+phase and gatherer reservations bundled with it.
+
 ## Native building atlas
 
 Every building, construction and ambient source packs at full native resolution
@@ -200,7 +212,7 @@ for a browser navigation. Camera, seat and unknown fragment fields are preserved
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot
-pass. The pinned Gungraun/Callgrind and DHAT analysis image measures four
+pass. The pinned Gungraun/Callgrind and DHAT analysis image measures five
 simulation, protocol, and palette-decoding kernels. Binaryen optimizes the WASM bundle before gzip
 size comparison. Their reviewed initial baselines live in `baselines/perf/`;
 `make perf-baseline-propose` writes proposed replacements to ignored reports

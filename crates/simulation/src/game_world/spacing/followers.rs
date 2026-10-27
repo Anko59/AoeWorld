@@ -6,6 +6,8 @@ use std::collections::HashMap;
 pub(crate) struct Followers {
     cells: HashMap<u64, Vec<EntityId>>,
     slots: Vec<usize>,
+    #[cfg(test)]
+    neighbour_reads: std::sync::atomic::AtomicUsize,
 }
 fn packed(x: i32, y: i32) -> u64 {
     u64::from(x as u32) | (u64::from(y as u32) << 32)
@@ -13,7 +15,49 @@ fn packed(x: i32, y: i32) -> u64 {
 fn key(tile: TileCoord) -> u64 {
     packed(tile.x >> 3, tile.y >> 3)
 }
+#[cfg(not(target_arch = "wasm32"))]
+mod snapshot;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use snapshot::Snapshot;
+
+fn sample_cell(
+    units: &[EntityId],
+    salt: u64,
+    except: EntityId,
+    test: &mut impl FnMut(EntityId) -> bool,
+) -> bool {
+    if units.len() <= 32 {
+        return units.iter().copied().any(|id| id != except && test(id));
+    }
+    let start = (salt % units.len() as u64) as usize;
+    let first = (units.len() - start).min(32);
+    units[start..start + first]
+        .iter()
+        .chain(&units[..32 - first])
+        .copied()
+        .any(|id| id != except && test(id))
+}
+
 impl Followers {
+    fn cell(&self, x: i32, y: i32) -> Option<&[EntityId]> {
+        #[cfg(test)]
+        self.neighbour_reads
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.cells.get(&packed(x, y)).map(Vec::as_slice)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reset_neighbour_lookups(&self) {
+        self.neighbour_reads
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn neighbour_lookups(&self) -> usize {
+        self.neighbour_reads
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub(crate) fn contains(&self, id: EntityId) -> bool {
         self.slots
             .get(id.0 as usize)
@@ -66,8 +110,7 @@ impl Followers {
             self.insert(id, to);
         }
     }
-    /// Four coarse cells at most; 32 cyclic inspections per cell, including
-    /// the querying actor. Small cells need neither modulo nor iterator setup.
+    /// Same bounded cyclic windows for live ordered application and snapshots.
     pub(crate) fn any_neighbour(
         &self,
         tile: TileCoord,
@@ -77,28 +120,10 @@ impl Followers {
     ) -> bool {
         for y in ((tile.y - 1) >> 3)..=((tile.y + 1) >> 3) {
             for x in ((tile.x - 1) >> 3)..=((tile.x + 1) >> 3) {
-                let Some(units) = self.cells.get(&packed(x, y)) else {
-                    continue;
-                };
-                if units.len() <= 32 {
-                    for &id in units {
-                        if id != except && test(id) {
-                            return true;
-                        }
-                    }
-                    continue;
-                }
-                let start = (salt % units.len() as u64) as usize;
-                let first = (units.len() - start).min(32);
-                for &id in &units[start..start + first] {
-                    if id != except && test(id) {
-                        return true;
-                    }
-                }
-                for &id in &units[..32 - first] {
-                    if id != except && test(id) {
-                        return true;
-                    }
+                if let Some(units) = self.cell(x, y)
+                    && sample_cell(units, salt, except, &mut test)
+                {
+                    return true;
                 }
             }
         }

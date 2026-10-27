@@ -103,8 +103,12 @@ impl GameWorld {
         player: PlayerId,
         footprint: TileRect,
     ) {
+        let span = self.building(id).and_then(|b| b.bridge_span);
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
+                if span.is_some_and(|span| !span.contains(TileCoord::new(x, y))) {
+                    continue;
+                }
                 self.vision
                     .building_at_tile
                     .insert(TileCoord::new(x, y), id);
@@ -177,7 +181,10 @@ impl GameWorld {
     pub(crate) fn forget_building(&mut self, id: EntityId, footprint: TileRect) {
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
-                self.vision.building_at_tile.remove(&TileCoord::new(x, y));
+                let tile = TileCoord::new(x, y);
+                if self.vision.building_at_tile.get(&tile) == Some(&id) {
+                    self.vision.building_at_tile.remove(&tile);
+                }
             }
         }
         let watched = self.vision.building_watchers.remove(&id);

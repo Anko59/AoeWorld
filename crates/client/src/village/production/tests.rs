@@ -30,6 +30,7 @@ fn barracks(id: u32, count: usize) -> GameplayBuildingState {
         rally_point: None,
         farm_reseeds: 0,
         garrison: Vec::new(),
+        bridge_span: None,
     }
 }
 
@@ -78,6 +79,7 @@ fn shortest_queue_counts_burst_clicks_and_ignores_ineligible_selected_buildings(
             PlayerId(0),
             UnitKind::Militia,
             &pending,
+            |_| false,
         )
         .unwrap();
         assert_eq!(target.id, EntityId(expected));
@@ -93,7 +95,8 @@ fn shortest_queue_counts_burst_clicks_and_ignores_ineligible_selected_buildings(
             Some(&player),
             PlayerId(0),
             UnitKind::Militia,
-            &pending
+            &pending,
+            |_| false,
         )
         .is_none()
     );
@@ -198,4 +201,48 @@ fn full_queues_do_not_reintroduce_locked_or_superseded_training_buttons() {
         ),
         Availability::QueueFull
     ));
+}
+
+#[wasm_bindgen_test]
+fn grouped_vassal_training_skips_castles_with_a_home_or_pending_unit() {
+    let mut buildings = vec![barracks(1, 0), barracks(2, 0)];
+    for b in &mut buildings {
+        b.kind = BuildingKind::Castle;
+    }
+    let player = GameplayPlayerState {
+        player: PlayerId(0),
+        stockpile: Stockpile {
+            food: 10000,
+            gold: 10000,
+            ..Default::default()
+        },
+        age: Age::Castle,
+        researched: 0,
+        population_used: 5,
+        population_cap: 5,
+        market_prices: Default::default(),
+    };
+    let mut selected = Selection::default();
+    selected.same_buildings(
+        buildings.iter().map(|b| (b.id, b.player, b.kind, true)),
+        PlayerId(0),
+        BuildingKind::Castle,
+        EntityId(1),
+    );
+    let mut pending = PendingTraining::default();
+    let choose = |pending: &PendingTraining| {
+        shortest(
+            &buildings,
+            &selected,
+            Some(&player),
+            PlayerId(0),
+            UnitKind::Vassal,
+            pending,
+            |b| b.id == EntityId(1),
+        )
+        .map(|b| b.id)
+    };
+    assert_eq!(choose(&pending), Some(EntityId(2)));
+    pending.record(1, EntityId(2));
+    assert_eq!(choose(&pending), None);
 }

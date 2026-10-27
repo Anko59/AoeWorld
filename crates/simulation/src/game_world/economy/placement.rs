@@ -1,10 +1,9 @@
-use super::{
-    BuildingKind, ConstructionState, EconomyError, GameBuilding, MarketPrices, PlayerEconomy,
-    Stockpile, VILLAGE_RULES,
-};
+use super::{BuildingKind, EconomyError, VILLAGE_RULES};
 use crate::{GameWorld, GameWorldError, Terrain, UnitKind};
-use aoe_core::{EntityId, PlayerId, TileCoord, TileRect, WorldPosition};
+use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeSet, VecDeque};
+
+mod removal;
 
 impl GameWorld {
     /// Player orders need tile-exact exploration of the entire footprint.
@@ -43,26 +42,17 @@ impl GameWorld {
 
     pub(super) fn validate_footprint(&self, footprint: TileRect) -> Result<(), EconomyError> {
         if !footprint.valid(self.config.width_tiles, self.config.height_tiles)
-            || self.units().any(|unit| {
-                !self.embarked(unit.id) && footprint.contains(unit.position.tile_floor())
-            })
+            || !self.query(footprint).0.is_empty()
         {
             return Err(EconomyError::InvalidFootprint);
         }
-        // Farms are walked on, so they are not in `blocked_tiles`. This scan
-        // runs per placement command, never per tick.
-        if self
-            .economy
-            .buildings
-            .values()
-            .any(|building| rects_overlap(building.footprint, footprint))
-        {
-            return Err(EconomyError::InvalidFootprint);
-        }
+        // The maintained tile index includes nonblocking Farms, open gates and
+        // Town Center arches, so placement still reserves their full footprint.
         for y in footprint.min.y..footprint.max.y {
             for x in footprint.min.x..footprint.max.x {
                 let tile = TileCoord::new(x, y);
-                if self.economy.blocked_tiles.contains(&tile)
+                if self.building_at(tile).is_some()
+                    || self.economy.blocked_tiles.contains(&tile)
                     || !self
                         .terrain
                         .passable_with_cancel(tile, self.config, &|| false)
@@ -97,138 +87,8 @@ impl GameWorld {
         self.insert_building(player, BuildingKind::TownCenter, footprint, true)
     }
 
-    /// Create a building (or foundation) after its footprint was validated.
-    /// Nothing is charged here; the caller owns the cost. Foundations reveal
-    /// only after a builder contributes construction work.
-    pub(in crate::game_world) fn insert_building(
-        &mut self,
-        player: PlayerId,
-        kind: BuildingKind,
-        footprint: TileRect,
-        complete: bool,
-    ) -> Result<EntityId, EconomyError> {
-        if self.next_entity_id > u64::from(u32::MAX) {
-            return Err(GameWorldError::EntityIdExhausted.into());
-        }
-        let rules = kind.rules();
-        let age = self
-            .player_economy(player)
-            .map_or(crate::Age::Dark, |p| p.age);
-        let (mut max_hp, los) = kind.age_stats(age);
-        if !matches!(
-            kind,
-            BuildingKind::Farm | BuildingKind::PalisadeWall | BuildingKind::PalisadeGate
-        ) && self.has_researched(player, crate::Tech::Masonry)
-        {
-            max_hp += max_hp / 10;
-        }
-        let collision = kind.collision_rect(footprint, complete);
-        if let Some(rect) = collision
-            && let Terrain::Map { overlay, .. } = &mut self.terrain
-        {
-            overlay
-                .add_footprint(rect)
-                .map_err(|_| EconomyError::Capacity)?;
-        }
-        let id = self.allocate_entity_id()?;
-        if let Some(rect) = collision {
-            for y in rect.min.y..rect.max.y {
-                for x in rect.min.x..rect.max.x {
-                    self.economy.blocked_tiles.insert(TileCoord::new(x, y));
-                }
-            }
-        }
-        // Counting a player's units walks every unit: only a new player needs it.
-        let population_used = if self.economy.players.contains_key(&player) {
-            0
-        } else {
-            self.units()
-                .filter(|unit| unit.player == player)
-                .count()
-                .min(u16::MAX as usize) as u16
-        };
-        self.economy.players.entry(player).or_insert(PlayerEconomy {
-            player,
-            stockpile: Stockpile::default(),
-            population_used,
-            population_cap: 0,
-            age: crate::Age::Dark,
-            researched: 0,
-            market_prices: MarketPrices::default(),
-        });
-        let work_total = u64::from(rules.build_seconds)
-            * u64::from(self.config.tick_hz)
-            * super::buildings::BUILD_WORK_PER_BASE_TICK
-            * if kind == BuildingKind::Bridge {
-                (footprint.width().max(footprint.height()) - 2) as u64
-            } else {
-                1
-            };
-        self.economy.buildings.insert(
-            id,
-            GameBuilding {
-                age,
-                id,
-                player,
-                kind,
-                footprint,
-                training_queue: VecDeque::new(),
-                last_hit: None,
-                state: if complete {
-                    ConstructionState::Complete
-                } else {
-                    ConstructionState::UnderConstruction
-                },
-                work_done: if complete { work_total } else { 0 },
-                work_total,
-                hp: if complete { max_hp } else { 1 },
-                max_hp,
-                los: los
-                    .saturating_add(self.researched_los_bonus(player))
-                    .saturating_add(
-                        if matches!(
-                            kind,
-                            BuildingKind::TownCenter
-                                | BuildingKind::WatchTower
-                                | BuildingKind::Castle
-                        ) {
-                            u8::from(self.has_researched(player, crate::Tech::Fletching))
-                                + u8::from(self.has_researched(player, crate::Tech::BodkinArrow))
-                        } else {
-                            0
-                        },
-                    ),
-                research: None,
-                gate_open: false,
-                rally_point: None,
-                food_remaining: (kind == BuildingKind::Farm).then(|| self.farm_food(player)),
-                farm_reseeds: 0,
-                garrison: Vec::new(),
-            },
-        );
-        let bucket = self.economy.dropoffs.entry((player, kind)).or_default();
-        let at = bucket.binary_search(&id).unwrap_or_else(|at| at);
-        bucket.insert(at, id);
-        if complete && matches!(kind, BuildingKind::Castle | BuildingKind::WatchTower) {
-            self.combat.tower_ready.insert(id, 0);
-        }
-        self.refresh_population_cap(player);
-        self.index_new_building(id, player, footprint);
-        if complete {
-            if matches!(kind, BuildingKind::WatchTower | BuildingKind::Castle) {
-                self.combat.tower_ready.insert(id, 0);
-            }
-            self.update_building_vision(id);
-            self.remember_visible_buildings();
-        }
-        if rules.blocks {
-            self.collision_closed(footprint);
-        }
-        Ok(id)
-    }
-
     /// Housing: the supporting completed buildings, capped at the match's
-    /// population ceiling (200 unless the match sets another).
+    /// population ceiling (1000 unless the match sets another).
     pub(super) fn refresh_population_cap(&mut self, player: PlayerId) {
         // Only the player's own buildings, through the per-kind index: a
         // whole-world scan here ran on every placement in a 100-seat world.
@@ -241,45 +101,6 @@ impl GameWorld {
         if let Some(state) = self.economy.players.get_mut(&player) {
             state.population_cap = cap;
         }
-    }
-
-    /// Delete a building and its collision (cancelled foundation, spent farm).
-    pub(crate) fn remove_building(&mut self, id: EntityId) {
-        let Some(building) = self.economy.buildings.remove(&id) else {
-            return;
-        };
-        if building.kind == BuildingKind::Bridge && building.is_complete() {
-            self.remove_bridge_deck(building.footprint);
-        }
-        self.forget_building(id, building.footprint);
-        if let Some(bucket) = self
-            .economy
-            .dropoffs
-            .get_mut(&(building.player, building.kind))
-            && let Ok(at) = bucket.binary_search(&id)
-        {
-            bucket.remove(at);
-        }
-        if let Some(rect) = building
-            .kind
-            .collision_rect(building.footprint, building.is_complete())
-        {
-            for y in rect.min.y..rect.max.y {
-                for x in rect.min.x..rect.max.x {
-                    self.economy.blocked_tiles.remove(&TileCoord::new(x, y));
-                }
-            }
-            if let Terrain::Map { overlay, .. } = &mut self.terrain {
-                overlay.remove_footprint(rect);
-            }
-            self.collision_opened(building.footprint);
-        }
-        self.release_destroyed_garrison(id, building.footprint, building.garrison, &mut Vec::new());
-        self.economy.open_gates.remove(&id);
-        self.combat.tower_ready.remove(&id);
-        self.refresh_population_cap(building.player);
-        self.update_observer(id, None);
-        self.remember_visible_buildings();
     }
 
     pub(super) fn open_town_center_arches(&mut self, footprint: TileRect) {
@@ -466,35 +287,5 @@ impl GameWorld {
     }
 }
 
-pub(crate) fn position(tile: TileCoord) -> Result<WorldPosition, GameWorldError> {
-    WorldPosition::from_tile_center(tile).map_err(|_| GameWorldError::InvalidPosition)
-}
-pub(crate) fn distance_squared(a: TileCoord, b: TileCoord) -> u64 {
-    let x = u64::from(a.x.abs_diff(b.x));
-    let y = u64::from(a.y.abs_diff(b.y));
-    x.saturating_mul(x).saturating_add(y.saturating_mul(y))
-}
-pub(crate) fn perimeter(rect: TileRect) -> Vec<TileCoord> {
-    let mut tiles = Vec::new();
-    for y in rect.min.y - 1..=rect.max.y {
-        for x in rect.min.x - 1..=rect.max.x {
-            let tile = TileCoord::new(x, y);
-            if !rect.contains(tile) {
-                tiles.push(tile);
-            }
-        }
-    }
-    tiles
-}
-
-pub(crate) fn rects_overlap(a: TileRect, b: TileRect) -> bool {
-    a.min.x < b.max.x && b.min.x < a.max.x && a.min.y < b.max.y && b.min.y < a.max.y
-}
-/// Is `tile` in the one-tile ring around `rect`, corners included?
-pub(crate) fn adjacent(rect: TileRect, tile: TileCoord) -> bool {
-    tile.x >= rect.min.x - 1
-        && tile.x <= rect.max.x
-        && tile.y >= rect.min.y - 1
-        && tile.y <= rect.max.y
-        && !rect.contains(tile)
-}
+mod geometry;
+pub(crate) use geometry::{adjacent, distance_squared, perimeter, position, rects_overlap};

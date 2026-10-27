@@ -136,6 +136,22 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
         let tiles = construction::tiles(client, at).unwrap_or_default();
         let valid = construction::span_valid(client, kind, &tiles);
         state.push(f64::from(u8::from(valid)));
+        let bridge = kind == aoe_protocol::BuildingKind::Bridge;
+        let count = if bridge {
+            tiles.len().saturating_sub(2)
+        } else {
+            tiles.len()
+        };
+        let geometry = !bridge
+            || tiles
+                .first()
+                .zip(tiles.last())
+                .is_some_and(|(&a, &b)| aoe_core::BridgeSpan::new(a, b).is_some());
+        let available = geometry && construction::enabled(client, kind, count as u32);
+        let invalid = (0..tiles.len())
+            .filter(|i| !available || !construction::tile_valid(client, kind, &tiles, *i))
+            .count();
+        state.extend([tiles.len() as f64, invalid as f64]);
         let age = client
             .village
             .players
@@ -148,9 +164,13 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
                 f64::from(t.y) + f64::from(kind.depth()) / 2.0,
             ];
             units.push(aoe_rendering::SceneUnit {
-                kind: aoe_rendering::SceneUnitKind::building(building_ui::age_sprite_slot(
-                    kind, 1000, false, age,
-                ) as u8),
+                kind: if bridge {
+                    building_ui::bridge_piece(&tiles, index)
+                } else {
+                    aoe_rendering::SceneUnitKind::building(building_ui::age_sprite_slot(
+                        kind, 1000, false, age,
+                    ) as u8)
+                },
                 id: aoe_core::EntityId((1 << 31) + index as u32),
                 position,
                 visual: aoe_rendering::SceneUnitVisual::new(false)
@@ -160,7 +180,7 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
                         client.team_colour,
                         false,
                     )
-                    .with_ghost(valid),
+                    .with_ghost(available && construction::tile_valid(client, kind, &tiles, index)),
                 facing: if kind == aoe_protocol::BuildingKind::PalisadeWall {
                     building_ui::wall_frame(*t, |p| tiles.contains(&p))
                 } else {

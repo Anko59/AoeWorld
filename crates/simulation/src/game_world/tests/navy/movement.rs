@@ -52,3 +52,23 @@ fn land_armies_cannot_cross_water_without_loading_a_transport() {
     );
     assert_eq!(world.unit(soldier).unwrap().position, at(land));
 }
+
+#[test]
+fn ships_path_through_shallow_coastal_water() {
+    let mut world = coast_coverage(40);
+    let (land, water) = bank(&world);
+    let boat = ship(&mut world, UnitKind::Galley, water, 0);
+    let destination = TileCoord::new(water.x + 8, water.y);
+    let Terrain::Map { generator, .. } = world.terrain() else {
+        unreachable!()
+    };
+    assert_eq!(
+        generator.tile_at(destination).unwrap().water,
+        aoe_map::WaterKind::Shallow
+    );
+    assert!(world.spawn_militia(PlayerId(0), at(destination)).is_err());
+    world.issue_move(boat, at(destination)).unwrap();
+    advance(&mut world, 400);
+    assert_eq!(world.unit(boat).unwrap().position, at(destination));
+    assert!(world.tile_passable(land));
+}

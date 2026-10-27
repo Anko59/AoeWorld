@@ -16,6 +16,7 @@ async fn movement_cursor_uses_selected_domains_and_accepts_any_in_mixed_selectio
         (WaterKind::Ocean, GroundMaterial::DeepWater, false),
         (WaterKind::None, GroundMaterial::TemperateGrass, true),
         (WaterKind::River, GroundMaterial::Ford, true),
+        (WaterKind::Shallow, GroundMaterial::Shore, false),
     ] {
         for cell in &mut chunk.tiles {
             cell.terrain.water = water;
@@ -39,7 +40,11 @@ async fn movement_cursor_uses_selected_domains_and_accepts_any_in_mixed_selectio
         land.kind = UnitKind::Villager;
         client.units.insert(land.id, land);
         for (selection, expected) in [
-            (vec![EntityId(1)], if land_passable { 3.0 } else { 2.0 }),
+            // All water is navigable by ships, including the dual-domain Ford.
+            (
+                vec![EntityId(1)],
+                if water != WaterKind::None { 2.0 } else { 3.0 },
+            ),
             (vec![EntityId(2)], if land_passable { 2.0 } else { 3.0 }),
             (vec![EntityId(1), EntityId(2)], 2.0),
         ] {

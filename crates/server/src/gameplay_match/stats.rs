@@ -30,6 +30,10 @@ pub struct TickProbe {
 }
 
 impl TickProbe {
+    pub(crate) fn take_phase_micros(&self) -> std::collections::BTreeMap<&'static str, u64> {
+        self.phases.drain().values().collect()
+    }
+
     pub(crate) fn record(&self, advance: Duration, orders: usize) {
         self.advance_micros
             .store(advance.as_micros() as u64, Ordering::Relaxed);

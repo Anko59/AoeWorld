@@ -8,6 +8,7 @@ use aoe_simulation::GameWorld;
 use serde::Serialize;
 use std::{error::Error, fs, process::Command, time::Instant};
 
+mod late_game;
 #[path = "perf/network.rs"]
 mod network;
 pub(crate) use network::{ClientResult, gameplay_network, network, receive, send};
@@ -91,6 +92,8 @@ struct WorkloadResult {
     deltas: u64,
     encoded_bytes: u64,
     tick_duration_ns: Vec<u64>,
+    phases: std::collections::BTreeMap<String, late_game::Series>,
+    late_game_runs: Vec<late_game::Run>,
     elapsed_ms: u64,
     verdict: Verdict,
 }
@@ -114,6 +117,8 @@ struct Environment {
     architecture: &'static str,
     rustc: String,
     dedicated_hardware: bool,
+    available_parallelism: usize,
+    slot_cpus: Option<String>,
 }
 
 fn git(args: &[&str]) -> String {
@@ -215,8 +220,49 @@ fn offline(scenario: Scenario) -> Result<OfflineResult, Box<dyn Error>> {
     })
 }
 
+/// Keep a focused check/profile/instruction sequence in its admitted heavy
+/// slot. Child Make targets inherit the validated ticket and CPU allowance.
+pub fn late_game(check: bool, instructions: bool) -> Result<(), Box<dyn Error>> {
+    if check {
+        for (package, filter) in [
+            ("aoe-simulation", "test(game_world)"),
+            ("aoe-server", "test(gameplay)"),
+        ] {
+            crate::process::run(
+                "make",
+                &[
+                    "test-native-focused",
+                    &format!("AOE_NATIVE_TEST_PACKAGE={package}"),
+                    &format!("AOE_NATIVE_TEST_FILTER={filter}"),
+                ],
+                std::time::Duration::from_secs(1_200),
+            )?;
+        }
+        for (target, filter) in [
+            ("test-harness-focused", "perf"),
+            ("test-harness-focused", "slots::tests::makefile"),
+        ] {
+            crate::process::run(
+                "make",
+                &[target, &format!("HARNESS_TEST_FILTER={filter}")],
+                std::time::Duration::from_secs(1_200),
+            )?;
+        }
+    }
+    run("late-game")?;
+    if instructions {
+        crate::process::run(
+            "make",
+            &["perf-instructions"],
+            std::time::Duration::from_secs(1_800),
+        )?;
+    }
+    Ok(())
+}
+
 pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
     let scenarios: &[Scenario] = match mode {
+        "late-game" => &[],
         "smoke" => &[SMOKE],
         "ci" => &[SMOKE, TARGET_DISTRIBUTED, TARGET_HOTSPOT],
         "full" => &[
@@ -236,6 +282,8 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
         .enable_all()
         .build()?;
     let mut workloads = Vec::new();
+    let late = late_game::measure()?;
+    workloads.push(late);
     let mut comparisons = Vec::new();
     let mut notes = Vec::new();
     for scenario in scenarios {
@@ -269,6 +317,8 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
             deltas: connection.deltas,
             encoded_bytes: connection.bytes,
             tick_duration_ns: offline.tick_duration_ns,
+            phases: Default::default(),
+            late_game_runs: Vec::new(),
             elapsed_ms: start.elapsed().as_millis() as u64,
             verdict: Verdict::Pass,
         };
@@ -298,7 +348,7 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
             return Err("empty-map scaling assertion failed".into());
         }
     }
-    if mode != "smoke" {
+    if matches!(mode, "ci" | "full") {
         match crate::perf_micro::comparisons() {
             Ok(results) => comparisons.extend(results),
             Err(error) => {
@@ -341,6 +391,8 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
             architecture: std::env::consts::ARCH,
             rustc: rustc_version(),
             dedicated_hardware: false,
+            available_parallelism: std::thread::available_parallelism().map_or(1, |n| n.get()),
+            slot_cpus: std::env::var("AOE_SLOT_CPUS").ok(),
         },
         workloads,
         comparisons,
@@ -354,7 +406,7 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
     fs::write(format!("reports/perf/{mode}.md"), summary(&report))?;
     print!("{}", comparison_summary(&report.comparisons));
     println!("report: reports/perf/{mode}.json ({:?})", report.verdict);
-    if mode != "smoke" && verdict != Verdict::Pass {
+    if matches!(mode, "ci" | "full") && verdict != Verdict::Pass {
         return Err(format!("required performance comparisons are {verdict:?}").into());
     }
     Ok(())
@@ -375,6 +427,9 @@ fn summary(report: &Report) -> String {
             item.loaded_chunks,
             item.encoded_bytes
         ));
+    }
+    for workload in &report.workloads {
+        text.push_str(&late_game::summary(workload));
     }
     text.push('\n');
     text.push_str(&comparison_summary(&report.comparisons));

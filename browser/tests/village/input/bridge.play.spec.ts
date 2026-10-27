@@ -50,6 +50,11 @@ for (const queued of [false, true]) {
             0,
             0,
             0, // Current bridge state includes an empty shelter list.
+            1,
+            ...sint(8188),
+            ...sint(8189),
+            ...sint(8192),
+            ...sint(8189), // Exact raster endpoints.
           ];
           socket.send(
             Buffer.from([2, ...uint(revision), 1, 0, 0, 0, 1, ...bridge, 0]),
@@ -170,4 +175,102 @@ test("bridge construction is disabled in Dark Age", async ({ page }) => {
     "title",
     /requires Feudal Age/,
   );
+});
+
+test("diagonal drag previews every bridge cell and marks an endpoint in a two-tile stream red", async ({
+  page,
+}) => {
+  await gameAssets(page, true);
+  const orders: Buffer[] = [];
+  await fiveVillagerFixture(
+    page,
+    (bytes) => {
+      if (bytes[0] === 24) orders.push(bytes);
+    },
+    () => 0,
+    true,
+  );
+  await page.goto("/?play=1#x=8192&y=8192&zoom=1");
+  await expect(page.locator("#population")).toHaveText("6/10");
+  const chunks = [-1, 0].flatMap((y) =>
+    [-1, 0].map((x) => {
+      const chunk = syntheticChunk(256 + x, 256 + y, () => false);
+      const bytes = Buffer.from(chunk.payload_hex, "hex");
+      for (let i = 0; i < 1024; i++) {
+        const tx = chunk.x * 32 + (i % 32);
+        bytes.writeUInt32LE(
+          tx === 8189 || tx === 8190 ? 11 | (3 << 12) : 1 << 21,
+          7 + i * 35 + 14,
+        );
+      }
+      return { ...chunk, payload_hex: bytes.toString("hex") };
+    }),
+  );
+  await page.evaluate(async (json) => {
+    const module = (await import(
+      new URL("/pkg/aoe_client.js", location.href).href
+    )) as {
+      activate_surface_fixture(hash: string, chunks: string): void;
+    };
+    module.activate_surface_fixture("01".repeat(32), json);
+  }, JSON.stringify(chunks));
+  await centerVillage(page);
+  const worker = (
+    JSON.parse(
+      (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
+    ) as { kind: string; x: number; y: number }[]
+  ).find((u) => u.kind === "Villager");
+  if (!worker) throw new Error("Fixture villager missing");
+  await page.mouse.click(worker.x, worker.y);
+  await page.locator("#build-menu").click();
+  await page.locator("#build-bridge").click();
+  const size = page.viewportSize();
+  if (!size) throw new Error("Viewport missing");
+  const point = (x: number, y: number) => ({
+    x: size.width / 2 + (x - y) * 64,
+    y: size.height / 2 + (x + y - 16384) * 32,
+  });
+  // Keep the span above the fixture Town Center (whose footprint starts at y=8190).
+  const from = point(8188.5, 8187.5);
+  await page.mouse.move(from.x, from.y);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-placement-count",
+    "1",
+  );
+  await page.mouse.down();
+  const wetEnd = point(8190.5, 8189.5);
+  await page.mouse.move(wetEnd.x, wetEnd.y, { steps: 5 });
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-placement-valid",
+    "false",
+  );
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-placement-count",
+    "3",
+  );
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-placement-invalid",
+    "1",
+  );
+  const to = point(8191.5, 8189.5);
+  await page.mouse.move(to.x, to.y, { steps: 5 });
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-placement-count",
+    "4",
+  );
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-placement-valid",
+    "true",
+  );
+  await page.mouse.up();
+  await expect.poll(() => orders.length).toBe(1);
+  const endpoints = [
+    ...sint(8188),
+    ...sint(8187),
+    ...sint(8191),
+    ...sint(8189),
+  ];
+  const placed = orders[0];
+  if (!placed) throw new Error("Bridge order missing");
+  expect([...placed.subarray(-endpoints.length - 1, -1)]).toEqual(endpoints);
 });

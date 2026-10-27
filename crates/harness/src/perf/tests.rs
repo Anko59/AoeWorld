@@ -145,3 +145,83 @@ fn wasm_size_reports_growth_and_fails_only_on_a_jump_over_a_quarter() {
         .to_string();
     assert!(message.contains("1 bytes over"), "{message}");
 }
+
+#[test]
+fn late_game_report_rejects_a_collapsed_workload_and_preserves_phases() {
+    let empty = late_game::Census::default();
+    assert!(empty.validate().is_err());
+    let mut result = late_game::Census {
+        players: 100,
+        units: 14_000,
+        gathering: 6_000,
+        returning: 1_000,
+        moving: 6_000,
+        idle_army: 4_000,
+        marching_army: 4_000,
+        queues: 200,
+        queued: 1_000,
+        trained_units: 0,
+        research: 100,
+        wildlife: 1_500,
+        deposited: 1,
+        displaced: 4_000,
+        exploring: 100,
+        formation_members: 1_200,
+        garrisoned: 100,
+        monks: 100,
+        naval: 200,
+        mature_queues: 25,
+    };
+    result.validate().unwrap();
+    result.queued = 999;
+    assert!(
+        result.validate().is_err(),
+        "endpoints must have full queues"
+    );
+    result.validate_activity().unwrap();
+    result.queued = 799;
+    assert!(
+        result.validate_activity().is_err(),
+        "a refill vacancy cannot hide drained queues"
+    );
+    result.queued = 1_000;
+    let mut after = late_game::Census {
+        deposited: 2,
+        queued: 1_000,
+        trained_units: 1,
+        research: 0,
+        ..result
+    };
+    after.validate_after(&result).unwrap();
+    after.deposited = 1;
+    assert!(after.validate_after(&result).is_err());
+    after.deposited = 2;
+    after.trained_units = result.trained_units;
+    assert!(after.validate_after(&result).is_err());
+    result.exploring = 0;
+    assert!(result.validate().is_err());
+    result.exploring = 100;
+    result.displaced = 0;
+    assert!(result.validate().is_err());
+    result.displaced = 4_000;
+    result.mature_queues = 0;
+    assert!(result.validate().is_err());
+    result.mature_queues = 25;
+    result.gathering = 0;
+    assert!(result.validate().is_err());
+    let series = late_game::Series(vec![10, 1, 5, 2, 3, 8, 7, 6, 4, 9]);
+    assert_eq!(series.percentile(50), 5);
+    assert_eq!(series.percentile(95), 10);
+}
+
+#[test]
+fn phase_series_retains_raw_samples_and_explicit_percentiles() {
+    let series = late_game::Series(vec![10, 1, 5, 2, 3, 8, 7, 6, 4, 9]);
+    let value = serde_json::to_value(series).unwrap();
+    assert_eq!(
+        value["samples_ns"],
+        serde_json::json!([10, 1, 5, 2, 3, 8, 7, 6, 4, 9])
+    );
+    assert_eq!(value["p50_ns"], 5);
+    assert_eq!(value["p95_ns"], 10);
+}

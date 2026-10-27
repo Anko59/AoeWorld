@@ -251,6 +251,10 @@ pub enum SceneUnitKind {
     BridgeBTop,
     BridgeBMiddle,
     BridgeBBottom,
+    KingStand,
+    KingWalk,
+    KingDie,
+    KingDecay,
 }
 
 #[path = "scene_actors.rs"]

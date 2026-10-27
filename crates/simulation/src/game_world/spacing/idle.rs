@@ -16,6 +16,13 @@ pub(crate) struct IdleSpacing {
     pub(crate) adjacent_visits: usize,
 }
 impl IdleSpacing {
+    /// Exact membership, independent of crowd size or neighbour sampling.
+    pub(crate) fn occupied(&self, tile: TileCoord, except: EntityId) -> bool {
+        self.cells
+            .get(&key(tile))
+            .is_some_and(|cell| cell.units.len() > 1 || cell.units.first() != Some(&except))
+    }
+
     pub(crate) fn take_candidates(&mut self, phase: usize) -> Vec<EntityId> {
         let candidates = &self.candidates[phase];
         if candidates.len() <= IDLE_VISITS_PER_TICK {

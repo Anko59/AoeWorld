@@ -14,7 +14,9 @@ fn bridge_and_foundation_reservations_share_the_fixed_collision_capacity() {
         Err(super::super::ResourceOverlayError::Capacity)
     );
     assert_eq!(
-        overlay.add_bridge(TileRect::from_xywh(1, 1, 3, 1)),
+        overlay.add_bridge(
+            aoe_core::BridgeSpan::new(TileCoord::new(1, 1), TileCoord::new(3, 1)).unwrap()
+        ),
         Err(super::super::ResourceOverlayError::Capacity)
     );
     assert_eq!(
@@ -150,21 +152,23 @@ fn navigation_snapshots_pin_building_and_starting_resource_collision() {
 #[test]
 fn bridge_completion_requires_the_reserved_span_and_keeps_failed_attempts_atomic() {
     let rect = aoe_core::TileRect::from_xywh(7, 9, 6, 1);
+    let span = aoe_core::BridgeSpan::new(rect.min, TileCoord::new(rect.max.x - 1, rect.max.y - 1))
+        .unwrap();
     let gap = aoe_core::TileRect::from_xywh(9, 9, 1, 1);
     let mut overlay = super::super::ResourceOverlay::default();
     overlay.add_footprint(rect).unwrap();
     overlay.remove_footprint(gap);
     let before = overlay.clone();
-    assert!(!overlay.complete_bridge(rect));
+    assert!(!overlay.complete_bridge(span));
     assert_eq!(overlay, before);
     overlay.add_footprint(gap).unwrap();
-    assert!(overlay.complete_bridge(rect));
+    assert!(overlay.complete_bridge(span));
     for x in 7..13 {
         let tile = aoe_core::TileCoord::new(x, 9);
         assert!(!overlay.blocks_tile(tile));
         assert_eq!(
-            overlay.bridge_axis(tile),
-            (8..12).contains(&x).then_some(true)
+            overlay.bridge_connections(tile),
+            (8..12).contains(&x).then_some((1 << 3) | (1 << 5))
         );
     }
 }

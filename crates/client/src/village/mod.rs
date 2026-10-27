@@ -16,6 +16,7 @@ pub(super) mod presentation;
 pub(super) mod production;
 pub(super) mod rally;
 pub(super) mod selection;
+pub(super) mod vassal;
 pub(super) mod waypoints;
 
 #[derive(Default)]

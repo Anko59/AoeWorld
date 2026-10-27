@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 19;
+pub const VERSION: u8 = 20;
 
 pub mod buildings;
 pub mod candidates;
@@ -316,8 +316,8 @@ pub const OPTIONAL_RESOURCE_SOURCES: [SpriteSource; 23] = [
 /// Water depth: required water 15002 is the light shallow sheet. Medium
 /// 15016, deep 15015 and marsh shallows 15014 are periodic sheets of the same
 /// layout; a pack without one draws the shallow sheet in its place, never a
-/// flat tint. Shallows is renderer wiring only: no terrain generator emits
-/// Ford yet. Ford generation belongs to separate river work.
+/// flat tint. AoK DAT terrain 4 (Shallows / g_sha, SLP 15014) marks
+/// generated Ford crossings that both land units and ships can use.
 /// The four ground-variety sheets were reviewed as 10×10 periodic montages in
 /// the same x-major, reversed-y order as the required sheets: grass and dirt
 /// mix 15006, grass with brown patches 15009, darker grass 15001 and pebbly

@@ -52,6 +52,7 @@ def test_first_decision_exposes_a_typed_world(server, secret):
         assert world.tick_hz == 20
         villagers = world.my_units(UnitKind.VILLAGER)
         assert len(villagers) == 3
+        assert all(u.home_castle is None and u.managed_by is None for u in villagers)
         assert all(unit.mine and unit.kind == UnitKind.VILLAGER for unit in villagers)
         assert len(world.my_units(UnitKind.SCOUT)) == 1
         center = world.town_center()

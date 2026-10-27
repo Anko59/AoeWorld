@@ -11,16 +11,25 @@ Dark Age, and Galleys, Fire Ships and Demolition Ships after Feudal Age.
 Castle Age is researched at the Town Center; War Galley is researched at a Dock
 and upgrades existing, queued and future Galleys.
 
-To cross a river, bring a Transport Ship beside the bank. Select up to five
-nearby land units and right-click the owned transport. Passengers leave the map
-and stop providing vision or accepting orders. Sail the ship to the opposite
-bank, select **Unload passengers**, then right-click an adjacent dry tile.
-Ownership, capacity, range and landing terrain are authoritative and validated
-before any passenger changes state. Sinking a loaded transport kills its cargo.
-Transport orders are available through the ordinary Rust and Python SDKs too.
-Automatic ferry route planning is outside this manual crossing path.
+Select up to five land units and right-click an owned Transport Ship. The
+board cursor and **Board Transport Ship** hint identify the target. Units and
+ship meet at the nearest reachable land shore; boarding happens on arrival,
+not at order time. The ship shows its passenger count both above the hull and
+in the selection panel. Passengers leave the map and stop providing vision or
+accepting orders. Select the loaded ship and right-click a dry shore to sail
+there and unload, or choose **Unload passengers** and then the shore. Explicit
+Move and Shift-queued Move retain ordinary movement behavior. Ownership,
+capacity and landing terrain are authoritative. Sinking a loaded transport
+kills its cargo. A new Move or Stop cancels a pending rendezvous.
+Transport orders use the ordinary Rust and Python SDKs too. Shore discovery
+examines at most 4,096 land/water states and chooses the shortest combined
+approach with one boarding transition; subsequent movement uses the
+normal incremental route scheduler. This is one crossing order, not a
+persistent automatic ferry route.
 
-Every ship uses water navigation, including diagonal bank-corner checks and
+Every water tile is navigable by ships, including coastal shallows and the
+marsh-textured narrow streams that land units can wade through. Ships use
+water navigation, including diagonal bank-corner checks and
 Dock footprint blocking. Galleys fire at ships and reachable shore targets.
 Fire Ships attack at short range. Demolition Ships detonate once and disappear;
 their blast damages nearby enemy units and buildings.

@@ -1,9 +1,12 @@
 use aoe_core::Region;
 use aoe_scenario::SMOKE;
-use aoe_simulation::World;
-use gungraun::Dhat;
+use aoe_simulation::{GameWorld, World};
 use gungraun::prelude::*;
+use gungraun::{Callgrind, Dhat, EntryPoint};
 use std::hint::black_box;
+
+mod support;
+use support::setup_late_game;
 
 fn setup() -> World {
     World::new(SMOKE)
@@ -29,7 +32,27 @@ fn viewport_query(world: World) -> usize {
     )
 }
 
-library_benchmark_group!(name = simulation, benchmarks = [advance, viewport_query]);
+#[library_benchmark(
+    setup = setup_late_game,
+    config = LibraryBenchmarkConfig::default().tool(
+        Callgrind::with_args(["--instr-atstart=no"])
+            .entry_point(EntryPoint::None)
+    )
+)]
+fn late_game(mut world: GameWorld) -> GameWorld {
+    // Setup/warm-up is unmeasured. Disable its instrumentation, then count
+    // the entire authoritative tick, including all callees and allocations.
+    gungraun::client_requests::callgrind::start_instrumentation();
+    world.advance();
+    gungraun::client_requests::callgrind::stop_instrumentation();
+    // Return the world: teardown is outside the measured tick.
+    black_box(world)
+}
+
+library_benchmark_group!(
+    name = simulation,
+    benchmarks = [advance, viewport_query, late_game]
+);
 
 main!(
     config = LibraryBenchmarkConfig::default().tool(Dhat::default()),

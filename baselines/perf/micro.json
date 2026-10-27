@@ -5,22 +5,26 @@
   "valgrind": "3.19.0",
   "allow_aslr": true,
   "smoke_workload_hash": "c068a47ebd635279753bfe7d8b630de70a1164e3ec1c92139c1c56d6c323ad56",
+  "late_game_workload_hash": "36c2ec66e60a9bfbe2ab7aa381bdc9a5f3c7867b90a9620070955cab0c662a4d",
   "instructions": {
     "instructions::assets::palette_decode": 243938,
     "instructions::protocol::snapshot_encode": 207527,
     "instructions::simulation::advance": 712509,
-    "instructions::simulation::viewport_query": 257593
+    "instructions::simulation::late_game": 143767781,
+    "instructions::simulation::viewport_query": 183030
   },
   "allocation_bytes": {
     "instructions::assets::palette_decode": 17152,
     "instructions::protocol::snapshot_encode": 16376,
     "instructions::simulation::advance": 0,
+    "instructions::simulation::late_game": 4127477,
     "instructions::simulation::viewport_query": 54024
   },
   "allocation_count": {
     "instructions::assets::palette_decode": 257,
     "instructions::protocol::snapshot_encode": 11,
     "instructions::simulation::advance": 0,
-    "instructions::simulation::viewport_query": 84
+    "instructions::simulation::late_game": 5671,
+    "instructions::simulation::viewport_query": 9
   }
 }

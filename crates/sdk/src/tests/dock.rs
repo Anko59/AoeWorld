@@ -43,7 +43,12 @@ fn shoreline(water: WaterKind, ford: bool, explored: bool) -> World {
 #[test]
 fn dock_build_sites_accept_explored_river_lake_and_ocean_banks() {
     let bank = TileCoord::new(14, 10);
-    for water in [WaterKind::River, WaterKind::Lake, WaterKind::Ocean] {
+    for water in [
+        WaterKind::River,
+        WaterKind::Lake,
+        WaterKind::Ocean,
+        WaterKind::Shallow,
+    ] {
         let world = shoreline(water, false, true);
         assert_eq!(
             world.find_build_site(BuildingKind::Dock, bank, 0, 1),
@@ -71,9 +76,9 @@ fn dock_build_sites_reject_footprints_entirely_on_land_or_water() {
 }
 
 #[test]
-fn dock_build_sites_reject_loaded_but_unexplored_banks_and_fords() {
+fn dock_build_sites_reject_loaded_but_unexplored_banks() {
     let bank = TileCoord::new(14, 10);
-    for (ford, explored) in [(false, false), (true, true)] {
+    for (ford, explored) in [(false, false), (true, false)] {
         let world = shoreline(WaterKind::River, ford, explored);
         assert!(
             world
@@ -81,4 +86,14 @@ fn dock_build_sites_reject_loaded_but_unexplored_banks_and_fords() {
                 .is_none()
         );
     }
+}
+
+#[test]
+fn dock_build_sites_accept_explored_wadeable_marsh_banks() {
+    let bank = TileCoord::new(14, 10);
+    let world = shoreline(WaterKind::River, true, true);
+    assert_eq!(
+        world.find_build_site(BuildingKind::Dock, bank, 0, 0),
+        Some(bank)
+    );
 }

@@ -167,10 +167,10 @@ impl Search {
                 } else {
                     match self.heap.first().map(|entry| entry.2) {
                         Some(Node::Portal(tile)) => {
-                            ground.portals(chunk_of(tile))?.portals.len() as u32 + 2
+                            ground.portals(chunk_of(tile))?.portal_count() as u32 + 2
                         }
                         Some(Node::Start) => {
-                            ground.portals(chunk_of(self.origin))?.portals.len() as u32 + 2
+                            ground.portals(chunk_of(self.origin))?.portal_count() as u32 + 2
                         }
                         _ => 1,
                     }
@@ -251,7 +251,7 @@ impl Search {
         let mut edges = Vec::new();
         match node {
             Node::Start => {
-                for portal in &ground.portals(start_key)?.portals {
+                for portal in ground.portals(start_key)?.portals() {
                     if let Some(cost) = self.start_costs.get(&portal.tile) {
                         edges.push((Node::Portal(portal.tile), u64::from(*cost)));
                     }
@@ -261,10 +261,13 @@ impl Search {
             Node::Portal(tile) => {
                 let key = chunk_of(tile);
                 let chunk = ground.portals(key)?;
-                let costs = ground.row(key, &chunk, tile)?;
-                for (to, other) in chunk.portals.iter().enumerate() {
+                let from = chunk.portals().position(|p| p.tile == tile);
+                if from.is_some() {
+                    ground.ensure_costs(key, &chunk)?;
+                }
+                for (to, other) in chunk.portals().enumerate() {
                     if other.tile != tile
-                        && let Some(cost) = costs.get(to).copied().flatten()
+                        && let Some(cost) = from.and_then(|from| chunk.cost(from, to))
                     {
                         edges.push((Node::Portal(other.tile), u64::from(cost)));
                     }

@@ -38,9 +38,11 @@ dry grass 15007, dirt 15000, sand 15010, and water 15002. These groups declare
 10×10 periodic topology explicitly, indexed x-major with reversed y so
 neighboring source edges meet. Water 15002 is the light shallow sheet; optional
 periodic sheets add medium water 15016, deep water 15015 and marsh shallows
-15014. Generated river `Ford` crossings draw with the light shallow 15002
-sheet at 85% coverage over the bank dirt (docs/assets/landscape.md); the marsh sheet stays imported but is not selected for fords. Ordinary
-shallow water remains impassable. A pack without an optional sheet draws the
+15014. Generated river `Ford` crossings use the native Shallows sheet (AoK DAT
+terrain 4, `g_sha`, SLP 15014), with bank dirt visible beneath the marsh
+(docs/assets/landscape.md). This distinguishes wadeable water from blocking water. Narrow mapped streams up to 2.5 tiles wide are wadeable where the
+composed surface is walkable; a wider overlapping channel keeps the water
+blocking for land units. Ordinary shallow water remains impassable for land. A pack without an optional sheet draws the
 shallow sheet in its place. Catalog v12 selects natural rock ground 15033 and soft snow ground 15026,
 with distinct authored sheets and colours. Paved 15018 and gravel 15017 are
 not rock substitutes; cracked ice 15024 is used only for frozen water. Frame count alone
@@ -55,7 +57,7 @@ grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
 The periodic groups retain all 100 frames. The base selects 2,371 frames (including ten gather-point flag cells):
 1,474 terrain and 897 objects including village art and cliff faces 226. The
-[unit and wildlife selection](assets/units.md) adds 2,590 semantic frames. DAT building
+[unit and wildlife selection](assets/units.md) adds 2,625 semantic frames. DAT building
 recipes add their selected native frames, including animated Mill layers,
 static House variants and construction/wall angles. Runtime packing uses five
 2048² RGBA pages/80 MiB, terrain on pages 0–1 and objects on pages 2–4,

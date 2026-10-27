@@ -20,6 +20,7 @@ mod rejections;
 #[path = "economy/navigation/resource_collision.rs"]
 mod resource_collision;
 mod training;
+mod vassal;
 #[path = "economy/navigation/village_routes.rs"]
 mod village_routes;
 

@@ -12,8 +12,8 @@ pub(super) fn update(
     old: Option<&GameplayBuildingState>,
     new: Option<&GameplayBuildingState>,
 ) {
-    let old = old.filter(|b| complete(b)).map(|b| b.footprint);
-    let new = new.filter(|b| complete(b)).map(|b| b.footprint);
+    let old = old.filter(|b| complete(b)).and_then(|b| b.bridge_span);
+    let new = new.filter(|b| complete(b)).and_then(|b| b.bridge_span);
     if old == new {
         return;
     }

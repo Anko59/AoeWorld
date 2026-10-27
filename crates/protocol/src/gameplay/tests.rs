@@ -169,6 +169,8 @@ fn gameplay_collections_are_bounded() {
             death_hunt: None,
             auto_scout: false,
             cargo_count: 0,
+            home_castle: None,
+            managed_by: None,
         };
         MAX_SUBSCRIBED_UNITS + 1
     ];

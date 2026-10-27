@@ -78,7 +78,12 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         (client.camera.center[0] as i32).div_euclid(aoe_map::CHUNK_TILES),
         (client.camera.center[1] as i32).div_euclid(aoe_map::CHUNK_TILES),
     ];
-    values[3] = if villager {
+    values[3] = if client.selected.units.iter().any(|id| {
+        client
+            .units
+            .get(id)
+            .is_some_and(|u| u.hp > 0 && u.player == owner)
+    }) {
         if hover.is_some() {
             1.0
         } else if client.pointer.is_some_and(|p| passable(client, p)) {
@@ -101,7 +106,9 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         && let Some(point) = client.pointer
     {
         let actor = super::picking::actor(client, point);
-        if actor.is_some_and(|a| a.1) {
+        if let Some(cursor) = super::navy::hover(client, point) {
+            values[3] = cursor;
+        } else if actor.is_some_and(|a| a.1) {
             values[3] = if !super::construction::builders(client).is_empty() {
                 5.0
             } else {
@@ -252,7 +259,7 @@ fn passable(client: &Client, point: ScreenPoint) -> bool {
         .village
         .buildings
         .iter()
-        .find(|b| b.footprint.contains(tile));
+        .find(|b| b.contains_tile(tile));
     let bridge = occupant.is_some_and(|b| {
         b.kind == aoe_protocol::BuildingKind::Bridge
             && b.construction == aoe_protocol::ConstructionState::Complete
@@ -272,21 +279,18 @@ fn passable(client: &Client, point: ScreenPoint) -> bool {
             u.player == owner(client)
                 && u.hp > 0
                 && if u.kind.is_naval() {
-                    !bridge
-                        && terrain.is_some_and(|t| {
-                            matches!(
-                                t.water,
-                                aoe_map::WaterKind::Ocean
-                                    | aoe_map::WaterKind::Lake
-                                    | aoe_map::WaterKind::River
-                            ) && t.material != aoe_map::GroundMaterial::Ford
-                        })
+                    !bridge && terrain.is_some_and(|t| t.water != aoe_map::WaterKind::None)
                 } else {
                     bridge || terrain.map_or(client.map_content_hash.is_none(), |t| t.passable)
                 }
         })
     });
-    let resource = map::feedback::blocker_at(client, tile).is_some();
+    let resource = map::feedback::blocker_at(client, tile).is_some_and(|object| {
+        !matches!(
+            object,
+            aoe_map::ObjectKind::ShoreFish | aoe_map::ObjectKind::DeepFish
+        )
+    });
     let building = occupant.is_some() && !bridge;
     aoe_simulation::destination_passable(ground, resource, building)
 }

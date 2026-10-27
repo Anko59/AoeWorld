@@ -13,6 +13,7 @@ impl GameWorld {
         from: TileCoord,
         kind: AnimalKind,
         exclude: EntityId,
+        worker: EntityId,
     ) -> Option<GameAnimal> {
         let reach = VILLAGE_RULES.replacement_radius_tiles;
         let min = cell_of(TileCoord::new(from.x - reach, from.y - reach));
@@ -38,7 +39,12 @@ impl GameWorld {
                     } else {
                         matches!(a.kind, AnimalKind::Deer | AnimalKind::Boar)
                     };
-                    if *id == exclude || a.food_remaining == 0 || !same_kind {
+                    if *id == exclude
+                        || a.food_remaining == 0
+                        || !same_kind
+                        || !self.animal_has_work_slot(a.id, a.kind, worker)
+                        || !self.resource_has_work_spot(worker, a.position.tile_floor())
+                    {
                         continue;
                     }
                     if a.owner != Some(player)

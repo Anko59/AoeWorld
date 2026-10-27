@@ -5,6 +5,7 @@ use crate::{EconomyError, UnitKind, UnitTask};
 mod combat;
 mod crossing;
 mod healing;
+mod journeys;
 mod movement;
 mod research;
 mod stats;
@@ -21,10 +22,14 @@ fn advance(world: &mut GameWorld, ticks: u32) {
 }
 
 fn coast() -> GameWorld {
+    coast_coverage(100)
+}
+
+fn coast_coverage(coverage: u8) -> GameWorld {
     let (mut package, pages, mut water) = economy::fixture::flat_fixture(true);
     package.request.requested_side_meters = 15_360;
-    water[0].ocean_coverage_percent = vec![0, 100, 0, 100];
-    water[1].ocean_coverage_percent = vec![50];
+    water[0].ocean_coverage_percent = vec![0, coverage, 0, coverage];
+    water[1].ocean_coverage_percent = vec![coverage / 2];
     for (level, page) in package
         .environment
         .water

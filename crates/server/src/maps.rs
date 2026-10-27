@@ -363,6 +363,12 @@ pub(super) async fn reset(
                 Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
             }
         }
+        Some("vassal-economy") => {
+            match GameplayService::vassal_demo(state.diagnostic_scenario.seed) {
+                Ok(service) => service,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        }
         Some("feudal-military") => {
             match GameplayService::military_demo(state.diagnostic_scenario.seed) {
                 Ok(service) => service,

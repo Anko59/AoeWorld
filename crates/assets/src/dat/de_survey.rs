@@ -8,6 +8,8 @@ use serde::Serialize;
 #[path = "de_military.rs"]
 mod military;
 pub use military::ProjectileSource;
+#[path = "de_survey/economy.rs"]
+mod economy;
 
 const BUILDINGS: &[(i16, i32, &str)] = &[
     (82, 5142, "CSTL"),
@@ -98,6 +100,8 @@ pub struct Building {
     pub collision: [f32; 2],
     pub graphic: i16,
     pub speed: f32,
+    pub work_rate: f32,
+    pub resource_capacity: i16,
     pub projectile: i16,
     pub attacks: Vec<(i16, i16)>,
     pub armours: Vec<(i16, i16)>,
@@ -135,6 +139,7 @@ pub struct Survey {
     pub inflated_bytes: usize,
     pub buildings: Vec<Building>,
     pub soldiers: Vec<Building>,
+    pub workers: Vec<Building>,
     pub projectiles: Vec<ProjectileSource>,
     pub technologies: Vec<Technology>,
     pub effects: Vec<(i16, Effect)>,
@@ -159,7 +164,8 @@ fn pairs(r: &mut Reader) -> Result<Vec<(i16, i16)>, Error> {
 
 pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Result<Building, Error> {
     let mut r = Reader::new(bytes, at);
-    if !matches!(r.u8()?, 70 | 80) || r.i16()? != id {
+    let unit_type = r.u8()?;
+    if !matches!(unit_type, 70 | 80) || r.i16()? != id {
         return Err(r.fail("wrong building identity"));
     }
     r.skip(10)?;
@@ -172,6 +178,8 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
     if hp <= 0 || !los.is_finite() || collision.iter().any(|v| !v.is_finite() || *v <= 0.) {
         return Err(r.fail("invalid building dimensions or stats"));
     }
+    r.pos = at + 79;
+    let resource_capacity = r.i16()?;
     r.pos = at + 136;
     let resource_storage = (0..3)
         .map(|_| Ok((r.i16()?, r.f32()?, r.u8()?)))
@@ -190,7 +198,11 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
     if !speed.is_finite() || speed < 0. {
         return Err(r.fail("invalid speed"));
     }
-    r.skip(41 + 10)?; // dead-fish, bird's task/search/work header
+    r.skip(41 + 6)?; // dead-fish, bird's default task and search radius
+    let work_rate = r.f32()?;
+    if !work_rate.is_finite() || work_rate < 0. {
+        return Err(r.fail("invalid work rate"));
+    }
     let drops = count(&mut r, 64, "drop sites")?;
     r.skip(drops * 2 + 14)?;
     let tasks = count(&mut r, 256, "tasks")?;
@@ -222,7 +234,9 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
             (build_location, button, hot_key) = (location, slot, key);
         }
     }
-    if build_seconds <= 0
+    // Profession variants are not trained directly and have no train location.
+    if build_seconds < 0
+        || (unit_type == 80 && build_seconds == 0)
         || [range, reload, min_range, blast_width]
             .iter()
             .any(|v| !v.is_finite() || *v < 0.)
@@ -238,6 +252,8 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
         collision,
         graphic,
         speed,
+        work_rate,
+        resource_capacity,
         projectile,
         attacks,
         armours,
@@ -426,6 +442,7 @@ pub fn survey(bytes: &[u8]) -> Result<Survey, Error> {
         inflated_bytes: bytes.len(),
         buildings,
         soldiers,
+        workers: economy::workers(bytes)?,
         projectiles,
         technologies,
         effects,

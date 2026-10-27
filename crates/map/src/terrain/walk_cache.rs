@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 mod probe;
-pub use probe::{NavigationPhase, NavigationProbe, NavigationSpan};
+pub use probe::{NavigationPhase, NavigationProbe, NavigationSpan, NavigationTarget};
 
 const SIDE: usize = CHUNK_TILES as usize;
 const CELLS: usize = SIDE * SIDE;

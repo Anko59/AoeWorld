@@ -209,7 +209,7 @@ impl Resolution {
                 return Ok(());
             }
             let chunk = self.atlas.chunk(generator, key, cancelled)?;
-            let label = chunk.labels[grid::index(self.origin)];
+            let label = chunk.label(grid::index(self.origin));
             if label == 0 {
                 self.outcome = Some(ResolutionOutcome::Destination(None));
             } else {
@@ -258,16 +258,11 @@ impl Resolution {
         // assume a one-way drop can be traversed backwards.
         let mut entered = BTreeSet::new();
         if inside(key, self.origin) {
-            entered.insert(chunk.labels[grid::index(self.origin)]);
+            entered.insert(chunk.label(grid::index(self.origin)));
         }
-        entered.extend(
-            chunk
-                .portals
-                .iter()
-                .map(|p| chunk.labels[grid::index(p.tile)]),
-        );
+        entered.extend(chunk.portals().map(|p| chunk.label(grid::index(p.tile))));
         let mut successors: BTreeMap<u16, Vec<u16>> = BTreeMap::new();
-        for &(from, to) in &chunk.links {
+        for (from, to) in chunk.links() {
             successors.entry(from).or_default().push(to);
         }
         let mut frontier: Vec<_> = entered.iter().copied().collect();
@@ -279,7 +274,7 @@ impl Resolution {
             }
         }
         let closest = closest_in_chunk(key, self.destination);
-        let label = chunk.labels[grid::index(closest)];
+        let label = chunk.label(grid::index(closest));
         if label != 0 && entered.contains(&label) && !self.excluded.contains(&closest) {
             self.best = self.best.min((
                 squared_distance(closest, self.destination),
@@ -287,7 +282,7 @@ impl Resolution {
                 closest.x,
             ));
         } else {
-            for (at, &label) in chunk.labels.iter().enumerate() {
+            for (at, label) in chunk.labels().enumerate() {
                 if label != 0 && entered.contains(&label) {
                     let tile = grid::tile(key, at);
                     if self.excluded.contains(&tile) {
@@ -328,14 +323,14 @@ impl Resolution {
             return Ok(());
         }
         let chunk = self.atlas.chunk(generator, key, cancelled)?;
-        let label = chunk.labels[grid::index(entry)];
-        debug_assert!(label <= chunk.components);
+        let label = chunk.label(grid::index(entry));
+        debug_assert!(label <= chunk.components());
         let component = (key, label);
         if label == 0 || self.parents.contains_key(&component) {
             return Ok(());
         }
         self.parents.insert(component, parent);
-        if inside(key, self.candidate) && chunk.labels[grid::index(self.candidate)] == label {
+        if inside(key, self.candidate) && chunk.label(grid::index(self.candidate)) == label {
             self.atlas.remember(
                 &self.parents,
                 Some(component),
@@ -348,7 +343,7 @@ impl Resolution {
         if squared_distance(closest_in_chunk(key, self.destination), self.destination)
             <= self.best.0
         {
-            for (at, &local) in chunk.labels.iter().enumerate() {
+            for (at, local) in chunk.labels().enumerate() {
                 if local == label {
                     let tile = grid::tile(key, at);
                     if self.excluded.contains(&tile) {
@@ -362,9 +357,9 @@ impl Resolution {
                 }
             }
         }
-        for &(from, to) in &chunk.links {
+        for (from, to) in chunk.links() {
             if from == label
-                && let Some(at) = chunk.labels.iter().position(|label| *label == to)
+                && let Some(at) = chunk.labels().position(|label| label == to)
             {
                 let tile = grid::tile(key, at);
                 self.heap.insert((
@@ -374,8 +369,8 @@ impl Resolution {
                 ));
             }
         }
-        for portal in &chunk.portals {
-            if portal.crossing_cost > 0 && chunk.labels[grid::index(portal.tile)] == label {
+        for portal in chunk.portals() {
+            if portal.crossing_cost > 0 && chunk.label(grid::index(portal.tile)) == label {
                 self.heap.insert((
                     squared_distance(portal.cross, self.candidate),
                     portal.cross,

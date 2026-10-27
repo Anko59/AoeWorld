@@ -139,7 +139,9 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
     fishing::select(&manifest, &mut selected, &mut domains).unwrap();
     // Combined Castle poses add 365 cells to the naval/DAT/rally selection;
     // the Castle camp fallback slots reuse two available DE camp cells.
-    assert_eq!(selected.len(), 5062);
+    // King poses add 35 selected cells to the current catalog. Regenerate this
+    // content-count pin; the 5120-frame and five-page atlas gates stay fixed.
+    assert_eq!(selected.len(), 5097);
     assert!(selected.len() <= MAX_SELECTED_FRAMES);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)

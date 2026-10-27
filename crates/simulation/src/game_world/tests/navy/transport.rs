@@ -132,25 +132,16 @@ fn transport_capacity_is_five_and_failed_loads_leave_state_unchanged() {
 }
 
 #[test]
-fn load_validates_the_whole_group_ownership_kind_and_bank_proximity_atomically() {
+fn load_validates_the_whole_group_ownership_and_kind_atomically() {
     let (mut world, transport, passenger, land, water) = fixture();
     let enemy = world.spawn_villager(PlayerId(1), at(land)).unwrap();
     let fishing = ship(&mut world, UnitKind::FishingShip, water, 0);
-    let far_tile = (1..land.x - 10)
-        .map(|x| TileCoord::new(x, land.y))
-        .find(|&tile| {
-            world
-                .unit_tile_passable(UnitKind::Villager, tile, &|| false)
-                .unwrap()
-        })
-        .unwrap();
-    let far = world.spawn_villager(PlayerId(0), at(far_tile)).unwrap();
+    // Distance is a rendezvous order, covered by the crossing journey tests.
     for group in [
         vec![passenger, enemy],
         vec![passenger, fishing],
         vec![passenger, EntityId(999_999)],
         vec![passenger, passenger],
-        vec![far],
         vec![],
     ] {
         let before = world.canonical_hash();

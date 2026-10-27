@@ -2,6 +2,30 @@
 use super::MapChunkGenerator;
 use std::sync::Arc;
 
+/// A background installer must not keep a retired world's caches alive.
+#[derive(Clone, Debug)]
+pub struct NavigationTarget {
+    owner: std::sync::Weak<super::DerivedCaches>,
+    side: i32,
+}
+impl NavigationTarget {
+    pub fn is_alive(&self) -> bool {
+        self.owner.strong_count() > 0
+    }
+    pub fn install(
+        &self,
+        snapshot: Arc<crate::NavigationSnapshot>,
+    ) -> Result<(), crate::EnvironmentPageError> {
+        if snapshot.chunk_side() != self.side {
+            return Err(crate::EnvironmentPageError::Invalid);
+        }
+        if let Some(owner) = self.owner.upgrade() {
+            let _ = owner.static_navigation.set(snapshot);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NavigationPhase {
     Terrain,
@@ -37,6 +61,12 @@ pub trait NavigationProbe: std::fmt::Debug + Send + Sync {
 }
 
 impl MapChunkGenerator {
+    pub fn navigation_target(&self) -> NavigationTarget {
+        NavigationTarget {
+            owner: Arc::downgrade(&self.derived),
+            side: self.navigation_chunk_side(),
+        }
+    }
     pub fn set_navigation_probe(&self, probe: Arc<dyn NavigationProbe>) {
         if let Ok(mut slot) = self.derived.probe.write() {
             *slot = Some(probe);

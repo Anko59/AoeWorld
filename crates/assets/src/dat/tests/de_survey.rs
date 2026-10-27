@@ -102,6 +102,11 @@ fn fixture() -> Vec<u8> {
         row[0] = 70;
         out.extend(row);
     }
+    for &(id, language, name) in economy::WORKERS {
+        let mut row = unit(id, language, name);
+        row[0] = 70;
+        out.extend(row);
+    }
     out
 }
 
@@ -112,6 +117,7 @@ fn complete_synthetic_de_survey_preserves_numeric_records_and_source_identity() 
     let report = survey(&bytes).unwrap();
     assert_eq!(report.buildings.len(), BUILDINGS.len());
     assert_eq!(report.technologies.len(), TECHS.len());
+    assert_eq!(report.workers.len(), economy::WORKERS.len());
     let b = &report.buildings[0];
     assert_eq!(
         (
@@ -197,6 +203,20 @@ fn soldier_record_reads_speed_projectile_and_rejects_nonfinite_speed() {
     assert_eq!(row.projectile, -1);
     bytes[name_end..name_end + 4].copy_from_slice(&f32::NAN.to_le_bytes());
     assert!(unit_record(&bytes, 0, 4, "ARCHR").is_err());
+}
+
+#[test]
+fn worker_survey_reads_work_rate_and_carry_capacity_as_distinct_attributes() {
+    let mut bytes = unit(122, 5124, "VMHUN");
+    bytes[0] = 70;
+    bytes[79..81].copy_from_slice(&35_i16.to_le_bytes());
+    let work = 180 + 4 + 5 + 4 + 4 + 41 + 6;
+    bytes[work..work + 4].copy_from_slice(&0.41_f32.to_le_bytes());
+    let row = serde_json::to_value(unit_record(&bytes, 0, 122, "VMHUN").unwrap()).unwrap();
+    assert_eq!(row.get("work_rate"), Some(&serde_json::json!(0.41_f32)));
+    assert_eq!(row.get("resource_capacity"), Some(&serde_json::json!(35)));
+    bytes[work..work + 4].copy_from_slice(&f32::NAN.to_le_bytes());
+    assert!(unit_record(&bytes, 0, 122, "VMHUN").is_err());
 }
 
 #[test]

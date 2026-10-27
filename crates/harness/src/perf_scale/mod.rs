@@ -17,14 +17,15 @@ use stats::{Series, memory, round};
 use std::{fs, path::PathBuf, process::Command, time::Instant};
 use world::{BoxError, Built, Params, Player};
 
-const PHASES: [&str; 10] = [
+const PHASES: [&str; TickPhase::Changed as usize + 2] = [
     "movement_and_path_planning",
-    "spacing",
+    "unit_spacing",
     "wildlife",
     "combat",
     "construction_and_gates",
     "gathering_and_economy",
     "research_and_training",
+    "vassal_economy",
     "building_memory_per_player",
     "result_collation",
     "idle_tail",

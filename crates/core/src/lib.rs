@@ -1,4 +1,6 @@
 //! Configuration-independent values shared by diagnostics and gameplay.
+mod bridge;
+pub use bridge::{BridgeSpan, raster_bridge_line};
 mod clamp;
 mod coordinates;
 mod formation;

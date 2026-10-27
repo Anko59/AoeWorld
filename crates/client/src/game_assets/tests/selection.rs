@@ -323,7 +323,17 @@ async fn full_catalog_packs_1474_terrain_frames_and_782_objects_in_their_domains
     let fetch = FetchFixture::install(&value);
     let loaded = load_collected().await;
     drop(fetch);
-    let (_, pixels, _) = loaded.expect("full catalog must initialise");
+    let (art, pixels, _) = loaded.expect("full catalog must initialise");
+    let shallows = OPTIONAL_TERRAIN_SOURCES
+        .iter()
+        .find(|s| s.role == AssetRole::Shallows)
+        .unwrap();
+    assert_eq!(shallows.id, 15014, "AoK DAT terrain 4, Shallows / g_sha");
+    assert_eq!(art.water_depth[3].0.len(), 100);
+    assert_ne!(
+        art.water_depth[3].0[0].atlas, art.terrain[5][0].atlas,
+        "walkable marsh has its own imported texture"
+    );
     let (terrain, objects) = pixels.split_at(2 * GAME_ATLAS_PAGE_BYTES);
     let count = |pixels: &[u8], color: [u8; 4]| {
         pixels

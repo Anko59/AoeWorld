@@ -27,6 +27,7 @@ export const castleTechs=[
   ['murder-holes','Murder Holes · 200 food · 100 stone',18],
 ];
 export const castleTraining=[
+  ['vassal','Vassal','1000 food · 1000 gold · one per Castle',16,22],
   ['long-swordsman','Long Swordsman','50 food · 20 gold',6,8],
   ['pikeman','Pikeman','35 food · 25 wood',6,9],
   ['crossbowman','Crossbowman','25 wood · 45 gold',10,10],

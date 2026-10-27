@@ -1,7 +1,7 @@
 //! Resource nodes read from public map chunks, the same terrain the browser
 //! downloads. A node is exposed to a bot only once its tile is explored.
 use aoe_core::TileCoord;
-use aoe_map::{CompactChunk, GroundMaterial, LandscapeChunk, ResourceKind as MapKind, WaterKind};
+use aoe_map::{CompactChunk, LandscapeChunk, ResourceKind as MapKind, WaterKind};
 use aoe_protocol::ResourceKind;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -85,13 +85,9 @@ impl ResourceCatalog {
                 Ground {
                     passable: tile.terrain.passable && tile.terrain.surface.walkable(),
                     height: tile.terrain.game_height_level,
-                    water: tile.terrain.water != WaterKind::None
-                        && tile.terrain.material != GroundMaterial::Ford,
+                    water: tile.terrain.water != WaterKind::None,
                     dry: tile.terrain.water == WaterKind::None && tile.terrain.passable,
-                    navigable: matches!(
-                        tile.terrain.water,
-                        WaterKind::River | WaterKind::Lake | WaterKind::Ocean
-                    ) && tile.terrain.material != GroundMaterial::Ford,
+                    navigable: tile.terrain.water != WaterKind::None,
                 };
         }
         self.passable.insert((landscape.x, landscape.y), walkable);

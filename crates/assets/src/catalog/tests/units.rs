@@ -92,3 +92,31 @@ fn navy_actor_sources_sample_eight_facings_from_original_sixteen_direction_art()
         }
     }
 }
+
+#[test]
+fn vassal_uses_king_poses_with_native_timing() {
+    // Trial DAT confirms these King identities/timings but its DRS omits all
+    // four bodies; the owner's licensed DE King is the explicit pixel source.
+    for (pose, name, id, stride, millis, frames) in [
+        (Pose::KingStand, "idle", 1767, 6, 200, 961),
+        (Pose::KingWalk, "walk", 1771, 10, 70, 481),
+        (Pose::KingDie, "death", 1764, 10, 100, 481),
+        (Pose::KingDecay, "decay", 1768, 5, 6000, 481),
+    ] {
+        let source = SPRITES[pose as usize];
+        assert_eq!(
+            (source.id, source.stride, source.millis, source.frames()),
+            (id, stride, millis, frames)
+        );
+        assert_eq!(
+            source.manifest_source(),
+            format!("de/u_king_west_{name}A_x1.sld")
+        );
+        for row in 0..5 {
+            for phase in (0..source.stride as usize).step_by(source.sample_step() as usize) {
+                assert!(source.source_frame(row, phase) < frames as usize);
+            }
+        }
+    }
+    assert!(crate::dat::table::DARK_AGE.iter().any(|(_, id)| *id == 434));
+}

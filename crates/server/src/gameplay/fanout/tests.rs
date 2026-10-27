@@ -373,3 +373,76 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
     assert_eq!(session.resident_animals, fresh.animals);
     assert_eq!(session.resident_projectiles, fresh.projectiles);
 }
+
+#[test]
+fn session_views_reuse_the_same_bounded_worker_pool_across_ticks() {
+    let world = GameWorld::with_population(
+        WorldConfig::new(1024, 1024, Seed(7)).unwrap(),
+        13_400,
+        0,
+        100,
+    )
+    .unwrap();
+    let views = (0..100_u16)
+        .map(|player| View {
+            session_id: u64::from(player),
+            subscription: Subscription {
+                revision: 1,
+                region: TileRect::from_xywh(0, 0, 96, 96),
+            },
+            vision: Some(world.player_vision_revision(PlayerId(player))),
+            viewer: PlayerId(player),
+            primary: EntityId(u32::from(player)),
+            ai: true,
+            fog_disabled: Some(world.fog_disabled()),
+            rebuild: false,
+        })
+        .collect::<Vec<_>>();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(2)
+        .build()
+        .unwrap();
+    let mut workers = std::collections::HashSet::new();
+    let mut baseline = None;
+    for _ in 0..4 {
+        let built = pool.install(|| build(&world, &views, &BTreeMap::new()).unwrap());
+        assert_eq!(built.sessions.len(), 100);
+        workers.extend(built.workers.iter().copied());
+        assert!(
+            workers.len() <= 2,
+            "per-tick OS threads escaped the shared pool: {} workers",
+            workers.len()
+        );
+        assert_eq!(
+            built.frame.part_count(),
+            4,
+            "13k frames must share conversion work"
+        );
+        for (slot, unit) in world.units().enumerate() {
+            assert_eq!(
+                *built.frame.state(slot as u32),
+                super::super::economy::wire_unit(&unit, None, None)
+            );
+        }
+        let states = built
+            .sessions
+            .iter()
+            .map(|session| {
+                (
+                    session.session_id,
+                    session.units.as_ref().map(|slots| {
+                        slots
+                            .iter()
+                            .map(|slot| *built.frame.state(*slot))
+                            .collect::<Vec<_>>()
+                    }),
+                )
+            })
+            .collect::<Vec<_>>();
+        if let Some(expected) = &baseline {
+            assert_eq!(&states, expected);
+        } else {
+            baseline = Some(states);
+        }
+    }
+}

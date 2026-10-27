@@ -38,8 +38,8 @@ pub use economy::{
     BUILDING_RULES, BUILDINGS_PER_PLAYER, BuildingKind, BuildingRules, CarriedResource,
     ConstructionState, EconomyError, GameBuilding, GarrisonedUnit, MARKET_RULES, MAX_BUILD_GROUP,
     MAX_POPULATION, MAX_WALL_SEGMENTS, MarketPrices, PlayerEconomy, RallyPoint, RallyTarget,
-    Stockpile, TickPhase, TrainingEntry, UnitKind, UnitTask, VILLAGE_RULES, VillageRules,
-    WorldLimits, trainable_units,
+    Stockpile, TickPhase, TrainingEntry, UnitKind, UnitTask, VASSAL_RULES, VILLAGE_RULES,
+    VassalRules, VassalWork, VillageRules, WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;
@@ -87,6 +87,8 @@ pub enum GameWorldError {
     InvalidConfig(#[from] aoe_core::CoordinateError),
     #[error("position is outside the valid map ground")]
     InvalidPosition,
+    #[error("a Vassal must stay within 100 tiles of its home Castle")]
+    VassalLeash,
     #[error("destination is unreachable from the unit position")]
     Unreachable,
     #[error("path planning exceeded its deterministic work budget")]
@@ -140,6 +142,7 @@ pub struct GameWorld {
     pub(crate) lookup: UnitIndex,
     pub(crate) chunks: BTreeMap<ChunkCoord, Vec<EntityId>>,
     pub(crate) active_movers: Vec<EntityId>,
+    pub(crate) movement_scratch: movement_step::Scratch,
     pub(crate) formations: BTreeMap<EntityId, formation::Group>,
     pub(crate) move_queues: BTreeMap<EntityId, VecDeque<WorldPosition>>,
     pub(crate) destinations: spacing::Destinations,
@@ -188,6 +191,7 @@ impl GameWorld {
             lookup: UnitIndex::new(),
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
+            movement_scratch: Default::default(),
             move_queues: BTreeMap::new(),
             formations: BTreeMap::new(),
             destinations: spacing::Destinations::default(),

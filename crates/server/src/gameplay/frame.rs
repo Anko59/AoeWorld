@@ -5,6 +5,7 @@ use super::economy::wire_unit;
 use aoe_core::{EntityId, PlayerId, TileRect};
 use aoe_protocol::{GameplayUnitState, MAX_SUBSCRIBED_UNITS};
 use aoe_simulation::GameWorld;
+use rayon::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 
@@ -69,9 +70,9 @@ fn resource_of(code: u8) -> Option<aoe_map::ResourceKind> {
     }
 }
 
-/// Units are converted in fixed-size parts, one worker each; a unit's slot is
+/// Units are converted in fixed-size parts on shared workers; a unit's slot is
 /// `part * PART + position in part`, which is also its storage index.
-const PART: usize = 1 << 14;
+const PART: usize = 1 << 12;
 
 struct Part {
     states: Vec<GameplayUnitState>,
@@ -109,6 +110,11 @@ fn key(id: EntityId, slot: u32) -> u64 {
 }
 
 impl UnitFrame {
+    #[cfg(test)]
+    pub(super) fn part_count(&self) -> usize {
+        self.parts.len()
+    }
+
     /// `None` when a worker failed, so no half-built frame is ever used.
     pub(super) fn build(world: &GameWorld, viewers: &[PlayerId], threads: usize) -> Option<Self> {
         let bound = world.entity_id_bound();
@@ -149,6 +155,8 @@ impl UnitFrame {
                     (target != ABSENT).then_some(EntityId(target)),
                 );
                 state.cargo_count = world.transport_cargo(unit.id).len() as u8;
+                state.home_castle = world.vassal_castle(unit.id);
+                state.managed_by = world.vassal_controller(unit.id);
                 states.push(state);
                 if world.unit_visible_to(unit.player, unit.id)
                     && let Some(list) = list_of
@@ -164,15 +172,12 @@ impl UnitFrame {
         let parts = if threads <= 1 || wanted <= 1 {
             (0..wanted).map(part).collect::<Vec<_>>()
         } else {
-            std::thread::scope(|scope| {
-                let handles = (0..wanted)
-                    .map(|at| scope.spawn(move || part(at)))
-                    .collect::<Vec<_>>();
-                handles
-                    .into_iter()
-                    .map(|handle| handle.join().ok())
-                    .collect::<Option<Vec<_>>>()
-            })?
+            (0..wanted)
+                .into_par_iter()
+                // At most `threads` concurrent parts, even in a larger pool.
+                .with_min_len(wanted.div_ceil(threads))
+                .map(|at| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| part(at))).ok())
+                .collect::<Option<Vec<_>>>()?
         };
         let mut index = IdTable::new(bound, ABSENT);
         let mut owner = Vec::with_capacity(count);

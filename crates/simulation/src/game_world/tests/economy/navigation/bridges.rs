@@ -5,6 +5,8 @@ use aoe_map::*;
 mod river_fixture;
 use river_fixture::{clear_nodes, river_lane, river_width};
 
+#[path = "bridges/angles.rs"]
+mod angles;
 #[path = "bridges/bridge_queue_tests.rs"]
 mod bridge_queue_tests;
 
@@ -161,7 +163,7 @@ fn bridge_geometry_caps_forty_water_tiles_and_canonicalizes_reversed_drags() {
     );
     assert!(GameWorld::bridge_footprint(from, TileCoord::new(47, 9)).is_none());
     assert!(GameWorld::bridge_footprint(from, TileCoord::new(6, 9)).is_none());
-    assert!(GameWorld::bridge_footprint(from, TileCoord::new(46, 10)).is_none());
+    assert!(GameWorld::bridge_footprint(from, TileCoord::new(46, 10)).is_some());
 }
 
 #[test]
@@ -265,7 +267,7 @@ fn bridge_placement_is_atomic_feudal_bounded_and_requires_water_between_land_ban
     );
     world.economy.players.get_mut(&PlayerId(0)).unwrap().age = crate::Age::Feudal;
     for end in [
-        TileCoord::new(34, 21),
+        TileCoord::new(34, i32::MAX),
         TileCoord::new(33, 20),
         TileCoord::new(35, 20),
         TileCoord::new(29, 20),

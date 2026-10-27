@@ -37,11 +37,12 @@ pub use game_world::{
     PlayerEconomy, PreparedResourceDepletion, Projectile, ProjectileKind, RallyPoint, RallyTarget,
     ResearchEntry, RouteSchedulerStats, Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement,
     TechRules, TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask,
-    UnitTraining, VILLAGE_RULES, VillageRules, WorldLimits, building_combat, damage_dealt,
-    researched_stats, trainable_units, unit_combat, villager_capacity,
+    UnitTraining, VASSAL_RULES, VILLAGE_RULES, VassalRules, VassalWork, VillageRules, WorldLimits,
+    building_combat, damage_dealt, researched_stats, trainable_units, unit_combat,
+    villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 pub use terrain::{LandMasses, StartSearchResult, Terrain, UniformGrass, destination_passable};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -178,7 +179,7 @@ impl World {
         if !region.valid(self.scenario.world_size) {
             return (Vec::new(), QueryStats::default());
         }
-        let mut ids = BTreeSet::<EntityId>::new();
+        let mut entities = Vec::new();
         let mut stats = QueryStats::default();
         let end_x = (region.x + i32::from(region.width) - 1) / CHUNK_SIZE;
         let end_y = (region.y + i32::from(region.height) - 1) / CHUNK_SIZE;
@@ -187,15 +188,19 @@ impl World {
                 stats.visited_chunks += 1;
                 if let Some(chunk) = self.chunks.get(&(cx, cy)) {
                     stats.candidate_entities += chunk.len() as u32;
-                    ids.extend(chunk);
+                    entities.extend(
+                        chunk
+                            .iter()
+                            .filter_map(|id| self.entities.get(id.0 as usize).copied())
+                            .filter(|e| region.contains(e.position)),
+                    );
                 }
             }
         }
-        let entities = ids
-            .into_iter()
-            .filter_map(|id| self.entities.get(id.0 as usize).copied())
-            .filter(|e| region.contains(e.position))
-            .collect();
+        // Chunks discover entities in spatial order; callers receive id order.
+        // Sort the output once instead of allocating an ordered set per query.
+        entities.sort_unstable_by_key(|entity| entity.id);
+        entities.dedup_by_key(|entity| entity.id);
         (entities, stats)
     }
 

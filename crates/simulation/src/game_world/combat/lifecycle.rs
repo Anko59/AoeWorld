@@ -31,6 +31,7 @@ impl GameWorld {
     pub(crate) fn stop_unit_orders(&mut self, index: usize) {
         let unit = self.units[index].state;
         let id = unit.id;
+        self.cancel_transport_journey(id);
         self.cancel_auto_scout(id);
         self.stop_movement(index);
         if let Ok(slot) = self.active_movers.binary_search(&id) {
@@ -68,6 +69,7 @@ impl GameWorld {
         self.stop_movement(index);
         let id = self.units[index].state.id;
         let player = self.units[index].state.player;
+        self.forget_vassal(id);
         self.sink_cargo(id);
         let death_hunt = self
             .hunting_target(id)

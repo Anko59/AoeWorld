@@ -16,6 +16,9 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition.into());
         }
         let destination = self.config.snap_ground_position(destination);
+        if !self.vassal_position_allowed(id, destination) {
+            return Err(GameWorldError::VassalLeash.into());
+        }
         if !self
             .unit_tile_passable(unit.kind, destination.tile_floor(), &|| false)
             .map_err(GameWorldError::Environment)?
@@ -38,6 +41,7 @@ impl GameWorld {
         }
         // An accepted manual waypoint takes ownership of the current route;
         // autonomous frontier selection must not replace the queued legs.
+        self.player_override(id);
         self.cancel_auto_scout(id);
         self.move_queues
             .entry(id)

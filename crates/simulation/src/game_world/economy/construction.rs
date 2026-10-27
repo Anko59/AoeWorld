@@ -15,6 +15,9 @@ const APPROACH_TILE_TRIES: usize = 6;
 
 mod continuation;
 
+#[cfg(test)]
+mod tests;
+
 fn affordable(have: Stockpile, need: Stockpile) -> bool {
     have.food >= need.food
         && have.wood >= need.wood
@@ -340,14 +343,18 @@ impl GameWorld {
                 building.footprint,
             );
             if healthy {
-                self.next_queued_build(id);
+                if !self.retry_completed_farm(id, target) {
+                    self.next_queued_build(id);
+                }
                 continue;
             }
             // The route chooses an approach, not a mandatory work spot. Start
-            // on first free contact. Settled builders retain their work spot
-            // when traffic or combat enters it.
-            if adjacent(footprint, self.units[index].state.position.tile_floor())
-                && (self.units[index].order.is_none() || self.arrival_position_free(index))
+            // on first free contact that no other worker has reserved. Settled
+            // builders retain their work spot when traffic or combat enters it.
+            let tile = self.units[index].state.position.tile_floor();
+            if adjacent(footprint, tile)
+                && (self.units[index].order.is_none()
+                    || (self.arrival_position_free(index) && !self.work_spot_busy(tile, id)))
             {
                 if self.units[index].order.is_some() || self.units[index].state.planning {
                     self.stop_movement(index);
@@ -372,15 +379,21 @@ impl GameWorld {
             }
             if walking {
                 self.units[index].state.task = UnitTask::Moving;
+            } else {
+                self.units[index].state.task = UnitTask::Idle;
             }
         }
+        let mut completed = std::collections::BTreeMap::new();
         for (building, count) in working {
             if self.building(building).is_some_and(|b| b.is_complete()) {
                 self.repair_building(building, count);
-            } else if let Some(done) = self.add_work(building, count) {
-                touched.extend(done);
+            } else if let Some(state) = self.add_work(building, count) {
+                completed.insert(building, state);
             }
             self.update_building_vision(building);
+        }
+        if !completed.is_empty() {
+            self.finish_builders(&completed, &mut touched);
         }
         touched.sort_unstable();
         touched.dedup();
@@ -424,8 +437,12 @@ impl GameWorld {
     }
 
     /// `builders + 2` work per tick (one builder adds 3, matching the base
-    /// time). Returns the released builders when the building completes.
-    fn add_work(&mut self, id: EntityId, builders: u64) -> Option<Vec<EntityId>> {
+    /// time). Completion memberships are collected once by the caller.
+    fn add_work(
+        &mut self,
+        id: EntityId,
+        builders: u64,
+    ) -> Option<(PlayerId, BuildingKind, TileRect)> {
         let building = self.economy.buildings.get_mut(&id)?;
         let total = building.work_total.max(1);
         let max_hp = u64::from(building.max_hp);
@@ -437,14 +454,24 @@ impl GameWorld {
         if building.work_done < building.work_total {
             return None;
         }
-        let (kind, player, footprint) = (building.kind, building.player, building.footprint);
-        if kind == BuildingKind::Bridge && !self.complete_bridge(footprint) {
+        let (kind, player, footprint, bridge_span) = (
+            building.kind,
+            building.player,
+            building.footprint,
+            building.bridge_span,
+        );
+        if kind == BuildingKind::Bridge
+            && bridge_span.is_none_or(|span| !self.complete_bridge(span))
+        {
             if let Some(building) = self.economy.buildings.get_mut(&id) {
                 building.work_done = building.work_total.saturating_sub(1);
             }
             return None;
         }
         self.economy.buildings.get_mut(&id)?.state = ConstructionState::Complete;
+        if kind == BuildingKind::Farm {
+            self.reset_farm_production(id);
+        }
         if kind == BuildingKind::TownCenter {
             self.open_town_center_arches(footprint);
         }
@@ -452,48 +479,6 @@ impl GameWorld {
             self.combat.tower_ready.insert(id, 0);
         }
         self.refresh_population_cap(player);
-        let finished = self
-            .economy
-            .builders
-            .iter()
-            .filter(|(_, task)| task.building == id)
-            .map(|(builder, _)| *builder)
-            .collect::<Vec<_>>();
-        for &builder in &finished {
-            if !self.next_queued_build(builder) && !self.continue_foundation(builder, player) {
-                self.after_building(builder, player, id, kind, footprint);
-            }
-        }
-        Some(finished)
-    }
-
-    /// What a builder does next: farm its farm, gather beside a new camp,
-    /// continue along a palisade, or stand idle.
-    fn after_building(
-        &mut self,
-        builder: EntityId,
-        player: PlayerId,
-        id: EntityId,
-        kind: BuildingKind,
-        footprint: TileRect,
-    ) {
-        let radius = super::VILLAGE_RULES.replacement_radius_tiles;
-        let wanted: &[ResourceKind] = match kind {
-            BuildingKind::LumberCamp => &[ResourceKind::Wood],
-            BuildingKind::MiningCamp => &[ResourceKind::Gold, ResourceKind::Stone],
-            BuildingKind::Mill => &[ResourceKind::Food],
-            BuildingKind::Farm => {
-                let _ = self.issue_farm(player, builder, id);
-                return;
-            }
-            _ => &[],
-        };
-        for resource in wanted {
-            if let Some(node) = self.nearest_resource(footprint.min, *resource, radius, None)
-                && self.issue_gather(player, builder, node.id).is_ok()
-            {
-                return;
-            }
-        }
+        Some((player, kind, footprint))
     }
 }

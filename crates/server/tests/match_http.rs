@@ -214,18 +214,18 @@ async fn population_cap_and_start_units_are_match_rules() {
     let (status, body) = post(
         address,
         Some(SECRET),
-        &rules(r#""population_cap":1000,"start_units":{"villagers":30,"militia":10}"#),
+        &rules(r#""population_cap":700,"start_units":{"villagers":30,"militia":10}"#),
     )
     .await;
     assert_eq!(status, 200, "{body}");
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(json["population_cap"], 1_000);
+    assert_eq!(json["population_cap"], 700);
     assert_eq!(
         json["seeded_units"], 80,
         "40 extra units for each of 2 seats"
     );
     assert_eq!(json["partial_starting_kits"], 0);
-    // The default is the AoE rule, with nothing seeded.
+    // The shipped default now allows 1000 population, with nothing seeded.
     let (status, body) = post(address, Some(SECRET), &rules("")).await;
     assert_eq!(status, 200, "{body}");
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
@@ -234,7 +234,7 @@ async fn population_cap_and_start_units_are_match_rules() {
             json["population_cap"].as_u64(),
             json["seeded_units"].as_u64()
         ),
-        (Some(200), Some(0))
+        (Some(1000), Some(0))
     );
     for extra in [
         r#""population_cap":4"#,

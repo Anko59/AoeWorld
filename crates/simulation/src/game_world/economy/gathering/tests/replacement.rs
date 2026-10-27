@@ -1,6 +1,6 @@
 use super::*;
 
-fn cleared_work_area(kind: ResourceKind) -> (GameWorld, ResourceNode) {
+pub(super) fn cleared_work_area(kind: ResourceKind) -> (GameWorld, ResourceNode) {
     let (mut world, original) = resource_mainland();
     let Terrain::Map { generator, overlay } = &mut world.terrain else {
         unreachable!()

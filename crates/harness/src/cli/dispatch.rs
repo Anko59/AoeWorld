@@ -107,6 +107,10 @@ pub(super) fn run(
         Command::FuzzSmoke => fuzz::run(fuzz::Mode::Smoke)?,
         Command::FuzzNightly => fuzz::run(fuzz::Mode::Nightly)?,
         Command::PerfSmoke => perf::run("smoke")?,
+        Command::PerfLateGame {
+            check,
+            instructions,
+        } => perf::late_game(check, instructions)?,
         Command::PerfCi => perf::run("ci")?,
         Command::PerfFull => perf::run("full")?,
         Command::PerfPressure => perf_pressure::run()?,

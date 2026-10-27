@@ -36,6 +36,9 @@ impl GameWorld {
             return Err(GameWorldError::UnknownEntity);
         }
         let destination = self.config.snap_ground_position(destination);
+        if !self.vassal_position_allowed(id, destination) {
+            return Err(GameWorldError::VassalLeash);
+        }
         let kind = self.units[index].state.kind;
         let passable = self
             .unit_tile_passable(kind, destination.tile_floor(), &|| false)

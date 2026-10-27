@@ -2,6 +2,7 @@ use crate::{MapChunkGenerator, ResourceKind, ResourceNode};
 use aoe_core::{TileCoord, TileRect};
 use std::collections::BTreeMap;
 
+mod bridges;
 mod navigation;
 mod snapshot;
 mod starting;

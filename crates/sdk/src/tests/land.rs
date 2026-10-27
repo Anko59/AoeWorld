@@ -10,6 +10,7 @@ fn bridge_observations_connect_known_land_and_removal_disconnects_it() {
     let mut bridge = building(10, ME, ConstructionState::Complete);
     bridge.kind = BuildingKind::Bridge;
     bridge.footprint = TileRect::from_xywh(15, 8, 3, 1);
+    bridge.bridge_span = aoe_core::BridgeSpan::new(TileCoord::new(15, 8), TileCoord::new(17, 8));
     world.apply(M::Tick {
         revision: 1,
         tick: Tick(2),

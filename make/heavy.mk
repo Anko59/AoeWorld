@@ -40,6 +40,7 @@ SLOT_ENV := \
   -e AOE_MAP_HYDROLOGY_MODE \
   -e AOE_POLISH_SOURCE_URL \
   -e AOE_POLISH_SOURCE_HASH \
+  -e AOE_LATE_GAME_ARGS \
   -e PERF_SCALE_ARGS \
   -e SCALE_MATCH_ARGS \
   -e AOE_ARENA \
@@ -343,19 +344,28 @@ perf-smoke: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) perf-smoke -- make --no-print-directory perf-smoke-steps
 
 perf-smoke-steps:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-smoke
+	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-smoke
 
-perf-ci: perf-instructions perf-wasm-size orchestrator-tools slot-bootstrap
+# Standalone, identical late-game repetitions for before/after profiling.
+.PHONY: perf-late-game perf-late-game-steps
+perf-late-game: orchestrator-tools slot-bootstrap
+	@$(SLOT_RUN) perf-late-game -- make --no-print-directory perf-late-game-steps
+
+perf-late-game-steps:
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --release --locked -p aoe-harness -- perf-late-game $(AOE_LATE_GAME_ARGS)
+
+perf-ci: analysis-tools orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) perf-ci -- make --no-print-directory perf-ci-steps
 
 perf-ci-steps:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-ci
+	@make --no-print-directory perf-wasm-size perf-instructions
+	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-ci
 
 perf-full: perf-instructions perf-wasm-size orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) perf-full -- make --no-print-directory perf-full-steps
 
 perf-full-steps:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-full
+	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-full
 
 perf-pressure: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) perf-pressure -- make --no-print-directory perf-pressure-steps
@@ -443,6 +453,13 @@ test-navigation-steps:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-server a_job_for_a_stored_preset_publishes_navigation_without_a_worker
 	@$(DOCKER_RUN) cargo test --locked -p aoe-simulation pinned
 
+.PHONY: test-navigation-perf test-navigation-perf-steps
+test-navigation-perf: slot-bootstrap
+	@$(SLOT_RUN) test-navigation-perf -- make --no-print-directory test-navigation-perf-steps
+
+test-navigation-perf-steps:
+	@$(DOCKER_RUN) cargo test --release --locked -p aoe-server --lib large_navigation_ -- --nocapture --test-threads=1
+
 .PHONY: test-bridges test-bridges-steps
 test-bridges: slot-bootstrap
 	@$(SLOT_RUN) test-bridges -- make --no-print-directory test-bridges-steps
@@ -463,3 +480,11 @@ test-formations-perf: slot-bootstrap
 
 test-formations-perf-steps:
 	@$(DOCKER_RUN) cargo test --locked --release -p aoe-simulation --lib formations_measure_warm -- --nocapture
+# One complete late-game tick under Callgrind for focused optimisation work.
+.PHONY: perf-late-game-instructions perf-late-game-instructions-steps
+perf-late-game-instructions: analysis-tools slot-bootstrap
+	@$(SLOT_RUN) perf-late-game-instructions -- make --no-print-directory perf-late-game-instructions-steps
+
+perf-late-game-instructions-steps:
+	@mkdir -p reports/perf
+	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) cargo bench --locked -p aoe-simulation --bench late_game_instructions -- --output-format=json > reports/perf/late-game-instructions.ndjson

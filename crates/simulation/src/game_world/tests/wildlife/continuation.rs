@@ -126,6 +126,7 @@ fn replacement_query_uses_distance_then_identity_and_ignores_foreign_sheep() {
             TileCoord::new(101, 100),
             AnimalKind::Sheep,
             old,
+            worker,
         )
         .unwrap();
     assert_eq!(next.id, low);
@@ -135,7 +136,7 @@ fn replacement_query_uses_distance_then_identity_and_ignores_foreign_sheep() {
 
 #[test]
 fn one_hundred_players_do_not_expand_the_local_replacement_query() {
-    let (mut w, _, old) = harvesting(AnimalKind::Sheep, false);
+    let (mut w, worker, old) = harvesting(AnimalKind::Sheep, false);
     let next = owned_sheep(&mut w, 104, 100);
     for player in 1..100_u16 {
         let x = 160 + i32::from(player % 10) * 8;
@@ -154,7 +155,8 @@ fn one_hundred_players_do_not_expand_the_local_replacement_query() {
             PlayerId(0),
             TileCoord::new(101, 100),
             AnimalKind::Sheep,
-            old
+            old,
+            worker,
         )
         .unwrap()
         .id,

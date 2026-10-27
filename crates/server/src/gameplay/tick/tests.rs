@@ -49,13 +49,20 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// Regenerated from `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server
 /// AOE_NATIVE_TEST_FILTER='test(per_session_messages_match_the_pinned_stream)'`;
 /// keep the scenario, all six sessions and every visibility assertion unchanged.
+/// Combined bundle: gatherer reservations change routes, loads and message
+/// counts; water appends bridge spans and Vassal appends home/control IDs.
+/// Regenerated from the focused current encoder stream. The scenario, digest
+/// algorithm and independent replay/visibility assertions remain unchanged.
+/// Rebased onto #573: avoidance, arrival slots and contact drop-off combine
+/// with gatherer reservations; sessions 1, 4 and 5 change (409/407/407 to
+/// 138/421/407 messages). Regenerated with the focused command above.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 10222491968877725009),
-    (245, 16007369301885903178),
-    (51, 14100784394782800172),
-    (168, 8194618264119467797),
-    (422, 1005210721453389037),
-    (407, 13037734391478091236),
+    (407, 17021387622642390119),
+    (138, 10316735756599434788),
+    (51, 10566546695267247314),
+    (168, 3438870950798754275),
+    (421, 6943729807736241409),
+    (407, 13894714148338880866),
 ];
 
 #[tokio::test(flavor = "multi_thread")]

@@ -77,28 +77,52 @@ bounded by a four-pixel minimum and one eighth of the raster axis (smaller
 rasters use a smaller window). Sliding sums keep filtering linear in raster
 area, with bounded scratch; class queries, colours and water shading are unchanged.
 
-Native map preparation computes immutable navigation on at most four parallel
-workers for maps up to 65,536 chunks, with a 512 MiB retained snapshot budget.
-Larger maps use the lazy walk/portal caches instead of allocating a whole-map
-snapshot; oversized eager builds/loads fail with a smaller-map/compression hint.
-Eager preparation captures compact walk fields and resource nodes, exact local
-land components, portals, and all intra-chunk portal costs. The server persists a checksummed
-binary snapshot under `map-packages/navigation/<package-hash>-<navigation-format>.bin`.
-For eager maps, preset reuse prepares missing snapshots before reporting the
-map ready. Match creation decodes their current snapshot before ticking; missing
-procedural or old package data is built there, never by the tick. Large maps
-prepare only local walk chunks and use off-tick workers for cold requests.
-Only overlay changes rebuild local graphs, using the existing deterministic planner budgets and immutable
-walk data. Move admission does not wait for terrain workers once the snapshot
-is installed. Navigation format changes regenerate the derived file in place;
-there is no migration path. These files stay outside Git and container images.
+Native map preparation streams immutable navigation on at most four workers,
+with at most eight encoded chunks queued for its writer. It never collects a
+whole-map chunk vector. The current format (2) stores walk runs, 16-byte resource
+records, component-label runs, 8-byte portals and flat u32 portal costs (the
+maximum u32 means unreachable). Local coordinates imply global tile positions.
+Every tile, resource identity, directed crossing and exact cost is preserved.
 
-Verified navigation snapshots are shared by `Arc` across preparation and match
-replacement. The process retains at most 1 GiB in its snapshot LRU and 256
-package handles; weak handles reuse data still owned by a world after LRU
-eviction. Mutable world caches stay separate. Snapshot resource records omit
-redundant global tile coordinates, and component labels retain runs when those
-use less space than a tile array. Encoding and checksums are unchanged.
+The server atomically publishes a checksummed binary snapshot under
+`map-packages/navigation/<package-hash>-<navigation-format>.bin`, using the
+existing package lock. Staging inodes are private; published inodes are read-only
+and must never be edited or truncated. Regeneration replaces the pathname.
+Native adapters use memmap2's safe mapping API, validate all records before
+installation, and retain only an offset index on the heap. Kernel-immutable
+fs-verity files map directly. Ordinary cache files stream through a 1 MiB
+buffer into a sealed Linux memfd before mapping; no first-party unchecked map
+or heap-sized file copy is used. Walk, component,
+portal and cost queries then read the mapped bytes directly; no static terrain,
+graph or cost construction occurs on the tick thread. Overlay changes still
+rebuild affected local graphs from the immutable walk data under planner budgets.
+The pure map crate owns byte views and validation, with no filesystem or OS API.
+
+Files are limited to 2 GiB and retained index entries to 16 MiB (4 MB of entries
+for France's 250,000 chunks). Validation temporarily duplicates the bounded index
+to reject overlaps, gaps and trailing data. Four walk caches are each capped at
+64 MiB; encoded messages are individually capped at 4 MiB. These are logical
+bounds, not a measurement of total RSS. Source residency, simulation and sessions
+have separate budgets. Larger indexes remain lazy without allocating in
+proportion to map area. Format changes regenerate derived data; no legacy
+reader is retained. Files stay outside Git and container images.
+
+Package creation bakes off tick before reporting readiness. A match maps an
+existing file off tick; when it is missing or another bake is running, the
+match continues with lazy navigation and registers a background installation.
+One background bake runs per process with at most eight package requests and
+256 weak installation targets per package. Retired worlds cancel their requests
+without pinning caches. Concurrent package requests use the existing native lock.
+
+Verified snapshots share one Arc across preparation and match replacement;
+fs-verity file pages are shared and evictable across processes. The sealed
+memfd path shares one compact copy within the process; its pages require swap
+for eviction, and separate server processes retain separate sealed copies. The snapshot LRU
+retains at most 1 GiB of logical mapped bytes and 256 handles, with weak handles
+for live worlds after eviction. Health snapshot bytes include the mapped file
+and index; they are not resident heap or RSS. Mutable caches remain world-local.
+See [large-map navigation measurements](scale/static-navigation.md) for the
+synthetic before/after workload and its qualification limits.
 Resource-candidate blocks have an 8,192-entry, 32 MiB LRU, including empty
 blocks. Walk and dynamic portal caches each retain at most 64 MiB.
 `/health` exposes live world/session counts and retained snapshot, atlas and
