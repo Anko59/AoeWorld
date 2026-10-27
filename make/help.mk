@@ -17,6 +17,7 @@ help:
 	@echo '  make test-game-focused AOE_GAME_TEST_FILTER=...  Filter asset/simulation tests'
 	@echo '  make test-source-qualification  Run the slow source-qualification tests test-unit excludes'
 	@echo '  make test-exhaustive  Run the 16-seed sweeps and full-axis geodata round-trips test-unit excludes'
+	@echo '  make clean-stale     List merged/idle worktrees; APPLY=1 removes merged ones and idle target/'
 	@echo '  make load-status     Show the heavy slot holders and queue'
 	@echo '  make ledger          Which model did what with measured results (docs/models.md)'
 	@echo '  make usage           What is left of each provider, and the last 7 days of the ledger'

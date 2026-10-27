@@ -177,6 +177,11 @@ test-showcase: slot-bootstrap
 test-showcase-steps:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness showcase
 
+# Classify every worktree; APPLY=1 removes merged clean ones and idle target/ (docs/troubleshooting.md).
+.PHONY: clean-stale
+clean-stale: slot-bootstrap
+	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' clean-stale $(if $(filter 1,$(APPLY)),--apply)
+
 # Read-only report using this checkout before the command reaches the dev judge.
 export TIMELINE_DAYS
 .PHONY: timeline

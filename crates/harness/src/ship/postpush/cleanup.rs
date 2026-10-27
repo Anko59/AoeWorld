@@ -22,5 +22,9 @@ pub(in crate::ship) fn after_publication(
         }
     };
     eprintln!("ship: freed {freed} bytes of rebuildable output");
+    let free = disk::precheck::free_bytes(root).ok();
+    if let Some(line) = free.and_then(disk::stale::hint) {
+        eprintln!("{line}");
+    }
     Ok(())
 }

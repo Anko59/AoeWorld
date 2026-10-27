@@ -20,7 +20,13 @@ less than 15 GiB available. `AOE_DISK_FLOOR_GIB` sets a whole-GiB floor;
 `0` disables it. CI (`CI` or `GITHUB_ACTIONS` nonempty) skips the check.
 The refusal gives available bytes, the floor, and the five largest `target/`
 directories from `git worktree list`, largest first, with file-byte sizes.
-Remove disposable output only after verifying no run uses it, then retry.
+`make clean-stale` lists every worktree as MERGED (tip in `origin/dev`, or a
+merged pull request with that head), IDLE (nothing modified for 3 days) or
+ACTIVE, with `target/` size; `APPLY=1` removes merged worktrees and only the
+`target/` of idle ones. It never touches the main checkout, the current
+worktree, one with uncommitted changes, one a process has as its working
+directory, or a merged one modified in the last hour. `origin/dev` is not
+fetched. `make ship` names it when under 50 GiB is free.
 `make disk-precheck` checks without starting a gate. Its bounded command
 bootstrap still needs enough disk to build the checking binary on a cold start.
 This is an admission check; other processes can consume disk afterward.
