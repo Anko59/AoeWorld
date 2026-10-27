@@ -76,12 +76,6 @@ fn fixture() -> (TempDir, String) {
         fs::read(real.join("gates/registry.json")).unwrap(),
     )
     .unwrap();
-    let catalog = json!({"schema":1,"requirements":[{"id":"fixture-bounds","risk":"critical","scope":"AST fixture only, semantic execution not assessed.","statement":"Fixture checks bounded values.","invariants":[{"id":"fixture-boundary","claim":"Valid and invalid values exercise the declared boundary.","boundaries":[{"path":"crates/demo/src/lib.rs","symbol":"bounded","kind":"function"}],"case_ids":["fixture-positive","fixture-negative"]}],"gate_refs":["test-unit"]}],"cases":[{"id":"fixture-positive","kind":"positive","path":"crates/demo/src/lib.rs","symbol":"tests::accepts","runner":"native-test","gate":"test-unit"},{"id":"fixture-negative","kind":"negative","path":"crates/demo/src/lib.rs","symbol":"tests::rejects","runner":"native-test","gate":"test-unit"}],"deferred":[]});
-    fs::write(
-        root.join("gates/contracts.json"),
-        serde_json::to_vec(&catalog).unwrap(),
-    )
-    .unwrap();
     fs::write(root.join("old.txt"), "unchanged bytes").unwrap();
     let oid = commit(root, None);
     (owner, oid)
@@ -106,7 +100,6 @@ fn real_checked_catalog_subject_is_portable_and_never_authorizes_review() {
     assert_eq!(generated, materialize(&base2, &candidate2).unwrap());
     assert!(generated.affected_paths.is_empty());
     assert_eq!(generated.repository_anchor, "UNAVAILABLE");
-    verify_bindings(&generated.contracts, &generated.candidate_content).unwrap();
     let no_review = assessment(&generated, None).unwrap();
     assert_eq!(
         no_review["status"],
@@ -172,9 +165,6 @@ fn every_subject_component_and_nested_claim_is_exact_not_self_reported() {
         "/scope/candidate",
         "/base_content/digest",
         "/candidate_content/digest",
-        "/contracts/digest",
-        "/contracts/algorithm",
-        "/contracts/bindings/0/binding/line",
         "/canonical_registry_hash",
         "/affected_paths",
         "/required_pr_plan/gates",
@@ -187,12 +177,6 @@ fn every_subject_component_and_nested_claim_is_exact_not_self_reported() {
     let mut unknown = review(&subject);
     unknown.subject["candidate_content"]["approved"] = json!(true);
     assert!(assessment(&subject, Some(&unknown)).is_err());
-    let mut mismatched = subject.contracts.clone();
-    mismatched["bindings"][0]["binding"]["file_blake3"] = json!("forged");
-    assert!(verify_bindings(&mismatched, &subject.candidate_content).is_err());
-    let mut outside = subject.contracts.clone();
-    outside["bindings"][0]["binding"]["path"] = json!("outside.rs");
-    assert!(verify_bindings(&outside, &subject.candidate_content).is_err());
 }
 #[test]
 fn duplicate_keys_at_every_depth_and_unbounded_or_privileged_input_fail_closed() {

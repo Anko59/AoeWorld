@@ -51,8 +51,7 @@ Local filesystem and Git operations are not hard wall-supervised, and endpoint
 checks cannot detect every hostile edit reverted between observations.
 
 The future exact-review adapter must generate a closed subject from these observed
-logical witnesses plus the separate [contract digest](contracts.md), canonical
-registry plans, complete affected paths and actual AST bindings. Snapshot-specific
+logical witnesses plus the canonical registry plans and complete affected paths. Snapshot-specific
 observations must stay outside its reproducible comparator. Matching a submitted
 subject will establish only exact byte/content agreement; independent review and
 execution evidence remain unavailable until separately verified. That comparator

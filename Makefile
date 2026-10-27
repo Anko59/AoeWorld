@@ -205,9 +205,7 @@ structure-check:
 architecture-check:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- architecture-check
 
-.PHONY: contracts-check review-subject
-contracts-check:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- contracts-check
+.PHONY: review-subject
 
 REVIEW_QUOTE = '$(subst ','"'"',$(1))'
 REVIEW_COMMA := ,

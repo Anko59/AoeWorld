@@ -63,7 +63,6 @@ pub(super) fn run(
             gates::placement::check(Path::new("."), kind)?;
         }
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
-        Command::ContractsCheck => println!("{}", gates::contracts::check(Path::new("."))?),
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
         Command::GatesDocs => gates::docs_generate(Path::new("."))?,
         Command::ScopeCheck { revision } => {

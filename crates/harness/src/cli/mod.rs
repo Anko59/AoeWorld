@@ -37,7 +37,6 @@ enum Command {
         revision: Option<String>,
     },
     ArchitectureCheck,
-    ContractsCheck,
     DocsCheck,
     GatesDocs,
     ScopeCheck {
