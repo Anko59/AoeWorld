@@ -21,6 +21,11 @@ enum Command {
     /// Prepare the bounded synthetic coast used by fishing captures.
     FishingScenario,
     DiskPrecheck,
+    /// Classify every worktree; `--apply` removes merged clean ones and idle ones' target/.
+    CleanStale {
+        #[arg(long)]
+        apply: bool,
+    },
     /// Stop the harness containers that a host suspend left running.
     Recover,
     Dev {

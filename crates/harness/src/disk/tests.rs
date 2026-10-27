@@ -2,6 +2,8 @@ use super::precheck::{GIB, check_at, free_bytes};
 use crate::ship::git::git;
 use std::{cell::RefCell, fs, path::Path};
 
+mod stale;
+
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn check_with(

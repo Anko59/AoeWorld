@@ -35,6 +35,7 @@ pub(super) fn run(
             println!("{hash}");
         }
         Command::DiskPrecheck => (),
+        Command::CleanStale { apply } => crate::disk::stale::run(apply)?,
         Command::Doctor => {
             for tool in ["git", "cargo", "rustc"] {
                 process::run(tool, &["--version"], Duration::from_secs(10))?;
