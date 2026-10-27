@@ -174,7 +174,7 @@ fn proposal_rechecks_following_after_an_earlier_mover_changes_spacing() {
     let leader = world
         .spawn_unit(
             PlayerId(0),
-            WorldPosition::new(position.x + 760, position.y),
+            WorldPosition::new(position.x + 500, position.y),
         )
         .unwrap();
     for id in [follower, leader] {
@@ -210,7 +210,12 @@ fn a_walking_unit_with_pending_lookahead_still_gets_a_pure_proposal() {
     let index = world.lookup[&id];
     let waypoint = WorldPosition::from_tile_center(path.tiles[1]).unwrap();
     let destination = WorldPosition::from_tile_center(target).unwrap();
-    world.units[index].route = path.tiles.into_iter().skip(2).collect();
+    world.units[index].route = path
+        .tiles
+        .into_iter()
+        .skip(2)
+        .map(|t| WorldPosition::from_tile_center(t).unwrap())
+        .collect();
     world.units[index].order = Some(MovementOrder {
         origin: world.units[index].state.position,
         waypoint,
