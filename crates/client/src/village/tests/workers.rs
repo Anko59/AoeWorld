@@ -26,6 +26,7 @@ pub(super) fn villager(task: UnitTask) -> GameplayUnitState {
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
+        stance: Default::default(),
     }
 }
 

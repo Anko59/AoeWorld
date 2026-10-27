@@ -49,6 +49,8 @@ pub(super) fn docker_args(options: &Options, root: &Path, out: &Path) -> Vec<Str
         format!("SCALE_OUT={}", out.display()),
         "-e".to_owned(),
         format!("SCALE_SECONDS={seconds}"),
+        "-e".to_owned(),
+        format!("SCALE_RECORD_VIDEO={}", u8::from(options.record_video)),
         "-v".to_owned(),
         mount,
         "-v".to_owned(),

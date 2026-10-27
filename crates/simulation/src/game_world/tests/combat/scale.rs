@@ -72,6 +72,10 @@ fn a_scripted_fight_replays_to_the_same_hash_and_differs_from_no_fight() {
         let (mut world, militia, [first, ..]) = kill_scenario();
         if fight {
             world.issue_attack(PlayerId(0), militia, first).unwrap();
+        } else {
+            world
+                .issue_stance(PlayerId(0), &[militia], aoe_core::CombatStance::NoAttack)
+                .unwrap();
         }
         advance(&mut world, 300);
         world.canonical_hash()
@@ -100,7 +104,7 @@ fn crowd(units: u32, attackers: usize) -> GameWorld {
 }
 
 #[test]
-fn combat_work_follows_the_attackers_not_the_crowd() {
+fn autonomous_combat_work_has_fixed_query_and_search_budgets() {
     let mut worst = Vec::new();
     for units in [400, 6_000] {
         let mut world = crowd(units, 16);
@@ -109,21 +113,30 @@ fn combat_work_follows_the_attackers_not_the_crowd() {
             world.advance();
             peak = peak.max(world.combat_stats().attackers);
             assert!(world.combat_stats().hits <= world.combat_stats().attackers);
+            assert!(world.combat_stats().acquisition_checks <= 128);
+            assert!(world.combat_stats().targeting_scanned <= 16_384);
+            assert!(world.combat_stats().attack_searches <= 16);
         }
         worst.push(peak);
     }
-    // Unit obstruction changes approach timing in the denser crowd, hence
-    // which retaliations overlap. Bounded yields and legal arrivals change
-    // those peaks again. Pin both current seeded peaks; each still
-    // stays under 16 ordered attackers plus at most 16 retaliating victims.
-    assert_eq!(worst, [22, 19]);
-    assert!(
-        worst.iter().all(|peak| (16..=32).contains(peak)),
-        "{worst:?}"
-    );
+    // Default Aggressive acquisition intentionally replaces the former ceiling
+    // of sixteen explicit attackers plus their victims. Whole armies defend;
+    // spatial inspection and route-search work remain bounded above.
+    assert!(worst.iter().all(|peak| *peak > 32), "{worst:?}");
     let mut idle = crowd(6_000, 0);
+    for player in [PlayerId(0), PlayerId(1)] {
+        let ids = idle
+            .units()
+            .filter(|u| u.player == player)
+            .map(|u| u.id)
+            .collect::<Vec<_>>();
+        idle.issue_stance(player, &ids, aoe_core::CombatStance::NoAttack)
+            .unwrap();
+    }
     for _ in 0..20 {
         idle.advance();
-        assert_eq!(idle.combat_stats(), crate::CombatStats::default());
+        assert_eq!(idle.combat_stats().attackers, 0);
+        assert_eq!(idle.combat_stats().hits, 0);
+        assert_eq!(idle.combat_stats().targeting_scanned, 0);
     }
 }

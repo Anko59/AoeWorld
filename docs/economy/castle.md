@@ -36,8 +36,9 @@ HP; the trial graphics DAT has older numeric balance and supplies art only.
 A completed Castle supplies 20 population slots (DAT resource storage 4).
 Castles fire five 11-pierce arrows every two seconds with range 1–8. Murder
 Holes removes the minimum range; Fletching and Bodkin Arrow each add one attack,
-range and LOS. No garrison system exists in this checkout, so garrison is not
-part of this milestone.
+range and LOS. [Garrisons](../garrison.md) add arrows. Castles accept manual
+in-range attack targets and ordinary production rallies; rallies remain valid
+in snapshots and tick deltas after reconnecting.
 
 | Unit / DAT id | Food / wood / gold | Seconds | HP | Attack | Melee / pierce armour |
 | --- | --- | --- | --- | --- | --- |

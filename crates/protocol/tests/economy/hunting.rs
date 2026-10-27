@@ -37,12 +37,12 @@ fn hunter_maximum_load_has_current_golden_wire() {
     let message = hunter_load(67, UnitTask::Returning);
     let bytes = postcard::to_allocvec(&message).unwrap();
     // The combined bundle keeps eco2's DAT hunter maximum and appends the
-    // optional Vassal IDs. Regenerated from the current codec with roundtrips.
+    // optional Vassal IDs and current stance. Regenerated with roundtrips.
     assert_eq!(
         bytes,
         vec![
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 0, 67, 1, 0, 25, 25, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0
+            0, 0, 0, 0, 0, 0, 0, 0
         ]
     );
     assert_eq!(encode_gameplay_server(&message).unwrap(), bytes);

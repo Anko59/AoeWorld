@@ -80,6 +80,8 @@ pub(super) struct Client {
     pub pointer: Option<ScreenPoint>,
     pub last_frame: f64,
     pub status: String,
+    /// Kept across reconnect attempts until a new Welcome or user order.
+    pub last_error: Option<String>,
 }
 
 pub(super) fn now() -> f64 {

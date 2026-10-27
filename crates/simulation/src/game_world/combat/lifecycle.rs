@@ -86,6 +86,8 @@ impl GameWorld {
         self.update_observer(id, None);
         self.combat.attackers.remove(&id);
         self.combat.healers.remove(&id);
+        self.combat.seekers.remove(&id);
+        self.combat.target_rounds.remove(&id);
         self.stop_gathering(id);
         self.cancel_hunt(id);
         self.economy.builders.remove(&id);
@@ -147,6 +149,8 @@ impl GameWorld {
         }
         self.combat.attackers.remove(&id);
         self.combat.healers.remove(&id);
+        self.combat.seekers.remove(&id);
+        self.combat.target_rounds.remove(&id);
         self.stop_gathering(id);
         self.economy.builders.remove(&id);
         self.lookup.remove(&id);

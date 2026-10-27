@@ -25,6 +25,7 @@ fn row(tick: u64, total_us: u64, sim_us: u64, units: u64, missed: bool) -> TickR
         orders: 10,
         units,
         missed,
+        phases_us: [0; 3],
     }
 }
 
@@ -81,8 +82,40 @@ fn docker_stats_lines_become_cores_and_mebibytes() {
 }
 
 #[test]
+fn real_match_recording_is_an_explicit_browser_option() {
+    let options = Cli::try_parse_from(["scale-match", "--browser", "--record-video"])
+        .unwrap()
+        .options;
+    let args = browser::docker_args(
+        &options,
+        std::path::Path::new("/repo"),
+        std::path::Path::new("/repo/reports/combat.json"),
+    );
+    assert!(args.contains(&"SCALE_RECORD_VIDEO=1".to_owned()));
+}
+
+#[test]
+fn live_match_report_retains_combat_orders_and_hierarchy_phase_timings() {
+    let rows = [1_000, 3_000].map(|combat| {
+        TickRow::from_json(&json!([
+            7, 30_000, 20_000, 0, 10, 1_000, 0, 0,
+            {"orders": 2_000, "combat": combat, "hierarchy": 1_500}
+        ]))
+        .unwrap()
+    });
+    let window = report::window(&rows, 0.1);
+    assert_eq!(window["phases_ms"]["orders"]["p95_ms"], 2.0);
+    assert_eq!(window["phases_ms"]["combat"]["p95_ms"], 3.0);
+    assert_eq!(window["phases_ms"]["hierarchy"]["p95_ms"], 1.5);
+}
+
+#[test]
 fn tick_rows_parse_and_summarise() {
-    let parsed = TickRow::from_json(&json!([7, 30_000, 20_000, 0, 10, 1_000, 0])).unwrap();
+    let parsed = TickRow::from_json(&json!([
+        7, 30_000, 20_000, 0, 10, 1_000, 0, 0,
+        {"orders": 0, "combat": 0, "hierarchy": 0}
+    ]))
+    .unwrap();
     assert_eq!(parsed, row(7, 30_000, 20_000, 1_000, false));
     assert!(TickRow::from_json(&json!([1, 2])).is_none());
     let rows: Vec<_> = (0..100)

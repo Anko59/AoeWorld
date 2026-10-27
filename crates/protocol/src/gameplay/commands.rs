@@ -183,6 +183,12 @@ pub enum ClientMessage {
         queued: bool,
         attack_move: bool,
     },
+    StanceOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "bounded_members")]
+        unit_ids: Vec<EntityId>,
+        stance: CombatStance,
+    },
 }
 
 fn bounded_members<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::Error> {
@@ -190,6 +196,17 @@ fn bounded_members<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::
 }
 
 pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
+    if let ClientMessage::StanceOrder { unit_ids, .. } = message
+        && (unit_ids.is_empty()
+            || unit_ids.len() > aoe_core::MAX_FORMATION_MEMBERS
+            || unit_ids
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != unit_ids.len())
+    {
+        return Err(Error::InvalidEconomyState);
+    }
     if let ClientMessage::FormationOrder {
         unit_ids,
         destination,

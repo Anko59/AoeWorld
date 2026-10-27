@@ -43,6 +43,12 @@ its route and queued points. Rust uses `Order::SetFormation`. Stop, a replacemen
 individual order or an attack breaks the group. An
 attack-move advances until it can engage a visible nearby enemy.
 
+`Client.set_stance(units, CombatStance.NO_ATTACK)` sets an owned military
+group's posture; Rust uses `Order::SetStance`. `Unit.stance` is authoritative.
+The other values are `AGGRESSIVE`, `DEFENSIVE` and `STAND_GROUND`. Idle armies
+acquire targets without Python orders. Existing `under_attack` events include
+the victim, attacker ID, victim tile and building flag, also for building fire.
+
 ```python
 army = [u.id for u in world.my_units() if u.kind == aoeworld.UnitKind.SPEARMAN]
 client.formation_move(army, 120, 90, aoeworld.Formation.STAGGERED)

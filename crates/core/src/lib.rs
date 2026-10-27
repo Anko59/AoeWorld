@@ -2,7 +2,9 @@
 mod bridge;
 pub use bridge::{BridgeSpan, raster_bridge_line};
 mod clamp;
+mod combat;
 mod coordinates;
+pub use combat::CombatStance;
 mod formation;
 pub use formation::{Formation, MAX_FORMATION_MEMBERS};
 mod projection;

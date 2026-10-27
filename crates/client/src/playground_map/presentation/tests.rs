@@ -25,6 +25,7 @@ fn state(x: i32, moving: bool) -> GameplayUnitState {
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
+        stance: Default::default(),
     }
 }
 

@@ -84,6 +84,12 @@ async fn leaving_sight_removes_enemy_and_wolf_and_resync_does_not_restore_them()
     let scout = world.spawn_unit(PlayerId(0), at(20, 20)).unwrap();
     let enemy = world.spawn_unit(PlayerId(1), at(22, 20)).unwrap();
     let wolf = world.spawn_animal(AnimalKind::Wolf, at(22, 21)).unwrap();
+    world
+        .issue_stance(PlayerId(0), &[scout], aoe_core::CombatStance::NoAttack)
+        .unwrap();
+    world
+        .issue_stance(PlayerId(1), &[enemy], aoe_core::CombatStance::NoAttack)
+        .unwrap();
     let service = GameplayService::from_world(world, scout, None, None);
     let (tx, mut rx) = tokio::sync::mpsc::channel(32);
     let (id, _) = service.register(None, tx).await;

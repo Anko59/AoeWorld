@@ -8,6 +8,8 @@ use futures_util::{Sink, SinkExt, StreamExt};
 use std::{collections::BTreeMap, time::Duration};
 use tokio::{sync::mpsc, time::timeout};
 
+mod requests;
+
 const LEASE_RESERVATION: Duration = Duration::from_secs(30);
 /// How long one socket write may take before the peer counts as gone: long
 /// enough for a bot busy deciding, short enough to free a dead connection.
@@ -56,68 +58,73 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
         return;
     }
     drop(sender);
-    loop {
+    // These futures run together for the entire connection. Waiting for a
+    // command's world lock must not suspend the writer, and a slow write must
+    // not suspend incoming requests, Ping/Pong or the peer's close frame.
+    let failure = {
         tokio::select! {
-            outgoing = receiver.recv() => {
-                let Some(message) = outgoing else { break };
-                let reset = matches!(message, GameplayServerMessage::WorldReset { .. });
-                if send_socket(&mut sink, message).await.is_err() {
-                    tracing::warn!(session_id, "gameplay session dropped: a socket write failed or timed out");
-                    break;
-                }
-                if reset { break }
-            }
-            incoming = stream.next() => {
-                let Some(Ok(Message::Binary(bytes))) = incoming else { break };
-                match decode_gameplay_client(&bytes) {
-                    Ok(GameplayClientMessage::Subscribe { revision, region }) => service.subscribe(session_id, revision, region).await,
-                    Ok(GameplayClientMessage::FormationOrder { sequence, unit_ids, formation, destination, queued, attack_move }) => service.queue_formation(session_id, sequence, unit_ids, formation, destination, queued, attack_move).await,
-                    Ok(GameplayClientMessage::MoveOrder { sequence, entity_id, destination }) => service.queue_move(session_id, sequence, entity_id, destination).await,
-                    Ok(GameplayClientMessage::QueueMoveOrder { sequence, entity_id, destination }) => service.queue_waypoint(session_id, sequence, entity_id, destination).await,
-                    Ok(GameplayClientMessage::StopOrder { sequence, entity_id }) => service.queue_stop(session_id, sequence, entity_id).await,
-                    Ok(GameplayClientMessage::GatherOrder { sequence, entity_id, resource_id }) => service.queue_gather(session_id, sequence, entity_id, resource_id).await,
-                    Ok(GameplayClientMessage::CancelTrainingOrder { sequence, building_id }) => service.queue_cancel_training(session_id, sequence, building_id).await,
-                    Ok(GameplayClientMessage::GarrisonOrder { sequence, entity_id, building_id }) => service.queue_garrison(session_id, sequence, entity_id, building_id).await,
-                    Ok(GameplayClientMessage::UngarrisonOrder { sequence, building_id, entity_id }) => service.queue_ungarrison(session_id, sequence, building_id, entity_id).await,
-                    Ok(GameplayClientMessage::AutoScoutOrder { sequence, entity_id, enabled }) => service.queue_auto_scout(session_id, sequence, entity_id, enabled).await,
-                    Ok(GameplayClientMessage::SetRallyOrder { sequence, building_id, target }) => service.queue_set_rally(session_id, sequence, building_id, target).await,
-                    Ok(GameplayClientMessage::FarmReseedOrder { sequence, building_id, add }) => service.queue_farm_reseed(session_id, sequence, building_id, add).await,
-                    Ok(GameplayClientMessage::TrainOrder { sequence, building_id, kind }) => service.queue_train(session_id, sequence, building_id, kind).await,
-                    Ok(GameplayClientMessage::AttackOrder { sequence, entity_id, target_id }) => service.queue_attack(session_id, sequence, entity_id, target_id).await,
-                    Ok(GameplayClientMessage::BuildOrder { sequence, builder_ids, kind, origin, queued }) => service.queue_build(session_id, sequence, builder_ids, kind, origin, queued).await,
-                    Ok(GameplayClientMessage::BuildWallOrder { sequence, builder_ids, from, to, queued }) => service.queue_build_wall(session_id, sequence, builder_ids, from, to, queued).await,
-                    Ok(GameplayClientMessage::BuildBridgeOrder { sequence, builder_ids, from, to, queued }) => service.queue_build_bridge(session_id, sequence, builder_ids, from, to, queued).await,
-                    Ok(GameplayClientMessage::CancelConstructionOrder { sequence, building_id }) => service.queue_cancel_construction(session_id, sequence, building_id).await,
-                    Ok(GameplayClientMessage::ConstructOrder { sequence, builder_ids, building_id }) => service.queue_construct(session_id, sequence, builder_ids, building_id).await,
-                    Ok(GameplayClientMessage::FarmOrder { sequence, entity_id, farm_id }) => service.queue_farm(session_id, sequence, entity_id, farm_id).await,
-                    Ok(GameplayClientMessage::ResearchOrder { sequence, building_id, tech }) => service.queue_research(session_id, sequence, building_id, tech).await,
-                    Ok(GameplayClientMessage::CancelResearch { sequence, building_id }) => service.queue_cancel_research(session_id, sequence, building_id).await,
-                    Ok(GameplayClientMessage::HuntOrder { sequence, unit_ids, animal_id }) => service.queue_hunt(session_id, sequence, unit_ids, animal_id).await,
-                    Ok(GameplayClientMessage::MarketBuy { sequence, building_id, resource }) => service.queue_market_buy(session_id, sequence, building_id, resource).await,
-                    Ok(GameplayClientMessage::MarketSell { sequence, building_id, resource }) => service.queue_market_sell(session_id, sequence, building_id, resource).await,
-                    Ok(GameplayClientMessage::LoadOrder { sequence, unit_ids, transport_id }) => service.queue_load(session_id, sequence, unit_ids, transport_id).await,
-                    Ok(GameplayClientMessage::UnloadOrder { sequence, transport_id, destination }) => service.queue_unload(session_id, sequence, transport_id, destination).await,
-                    Ok(GameplayClientMessage::Resync { revision }) => service.resync(session_id, revision).await,
-                    Ok(GameplayClientMessage::Hello { .. } | GameplayClientMessage::JoinSlot { .. }) | Err(_) => {
-                        let _ = send_socket(&mut sink, GameplayServerMessage::Error { code: 400, message: "invalid gameplay request".to_owned() }).await;
-                        break;
+            message = requests::read_requests(&service, session_id, &mut stream) => message,
+            outcome = write_messages(&mut sink, &mut receiver) => {
+                match outcome {
+                    Ok(()) => None,
+                    Err(error) => {
+                        tracing::warn!(session_id, %error, "gameplay session delivery failed");
+                        Some(GameplayServerMessage::Error {code:500, message:format!("The server could not send a game update: {error}. Reload to reconnect.")})
                     }
                 }
             }
         }
+    };
+    if let Some(message) = failure {
+        let _ = send_socket(&mut sink, message).await;
+        let _ = timeout(
+            SEND_TIMEOUT,
+            sink.send(Message::Close(Some(axum::extract::ws::CloseFrame {
+                code: 1011,
+                reason: "Server game update failed; reload to reconnect".into(),
+            }))),
+        )
+        .await;
     }
     service.disconnect(session_id).await;
 }
 
-async fn send_socket<S>(sink: &mut S, message: GameplayServerMessage) -> Result<(), ()>
+#[derive(Debug, thiserror::Error)]
+enum SendFailure {
+    #[error("invalid outgoing game state: {0}")]
+    Encode(aoe_protocol::GameplayError),
+    #[error("socket write timed out")]
+    Timeout,
+    #[error("socket write failed")]
+    Write,
+}
+
+async fn send_socket<S>(sink: &mut S, message: GameplayServerMessage) -> Result<(), SendFailure>
 where
     S: Sink<Message> + Unpin,
 {
-    let bytes = encode_gameplay_server(&message).map_err(|_| ())?;
+    let bytes = encode_gameplay_server(&message).map_err(SendFailure::Encode)?;
     timeout(SEND_TIMEOUT, sink.send(Message::Binary(bytes.into())))
         .await
-        .map_err(|_| ())?
-        .map_err(|_| ())
+        .map_err(|_| SendFailure::Timeout)?
+        .map_err(|_| SendFailure::Write)
+}
+
+async fn write_messages<S>(
+    sink: &mut S,
+    receiver: &mut mpsc::Receiver<GameplayServerMessage>,
+) -> Result<(), SendFailure>
+where
+    S: Sink<Message> + Unpin,
+{
+    while let Some(message) = receiver.recv().await {
+        let reset = matches!(message, GameplayServerMessage::WorldReset { .. });
+        send_socket(sink, message).await?;
+        if reset {
+            break;
+        }
+    }
+    Ok(())
 }
 
 /// Gives every human slot whose controller stayed away past the lease to the

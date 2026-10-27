@@ -93,6 +93,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         pointer: None,
         last_frame: 0.0,
         status: "loading".to_owned(),
+        last_error: None,
     }));
     resize(&mut shared.borrow_mut());
     super::fixture::set_active(&shared);

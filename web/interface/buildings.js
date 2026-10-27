@@ -114,6 +114,7 @@ export function initBuildings() {
       unload.addEventListener('click',()=>callback(4,0));
       formations.forEach((button,i)=>button.addEventListener('click',()=>callback(5,i)));
       attackMove.addEventListener('click',()=>callback(6,0));
+      byId('combat-stance').addEventListener('change',event=>{ if(event.target.value!=='') callback(7,Number(event.target.value)); event.target.value=''; });
     },
     queue(values,visible) { queue=values; byId('training').hidden=!visible||!queue.length; },
     key(event) {

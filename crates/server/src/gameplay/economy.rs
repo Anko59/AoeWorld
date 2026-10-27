@@ -102,6 +102,7 @@ pub(super) fn wire_unit(
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
+        stance: unit.stance,
         death_hunt: unit.death_hunt.map(|kind| match kind {
             aoe_simulation::AnimalKind::Sheep => aoe_protocol::AnimalKind::Sheep,
             aoe_simulation::AnimalKind::Deer => aoe_protocol::AnimalKind::Deer,

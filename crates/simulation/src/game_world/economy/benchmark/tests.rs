@@ -89,7 +89,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        "a81ce699f6d1d9c48c83a25e1662517d0b90b2abebd5975e2588ffda48beaa69"
+        // Current combat stance and targeting state; 1/4-worker comparison above stays.
+        "aac7700521f7c864c96df7b5ee84c8d43b0c2a2b1fd855d60032ca54a20f9b42"
     );
 }
 

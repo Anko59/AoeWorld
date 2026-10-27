@@ -83,6 +83,7 @@ fn unit(id: u32, player: PlayerId, kind: UnitKind) -> GameplayUnitState {
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
+        stance: Default::default(),
     }
 }
 

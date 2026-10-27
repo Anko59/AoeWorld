@@ -129,6 +129,10 @@ impl PendingCommand {
 
 #[derive(Clone)]
 enum PendingAction {
+    Stance {
+        unit_ids: Vec<EntityId>,
+        stance: aoe_core::CombatStance,
+    },
     Garrison {
         entity_id: EntityId,
         building_id: EntityId,

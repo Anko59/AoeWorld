@@ -171,6 +171,7 @@ fn gameplay_collections_are_bounded() {
             cargo_count: 0,
             home_castle: None,
             managed_by: None,
+            stance: Default::default(),
         };
         MAX_SUBSCRIBED_UNITS + 1
     ];

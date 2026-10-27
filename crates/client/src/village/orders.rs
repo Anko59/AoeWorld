@@ -6,6 +6,7 @@ use aoe_protocol::{
 };
 
 pub(super) fn send(client: &mut Client, message: Message) {
+    client.last_error = None;
     if client.role != Some(GameplayRole::Controller) {
         return;
     }
@@ -95,6 +96,9 @@ pub(in super::super) fn stop(client: &mut Client) {
 
 pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queued: bool) {
     if client.role != Some(GameplayRole::Controller) {
+        return;
+    }
+    if !queued && building_attack_at_pointer(client, point) {
         return;
     }
     if client.selected.building_id.is_some() && super::rally::at_pointer(client, point) {
@@ -243,6 +247,51 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
     let _ = client.canvas.set_attribute("data-order-mode", "");
 }
 
+/// Enemy clicks command defensive weapons; other clicks can still set rallies.
+fn building_attack_at_pointer(client: &mut Client, point: ScreenPoint) -> bool {
+    if client.selected.building_id.is_none() {
+        return false;
+    }
+    let Some(target_id) = super::picking::actor(client, point)
+        .filter(|a| a.2)
+        .map(|a| a.0)
+        .or_else(|| super::picking::enemy_building(client, point))
+    else {
+        return false;
+    };
+    let ids = client
+        .village
+        .buildings
+        .iter()
+        .filter(|b| {
+            client.selected.has_building(b.id)
+                && b.player == owner(client)
+                && matches!(
+                    b.kind,
+                    aoe_protocol::BuildingKind::Castle
+                        | aoe_protocol::BuildingKind::WatchTower
+                        | aoe_protocol::BuildingKind::TownCenter
+                )
+        })
+        .map(|b| b.id)
+        .collect::<Vec<_>>();
+    if ids.is_empty() {
+        return false;
+    }
+    for entity_id in ids {
+        let sequence = client.next_sequence;
+        send(
+            client,
+            Message::AttackOrder {
+                sequence,
+                entity_id,
+                target_id,
+            },
+        );
+    }
+    true
+}
+
 pub(in super::super) fn focus_town_center(client: &mut Client, select: bool) {
     if let Some((id, position)) = client
         .village
@@ -299,6 +348,48 @@ pub(super) fn formation(client: &mut Client, index: u32) {
                 destination: None,
                 queued: false,
                 attack_move: false,
+            },
+        );
+    }
+}
+
+pub(super) fn stance(client: &mut Client, index: u32) {
+    let Some(&stance) = [
+        aoe_protocol::CombatStance::Aggressive,
+        aoe_protocol::CombatStance::Defensive,
+        aoe_protocol::CombatStance::StandGround,
+        aoe_protocol::CombatStance::NoAttack,
+    ]
+    .get(index as usize) else {
+        return;
+    };
+    let unit_ids = client
+        .selected
+        .units
+        .iter()
+        .copied()
+        .filter(|id| {
+            client.units.get(id).is_some_and(|u| {
+                u.player == owner(client)
+                    && !matches!(
+                        u.kind,
+                        UnitKind::Villager
+                            | UnitKind::FishingShip
+                            | UnitKind::TransportShip
+                            | UnitKind::Monk
+                            | UnitKind::Vassal
+                    )
+            })
+        })
+        .collect::<Vec<_>>();
+    for ids in unit_ids.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
+        let sequence = client.next_sequence;
+        send(
+            client,
+            Message::StanceOrder {
+                sequence,
+                unit_ids: ids.to_vec(),
+                stance,
             },
         );
     }

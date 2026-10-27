@@ -8,6 +8,7 @@ use std::{fmt, marker::PhantomData};
 mod automation;
 mod garrison;
 mod validation;
+pub use aoe_core::CombatStance;
 pub use aoe_core::Formation;
 pub use garrison::GarrisonUnitState;
 use validation::validate_server;
@@ -75,6 +76,8 @@ pub struct UnitState {
     pub home_castle: Option<EntityId>,
     /// Owner-only ID of the Vassal currently managing this villager.
     pub managed_by: Option<EntityId>,
+    /// Owner-only posture; foreign records use the default.
+    pub stance: CombatStance,
 }
 
 impl UnitState {
@@ -82,6 +85,7 @@ impl UnitState {
         if self.player != viewer {
             self.home_castle = None;
             self.managed_by = None;
+            self.stance = CombatStance::Aggressive;
         }
         self
     }

@@ -113,6 +113,7 @@ fn vassal_poses_use_the_king_for_standing_walking_and_death() {
         cargo_count: 0,
         home_castle: Some(EntityId(8)),
         managed_by: None,
+        stance: Default::default(),
     };
     assert_eq!(unit_pose(&u, None), Pose::KingStand);
     u.moving = true;

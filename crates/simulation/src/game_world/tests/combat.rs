@@ -3,7 +3,9 @@ mod castle;
 use super::*;
 use crate::{BUILDING_COMBAT, DamageKind, EconomyError, UNIT_COMBAT, UnitTask, damage_dealt};
 
+mod acquisition;
 mod approach;
+mod benchmark;
 mod buildings;
 mod garrison;
 mod military;
@@ -284,6 +286,10 @@ fn re_ordering_attacks_never_strikes_faster_than_one_hit_per_period() {
     let militia = world.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
     let b = world.spawn_militia(PlayerId(1), at(101, 100)).unwrap();
     let c = world.spawn_militia(PlayerId(1), at(99, 100)).unwrap();
+    // Isolate the weapon cooldown from the targets' new default aggression.
+    world
+        .issue_stance(PlayerId(1), &[b, c], aoe_core::CombatStance::NoAttack)
+        .unwrap();
     for tick in 0..200 {
         let target = if tick % 2 == 0 { b } else { c };
         world.issue_attack(PlayerId(0), militia, target).unwrap();

@@ -209,6 +209,7 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
                 cargo_count: 0,
                 home_castle: None,
                 managed_by: None,
+                stance: Default::default(),
             },
         )]),
         presentation: Default::default(),
@@ -224,6 +225,7 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
         pointer: None,
         last_frame: 0.0,
         status: String::new(),
+        last_error: None,
     }
 }
 

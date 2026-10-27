@@ -10,6 +10,7 @@ import { forceCanvas } from "../../rendering/backends.js";
 
 type Actor = {
   id: number;
+  owned: boolean;
   kind: string;
   x: number;
   y: number;
@@ -22,13 +23,23 @@ async function actors(page: Page): Promise<Actor[]> {
     (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
   ) as Actor[];
 }
+// Soldiers now engage on their own and move between reading a position and
+// the click, so re-read and click until the selection takes.
 async function select(page: Page, kind: string) {
-  const actor = (await actors(page)).find(
-    (a) => a.kind === kind && a.x > 0 && a.x < 1280 && a.y > 54 && a.y < 512,
-  );
-  if (!actor) throw new Error(`Visible ${kind} missing`);
-  await page.mouse.click(actor.x, actor.y);
-  await expect(page.locator("#selection")).toHaveAttribute("data-kind", kind);
+  await expect(async () => {
+    const actor = (await actors(page)).find(
+      (a) => a.kind === kind && a.x > 0 && a.x < 1280 && a.y > 54 && a.y < 512,
+    );
+    if (!actor) throw new Error(`Visible ${kind} missing`);
+    await page.mouse.click(actor.x, actor.y);
+    await expect(page.locator("#selection")).toHaveAttribute(
+      "data-kind",
+      kind,
+      {
+        timeout: 1_000,
+      },
+    );
+  }).toPass({ timeout: 15_000 });
 }
 
 export async function militaryAttack(
@@ -64,29 +75,60 @@ export async function militaryAttack(
   await expect
     .poll(async () => (await actors(page)).some((a) => a.kind === "Spearman"))
     .toBe(true);
+  // The scenario's enemy Militia and Scout now raid the village; the new
+  // Spearman fights back without an order.
+  const enemies = (await actors(page)).filter((a) => !a.owned);
+  const militia = enemies.find((a) => a.kind === "Militia");
+  const scout = enemies.find((a) => a.kind === "Scout");
+  if (!militia || !scout) throw new Error("Enemy Militia or Scout missing");
+  await expect
+    .poll(async () => damaged(page, militia.id), {
+      timeout: 40_000,
+      message: "the idle Spearman fights back against the raiding Militia",
+    })
+    .toBe(true);
   await expect(page.locator("#research-fletching")).toBeDisabled();
   await select(page, "Archer");
   await expect(page.locator("#unit-combat")).toContainText("Attack 5");
   await expect(page.locator("#unit-combat")).toContainText("Range 5");
-  const enemy = (await actors(page)).find((a) => a.kind === "Militia");
-  if (!enemy) throw new Error("Enemy target missing");
-  await page.mouse.click(enemy.x, enemy.y, { button: "right" });
+  // No Attack leaves the Archer only explicit orders, so an Attacking task
+  // and Scout damage after the click both come from the order.
+  await page.locator("#combat-stance").selectOption("3");
+  const archer = (await actors(page)).find(
+    (a) => a.owned && a.kind === "Archer",
+  );
+  if (!archer) throw new Error("Archer missing");
+  await expect
+    .poll(async () => task(page, archer.id), { timeout: 10_000 })
+    .not.toBe("Attacking");
+  const target = (await actors(page)).find((a) => a.id === scout.id);
+  if (!target) throw new Error("Enemy Scout gone before the Archer's order");
+  await page.mouse.click(target.x, target.y, { button: "right" });
+  await expect
+    .poll(async () => task(page, archer.id), {
+      timeout: 10_000,
+      message: "the No Attack Archer attacks only on the explicit order",
+    })
+    .toBe("Attacking");
   await expect
     .poll(
       async () =>
-        (await actors(page)).some((a) => a.id === enemy.id && a.hp < a.maxHp),
-      { timeout: 20_000 },
+        !(await actors(page)).some(
+          (a) => a.id === scout.id && a.hp >= target.hp,
+        ),
+      {
+        timeout: 20_000,
+        message: "the ordered Archer damages the enemy Scout",
+      },
     )
     .toBe(true);
-  await select(page, "Spearman");
-  const scout = (await actors(page)).filter((a) => a.kind === "Scout").at(-1);
-  if (!scout) throw new Error("Enemy scout missing");
-  await page.mouse.click(scout.x, scout.y, { button: "right" });
-  await expect
-    .poll(
-      async () =>
-        (await actors(page)).some((a) => a.id === scout.id && a.hp < a.maxHp),
-      { timeout: 20_000 },
-    )
-    .toBe(true);
+}
+
+async function task(page: Page, id: number) {
+  return (await actors(page)).find((a) => a.id === id)?.task;
+}
+
+// Damaged, or killed and removed.
+async function damaged(page: Page, id: number) {
+  return !(await actors(page)).some((a) => a.id === id && a.hp === a.maxHp);
 }

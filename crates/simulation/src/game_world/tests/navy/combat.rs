@@ -37,7 +37,12 @@ fn galley_hits_a_shore_unit_without_beaching_or_chasing_onto_land() {
     let victim = world.spawn_villager(PlayerId(1), at(land)).unwrap();
     let before = world.unit(victim).unwrap().hp;
     world.issue_attack(PlayerId(0), galley, victim).unwrap();
-    advance(&mut world, 40);
+    for _ in 0..40 {
+        // The ranged-hit escape reaction must not turn this firing-position
+        // regression into a chase; the owner explicitly keeps this target here.
+        world.issue_stop(PlayerId(1), victim).unwrap();
+        world.advance();
+    }
     assert!(world.unit(victim).unwrap().hp < before);
     assert_eq!(world.unit(galley).unwrap().position, at(start));
     assert!(world.movement_order(galley).is_none());

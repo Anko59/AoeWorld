@@ -228,7 +228,6 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                             | BuildingKind::Market
                             | BuildingKind::WatchTower
                             | BuildingKind::University
-                            | BuildingKind::Castle
                     )
                     && match r.target {
                         super::RallyTarget::Ground(p) => p == r.position,

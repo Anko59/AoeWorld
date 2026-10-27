@@ -6,6 +6,7 @@ fn occupants(hash: &mut blake3::Hasher, units: &[GarrisonedUnit]) {
         hash.update(&g.unit.id.0.to_le_bytes());
         hash.update(&g.unit.player.0.to_le_bytes());
         hash.update(&[g.unit.kind as u8]);
+        hash.update(&[g.unit.stance as u8]);
         hash.update(&g.unit.hp.to_le_bytes());
         hash.update(&g.unit.max_hp.to_le_bytes());
         hash.update(&g.next_hit_tick.to_le_bytes());

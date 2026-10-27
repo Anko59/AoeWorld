@@ -291,6 +291,10 @@ fn garrison_arrows_use_projectiles_and_only_villagers_and_foot_archers_add_firep
     ] {
         let (mut world, building) = shelter(kind);
         let target = world.spawn_militia(PlayerId(1), at(106, 101)).unwrap();
+        // Hold the damage target still while measuring garrison firepower.
+        world
+            .issue_stance(PlayerId(1), &[target], aoe_core::CombatStance::NoAttack)
+            .unwrap();
         world.advance();
         assert_eq!(
             world

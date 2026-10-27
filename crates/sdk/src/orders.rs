@@ -5,6 +5,10 @@ use aoe_protocol::GameplayClientMessage;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Order {
+    SetStance {
+        units: Vec<EntityId>,
+        stance: crate::CombatStance,
+    },
     Garrison {
         unit: EntityId,
         building: EntityId,
@@ -147,6 +151,11 @@ impl Order {
     pub fn message(&self, sequence: u64) -> Option<GameplayClientMessage> {
         use GameplayClientMessage as M;
         Some(match self.clone() {
+            Order::SetStance { units, stance } => M::StanceOrder {
+                sequence,
+                unit_ids: units,
+                stance,
+            },
             Order::Garrison { unit, building } => M::GarrisonOrder {
                 sequence,
                 entity_id: unit,

@@ -9,6 +9,10 @@ fn id(n: u32) -> EntityId {
 fn all_orders() -> Vec<Order> {
     let tile = TileCoord::new(10, 20);
     vec![
+        Order::SetStance {
+            units: vec![id(1), id(2)],
+            stance: crate::CombatStance::StandGround,
+        },
         Order::Garrison {
             unit: id(2),
             building: id(7),
@@ -175,7 +179,8 @@ fn every_order_maps_to_a_wire_message_that_round_trips() {
     // Garrison and Ungarrison add two ordinary authenticated wire variants;
     // selective and all-unit ejection use the same current Ungarrison order.
     // Bridge, garrison/ejection, load/unload and formation share the current combined wire.
-    assert_eq!(seen.len(), 26, "distinct wire variants: {seen:?}");
+    // Combat stance adds one bounded group command.
+    assert_eq!(seen.len(), 27, "distinct wire variants: {seen:?}");
 }
 
 #[test]

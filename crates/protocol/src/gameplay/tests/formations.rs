@@ -3,6 +3,38 @@ use super::*;
 use aoe_core::{Formation, MAX_FORMATION_MEMBERS};
 
 #[test]
+fn stance_orders_have_a_bounded_current_golden_wire() {
+    for (stance, code) in [
+        (CombatStance::Aggressive, 0),
+        (CombatStance::Defensive, 1),
+        (CombatStance::StandGround, 2),
+        (CombatStance::NoAttack, 3),
+    ] {
+        let order = ClientMessage::StanceOrder {
+            sequence: 1,
+            unit_ids: vec![EntityId(2), EntityId(3)],
+            stance,
+        };
+        let wire = [30, 1, 2, 2, 3, code];
+        assert_eq!(encode_client(&order).unwrap(), wire);
+        assert_eq!(decode_client(&wire).unwrap(), order);
+        for ids in [
+            vec![],
+            vec![EntityId(1); 2],
+            vec![EntityId(1); MAX_FORMATION_MEMBERS + 1],
+        ] {
+            let order = ClientMessage::StanceOrder {
+                sequence: 1,
+                unit_ids: ids,
+                stance,
+            };
+            assert!(encode_client(&order).is_err());
+            assert!(decode_client(&postcard::to_allocvec(&order).unwrap()).is_err());
+        }
+    }
+}
+
+#[test]
 fn formation_order_has_a_bounded_current_golden_wire() {
     let message = ClientMessage::FormationOrder {
         sequence: 1,

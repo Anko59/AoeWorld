@@ -29,6 +29,7 @@ pub struct Unit {
     pub carrying: Option<(ResourceKind, u16)>,
     pub gathering: Option<ResourceKind>,
     pub attack_target: Option<u32>,
+    pub stance: crate::enums::CombatStance,
 }
 
 #[pymethods]
@@ -67,6 +68,7 @@ impl From<aoe_sdk::Unit> for Unit {
             cargo_count: unit.state.cargo_count,
             home_castle: unit.state.home_castle.map(|id| id.0),
             managed_by: unit.state.managed_by.map(|id| id.0),
+            stance: unit.state.stance.into(),
             idle: unit.idle(),
             alive: unit.alive(),
             military: unit.is_military(),

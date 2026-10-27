@@ -27,6 +27,7 @@
       </nav>
     </header>
     <div id="game-notice" role="status"><span id="connection">Loading…</span></div>
+    <div id="game-error" role="alert" hidden><span id="game-error-message"></span> <a id="reload-game" href="/">Reload game</a></div>
     <section id="bottom-panel" aria-label="Village command panel">
       <section id="commands" aria-label="Commands"><h2>COMMANDS <span id="command-context">Select a unit</span></h2>
         <div id="command-grid">
@@ -35,6 +36,7 @@
           <button id="stop-units" type="button" aria-label="Stop selected units" title="Stop selected units" hidden><svg class="icon" aria-hidden="true"><use href="/interface/icons.svg#stop"></use></svg><span>Stop</span></button>
         </div>
         <p id="command-hint">Click to select · drag to select a group</p>
+        <label id="combat-stance-label" hidden>Combat stance <select id="combat-stance"><option value="">Set stance…</option><option value="0">Aggressive</option><option value="1">Defensive</option><option value="2">Stand ground</option><option value="3">No attack</option></select></label>
       </section>
       <section id="selection" data-count="0" aria-label="Selection"><div id="selection-empty"><span class="crest">A<span>W</span></span><h2>Your village awaits</h2><p>Select villagers to gather resources.<br>Select the Town Center to grow your village.</p></div>
         <div id="selection-content" hidden><div id="selection-heading"><div id="portrait-frame"><div id="selection-portrait"></div><progress id="selection-health" max="1" value="1" aria-label="Selected entity health"></progress></div><div><p class="eyebrow"><span id="selection-owner">Your village</span></p><h1 id="selection-name"></h1><p id="selection-task"></p><p id="selection-load"></p><p id="unit-hp" hidden></p><p id="unit-combat" hidden></p></div></div><div id="selected-icons"></div>

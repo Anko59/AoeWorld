@@ -69,6 +69,7 @@ pub struct GameUnit {
     pub death_hunt: Option<AnimalKind>,
     /// Authoritative cavalry exploration toggle.
     pub auto_scout: bool,
+    pub stance: aoe_core::CombatStance,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MovementOrder {

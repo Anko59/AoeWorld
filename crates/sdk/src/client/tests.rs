@@ -25,6 +25,7 @@ fn unit(id: u32, kind: UnitKind, tile: TileCoord) -> GameplayUnitState {
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
+        stance: Default::default(),
     }
 }
 

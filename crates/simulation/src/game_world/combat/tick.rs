@@ -65,12 +65,21 @@ impl GameWorld {
             self.combat.dying.pop_first();
             self.remove_unit(id);
         }
-        // Ids are snapshotted: a unit that starts retaliating this tick first
-        // acts on the next one, which keeps the order canonical.
+        self.advance_acquisition(changed);
+        // Melee retaliation created during this loop acts next tick;
+        // projectile reactions and acquisition already join this snapshot.
         let ids = self.combat.attackers.keys().copied().collect::<Vec<_>>();
+        self.combat.pursuit_floor = self.combat.pursuit_cursor;
+        self.combat.pursuit_cursor = None;
         for id in ids {
             self.step_attacker(id, now, changed);
         }
+        if self.combat.searches_used < super::approach::MAX_ATTACK_SEARCHES_PER_TICK
+            && self.combat.far_searches > 0
+        {
+            self.combat.pursuit_cursor = None;
+        }
+        self.combat.pursuit_floor = None;
         self.advance_towers(changed);
         self.advance_healing(changed);
     }
@@ -89,6 +98,9 @@ impl GameWorld {
             self.end_attack(id, changed);
             return;
         };
+        if !self.pursuit_allowed(id, goal, changed) {
+            return;
+        }
         if (unit_combat(before.kind).attack_kind == super::DamageKind::Pierce
             || before.kind == crate::UnitKind::Mangonel)
             && !self.target_visible_to(before.player, attacker.target)
@@ -164,36 +176,42 @@ impl GameWorld {
             let counts_as_far = attacker.far.is_some()
                 || i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
                     > super::approach::FAR_REUSE_TILES;
-            let destination = if let Some(far) = reusable {
-                Some(far.destination)
-            } else if counts_as_far && self.combat.far_searches == 0 {
-                // Over this tick's budget: keep walking and look again next tick.
-                if let Some(entry) = self.combat.attackers.get_mut(&id) {
-                    entry.repath_tick = now.saturating_add(1);
-                }
-                self.units[index].state.task = UnitTask::Attacking;
-                if self.units[index].state != before {
-                    changed.push(self.units[index].state.id);
-                }
-                return;
-            } else {
-                let search = self.attack_search(id, &goal).ok();
-                if counts_as_far {
-                    self.combat.far_searches -= 1;
-                }
-                let far = search
-                    .as_ref()
-                    .filter(|search| search.far)
-                    .and_then(|search| search.destination)
-                    .map(|destination| super::approach::FarAttack {
-                        centre,
-                        destination,
-                    });
-                if let Some(entry) = self.combat.attackers.get_mut(&id) {
-                    entry.far = far;
-                }
-                search.and_then(|search| search.destination)
-            };
+            let destination =
+                if !counts_as_far && attacker.goal_tile == Some(centre) && order.is_some() {
+                    order.map(|o| o.destination)
+                } else if let Some(far) = reusable {
+                    Some(far.destination)
+                } else if (counts_as_far && self.combat.far_searches == 0)
+                    || !self.reserve_pursuit_search(id)
+                {
+                    // Over this tick's budget: keep walking and look again next tick.
+                    if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                        entry.repath_tick = now.saturating_add(1);
+                    }
+                    self.units[index].state.task = UnitTask::Attacking;
+                    if self.units[index].state != before {
+                        changed.push(self.units[index].state.id);
+                    }
+                    return;
+                } else {
+                    let search = self.attack_search(id, &goal).ok();
+                    if counts_as_far {
+                        self.combat.far_searches -= 1;
+                    }
+                    let far = search
+                        .as_ref()
+                        .filter(|search| search.far)
+                        .and_then(|search| search.destination)
+                        .map(|destination| super::approach::FarAttack {
+                            centre,
+                            destination,
+                        });
+                    if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                        entry.far = far;
+                        entry.goal_tile = Some(centre);
+                    }
+                    search.and_then(|search| search.destination)
+                };
             // A far chase follows its target loosely: it is re-planned once
             // the target has moved more than a quarter of the remaining way.
             // Re-planning every attacker each second toward a target a few
@@ -349,7 +367,7 @@ impl GameWorld {
             let damage = super::table::damage_with_bonus(attack, kind, melee, pierce, bonus);
             victim.hp = victim.hp.saturating_sub(damage);
             victim.last_hit = Some(hit);
-            let (hp, victim_id, victim_player) = (victim.hp, victim.id, victim.player);
+            let (hp, victim_player) = (victim.hp, victim.player);
             self.record_combat_hit(
                 Some(attacker_player),
                 victim_player,
@@ -359,12 +377,8 @@ impl GameWorld {
             if hp == 0 {
                 self.kill_unit(victim_index);
                 self.finish_target_attack(attacker_id, target, changed);
-            } else if self
-                .unit(attacker_id)
-                .is_some_and(|a| a.player != self.units[victim_index].state.player)
-                && self.can_retaliate(victim_index)
-            {
-                self.begin_attack(victim_id, attacker_id);
+            } else if attacker_player != victim_player {
+                self.retaliate(victim_index, attacker_id, changed);
             }
             changed.push(self.units[victim_index].state.id);
         } else if self.animal(target).is_some() {
@@ -445,18 +459,5 @@ impl GameWorld {
         {
             self.end_attack(attacker, changed);
         }
-    }
-
-    /// Only an idle, living unit without an attack order fights back.
-    fn can_retaliate(&self, index: usize) -> bool {
-        let unit = &self.units[index].state;
-        unit.hp > 0
-            && !unit.moving
-            && !unit.planning
-            && matches!(unit.task, UnitTask::Idle | UnitTask::Carrying)
-            && !self.combat.attackers.contains_key(&unit.id)
-            && !self.economy.gatherers.contains_key(&unit.id)
-            && !self.economy.builders.contains_key(&unit.id)
-            && unit_combat(unit.kind).attack > 0
     }
 }

@@ -111,6 +111,7 @@ fn dark_players_cannot_claim_feudal_techs_and_wheelbarrow_loads_round_trip() {
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
+        stance: Default::default(),
     });
     let bytes = encode_gameplay_server(&snapshot).unwrap();
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);

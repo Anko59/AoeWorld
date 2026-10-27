@@ -1,6 +1,14 @@
 use super::{Client, map, set_text};
 
 pub(super) fn update(client: &Client) {
+    if let Some(banner) = client.document.get_element_by_id("game-error") {
+        if let Some(error) = &client.last_error {
+            set_text(&client.document, "game-error-message", error);
+            let _ = banner.remove_attribute("hidden");
+        } else {
+            let _ = banner.set_attribute("hidden", "");
+        }
+    }
     set_text(
         &client.document,
         "connection",

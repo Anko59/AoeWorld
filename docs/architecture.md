@@ -19,7 +19,11 @@ The simulation owns integer stockpiles, population, gathering jobs and a serial
 villager training queue. Building footprints block authoritative navigation.
 Gathering uses the resource overlay transaction and owned Town Center drop-off
 points. Snapshot and tick messages carry bounded player/building state alongside
-unit kinds, tasks and carried loads; failed outgoing delivery closes the session.
+unit kinds, tasks and carried loads. Socket reads and writes progress
+independently; command application runs on a blocking worker. Failed outgoing
+delivery distinguishes encoding, socket failure and timeout, sends an error
+where possible, and closes only that session. The browser retains the reason
+through reconnect attempts and offers a reload link.
 The single current rules table is described in [village economy](economy.md).
 
 The `/diagnostics.html` adapter retains the synthetic compatibility world and

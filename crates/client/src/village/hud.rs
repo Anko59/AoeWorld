@@ -24,6 +24,21 @@ fn screen(client: &Client, position: [f64; 2]) -> [f64; 2] {
 }
 
 pub(in super::super) fn update(client: &Client) {
+    let stance = client
+        .selected
+        .units
+        .first()
+        .and_then(|id| client.units.get(id))
+        .filter(|first| {
+            client.selected.units.iter().all(|id| {
+                client
+                    .units
+                    .get(id)
+                    .is_some_and(|u| u.stance == first.stance)
+            })
+        })
+        .map_or("", |u| ["0", "1", "2", "3"][u.stance as usize]);
+    let _ = client.canvas.set_attribute("data-selected-stance", stance);
     let owner = owner(client);
     let overview = crate::playground::game::strategic::active(client);
     // Header: four stockpiles, used/cap, four worker counts, clock, observing,

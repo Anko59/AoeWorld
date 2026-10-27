@@ -36,21 +36,31 @@ impl GameplayService {
         self.probe.phase("world_lock", started.elapsed());
         let started = std::time::Instant::now();
         let orders = pending.len();
-        let mut acknowledgements = BTreeMap::<u64, Vec<GameplayServerMessage>>::new();
-        for (session_id, command) in pending {
-            let result = match controllers.get(&session_id) {
-                None => CommandResult::RejectedNotController,
-                Some(player) => super::commands::apply(&mut world, *player, command.action),
-            };
-            let tick = world.tick();
-            acknowledgements.entry(session_id).or_default().push(
-                GameplayServerMessage::CommandAck {
-                    sequence: command.sequence,
-                    result,
-                    applied_tick: tick,
-                },
-            );
-        }
+        // Attack-position and construction validation can be CPU work. Keep
+        // it off the async runtime so one order cannot starve socket I/O.
+        let applied = tokio::task::spawn_blocking(move || {
+            let mut acknowledgements = BTreeMap::<u64, Vec<GameplayServerMessage>>::new();
+            for (session_id, command) in pending {
+                let result = match controllers.get(&session_id) {
+                    None => CommandResult::RejectedNotController,
+                    Some(player) => super::commands::apply(&mut world, *player, command.action),
+                };
+                let tick = world.tick();
+                acknowledgements.entry(session_id).or_default().push(
+                    GameplayServerMessage::CommandAck {
+                        sequence: command.sequence,
+                        result,
+                        applied_tick: tick,
+                    },
+                );
+            }
+            (world, acknowledgements)
+        })
+        .await;
+        let Ok((world, acknowledgements)) = applied else {
+            tracing::error!("gameplay order worker failed");
+            return;
+        };
         self.probe.phase("orders", started.elapsed());
         let advance_started = std::time::Instant::now();
         let advanced = self.advance_world(world).await;

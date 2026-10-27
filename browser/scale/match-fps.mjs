@@ -10,6 +10,7 @@ import { writeFileSync } from "node:fs";
 const base = process.env["SCALE_BASE_URL"] ?? "http://127.0.0.1:9100";
 const out = process.env["SCALE_OUT"] ?? "browser.json";
 const seconds = Number(process.env["SCALE_SECONDS"] ?? "240");
+const recording = process.env["SCALE_RECORD_VIDEO"] === "1";
 const WINDOW_SECONDS = 10;
 
 const result = {
@@ -80,8 +81,15 @@ const browser = await chromium.launch({
     "--disable-vulkan-surface",
   ],
 });
+let video;
 try {
-  const page = await browser.newPage({ viewport: result.viewport });
+  const page = await browser.newPage({
+    viewport: result.viewport,
+    recordVideo: recording
+      ? { dir: `${out}.video`, size: result.viewport }
+      : undefined,
+  });
+  video = page.video();
   page.on("pageerror", (error) => result.errors.push(String(error.message)));
   await page.addInitScript(() => {
     window.__frames = [];
@@ -120,5 +128,12 @@ try {
   result.error = result.errors.at(-1);
 } finally {
   save();
-  await browser.close();
+  try {
+    await browser.close();
+    if (video) result.video = await video.path();
+  } catch (error) {
+    result.errors.push(String(error instanceof Error ? error.message : error));
+    result.error = result.errors.at(-1);
+  }
+  save();
 }

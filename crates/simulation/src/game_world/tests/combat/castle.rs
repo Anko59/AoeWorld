@@ -100,6 +100,10 @@ fn monk_heals_injured_owned_units_without_overhealing_or_healing_enemies() {
     for id in [friend, enemy] {
         let i = w.lookup[&id];
         w.units[i].state.hp = 90;
+        // This fixture measures healing, with both armies holding fire.
+        let player = w.unit(id).unwrap().player;
+        w.issue_stance(player, &[id], aoe_core::CombatStance::NoAttack)
+            .unwrap();
     }
     let ticks = 5 * w.config().tick_hz;
     advance(&mut w, ticks);
@@ -250,6 +254,9 @@ fn castle_fires_and_murder_holes_removes_minimum_range() {
     let enemy = w
         .spawn_kind(PlayerId(1), UnitKind::Knight, at(106, 100))
         .unwrap();
+    // This range/armour fixture holds fire; pursuit is covered separately.
+    w.issue_stance(PlayerId(1), &[enemy], aoe_core::CombatStance::NoAttack)
+        .unwrap();
     let ticks = 2 * w.config().tick_hz;
     advance(&mut w, ticks);
     assert!(w.unit(enemy).unwrap().hp < 100);
@@ -313,6 +320,11 @@ fn ballistics_hits_a_scout_after_stop_and_after_arrival() {
             .unwrap();
         let victim = w
             .spawn_kind(PlayerId(1), UnitKind::Scout, at(104, 100))
+            .unwrap();
+        // Isolate Stop/arrival velocity from automatic acquisition on either side.
+        w.issue_stance(PlayerId(0), &[archer], aoe_core::CombatStance::NoAttack)
+            .unwrap();
+        w.issue_stance(PlayerId(1), &[victim], aoe_core::CombatStance::NoAttack)
             .unwrap();
         w.issue_move(victim, at(104, 101)).unwrap();
         if stop {
