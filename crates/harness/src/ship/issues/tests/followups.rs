@@ -99,8 +99,8 @@ fn ship_routes_findings_by_path_and_never_creates() {
     )
     .unwrap();
     let calls = stub.calls();
-    assert!(calls.contains("<issue>\n<edit>\n<575>"), "{calls}");
-    assert!(calls.contains("<issue>\n<edit>\n<576>"), "{calls}");
+    assert!(calls.contains("<issue>\n<comment>\n<575>"), "{calls}");
+    assert!(calls.contains("<issue>\n<comment>\n<576>"), "{calls}");
     assert!(!calls.contains("<create>"));
     assert!(!calls.contains("<close>"));
     assert!(!calls.contains("<--jq>"));
@@ -108,9 +108,7 @@ fn ship_routes_findings_by_path_and_never_creates() {
     assert!(!calls.contains("wrong/override"));
     let bodies = stub.bodies();
     let (game, other) = bodies.split_once("===").unwrap();
-    assert!(
-        game.find("#### Game findings").unwrap() < game.find("crates/server/src/lib.rs").unwrap()
-    );
+    assert!(game.contains("crates/server/src/lib.rs"));
     assert!(!game.contains("docs/issues.md"));
     assert!(other.contains("docs/issues.md"));
     assert!(!bodies.contains("crates/client/src/lib.rs"));
@@ -156,23 +154,40 @@ fn matching_findings_keep_the_highest_severity_and_untrusted_details_are_sanitis
 }
 
 #[test]
-fn ship_fails_loudly_for_a_closed_destination() {
+fn comments_are_bounded_and_other_destination_is_attempted_after_failure() {
     let mut stub = Stub::new(&serde_json::json!([]));
-    stub.set(
-        "GH_VIEW_JSON",
-        r#"{"state":"CLOSED","body":"","updatedAt":"t"}"#,
-    );
-    let error = file(
+    stub.set("GH_FAIL_NUMBER", "575");
+    let finding = |i: usize, path: &str| Finding {
+        id: i.to_string(),
+        reporter: 0,
+        round: 1,
+        reported: Reported {
+            file: path.into(),
+            line: Some(i as u32),
+            severity: Severity::Minor,
+            category: "c".repeat(2000),
+            claim: format!("claim {i} {}", "x".repeat(2000)),
+            trigger: "t".repeat(2000),
+            expected_vs_actual: "e".repeat(2000),
+            evidence: "z".repeat(2000),
+        },
+        votes: vec![],
+        status: Status::Confirmed,
+        members: vec![],
+    };
+    let mut findings = vec![finding(0, "crates/server/a.rs")];
+    findings.extend((1..100).map(|i| finding(i, "docs/a.md")));
+    file(
         &stub.root,
         "https://github.com/project/checkout/pull/42",
-        &report(vec![]),
+        &report(findings),
     )
-    .unwrap_err()
-    .to_string();
-    assert!(
-        error.contains("gates/issues.json") && error.contains("575"),
-        "{error}"
-    );
-    assert!(!stub.calls().contains("<edit>"));
-    assert!(!stub.calls().contains("<create>"));
+    .unwrap();
+    let calls = stub.calls();
+    assert!(calls.contains("<comment>\n<576>"), "{calls}");
+    assert!(!calls.contains("<edit>"));
+    let body = stub.bodies();
+    assert!(body.chars().count() <= 50_000);
+    assert!(body.contains("more findings, see https://github.com/project/checkout/pull/42"));
+    assert!(!body.contains(&"t".repeat(601)));
 }

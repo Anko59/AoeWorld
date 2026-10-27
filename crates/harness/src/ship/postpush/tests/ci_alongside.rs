@@ -14,7 +14,7 @@ case "$1 $2" in
     else
       printf '%s\n' '{"state":"OPEN","body":"#### Game findings (owned by the game session)\n","updatedAt":"t"}'
     fi ;;
-  'issue edit') cat >/dev/null ;;
+  'issue comment') cat >/dev/null ;;
   'pr list')
     case "$*" in *'--state merged'*) echo '[]'; exit 0 ;; esac
     if [ -f "$GH_DIR/existing" ]; then echo '{"url":"https://github.com/project/checkout/pull/1","baseRefName":"dev"}'; fi ;;
@@ -423,18 +423,33 @@ fn pull_request_state_parses_githubs_json_for_drafts_and_armed_auto_merge() {
 }
 
 #[test]
-fn ship_propagates_a_closed_workstream_after_publication() {
+fn ship_succeeds_when_a_workstream_is_closed_after_publication() {
     let (world, options) = setup();
     world.answer("closed-issue", "");
-    let error = ship_with(&world.root, &options, &|root, tier, _, _, _| {
-        Ok(graded(root, tier, 9))
+    ship_with(&world.root, &options, &|root, tier, _, _, _| {
+        use crate::review::protocol::{Finding, Reported, Severity, Status};
+        let mut report = graded(root, tier, 9);
+        report.findings.push(Finding {
+            id: "F1".into(),
+            reporter: 0,
+            round: 1,
+            reported: Reported {
+                file: "crates/server/a.rs".into(),
+                line: Some(1),
+                severity: Severity::Minor,
+                category: "test".into(),
+                claim: "broken".into(),
+                trigger: String::new(),
+                expected_vs_actual: String::new(),
+                evidence: String::new(),
+            },
+            votes: vec![],
+            status: Status::Confirmed,
+            members: vec![],
+        });
+        Ok(report)
     })
-    .unwrap_err()
-    .to_string();
-    assert!(
-        error.contains("gates/issues.json") && error.contains("575"),
-        "{error}"
-    );
+    .unwrap();
     let calls = world.calls();
     assert!(calls.contains("issue view 575"), "{calls}");
     assert!(!calls.contains("issue create"), "{calls}");

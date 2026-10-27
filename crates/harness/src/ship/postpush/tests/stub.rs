@@ -15,7 +15,7 @@ if [ "$1 $2" = "issue view" ]; then
   printf '%s\n' '{"state":"OPEN","body":"#### Game findings (owned by the game session)\n","updatedAt":"t"}'
   exit 0
 fi
-if [ "$1 $2" = "issue edit" ]; then cat >/dev/null; exit 0; fi
+if [ "$1 $2" = "issue comment" ]; then cat >/dev/null; exit 0; fi
 if [ "$1 $2" = "pr view" ]; then
   case "$*" in
     *headRefOid*) cat "$GH_DIR/review-meta.json" ;;

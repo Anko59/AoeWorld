@@ -106,7 +106,7 @@ critical), an incomplete review, or a closing review
    but fix CI and reship. Every review outcome prints the score beside CI counts.
 10. **Files the review's leftovers** in the configured workstream issues by
    finding path ([issues](issues.md#review-follow-ups-and-nightly-triage)). A
-   filing failure fails ship after publication and names the problem.
+   filing failure warns after publication; ship continues.
 
 ## One ship at a time
 

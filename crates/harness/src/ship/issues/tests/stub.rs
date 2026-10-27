@@ -9,6 +9,7 @@ use std::{
 const GH: &str = r#"#!/bin/sh
 printf -- '---\n' >> "$GH_LOG"
 printf '<%s>\n' "$@" >> "$GH_LOG"
+if [ "${GH_FAIL_NUMBER-}" = "$3" ] && [ "$2" = view ]; then echo "stub failure" >&2; exit 1; fi
 for arg in "$@"; do
   if [ -n "${GH_FAIL-}" ] && [ "$arg" = "$GH_FAIL" ]; then
     # A failing gh has still read its piped body: drain it before exiting.
@@ -34,6 +35,7 @@ case "$1" in
         cat "$GH_VIEW_RESPONSES/$count"
       else
         case " $* " in
+          *" state "*) printf '%s' "$GH_VIEW_JSON" ;;
           *" state,body,updatedAt "*) printf '%s' "$GH_VIEW_JSON" ;;
           *" body,updatedAt "*) printf '%s' "$GH_VIEW_JSON" ;;
           *" updatedAt "*) printf '2026-10-14T00:00:00Z' ;;
@@ -117,6 +119,7 @@ impl Stub {
         stub.set("GITHUB_REPOSITORY", "wrong/override");
         stub.set("GH_REPO", "wrong/override");
         stub.unset("GH_FAIL");
+        stub.unset("GH_FAIL_NUMBER");
         stub.unset("GH_VIEW_BODY");
         stub.unset("GH_VIEW_RESPONSES");
         stub.unset("GH_OPEN_PR");
@@ -140,16 +143,6 @@ impl Stub {
         }
         self.saved.push((name, std::env::var_os(name)));
         unsafe { std::env::set_var(name, value) };
-    }
-
-    pub(super) fn view_responses(&mut self, responses: &[String]) {
-        let directory = self._temp.path().join("views");
-        fs::create_dir_all(&directory).unwrap();
-        fs::write(directory.join("count"), "0").unwrap();
-        for (index, response) in responses.iter().enumerate() {
-            fs::write(directory.join((index + 1).to_string()), response).unwrap();
-        }
-        self.set("GH_VIEW_RESPONSES", directory.to_str().unwrap());
     }
 
     pub(super) fn unset(&mut self, name: &'static str) {

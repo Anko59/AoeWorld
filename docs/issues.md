@@ -43,11 +43,4 @@ blocking issue to be resolved, never on a person.
 
 ## Review follow-ups and nightly triage
 
-Ship records confirmed or disputed review findings by path in the workstream
-issues configured in `gates/issues.json`: game findings under “Game findings”
-in #575, and other findings in #576. Nightly job failures and metric regressions
-go to #574. Stable per-PR and per-job sections deduplicate repeat reports,
-preserve checked matching findings, and retain other issue text; configured
-targets must be open. These paths never create, retitle, or close issues.
-Updates check `updatedAt` and retry concurrent changes, though GitHub does not
-provide an atomic compare-and-set.
+Ship posts one bounded comment per destination for confirmed or disputed review findings: game paths go to #575 and other paths to #576, as configured in `gates/issues.json`. Nightly triage posts one comment on #574 listing failed jobs and metric regressions, and posts nothing when there are none. Filing failures, including closed issues, warn and do not fail ship or nightly; file those follow-ups by hand.

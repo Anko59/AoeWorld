@@ -463,7 +463,9 @@ pub(crate) fn ship_with(
                     }
                 };
                 postpush::cleanup::after_publication(root, &evidence.base_branch, publish)?;
-                issues::followups::file(root, &url, report)?;
+                if let Err(error) = issues::followups::file(root, &url, report) {
+                    eprintln!("warning: could not file follow-ups ({error}); file them by hand");
+                }
                 eprintln!("{}", stack::next_steps(options.parent.as_ref(), &url));
             }
         }

@@ -1,6 +1,6 @@
 //! File passing-review findings in the configured workstream issues.
 use super::{
-    Result, Target, fingerprint,
+    Result, fingerprint,
     routing::{self, Config},
 };
 use crate::review::{
@@ -10,9 +10,11 @@ use crate::review::{
 use std::{collections::HashSet, path::Path};
 
 pub(in crate::ship) fn file(root: &Path, url: &str, report: &Report) -> Result<()> {
+    if url.chars().count() > 1_000 {
+        return Err("pull request URL exceeds 1000 characters".into());
+    }
     let pr = pr_number(url).ok_or_else(|| format!("no pull request number in {url}"))?;
     let config = Config::load(root)?;
-    let target = Target::direct(root)?;
     for (number, game) in [(config.game_review, true), (config.other_review, false)] {
         let mut findings: Vec<_> = report
             .findings
@@ -42,24 +44,32 @@ pub(in crate::ship) fn file(root: &Path, url: &str, report: &Report) -> Result<(
             })
             .map(item)
             .collect();
-        let section = if lines.is_empty() {
-            String::new()
-        } else {
-            format!(
-                "**PR #{pr} — {}**\n\nPassing review at {}:\n{}",
+        if !lines.is_empty() {
+            let heading = format!(
+                "**PR #{pr} — {}**\n\nPassing review at {}:\n",
                 inline(url),
-                inline(&report.head),
-                lines.join("\n")
-            )
-        };
-        routing::update(
-            &target,
-            root,
-            number,
-            &format!("review-pr-{pr}"),
-            &section,
-            game,
-        )?;
+                clip(&inline(&report.head), 600)
+            );
+            let mut body = heading;
+            let total = lines.len();
+            for (index, line) in lines.iter().enumerate() {
+                let remaining = total - index - 1;
+                let overflow = format!("\n… {remaining} more findings, see {}", inline(url));
+                if body.chars().count() + line.chars().count() + overflow.chars().count() + 1
+                    > 50_000
+                {
+                    body.push_str(&format!(
+                        "\n… {} more findings, see {}",
+                        total - index,
+                        inline(url)
+                    ));
+                    break;
+                }
+                body.push_str(line);
+                body.push('\n');
+            }
+            routing::comment(root, number, &body);
+        }
     }
     Ok(())
 }
@@ -94,7 +104,7 @@ fn item(finding: &Finding) -> String {
         ("Evidence", &finding.reported.evidence),
     ] {
         if !value.trim().is_empty() {
-            text.push_str(&format!("\n  - {label}: {}", clip(&inline(value), 8000)));
+            text.push_str(&format!("\n  - {label}: {}", clip(&inline(value), 600)));
         }
     }
     text

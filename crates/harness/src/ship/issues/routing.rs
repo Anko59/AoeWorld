@@ -1,7 +1,7 @@
-//! Numbered workstream destinations and fingerprinted body sections.
-use super::{BODY_LIMIT, Result, Target, validate_text};
+//! Numbered workstream destinations and comment filing.
+use super::{Result, Target};
 use serde::Deserialize;
-use std::{collections::HashSet, path::Path};
+use std::path::Path;
 
 const CONFIG: &str = "gates/issues.json";
 
@@ -59,126 +59,36 @@ impl Config {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct Snapshot {
     state: String,
-    body: String,
-    updated_at: String,
 }
 
-/// Update only the section identified by a stable fingerprint. Retry on a
-/// concurrent change; GitHub does not offer an atomic compare-and-set.
-pub(super) fn update(
-    target: &Target,
-    root: &Path,
-    number: u64,
-    key: &str,
-    section: &str,
-    game: bool,
-) -> Result<()> {
-    let number = number.to_string();
-    for _ in 0..3 {
-        let read = || {
-            target.gh(
-                root,
-                &["issue", "view", &number, "--json", "state,body,updatedAt"],
-                None,
-            )
-        };
-        let current: Snapshot = serde_json::from_str(&read()?)?;
-        if current.state != "OPEN" {
-            return Err(
-                format!("{CONFIG}: configured issue #{number} is {}", current.state).into(),
-            );
-        }
-        let body = splice(&current.body, key, section, game)?;
-        validate_text("ISSUE_BODY", &body, BODY_LIMIT)?;
-        let latest: Snapshot = serde_json::from_str(&read()?)?;
-        if latest.state != "OPEN" {
-            return Err(format!("{CONFIG}: configured issue #{number} is {}", latest.state).into());
-        }
-        if latest.updated_at != current.updated_at {
-            continue;
-        }
-        if body != current.body {
-            target.gh(
-                root,
-                &["issue", "edit", &number, "--body-file", "-"],
-                Some(body.as_bytes()),
-            )?;
-        }
-        return Ok(());
-    }
-    Err(format!("{CONFIG}: issue #{number} was busy after 3 attempts").into())
+pub(super) fn warn(number: u64, error: &dyn std::fmt::Display) {
+    eprintln!("warning: could not file follow-ups in #{number} ({error}); file them by hand");
 }
 
-fn splice(current: &str, key: &str, section: &str, game: bool) -> Result<String> {
-    let start = format!("<!-- aoe-workstream:{key}:start -->");
-    let end = format!("<!-- aoe-workstream:{key}:end -->");
-    let old = match (current.find(&start), current.find(&end)) {
-        (Some(a), Some(b)) if a < b => Some((a, b + end.len())),
-        (None, None) => None,
-        _ => return Err(format!("{CONFIG}: malformed section {key}").into()),
-    };
-    let checked: HashSet<String> = old
-        .map(|(a, b)| {
-            current[a..b]
-                .lines()
-                .filter_map(|line| line.strip_prefix("- [x] ").map(str::to_owned))
-                .collect()
-        })
-        .unwrap_or_default();
-    let content = section
-        .lines()
-        .map(|line| {
-            if let Some(rest) = line.strip_prefix("- [ ] ")
-                && checked.contains(rest)
-            {
-                format!("- [x] {rest}")
-            } else {
-                line.to_owned()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    let replacement = if section.is_empty() {
-        String::new()
-    } else {
-        format!("{start}\n{content}\n{end}")
-    };
-    if let Some((a, b)) = old {
-        return Ok(format!("{}{}{}", &current[..a], replacement, &current[b..]));
-    }
-    if section.is_empty() {
-        return Ok(current.to_owned());
-    }
-    if game {
-        let mut after = None;
-        let mut offset = 0;
-        for line in current.split_inclusive('\n') {
-            let heading = line.trim_end_matches(['\r', '\n']);
-            let marks = heading.bytes().take_while(|byte| *byte == b'#').count();
-            if (1..=6).contains(&marks)
-                && heading[marks..]
-                    .strip_prefix(" Game findings")
-                    .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(' '))
-            {
-                after = Some(offset + heading.len());
-                break;
-            }
-            offset += line.len();
+pub(super) fn comment(root: &Path, number: u64, body: &str) {
+    let result = (|| -> Result<()> {
+        let target = Target::direct(root)?;
+        let number_text = number.to_string();
+        let state: Snapshot = serde_json::from_str(&target.gh(
+            root,
+            &["issue", "view", &number_text, "--json", "state"],
+            None,
+        )?)?;
+        if state.state != "OPEN" {
+            return Err(format!("{CONFIG}: configured issue #{number} is {}", state.state).into());
         }
-        let after = after.ok_or_else(|| {
-            format!("{CONFIG}: game_review issue is missing its Game findings heading")
-        })?;
-        Ok(format!(
-            "{}\n\n{}{}",
-            &current[..after],
-            replacement,
-            &current[after..]
-        ))
-    } else {
-        Ok(format!("{}\n\n{}\n", current, replacement))
+        target.gh(
+            root,
+            &["issue", "comment", &number_text, "--body-file", "-"],
+            Some(body.as_bytes()),
+        )?;
+        Ok(())
+    })();
+    match result {
+        Ok(()) => println!("filed follow-ups in #{number}"),
+        Err(error) => warn(number, &error),
     }
 }
 

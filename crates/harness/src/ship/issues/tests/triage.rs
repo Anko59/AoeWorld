@@ -14,6 +14,25 @@ fn needs(pairs: &[(&str, &str)]) -> String {
     serde_json::Value::Object(map).to_string()
 }
 
+fn prepare_metrics(stub: &Stub) {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../gates/metric-regressions.json");
+    std::fs::copy(source, stub.root.join("gates/metric-regressions.json")).unwrap();
+    for args in [&["add", "-A"][..], &["commit", "-qm", "fixture"][..]] {
+        assert!(
+            std::process::Command::new("git")
+                .current_dir(&stub.root)
+                .args(args)
+                .env("GIT_AUTHOR_NAME", "Test")
+                .env("GIT_AUTHOR_EMAIL", "test@example.com")
+                .env("GIT_COMMITTER_NAME", "Test")
+                .env("GIT_COMMITTER_EMAIL", "test@example.com")
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+}
+
 #[test]
 fn the_needs_context_is_bounded_and_strict() {
     let parsed = parse(&needs(&[
@@ -128,23 +147,21 @@ fn failing_jobs_are_recorded_on_574_without_create_or_close() {
     )
     .unwrap();
     let calls = stub.calls();
-    assert!(calls.contains("<issue>\n<edit>\n<574>"), "{calls}");
+    assert!(calls.contains("<issue>\n<comment>\n<574>"), "{calls}");
     assert!(!calls.contains("<create>"));
     assert!(!calls.contains("<close>"));
     assert!(!calls.contains("<--jq>"));
     assert!(calls.contains("<--repo>\n<github.com/project/checkout>"));
     assert!(!calls.contains("wrong/override"));
-    assert!(stub.bodies().contains("Nightly failure: parser"));
-    assert!(
-        stub.bodies()
-            .contains("- [ ] The nightly job `parser` failed")
-    );
+    assert!(stub.bodies().contains("Nightly failures"));
+    assert!(stub.bodies().contains("`parser`"));
     assert!(stub.bodies().contains("actions/runs/123"));
 }
 
 #[test]
 fn nightly_cli_uses_the_configured_issue_without_creating() {
     let stub = Stub::new(&serde_json::json!([]));
+    prepare_metrics(&stub);
     let binary = std::env::current_exe()
         .unwrap()
         .parent()
@@ -166,67 +183,27 @@ fn nightly_cli_uses_the_configured_issue_without_creating() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("recorded parser in #574"), "{stdout}");
-    assert!(stub.calls().contains("<issue>\n<edit>\n<574>"));
+    assert!(stdout.contains("filed follow-ups in #574"), "{stdout}");
+    assert!(stub.calls().contains("<issue>\n<comment>\n<574>"));
     assert!(!stub.calls().contains("<create>"));
     println!(
-        "CLI nightly-triage rehearsal (scripted GitHub): {stdout}ASSERT: edited #574; no issue created"
+        "CLI nightly-triage rehearsal (scripted GitHub): {stdout}ASSERT: commented on #574; no issue created"
     );
 }
 
 #[test]
-fn failed_github_calls_are_reported_after_trying_each_failure() {
-    let mut stub = Stub::new(&serde_json::json!([]));
-    stub.set("GH_FAIL", "edit");
-    let error = triage(
+fn one_comment_lists_all_failures_and_success_posts_nothing() {
+    let stub = Stub::new(&serde_json::json!([]));
+    triage(
         &stub.root,
         &needs(&[("first", "failure"), ("second", "failure")]),
         None,
     )
-    .unwrap_err()
-    .to_string();
-    assert!(
-        error.contains("first") && error.contains("second"),
-        "{error}"
-    );
-    assert_eq!(stub.calls().matches("<edit>").count(), 2);
-}
-
-#[test]
-fn nightly_closed_target_reports_config_path() {
-    let mut stub = Stub::new(&serde_json::json!([]));
-    stub.set(
-        "GH_VIEW_JSON",
-        r#"{"state":"CLOSED","body":"","updatedAt":"t"}"#,
-    );
-    let error = triage(&stub.root, &needs(&[("parser", "failure")]), Some("123"))
-        .unwrap_err()
-        .to_string();
-    assert!(
-        error.contains("gates/issues.json") && error.contains("574"),
-        "{error}"
-    );
-    assert!(!stub.calls().contains("<create>"));
-    assert!(!stub.calls().contains("<edit>"));
-}
-
-#[test]
-fn distinct_job_ids_keep_distinct_safe_fingerprints() {
-    let stub = Stub::new(&serde_json::json!([]));
-    triage(
-        &stub.root,
-        &needs(&[("a--b", "failure"), ("ab", "failure")]),
-        None,
-    )
     .unwrap();
-    let body = stub.bodies();
-    for job in ["a--b", "ab"] {
-        assert!(body.contains(&format!(
-            "aoe-workstream:nightly-job-{}:start",
-            blake3::hash(job.as_bytes()).to_hex()
-        )));
-    }
-    assert!(!body.contains("nightly-job-a--b"));
+    assert_eq!(stub.calls().matches("<comment>").count(), 1);
+    assert!(stub.bodies().contains("first") && stub.bodies().contains("second"));
+    triage(&stub.root, &needs(&[("ok", "success")]), None).unwrap();
+    assert_eq!(stub.calls().matches("<comment>").count(), 1);
 }
 
 #[test]
@@ -248,7 +225,52 @@ fn triage_requires_the_main_session_and_results() {
             .to_string()
             .contains("set NIGHTLY_RESULTS")
     );
+    prepare_metrics(&stub);
     stub.set("NIGHTLY_RESULTS", &needs(&[("a", "skipped")]));
     execute(&stub.root).unwrap();
     assert!(!stub.calls().contains("<issue>"));
+}
+
+#[test]
+fn jobs_and_metrics_share_one_comment() {
+    let stub = Stub::new(&serde_json::json!([]));
+    triage_with_metrics(
+        &stub.root,
+        &needs(&[("parser", "failure")]),
+        Some("123"),
+        &["Test count fell".into()],
+    )
+    .unwrap();
+    assert_eq!(stub.calls().matches("<comment>").count(), 1);
+    assert!(stub.bodies().contains("parser") && stub.bodies().contains("Test count fell"));
+}
+
+#[test]
+fn closed_nightly_issue_warns_and_cli_succeeds() {
+    let mut stub = Stub::new(&serde_json::json!([]));
+    prepare_metrics(&stub);
+    stub.set("GH_VIEW_JSON", r#"{"state":"CLOSED"}"#);
+    let binary = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("aoe-harness");
+    let output = std::process::Command::new(binary)
+        .current_dir(&stub.root)
+        .arg("nightly-triage")
+        .env("NIGHTLY_RESULTS", needs(&[("parser", "failure")]))
+        .env_remove("AOE_JUDGE_REV")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("warning: could not file follow-ups in #574")
+            && error.contains("CLOSED")
+            && error.contains("file them by hand"),
+        "{error}"
+    );
+    assert!(!stub.calls().contains("<comment>"));
 }

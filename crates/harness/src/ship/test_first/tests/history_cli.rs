@@ -65,7 +65,7 @@ fn rehearse_merge(own_changes: bool) {
 case "$1 $2" in
   '--version ') echo 'gh version 2.100.0' ;;
   'issue view') printf '%s\n' '{"state":"OPEN","body":"#### Game findings (owned by the game session)\n","updatedAt":"t"}' ;;
-  'issue edit') cat >/dev/null ;;
+  'issue comment') cat >/dev/null ;;
   'pr list') printf '{"url":"https://github.com/project/checkout/pull/43","baseRefName":"dev"}' ;;
   'pr view') printf '{"isDraft":false,"autoMergeRequest":null}' ;;
   'api '*) case "$*" in

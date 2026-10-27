@@ -48,29 +48,31 @@ pub(in crate::ship) fn execute(root: &Path) -> Result<()> {
     if !crate::agents::main_session() {
         return Err("make metric-regressions is available only to the main session and CI".into());
     }
+    let findings = collect(root)?;
+    if findings.is_empty() {
+        return Ok(());
+    }
+    let config = Config::load(root)?;
+    let target = match Target::direct(root) {
+        Ok(target) => target,
+        Err(error) => {
+            routing::warn(config.nightly, &error);
+            return Ok(());
+        }
+    };
+    let run = triage::run_link(&target.repo, std::env::var("GITHUB_RUN_ID").ok().as_deref());
+    routing::comment(root, config.nightly, &body(&findings, &run));
+    Ok(())
+}
+
+pub(super) fn collect(root: &Path) -> Result<Vec<String>> {
     let thresholds = Thresholds::load(root)?;
     let head = snapshot::compute(root, "HEAD")?.statics;
     let earlier = match baseline(root, thresholds.window_hours)? {
         Some(sha) => Some(snapshot::compute(root, &sha)?.statics),
         None => None,
     };
-    let findings = regressions(earlier.as_ref(), &head, &thresholds);
-    if findings.is_empty() {
-        return Ok(());
-    }
-    let config = Config::load(root)?;
-    let target = Target::direct(root)?;
-    let run = triage::run_link(&target.repo, std::env::var("GITHUB_RUN_ID").ok().as_deref());
-    routing::update(
-        &target,
-        root,
-        config.nightly,
-        "nightly-metric-regressions",
-        &body(&findings, &run),
-        false,
-    )?;
-    println!("metric-regressions: recorded in #{}", config.nightly);
-    Ok(())
+    Ok(regressions(earlier.as_ref(), &head, &thresholds))
 }
 
 /// The newest commit of HEAD's history made at least `hours` ago.

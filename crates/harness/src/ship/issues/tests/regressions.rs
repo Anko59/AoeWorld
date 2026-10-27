@@ -149,7 +149,7 @@ fn the_route_make_target_and_workflow_reach_the_regression_check() {
     let workflow = read(".github/workflows/nightly.yml");
     let (_, triage) = workflow.split_once("\n  triage:\n").unwrap();
     assert!(triage.contains("fetch-depth: 0"));
-    assert!(triage.contains("run: make metric-regressions"));
+    assert!(triage.contains("run: make nightly-triage"));
     let _ = snapshot::path;
 }
 
@@ -191,7 +191,7 @@ fn metric_regressions_are_recorded_on_574() {
         ],
     );
     execute(&stub.root).unwrap();
-    assert!(stub.calls().contains("<issue>\n<edit>\n<574>"));
+    assert!(stub.calls().contains("<issue>\n<comment>\n<574>"));
     assert!(!stub.calls().contains("<create>"));
     assert!(!stub.calls().contains("<close>"));
     assert!(stub.bodies().contains("- [ ] Test count fell from 3 to 1"));
