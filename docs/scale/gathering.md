@@ -14,8 +14,8 @@ Other agents loaded the machine during the after run (movement, untouched, read
 | initial node search (`find_nodes_s`, s) | 5.6 | 9.7 |
 
 Canonical hashes at ticks 100 to 600 and the initial hash are identical to the
-before run. A replay test (`gathering_and_dropoffs_replay_to_pinned_hashes`) pins
-six hashes taken on 41d85f46.
+before run. A replay test (`gathering_and_dropoffs_replay_deterministically`)
+runs the scenario twice and requires the six checkpoint hashes to agree.
 
 What changed: a per-player, per-kind drop-off index (`Economy::dropoffs`); the
 replacement search reads cached 8x8-tile blocks ring by ring with the former

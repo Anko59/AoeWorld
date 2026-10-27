@@ -92,7 +92,7 @@ Simulation `advance`, 600 ticks, milliseconds:
 Same workload after reworking hot spots 4 and 5 (the numbers are inline; the
 current tree's full report is `reports/scale/perf-scale.json`). The canonical hashes at
 ticks 100 to 600 are identical before and after, so behaviour did not change;
-the pinned scenario in `tests/replay_pin.rs` guards this.
+the run-twice scenario in `tests/wildlife_fog_replay.rs` guards determinism.
 
 | Phase (fog on, p50 / p95) | before | after |
 |---|---|---|

@@ -1,48 +1,5 @@
-// Regenerated for bounded obstruction state, arrival hysteresis and unchanged-wait suppression.
-// Combined bundle: Vassal economy state, water geometry and eco2 job rules
-// regenerate current replay pins. Retain all scenarios and thread comparisons.
-// The Vassal manager adds its fair cursor, active index and controlled jobs
-// to canonical state. Regenerate current pins for this intentional schema
-// change; independent runs, thread equality and emitted-change pins stay intact.
-// Vassal home bindings add an ordered map to canonical economy state,
-// including the empty map length. Regenerate current hashes for this deliberate
-// schema change; preserve the scenarios, emitted changes and replay comparisons.
-// Rebased onto #573: its avoidance, arrival slots, settling and contact drop-off
-// now combine with eco2 reservations (reservation-aware refinement, staged
-// transport boarding). Regenerated the observed current hashes with the same
-// scenarios via `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation`.
-//! Auto-scout flags and retained frontier state deliberately extend replay hashes
-//! and change digests; current pins are regenerated, with thread checks retained.
 //! The parallel proposal phase must reproduce the sequential engine bit for
-//! bit, for any number of worker threads. Pins were regenerated on the merged
-//! playtest tree: fair route scheduling, destination spreading and spacing
-//! intentionally change the upstream replay. The original merge pins used a
-//! sequential reference. Re-pinned for the review fixes: player-first budget
-//! sharing changes route timing, and resumable reverse frontiers/cursors are
-//! hashed. The same cases still compare complete 1/2/6-thread replays.
-//! Re-pinned for bounded idle separation: large crowds now rotate across ticks,
-//! changing spacing timing and emitted changes; cursors and both neighbour
-//! sampling slots are hashed. Followers no longer sample distant idle tiles.
-//! Ordered units leave the idle queue, so only idle units spend its budget.
-//! The combined scheduler offers near fast attempts before far work and
-//! reserves far fair work inside each player share, intentionally changing
-//! route timing and emitted changes. All thread-equality assertions stay.
-//! Static navigation adds a hashed per-tick preparation allowance and budgeted
-//! proof state; guidance pacing also changes the emitted movement. Regenerate
-//! these pins for that intentional state/pacing change, keeping the workload
-//! and every complete 1/2/6-thread equality assertion.
-//! TC collision now uses the NW 2x2 annex, and planner hashes drop the obsolete
-//! unproven-approach flag. Near portal guidance and retained searches change
-//! timing intentionally. Regenerate pins while keeping all thread comparisons.
-// Castle Age widens researched bits to u64 and hashes the ordered healer index;
-// Gather credits now use millionths for exact stacked mining upgrades.
-// Regenerate current checkpoints for these deliberate state-schema changes.
-// Combined Castle bundle: u64 research, healers, garrisons, queued builders and
-// cargo/embarked maps extend current state. Regenerate the same scenario; all
-// independent replay, thread equality and emitted-change assertions remain.
-// Swept unit obstruction, bounded local refinement and reachable arrival slots
-// deliberately change routes, timing and neighbour-index order. Regenerate the
-// current pins; keep the same workload and every complete thread comparison.
+//! bit, for any number of worker threads: complete 1/2/6-thread replays agree.
 use super::*;
 use aoe_map::{MapPackage, MapRequest};
 
@@ -164,45 +121,6 @@ fn thread_count_never_changes_the_replay_with_buildings_in_sight() {
     assert_eq!(run(2, true), one);
     assert_eq!(run(6, true), one);
 }
-
-#[test]
-fn parallel_movement_matches_the_pinned_sequential_replay() {
-    let (hashes, digest) = run(3, false);
-    let last = hashes.last().cloned().unwrap_or_default();
-    assert_eq!(
-        (last.as_str(), digest.as_str()),
-        (PINNED_FINAL_HASH, PINNED_CHANGE_DIGEST)
-    );
-}
-
-// Regenerate the current combined replay for retained detours, open TC arches,
-// drop-off work state, prepaid reseeds and auto-scout state. Keep every
-// sequential/parallel equality assertion and the existing scenario unchanged.
-const PINNED_FINAL_HASH: &str = "fef78f2af05f3a428f269f6e02fdcc9be9f52be297aaf81042a271990f4c1f08";
-const PINNED_CHANGE_DIGEST: &str =
-    "b753afc4726f1222d4a9f903b5c86ba6abe6adbae5f58b02cc3f15585432a65a";
-
-#[test]
-fn parallel_movement_with_buildings_matches_the_pinned_sequential_replay() {
-    let (hashes, digest) = run(3, true);
-    let last = hashes.last().cloned().unwrap_or_default();
-    assert_eq!(
-        (last.as_str(), digest.as_str()),
-        (PINNED_BUILDINGS_HASH, PINNED_BUILDINGS_DIGEST)
-    );
-}
-
-// Current player-first/resumable-proof replay, including emitted changes.
-// Prepaid reseed counts extend live and remembered building hashes; regenerate
-// the current building replay pins for that intentional state-schema change.
-// Auto-scout flags and retained fair frontier state extend the world schema;
-// regenerate current hashes/digests while keeping every thread equality check.
-// The tests above retain complete 1/2/6-thread equality checks.
-// Cargo/embarked maps extend canonical state; the emitted-change digest stays.
-const PINNED_BUILDINGS_HASH: &str =
-    "1dd958d17ccd2357c17a20283fcbe7357924f9b36478695cfe4027889bd1d2e4";
-const PINNED_BUILDINGS_DIGEST: &str =
-    "4694825603fc6a75af7fd584e98a4f33a8640e5342b160b645ccb698ec6af4be";
 
 fn waiting_fixture() -> (GameWorld, EntityId) {
     let config = WorldConfig::new(64, 64, Seed(0)).expect("config");

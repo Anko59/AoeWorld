@@ -28,9 +28,9 @@ client chunk caches.
 
 The strict package reader denies unknown fields and is the only reader. Every
 environment field declares its own axis in its first pyramid level, and every
-pyramid must end at one sample. Golden digests (chunk content, default package
-hash and terrain, routes, start tiles) pin the current output as regression
-guards, not as compatibility promises.
+pyramid must end at one sample. Determinism properties (independently built
+generators emit identical chunks, distinct seeds differ, forest routes reach
+every node) guard the current output without pinning literal digests.
 
 Compact terrain properties use five material bits followed by the biome and
 physical flags, still inside the existing 32-bit word. This accommodates all

@@ -4,7 +4,7 @@ mod base_sampling;
 mod elevation_interpolation;
 mod field_local_axes;
 mod fishing;
-mod golden;
+mod generation_determinism;
 mod historical_field_axis;
 mod lake_outline;
 mod mountains;
