@@ -199,7 +199,6 @@ impl GameWorld {
             self.combat.search_tick,
             self.combat.searches_used,
             self.combat.stats.attack_searches,
-            self.combat.position_searches,
         );
         let mut initial_far = None;
         let mut retry_next_tick = false;
@@ -233,13 +232,13 @@ impl GameWorld {
                     }
                 }
                 result => {
-                    // Rejected validation is atomic. Failed local searches are
-                    // still bounded per order; server admission caps the burst.
+                    // Rejected validation leaves the pursuit admission intact.
+                    // The expensive position search it ran still spends the
+                    // shared per-tick budget, so rejected orders stay bounded.
                     (
                         self.combat.search_tick,
                         self.combat.searches_used,
                         self.combat.stats.attack_searches,
-                        self.combat.position_searches,
                     ) = search_before;
                     return match result {
                         Err(error) => Err(error.into()),

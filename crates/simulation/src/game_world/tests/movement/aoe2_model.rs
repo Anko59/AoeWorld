@@ -371,6 +371,9 @@ fn approaching_melee_units_reserve_contact_positions_using_both_body_radii() {
         .spawn_kind(PlayerId(1), UnitKind::Vassal, at(60, 60))
         .unwrap();
     w.units[w.lookup[&target]].state.hp = 20_000;
+    // Contact geometry needs a stationary target: automatic combat would
+    // otherwise let the King react to the hits and leave its spot.
+    w.units[w.lookup[&target]].state.stance = aoe_core::CombatStance::NoAttack;
     let ids = (0..6)
         .map(|n| {
             w.spawn_militia(PlayerId(0), at(50 - n / 3, 59 + n % 3))

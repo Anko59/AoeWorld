@@ -321,6 +321,14 @@ impl GameWorld {
         let ids = self.economy.builders.keys().copied().collect::<Vec<_>>();
         let mut working = std::collections::BTreeMap::<EntityId, u64>::new();
         let mut touched = ids.clone();
+        // Radius bodies can share a tile without overlapping; work spots stay
+        // one builder per perimeter tile, so arrivals skip tiles already held.
+        let mut held = ids
+            .iter()
+            .filter_map(|id| self.unit(*id))
+            .filter(|u| u.task == UnitTask::Building)
+            .map(|u| u.position.tile_floor())
+            .collect::<std::collections::BTreeSet<_>>();
         for id in ids {
             let Some((target, attempts)) = self
                 .economy
@@ -352,10 +360,14 @@ impl GameWorld {
             // on first free contact that no other worker has reserved. Settled
             // builders retain their work spot when traffic or combat enters it.
             let tile = self.units[index].state.position.tile_floor();
+            let settled = self.units[index].state.task == UnitTask::Building;
             if adjacent(footprint, tile)
-                && (self.units[index].order.is_none()
-                    || (self.arrival_position_free(index) && !self.work_spot_busy(tile, id)))
+                && ((self.units[index].order.is_none() && settled)
+                    || ((self.units[index].order.is_none() || self.arrival_position_free(index))
+                        && (settled || !held.contains(&tile))
+                        && !self.work_spot_busy(tile, id)))
             {
+                held.insert(tile);
                 if self.units[index].order.is_some() || self.units[index].state.planning {
                     self.stop_movement(index);
                 }
