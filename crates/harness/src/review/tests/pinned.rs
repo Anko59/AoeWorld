@@ -219,3 +219,39 @@ fn a_low_tier_review_runs_and_reports_the_light_model_from_origin_dev() {
         report.headline()
     );
 }
+
+#[test]
+fn persona_validation_uses_the_pinned_policy_tree() {
+    let temp = fixture("README.md");
+    let root = temp.path();
+    git(root, &["checkout", "-q", "dev"]);
+    let path = root.join("gates/review.json");
+    let text = fs::read_to_string(&path)
+        .unwrap()
+        .replace("\"quick\"", "\"custom\"");
+    fs::write(&path, text).unwrap();
+    fs::write(root.join("gates/review/personas/custom.md"), "# Custom\n").unwrap();
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "-q", "-m", "custom policy"]);
+    git(root, &["update-ref", "refs/remotes/origin/dev", "HEAD"]);
+    git(root, &["checkout", "-q", "feature"]);
+    let policy = Policy::pin(root, None, Tier::Low, Runtime::Claude, &Plan::Full).unwrap();
+    assert_eq!(policy.config.tiers[&Tier::Low].personas, ["custom"]);
+}
+
+#[test]
+fn config_load_bootstraps_personas_from_the_working_tree() {
+    let temp = fixture("README.md");
+    let root = temp.path();
+    git(root, &["checkout", "-q", "dev"]);
+    git(root, &["rm", "-qr", "gates/review/personas"]);
+    git(
+        root,
+        &["commit", "-q", "-m", "policy before persona prompts"],
+    );
+    git(root, &["update-ref", "refs/remotes/origin/dev", "HEAD"]);
+    git(root, &["checkout", "-q", "feature"]);
+    assert!(super::super::Config::load(root).is_ok());
+    git(root, &["update-ref", "-d", "refs/remotes/origin/dev"]);
+    assert!(super::super::Config::load(root).is_ok());
+}

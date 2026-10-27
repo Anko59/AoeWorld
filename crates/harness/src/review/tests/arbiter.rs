@@ -11,12 +11,13 @@ const MAJOR: &str = r#"{"findings": [{"file": "README.md", "line": 1, "severity"
 const MINOR: &str = r#"{"findings": [{"file": "README.md", "line": 1, "severity": "minor", "category": "correctness", "claim": "small", "trigger": "x", "expected_vs_actual": "y", "evidence": "z"}]}"#;
 
 /// The correctness reviewer reports F1; the spec reviewer upholds it and the
-/// test-integrity reviewer refutes it (the others abstain): it stays disputed
+/// hostile-input reviewer refutes it (the others abstain): it stays disputed
 /// until the arbiter's session, which answers `ruling`.
 struct Arbitrated {
     first: &'static str,
     ruling: &'static str,
     strong: Mutex<Vec<String>>,
+    spec_vote: &'static str,
 }
 
 impl Ask for Arbitrated {
@@ -28,8 +29,8 @@ impl Ask for Arbitrated {
                     r#"{"grade": 9, "summary": "ok"}"#.into()
                 } else if p.contains("verify the other reviewers' findings") {
                     let vote = if p.contains("# Spec and scope auditor") {
-                        "upheld"
-                    } else if p.contains("# Test-integrity") {
+                        self.spec_vote
+                    } else if p.contains("# Hostile-input and safety adversary") {
                         "refuted"
                     } else {
                         "unverifiable"
@@ -57,6 +58,7 @@ fn ask(first: &'static str, ruling: &'static str) -> Arbitrated {
         first,
         ruling,
         strong: Mutex::new(Vec::new()),
+        spec_vote: "upheld",
     }
 }
 
@@ -140,10 +142,17 @@ fn rulings_on_unknown_findings_change_nothing() {
 #[test]
 fn lower_tiers_and_minor_findings_never_reach_the_arbiter() {
     let ruling = r#"{"rulings": [{"id": "F1", "ruling": "upheld", "evidence": "x"}]}"#;
-    let medium = ask(MAJOR, ruling);
-    assert_eq!(
-        run(Tier::Medium, &medium).findings[0].status,
-        Status::Disputed
+    let mut medium = ask(MAJOR, ruling);
+    // Spec cannot verify correctness's claim; neither side has a vote majority.
+    medium.spec_vote = "unverifiable";
+    let medium_report = run(Tier::Medium, &medium);
+    assert!(medium_report.complete());
+    assert_eq!(medium_report.findings[0].status, Status::Disputed);
+    assert!(
+        medium_report.findings[0]
+            .votes
+            .iter()
+            .any(|vote| vote.vote == Vote::Unverifiable)
     );
     assert!(medium.strong.lock().unwrap().is_empty());
     let minor = ask(MINOR, ruling);

@@ -31,7 +31,7 @@ pub(crate) fn review_for_branch(
     review_judged(root, branch, judge.as_deref(), tier, runtime, task, plan)
 }
 
-fn review_judged(
+pub(super) fn review_judged(
     root: &Path,
     branch: &str,
     judge: Option<&str>,
@@ -41,11 +41,26 @@ fn review_judged(
     plan: &Plan,
 ) -> Result<Report> {
     let policy = Policy::pin(root, judge, tier, runtime, plan)?;
+    let other = match runtime {
+        Runtime::Codex => Some(Runtime::Claude),
+        Runtime::Claude => Some(Runtime::Codex),
+        _ => None,
+    };
     let live = Live {
         runtime,
         root,
         model: policy.model.clone(),
         strong: policy.config.arbiter_model(runtime),
+        fallback: other.map(|r| {
+            (
+                r,
+                policy
+                    .config
+                    .fallback_model_for(tier, r, plan.closing_style()),
+                policy.config.arbiter_model(r),
+            )
+        }),
+        used: std::sync::atomic::AtomicBool::new(false),
     };
     review_with_branch(root, branch, tier, &policy, task, plan, &live)
 }

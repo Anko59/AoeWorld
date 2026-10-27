@@ -27,11 +27,17 @@ Harness and pi.
 
 | Tier | Reviewers (personas) | Rounds | Models |
 |---|---|---|---|
-| low | 1 (quick: correctness + test integrity) | 1 | light where the family has one (Claude Haiku 5.5 medium), else average (Sonnet 5.5 medium, GPT‑6.1 Sol medium, GLM 5.3 Flash high) |
-| medium | 3 (correctness, spec, test integrity) | ≤ 3 until convergence | average |
-| high | 5 (adds hostile input, performance) | ≤ 3 | average, reasoning one step higher |
-| xhigh | 3 | ≤ 3 | strong (Opus 5.5, GPT‑6.1 Sol, GLM 5.3; medium) |
-| max | 5 | ≤ 5 | strong |
+| low | 1 (quick) | 1 | light where the family has one (Claude Haiku 5.5 medium), else average |
+| medium | 2 (correctness, spec) | ≤ 3 until convergence | average (Sonnet 5.5 medium, GPT‑6.1 Terra medium) |
+| high | 3 (correctness, spec, hostile input) | ≤ 3 | average, reasoning one step higher |
+| xhigh | 3 | ≤ 3 | strong (Opus 5.5, GPT‑6.1 Terra; medium) |
+| max | 3 | ≤ 5 | strong |
+
+The correctness persona also checks test integrity: weakened or deleted assertions, tests changed
+to match buggy output, added skips or ignores, `allow` added to silence a lint, and thresholds or
+baselines loosened without a stated reason. When capacity or rate limits persist through the 60-
+and 180-second retries, a Codex or Claude reviewer runs once on the other runtime at the same
+strength; reports record `runtime_fallback`. Only both runtimes failing leaves a review incomplete.
 
 Floors: docs-only and static changes allow `low`; native, gameplay, browser,
 asset, performance and map/geodata changes need `medium` (map and geodata still
@@ -192,8 +198,8 @@ none replaces another.
   relies on; patch identity does not establish semantic equivalence.
 - Reviewer processes that fail with a rate-limit diagnostic get at most three
   attempts, waiting 60s then 180s. Other process failures are not retried.
-  Exhaustion is incomplete and says `rate-limited`: wait and ship again;
-  nothing needs changing. The existing retry for an unreadable answer is separate.
+  On Codex or Claude, exhaustion tries the other runtime once; failure there
+  is incomplete. The retry for an unreadable answer is separate.
 - **Fail:** into `dev`, the PR stays a draft with its CI state printed; other
   paths publish nothing. Fix every confirmed finding without weakening a
   test or gate, commit, and ship again. File what you leave out of scope as an
@@ -352,6 +358,6 @@ Why this policy, and not the alternatives:
   allows.
 - The `harness/review` status is posted with the person's GitHub token by the
   harness. A same-user process could forge it; CI re-runs every gate.
-- Reviewers can be slow: a high-tier review is up to 16 sessions.
+- Reviewers can be slow: a high-tier review can require multiple sessions.
 - Prompts are passed as one command-line argument, so each is kept under
   120 KB: the diff is cut first (reviewers read the rest with `git diff`).

@@ -66,6 +66,45 @@ pub(super) fn pin(root: &Path, judge: Option<&str>) -> Result<(Pin, String), Str
     Ok((Pin(()), commit))
 }
 
+/// Persona names are the Markdown prompts in the same pinned policy tree.
+pub(super) fn personas(root: &Path) -> Result<Vec<String>, String> {
+    let revision = PINNED
+        .with(|pinned| pinned.borrow().clone())
+        .unwrap_or_else(|| "refs/remotes/origin/dev".to_owned());
+    match git::git(
+        root,
+        &[
+            "ls-tree",
+            "--name-only",
+            &format!("{revision}:gates/review/personas"),
+        ],
+    ) {
+        Ok(files) => Ok(files
+            .lines()
+            .filter_map(|name| name.strip_suffix(".md"))
+            .map(str::to_owned)
+            .collect()),
+        Err(_) => {
+            let directory = root.join("gates/review/personas");
+            let entries = std::fs::read_dir(&directory)
+                .map_err(|e| format!("{}: {e}", directory.display()))?;
+            let mut names = Vec::new();
+            for entry in entries {
+                let entry = entry.map_err(|e| e.to_string())?;
+                if let Some(name) = entry
+                    .file_name()
+                    .to_str()
+                    .and_then(|n| n.strip_suffix(".md"))
+                {
+                    names.push(name.to_owned());
+                }
+            }
+            names.sort();
+            Ok(names)
+        }
+    }
+}
+
 /// A review input from the pinned commit (origin/dev when nothing is
 /// pinned); the working tree only while dev does not have it yet (bootstrap).
 pub(crate) fn trusted(root: &Path, relative: &str) -> Result<String, String> {
