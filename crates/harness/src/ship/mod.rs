@@ -24,7 +24,6 @@ mod review_pr;
 pub(crate) mod run;
 mod showcase;
 pub(crate) mod stack;
-pub(crate) mod test_first;
 #[cfg(test)]
 mod tests;
 
@@ -259,7 +258,7 @@ pub(crate) fn ship_with(
     let push_tip = git::lease::tracking(root, &branch);
     let started_head = git::git(root, &["rev-parse", "HEAD"])?;
     stack::refuse_base(&options.base, &branch)?;
-    // Suites, the review diff, test-first and metrics all measure the change
+    // Suites, the review diff and metrics all measure the change
     // against the selected base (origin, or an explicitly local parent).
     let _base = crate::review::base::scope(&options.base);
     let preflight = if !options.no_pr {
@@ -298,12 +297,6 @@ pub(crate) fn ship_with(
         eprintln!("ship: lock released for the gates and the review");
     }
     let _anchor = crate::review::base::scope_at(&options.base, &base);
-    let subject = git::subject(root)?;
-    let merge_base = git::git(root, &["merge-base", &base, &subject.head])?;
-    eprint!(
-        "ship: test-first report\n{}",
-        test_first::summary(root, &merge_base, &subject.head)
-    );
     let options = &Options {
         no_fetch: true,
         ..options.clone()

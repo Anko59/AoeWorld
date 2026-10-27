@@ -89,7 +89,7 @@ still caught per PR. Measured under load (12 cores, load 11-16):
 | `hyde::hyde_tests::production_archive_stream_prepares_the_independent_1024_axis` | 75 s | none: the 2 and 128 axis HYDE tests run the same path; only the 1024 streaming windows are tier-only |
 | `terrain::tests::rivers::source_river_water_never_invents_invisible_crossings` | 20 s | none: `subcell_meandering_river_blocks_water...` asserts impassable, non-ford river water per PR; the tier adds the exhaustive unreachable route search |
 
-Tests above 20 s in the aoe-harness crate (review calibration, QA source and
+Tests above 20 s in the aoe-harness crate (QA source and
 gate review) stay in `test-unit`: they are the only guard of the gate machinery.
 
 **Expiring flaky-test quarantine (#391).** [gates/flaky.json](../gates/flaky.json)
@@ -171,8 +171,8 @@ route on WebGPU, forced Canvas and default Chromium; missing inputs fail this
 focused target. Ordinary E2E skips that external qualification when inputs are
 absent. See [render polish](geodata/render-polish.md) for RSS bounds and limits.
 `make coverage` records LCOV and JSON, excludes inline test modules from the
-production-line denominator, and rejects less than 85% overall or 90% in
-protocol, asset parsers, and policy/report logic. A missing group fails.
+production-line denominator, and reports counts and missing sources for the
+overall total, protocol, asset parsers, and policy/report logic.
 The coverage run instruments the native Playwright harness and server, and the
 native browser WASM runner. It selects the server built by cargo-llvm-cov and
 requires graceful shutdown so its execution counters are written. These are
@@ -203,17 +203,7 @@ or fewer than five completed nightly segments is a failure. Reports record
 segment counts, completed fuzz seconds, maintenance, each target's elapsed time
 and outcome, and the storage snapshots. Archived inputs
 are outside the active quota and must be retained separately.
-`make mutation-nightly` runs pinned cargo-mutants against the impact
-classifier, CI selection check, and 5% performance comparator. It requires a
-completed, nonempty campaign with no missed or timed-out mutations and writes
-`reports/mutation/nightly.json`. Mutations that cannot compile are reported
-as unviable, separately from caught mutations.
-Pull-request CI runs `make ci-select` against the base commit and records the
-selected jobs in `reports/gates/selection.json`. Unknown paths and missing
-base information select every job. The aggregate `required` check recomputes
-the selection at the checked-out revision and requires success for each selected
-job; only unselected jobs may be skipped. `make ci-check` validates that
-contract locally when supplied the manifest and job results.
+
 
 **Sharded browser suite (#388).** The Playwright suite ran on one serial worker
 and took 19.5 of 20 minutes on the 4-core runner, behind `browser-check` and

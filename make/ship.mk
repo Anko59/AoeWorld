@@ -13,7 +13,7 @@ override REVIEW_PR := $(or $(PR),$(REVIEW_PR))
 # Video paths are data, including literal Make/shell metacharacters.
 override SHIP_VIDEO := $(value SHIP_VIDEO)
 export DUEL_TASK DUEL_RUNTIME DUEL_MODEL DUEL_EFFORT DUEL_ROUNDS DUEL_CHECK DUEL_BUDGET_MINUTES DUEL_QUALIFY DUEL_QUALIFY_MINUTES DUEL_QUALIFY_ATTEMPTS
-export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_LOCK_WAIT_MINUTES SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR CALIBRATE_TIER CALIBRATE_RUNTIME CALIBRATE_CASES NIGHTLY_RESULTS CARRY_PR UPDATE_MAX_PRS METRICS_REV
+export SHIP_TITLE SHIP_BODY SHIP_FORCE SHIP_BASE SHIP_TIER SHIP_RUNTIME SHIP_LOCK_WAIT_MINUTES SHIP_VIDEO SHOWCASE_STORYBOARD SHOWCASE_OUT REVIEW_TIER REVIEW_RUNTIME REVIEW_TASK REVIEW_PR NIGHTLY_RESULTS CARRY_PR UPDATE_MAX_PRS METRICS_REV
 export COMPARE_ASSET_PACK COMPARE_BOOKMARKS COMPARE_VIEWS COMPARE_BEFORE COMPARE_AFTER COMPARE_BEFORE_PACKAGES COMPARE_AFTER_PACKAGES COMPARE_BASE COMPARE_OUT COMPARE_VIEW_TIMEOUT_SECONDS COMPARE_BUDGET_MINUTES
 export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
 .PHONY: \
@@ -27,7 +27,6 @@ export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
   review-floor \
   level-floor \
   level-stats \
-  review-calibrate \
   review-pr \
   issue \
   next \
@@ -70,12 +69,6 @@ review:
 
 review-floor:
 	@.agents/hooks/harness.sh exec review-floor
-
-# Run the review on the calibration seeds (docs/review.md): CALIBRATE_TIER
-# (default low), CALIBRATE_RUNTIME and CALIBRATE_CASES (a sample size) reach it
-# through the environment. A tool for tuning the reviewers, not a gate.
-review-calibrate:
-	@.agents/hooks/harness.sh exec review-calibrate
 
 # Review a same-repository PR the harness did not open. REVIEW_PR is passed
 # through the environment and never interpolated into shell text.

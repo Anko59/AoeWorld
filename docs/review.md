@@ -25,24 +25,19 @@ floors. Reviewers use the model family of the runtime you are working in
 (`REVIEW_RUNTIME`; set it, the default is `claude`): Claude reviews in Claude Code, GPT in Codex, GLM in DeepSeek
 Harness and pi.
 
-Low uses one quick reviewer; medium uses correctness and spec; high, xhigh and max add hostile-input. Low through high use the average models (low may use light, high raises effort); xhigh and max use strong. Low has one round, medium through xhigh up to three, and max up to five. The correctness persona also checks test integrity: weakened or deleted assertions, tests changed to match buggy output, added skips or ignores, `allow` added to silence a lint, and thresholds or baselines loosened without a stated reason. Codex uses GPT-6.1 Terra for average and strong. After capacity or rate limits persist through the 60- and 180-second retries, Codex and Claude sessions try the other runtime once at the same strength; reports record `runtime_fallback`.
+| Tier | Reviewers (personas) | Rounds | Models |
+|---|---|---|---|
+| low | 1 (quick) | 1 | light where the family has one (Claude Haiku 5.5 medium), else average |
+| medium | 2 (correctness, spec) | ≤ 3 until convergence | average (Sonnet 5.5 medium, GPT‑6.1 Terra medium) |
+| high | 3 (correctness, spec, hostile input) | ≤ 3 | average, reasoning one step higher |
+| xhigh | 3 | ≤ 3 | strong (Opus 5.5, GPT‑6.1 Terra; medium) |
+| max | 3 | ≤ 5 | strong |
 
-The **light** model is the one exception to the average and strong levels. It
-is per runtime family and used only by tier low's reviewer and grader sessions
-(`light` in `gates/review.json`; a family without it keeps its average model).
-Closing reviews, the arbiter and every other tier never use it. Claude Haiku
-5.5 (medium) is light for Claude, on `make review-calibrate` over the 30 seeds at
-tier low, medium effort:
-
-| Model | Planted defects blocked | Clean cases wrongly blocked | Mean grade, clean | Mean grade, planted |
-|---|---|---|---|---|
-| Sonnet 5.5 (average) | 20/20 | 0/10 | 9.2 | 3.5 |
-| Haiku 5.5 (light) | 20/20 | 0/10 | 8.6 | 3.8 |
-
-The seed set is too easy to separate the two above that tier, so Haiku is used
-for low only; medium, high and max keep their models. This is a limit: the set
-shows no recall gap, so it cannot tell whether Haiku misses subtler defects
-than Sonnet does; widening the seeds is tracked in #377.
+The correctness persona also checks test integrity: weakened or deleted assertions, tests changed
+to match buggy output, added skips or ignores, `allow` added to silence a lint, and thresholds or
+baselines loosened without a stated reason. When capacity or rate limits persist through the 60-
+and 180-second retries, a Codex or Claude reviewer runs once on the other runtime at the same
+strength; reports record `runtime_fallback`. Only both runtimes failing leaves a review incomplete.
 
 Floors: docs-only and static changes allow `low`; native, gameplay, browser,
 asset, performance and map/geodata changes need `medium` (map and geodata still
@@ -127,51 +122,6 @@ least `merge_grade` (7) and no blocking finding stands (a confirmed major or cri
 disputed critical). Every report is stored, keyed by commit, tier and
 attempt, in `<git common dir>/aoe-ship/reviews/` (agents cannot write there);
 none replaces another.
-
-## Calibration
-
-`make review-calibrate [CALIBRATE_TIER=low] [CALIBRATE_RUNTIME=claude]
-[CALIBRATE_CASES=n]` (main session only) measures the reviewers instead of a
-change. `gates/review/seeds/<area>/<case>.json` holds about 45 small cases, a
-third clean refactors and features and the rest with planted defects:
-`correctness` (off-by-one, overflow, wrong boundary), `test-integrity`
-(loosened assertion, `#[ignore]`, special-cased test), `spec` (requirement
-unmet, scope creep), `hostile-input` (unbounded read, panic on malformed data)
-and `performance` (quadratic loop on a hot path). A case is a base file set, a
-unified diff, the task sentence and the expectation: clean, or one or more
-planted defects, each naming its file, its line range in the file as the diff
-leaves it, and the severity a correct review assigns. Each case becomes a
-temporary git repository (policy files on its `origin/dev`, the diff as one
-commit) and gets the normal review at the chosen tier and runtime, outside
-the branch review budget. `CALIBRATE_CASES` takes a sample round-robin across
-the areas.
-
-The harder cases of #377 live one level deeper, under
-`gates/review/seeds/hard/<area>/`: an off-by-one at a chunk boundary whose
-wrong number is produced in one file and consumed in another; an ordering bug
-(events applied before the state they depend on); a defect that appears only
-when two changes in one diff interact; a test that passes for the wrong
-reason; a silent behaviour change hidden in a refactor; a determinism break
-(`HashMap` iteration feeding a simulation result); three cases with two
-defects of different severity (partial recall); and five clean changes that
-look suspicious (a deliberate wrapping add, a removed check with the reason
-in the task, a mechanical rename, a performance rewrite with an equivalence
-test, a deliberately ignored error with a justification). `make test-harness`
-validates every seed: the base compiles with its tests, the diff applies, and
-the tests stay green through it (a defect the seed's own tests catch would
-not be hard to review). Separate input probes exercise each Rust base and
-post-diff crate, checking ordinary inputs and pinning known planted failures;
-these small probes do not establish exhaustive correctness or performance.
-
-It writes `reports/review/calibration.json` and `.md`: per area the planted
-defects found (recall: a standing finding of at least the planted severity,
-on the defect's file within its lines, so a case with two planted defects can
-be half found; each finding matches at most one defect), per persona the
-number of distinct planted defects it reported (several may come from one
-case) and what it raised on clean cases, and the clean cases wrongly blocked
-(a complete review that does not pass) with their grades. Cases whose review did not complete count as "no
-result", not as misses. It is a tool for tuning prompts, personas and models,
-not a gate, and a case set this small shows large differences only.
 
 ## What happens next
 

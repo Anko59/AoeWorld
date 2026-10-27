@@ -70,12 +70,6 @@ pub(super) fn fixture() -> (TempDir, String, String) {
         fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../gates/registry.json")).unwrap(),
     )
     .unwrap();
-    let catalog = json!({"schema":1,"requirements":[{"id":"fixture-bounds","risk":"critical","scope":"AST fixture only, semantic execution not assessed.","statement":"Fixture checks bounded values.","invariants":[{"id":"fixture-boundary","claim":"Declared boundary.","boundaries":[{"path":"crates/demo/src/lib.rs","symbol":"bounded","kind":"function"}],"case_ids":["fixture-positive","fixture-negative"]}],"gate_refs":["test-unit"]}],"cases":[{"id":"fixture-positive","kind":"positive","path":"crates/demo/src/lib.rs","symbol":"tests::accepts","runner":"native-test","gate":"test-unit"},{"id":"fixture-negative","kind":"negative","path":"crates/demo/src/lib.rs","symbol":"tests::rejects","runner":"native-test","gate":"test-unit"}],"deferred":[]});
-    fs::write(
-        root.join("gates/contracts.json"),
-        serde_json::to_vec(&catalog).unwrap(),
-    )
-    .unwrap();
     fs::write(root.join("old.txt"), "baseline").unwrap();
     let base = commit(root, None);
     fs::write(root.join("old.txt"), "candidate").unwrap();

@@ -162,7 +162,7 @@ including amendments; without a fork point, rebase the child onto the parent you
 Dev keeps the ordinary merge base because it is never rewritten.
 
 Once the parent has its open harness pull request, run `make ship` with the
-same base and description. Suites, review, test-first and metrics use the
+same base and description. Suites, review and metrics use the
 merge base with the fetched `refs/remotes/origin/<parent>`. Gates run again;
 a stored approval is reused if the child's own patch and the other guards
 still match, even if the parent was edited and the child rebased. The child
@@ -191,7 +191,7 @@ the PR") and renders two parts:
 - **🧑 For humans:** Why, What with the showcase video (`SHIP_VIDEO`, uploaded
   inline with `gh --attach`), and How with the review headline, summary, and a
   metrics table comparing the merge base with this PR ([metrics](#metrics)).
-- **🤖 For AI:** the agent's notes, the [test-first report](#test-first), gate
+- **🤖 For AI:** the agent's notes, gate
   evidence and the full adversarial review.
 
 | Level | For | Video (`SHIP_VIDEO`) | Voice | Target share |
@@ -465,14 +465,6 @@ stubs, so use a real task separately to verify a live runtime.
 A pre-commit that stages only test files runs clippy without test targets, so
 red tests that name code not written yet can be committed first; the next
 commit and every preflight check all targets.
-
-The review facts and PR description include a non-blocking Git-history summary:
-commit ordering, test functions added before the first product commit, inline-test
-changes and build-time inputs. Review checks whether the tests cover the change;
-CI runs all required test suites.
-
-Product scope includes `crates/` except the harness, `web/` and `browser/`.
-Harness, gates, docs and CI alone remain not applicable to the ordering summary.
 
 ## Delivery time
 See [delivery timeline](timeline.md) for `make timeline`, stage journals and historical limits.

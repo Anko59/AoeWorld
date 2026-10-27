@@ -227,11 +227,16 @@ fn live_entry_uses_fallback_models_and_records_the_switch() {
     use std::os::unix::fs::PermissionsExt;
     const CHILD: &str = "AOE_REVIEW_LIVE_TEST_CHILD";
     if let Some(root) = std::env::var_os(CHILD) {
-        let report = super::super::entry::review_isolated(
-            std::path::Path::new(&root),
+        let root = std::path::Path::new(&root);
+        let branch = crate::ship::git::branch(root).unwrap_or_default();
+        let report = super::super::entry::review_judged(
+            root,
+            &branch,
+            None,
             Tier::High,
             Runtime::Codex,
             "scripted review",
+            &crate::review::Plan::Full,
         )
         .unwrap();
         assert!(report.complete(), "{:?}", report.failures);
