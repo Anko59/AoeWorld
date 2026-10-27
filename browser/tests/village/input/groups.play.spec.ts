@@ -51,6 +51,10 @@ test("all ten control groups assign, select, extend and double-tap center", asyn
     "data-camera-x",
     "8202",
   );
+  // A double tap is two presses within 350 ms; the frame wait and assertion
+  // above can exceed that under software WebGPU, so tap twice afresh.
+  await page.waitForTimeout(400);
+  await page.keyboard.press("1");
   await page.keyboard.press("1");
   await expect(page.locator("#minimap")).toHaveAttribute(
     "data-camera-x",
