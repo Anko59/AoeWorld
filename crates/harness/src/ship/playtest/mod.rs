@@ -1,6 +1,12 @@
 //! Advisory gameplay evidence for the exact gated revision.
 use serde::Deserialize;
-use std::{fs, path::Path, process::Command, time::Duration};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
+    thread,
+    time::{Duration, Instant},
+};
 
 const GAMEPLAY: &[&str] = &[
     "crates/simulation/",
@@ -13,6 +19,8 @@ const GAMEPLAY: &[&str] = &[
 ];
 // Changing this switch makes a missing or failed gameplay report block shipping.
 const BLOCKING: bool = false;
+const DEADLINE: Duration = Duration::from_secs(30 * 60);
+const POLL: Duration = Duration::from_millis(200);
 
 #[derive(Deserialize)]
 pub(super) struct Report {
@@ -124,12 +132,30 @@ pub(super) fn append(
     Ok(())
 }
 
-pub(super) fn run(
-    root: &Path,
-    base: &str,
-    head: &str,
-    slots: &crate::slots::SlotEnv,
-) -> Option<Report> {
+#[cfg(test)]
+thread_local! {
+    /// Tests only: a scripted `make` in place of the real one.
+    pub(super) static MAKE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+fn make() -> String {
+    #[cfg(test)]
+    if let Some(make) = MAKE.with(|make| make.borrow().clone()) {
+        return make;
+    }
+    "make".into()
+}
+
+/// The playtest of `head`, started before the review. A missing report is produced by a
+/// `make playtest` child in its own process group: it takes its heavy slot through the Makefile's
+/// slot wrapper, never this process's, so the review is not held behind that slot.
+pub(super) struct Started {
+    path: PathBuf,
+    head: String,
+    child: Option<Child>,
+}
+
+pub(super) fn start(root: &Path, base: &str, head: &str) -> Option<Started> {
     let changed = match super::git::changed_between(root, base, head) {
         Ok(paths) => paths.iter().any(|path| gameplay(path)),
         Err(error) => {
@@ -140,40 +166,106 @@ pub(super) fn run(
     if !changed {
         return None;
     }
-    let path = root.join("reports/playtest").join(format!("{head}.json"));
-    if !path.exists() {
-        let available = target_available(root, "make");
-        if !available {
-            eprintln!("playtest: not available on this revision");
-            return None;
+    let directory = root.join("reports/playtest");
+    let path = directory.join(format!("{head}.json"));
+    let mut started = Started {
+        path,
+        head: head.into(),
+        child: None,
+    };
+    if started.path.exists() {
+        return Some(started);
+    }
+    let make = make();
+    if !target_available(root, &make) {
+        eprintln!("playtest: not available on this revision");
+        return None;
+    }
+    let spawned = fs::create_dir_all(&directory)
+        .and_then(|()| fs::File::create(directory.join(format!("{head}.log"))))
+        .and_then(|log| {
+            let mut command = crate::process::explicit_command(root, &make, &["playtest"], &[]);
+            command
+                .stdin(Stdio::null())
+                .stdout(log.try_clone()?)
+                .stderr(log);
+            #[cfg(unix)]
+            std::os::unix::process::CommandExt::process_group(&mut command, 0);
+            command.spawn()
+        });
+    match spawned {
+        Ok(child) => started.child = Some(child),
+        Err(error) => eprintln!("playtest: could not start make playtest ({error}) (advisory)"),
+    }
+    Some(started)
+}
+
+impl Started {
+    /// The review failed: its outcome is reported now, not after the playtest.
+    pub(super) fn stop(mut self) {
+        if self.child.is_some() {
+            self.kill();
+            eprintln!("playtest: stopped (review failed)");
         }
-        match crate::slots::guard::hold_forced(root, "playtest", slots) {
-            Ok(slot) => {
-                let env = slot.env();
-                let env: Vec<_> = env
-                    .iter()
-                    .map(|(key, value)| (*key, value.as_str()))
-                    .collect();
-                if let Err(error) = crate::process::run_in(
-                    root,
-                    "make",
-                    &["playtest"],
-                    &env,
-                    Duration::from_secs(30 * 60),
-                ) {
-                    eprintln!("playtest: {error} (advisory)");
+    }
+
+    /// Wait for the child within its deadline, then read the report of exactly `head`.
+    pub(super) fn finish(mut self) -> Option<Report> {
+        if let Some(child) = &mut self.child {
+            let deadline = Instant::now() + DEADLINE;
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        if !status.success() {
+                            eprintln!("playtest: make playtest exited with {status} (advisory)");
+                        }
+                        break;
+                    }
+                    Ok(None) if Instant::now() < deadline => thread::sleep(POLL),
+                    Ok(None) => {
+                        eprintln!(
+                            "playtest: exceeded its {} min deadline (advisory)",
+                            DEADLINE.as_secs() / 60
+                        );
+                        break;
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "playtest: could not supervise make playtest ({error}) (advisory)"
+                        );
+                        break;
+                    }
                 }
             }
-            Err(error) => eprintln!("playtest: {error} (advisory)"),
+            self.kill();
+        }
+        let report = fs::read_to_string(&self.path)
+            .ok()
+            .and_then(|json| Report::parse(&json, &self.head));
+        if report.is_none() {
+            eprintln!("playtest: report missing or invalid for this revision (advisory)");
+        }
+        report
+    }
+
+    /// End the child and anything it started; a no-op once it was reaped.
+    fn kill(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            #[cfg(unix)]
+            let _ = nix::sys::signal::killpg(
+                nix::unistd::Pid::from_raw(child.id() as i32),
+                nix::sys::signal::Signal::SIGKILL,
+            );
+            let _ = child.kill();
+            let _ = child.wait();
         }
     }
-    let report = fs::read_to_string(path)
-        .ok()
-        .and_then(|json| Report::parse(&json, head));
-    if report.is_none() {
-        eprintln!("playtest: report missing or invalid for this revision (advisory)");
+}
+
+impl Drop for Started {
+    fn drop(&mut self) {
+        self.kill();
     }
-    report
 }
 
 pub(super) fn draft_advisory(

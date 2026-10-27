@@ -345,24 +345,27 @@ pub(crate) fn ship_with(
     } else {
         push_tip
     };
-    let (reviewed, playtest) = std::thread::scope(|scope| {
-        let playtest = scope.spawn(|| playtest::run(root, &base, &evidence.head, &options.slots));
-        let reviewed = if options.no_review {
-            Ok(None)
-        } else {
-            match (early_draft, body_text.as_deref()) {
-                (true, Some(task)) => {
-                    review_gate::require_task(root, &evidence, options, task, reviewer)
-                }
-                _ => review_gate::require(root, &evidence, options, reviewer),
+    let started = playtest::start(root, &base, &evidence.head);
+    let reviewed = if options.no_review {
+        Ok(None)
+    } else {
+        match (early_draft, body_text.as_deref()) {
+            (true, Some(task)) => {
+                review_gate::require_task(root, &evidence, options, task, reviewer)
             }
-            .map(Some)
-        };
-        (reviewed, playtest.join().unwrap_or(None))
-    });
+            _ => review_gate::require(root, &evidence, options, reviewer),
+        }
+        .map(Some)
+    };
+    let playtest = match (&reviewed, started) {
+        (Err(_), Some(started)) => {
+            started.stop();
+            None
+        }
+        (_, started) => started.and_then(playtest::Started::finish),
+    };
     let applicable = git::changed_between(root, &base, &evidence.head)
         .is_ok_and(|paths| paths.iter().any(|p| playtest::gameplay(p)));
-    playtest::enforce(playtest.as_ref(), applicable)?;
     let review = match reviewed {
         Ok(report) => report,
         Err(error) if early_draft => {
@@ -379,6 +382,7 @@ pub(crate) fn ship_with(
         }
         Err(error) => return Err(error),
     };
+    playtest::enforce(playtest.as_ref(), applicable)?;
     if options.review_ahead {
         playtest::announce(playtest.as_ref(), &evidence.head);
         let report = review

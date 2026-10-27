@@ -45,7 +45,7 @@ pub(crate) fn capture_in(
     )
 }
 
-pub(super) fn explicit_command(
+pub(crate) fn explicit_command(
     root: &Path,
     program: &str,
     args: &[&str],

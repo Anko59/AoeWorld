@@ -111,8 +111,11 @@ critical), an incomplete review, or a closing review
    reported and does not fail the ship.
 
 Gameplay changes also include a **Playtest (advisory)** report for the gated
-revision when available. Ship runs `make playtest` in a heavy slot alongside
-review if the target exists and the report is missing; failures and missing
+revision when available. If the target exists and the report is missing, ship
+starts `make playtest` as a child process before the review; the child takes its
+heavy slot through the Makefile's slot wrapper, so the review never waits on it.
+A failed review kills the child and is reported at once; after a passing review
+ship waits up to 30 minutes for the report. Failures, timeouts and missing
 reports do not block shipping. The `BLOCKING` constant in
 `crates/harness/src/ship/playtest/mod.rs` controls that policy.
 

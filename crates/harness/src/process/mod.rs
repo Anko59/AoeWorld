@@ -21,7 +21,7 @@ pub(crate) mod load;
 pub(crate) mod suspend;
 pub(crate) use capture::{
     CaptureExit, Captured, SafeErrorKind, SafeObservation, capture_command,
-    capture_command_retaining_stdout, capture_in, safe_observation,
+    capture_command_retaining_stdout, capture_in, explicit_command, safe_observation,
 };
 
 const LOG_LIMIT: usize = 64 * 1024;
