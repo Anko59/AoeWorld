@@ -22,7 +22,13 @@ test("quarantine step evidence is serialized once and retains nested failures", 
     })),
   };
   const reporter = new QuarantineReporter();
-  const testCase = { id: "sentinel", annotations: [] } as unknown as TestCase;
+  const testCase = {
+    id: "sentinel",
+    annotations: [],
+    location: { file: "tests/sentinel.spec.ts", line: 7, column: 3 },
+    titlePath: () => ["", "webgpu", "tests/sentinel.spec.ts", "sentinel"],
+    parent: { project: () => ({ name: "webgpu" }) },
+  } as unknown as TestCase;
   const error = { message: "nested assertion", stack: "assertion stack" };
   const nested = {
     title: "Expect sentinel",
@@ -56,6 +62,14 @@ test("quarantine step evidence is serialized once and retains nested failures", 
     aoeQuarantine: {
       selected: ["sentinel"],
       status: "failed",
+      tests: {
+        sentinel: {
+          file: "tests/sentinel.spec.ts",
+          line: 7,
+          title: "sentinel",
+          project: "webgpu",
+        },
+      },
       results: {
         sentinel: { errors: [error], steps: [{ ...hook, error: null }] },
       },

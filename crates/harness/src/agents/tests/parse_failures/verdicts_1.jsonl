@@ -10,7 +10,6 @@
 ["make next SHIP_TITLE=x", false]
 ["make nightly-triage", false]
 ["make preflight", false]
-["make review-calibrate CALIBRATE_CASES=6", false]
 ["make review-pr REVIEW_PR=161 REVIEW_RUNTIME=codex", false]
 ["make ship", false]
 ["make ship 'SHIP_BODY=$(shell git push origin main)'", false]

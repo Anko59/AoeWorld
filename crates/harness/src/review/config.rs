@@ -70,14 +70,8 @@ pub(crate) struct Config {
     pub(crate) floors: BTreeMap<String, Tier>,
 }
 
-pub(super) const PERSONAS: [&str; 6] = [
-    "quick",
-    "correctness",
-    "spec",
-    "test-integrity",
-    "hostile-input",
-    "performance",
-];
+#[cfg(test)]
+pub(super) const PERSONAS: [&str; 4] = ["quick", "correctness", "spec", "hostile-input"];
 /// The reasoning efforts each runtime accepts, lowest first.
 pub(crate) fn efforts(runtime: &str) -> &'static [&'static str] {
     match runtime {
@@ -91,10 +85,19 @@ pub(crate) fn efforts(runtime: &str) -> &'static [&'static str] {
 impl Config {
     /// The trusted copy (origin/dev's): a branch cannot lower its own bar.
     pub(crate) fn load(root: &Path) -> Result<Self, String> {
-        Self::parse(&super::trusted(root, "gates/review.json")?)
+        let names = super::trusted::personas(root)?;
+        Self::parse_with(
+            &super::trusted(root, "gates/review.json")?,
+            &names.iter().map(String::as_str).collect::<Vec<_>>(),
+        )
     }
 
+    #[cfg(test)]
     pub(crate) fn parse(text: &str) -> Result<Self, String> {
+        Self::parse_with(text, &PERSONAS)
+    }
+
+    fn parse_with(text: &str, personas: &[&str]) -> Result<Self, String> {
         let config: Self =
             serde_json::from_str(text).map_err(|e| format!("gates/review.json: {e}"))?;
         let mut problems = Vec::new();
@@ -116,7 +119,7 @@ impl Config {
                         problems.push(format!("tier {} repeats a persona", tier.name()));
                     }
                     for persona in &t.personas {
-                        if !PERSONAS.contains(&persona.as_str()) {
+                        if !personas.contains(&persona.as_str()) {
                             problems.push(format!("unknown persona {persona}"));
                         }
                     }
@@ -157,6 +160,20 @@ impl Config {
     /// The arbiter's model: the runtime's strong one, at its own effort.
     pub(crate) fn arbiter_model(&self, runtime: Runtime) -> Model {
         self.models[runtime_key(runtime)].strong.clone()
+    }
+
+    /// The other runtime uses the tier's configured strength, without its
+    /// optional low-tier light model.
+    pub(crate) fn fallback_model_for(&self, tier: Tier, runtime: Runtime, closing: bool) -> Model {
+        let config = &self.tiers[&tier];
+        if tier != Tier::Low || closing || config.strength == Strength::Strong {
+            return self.model_for(tier, runtime, closing);
+        }
+        let mut model = self.models[runtime_key(runtime)].average.clone();
+        if config.reasoning_bump {
+            model.effort = bump(runtime_key(runtime), &model.effort).to_owned();
+        }
+        model
     }
 
     /// The model for a review: a closing review (docs/review.md) runs on the

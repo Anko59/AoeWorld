@@ -24,6 +24,7 @@ pub(super) fn report(head: &str, finished: u64, grade: u8, blocking: &[Severity]
         tier: "high".into(),
         floor: "high".into(),
         runtime: "claude".into(),
+        runtime_fallback: false,
         model: "m".into(),
         effort: "high".into(),
         personas: vec!["a".into(), "b".into()],

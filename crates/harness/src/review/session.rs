@@ -13,6 +13,10 @@ use std::path::Path;
 pub(crate) trait Ask: Sync {
     fn all(&self, prompts: Vec<String>) -> Vec<std::result::Result<String, String>>;
 
+    fn runtime_fallback(&self) -> bool {
+        false
+    }
+
     /// The same, on the runtime's strong model (the arbiter's). Scripted
     /// answers in tests need not tell the two apart.
     fn strong(&self, prompts: Vec<String>) -> Vec<std::result::Result<String, String>> {
@@ -93,15 +97,35 @@ pub(super) struct Live<'a> {
     pub(super) root: &'a Path,
     pub(super) model: config::Model,
     pub(super) strong: config::Model,
+    pub(super) fallback: Option<(Runtime, config::Model, config::Model)>,
+    pub(super) used: std::sync::atomic::AtomicBool,
 }
 
 impl Ask for Live<'_> {
+    fn runtime_fallback(&self) -> bool {
+        self.used.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     fn all(&self, prompts: Vec<String>) -> Vec<std::result::Result<String, String>> {
-        runner::ask_all(self.runtime, self.root, &self.model, prompts)
+        runner::ask_all(
+            self.runtime,
+            self.root,
+            &self.model,
+            self.fallback.as_ref().map(|(r, m, _)| (*r, m)),
+            prompts,
+            &self.used,
+        )
     }
 
     fn strong(&self, prompts: Vec<String>) -> Vec<std::result::Result<String, String>> {
-        runner::ask_all(self.runtime, self.root, &self.strong, prompts)
+        runner::ask_all(
+            self.runtime,
+            self.root,
+            &self.strong,
+            self.fallback.as_ref().map(|(r, _, m)| (*r, m)),
+            prompts,
+            &self.used,
+        )
     }
 }
 

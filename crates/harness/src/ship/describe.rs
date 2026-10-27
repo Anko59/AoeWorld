@@ -2,7 +2,7 @@
 //! `SHIP_BODY` with a level and three sections; the harness checks the limits
 //! a human reader relies on and renders two parts: "For humans" (Why, What with
 //! the video, How with the review grade and summary) and "For AI"
-//! (the agent's notes, the test-first report, gate evidence and the full
+//! (the agent's notes, gate evidence and the full
 //! review).
 //!
 //! ```markdown
@@ -410,7 +410,6 @@ pub(crate) fn footer(runtime: crate::agents::Runtime) -> String {
 pub(crate) struct Extras<'a> {
     pub(crate) footer: &'a str,
     pub(crate) metrics: &'a str,
-    pub(crate) test_first: &'a str,
     /// The level distribution line (`make level-stats`).
     pub(crate) distribution: &'a str,
 }
@@ -461,10 +460,6 @@ pub(crate) fn render(
         out.push_str(&format!("{}\n\n", template.for_ai));
     }
     out.push_str(&level_section(template, evidence, extras.distribution));
-    out.push_str(&format!(
-        "## Test-first report\n\nReported, never enforced: the test-integrity reviewer judges it.\n\n{}\n",
-        extras.test_first
-    ));
     out.push_str(&format!(
         "## Gate evidence (`{}`, level {})\n\n| Gate | Verdict | Time |\n|---|---|---|\n",
         &evidence.head[..12],

@@ -21,6 +21,7 @@ pub(crate) struct Report {
     pub(crate) tier: String,
     pub(crate) floor: String,
     pub(crate) runtime: String,
+    pub(crate) runtime_fallback: bool,
     pub(crate) model: String,
     pub(crate) effort: String,
     pub(crate) personas: Vec<String>,
@@ -359,6 +360,9 @@ impl Report {
             self.headline(),
             self.summary.trim().replace('\n', "\n> ")
         );
+        if self.runtime_fallback {
+            out.push_str("Runtime fallback was used.\n\n");
+        }
         if let Some(source) = &self.reused_from {
             out.push_str(&format!(
                 "Review of `{}` reused (same patch){}; CI re-runs every gate on this commit.\n\n",

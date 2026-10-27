@@ -24,8 +24,12 @@ export default class QuarantineReporter implements Reporter {
   private evidence: {
     selected: string[];
     status: string;
+    tests: Record<
+      string,
+      { file: string; line: number; title: string; project: string }
+    >;
     results: Record<string, unknown>;
-  } = { selected: [], status: "incomplete", results: {} };
+  } = { selected: [], status: "incomplete", tests: {}, results: {} };
 
   printsToStdio(): boolean {
     return false;
@@ -33,6 +37,14 @@ export default class QuarantineReporter implements Reporter {
 
   onBegin(config: FullConfig, suite: Suite): void {
     this.evidence.selected = suite.allTests().map((test) => test.id);
+    for (const test of suite.allTests()) {
+      this.evidence.tests[test.id] = {
+        file: test.location.file,
+        line: test.location.line,
+        title: test.titlePath().slice(3).join(" "),
+        project: test.parent.project()?.name ?? "unknown",
+      };
+    }
     // Projects inherit this object; mutating it repeats the entire step tree in
     // both JSON project lists. Keep the complete evidence once at config level.
     config.metadata = { ...config.metadata, aoeQuarantine: this.evidence };

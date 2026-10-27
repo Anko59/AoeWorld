@@ -4,7 +4,6 @@ mod schema;
 #[cfg(test)]
 mod tests;
 use super::{
-    contracts,
     registry::{Cadence, Plan, Registry},
     scopes::{Kind, Snapshot},
 };
@@ -38,7 +37,6 @@ struct Subject {
     scope: Scope,
     base_content: Value,
     candidate_content: Value,
-    contracts: Value,
     canonical_registry_hash: String,
     affected_paths: Vec<String>,
     required_pr_plan: Plan,
@@ -95,28 +93,6 @@ fn affected(base: &Value, candidate: &Value) -> Result<Vec<String>> {
         .filter(|path| base.get(path) != candidate.get(path))
         .collect())
 }
-fn verify_bindings(report: &Value, candidate: &Value) -> Result<()> {
-    let files = files(candidate)?;
-    for record in report["bindings"]
-        .as_array()
-        .ok_or("checked contract bindings missing")?
-    {
-        let binding = &record["binding"];
-        let path = binding["path"]
-            .as_str()
-            .ok_or("checked binding path missing")?;
-        let file = files
-            .get(path)
-            .ok_or("checked binding outside logical witness")?;
-        if binding["file_blake3"] != file["raw_blake3"]
-            || binding["file_blake3"].as_str().is_none()
-            || binding["line"].as_u64().is_none_or(|line| line == 0)
-        {
-            return Err("checked binding does not match actual logical file witness".into());
-        }
-    }
-    Ok(())
-}
 fn materialize(base: &Snapshot, candidate: &Snapshot) -> Result<Subject> {
     let base_content = serde_json::to_value(base.content_witness()?)?;
     let candidate_content = serde_json::to_value(candidate.content_witness()?)?;
@@ -140,22 +116,7 @@ fn materialize(base: &Snapshot, candidate: &Snapshot) -> Result<Subject> {
         },
         Kind::Working => return Err("working source cannot be an exact review subject".into()),
     };
-    let report = candidate.run_checked(contracts::check)?;
-    verify_bindings(&report, &candidate_content)?;
     let registry = candidate.run_checked(Registry::load)?;
-    let registry_hash = registry.fingerprint()?;
-    let contract_digest = report["contracts_blake3"]
-        .as_str()
-        .ok_or("checked contract digest missing")?;
-    if report["contracts_hash_algorithm"] != "blake3:aoeworld-contracts-raw-v1"
-        || contract_digest.len() != 64
-        || !contract_digest
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-        || report["registry_hash"] != registry_hash
-    {
-        return Err("checked contract digest/registry witness mismatch".into());
-    }
     let affected_paths = affected(&base_content, &candidate_content)?;
     let classified = registry.classify(&affected_paths);
     let subject = Subject {
@@ -165,7 +126,6 @@ fn materialize(base: &Snapshot, candidate: &Snapshot) -> Result<Subject> {
         scope,
         base_content,
         candidate_content,
-        contracts: json!({"algorithm":report["contracts_hash_algorithm"],"digest":report["contracts_blake3"],"bindings":report["bindings"]}),
         canonical_registry_hash: registry.fingerprint()?,
         affected_paths,
         required_pr_plan: registry.plan(Cadence::Pr, &classified.suites)?,

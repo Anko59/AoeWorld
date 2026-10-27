@@ -33,7 +33,6 @@ fn the_committed_registry_marks_the_compiling_and_testing_gates_heavy() {
         "coverage",
         "fuzz-nightly",
         "fuzz-smoke",
-        "mutation-nightly",
         "perf-ci",
         "perf-full",
         "perf-instructions",
