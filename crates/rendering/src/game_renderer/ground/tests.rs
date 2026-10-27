@@ -15,6 +15,7 @@ fn dock_foundations_and_aprons_paint_land_without_changing_water() {
         foundation_material: None,
         parts: Vec::new(),
         construction: Vec::new(),
+        damage: Vec::new(),
     });
     // The trial Dock has no dedicated sheet; also cover DAT-selected terrain.
     for foundation in [None, Some(13)] {
@@ -81,6 +82,7 @@ fn native_farm_without_de_art_keeps_its_imported_crop_sheet() {
         foundation_material: Some(17),
         parts: Vec::new(),
         construction: Vec::new(),
+        damage: Vec::new(),
     });
     assert!(art.buildings.iter().all(Vec::is_empty));
     let camera = test_camera();
@@ -167,6 +169,7 @@ fn farm_crop_uvs_keep_both_triangle_halves_when_the_apron_blends() {
         foundation_material: Some(17),
         parts: Vec::new(),
         construction: Vec::new(),
+        damage: Vec::new(),
     });
     let camera = SceneCamera {
         center: [0.5; 2],
@@ -314,6 +317,7 @@ fn feudal_buildings_paint_native_foundations_and_aprons_only_on_land() {
             foundation_material: None,
             parts: Vec::new(),
             construction: Vec::new(),
+            damage: Vec::new(),
         });
         // The trial Dock has no dedicated sheet; also cover DAT-selected terrain.
         for foundation in [None, Some(13)] {

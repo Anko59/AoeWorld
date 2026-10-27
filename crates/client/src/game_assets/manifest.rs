@@ -50,8 +50,16 @@ pub(super) struct BuildingComposition {
     pub foundation_size: [u16; 2],
     pub parts: Vec<BuildingPart>,
     pub construction: Vec<BuildingPart>,
+    pub damage: Vec<BuildingDamage>,
 }
 
+pub(super) struct BuildingDamage {
+    pub damage_percent: i16,
+    pub apply_mode: u8,
+    pub parts: Vec<BuildingPart>,
+}
+
+#[derive(Clone)]
 pub(super) struct BuildingPart {
     pub record: Option<usize>,
     pub frames: u16,

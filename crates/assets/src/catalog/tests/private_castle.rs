@@ -38,6 +38,7 @@ fn castle_ambient_layers_share_object_pages_with_the_full_actor_selection() {
             foundation_size: [0; 2],
             parts,
             construction: Vec::new(),
+            damage: Vec::new(),
         });
     }
     // Full native loops would need 66 large rectangles and overflow the three

@@ -109,6 +109,7 @@ pub(super) fn art() -> GameArt {
                 })
                 .collect(),
             construction: Vec::new(),
+            damage: Vec::new(),
         }],
         foundation: Default::default(),
         walking: vec![frame(900); 50],

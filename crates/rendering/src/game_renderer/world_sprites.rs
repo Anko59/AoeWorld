@@ -454,7 +454,7 @@ pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneC
                 .is_some()
             });
     }
-    if unit.kind.is_foundation() || unit.kind == crate::SceneUnitKind::PalisadeWall {
+    if unit.kind.is_foundation() {
         return false;
     }
     if unit.kind.building_id().is_some() {
@@ -468,7 +468,12 @@ pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneC
                 } else {
                     &b.parts
                 };
-                parts.iter().any(|p| {
+                let damage = usize::from(unit.visual.damage_stage())
+                    .checked_sub(1)
+                    .and_then(|i| b.damage.get(i))
+                    .into_iter()
+                    .flat_map(|d| &d.parts);
+                parts.iter().chain(damage).any(|p| {
                     p.frame_rate > 0.0
                         && p.animation.len() > 1
                         && scene_sprite(

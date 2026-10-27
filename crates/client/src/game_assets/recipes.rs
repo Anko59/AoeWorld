@@ -1,6 +1,6 @@
 //! Bounded reader for the importer's compiled recipe view. No string trees or
 //! floating-point JSON visitors are needed by the browser's startup path.
-use super::manifest::{BuildingComposition, BuildingPart, FrameRecord};
+use super::manifest::{BuildingComposition, BuildingDamage, BuildingPart, FrameRecord};
 
 struct Reader {
     bytes: Vec<u8>,
@@ -19,6 +19,9 @@ impl Reader {
     }
     fn u16(&mut self) -> Result<u16, &'static str> {
         Ok(u16::from_le_bytes(self.array()?))
+    }
+    fn i16(&mut self) -> Result<i16, &'static str> {
+        Ok(i16::from_le_bytes(self.array()?))
     }
     fn u32(&mut self) -> Result<u32, &'static str> {
         Ok(u32::from_le_bytes(self.array()?))
@@ -92,13 +95,51 @@ pub(super) fn decode(
         let footprint = [r.float()?, r.float()?];
         let slp = r.i32()?;
         let foundation_size = [r.u16()?, r.u16()?];
+        let parts = r.parts(frames)?;
+        let construction = r.parts(frames)?;
+        let shared = r.parts(frames)?;
+        if shared.iter().any(|part| part.offset != [0; 2]) {
+            return Err("invalid shared damage offset");
+        }
+        let count = r.array::<1>()?[0];
+        if count > 7 {
+            return Err("too many damage states");
+        }
+        let mut damage = Vec::with_capacity(usize::from(count));
+        for _ in 0..count {
+            let damage_percent = r.i16()?;
+            let apply_mode = r.array::<1>()?[0];
+            if !(0..=100).contains(&damage_percent) || apply_mode > 2 {
+                return Err("invalid damage state");
+            }
+            let count = r.u16()?;
+            if count > 256 {
+                return Err("too many damage parts");
+            }
+            let mut parts = Vec::with_capacity(usize::from(count));
+            for _ in 0..count {
+                let index = usize::from(r.u16()?);
+                let mut part = shared
+                    .get(index)
+                    .ok_or("invalid damage part index")?
+                    .clone();
+                part.offset = [r.i32()?, r.i32()?];
+                parts.push(part);
+            }
+            damage.push(BuildingDamage {
+                damage_percent,
+                apply_mode,
+                parts,
+            });
+        }
         buildings.push(BuildingComposition {
             unit_id,
             footprint,
             foundation_slp: (slp >= 0).then_some(slp),
             foundation_size,
-            parts: r.parts(frames)?,
-            construction: r.parts(frames)?,
+            parts,
+            construction,
+            damage,
         });
     }
     if r.pos != r.bytes.len() {

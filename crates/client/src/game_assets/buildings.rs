@@ -17,6 +17,7 @@ pub(super) fn select(
             || building.parts.iter().filter(|p| p.primary).count() > 1
             || building.parts.len() > 256
             || building.construction.len() > 256
+            || building.damage.len() > 7
             || building
                 .footprint
                 .iter()
@@ -46,7 +47,19 @@ pub(super) fn select(
                 }
             }
         }
-        for part in building.parts.iter().chain(&building.construction) {
+        for (part, damage) in building
+            .parts
+            .iter()
+            .chain(&building.construction)
+            .map(|part| (part, false))
+            .chain(
+                building
+                    .damage
+                    .iter()
+                    .flat_map(|d| &d.parts)
+                    .map(|part| (part, true)),
+            )
+        {
             if part.frames == 0
                 || part.angles == 0
                 || u32::from(part.frames) * u32::from(part.angles) > 256
@@ -74,7 +87,7 @@ pub(super) fn select(
             // A standing palisade displays one damage frame per native angle.
             // Its connectivity selects the angle; these frames do not animate.
             let step = aoe_assets::catalog::runtime::building_frame_step(
-                building.unit_id,
+                if damage { -1 } else { building.unit_id },
                 part.frames,
                 part.angles,
                 part.frame_rate,
@@ -212,6 +225,15 @@ pub(super) fn resolve(
             foundation_material: material(b),
             parts: parts(b.unit_id, &b.parts, manifest, selected, records),
             construction: parts(b.unit_id, &b.construction, manifest, selected, records),
+            damage: b
+                .damage
+                .iter()
+                .map(|d| aoe_rendering::BuildingDamage {
+                    damage_percent: d.damage_percent as u8,
+                    apply_mode: d.apply_mode,
+                    parts: parts(-1, &d.parts, manifest, selected, records),
+                })
+                .collect(),
         })
         .collect()
 }

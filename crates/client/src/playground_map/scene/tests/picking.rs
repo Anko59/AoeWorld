@@ -69,6 +69,7 @@ async fn fixture(zoom: f64) -> Client {
             },
         ],
         construction: Vec::new(),
+        damage: Vec::new(),
     });
     let actor = GameFrame {
         size: [40.0, 80.0],

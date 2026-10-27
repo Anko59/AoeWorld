@@ -14,7 +14,7 @@ mod reader;
 mod sections;
 mod terrain;
 pub use building::{Annex, Building};
-pub use composition::{BuildingComposition, BuildingPart};
+pub use composition::{BuildingComposition, BuildingDamage, BuildingPart};
 pub use terrain::Terrain;
 pub mod table;
 mod table_details;
@@ -86,6 +86,7 @@ pub struct Unit {
     pub name: String,
     pub icon_id: i16,
     pub hit_points: i16,
+    pub damage_graphics: Vec<DamageGraphic>,
     pub line_of_sight: f32,
     pub garrison_capacity: u8,
     pub collision_size: [f32; 2],
@@ -112,6 +113,14 @@ pub struct Unit {
     pub train_location: Option<i16>,
     pub construction_graphic: Option<i16>,
     pub tasks: Vec<Task>,
+}
+
+/// A native damage state and its rendering mode.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DamageGraphic {
+    pub graphic_id: i16,
+    pub damage_percent: i16,
+    pub apply_mode: u8,
 }
 
 /// Where each stage began and how far parsing got.

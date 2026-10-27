@@ -196,12 +196,21 @@ pub(super) fn building(
         sprite_building(art, unit, camera, animation, emit);
         return;
     };
+    let damage = if unit.kind.is_foundation() || unit.visual.ghost() {
+        None
+    } else {
+        usize::from(unit.visual.damage_stage())
+            .checked_sub(1)
+            .and_then(|i| building.damage.get(i))
+    };
     let parts = if unit.kind.is_foundation() {
         &building.construction
+    } else if let Some(replacement) = damage.filter(|d| d.apply_mode == 2) {
+        &replacement.parts
     } else {
         &building.parts
     };
-    if parts.is_empty() {
+    if parts.is_empty() && damage.is_none_or(|d| d.parts.is_empty()) {
         if unit.kind == SceneUnitKind::Farm
             && building.foundation_material == Some(17)
             && !art.foundation.0.is_empty()
@@ -213,7 +222,15 @@ pub(super) fn building(
     }
     // Import order is shadow layer, then isometric annex depth, preserving
     // stand/delta order within each unit. No rotation or mirroring is applied.
-    for part in parts {
+    let overlay = damage
+        .filter(|d| d.apply_mode != 2)
+        .into_iter()
+        .flat_map(|d| &d.parts);
+    for (part, is_overlay) in parts
+        .iter()
+        .map(|part| (part, false))
+        .chain(overlay.map(|part| (part, true)))
+    {
         let mut native = part.frame;
         if !part.animation.is_empty() {
             let angles = usize::from(part.angles).max(1);
@@ -223,7 +240,9 @@ pub(super) fn building(
             } else {
                 0
             };
-            let index = if unit.kind.is_foundation() || unit.kind == SceneUnitKind::PalisadeWall {
+            let index = if unit.kind.is_foundation()
+                || (unit.kind == SceneUnitKind::PalisadeWall && !is_overlay)
+            {
                 0
             } else if part.frame_rate > 0.0 {
                 (animation as f64 * 0.1 / f64::from(part.frame_rate) + 1e-5) as usize % count

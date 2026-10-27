@@ -152,6 +152,11 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
                 .iter()
                 .chain(&b.construction)
                 .map(move |p| (b.unit_id, p))
+                .chain(
+                    b.damage
+                        .iter()
+                        .flat_map(|d| d.parts.iter().map(|p| (-1, p))),
+                )
         })
         .filter(|(_, p)| p.available)
     {
@@ -412,6 +417,7 @@ fn full_catalog_with_native_mill_dock_and_farm_fits_runtime_budget() {
                 }]
             },
             construction: Vec::new(),
+            damage: Vec::new(),
         });
         if terrain {
             for frame in manifest.frames.iter_mut().rev().take(count as usize) {
@@ -449,6 +455,7 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
         foundation_size: [0; 2],
         parts: vec![part(2223, 3, 1)],
         construction: (236..=239).map(|slp| part(slp, 1, 3)).collect(),
+        damage: Vec::new(),
     });
     for slp in [2223, 236, 237, 238, 239] {
         for frame in 0..3 {
