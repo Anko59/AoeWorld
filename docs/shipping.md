@@ -110,6 +110,12 @@ critical), an incomplete review, or a closing review
    ([issues](issues.md#review-follow-ups)). A follow-up that cannot be filed is
    reported and does not fail the ship.
 
+Gameplay changes also include a **Playtest (advisory)** report for the gated
+revision when available. Ship runs `make playtest` in a heavy slot alongside
+review if the target exists and the report is missing; failures and missing
+reports do not block shipping. The `BLOCKING` constant in
+`crates/harness/src/ship/playtest/mod.rs` controls that policy.
+
 ## One ship at a time
 
 Sessions share one machine, so `make ship` and `make duel` take a machine-wide
