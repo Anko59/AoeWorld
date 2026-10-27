@@ -10,7 +10,6 @@ ANALYSIS_IMAGE := aoeworld/analysis:0.19.4
 POLICY_IMAGE := aoeworld/policy:0.20.2
 COVERAGE_IMAGE := aoeworld/coverage:0.9.1
 FUZZ_IMAGE := aoeworld/fuzz:nightly-2026-09-01-0.13.2
-MUTATION_IMAGE := aoeworld/mutation:27.1.0
 SDK_IMAGE := aoeworld/sdk-python:1.15.0
 # CI sets e.g. type=gha,version=2 to reuse BuildKit layers; empty keeps local builds unchanged.
 DOCKER_BUILD_CACHE ?=
@@ -63,7 +62,6 @@ DOCKER_RUN := \
   policy-tools \
   coverage-tools \
   fuzz-tools \
-  mutation-tools \
   browser-tools \
   orchestrator-tools \
   browser-deps \
@@ -170,9 +168,6 @@ coverage-tools: tools
 
 fuzz-tools: tools
 	@$(call IMAGE_BUILD,fuzz,$(FUZZ_IMAGE))
-
-mutation-tools:
-	@$(call IMAGE_BUILD,mutation,$(MUTATION_IMAGE))
 
 orchestrator-tools: tools
 	@$(call IMAGE_BUILD,orchestrator,$(ORCH_IMAGE))

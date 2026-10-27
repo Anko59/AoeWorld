@@ -37,25 +37,24 @@ fn gate_mut<'a>(value: &'a mut Value, id: &str) -> &'a mut Value {
 }
 
 #[test]
-fn valid_proposal_roundtrips_and_keeps_entire_v1_catalog() {
+fn valid_registry_roundtrips_and_keeps_catalog_entries() {
     let registry = registry();
     Registry::parse(&serde_json::to_vec(&registry).unwrap()).expect("strict roundtrip");
-    // Draft-only characterization fixture; integration should preserve a v1
-    // fixture in tests instead of pointing this assertion at the migrated file.
+    // Pin the current catalog entries and their required dependencies.
     let original: Value = serde_json::from_slice(include_bytes!(
-        "../../../../../gates/tests/registry-v1.json"
+        "../../../../../gates/tests/registry-catalog.json"
     ))
     .unwrap();
-    for old in original["gates"].as_array().unwrap() {
+    for entry in original["gates"].as_array().unwrap() {
         let gate = registry
             .gates
             .iter()
-            .find(|g| g.id == old["id"].as_str().unwrap())
+            .find(|g| g.id == entry["id"].as_str().unwrap())
             .unwrap();
-        assert_eq!(gate.command, old["command"].as_str().unwrap());
-        assert_eq!(gate.select, old["select"].as_str().unwrap());
-        assert_eq!(gate.evidence, old["evidence"].as_str().unwrap());
-        for dep in old["requires"].as_array().unwrap() {
+        assert_eq!(gate.command, entry["command"].as_str().unwrap());
+        assert_eq!(gate.select, entry["select"].as_str().unwrap());
+        assert_eq!(gate.evidence, entry["evidence"].as_str().unwrap());
+        for dep in entry["requires"].as_array().unwrap() {
             assert!(gate.requires.contains(&dep.as_str().unwrap().to_owned()));
         }
     }

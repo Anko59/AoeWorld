@@ -1,8 +1,6 @@
 mod dispatch;
 
-use crate::{
-    agents, assets, e2e, gates, ledger, mutation, native, perf_scale, qa, review, ship, slots,
-};
+use crate::{agents, assets, e2e, gates, ledger, native, perf_scale, qa, review, ship, slots};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -89,8 +87,6 @@ enum Command {
     TestGeographicVisuals,
     FuzzSmoke,
     FuzzNightly,
-    MutationNightly(mutation::Options),
-    MutationIntegrity,
     PerfSmoke,
     PerfCi,
     PerfFull,

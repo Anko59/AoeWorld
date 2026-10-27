@@ -19,8 +19,6 @@ CLI fixture constructors similarly clear ambient Git variables before deliberate
 adding each test's own overrides. Explicit config injection after this constructor
 must still make both installer and checker fail without changing owned sentinels.
 
-Validate the **whole locked harness package inside the mutation image under the
-scanner's unchanged Git environment**, not merely clean-env unit tests in another
-image. This fixes fixture isolation, not independent worker authority, compiled
-cache provenance or the complete critical mutation campaign. Original failed
-baseline evidence remains retained; the unchanged full campaign must be retried.
+Validate the whole locked harness package under the scanner’s unchanged Git
+environment. Fixture isolation does not establish independent worker authority
+or compiled cache provenance.
