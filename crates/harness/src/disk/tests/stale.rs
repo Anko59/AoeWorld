@@ -170,3 +170,26 @@ fn ship_hint_appears_only_below_fifty_gib() {
     );
     assert!(hint(50 * gib).is_none());
 }
+
+#[test]
+fn a_worktree_nested_in_another_ones_cache_is_tool_owned_and_kept() {
+    // `make showcase` keeps a dev-before checkout in `<worktree>/.cache/showcase/`.
+    let fixture = Fixture::new();
+    let owner = fixture.add("owner", true);
+    let nested = owner.join(".cache/showcase/dev-before");
+    fs::create_dir_all(nested.parent().unwrap()).unwrap();
+    git(
+        &fixture.main(),
+        &[
+            "worktree",
+            "add",
+            "--detach",
+            nested.to_str().unwrap(),
+            "dev",
+        ],
+    )
+    .unwrap();
+    let rows = fixture.run(&fixture.main(), true, 4 * 24 * HOUR);
+    assert_eq!(outcome(&rows, &nested).outcome, "kept: tool-owned");
+    assert!(nested.is_dir());
+}

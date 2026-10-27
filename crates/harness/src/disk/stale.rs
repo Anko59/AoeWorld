@@ -99,6 +99,10 @@ pub(crate) fn clean(
             Some("kept: main checkout")
         } else if fs::canonicalize(&path)? == current {
             Some("kept: current worktree")
+        } else if path.components().any(|part| part.as_os_str() == ".cache") {
+            // A worktree nested in another one's `.cache` (showcase's dev-before checkout)
+            // belongs to that worktree's tooling, which reuses it.
+            Some("kept: tool-owned")
         } else if class == Class::Active {
             Some("kept: active")
         } else if class == Class::Merged && age < GRACE {
