@@ -30,10 +30,27 @@ fn a_seeded_flat_match_scout_clears_the_starting_traffic() {
     assert_eq!(
         world.unit(id).unwrap().position,
         destination,
-        "unit={:?}, order={:?}, obstruction={:?}",
+        "unit={:?}, order={:?}, obstruction={:?}, rect={rect:?}, resources={:?}, units={:?}",
         world.unit(id),
         world.movement_order(id),
-        world.movement_obstruction_ticks(id)
+        world.movement_obstruction_ticks(id),
+        world
+            .starting_resources()
+            .iter()
+            .filter(|n| {
+                (n.tile.x - rect.min.x)
+                    .abs()
+                    .max((n.tile.y - rect.min.y).abs())
+                    <= 5
+            })
+            .collect::<Vec<_>>(),
+        world
+            .units()
+            .filter(|u| {
+                let tile = u.position.tile_floor();
+                (tile.x - rect.min.x).abs().max((tile.y - rect.min.y).abs()) <= 5
+            })
+            .collect::<Vec<_>>()
     );
 }
 

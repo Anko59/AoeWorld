@@ -1,6 +1,96 @@
 use super::*;
 
 #[test]
+fn a_distant_rejoin_in_the_seeded_flat_village_keeps_progressing() {
+    let (original, pages, water) = economy::fixture::flat_fixture(false);
+    let request = aoe_map::MapRequest {
+        requested_side_meters: 1000,
+        compression: aoe_map::Ratio {
+            numerator: 1,
+            denominator: 1,
+        },
+        seed: 3,
+        ..aoe_map::MapRequest::default()
+    };
+    let package = aoe_map::MapPackage::with_prepared_environment(
+        1,
+        request,
+        Vec::new(),
+        Default::default(),
+        Default::default(),
+        original.environment,
+    )
+    .unwrap();
+    let mut w =
+        GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
+    w.prepare_navigation(&|| false).unwrap();
+    let id = w
+        .initialize_village(PlayerId(0), TileCoord::new(402, 360))
+        .unwrap();
+    let goal = at(415, 363);
+    w.issue_move(id, goal).unwrap();
+    let i = w.lookup[&id];
+    let mut trace = Vec::new();
+    for tick in 0..1500 {
+        w.advance();
+        if tick % 64 == 0 {
+            trace.push((
+                tick,
+                w.units[i].state.position,
+                w.units[i].order,
+                w.units[i].route.clone(),
+            ));
+        }
+    }
+    let mut order = w.units[i].order;
+    w.local_refinement_left = 4;
+    let refined = order.as_mut().is_some_and(|o| w.refine_unit_route(i, o));
+    let solid = (355..367)
+        .flat_map(|y| (397..412).map(move |x| TileCoord::new(x, y)))
+        .filter(|&t| !w.tile_passable(t))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        w.unit(id).unwrap().position,
+        goal,
+        "refined={refined}, draft={order:?}, route={:?}, solid={solid:?}, trace={trace:#?}",
+        w.units[i].route
+    );
+}
+
+#[test]
+fn a_distant_rejoin_goes_around_the_town_center_and_worker_row() {
+    let mut w = world();
+    w.economy.blocked_tiles.extend([
+        TileCoord::new(40, 41),
+        TileCoord::new(41, 41),
+        TileCoord::new(40, 42),
+        TileCoord::new(41, 42),
+    ]);
+    for x in 40..43 {
+        w.spawn_villager(PlayerId(0), at(x, 40)).unwrap();
+    }
+    let from = WorldPosition::new(40 * 1024 + 69, 40 * 1024 + 671);
+    let id = w.spawn_kind(PlayerId(0), UnitKind::Scout, from).unwrap();
+    let goal = at(52, 43);
+    w.issue_move_waypoints(id, &[at(43, 41), goal]).unwrap();
+    let i = w.lookup[&id];
+    let mut order = w.units[i].order.unwrap();
+    assert!(w.refine_unit_route(i, &mut order), "local rejoin failed");
+    w.units[i].order = Some(order);
+    for _ in 0..1000 {
+        w.advance();
+    }
+    assert_eq!(
+        w.unit(id).unwrap().position,
+        goal,
+        "order={:?}, route={:?}, obstruction={:?}",
+        w.units[i].order,
+        w.units[i].route,
+        w.units[i].obstruction
+    );
+}
+
+#[test]
 fn a_static_corner_sweep_rejects_a_chord_with_two_clear_endpoints() {
     let mut w = world();
     w.economy.blocked_tiles.insert(TileCoord::new(39, 40));

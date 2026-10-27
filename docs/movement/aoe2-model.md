@@ -58,7 +58,7 @@ obstruction policy is unpublished.
 * Long-distance routes use the existing bounded static planner. At short
   range, inspect a bounded, deterministically ordered neighbourhood, predict
   obstruction, and choose a small lateral path. Retain a chosen side and the
-  blocker long enough to prevent oscillation; reset on a new order or changed
+  refined route long enough to prevent oscillation; reset on a new order or changed
   circumstances. On congestion, deterministic priority and bounded waiting
   allow yielding, then retry or request a budgeted replan. No finite timeout
   can guarantee progress in a physically sealed or permanently full region;
@@ -86,8 +86,10 @@ obstruction policy is unpublished.
   radius without increasing the node cap. Retained routes store exact world
   positions, including local detours; converting them back into tile centres
   would close physically passable gaps. A distant static waypoint is retained
-  behind a nearby free rejoin point, so the local search never tries to reach
-  an endpoint outside its bounded window. Repeated refinements cannot grow a
+  behind a nearby free rejoin point. The fixed window ranks reachable points
+  against that actual waypoint; clipping its objective to the next tile can
+  put the objective inside a building and repeatedly select the same pocket.
+  Repeated refinements cannot grow a
   generated queue beyond 512 points. An occupied intermediate waypoint may be
   bypassed while retaining the final destination. Static corners use exact
   swept-circle tests too: two clear endpoints do not prove a clear diagonal

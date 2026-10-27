@@ -58,10 +58,6 @@ impl GameWorld {
             && self.position_occupied(index, order.waypoint, stationary_only);
         let short_join =
             goal.tile_floor().x.abs_diff(start.x) > 1 || goal.tile_floor().y.abs_diff(start.y) > 1;
-        if short_join {
-            goal =
-                crate::game_path::next_waypoint(from, order.waypoint.tile_floor(), order.waypoint);
-        }
         for (n, &point) in self.units[index].route.iter().take(4).enumerate() {
             let tile = point.tile_floor();
             if tile.x.abs_diff(start.x) > 1 || tile.y.abs_diff(start.y) > 1 {
@@ -102,7 +98,10 @@ impl GameWorld {
             return false;
         };
         // Repeated transient obstruction cannot grow retained detours forever.
-        let retains_waypoint = short_join && !bypass && pops == 0 && goal != order.waypoint;
+        let retains_waypoint = short_join
+            && !bypass
+            && pops == 0
+            && path.back().copied().unwrap_or(waypoint) != order.waypoint;
         if self.units[index].route.len().saturating_sub(pops)
             + path.len()
             + usize::from(retains_waypoint)
@@ -189,7 +188,12 @@ impl GameWorld {
                 start.y + (at / SIDE) as i32 - RADIUS,
             )
         };
-        slot(grid(goal))?;
+        // A rejoin ranks this fixed window against the actual distant anchor.
+        // Clipping the anchor to a neighbouring tile can put the objective
+        // inside a building and repeatedly choose the same obstructed pocket.
+        if !free_arrival {
+            slot(grid(goal))?;
+        }
         if !self.config.valid_ground_position(goal)
             || (!free_arrival && self.position_occupied(index, goal, stationary_only))
         {
@@ -263,12 +267,7 @@ impl GameWorld {
             closed[at] = true;
             let from = point(at)?;
             let current = grid(from);
-            if free_arrival
-                && at < CELLS
-                && current.x.abs_diff(grid(goal).x) <= 32
-                && current.y.abs_diff(grid(goal).y) <= 32
-                && !self.destination_point_reserved(from, unit.id)
-            {
+            if free_arrival && at < CELLS && !self.destination_point_reserved(from, unit.id) {
                 let x = i64::from(from.x) - i64::from(goal.x);
                 let y = i64::from(from.y) - i64::from(goal.y);
                 // Exact-goal distance is the optimal arrival. Otherwise inspect
