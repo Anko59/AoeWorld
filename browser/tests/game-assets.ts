@@ -21,48 +21,6 @@ const terrainSourceAccents = {
   shore: [164, 119, 54],
 } as const;
 
-const tint = (source: readonly number[], factor: number) =>
-  source.map((value) => Math.round(value * factor));
-
-// Independent fixture oracle: normalized arithmetic-mean dirt luminance feeds
-// natural rock (.18 + .55 * luma), then face lighting, with one byte rounding.
-// Cliff tops retain .78 lighting; exposed skirts retain .72 lighting.
-const luminance = (source: readonly number[]) =>
-  source.reduce((sum, value) => sum + value, 0) / (3 * 255);
-const naturalRock = (source: readonly number[], shade: number) => {
-  const gray = Math.round((0.18 + 0.55 * luminance(source)) * shade * 255);
-  return [gray, gray, gray];
-};
-
-// Keep unused 15018 paving art in the atlas as an adversarial source sentinel.
-// Zero-green magenta cannot collide with legitimate dirt/water blends: every
-// real fixture terrain color has green >= 20% of both red and blue. The old
-// muted purple sentinel collided with the new foundation's shoreline blend.
-// Keep the same pixel tolerance and world ROI in every negative assertion.
-export const syntheticPavedRockColors = [
-  tint(terrainSourceColors.paving, 0.78),
-  tint(terrainSourceAccents.paving, 0.78),
-  tint(terrainSourceColors.paving, 0.72),
-  tint(terrainSourceAccents.paving, 0.72),
-] as const;
-
-export const syntheticSurfaceColors = {
-  grass: terrainSourceColors.grass,
-  grassAccent: terrainSourceAccents.grass,
-  ramp: tint(terrainSourceColors.ramp, 0.92),
-  rampAccent: tint(terrainSourceAccents.ramp, 0.92),
-  cliff: naturalRock(terrainSourceColors.dirt, 0.78),
-  cliffAccent: naturalRock(terrainSourceAccents.dirt, 0.78),
-  skirt: naturalRock(terrainSourceColors.dirt, 0.72),
-  // Water is drawn as authored, never tinted: medium water uses its own
-  // sheet 15016 and typed Shore the light shallow sheet 15002.
-  water: terrainSourceColors.medium,
-  waterAccent: terrainSourceAccents.medium,
-  shore: terrainSourceColors.water,
-  shoreAccent: terrainSourceAccents.water,
-  ring: [242, 217, 89],
-} as const;
-
 type TerrainSource = {
   x: number;
   y: number;

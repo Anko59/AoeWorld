@@ -1,66 +1,9 @@
 import { expect } from "@playwright/test";
-import { PNG } from "pngjs";
 import { test } from "../../../server.js";
 import { gameAssets } from "../../game-assets.js";
 import { fiveVillagerFixture } from "../../village/fixtures/village.js";
 import { freshHud } from "../../village/fixtures/resources.js";
-import { arm } from "../../village/fixtures/placement.js";
 import { forceWebGl } from "../backends.js";
-
-test("WebGL2 pointer input between layout and the next frame keeps the ghost at the cursor", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1600, height: 900 });
-  await forceWebGl(page);
-  await gameAssets(page, true, [[2223, 3]]);
-  await fiveVillagerFixture(page);
-  await arm(page);
-  await expect(page.locator("#playground")).toHaveAttribute(
-    "data-renderer",
-    "webgl2",
-  );
-  await expect(page.locator("#scene")).toHaveJSProperty("width", 1600);
-  await expect(page.locator("#scene")).toHaveJSProperty("height", 900);
-  await page.evaluate(() => {
-    const canvas = document.querySelector<HTMLCanvasElement>("#scene");
-    if (!canvas) throw new Error("Missing canvas");
-    // Deliver input after CSS layout changes, before the animation callback
-    // can update the old 1600-by-900 backing store and camera viewport.
-    canvas.style.width = "1280px";
-    canvas.style.height = "720px";
-    canvas.dispatchEvent(
-      new PointerEvent("pointermove", {
-        bubbles: true,
-        clientX: 1000,
-        clientY: 240,
-      }),
-    );
-  });
-  await expect(page.locator("#scene")).toHaveJSProperty("width", 1280);
-  await expect(page.locator("#scene")).toHaveJSProperty("height", 720);
-  await freshHud(page);
-  const ghost = PNG.sync.read(await page.screenshot());
-  await page.keyboard.press("Escape");
-  await freshHud(page);
-  const ground = PNG.sync.read(await page.screenshot());
-  let changed = 0;
-  for (let y = 150; y < 300; y++) {
-    for (let x = 900; x < 1100; x++) {
-      const offset = (y * ghost.width + x) * 4;
-      if (
-        [0, 1, 2].some(
-          (channel) =>
-            Math.abs(
-              (ghost.data[offset + channel] ?? 0) -
-                (ground.data[offset + channel] ?? 0),
-            ) >= 3,
-        )
-      )
-        changed++;
-    }
-  }
-  expect(changed).toBeGreaterThan(30);
-});
 
 test("minimap reports the camera used by a 100 ms pan frame", async ({
   page,

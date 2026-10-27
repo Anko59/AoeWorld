@@ -1,5 +1,4 @@
 import type { Page } from "@playwright/test";
-import { PNG } from "pngjs";
 import { scoutCombat, villagerCombat } from "../../wire/combat.js";
 import {
   darkAgeState,
@@ -8,16 +7,6 @@ import {
 } from "../../wire/buildings.js";
 import { disabledFog } from "../../wire/fog.js";
 
-export const colours = [
-  [65, 145, 245],
-  [245, 65, 65],
-  [50, 190, 65],
-  [245, 220, 40],
-  [40, 220, 220],
-  [175, 65, 220],
-  [160, 160, 160],
-  [245, 145, 40],
-];
 const positions = [
   [8192.5, 8192.5],
   [8195.5, 8192.5],
@@ -38,21 +27,6 @@ function uint(value: number): number[] {
     bytes.push(digit + (value ? 128 : 0));
   } while (value);
   return bytes;
-}
-
-/** True player-mask pixels, with opaque blue artwork beside them as a sentinel. */
-export async function playerMask(page: Page) {
-  const mask = new PNG({ width: 2048, height: 2048 });
-  for (let y = 1200; y < 1245; y++)
-    for (let x = 1300; x < 1320; x++) {
-      const at = (y * 2048 + x) * 4;
-      mask.data[at] = 7;
-      mask.data[at + 3] = 255;
-    }
-  const png = PNG.sync.write(mask);
-  await page.route("**/asset-pack/fixture-mask.png", (route) =>
-    route.fulfill({ contentType: "image/png", body: png }),
-  );
 }
 
 export async function ownersFixture(page: Page) {
