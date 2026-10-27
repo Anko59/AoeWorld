@@ -36,7 +36,7 @@ fn regions(tokens: TokenStream, cfg: bool, found: &mut Vec<(usize, usize)>) {
         let is_cfg =
             matches!(attr.stream().into_iter().next(), Some(TokenTree::Ident(id)) if id == "cfg");
         if (cfg && is_cfg && mentions_test(attr.stream()))
-            || (!cfg && super::test_marker(&text.replace(' ', "")))
+            || (!cfg && test_marker(&text.replace(' ', "")))
         {
             // Parse one item so braces in literals, attributes or generics cannot end it early.
             let mut start = i;
@@ -100,12 +100,6 @@ fn hunk_start(header: &str) -> Option<(usize, usize)> {
     Some((start(fields.next(), '-')?, start(fields.next(), '+')?))
 }
 
-/// Per-file changes of a `git diff -U0` patch, by path (the new path, or the
-/// old one for a deletion).
-pub(crate) fn changes(patch: &str) -> Vec<(String, Changes)> {
-    parse_changes(patch, false)
-}
-
 /// Include blank changed lines when enforcing byte-identical test code.
 pub(crate) fn all_changes(patch: &str) -> Vec<(String, Changes)> {
     parse_changes(patch, true)
@@ -148,13 +142,14 @@ fn parse_changes(patch: &str, include_blank: bool) -> Vec<(String, Changes)> {
     files
 }
 
-/// Whether each changed line is inside a test item: `(test, product)` counts.
-pub(crate) fn split(changes: &Changes, before: &str, after: &str) -> (usize, usize) {
-    let inside = |regions: &[(usize, usize)], line: usize| {
-        regions.iter().any(|(a, b)| (*a..=*b).contains(&line))
+pub(crate) fn test_marker(line: &str) -> bool {
+    let Some(rest) = line.trim().strip_prefix("#[") else {
+        return false;
     };
-    let (old, new) = (test_regions(before), test_regions(after));
-    let tests = changes.old.iter().filter(|l| inside(&old, **l)).count()
-        + changes.new.iter().filter(|l| inside(&new, **l)).count();
-    (tests, changes.old.len() + changes.new.len() - tests)
+    let path: String = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
+        .collect();
+    let last = path.rsplit("::").next().unwrap_or_default();
+    last.contains("test") && !last.starts_with("cfg")
 }

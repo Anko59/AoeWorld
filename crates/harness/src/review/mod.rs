@@ -130,7 +130,7 @@ pub(crate) fn facts(root: &Path, merge_base: &str) -> Result<String> {
         }
     }
     Ok(format!(
-        "- lines added: {test_lines} in tests, {other_lines} elsewhere\n- added lines containing `#[ignore]`: {}, `unsafe`: {}, `.unwrap(`: {}, `cfg(test)`: {}\n- changed CI, gate or baseline files: {}\n{}",
+        "- lines added: {test_lines} in tests, {other_lines} elsewhere\n- added lines containing `#[ignore]`: {}, `unsafe`: {}, `.unwrap(`: {}, `cfg(test)`: {}\n- changed CI, gate or baseline files: {}\n",
         count("#[ignore]"),
         count("unsafe"),
         count(".unwrap("),
@@ -140,7 +140,6 @@ pub(crate) fn facts(root: &Path, merge_base: &str) -> Result<String> {
         } else {
             sensitive.join(", ")
         },
-        crate::ship::test_first::summary(root, merge_base, "HEAD"),
     ))
 }
 
