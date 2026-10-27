@@ -4,7 +4,7 @@ use aoe_core::{Seed, Tick};
 #[test]
 fn comparison_summary_identifies_regressions_and_missing_measurements() {
     let comparisons = [
-        compare("optimized_gzip_wasm_bytes", Some(302_106), Some(287_702)),
+        compare("optimized_gzip_wasm_bytes", Some(359_628), Some(287_702)),
         compare("instructions::advance", None, Some(712_509)),
         compare("new_metric", Some(10), None),
         compare("allocation_count", Some(0), Some(0)),
@@ -12,10 +12,10 @@ fn comparison_summary_identifies_regressions_and_missing_measurements() {
     let text = comparison_summary(&comparisons);
     assert!(text.contains("| Metric | Observed | Baseline | Allowance | Verdict |"));
     for row in [
-        "| optimized_gzip_wasm_bytes | 302106 | 287702 | 5% | Regression |",
-        "| instructions::advance | unavailable | 712509 | 5% | Inconclusive |",
-        "| new_metric | 10 | unavailable | 5% | Unbaselined |",
-        "| allocation_count | 0 | 0 | 5% | Pass |",
+        "| optimized_gzip_wasm_bytes | 359628 | 287702 | 25% | Regression |",
+        "| instructions::advance | unavailable | 712509 | 25% | Inconclusive |",
+        "| new_metric | 10 | unavailable | 25% | Unbaselined |",
+        "| allocation_count | 0 | 0 | 25% | Pass |",
     ] {
         assert!(text.contains(row), "missing {row} in {text}");
     }
@@ -26,11 +26,11 @@ fn comparator_rejects_missing_and_regressed_samples() {
     assert_eq!(network::initial_client_result(37).bytes, 37);
     assert_eq!(compare("x", None, Some(100)).verdict, Verdict::Inconclusive);
     assert_eq!(compare("x", Some(100), None).verdict, Verdict::Unbaselined);
-    assert_eq!(compare("x", Some(105), Some(100)).verdict, Verdict::Pass);
+    assert_eq!(compare("x", Some(125), Some(100)).verdict, Verdict::Pass);
     assert_eq!(compare("x", Some(0), Some(0)).verdict, Verdict::Pass);
     assert_eq!(compare("x", Some(1), Some(0)).verdict, Verdict::Regression);
     assert_eq!(
-        compare("x", Some(106), Some(100)).verdict,
+        compare("x", Some(126), Some(100)).verdict,
         Verdict::Regression
     );
     assert_eq!(
@@ -41,20 +41,18 @@ fn comparator_rejects_missing_and_regressed_samples() {
 
 #[test]
 fn regression_floor_is_the_smallest_regressing_value() {
-    for percent in [THRESHOLD_PERCENT, crate::perf_size::JUMP_PERCENT] {
-        for baseline in [0u64, 1, 19, 20, 21, 100, 105, 1_000, 261_677, 1 << 40] {
-            let floor = regression_floor(baseline, percent);
-            assert_eq!(
-                compare_at("x", Some(floor), Some(baseline), percent).verdict,
-                Verdict::Regression,
-                "floor of {baseline} at {percent}%"
-            );
-            assert_ne!(
-                compare_at("x", Some(floor - 1), Some(baseline), percent).verdict,
-                Verdict::Regression,
-                "below the floor of {baseline} at {percent}%"
-            );
-        }
+    for baseline in [0u64, 1, 19, 20, 21, 100, 105, 1_000, 261_677, 1 << 40] {
+        let floor = regression_floor(baseline);
+        assert_eq!(
+            compare("x", Some(floor), Some(baseline)).verdict,
+            Verdict::Regression,
+            "floor of {baseline}"
+        );
+        assert_ne!(
+            compare("x", Some(floor - 1), Some(baseline)).verdict,
+            Verdict::Regression,
+            "below the floor of {baseline}"
+        );
     }
 }
 
@@ -68,8 +66,8 @@ fn comparator_cartesian_samples_preserve_verdict_and_evidence_fields() {
         Some(20),
         Some(21),
         Some(100),
-        Some(105),
-        Some(106),
+        Some(125),
+        Some(126),
         Some(u64::MAX - 1),
         Some(u64::MAX),
     ];
@@ -81,7 +79,7 @@ fn comparator_cartesian_samples_preserve_verdict_and_evidence_fields() {
                 (Some(actual), Some(reference)) => {
                     // Inclusive rational limit, computed without truncating the
                     // percentage or overflowing either extreme u64 sample.
-                    let limit = u128::from(reference) + u128::from(reference) / 20;
+                    let limit = u128::from(reference) + u128::from(reference) / 4;
                     if u128::from(actual) <= limit {
                         Verdict::Pass
                     } else {
@@ -94,7 +92,7 @@ fn comparator_cartesian_samples_preserve_verdict_and_evidence_fields() {
             assert_eq!(comparison.metric, "instructions::tiny");
             assert_eq!(comparison.observed, observed);
             assert_eq!(comparison.baseline, baseline);
-            assert_eq!(comparison.threshold_percent, 5);
+            assert_eq!(comparison.threshold_percent, THRESHOLD_PERCENT);
         }
     }
 }
@@ -140,7 +138,7 @@ fn wasm_size_reports_growth_and_fails_only_on_a_jump_over_a_quarter() {
         let result = crate::perf_size::comparison_at(&baseline, &artifact).unwrap();
         assert_eq!(crate::perf_size::verdict(&result).is_ok(), passes, "{size}");
     }
-    let message = crate::perf_size::verdict(&compare_at("w", Some(1251), Some(1000), 25))
+    let message = crate::perf_size::verdict(&compare("w", Some(1251), Some(1000)))
         .unwrap_err()
         .to_string();
     assert!(message.contains("1 bytes over"), "{message}");

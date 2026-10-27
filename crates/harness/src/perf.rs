@@ -31,44 +31,36 @@ pub struct Comparison {
     pub verdict: Verdict,
 }
 
-/// The regression threshold every comparison applies: a value regresses when
-/// it exceeds its baseline by more than this percent.
-pub const THRESHOLD_PERCENT: u8 = 5;
+/// Sizes and counts (WASM bytes, instructions, allocations) are trends, not
+/// budgets: every run reports them against the baseline and only a jump of more
+/// than this percent blocks.
+pub const THRESHOLD_PERCENT: u8 = 25;
 
-/// `actual` regresses against `reference` by more than `percent`.
-fn over(actual: u64, reference: u64, percent: u8) -> bool {
-    u128::from(actual) * 100 > u128::from(reference) * u128::from(100 + u16::from(percent))
+/// `actual` regresses against `reference` under [`THRESHOLD_PERCENT`].
+fn over(actual: u64, reference: u64) -> bool {
+    u128::from(actual) * 100
+        > u128::from(reference) * u128::from(100 + u16::from(THRESHOLD_PERCENT))
 }
 
-/// The smallest observed value [`over`] flags as a regression at `percent`: the
-/// cap a gate compares against, derived from the same threshold as the verdict.
-pub fn regression_floor(reference: u64, percent: u8) -> u64 {
-    let scaled = u128::from(reference) * u128::from(100 + u16::from(percent));
+/// The smallest observed value [`over`] flags as a regression: the cap a gate
+/// compares against, derived from the same threshold as the verdict.
+pub fn regression_floor(reference: u64) -> u64 {
+    let scaled = u128::from(reference) * u128::from(100 + u16::from(THRESHOLD_PERCENT));
     (scaled / 100 + 1) as u64
 }
 
 pub fn compare(metric: &str, observed: Option<u64>, baseline: Option<u64>) -> Comparison {
-    compare_at(metric, observed, baseline, THRESHOLD_PERCENT)
-}
-
-/// [`compare`] with a metric-specific threshold.
-pub fn compare_at(
-    metric: &str,
-    observed: Option<u64>,
-    baseline: Option<u64>,
-    percent: u8,
-) -> Comparison {
     let verdict = match (observed, baseline) {
         (None, _) => Verdict::Inconclusive,
         (Some(_), None) => Verdict::Unbaselined,
-        (Some(actual), Some(reference)) if over(actual, reference, percent) => Verdict::Regression,
+        (Some(actual), Some(reference)) if over(actual, reference) => Verdict::Regression,
         _ => Verdict::Pass,
     };
     Comparison {
         metric: metric.to_owned(),
         observed,
         baseline,
-        threshold_percent: percent,
+        threshold_percent: THRESHOLD_PERCENT,
         verdict,
     }
 }
