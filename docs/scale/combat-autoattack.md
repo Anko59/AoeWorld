@@ -186,15 +186,87 @@ The far-search regression exposed near-goal cache reuse bypassing far-search
 bookkeeping. Cache reuse is now restricted to nearby goals; far goals retain
 their explicit cache and four-search budget. A 1,024-expansion proof allowance
 retains bounded sealed-pocket validation. The paired benchmark samples above
-precede this final repair; no final-repair timing claim is made. Focused repair
-checks are recorded in the final handoff. The full suite is not repeated,
-respecting the owner's single-run rule.
+precede this final repair; the completion run below measures the repaired code.
 
 The stored-minimap raster test exceeded its existing time budget with a local
 real package present. That unrelated threshold is unchanged.
 
 The exact original 100-session incident, original match-state replay, real-map
-AI combat with a watched browser recording, Python integration suite, and
-dedicated-hardware performance qualification are not established by the
-focused evidence. Video capture support has unit/configuration coverage;
-an actual recording has not yet been exercised. No CI publication was run.
+AI combat with a watched browser recording, and dedicated-hardware performance
+qualification remain unestablished. Video capture support has unit/configuration
+coverage; an actual recording has not yet been exercised. No CI publication was run.
+
+## Completion verification, 2026-10-27
+
+Production revision: `57acccf50b98b65c3567f9acb7a911bc7b622387`.
+The checkout was clean before testing. These runs validate the fixture and
+cache repairs already committed in that revision; no further code or fixture
+repair was required by the three package runs.
+
+Each package ran sequentially through
+`make test-native-focused AOE_NATIVE_TEST_PACKAGE=<package> AOE_NATIVE_TEST_FILTER='all()'`:
+
+| Package | Passed | Failed | Skipped |
+| --- | ---: | ---: | ---: |
+| `aoe-simulation` | 654 | 0 | 0 |
+| `aoe-server` | 333 | 2 | 3 |
+| `aoe-protocol` | 75 | 0 | 0 |
+
+Both observed failures were outside the combat changes:
+
+- `maps::tests::minimap::dump::dump_stored_minimap_rasters_when_packages_are_available`
+  exceeded its existing raster time budget with the local stored package. This
+  is the owner's known unrelated failure and remains unchanged.
+- `map_jobs::presets::tests::a_job_for_a_stored_preset_publishes_navigation_without_a_worker`
+  exhausted its approximately two-second polling window under concurrent tests.
+  Its preset/publication code is unchanged by this branch. The focused recheck,
+  `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(a_job_for_a_stored_preset_publishes_navigation_without_a_worker)'`,
+  passed in 0.094 seconds (one passed, 337 skipped). This supports a timing-sensitive
+  local failure; the initial failure is retained here, not counted as a package pass.
+
+The simulation run also reran both combat benchmarks after the cache repair.
+The fixture remains byte-identical to the paired benchmark above. Raw samples
+are retained under ignored `reports/perf/combat-final/`, with `summary.json`.
+P95 uses the nearest-rank sample; combined time adds orders and simulation for
+each tick before computing its quantile.
+
+| 1,000-unit workload | Combat p95, ms | Orders p95, ms | Orders + simulation p95, ms |
+| --- | ---: | ---: | ---: |
+| Adjacent, 400 ticks | 0.221 | 0.006 | 0.254 |
+| 12-tile approach, 400 ticks | 0.612 | 0.007 | 1.307 |
+| 32 changed far orders/tick, 32 ticks | 4.738 | 16.925 | 21.893 |
+
+Both fighting layouts engaged both sides of all 500 pairs, with 8,000 adjacent
+hits and 7,400 approach hits. Initial order setup took 0.420 and 0.658 ms,
+respectively. The far-pressure maximum combined sample was 23.155 ms; that
+workload still measures routing pressure rather than completed fighting.
+This batch ran alongside the other simulation tests in a four-CPU shared
+heavy slot. It is not an isolated paired comparison or hardware qualification;
+server fan-out, rendering and Python decisions remain outside these timings.
+
+`make sdk-python-test` ran exactly once and passed: **20 binding tests** in
+100.58 seconds and **117 AI tests** in 1,662.07 seconds. The server and wheel
+were rebuilt by that target. No seed or game-duration overrides were present.
+Both `test_full_game.py` cases passed: all five two-bot seeds reached Feudal,
+fielded at least ten soldiers per bot and landed an attack in every seed; the
+solo case reached Castle and fielded Castle units. Auto-acquisition stayed on
+through the default military stances. Python defence/worker-protection tests
+also passed, alongside the native
+`an_ai_owned_idle_army_defends_without_python_orders` test, which verifies
+automatic acquisition and damage in both directions without Python targets.
+This checks functional fighting and defence, not watched real-map play.
+
+**Remaining branch-caused failures: zero in the requested checks.** The known
+minimap failure remains ignored; the separate preset-publication timing failure
+passed its focused recheck. The server package run itself remains a failed run
+with the two failures shown above. No further production or test changes were
+needed; the completion commit updates this report only.
+
+`make hooks-check` passed. Command logs are retained locally under ignored
+`reports/perf/combat-final/` beside the benchmark samples. The final commit uses
+the installed pre-commit hook.
+
+The completion run does not repeat the full workspace preflight, WASM or browser
+suites. Earlier results above remain historical evidence, not fresh passes for
+this completion run. Heavy targets ran sequentially through the shared queue;
+only the normal `target/` was used, with no additional build-cache paths.
