@@ -217,6 +217,13 @@ and outcome, and the storage snapshots. Archived inputs
 are outside the active quota and must be retained separately.
 
 
+Pull-request CI runs `make ci-select` against the base commit and records the
+selected jobs in `reports/gates/selection.json`. Unknown paths and missing
+base information select every job. The aggregate `required` check recomputes
+the selection at the checked-out revision and requires success for each selected
+job; only unselected jobs may be skipped. `make ci-check` validates that
+contract locally when supplied the manifest and job results.
+
 **Sharded browser suite (#388).** The Playwright suite ran on one serial worker
 and took 19.5 of 20 minutes on the 4-core runner, behind `browser-check` and
 `test-wasm` in the same job. CI now runs it as the `e2e` job, a matrix of three

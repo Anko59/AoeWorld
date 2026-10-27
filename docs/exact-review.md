@@ -38,13 +38,10 @@ or `--base <fullOID> --index --output <directory>` selects the subject.
   On failure it remains unavailable; old subject bytes do not establish acceptance.
 
 The subject includes both complete logical content witnesses, exact commit/index
-identity, checked contract digest and actual AST bindings, separate canonical
-registry fingerprint, complete affected paths, the candidate's PR plan and the
-mandatory preflight-everything plan. Binding file BLAKE3 digests are matched to
-actual witnessed files. Affected paths compare both inventories by path, mode,
+identity, a canonical registry fingerprint, complete affected paths, the
+candidate's PR plan and the mandatory preflight-everything plan. Affected paths compare both inventories by path, mode,
 blob ID and raw BLAKE3; rename/delete/add names are retained without hunk truncation.
-The candidate registry is feedback, not protected minimum judge policy. Existing
-required preflight and native85%/critical90% gates remain independent and unchanged.
+The candidate registry is feedback, not protected minimum judge policy. Required preflight remains independent.
 
 Physical index paths/cache bytes, incidental current HEAD for commit mode and
 private Git representation fingerprints belong only to the observation, not the
@@ -58,7 +55,7 @@ The only top-level fields are `schema` (1), `subject` (the exact generated JSON
 subject) and `notes` (nonempty printable text, at most4096 UTF-8 bytes). Duplicate
 JSON object keys at every depth are rejected before ordinary Value deserialization.
 Depth32, total200000 nodes and16384 members per array/object bound parsing. Unknown
-nested fields, changed algorithms, reordered/duplicated arrays, altered bindings,
+nested fields, changed algorithms, reordered/duplicated arrays, altered
 plans, paths or base/candidate identities cannot equal the generated subject.
 Approval, budget, provider-role, command, credential and qualification fields are
 not accepted. Notes are not echoed; their document byte hash observes bytes only.
@@ -78,4 +75,4 @@ ownership or qualified power-loss durability. The coding UID's host-daemon acces
 still defeats local independent-judge claims. Protected built service artifacts,
 restricted runtimes, authenticated reviewer/verdict evidence and deployment/operator
 qualification remain separate unavailable evidence. Original game assets, geodata
-and hardware qualification are not manufactured by these hashes or AST checks.
+and hardware qualification are not manufactured by these hashes.
