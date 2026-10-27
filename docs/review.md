@@ -14,7 +14,8 @@ it first pushes a draft PR so CI runs alongside review; approval marks it ready
 and arms auto-merge ([shipping](shipping.md)).
 
 `make review-floor` prints the lowest tier the change allows. The agent picks the
-tier (never below the floor) and says why in the description. A full review passes at
+tier (never below the floor) and says why in the description. `make ship` refuses
+a `SHIP_TIER` below the floor before any gate runs. A full review passes at
 7/10 or more with no blocking finding: no confirmed major or critical, and no disputed
 critical (a disputed finding counts one severity lower). The bar is 7 since 2026-10-19.
 
