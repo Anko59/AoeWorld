@@ -108,7 +108,9 @@ phase and gatherer reservations bundled with it. On 2026-10-27, rebased onto
 allocations and 4,751,988 allocated bytes in CI, and these became the baselines:
 blocked gatherers re-planned whole approaches under avoidance (8,531 route searches
 per 64 ticks against 906). The radius-movement change that follows cuts the tick
-to about 247M instructions and re-takes the baseline downward.
+to about 247M instructions and re-takes the baseline downward. The −40.2%
+above therefore holds only for dev before #573; this batch's net late-game claim
+is the 431M measured on top of it.
 
 ## Native building atlas
 
