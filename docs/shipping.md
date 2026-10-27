@@ -87,7 +87,7 @@ critical), an incomplete review, or a closing review
    dev changed in <commits>") and the own patch is identical against each base (else "changed your
    patch"). The rebased head's evidence (cadence `recheck`) holds its static gates and a separate "full
    preflight passed on <old head> (base <old base>)". A rebased branch already on `origin` is pushed
-   with a lease on the draft push head (otherwise the starting commit) or its GitHub dev merges ([details](post-push.md)), else the ship asks for `SHIP_FORCE=1`. **Then**, if
+   with a lease on the draft push head (otherwise the starting commit), its GitHub dev merges, or an earlier push of the same ordered patches ([details](post-push.md)), else the ship asks for `SHIP_FORCE=1`. **Then**, if
    the parent is ready, pushes exactly that commit to `origin` as the branch (`SHIP_FORCE=1` adds
    `--force-with-lease`, after a rebase). The pre-push hook runs `make pre-push`: it skips the preflight
    when `make ship`'s preflight evidence, or a rebased head's re-check record (static gates passed on
@@ -103,7 +103,7 @@ critical), an incomplete review, or a closing review
    CI succeeds; a missing run is pending, and unreadable CI is an explicit error.
    Already failed jobs make ship exit non-zero with their names, run
    URL and `gh run rerun <run> --failed`: review passed and auto-merge is armed,
-   but fix CI and reship. Every review outcome prints the score beside CI counts.
+   but fix CI and reship. Every review outcome prints the score beside CI counts or its pending state.
 10. **Files the review's leftovers**: one issue per confirmed or disputed
    critical or major finding; the minor and nit ones become a section of the
    standing issue `Review follow-ups` and a pull request comment

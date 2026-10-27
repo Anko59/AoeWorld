@@ -1,6 +1,7 @@
 //! The few Git facts `ship` needs, each from one plain `git` call.
 use std::{path::Path, process::Command};
 pub(super) mod lease;
+mod own_push;
 mod patch;
 pub(super) mod publish;
 pub(crate) mod remote;
