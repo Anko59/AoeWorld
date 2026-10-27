@@ -72,6 +72,9 @@ pub struct Options {
     /// Also drive the human's view in Chromium and record its frame rate.
     #[arg(long)]
     pub browser: bool,
+    /// Save the browser's video alongside its report for visual inspection.
+    #[arg(long, requires = "browser")]
+    pub record_video: bool,
     /// Minutes of browser measurement (half near the village, half over busy ground).
     #[arg(long, default_value_t = 4.0)]
     pub browser_minutes: f64,

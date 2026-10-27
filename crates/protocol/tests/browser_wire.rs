@@ -8,6 +8,7 @@
 //! Unit tails now append the two optional Vassal identifiers. Regenerate the
 //! current empty fragments for this deliberate schema change, preserving codec
 //! roundtrips and the browser mocks that consume these same fragments.
+//! Unit tails append the authoritative combat stance (Aggressive = 0).
 use aoe_core::{EntityId, PlayerId, Tick, TileCoord, TileRect, WorldPosition};
 use aoe_protocol::{
     BuildingKind, ConstructionState, GameplayBuildingState, GameplayPlayerState,
@@ -86,6 +87,7 @@ fn browser_unit_combat_fragments_match_the_current_codec() {
             cargo_count: 0,
             home_castle: None,
             managed_by: None,
+            stance: Default::default(),
         };
         let mut expected = vec![
             1, 1, 0, 1, 7, 1, 128, 32, 128, 64, 0, 0, 2, kind as u8, 0, 0, 0,

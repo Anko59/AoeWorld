@@ -30,6 +30,7 @@ export function initInterface() {
   byId('resume-game').addEventListener('click', () => { menu.close(); scene().focus(); });
   byId('quit-game').addEventListener('click', () => { menu.close(); window.aoeStart.menu(); });
   byId('reconnect').addEventListener('click', () => menu.close());
+  byId('reload-game').addEventListener('click', event => { event.preventDefault(); location.reload(); });
   let drag = null;
   const box = byId('drag-box');
   document.addEventListener('pointerdown', event => { if (event.target===scene() && event.button===0) drag=[event.clientX,event.clientY]; });
@@ -59,6 +60,10 @@ export function initInterface() {
     const owned=count>0 && selected.every(actor=>actor.owned);
     const units=owned && !building;
     const military=units && count>1 && selected.every(u=>['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits].includes(u.kind));
+    const stance=units && selected.every(u=>!['Villager','FishingShip','TransportShip','Monk','Vassal','Sheep','Deer','Boar','Wolf'].includes(u.kind));
+    show('combat-stance-label',stance);show('command-context',!stance);
+    byId('combat-stance').disabled=state.observer;
+    byId('combat-stance').value=scene().dataset.selectedStance??'';
     for(const name of ['line','box','staggered','flank']){show(`formation-${name}`,military);byId(`formation-${name}`).disabled=state.observer;}
     show('attack-move-units',military);byId('attack-move-units').disabled=state.observer;
     attribute(byId('selection'),'data-count',String(count));

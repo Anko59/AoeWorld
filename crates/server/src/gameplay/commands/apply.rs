@@ -5,6 +5,7 @@ pub(in crate::gameplay) fn apply(
     action: PendingAction,
 ) -> CommandResult {
     let result = match action {
+        PendingAction::Stance { unit_ids, stance } => world.issue_stance(player, &unit_ids, stance),
         PendingAction::Garrison {
             entity_id,
             building_id,

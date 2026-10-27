@@ -94,6 +94,7 @@ impl GameWorld {
                 unit.state.task as u8,
             ]);
             hash.update(&[u8::from(unit.state.auto_scout)]);
+            hash.update(&[unit.state.stance as u8]);
             hash.update(&unit.next_hit_tick.to_le_bytes());
             hash.update(&unit.state.hp.to_le_bytes());
             hash.update(&unit.state.max_hp.to_le_bytes());

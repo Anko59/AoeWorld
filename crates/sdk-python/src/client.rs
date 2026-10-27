@@ -1,6 +1,6 @@
 //! `connect`, `start_match` and the `Client` a bot holds.
 use crate::{
-    enums::{Formation, BuildingKind, Tech, TradeResource, UnitKind},
+    enums::{CombatStance, Formation, BuildingKind, Tech, TradeResource, UnitKind},
     types::Event,
     world::World,
 };
@@ -227,6 +227,12 @@ impl Client {
         self.order(Order::SetFormation {
             units: units.into_iter().map(EntityId).collect(),
             formation: formation.into(),
+        })
+    }
+    fn set_stance(&self, units: Vec<u32>, stance: CombatStance) -> u64 {
+        self.order(Order::SetStance {
+            units: units.into_iter().map(EntityId).collect(),
+            stance: stance.into(),
         })
     }
     #[pyo3(signature = (units, x, y, formation=Formation::Line, *, queued=false, attack_move=false))]

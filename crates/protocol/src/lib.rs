@@ -2,7 +2,7 @@
 mod gameplay;
 pub use gameplay::MoveQueue;
 pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
-pub use gameplay::{FogState, Formation};
+pub use gameplay::{CombatStance, FogState, Formation};
 pub use gameplay::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 
 use aoe_core::{EntityId, PlayerId, Position, Region, Tick};

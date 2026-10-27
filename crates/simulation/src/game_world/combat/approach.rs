@@ -2,19 +2,22 @@
 use super::{MELEE_RANGE_SUBUNITS, tick::Goal};
 use crate::{GameWorld, GameWorldError};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
-use aoe_map::{DEFAULT_HIERARCHY_EXPANSIONS, HierarchicalOutcome};
+use aoe_map::HierarchicalOutcome;
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, BinaryHeap},
 };
 
 /// Bounds both search work and retained frontier entries, independent of map size.
-const MAX_ATTACK_SEARCH_TILES: usize = 8_192;
+const MAX_ATTACK_SEARCH_TILES: usize = 1_024;
 /// Targets within this many tiles are checked for reachability over chunk portals.
 const HIERARCHY_PROOF_TILES: i64 = 400;
 /// Candidate tiles proven over the portal graph per search, so a target in a
 /// sealed pocket costs a bounded number of abstract searches.
-const MAX_HIERARCHY_PROOFS: u32 = 16;
+const MAX_HIERARCHY_PROOFS: u32 = 4;
+/// Combat only proves a candidate; the route scheduler owns full route work.
+const ATTACK_HIERARCHY_EXPANSIONS: u32 = 256;
+pub(super) const MAX_ATTACK_SEARCHES_PER_TICK: u32 = 16;
 const NEIGHBOURS: [(i32, i32); 8] = [
     (0, -1),
     (-1, 0),
@@ -45,6 +48,28 @@ pub(crate) struct AttackSearch {
 }
 
 impl GameWorld {
+    pub(super) fn reserve_pursuit_search(&mut self, id: EntityId) -> bool {
+        if self.combat.pursuit_floor.is_some_and(|floor| id <= floor)
+            || !self.reserve_attack_search()
+        {
+            return false;
+        }
+        self.combat.pursuit_cursor = Some(id);
+        true
+    }
+
+    pub(super) fn reserve_attack_search(&mut self) -> bool {
+        if self.combat.search_tick != self.tick.0 {
+            self.combat.search_tick = self.tick.0;
+            self.combat.searches_used = 0;
+        }
+        if self.combat.searches_used == MAX_ATTACK_SEARCHES_PER_TICK {
+            return false;
+        }
+        self.combat.searches_used += 1;
+        self.combat.stats.attack_searches += 1;
+        true
+    }
     /// Search outward from the attacker, prioritizing travel distance plus a
     /// lower bound on distance still needed to reach attack range. Reaching a
     /// tile proves connectivity; merely being passable near the target does not.
@@ -220,7 +245,7 @@ impl GameWorld {
             |tile| {
                 !matches!(
                     self.terrain
-                        .hierarchical_route(origin, tile, DEFAULT_HIERARCHY_EXPANSIONS),
+                        .hierarchical_route(origin, tile, ATTACK_HIERARCHY_EXPANSIONS),
                     Some(HierarchicalOutcome::Unreachable)
                 )
             },

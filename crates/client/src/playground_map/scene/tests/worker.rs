@@ -27,6 +27,7 @@ fn villager(task: UnitTask, gathering: Option<ResourceKind>) -> GameplayUnitStat
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
+        stance: Default::default(),
     }
 }
 

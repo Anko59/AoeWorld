@@ -26,6 +26,11 @@ macro_rules! mirror {
 }
 
 mirror!(Formation, aoe_sdk::Formation, [Line, Box, Staggered, Flank]);
+mirror!(
+    CombatStance,
+    aoe_sdk::CombatStance,
+    [Aggressive, Defensive, StandGround, NoAttack]
+);
 
 mirror!(
     UnitKind,
@@ -205,6 +210,7 @@ mirror!(
 );
 
 pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<CombatStance>()?;
     module.add_class::<Formation>()?;
     module.add_class::<UnitKind>()?;
     module.add_class::<BuildingKind>()?;

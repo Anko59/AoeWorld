@@ -29,7 +29,9 @@ button:disabled { color:#9b9f8e; opacity:.55; cursor:default; }
 #bottom-panel { position:fixed; inset:auto 0 0; height:var(--bottom); display:grid; grid-template-columns:304px minmax(240px,1fr) 250px; gap:22px; padding:16px 20px 10px; z-index:3; border-top:5px ridge #a58b5d; background:repeating-linear-gradient(0deg,#ffffff02 0px,#ffffff02 1px,transparent 1px,transparent 4px),linear-gradient(105deg,#464632,#2b3027 38%,#34392d); box-shadow:0 -4px 18px #0008,inset 0 2px 0 #c9b17d55; }
 #bottom-panel::before { content:""; position:absolute; inset:4px 6px; border:1px solid #96825b66; pointer-events:none; }
 h1,h2,p { margin:0; }
-#commands { border-right:1px solid #86826688; padding-right:22px; }
+#commands { position:relative; border-right:1px solid #86826688; padding-right:22px; }
+#combat-stance-label { position:absolute; top:-4px; right:22px; display:flex; align-items:center; gap:5px; font-size:10px; color:var(--muted); }
+#combat-stance { max-width:115px; font:11px system-ui; }
 #commands h2 { font-size:10px; letter-spacing:.13em; color:#d6c49b; margin-bottom:8px; display:flex; justify-content:space-between; }
 #command-context { font-size:10px; color:var(--muted); letter-spacing:0; font-weight:400; }
 #command-grid { display:grid; grid-template-columns:repeat(5,1fr); grid-template-rows:repeat(3,44px); gap:4px; }
@@ -82,6 +84,9 @@ progress::-webkit-progress-value { background:linear-gradient(90deg,#8b9b62,#dec
 #minimap.expanded #minimap-terrain { image-rendering:pixelated; }
 #game-notice { position:fixed; bottom:calc(var(--bottom) + 12px); left:20px; color:#f1deb4; padding:6px 12px; background:#1a221be8; border-left:3px solid #bcaa70; z-index:2; max-width:calc(100% - 40px); font-size:12px; }
 #game-notice.connected { opacity:0; pointer-events:none; }
+#game-error { position:fixed; top:calc(var(--top) + 12px); left:20px; right:20px; width:fit-content; max-width:calc(100% - 40px); color:#fff1dd; background:#651e1ef2; border:1px solid #d9a162; padding:12px 16px; z-index:10; }
+#game-error[hidden] { display:none; }
+#game-error a { color:#ffe2a0; text-decoration:underline; white-space:nowrap; }
 #drag-box { position:fixed; border:1px solid #eedb91; background:#d3d89e18; pointer-events:none; z-index:1; }
 #carried-loads { position:fixed; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
 .load-badge { position:absolute; display:flex; align-items:center; gap:2px; color:#f6e8bf; background:#17251de6; border:1px solid #8b9a7e; border-radius:3px; padding:1px 3px; font-size:9px; }
@@ -164,6 +169,7 @@ dialog>button { width:100%; display:block; margin:9px 0; padding:10px; }
 html[data-interface-art=original] #bottom-panel { padding:0; gap:0; border:0; background:#39392e; grid-template-columns:300px minmax(300px,1fr) 310px; box-shadow:none; }
 html[data-interface-art=original] #bottom-panel::before { display:none; }
 html[data-interface-art=original] #commands { padding:19px 18px 12px; border:0; }
+html[data-interface-art=original] #combat-stance-label { top:15px; right:18px; }
 html[data-interface-art=original] #commands h2 { height:13px; margin:0 0 7px; letter-spacing:.06em; color:#eee0af; text-shadow:0 1px 2px #000; }
 html[data-interface-art=original] #command-grid { width:236px; margin:auto; grid-template-columns:repeat(5,44px); grid-template-rows:repeat(3,42px); gap:3px 4px; }
 html[data-interface-art=original] #command-grid button, html[data-interface-art=original] #command-grid .empty-command { background-image:var(--ui-button-image); background-size:var(--ui-button-size); background-position:var(--ui-button-position); border:1px solid #161711; border-radius:0; box-shadow:inset 1px 1px #d7d2b080,inset -1px -1px #000a; padding:2px; }

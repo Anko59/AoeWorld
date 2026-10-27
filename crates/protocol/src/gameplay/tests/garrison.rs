@@ -100,6 +100,14 @@ fn vassal_queue_and_garrison_roundtrip_and_other_buildings_reject_training() {
         players: vec![],
         buildings: vec![b],
     };
+    // Castles train Vassals and accept rallies through the same command path.
+    // Every subsequent snapshot must remain encodable after that right-click.
+    let mut castle = castle;
+    let position = WorldPosition::new(4096, 4096);
+    castle.rally_point = Some(RallyPoint {
+        target: RallyTarget::Ground(position),
+        position,
+    });
     let snapshot = message(castle.clone());
     assert_eq!(
         decode_server(&encode_server(&snapshot).unwrap()).unwrap(),
@@ -147,11 +155,14 @@ fn vassal_home_and_worker_management_are_current_owner_only_state() {
         cargo_count: 0,
         home_castle: Some(EntityId(9)),
         managed_by: None,
+        stance: Default::default(),
     };
     // The current unit tail appends the two optional owner-visible identifiers.
-    assert!(postcard::to_allocvec(&u).unwrap().ends_with(&[1, 9, 0]));
+    assert!(postcard::to_allocvec(&u).unwrap().ends_with(&[1, 9, 0, 0]));
+    u.stance = CombatStance::Defensive;
     assert_eq!(u.for_viewer(PlayerId(0)), u);
     assert_eq!(u.for_viewer(PlayerId(1)).home_castle, None);
+    assert_eq!(u.for_viewer(PlayerId(1)).stance, CombatStance::Aggressive);
     let message = |u| ServerMessage::Snapshot {
         revision: 1,
         tick: Tick(1),

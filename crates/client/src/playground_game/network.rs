@@ -7,6 +7,10 @@ use web_sys::{Event, MessageEvent};
 #[cfg(test)]
 mod tests;
 
+#[path = "network/lifecycle.rs"]
+mod lifecycle;
+use lifecycle::{clear_world, reconnect};
+
 pub(super) struct ConnectionCallbacks {
     socket: WebSocket,
     _onopen: Closure<dyn FnMut(Event)>,
@@ -180,6 +184,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     return;
                 }
                 client.revision = revision;
+                client.last_error = None;
                 let mut resident = BTreeMap::new();
                 for unit in units {
                     resident.insert(unit.id, unit);
@@ -394,9 +399,13 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     .order_feedback
                     .acknowledge(sequence, result)
                     .to_owned();
+                if result != aoe_protocol::CommandResult::Accepted {
+                    client.last_error = Some(client.status.clone());
+                }
             }
             Ok(GameplayServerMessage::Error { message, .. }) => {
-                client.status = format!("server error: {message}")
+                client.status = format!("server error: {message}");
+                client.last_error = Some(client.status.clone());
             }
             _ => {
                 reconnect(&mut client, "protocol error; reconnect required");
@@ -406,12 +415,13 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     socket.set_onmessage(Some(onmessage.as_ref().unchecked_ref()));
 
     let closed = Rc::downgrade(&shared);
-    let onclose = Closure::<dyn FnMut(Event)>::new(move |_| {
+    let onclose = Closure::<dyn FnMut(Event)>::new(move |event: Event| {
         let Some(closed) = closed.upgrade() else {
             return;
         };
         let client = &mut *closed.borrow_mut();
         if client.connection_id == id {
+            lifecycle::record_close(client, &event);
             client.status = "reconnecting".to_owned();
             client.socket = None;
         }
@@ -443,28 +453,4 @@ pub(super) fn merge_buildings(
     }
     (merged.len() <= aoe_protocol::MAX_RETAINED_BUILDINGS)
         .then(|| merged.into_values().cloned().collect())
-}
-
-fn reconnect(client: &mut Client, status: &str) {
-    client.status = status.to_owned();
-    client.resources.clear();
-    if let Some(socket) = &client.socket {
-        let _ = socket.close();
-    }
-}
-
-// The pieces of a connection's world that a new Welcome or a WorldReset drops.
-fn clear_world(client: &mut Client) {
-    client.terrain_scene.get_mut().take();
-    client.resources.clear();
-    client.fog.clear();
-    if !client.surface_fixture {
-        map::clear_terrain_cache(client);
-    }
-    client.units.clear();
-    client.village = Default::default();
-    client.selected = Default::default();
-    let tick_hz = client.config.tick_hz;
-    client.presentation.reset(tick_hz);
-    client.rendered_frame.clear();
 }

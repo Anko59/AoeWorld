@@ -199,6 +199,7 @@ fn hunting_tasks_require_villagers_and_food_loads() {
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
+        stance: Default::default(),
     };
     for invalid in [
         GameplayUnitState {

@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, WebSocketRoute } from "@playwright/test";
 import { gameAssets } from "../game-assets.js";
 import { syntheticChunk } from "../synthetic-map.js";
 import { disabledFog } from "../wire/fog.js";
@@ -17,9 +17,13 @@ function uint(value: number): number[] {
 
 /** Real fetch/decode/eviction/render lifecycle on a synthetic 2,048-square map.
  * No per-camera fixture reset: previously visited chunks must actually evict. */
-export async function explorationFixture(page: Page) {
+export async function explorationFixture(
+  page: Page,
+  onSocket?: (socket: WebSocketRoute) => void,
+) {
   await gameAssets(page, true);
   await page.routeWebSocket("**/game/ws", (socket) => {
+    onSocket?.(socket);
     socket.onMessage((message) => {
       const bytes =
         typeof message === "string" ? Buffer.from(message) : message;

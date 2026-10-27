@@ -15,6 +15,28 @@ pub(crate) fn hash_hit(hash: &mut blake3::Hasher, hit: Option<HitRecord>) {
 
 impl Combat {
     pub(crate) fn update_hash(&self, hash: &mut blake3::Hasher) {
+        hash.update(&self.search_tick.to_le_bytes());
+        hash.update(&self.searches_used.to_le_bytes());
+        hash.update(&[u8::from(self.pursuit_cursor.is_some())]);
+        if let Some(id) = self.pursuit_cursor {
+            hash.update(&id.0.to_le_bytes());
+        }
+        hash.update(&(self.target_rounds.len() as u64).to_le_bytes());
+        for (id, round) in &self.target_rounds {
+            hash.update(&id.0.to_le_bytes());
+            hash.update(&round.to_le_bytes());
+        }
+        hash.update(&self.seeker_cursor.0.to_le_bytes());
+        hash.update(&self.tower_cursor.0.to_le_bytes());
+        hash.update(&(self.seekers.len() as u64).to_le_bytes());
+        for id in &self.seekers {
+            hash.update(&id.0.to_le_bytes());
+        }
+        hash.update(&(self.tower_targets.len() as u64).to_le_bytes());
+        for (id, target) in &self.tower_targets {
+            hash.update(&id.0.to_le_bytes());
+            hash.update(&target.0.to_le_bytes());
+        }
         hash.update(&(self.healers.len() as u64).to_le_bytes());
         for id in &self.healers {
             hash.update(&id.0.to_le_bytes());
@@ -46,6 +68,20 @@ impl Combat {
             hash.update(&id.0.to_le_bytes());
             hash.update(&attacker.target.0.to_le_bytes());
             hash.update(&attacker.repath_tick.to_le_bytes());
+            if let Some(origin) = attacker.origin {
+                hash.update(&[1]);
+                hash.update(&origin.x.to_le_bytes());
+                hash.update(&origin.y.to_le_bytes());
+            } else {
+                hash.update(&[0]);
+            }
+            if let Some(tile) = attacker.goal_tile {
+                hash.update(&[1]);
+                hash.update(&tile.x.to_le_bytes());
+                hash.update(&tile.y.to_le_bytes());
+            } else {
+                hash.update(&[0]);
+            }
         }
         hash.update(&(self.dying.len() as u64).to_le_bytes());
         for (due, id) in &self.dying {

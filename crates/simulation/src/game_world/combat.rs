@@ -1,14 +1,13 @@
 //! Authoritative Dark Age combat: hit points, armour, attack orders,
 //! retaliation, death and building destruction.
 //!
-//! Work per tick is bounded by the number of units that currently hold an
-//! attack order (`Combat::attackers`), never by the unit count: there is no
-//! automatic target search and no all-pairs scan. A unit idles until it is
-//! ordered to attack or is hit while idle (retaliation).
+//! Target searches rotate through a bounded active index and spatial buckets;
+//! pursuit searches share one tick budget with explicit attack orders.
 use super::{EconomyError, GameUnit, GameWorld, UnitTask};
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, Tick};
 use std::collections::{BTreeMap, BTreeSet};
 
+pub(crate) mod acquisition;
 mod approach;
 #[path = "combat/castle/mod.rs"]
 mod castle;
@@ -17,7 +16,9 @@ mod hash;
 mod lifecycle;
 pub(crate) mod military;
 mod projectiles;
+mod retaliation;
 mod table;
+mod targeting;
 mod telemetry;
 pub(super) mod tick;
 pub use telemetry::CombatTelemetry;
@@ -59,6 +60,12 @@ pub struct CombatStats {
     pub healing_scanned_units: u64,
     /// Wounded candidate entries considered by healers this tick.
     pub healing_candidates: u64,
+    /// Military identities visited by the fair acquisition rotation.
+    pub acquisition_checks: u32,
+    /// Bucket entries inspected by military and defensive buildings together.
+    pub targeting_scanned: u32,
+    /// Pursuit searches in the combat phase (order validation is separate).
+    pub attack_searches: u32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -67,10 +74,23 @@ pub(crate) struct Attacker {
     pub(crate) repath_tick: u64,
     /// The firing tile of the last far search, while it can still be reused.
     pub(crate) far: Option<approach::FarAttack>,
+    pub(crate) goal_tile: Option<aoe_core::TileCoord>,
+    /// Origin for autonomous pursuit; explicit orders override the stance.
+    pub(crate) origin: Option<aoe_core::WorldPosition>,
 }
 
 #[derive(Debug, Default)]
 pub(crate) struct Combat {
+    pub(crate) seekers: BTreeSet<EntityId>,
+    pub(crate) seeker_cursor: EntityId,
+    pub(crate) tower_cursor: EntityId,
+    pub(crate) tower_targets: BTreeMap<EntityId, EntityId>,
+    pub(crate) target_rounds: BTreeMap<EntityId, u64>,
+    pub(crate) search_tick: u64,
+    pub(crate) searches_used: u32,
+    pub(crate) pursuit_cursor: Option<EntityId>,
+    /// Current phase's admission floor; cleared before returning to callers.
+    pub(crate) pursuit_floor: Option<EntityId>,
     pub(crate) healers: BTreeSet<EntityId>,
     pub(crate) projectiles: BTreeMap<u64, Projectile>,
     pub(crate) next_projectile: u64,
@@ -87,6 +107,7 @@ pub(crate) struct Combat {
 impl Combat {
     pub(crate) fn is_idle(&self) -> bool {
         self.healers.is_empty()
+            && self.seekers.is_empty()
             && self.attackers.is_empty()
             && self.dying.is_empty()
             && self.tower_ready.is_empty()
@@ -99,15 +120,18 @@ impl GameWorld {
         self.combat.stats
     }
 
-    /// Order `id` to attack another player's unit or building. The unit walks
-    /// into attack range, then hits every attack period until the target is
-    /// gone. A plain move or gather order cancels the attack.
+    /// Order an owned unit or defensive building to attack an enemy. Units
+    /// pursue; buildings require a target already in range. Weapon cooldowns
+    /// survive replacement orders. A move or gather cancels a unit's attack.
     pub fn issue_attack(
         &mut self,
         player: aoe_core::PlayerId,
         id: EntityId,
         target: EntityId,
     ) -> Result<(), EconomyError> {
+        if self.building(id).is_some() {
+            return self.issue_building_attack(player, id, target);
+        }
         let unit = self
             .unit(id)
             .filter(|unit| unit.hp > 0 && !self.embarked(unit.id))
@@ -129,14 +153,55 @@ impl GameWorld {
         let Some(&index) = self.lookup.get(&id) else {
             return Err(EconomyError::UnknownEntity);
         };
+        // Repeating an accepted target does not restart a route or spend a
+        // second firing-position search (nor reset the weapon cooldown).
+        if self
+            .combat
+            .attackers
+            .get(&id)
+            .is_some_and(|a| a.target == target)
+        {
+            if let Some(a) = self.combat.attackers.get_mut(&id) {
+                a.origin = None;
+            }
+            return Ok(());
+        }
         let range =
             super::navy::attack_range(&self.unit_stats(id).ok_or(EconomyError::UnknownEntity)?);
+        let search_before = (
+            self.combat.search_tick,
+            self.combat.searches_used,
+            self.combat.stats.attack_searches,
+        );
         if goal.distance_squared(unit.position) <= range * range {
             self.stop_movement(index);
-        } else if let Some(destination) = self.attack_destination(id, &goal)? {
-            self.issue_task_move(id, destination)?;
+        } else if !self.reserve_attack_search() {
+            self.stop_unit_orders(index);
+            self.begin_attack(id, target);
+            if let Some(attacker) = self.combat.attackers.get_mut(&id) {
+                attacker.repath_tick = self.tick.0;
+            }
+            return Ok(());
         } else {
-            return Err(EconomyError::NoAttackPosition);
+            let destination = self.attack_destination(id, &goal);
+            match destination {
+                Ok(Some(destination)) => {
+                    self.issue_task_move(id, destination)?;
+                }
+                result => {
+                    // Rejected validation is atomic. Failed local searches are
+                    // still bounded per order; server admission caps the burst.
+                    (
+                        self.combat.search_tick,
+                        self.combat.searches_used,
+                        self.combat.stats.attack_searches,
+                    ) = search_before;
+                    return match result {
+                        Err(error) => Err(error.into()),
+                        _ => Err(EconomyError::NoAttackPosition),
+                    };
+                }
+            }
         }
         self.stop_gathering(id);
         self.economy.builders.remove(&id);
@@ -159,6 +224,10 @@ impl GameWorld {
                 target,
                 repath_tick: self.tick.0.saturating_add(self.repath_ticks()),
                 far: None,
+                goal_tile: self
+                    .attack_goal(target, self.units[index].state.player)
+                    .map(|g| g.centre().tile_floor()),
+                origin: None,
             },
         );
         let state = &mut self.units[index].state;

@@ -35,6 +35,7 @@ mod world;
 #[cfg(test)]
 mod tests;
 
+pub use aoe_protocol::CombatStance;
 pub use bot::{Bot, RunLimits, RunSummary, run_bot};
 pub use catalog::ResourceCatalog;
 pub use client::{Client, ConnectOptions, ConnectionStats, Decision, ViewPolicy, parse_token};

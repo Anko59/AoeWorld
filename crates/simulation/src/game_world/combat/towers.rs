@@ -1,6 +1,8 @@
 //! Defensive buildings share indexed targeting and the existing arrow system.
-use crate::{BuildingKind, GameWorld};
-use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, TileCoord, TileRect, WorldPosition};
+use super::{targeting::TargetArea, tick::Goal};
+use crate::{BuildingKind, EconomyError, GameWorld};
+use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, WorldPosition};
+use std::ops::Bound::{Excluded, Unbounded};
 
 impl GameWorld {
     /// Garrison firepower / single-arrow firepower, floored after summing.
@@ -45,15 +47,85 @@ impl GameWorld {
             as u8
     }
 
+    pub(super) fn issue_building_attack(
+        &mut self,
+        player: PlayerId,
+        id: EntityId,
+        target: EntityId,
+    ) -> Result<(), EconomyError> {
+        let building = self.building(id).ok_or(EconomyError::UnknownEntity)?;
+        if building.player != player {
+            return Err(EconomyError::NotOwner);
+        }
+        if !building.is_complete() {
+            return Err(EconomyError::UnderConstruction);
+        }
+        if self.building_arrow_count(id) == 0 {
+            return Err(EconomyError::WrongUnitKind);
+        }
+        let arrow = self
+            .building_attack(player, building.kind)
+            .ok_or(EconomyError::WrongUnitKind)?;
+        let area = self
+            .building_target_area(id, arrow)
+            .ok_or(EconomyError::UnknownEntity)?;
+        let goal = self
+            .attack_goal(target, player)
+            .filter(|g| area.accepts(*g) && self.target_visible_to(player, target))
+            .ok_or(EconomyError::InvalidTarget)?;
+        let _ = goal;
+        self.combat.tower_targets.insert(id, target);
+        self.combat.tower_ready.entry(id).or_insert(0);
+        Ok(())
+    }
+
+    fn building_target_area(
+        &self,
+        id: EntityId,
+        arrow: super::BuildingAttack,
+    ) -> Option<TargetArea> {
+        let tower = self.building(id)?;
+        let footprint = tower.footprint;
+        let at = WorldPosition::new(
+            (footprint.min.x + footprint.max.x) * FIXED_SUBUNITS_PER_TILE / 2,
+            (footprint.min.y + footprint.max.y) * FIXED_SUBUNITS_PER_TILE / 2,
+        );
+        Some(TargetArea {
+            player: tower.player,
+            source: if tower.kind == BuildingKind::Castle {
+                Goal::Building(footprint)
+            } else {
+                Goal::Unit(at)
+            },
+            min: i64::from(arrow.min_range) * i64::from(FIXED_SUBUNITS_PER_TILE),
+            max: i64::from(arrow.range) * i64::from(FIXED_SUBUNITS_PER_TILE),
+            actor: id,
+            ram: false,
+        })
+    }
+
     pub(super) fn advance_towers(&mut self, _changed: &mut Vec<EntityId>) {
-        // Registered defensive buildings query spatial buckets, never all units.
-        let towers: Vec<_> = self.combat.tower_ready.keys().copied().collect();
+        // A fair bounded rotation, including empty/idle buildings. One dense
+        // enemy crowd cannot make every tower scan the same world-wide list.
+        let cursor = self.combat.tower_cursor;
+        let towers: Vec<_> = self
+            .combat
+            .tower_ready
+            .range((Excluded(cursor), Unbounded))
+            .chain(self.combat.tower_ready.range(..=cursor))
+            .map(|(&id, _)| id)
+            .take(64)
+            .collect();
         for id in towers {
-            let Some(tower) = self
-                .building(id)
-                .filter(|b| b.kind.garrison_capacity() > 0 && b.is_complete() && b.hp > 0)
-            else {
+            if self.combat.stats.targeting_scanned
+                > super::targeting::MAX_TARGET_INSPECTIONS - super::targeting::MAX_QUERY_INSPECTIONS
+            {
+                break;
+            }
+            self.combat.tower_cursor = id;
+            let Some(tower) = self.building(id).filter(|b| b.is_complete() && b.hp > 0) else {
                 self.combat.tower_ready.remove(&id);
+                self.combat.tower_targets.remove(&id);
                 continue;
             };
             if self.combat.tower_ready[&id] > self.tick.0 {
@@ -66,44 +138,24 @@ impl GameWorld {
             let Some(arrow) = self.building_attack(tower.player, tower.kind) else {
                 continue;
             };
-            let footprint = tower.footprint;
-            let radius = i32::from(arrow.range);
-            let tower_kind = tower.kind;
-            let player = tower.player;
-            let at = WorldPosition::new(
-                (footprint.min.x + footprint.max.x) * FIXED_SUBUNITS_PER_TILE / 2,
-                (footprint.min.y + footprint.max.y) * FIXED_SUBUNITS_PER_TILE / 2,
-            );
-            let bounds = TileRect::new(
-                TileCoord::new(
-                    (footprint.min.x - radius).max(0),
-                    (footprint.min.y - radius).max(0),
-                ),
-                TileCoord::new(
-                    (footprint.max.x + radius + 1).min(self.config.width_tiles),
-                    (footprint.max.y + radius + 1).min(self.config.height_tiles),
-                ),
-            );
-            let square = i64::from(FIXED_SUBUNITS_PER_TILE).pow(2);
-            let target = self
-                .query(bounds)
-                .0
-                .into_iter()
-                .filter(|u| u.player != player && u.hp > 0 && self.unit_visible_to(player, u.id))
-                .filter_map(|u| {
-                    let dx = i64::from(u.position.x) - i64::from(at.x);
-                    let dy = i64::from(u.position.y) - i64::from(at.y);
-                    let distance = if tower_kind == BuildingKind::Castle {
-                        super::tick::Goal::Building(footprint).distance_squared(u.position)
-                    } else {
-                        dx * dx + dy * dy
-                    };
-                    (distance >= i64::from(arrow.min_range).pow(2) * square
-                        && distance <= i64::from(arrow.range).pow(2) * square)
-                        .then_some((distance, u.id))
-                })
-                .min();
-            if let Some((_, target)) = target {
+            let Some(area) = self.building_target_area(id, arrow) else {
+                continue;
+            };
+            let manual = self
+                .combat
+                .tower_targets
+                .get(&id)
+                .copied()
+                .filter(|&target| {
+                    self.attack_goal(target, area.player)
+                        .is_some_and(|g| area.accepts(g))
+                        && self.target_visible_to(area.player, target)
+                });
+            if manual.is_none() {
+                self.combat.tower_targets.remove(&id);
+            }
+            let target = manual.or_else(|| self.acquire_target(&area, true));
+            if let Some(target) = target {
                 self.combat.tower_ready.insert(
                     id,
                     self.tick.0

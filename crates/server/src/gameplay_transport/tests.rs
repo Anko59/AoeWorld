@@ -2,6 +2,37 @@ use super::*;
 use aoe_core::Seed;
 use std::time::Instant;
 
+#[path = "tests/combat.rs"]
+mod combat;
+
+#[tokio::test]
+async fn outgoing_validation_and_socket_failures_are_distinguishable() {
+    let mut sink = futures_util::sink::drain();
+    let invalid = GameplayServerMessage::Projectiles {
+        revision: 0,
+        tick: aoe_core::Tick(0),
+        projectiles: vec![],
+    };
+    assert!(matches!(
+        send_socket(&mut sink, invalid).await,
+        Err(SendFailure::Encode(_))
+    ));
+    let mut broken = Box::pin(futures_util::sink::unfold((), |(), _| async {
+        Err::<(), ()>(())
+    }));
+    assert!(matches!(
+        send_socket(
+            &mut broken,
+            GameplayServerMessage::Error {
+                code: 400,
+                message: "invalid order".into()
+            }
+        )
+        .await,
+        Err(SendFailure::Write)
+    ));
+}
+
 async fn expire(service: &GameplayService, slot: usize, session_id: u64) {
     let expired_at = Instant::now()
         .checked_sub(LEASE_RESERVATION)

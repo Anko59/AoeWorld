@@ -75,6 +75,11 @@ impl GameWorld {
             death_tick: None,
             death_hunt: None,
             auto_scout: false,
+            stance: if kind == UnitKind::BatteringRam {
+                aoe_core::CombatStance::Defensive
+            } else {
+                Default::default()
+            },
         };
         if let Some(player) = self.economy.players.get_mut(&player) {
             player.population_used = player.population_used.saturating_add(1);
@@ -87,6 +92,9 @@ impl GameWorld {
         let (id, position) = (state.id, state.position);
         if state.kind == UnitKind::Monk {
             self.combat.healers.insert(id);
+        }
+        if super::combat::acquisition::autonomous_kind(state.kind) {
+            self.combat.seekers.insert(id);
         }
         let bucket = ChunkCoord::from_position(position);
         let bucket_slot = self.chunks.entry(bucket).or_default().len();

@@ -147,7 +147,7 @@ export async function inputFixture(
             : kind === 2
               ? militiaCombat
               : villagerCombat;
-        // Combined wire: cargo_count precedes the optional Vassal home/control IDs.
+        // Cargo precedes the optional Vassal IDs and combat stance.
         return [
           id,
           player,
@@ -159,9 +159,9 @@ export async function inputFixture(
           0,
           ...(options.carried && id === 2 ? [1, 1, 7] : [0]),
           0,
-          ...combat.slice(0, -3),
+          ...combat.slice(0, -4),
           cargo,
-          ...combat.slice(-2),
+          ...combat.slice(-3),
         ];
       };
       socket.send(

@@ -111,6 +111,7 @@ fn subscription_response_classification_rejects_changed_revision_or_nonstationar
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
+        stance: Default::default(),
     };
     let messages = [
         GameplayServerMessage::Tick {

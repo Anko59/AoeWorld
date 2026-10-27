@@ -50,6 +50,7 @@ panel shows owner-visible occupants, their HP and ejection controls. The
 current bounded protocol carries occupant records only in their building;
 Rust and Python SDKs send the same Garrison/Ungarrison orders as the browser.
 
-This branch has Dark and Feudal ages. Its Castle entry is available in Feudal
-so it can be constructed here; Castle Age progression belongs to the separate
-age implementation. Town Bell automation is not implemented.
+Castles require Castle Age. Defensive buildings automatically prefer units,
+then armed buildings and other structures. Explicit in-range attack orders
+override automatic selection without resetting the reload timer. Empty Town
+Centers cannot shoot. Town Bell automation is not implemented.

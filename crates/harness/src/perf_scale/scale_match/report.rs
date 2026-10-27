@@ -16,6 +16,7 @@ pub(super) struct TickRow {
     pub orders: u64,
     pub units: u64,
     pub missed: bool,
+    pub phases_us: [u64; 3],
 }
 
 impl TickRow {
@@ -29,6 +30,11 @@ impl TickRow {
             orders: field(4)?,
             units: field(5)?,
             missed: field(6)? != 0,
+            phases_us: [
+                value.get(8)?.get("orders")?.as_u64()?,
+                value.get(8)?.get("combat")?.as_u64()?,
+                value.get(8)?.get("hierarchy")?.as_u64()?,
+            ],
         })
     }
 
@@ -77,6 +83,11 @@ pub(super) fn window(rows: &[TickRow], wall_seconds: f64) -> Value {
         "tick_ms": series(rows, TickRow::total_ms),
         "advance_ms": series(rows, TickRow::sim_ms),
         "fan_out_and_orders_ms": series(rows, TickRow::fan_out_ms),
+        "phases_ms": {
+            "orders": series(rows, |row| row.phases_us[0] as f64 / 1000.0),
+            "combat": series(rows, |row| row.phases_us[1] as f64 / 1000.0),
+            "hierarchy": series(rows, |row| row.phases_us[2] as f64 / 1000.0),
+        },
         "late_start_ms": series(rows, |row| row.late_us as f64 / 1000.0),
         "missed_ticks": missed,
         "missed_tick_rate": round(missed as f64 / rows.len().max(1) as f64),

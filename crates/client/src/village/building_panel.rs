@@ -206,6 +206,10 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             super::orders::formation(&mut client, code);
             return;
         }
+        if action == 7 {
+            super::orders::stance(&mut client, code);
+            return;
+        }
         if action == 6 {
             client.village.garrison_cursor = false;
             client.village.unload_cursor = false;
