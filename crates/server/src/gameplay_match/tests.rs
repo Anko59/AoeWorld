@@ -1,6 +1,43 @@
 use super::*;
 
 #[test]
+fn a_seeded_flat_match_scout_clears_the_starting_traffic() {
+    let (package, pages) = flat::package(flat::FlatMap {
+        tiles_per_side: 500,
+        seed: 3,
+    })
+    .unwrap();
+    let mut world = GameWorld::from_prepared_map(package, pages, vec![], vec![], vec![]).unwrap();
+    world.prepare_navigation(&|| false).unwrap();
+    let placed = std::sync::atomic::AtomicUsize::new(0);
+    let scouts = place_villages(&mut world, 2, Some(3), &placed, &|| false).unwrap();
+    let id = scouts[0];
+    let rect = world
+        .buildings()
+        .find(|b| b.player == PlayerId(0) && b.kind == aoe_simulation::BuildingKind::TownCenter)
+        .unwrap()
+        .footprint;
+    let goal = aoe_core::WorldPosition::from_tile_center(TileCoord::new(
+        (rect.min.x + rect.max.x) / 2 + 10,
+        (rect.min.y + rect.max.y) / 2,
+    ))
+    .unwrap();
+    world.issue_move(id, goal).unwrap();
+    let destination = world.movement_order(id).unwrap().destination;
+    for _ in 0..1500 {
+        world.advance();
+    }
+    assert_eq!(
+        world.unit(id).unwrap().position,
+        destination,
+        "unit={:?}, order={:?}, obstruction={:?}",
+        world.unit(id),
+        world.movement_order(id),
+        world.movement_obstruction_ticks(id)
+    );
+}
+
+#[test]
 fn ideal_starts_spread_over_the_whole_map() {
     let two = ideal_starts(400, 2);
     let gap = (two[0].x - two[1].x).abs().max((two[0].y - two[1].y).abs());

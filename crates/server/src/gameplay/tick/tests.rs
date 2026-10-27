@@ -1,3 +1,5 @@
+// Radius geometry, exact static sweeps and local rejoining intentionally
+// change these current pins. Preserve workloads, floors and replay comparisons.
 //! Pin the current deterministic state stream delivered to every session.
 use super::scenario::{SEATS, SessionLog, run};
 use aoe_core::PlayerId;

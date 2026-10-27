@@ -88,7 +88,11 @@ obstruction policy is unpublished.
   would close physically passable gaps. A distant static waypoint is retained
   behind a nearby free rejoin point, so the local search never tries to reach
   an endpoint outside its bounded window. Repeated refinements cannot grow a
-  generated queue beyond 512 points. The long-route scheduler keeps its budget.
+  generated queue beyond 512 points. An occupied intermediate waypoint may be
+  bypassed while retaining the final destination. Static corners use exact
+  swept-circle tests too: two clear endpoints do not prove a clear diagonal
+  edge. Planning and movement use the same clearance. The long-route
+  scheduler keeps its budget.
   Steering tries four lateral directions, then two retreat directions after
   sustained obstruction. Each swept probe reads at most sixteen one-tile
   collision cells and 32 entries per cell. Normal cells are exact; an overfull

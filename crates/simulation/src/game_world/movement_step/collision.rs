@@ -311,7 +311,7 @@ impl GameWorld {
     // Raster bridge links form a one-tile-wide continuous deck. On a diagonal
     // link its sides cross water tile corners: water there is not a solid wall.
     // Foundations/buildings are still checked independently above.
-    fn bridge_water_clear(&self, tile: TileCoord) -> bool {
+    pub(super) fn bridge_water_clear(&self, tile: TileCoord) -> bool {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return false;
         };
@@ -326,7 +326,7 @@ impl GameWorld {
                 })
     }
 
-    fn on_bridge_corridor(&self, at: WorldPosition, radius: i32) -> bool {
+    pub(super) fn on_bridge_corridor(&self, at: WorldPosition, radius: i32) -> bool {
         let Terrain::Map { overlay, .. } = &self.terrain else {
             return false;
         };

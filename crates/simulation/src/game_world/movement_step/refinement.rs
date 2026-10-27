@@ -54,6 +54,8 @@ impl GameWorld {
         let stationary_only = self.has_work_task(self.units[index].state.id);
         let mut goal = order.waypoint;
         let mut pops = 0;
+        let bypass = order.waypoint != order.destination
+            && self.position_occupied(index, order.waypoint, stationary_only);
         let short_join =
             goal.tile_floor().x.abs_diff(start.x) > 1 || goal.tile_floor().y.abs_diff(start.y) > 1;
         if short_join {
@@ -88,7 +90,7 @@ impl GameWorld {
                 goal = next;
             }
         }
-        let local = if short_join && pops == 0 {
+        let local = if (short_join || bypass) && pops == 0 {
             self.local_free_arrival_route(index, goal)
         } else {
             self.local_unit_route(index, goal)
@@ -100,7 +102,7 @@ impl GameWorld {
             return false;
         };
         // Repeated transient obstruction cannot grow retained detours forever.
-        let retains_waypoint = short_join && pops == 0 && goal != order.waypoint;
+        let retains_waypoint = short_join && !bypass && pops == 0 && goal != order.waypoint;
         if self.units[index].route.len().saturating_sub(pops)
             + path.len()
             + usize::from(retains_waypoint)

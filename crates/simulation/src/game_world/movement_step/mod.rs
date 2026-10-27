@@ -19,6 +19,7 @@ use aoe_core::{ChunkCoord, EntityId, PlayerId, WorldPosition};
 
 mod avoidance;
 mod collision;
+mod static_collision;
 pub(crate) use collision::CollisionIndex;
 mod lookahead;
 mod refinement;

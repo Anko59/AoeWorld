@@ -138,7 +138,17 @@ async fn two_bots_join_their_slots_and_grow() {
         (&b_summary, &b_world, &info.slots[1]),
     ] {
         assert_eq!(world.me().map(|p| p.0), Some(slot.player));
-        assert!(summary.orders_sent > 3, "{summary:?}");
+        assert!(
+            summary.orders_sent > 3,
+            "{summary:?}, player={:?}, units={:?}, scout queues={:?}",
+            slot.player,
+            world.my_units(None),
+            world
+                .my_units(Some(UnitKind::Scout))
+                .iter()
+                .map(|u| world.move_queue(u.id()))
+                .collect::<Vec<_>>()
+        );
         assert!(summary.orders_accepted > 0, "{summary:?}");
         let villagers = world.my_units(Some(UnitKind::Villager)).len();
         assert!(villagers > 3, "the economy grew: {villagers} villagers");

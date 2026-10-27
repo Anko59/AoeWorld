@@ -170,7 +170,7 @@ impl GameWorld {
             .and_then(|p| p.movement_span("avoidance_query"));
         // Crowded candidates need no terrain query once their sweep fails.
         self.collision_sweep(index, from, to, stationary_only, false)
-            && self.body_position_clear(self.units[index].state.kind, to)
+            && self.body_step_clear(self.units[index].state.kind, from, to)
     }
 
     /// Fixed-angle right-hand sidesteps, then the other side, then a wait.

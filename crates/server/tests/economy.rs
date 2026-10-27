@@ -175,7 +175,13 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
                 TileRect::new(TileCoord::new(0, 0), TileCoord::new(side, side)),
             )
             .await;
-        format!("node={node:?}, state={:?}", drain(&mut rx))
+        format!(
+            "node={node:?}, snapshots={:?}",
+            drain(&mut rx)
+                .into_iter()
+                .filter(|m| matches!(m, GameplayServerMessage::Snapshot { .. }))
+                .collect::<Vec<_>>()
+        )
     } else {
         String::new()
     };

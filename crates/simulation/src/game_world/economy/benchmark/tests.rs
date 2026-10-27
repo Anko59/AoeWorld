@@ -1,3 +1,5 @@
+// Radius geometry, exact static sweeps and local rejoining intentionally
+// change these current pins. Preserve workloads, floors and replay comparisons.
 // Radius collision and persistent work reservations, bounded position searches
 // and continuous yielding intentionally change this current replay checkpoint.
 // Keep the same workload, activity floors and independent replay comparisons.

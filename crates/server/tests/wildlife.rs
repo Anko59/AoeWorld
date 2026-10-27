@@ -271,7 +271,22 @@ async fn a_military_hit_publishes_a_valid_retaliating_predator_in_the_same_tick(
             service.tick().await;
             target = drain(&mut rx).into_iter().find_map(predator);
         }
-        let target = target.expect("scout must reveal the predator before attacking");
+        let debug = if target.is_none() {
+            service.subscribe(session, 99, region).await;
+            drain(&mut rx)
+                .into_iter()
+                .filter_map(|m| match m {
+                    GameplayServerMessage::Snapshot { units, .. } => Some(units),
+                    _ => None,
+                })
+                .flatten()
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        let target = target.unwrap_or_else(|| {
+            panic!("scout must reveal the predator before attacking: {debug:?}")
+        });
         service
             .queue_attack(session, 2, EntityId(0), target.id)
             .await;
