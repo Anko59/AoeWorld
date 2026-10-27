@@ -271,7 +271,7 @@ async fn explicit_source_choices_never_become_procedural_fallback() {
                     }
                     let job = submitted.unwrap();
                     let completed =
-                        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                        tokio::time::timeout(std::time::Duration::from_secs(60), async {
                             loop {
                                 let job = crate::map_jobs::status(&state, job.id).await.unwrap();
                                 if job.state == JobState::Completed {

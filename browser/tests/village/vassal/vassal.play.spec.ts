@@ -10,7 +10,7 @@ const actors = async (page: Page): Promise<Actor[]> =>
   JSON.parse(
     (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
   );
-async function select(page: Page, kind: string) {
+async function select(page: Page, kind: string, status?: string) {
   let attempt = 0;
   await expect(async () => {
     const previous = await actors(page);
@@ -34,7 +34,13 @@ async function select(page: Page, kind: string) {
     await expect(page.locator("#selection-name")).toHaveText(kind, {
       timeout: 500,
     });
-  }).toPass({ timeout: 20_000, intervals: [500] });
+    // The Vassal manages only the idle workers inside its domain; cycle
+    // villagers until one it manages is under the pointer.
+    if (status)
+      await expect(page.locator("#vassal-status")).toHaveText(status, {
+        timeout: 1_000,
+      });
+  }).toPass({ timeout: status ? 30_000 : 20_000, intervals: [500] });
 }
 
 async function centerCastle(page: Page) {
@@ -131,10 +137,7 @@ test("train one Vassal per Castle and activate its visible economic domain", asy
   );
   await expect(page.locator("#vassal-status")).toContainText("domain active");
   await centerVillage(page);
-  await select(page, "Villager");
-  await expect(page.locator("#vassal-status")).toHaveText("Managed by Vassal", {
-    timeout: 15_000,
-  });
+  await select(page, "Villager", "Managed by Vassal");
   if (capture)
     await page.screenshot({ path: "../.cache/vassal/managed-firefox.png" });
   await centerCastle(page);
