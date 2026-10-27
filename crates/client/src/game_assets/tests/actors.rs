@@ -165,3 +165,37 @@ fn identical_owned_actor_groups_share_their_selected_frames() {
     );
     assert_eq!(selected.len(), 5);
 }
+
+#[wasm_bindgen_test]
+fn projectile_atlas_uses_level_flight_frames_in_each_native_direction() {
+    let mut value = manifest::fixture();
+    let template = value["frames"][0].clone();
+    value["frames"] = [Pose::Arrow, Pose::Javelin]
+        .into_iter()
+        .flat_map(|pose| {
+            let source = SPRITES[pose as usize];
+            let template = template.clone();
+            (0..source.frames()).map(move |frame| {
+                let mut cell = template.clone();
+                cell["source"] = source.manifest_source().into();
+                cell["frame"] = frame.into();
+                cell
+            })
+        })
+        .collect::<Vec<_>>()
+        .into();
+    let manifest: Manifest = serde_json::from_value(value).unwrap();
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
+    let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
+    for (pose, expected) in [
+        (Pose::Arrow, [6, 49, 93, 137, 175]),
+        (Pose::Javelin, [5, 45, 84, 125, 169]),
+    ] {
+        let range = ranges[pose as usize].clone().unwrap();
+        let actual = selected[range]
+            .iter()
+            .map(|&index| manifest.frames[index].frame)
+            .collect::<Vec<_>>();
+        assert_eq!(actual, expected);
+    }
+}
