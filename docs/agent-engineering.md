@@ -55,7 +55,7 @@ build. Qualification and authorization remain independent required planes.
 ## Heavy gates queue
 
 Gates that run the workspace's tests or heavy builds (`test-unit`,
-`test-wasm`, `test-e2e`, coverage, mutation, perf; the `heavy` flag in
+`test-wasm`, `test-e2e`, coverage, perf; the `heavy` flag in
 `gates/registry.json`) take one of two machine-wide slots and queue first come,
 first served (static checks such as `lint` never queue: they run in the Stop
 hook), so many agents on one machine no longer push each other past their
@@ -72,7 +72,7 @@ after start never pauses or aborts running gates. Direct `test-harness`, `test-u
 the slot before compiling their test steps. So do the make targets that compile or test without
 being gates (`build`, `map-test`, `geodata-test`, `test-harness-focused`, `test-placement-coverage`,
 `test-geographic-visuals-unit`, `duel-check`, `dev-build`, `test-country-source`, the single-command
-gates `fuzz-smoke`, `fuzz-nightly`, `mutation-nightly`, `perf-smoke`, `perf-ci`, `perf-full`,
+gates `fuzz-smoke`, `fuzz-nightly`, `perf-smoke`, `perf-ci`, `perf-full`,
 `perf-pressure`, `perf-stress`, `perf-soak-*`, and the release `map-*` targets): each runs
 `$(SLOT_RUN) <target> -- make <target>-steps`, and `aoe-harness slot` queues it whatever the registry
 says. Each slot's containers take `cores / slots` CPUs (2 slots in `gates/heavy.json` on 12 cores, so

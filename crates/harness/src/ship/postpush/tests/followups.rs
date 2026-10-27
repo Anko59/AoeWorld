@@ -1,6 +1,8 @@
-use super::{robustness::remote_commit, stub::World};
+use super::{ci_alongside::setup, robustness::remote_commit, stub::World};
 use crate::ship::{
-    Options, git, ship_with,
+    Options, git,
+    review_gate::graded,
+    ship_with,
     tests::{offline, run},
 };
 use std::io::Write;
@@ -170,5 +172,56 @@ fn default_ship_keeps_a_safe_fast_forward_after_the_recheck_rebase() {
         git::git(&world.root, &["ls-remote", "origin", "refs/heads/feature"])
             .unwrap()
             .starts_with(&shipped.head)
+    );
+}
+
+#[test]
+fn ship_succeeds_when_a_workstream_is_closed_after_publication() {
+    let (world, options) = setup();
+    world.answer("closed-issue", "");
+    ship_with(&world.root, &options, &|root, tier, _, _, _| {
+        use crate::review::protocol::{Finding, Reported, Severity, Status};
+        let mut report = graded(root, tier, 9);
+        report.findings.push(Finding {
+            id: "F1".into(),
+            reporter: 0,
+            round: 1,
+            reported: Reported {
+                file: "crates/server/a.rs".into(),
+                line: Some(1),
+                severity: Severity::Minor,
+                category: "test".into(),
+                claim: "broken".into(),
+                trigger: String::new(),
+                expected_vs_actual: String::new(),
+                evidence: String::new(),
+            },
+            votes: vec![],
+            status: Status::Confirmed,
+            members: vec![],
+        });
+        Ok(report)
+    })
+    .unwrap();
+    let calls = world.calls();
+    assert!(calls.contains("issue view 575"), "{calls}");
+    assert!(!calls.contains("issue create"), "{calls}");
+    assert!(!calls.contains("issue edit"), "{calls}");
+}
+
+#[test]
+fn pull_request_state_parses_githubs_json_for_drafts_and_armed_auto_merge() {
+    use crate::ship::postpush::draft::PrState;
+    // A failed review leaves exactly this: a draft with no auto-merge (#518, 2026-10-21).
+    let draft = PrState::parse(r#"{"isDraft":true,"autoMergeRequest":null}"#).unwrap();
+    assert!(draft.is_draft && !draft.armed());
+    let armed = PrState::parse(
+        r#"{"isDraft":false,"autoMergeRequest":{"enabledAt":"2026-10-21T00:00:00Z","mergeMethod":"SQUASH"}}"#,
+    )
+    .unwrap();
+    assert!(!armed.is_draft && armed.armed());
+    assert!(
+        PrState::parse("true false").is_err(),
+        "jq-style text is not accepted"
     );
 }

@@ -105,12 +105,12 @@ pub(super) fn check_at(
         }
         Err(error) => message.push_str(&format!("  cannot inventory targets: {error}\n")),
     }
-    message.push_str("Free disposable output after checking no run uses it, then retry. AOE_DISK_FLOOR_GIB=0 disables this check.");
+    message.push_str("Run `make clean-stale` (APPLY=1 to act), then retry. AOE_DISK_FLOOR_GIB=0 disables this check.");
     Err(message.into())
 }
 
 /// Available to this user, including when output has not been created yet.
-pub(super) fn free_bytes(path: &Path) -> Result<u64> {
+pub(crate) fn free_bytes(path: &Path) -> Result<u64> {
     let absolute = std::path::absolute(path)?;
     let mut existing = absolute.as_path();
     loop {

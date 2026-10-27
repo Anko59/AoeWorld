@@ -134,35 +134,84 @@ fn json_string(text: &str) -> String {
     serde_json::to_string(text).unwrap_or_else(|_| "\"\"".into())
 }
 
-/// The reviewer's answer text, or why there is none.
+/// Run one session, retrying transient capacity failures, then try the other
+/// supported runtime once. The fallback model is selected by the caller.
 pub(crate) fn ask(
     runtime: Runtime,
     root: &Path,
     model: &Model,
+    fallback: Option<(Runtime, &Model)>,
     prompt: &str,
-) -> Result<String, String> {
-    ask_with(|| command(runtime, root, model, prompt), thread::sleep)
+) -> (Result<String, String>, bool) {
+    ask_fallback_with(
+        runtime,
+        |which| {
+            let selected = if which == runtime {
+                model
+            } else {
+                fallback.ok_or("fallback model is missing")?.1
+            };
+            command(which, root, selected, prompt)
+        },
+        wait_for_retry,
+    )
 }
 
-/// Run the actual process on each attempt, cleaning its private scratch before
-/// waiting. The factory and wait are injectable, never environment overrides.
+pub(super) fn ask_fallback_with(
+    runtime: Runtime,
+    mut launch: impl FnMut(Runtime) -> Result<(Command, Option<PathBuf>), String>,
+    wait: impl FnMut(Duration),
+) -> (Result<String, String>, bool) {
+    let result = ask_with(|| launch(runtime), wait);
+    let other = match runtime {
+        Runtime::Codex => Some(Runtime::Claude),
+        Runtime::Claude => Some(Runtime::Codex),
+        _ => None,
+    };
+    if result
+        .as_ref()
+        .is_err_and(|error| error.starts_with("reviewer rate-limited after "))
+        && let Some(other) = other
+    {
+        eprintln!(
+            "reviewer rate-limited; trying {} runtime",
+            super::config::runtime_key(other)
+        );
+        let alternate = run_once(|| launch(other)).0;
+        return (
+            alternate.map_err(|error| format!("{}; fallback failed: {error}", result.unwrap_err())),
+            true,
+        );
+    }
+    (result, false)
+}
+
+fn run_once(
+    launch: impl FnOnce() -> Result<(Command, Option<PathBuf>), String>,
+) -> (Result<String, String>, bool) {
+    let (command, scratch) = match launch() {
+        Ok(command) => command,
+        Err(error) => return (Err(error), false),
+    };
+    let captured = capture_command(command, BUDGET, &Cancellation::default());
+    if let Some(patch) = scratch {
+        let _ = fs::remove_file(patch);
+    }
+    let stdout = String::from_utf8_lossy(&captured.stdout);
+    let stderr = String::from_utf8_lossy(&captured.stderr);
+    let limited = matches!(captured.exit, CaptureExit::Failed(_) | CaptureExit::Success)
+        && (rate_limited(&stdout) || rate_limited(&stderr));
+    (answer(&stdout, &stderr, &captured.exit), limited)
+}
+
+/// Three attempts; tests inject the wait without sleeping.
 pub(super) fn ask_with(
     mut launch: impl FnMut() -> Result<(Command, Option<PathBuf>), String>,
     mut wait: impl FnMut(Duration),
 ) -> Result<String, String> {
     for attempt in 0..=RATE_LIMIT_BACKOFF.len() {
-        let (command, scratch) = launch()?;
-        let captured = capture_command(command, BUDGET, &Cancellation::default());
-        if let Some(patch) = scratch {
-            let _ = fs::remove_file(patch);
-        }
-        let stdout = String::from_utf8_lossy(&captured.stdout);
-        let stderr = String::from_utf8_lossy(&captured.stderr);
-        let result = answer(&stdout, &stderr, &captured.exit);
-        if result.is_ok()
-            || !matches!(captured.exit, CaptureExit::Failed(_) | CaptureExit::Success)
-            || !(rate_limited(&stdout) || rate_limited(&stderr))
-        {
+        let (result, limited) = run_once(&mut launch);
+        if result.is_ok() || !limited {
             return result;
         }
         if let Some(delay) = RATE_LIMIT_BACKOFF.get(attempt) {
@@ -179,18 +228,35 @@ pub(super) fn ask_with(
     unreachable!("the last attempt returns")
 }
 
-/// Whole diagnostic words, not a source line numbered 429 or a rate limiter.
+fn wait_for_retry(delay: Duration) {
+    #[cfg(test)]
+    if std::env::var_os("AOE_REVIEW_LIVE_TEST_CHILD").is_some() {
+        return;
+    }
+    thread::sleep(delay);
+}
+
+/// Recognize specific diagnostics, never an unrelated bare 429.
 fn rate_limited(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     let words: Vec<_> = lower
         .split(|c: char| !c.is_ascii_alphanumeric())
         .filter(|word| !word.is_empty())
         .collect();
-    words.windows(3).any(|w| w == ["too", "many", "requests"])
+    let status_429 = ["http 429", "status 429"].iter().any(|phrase| {
+        lower.match_indices(*phrase).any(|(index, _)| {
+            let before = index.checked_sub(1).and_then(|i| lower.as_bytes().get(i));
+            let after = lower.as_bytes().get(index + phrase.len());
+            before.is_none_or(|c| !c.is_ascii_alphanumeric())
+                && after.is_none_or(|c| !c.is_ascii_alphanumeric())
+        })
+    });
+    status_429
+        || words.windows(3).any(|w| w == ["too", "many", "requests"])
         || words.windows(2).any(|w| {
             matches!(
                 w,
-                ["rate", "limit" | "limited"] | ["http" | "status", "429"]
+                ["rate", "limit" | "limited"] | ["usage", "limit"] | ["at", "capacity"]
             )
         })
 }
@@ -218,12 +284,22 @@ pub(crate) fn ask_all(
     runtime: Runtime,
     root: &Path,
     model: &Model,
+    fallback: Option<(Runtime, &Model)>,
     prompts: Vec<String>,
+    used: &std::sync::atomic::AtomicBool,
 ) -> Vec<Result<String, String>> {
     thread::scope(|scope| {
         let handles: Vec<_> = prompts
             .iter()
-            .map(|prompt| scope.spawn(move || ask(runtime, root, model, prompt)))
+            .map(|prompt| {
+                scope.spawn(move || {
+                    let (answer, switched) = ask(runtime, root, model, fallback, prompt);
+                    if switched {
+                        used.store(true, Ordering::Relaxed);
+                    }
+                    answer
+                })
+            })
             .collect();
         handles
             .into_iter()

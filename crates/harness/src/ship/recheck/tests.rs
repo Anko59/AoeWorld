@@ -13,6 +13,7 @@ use std::{fs, path::PathBuf};
 mod fork_point;
 mod fork_point_cli;
 mod merge;
+mod ownlease;
 mod pinned;
 mod restack;
 mod start;
@@ -295,10 +296,11 @@ fn only_the_ships_own_remote_tip_is_overwritten_without_ship_force() {
         shipped.head,
         "leased push replaced the tip"
     );
-    // Another tip, no SHIP_FORCE: stop and ask for it.
+    // A modified patch, no SHIP_FORCE: stop and ask for it.
     let (temp, root) = fixture("true");
     run(&root, &["push", "-q", "origin", "feature"]);
-    run(&root, &["commit", "-q", "--amend", "-m", "amended"]);
+    fs::write(root.join("README.md"), "modified patch\n").unwrap();
+    run(&root, &["commit", "-q", "-a", "--amend", "-m", "amended"]);
     let tip = remote_tip(&root, "feature");
     let before = judge(&root, &offline()).unwrap();
     advance(&temp, "dev", "other.txt", "o\n");
@@ -314,7 +316,8 @@ fn only_the_ships_own_remote_tip_is_overwritten_without_ship_force() {
     // With SHIP_FORCE the plain `--force-with-lease` of today applies.
     let (temp, root) = fixture("true");
     run(&root, &["push", "-q", "origin", "feature"]);
-    run(&root, &["commit", "-q", "--amend", "-m", "amended"]);
+    fs::write(root.join("README.md"), "modified patch\n").unwrap();
+    run(&root, &["commit", "-q", "-a", "--amend", "-m", "amended"]);
     let before = judge(&root, &offline()).unwrap();
     advance(&temp, "dev", "other.txt", "o\n");
     let forced = Options {

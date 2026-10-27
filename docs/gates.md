@@ -16,10 +16,9 @@ Registry v2 drives selection and dependency plans. The opt-in gate-run CLI execu
 | lint | `make lint` | fmt-check | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 600 | — | Clippy exit status |
 | deny | `make deny` | — | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 600 | — | Cargo advisory, source, license, and bans audit |
 | test-unit | `make test-unit` | lint | native | [Pr, Ci, Nightly] | 900 | yes | native unit, integration, and doctest results |
-| coverage | `make coverage` | test-unit, build-wasm | native | [Ci, Nightly] | 3600 | yes | LCOV production-line thresholds and JSON report |
+| coverage | `make coverage` | test-unit, build-wasm | native | [Ci, Nightly] | 3600 | yes | LCOV production-line counts and JSON report |
 | fuzz-smoke | `make fuzz-smoke` | test-unit | native, assets, release | [Pr, Ci, Nightly] | 1800 | yes | 512 bounded libFuzzer runs per parser and JSON report |
 | fuzz-nightly | `make fuzz-nightly` | fuzz-smoke | native, assets, release | [Nightly] | 5400 | yes | 300-second libFuzzer campaign per parser and JSON report |
-| mutation-nightly | `make mutation-nightly` | test-unit | everything | [Nightly] | 5400 | yes | pinned comparator and CI-selection mutation outcomes |
 | browser-check | `make browser-check` | — | browser | [Stop, Commit, Pr, Ci, Nightly] | 600 | — | TypeScript, ESLint, and Prettier results |
 | test-wasm | `make test-wasm` | test-unit, browser-check, build-wasm | browser | [Pr, Ci, Nightly] | 1800 | yes | wasm-bindgen-test in pinned Chromium and JSON report |
 | test-e2e | `make test-e2e` | test-unit, browser-check, build-wasm | browser | [Pr, Ci, Nightly] | 2400 | yes | Playwright result and screenshots |

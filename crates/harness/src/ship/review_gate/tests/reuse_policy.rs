@@ -25,7 +25,7 @@ fn reuse_requires_the_current_review_config_fingerprint() {
     let source = unstored(&root, Tier::Low, 9);
     source.store(&root).unwrap();
     advance_dev_with_policy(&root, |config| {
-        config["tiers"]["low"]["personas"] = serde_json::json!(["quick", "test-integrity"]);
+        config["tiers"]["low"]["personas"] = serde_json::json!(["quick", "correctness"]);
     });
     let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
     assert!(

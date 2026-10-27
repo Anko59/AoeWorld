@@ -65,9 +65,7 @@ pub(super) fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
         "gates/review/personas/quick.md",
         "gates/review/personas/correctness.md",
         "gates/review/personas/spec.md",
-        "gates/review/personas/test-integrity.md",
         "gates/review/personas/hostile-input.md",
-        "gates/review/personas/performance.md",
     ] {
         fs::create_dir_all(root.join(file).parent().unwrap()).unwrap();
         fs::copy(repo.join(file), root.join(file)).unwrap();

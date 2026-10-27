@@ -36,6 +36,7 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
         tier: tier.name().into(),
         floor: "low".into(),
         runtime: "claude".into(),
+        runtime_fallback: false,
         model: "scripted".into(),
         effort: "medium".into(),
         personas: vec!["quick".into()],
@@ -78,7 +79,6 @@ fn pushed(root: &Path) -> bool {
         .unwrap()
         .is_empty()
 }
-
 #[test]
 fn a_review_below_the_merge_grade_pushes_nothing() {
     let (_temp, root) = fixture("true");
@@ -233,10 +233,6 @@ fn the_review_is_rendered_into_a_private_description() {
     assert!(text.contains("A README edit."), "{text}");
     assert!(text.contains("9/10"), "{text}");
     assert!(text.contains("### ✅ How\n\n"), "{text}");
-    assert!(
-        text.contains("## Test-first report\n\n") && text.contains("- test-first: not applicable"),
-        "{text}"
-    );
     assert!(
         text.contains("Review of `aaaaaaaaaaaa` reused (same patch)"),
         "{text}"

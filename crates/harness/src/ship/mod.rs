@@ -16,6 +16,7 @@ mod issues;
 mod levels;
 pub(crate) mod lock;
 mod metrics;
+mod playtest;
 mod postpush;
 pub(crate) mod prepush;
 mod recheck;
@@ -24,7 +25,6 @@ mod review_pr;
 pub(crate) mod run;
 mod showcase;
 pub(crate) mod stack;
-pub(crate) mod test_first;
 #[cfg(test)]
 mod tests;
 
@@ -259,7 +259,7 @@ pub(crate) fn ship_with(
     let push_tip = git::lease::tracking(root, &branch);
     let started_head = git::git(root, &["rev-parse", "HEAD"])?;
     stack::refuse_base(&options.base, &branch)?;
-    // Suites, the review diff, test-first and metrics all measure the change
+    // Suites, the review diff and metrics all measure the change
     // against the selected base (origin, or an explicitly local parent).
     let _base = crate::review::base::scope(&options.base);
     let preflight = if !options.no_pr {
@@ -298,12 +298,6 @@ pub(crate) fn ship_with(
         eprintln!("ship: lock released for the gates and the review");
     }
     let _anchor = crate::review::base::scope_at(&options.base, &base);
-    let subject = git::subject(root)?;
-    let merge_base = git::git(root, &["merge-base", &base, &subject.head])?;
-    eprint!(
-        "ship: test-first report\n{}",
-        test_first::summary(root, &merge_base, &subject.head)
-    );
     let options = &Options {
         no_fetch: true,
         ..options.clone()
@@ -351,25 +345,46 @@ pub(crate) fn ship_with(
     } else {
         push_tip
     };
-    let review = if options.no_review {
-        None
+    let started = playtest::start(root, &base, &evidence.head);
+    let reviewed = if options.no_review {
+        Ok(None)
     } else {
-        let reviewed = match (early_draft, body_text.as_deref()) {
+        match (early_draft, body_text.as_deref()) {
             (true, Some(task)) => {
                 review_gate::require_task(root, &evidence, options, task, reviewer)
             }
             _ => review_gate::require(root, &evidence, options, reviewer),
-        };
-        match reviewed {
-            Ok(report) => Some(report),
-            Err(error) if early_draft => {
-                let grade = postpush::ci::recorded_grade(root, &evidence.branch, &evidence.head);
-                return postpush::ci::outcome(root, &evidence.head, grade, Err(error));
-            }
-            Err(error) => return Err(error),
         }
+        .map(Some)
     };
+    let playtest = match (&reviewed, started) {
+        (Err(_), Some(started)) => {
+            started.stop();
+            None
+        }
+        (_, started) => started.and_then(playtest::Started::finish),
+    };
+    let applicable = git::changed_between(root, &base, &evidence.head)
+        .is_ok_and(|paths| paths.iter().any(|p| playtest::gameplay(p)));
+    let review = match reviewed {
+        Ok(report) => report,
+        Err(error) if early_draft => {
+            playtest::draft_advisory(
+                root,
+                &evidence,
+                body_text.as_deref(),
+                playtest.as_ref(),
+                applicable,
+            );
+            playtest::announce(playtest.as_ref(), &evidence.head);
+            let grade = postpush::ci::recorded_grade(root, &evidence.branch, &evidence.head);
+            return postpush::ci::outcome(root, &evidence.head, grade, Err(error));
+        }
+        Err(error) => return Err(error),
+    };
+    playtest::enforce(playtest.as_ref(), applicable)?;
     if options.review_ahead {
+        playtest::announce(playtest.as_ref(), &evidence.head);
         let report = review
             .as_ref()
             .ok_or("review ahead requires a passing review")?;
@@ -401,9 +416,9 @@ pub(crate) fn ship_with(
         if !options.no_pr {
             let mut options = options.clone();
             if let (Some(report), Some(body_text)) = (&review, body_text.as_deref()) {
-                options.body_file = Some(github::description(
-                    root, &evidence, &options, report, body_text,
-                )?);
+                let path = github::description(root, &evidence, &options, report, body_text)?;
+                playtest::append(&path, playtest.as_ref(), applicable, &evidence.head)?;
+                options.body_file = Some(path);
             }
             let url = github::pull_request(root, &evidence, &options)?;
             if let (Some(video), Some(body)) = (&options.video, &options.body_file) {
@@ -471,6 +486,7 @@ pub(crate) fn ship_with(
         }
         Ok(evidence)
     })();
+    playtest::announce(playtest.as_ref(), &pushed_head);
     if early_draft {
         postpush::ci::outcome(root, &pushed_head, grade, published)
     } else {

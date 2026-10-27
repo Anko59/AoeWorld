@@ -1,6 +1,7 @@
 //! Disk admission, and disposable output sizing/cleanup without following symlinks.
 use std::{fs, io, path::Path};
 pub(crate) mod precheck;
+pub(crate) mod stale;
 
 #[cfg(test)]
 mod tests;

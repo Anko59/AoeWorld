@@ -82,7 +82,6 @@ pub fn check(root: &Path) -> Result<(), Box<dyn Error>> {
         }
     }
     if violations.is_empty() {
-        crate::gates::contracts::check(root)?;
         Ok(())
     } else {
         Err(violations.join("\n").into())

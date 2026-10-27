@@ -171,7 +171,7 @@ fn before_push_from(
         return Ok(None);
     }
     let subject = git::subject(root)?;
-    let lease = lease(root, options, &subject, started_head)?;
+    let lease = lease(root, options, &subject.branch, &subject.head, started_head)?;
     let anchor = base::scope_at(&options.base, &current);
     let after = Evidence {
         cadence: "recheck".into(),
@@ -358,29 +358,26 @@ fn failure(options: &Options, failed: &GateResult, gained: &[String]) -> String 
 
 /// After a rebase of a branch already on the remote, the push overwrites it.
 /// Only the branch's own remote is ever lease-forced, and only from the
-/// draft-pushed head (otherwise the starting commit); any other remote tip
-/// needs `SHIP_FORCE`.
+/// draft-pushed head (otherwise the starting commit), its GitHub dev merges,
+/// or an earlier push of the same ordered patches.
 pub(super) fn lease(
     root: &Path,
     options: &Options,
-    subject: &git::Subject,
+    branch: &str,
+    head: &str,
     from_head: &str,
 ) -> Result<Option<String>> {
     let tip = git::git(
         root,
-        &[
-            "ls-remote",
-            "origin",
-            &format!("refs/heads/{}", subject.branch),
-        ],
+        &["ls-remote", "origin", &format!("refs/heads/{branch}")],
     )?;
     let Some(tip) = tip.split_whitespace().next() else {
         return Ok(None);
     };
-    // The updater may have merged dev while the gates/review were running.
-    // Fetch its objects and validate the same strict chain used immediately before push.
+    // The updater may have merged dev, or origin may hold our earlier push.
+    // Validate with the same rules used immediately before push.
     if tip != from_head
-        && git::lease::refresh(root, &subject.branch, from_head, from_head)
+        && git::lease::refresh(root, branch, from_head, from_head, head)
             .is_ok_and(|head| head == tip)
     {
         return Ok(Some(tip.to_owned()));
@@ -388,7 +385,7 @@ pub(super) fn lease(
     if tip == from_head {
         return Ok(Some(from_head.to_owned()));
     }
-    let behind = git::git(root, &["merge-base", "--is-ancestor", tip, &subject.head]).is_ok();
+    let behind = git::git(root, &["merge-base", "--is-ancestor", tip, head]).is_ok();
     if behind || options.force {
         return Ok(None);
     }
@@ -396,7 +393,7 @@ pub(super) fn lease(
         "ship: origin/{} is at {}, not at {} where this ship started, and the re-check rebase \
          rewrote the branch: check nobody else pushed there, then ship again with SHIP_FORCE=1. \
          Nothing was pushed",
-        subject.branch,
+        branch,
         short(tip),
         short(from_head)
     )

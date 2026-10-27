@@ -12,6 +12,7 @@ fn report(findings: Vec<Finding>) -> Report {
         tier: "low".into(),
         floor: "low".into(),
         runtime: "claude".into(),
+        runtime_fallback: false,
         model: "scripted".into(),
         effort: "medium".into(),
         personas: vec!["quick".into()],

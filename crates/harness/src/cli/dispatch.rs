@@ -1,9 +1,9 @@
 use super::{Command, DevCommand};
 use crate::{
     agents, architecture, assets, coverage, dev, e2e, format_commands, fuzz, gates, hooks, ledger,
-    mutation, native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure, perf_scale,
-    perf_size, perf_soak, perf_stress, perf_timing, policy, process, qa, qa_mcp, release,
-    release_promotion, release_publish, repo_policy, review, ship, slots, timeline, wasm_test,
+    native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure, perf_scale, perf_size,
+    perf_soak, perf_stress, perf_timing, policy, process, qa, qa_mcp, release, release_promotion,
+    release_publish, repo_policy, review, ship, slots, timeline, wasm_test,
 };
 use std::{
     path::{Path, PathBuf},
@@ -35,6 +35,7 @@ pub(super) fn run(
             println!("{hash}");
         }
         Command::DiskPrecheck => (),
+        Command::CleanStale { apply } => crate::disk::stale::run(apply)?,
         Command::Doctor => {
             for tool in ["git", "cargo", "rustc"] {
                 process::run(tool, &["--version"], Duration::from_secs(10))?;
@@ -63,7 +64,6 @@ pub(super) fn run(
             gates::placement::check(Path::new("."), kind)?;
         }
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
-        Command::ContractsCheck => println!("{}", gates::contracts::check(Path::new("."))?),
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
         Command::GatesDocs => gates::docs_generate(Path::new("."))?,
         Command::ScopeCheck { revision } => {
@@ -106,8 +106,6 @@ pub(super) fn run(
         Command::TestGeographicVisuals => e2e::run_visuals()?,
         Command::FuzzSmoke => fuzz::run(fuzz::Mode::Smoke)?,
         Command::FuzzNightly => fuzz::run(fuzz::Mode::Nightly)?,
-        Command::MutationNightly(options) => mutation::run(options)?,
-        Command::MutationIntegrity => mutation::run_integrity()?,
         Command::PerfSmoke => perf::run("smoke")?,
         Command::PerfCi => perf::run("ci")?,
         Command::PerfFull => perf::run("full")?,

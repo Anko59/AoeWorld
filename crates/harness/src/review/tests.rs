@@ -219,15 +219,27 @@ fn the_committed_config_is_strict_and_sets_floors_and_models() {
         config.model_for(Tier::High, Runtime::Claude, false).effort,
         "high"
     );
-    // Codex reviews on GPT-6.1 Sol, never Luna (docs/review.md).
+    // Codex reviews on GPT-6.1 Terra (docs/review.md).
     let codex = config.model_for(Tier::High, Runtime::Codex, false);
     assert_eq!(
         (codex.model.as_str(), codex.effort.as_str()),
-        ("gpt-6.1-sol", "high")
+        ("gpt-6.1-terra", "high")
     );
     // Codex's highest effort is xhigh: the bump never invents one it refuses.
     assert_eq!(bump("codex", "xhigh"), "xhigh");
-    assert_eq!(config.tiers[&Tier::Max].personas.len(), 5);
+    for (tier, count) in [
+        (Tier::Low, 1),
+        (Tier::Medium, 2),
+        (Tier::High, 3),
+        (Tier::Xhigh, 3),
+        (Tier::Max, 3),
+    ] {
+        assert_eq!(config.tiers[&tier].personas.len(), count);
+    }
+    assert_eq!(
+        config.model_for(Tier::Max, Runtime::Codex, false).model,
+        "gpt-6.1-terra"
+    );
     assert_eq!(bump("claude", "max"), "max");
     assert_eq!(bump("codex", "high"), "xhigh");
     assert_eq!(bump("dsh", "high"), "max");
@@ -266,6 +278,18 @@ fn only_the_low_tiers_reviewers_run_on_the_light_model() {
         (low.model.as_str(), low.effort.as_str()),
         ("claude-haiku-5-5", "medium")
     );
+    assert_eq!(
+        config
+            .fallback_model_for(Tier::Low, Runtime::Claude, false)
+            .model,
+        "claude-sonnet-5-5"
+    );
+    assert_eq!(
+        config
+            .fallback_model_for(Tier::Low, Runtime::Claude, true)
+            .model,
+        "claude-opus-5-5"
+    );
     // Closing reviews (strong, whatever the tier) and the arbiter keep Opus.
     assert_eq!(
         config.model_for(Tier::Low, Runtime::Claude, true).model,
@@ -286,7 +310,7 @@ fn only_the_low_tiers_reviewers_run_on_the_light_model() {
     // Other families have no light model: low stays on their average one.
     assert_eq!(
         config.model_for(Tier::Low, Runtime::Codex, false).model,
-        "gpt-6.1-sol"
+        "gpt-6.1-terra"
     );
     // Without `light` the low tier runs on the average model, as before.
     let mut without: serde_json::Value = serde_json::from_str(text).unwrap();
@@ -332,6 +356,7 @@ pub(super) fn sample_report() -> Report {
         tier: "medium".into(),
         floor: "medium".into(),
         runtime: "claude".into(),
+        runtime_fallback: false,
         model: "claude-sonnet-5-5".into(),
         effort: "medium".into(),
         personas: vec!["correctness".into(), "spec".into(), "test-integrity".into()],

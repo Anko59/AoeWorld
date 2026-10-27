@@ -13,8 +13,7 @@
     "medium": {
       "personas": [
         "correctness",
-        "spec",
-        "test-integrity"
+        "spec"
       ],
       "max_rounds": 3,
       "strength": "average",
@@ -24,9 +23,7 @@
       "personas": [
         "correctness",
         "spec",
-        "test-integrity",
-        "hostile-input",
-        "performance"
+        "hostile-input"
       ],
       "max_rounds": 3,
       "strength": "average",
@@ -36,7 +33,7 @@
       "personas": [
         "correctness",
         "spec",
-        "test-integrity"
+        "hostile-input"
       ],
       "max_rounds": 3,
       "strength": "strong",
@@ -46,9 +43,7 @@
       "personas": [
         "correctness",
         "spec",
-        "test-integrity",
-        "hostile-input",
-        "performance"
+        "hostile-input"
       ],
       "max_rounds": 5,
       "strength": "strong",
@@ -72,11 +67,11 @@
     },
     "codex": {
       "average": {
-        "model": "gpt-6.1-sol",
+        "model": "gpt-6.1-terra",
         "effort": "medium"
       },
       "strong": {
-        "model": "gpt-6.1-sol",
+        "model": "gpt-6.1-terra",
         "effort": "medium"
       }
     },

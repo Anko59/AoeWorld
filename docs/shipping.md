@@ -87,7 +87,7 @@ critical), an incomplete review, or a closing review
    dev changed in <commits>") and the own patch is identical against each base (else "changed your
    patch"). The rebased head's evidence (cadence `recheck`) holds its static gates and a separate "full
    preflight passed on <old head> (base <old base>)". A rebased branch already on `origin` is pushed
-   with a lease on the draft push head (otherwise the starting commit) or its GitHub dev merges ([details](post-push.md)), else the ship asks for `SHIP_FORCE=1`. **Then**, if
+   with a lease on the draft push head (otherwise the starting commit), its GitHub dev merges, or an earlier push of the same ordered patches ([details](post-push.md)), else the ship asks for `SHIP_FORCE=1`. **Then**, if
    the parent is ready, pushes exactly that commit to `origin` as the branch (`SHIP_FORCE=1` adds
    `--force-with-lease`, after a rebase). The pre-push hook runs `make pre-push`: it skips the preflight
    when `make ship`'s preflight evidence, or a rebased head's re-check record (static gates passed on
@@ -103,10 +103,19 @@ critical), an incomplete review, or a closing review
    CI succeeds; a missing run is pending, and unreadable CI is an explicit error.
    Already failed jobs make ship exit non-zero with their names, run
    URL and `gh run rerun <run> --failed`: review passed and auto-merge is armed,
-   but fix CI and reship. Every review outcome prints the score beside CI counts.
+   but fix CI and reship. Every review outcome prints the score beside CI counts or its pending state.
 10. **Files the review's leftovers** in the configured workstream issues by
    finding path ([issues](issues.md#review-follow-ups-and-nightly-triage)). A
    filing failure warns after publication; ship continues.
+
+Gameplay changes also include a **Playtest (advisory)** report for the gated
+revision when available. If the target exists and the report is missing, ship
+starts `make playtest` as a child process before the review; the child takes its
+heavy slot through the Makefile's slot wrapper, so the review never waits on it.
+A failed review kills the child and is reported at once; after a passing review
+ship waits up to 30 minutes for the report. Failures, timeouts and missing
+reports do not block shipping. The `BLOCKING` constant in
+`crates/harness/src/ship/playtest/mod.rs` controls that policy.
 
 ## One ship at a time
 
@@ -160,7 +169,7 @@ including amendments; without a fork point, rebase the child onto the parent you
 Dev keeps the ordinary merge base because it is never rewritten.
 
 Once the parent has its open harness pull request, run `make ship` with the
-same base and description. Suites, review, test-first and metrics use the
+same base and description. Suites, review and metrics use the
 merge base with the fetched `refs/remotes/origin/<parent>`. Gates run again;
 a stored approval is reused if the child's own patch and the other guards
 still match, even if the parent was edited and the child rebased. The child
@@ -189,7 +198,7 @@ the PR") and renders two parts:
 - **🧑 For humans:** Why, What with the showcase video (`SHIP_VIDEO`, uploaded
   inline with `gh --attach`), and How with the review headline, summary, and a
   metrics table comparing the merge base with this PR ([metrics](#metrics)).
-- **🤖 For AI:** the agent's notes, the [test-first report](#test-first), gate
+- **🤖 For AI:** the agent's notes, gate
   evidence and the full adversarial review.
 
 | Level | For | Video (`SHIP_VIDEO`) | Voice | Target share |
@@ -463,14 +472,6 @@ stubs, so use a real task separately to verify a live runtime.
 A pre-commit that stages only test files runs clippy without test targets, so
 red tests that name code not written yet can be committed first; the next
 commit and every preflight check all targets.
-
-The review facts and PR description include a non-blocking Git-history summary:
-commit ordering, test functions added before the first product commit, inline-test
-changes and build-time inputs. Review checks whether the tests cover the change;
-CI runs all required test suites.
-
-Product scope includes `crates/` except the harness, `web/` and `browser/`.
-Harness, gates, docs and CI alone remain not applicable to the ordering summary.
 
 ## Delivery time
 See [delivery timeline](timeline.md) for `make timeline`, stage journals and historical limits.

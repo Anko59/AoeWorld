@@ -39,6 +39,18 @@ opt-level = "z"
 lto = "fat"
 codegen-units = 1
 
+[profile.dev]
+incremental = false
+
+[profile.test]
+incremental = false
+
+[profile.dev.package."*"]
+debug = 0
+
+[profile.test.package."*"]
+debug = 0
+
 # Full-distance movement/replay regressions exercise millions of terrain
 # queries. Optimize their hot crates while retaining test safety checks.
 [profile.test.package.aoe-map]
