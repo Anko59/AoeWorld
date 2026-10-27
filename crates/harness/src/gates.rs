@@ -1,5 +1,4 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
-pub(crate) mod contracts;
 pub(crate) mod dispatch_status;
 pub(crate) mod flaky;
 mod heavy_slots;

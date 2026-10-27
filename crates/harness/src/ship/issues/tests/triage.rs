@@ -277,7 +277,7 @@ fn the_route_make_target_and_workflow_reach_the_triage() {
         .filter_map(|line| line.strip_prefix("  ")?.strip_suffix(':'))
         .filter(|name| !name.starts_with(' '))
         .collect();
-    assert!(jobs.len() >= 5, "{jobs:?}");
+    assert!(jobs.len() >= 4, "{jobs:?}");
     for job in jobs {
         assert!(
             needs

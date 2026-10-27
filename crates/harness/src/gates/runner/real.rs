@@ -413,7 +413,6 @@ pub(super) fn images(
         ("policy", "0.20.2"),
         ("coverage", "0.9.1"),
         ("fuzz", "nightly-2026-09-01-0.13.2"),
-        ("mutation", "27.1.0"),
     ] {
         let tag = format!("aoeworld/{name}:{version}");
         let remaining = budget.saturating_sub(started.elapsed());

@@ -417,7 +417,6 @@ pub(super) fn description(
         &evidence.base_branch,
         levels.spec(template.level).metrics,
     )?;
-    let test_first = super::test_first::summary(root, &evidence.merge_base, &evidence.head);
     let distribution = super::levels::stats::summary_line(root, &levels);
     let text = describe::render(
         &template,
@@ -427,7 +426,6 @@ pub(super) fn description(
         &describe::Extras {
             footer: &describe::footer(options.runtime),
             metrics: &metrics,
-            test_first: &test_first,
             distribution: &distribution,
         },
     );
