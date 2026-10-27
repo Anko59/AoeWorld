@@ -76,20 +76,6 @@ fn only_the_main_session_reviews_existing_pull_requests() {
 }
 
 #[test]
-fn only_the_main_session_calibrates_the_review() {
-    // It spends model sessions on the seed set.
-    let fixture = Fixture::new();
-    for role in AGENTS {
-        denied(&fixture, role, "make review-calibrate CALIBRATE_CASES=6");
-    }
-    allowed(
-        &fixture,
-        Role::Main,
-        "make review-calibrate CALIBRATE_CASES=6",
-    );
-}
-
-#[test]
 fn showcase_and_ship_tools_are_main_session_only() {
     let fixture = Fixture::new();
     for role in AGENTS {

@@ -33,29 +33,6 @@ Harness and pi.
 | xhigh | 3 | ≤ 3 | strong (Opus 5.5, GPT‑6.1 Sol, GLM 5.3; medium) |
 | max | 5 | ≤ 5 | strong |
 
-GPT‑6 Luna was the Codex family's `average` model until the owner rejected
-it as a reviewer: for days it graded working, verified changes 2–6/10 on
-contrived attacks. Codex now reviews on GPT‑6.1 Sol (medium) at the average and
-strong levels alike; use `make review-calibrate` (below) before trusting any
-other model as a reviewer.
-
-The **light** model is the one exception to the average and strong levels. It
-is per runtime family and used only by tier low's reviewer and grader sessions
-(`light` in `gates/review.json`; a family without it keeps its average model).
-Closing reviews, the arbiter and every other tier never use it. Claude Haiku
-5.5 (medium) is light for Claude, on `make review-calibrate` over the 30 seeds at
-tier low, medium effort:
-
-| Model | Planted defects blocked | Clean cases wrongly blocked | Mean grade, clean | Mean grade, planted |
-|---|---|---|---|---|
-| Sonnet 5.5 (average) | 20/20 | 0/10 | 9.2 | 3.5 |
-| Haiku 5.5 (light) | 20/20 | 0/10 | 8.6 | 3.8 |
-
-The seed set is too easy to separate the two above that tier, so Haiku is used
-for low only; medium, high and max keep their models. This is a limit: the set
-shows no recall gap, so it cannot tell whether Haiku misses subtler defects
-than Sonnet does; widening the seeds is tracked in #377.
-
 Floors: docs-only and static changes allow `low`; native, gameplay, browser,
 asset, performance and map/geodata changes need `medium` (map and geodata still
 select every product suite in CI); the harness, gates, instructions and
@@ -139,51 +116,6 @@ least `merge_grade` (7) and no blocking finding stands (a confirmed major or cri
 disputed critical). Every report is stored, keyed by commit, tier and
 attempt, in `<git common dir>/aoe-ship/reviews/` (agents cannot write there);
 none replaces another.
-
-## Calibration
-
-`make review-calibrate [CALIBRATE_TIER=low] [CALIBRATE_RUNTIME=claude]
-[CALIBRATE_CASES=n]` (main session only) measures the reviewers instead of a
-change. `gates/review/seeds/<area>/<case>.json` holds about 45 small cases, a
-third clean refactors and features and the rest with planted defects:
-`correctness` (off-by-one, overflow, wrong boundary), `test-integrity`
-(loosened assertion, `#[ignore]`, special-cased test), `spec` (requirement
-unmet, scope creep), `hostile-input` (unbounded read, panic on malformed data)
-and `performance` (quadratic loop on a hot path). A case is a base file set, a
-unified diff, the task sentence and the expectation: clean, or one or more
-planted defects, each naming its file, its line range in the file as the diff
-leaves it, and the severity a correct review assigns. Each case becomes a
-temporary git repository (policy files on its `origin/dev`, the diff as one
-commit) and gets the normal review at the chosen tier and runtime, outside
-the branch review budget. `CALIBRATE_CASES` takes a sample round-robin across
-the areas.
-
-The harder cases of #377 live one level deeper, under
-`gates/review/seeds/hard/<area>/`: an off-by-one at a chunk boundary whose
-wrong number is produced in one file and consumed in another; an ordering bug
-(events applied before the state they depend on); a defect that appears only
-when two changes in one diff interact; a test that passes for the wrong
-reason; a silent behaviour change hidden in a refactor; a determinism break
-(`HashMap` iteration feeding a simulation result); three cases with two
-defects of different severity (partial recall); and five clean changes that
-look suspicious (a deliberate wrapping add, a removed check with the reason
-in the task, a mechanical rename, a performance rewrite with an equivalence
-test, a deliberately ignored error with a justification). `make test-harness`
-validates every seed: the base compiles with its tests, the diff applies, and
-the tests stay green through it (a defect the seed's own tests catch would
-not be hard to review). Separate input probes exercise each Rust base and
-post-diff crate, checking ordinary inputs and pinning known planted failures;
-these small probes do not establish exhaustive correctness or performance.
-
-It writes `reports/review/calibration.json` and `.md`: per area the planted
-defects found (recall: a standing finding of at least the planted severity,
-on the defect's file within its lines, so a case with two planted defects can
-be half found; each finding matches at most one defect), per persona the
-number of distinct planted defects it reported (several may come from one
-case) and what it raised on clean cases, and the clean cases wrongly blocked
-(a complete review that does not pass) with their grades. Cases whose review did not complete count as "no
-result", not as misses. It is a tool for tuning prompts, personas and models,
-not a gate, and a case set this small shows large differences only.
 
 ## What happens next
 
