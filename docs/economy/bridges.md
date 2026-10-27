@@ -67,6 +67,8 @@ DE pack sources are `de/<stem>_x1.sld`, frame 0. Runtime slots 45–50 retain si
 frames in the existing atlas. Raster cells use the closest dominant native
 axis family. The source pieces are displayed at half scale
 for the single-lane tile cadence; the deck renders behind crossing actors.
-Missing art retains semantic markers. Import with `make assets-import-de`;
-verify DAT identifiers with `make test-assets-dat`. `make test-bridges` covers
+Missing art retains semantic markers. `make assets-import-de` imports it and,
+without `AOE_ASSET_PACK`, attaches it to the only pack that still lacks a
+`buildings` overlay; set `AOE_ASSET_PACK=<base>` to choose explicitly. Verify
+DAT identifiers with `make test-assets-dat`. `make test-bridges` covers
 the focused simulation, navigation, protocol, SDK and catalog regressions.

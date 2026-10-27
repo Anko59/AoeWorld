@@ -1,5 +1,29 @@
 //! Local-only attachment of a DE pack to the selected trial pack.
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// The pack an import should fill when the caller did not name one: the only
+/// existing pack that still has no building overlay. Several candidates stay
+/// untouched because importing is not the place to choose the player's pack.
+pub(super) fn default_base(
+    packs: &Path,
+    de: &Path,
+) -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
+    let packs = packs.canonicalize()?;
+    let de = de.canonicalize()?;
+    let mut candidates = Vec::new();
+    for entry in std::fs::read_dir(&packs)? {
+        let path = entry?.path();
+        if path == de
+            || !path.join("manifest.json").is_file()
+            || std::fs::symlink_metadata(path.join("buildings")).is_ok()
+        {
+            continue;
+        }
+        candidates.push(path);
+    }
+    candidates.sort();
+    Ok((candidates.len() == 1).then(|| candidates.remove(0)))
+}
 
 pub(super) fn attach(base: &Path, de: &Path) -> Result<(), Box<dyn std::error::Error>> {
     attach_in(Path::new("local-assets/packs"), base, de)
