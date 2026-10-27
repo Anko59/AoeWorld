@@ -37,7 +37,8 @@ fn reviewer_rate_limits_retry_the_process_with_bounded_backoff() {
         "Rate-limited",
         "model at capacity",
         "usage limit",
-        "429",
+        "status 429",
+        r#"{"error": {"type": "rate_limit_exceeded"}}"#,
     ] {
         for stdout in [true, false] {
             let failure = if stdout {
@@ -70,6 +71,12 @@ fn exhausted_reviewer_rate_limits_explain_how_to_reship() {
 fn other_reviewer_failures_and_successful_answers_are_not_retried() {
     for message in [
         "line 429 failed",
+        "src/foo.rs:429:12",
+        "request id 429",
+        "429 bytes",
+        "http://429",
+        "HTTP 4290",
+        "429",
         "rate limiter crashed",
         "prorate limits",
         "permission denied",
@@ -213,4 +220,106 @@ fn fallback_is_recorded_and_review_is_complete_only_if_it_answers() {
         .unwrap();
         assert!(stored.contains("\"runtime_fallback\": true"));
     }
+}
+
+#[test]
+fn live_entry_uses_fallback_models_and_records_the_switch() {
+    use std::os::unix::fs::PermissionsExt;
+    const CHILD: &str = "AOE_REVIEW_LIVE_TEST_CHILD";
+    if let Some(root) = std::env::var_os(CHILD) {
+        let report = super::super::entry::review_isolated(
+            std::path::Path::new(&root),
+            Tier::High,
+            Runtime::Codex,
+            "scripted review",
+        )
+        .unwrap();
+        assert!(report.complete(), "{:?}", report.failures);
+        assert!(report.runtime_fallback);
+        assert_eq!(
+            report.findings[0].status,
+            super::super::protocol::Status::Confirmed
+        );
+        assert_eq!(
+            report.findings[0].votes.last().unwrap().reviewer,
+            super::super::protocol::ARBITER
+        );
+        println!(
+            "LIVE_TEST: complete={}, runtime_fallback={}, arbiter=confirmed",
+            report.complete(),
+            report.runtime_fallback
+        );
+        return;
+    }
+    let temp = fixture("README.md");
+    fs::create_dir(temp.path().join(".codex")).unwrap();
+    fs::write(temp.path().join(".codex/hooks.json"), r#"{"hooks":{}}"#).unwrap();
+    super::flow::git(temp.path(), &["add", ".codex/hooks.json"]);
+    super::flow::git(
+        temp.path(),
+        &["commit", "-q", "-m", "configure scripted runner"],
+    );
+    let scripts_dir = tempfile::tempdir().unwrap();
+    let bin = scripts_dir.path();
+    let log = bin.join("models.log");
+    let scripts = [
+        (
+            "codex",
+            r#"#!/bin/sh
+printf '%s\n' "$*" >> "$AOE_REVIEW_LIVE_TEST_LOG"
+echo 'HTTP 429' >&2
+exit 1
+"#,
+        ),
+        (
+            "claude",
+            r##"#!/bin/sh
+printf '%s\n' "$*" >> "$AOE_REVIEW_LIVE_TEST_LOG"
+case "$*" in
+  *'# Arbiter'*) answer='{"rulings":[{"id":"F1","ruling":"upheld","evidence":"README.md:1"}]}' ;;
+  *'# Grader'*) answer='{"grade":9,"summary":"ok"}' ;;
+  *'# Spec and scope auditor'*"verify the other reviewers' findings"*) answer='{"verdicts":[{"id":"F1","verdict":"upheld","evidence":"README.md:1"}],"findings":[]}' ;;
+  *'# Hostile-input and safety adversary'*"verify the other reviewers' findings"*) answer='{"verdicts":[{"id":"F1","verdict":"refuted","evidence":"README.md:1"}],"findings":[]}' ;;
+  *"verify the other reviewers' findings"*) answer='{"verdicts":[],"findings":[]}' ;;
+  *'# Correctness breaker'*) answer='{"findings":[{"file":"README.md","line":1,"severity":"major","category":"correctness","claim":"wrong text","trigger":"read it","expected_vs_actual":"base vs changed","evidence":"README.md:1"}]}' ;;
+  *) answer='{"findings":[]}' ;;
+esac
+printf 'AOE-REVIEW-BEGIN\n%s\nAOE-REVIEW-END\n' "$answer"
+"##,
+        ),
+    ];
+    for (name, script) in scripts {
+        let path = bin.join(name);
+        fs::write(&path, script).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "review::tests::retry::live_entry_uses_fallback_models_and_records_the_switch",
+            "--nocapture",
+        ])
+        .env(CHILD, temp.path())
+        .env("PATH", path)
+        .env("AOE_REVIEW_LIVE_TEST_LOG", &log)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let models = fs::read_to_string(log).unwrap();
+    assert!(models.contains("-m gpt-6.1-terra"), "codex model: {models}");
+    assert!(
+        models.contains("--model claude-sonnet-5-5"),
+        "average fallback: {models}"
+    );
+    assert!(
+        models.contains("--model claude-opus-5-5"),
+        "arbiter fallback: {models}"
+    );
+    println!("{}", String::from_utf8_lossy(&output.stdout));
 }

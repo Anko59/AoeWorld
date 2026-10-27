@@ -238,3 +238,20 @@ fn persona_validation_uses_the_pinned_policy_tree() {
     let policy = Policy::pin(root, None, Tier::Low, Runtime::Claude, &Plan::Full).unwrap();
     assert_eq!(policy.config.tiers[&Tier::Low].personas, ["custom"]);
 }
+
+#[test]
+fn config_load_bootstraps_personas_from_the_working_tree() {
+    let temp = fixture("README.md");
+    let root = temp.path();
+    git(root, &["checkout", "-q", "dev"]);
+    git(root, &["rm", "-qr", "gates/review/personas"]);
+    git(
+        root,
+        &["commit", "-q", "-m", "policy before persona prompts"],
+    );
+    git(root, &["update-ref", "refs/remotes/origin/dev", "HEAD"]);
+    git(root, &["checkout", "-q", "feature"]);
+    assert!(super::super::Config::load(root).is_ok());
+    git(root, &["update-ref", "-d", "refs/remotes/origin/dev"]);
+    assert!(super::super::Config::load(root).is_ok());
+}

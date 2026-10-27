@@ -8,3 +8,7 @@ non-determinism and `HashMap` iteration order in the deterministic simulation;
 state-machine transitions; serialization round trips; concurrency and
 cancellation in the server and harness; shell and path handling in the harness.
 A finding names the triggering input and the line where behaviour goes wrong.
+
+Check test integrity: weakened or deleted assertions; tests changed to match
+buggy output; added skips or ignores; `allow` added to silence a lint; and
+thresholds or baselines loosened without a stated reason.

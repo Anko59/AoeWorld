@@ -16,7 +16,7 @@ For each pull request merged into `dev` the ledger records:
 | Field | Source |
 |---|---|
 | Implementer models | The description's `Written by …` line, then the `Co-Authored-By` trailers of the pull request's commits. Bots are not models. |
-| Review tier, reviewers, reviewer model, grade, confirmed findings, rounds | The review badge `make ship` renders (`**Review: 8/10** (high tier · 5 reviewers · 2 rounds · claude-sonnet-5-5 high): 4 confirmed …`). |
+| Review tier, reviewers, reviewer model, grade, confirmed findings, rounds | The review badge `make ship` renders (`**Review: 8/10** (high tier · 3 reviewers · 2 rounds · claude-sonnet-5-5 high): 4 confirmed …`). |
 | First-review grade | The badge when the review took one round; for a closing review, its `approved N/10`. After several rounds the badge keeps only the last grade, so the first one is `unknown`. |
 | Closing review | The badge reads `Closing review`. |
 | Split | The title starts with `Split`, or the description says `split from #N` (a heuristic). |

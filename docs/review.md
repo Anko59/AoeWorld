@@ -25,7 +25,7 @@ floors. Reviewers use the model family of the runtime you are working in
 (`REVIEW_RUNTIME`; set it, the default is `claude`): Claude reviews in Claude Code, GPT in Codex, GLM in DeepSeek
 Harness and pi.
 
-Low uses one quick reviewer; medium uses correctness and spec; high, xhigh and max add hostile-input. Low through high use the average models (low may use light, high raises effort); xhigh and max use strong. Low has one round, medium through xhigh up to three, and max up to five. Codex uses GPT-6.1 Terra for average and strong. After capacity or rate limits persist through the 60- and 180-second retries, Codex and Claude sessions try the other runtime once at the same strength; reports record `runtime_fallback`.
+Low uses one quick reviewer; medium uses correctness and spec; high, xhigh and max add hostile-input. Low through high use the average models (low may use light, high raises effort); xhigh and max use strong. Low has one round, medium through xhigh up to three, and max up to five. The correctness persona also checks test integrity: weakened or deleted assertions, tests changed to match buggy output, added skips or ignores, `allow` added to silence a lint, and thresholds or baselines loosened without a stated reason. Codex uses GPT-6.1 Terra for average and strong. After capacity or rate limits persist through the 60- and 180-second retries, Codex and Claude sessions try the other runtime once at the same strength; reports record `runtime_fallback`.
 
 The **light** model is the one exception to the average and strong levels. It
 is per runtime family and used only by tier low's reviewer and grader sessions

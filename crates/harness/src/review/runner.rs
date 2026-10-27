@@ -153,7 +153,7 @@ pub(crate) fn ask(
             };
             command(which, root, selected, prompt)
         },
-        thread::sleep,
+        wait_for_retry,
     )
 }
 
@@ -228,22 +228,35 @@ pub(super) fn ask_with(
     unreachable!("the last attempt returns")
 }
 
-/// Whole diagnostic words, not a source line numbered 429 or a rate limiter.
+fn wait_for_retry(delay: Duration) {
+    #[cfg(test)]
+    if std::env::var_os("AOE_REVIEW_LIVE_TEST_CHILD").is_some() {
+        return;
+    }
+    thread::sleep(delay);
+}
+
+/// Recognize specific diagnostics, never an unrelated bare 429.
 fn rate_limited(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     let words: Vec<_> = lower
         .split(|c: char| !c.is_ascii_alphanumeric())
         .filter(|word| !word.is_empty())
         .collect();
-    (words.contains(&"429") && !words.windows(2).any(|w| w == ["line", "429"]))
+    let status_429 = ["http 429", "status 429"].iter().any(|phrase| {
+        lower.match_indices(*phrase).any(|(index, _)| {
+            let before = index.checked_sub(1).and_then(|i| lower.as_bytes().get(i));
+            let after = lower.as_bytes().get(index + phrase.len());
+            before.is_none_or(|c| !c.is_ascii_alphanumeric())
+                && after.is_none_or(|c| !c.is_ascii_alphanumeric())
+        })
+    });
+    status_429
         || words.windows(3).any(|w| w == ["too", "many", "requests"])
         || words.windows(2).any(|w| {
             matches!(
                 w,
-                ["rate", "limit" | "limited"]
-                    | ["usage", "limit"]
-                    | ["at", "capacity"]
-                    | ["http" | "status", "429"]
+                ["rate", "limit" | "limited"] | ["usage", "limit"] | ["at", "capacity"]
             )
         })
 }
