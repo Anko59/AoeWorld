@@ -70,7 +70,7 @@ fn a_level_below_the_floor_names_the_floor_and_its_reason() {
     assert!(message.contains("1 problem;"), "{message}");
     assert!(message.contains("below the floor `high`"), "{message}");
     assert!(
-        message.contains("gate files: 6 of 13 changed lines (need 5 for high)"),
+        message.contains("gate files: 6 of 12 changed lines (need 5 for high)"),
         "{message}"
     );
 }
@@ -78,7 +78,7 @@ fn a_level_below_the_floor_names_the_floor_and_its_reason() {
 #[test]
 fn the_check_counts_uncommitted_lines_towards_the_floor() {
     let (_temp, root) = fixture("true");
-    // The committed change is 2 lines; the untracked gate file adds 200 more
+    // The committed change adds 1 line; the untracked gate file adds 200 more
     // before it is committed, so the early check must find `low` below `high`.
     // The description lives outside the checkout, as a real one does.
     fs::write(root.join("gates/new.txt"), "x\n".repeat(200)).unwrap();
@@ -88,7 +88,7 @@ fn the_check_counts_uncommitted_lines_towards_the_floor() {
     assert!(message.contains("1 problem;"), "{message}");
     assert!(message.contains("below the floor `high`"), "{message}");
     assert!(
-        message.contains("gate files: 200 of 202 changed lines (need 5 for high)"),
+        message.contains("gate files: 200 of 201 changed lines (need 5 for high)"),
         "{message}"
     );
 }

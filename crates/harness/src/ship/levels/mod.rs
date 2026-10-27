@@ -51,7 +51,7 @@ impl Change {
     }
 }
 
-/// One changed file: its lines (added plus removed) and the suites it selects.
+/// One changed file: its added lines and the suites it selects.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Part {
     pub(crate) path: String,
@@ -179,10 +179,11 @@ fn nul_list(text: &str) -> impl Iterator<Item = &str> {
     text.split('\0').filter(|record| !record.is_empty())
 }
 
-/// `(path, lines added plus removed)` of each record of `git diff --numstat
+/// `(path, lines added)` of each record of `git diff --numstat
 /// -z` (`added<TAB>removed<TAB>path<NUL>`): the path is raw, so a name with a
 /// quote, a tab or a non-ASCII byte is matched as it is. A binary file (`-`)
-/// counts as `binary` lines.
+/// counts as `binary` lines. Removed lines are free: deleting code never raises
+/// the level a change needs.
 fn numstat_parts(numstat: &str, binary: u64) -> Vec<(String, u64)> {
     nul_list(numstat)
         .filter_map(|record| {
@@ -191,7 +192,7 @@ fn numstat_parts(numstat: &str, binary: u64) -> Vec<(String, u64)> {
             let removed = columns.next()?;
             let path = columns.next()?;
             let lines = match (added.parse::<u64>(), removed.parse::<u64>()) {
-                (Ok(added), Ok(removed)) => added + removed,
+                (Ok(added), Ok(_)) => added,
                 _ => binary,
             };
             Some((path.to_owned(), lines))

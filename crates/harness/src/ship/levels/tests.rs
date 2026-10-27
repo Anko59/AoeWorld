@@ -220,11 +220,15 @@ fn docs_and_configuration_edits_may_be_low_but_harness_code_may_not() {
 }
 
 #[test]
-fn binary_files_count_as_large_changes() {
+fn binary_files_count_as_large_changes_and_removed_lines_are_free() {
     // `git diff --numstat -z`: each record ends with a NUL.
     assert_eq!(
-        numstat_parts("3\t4\ta.rs\0-\t-\tlogo.png\0", 61),
-        vec![("a.rs".to_owned(), 7), ("logo.png".to_owned(), 61)]
+        numstat_parts("3\t4\ta.rs\0-\t-\tlogo.png\u{0}0\t900\tgone.rs\0", 61),
+        vec![
+            ("a.rs".to_owned(), 3),
+            ("logo.png".to_owned(), 61),
+            ("gone.rs".to_owned(), 0)
+        ]
     );
     assert!(numstat_parts("", 61).is_empty());
 }
@@ -305,15 +309,15 @@ fn the_floor_of_a_dirty_tree_is_the_floor_after_the_commit() {
     let (_temp, root) = fixture("true");
     let levels = Levels::load(&root).unwrap();
     let clean = Change::collect_working(&root, &levels, "dev", false).unwrap();
-    assert_eq!((levels.floor(&clean).level, clean.lines), (Level::Low, 2));
+    assert_eq!((levels.floor(&clean).level, clean.lines), (Level::Low, 1));
     // A new, untracked gate file of 200 lines is in the change before its commit.
     fs::write(root.join("gates/new.txt"), "x\n".repeat(200)).unwrap();
     let dirty = Change::collect_working(&root, &levels, "dev", false).unwrap();
-    assert_eq!(dirty.lines, 202);
+    assert_eq!(dirty.lines, 201);
     assert_eq!(levels.floor(&dirty).level, Level::High, "{dirty:?}");
     // The committed view does not see it until it is committed.
     let committed_only = Change::collect(&root, &levels, "dev", false).unwrap();
-    assert_eq!(committed_only.lines, 2);
+    assert_eq!(committed_only.lines, 1);
     run(&root, &["add", "-A"]);
     run(&root, &["commit", "-q", "-m", "harness"]);
     let after = Change::collect(&root, &levels, "dev", false).unwrap();
@@ -377,7 +381,7 @@ fn limits_come_from_the_config() {
 fn the_floor_is_computed_from_a_real_checkout() {
     let (_temp, root) = fixture("true");
     let (floor, change) = current_floor(&root).unwrap();
-    assert_eq!((floor.level, change.lines), (Level::Low, 2));
+    assert_eq!((floor.level, change.lines), (Level::Low, 1));
     let paths: Vec<&str> = change.parts.iter().map(|part| part.path.as_str()).collect();
     assert_eq!(paths, ["README.md"]);
     fs::write(root.join("gates/extra.txt"), "x\ny\nz\nw\nv\n").unwrap();

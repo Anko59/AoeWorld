@@ -237,8 +237,8 @@ unreadable entry is left out with a note on stderr. `describe-check` prints
 The agent picks the level, but never below the floor `make ship` computes from
 the change: `make level-floor` prints it for the committed change (every role;
 read-only) with the rule that demands it. A rule names a level, a minimum of
-changed lines (added plus removed against the merge base; a binary file counts as
-61 in all, not per side) and optionally the registry suites or path prefixes the
+added lines (against the merge base; removed lines are free, so deleting code never
+raises the level; a binary file counts as 61) and optionally the registry suites or path prefixes the
 change must touch (a `behaviour` rule counts only files that are neither tests nor
 documentation or configuration); the floor is the highest level of any matching
 rule. Today, the four rules of `gates/levels.json`:
