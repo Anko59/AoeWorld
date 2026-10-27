@@ -71,5 +71,5 @@ cannot detect every reverted hostile race or prove independent service ownership
 while the coding UID controls the host daemon.
 
 Parent validation must supply the actual Dockerized focused tests, strict lint,
-structure, preflight, unchanged coverage floors, hooks, exact revision, and CI
+structure, preflight, coverage reporting, hooks, exact revision, and CI
 results. Adding this source alone is not evidence that these gates have run.
