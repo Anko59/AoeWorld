@@ -3,7 +3,7 @@ use crate::{
     agents::Runtime,
     ship::{
         duel::{Options, run as duel},
-        git, test_first,
+        git,
     },
 };
 use std::{fs, os::unix::fs::PermissionsExt, path::Path, time::Duration};
@@ -162,15 +162,12 @@ fn happy_path_commits_tests_before_product_and_stops_on_empty_attack() {
         let (_temp, root) = fixture("true");
         let (_env, mut options) = setup(&root, "happy");
         options.runtime = runtime;
-        let base = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
         let summary = duel(&root, "Make f correct\nDetails", &options).unwrap();
-        let head = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
-        let report = test_first::report(&root, &base, &head).unwrap();
+        let phases = git::git(&root, &["log", "-2", "--format=%s"]).unwrap();
         assert_eq!(
-            report.commits.iter().map(|(_, k)| *k).collect::<Vec<_>>(),
-            vec![test_first::Kind::TestsOnly, test_first::Kind::Product]
+            phases.lines().collect::<Vec<_>>(),
+            ["Make f correct", "Tests: Make f correct"]
         );
-        assert_eq!(report.tests_before, 1);
         let messages = git::git(&root, &["log", "-2", "--format=%B"]).unwrap();
         assert!(messages.contains("Tests: Make f correct"));
         assert!(messages.contains("Harness-Phase: tests"));

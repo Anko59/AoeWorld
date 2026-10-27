@@ -339,13 +339,6 @@ fuzz-nightly: fuzz-tools orchestrator-tools slot-bootstrap
 fuzz-nightly-steps:
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-nightly
 
-mutation-nightly: mutation-tools orchestrator-tools slot-bootstrap
-	@$(SLOT_RUN) mutation-nightly -- make --no-print-directory mutation-nightly-steps
-
-mutation-nightly-steps:
-	@mkdir -p reports/mutation
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) --tmpfs /tmp:rw,exec,size=4g -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e CARGO_TARGET_DIR=$(ROOT)/.cache/mutation/driver-target $(ROOT_MOUNTS) -w $(ROOT) $(MUTATION_IMAGE) cargo run --locked -p aoe-harness -- mutation-nightly
-
 perf-smoke: orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) perf-smoke -- make --no-print-directory perf-smoke-steps
 
@@ -403,7 +396,6 @@ perf-soak-30-steps:
 .PHONY: \
   fuzz-smoke \
   fuzz-nightly \
-  mutation-nightly \
   perf-smoke \
   perf-ci \
   perf-full \

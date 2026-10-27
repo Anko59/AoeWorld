@@ -425,7 +425,6 @@ fn the_registry_decides_which_gates_are_heavy() {
         "test-wasm",
         "test-e2e",
         "coverage",
-        "mutation-nightly",
         "perf-smoke",
         "preflight",
     ] {

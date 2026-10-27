@@ -4,9 +4,9 @@ use crate::{
     ship::{
         duel::{authored, specs},
         git,
-        test_first::inline,
     },
 };
+mod inline;
 pub(crate) mod kept;
 
 use std::{collections::BTreeSet, path::Path, process::Command};

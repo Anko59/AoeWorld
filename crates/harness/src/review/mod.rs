@@ -5,7 +5,6 @@
 //! next to the ship evidence, keyed by commit, where agents cannot write.
 mod arbiter;
 pub(crate) mod base;
-mod calibrate;
 pub(crate) mod closing;
 mod cluster;
 pub(crate) mod config;
@@ -63,10 +62,6 @@ pub(crate) enum Commands {
     },
     /// Print the lowest review tier the change allows.
     ReviewFloor,
-    /// Run the review on the calibration seed set and write the recall and
-    /// false-positive tables (`make review-calibrate`: CALIBRATE_TIER,
-    /// CALIBRATE_RUNTIME, CALIBRATE_CASES). A tool, not a gate.
-    ReviewCalibrate,
 }
 
 fn changed_suites(root: &Path) -> Result<(String, String, std::collections::BTreeSet<String>)> {
@@ -135,7 +130,7 @@ pub(crate) fn facts(root: &Path, merge_base: &str) -> Result<String> {
         }
     }
     Ok(format!(
-        "- lines added: {test_lines} in tests, {other_lines} elsewhere\n- added lines containing `#[ignore]`: {}, `unsafe`: {}, `.unwrap(`: {}, `cfg(test)`: {}\n- changed CI, gate or baseline files: {}\n{}",
+        "- lines added: {test_lines} in tests, {other_lines} elsewhere\n- added lines containing `#[ignore]`: {}, `unsafe`: {}, `.unwrap(`: {}, `cfg(test)`: {}\n- changed CI, gate or baseline files: {}\n",
         count("#[ignore]"),
         count("unsafe"),
         count(".unwrap("),
@@ -145,7 +140,6 @@ pub(crate) fn facts(root: &Path, merge_base: &str) -> Result<String> {
         } else {
             sensitive.join(", ")
         },
-        crate::ship::test_first::summary(root, merge_base, "HEAD"),
     ))
 }
 

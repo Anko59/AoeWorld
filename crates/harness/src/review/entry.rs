@@ -31,19 +31,6 @@ pub(crate) fn review_for_branch(
     review_judged(root, branch, judge.as_deref(), tier, runtime, task, plan)
 }
 
-/// The review of a throwaway repository of its own (`make review-calibrate`):
-/// the judge's commit lives in the real checkout, so its policy is that
-/// repository's origin/dev.
-pub(super) fn review_isolated(
-    root: &Path,
-    tier: Tier,
-    runtime: Runtime,
-    task: &str,
-) -> Result<Report> {
-    let branch = git::branch(root).unwrap_or_default();
-    review_judged(root, &branch, None, tier, runtime, task, &Plan::Full)
-}
-
 fn review_judged(
     root: &Path,
     branch: &str,
@@ -176,7 +163,6 @@ pub(crate) fn execute(command: Commands, slots: &SlotEnv) -> Result<()> {
                 .into())
             }
         }
-        Commands::ReviewCalibrate => Ok(super::calibrate::from_env(&root)?),
         Commands::ReviewFloor => {
             println!("{}", floor(&root)?.name());
             Ok(())

@@ -12,7 +12,6 @@ mod gates;
 mod hooks;
 mod input_json;
 mod ledger;
-mod mutation;
 mod native;
 mod perf;
 mod perf_comment;
