@@ -115,3 +115,42 @@ fn ten_villagers_work_around_one_gold_mine() {
     let (w, ids, nodes) = worksite(aoe_map::ResourceKind::Gold, 1, 10);
     assert_work_progress(w, ids, nodes);
 }
+
+#[test]
+fn a_blocked_approach_away_from_the_worksite_keeps_its_route() {
+    let (mut w, ids, nodes) = worksite(aoe_map::ResourceKind::Gold, 1, 1);
+    let id = ids[0];
+    w.advance();
+    let start = w.unit(id).unwrap().position;
+    // A foreign crowd seals the worker far from its mine: temporary traffic,
+    // not a reason to restart the static route or pick another work spot.
+    let ring = [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
+    ]
+    .map(|(dx, dy)| {
+        w.spawn_villager(
+            PlayerId(1),
+            WorldPosition::new(start.x + dx * 640, start.y + dy * 640),
+        )
+        .unwrap()
+    });
+    let orders = w.route_scheduler_stats().metrics.orders;
+    let destination = w.movement_order(id).map(|o| o.destination);
+    for _ in 0..200 {
+        w.advance();
+    }
+    assert!(destination.is_some());
+    assert_eq!(w.movement_order(id).map(|o| o.destination), destination);
+    assert!(w.route_scheduler_stats().metrics.orders <= orders + 1);
+    for other in ring {
+        w.remove_unit(other);
+    }
+    assert_work_progress(w, ids, nodes);
+}
