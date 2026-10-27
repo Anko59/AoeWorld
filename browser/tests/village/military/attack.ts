@@ -32,9 +32,13 @@ async function select(page: Page, kind: string) {
     );
     if (!actor) throw new Error(`Visible ${kind} missing`);
     await page.mouse.click(actor.x, actor.y);
-    await expect(page.locator("#selection")).toHaveAttribute("data-kind", kind, {
-      timeout: 1_000,
-    });
+    await expect(page.locator("#selection")).toHaveAttribute(
+      "data-kind",
+      kind,
+      {
+        timeout: 1_000,
+      },
+    );
   }).toPass({ timeout: 15_000 });
 }
 
