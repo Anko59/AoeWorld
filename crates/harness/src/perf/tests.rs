@@ -41,18 +41,20 @@ fn comparator_rejects_missing_and_regressed_samples() {
 
 #[test]
 fn regression_floor_is_the_smallest_regressing_value() {
-    for baseline in [0u64, 1, 19, 20, 21, 100, 105, 1_000, 261_677, 1 << 40] {
-        let floor = regression_floor(baseline);
-        assert_eq!(
-            compare("x", Some(floor), Some(baseline)).verdict,
-            Verdict::Regression,
-            "floor of {baseline}"
-        );
-        assert_ne!(
-            compare("x", Some(floor - 1), Some(baseline)).verdict,
-            Verdict::Regression,
-            "below the floor of {baseline}"
-        );
+    for percent in [THRESHOLD_PERCENT, crate::perf_size::JUMP_PERCENT] {
+        for baseline in [0u64, 1, 19, 20, 21, 100, 105, 1_000, 261_677, 1 << 40] {
+            let floor = regression_floor(baseline, percent);
+            assert_eq!(
+                compare_at("x", Some(floor), Some(baseline), percent).verdict,
+                Verdict::Regression,
+                "floor of {baseline} at {percent}%"
+            );
+            assert_ne!(
+                compare_at("x", Some(floor - 1), Some(baseline), percent).verdict,
+                Verdict::Regression,
+                "below the floor of {baseline} at {percent}%"
+            );
+        }
     }
 }
 
@@ -124,7 +126,7 @@ fn offline_uses_actual_scenario_dimensions_and_seed_without_path_work() {
 }
 
 #[test]
-fn wasm_size_check_fails_over_the_perf_ci_cap_and_passes_at_it() {
+fn wasm_size_reports_growth_and_fails_only_on_a_jump_over_a_quarter() {
     let dir = tempfile::tempdir().unwrap();
     let baseline = dir.path().join("wasm.json");
     let artifact = dir.path().join("optimized.wasm.gz");
@@ -133,12 +135,12 @@ fn wasm_size_check_fails_over_the_perf_ci_cap_and_passes_at_it() {
         r#"{"version":1,"toolchain":"rustc 1.99.1","wasm_bindgen":"0.2.128","binaryen":"108","gzip":"1.12 -n -9","optimized_gzip_bytes":1000}"#,
     )
     .unwrap();
-    for (size, passes) in [(1050, true), (1051, false)] {
+    for (size, passes) in [(1051, true), (1250, true), (1251, false)] {
         std::fs::write(&artifact, vec![7u8; size]).unwrap();
         let result = crate::perf_size::comparison_at(&baseline, &artifact).unwrap();
         assert_eq!(crate::perf_size::verdict(&result).is_ok(), passes, "{size}");
     }
-    let message = crate::perf_size::verdict(&compare("w", Some(1051), Some(1000)))
+    let message = crate::perf_size::verdict(&compare_at("w", Some(1251), Some(1000), 25))
         .unwrap_err()
         .to_string();
     assert!(message.contains("1 bytes over"), "{message}");

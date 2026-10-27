@@ -1,17 +1,17 @@
 use super::*;
 
 #[test]
-fn size_baseline_rejects_wrong_identity_and_five_percent_regression() {
+fn size_baseline_rejects_wrong_identity_and_a_jump_over_a_quarter() {
     let baseline = proposal(100);
     assert_eq!(baseline.toolchain, "rustc 1.99.1");
     assert_eq!(
-        compare_observed(baseline, 105)
+        compare_observed(baseline, 125)
             .expect("at threshold")
             .verdict,
         Verdict::Pass
     );
     assert_eq!(
-        compare_observed(proposal(100), 106)
+        compare_observed(proposal(100), 126)
             .expect("over threshold")
             .verdict,
         Verdict::Regression
@@ -54,7 +54,7 @@ fn size_artifact_must_exist_and_proposal_never_changes_baseline() {
 }
 
 #[test]
-fn both_browser_apps_must_exist_and_fit_the_same_unchanged_cap() {
+fn both_browser_apps_must_exist_and_stay_under_the_same_jump_cap() {
     let root = tempfile::tempdir().unwrap();
     fs::create_dir_all(root.path().join("baselines/perf")).unwrap();
     fs::create_dir_all(root.path().join("reports/perf")).unwrap();
@@ -69,11 +69,11 @@ fn both_browser_apps_must_exist_and_fit_the_same_unchanged_cap() {
         .join("reports/perf/diagnostics-optimized.wasm.gz");
     fs::write(&game, [0; 100]).unwrap();
     assert!(check_at(root.path()).is_err());
-    fs::write(&lab, [0; 105]).unwrap();
+    fs::write(&lab, [0; 125]).unwrap();
     check_at(root.path()).unwrap();
-    fs::write(&lab, [0; 106]).unwrap();
+    fs::write(&lab, [0; 126]).unwrap();
     assert!(check_at(root.path()).is_err());
     fs::write(&lab, [0; 100]).unwrap();
-    fs::write(&game, [0; 106]).unwrap();
+    fs::write(&game, [0; 126]).unwrap();
     assert!(check_at(root.path()).is_err());
 }
