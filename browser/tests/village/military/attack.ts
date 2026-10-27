@@ -91,16 +91,41 @@ export async function militaryAttack(
   await select(page, "Archer");
   await expect(page.locator("#unit-combat")).toContainText("Attack 5");
   await expect(page.locator("#unit-combat")).toContainText("Range 5");
-  // An explicit order on the untouched enemy Scout.
+  // No Attack leaves the Archer only explicit orders, so an Attacking task
+  // and Scout damage after the click both come from the order.
+  await page.locator("#combat-stance").selectOption("3");
+  const archer = (await actors(page)).find(
+    (a) => a.owned && a.kind === "Archer",
+  );
+  if (!archer) throw new Error("Archer missing");
+  await expect
+    .poll(async () => task(page, archer.id), { timeout: 10_000 })
+    .not.toBe("Attacking");
   const target = (await actors(page)).find((a) => a.id === scout.id);
   if (!target) throw new Error("Enemy Scout gone before the Archer's order");
   await page.mouse.click(target.x, target.y, { button: "right" });
   await expect
-    .poll(async () => damaged(page, scout.id), {
-      timeout: 20_000,
-      message: "the ordered Archer damages the enemy Scout",
+    .poll(async () => task(page, archer.id), {
+      timeout: 10_000,
+      message: "the No Attack Archer attacks only on the explicit order",
     })
+    .toBe("Attacking");
+  await expect
+    .poll(
+      async () =>
+        !(await actors(page)).some(
+          (a) => a.id === scout.id && a.hp >= target.hp,
+        ),
+      {
+        timeout: 20_000,
+        message: "the ordered Archer damages the enemy Scout",
+      },
+    )
     .toBe(true);
+}
+
+async function task(page: Page, id: number) {
+  return (await actors(page)).find((a) => a.id === id)?.task;
 }
 
 // Damaged, or killed and removed.
