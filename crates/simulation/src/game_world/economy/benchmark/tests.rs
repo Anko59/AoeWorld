@@ -90,7 +90,7 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     assert_eq!(
         checkpoint,
         // Current combat stance and targeting state; 1/4-worker comparison above stays.
-        "aac7700521f7c864c96df7b5ee84c8d43b0c2a2b1fd855d60032ca54a20f9b42"
+        "705a7aacd85154c7ed7e10e07e9f0b9349915405fdc573831fc034b691879d81"
     );
 }
 
