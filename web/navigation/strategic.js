@@ -24,13 +24,11 @@ export function initStrategic(fog, actors) {
       scene.dataset.lod = lod;
       document.documentElement.dataset.lod = lod;
     }
-    canvas.hidden = label.hidden = !level;
+    if (level) canvas.hidden = label.hidden = false;
     const title = `${level === 2 ? 'Map view' : 'Overview'} · ${(zoom * 100).toPrecision(3)}% · click a marker to zoom in`;
     if (label.textContent !== title) label.textContent = title;
     if (!level || !context) {
       previous = ''; picks = [];
-      if (canvas.width !== 1) canvas.width = canvas.height = 1;
-      canvas.dataset.workingBytes = '4';
       return false;
     }
     const key = [...state, terrainRevision, actors.revision(), fog.revision].join(',');
@@ -109,5 +107,10 @@ export function initStrategic(fog, actors) {
     }
     return nearest;
   }
-  return { frame, pick, terrain(value) { terrain = value; terrainRevision++; } };
+  function present() {
+    canvas.hidden = label.hidden = true;
+    if (canvas.width !== 1) canvas.width = canvas.height = 1;
+    canvas.dataset.workingBytes = '4';
+  }
+  return { frame, pick, present, terrain(value) { terrain = value; terrainRevision++; } };
 }

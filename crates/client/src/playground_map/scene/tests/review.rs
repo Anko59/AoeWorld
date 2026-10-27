@@ -456,6 +456,10 @@ async fn projectile_scene_uses_native_arrow_and_javelin_and_current_fog() {
         let rendered = units(&client, &scene);
         assert_eq!(rendered.len(), 1);
         assert_eq!(rendered[0].position, [283.5, 603.5]);
+        assert!(
+            rendered[0].elevation_meters > scene.height(rendered[0].position).unwrap() + 1.0,
+            "mid-flight projectile arcs above its launch height"
+        );
         assert_eq!(
             rendered[0].kind,
             if kind == ProjectileKind::Arrow {

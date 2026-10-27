@@ -97,9 +97,9 @@ fn click(client: &mut Client, offset: [f64; 2]) {
 
 #[wasm_bindgen_test]
 async fn house_picking_keeps_the_displayed_workers_bounds_and_depth_until_the_next_frame() {
-    for (displayed, incoming, foreground) in [
-        (TileCoord::new(101, 101), TileCoord::new(98, 98), true),
-        (TileCoord::new(98, 98), TileCoord::new(101, 101), false),
+    for (displayed, incoming) in [
+        (TileCoord::new(101, 101), TileCoord::new(98, 98)),
+        (TileCoord::new(98, 98), TileCoord::new(101, 101)),
     ] {
         let mut client = fixture(1.0).await;
         client.art.compositions[0].unit_id = 70;
@@ -135,15 +135,12 @@ async fn house_picking_keeps_the_displayed_workers_bounds_and_depth_until_the_ne
 
         // A network/interpolation update can arrive while the GPU throttles
         // submissions. AoE2 picking must still follow the displayed worker,
-        // including its body rectangle and roof ordering, not only its feet.
+        // including its body rectangle, even behind the roof.
         client.units.get_mut(&EntityId(1)).unwrap().position =
             WorldPosition::from_tile_center(incoming).unwrap();
-        click(&mut client, [0.0, 20.0]);
-        if foreground {
-            assert_eq!(client.selected.units, [EntityId(1)]);
-        } else {
-            assert_eq!(client.selected.building_id, Some(EntityId(8)));
-        }
+        let y = if displayed.x == 101 { 20.0 } else { -90.0 };
+        click(&mut client, [0.0, y]);
+        assert_eq!(client.selected.units, [EntityId(1)]);
         client.canvas.remove();
     }
 }
@@ -154,7 +151,8 @@ async fn town_center_roof_center_and_bottom_left_annex_select_the_rendered_build
         let mut client = fixture(zoom).await;
         // Native main body reaches 187 px above and 27 px below its hotspot;
         // the left annex is offset outside the ground footprint.
-        for offset in [[0.0, -150.0], [0.0, -90.0], [0.0, 0.0], [-145.0, 20.0]] {
+        client.units.clear();
+        for offset in [[0.0, -150.0], [0.0, 0.0], [-145.0, 20.0]] {
             click(&mut client, offset);
             assert_eq!(
                 client.selected.building_id,
@@ -163,8 +161,9 @@ async fn town_center_roof_center_and_bottom_left_annex_select_the_rendered_build
             );
             assert!(client.selected.units.is_empty());
         }
-        // The upper click really overlaps the scout's body behind the roof.
-        client.village.buildings.clear();
+        client.canvas.remove();
+        let mut client = fixture(zoom).await;
+        // The upper click overlaps the scout behind the roof.
         click(&mut client, [0.0, -90.0]);
         assert_eq!(client.selected.units, [EntityId(1)]);
         client.canvas.remove();
@@ -186,7 +185,7 @@ async fn ground_farms_remain_selectable_and_do_not_hide_units() {
 }
 
 #[wasm_bindgen_test]
-async fn building_selection_obeys_draw_depth_for_units_resources_and_other_buildings() {
+async fn building_selection_prefers_resources_and_keeps_building_depth_order() {
     let mut client = fixture(1.0).await;
     let scout = client.units.get_mut(&EntityId(1)).unwrap();
     scout.position = WorldPosition::from_tile_center(TileCoord::new(101, 101)).unwrap();
@@ -220,9 +219,9 @@ async fn building_selection_obeys_draw_depth_for_units_resources_and_other_build
     });
     click(&mut client, [0.0, -90.0]);
     assert_eq!(
-        client.selected.building_id,
-        Some(EntityId(8)),
-        "roof hides berries behind it"
+        client.selected.resource_id,
+        Some(berry.id),
+        "berries behind the roof remain selectable"
     );
     let foreground =
         aoe_map::ResourceNode::starting(TileCoord::new(100, 101), aoe_map::ResourceKind::Food)
@@ -258,6 +257,93 @@ async fn building_selection_obeys_draw_depth_for_units_resources_and_other_build
         client.selected.building_id,
         Some(EntityId(9)),
         "equal depths follow the renderer's entity ID tie break"
+    );
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn enemy_behind_tree_remains_an_attack_target() {
+    let mut client = fixture(1.0).await;
+    client.village.buildings.clear();
+    let mut primary = client.units.get(&EntityId(1)).unwrap().clone();
+    primary.id = EntityId(2);
+    primary.position = WorldPosition::from_tile_center(TileCoord::new(110, 110)).unwrap();
+    client.units.insert(primary.id, primary);
+    client.primary = Some(EntityId(2));
+    let enemy = if crate::playground::game::village::owner(&client) == PlayerId(1) {
+        PlayerId(2)
+    } else {
+        PlayerId(1)
+    };
+    client.units.get_mut(&EntityId(1)).unwrap().player = enemy;
+    let tree = aoe_map::ResourceNode::starting(TileCoord::new(98, 98), aoe_map::ResourceKind::Wood)
+        .unwrap();
+    client.resources.apply(aoe_protocol::ResourceState {
+        snapshot_page: None,
+        subscription_revision: 1,
+        from_revision: None,
+        revision: 0,
+        changes: vec![aoe_protocol::ResourceAmount {
+            id: tree.id,
+            remaining: tree.initial_amount,
+        }],
+    });
+    client.fog.apply(aoe_protocol::FogState {
+        revision: 1,
+        tick: aoe_core::Tick(0),
+        region: TileRect::from_xywh(0, 0, 1, 1),
+        tiles: vec![],
+        overview: vec![],
+        disabled: true,
+    });
+    let point = ScreenPoint { x: 640.0, y: 270.0 };
+    assert_eq!(
+        picking::actor(&client, point),
+        Some((EntityId(1), false, true))
+    );
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn gold_behind_a_tree_remains_a_resource_target() {
+    let mut client = fixture(1.0).await;
+    client.units.clear();
+    client.village.buildings.clear();
+    let frame = client.art.resources[0][0];
+    client.art.resources[1] = vec![GameFrame {
+        size: [40.0, 160.0],
+        anchor: [20.0, 150.0],
+        ..frame
+    }];
+    client.art.resources[2] = vec![frame];
+    let tree = aoe_map::ResourceNode::starting(TileCoord::new(99, 99), aoe_map::ResourceKind::Wood)
+        .unwrap();
+    let gold = aoe_map::ResourceNode::starting(TileCoord::new(98, 98), aoe_map::ResourceKind::Gold)
+        .unwrap();
+    client.resources.apply(aoe_protocol::ResourceState {
+        snapshot_page: None,
+        subscription_revision: 1,
+        from_revision: None,
+        revision: 0,
+        changes: vec![tree, gold]
+            .into_iter()
+            .map(|node| aoe_protocol::ResourceAmount {
+                id: node.id,
+                remaining: node.initial_amount,
+            })
+            .collect(),
+    });
+    client.fog.apply(aoe_protocol::FogState {
+        revision: 1,
+        tick: aoe_core::Tick(0),
+        region: TileRect::from_xywh(0, 0, 1, 1),
+        tiles: vec![],
+        overview: vec![],
+        disabled: true,
+    });
+    assert_eq!(
+        picking::resource(&client, ScreenPoint { x: 640.0, y: 220.0 }),
+        Some((gold.id, aoe_protocol::ResourceKind::Gold))
     );
     client.canvas.remove();
 }

@@ -42,6 +42,7 @@ h1,h2,p { margin:0; }
 #command-grid button>span:not(.cost) { position:absolute; inset:auto 0 0; font-size:9px; text-shadow:0 1px #000; }
 kbd { font:10px system-ui; position:absolute; right:3px; top:1px; color:#f5e1a5; }
 .cost { position:absolute; inset:auto 0 0; display:flex; justify-content:center; align-items:center; font-size:10px; background:#171e19dd; height:13px; }
+#command-grid .reseed-count { position:absolute; right:1px; top:1px; min-width:14px; background:#151b13e8; color:#fff0a0; font-size:12px; line-height:15px; text-align:center; border:1px solid #bca76e; }
 #command-grid .cost .icon { width:12px; height:12px; display:inline; margin:0 2px; }
 #command-hint { font-size:10px; color:#c0c3ab; margin-top:7px; white-space:nowrap; }
 #selection { min-width:0; padding-top:3px; }

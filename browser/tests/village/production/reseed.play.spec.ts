@@ -47,7 +47,6 @@ test("Mill reseeds charge wood, persist after reload, and refund cancellation", 
     timeout: 70_000,
   });
   await expect(page.locator("#farm-reseed-count")).toHaveText("0");
-  await expect(page.locator("#remove-farm-reseed")).toBeDisabled();
   await page.locator("#add-farm-reseed").click();
   await expect(page.locator("#farm-reseed-count")).toHaveText("1");
   await expect(page.locator("#stockpile-wood")).toHaveText("40");
@@ -56,7 +55,7 @@ test("Mill reseeds charge wood, persist after reload, and refund cancellation", 
     base,
     `mill-reseeds-${test.info().project.name}`,
   );
-  await expect(page.locator("#add-farm-reseed")).toBeDisabled();
+  await expect(page.locator("#add-farm-reseed")).toContainText("1");
   await page.reload();
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 60_000,
@@ -64,7 +63,7 @@ test("Mill reseeds charge wood, persist after reload, and refund cancellation", 
   await centerVillage(page);
   await selectMill();
   await expect(page.locator("#farm-reseed-count")).toHaveText("1");
-  await page.locator("#remove-farm-reseed").click();
+  await page.locator("#add-farm-reseed").click({ button: "right" });
   await expect(page.locator("#farm-reseed-count")).toHaveText("0");
   await expect(page.locator("#stockpile-wood")).toHaveText("100");
 });

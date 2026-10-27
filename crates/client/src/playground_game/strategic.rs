@@ -10,10 +10,12 @@ export function strategic_pick(point) {
   if (world) point.set(world); else point.fill(NaN);
 }
 export function strategic_frame(state) { return window.aoeNavigation?.strategic?.frame(state) ?? false; }
+export function strategic_present() { window.aoeNavigation?.strategic?.present(); }
 ")]
 extern "C" {
     fn strategic_frame(state: &[f64]) -> bool;
     fn strategic_pick(point: &mut [f64]);
+    fn strategic_present();
 }
 
 pub(super) fn level(client: &Client) -> Lod {
@@ -45,6 +47,10 @@ pub(super) fn render(client: &mut Client) -> bool {
     } else {
         false
     }
+}
+
+pub(super) fn present() {
+    strategic_present();
 }
 
 pub(super) fn focus(client: &mut Client, point: ScreenPoint) -> bool {

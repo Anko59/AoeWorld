@@ -33,7 +33,7 @@ export function initBuildings() {
   ];
   const formations=['Line','Box','Staggered','Flank'].map((name,i)=>{const button=document.createElement('button');button.id=`formation-${name.toLowerCase()}`;button.className='formation-command';button.hidden=true;button.type='button';button.innerHTML=`<svg class="formation-icon" viewBox="0 0 32 24" aria-hidden="true">${formationDots[i].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="2.2"/>`).join('')}</svg><span class="formation-name">${name}</span>`;button.title=`${name} formation`;button.setAttribute('aria-label',button.title);button.setAttribute('aria-pressed',String(i===0));button.addEventListener('click',()=>formations.forEach(b=>b.setAttribute('aria-pressed',String(b===button))));grid.append(button);return button;});
   const attackMove=document.createElement('button');attackMove.id='attack-move-units';attackMove.hidden=true;attackMove.type='button';attackMove.innerHTML='<svg class="formation-icon" viewBox="0 0 32 24" aria-hidden="true"><path d="M7 20 24 3M13 3h11v11" fill="none" stroke="currentColor" stroke-width="3"/></svg><span class="formation-name">Attack move</span>';attackMove.title='Advance in formation and engage visible enemies';grid.append(attackMove);
-  const reseedButtons=['add','remove'].map(side=>{const button=document.createElement('button');button.id=`${side}-farm-reseed`;button.hidden=true;button.innerHTML=entityIcon('Farm')+`<span class="command-label">${side==='add'?'Queue farm reseed':'Remove farm reseed'}</span>`;grid.append(button);return button;});
+  const reseedButtons=['add','remove'].map(side=>{const button=document.createElement('button');button.id=`${side}-farm-reseed`;button.hidden=true;button.innerHTML=entityIcon('Farm')+`<span class="command-label">${side==='add'?'Farm reseed':'Remove farm reseed'}</span><b class="reseed-count">0</b>`;grid.append(button);return button;});
   const trainIcon=document.createElement('span');trainIcon.className='train-icon';
   byId('train-villager').querySelector(':scope>.icon').replaceWith(trainIcon);
   setEntityIcon(trainIcon,'Villager');
@@ -91,12 +91,12 @@ export function initBuildings() {
   byId('selection-content').insertBefore(panel,byId('training'));
   const reseedQueue=document.createElement('div');reseedQueue.id='farm-reseed-queue';reseedQueue.hidden=true;reseedQueue.innerHTML='Farm reseeds queued: <span id="farm-reseed-count">0</span>';panel.append(reseedQueue);
   const progressLabels=document.createElement('div');progressLabels.id='construction-labels';document.body.append(progressLabels);
-  let open=false, state=[], lastPreview='', queue=[], previousQueue='', previousResearch=-1, previousLabels='';
+  let open=false, state=[], lastPreview='', queue=[], previousQueue='', previousResearch=-1, previousLabels='', canReseedAdd=false, canReseedRemove=false;
   const menu=()=>{
     const villager=byId('selection').dataset.villagers==='true';
     build.hidden=!villager;military.hidden=!villager;if(!villager)open=false;
     buttons.forEach((b,i)=>{b.hidden=!villager||open!==category(i);b.disabled=state[buildStart+i]!==1;const [id,name,key,cost]=commands[i];b.title=`${name} · ${cost} · ${category(i)==='military'?'V':'B'} ${key}${(i>=15&&i<=18||id==='town-center')&&state[0]<2?' · requires Castle Age':state[0]===0&&(i>=9&&i<=13||i===19)?' · requires Feudal Age':''}`;b.setAttribute('aria-label',b.title);});
-    if(open){for(const id of ['move-units','stop-units'])byId(id).hidden=true;byId('command-context').textContent=open==='military'?'Military buildings':'Economic buildings';byId('command-hint').textContent=byId('scene').dataset.orderMode==='build'?'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels':'Choose a building · Esc closes the menu';}
+    if(open){for(const id of ['move-units','stop-units'])byId(id).hidden=true;byId('command-context').textContent=open==='military'?'Military buildings':'Economic buildings';byId('command-hint').textContent=byId('scene').dataset.orderMode==='build'?(byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels'):'Choose a building · Esc closes the menu';}
     grid.classList.toggle('building-menu-open',Boolean(open));
     build.setAttribute('aria-expanded',String(open==='economy'));military.setAttribute('aria-expanded',String(open==='military'));
     const active=Array.from(grid.children).filter(n=>n.tagName==='BUTTON'&&!n.hidden).length;
@@ -106,7 +106,11 @@ export function initBuildings() {
   military.addEventListener('click',()=>{open=open==='military'?false:'military';menu();});
   window.aoeBuildings={
     bind(callback) {
-      [...buttons,...techs,byId('cancel-construction'),byId('cancel-research'),...reseedButtons,autoScout].forEach((button,i)=>button.addEventListener('click',()=>callback(0,i)));
+      [...buttons,...techs,byId('cancel-construction'),byId('cancel-research')].forEach((button,i)=>button.addEventListener('click',()=>callback(0,i)));
+      const reseedCode=buttons.length+techs.length+2;
+      reseedButtons[0].addEventListener('click',()=>{if(canReseedAdd)callback(0,reseedCode);});
+      reseedButtons[0].addEventListener('contextmenu',event=>{event.preventDefault();if(canReseedRemove)callback(0,reseedCode+1);});
+      autoScout.addEventListener('click',()=>callback(0,reseedCode+2));
       militaryTrain.forEach(({button,kind})=>button.addEventListener('click',()=>callback(1,kind)));
       tradeButtons.forEach(({button},i)=>button.addEventListener('click',()=>callback(2,i)));
       ['train-villager','stop-units','move-units','cancel-training'].forEach((id,i)=>byId(id).addEventListener('click',()=>callback(3,i)));
@@ -140,7 +144,8 @@ export function initBuildings() {
       const transport=v[reseed+6]??0,cargo=v[reseed+7]??0;unload.hidden=!transport;unload.disabled=cargo===0||!byId('observer-label').hidden;unload.title='Right-click a shore to sail there and unload';if(transport)byId('selection-load').textContent=`${cargo}/5 passengers`;transportLoads(v.slice(reseed+8));
       const cavalry=v[reseed+4]??0,scouting=v[reseed+5]??0;autoScout.hidden=cavalry===0;autoScout.disabled=!byId('observer-label').hidden;autoScout.setAttribute('aria-pressed',scouting===0?'false':scouting===cavalry?'true':'mixed');autoScout.querySelector('.command-label').textContent=scouting===cavalry&&cavalry>0?'Stop auto-scout':'Auto-scout';
       reseedQueue.hidden=kind!==4||!owned;byId('farm-reseed-count').textContent=String(v[reseed]??0);
-      reseedButtons.forEach((button,i)=>{button.hidden=!owned||kind!==4||v[4]<1000;button.disabled=v[reseed+1+i]!==1||!byId('observer-label').hidden;button.title=i===0?`Queue farm reseed · ${v[reseed+3]} wood`:`Remove farm reseed · refund ${v[reseed+3]} wood`;button.setAttribute('aria-label',button.title);});
+      canReseedAdd=v[reseed+1]===1&&byId('observer-label').hidden;canReseedRemove=v[reseed+2]===1&&byId('observer-label').hidden;
+      const reseedButton=reseedButtons[0];reseedButton.hidden=!owned||kind!==4||v[4]<1000;reseedButtons[1].hidden=true;reseedButton.disabled=!canReseedAdd&&!canReseedRemove;reseedButton.querySelector('.reseed-count').textContent=String(v[reseed]??0);reseedButton.title=`${v[reseed]??0} farm reseeds queued · left-click to prepay ${v[reseed+3]} wood; right-click to cancel and refund`;reseedButton.setAttribute('aria-label',reseedButton.title);
       tradeButtons.forEach(({button,side,res},i)=>{const price=v[market+i%3];const gold=v[market+(side==='buy'?9:12)+i%3];button.hidden=!owned||kind!==13||v[4]<1000;button.disabled=v[market+3+i]!==1||!byId('observer-label').hidden;const name=res[0].toUpperCase()+res.slice(1);const signature=`${side}:${res}:${gold}`;if(button.dataset.signature!==signature){button.innerHTML=icon('resources',res,res)+`<span class="command-label">${side==='buy'?'Buy':'Sell'} ${name}</span><span class="trade-side">${side==='buy'?'+':'−'}</span><small>${gold} gold</small>`;button.dataset.signature=signature;}button.dataset.price=String(price);button.title=`${side==='buy'?'Buy':'Sell'} 100 ${res} for ${gold} gold (price ${price})`;button.setAttribute('aria-label',button.title);});
       byId('market-prices')&&(byId('market-prices').textContent=kind===13&&v[4]>=1000?`Prices per 100: wood ${v[market]} · food ${v[market+1]} · stone ${v[market+2]} gold`:'');
       techs.forEach((b,i)=>{b.hidden=!owned||kind!==sites[i]||v[8+i]===0||v[8+i]===3;action(b,`Research ${research[i]}${i===8?' · Upgrades existing and future Militia':''}`,v[8+i],!byId('observer-label').hidden);});
@@ -177,6 +182,9 @@ export function initBuildings() {
       byId('scene').dataset.placementValid=String(v.length>0&&v[0]===1);
       byId('scene').dataset.placementCount=String(v[1]??0);
       byId('scene').dataset.placementInvalid=String(v[2]??0);
+      const reasons=['','Drag between two land banks','Bridge is too long or has an invalid direction','Bridge start must be on land','Bridge end must be on land','Not enough resources for this bridge','Bridge tiles must be clear and cross water'];
+      byId('scene').title=reasons[v[3]??0]??'';
+      if(open&&byId('scene').dataset.orderMode==='build')byId('command-hint').textContent=byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels';
     },
   };
 }
