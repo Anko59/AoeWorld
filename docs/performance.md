@@ -282,10 +282,13 @@ recorded in [ground variety evidence](geodata/landscape/ground-variety.md).
 
 `make perf-wasm-cap` measures (`make perf-wasm-size`) and then runs
 `aoe-harness perf-wasm-size-check`, the same comparison against
-`baselines/perf/wasm.json` that `perf-ci` makes, and fails over the cap. It is a
+`baselines/perf/wasm.json` that `perf-ci` makes. Size is a trend, not a budget:
+every run prints the growth over the baseline, and the check fails only on a jump
+of more than 25% (`perf_size::JUMP_PERCENT`), so ordinary growth never costs a
+ship cycle or a baseline re-take. It is a
 preflight gate for any change that selects the performance suite (a client,
 rendering, web or gameplay change, not a docs one), so `make ship` finds a size
-overage before CI does (#434 lost a CI cycle to 519 bytes). It measures in its
+jump before CI does. It measures in its
 own gate snapshot, because each gate runs in a separate checkout, and it is
 heavy, so its slot and load wait come before its deadline. `make perf-wasm-size`
 alone only measures, so `make perf-baseline-propose` still works when the size
