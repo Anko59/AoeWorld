@@ -18,7 +18,7 @@ fn game_paths_and_non_game_paths_route_to_the_configured_workstreams() {
         "crates/sdk/src/lib.rs",
         "crates/sdk-python/src/lib.rs",
         "ai/model.py",
-        "browser/src/game.ts",
+        "browser/tests/village/commands.play.spec.ts",
         "web/interface/hud.js",
     ] {
         assert_eq!(config.review(path), 575, "{path}");
@@ -33,6 +33,8 @@ fn game_paths_and_non_game_paths_route_to_the_configured_workstreams() {
         "crates/server/README.md",
         "ai/AGENTS.md",
         "web/dev/tools.js",
+        "browser/tests/tooling/quarantine-reporter.spec.ts",
+        "browser/tests/showcase/readiness.spec.ts",
     ] {
         assert_eq!(config.review(path), 576, "{path}");
     }

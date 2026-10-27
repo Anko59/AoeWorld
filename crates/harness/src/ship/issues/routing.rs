@@ -44,11 +44,14 @@ impl Config {
             "crates/sdk/",
             "crates/sdk-python/",
             "ai/",
-            "browser/src/",
+            "browser/tests/",
             "web/",
         ];
         if !path.ends_with(".md")
             && !path.starts_with("web/dev/")
+            // Harness tooling specs belong to delivery, not to gameplay.
+            && !path.starts_with("browser/tests/tooling/")
+            && !path.starts_with("browser/tests/showcase/")
             && game.iter().any(|prefix| path.starts_with(prefix))
         {
             self.game_review
