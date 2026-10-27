@@ -479,3 +479,6 @@ fn a_farm_under_construction_draws_no_scaffolding() {
     );
     assert_eq!(emitted, 0);
 }
+
+#[path = "tests/siege.rs"]
+mod siege;

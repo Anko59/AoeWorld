@@ -268,6 +268,21 @@ pub(super) fn building(
 #[cfg(test)]
 mod tests;
 
+/// The DAT delta that completes a siege unit's partial animation row.
+/// Its pixels are the standing body already selected for that unit.
+pub(super) fn siege_body_frame(art: &GameArt, unit: SceneUnit) -> Option<GameFrame> {
+    use SceneUnitKind::*;
+    let kind = match unit.kind {
+        MangonelWalk => MangonelStand,
+        BatteringRamWalk | BatteringRamAttack => BatteringRamStand,
+        _ => return None,
+    };
+    let frames = art.actors.get(kind.actor_slot()?)?;
+    let direction = super::sprite_direction(unit.facing).0;
+    let frame = *frames.get(direction.min(frames.len().saturating_sub(1)))?;
+    (frames.len() == 5).then(|| super::world_frame(frame))
+}
+
 /// Native anchors and player/shadow planes are shared by all backends.
 #[inline(never)]
 pub(super) fn sprite_building(

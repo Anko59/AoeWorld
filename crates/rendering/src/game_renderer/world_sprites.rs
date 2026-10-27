@@ -235,7 +235,12 @@ pub(super) fn emit_world_sprite_frames(
             .then(|| art.fishing[9].get(direction).copied())
             .flatten()
             .map(world_frame);
-        for frame in std::iter::once(frame).chain(net) {
+        // Siege bodies are DAT deltas over the wheels, rails or log base row.
+        let mut shadow_emitted = false;
+        for frame in std::iter::once(frame)
+            .chain(net)
+            .chain(village::siege_body_frame(art, unit))
+        {
             let scale = camera.zoom as f32;
             let width = f64::from(frame.size[0]) * camera.zoom;
             let height = f64::from(frame.size[1]) * camera.zoom;
@@ -278,9 +283,11 @@ pub(super) fn emit_world_sprite_frames(
             scaled_frame.size = scaled_frame.size.map(|value| value * scale);
             scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
             let depth = object_depth(object);
-            if let Some((shadow, shadow_frame)) =
-                alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
+            if !shadow_emitted
+                && let Some((shadow, shadow_frame)) =
+                    alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
             {
+                shadow_emitted = true;
                 emit((shadow, shadow_frame, depth, object.stable_id()));
             }
             emit((sprite, scaled_frame, depth, object.stable_id()));
