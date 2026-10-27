@@ -79,9 +79,7 @@ fn every_role_reads_metrics_but_only_the_main_session_files_regressions() {
     }
     for role in [Role::Tester, Role::Implementer, Role::Reviewer] {
         allowed(&fixture, role, "make metrics METRICS_REV=HEAD~1");
-        denied(&fixture, role, "make metric-regressions");
     }
-    allowed(&fixture, Role::Main, "make metric-regressions");
 }
 
 #[test]

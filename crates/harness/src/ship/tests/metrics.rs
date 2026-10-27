@@ -241,8 +241,8 @@ fn the_snapshot_counts_every_static_metric_from_blobs() {
     assert_eq!(m.tests.get("wasm"), Some(&2));
     assert_eq!(m.tests.get("fuzz"), Some(&1));
     assert_eq!(m.tests.get("playwright"), Some(&2));
-    assert_eq!(m.test_total(), 6);
-    assert_eq!(m.dependency_total(), 5);
+    assert_eq!(m.tests.values().sum::<u64>(), 6);
+    assert_eq!(m.dependencies.values().sum::<u64>(), 5);
     assert_eq!(m.files_near_limit, 1);
     assert_eq!(m.files_over_limit, vec!["docs/huge.md".to_owned()]);
     let largest = m.largest_file.unwrap();

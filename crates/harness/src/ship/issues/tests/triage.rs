@@ -14,25 +14,6 @@ fn needs(pairs: &[(&str, &str)]) -> String {
     serde_json::Value::Object(map).to_string()
 }
 
-fn prepare_metrics(stub: &Stub) {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../gates/metric-regressions.json");
-    std::fs::copy(source, stub.root.join("gates/metric-regressions.json")).unwrap();
-    for args in [&["add", "-A"][..], &["commit", "-qm", "fixture"][..]] {
-        assert!(
-            std::process::Command::new("git")
-                .current_dir(&stub.root)
-                .args(args)
-                .env("GIT_AUTHOR_NAME", "Test")
-                .env("GIT_AUTHOR_EMAIL", "test@example.com")
-                .env("GIT_COMMITTER_NAME", "Test")
-                .env("GIT_COMMITTER_EMAIL", "test@example.com")
-                .status()
-                .unwrap()
-                .success()
-        );
-    }
-}
-
 #[test]
 fn the_needs_context_is_bounded_and_strict() {
     let parsed = parse(&needs(&[
@@ -161,7 +142,6 @@ fn failing_jobs_are_recorded_on_574_without_create_or_close() {
 #[test]
 fn nightly_cli_uses_the_configured_issue_without_creating() {
     let stub = Stub::new(&serde_json::json!([]));
-    prepare_metrics(&stub);
     let binary = std::env::current_exe()
         .unwrap()
         .parent()
@@ -225,30 +205,14 @@ fn triage_requires_the_main_session_and_results() {
             .to_string()
             .contains("set NIGHTLY_RESULTS")
     );
-    prepare_metrics(&stub);
     stub.set("NIGHTLY_RESULTS", &needs(&[("a", "skipped")]));
     execute(&stub.root).unwrap();
     assert!(!stub.calls().contains("<issue>"));
 }
 
 #[test]
-fn jobs_and_metrics_share_one_comment() {
-    let stub = Stub::new(&serde_json::json!([]));
-    triage_with_metrics(
-        &stub.root,
-        &needs(&[("parser", "failure")]),
-        Some("123"),
-        &["Test count fell".into()],
-    )
-    .unwrap();
-    assert_eq!(stub.calls().matches("<comment>").count(), 1);
-    assert!(stub.bodies().contains("parser") && stub.bodies().contains("Test count fell"));
-}
-
-#[test]
 fn closed_nightly_issue_warns_and_cli_succeeds() {
     let mut stub = Stub::new(&serde_json::json!([]));
-    prepare_metrics(&stub);
     stub.set("GH_VIEW_JSON", r#"{"state":"CLOSED"}"#);
     let binary = std::env::current_exe()
         .unwrap()

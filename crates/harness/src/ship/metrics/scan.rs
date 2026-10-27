@@ -43,16 +43,6 @@ pub(in crate::ship) struct Metrics {
     pub(in crate::ship) files_over_limit: Vec<String>,
 }
 
-impl Metrics {
-    pub(in crate::ship) fn test_total(&self) -> u64 {
-        self.tests.values().sum()
-    }
-
-    pub(in crate::ship) fn dependency_total(&self) -> u64 {
-        self.dependencies.values().sum()
-    }
-}
-
 fn lock_file(path: &str) -> bool {
     matches!(
         path,

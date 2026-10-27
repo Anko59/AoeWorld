@@ -33,33 +33,17 @@ pub(in crate::ship) fn execute(root: &Path) -> Result<()> {
     }
     let raw = std::env::var("NIGHTLY_RESULTS")
         .map_err(|_| "set NIGHTLY_RESULTS to the nightly workflow's `needs` context JSON")?;
-    let metrics = super::regressions::collect(root)?;
-    triage_with_metrics(
-        root,
-        &raw,
-        std::env::var("GITHUB_RUN_ID").ok().as_deref(),
-        &metrics,
-    )
+    triage(root, &raw, std::env::var("GITHUB_RUN_ID").ok().as_deref())
 }
 
-#[cfg(test)]
 pub(super) fn triage(root: &Path, raw: &str, run_id: Option<&str>) -> Result<()> {
-    triage_with_metrics(root, raw, run_id, &[])
-}
-
-fn triage_with_metrics(
-    root: &Path,
-    raw: &str,
-    run_id: Option<&str>,
-    metrics: &[String],
-) -> Result<()> {
     let results = parse(raw)?;
     let failures: Vec<_> = results
         .into_iter()
         .filter(|(_, outcome)| *outcome == Outcome::Failure)
         .map(|(job, _)| job)
         .collect();
-    if failures.is_empty() && metrics.is_empty() {
+    if failures.is_empty() {
         return Ok(());
     }
     let config = Config::load(root)?;
@@ -72,17 +56,9 @@ fn triage_with_metrics(
     };
     let run = run_link(&target.repo, run_id);
     let mut body = format!("### Nightly results for {run}\n");
-    if !failures.is_empty() {
-        body.push_str("\nNightly failures:\n");
-        for job in failures {
-            body.push_str(&format!("- [ ] `{job}` failed\n"));
-        }
-    }
-    if !metrics.is_empty() {
-        body.push_str("\nMetric regressions:\n");
-        for metric in metrics {
-            body.push_str(&format!("- [ ] {metric}\n"));
-        }
+    body.push_str("\nNightly failures:\n");
+    for job in failures {
+        body.push_str(&format!("- [ ] `{job}` failed\n"));
     }
     routing::comment(root, config.nightly, &body);
     Ok(())

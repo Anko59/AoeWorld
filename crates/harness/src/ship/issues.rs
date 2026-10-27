@@ -19,7 +19,6 @@ const BODY_LIMIT: usize = 60_000;
 const ISSUE_CAP: usize = 10_000;
 
 pub(super) mod followups;
-pub(super) mod regressions;
 mod routing;
 pub(super) mod triage;
 
