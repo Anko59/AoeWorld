@@ -10,21 +10,21 @@
     "instructions::assets::palette_decode": 243938,
     "instructions::protocol::snapshot_encode": 207527,
     "instructions::simulation::advance": 712509,
-    "instructions::simulation::late_game": 143767781,
+    "instructions::simulation::late_game": 431004141,
     "instructions::simulation::viewport_query": 183030
   },
   "allocation_bytes": {
     "instructions::assets::palette_decode": 17152,
     "instructions::protocol::snapshot_encode": 16376,
     "instructions::simulation::advance": 0,
-    "instructions::simulation::late_game": 4127477,
+    "instructions::simulation::late_game": 4751988,
     "instructions::simulation::viewport_query": 54024
   },
   "allocation_count": {
     "instructions::assets::palette_decode": 257,
     "instructions::protocol::snapshot_encode": 11,
     "instructions::simulation::advance": 0,
-    "instructions::simulation::late_game": 5671,
+    "instructions::simulation::late_game": 10168,
     "instructions::simulation::viewport_query": 9
   }
 }

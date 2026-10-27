@@ -103,7 +103,12 @@ pre-optimisation 240,341,066) with `make perf-baseline-propose`, so the 5% gate
 guards the active worksets, route-cache index and walking proposals; viewport
 queries were re-taken at 183,030 (from 257,593) for the ordered collection; the late
 game's allocation count was re-taken at 5,671 (from 4,733) for the Vassal economy
-phase and gatherer reservations bundled with it.
+phase and gatherer reservations bundled with it. On 2026-10-27, rebased onto
+#573's unit avoidance, the same workload measured 431,004,141 instructions, 10,168
+allocations and 4,751,988 allocated bytes in CI, and these became the baselines:
+blocked gatherers re-planned whole approaches under avoidance (8,531 route searches
+per 64 ticks against 906). The radius-movement change that follows cuts the tick
+to about 247M instructions and re-takes the baseline downward.
 
 ## Native building atlas
 
