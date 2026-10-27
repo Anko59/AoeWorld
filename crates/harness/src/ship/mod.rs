@@ -79,8 +79,6 @@ pub(crate) enum Commands {
     ShowcaseSession,
     /// Record nightly failures in the configured workstream (NIGHTLY_RESULTS).
     NightlyTriage,
-    /// Record nightly metric regressions in the configured workstream.
-    MetricRegressions,
     /// Carry `harness/review` to the rebased head of pull request CARRY_PR when its patch and the policy are unchanged.
     CarryReview,
     /// Update the open pull requests with auto-merge that are behind dev (UPDATE_MAX_PRS).
@@ -225,7 +223,6 @@ pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Resul
         Commands::LevelFloor => levels::print_floor(&root),
         Commands::LevelStats => levels::print_stats(&root),
         Commands::NightlyTriage => issues::triage::execute(&root),
-        Commands::MetricRegressions => issues::regressions::execute(&root),
         Commands::CarryReview => postpush::carry::execute(&root),
         Commands::UpdatePrs => postpush::update::execute(&root),
         Commands::Metrics => Ok(metrics::snapshot::command(&root)?),

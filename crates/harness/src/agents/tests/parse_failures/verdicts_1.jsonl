@@ -3,7 +3,6 @@
 ["make lint FOO=bar", false]
 ["make lint SHELL=/bin/true", true]
 ["make lint TOOL_IMAGE=evil", true]
-["make metric-regressions", false]
 ["make metrics", false]
 ["make metrics METRICS_REV=HEAD~1", false]
 ["make next", false]

@@ -110,7 +110,7 @@ fn main_session_verdicts_never_weaken_integration_verdicts() {
         .chain(include_str!("parse_failures/verdicts_1.jsonl").lines())
         .map(|row| serde_json::from_str::<(String, bool)>(row).expect("verdict data"))
         .collect::<Vec<_>>();
-    assert_eq!(cases.len(), 577);
+    assert_eq!(cases.len(), 576);
     for command in BYPASSES {
         assert!(cases.iter().any(|(s, denied)| s == command && *denied));
     }

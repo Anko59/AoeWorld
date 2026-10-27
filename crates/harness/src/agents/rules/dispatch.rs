@@ -25,9 +25,8 @@ const PERSON_TARGETS: &[&str] = &[
     "review-pr",
     // It lists merged pull requests through gh: the main session only.
     "level-stats",
-    // It opens, comments on and closes nightly issues: CI and the main session.
+    // It comments on the nightly workstream issue: CI and the main session.
     "nightly-triage",
-    "metric-regressions",
     // They post a status, comment on and rebase pull requests: CI and the main session.
     "carry-review",
     "update-prs",

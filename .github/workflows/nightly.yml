@@ -101,7 +101,7 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-  # File one comment for the run’s failures and metric regressions.
+  # File one comment for the run’s failures.
   triage:
     if: always()
     needs: [full-functional, parser-fuzz, target-performance, network-soak]

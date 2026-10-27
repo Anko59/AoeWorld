@@ -31,7 +31,6 @@ export MAKE BROWSER_IMAGE SHIP_TOOLS_IMAGE
   issue \
   next \
   nightly-triage \
-  metric-regressions \
   ledger \
   usage \
   carry-review \
@@ -87,10 +86,6 @@ next:
 # `needs` context JSON, reaches the harness through the environment only.
 nightly-triage:
 	@.agents/hooks/harness.sh exec nightly-triage
-
-# The nightly workflow's metric comparison (docs/issues.md): one bot-owned issue.
-metric-regressions:
-	@.agents/hooks/harness.sh exec metric-regressions
 
 # Which model did what, with measured results (docs/models.md); cached in .cache/ledger.
 ledger:
