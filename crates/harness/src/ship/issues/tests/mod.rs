@@ -7,7 +7,6 @@ fn item(number: u64, title: &str, labels: &[&str], created_at: &str) -> Issue {
     Issue {
         number,
         title: title.into(),
-        author: String::new(),
         fingerprint_marker: None,
         labels: labels
             .iter()

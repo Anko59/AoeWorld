@@ -4,10 +4,17 @@ use crate::ship::{Options, git, review_gate::graded, ship_with, tests::run};
 use std::fs;
 
 const BODY: &str = "<!-- level: low -->\n## Why\n> \"CI alongside review\" — the owner\n## What\nStart CI during review.\n";
-const GH: &str = r#"#!/bin/sh
+const GH: &str = r#####"#!/bin/sh
 printf '%s\n' "$*" >> "$GH_LOG"
 case "$1 $2" in
   '--version ') echo 'gh version 2.100.0'; exit 0 ;;
+  'issue view')
+    if [ -f "$GH_DIR/closed-issue" ]; then
+      printf '%s\n' '{"state":"CLOSED","body":"#### Game findings (owned by the game session)\n","updatedAt":"t"}'
+    else
+      printf '%s\n' '{"state":"OPEN","body":"#### Game findings (owned by the game session)\n","updatedAt":"t"}'
+    fi ;;
+  'issue edit') cat >/dev/null ;;
   'pr list')
     case "$*" in *'--state merged'*) echo '[]'; exit 0 ;; esac
     if [ -f "$GH_DIR/existing" ]; then echo '{"url":"https://github.com/project/checkout/pull/1","baseRefName":"dev"}'; fi ;;
@@ -53,7 +60,7 @@ if [ "$1" = api ]; then
     *) echo '[]' ;;
   esac
 fi
-"#;
+"#####;
 
 fn setup() -> (World, Options) {
     let world = World::new();
@@ -413,4 +420,23 @@ fn pull_request_state_parses_githubs_json_for_drafts_and_armed_auto_merge() {
         PrState::parse("true false").is_err(),
         "jq-style text is not accepted"
     );
+}
+
+#[test]
+fn ship_propagates_a_closed_workstream_after_publication() {
+    let (world, options) = setup();
+    world.answer("closed-issue", "");
+    let error = ship_with(&world.root, &options, &|root, tier, _, _, _| {
+        Ok(graded(root, tier, 9))
+    })
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.contains("gates/issues.json") && error.contains("575"),
+        "{error}"
+    );
+    let calls = world.calls();
+    assert!(calls.contains("issue view 575"), "{calls}");
+    assert!(!calls.contains("issue create"), "{calls}");
+    assert!(!calls.contains("issue edit"), "{calls}");
 }

@@ -1,10 +1,8 @@
-//! `make metric-regressions`: the nightly workflow compares the static metrics
-//! of dev's HEAD with dev as of `window_hours` earlier and keeps ONE issue,
-//! `Nightly: metric regressions`, listing every change beyond the thresholds in
-//! `gates/metric-regressions.json`. It opens or updates that issue while there
-//! is a regression and closes it when there is none. Ownership follows
-//! [`triage::owned_titled`]: only the bot's labelled, marked issue is touched.
-use super::{Issue, Result, Target, triage};
+use super::{
+    Result, Target,
+    routing::{self, Config},
+    triage,
+};
 use crate::ship::{
     git,
     metrics::{Metrics, snapshot},
@@ -15,7 +13,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub(super) const TITLE: &str = "Nightly: metric regressions";
 const CONFIG: &str = "gates/metric-regressions.json";
 const LISTED_FILES: usize = 20;
 
@@ -58,19 +55,22 @@ pub(in crate::ship) fn execute(root: &Path) -> Result<()> {
         None => None,
     };
     let findings = regressions(earlier.as_ref(), &head, &thresholds);
-    let target = Target::load(root)?;
-    let run = triage::run_link(&target.repo, std::env::var("GITHUB_RUN_ID").ok().as_deref());
-    let mut problems = Vec::new();
-    for action in plan(&findings, &target.issues, &run) {
-        match triage::apply(&target, root, &action) {
-            Ok(_) => println!("metric-regressions: {action:?}"),
-            Err(error) => problems.push(format!("{action:?}: {error}")),
-        }
-    }
-    if problems.is_empty() {
+    if findings.is_empty() {
         return Ok(());
     }
-    Err(format!("metric-regressions: {}", problems.join("; ")).into())
+    let config = Config::load(root)?;
+    let target = Target::direct(root)?;
+    let run = triage::run_link(&target.repo, std::env::var("GITHUB_RUN_ID").ok().as_deref());
+    routing::update(
+        &target,
+        root,
+        config.nightly,
+        "nightly-metric-regressions",
+        &body(&findings, &run),
+        false,
+    )?;
+    println!("metric-regressions: recorded in #{}", config.nightly);
+    Ok(())
 }
 
 /// The newest commit of HEAD's history made at least `hours` ago.
@@ -154,35 +154,13 @@ pub(super) fn regressions(
 }
 
 fn body(findings: &[String], run: &str) -> String {
-    let list: String = findings.iter().map(|line| format!("- {line}\n")).collect();
-    format!(
-        "Static metrics of dev regressed beyond `{CONFIG}` in {run}:\n\n{list}\n`make metric-regressions` updates this issue on every nightly run and closes it when none remains (docs/issues.md).\n"
-    )
-}
-
-pub(super) fn plan(findings: &[String], issues: &[Issue], run: &str) -> Vec<triage::Action> {
-    let mut mine = issues
+    let list: String = findings
         .iter()
-        .filter(|issue| triage::owned_titled(issue, TITLE));
-    if findings.is_empty() {
-        return mine
-            .map(|issue| triage::Action::Close {
-                number: issue.number,
-                comment: format!("No metric regression in {run}."),
-            })
-            .collect();
-    }
-    vec![match mine.next() {
-        Some(issue) => triage::Action::Update {
-            number: issue.number,
-            title: TITLE.to_owned(),
-            body: body(findings, run),
-        },
-        None => triage::Action::Open {
-            title: TITLE.to_owned(),
-            body: body(findings, run),
-        },
-    }]
+        .map(|line| format!("- [ ] {line}\n"))
+        .collect();
+    format!(
+        "Static metrics of dev regressed beyond `{CONFIG}` in {run}:\n\n{list}\nRecorded by `make metric-regressions` (docs/issues.md).\n"
+    )
 }
 
 #[cfg(test)]

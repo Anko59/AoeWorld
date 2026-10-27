@@ -1,4 +1,4 @@
-use super::super::{marked_body, parse_issue_pages, test_stub::Stub};
+use super::super::test_stub::Stub;
 use super::*;
 use crate::ship::metrics::snapshot;
 use std::{fs, process::Command};
@@ -17,20 +17,6 @@ fn metrics(tests: u64, unsafe_count: u64, todo: u64, deps: u64, over: &[&str]) -
     metrics.tests.insert("unit".into(), tests);
     metrics.dependencies.insert("cargo".into(), deps);
     metrics
-}
-
-fn owned_issue(number: u64) -> Issue {
-    let body = marked_body("old", TITLE).unwrap();
-    parse_issue_pages(
-        serde_json::json!([{
-            "number": number, "title": TITLE, "body": body, "user": {"login": "github-actions[bot]"},
-            "labels": [{"name": "nightly-failure"}], "html_url": "u"
-        }])
-        .to_string()
-        .as_bytes(),
-    )
-    .unwrap()
-    .remove(0)
 }
 
 #[test]
@@ -76,41 +62,6 @@ fn each_regression_beyond_its_threshold_is_listed() {
         alone[0].starts_with("25 files") && alone[0].ends_with(", …"),
         "{alone:?}"
     );
-}
-
-#[test]
-fn one_owned_issue_is_opened_updated_or_closed() {
-    let findings = vec!["Test count fell".to_owned()];
-    let opened = plan(&findings, &[], "RUN");
-    assert!(matches!(&opened[..], [triage::Action::Open { title, body }]
-        if title == TITLE && body.contains("- Test count fell") && body.contains("RUN")));
-    let issues = [owned_issue(4), owned_issue(5)];
-    let updated = plan(&findings, &issues, "RUN");
-    assert!(
-        matches!(&updated[..], [triage::Action::Update { number: 4, .. }]),
-        "{updated:?}"
-    );
-    assert!(matches!(
-        &plan(&[], &issues, "RUN")[..],
-        [
-            triage::Action::Close { number: 4, .. },
-            triage::Action::Close { number: 5, .. }
-        ]
-    ));
-    let forged = parse_issue_pages(
-        serde_json::json!([{
-            "number": 8, "title": TITLE, "body": marked_body("x", TITLE).unwrap(),
-            "user": {"login": "mallory"}, "labels": [{"name": "nightly-failure"}], "html_url": "u"
-        }])
-        .to_string()
-        .as_bytes(),
-    )
-    .unwrap();
-    assert!(plan(&[], &forged, "RUN").is_empty());
-    assert!(matches!(
-        &plan(&findings, &forged, "RUN")[..],
-        [triage::Action::Open { .. }]
-    ));
 }
 
 fn commit(root: &Path, date: Option<&str>, message: &str) {
@@ -181,9 +132,30 @@ fn git(stub: &Stub, args: &[&str]) {
 }
 
 #[test]
-fn the_nightly_run_opens_updates_and_closes_the_issue_on_origin() {
+fn the_route_make_target_and_workflow_reach_the_regression_check() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let read = |path: &str| fs::read_to_string(root.join(path)).unwrap();
+    let harness = read(".agents/hooks/harness.sh");
+    assert!(
+        harness.contains("metric-regressions) probe=crates/harness/src/ship/issues/regressions.rs")
+    );
+    assert!(harness.contains("metrics) probe=crates/harness/src/ship/metrics/snapshot.rs"));
+    let make = read("make/ship.mk");
+    assert!(
+        make.contains("metric-regressions:\n\t@.agents/hooks/harness.sh exec metric-regressions")
+    );
+    assert!(make.contains("metrics:\n\t@.agents/hooks/harness.sh exec metrics"));
+    assert!(make.contains(" METRICS_REV"));
+    let workflow = read(".github/workflows/nightly.yml");
+    let (_, triage) = workflow.split_once("\n  triage:\n").unwrap();
+    assert!(triage.contains("fetch-depth: 0"));
+    assert!(triage.contains("run: make metric-regressions"));
+    let _ = snapshot::path;
+}
+
+#[test]
+fn metric_regressions_are_recorded_on_574() {
     let mut stub = Stub::new(&serde_json::json!([]));
-    stub.set("GITHUB_RUN_ID", "77");
     stub.set("GIT_AUTHOR_DATE", "2020-01-01T00:00:00 +0000");
     stub.set("GIT_COMMITTER_DATE", "2020-01-01T00:00:00 +0000");
     repository_with(&stub, 3, 10);
@@ -218,57 +190,16 @@ fn the_nightly_run_opens_updates_and_closes_the_issue_on_origin() {
             "after",
         ],
     );
-
     execute(&stub.root).unwrap();
-    let calls = stub.calls();
-    assert!(
-        calls.contains("<--title>\n<Nightly: metric regressions>"),
-        "{calls}"
-    );
-    let bodies = stub.bodies();
-    assert!(bodies.contains("Test count fell from 3 to 1"), "{bodies}");
-    assert!(bodies.contains("`docs.md`"), "{bodies}");
-    assert!(bodies.contains("actions/runs/77"), "{bodies}");
-    assert!(bodies.contains("aoe-fingerprint"));
+    assert!(stub.calls().contains("<issue>\n<edit>\n<574>"));
+    assert!(!stub.calls().contains("<create>"));
+    assert!(!stub.calls().contains("<close>"));
+    assert!(stub.bodies().contains("- [ ] Test count fell from 3 to 1"));
+}
 
-    // The next run edits the same issue.
-    let listing = serde_json::json!([{
-        "number": 12, "title": TITLE, "body": marked_body("old", TITLE).unwrap(),
-        "user": {"login": "github-actions[bot]"}, "labels": [{"name": "nightly-failure"}], "html_url": "u"
-    }]);
-    stub.set("GH_LIST_JSON", &listing.to_string());
-    stub.clear();
-    execute(&stub.root).unwrap();
-    assert!(
-        stub.calls()
-            .contains("<issue>\n<edit>\n<12>\n<--body-file>\n<->"),
-        "{}",
-        stub.calls()
-    );
-
-    // Healthy again: the issue is closed.
-    repository_with(&stub, 9, 10);
-    git(&stub, &["add", "-A"]);
-    git(
-        &stub,
-        &[
-            "-c",
-            "user.name=t",
-            "-c",
-            "user.email=t@e.x",
-            "commit",
-            "-q",
-            "-m",
-            "fixed",
-        ],
-    );
-    stub.clear();
-    execute(&stub.root).unwrap();
-    assert!(
-        stub.calls().contains("<issue>\n<close>\n<12>"),
-        "{}",
-        stub.calls()
-    );
+#[test]
+fn regression_command_refuses_other_agent_roles() {
+    let mut stub = Stub::new(&serde_json::json!([]));
     stub.set("AOE_AGENT_ROLE", "tester");
     assert!(
         execute(&stub.root)
@@ -276,26 +207,5 @@ fn the_nightly_run_opens_updates_and_closes_the_issue_on_origin() {
             .to_string()
             .contains("only to the main session")
     );
-}
-
-#[test]
-fn the_route_make_target_and_workflow_reach_the_regression_check() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let read = |path: &str| fs::read_to_string(root.join(path)).unwrap();
-    let harness = read(".agents/hooks/harness.sh");
-    assert!(
-        harness.contains("metric-regressions) probe=crates/harness/src/ship/issues/regressions.rs")
-    );
-    assert!(harness.contains("metrics) probe=crates/harness/src/ship/metrics/snapshot.rs"));
-    let make = read("make/ship.mk");
-    assert!(
-        make.contains("metric-regressions:\n\t@.agents/hooks/harness.sh exec metric-regressions")
-    );
-    assert!(make.contains("metrics:\n\t@.agents/hooks/harness.sh exec metrics"));
-    assert!(make.contains(" METRICS_REV"));
-    let workflow = read(".github/workflows/nightly.yml");
-    let (_, triage) = workflow.split_once("\n  triage:\n").unwrap();
-    assert!(triage.contains("fetch-depth: 0"));
-    assert!(triage.contains("run: make metric-regressions"));
-    let _ = snapshot::path;
+    assert!(stub.calls().is_empty());
 }

@@ -34,6 +34,7 @@ case "$1" in
         cat "$GH_VIEW_RESPONSES/$count"
       else
         case " $* " in
+          *" state,body,updatedAt "*) printf '%s' "$GH_VIEW_JSON" ;;
           *" body,updatedAt "*) printf '%s' "$GH_VIEW_JSON" ;;
           *" updatedAt "*) printf '2026-10-14T00:00:00Z' ;;
           *) printf '%s' "${GH_VIEW_BODY-}" ;;
@@ -65,7 +66,12 @@ impl Stub {
         let guard = ENVIRONMENT.lock().unwrap_or_else(|e| e.into_inner());
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("checkout");
-        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(root.join("gates")).unwrap();
+        fs::copy(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../gates/issues.json"),
+            root.join("gates/issues.json"),
+        )
+        .unwrap();
         for args in [
             &["init", "-q"][..],
             &[
@@ -116,7 +122,7 @@ impl Stub {
         stub.unset("GH_OPEN_PR");
         stub.set(
             "GH_VIEW_JSON",
-            r#"{"body":"","updatedAt":"2026-10-14T00:00:00Z"}"#,
+            r#####"{"state":"OPEN","body":"#### Game findings (owned by the game session)\n","updatedAt":"2026-10-14T00:00:00Z"}"#####,
         );
         stub.unset("AOE_AGENT_ROLE");
         stub
@@ -127,7 +133,7 @@ impl Stub {
             self.set(
                 "GH_VIEW_JSON",
                 &serde_json::json!({
-                    "body": value, "updatedAt": "2026-10-14T00:00:00Z"
+                    "state": "OPEN", "body": value, "updatedAt": "2026-10-14T00:00:00Z"
                 })
                 .to_string(),
             );
@@ -159,11 +165,6 @@ impl Stub {
     /// The bodies `gh issue create` read on standard input, split by `===`.
     pub(super) fn bodies(&self) -> String {
         fs::read_to_string(&self.bodies).unwrap()
-    }
-
-    pub(super) fn clear(&self) {
-        fs::write(&self.log, "").unwrap();
-        fs::write(&self.bodies, "").unwrap();
     }
 }
 

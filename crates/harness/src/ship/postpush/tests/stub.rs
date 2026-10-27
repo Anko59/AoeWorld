@@ -8,9 +8,14 @@ use crate::ship::{
 };
 use std::{ffi::OsString, fs, os::unix::fs::PermissionsExt, path::PathBuf, sync::MutexGuard};
 
-const GH: &str = r#"#!/bin/sh
+const GH: &str = r#####"#!/bin/sh
 printf -- '---\n' >> "$GH_LOG"
 printf '<%s>\n' "$@" >> "$GH_LOG"
+if [ "$1 $2" = "issue view" ]; then
+  printf '%s\n' '{"state":"OPEN","body":"#### Game findings (owned by the game session)\n","updatedAt":"t"}'
+  exit 0
+fi
+if [ "$1 $2" = "issue edit" ]; then cat >/dev/null; exit 0; fi
 if [ "$1 $2" = "pr view" ]; then
   case "$*" in
     *headRefOid*) cat "$GH_DIR/review-meta.json" ;;
@@ -57,7 +62,7 @@ case "$all" in
     n=$(printf '%s\n' "$@" | sed -n 's|.*/issues/\([0-9]*\)/comments.*|\1|p')
     if [ -f "$GH_DIR/comments-$n.json" ]; then cat "$GH_DIR/comments-$n.json"; else echo '[]'; fi ;;
 esac
-"#;
+"#####;
 
 /// `git@github.com:project/checkout.git` is served from the local bare repository.
 const SSH: &str = r#"#!/bin/sh

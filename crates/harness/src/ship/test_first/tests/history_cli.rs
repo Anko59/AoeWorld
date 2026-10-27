@@ -61,9 +61,11 @@ fn rehearse_merge(own_changes: bool) {
     fs::write(bin.join("git"), format!("#!/bin/sh\nif [ \"$3 $4 $5\" = 'remote get-url origin' ]; then\n printf 'https://github.com/project/checkout.git\\n'\nelse\n exec '{}' \"$@\"\nfi\n", real_git.display())).unwrap();
     fs::write(
         bin.join("gh"),
-        r#"#!/bin/sh
+        r#####"#!/bin/sh
 case "$1 $2" in
   '--version ') echo 'gh version 2.100.0' ;;
+  'issue view') printf '%s\n' '{"state":"OPEN","body":"#### Game findings (owned by the game session)\n","updatedAt":"t"}' ;;
+  'issue edit') cat >/dev/null ;;
   'pr list') printf '{"url":"https://github.com/project/checkout/pull/43","baseRefName":"dev"}' ;;
   'pr view') printf '{"isDraft":false,"autoMergeRequest":null}' ;;
   'api '*) case "$*" in
@@ -72,7 +74,7 @@ case "$1 $2" in
   esac ;;
 esac
 case " $* " in *' --body-file - '*) cat >/dev/null ;; esac
-"#,
+"#####,
     )
     .unwrap();
     for tool in ["git", "gh"] {

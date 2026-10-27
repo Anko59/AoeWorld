@@ -58,6 +58,7 @@ pub(super) fn fixture(gate: &str) -> (tempfile::TempDir, std::path::PathBuf) {
     fs::create_dir_all(root.join("gates")).unwrap();
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for file in [
+        "gates/issues.json",
         "gates/review/preamble.md",
         "gates/review/grader.md",
         "gates/review/arbiter.md",
