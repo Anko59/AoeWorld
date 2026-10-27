@@ -1,7 +1,6 @@
 //! `make issue` records out-of-scope work; `make next` selects the next task.
 //! `make ship` files a passing review's leftovers ([`followups`]) and the
-//! nightly workflow triages its failing jobs ([`triage`]) through the same
-//! listing, fingerprint and deduplication.
+//! nightly workflow triages its failing jobs ([`triage`]) in configured workstreams.
 use super::git;
 use serde::Deserialize;
 use std::{
@@ -21,13 +20,13 @@ const ISSUE_CAP: usize = 10_000;
 
 pub(super) mod followups;
 pub(super) mod regressions;
+mod routing;
 pub(super) mod triage;
 
 #[derive(Clone, Debug)]
 struct Issue {
     number: u64,
     title: String,
-    author: String,
     fingerprint_marker: Option<String>,
     labels: Vec<Label>,
     created_at: String,
@@ -48,13 +47,6 @@ struct IssueResponse {
     url: String,
     #[serde(default, rename = "pull_request")]
     pull_request: Option<serde_json::Value>,
-    #[serde(default)]
-    user: Option<User>,
-}
-
-#[derive(Deserialize)]
-struct User {
-    login: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -225,7 +217,6 @@ fn parse_issue_pages<R: Read>(reader: R) -> Result<Vec<Issue>> {
             issues.push(Issue {
                 number: response.number,
                 title: response.title,
-                author: response.user.map(|user| user.login).unwrap_or_default(),
                 fingerprint_marker,
                 labels: response.labels,
                 created_at: response.created_at,
@@ -279,6 +270,15 @@ struct Target {
 }
 
 impl Target {
+    fn direct(root: &Path) -> Result<Self> {
+        let (host, repo) = repository(root)?;
+        Ok(Self {
+            host,
+            repo,
+            issues: Vec::new(),
+        })
+    }
+
     fn load(root: &Path) -> Result<Self> {
         let (host, repo) = repository(root)?;
         let issues = open_issues(

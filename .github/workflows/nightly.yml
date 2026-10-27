@@ -101,9 +101,7 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
-  # Runs last: one issue per failing job, closed when it passes again, and one
-  # for metric regressions (docs/issues.md). The logic is `aoe-harness
-  # nightly-triage` and `aoe-harness metric-regressions`.
+  # File one comment for the run’s failures and metric regressions.
   triage:
     if: always()
     needs: [full-functional, parser-fuzz, target-performance, network-soak]
@@ -125,8 +123,4 @@ jobs:
       - run: make nightly-triage
         env:
           NIGHTLY_RESULTS: ${{ toJSON(needs) }}
-          GH_TOKEN: ${{ github.token }}
-      - if: always()
-        run: make metric-regressions
-        env:
           GH_TOKEN: ${{ github.token }}

@@ -1,4 +1,4 @@
-use super::super::{MARKER, marked_body, parse_issue_pages, test_stub::Stub};
+use super::super::test_stub::Stub;
 use super::*;
 
 fn needs(pairs: &[(&str, &str)]) -> String {
@@ -14,36 +14,23 @@ fn needs(pairs: &[(&str, &str)]) -> String {
     serde_json::Value::Object(map).to_string()
 }
 
-/// An issue as GitHub lists it, with the body's last marker parsed.
-fn listed(number: u64, title: &str, author: &str, labels: &[&str], body: &str) -> Issue {
-    let page = serde_json::json!([{
-        "number": number, "title": title, "body": body, "user": {"login": author},
-        "labels": labels.iter().map(|name| serde_json::json!({"name": name})).collect::<Vec<_>>(),
-        "html_url": format!("https://github.com/project/checkout/issues/{number}")
-    }]);
-    parse_issue_pages(page.to_string().as_bytes())
-        .unwrap()
-        .remove(0)
-}
-
-fn genuine(number: u64, job: &str) -> Issue {
-    let title = title(job);
-    listed(
-        number,
-        &title,
-        BOT,
-        &[NIGHTLY_LABEL],
-        &marked_body("failed", &title).unwrap(),
-    )
-}
-
-fn as_json(issue: &Issue, body: &str) -> serde_json::Value {
-    serde_json::json!({
-        "number": issue.number, "title": issue.title, "body": body,
-        "user": {"login": issue.author},
-        "labels": issue.labels.iter().map(|l| serde_json::json!({"name": l.name})).collect::<Vec<_>>(),
-        "html_url": issue.url
-    })
+fn prepare_metrics(stub: &Stub) {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../gates/metric-regressions.json");
+    std::fs::copy(source, stub.root.join("gates/metric-regressions.json")).unwrap();
+    for args in [&["add", "-A"][..], &["commit", "-qm", "fixture"][..]] {
+        assert!(
+            std::process::Command::new("git")
+                .current_dir(&stub.root)
+                .args(args)
+                .env("GIT_AUTHOR_NAME", "Test")
+                .env("GIT_AUTHOR_EMAIL", "test@example.com")
+                .env("GIT_COMMITTER_NAME", "Test")
+                .env("GIT_COMMITTER_EMAIL", "test@example.com")
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
 }
 
 #[test]
@@ -83,166 +70,6 @@ fn the_needs_context_is_bounded_and_strict() {
         .collect();
     let crowded = serde_json::json!({"a": {"result": "success", "outputs": outputs}});
     assert!(parse(&crowded.to_string()).is_err());
-}
-
-#[test]
-fn only_the_bots_labelled_marked_issue_with_the_generated_title_is_owned() {
-    let job = "parser-fuzz";
-    let title = title(job);
-    let marked = marked_body("failed", &title).unwrap();
-    assert!(owned(&genuine(1, job), job));
-    // A person forging every other property is still not the bot.
-    assert!(!owned(
-        &listed(2, &title, "mallory", &[NIGHTLY_LABEL], &marked),
-        job
-    ));
-    assert!(!owned(&listed(3, &title, BOT, &[], &marked), job));
-    assert!(!owned(
-        &listed(4, &title, BOT, &[NIGHTLY_LABEL], "failed"),
-        job
-    ));
-    assert!(
-        !owned(&genuine(5, "network-soak"), job),
-        "another job's issue"
-    );
-    let retitled = format!("{title}!");
-    assert!(!owned(
-        &listed(6, &retitled, BOT, &[NIGHTLY_LABEL], &marked),
-        job
-    ));
-    // A decoy marker earlier in the body does not count; the last one does.
-    let decoy = format!(
-        "{MARKER}{} -->\n{}",
-        fingerprint(&title),
-        marked_body("x", "Other").unwrap()
-    );
-    assert!(!owned(
-        &listed(7, &title, BOT, &[NIGHTLY_LABEL], &decoy),
-        job
-    ));
-}
-
-#[test]
-fn failures_open_or_comment_passes_close_and_other_results_do_nothing() {
-    let forged = listed(
-        8,
-        &title("b"),
-        "mallory",
-        &[NIGHTLY_LABEL],
-        &marked_body("x", &title("b")).unwrap(),
-    );
-    let issues = [genuine(7, "a"), forged.clone(), genuine(9, "c")];
-    let results = parse(&needs(&[
-        ("a", "success"),
-        ("b", "failure"),
-        ("c", "failure"),
-        ("d", "cancelled"),
-        ("e", "skipped"),
-        ("f", "failure"),
-    ]))
-    .unwrap();
-    let actions = plan(&results, &issues, "RUN");
-    assert_eq!(actions.len(), 4, "{actions:?}");
-    assert_eq!(
-        actions[0],
-        Action::Close {
-            number: 7,
-            comment: "Passing again in RUN.".into()
-        }
-    );
-    assert!(
-        matches!(&actions[1], Action::Open { title, body } if title == "Nightly failure: b" && body.contains("`b` failed in RUN"))
-    );
-    assert_eq!(
-        actions[2],
-        Action::Comment {
-            number: 9,
-            body: "Still failing in RUN.".into()
-        }
-    );
-    assert!(matches!(&actions[3], Action::Open { title, .. } if title == "Nightly failure: f"));
-    // The forged issue is never closed even when its job passes.
-    let passing = parse(&needs(&[("b", "success")])).unwrap();
-    assert!(plan(&passing, &[forged], "RUN").is_empty());
-}
-
-#[test]
-fn triage_acts_on_origin_and_leaves_forged_issues_alone() {
-    let forged = listed(8, &title("b"), "mallory", &[NIGHTLY_LABEL], "");
-    let forged_body = marked_body("x", &title("b")).unwrap();
-    let listing = serde_json::json!([
-        as_json(&genuine(7, "a"), &marked_body("x", &title("a")).unwrap()),
-        as_json(&forged, &forged_body),
-        as_json(&genuine(9, "c"), &marked_body("x", &title("c")).unwrap()),
-    ]);
-    let stub = Stub::new(&listing);
-    let raw = needs(&[("a", "success"), ("b", "failure"), ("c", "failure")]);
-    triage(&stub.root, &raw, Some("123")).unwrap();
-    let calls = stub.calls();
-    let run = "https://github.com/project/checkout/actions/runs/123";
-    assert!(
-        calls.contains(&format!(
-            "<close>\n<7>\n<--comment>\n<Passing again in {run}.>"
-        )),
-        "{calls}"
-    );
-    assert!(calls.contains("<comment>\n<9>\n<--body-file>\n<->"));
-    assert!(stub.bodies().contains(&format!("Still failing in {run}.")));
-    assert!(calls.contains("<--title>\n<Nightly failure: b>"), "{calls}");
-    assert!(calls.contains("<--label>\n<nightly-failure>"));
-    assert!(
-        !calls.contains("<8>"),
-        "the forged issue was touched: {calls}"
-    );
-    assert!(!calls.contains("wrong/override"));
-    assert!(calls.contains("<--repo>\n<github.com/project/checkout>"));
-    let bodies = stub.bodies();
-    assert!(bodies.contains(&format!("`b` failed in {run}")));
-    assert!(bodies.contains(&format!("{MARKER}{} -->", fingerprint(&title("b")))));
-}
-
-#[test]
-fn a_failed_github_call_fails_the_triage_after_trying_every_job() {
-    let listing = serde_json::json!([as_json(
-        &genuine(7, "a"),
-        &marked_body("x", &title("a")).unwrap()
-    )]);
-    let mut stub = Stub::new(&listing);
-    stub.set("GH_FAIL", "close");
-    let raw = needs(&[("a", "success"), ("b", "failure")]);
-    let error = triage(&stub.root, &raw, Some("not-a-number"))
-        .unwrap_err()
-        .to_string();
-    assert!(error.contains("stub failure"), "{error}");
-    let calls = stub.calls();
-    assert!(
-        calls.contains("<create>"),
-        "the other job still ran: {calls}"
-    );
-    assert!(stub.bodies().contains("a run without a GITHUB_RUN_ID"));
-    stub.clear();
-    assert!(triage(&stub.root, "{}", None).is_err());
-    assert!(
-        stub.calls().is_empty(),
-        "a bad context makes no GitHub call"
-    );
-}
-
-#[test]
-fn only_the_main_session_triages_and_the_results_are_required() {
-    let mut stub = Stub::new(&serde_json::json!([]));
-    stub.set("AOE_AGENT_ROLE", "tester");
-    stub.set("NIGHTLY_RESULTS", &needs(&[("a", "failure")]));
-    let error = execute(&stub.root).unwrap_err().to_string();
-    assert!(error.contains("only to the main session"), "{error}");
-    stub.unset("AOE_AGENT_ROLE");
-    stub.unset("NIGHTLY_RESULTS");
-    let error = execute(&stub.root).unwrap_err().to_string();
-    assert!(error.contains("set NIGHTLY_RESULTS"), "{error}");
-    stub.set("NIGHTLY_RESULTS", &needs(&[("a", "skipped")]));
-    stub.unset("GITHUB_RUN_ID");
-    execute(&stub.root).unwrap();
-    assert!(!stub.calls().contains("<issue>"));
 }
 
 #[test]
@@ -290,38 +117,6 @@ fn the_route_make_target_and_workflow_reach_the_triage() {
 }
 
 #[test]
-fn duplicate_bot_issues_keep_the_oldest_and_close_only_owned_duplicates() {
-    let forged = listed(
-        2,
-        &title("a"),
-        "mallory",
-        &[NIGHTLY_LABEL],
-        &marked_body("x", &title("a")).unwrap(),
-    );
-    let issues = [genuine(9, "a"), forged, genuine(7, "a")];
-    let actions = plan(&parse(&needs(&[("a", "failure")])).unwrap(), &issues, "RUN");
-    assert_eq!(actions.len(), 2, "{actions:?}");
-    assert!(
-        matches!(&actions[0], Action::Comment { number: 7, .. }),
-        "{actions:?}"
-    );
-    assert!(
-        matches!(&actions[1], Action::Close { number: 9, comment } if comment.contains("#7") && comment.contains("RUN")),
-        "{actions:?}"
-    );
-    for outcome in ["cancelled", "skipped"] {
-        assert!(plan(&parse(&needs(&[("a", outcome)])).unwrap(), &issues, "RUN").is_empty());
-    }
-    let success = plan(&parse(&needs(&[("a", "success")])).unwrap(), &issues, "RUN");
-    assert_eq!(success.len(), 2);
-    assert!(
-        success
-            .iter()
-            .all(|action| matches!(action, Action::Close { number: 7 | 9, .. }))
-    );
-}
-
-#[test]
 fn nightly_triage_concurrency_is_shared_across_refs_without_cancellation() {
     let workflow = std::fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.github/workflows/nightly.yml"),
@@ -343,21 +138,30 @@ fn nightly_triage_concurrency_is_shared_across_refs_without_cancellation() {
 }
 
 #[test]
-fn the_triage_command_reconciles_duplicate_bot_issues_without_touching_forgery() {
-    use std::io::Write;
-    let forged = listed(
-        2,
-        &title("a"),
-        "mallory",
-        &[NIGHTLY_LABEL],
-        &marked_body("x", &title("a")).unwrap(),
-    );
-    let listing = serde_json::json!([
-        as_json(&genuine(9, "a"), &marked_body("x", &title("a")).unwrap()),
-        as_json(&forged, &marked_body("x", &title("a")).unwrap()),
-        as_json(&genuine(7, "a"), &marked_body("x", &title("a")).unwrap()),
-    ]);
-    let stub = Stub::new(&listing);
+fn failing_jobs_are_recorded_on_574_without_create_or_close() {
+    let stub = Stub::new(&serde_json::json!([]));
+    triage(
+        &stub.root,
+        &needs(&[("parser", "failure"), ("ok", "success")]),
+        Some("123"),
+    )
+    .unwrap();
+    let calls = stub.calls();
+    assert!(calls.contains("<issue>\n<comment>\n<574>"), "{calls}");
+    assert!(!calls.contains("<create>"));
+    assert!(!calls.contains("<close>"));
+    assert!(!calls.contains("<--jq>"));
+    assert!(calls.contains("<--repo>\n<github.com/project/checkout>"));
+    assert!(!calls.contains("wrong/override"));
+    assert!(stub.bodies().contains("Nightly failures"));
+    assert!(stub.bodies().contains("`parser`"));
+    assert!(stub.bodies().contains("actions/runs/123"));
+}
+
+#[test]
+fn nightly_cli_uses_the_configured_issue_without_creating() {
+    let stub = Stub::new(&serde_json::json!([]));
+    prepare_metrics(&stub);
     let binary = std::env::current_exe()
         .unwrap()
         .parent()
@@ -368,25 +172,105 @@ fn the_triage_command_reconciles_duplicate_bot_issues_without_touching_forgery()
     let output = std::process::Command::new(binary)
         .current_dir(&stub.root)
         .arg("nightly-triage")
-        .env("NIGHTLY_RESULTS", needs(&[("a", "failure")]))
+        .env("NIGHTLY_RESULTS", needs(&[("parser", "failure")]))
         .env("GITHUB_RUN_ID", "123")
         .env_remove("AOE_JUDGE_REV")
         .output()
         .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "{stdout}\n{stderr}");
-    let calls = stub.calls();
-    assert!(
-        calls.contains("<issue>\n<comment>\n<7>\n<--body-file>\n<->"),
-        "{calls}"
+    assert!(stdout.contains("filed follow-ups in #574"), "{stdout}");
+    assert!(stub.calls().contains("<issue>\n<comment>\n<574>"));
+    assert!(!stub.calls().contains("<create>"));
+    println!(
+        "CLI nightly-triage rehearsal (scripted GitHub): {stdout}ASSERT: commented on #574; no issue created"
     );
-    assert!(calls.contains("<issue>\n<close>\n<9>"), "{calls}");
-    assert!(!calls.contains("<2>"), "{calls}");
-    assert!(!calls.contains("<create>"), "{calls}");
+}
+
+#[test]
+fn one_comment_lists_all_failures_and_success_posts_nothing() {
+    let stub = Stub::new(&serde_json::json!([]));
+    triage(
+        &stub.root,
+        &needs(&[("first", "failure"), ("second", "failure")]),
+        None,
+    )
+    .unwrap();
+    assert_eq!(stub.calls().matches("<comment>").count(), 1);
+    assert!(stub.bodies().contains("first") && stub.bodies().contains("second"));
+    triage(&stub.root, &needs(&[("ok", "success")]), None).unwrap();
+    assert_eq!(stub.calls().matches("<comment>").count(), 1);
+}
+
+#[test]
+fn triage_requires_the_main_session_and_results() {
+    let mut stub = Stub::new(&serde_json::json!([]));
+    stub.set("AOE_AGENT_ROLE", "tester");
+    stub.set("NIGHTLY_RESULTS", &needs(&[("a", "failure")]));
     assert!(
-        stub.bodies()
-            .contains("Still failing in https://github.com/project/checkout/actions/runs/123.")
+        execute(&stub.root)
+            .unwrap_err()
+            .to_string()
+            .contains("only to the main session")
     );
-    writeln!(std::io::stdout(), "CLI nightly-triage rehearsal (scripted GitHub):\n{stdout}{stderr}ASSERT: commented #7; closed duplicate #9; forged #2 untouched; no new issue").unwrap();
+    stub.unset("AOE_AGENT_ROLE");
+    stub.unset("NIGHTLY_RESULTS");
+    assert!(
+        execute(&stub.root)
+            .unwrap_err()
+            .to_string()
+            .contains("set NIGHTLY_RESULTS")
+    );
+    prepare_metrics(&stub);
+    stub.set("NIGHTLY_RESULTS", &needs(&[("a", "skipped")]));
+    execute(&stub.root).unwrap();
+    assert!(!stub.calls().contains("<issue>"));
+}
+
+#[test]
+fn jobs_and_metrics_share_one_comment() {
+    let stub = Stub::new(&serde_json::json!([]));
+    triage_with_metrics(
+        &stub.root,
+        &needs(&[("parser", "failure")]),
+        Some("123"),
+        &["Test count fell".into()],
+    )
+    .unwrap();
+    assert_eq!(stub.calls().matches("<comment>").count(), 1);
+    assert!(stub.bodies().contains("parser") && stub.bodies().contains("Test count fell"));
+}
+
+#[test]
+fn closed_nightly_issue_warns_and_cli_succeeds() {
+    let mut stub = Stub::new(&serde_json::json!([]));
+    prepare_metrics(&stub);
+    stub.set("GH_VIEW_JSON", r#"{"state":"CLOSED"}"#);
+    let binary = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("aoe-harness");
+    let output = std::process::Command::new(binary)
+        .current_dir(&stub.root)
+        .arg("nightly-triage")
+        .env("NIGHTLY_RESULTS", needs(&[("parser", "failure")]))
+        .env_remove("AOE_JUDGE_REV")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("warning: could not file follow-ups in #574")
+            && error.contains("CLOSED")
+            && error.contains("file them by hand"),
+        "{error}"
+    );
+    assert!(!stub.calls().contains("<comment>"));
 }

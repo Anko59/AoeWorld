@@ -104,11 +104,9 @@ critical), an incomplete review, or a closing review
    Already failed jobs make ship exit non-zero with their names, run
    URL and `gh run rerun <run> --failed`: review passed and auto-merge is armed,
    but fix CI and reship. Every review outcome prints the score beside CI counts or its pending state.
-10. **Files the review's leftovers**: one issue per confirmed or disputed
-   critical or major finding; the minor and nit ones become a section of the
-   standing issue `Review follow-ups` and a pull request comment
-   ([issues](issues.md#review-follow-ups)). A follow-up that cannot be filed is
-   reported and does not fail the ship.
+10. **Files the review's leftovers** in the configured workstream issues by
+   finding path ([issues](issues.md#review-follow-ups-and-nightly-triage)). A
+   filing failure warns after publication; ship continues.
 
 Gameplay changes also include a **Playtest (advisory)** report for the gated
 revision when available. If the target exists and the report is missing, ship

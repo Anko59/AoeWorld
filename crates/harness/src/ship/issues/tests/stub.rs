@@ -9,6 +9,7 @@ use std::{
 const GH: &str = r#"#!/bin/sh
 printf -- '---\n' >> "$GH_LOG"
 printf '<%s>\n' "$@" >> "$GH_LOG"
+if [ "${GH_FAIL_NUMBER-}" = "$3" ] && [ "$2" = view ]; then echo "stub failure" >&2; exit 1; fi
 for arg in "$@"; do
   if [ -n "${GH_FAIL-}" ] && [ "$arg" = "$GH_FAIL" ]; then
     # A failing gh has still read its piped body: drain it before exiting.
@@ -34,6 +35,8 @@ case "$1" in
         cat "$GH_VIEW_RESPONSES/$count"
       else
         case " $* " in
+          *" state "*) printf '%s' "$GH_VIEW_JSON" ;;
+          *" state,body,updatedAt "*) printf '%s' "$GH_VIEW_JSON" ;;
           *" body,updatedAt "*) printf '%s' "$GH_VIEW_JSON" ;;
           *" updatedAt "*) printf '2026-10-14T00:00:00Z' ;;
           *) printf '%s' "${GH_VIEW_BODY-}" ;;
@@ -65,7 +68,12 @@ impl Stub {
         let guard = ENVIRONMENT.lock().unwrap_or_else(|e| e.into_inner());
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("checkout");
-        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(root.join("gates")).unwrap();
+        fs::copy(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../gates/issues.json"),
+            root.join("gates/issues.json"),
+        )
+        .unwrap();
         for args in [
             &["init", "-q"][..],
             &[
@@ -111,12 +119,13 @@ impl Stub {
         stub.set("GITHUB_REPOSITORY", "wrong/override");
         stub.set("GH_REPO", "wrong/override");
         stub.unset("GH_FAIL");
+        stub.unset("GH_FAIL_NUMBER");
         stub.unset("GH_VIEW_BODY");
         stub.unset("GH_VIEW_RESPONSES");
         stub.unset("GH_OPEN_PR");
         stub.set(
             "GH_VIEW_JSON",
-            r#"{"body":"","updatedAt":"2026-10-14T00:00:00Z"}"#,
+            r#####"{"state":"OPEN","body":"#### Game findings (owned by the game session)\n","updatedAt":"2026-10-14T00:00:00Z"}"#####,
         );
         stub.unset("AOE_AGENT_ROLE");
         stub
@@ -127,23 +136,13 @@ impl Stub {
             self.set(
                 "GH_VIEW_JSON",
                 &serde_json::json!({
-                    "body": value, "updatedAt": "2026-10-14T00:00:00Z"
+                    "state": "OPEN", "body": value, "updatedAt": "2026-10-14T00:00:00Z"
                 })
                 .to_string(),
             );
         }
         self.saved.push((name, std::env::var_os(name)));
         unsafe { std::env::set_var(name, value) };
-    }
-
-    pub(super) fn view_responses(&mut self, responses: &[String]) {
-        let directory = self._temp.path().join("views");
-        fs::create_dir_all(&directory).unwrap();
-        fs::write(directory.join("count"), "0").unwrap();
-        for (index, response) in responses.iter().enumerate() {
-            fs::write(directory.join((index + 1).to_string()), response).unwrap();
-        }
-        self.set("GH_VIEW_RESPONSES", directory.to_str().unwrap());
     }
 
     pub(super) fn unset(&mut self, name: &'static str) {
@@ -159,11 +158,6 @@ impl Stub {
     /// The bodies `gh issue create` read on standard input, split by `===`.
     pub(super) fn bodies(&self) -> String {
         fs::read_to_string(&self.bodies).unwrap()
-    }
-
-    pub(super) fn clear(&self) {
-        fs::write(&self.log, "").unwrap();
-        fs::write(&self.bodies, "").unwrap();
     }
 }
 

@@ -77,9 +77,9 @@ pub(crate) enum Commands {
     ShowcaseCheck,
     /// Print the `agent-session` steps of a headless agent log (SESSION=<jsonl>).
     ShowcaseSession,
-    /// Open, comment on or close one issue per nightly job (NIGHTLY_RESULTS).
+    /// Record nightly failures in the configured workstream (NIGHTLY_RESULTS).
     NightlyTriage,
-    /// Open, update or close the nightly issue for metric regressions.
+    /// Record nightly metric regressions in the configured workstream.
     MetricRegressions,
     /// Carry `harness/review` to the rebased head of pull request CARRY_PR when its patch and the policy are unchanged.
     CarryReview,
@@ -478,11 +478,8 @@ pub(crate) fn ship_with(
                     }
                 };
                 postpush::cleanup::after_publication(root, &evidence.base_branch, publish)?;
-                // The review passed: a leftover that cannot be filed is reported, not fatal.
-                for problem in issues::followups::file(root, &url, report) {
-                    eprintln!(
-                        "ship: review follow-up not filed ({problem}); file it with `make issue`"
-                    );
+                if let Err(error) = issues::followups::file(root, &url, report) {
+                    eprintln!("warning: could not file follow-ups ({error}); file them by hand");
                 }
                 eprintln!("{}", stack::next_steps(options.parent.as_ref(), &url));
             }

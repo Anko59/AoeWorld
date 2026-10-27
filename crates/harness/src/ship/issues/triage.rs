@@ -1,18 +1,14 @@
-//! `make nightly-triage`: the nightly workflow's last job reads its `needs`
-//! context from `NIGHTLY_RESULTS` and keeps one issue per failing job
-//! (docs/issues.md). A failing job opens its issue or comments on it; a job
-//! that passes again closes it. Only issues this command opened are touched:
-//! authored by `github-actions[bot]`, labelled `nightly-failure`, titled
-//! `Nightly failure: <job>` and carrying that title's fingerprint marker.
-use super::{Issue, Result, Target, fingerprint};
+//! Record failing nightly jobs in the configured workstream.
+use super::{
+    Result, Target,
+    routing::{self, Config},
+};
 use serde::Deserialize;
 use std::{collections::BTreeMap, path::Path};
 
 const RESULTS_LIMIT: usize = 64 * 1024;
 const JOB_CAP: usize = 64;
 const OUTPUT_CAP: usize = 64;
-const NIGHTLY_LABEL: &str = "nightly-failure";
-const BOT: &str = "github-actions[bot]";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -31,83 +27,65 @@ pub(super) enum Outcome {
     Skipped,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub(super) enum Action {
-    Open {
-        title: String,
-        body: String,
-    },
-    Comment {
-        number: u64,
-        body: String,
-    },
-    Close {
-        number: u64,
-        comment: String,
-    },
-    /// Replace the body of the open issue `number`, re-marked for `title`.
-    Update {
-        number: u64,
-        title: String,
-        body: String,
-    },
-}
-
 pub(in crate::ship) fn execute(root: &Path) -> Result<()> {
     if !crate::agents::main_session() {
         return Err("make nightly-triage is available only to the main session and CI".into());
     }
     let raw = std::env::var("NIGHTLY_RESULTS")
         .map_err(|_| "set NIGHTLY_RESULTS to the nightly workflow's `needs` context JSON")?;
-    triage(root, &raw, std::env::var("GITHUB_RUN_ID").ok().as_deref())
+    let metrics = super::regressions::collect(root)?;
+    triage_with_metrics(
+        root,
+        &raw,
+        std::env::var("GITHUB_RUN_ID").ok().as_deref(),
+        &metrics,
+    )
 }
 
+#[cfg(test)]
 pub(super) fn triage(root: &Path, raw: &str, run_id: Option<&str>) -> Result<()> {
+    triage_with_metrics(root, raw, run_id, &[])
+}
+
+fn triage_with_metrics(
+    root: &Path,
+    raw: &str,
+    run_id: Option<&str>,
+    metrics: &[String],
+) -> Result<()> {
     let results = parse(raw)?;
-    let target = Target::load(root)?;
-    let run = run_link(&target.repo, run_id);
-    let mut problems = Vec::new();
-    for action in plan(&results, &target.issues, &run) {
-        match apply(&target, root, &action) {
-            Ok(_) => println!("nightly-triage: {action:?}"),
-            Err(error) => problems.push(format!("{action:?}: {error}")),
-        }
-    }
-    if problems.is_empty() {
+    let failures: Vec<_> = results
+        .into_iter()
+        .filter(|(_, outcome)| *outcome == Outcome::Failure)
+        .map(|(job, _)| job)
+        .collect();
+    if failures.is_empty() && metrics.is_empty() {
         return Ok(());
     }
-    Err(format!("nightly-triage: {}", problems.join("; ")).into())
-}
-
-/// Carry out one planned action on origin's repository.
-pub(super) fn apply(target: &Target, root: &Path, action: &Action) -> Result<String> {
-    match action {
-        Action::Open { title, body } => {
-            target.create(root, title, &[NIGHTLY_LABEL.to_owned()], body)
+    let config = Config::load(root)?;
+    let target = match Target::direct(root) {
+        Ok(target) => target,
+        Err(error) => {
+            routing::warn(config.nightly, &error);
+            return Ok(());
         }
-        Action::Comment { number, body } => target.gh(
-            root,
-            &["issue", "comment", &number.to_string(), "--body-file", "-"],
-            Some(body.as_bytes()),
-        ),
-        Action::Close { number, comment } => target.gh(
-            root,
-            &["issue", "close", &number.to_string(), "--comment", comment],
-            None,
-        ),
-        Action::Update {
-            number,
-            title,
-            body,
-        } => {
-            let marked = super::marked_body(body, title)?;
-            target.gh(
-                root,
-                &["issue", "edit", &number.to_string(), "--body-file", "-"],
-                Some(marked.as_bytes()),
-            )
+    };
+    let run = run_link(&target.repo, run_id);
+    let mut body = format!("### Nightly results for {run}\n");
+    if !failures.is_empty() {
+        body.push_str("\nNightly failures:\n");
+        for job in failures {
+            body.push_str(&format!("- [ ] `{job}` failed\n"));
         }
     }
+    if !metrics.is_empty() {
+        body.push_str("\nMetric regressions:\n");
+        for metric in metrics {
+            body.push_str(&format!("- [ ] {metric}\n"));
+        }
+    }
+    routing::comment(root, config.nightly, &body);
+    Ok(())
 }
 
 /// The `needs` context: at most 64 KiB, 64 jobs with GitHub job ids, each
@@ -144,74 +122,11 @@ fn job_id(job: &str) -> bool {
         && bytes.all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
-pub(super) fn title(job: &str) -> String {
-    format!("Nightly failure: {job}")
-}
-
-/// Only an issue this command opened: the bot's, labelled, titled for `job`
-/// and with the last fingerprint marker matching that title.
-pub(super) fn owned(issue: &Issue, job: &str) -> bool {
-    owned_titled(issue, &title(job))
-}
-
-/// The same rules for any bot-opened nightly issue with exactly `title`.
-pub(super) fn owned_titled(issue: &Issue, title: &str) -> bool {
-    issue.author == BOT
-        && issue.title == title
-        && issue.has_label(NIGHTLY_LABEL)
-        && issue.fingerprint_marker.as_deref() == Some(fingerprint(title).as_str())
-}
-
-/// The run on origin's repository (`host/owner/name`), never GITHUB_REPOSITORY.
 pub(super) fn run_link(repo: &str, run_id: Option<&str>) -> String {
     match run_id.filter(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())) {
         Some(id) => format!("https://{repo}/actions/runs/{id}"),
         None => "a run without a GITHUB_RUN_ID".into(),
     }
-}
-
-pub(super) fn plan(
-    results: &BTreeMap<String, Outcome>,
-    issues: &[Issue],
-    run: &str,
-) -> Vec<Action> {
-    let mut actions = Vec::new();
-    for (job, outcome) in results {
-        let mut mine: Vec<_> = issues.iter().filter(|issue| owned(issue, job)).collect();
-        mine.sort_by_key(|issue| issue.number);
-        let mut mine = mine.into_iter();
-        match outcome {
-            Outcome::Failure => {
-                if let Some(issue) = mine.next() {
-                    actions.push(Action::Comment {
-                        number: issue.number,
-                        body: format!("Still failing in {run}."),
-                    });
-                    actions.extend(mine.map(|duplicate| Action::Close {
-                        number: duplicate.number,
-                        comment: format!(
-                            "Duplicate of #{}; tracking this job there in {run}.",
-                            issue.number
-                        ),
-                    }));
-                } else {
-                    actions.push(Action::Open {
-                        title: title(job),
-                        body: format!(
-                            "The nightly job `{job}` failed in {run}.\n\n`make nightly-triage` comments here while it keeps failing and closes this issue when it passes again (docs/issues.md).\n"
-                        ),
-                    });
-                }
-            }
-            Outcome::Success => actions.extend(mine.map(|issue| Action::Close {
-                number: issue.number,
-                comment: format!("Passing again in {run}."),
-            })),
-            // A cancelled or skipped job proved nothing either way.
-            Outcome::Cancelled | Outcome::Skipped => {}
-        }
-    }
-    actions
 }
 
 #[cfg(test)]
