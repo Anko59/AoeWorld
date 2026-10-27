@@ -317,6 +317,26 @@ fn the_run_writes_json_and_a_markdown_table() {
         root.join("gates/review.json"),
     )
     .unwrap();
+    let git = |args: &[&str]| {
+        assert!(
+            std::process::Command::new("git")
+                .current_dir(root)
+                .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+                .args(args)
+                .status()
+                .unwrap()
+                .success()
+        );
+    };
+    git(&["init", "-q", "-b", "dev"]);
+    for persona in ["quick", "correctness", "spec", "hostile-input"] {
+        let relative = format!("gates/review/personas/{persona}.md");
+        fs::create_dir_all(root.join("gates/review/personas")).unwrap();
+        fs::copy(repo_root().join(&relative), root.join(&relative)).unwrap();
+    }
+    git(&["add", "-A"]);
+    git(&["commit", "-q", "-m", "policy"]);
+    git(&["update-ref", "refs/remotes/origin/dev", "HEAD"]);
     let seeds_dir = root.join(SEEDS);
     for case in seeds::select(shipped(), Some(3)) {
         let to = seeds_dir.join(&case.path);

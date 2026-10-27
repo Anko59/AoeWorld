@@ -400,6 +400,7 @@ fn review_with_branch(
         tier: tier.name().into(),
         floor: minimum.name().into(),
         runtime: config::runtime_key(runtime).into(),
+        runtime_fallback: ask.runtime_fallback(),
         model: model.model,
         effort: model.effort,
         personas,

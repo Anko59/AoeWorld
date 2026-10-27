@@ -61,6 +61,7 @@ fn publication_calls_include_shared_status_merge_and_pr_comment() {
         tier: "low".into(),
         floor: "low".into(),
         runtime: "codex".into(),
+        runtime_fallback: false,
         model: "scripted".into(),
         effort: "medium".into(),
         personas: vec!["quick".into()],
@@ -188,7 +189,7 @@ fn only_dependabot_dependency_updates_are_reviewed() {
 fn auto_merge_is_pinned_to_the_reviewed_commit() {
     let report: review::Report = serde_json::from_value(serde_json::json!({
         "version": 1, "head": "b".repeat(40), "branch": "dependabot/x", "base": "", "base_branch": "dev", "merge_base": "",
-        "tier": "low", "floor": "low", "runtime": "codex", "model": "m", "effort": "high",
+        "tier": "low", "floor": "low", "runtime": "codex", "runtime_fallback": false, "model": "m", "effort": "high",
         "personas": ["quick"], "rounds": 1, "findings": [], "written_grade": 9, "grade": 9,
         "summary": "", "failures": [], "merge_grade": 8, "started": 0, "finished": 0
     })).unwrap();

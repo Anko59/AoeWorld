@@ -11,7 +11,7 @@ const MAJOR: &str = r#"{"findings": [{"file": "README.md", "line": 1, "severity"
 const MINOR: &str = r#"{"findings": [{"file": "README.md", "line": 1, "severity": "minor", "category": "correctness", "claim": "small", "trigger": "x", "expected_vs_actual": "y", "evidence": "z"}]}"#;
 
 /// The correctness reviewer reports F1; the spec reviewer upholds it and the
-/// test-integrity reviewer refutes it (the others abstain): it stays disputed
+/// hostile-input reviewer refutes it (the others abstain): it stays disputed
 /// until the arbiter's session, which answers `ruling`.
 struct Arbitrated {
     first: &'static str,
@@ -29,7 +29,7 @@ impl Ask for Arbitrated {
                 } else if p.contains("verify the other reviewers' findings") {
                     let vote = if p.contains("# Spec and scope auditor") {
                         "upheld"
-                    } else if p.contains("# Test-integrity") {
+                    } else if p.contains("# Hostile-input and safety adversary") {
                         "refuted"
                     } else {
                         "unverifiable"
@@ -143,7 +143,7 @@ fn lower_tiers_and_minor_findings_never_reach_the_arbiter() {
     let medium = ask(MAJOR, ruling);
     assert_eq!(
         run(Tier::Medium, &medium).findings[0].status,
-        Status::Disputed
+        Status::Confirmed
     );
     assert!(medium.strong.lock().unwrap().is_empty());
     let minor = ask(MINOR, ruling);

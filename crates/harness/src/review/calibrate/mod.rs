@@ -8,7 +8,7 @@ mod summary;
 #[cfg(test)]
 mod tests;
 
-use super::{Report, Tier, config::Config, config::runtime_key, entry, trusted};
+use super::{Report, Tier, config::Config, config::runtime_key, entry};
 use crate::agents::Runtime;
 use seeds::Case;
 use std::{fs, path::Path};
@@ -98,7 +98,7 @@ fn write_run(
     if cases.is_empty() {
         return Err("no seed cases selected".into());
     }
-    let config = Config::parse(&trusted(root, "gates/review.json")?)?;
+    let config = Config::load(root)?;
     let model = config.model_for(tier, runtime, false);
     let outcomes = run(root, &cases, review);
     let summary = Summary::new(

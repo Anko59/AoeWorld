@@ -35,6 +35,9 @@ fn reviewer_rate_limits_retry_the_process_with_bounded_backoff() {
         "Too Many Requests",
         "rate limit exceeded",
         "Rate-limited",
+        "model at capacity",
+        "usage limit",
+        "429",
     ] {
         for stdout in [true, false] {
             let failure = if stdout {
@@ -83,4 +86,131 @@ fn other_reviewer_failures_and_successful_answers_are_not_retried() {
     let (_, waits, calls) = ask(&[("", "HTTP 429", 1), ("", "permission denied", 1)]);
     assert_eq!(calls, 2);
     assert_eq!(waits.len(), 1);
+}
+
+#[test]
+fn fallback_uses_other_runtime_once_after_backoff() {
+    use super::super::runner::ask_fallback_with;
+    use crate::agents::Runtime;
+    let mut calls = Vec::new();
+    let mut waits = Vec::new();
+    let (answer, fallback) = ask_fallback_with(
+        Runtime::Codex,
+        |runtime| {
+            calls.push(runtime);
+            let mut command = Command::new("sh");
+            if runtime == Runtime::Codex {
+                command.args(["-c", "echo 'at capacity' >&2; exit 1"]);
+            } else {
+                command.args([
+                    "-c",
+                    "printf 'AOE-REVIEW-BEGIN\\n{\"findings\": []}\\nAOE-REVIEW-END\\n'",
+                ]);
+            }
+            Ok((command, None))
+        },
+        |delay| waits.push(delay),
+    );
+    assert_eq!(answer.as_deref(), Ok("{\"findings\": []}"));
+    assert!(fallback);
+    assert_eq!(
+        calls,
+        [
+            Runtime::Codex,
+            Runtime::Codex,
+            Runtime::Codex,
+            Runtime::Claude
+        ]
+    );
+    assert_eq!(waits, [Duration::from_secs(60), Duration::from_secs(180)]);
+}
+
+#[test]
+fn fallback_failure_stays_an_error() {
+    use super::super::runner::ask_fallback_with;
+    use crate::agents::Runtime;
+    let (answer, fallback) = ask_fallback_with(
+        Runtime::Claude,
+        |_| {
+            let mut command = Command::new("sh");
+            command.args(["-c", "echo 'usage limit' >&2; exit 1"]);
+            Ok((command, None))
+        },
+        |_| {},
+    );
+    assert!(fallback);
+    assert!(answer.is_err());
+}
+
+use super::super::{Ask, Plan, Tier, report, review_with};
+use super::flow::fixture;
+use crate::agents::Runtime;
+
+struct FallbackScript {
+    failed: bool,
+    used: std::sync::atomic::AtomicBool,
+}
+
+impl Ask for FallbackScript {
+    fn all(&self, prompts: Vec<String>) -> Vec<Result<String, String>> {
+        prompts.into_iter().map(|prompt| {
+            if prompt.contains("# Grader") {
+                return Ok(r#"{"grade": 9, "summary": "ok"}"#.into());
+            }
+            let (result, used) = super::super::runner::ask_fallback_with(
+                Runtime::Codex,
+                |runtime| {
+                    let mut command = Command::new("sh");
+                    if runtime == Runtime::Codex || self.failed {
+                        command.args(["-c", "echo 'model at capacity' >&2; exit 1"]);
+                    } else {
+                        command.args(["-c", "printf 'AOE-REVIEW-BEGIN\\n{\"findings\": []}\\nAOE-REVIEW-END\\n'"]);
+                    }
+                    Ok((command, None))
+                },
+                |_| {},
+            );
+            self.used.store(used, std::sync::atomic::Ordering::Relaxed);
+            result
+        }).collect()
+    }
+
+    fn runtime_fallback(&self) -> bool {
+        self.used.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+#[test]
+fn fallback_is_recorded_and_review_is_complete_only_if_it_answers() {
+    for failed in [false, true] {
+        let temp = fixture("README.md");
+        let script = FallbackScript {
+            failed,
+            used: std::sync::atomic::AtomicBool::new(false),
+        };
+        let report = review_with(
+            temp.path(),
+            Tier::Low,
+            Runtime::Codex,
+            "",
+            &Plan::Full,
+            &script,
+        )
+        .unwrap();
+        assert!(report.runtime_fallback);
+        assert_eq!(report.complete(), !failed);
+        assert_eq!(report.passes(), !failed);
+        let stored = std::fs::read_to_string(
+            report::directory(temp.path())
+                .unwrap()
+                .read_dir()
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path(),
+        )
+        .unwrap();
+        assert!(stored.contains("\"runtime_fallback\": true"));
+    }
 }

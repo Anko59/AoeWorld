@@ -30,7 +30,7 @@ fn advance_dev(root: &Path, files: &[(&str, &str)]) {
 fn policy_change(root: &Path) -> (String, String) {
     let mut config: serde_json::Value =
         serde_json::from_slice(&fs::read(root.join("gates/review.json")).unwrap()).unwrap();
-    config["tiers"]["medium"]["personas"] = serde_json::json!(["quick", "test-integrity"]);
+    config["tiers"]["medium"]["personas"] = serde_json::json!(["quick", "correctness"]);
     ("gates/review.json".into(), config.to_string())
 }
 

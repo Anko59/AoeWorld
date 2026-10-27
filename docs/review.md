@@ -25,19 +25,7 @@ floors. Reviewers use the model family of the runtime you are working in
 (`REVIEW_RUNTIME`; set it, the default is `claude`): Claude reviews in Claude Code, GPT in Codex, GLM in DeepSeek
 Harness and pi.
 
-| Tier | Reviewers (personas) | Rounds | Models |
-|---|---|---|---|
-| low | 1 (quick: correctness + test integrity) | 1 | light where the family has one (Claude Haiku 5.5 medium), else average (Sonnet 5.5 medium, GPT‑6.1 Sol medium, GLM 5.3 Flash high) |
-| medium | 3 (correctness, spec, test integrity) | ≤ 3 until convergence | average |
-| high | 5 (adds hostile input, performance) | ≤ 3 | average, reasoning one step higher |
-| xhigh | 3 | ≤ 3 | strong (Opus 5.5, GPT‑6.1 Sol, GLM 5.3; medium) |
-| max | 5 | ≤ 5 | strong |
-
-GPT‑6 Luna was the Codex family's `average` model until the owner rejected
-it as a reviewer: for days it graded working, verified changes 2–6/10 on
-contrived attacks. Codex now reviews on GPT‑6.1 Sol (medium) at the average and
-strong levels alike; use `make review-calibrate` (below) before trusting any
-other model as a reviewer.
+Low uses one quick reviewer; medium uses correctness and spec; high, xhigh and max add hostile-input. Low through high use the average models (low may use light, high raises effort); xhigh and max use strong. Low has one round, medium through xhigh up to three, and max up to five. Codex uses GPT-6.1 Terra for average and strong. After capacity or rate limits persist through the 60- and 180-second retries, Codex and Claude sessions try the other runtime once at the same strength; reports record `runtime_fallback`.
 
 The **light** model is the one exception to the average and strong levels. It
 is per runtime family and used only by tier low's reviewer and grader sessions
@@ -260,8 +248,8 @@ not a gate, and a case set this small shows large differences only.
   relies on; patch identity does not establish semantic equivalence.
 - Reviewer processes that fail with a rate-limit diagnostic get at most three
   attempts, waiting 60s then 180s. Other process failures are not retried.
-  Exhaustion is incomplete and says `rate-limited`: wait and ship again;
-  nothing needs changing. The existing retry for an unreadable answer is separate.
+  On Codex or Claude, exhaustion tries the other runtime once; failure there
+  is incomplete. The retry for an unreadable answer is separate.
 - **Fail:** into `dev`, the PR stays a draft with its CI state printed; other
   paths publish nothing. Fix every confirmed finding without weakening a
   test or gate, commit, and ship again. File what you leave out of scope as an
@@ -420,6 +408,6 @@ Why this policy, and not the alternatives:
   allows.
 - The `harness/review` status is posted with the person's GitHub token by the
   harness. A same-user process could forge it; CI re-runs every gate.
-- Reviewers can be slow: a high-tier review is up to 16 sessions.
+- Reviewers can be slow: a high-tier review can require multiple sessions.
 - Prompts are passed as one command-line argument, so each is kept under
   120 KB: the diff is cut first (reviewers read the rest with `git diff`).

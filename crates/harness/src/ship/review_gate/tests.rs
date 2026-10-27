@@ -36,6 +36,7 @@ fn unstored(root: &Path, tier: Tier, grade: u8) -> Report {
         tier: tier.name().into(),
         floor: "low".into(),
         runtime: "claude".into(),
+        runtime_fallback: false,
         model: "scripted".into(),
         effort: "medium".into(),
         personas: vec!["quick".into()],
@@ -78,7 +79,6 @@ fn pushed(root: &Path) -> bool {
         .unwrap()
         .is_empty()
 }
-
 #[test]
 fn a_review_below_the_merge_grade_pushes_nothing() {
     let (_temp, root) = fixture("true");

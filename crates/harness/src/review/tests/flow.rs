@@ -30,9 +30,7 @@ pub(super) fn fixture(changed: &str) -> tempfile::TempDir {
         "gates/review/personas/quick.md",
         "gates/review/personas/correctness.md",
         "gates/review/personas/spec.md",
-        "gates/review/personas/test-integrity.md",
         "gates/review/personas/hostile-input.md",
-        "gates/review/personas/performance.md",
     ] {
         fs::create_dir_all(root.join(file).parent().unwrap()).unwrap();
         fs::copy(repo.join(file), root.join(file)).unwrap();
@@ -95,7 +93,7 @@ fn findings_are_cross_examined_and_confirmed_ones_cap_the_grade() {
         first: |p| {
             if p.contains("# Correctness breaker") {
                 MAJOR.into()
-            } else if p.contains("# Test-integrity") {
+            } else if p.contains("# Spec and scope auditor") {
                 MINOR.into()
             } else {
                 r#"{"findings": []}"#.into()
@@ -138,8 +136,8 @@ fn findings_are_cross_examined_and_confirmed_ones_cap_the_grade() {
         1,
         "the report is stored"
     );
-    // 3 blind reviewers, 3 cross-examiners in round 2, 1 grader.
-    assert_eq!(*script.sessions.lock().unwrap(), 7);
+    // 2 blind reviewers, 2 cross-examiners in round 2, 1 grader.
+    assert_eq!(*script.sessions.lock().unwrap(), 5);
 }
 
 #[test]
@@ -161,7 +159,7 @@ fn a_clean_low_tier_review_passes_and_garbage_makes_it_incomplete() {
     )
     .unwrap();
     assert!(report.passes(), "{}", report.markdown());
-    assert_eq!(report.model, "gpt-6.1-sol");
+    assert_eq!(report.model, "gpt-6.1-terra");
     assert_eq!(*clean.sessions.lock().unwrap(), 2);
     let garbage = Script {
         first: |_| "not json".into(),
@@ -209,7 +207,7 @@ const DISPUTED_F2: &str = r#"{"verdicts": [{"id": "F1", "verdict": "upheld", "ev
 fn findings_by_persona(p: &str) -> String {
     if p.contains("# Correctness breaker") {
         MAJOR.into()
-    } else if p.contains("# Test-integrity") {
+    } else if p.contains("# Spec and scope auditor") {
         MINOR.into()
     } else {
         r#"{"findings": []}"#.into()
@@ -239,8 +237,8 @@ fn a_review_stops_when_a_round_changes_nothing_before_the_cap() {
     )
     .unwrap();
     assert_eq!(report.rounds, 3);
-    // 5 blind reviewers, 5 cross-examiners in rounds 2 and 3, 1 grader.
-    assert_eq!(*script.sessions.lock().unwrap(), 16);
+    // 3 blind reviewers, 3 cross-examiners in rounds 2 and 3, 1 grader.
+    assert_eq!(*script.sessions.lock().unwrap(), 10);
 }
 
 #[test]

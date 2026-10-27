@@ -30,7 +30,7 @@ fn one_defect_reported_by_two_personas_is_one_finding_in_the_stored_report() {
     };
     let report = review_with(
         temp.path(),
-        Tier::Medium,
+        Tier::High,
         Runtime::Claude,
         "Change the README",
         &Plan::Full,

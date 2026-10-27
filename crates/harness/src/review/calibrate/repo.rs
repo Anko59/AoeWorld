@@ -2,7 +2,7 @@
 //! case's base files on `origin/dev`, the case's diff as one commit on a
 //! branch, so the normal review runs on it unchanged.
 use super::seeds::Case;
-use crate::{review::config::PERSONAS, review::trusted, ship::git};
+use crate::{review::trusted, ship::git};
 use std::{
     fs,
     io::Write,
@@ -78,8 +78,10 @@ pub(super) fn materialise(source: &Path, case: &Case) -> Result<TempDir, String>
     run(root, &["init", "-q", "-b", "dev"])?;
     let mut policy: Vec<String> = POLICY.iter().map(|p| (*p).to_owned()).collect();
     policy.extend(
-        PERSONAS
-            .iter()
+        crate::review::config::Config::load(source)?
+            .tiers
+            .values()
+            .flat_map(|tier| &tier.personas)
             .map(|p| format!("gates/review/personas/{p}.md")),
     );
     for relative in policy {

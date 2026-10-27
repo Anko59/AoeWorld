@@ -66,6 +66,26 @@ pub(super) fn pin(root: &Path, judge: Option<&str>) -> Result<(Pin, String), Str
     Ok((Pin(()), commit))
 }
 
+/// Persona names are the Markdown prompts in the same pinned policy tree.
+pub(super) fn personas(root: &Path) -> Result<Vec<String>, String> {
+    let revision = PINNED
+        .with(|pinned| pinned.borrow().clone())
+        .unwrap_or_else(|| "refs/remotes/origin/dev".to_owned());
+    let files = git::git(
+        root,
+        &[
+            "ls-tree",
+            "--name-only",
+            &format!("{revision}:gates/review/personas"),
+        ],
+    )?;
+    Ok(files
+        .lines()
+        .filter_map(|name| name.strip_suffix(".md"))
+        .map(str::to_owned)
+        .collect())
+}
+
 /// A review input from the pinned commit (origin/dev when nothing is
 /// pinned); the working tree only while dev does not have it yet (bootstrap).
 pub(crate) fn trusted(root: &Path, relative: &str) -> Result<String, String> {
