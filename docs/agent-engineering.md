@@ -70,7 +70,7 @@ that wait; a child acquiring its own slot checks load. Integration tests inherit
 the parent's slot or hold an admitted fixture ticket in a private queue. Load rising
 after start never pauses or aborts running gates. Direct `test-harness`, `test-unit` and `test-wasm` recipes take
 the slot before compiling their test steps. So do the make targets that compile or test without
-being gates (`build`, `map-test`, `geodata-test`, `test-harness-focused`, `test-placement-coverage`,
+being gates (`build`, `map-test`, `geodata-test`, `test-harness-focused`,
 `test-geographic-visuals-unit`, `duel-check`, `dev-build`, `test-country-source`, the single-command
 gates `fuzz-smoke`, `fuzz-nightly`, `perf-smoke`, `perf-ci`, `perf-full`,
 `perf-pressure`, `perf-stress`, `perf-soak-*`, and the release `map-*` targets): each runs

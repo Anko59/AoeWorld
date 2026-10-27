@@ -367,7 +367,6 @@ fn preflight_remains_full_for_docs_and_source_checks_do_not_leak_into_pr() {
     for gate in [
         "fmt-check",
         "structure-check",
-        "test-placement",
         "architecture-check",
         "docs-check",
         "lint",

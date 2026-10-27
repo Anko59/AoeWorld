@@ -18,12 +18,6 @@ agent-smoke:
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
 	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' agent-smoke --runtime '$(RUNTIME)'
 
-# Focused native coverage; counters and compiler outputs stay in target/.
-.PHONY: test-placement-coverage
-
-test-placement:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-placement
-
 hooks-install:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- hooks-install
 

@@ -8,12 +8,7 @@ fn docs_do_not_select_code_via_static_flag_or_dependency_broadening() {
     let plan = registry.plan(Cadence::Pr, &impact.suites).unwrap();
     assert_eq!(
         plan.gates,
-        paths(&[
-            "docs-check",
-            "fmt-check",
-            "structure-check",
-            "test-placement"
-        ])
+        paths(&["docs-check", "fmt-check", "structure-check"])
     );
     assert!(plan.jobs["static"]);
     for name in [

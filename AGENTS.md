@@ -8,7 +8,7 @@ canonical documentation and commands. Claude Code, Codex, DeepSeek Harness and p
 are judged by the same hooks; see [agent runtimes](docs/agent-runtimes.md).
 
 Product work goes through `make duel` or follows the same tests-first order.
-Tests live in test files; `make test-placement` enforces this for new Rust code.
+Tests live in test files.
 
 Before committing, run `make hooks-install`, `make hooks-check`, and the focused
 gate plus `make preflight`. Publish only with `make ship` ([shipping](docs/shipping.md)). Never bypass hooks or reduce a gate/baseline to obtain

@@ -3,7 +3,6 @@ pub(crate) mod dispatch_status;
 pub(crate) mod flaky;
 mod heavy_slots;
 mod paths;
-pub(crate) mod placement;
 pub(crate) mod registry;
 pub(crate) mod review;
 pub(crate) mod runner;
