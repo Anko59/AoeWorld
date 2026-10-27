@@ -36,6 +36,8 @@ export function productionBuilding(b: ProductionBuilding) {
     0,
     0,
     0,
+    // No bridge span.
+    0,
   ];
 }
 export function playerState(

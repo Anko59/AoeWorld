@@ -4,7 +4,7 @@ Every fixed bound in the simulation, map, server and protocol that a match of
 100 seats at population cap 1000 (about 100,000 units, France 16,000 x 16,000
 tiles) can reach in play, whether it is per world or per seat, and what happens
 when it is reached. Sizes are set in `WorldLimits::for_match(seats, population)`
-(`crates/simulation/src/game_world/economy.rs`); the match creation passes the
+(`crates/simulation/src/game_world/economy/limits/mod.rs`); the match creation passes the
 slot count and the population cap.
 
 ## The playtest failure

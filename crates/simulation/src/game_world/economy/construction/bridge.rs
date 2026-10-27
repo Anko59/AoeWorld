@@ -75,6 +75,12 @@ impl GameWorld {
                 .0
                 .iter()
                 .any(|u| u.hp > 0 && !self.embarked(u.id) && span.contains(u.position.tile_floor()))
+            // One pass over the buildings per order, not one per span tile.
+            || {
+                let tiles = span.tiles();
+                self.buildings()
+                    .any(|b| tiles.iter().any(|&tile| b.contains_tile(tile)))
+            }
         {
             return Err(EconomyError::InvalidFootprint);
         }
@@ -87,7 +93,6 @@ impl GameWorld {
             if overlay.blocks_tile(tile)
                 || overlay.bridge_connections(tile).is_some()
                 || node.is_some_and(|n| overlay.blocks_node(n))
-                || self.buildings().any(|b| b.contains_tile(tile))
                 || if end {
                     !sample.passable || sample.water != WaterKind::None
                 } else {
