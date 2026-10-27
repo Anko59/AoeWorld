@@ -56,7 +56,17 @@ impl GameWorld {
 
     pub(crate) fn take_local_retry(&mut self, index: usize) -> bool {
         let unit = self.units[index].state;
-        if !self.local_retry(unit.id)
+        // A mover can alternate a clear step and a blocked sidestep. An
+        // absolute eight-tick phase can then miss every blocked step forever.
+        // Seed the first retry by id, then measure elapsed time between tries.
+        let due = self.units[index].obstruction.is_some_and(|o| {
+            if o.search_tick == u64::MAX {
+                self.local_retry(unit.id) || o.blocked >= 8
+            } else {
+                self.tick.0.saturating_sub(o.search_tick) >= 8
+            }
+        });
+        if !due
             && !(self.has_work_task(unit.id) && self.local_position_occupied(index, unit.position))
         {
             return false;

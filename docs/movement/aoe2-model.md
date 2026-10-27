@@ -94,7 +94,13 @@ obstruction policy is unpublished.
   bypassed while retaining the final destination. Static corners use exact
   swept-circle tests too: two clear endpoints do not prove a clear diagonal
   edge. Planning and movement use the same clearance. The long-route
-  scheduler keeps its budget.
+  scheduler keeps its budget. If sustained obstruction leaves no useful
+  forward point in the local window, try a remembered lateral escape before
+  requesting a fresh static route. Both lateral searches spend the same shared
+  four-search allowance; an escape must gain at least half a tile laterally.
+  The final destination and queued orders stay intact. This permits a detour
+  that initially moves away from the target rather than returning to the same
+  pocket, without displacing stationary workers.
   Steering tries four lateral directions, then two retreat directions after
   sustained obstruction. Each swept probe reads at most sixteen one-tile
   collision cells and 32 entries per cell. Normal cells are exact; an overfull
@@ -152,7 +158,9 @@ remain active until members recover their shape. Normal/column gaps include
 not round two siege bodies into an overlap at their final slots.
 
 Short-range steering remembers its chosen side across ticks and changes side
-only after sustained obstruction. Moving traffic cannot cancel an order as
+only after sustained obstruction. Local retries use elapsed time after their
+initial id-based phase: an alternating clear/blocked motion must not miss
+every retry indefinitely. Moving traffic cannot cancel an order as
 unreachable. A plain move may finish at the closest reachable free position
 near its assigned endpoint after sustained obstruction. Its exact source is
 also considered when within 1.5 tiles: a legal fractional pocket need not

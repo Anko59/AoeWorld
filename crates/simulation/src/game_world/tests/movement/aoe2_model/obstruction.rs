@@ -66,6 +66,12 @@ fn a_distant_rejoin_goes_around_the_town_center_and_worker_row() {
         TileCoord::new(40, 42),
         TileCoord::new(41, 42),
     ]);
+    for x in 36..40 {
+        w.economy.blocked_tiles.insert(TileCoord::new(x, 39));
+        if x < 39 {
+            w.economy.blocked_tiles.insert(TileCoord::new(x, 40));
+        }
+    }
     for x in 40..43 {
         w.spawn_villager(PlayerId(0), at(x, 40)).unwrap();
     }

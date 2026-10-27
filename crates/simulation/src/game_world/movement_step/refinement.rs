@@ -91,6 +91,19 @@ impl GameWorld {
         } else {
             self.local_unit_route(index, goal)
         };
+        if short_join
+            && pops == 0
+            && self.units[index]
+                .obstruction
+                .is_some_and(|o| o.blocked >= 48)
+            && local
+                .as_ref()
+                .and_then(|p| p.back())
+                .is_none_or(|&at| distance(at, goal).saturating_add(64) >= distance(from, goal))
+            && self.refine_lateral_escape(index, order)
+        {
+            return true;
+        }
         let Some(mut path) = local else {
             return false;
         };
@@ -125,6 +138,48 @@ impl GameWorld {
             i64::from(waypoint.y) - i64::from(from.y),
         );
         true
+    }
+
+    /// A bounded window can have no forward exit although the static route
+    /// can go around the obstruction from another side. Remembered lateral
+    /// yielding leaves that pocket before requesting a fresh coarse route.
+    fn refine_lateral_escape(&mut self, index: usize, order: &mut MovementOrder) -> bool {
+        let from = self.units[index].state.position;
+        let dx = i64::from(order.waypoint.x) - i64::from(from.x);
+        let dy = i64::from(order.waypoint.y) - i64::from(from.y);
+        let length = i64::from(distance(from, order.waypoint));
+        let side = i64::from(self.units[index].obstruction.map_or(1, |o| o.side));
+        for side in [side, -side] {
+            let lateral = (-dy * side, dx * side);
+            let goal = WorldPosition::new(
+                from.x.saturating_add((lateral.0 * 1536 / length) as i32),
+                from.y.saturating_add((lateral.1 * 1536 / length) as i32),
+            );
+            let Some(mut path) = self.local_free_arrival_route(index, goal) else {
+                continue;
+            };
+            let Some(end) = path.back().copied() else {
+                continue;
+            };
+            let progress = (i64::from(end.x) - i64::from(from.x)) * lateral.0
+                + (i64::from(end.y) - i64::from(from.y)) * lateral.1;
+            if progress < length * 512 {
+                continue;
+            }
+            let Some(waypoint) = path.pop_front() else {
+                continue;
+            };
+            self.clear_planner(index);
+            self.units[index].route = path;
+            self.units[index].fast_route_tried = false;
+            self.units[index].planning_since = self.tick.0;
+            order.origin = from;
+            order.waypoint = waypoint;
+            order.travelled = 0;
+            order.segment_length = distance(from, waypoint);
+            return true;
+        }
+        false
     }
 
     /// At most 306 expansions (289 quarter-tile points, exact start and 16 corner exits), with
