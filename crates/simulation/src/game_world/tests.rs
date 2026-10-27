@@ -3,12 +3,12 @@ use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
 use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, MovementOutcome, ResourceOverlay};
 
 mod formations;
-mod replay_pin;
 mod spacing;
 mod visibility;
 mod visibility_fanout;
 mod visibility_ghosts;
 mod visibility_resources;
+mod wildlife_fog_replay;
 
 fn world() -> GameWorld {
     GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap()

@@ -9,9 +9,8 @@ they were not repeated for that integration. In the current engine the fair
 per-player search pass runs before movement, and lookahead uses its remaining
 budget afterward. A mover needing a search always waits in the movement loop,
 even with free budget or slots. Proposals preserve that wait and its start tick,
-and recheck follower spacing during ordered application. The replay pins were
-regenerated from the merged sequential loop and verified with proposals enabled
-and with 1, 2 and 6 threads. The scheduler's fast attempts, sealed proofs, near/far
+and recheck follower spacing during ordered application. The replay tests
+compare complete runs with proposals enabled on 1, 2 and 6 threads. The scheduler's fast attempts, sealed proofs, near/far
 slots and planner retention remain in place.
 
 Same workload and command (`make perf-scale`, 100 players, 101,111 units, 600 ticks fog
@@ -66,8 +65,8 @@ and wildlife replay pins hold unchanged. The tests in
 `game_world/tests/physical_movement/parallel.rs` replay 1,800 mixed units for 160 ticks on 1, 2
 and 6 rayon threads and require identical canonical hashes and change sets, once without buildings and once with
 three town centres in sight of the movers (so the batched building-watch events run, and each
-player's remembered foreign buildings are part of the digest). Both pin the final hash and a digest of
-all changes, produced by the sequential engine (proposal phase disabled) and unchanged by the fix.
+player's remembered foreign buildings are part of the digest). They compare runs with each other,
+never with literal hashes, so intended behaviour changes need no regenerated values.
 
 **What changed.**
 

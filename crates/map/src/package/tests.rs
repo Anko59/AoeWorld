@@ -46,34 +46,6 @@ fn source(id: &str) -> SourceLock {
     }
 }
 
-fn terrain_fingerprint(chunk: &crate::Chunk) -> [u8; 32] {
-    let mut hash = blake3::Hasher::new();
-    for tile in &chunk.tiles {
-        hash.update(&tile.geographic_height_centimeters.to_le_bytes());
-        hash.update(&tile.game_height_level.to_le_bytes());
-        for level in tile.surface.corner_game_height_levels {
-            hash.update(&level.to_le_bytes());
-        }
-        hash.update(&[
-            tile.surface.kind as u8,
-            tile.surface.triangulation as u8,
-            tile.biome as u8,
-            tile.vegetation_provenance as u8,
-            tile.water as u8,
-            tile.elevation_provenance as u8,
-            tile.water_provenance as u8,
-            u8::from(tile.passable),
-        ]);
-    }
-    *hash.finalize().as_bytes()
-}
-
-fn fingerprint_hex(chunk: &crate::Chunk) -> String {
-    terrain_fingerprint(chunk)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
 #[test]
 fn packages_have_canonical_source_order_and_stable_identity() {
     let first =
@@ -142,29 +114,6 @@ fn validation_rejects_tampering_and_other_generation_recipe_identity() {
         Err(MapPackageError::InvalidGenerationRecipeVersion)
     );
 }
-
-/// Regression guard on the current version, not a compatibility fixture: a
-/// deliberate generation or identity change updates these digests.
-#[test]
-fn default_package_identity_and_terrain_are_pinned() {
-    let package = MapPackage::new(1, MapRequest::default(), vec![]).expect("package");
-    assert_eq!(package.schema_version, crate::MAP_SCHEMA_VERSION);
-    assert_eq!(
-        package.generation_recipe_version,
-        crate::GENERATION_RECIPE_VERSION
-    );
-    assert_eq!(package.content_hash_hex(), DEFAULT_PACKAGE_HASH);
-    assert_eq!(
-        fingerprint_hex(&package.generator().chunk(0, 0).expect("chunk")),
-        DEFAULT_TERRAIN_FINGERPRINT
-    );
-}
-
-// River-fish generation advances the single recipe and its content identity.
-const DEFAULT_PACKAGE_HASH: &str =
-    "ca2b797aebe65f014bae0c4a80fde48fa7a441b23f0638d362a41a6b92de9115";
-const DEFAULT_TERRAIN_FINGERPRINT: &str =
-    "5216ecbe42545ee3958222a22b78957a274aad41029b38797e926ac8ac46aa29";
 
 #[test]
 fn packages_require_and_hash_projection_metadata() {

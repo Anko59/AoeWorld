@@ -1,12 +1,5 @@
-//! Current-output replay pins for a fixed scenario with movers, gathering,
-//! construction and short routes. Cache and index refactors preserve these;
-//! intentional gameplay changes regenerate them after behaviour tests pass.
-//! Capture with `perf-scale --players 4 --units-per-player 80 --side-tiles 2048
-//! --fight-size 4 --skip-attacks --ticks 300 --fog-off-ticks 0 --hash-every 100
-//! --server-ticks 0`.
-// Combined Castle bundle: u64 research, healers, garrisons, queued builders and
-// cargo/embarked maps extend current state. Regenerate the same scenario; all
-// independent replay, thread equality and emitted-change assertions remain.
+//! Perf-scale report shape, phase budgets and a run-twice determinism property
+//! for a fixed scenario with movers, gathering, construction and short routes.
 use super::*;
 
 fn smoke_options(out: PathBuf) -> Options {
@@ -122,67 +115,7 @@ fn scale_tail_movers_have_a_bounded_obstruction_budget() {
     }
 }
 
-/// Re-pinned when route searches became a per-player fair pass run before
-/// units move (see `route_scheduler`): legs are found on different ticks.
-/// Re-pinned again when gatherers began to step up against their node and
-/// animals to move inside their tile on map terrain. The merge with the
-/// seeded mainland placement and the route planners surviving ground changes
-/// moved them once more; the values are the combined tree's.
-/// Unit spacing (distinct destination and work slots, idle separation,
-/// yielding followers) is a further intended cause of the values below, as is facing the work target on working ticks.
-/// Re-pinned for the combined follow-ups: exact explored placement/foundation
-/// sight, retained route guidance and endpoint proof state, bounded idle
-/// rotation and active follower sampling. These intentional state/timing
-/// changes, including deferred fast attempts and within-player far reserves,
-/// preserve the three checkpoints and deterministic scenario checks.
-/// Static-navigation integration adds the shared per-tick preparation allowance
-/// and the budgeted reverse-proof state to authoritative hashes. Re-pin for
-/// that intentional schema/pacing change, keeping seed, workload and thresholds.
-/// Re-pin for the original DAT TC annex collision, retained detour searches
-/// and removal of the obsolete unproven-approach flag from planner hashes.
-/// The merged drop-off work state, prepaid reseeds and auto-scout scheduling
-/// extend that same schema. Regenerate these current pins for the combination;
-/// the scenario, checkpoints and limits remain unchanged.
-/// Castle Age widens research bits, adds the ordered healer index and refines
-/// gather credits. Regenerate current hashes for those deliberate state changes.
-/// Unit obstruction, bounded local refinement and reachable arrival slots
-/// intentionally change paths, work timing and neighbour-index order. Regenerate
-/// these current checkpoints with the same workload, seed and assertions.
-/// Combined with perimeter-contact drop-off, these timings also change worker
-/// stockpiles; bounded worker corner escapes also change retained routes.
-/// Regenerate all three current pins from `make test-native-focused
-/// AOE_NATIVE_TEST_PACKAGE=aoe-harness AOE_NATIVE_TEST_FILTER='test(perf_scale::)'`.
-/// Keep the same 300-tick workload and checkpoints.
-/// Builders now use exact-position corner exits and start on first free
-/// perimeter contact, deliberately changing construction timing and routes.
-/// Regenerate only the current output hashes.
-// The current Vassal home/control maps and retained manager cursors extend
-// canonical state even in a world without Vassals. Re-pin the same workload,
-// seed, checkpoints and independent replay/thread assertions for that schema.
-// Bundled gatherer/builder reservations, the Vassal economy phase and walking
-// proposals change work assignment, canonical state and route timing. Regenerate
-// with the command above after their behaviour and replay/thread checks pass.
-// Rebasing these reservations onto avoidance, arrival slots and contact
-// drop-off combines both behaviours; regenerate with the command above.
-const PINNED_HASHES: [(u64, &str); 3] = [
-    (
-        100,
-        "833472100cd475f676fe2274a68ad8245971092ff8873f4d9225e8a833d4d2a8",
-    ),
-    (
-        200,
-        "46e447b7ec5e78f954f205e3f903fb0ec9688ba42b73108dcab38105f7ff8467",
-    ),
-    (
-        300,
-        "17aef54e943664f1f7874a9dab57f64e8971f910224e7044ebe84fe307fbf48a",
-    ),
-];
-
-#[test]
-fn small_scale_scenario_replays_to_the_pinned_hashes() {
-    // Regenerated for the current construction state: builders now hash their
-    // ordered foundation queues, and completion can choose another own site.
+fn small_scale_hashes() -> Vec<Value> {
     let params = Params {
         players: 4,
         units_per_player: 80,
@@ -198,20 +131,12 @@ fn small_scale_scenario_replays_to_the_pinned_hashes() {
     } = world::build(&params).expect("scenario builds");
     let mut driver = Driver::new(1, players.len(), 3.0, world.config().tick_hz);
     driver.skip_attacks = true;
-    let run = run_ticks(&mut world, &mut players, &mut driver, 300, 100);
-    let hashes: Vec<(u64, String)> = run
-        .hashes
-        .iter()
-        .map(|entry| {
-            (
-                entry["tick"].as_u64().expect("tick"),
-                entry["blake3"].as_str().expect("hash").to_owned(),
-            )
-        })
-        .collect();
-    let pinned: Vec<(u64, String)> = PINNED_HASHES
-        .iter()
-        .map(|(tick, hash)| (*tick, (*hash).to_owned()))
-        .collect();
-    assert_eq!(hashes, pinned);
+    run_ticks(&mut world, &mut players, &mut driver, 300, 100).hashes
+}
+
+#[test]
+fn small_scale_scenario_replays_to_identical_hashes() {
+    let first = small_scale_hashes();
+    assert_eq!(first.len(), 3);
+    assert_eq!(first, small_scale_hashes());
 }

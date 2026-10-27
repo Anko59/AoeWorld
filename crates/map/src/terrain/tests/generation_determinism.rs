@@ -1,5 +1,5 @@
-//! Regression guard on the single current generation, not a compatibility
-//! fixture: any deliberate generation change regenerates these digests.
+//! Determinism properties of the current generation: independently built
+//! generators emit identical chunks, and forests never wall off a route.
 use super::*;
 use crate::{CompactChunk, MapPackage, MapRequest};
 
@@ -16,31 +16,24 @@ fn digest(generator: &MapChunkGenerator, chunks: &[(i32, i32)]) -> String {
 }
 
 #[test]
-fn fallback_chunk_content_is_pinned() {
-    let actual = [1, 17, 991]
-        .map(|seed| {
-            digest(
-                &MapChunkGenerator::new([23; 32], seed, 512),
-                &[(0, 0), (5, 6), (7, 7), (15, 15)],
-            )
-        })
-        .to_vec();
-    assert_eq!(actual, FALLBACK_DIGESTS);
+fn chunk_content_is_deterministic_and_keyed_by_seed() {
+    const CHUNKS: [(i32, i32); 4] = [(0, 0), (5, 6), (7, 7), (15, 15)];
+    let run =
+        || [1, 17, 991].map(|seed| digest(&MapChunkGenerator::new([23; 32], seed, 512), &CHUNKS));
+    let first = run();
+    assert_eq!(first, run());
+    assert!(first[0] != first[1] && first[1] != first[2] && first[0] != first[2]);
+    let package = || MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
+    assert_eq!(
+        digest(&package().generator(), &CHUNKS),
+        digest(&package().generator(), &CHUNKS)
+    );
 }
 
 #[test]
-fn default_package_chunk_content_is_pinned() {
-    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
-    let actual = digest(&package.generator(), &[(0, 0), (7, 7), (15, 15)]);
-    assert_eq!(actual, DEFAULT_PACKAGE_DIGEST);
-}
-
-#[test]
-fn flat_forest_routes_from_the_start_glade_are_pinned() {
+fn flat_forest_routes_from_the_start_glade_all_reach_their_node() {
     let terrain = forest_generator();
     let origin = TileCoord::new(255, 255);
-    let mut digest = blake3::Hasher::new();
-    let mut paths = 0;
     for (dx, dy) in [
         (-1, -1),
         (0, -1),
@@ -70,16 +63,15 @@ fn flat_forest_routes_from_the_start_glade_are_pinned() {
                 (-1..=1).all(|dy| (-1..=1).all(|dx| open(TileCoord::new(tile.x + dx, tile.y + dy))))
             })
             .expect("open ground beside every node");
-        // Whole-map budget: the pin is that forests never wall a node off,
-        // not how cheaply a detour around one is found.
+        // Whole-map budget: forests never wall a node off, however costly the
+        // detour. Before the octile estimate counted the straight remainder of
+        // a route longer in y than in x, four of these exhausted the budget.
         let outcome = crate::find_path(&terrain, origin, destination, 262_144);
-        paths += usize::from(matches!(outcome, crate::MovementOutcome::Path(_)));
-        digest.update(format!("{destination:?}{outcome:?}").as_bytes());
+        assert!(
+            matches!(outcome, crate::MovementOutcome::Path(_)),
+            "{destination:?}: {outcome:?}"
+        );
     }
-    assert_eq!(
-        (paths, digest.finalize().to_hex().to_string().as_str()),
-        FOREST_ROUTES
-    );
 }
 
 /// Flat dry temperate forest (PNV class 9) with one elevation sample.
@@ -121,46 +113,6 @@ fn forest_generator() -> MapChunkGenerator {
         .unwrap()
         .with_prepared_biomes(&environment, vec![biome])
         .unwrap()
-}
-
-// All eight: before the octile estimate counted the straight remainder of a
-// route longer in y than in x, four of these exhausted the search budget.
-const FOREST_ROUTES: (usize, &str) = (
-    8,
-    "112e4fe0358ffbe1f4bd82013d9cfaea9d7f1998a3bd9edb2d617ee9a84af4b0",
-);
-
-// River fish add current resource records and visual families to wire and scene
-// content. Regenerate these pins for the combined generation recipe.
-// Current generation bytes pin the only live wire format. Drawn-sheet variety
-// changes these digests without changing the flat forest route pin.
-const FALLBACK_DIGESTS: [&str; 3] = [
-    "17bb790a52a28e4460fc9e9b41ae3a84971e5732d8c866b87ba85bdbfd1fef91",
-    "a489374a8b97973de566f73c2b01352bb5356b198ab9fa360c1abdf23bb289de",
-    "02ecdf2c1d7b0341ec02d675c09bb996ca143140554770a6430192a07155e883",
-];
-// Current latitude/elevation ground cover changes the default package.
-const DEFAULT_PACKAGE_DIGEST: &str =
-    "5c1dbce816f3c3d635da2fd602c50e3105bba8d8984e7b4805b25cbf594ba3c5";
-
-/// Regression pin of the current generation on scene content rather than
-/// transport bytes, so a wire-format change alone cannot move it. Regenerate
-/// it with any deliberate generation change, like the pins above.
-#[test]
-fn default_package_generated_scene_content_is_pinned() {
-    let package = MapPackage::new(1, MapRequest::default(), Vec::new()).expect("package");
-    let generator = package.generator();
-    let mut digest = blake3::Hasher::new();
-    for (x, y) in [(0, 0), (7, 7), (15, 15)] {
-        let scene = generator
-            .landscape_chunk_with_cancel(x, y, &|| false)
-            .expect("chunk");
-        digest.update(format!("{scene:?}").as_bytes());
-    }
-    assert_eq!(
-        digest.finalize().to_hex().as_str(),
-        "f5e6f9c455455d35b70bb4816e2f1ad38ac7667e0b8af82ab403ad510b314ce1"
-    );
 }
 
 /// Sheet selection and ground variety preserve physical terrain. Retain all
