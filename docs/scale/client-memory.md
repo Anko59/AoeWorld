@@ -182,7 +182,7 @@ outgoing-socket handling passed. Raw results are in
 
 The same serial run passed all 2,985 native tests (18 skipped), doctests, and
 the full `make test-wasm` target. `make fmt`, `make fmt-check`,
-`make structure-check`, `make test-placement`, `make lint`, `make browser-check`,
+`make structure-check`, `make lint`, `make browser-check`,
 `make docs-check`, `make hooks-install`, and `make hooks-check` also passed.
 These results qualify the individual fixes, but the requested browser memory
 plateau is not proven and the original Firefox crash is not resolved by this

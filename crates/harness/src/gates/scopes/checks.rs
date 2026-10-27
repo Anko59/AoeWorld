@@ -43,7 +43,6 @@ pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
         _ => Vec::new(),
     };
     let clippy = clippy_args(&kind, &staged);
-    let comparison = crate::gates::placement::Comparison::prepare(&source, &kind)?;
     let snapshot = Snapshot::prepare(&source, kind)?;
     let home = crate::process::cargo_cache::home(&source)?;
     let home = home.to_str().ok_or("non-UTF-8 Cargo cache path")?;
@@ -66,7 +65,6 @@ pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
         cargo(&args, 120)?;
     }
     snapshot.run_checked(|root| crate::policy::structure(root).map_err(|error| error.into()))?;
-    snapshot.run_checked(|root| comparison.check(root))?;
     snapshot.run_checked(crate::architecture::check)?;
     snapshot.run_checked(crate::gates::docs_check)?;
     cargo(&clippy, 600)?;

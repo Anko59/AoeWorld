@@ -33,12 +33,6 @@ enum Command {
         command: DevCommand,
     },
     StructureCheck,
-    TestPlacement {
-        #[arg(long)]
-        index: bool,
-        #[arg(long, conflicts_with = "index")]
-        revision: Option<String>,
-    },
     ArchitectureCheck,
     DocsCheck,
     GatesDocs,

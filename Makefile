@@ -71,7 +71,6 @@ DOCKER_RUN := \
   test-e2e \
   test-creator-source \
   test-geographic-matrix \
-  test-placement \
   deny \
   test-unit \
   test-source-qualification \

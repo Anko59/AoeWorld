@@ -6,7 +6,6 @@ help:
 	@echo '  make recover         Stop harness containers a host suspend left running'
 	@echo '  make fmt-check       Check Rust formatting without changing files'
 	@echo '  make fmt             Format Rust files'
-	@echo '  make test-placement  Reject additions to inline Rust tests'
 	@echo '  make structure-check Check tracked file and directory limits'
 	@echo '  make architecture-check Check crate boundaries and source rules'
 	@echo '  make docs-check      Check gate table and local documentation links'

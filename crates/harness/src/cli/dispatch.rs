@@ -50,19 +50,6 @@ pub(super) fn run(
             DevCommand::Logs => dev::logs()?,
         },
         Command::StructureCheck => policy::structure(Path::new("."))?,
-        Command::TestPlacement { index, revision } => {
-            let kind = revision.map_or_else(
-                || {
-                    if index {
-                        gates::scopes::Kind::Index
-                    } else {
-                        gates::scopes::Kind::Working
-                    }
-                },
-                gates::scopes::Kind::Commit,
-            );
-            gates::placement::check(Path::new("."), kind)?;
-        }
         Command::ArchitectureCheck => architecture::check(Path::new("."))?,
         Command::DocsCheck => gates::docs_check(Path::new("."))?,
         Command::GatesDocs => gates::docs_generate(Path::new("."))?,

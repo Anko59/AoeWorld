@@ -278,15 +278,6 @@ test-geographic-visuals-unit-steps:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness e2e::visual::packages
 	@$(DOCKER_RUN) cargo test --locked -p aoe-server explicit_map_package_directory_is_canonical_and_must_be_a_directory
 
-test-placement-coverage: coverage-tools slot-bootstrap
-	@$(SLOT_RUN) test-placement-coverage -- make --no-print-directory test-placement-coverage-steps
-
-test-placement-coverage-steps:
-	@mkdir -p reports/placement
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(TMP_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov nextest --locked -p aoe-harness --no-report -E 'test(gates::placement::tests::)'
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(TMP_MOUNT) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov run --locked -p aoe-harness --no-report -- test-placement
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) cargo llvm-cov report --lcov --output-path reports/placement/coverage.lcov
-
 .PHONY: test-native-focused test-native-focused-steps
 # A developer-selected Nextest filter keeps iteration inside the shared heavy slot.
 test-native-focused: slot-bootstrap

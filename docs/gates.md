@@ -10,7 +10,6 @@ Registry v2 drives selection and dependency plans. The opt-in gate-run CLI execu
 |---|---|---|---|---|---|---|---|
 | fmt-check | `make fmt-check` | — | static | [Edit, Stop, Commit, Pr, Ci, Nightly, Preflight] | 120 | — | rustfmt exit status |
 | structure-check | `make structure-check` | — | static | [Edit, Stop, Commit, Pr, Ci, Nightly, Preflight] | 120 | — | tracked file and directory audit |
-| test-placement | `make test-placement` | — | static | [Edit, Stop, Commit, Pr, Ci, Nightly, Preflight] | 120 | — | merge-base Rust test placement audit |
 | architecture-check | `make architecture-check` | — | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 180 | — | Cargo metadata and source boundary audit |
 | docs-check | `make docs-check` | — | static | [Edit, Stop, Commit, Pr, Ci, Nightly, Preflight] | 120 | — | registry table and local link validation |
 | lint | `make lint` | fmt-check | native | [Stop, Commit, Pr, Ci, Nightly, Preflight] | 600 | — | Clippy exit status |

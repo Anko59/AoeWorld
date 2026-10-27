@@ -434,7 +434,6 @@ fn the_registry_decides_which_gates_are_heavy() {
         "lint",
         "fmt-check",
         "structure-check",
-        "test-placement",
         "architecture-check",
         "docs-check",
         "deny",

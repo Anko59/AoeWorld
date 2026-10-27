@@ -62,7 +62,7 @@ fn main() {
 }
 
 #[cfg(test)]
-#[path = "gates/placement/main_tests.rs"]
+#[path = "gates/main_tests.rs"]
 mod main_tests;
 
 #[cfg(test)]
