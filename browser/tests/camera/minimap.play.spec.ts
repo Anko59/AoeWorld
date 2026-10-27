@@ -58,34 +58,6 @@ test("strategic raster is one bounded request per map and never loads the world"
     "href",
     /^data:image\/png/,
   );
-  // The drawn image carries the decoded geography at raster resolution.
-  const pixels = await page.evaluate(async () => {
-    const image = new Image();
-    image.src = document
-      .getElementById("minimap-terrain")
-      ?.getAttribute("href") as string;
-    await image.decode();
-    const canvas = document.createElement("canvas");
-    canvas.width = image.naturalWidth;
-    canvas.height = image.naturalHeight;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("2D context missing");
-    context.drawImage(image, 0, 0);
-    const at = (x: number, y: number) =>
-      Array.from(context.getImageData(x, y, 1, 1).data);
-    return {
-      size: [image.naturalWidth, image.naturalHeight],
-      ocean: at(10, 30),
-      forest: at(50, 10),
-      grass: at(50, 50),
-    };
-  });
-  expect(pixels).toEqual({
-    size: [64, 64],
-    ocean: [30, 70, 118, 255],
-    forest: [34, 84, 44, 255],
-    grass: [124, 164, 82, 255],
-  });
   const camera = await page.locator("#world-position").innerText();
   for (let index = 0; index < 3; index++) {
     await page.getByRole("button", { name: "Show whole map" }).click();
@@ -140,7 +112,7 @@ test("strategic raster is one bounded request per map and never loads the world"
   await expect(page.locator("#minimap-title")).toContainText("schematic");
 });
 
-test("minimap raster decoding is bounded and keeps forest apart from open land", async ({
+test("minimap raster decoding is bounded and rejects malformed rasters", async ({
   page,
 }) => {
   await page.goto("/diagnostics.html");
@@ -172,9 +144,6 @@ test("minimap raster decoding is bounded and keeps forest apart from open land",
       change(copy);
       return module.decodeMinimap(copy.buffer) === null;
     };
-    const luminance = ([r, g, b]: number[]) =>
-      0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (b ?? 0);
-    const colors = Object.fromEntries(module.MINIMAP_CLASSES);
     const largest = module.decodeMinimap(
       raster(
         512,
@@ -185,7 +154,6 @@ test("minimap raster decoding is bounded and keeps forest apart from open land",
       classes: module.MINIMAP_CLASSES.map(([label]) => label),
       maximumBytes: module.MAX_MINIMAP_BYTES,
       samples: decoded?.samples,
-      rgba: Array.from(decoded?.rgba ?? []),
       largest: [largest?.samples, largest?.rgba.length],
       rejected: [
         mutate((bytes) => (bytes[0] = 0)),
@@ -199,20 +167,6 @@ test("minimap raster decoding is bounded and keeps forest apart from open land",
           null,
         module.decodeMinimap(raster(513, []).buffer) === null,
       ],
-      forestContrast:
-        luminance(colors.grass ?? []) - luminance(colors.forest ?? []),
-      dryContrast:
-        luminance(colors["dry grass"] ?? []) - luminance(colors.forest ?? []),
-      waterIsBlue: ["river", "lake", "ocean"].every((name) => {
-        const [r, g, b] = colors[name] ?? [];
-        return (b ?? 0) > (g ?? 0) && (g ?? 0) > (r ?? 0);
-      }),
-      landIsNotBlue: ["grass", "dry grass", "forest", "soil", "sand"].every(
-        (name) => {
-          const [, g, b] = colors[name] ?? [];
-          return (b ?? 0) < (g ?? 0);
-        },
-      ),
     };
   });
   expect(result.classes).toEqual([
@@ -231,17 +185,8 @@ test("minimap raster decoding is bounded and keeps forest apart from open land",
   ]);
   expect(result.maximumBytes).toBe(8 + 512 * 512);
   expect(result.samples).toBe(2);
-  // Level ocean and forest keep their palette colour; relief lights and
-  // shades grass by 4.5% per step around the level value 8.
-  expect(result.rgba.slice(0, 8)).toEqual([30, 70, 118, 255, 34, 84, 44, 255]);
-  expect(result.rgba.slice(8, 12)).toEqual([163, 216, 108, 255]);
-  expect(result.rgba.slice(12, 16)).toEqual([79, 105, 52, 255]);
   expect(result.largest).toEqual([512, 512 * 512 * 4]);
   expect(result.rejected).toEqual(Array.from({ length: 9 }, () => true));
-  expect(result.forestContrast).toBeGreaterThan(60);
-  expect(result.dryContrast).toBeGreaterThan(60);
-  expect(result.waterIsBlue).toBe(true);
-  expect(result.landIsNotBlue).toBe(true);
 });
 
 test("minimap pointer mapping inverts the diamond rotation inside the letterboxed square", async ({

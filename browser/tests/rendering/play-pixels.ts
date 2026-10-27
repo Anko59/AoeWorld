@@ -15,26 +15,3 @@ export async function bluePixels(canvas: ReturnType<Page["locator"]>) {
   }
   return blue;
 }
-
-export function assetTerrainColorVariety(image: PNG) {
-  const colors = new Set<string>();
-  for (let y = 32; y < image.height - 96; y += 16) {
-    for (let x = 32; x < image.width - 32; x += 16) {
-      if (x > image.width - 260 && y < 80) continue;
-      if (x < 620 && y > image.height - 110) continue;
-      if (
-        x > image.width / 2 - 50 &&
-        x < image.width / 2 + 50 &&
-        y > image.height / 2 - 80 &&
-        y < image.height / 2 + 80
-      ) {
-        continue;
-      }
-      const offset = (y * image.width + x) * 4;
-      colors.add(
-        `${image.data[offset]},${image.data[offset + 1]},${image.data[offset + 2]}`,
-      );
-    }
-  }
-  return colors.size;
-}

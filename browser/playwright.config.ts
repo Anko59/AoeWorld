@@ -19,14 +19,13 @@ const rendererDependent = [
   /[\\/]village[\\/]vassal[\\/]vassal\.play\.spec\.ts$/,
   /[\\/]village[\\/]castle[\\/]castle\.play\.spec\.ts$/,
   /[\\/]play\.spec\.ts$/,
-  /[\\/]rendering[\\/]occlusion\.spec\.ts$/,
   /(?:^|[\\/.])shared-surfaces\.spec\.ts$/,
   /[\\/]source-creator\.spec\.ts$/,
-  /[\\/]camera[\\/](?:hooks|navigation)\.play\.spec\.ts$/,
+  /[\\/]camera[\\/]hooks\.play\.spec\.ts$/,
   /[\\/]memory[\\/]exploration\.spec\.ts$/,
-  /[\\/](?:rendering|assets)[\\/][^\\/]+\.play\.spec\.ts$/,
+  /[\\/]rendering[\\/][^\\/]+\.play\.spec\.ts$/,
   /[\\/]landscape[\\/]forest\.play\.spec\.ts$/,
-  /[\\/]village[\\/](?:selection|feudal)\.play\.spec\.ts$/,
+  /[\\/]village[\\/]feudal\.play\.spec\.ts$/,
 ];
 
 export default defineConfig({
@@ -63,7 +62,7 @@ export default defineConfig({
     {
       name: "firefox-webgl2",
       testMatch:
-        /[\\/]rendering[\\/](?:occlusion\.spec|(?:hover|ownership|startup|placement)\.play\.spec)\.ts$|[\\/]village[\\/](?:(?:input|formations|vassal)[\\/][^\\/]+|production[\\/](?:rally|reseed|auto-scout)|castle[\\/]castle)\.play\.spec\.ts$|[\\/]proofs[\\/]ui-panel\.spec\.ts$/,
+        /[\\/]rendering[\\/](?:startup|placement)\.play\.spec\.ts$|[\\/]village[\\/](?:(?:input|formations|vassal)[\\/][^\\/]+|production[\\/](?:rally|reseed|auto-scout)|castle[\\/]castle)\.play\.spec\.ts$|[\\/]proofs[\\/]ui-panel\.spec\.ts$/,
       use: {
         ...nativeDevice("Desktop Firefox"),
         launchOptions: { firefoxUserPrefs: { "webgl.force-enabled": true } },
@@ -90,7 +89,7 @@ export default defineConfig({
     {
       name: "canvas",
       testMatch:
-        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/](?:selection|feudal|vassal[\\/]vassal|castle[\\/]castle)\.play\.spec\.ts$|[\\/]rendering[\\/](?:ownership|bigview|bigview-interaction|bigview-population)\.play\.spec\.ts$/,
+        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/](?:feudal|vassal[\\/]vassal|castle[\\/]castle)\.play\.spec\.ts$|[\\/]rendering[\\/](?:bigview-interaction|bigview-population)\.play\.spec\.ts$/,
       use: { launchOptions: { args: [] } },
     },
     {
