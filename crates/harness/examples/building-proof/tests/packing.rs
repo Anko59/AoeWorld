@@ -44,7 +44,7 @@ fn fixture() -> Manifest {
     };
     value["buildings"] = serde_json::json!([{
         "unit_id":70,"footprint":[2.0,2.0],"foundation_terrain":2,
-        "foundation_slp":null,"foundation_size":[0,0],"parts":[part(2223,3,1)],
+        "foundation_slp":null,"foundation_size":[0,0],"damage":[],"parts":[part(2223,3,1)],
         "construction":(236..=239).map(|slp| part(slp,1,3)).collect::<Vec<_>>()
     }]);
     for slp in [2223, 236, 237, 238, 239] {
