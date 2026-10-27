@@ -260,6 +260,7 @@ export function initNavigation() {
     },
     fog,
     actors: view.actors,
+    resources: strategic.resources,
     strategic,
     overview: () => expanded,
     fragment: () => parseCameraFragment(location.hash),

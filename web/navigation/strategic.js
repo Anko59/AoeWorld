@@ -15,6 +15,7 @@ export function initStrategic(fog, actors) {
   initialScene.after(canvas, label);
   const context = canvas.getContext('2d', { alpha: false });
   let terrain = null, terrainRevision = 0, previous = '', redraws = 0, picks = [], pickRadius = 0;
+  let resources = [], resourceRevision = 0;
   function frame(state) {
     // Renderer fallback replaces a context-bound canvas during startup.
     const scene = document.getElementById('scene');
@@ -31,7 +32,7 @@ export function initStrategic(fog, actors) {
       previous = ''; picks = [];
       return false;
     }
-    const key = [...state, terrainRevision, actors.revision(), fog.revision].join(',');
+    const key = [...state, terrainRevision, actors.revision(), fog.revision, resourceRevision].join(',');
     if (key === previous) return false;
     previous = key;
     if (canvas.width !== width) canvas.width = width;
@@ -87,6 +88,18 @@ export function initStrategic(fog, actors) {
         context.fillText(String(pixel.units), pixel.x, pixel.y - 5);
       }
     }
+    // Deposits remain legible after sprite drawing stops and above clusters.
+    // Rust sends only explored, non-forest resources; forests live in terrain.
+    const colours = ['#e85b8a', '#3c8f4a', '#f2cf50', '#c4c8d0', '#75c8f0', '#75c8f0'];
+    const radius = level === 2 ? 3 : 2;
+    for (const resource of resources) {
+      const [x, y] = project(resource.world);
+      context.fillStyle = '#101910';
+      context.fillRect(x - radius - 1, y - radius - 1, radius * 2 + 2, radius * 2 + 2);
+      context.fillStyle = colours[resource.kind] ?? '#e85b8a';
+      context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+    }
+    canvas.dataset.resources = String(resources.length);
     canvas.dataset.clusters = String(picks.length);
     canvas.dataset.terrainDraws = terrain ? '1' : '0';
     canvas.dataset.territory = 'settlements';
@@ -112,5 +125,18 @@ export function initStrategic(fog, actors) {
     if (canvas.width !== 1) canvas.width = canvas.height = 1;
     canvas.dataset.workingBytes = '4';
   }
-  return { frame, pick, present, terrain(value) { terrain = value; terrainRevision++; } };
+  return { frame, pick, present, terrain(value) { terrain = value; terrainRevision++; },
+    resources(values) {
+      if (typeof values?.length !== 'number') return;
+      const next = [];
+      for (let at = 0; at + 2 < values.length; at += 3) {
+        const kind = values[at], x = values[at + 1], y = values[at + 2];
+        if (![kind, x, y].every(Number.isFinite)) continue;
+        next.push({ kind, world: [x, y] });
+      }
+      if (next.length === resources.length && next.every((r, i) =>
+        r.kind === resources[i].kind && r.world[0] === resources[i].world[0]
+        && r.world[1] === resources[i].world[1])) return;
+      resources = next; resourceRevision++; previous = '';
+    } };
 }
