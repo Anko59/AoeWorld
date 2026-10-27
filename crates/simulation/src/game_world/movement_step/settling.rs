@@ -10,7 +10,17 @@ pub(crate) struct Obstruction {
     pub(crate) side: i8,
     pub(crate) last_tick: u64,
     pub(crate) search_tick: u64,
+    /// Until this tick the mover may pass through friendly traffic.
+    pub(crate) pass_until: u64,
 }
+
+/// Obstructed ticks without progress before a mover squeezes through its own
+/// player's traffic, as AoE2 units shuffle through a friendly crowd instead
+/// of standing in a permanent gridlock. Enemies and settled workers still block.
+pub(crate) const PASS_AFTER_TICKS: u16 = 64;
+/// How long one squeeze lasts once granted, so the mover clears the crowd
+/// rather than colliding again after its first half tile of progress.
+const PASS_TICKS: u64 = 40;
 
 fn distance(a: WorldPosition, b: WorldPosition) -> u32 {
     crate::game_path::segment_length(
@@ -44,6 +54,7 @@ impl GameWorld {
             side: 1,
             last_tick: u64::MAX,
             search_tick: u64::MAX,
+            pass_until: 0,
         });
         if obstruction.last_tick != self.tick.0 {
             if obstruction.blocked > 0 && obstruction.blocked.is_multiple_of(48) {
@@ -51,6 +62,9 @@ impl GameWorld {
             }
             obstruction.blocked = obstruction.blocked.saturating_add(1);
             obstruction.last_tick = self.tick.0;
+            if obstruction.blocked >= PASS_AFTER_TICKS {
+                obstruction.pass_until = self.tick.0 + PASS_TICKS;
+            }
         }
     }
 

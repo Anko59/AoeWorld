@@ -80,7 +80,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
         })
     }
     // Radius collision, persistent work reservations and bounded position
-    // searches deliberately change this current checkpoint. Preserve the
+    // searches deliberately change this current checkpoint. Friendly
+    // squeeze-through and worksite-only gather redirects change it again. Preserve the
     // exact workload, activity floors and complete 1/4-worker comparison.
     let single = run(1);
     assert_eq!(single, run(4));

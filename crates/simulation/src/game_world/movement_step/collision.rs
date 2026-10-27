@@ -1,6 +1,6 @@
 //! Fine collision cells complement the wildlife index. Normal cells are exact;
 //! overfull spawn cells admit outward escape, but never new arrivals.
-use crate::{GameWorld, Terrain, UnitKind};
+use crate::{GameWorld, Terrain, UnitKind, UnitTask};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
@@ -147,6 +147,23 @@ impl CollisionIndex {
     }
 }
 
+impl crate::GameUnit {
+    /// A body working in place: friendly traffic never squeezes through it.
+    fn settled_worker(&self) -> bool {
+        !self.moving
+            && matches!(
+                self.task,
+                UnitTask::Gathering
+                    | UnitTask::Building
+                    | UnitTask::Farming
+                    | UnitTask::Fishing
+                    | UnitTask::Hunting
+                    | UnitTask::Shepherding
+                    | UnitTask::Attacking
+            )
+    }
+}
+
 impl UnitKind {
     /// Equal collision axes in the complete classic DAT table, rounded up to
     /// fixed subunits. See docs/movement/aoe2-model.md for source and confidence.
@@ -213,6 +230,9 @@ impl GameWorld {
             ((i64::from(from.x) + i64::from(to.x)) / 2) as i32,
             ((i64::from(from.y) + i64::from(to.y)) / 2) as i32,
         );
+        let passing = self.units[index]
+            .obstruction
+            .is_some_and(|o| o.pass_until > self.tick.0);
         !self.collisions.blocked(
             midpoint,
             unit.kind.collision_radius() + 768,
@@ -223,7 +243,10 @@ impl GameWorld {
                     return false;
                 }
                 let other = self.units[self.collisions.unit_index(id)].state;
-                if other.hp == 0 || (stationary && other.moving) {
+                if other.hp == 0
+                    || (stationary && other.moving)
+                    || (passing && other.player == unit.player && !other.settled_worker())
+                {
                     return false;
                 }
                 let r = i64::from(unit.kind.collision_radius() + other.kind.collision_radius());
@@ -231,13 +254,17 @@ impl GameWorld {
                 let y = i64::from(other.position.y) - i64::from(from.y);
                 let start = x * x + y * y;
                 let dot = x * dx + y * dy;
-                // Existing overlaps may separate; priority never permits tunnelling
+                // Existing overlaps may separate in any direction that does not
+                // bring the centres closer: a nearly concentric pair has no
+                // single "away" direction. Priority never permits tunnelling
                 // through a body that is already separated from the mover.
-                if start < r * r && (repairing_spawn || dot <= 0) {
-                    return false;
+                if start < r * r {
+                    let x = i64::from(other.position.x) - i64::from(to.x);
+                    let y = i64::from(other.position.y) - i64::from(to.y);
+                    return !repairing_spawn && x * x + y * y < start;
                 }
                 if dot <= 0 {
-                    start < r * r
+                    false
                 } else if dot >= length {
                     let x = i64::from(other.position.x) - i64::from(to.x);
                     let y = i64::from(other.position.y) - i64::from(to.y);

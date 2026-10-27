@@ -5,10 +5,18 @@ use std::collections::BTreeSet;
 
 impl GameWorld {
     pub(crate) fn resource_has_work_spot(&self, id: EntityId, target: TileCoord) -> bool {
+        self.resource_work_spot(id, target).is_some()
+    }
+
+    /// The closest free work position, the first one an approach tries.
+    pub(crate) fn resource_work_spot(
+        &self,
+        id: EntityId,
+        target: TileCoord,
+    ) -> Option<aoe_core::WorldPosition> {
         self.resource_work_positions(id, target, None)
             .into_iter()
             .next()
-            .is_some()
     }
 
     fn resource_work_positions(

@@ -2,6 +2,10 @@ use super::VILLAGE_RULES;
 use crate::{GameWorld, UnitKind};
 use aoe_core::{FIXED_SUBUNITS_PER_TILE, TileCoord};
 
+/// Chebyshev tiles from a resource within which a blocked approach may
+/// choose another free work spot.
+const WORKSITE_TILES: u32 = 3;
+
 impl GameWorld {
     /// Work approaches share continuous escape steps and local corner exits.
     pub(crate) fn has_work_task(&self, id: aoe_core::EntityId) -> bool {
@@ -14,8 +18,30 @@ impl GameWorld {
         let unit = self.units[index].state;
         let task = self.economy.gatherers.get(&unit.id)?;
         if task.phase == super::GatherPhase::Approaching {
+            // Away from the worksite an obstruction is traffic: local steering
+            // and yielding handle it. Re-issuing the approach there restarted
+            // a static route search every few ticks for thousands of workers
+            // in a crowded village, and reset the obstruction memory that
+            // drives lateral escapes.
             let target = task.tile;
+            let here = unit.position.tile_floor();
+            if here.x.abs_diff(target.x) > WORKSITE_TILES
+                || here.y.abs_diff(target.y) > WORKSITE_TILES
+            {
+                return None;
+            }
+            let current = self.units[index].order.map(|o| o.destination);
+            let best = self.resource_work_spot(unit.id, target);
+            if best.is_some() && best == current {
+                return Some(true);
+            }
+            let obstruction = self.units[index].obstruction;
+            let queue = self.move_queues.remove(&unit.id);
             let success = self.approach_resource(unit.id, target).is_ok();
+            self.units[index].obstruction = obstruction;
+            if let Some(queue) = queue {
+                self.move_queues.insert(unit.id, queue);
+            }
             if success {
                 let at = self
                     .movement_order(unit.id)

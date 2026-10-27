@@ -113,7 +113,8 @@ fn measure(installed: bool) {
     // Pin the current authoritative result in both physical cache modes. Re-pinned
     // for the bundled economy reservations, Vassal and walking changes, which alter
     // this workload's gatherer and route outcomes; both cache modes still agree.
-    // Swept avoidance adds current obstruction/arrival state. Regenerated with
+    // Swept avoidance adds current obstruction/arrival state; friendly
+    // squeeze-through and worksite-only gather redirects change it again. Regenerated with
     // `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server
     // AOE_NATIVE_TEST_FILTER='test(large_navigation_)'`; both cache modes retain
     // their identical workload, canonical state and no-construction assertions.

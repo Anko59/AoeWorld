@@ -2,6 +2,10 @@
 use super::*;
 
 fn boxed_mover(destination: WorldPosition) -> (GameWorld, EntityId) {
+    boxed_mover_by(destination, PlayerId(0))
+}
+
+fn boxed_mover_by(destination: WorldPosition, ring: PlayerId) -> (GameWorld, EntityId) {
     let mut w = world();
     w.set_fog_disabled(true);
     let mover = w.spawn_villager(PlayerId(0), at(40, 30)).unwrap();
@@ -18,7 +22,7 @@ fn boxed_mover(destination: WorldPosition) -> (GameWorld, EntityId) {
         (1, 1),
     ] {
         w.spawn_villager(
-            PlayerId(0),
+            ring,
             WorldPosition::new(at(40, 30).x + dx * 640, at(40, 30).y + dy * 640),
         )
         .unwrap();
@@ -102,16 +106,33 @@ fn a_full_worksite_waits_and_resumes_when_a_physical_work_spot_opens() {
 
 #[test]
 fn boxed_far_order_retains_its_goal_without_a_false_static_failure() {
-    let (mut w, mover) = boxed_mover(at(70, 30));
+    let (mut w, mover) = boxed_mover_by(at(70, 30), PlayerId(1));
     for _ in 0..160 {
         movement_tick(&mut w);
     }
     assert!(w.movement_order(mover).is_some());
     assert_eq!(w.movement_failure(mover), None);
-    // The smaller body has room to yield inside the sealed ring, but cannot
-    // pass through it or misreport the original goal as unreachable.
+    // The smaller body has room to yield inside a sealed foreign ring, but
+    // cannot pass through it or misreport the original goal as unreachable.
     assert!(distance(w.unit(mover).unwrap().position, at(40, 30)) <= 640_i64.pow(2));
     assert_eq!(w.movement_order(mover).unwrap().destination, at(70, 30));
+}
+
+#[test]
+fn a_sustained_friendly_gridlock_lets_the_mover_squeeze_through() {
+    let (mut w, mover) = boxed_mover(at(70, 30));
+    for _ in 0..160 {
+        movement_tick(&mut w);
+    }
+    assert_eq!(w.movement_failure(mover), None);
+    // Idle villagers of the same player do not seal a permanent box: after
+    // sustained obstruction the mover shuffles through them toward its goal.
+    let position = w.unit(mover).unwrap().position;
+    assert!(position.x - at(40, 30).x >= 1024, "{position:?}");
+    assert_eq!(
+        w.movement_order(mover).map(|o| o.destination),
+        Some(at(70, 30))
+    );
 }
 
 #[test]

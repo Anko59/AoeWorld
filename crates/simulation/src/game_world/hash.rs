@@ -152,6 +152,7 @@ impl GameWorld {
                 hash.update(&obstruction.side.to_le_bytes());
                 hash.update(&obstruction.last_tick.to_le_bytes());
                 hash.update(&obstruction.search_tick.to_le_bytes());
+                hash.update(&obstruction.pass_until.to_le_bytes());
             } else {
                 hash.update(&[0]);
             }
