@@ -23,7 +23,9 @@ async function select(page: Page, kind: string) {
         a.kind === kind &&
         (kind !== "Villager" ||
           previous.some(
-            (p) => p.id === a.id && Math.hypot(p.x - a.x, p.y - a.y) < 0.5,
+            // Slow software rendering lets a working villager drift a few
+            // pixels between reads; that is still clickable.
+            (p) => p.id === a.id && Math.hypot(p.x - a.x, p.y - a.y) < 4,
           )),
     );
     const actor = candidates[attempt++ % candidates.length];
@@ -32,7 +34,7 @@ async function select(page: Page, kind: string) {
     await expect(page.locator("#selection-name")).toHaveText(kind, {
       timeout: 500,
     });
-  }).toPass({ timeout: 10_000, intervals: [500] });
+  }).toPass({ timeout: 20_000, intervals: [500] });
 }
 
 async function centerCastle(page: Page) {
