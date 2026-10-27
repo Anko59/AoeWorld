@@ -53,16 +53,18 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// counts; water appends bridge spans and Vassal appends home/control IDs.
 /// Regenerated from the focused current encoder stream. The scenario, digest
 /// algorithm and independent replay/visibility assertions remain unchanged.
+/// Combat acquisition, stances and retaliation change the observed encounters;
+/// regenerated with the same scenario.
 /// Rebased onto #573: avoidance, arrival slots and contact drop-off combine
 /// with gatherer reservations; sessions 1, 4 and 5 change (409/407/407 to
 /// 138/421/407 messages). Regenerated with the focused command above.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 17021387622642390119),
-    (138, 10316735756599434788),
-    (51, 10566546695267247314),
-    (168, 3438870950798754275),
-    (421, 6943729807736241409),
-    (407, 13894714148338880866),
+    (407, 12752679128811070264),
+    (145, 17177950914196634250),
+    (60, 6795566676495521442),
+    (373, 14514470042877463862),
+    (425, 11566207422694317532),
+    (407, 16830935279046132027),
 ];
 
 #[tokio::test(flavor = "multi_thread")]
