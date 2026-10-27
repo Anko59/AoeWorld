@@ -1,9 +1,5 @@
 //! Optimized, reproducibly compressed WASM bundle size governance.
-use crate::perf::{Comparison, Verdict, compare_at, regression_floor};
-
-/// Bundle size is a trend, not a budget: growth is reported on every run and only
-/// a jump of more than this percent over `baselines/perf/wasm.json` blocks.
-pub const JUMP_PERCENT: u8 = 25;
+use crate::perf::{Comparison, Verdict, compare, regression_floor};
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fs, path::Path};
 
@@ -60,11 +56,10 @@ fn compare_observed(baseline: Baseline, size: u64) -> Result<Comparison, Box<dyn
     {
         return Err("WASM size baseline identity is incompatible".into());
     }
-    Ok(compare_at(
+    Ok(compare(
         "optimized_gzip_wasm_bytes",
         Some(size),
         Some(baseline.optimized_gzip_bytes),
-        JUMP_PERCENT,
     ))
 }
 
@@ -85,7 +80,7 @@ pub(crate) fn comparison_at(
 
 /// `make perf-wasm-size`: the optimized gzip bundle against the baseline, with
 /// the comparison `perf-ci` makes in CI (same threshold): it reports the trend and
-/// fails only on a jump over [`JUMP_PERCENT`].
+/// fails only on a jump over [`crate::perf::THRESHOLD_PERCENT`].
 pub fn check() -> Result<(), Box<dyn Error>> {
     check_at(Path::new("."))
 }
@@ -107,7 +102,7 @@ pub(crate) fn verdict(result: &Comparison) -> Result<(), Box<dyn Error>> {
         return Err("optimized WASM gzip size or baseline is missing".into());
     };
     if result.verdict != Verdict::Pass {
-        let cap = regression_floor(baseline, result.threshold_percent) - 1;
+        let cap = regression_floor(baseline) - 1;
         return Err(format!(
             "optimized WASM gzip is {observed} bytes: {:?} against baseline {baseline} (cap {cap}, {} bytes over)",
             result.verdict,

@@ -99,7 +99,7 @@ idle and marching armies, and wildlife. It runs in `perf-smoke` and `perf-ci`;
 `make perf-late-game` isolates its three repetitions. Reports include every
 simulation and fan-out phase's raw samples, p50/p95 and median run percentiles.
 Its instruction baseline was re-taken on 2026-10-26 at 143,767,781 (from the
-pre-optimisation 240,341,066) with `make perf-baseline-propose`, so the 5% gate
+pre-optimisation 240,341,066) with `make perf-baseline-propose`, so the threshold
 guards the active worksets, route-cache index and walking proposals; viewport
 queries were re-taken at 183,030 (from 257,593) for the ordered collection; the late
 game's allocation count was re-taken at 5,671 (from 4,733) for the Vassal economy
@@ -218,8 +218,10 @@ the live camera's floats in Rust would retain its full decimal formatter solely
 for a browser navigation. Camera, seat and unknown fragment fields are preserved.
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
-`INCONCLUSIVE` verdicts and a 5% threshold. A missing baseline or sample cannot
-pass. The pinned Gungraun/Callgrind and DHAT analysis image measures five
+`INCONCLUSIVE` verdicts. Sizes and instruction and allocation counts are
+trends, not budgets: every run reports them against the baseline and only a
+jump of more than 25% (`perf::THRESHOLD_PERCENT`) is a `REGRESSION` (5% until
+2026-10-27). A missing baseline or sample cannot pass. The pinned Gungraun/Callgrind and DHAT analysis image measures five
 simulation, protocol, and palette-decoding kernels. Binaryen optimizes the WASM bundle before gzip
 size comparison. Their reviewed initial baselines live in `baselines/perf/`;
 `make perf-baseline-propose` writes proposed replacements to ignored reports
@@ -303,7 +305,7 @@ recorded in [ground variety evidence](geodata/landscape/ground-variety.md).
 `aoe-harness perf-wasm-size-check`, the same comparison against
 `baselines/perf/wasm.json` that `perf-ci` makes. Size is a trend, not a budget:
 every run prints the growth over the baseline, and the check fails only on a jump
-of more than 25% (`perf_size::JUMP_PERCENT`), so ordinary growth never costs a
+of more than 25% (`perf::THRESHOLD_PERCENT`), so ordinary growth never costs a
 ship cycle or a baseline re-take. It is a
 preflight gate for any change that selects the performance suite (a client,
 rendering, web or gameplay change, not a docs one), so `make ship` finds a size

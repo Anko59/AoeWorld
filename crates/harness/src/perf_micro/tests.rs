@@ -75,7 +75,7 @@ fn baseline_identity_case_set_and_regressions_are_checked() {
     assert!(compare_observed(baseline, observed.clone()).is_err());
 
     let baseline = proposal(&observed).expect("proposal");
-    observed.get_mut("a").expect("case").instructions = 106;
+    observed.get_mut("a").expect("case").instructions = 126;
     let results = compare_observed(baseline, observed).expect("comparison");
     assert_eq!(results.len(), 15);
     assert_eq!(results[0].verdict, Verdict::Regression);

@@ -471,7 +471,7 @@ fn a_report_without_the_core_file_is_refused_and_the_rule_computes_its_cap() {
     // The cap is the gate's own rule: the largest value it still passes
     // (150 * 1.25 = 187.5, so 187 passes and 188 regresses).
     assert_eq!(rule.cap, 187);
-    let verdict = |size| crate::perf::compare_at("gzip", Some(size), Some(150), 25).verdict;
+    let verdict = |size| crate::perf::compare("gzip", Some(size), Some(150)).verdict;
     assert_eq!(verdict(rule.cap), crate::perf::Verdict::Pass);
     assert_eq!(verdict(rule.cap + 1), crate::perf::Verdict::Regression);
     assert_eq!(reports::wasm_rule_at(&dir.path().join("gone.json")), None);

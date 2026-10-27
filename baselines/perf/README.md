@@ -46,4 +46,6 @@ pass.
 `reports/perf/micro-proposal.json`; it does not change this baseline. Review
 old and new values, scenario/tool versions, and a written rationale before a
 future baseline change. CODEOWNERS protects this directory on a configured
-remote. The 5% threshold remains in the tested Rust comparator.
+remote. The tested Rust comparator blocks only a jump of more than 25%
+(`perf::THRESHOLD_PERCENT`; it was 5% until 2026-10-27), so growth below that
+is reported as a trend and needs no baseline change.
