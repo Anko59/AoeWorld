@@ -29,12 +29,14 @@ fn workstation(kind: ResourceKind, farm: bool) -> (GameWorld, EntityId) {
         world.issue_farm(PlayerId(0), worker, id).unwrap();
         let index = world.lookup[&worker];
         world.stop_movement(index);
-        world.units[index].state.position =
-            position(TileCoord::new(rect.min.x + 1, rect.min.y + 1)).unwrap();
+        let from = world.units[index].state.position;
+        let to = position(TileCoord::new(rect.min.x + 1, rect.min.y + 1)).unwrap();
+        world.units[index].state.position = to;
+        let state = world.units[index].state;
+        world.track_unit_step(worker, from.tile_floor(), &state);
     } else {
         world.issue_gather(PlayerId(0), worker, node.id).unwrap();
-        let index = world.lookup[&worker];
-        world.stop_movement(index);
+        place_at_work(&mut world, worker);
     }
     (world, worker)
 }
@@ -222,8 +224,7 @@ fn carcass_workstation(kind: crate::AnimalKind) -> (GameWorld, EntityId) {
         world.advance();
     }
     world.begin_carcass_gather(worker, animal).unwrap();
-    let index = world.lookup[&worker];
-    world.stop_movement(index);
+    place_at_work(&mut world, worker);
     (world, worker)
 }
 
@@ -262,4 +263,15 @@ fn dat_hunter_capacity_is_thirty_five_and_carry_techs_multiply_it() {
         }
         assert_eq!(maximum, expected);
     }
+}
+
+// Work-rate fixtures exclude travel without bypassing physical contact.
+fn place_at_work(world: &mut GameWorld, worker: EntityId) {
+    let to = world.economy.gatherers[&worker].work_position.unwrap();
+    let index = world.lookup[&worker];
+    let from = world.units[index].state.position;
+    world.units[index].state.position = to;
+    let state = world.units[index].state;
+    world.track_unit_step(worker, from.tile_floor(), &state);
+    world.stop_movement(index);
 }

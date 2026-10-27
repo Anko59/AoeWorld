@@ -153,7 +153,7 @@ impl GameWorld {
     ) -> Result<(), EconomyError> {
         let farm = task.farm;
         if task.farm.is_none() && task.animal.is_none() && task.fish.is_none() {
-            if (!self.node_has_work_slot(task.node, task.kind, id)
+            if (!self.node_has_work_slot(task.node, id)
                 || self.approach_resource(id, task.tile).is_err())
                 && !self.replacement_resource(id, &mut task)
             {
@@ -162,6 +162,10 @@ impl GameWorld {
         } else {
             self.approach_resource(id, task.tile)?;
         }
+        task.work_position = self
+            .movement_order(id)
+            .map(|o| o.destination)
+            .or_else(|| self.unit(id).map(|u| u.position));
         self.player_override(id);
         self.cancel_garrison_order(id);
         self.cancel_hunt(id);
@@ -190,6 +194,7 @@ impl GameWorld {
         } else {
             self.economy.gatherers.remove(&id);
         }
+        self.index_destination(id);
         if let Some(old) = previous_farm
             && Some(old) != farm
         {
@@ -226,6 +231,8 @@ impl GameWorld {
                 continue;
             };
             let before = self.units[index].state;
+            let work_position = task.work_position;
+            let phase = task.phase;
             let keep = self.gather_step(id, &mut task, sink);
             if keep {
                 self.economy.gatherers.insert(id, task);
@@ -238,6 +245,15 @@ impl GameWorld {
                 } else {
                     UnitTask::Idle
                 };
+            }
+            if !keep
+                || self
+                    .economy
+                    .gatherers
+                    .get(&id)
+                    .is_some_and(|t| t.work_position != work_position || t.phase != phase)
+            {
+                self.index_destination(id);
             }
             if let Some(after) = self.unit(id)
                 && after != before
@@ -302,13 +318,17 @@ impl GameWorld {
             return self.resume_resource(id, task);
         }
         let tile = self.units[index].state.position.tile_floor();
-        if tile.x.abs_diff(task.tile.x) > 1 || tile.y.abs_diff(task.tile.y) > 1 {
+        if (task.farm.is_none() && !self.at_work_position(id, task.tile))
+            || (task.farm.is_some()
+                && (tile.x.abs_diff(task.tile.x) > 1 || tile.y.abs_diff(task.tile.y) > 1))
+        {
+            // A finished/cancelled approach is never proof of work contact.
             return self.resume_resource(id, task);
         }
-        if task.phase == GatherPhase::Approaching && task.farm.is_none() {
+        if task.phase == GatherPhase::Approaching {
             task.approach_failures = 0;
             task.work_tile = Some(tile);
-            self.step_up_to_work(id, index, task.tile);
+            task.work_position = Some(self.units[index].state.position);
         }
         task.phase = GatherPhase::Gathering;
         if let Some(target) = task
@@ -425,36 +445,4 @@ impl GameWorld {
         }
         true
     }
-
-    /// Routes end at tile centres, a full tile from the node. As in AoE2 the
-    /// worker then steps up against the bush, tree, mine, fish or carcass,
-    /// inside its own tile. Facing is left to the facing rules.
-    fn step_up_to_work(&mut self, id: EntityId, index: usize, target: TileCoord) {
-        let unit = self.units[index].state;
-        let stand = unit.position.tile_floor();
-        let Ok(centre) = position(stand) else {
-            return;
-        };
-        let (dx, dy) = (target.x - stand.x, target.y - stand.y);
-        if unit.position != centre {
-            return;
-        }
-        let position = aoe_core::WorldPosition::new(
-            centre.x + dx.signum() * WORK_STEP,
-            centre.y + dy.signum() * WORK_STEP,
-        );
-        if !self.local_unit_step_clear(index, unit.position, position) {
-            return;
-        }
-        let state = &mut self.units[index].state;
-        state.previous_position = unit.position;
-        state.position = position;
-        let moved = *state;
-        self.track_unit_step(id, stand, &moved);
-    }
 }
-
-/// How far a worker steps from its tile centre toward the node: it then
-/// stands 0.7 tiles from a cardinal neighbour's centre, touching a one-tile
-/// bush or trunk, and stays inside its own (passable) tile.
-pub(crate) const WORK_STEP: i32 = aoe_core::FIXED_SUBUNITS_PER_TILE * 3 / 10;

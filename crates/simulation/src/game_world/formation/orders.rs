@@ -152,7 +152,10 @@ impl GameWorld {
             travelled: 0,
             speed_carry: 0,
         });
-        self.units[index].route = route;
+        self.units[index].route = route
+            .into_iter()
+            .filter_map(|t| WorldPosition::from_tile_center(t).ok())
+            .collect();
         self.units[index].state.planning = planning;
         self.units[index].planning_since = self.tick.0;
         self.units[index].fast_route_tried = fast_tried;

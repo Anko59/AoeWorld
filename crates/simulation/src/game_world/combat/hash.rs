@@ -37,6 +37,7 @@ impl Combat {
             hash.update(&id.0.to_le_bytes());
             hash.update(&target.0.to_le_bytes());
         }
+        hash.update(&self.position_searches.to_le_bytes());
         hash.update(&(self.healers.len() as u64).to_le_bytes());
         for id in &self.healers {
             hash.update(&id.0.to_le_bytes());
@@ -81,6 +82,22 @@ impl Combat {
                 hash.update(&tile.y.to_le_bytes());
             } else {
                 hash.update(&[0]);
+            }
+            match attacker.far {
+                Some(far) => {
+                    hash.update(&[1]);
+                    for value in [
+                        far.centre.x,
+                        far.centre.y,
+                        far.destination.x,
+                        far.destination.y,
+                    ] {
+                        hash.update(&value.to_le_bytes());
+                    }
+                }
+                None => {
+                    hash.update(&[0]);
+                }
             }
         }
         hash.update(&(self.dying.len() as u64).to_le_bytes());

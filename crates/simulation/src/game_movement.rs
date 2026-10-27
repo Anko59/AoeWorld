@@ -202,7 +202,6 @@ impl GameWorld {
                 let next = self.units[index]
                     .route
                     .pop_front()
-                    .and_then(|tile| WorldPosition::from_tile_center(tile).ok())
                     .map(SegmentAdvance::Next)
                     .or_else(|| {
                         (order.waypoint != order.destination
@@ -351,7 +350,10 @@ impl GameWorld {
                 let next = route
                     .pop_front()
                     .and_then(|tile| WorldPosition::from_tile_center(tile).ok());
-                self.units[index].route = route;
+                self.units[index].route = route
+                    .into_iter()
+                    .filter_map(|t| WorldPosition::from_tile_center(t).ok())
+                    .collect();
                 // Keep the certified endpoint's terminal verdict until the
                 // unit consumes this last segment and asks for continuation.
                 if !planner.is_terminal()

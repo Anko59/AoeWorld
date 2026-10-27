@@ -1,20 +1,37 @@
-//! Bounded work-spot admission; replacement can require a certified local tile.
+//! Work positions reserve circles around the resource footprint, not whole tiles.
 use super::*;
+use crate::game_world::movement_step::slots::{perimeter_positions, squared};
 use std::collections::BTreeSet;
 
 impl GameWorld {
     pub(crate) fn resource_has_work_spot(&self, id: EntityId, target: TileCoord) -> bool {
-        let Some(unit) = self.unit(id) else {
-            return false;
-        };
-        perimeter(aoe_core::TileRect::from_xywh(target.x, target.y, 1, 1))
+        self.resource_work_positions(id, target, None)
             .into_iter()
-            .any(|tile| {
-                self.unit_tile_passable(unit.kind, tile, &|| false)
-                    .unwrap_or(false)
-                    && !self.economy.blocked_tiles.contains(&tile)
-                    && !self.work_spot_busy(tile, id)
-            })
+            .next()
+            .is_some()
+    }
+
+    fn resource_work_positions(
+        &self,
+        id: EntityId,
+        target: TileCoord,
+        reached: Option<&BTreeSet<TileCoord>>,
+    ) -> Vec<aoe_core::WorldPosition> {
+        let Some(unit) = self.unit(id) else {
+            return Vec::new();
+        };
+        let rect = aoe_core::TileRect::from_xywh(target.x, target.y, 1, 1);
+        let mut candidates = perimeter_positions(rect, unit.kind);
+        // A worker already in contact need not walk to a canonical candidate.
+        if self.at_work_position(id, target) {
+            candidates.push(unit.position);
+        }
+        candidates.retain(|&at| {
+            reached.is_none_or(|tiles| tiles.contains(&at.tile_floor()))
+                && self.interaction_point_free(id, at)
+        });
+        candidates.sort_unstable_by_key(|&at| (squared(unit.position, at), at.y, at.x));
+        candidates
     }
 
     pub(crate) fn approach_resource(
@@ -31,26 +48,10 @@ impl GameWorld {
         target: TileCoord,
         reached: Option<&BTreeSet<TileCoord>>,
     ) -> Result<(), EconomyError> {
-        let unit = self.unit(id).ok_or(EconomyError::UnknownEntity)?;
-        let mut candidates = perimeter(aoe_core::TileRect::from_xywh(target.x, target.y, 1, 1));
-        candidates.retain(|tile| {
-            reached.is_none_or(|tiles| tiles.contains(tile))
-                && self
-                    .unit_tile_passable(unit.kind, *tile, &|| false)
-                    .unwrap_or(false)
-                && !self.economy.blocked_tiles.contains(tile)
-                && !self.work_spot_busy(*tile, id)
-        });
-        candidates.sort_by_key(|tile| {
-            (
-                distance_squared(unit.position.tile_floor(), *tile),
-                tile.y,
-                tile.x,
-            )
-        });
+        let candidates = self.resource_work_positions(id, target, reached);
         let mut failure = GameWorldError::Unreachable;
-        for tile in candidates {
-            match self.issue_task_move(id, position(tile)?) {
+        for at in candidates {
+            match self.issue_task_move(id, at) {
                 Ok(_) => return Ok(()),
                 Err(error) => {
                     failure = error;

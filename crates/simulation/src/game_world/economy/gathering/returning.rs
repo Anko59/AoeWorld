@@ -164,7 +164,7 @@ impl GameWorld {
         if (task.farm.is_none()
             && task.animal.is_none()
             && task.fish.is_none()
-            && !self.node_has_work_slot(task.node, task.kind, id))
+            && !self.node_has_work_slot(task.node, id))
             || self.approach_resource(id, task.tile).is_err()
         {
             return task.farm.is_none()
@@ -172,6 +172,10 @@ impl GameWorld {
                 && task.fish.is_none()
                 && self.replacement_resource(id, task);
         }
+        task.work_position = self
+            .movement_order(id)
+            .map(|o| o.destination)
+            .or_else(|| self.unit(id).map(|u| u.position));
         task.phase = GatherPhase::Approaching;
         task.dropoff = None;
         task.return_target = None;

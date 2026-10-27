@@ -1,10 +1,15 @@
-//! Fixed-size tile refinement around unit obstruction; no global search slot.
+//! Fixed-size quarter-tile refinement around unit obstruction; no global search slot.
 use crate::{GameWorld, MovementOrder};
 use aoe_core::{TileCoord, WorldPosition};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, VecDeque};
 
 const RADIUS: i32 = 8;
+const STEP: i32 = 256;
+
+fn grid(p: WorldPosition) -> TileCoord {
+    TileCoord::new(p.x.div_euclid(STEP), p.y.div_euclid(STEP))
+}
 const SIDE: usize = 17;
 const CELLS: usize = SIDE * SIDE;
 const EXITS: usize = 16;
@@ -39,19 +44,30 @@ fn trace_path(
 impl GameWorld {
     /// Rejoin at most four retained route tiles ahead. Flat ground has the
     /// same implicit tile route. The continuation beyond the join stays intact.
-    pub(super) fn refine_unit_route(&mut self, index: usize, order: &mut MovementOrder) -> bool {
+    pub(in crate::game_world) fn refine_unit_route(
+        &mut self,
+        index: usize,
+        order: &mut MovementOrder,
+    ) -> bool {
         let from = self.units[index].state.position;
         let start = from.tile_floor();
         let stationary_only = self.has_work_task(self.units[index].state.id);
         let mut goal = order.waypoint;
         let mut pops = 0;
-        for (n, &tile) in self.units[index].route.iter().take(4).enumerate() {
-            if tile.x.abs_diff(start.x) > 6 || tile.y.abs_diff(start.y) > 6 {
+        let short_join =
+            goal.tile_floor().x.abs_diff(start.x) > 1 || goal.tile_floor().y.abs_diff(start.y) > 1;
+        if short_join {
+            goal =
+                crate::game_path::next_waypoint(from, order.waypoint.tile_floor(), order.waypoint);
+        }
+        for (n, &point) in self.units[index].route.iter().take(4).enumerate() {
+            let tile = point.tile_floor();
+            if tile.x.abs_diff(start.x) > 1 || tile.y.abs_diff(start.y) > 1 {
                 break;
             }
-            if let Ok(point) = WorldPosition::from_tile_center(tile)
-                && !self.position_occupied(index, point, stationary_only)
-                && (!stationary_only || !self.work_spot_busy(tile, self.units[index].state.id))
+            if !self.position_occupied(index, point, stationary_only)
+                && (!stationary_only
+                    || !self.destination_point_reserved(point, self.units[index].state.id))
             {
                 goal = point;
                 pops = n + 1;
@@ -64,29 +80,42 @@ impl GameWorld {
                 }
                 let next =
                     crate::game_path::next_waypoint(goal, order.target_tile, order.destination);
-                if next.tile_floor().x.abs_diff(start.x) > 6
-                    || next.tile_floor().y.abs_diff(start.y) > 6
+                if next.tile_floor().x.abs_diff(start.x) > 1
+                    || next.tile_floor().y.abs_diff(start.y) > 1
                 {
                     break;
                 }
                 goal = next;
             }
         }
-        let Some(mut path) = self.local_unit_route(index, goal) else {
+        let local = if short_join && pops == 0 {
+            self.local_free_arrival_route(index, goal)
+        } else {
+            self.local_unit_route(index, goal)
+        };
+        let Some(mut path) = local else {
             return false;
         };
         let Some(waypoint) = path.pop_front() else {
             return false;
         };
+        // Repeated transient obstruction cannot grow retained detours forever.
+        let retains_waypoint = short_join && pops == 0 && goal != order.waypoint;
+        if self.units[index].route.len().saturating_sub(pops)
+            + path.len()
+            + usize::from(retains_waypoint)
+            > 512
+        {
+            return false;
+        }
         for _ in 0..pops {
             self.units[index].route.pop_front();
         }
-        let mut tiles = path
-            .into_iter()
-            .map(WorldPosition::tile_floor)
-            .collect::<VecDeque<_>>();
-        tiles.append(&mut self.units[index].route);
-        self.units[index].route = tiles;
+        if retains_waypoint {
+            path.push_back(order.waypoint);
+        }
+        path.append(&mut self.units[index].route);
+        self.units[index].route = path;
         order.origin = from;
         order.waypoint = waypoint;
         order.travelled = 0;
@@ -97,26 +126,38 @@ impl GameWorld {
         true
     }
 
-    /// At most 306 expansions (289 centers, exact start and 16 corner exits), with
+    /// At most 306 expansions (289 quarter-tile points, exact start and 16 corner exits), with
     /// ten normal edges each and sixteen extra source edges for work approaches.
-    /// Separated units retry once per eight ticks;
-    /// workers escaping an overlap can retry each tick, once per unit/tick.
-    /// Each edge uses at most five half-tile probes of 128 neighbours.
+    /// A world shares at most four searches per tick; blocked actors request
+    /// a retry on their deterministic eight-tick cadence. Each edge uses at
+    /// most five half-tile probes through the bounded fine collision cells.
     /// The exact goal can be reached from any adjacent cell,
     /// including a detour back into the start tile, without rounding a slot.
     pub(crate) fn local_unit_route(
-        &self,
+        &mut self,
         index: usize,
         goal: WorldPosition,
     ) -> Option<VecDeque<WorldPosition>> {
+        let reserve =
+            u32::from(self.units[index].formation.is_none() && !self.formations.is_empty()) * 2;
+        if self.local_refinement_left <= reserve {
+            return None;
+        }
+        self.local_refinement_left -= 1;
         self.local_search(index, goal, false)
     }
 
     pub(super) fn local_free_arrival_route(
-        &self,
+        &mut self,
         index: usize,
         goal: WorldPosition,
     ) -> Option<VecDeque<WorldPosition>> {
+        let reserve =
+            u32::from(self.units[index].formation.is_none() && !self.formations.is_empty()) * 2;
+        if self.local_refinement_left <= reserve {
+            return None;
+        }
+        self.local_refinement_left -= 1;
         self.local_search(index, goal, true)
     }
 
@@ -131,7 +172,8 @@ impl GameWorld {
             .as_ref()
             .and_then(|p| p.movement_span("local_refinement"));
         let unit = self.units[index].state;
-        let start = unit.position.tile_floor();
+        let start = grid(unit.position);
+        let start_tile = unit.position.tile_floor();
         let stationary_only = !free_arrival && self.has_work_task(unit.id);
         let slot = |tile: TileCoord| {
             let x = tile.x - start.x + RADIUS;
@@ -145,7 +187,7 @@ impl GameWorld {
                 start.y + (at / SIDE) as i32 - RADIUS,
             )
         };
-        slot(goal.tile_floor())?;
+        slot(grid(goal))?;
         if !self.config.valid_ground_position(goal)
             || (!free_arrival && self.position_occupied(index, goal, stationary_only))
         {
@@ -164,12 +206,13 @@ impl GameWorld {
                 let corner = exit / 4;
                 let side = exit % 4;
                 Some(WorldPosition::new(
-                    (start.x + (corner % 2) as i32) * 1024
+                    (start_tile.x + (corner % 2) as i32) * 1024
                         + if side.is_multiple_of(2) { -1 } else { 1 },
-                    (start.y + (corner / 2) as i32) * 1024 + if side / 2 == 0 { -1 } else { 1 },
+                    (start_tile.y + (corner / 2) as i32) * 1024
+                        + if side / 2 == 0 { -1 } else { 1 },
                 ))
             } else {
-                WorldPosition::from_tile_center(tile(at)).ok()
+                Some(WorldPosition::new(tile(at).x * STEP, tile(at).y * STEP))
             }
         };
         let mut occupied = [None; CELLS];
@@ -178,13 +221,10 @@ impl GameWorld {
                 return true;
             };
             *occupied[at].get_or_insert_with(|| {
-                !WorldPosition::from_tile_center(point).is_ok_and(|p| {
-                    self.config.valid_ground_position(p)
-                        && !self.position_occupied(index, p, stationary_only)
-                        // A work approach must route around the other workers'
-                        // reserved arrivals before they become stationary walls.
-                        && (!stationary_only || !self.work_spot_busy(point, unit.id))
-                })
+                let p = WorldPosition::new(point.x * STEP, point.y * STEP);
+                !self.config.valid_ground_position(p)
+                    || self.position_occupied(index, p, stationary_only)
+                    || stationary_only && self.destination_point_reserved(p, unit.id)
             })
         };
         let clear = |from: WorldPosition, to: WorldPosition| {
@@ -199,26 +239,40 @@ impl GameWorld {
         cost[source] = 0;
         let h = distance(unit.position, goal);
         let mut frontier = BinaryHeap::from([Reverse((h, h, 0, source))]);
-        let mut nearest = None;
+        // A body can occupy a legal fractional pocket with no free lattice
+        // point. Its exact source is a reachable arrival too, after the caller
+        // has established sustained obstruction. Work/attack jobs never use it.
+        let near_source = free_arrival
+            && self.units[index]
+                .obstruction
+                .is_some_and(|o| o.blocked >= 48)
+            && distance(unit.position, goal) <= 1536
+            && !self.position_occupied(index, unit.position, false)
+            && !self.destination_point_reserved(unit.position, unit.id);
+        let mut nearest = near_source.then(|| {
+            let x = i64::from(unit.position.x) - i64::from(goal.x);
+            let y = i64::from(unit.position.y) - i64::from(goal.y);
+            (x * x + y * y, 0, start.y, start.x, source)
+        });
         while let Some(Reverse((_, _, g, at))) = frontier.pop() {
             if closed[at] || g != cost[at] {
                 continue;
             }
             closed[at] = true;
             let from = point(at)?;
-            let current = from.tile_floor();
+            let current = grid(from);
             if free_arrival
                 && at < CELLS
-                && current.x.abs_diff(goal.tile_floor().x) <= 8
-                && current.y.abs_diff(goal.tile_floor().y) <= 8
-                && !self.work_spot_busy(current, unit.id)
+                && current.x.abs_diff(grid(goal).x) <= 32
+                && current.y.abs_diff(grid(goal).y) <= 32
+                && !self.destination_point_reserved(from, unit.id)
             {
                 let x = i64::from(from.x) - i64::from(goal.x);
                 let y = i64::from(from.y) - i64::from(goal.y);
-                // Accept a reachable nearby slot as soon as A* finds it.
-                // Exhausting the whole square to improve an already legal
-                // arrival by a fraction of a tile keeps crowds moving.
-                if x * x + y * y <= (3 * 1024_i64).pow(2) {
+                // Exact-goal distance is the optimal arrival. Otherwise inspect
+                // the whole bounded window for the closest reachable free spot;
+                // the first reachable point can sit outside the arrival crowd.
+                if x == 0 && y == 0 {
                     return trace_path(at, source, &previous, &point, None);
                 }
                 let key = (x * x + y * y, g, current.y, current.x, at);
@@ -227,8 +281,8 @@ impl GameWorld {
                 }
             }
             if !free_arrival
-                && current.x.abs_diff(goal.tile_floor().x) <= 1
-                && current.y.abs_diff(goal.tile_floor().y) <= 1
+                && current.x.abs_diff(grid(goal).x) <= 4
+                && current.y.abs_diff(grid(goal).y) <= 4
                 && clear(from, goal)
             {
                 return trace_path(at, source, &previous, &point, Some(goal));
@@ -280,6 +334,12 @@ impl GameWorld {
                 }
             }
         }
-        nearest.and_then(|(_, _, _, _, at)| trace_path(at, source, &previous, &point, None))
+        nearest.and_then(|(_, _, _, _, at)| {
+            if at == source {
+                Some(VecDeque::from([unit.position]))
+            } else {
+                trace_path(at, source, &previous, &point, None)
+            }
+        })
     }
 }

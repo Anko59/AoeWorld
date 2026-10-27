@@ -1,5 +1,5 @@
 //! Hysteresis counts obstruction until real progress, never sidestep distance.
-use crate::{GameWorld, GameWorldError, UnitTask};
+use crate::{GameWorld, UnitTask};
 use aoe_core::WorldPosition;
 
 #[derive(Clone, Copy, Debug)]
@@ -7,6 +7,7 @@ pub(crate) struct Obstruction {
     pub(crate) goal: WorldPosition,
     pub(crate) remaining: u32,
     pub(crate) blocked: u16,
+    pub(crate) side: i8,
     pub(crate) last_tick: u64,
     pub(crate) search_tick: u64,
 }
@@ -28,18 +29,26 @@ impl GameWorld {
     }
 
     pub(crate) fn record_unit_obstruction(&mut self, index: usize) {
-        let unit = &mut self.units[index];
-        let Some(order) = unit.order else {
+        let Some(order) = self.units[index].order else {
             return;
         };
+        self.record_obstruction_towards(index, order.destination);
+    }
+
+    pub(crate) fn record_obstruction_towards(&mut self, index: usize, goal: WorldPosition) {
+        let unit = &mut self.units[index];
         let obstruction = unit.obstruction.get_or_insert(Obstruction {
-            goal: order.destination,
-            remaining: distance(unit.state.position, order.destination),
+            goal,
+            remaining: distance(unit.state.position, goal),
             blocked: 0,
+            side: 1,
             last_tick: u64::MAX,
             search_tick: u64::MAX,
         });
         if obstruction.last_tick != self.tick.0 {
+            if obstruction.blocked > 0 && obstruction.blocked.is_multiple_of(48) {
+                obstruction.side = -obstruction.side;
+            }
             obstruction.blocked = obstruction.blocked.saturating_add(1);
             obstruction.last_tick = self.tick.0;
         }
@@ -64,7 +73,7 @@ impl GameWorld {
 
     pub(crate) fn observe_unit_progress(&mut self, index: usize) {
         let unit = &mut self.units[index];
-        if unit.order.is_none() {
+        if unit.order.is_none() && unit.formation.is_none() {
             unit.obstruction = None;
         } else if let Some(obstruction) = &mut unit.obstruction {
             let remaining = distance(unit.state.position, obstruction.goal);
@@ -88,15 +97,17 @@ impl GameWorld {
         }
         let unit = self.units[index].state;
         let plain_move = self.can_adjust_arrival(index);
-        let nearby = distance(unit.position, obstruction.goal) <= 3 * 1024
-            && (plain_move || self.at_gather_arrival(index))
+        let nearby = (plain_move
+            && distance(unit.position, obstruction.goal) <= 768
+            && self.position_occupied(index, obstruction.goal, true)
+            || self.at_gather_arrival(index))
             && self.arrival_position_free(index);
-        let full_worksite = !nearby
-            && distance(unit.position, obstruction.goal) <= 3 * 1024
-            && self.local_retry(unit.id)
-            && self.redirect_gather_arrival(index) == Some(false)
-            && obstruction.blocked >= 32;
-        if !nearby && !full_worksite && obstruction.blocked < 128 {
+        if !nearby {
+            if self.local_retry(unit.id) && obstruction.blocked >= 16 {
+                self.redirect_gather_arrival(index);
+            }
+            // A unit obstruction is temporary. Keep the order while yielding
+            // and re-pathing; only static navigation may prove unreachable.
             return false;
         }
         self.clear_planner(index);
@@ -108,7 +119,7 @@ impl GameWorld {
         stored.state.previous_position = unit.position;
         stored.state.moving = false;
         stored.state.planning = false;
-        stored.last_movement_error = (!nearby).then_some(GameWorldError::Unreachable);
+        stored.last_movement_error = None;
         if plain_move && stored.state.task == UnitTask::Moving {
             stored.state.task = if unit.carried.is_some() {
                 UnitTask::Carrying

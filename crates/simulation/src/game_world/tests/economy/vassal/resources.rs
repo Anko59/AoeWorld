@@ -112,7 +112,7 @@ fn managed_lumberjacks_share_the_normal_reservation_path() {
             }
         }
         for (target, count) in targets {
-            assert!(count <= 2, "tree {target} has {count} assigned workers");
+            assert!(count <= 12, "tree {target} has {count} assigned workers");
             assert_eq!(
                 w.economy.gatherers.count_target(WorkTarget::Node(target)),
                 count

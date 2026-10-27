@@ -37,6 +37,7 @@ impl GatherTask {
             carcass_kind: None,
             fish: None,
             work_tile: None,
+            work_position: None,
             phase: GatherPhase::Approaching,
             approach_failures: 0,
             credits: 0,
@@ -55,6 +56,12 @@ pub(crate) struct Gatherers {
 }
 
 impl Gatherers {
+    pub(crate) fn set_work_position(&mut self, id: EntityId, at: aoe_core::WorldPosition) {
+        if let Some(task) = self.tasks.get_mut(&id) {
+            task.work_position = Some(at);
+        }
+    }
+
     pub(crate) fn count_target(&self, target: WorkTarget) -> usize {
         self.targets.get(&target).map_or(0, BTreeSet::len)
     }
@@ -92,11 +99,16 @@ impl Gatherers {
 }
 
 impl GameWorld {
-    pub(crate) fn node_has_work_slot(&self, node: u64, kind: ResourceKind, id: EntityId) -> bool {
-        // One-tile deposits/bushes have eight perimeter tiles; a narrow trunk
-        // permits two workers. Terrain and other workers may reduce this further.
-        let spots = if kind == ResourceKind::Wood { 2 } else { 8 };
-        self.economy.gatherers.occupied(WorkTarget::Node(node), id) < spots
+    pub(crate) fn node_has_work_slot(&self, node: u64, id: EntityId) -> bool {
+        let Some(unit) = self.unit(id) else {
+            return false;
+        };
+        // Broad admission uses the number of radius-spaced perimeter samples.
+        // Exact terrain, occupancy and reservation checks belong to approach.
+        let radius = unit.kind.collision_radius();
+        let side = 1024 + 2 * (radius + 8);
+        let slots = (4 * (side / (2 * radius + 16))) as usize;
+        self.economy.gatherers.occupied(WorkTarget::Node(node), id) < slots
     }
 
     pub(crate) fn animal_has_work_slot(

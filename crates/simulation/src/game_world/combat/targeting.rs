@@ -22,7 +22,7 @@ pub(super) struct TargetArea {
 impl TargetArea {
     pub(super) fn distance(&self, goal: Goal) -> i64 {
         match self.source {
-            Goal::Unit(from) => goal.distance_squared(from),
+            Goal::Unit(from, _) => goal.distance_squared(from),
             Goal::Building(rect) => {
                 let to = goal.centre();
                 let tile = FIXED_SUBUNITS_PER_TILE;
@@ -41,7 +41,7 @@ impl TargetArea {
     fn bounds(&self, world: &GameWorld) -> TileRect {
         let radius = (self.max.div_euclid(i64::from(FIXED_SUBUNITS_PER_TILE)) as i32 + 1).min(32);
         let rect = match self.source {
-            Goal::Unit(at) => TileRect::from_xywh(at.tile_floor().x, at.tile_floor().y, 1, 1),
+            Goal::Unit(at, _) => TileRect::from_xywh(at.tile_floor().x, at.tile_floor().y, 1, 1),
             Goal::Building(rect) => rect,
         };
         TileRect::from_xywh(
@@ -106,7 +106,7 @@ impl GameWorld {
                         || u.hp == 0
                         || self.embarked(id)
                         || !bounds.contains(u.position.tile_floor())
-                        || !area.accepts(Goal::Unit(u.position))
+                        || !area.accepts(Goal::Unit(u.position, u.kind.collision_radius()))
                         || !self.unit_visible_to(area.player, id)
                         || (area.ram
                             && !matches!(u.kind, UnitKind::Mangonel | UnitKind::BatteringRam))
@@ -119,7 +119,7 @@ impl GameWorld {
                     );
                     let key = (
                         u8::from(civilian),
-                        area.distance(Goal::Unit(u.position)),
+                        area.distance(Goal::Unit(u.position, u.kind.collision_radius())),
                         id,
                     );
                     best = Some(best.map_or(key, |old| std::cmp::min(old, key)));

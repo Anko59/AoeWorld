@@ -95,17 +95,11 @@ fn a_farm_builder_waits_for_a_work_tile_instead_of_losing_its_farm_job() {
     let (mut world, farmer, _, farm) = mill_and_farm();
     let mut blockers = Vec::new();
     let rect = world.building(farm).unwrap().footprint;
-    for tile in crate::game_world::economy::placement::perimeter(aoe_core::TileRect::from_xywh(
-        rect.min.x + 1,
-        rect.min.y + 1,
-        1,
-        1,
-    )) {
-        blockers.push(
-            world
-                .spawn_villager(PlayerId(1), WorldPosition::from_tile_center(tile).unwrap())
-                .unwrap(),
-        );
+    for point in crate::game_world::movement_step::slots::perimeter_positions(
+        aoe_core::TileRect::from_xywh(rect.min.x + 1, rect.min.y + 1, 1, 1),
+        UnitKind::Villager,
+    ) {
+        blockers.push(world.spawn_villager(PlayerId(1), point).unwrap());
     }
     finish(&mut world, farm, 700);
     assert_eq!(world.gather_target(farmer), None);

@@ -19,7 +19,8 @@ fn corner_fixture() -> (GameWorld, EntityId, WorldPosition, WorldPosition) {
     world.units[index].state.position = start;
     world.units[index].state.previous_position = start;
     world.units[index].state.moving = true;
-    world.units[index].route = VecDeque::from([TileCoord::new(12, 11)]);
+    world.units[index].route =
+        VecDeque::from([WorldPosition::from_tile_center(TileCoord::new(12, 11)).unwrap()]);
     world.units[index].order = Some(MovementOrder {
         origin: start,
         destination,
@@ -87,7 +88,10 @@ fn corner_consumes_remainder_into_next_waypoint_in_tick_nineteen() {
 fn queued_detour_waypoint_is_consumed_before_planning() {
     let (mut world, id, corner, _) = corner_fixture();
     let index = world.lookup[&id];
-    world.units[index].route = VecDeque::from([TileCoord::new(12, 10), TileCoord::new(12, 11)]);
+    world.units[index].route = VecDeque::from(
+        [TileCoord::new(12, 10), TileCoord::new(12, 11)]
+            .map(|t| WorldPosition::from_tile_center(t).unwrap()),
+    );
     for _ in 0..19 {
         world.advance();
     }

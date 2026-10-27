@@ -245,7 +245,14 @@ fn exhausted_return_choices_stop_searching_and_keep_the_load() {
     for y in 126..=133 {
         for x in 126..=133 {
             if x == 126 || x == 133 || y == 126 || y == 133 {
-                world.economy.blocked_tiles.insert(TileCoord::new(x, y));
+                world
+                    .insert_building(
+                        PlayerId(1),
+                        crate::BuildingKind::PalisadeWall,
+                        TileRect::from_xywh(x, y, 1, 1),
+                        true,
+                    )
+                    .unwrap();
             }
         }
     }

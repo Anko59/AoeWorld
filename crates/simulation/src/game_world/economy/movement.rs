@@ -13,6 +13,18 @@ impl GameWorld {
     pub(crate) fn redirect_gather_arrival(&mut self, index: usize) -> Option<bool> {
         let unit = self.units[index].state;
         let task = self.economy.gatherers.get(&unit.id)?;
+        if task.phase == super::GatherPhase::Approaching {
+            let target = task.tile;
+            let success = self.approach_resource(unit.id, target).is_ok();
+            if success {
+                let at = self
+                    .movement_order(unit.id)
+                    .map_or(unit.position, |o| o.destination);
+                self.economy.gatherers.set_work_position(unit.id, at);
+                self.index_destination(unit.id);
+            }
+            return Some(success);
+        }
         let footprint = match task.phase {
             super::GatherPhase::Approaching => {
                 aoe_core::TileRect::new(task.tile, TileCoord::new(task.tile.x + 1, task.tile.y + 1))
@@ -79,7 +91,8 @@ impl GameWorld {
             .get(&unit.id)
             .is_some_and(|task| match task.phase {
                 super::GatherPhase::Approaching => {
-                    tile.x.abs_diff(task.tile.x) <= 1 && tile.y.abs_diff(task.tile.y) <= 1
+                    self.at_work_position(unit.id, task.tile)
+                        && !self.destination_point_reserved(unit.position, unit.id)
                 }
                 super::GatherPhase::Returning => task
                     .dropoff
@@ -142,6 +155,28 @@ impl GameWorld {
                     * 100,
             )
         }
+    }
+
+    pub(crate) fn work_position_preserved(
+        &self,
+        id: aoe_core::EntityId,
+        at: aoe_core::WorldPosition,
+    ) -> bool {
+        self.economy.gatherers.get(&id).is_none_or(|task| {
+            if task.phase != super::GatherPhase::Gathering || task.farm.is_some() {
+                return true;
+            }
+            let Some(unit) = self.unit(id) else {
+                return false;
+            };
+            let r = i64::from(
+                unit.kind.collision_radius() + if unit.kind.is_naval() { 256 } else { 104 },
+            );
+            let rect = aoe_core::TileRect::from_xywh(task.tile.x, task.tile.y, 1, 1);
+            !rect.contains(at.tile_floor())
+                && crate::game_world::movement_step::slots::footprint_distance_squared(at, rect)
+                    <= r * r
+        })
     }
 
     pub(crate) fn work_separation_clear(&self, id: aoe_core::EntityId, tile: TileCoord) -> bool {

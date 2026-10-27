@@ -387,6 +387,13 @@ fn carcass_rate_uses_hunting_and_shepherding_values() {
         // Measure from a fresh gather job: no route or prior fractional credit.
         w.issue_move(v, at(254, 100)).unwrap();
         w.issue_hunt(PlayerId(0), &[v], a).unwrap();
+        w.begin_carcass_gather(v, a).unwrap();
+        let index = w.lookup[&v];
+        let from = w.units[index].state.position.tile_floor();
+        w.units[index].state.position = w.economy.gatherers[&v].work_position.unwrap();
+        let state = w.units[index].state;
+        w.track_unit_step(v, from, &state);
+        w.stop_movement(index);
         run(&mut w, 20 * 20);
         assert_eq!(w.unit(v).unwrap().carried.unwrap().amount, rate / 5);
     }

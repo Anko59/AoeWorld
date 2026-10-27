@@ -22,6 +22,14 @@ fn flat() -> GameWorld {
 }
 
 fn assert_work(world: &mut GameWorld, id: EntityId, task: UnitTask, expected: Facing) {
+    if world.economy.gatherers.contains_key(&id) {
+        for _ in 0..200 {
+            if world.unit(id).unwrap().task == task && !world.unit(id).unwrap().moving {
+                break;
+            }
+            world.advance();
+        }
+    }
     // Poison the last walking direction at start and again during work. Every
     // tick must restore facing; a one-time order/arrival fix is insufficient.
     for phase in 0..2 {
@@ -133,9 +141,11 @@ fn hunters_and_carvers_face_the_animal_in_all_eight_directions() {
             let animal = world.spawn_animal(kind, at(100, 100)).unwrap();
             // For diagonal sheep the one-tile strike reach needs a closer
             // fractional position; preserve the same direction vector.
-            let index = world.lookup[&worker];
-            world.units[index].state.position =
-                WorldPosition::new(at(100, 100).x - dx * 512, at(100, 100).y - dy * 512);
+            relocate(
+                &mut world,
+                worker,
+                WorldPosition::new(at(100, 100).x - dx * 512, at(100, 100).y - dy * 512),
+            );
             world.issue_hunt(PlayerId(0), &[worker], animal).unwrap();
             let task = if kind == AnimalKind::Sheep {
                 UnitTask::Shepherding
@@ -143,15 +153,18 @@ fn hunters_and_carvers_face_the_animal_in_all_eight_directions() {
                 UnitTask::Hunting
             };
             assert_work(&mut world, worker, task, expected);
+            // Carving is a separate stationary carcass fixture: the live boar
+            // may charge across its hunter while the first assertion runs.
+            let mut world = flat();
+            let worker = world
+                .spawn_villager(PlayerId(0), at(100 - dx, 100 - dy))
+                .unwrap();
+            let animal = world.spawn_animal(kind, at(100, 100)).unwrap();
             world.strike_animal(animal, worker, 255);
             for _ in 0..world.config.tick_hz {
                 world.advance();
             }
             world.begin_carcass_gather(worker, animal).unwrap();
-            // Exercise carving from each approach tile, independent of which
-            // equally near tile the route planner would select.
-            world.stop_movement(index);
-            world.units[index].state.position = at(100 - dx, 100 - dy);
             assert_work(&mut world, worker, task, expected);
         }
     }
@@ -165,10 +178,20 @@ fn melee_attackers_face_unit_targets_in_all_eight_directions() {
             .spawn_militia(PlayerId(0), at(100 - dx, 100 - dy))
             .unwrap();
         let target = world.spawn_militia(PlayerId(1), at(100, 100)).unwrap();
-        let index = world.lookup[&attacker];
-        world.units[index].state.position =
-            WorldPosition::new(at(100, 100).x - dx * 512, at(100, 100).y - dy * 512);
+        relocate(
+            &mut world,
+            attacker,
+            WorldPosition::new(at(100, 100).x - dx * 512, at(100, 100).y - dy * 512),
+        );
         world.issue_attack(PlayerId(0), attacker, target).unwrap();
         assert_work(&mut world, attacker, UnitTask::Attacking, expected);
     }
+}
+
+fn relocate(world: &mut GameWorld, id: EntityId, to: WorldPosition) {
+    let index = world.lookup[&id];
+    let from = world.units[index].state.position.tile_floor();
+    world.units[index].state.position = to;
+    let state = world.units[index].state;
+    world.track_unit_step(id, from, &state);
 }

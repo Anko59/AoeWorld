@@ -12,11 +12,7 @@ pub(crate) use destinations::Destinations;
 mod idle;
 pub(crate) use idle::IdleSpacing;
 
-const SPACING: i64 = 768; // convoy/idle spacing; swept movement clearance is separate
 const PUSH: i64 = 32; // at most 45 subunits diagonally, once per four ticks
-
-// Even two pushes cannot turn a nonadjacent-tile pair into an overlap.
-const _: () = assert!(SPACING + 2 * PUSH < aoe_core::FIXED_SUBUNITS_PER_TILE as i64);
 
 impl GameWorld {
     pub(crate) fn refresh_spacing_order(&mut self, id: EntityId) {
@@ -83,11 +79,16 @@ impl GameWorld {
                 return false;
             };
             let other = &self.units[other_index];
-            if other.state.hp == 0 || !other.state.moving {
+            if other.state.hp == 0
+                || !other.state.moving
+                || unit.kind.is_naval() != other.state.kind.is_naval()
+            {
                 return false;
             }
             let (dx, dy) = delta(other.state.position, unit.position);
-            if dx * dx + dy * dy >= SPACING * SPACING {
+            let clearance =
+                i64::from(unit.kind.collision_radius() + other.state.kind.collision_radius());
+            if dx * dx + dy * dy >= clearance * clearance {
                 return false;
             }
             let direction = *direction.get_or_insert_with(|| heading(order.origin, order.waypoint));
@@ -106,11 +107,8 @@ impl GameWorld {
 
     pub(crate) fn advance_spacing(&mut self, changed: &mut Vec<EntityId>) {
         self.finish_spacing_orders(changed);
-        // A pair closer than SPACING must occupy the same or adjacent tiles.
-        // Rotate a bounded batch of due ids, then preserve storage order
-        // within the batch (including swap-removal). An earlier push is at most
-        // 32 subunits per axis: it cannot bring an initially nonadjacent tile
-        // pair within SPACING during this pass. Neighbour sampling is unchanged.
+        // Only actual radius overlaps receive bounded spawn correction.
+        // Tile membership selects candidates, never a required unit spacing.
         let mut indices = self
             .idle_spacing
             .take_candidates((self.tick.0 % 4) as usize)
@@ -160,7 +158,11 @@ impl GameWorld {
                     continue;
                 }
                 let (mut dx, mut dy) = delta(unit.position, other.state.position);
-                if dx * dx + dy * dy >= SPACING * SPACING {
+                let clearance =
+                    i64::from(unit.kind.collision_radius() + other.state.kind.collision_radius());
+                if unit.kind.is_naval() != other.state.kind.is_naval()
+                    || dx * dx + dy * dy >= clearance * clearance
+                {
                     continue;
                 }
                 if dx == 0 && dy == 0 {
@@ -210,8 +212,7 @@ impl GameWorld {
         // Re-enrol finished movers before selecting the bounded idle batch.
         for &id in changed {
             if self.movement_order(id).is_none() {
-                self.destinations.remove(id);
-                self.refresh_spacing_order(id);
+                self.index_destination(id);
             }
         }
     }
@@ -220,7 +221,8 @@ impl GameWorld {
         let unit = self.units[index].state;
         let tile = at.tile_floor();
         if !self.vassal_position_allowed(unit.id, at)
-            || !self.config.valid_ground_position(at)
+            || !self.body_position_clear(unit.kind, at)
+            || !self.collision_sweep(index, unit.position, at, false, true)
             || !self.building_step_clear(unit.position.tile_floor(), tile)
             || !self
                 .unit_step_clear(unit.kind, unit.position.tile_floor(), tile)
@@ -230,7 +232,7 @@ impl GameWorld {
         }
         // A working villager must remain adjacent to its resource; packed
         // footprints can limit the achievable spacing without cancelling work.
-        self.work_separation_clear(unit.id, tile)
+        self.work_separation_clear(unit.id, tile) && self.work_position_preserved(unit.id, at)
     }
 }
 fn delta(a: WorldPosition, b: WorldPosition) -> (i64, i64) {

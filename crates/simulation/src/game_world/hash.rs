@@ -48,6 +48,7 @@ impl GameWorld {
         hash.update(&(self.active_planner_count as u64).to_le_bytes());
         hash.update(&(self.active_route_searches as u64).to_le_bytes());
         hash.update(&self.planning_budget.to_le_bytes());
+        hash.update(&self.local_refinement_left.to_le_bytes());
         hash.update(
             &self
                 .navigation_preparation_budget
@@ -74,6 +75,7 @@ impl GameWorld {
         self.vision.update_hash(&mut hash);
         for unit in &self.units {
             hash.update(&unit.state.id.0.to_le_bytes());
+            hash.update(&self.collisions.sampling_slot(unit.state.id).to_le_bytes());
             // Both cyclic neighbour windows carry mutable sampling order.
             hash.update(&self.followers.sampling_slot(unit.state.id).to_le_bytes());
             let wildlife_slot = match unit.wildlife_slot {
@@ -147,6 +149,7 @@ impl GameWorld {
                 hash.update(&obstruction.goal.y.to_le_bytes());
                 hash.update(&obstruction.remaining.to_le_bytes());
                 hash.update(&obstruction.blocked.to_le_bytes());
+                hash.update(&obstruction.side.to_le_bytes());
                 hash.update(&obstruction.last_tick.to_le_bytes());
                 hash.update(&obstruction.search_tick.to_le_bytes());
             } else {

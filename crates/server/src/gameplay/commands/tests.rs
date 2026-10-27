@@ -352,7 +352,12 @@ fn attack_orders_apply_with_typed_rejections_and_reach_the_wire_state() {
     use aoe_protocol::UnitTask;
     let (mut world, scout) = aoe_simulation::GameWorld::default_with_village(Seed(1));
     let position = world.unit(scout).unwrap().position;
-    let enemy = world.spawn_militia(PlayerId(1), position).unwrap();
+    let enemy = world
+        .spawn_militia(
+            PlayerId(1),
+            aoe_core::WorldPosition::new(position.x + 512, position.y),
+        )
+        .unwrap();
     let attack = |entity_id, target_id| PendingAction::Attack {
         entity_id,
         target_id,
@@ -431,7 +436,7 @@ fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
             )
             .unwrap();
     }
-    let before = world.canonical_hash();
+    let before = world.unit(attacker).unwrap();
     assert_eq!(
         apply(
             &mut world,
@@ -443,7 +448,10 @@ fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
         ),
         CommandResult::RejectedUnreachable,
     );
-    assert_eq!(world.canonical_hash(), before);
+    // Search admission spends its shared cost budget even on rejection.
+    // The rejected command must leave the complete actor and its orders intact.
+    assert_eq!(world.unit(attacker), Some(before));
+    assert!(world.movement_order(attacker).is_none());
 }
 
 #[test]

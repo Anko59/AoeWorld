@@ -23,7 +23,8 @@ pub(crate) fn slots(form: Formation, count: usize) -> Vec<WorldPosition> {
         let gap = if form == Formation::Staggered {
             1536
         } else {
-            1024
+            // Largest land diameter plus integer rotation clearance.
+            1040
         };
         let stagger = if form == Formation::Staggered && row % 2 != 0 {
             gap / 2

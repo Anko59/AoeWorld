@@ -11,6 +11,7 @@ fn each_resource_uses_its_exact_rate_and_the_ten_unit_carry_cap() {
     ] {
         let (mut world, node, id) = resource_world(kind);
         world.issue_gather(PlayerId(0), id, node.id).unwrap();
+        place_at_work(&mut world, id);
         for tick in 1..=200_u32 {
             world.advance();
             let expected = (tick * u32::from(hundredths) / (world.config().tick_hz * 100)) as u16;
@@ -75,7 +76,6 @@ fn workers_stand_against_the_bush_or_tree_they_gather() {
         let (mut world, node, id) = resource_world(kind);
         world.initialize_village(PlayerId(0), node.tile).unwrap();
         world.issue_gather(PlayerId(0), id, node.id).unwrap();
-        let centre = WorldPosition::from_tile_center(node.tile).unwrap();
         let mut worked = false;
         for _ in 0..2000 {
             world.advance();
@@ -83,19 +83,11 @@ fn workers_stand_against_the_bush_or_tree_they_gather() {
             if unit.task != UnitTask::Gathering {
                 continue;
             }
-            let (dx, dy) = (
-                i64::from(unit.position.x - centre.x),
-                i64::from(unit.position.y - centre.y),
+            assert!(
+                world.at_work_position(id, node.tile),
+                "{kind:?}: {:?}",
+                unit.position
             );
-            // A tile-centre stand is 1.0 (side) or 1.41 (corner) tiles away;
-            // AoE2 workers touch the node: at most 0.7 or 1.0 tiles.
-            let tile = i64::from(FIXED_SUBUNITS_PER_TILE);
-            let limit = if dx != 0 && dy != 0 {
-                tile
-            } else {
-                7 * tile / 10
-            };
-            assert!(dx * dx + dy * dy <= limit * limit, "{kind:?} {dx},{dy}");
             assert_eq!(
                 unit.position
                     .tile_floor()
@@ -261,6 +253,10 @@ fn a_failed_resource_sink_never_depletes_or_creates_carried_resources() {
         node.initial_amount
     );
     assert_eq!(world.unit(id).unwrap().carried, None);
+    // Start a fresh work-only interval after exercising the rejected sink.
+    world.issue_stop(PlayerId(0), id).unwrap();
+    world.issue_gather(PlayerId(0), id, node.id).unwrap();
+    place_at_work(&mut world, id);
     advance(&mut world, 200);
     assert_eq!(world.unit(id).unwrap().carried.unwrap().amount, 3);
 }
@@ -385,3 +381,13 @@ fn gatherer_at(world: &mut GameWorld, node: ResourceNode) -> EntityId {
 }
 
 mod replay;
+
+fn place_at_work(world: &mut GameWorld, id: EntityId) {
+    let to = world.economy.gatherers[&id].work_position.unwrap();
+    let index = world.lookup[&id];
+    let from = world.units[index].state.position;
+    world.units[index].state.position = to;
+    let state = world.units[index].state;
+    world.track_unit_step(id, from.tile_floor(), &state);
+    world.stop_movement(index);
+}

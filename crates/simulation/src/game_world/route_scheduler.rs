@@ -303,7 +303,10 @@ impl GameWorld {
                 }
                 let mut route = VecDeque::from(path.tiles);
                 if route.pop_front() == Some(order.waypoint.tile_floor()) {
-                    self.units[index].route = route;
+                    self.units[index].route = route
+                        .into_iter()
+                        .filter_map(|t| aoe_core::WorldPosition::from_tile_center(t).ok())
+                        .collect();
                     self.units[index].fast_route_tried = false;
                     // A certified nearest endpoint still owes the order its
                     // terminal Unreachable result after this final segment.

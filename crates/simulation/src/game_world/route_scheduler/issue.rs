@@ -28,6 +28,8 @@ impl GameWorld {
     /// Both route budgets are refilled at the end of every tick.
     pub(crate) fn refill_route_budgets(&mut self) {
         self.planning_budget = crate::MAX_ROUTE_WORK_PER_TICK;
+        self.local_refinement_left = 4;
+        self.combat.position_searches = super::super::combat::MAX_POSITION_SEARCHES_PER_TICK;
         *self
             .navigation_preparation_budget
             .get_mut()

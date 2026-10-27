@@ -18,10 +18,10 @@ fn workers(world: &mut GameWorld, origin: TileCoord, count: i32) -> Vec<EntityId
 #[test]
 fn six_lumberjacks_and_ore_and_berry_workers_spread_over_free_nodes() {
     for (kind, count, capacity) in [
-        (ResourceKind::Wood, 6, 2),
-        (ResourceKind::Gold, 12, 8),
-        (ResourceKind::Stone, 12, 8),
-        (ResourceKind::Food, 12, 8),
+        (ResourceKind::Wood, 24, 12),
+        (ResourceKind::Gold, 24, 12),
+        (ResourceKind::Stone, 24, 12),
+        (ResourceKind::Food, 24, 12),
     ] {
         let run = || {
             let (mut world, node) = replacement::cleared_work_area(kind);
@@ -43,10 +43,7 @@ fn six_lumberjacks_and_ore_and_berry_workers_spread_over_free_nodes() {
                     .entry(world.gather_target(*id).unwrap())
                     .or_default() += 1;
             }
-            assert!(
-                targets.len() >= if kind == ResourceKind::Wood { 3 } else { 2 },
-                "{kind:?}: {targets:?}"
-            );
+            assert!(targets.len() >= 2, "{kind:?}: {targets:?}");
             assert!(
                 targets.values().all(|n| *n <= capacity),
                 "{kind:?}: {targets:?}"
@@ -58,7 +55,7 @@ fn six_lumberjacks_and_ore_and_berry_workers_spread_over_free_nodes() {
                 .iter()
                 .filter_map(|id| {
                     let u = world.unit(*id).unwrap();
-                    (u.task == UnitTask::Gathering).then_some(u.position.tile_floor())
+                    (u.task == UnitTask::Gathering).then_some((u.position.x, u.position.y))
                 })
                 .collect::<Vec<_>>();
             assert_eq!(working.iter().collect::<BTreeSet<_>>().len(), working.len());
@@ -104,31 +101,39 @@ fn a_new_lumberjack_uses_the_slot_released_by_a_cancelled_job() {
 
 #[test]
 fn returning_workers_keep_their_node_slots_and_removal_releases_them() {
-    let (mut world, node) = replacement::cleared_work_area(ResourceKind::Wood);
+    // Twelve full loads need 120 units; a 100-wood tree would deplete.
+    let (mut world, node) = replacement::cleared_work_area(ResourceKind::Gold);
     let next =
         ResourceNode::starting(TileCoord::new(node.tile.x - 3, node.tile.y), node.kind).unwrap();
     if let Terrain::Map { generator, overlay } = &mut world.terrain {
         overlay.insert_starting_resource(generator, next).unwrap();
     }
-    let ids = workers(&mut world, node.tile, 3);
-    for id in &ids[..2] {
+    let ids = workers(&mut world, node.tile, 13);
+    for id in &ids[..12] {
         world.issue_gather(PlayerId(0), *id, node.id).unwrap();
     }
     for _ in 0..1200 {
         world.advance();
     }
-    assert!(ids[..2].iter().all(|id| {
-        world
-            .unit(*id)
-            .unwrap()
-            .carried
-            .is_some_and(|load| load.amount == 10)
-    }));
-    world.issue_gather(PlayerId(0), ids[2], node.id).unwrap();
-    assert_eq!(world.gather_target(ids[2]), Some(next.id));
+    assert!(
+        ids[..12].iter().all(|id| {
+            world
+                .unit(*id)
+                .unwrap()
+                .carried
+                .is_some_and(|load| load.amount == 10)
+        }),
+        "node={node:?}, workers={:?}",
+        ids[..12]
+            .iter()
+            .map(|id| (world.unit(*id), world.gather_target(*id)))
+            .collect::<Vec<_>>()
+    );
+    world.issue_gather(PlayerId(0), ids[12], node.id).unwrap();
+    assert_eq!(world.gather_target(ids[12]), Some(next.id));
     world.remove_unit(ids[0]);
-    world.issue_gather(PlayerId(0), ids[2], node.id).unwrap();
-    assert_eq!(world.gather_target(ids[2]), Some(node.id));
+    world.issue_gather(PlayerId(0), ids[12], node.id).unwrap();
+    assert_eq!(world.gather_target(ids[12]), Some(node.id));
 }
 
 #[test]
@@ -144,11 +149,11 @@ fn exhausted_workers_skip_a_nearer_tree_whose_slots_are_full() {
             nodes.push(node);
         }
     }
-    let ids = workers(&mut world, old.tile, 3);
-    for id in &ids[..2] {
+    let ids = workers(&mut world, old.tile, 13);
+    for id in &ids[..12] {
         world.issue_gather(PlayerId(0), *id, nodes[0].id).unwrap();
     }
-    world.issue_gather(PlayerId(0), ids[2], old.id).unwrap();
+    world.issue_gather(PlayerId(0), ids[12], old.id).unwrap();
     if let Terrain::Map { generator, overlay } = &mut world.terrain {
         overlay
             .deplete(generator, old.id, old.initial_amount)
@@ -156,8 +161,8 @@ fn exhausted_workers_skip_a_nearer_tree_whose_slots_are_full() {
     }
     for _ in 0..600 {
         world.advance();
-        if world.gather_target(ids[2]) != Some(old.id) {
-            assert_eq!(world.gather_target(ids[2]), Some(nodes[1].id));
+        if world.gather_target(ids[12]) != Some(old.id) {
+            assert_eq!(world.gather_target(ids[12]), Some(nodes[1].id));
             return;
         }
     }
@@ -235,7 +240,7 @@ fn a_distant_initial_order_can_find_free_nodes_in_the_clicked_work_area() {
     if let Terrain::Map { generator, overlay } = &mut world.terrain {
         overlay.insert_starting_resource(generator, next).unwrap();
     }
-    let ids = workers(&mut world, node.tile, 2);
+    let ids = workers(&mut world, node.tile, 12);
     for id in ids {
         world.issue_gather(PlayerId(0), id, node.id).unwrap();
     }
@@ -267,10 +272,11 @@ fn a_hunter_uses_another_carcass_when_idle_units_block_every_work_tile() {
         world.strike_animal(animal, hunter, 255);
         animals.push(animal);
     }
-    for tile in perimeter(TileRect::from_xywh(100, 100, 1, 1)) {
-        world
-            .spawn_villager(PlayerId(1), position(tile).unwrap())
-            .unwrap();
+    for point in crate::game_world::movement_step::slots::perimeter_positions(
+        TileRect::from_xywh(100, 100, 1, 1),
+        crate::UnitKind::Villager,
+    ) {
+        world.spawn_villager(PlayerId(1), point).unwrap();
     }
     for _ in 0..20 {
         world.advance();
@@ -304,10 +310,11 @@ fn a_returning_hunter_replaces_a_carcass_whose_work_tiles_became_blocked() {
     let mut task = world.economy.gatherers.remove(&hunter).unwrap();
     let index = world.lookup[&hunter];
     world.stop_movement(index);
-    for tile in perimeter(TileRect::from_xywh(100, 100, 1, 1)) {
-        world
-            .spawn_villager(PlayerId(1), position(tile).unwrap())
-            .unwrap();
+    for point in crate::game_world::movement_step::slots::perimeter_positions(
+        TileRect::from_xywh(100, 100, 1, 1),
+        crate::UnitKind::Villager,
+    ) {
+        world.spawn_villager(PlayerId(1), point).unwrap();
     }
     assert!(world.resume_resource(hunter, &mut task));
     assert_eq!(task.animal, Some(animals[1]));

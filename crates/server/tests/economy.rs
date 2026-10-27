@@ -167,7 +167,22 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
         }
     }
     assert_eq!(accepted, 2);
-    assert!(wood >= 210, "wood stockpile must rise after return trips");
+    let debug = if wood < 210 {
+        service
+            .subscribe(
+                id,
+                99,
+                TileRect::new(TileCoord::new(0, 0), TileCoord::new(side, side)),
+            )
+            .await;
+        format!("node={node:?}, state={:?}", drain(&mut rx))
+    } else {
+        String::new()
+    };
+    assert!(
+        wood >= 210,
+        "wood stockpile must rise after return trips: {debug}"
+    );
     assert_eq!(population, 5);
     assert!(
         depleted,

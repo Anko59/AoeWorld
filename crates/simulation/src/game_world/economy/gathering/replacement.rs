@@ -41,7 +41,7 @@ impl GameWorld {
                                     && (n.kind != ResourceKind::Food
                                         || n.object == aoe_map::ObjectKind::ForageBush)
                                     && overlay.resource_available(*n)
-                                    && self.node_has_work_slot(n.id, n.kind, id)
+                                    && self.node_has_work_slot(n.id, id)
                                     && distance_squared(n.tile, task.tile) <= (radius as u64).pow(2)
                             }),
                     );
@@ -121,6 +121,10 @@ impl GameWorld {
                 .approach_resource_in(id, node.tile, Some(&seen))
                 .is_ok()
             {
+                task.work_position = self
+                    .movement_order(id)
+                    .map(|o| o.destination)
+                    .or_else(|| self.unit(id).map(|u| u.position));
                 task.node = node.id;
                 task.tile = node.tile;
                 task.fish = self.fish_object(node.id);

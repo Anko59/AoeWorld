@@ -17,12 +17,15 @@ impl GameWorld {
         group.speed = self.group_speed(&group);
         if let Some(mut order) = self.units[index].order {
             let (speed, denom) = group.speed;
-            let mut credit = u128::from(order.speed_carry)
-                + if group.ready && self.formation_cohesive(&group) {
-                    u128::from(speed)
-                } else {
-                    0
-                };
+            // A stretched column slows the anchor while members catch up.
+            // Stopping it completely strands the front on intermediate slots
+            // and lets one delayed member halt the whole formation forever.
+            let pace = if group.ready && self.formation_cohesive(&group) {
+                speed
+            } else {
+                speed / 2
+            };
+            let mut credit = u128::from(order.speed_carry) + u128::from(pace);
             order.speed_carry = 0;
             for _ in 0..32 {
                 let step = u128::from(order.segment_length.saturating_sub(order.travelled))
@@ -79,7 +82,6 @@ impl GameWorld {
                 let next = self.units[index]
                     .route
                     .pop_front()
-                    .and_then(|t| WorldPosition::from_tile_center(t).ok())
                     .map(SegmentAdvance::Next)
                     .or_else(|| {
                         (order.waypoint != order.destination

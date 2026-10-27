@@ -35,7 +35,9 @@ impl GameWorld {
         if self.units[index].state.hp == 0 || self.embarked(id) {
             return Err(GameWorldError::UnknownEntity);
         }
-        let destination = self.config.snap_ground_position(destination);
+        if !self.config.valid_ground_position(destination) {
+            return Err(GameWorldError::InvalidPosition);
+        }
         if !self.vassal_position_allowed(id, destination) {
             return Err(GameWorldError::VassalLeash);
         }
@@ -96,7 +98,10 @@ impl GameWorld {
         unit.state.planning = planning;
         unit.planning_since = self.tick.0;
         unit.fast_route_tried = fast_tried;
-        unit.route = route;
+        unit.route = route
+            .into_iter()
+            .filter_map(|t| WorldPosition::from_tile_center(t).ok())
+            .collect();
         unit.order = Some(MovementOrder {
             origin,
             destination,

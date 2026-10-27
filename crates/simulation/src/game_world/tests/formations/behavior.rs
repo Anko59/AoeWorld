@@ -239,3 +239,49 @@ fn formations_attack_move_engages_visible_enemies_and_stop_clears_the_group() {
     assert!(ids.iter().all(|&id| w.formation(id).is_none()));
     assert_eq!(w.route_scheduler_stats().planners, 0);
 }
+
+#[test]
+fn large_bodies_finish_a_diagonal_formation_without_rounding_into_each_other() {
+    let mut w = wide_world();
+    w.set_fog_disabled(true);
+    let ids = [
+        w.spawn_kind(PlayerId(0), UnitKind::Mangonel, center(40, 40))
+            .unwrap(),
+        w.spawn_kind(PlayerId(0), UnitKind::Mangonel, center(40, 42))
+            .unwrap(),
+    ];
+    w.issue_formation_move(
+        PlayerId(0),
+        &ids,
+        Formation::Line,
+        center(52, 52),
+        false,
+        false,
+    )
+    .unwrap();
+    let mut previous = ids.map(|id| w.unit(id).unwrap().position);
+    let mut stalled = [0; 2];
+    for tick in 0..1600 {
+        w.advance();
+        for (n, &id) in ids.iter().enumerate() {
+            let at = w.unit(id).unwrap().position;
+            if at != previous[n] || Some(at) == w.formation_slot(id) {
+                stalled[n] = 0;
+            } else {
+                stalled[n] += 1;
+            }
+            assert!(
+                stalled[n] <= 240,
+                "siege member {id:?} stalled at tick {tick}"
+            );
+            previous[n] = at;
+        }
+        let a = w.unit(ids[0]).unwrap().position;
+        let b = w.unit(ids[1]).unwrap().position;
+        assert!(i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2) >= 1024_i64.pow(2));
+    }
+    for id in ids {
+        assert_eq!(w.unit(id).unwrap().position, w.formation_slot(id).unwrap());
+        assert!(!w.unit(id).unwrap().moving);
+    }
+}
