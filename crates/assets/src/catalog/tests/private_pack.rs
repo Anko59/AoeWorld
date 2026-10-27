@@ -49,19 +49,25 @@ fn reviewed_sources() -> impl Iterator<
                 None,
             )
         })
-        .chain(super::units::SPRITES.iter().enumerate().map(|(index, s)| {
-            (
-                s.manifest_source(),
-                s.frames(),
-                if super::runtime::actor_maskable(index) {
-                    AtlasDomain::Objects
-                } else {
-                    AtlasDomain::Shared
-                },
-                usize::from(s.sample_step()),
-                Some(*s),
-            )
-        }))
+        .chain(
+            super::units::SPRITES
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !selection::duplicate_actor(*index))
+                .map(|(index, s)| {
+                    (
+                        s.manifest_source(),
+                        s.frames(),
+                        if super::runtime::actor_maskable(index) {
+                            AtlasDomain::Objects
+                        } else {
+                            AtlasDomain::Shared
+                        },
+                        usize::from(s.sample_step()),
+                        Some(*s),
+                    )
+                }),
+        )
 }
 
 fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
@@ -131,10 +137,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             }
         }
     }
-    let actor_count = super::units::SPRITES
-        .iter()
-        .map(|s| s.selected_frames())
-        .sum::<usize>();
+    let actor_count = actor_frames();
     // 45 cavalry idle and 70 villager idle cells are not drawn.
     if extents.len() != MAX_REVIEWED_FRAMES as usize + actor_count - 115
         || counts != [1474, 897 + actor_count - 115]
@@ -306,7 +309,7 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        2625,
+        2620,
         // Castle adds 365 sampled cells; navy adds 25 and King poses add 35.
         // This current-content count changes deliberately; fixed atlas caps do not.
         "military, Castle, projectile and farmer cells included"
@@ -485,6 +488,8 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
 fn actor_frames() -> usize {
     super::units::SPRITES
         .iter()
-        .map(|s| s.selected_frames())
+        .enumerate()
+        .filter(|(index, _)| !selection::duplicate_actor(*index))
+        .map(|(_, s)| s.selected_frames())
         .sum()
 }

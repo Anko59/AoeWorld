@@ -354,10 +354,10 @@ async fn damage_graphic_instances_keep_native_offsets_and_shared_animation() {
         REQUIRED_RENDER_SOURCES
             .iter()
             .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
-            .chain([(source.clone(), 2, false)]),
+            .chain([(source.clone(), 20, false)]),
     );
     let flame = serde_json::json!({"graphic_id":1,"slp_id":90000,"source":source,
-        "available":true,"frames":2,"angles":1,"primary":false,"frame_rate":0.05,
+        "available":true,"frames":20,"angles":1,"primary":false,"frame_rate":0.05,
         "offset":[-9,11],"misplacement":[0.0,0.0],"layer":20});
     let mut second = flame.clone();
     second["offset"] = serde_json::json!([17, -3]);
@@ -375,6 +375,7 @@ async fn damage_graphic_instances_keep_native_offsets_and_shared_animation() {
         [[-9.0, 11.0], [17.0, -3.0]]
     );
     assert_eq!(damage.parts[0].animation.len(), 2);
+    assert_eq!(damage.parts[0].frame_rate, 0.5);
     assert_eq!(
         damage.parts[0].animation[1].atlas,
         damage.parts[1].animation[1].atlas

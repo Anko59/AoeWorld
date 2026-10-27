@@ -116,3 +116,17 @@ pub(super) fn overlay(
     manifest.frames.extend(extra.frames);
     Ok(())
 }
+
+pub(super) fn duplicate_actor(index: usize) -> bool {
+    let source = super::super::units::SPRITES[index];
+    super::super::units::SPRITES[..index]
+        .iter()
+        .enumerate()
+        .any(|(i, old)| {
+            old.id == source.id
+                && old.stride == source.stride
+                && old.sample_step() == source.sample_step()
+                && super::super::runtime::actor_maskable(i)
+                    == super::super::runtime::actor_maskable(index)
+        })
+}

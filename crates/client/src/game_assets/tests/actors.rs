@@ -141,3 +141,27 @@ fn vassal_king_groups_select_bounded_native_facings_and_refuse_partial_art() {
     let partial: Manifest = serde_json::from_value(value).unwrap();
     assert!(actors::select(&partial, &mut Vec::new(), &mut Vec::new()).is_err());
 }
+
+#[wasm_bindgen_test]
+fn identical_owned_actor_groups_share_their_selected_frames() {
+    let source = SPRITES[Pose::FishingShipStand as usize];
+    let mut value = manifest::fixture();
+    let template = value["frames"][0].clone();
+    value["frames"] = (0..source.frames())
+        .map(|frame| {
+            let mut cell = template.clone();
+            cell["source"] = source.manifest_source().into();
+            cell["frame"] = frame.into();
+            cell
+        })
+        .collect::<Vec<_>>()
+        .into();
+    let manifest: Manifest = serde_json::from_value(value).unwrap();
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
+    let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
+    assert_eq!(
+        ranges[Pose::FishingShipStand as usize],
+        ranges[Pose::FishingShipWork as usize]
+    );
+    assert_eq!(selected.len(), 5);
+}

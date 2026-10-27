@@ -70,6 +70,10 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
     ] {
         sources.insert(format!("graphics.drs:[32, 112, 108, 115]:{id}"), count);
     }
+    for id in 424..=432 {
+        sources.insert(format!("graphics.drs:[32, 112, 108, 115]:{id}"), 20);
+    }
+    sources.insert("de/b_misc_waypoint_flag_x1.sld".into(), 90);
     for stem in [
         "b_dark_house_age1",
         "b_west_lumber_camp_age2",
@@ -116,7 +120,7 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
         })
         .collect::<Vec<_>>()
         .into();
-    let manifest: Manifest = serde_json::from_value(value).unwrap();
+    let mut manifest: Manifest = serde_json::from_value(value).unwrap();
     let (mut selected, mut domains) = (Vec::new(), Vec::new());
     for source in catalog {
         let frames = compact_standing(
@@ -141,8 +145,45 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
     // the Castle camp fallback slots reuse two available DE camp cells.
     // King poses add 35 selected cells to the current catalog. Regenerate this
     // content-count pin; the 5120-frame and five-page atlas gates stay fixed.
-    assert_eq!(selected.len(), 5097);
+    // The stationary and working fishing ship share one identical five-frame group.
+    assert_eq!(selected.len(), 5092);
     assert!(selected.len() <= MAX_SELECTED_FRAMES);
+    assert_eq!(
+        placement::plan(&manifest, &selected, &domains)
+            .unwrap()
+            .len(),
+        selected.len()
+    );
+    building_sprites::rally(&manifest, &mut selected, &mut domains).unwrap();
+    let parts = (424..=432)
+        .map(|id| {
+            let source = format!("graphics.drs:[32, 112, 108, 115]:{id}");
+            manifest::BuildingPart {
+                record: source_frames(&manifest, &source, 20).map(|frames| frames[0]),
+                frames: 20,
+                angles: 1,
+                primary: false,
+                frame_rate: 0.05,
+                offset: [0; 2],
+                misplacement: [0.0; 2],
+            }
+        })
+        .collect();
+    manifest.buildings.push(manifest::BuildingComposition {
+        unit_id: 70,
+        footprint: [2.0; 2],
+        foundation_slp: None,
+        foundation_size: [0; 2],
+        parts: Vec::new(),
+        construction: Vec::new(),
+        damage: vec![manifest::BuildingDamage {
+            damage_percent: 25,
+            apply_mode: 0,
+            parts,
+        }],
+    });
+    buildings::select(&manifest, &mut selected, &mut domains).unwrap();
+    assert_eq!(selected.len(), MAX_SELECTED_FRAMES);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)
             .unwrap()
