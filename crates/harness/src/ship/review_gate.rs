@@ -32,7 +32,7 @@ pub(crate) type Reviewer<'a> = dyn Fn(
 const TIERS: [Tier; 5] = [Tier::Low, Tier::Medium, Tier::High, Tier::Xhigh, Tier::Max];
 
 /// The tier to run: the requested one, which may not be below the floor.
-fn tier(root: &Path, options: &Options) -> Result<Tier> {
+pub(super) fn tier(root: &Path, options: &Options) -> Result<Tier> {
     let floor = review::floor(root)?;
     match options.tier {
         Some(tier) if tier < floor => Err(format!(

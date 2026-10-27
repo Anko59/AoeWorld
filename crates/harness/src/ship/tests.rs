@@ -420,3 +420,22 @@ fn timeline_observes_review_grade_and_only_reacquires_after_a_pass() {
         );
     }
 }
+
+#[test]
+fn a_tier_below_the_floor_is_refused_before_any_gate_runs() {
+    let marker = tempfile::tempdir().unwrap();
+    let ran = marker.path().join("ran");
+    let (_temp, root) = fixture(&format!("touch {}", ran.display()));
+    // `gates/**` is the fixture's `everything` suite: floor high.
+    fs::write(root.join("gates/extra.json"), "{}\n").unwrap();
+    run(&root, &["add", "-A"]);
+    run(&root, &["commit", "-q", "-m", "gate change"]);
+    let options = Options {
+        no_review: false,
+        tier: Some(crate::review::Tier::Low),
+        ..offline()
+    };
+    let error = ship(&root, &options).unwrap_err().to_string();
+    assert!(error.contains("at least a high review"), "{error}");
+    assert!(!ran.exists(), "a gate ran before the tier was refused");
+}

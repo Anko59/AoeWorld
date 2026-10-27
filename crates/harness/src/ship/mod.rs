@@ -299,6 +299,9 @@ pub(crate) fn ship_with(
         no_fetch: true,
         ..options.clone()
     };
+    if !options.no_review {
+        review_gate::tier(root, options)?;
+    }
     let evidence = judge(root, options)?;
     for result in &evidence.gates {
         eprintln!("{}", result.line());
