@@ -160,6 +160,9 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.token = resume_token;
                 storage::save_token(resume_token);
                 client.status = "connected".to_owned();
+                // A new connection clears connection errors; an order rejection
+                // stays until the next order rather than the next snapshot.
+                client.last_error = None;
                 resize(&mut client);
                 capture::world_received(&mut client, map_changed);
                 subscribe(&mut client);
@@ -184,7 +187,6 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     return;
                 }
                 client.revision = revision;
-                client.last_error = None;
                 let mut resident = BTreeMap::new();
                 for unit in units {
                     resident.insert(unit.id, unit);
