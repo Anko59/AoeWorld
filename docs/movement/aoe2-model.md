@@ -168,3 +168,22 @@ contain a free search-grid point. Work approaches finish only at actual contact.
 to actual radius overlaps, including compressed spawns; it no longer enforces
 a separate, larger cosmetic spacing. Confidence is moderate in these policies
 until the scenario and real-match observations establish their practical limits.
+
+## Friendly gridlock and work-spot redirects
+
+AoE2 units visibly shuffle through a crowd of their own player's units rather
+than standing in a permanent knot (Pottinger describes pushing and yielding;
+the exact DE rule is unpublished, so confidence in this specific threshold is
+low). After 64 obstructed ticks without half a tile of progress, a mover may
+pass bodies of its own player for 40 ticks. Enemy bodies and settled workers
+(gathering, building, farming, fishing, hunting, shepherding or striking in
+place) still block, so worker rows and battle lines are not tunnelled. Bodies
+that already overlap may separate in any direction that does not bring their
+centres closer; a nearly concentric pair has no single "away" direction.
+
+A blocked work approach chooses another free work position only within three
+tiles of its resource, and only when that position is better than its current
+one. Away from the worksite an obstruction is traffic for local steering and
+yielding. Re-issuing the approach there restarted a static route search with a
+destination pocket proof every few ticks and erased the obstruction memory
+that drives lateral escapes and squeezing.

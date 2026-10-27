@@ -7,12 +7,15 @@ Dev comparison: `24ee53b9cc3a511bfa2ed4d06faa5ed1f3c22b5f`.
 Research was committed before implementation:
 `4acf98bc701d497ac0293c2cf2d3c09f212bc7cc`.
 Implementation commits: `fb05b29c` (radius movement), `9cc85553`
-(exact static sweeps and intermediate rejoining), `0b3a6da5` (distant anchors).
+(exact static sweeps and intermediate rejoining), `0b3a6da5` (distant anchors),
+`066d2db1` (lateral escape, elapsed retries), `90a3d303` (friendly
+squeeze-through, worksite-only redirects) and `ed856700` (its regression).
 
-Acceptance is incomplete until the final seeded-scout regression and final
-performance measurements below are closed. The last measured intermediate
-implementation failed performance gates. This report does not qualify a
-finished RTS or dedicated hardware.
+The seeded-scout regression and all requested scenarios pass. Late-game tick
+time and instructions improve on the played base; `make perf-ci` still reports
+Regression against dev's pinned instruction, allocation-count and wasm-size
+baselines (see below). This report does not qualify a finished RTS or
+dedicated hardware.
 
 ## Verified causes and replacement
 
@@ -147,42 +150,49 @@ not changed and this session queued only one heavy target at a time.
 
 ## Performance evidence
 
-All measurements share this development machine with other agents. The dev
-Make target used its debug profile; played/current targets use release. The
-target-hotspot workload has four tick samples, so nearest-rank p95 is its
-maximum, not a stable distribution estimate.
+All measurements share this development machine (6 slot CPUs) with other
+agents; base and current runs below were taken back to back in the same
+session by checking out the base sources in the same worktree. Target-hotspot
+has four tick samples, so nearest-rank p95 is its maximum.
 
-| Workload | Reference p50 ms | Reference p95 ms | Intermediate p50 ms | Intermediate p95 ms |
+Late-game diagnosis (seed workload, ticks 320-384): obstructed work approaches
+re-issued their approach 8,531 times in 64 ticks, each a fresh static route
+search with a destination pocket proof (base: 906 route orders). Restricting
+redirects to the worksite restored 767 orders. That exposed 237 units standing
+still with an order for 64+ ticks (base: 10) in compressed village crowds;
+friendly squeeze-through reduced it to 5.
+
+| Workload (ms) | Base 80ff4af2 p50 | Base p95 | Current p50 | Current p95 |
 | --- | ---: | ---: | ---: | ---: |
-| Dev target-hotspot | 1.840 | 1.951 | 1.543 | 3.291 |
-| Played scale, 600 ticks including orders | 13.797 | 32.755 | Unmeasured | Unmeasured |
-| Played late-game simulation, pooled three runs | 64.726 | 82.827 | 80.769 | 94.744 |
-| Played late-game server, pooled three runs | 70.547 | 103.722 | 63.506 | 70.410 |
+| `make perf-late-game` simulation tick | 79.117 | 102.352 | 37.539 | 55.381 |
+| `make perf-late-game` server tick | 78.285 | 99.922 | 45.146 | 64.178 |
+| `make perf-smoke` late-game (base: earlier 4-CPU run) | 70.547 | 103.722 | 48.026 | 61.605 |
+| `make perf-scale` tick with orders | 12.383 | 31.986 | 15.477 | 116.519 |
+| `make perf-scale --fight-size 0` | 10.382 | 24.012 | 11.225 | 90.109 |
 
-The intermediate measured production patch SHA-256 is
-`60905c5475d915f05ca04c2f1124d573fa15c0f205e26584fb4b011779307ac9`.
-It precedes the collision-index optimization, exact static sweeps and final
-distant rejoin correction. These numbers must not be attributed to later code.
+One late-game tick under Callgrind: 430,571,870 instructions on the base,
+556,395,207 at `066d2db1`, 247,387,783 now (dev baseline 143,767,781).
 
-That `make perf-ci` returned Regression: late-game instructions were
-627,454,922 against 143,767,781 and allocations 10,433 against 5,671, each with
-an unchanged 5% allowance. Allocation bytes passed (3,383,987 vs 4,127,477).
-Optimized gzip wasm was 302,979 bytes against 287,702 and exceeded 5%.
-The hotspot p95 also missed the requested dev comparison. Callgrind attributed
-about 48% of that measured tick to static leg searches, including destination
-pocket proofs. Bounded work alone does not demonstrate a faster tick.
+The perf-scale regression is a longer startup burst, not a costlier tick.
+Its setup admits 6,079 gather jobs instead of 2,196 because the two-wood and
+eight-ore caps are gone, and its fights now find attack positions (964
+attackers instead of 13). Per-tick timelines show both builds at about
+100-160 ms while thousands of units wait for the fixed route budget; the base
+burst lasts about 22 ticks with 2,700 movers, the current one about 45 ticks
+with 6,600. After the burst both run at about 4-5 ms per tick and p99/max are
+similar (base 144/214 ms, current 155/224 ms). This workload then collapses to
+under 100 active movers in both builds, so it cannot establish RTS
+performance.
 
-The scale baseline ended with only 48 active movers. A collapsed movement
-workload cannot establish RTS performance; activity counts must accompany
-timing. Late-game workload activity floors are retained.
+`make perf-ci` at `ed856700`: target-hotspot p50 1.222 / p95 3.125 ms (dev
+24ee53b9: 1.840 / 1.951; owner-reported base about 11 ms); target-distributed
+0.591 / 2.930 (dev 1.894 / 4.991). Instruction, allocation-count (6,306 vs
+5,671) and gzip wasm (302,979 vs 287,702 bytes) comparisons are Regression
+against dev's unchanged 5% allowances; allocation bytes pass. No baseline or
+allowance was changed.
 
-Raw generated evidence is under ignored `reports/perf/path2/`, including
-`before-scale.json`, `before-smoke.json`, `dev-ci.json`,
-`intermediate-ci.json`, and the initial-after Callgrind profile. Reports retain
-their actual revision/dirty flags. The played smoke baseline's clone reported
-dirty because its Git alternate was inaccessible inside Docker; the scale
-baseline has the same metadata limitation. Their host source was clean. This
-metadata is preserved, not rewritten.
+Raw reports are ignored local files under `reports/perf/path2/` and the
+session scratchpad; they retain their actual revision and dirty flags.
 
 ## Limits
 
