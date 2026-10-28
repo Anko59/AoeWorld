@@ -78,7 +78,7 @@ The new warmed checkpoint is pinned in the workload test with its reason;
 general movement and wire replay pins remain unchanged.
 
 `make perf-baseline-propose` collects the complete authoritative tick after
-the same warm-up under pinned Gungraun/Callgrind and DHAT. One Rayon worker
+the same warm-up under pinned Gungraun/Callgrind. One Rayon worker
 makes counts independent of runner CPU count. Setup, warm-up and teardown are
 outside the measured kernel; Callgrind instrumentation stays off during setup.
 Only the changed late-game baseline is replaced from this unoptimized recipe's

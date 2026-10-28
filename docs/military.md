@@ -81,9 +81,7 @@ visited tiles and retained frontier entries to 8,192 each. Rejection says no
 reachable attack position was found within that bounded search; it does not
 prove disconnection beyond the bound. Chasing retains the one-second repath
 cadence. The server reports the existing unreachable-route acknowledgement,
-so the client explains that no reachable route was found. `make perf-timing`
-includes 16 approach orders against a blocked Town Center footprint; hosted
-timings remain informational.
+so the client explains that no reachable route was found.
 
 ## Blacksmith
 

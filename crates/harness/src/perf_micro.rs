@@ -1,9 +1,20 @@
-//! Parse exact Gungraun JSON samples and compare reviewed microbench baselines.
-use crate::perf::{Comparison, compare};
+//! Parse exact Gungraun/Callgrind JSON samples and gate instruction counts.
+//!
+//! Instructions are deterministic, so the gate is tight and semi-permissive:
+//! above [`WARN_PERCENT`] over the committed baseline a row warns, above
+//! [`FAIL_PERCENT`] it fails, and a row more than [`CREEP_PERCENT`] over the
+//! fixed `instruction_reference` fails whatever the baseline says, so many
+//! small accepted steps cannot add up. A drop past [`FAIL_PERCENT`] asks for a
+//! baseline refresh (`make perf-baseline-propose`, reviewed in a commit).
+use crate::perf::{Comparison, Verdict, compare_at, floor_at, over};
 use aoe_scenario::{LATE_GAME, SMOKE, TARGET_DISTRIBUTED};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeMap, error::Error, fs, path::Path};
+
+pub const WARN_PERCENT: u8 = 1;
+pub const FAIL_PERCENT: u8 = 3;
+pub const CREEP_PERCENT: u8 = 10;
 
 /// Simulation (advance, viewport, late game, smoke and distributed ticks),
 /// protocol (1) and assets (1).
@@ -20,15 +31,9 @@ struct Baseline {
     late_game_workload_hash: String,
     target_distributed_workload_hash: String,
     instructions: BTreeMap<String, u64>,
-    allocation_bytes: BTreeMap<String, u64>,
-    allocation_count: BTreeMap<String, u64>,
-}
-
-#[derive(Clone, Copy)]
-struct Metrics {
-    instructions: u64,
-    allocation_bytes: u64,
-    allocation_count: u64,
+    /// Fixed anchor for the creep guard. Refreshing `instructions` never moves
+    /// it; only a deliberate, reviewed edit does.
+    instruction_reference: BTreeMap<String, u64>,
 }
 
 fn metric(profile: &Value, tool: &str, name: &str, side: &str) -> Result<u64, Box<dyn Error>> {
@@ -47,7 +52,7 @@ fn metric(profile: &Value, tool: &str, name: &str, side: &str) -> Result<u64, Bo
         .ok_or_else(|| format!("missing {tool} {name} sample").into())
 }
 
-fn sample(line: &str) -> Result<(String, Metrics), Box<dyn Error>> {
+fn sample(line: &str) -> Result<(String, u64), Box<dyn Error>> {
     let item: Value = serde_json::from_str(line)?;
     if item["version"] != "6" {
         return Err("unexpected Gungraun JSON version".into());
@@ -61,21 +66,10 @@ fn sample(line: &str) -> Result<(String, Metrics), Box<dyn Error>> {
         .iter()
         .find(|profile| profile["tool"] == "Callgrind")
         .ok_or("Callgrind sample missing")?;
-    let dhat = profiles
-        .iter()
-        .find(|profile| profile["tool"] == "DHAT")
-        .ok_or("DHAT sample missing")?;
-    Ok((
-        name,
-        Metrics {
-            instructions: metric(callgrind, "Callgrind", "Ir", "Both")?,
-            allocation_bytes: metric(dhat, "Dhat", "TotalBytes", "Both")?,
-            allocation_count: metric(dhat, "Dhat", "TotalBlocks", "Both")?,
-        },
-    ))
+    Ok((name, metric(callgrind, "Callgrind", "Ir", "Both")?))
 }
 
-fn samples(path: &Path) -> Result<BTreeMap<String, Metrics>, Box<dyn Error>> {
+fn samples(path: &Path) -> Result<BTreeMap<String, u64>, Box<dyn Error>> {
     let content = fs::read_to_string(path)?;
     let mut result = BTreeMap::new();
     for line in content.lines().filter(|line| !line.trim().is_empty()) {
@@ -94,7 +88,7 @@ fn observed_samples_at(
     simulation: &Path,
     protocol: &Path,
     assets: &Path,
-) -> Result<BTreeMap<String, Metrics>, Box<dyn Error>> {
+) -> Result<BTreeMap<String, u64>, Box<dyn Error>> {
     let mut observed = samples(simulation)?;
     for suite in [protocol, assets] {
         for (name, value) in samples(suite)? {
@@ -106,7 +100,12 @@ fn observed_samples_at(
     Ok(observed)
 }
 
-fn proposal(observed: &BTreeMap<String, Metrics>) -> Result<Baseline, Box<dyn Error>> {
+/// `reference` is the committed anchor to keep; a case without one starts at
+/// its observed count.
+fn proposal(
+    observed: &BTreeMap<String, u64>,
+    reference: &BTreeMap<String, u64>,
+) -> Result<Baseline, Box<dyn Error>> {
     if observed.len() != CASES {
         return Err(format!("initial proposal requires {CASES} benchmark cases").into());
     }
@@ -119,17 +118,10 @@ fn proposal(observed: &BTreeMap<String, Metrics>) -> Result<Baseline, Box<dyn Er
         smoke_workload_hash: SMOKE.workload_hash(),
         late_game_workload_hash: LATE_GAME.workload_hash(),
         target_distributed_workload_hash: TARGET_DISTRIBUTED.workload_hash(),
-        instructions: observed
+        instructions: observed.clone(),
+        instruction_reference: observed
             .iter()
-            .map(|(name, value)| (name.clone(), value.instructions))
-            .collect(),
-        allocation_bytes: observed
-            .iter()
-            .map(|(name, value)| (name.clone(), value.allocation_bytes))
-            .collect(),
-        allocation_count: observed
-            .iter()
-            .map(|(name, value)| (name.clone(), value.allocation_count))
+            .map(|(name, value)| (name.clone(), reference.get(name).copied().unwrap_or(*value)))
             .collect(),
     })
 }
@@ -139,6 +131,7 @@ pub fn propose() -> Result<(), Box<dyn Error>> {
         Path::new("reports/perf/simulation.ndjson"),
         Path::new("reports/perf/protocol.ndjson"),
         Path::new("reports/perf/assets.ndjson"),
+        Path::new("baselines/perf/micro.json"),
         Path::new("reports/perf/micro-proposal.json"),
     )
 }
@@ -147,10 +140,16 @@ fn propose_at(
     simulation: &Path,
     protocol: &Path,
     assets: &Path,
+    baseline: &Path,
     output: &Path,
 ) -> Result<(), Box<dyn Error>> {
     let observed = observed_samples_at(simulation, protocol, assets)?;
-    let proposal = proposal(&observed)?;
+    let reference = fs::read(baseline)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Baseline>(&bytes).ok())
+        .map(|baseline| baseline.instruction_reference)
+        .unwrap_or_default();
+    let proposal = proposal(&observed, &reference)?;
     fs::create_dir_all(output.parent().ok_or("proposal has no parent")?)?;
     fs::write(output, serde_json::to_vec_pretty(&proposal)?)?;
     println!("review reports/perf/micro-proposal.json; baseline was not changed");
@@ -159,7 +158,7 @@ fn propose_at(
 
 fn compare_observed(
     baseline: Baseline,
-    observed: BTreeMap<String, Metrics>,
+    observed: BTreeMap<String, u64>,
 ) -> Result<Vec<Comparison>, Box<dyn Error>> {
     if baseline.instructions.len() != CASES
         || baseline.version != 1
@@ -175,30 +174,53 @@ fn compare_observed(
     }
     let expected: Vec<_> = baseline.instructions.keys().collect();
     if expected != observed.keys().collect::<Vec<_>>()
-        || expected != baseline.allocation_bytes.keys().collect::<Vec<_>>()
-        || expected != baseline.allocation_count.keys().collect::<Vec<_>>()
+        || expected != baseline.instruction_reference.keys().collect::<Vec<_>>()
     {
         return Err("microbenchmark case set differs from baseline".into());
     }
-    let mut results = Vec::new();
-    for (name, counts) in observed {
-        results.push(compare(
-            &format!("instructions::{name}"),
-            Some(counts.instructions),
-            baseline.instructions.get(&name).copied(),
+    Ok(observed
+        .into_iter()
+        .map(|(name, count)| {
+            judge(
+                &format!("instructions::{name}"),
+                count,
+                baseline.instructions[&name],
+                baseline.instruction_reference[&name],
+            )
+        })
+        .collect())
+}
+
+/// One instruction row: fail above +3% of `baseline` or +10% of `reference`,
+/// warn above +1%, ask for a refresh below -3%.
+fn judge(metric: &str, observed: u64, baseline: u64, reference: u64) -> Comparison {
+    let mut row = compare_at(metric, Some(observed), Some(baseline), FAIL_PERCENT);
+    let delta =
+        |from: u64| (i128::from(observed) - i128::from(from)) as f64 * 100.0 / from.max(1) as f64;
+    if row.verdict == Verdict::Regression {
+        row.note = Some(format!(
+            "FAIL {:+.1}% over baseline {baseline} (cap +{FAIL_PERCENT}%)",
+            delta(baseline)
         ));
-        results.push(compare(
-            &format!("allocation_bytes::{name}"),
-            Some(counts.allocation_bytes),
-            baseline.allocation_bytes.get(&name).copied(),
+    } else if over(observed, reference, CREEP_PERCENT) {
+        row.verdict = Verdict::Regression;
+        row.note = Some(format!(
+            "FAIL creep {:+.1}% over reference {reference} (cap {})",
+            delta(reference),
+            floor_at(reference, CREEP_PERCENT) - 1
         ));
-        results.push(compare(
-            &format!("allocation_count::{name}"),
-            Some(counts.allocation_count),
-            baseline.allocation_count.get(&name).copied(),
+    } else if over(observed, baseline, WARN_PERCENT) {
+        row.note = Some(format!(
+            "warning {:+.1}% over baseline {baseline} (fails above +{FAIL_PERCENT}%)",
+            delta(baseline)
+        ));
+    } else if u128::from(observed) * 100 < u128::from(baseline) * u128::from(100 - FAIL_PERCENT) {
+        row.note = Some(format!(
+            "improved {:+.1}%: refresh the baseline with make perf-baseline-propose",
+            delta(baseline)
         ));
     }
-    Ok(results)
+    row
 }
 
 pub fn comparisons() -> Result<Vec<Comparison>, Box<dyn Error>> {

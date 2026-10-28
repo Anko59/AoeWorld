@@ -49,3 +49,14 @@ future baseline change. CODEOWNERS protects this directory on a configured
 remote. The tested Rust comparator blocks only a jump of more than 25%
 (`perf::THRESHOLD_PERCENT`; it was 5% until 2026-10-27), so growth below that
 is reported as a trend and needs no baseline change.
+
+2026-10-28: instruction rows warn above +1% of their baseline, fail above +3%,
+and fail above +10% of the fixed `instruction_reference` (initially equal to the
+baseline); DHAT allocation baselines were removed. See
+[performance](../../docs/performance.md#instruction-gate).
+All seven instruction baselines and references were re-taken the same day on
+`dev` 96029c0e (Rust 1.99.1, Gungraun 0.19.4): the 25% window had let
+`smoke_ticks` drift +23.4% (4,959,397 to 6,118,714) since #610; late game
+moved +1.6% (236,784,665 to 240,557,748) and advance +1.2%. The smoke drift is
+unexplained and should be investigated separately; the new references anchor
+the creep guard from here.

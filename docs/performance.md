@@ -66,14 +66,6 @@ phase and the movement span split (`PERF_GROUPS_ARGS` passes flags;
 run also prices the attack-move look and the fights). It is the
 baseline for the [group movement rewrite](movement/group-movement-rewrite.md).
 
-`make perf-timing` runs pinned Criterion 0.8.2 benchmarks for a synthetic
-simulation tick, viewport query, 1,000-entity snapshot encode/decode, and
-256-color palette decode. Nightly CI uploads `reports/perf/timing.json` and
-`timing.md`. The versioned JSON contains the exact revision, dirty status,
-workload identity, toolchain, raw Criterion samples, and estimate intervals.
-Its `INCONCLUSIVE` verdict means hosted elapsed time does not establish a
-hardware timing pass. Criterion timings never block a merge for regression.
-
 The Playwright hotspot camera test uses a 1920×1080 browser viewport and
 collects bounded frame-interval, client decode/update, and CPU render-submit
 samples from the Rust/WASM client. It records navigation-relative first-visible
@@ -238,12 +230,36 @@ the live camera's floats in Rust would retain its full decimal formatter solely
 for a browser navigation. Camera, seat and unknown fragment fields are preserved.
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
-`INCONCLUSIVE` verdicts. Sizes and instruction and allocation counts are
-trends, not budgets: every run reports them against the baseline and only a
-jump of more than 25% (`perf::THRESHOLD_PERCENT`) is a `REGRESSION` (5% until
-2026-10-27). A missing baseline or sample cannot pass. The pinned Gungraun/Callgrind and DHAT analysis image measures five
-simulation, protocol, and palette-decoding kernels. Binaryen optimizes the WASM bundle before gzip
-size comparison. Their reviewed initial baselines live in `baselines/perf/`;
+`INCONCLUSIVE` verdicts. A missing baseline or sample cannot pass. WASM size is a
+trend, not a budget: only a jump of more than 25% (`perf::THRESHOLD_PERCENT`; 5%
+until 2026-10-27) is a `REGRESSION`.
+
+### Instruction gate
+
+CI runners are noisy, so performance is gated on Callgrind instruction counts
+(deterministic) and never on elapsed time. The pinned Gungraun/Callgrind analysis
+image counts seven kernels (simulation, protocol, palette decoding;
+`crates/harness/src/perf_micro.rs`). Each row is compared with its committed
+`instructions` baseline in `baselines/perf/micro.json`:
+
+| Row against its baseline | Result |
+|---|---|
+| above +1% | warning note in `make perf-ci` output and the PR comment |
+| above +3% | `REGRESSION`: `make perf-ci` fails |
+| below -3% | note asking for a refresh with `make perf-baseline-propose` |
+| more than +10% over `instruction_reference` | `REGRESSION` (creep guard), whatever the baseline says |
+
+`instruction_reference` is a fixed anchor per kernel, so many accepted small
+steps cannot add up. `make perf-baseline-propose` writes a proposal that keeps
+the committed reference; only a deliberate, reviewed edit of the reference (with
+the reason recorded here) moves it. Baselines are lowered or raised only in a
+reviewed commit. Allocation counts (DHAT) are no longer measured: no gate or
+comment used them, and DHAT roughly doubled the bench time. Elapsed-time rows
+(tick p50/p95, protocol pressure, scale and multi-thread workloads) stay
+informational and never gate; the Criterion `perf-timing` suite was removed.
+
+Binaryen optimizes the WASM bundle before gzip
+size comparison. Reviewed baselines live in `baselines/perf/`;
 `make perf-baseline-propose` writes proposed replacements to ignored reports
 without changing the baselines. The WASM size baseline was re-taken on
 2026-10-10 at 228410 B (from 217240 B, set by #6), the size of the tree that
@@ -339,7 +355,7 @@ On pull requests whose `target-performance` job ran, CI posts one informational
 performance comment and rewrites it in place on later runs (`make perf-comment`).
 It shows the optimized WASM size as `baseline …, cap …` (the cap is the size
 gate's own comparison threshold applied to `baselines/perf/wasm.json`) and the
-pinned kernels' instruction counts as deterministic rows. Tick and
+pinned kernels' instruction counts as deterministic rows with the gate's warning, failure or refresh note. Tick and
 protocol-pressure timings appear only when the PR value falls outside the band
 `dev` itself spans across its latest runs whose `target-performance` job passed
 and which have a `performance-report` artifact — their `[min, max]` widened by

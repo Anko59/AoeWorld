@@ -2,7 +2,7 @@ use super::{Command, DevCommand};
 use crate::{
     agents, architecture, assets, coverage, dev, e2e, format_commands, fuzz, gates, hooks, ledger,
     native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure, perf_scale, perf_size,
-    perf_soak, perf_stress, perf_timing, policy, process, qa, qa_mcp, release, release_promotion,
+    perf_soak, perf_stress, policy, process, qa, qa_mcp, release, release_promotion,
     release_publish, repo_policy, review, ship, slots, timeline, wasm_test,
 };
 use std::{
@@ -102,7 +102,6 @@ pub(super) fn run(
         Command::PerfFull => perf::run("full")?,
         Command::PerfPressure => perf_pressure::run()?,
         Command::PerfStress => perf_stress::run()?,
-        Command::PerfTimingReport => perf_timing::report()?,
         Command::PerfScale(options) => perf_scale::run(options)?,
         Command::PerfGroups(options) => perf_scale::groups::run(options)?,
         Command::ScaleMatch(options) => perf_scale::scale_match::run(options)?,

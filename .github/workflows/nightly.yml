@@ -71,7 +71,6 @@ jobs:
       - uses: ./.github/actions/docker-setup
       - run: make bootstrap
       - run: make perf-full
-      - run: make perf-timing
       - run: make perf-scale-smoke
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

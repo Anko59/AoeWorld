@@ -23,6 +23,8 @@ pub(crate) struct Report {
     pub(crate) wasm_gzip: Option<u64>,
     /// Kernel name (`simulation::advance`) to the observed instruction count.
     pub(crate) instructions: BTreeMap<String, Option<u64>>,
+    /// Kernel name to the gate's warning, failure or refresh note, if any.
+    pub(crate) instruction_notes: BTreeMap<String, String>,
     /// Scenario name to tick p50/p95 in nanoseconds.
     pub(crate) ticks: BTreeMap<String, Timing>,
     pub(crate) pressure: Option<Pressure>,
@@ -94,6 +96,25 @@ fn instructions(report: &Value) -> BTreeMap<String, Option<u64>> {
     instructions
 }
 
+fn instruction_notes(report: &Value) -> BTreeMap<String, String> {
+    let comparisons = report.get("comparisons").and_then(Value::as_array);
+    comparisons
+        .into_iter()
+        .flatten()
+        .filter_map(|item| {
+            let metric = item
+                .get("metric")?
+                .as_str()?
+                .strip_prefix("instructions::")?;
+            let note = item.get("note")?.as_str()?;
+            Some((
+                metric.trim_start_matches("instructions::").to_owned(),
+                note.to_owned(),
+            ))
+        })
+        .collect()
+}
+
 fn pressure(dir: &Path) -> Option<Pressure> {
     let report: Value = serde_json::from_slice(&fs::read(dir.join("pressure.json")).ok()?).ok()?;
     let latency: Vec<u64> = report
@@ -128,6 +149,7 @@ pub(crate) fn read(dir: &Path) -> Result<Report, String> {
         wasm_raw: file_size(dir, "optimized.wasm"),
         wasm_gzip: file_size(dir, "optimized.wasm.gz"),
         instructions: instructions(&report),
+        instruction_notes: instruction_notes(&report),
         ticks: ticks(&report),
         pressure: pressure(dir),
     })

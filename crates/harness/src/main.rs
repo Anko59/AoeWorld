@@ -22,7 +22,6 @@ mod perf_scale;
 mod perf_size;
 mod perf_soak;
 mod perf_stress;
-mod perf_timing;
 mod policy;
 mod process;
 mod qa;

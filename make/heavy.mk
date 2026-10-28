@@ -114,15 +114,6 @@ perf-instructions-steps:
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) cargo bench --locked -p aoe-protocol --bench instructions -- --output-format=json > reports/perf/protocol.ndjson
 	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) cargo bench --locked -p aoe-assets --bench instructions -- --output-format=json > reports/perf/assets.ndjson
 
-perf-timing: tools slot-bootstrap
-	@$(SLOT_RUN) perf-timing -- make --no-print-directory perf-timing-steps
-
-perf-timing-steps:
-	@$(DOCKER_RUN) cargo bench --locked -p aoe-simulation --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
-	@$(DOCKER_RUN) cargo bench --locked -p aoe-protocol --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
-	@$(DOCKER_RUN) cargo bench --locked -p aoe-assets --bench timings -- --noplot --warm-up-time 0.5 --measurement-time 1 --sample-size 10
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-timing-report
-
 # Headless 100-player, 100,000-unit tick benchmark; PERF_SCALE_ARGS passes harness flags
 # (for example `PERF_SCALE_ARGS="--players 8 --ticks 100" make perf-scale`).
 perf-scale: tools slot-bootstrap
@@ -414,7 +405,6 @@ perf-soak-30-steps:
   perf-soak-10 \
   perf-soak-30 \
   perf-instructions \
-  perf-timing \
   perf-scale \
   perf-scale-smoke \
   perf-groups \

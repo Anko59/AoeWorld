@@ -1,4 +1,4 @@
-//! Focused instruction-only iteration; the CI suite still collects DHAT.
+//! Focused instruction-only iteration.
 use aoe_simulation::GameWorld;
 use gungraun::prelude::*;
 use gungraun::{Callgrind, EntryPoint};
