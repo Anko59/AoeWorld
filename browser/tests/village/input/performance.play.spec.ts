@@ -100,7 +100,7 @@ test("performance sampling starts disabled and F3 enables it", async ({
   await expect.poll(async () => (await metrics(page))?.enabled).toBe(true);
 });
 
-test("Ctrl right-click toggles developer tools while Shift keeps queued orders", async ({
+test("Ctrl right-click queues orders and F3 toggles developer tools", async ({
   page,
 }, info) => {
   test.setTimeout(90_000);
@@ -108,20 +108,14 @@ test("Ctrl right-click toggles developer tools while Shift keeps queued orders",
   const commands = await inputFixture(page, renderer);
   const overlay = page.locator("#performance-overlay");
   await page.mouse.click(640, 360);
-  await page.keyboard.down("Shift");
+  await page.keyboard.down("Control");
   await page.mouse.click(850, 430, { button: "right" });
-  await page.keyboard.up("Shift");
+  await page.keyboard.up("Control");
   await expect.poll(() => commands.length).toBe(1);
   expect(commands[0]?.[0]).toBe(21);
   await expect(overlay).toBeHidden();
-  const count = commands.length;
-  await page.keyboard.down("Control");
-  await page.mouse.click(850, 430, { button: "right" });
-  await page.keyboard.up("Control");
+  await page.keyboard.press("F3");
   await expect(overlay).toBeVisible();
-  expect(commands.length).toBe(count);
-  await page.keyboard.down("Control");
-  await page.mouse.click(850, 430, { button: "right" });
-  await page.keyboard.up("Control");
+  await page.keyboard.press("F3");
   await expect(overlay).toBeHidden();
 });

@@ -23,13 +23,6 @@ export function initDevTools() {
   show(visible);
   button.addEventListener('click', toggle);
   const performance = initPerformance();
-  // Renderer fallback and recovery can replace the canvas.
-  document.addEventListener('pointerdown', event => {
-    if (event.target?.id !== 'scene' || event.button !== 2 || !event.ctrlKey) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    performance.enable(!performance.enabled);
-  }, true);
   document.addEventListener('keydown', event => {
     if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || editable(event.target)
         || document.querySelector('dialog[open]')) return;

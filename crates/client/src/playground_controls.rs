@@ -161,7 +161,8 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             return;
         }
         if event.button() == 2 {
-            super::village::orders::at_pointer(&mut client, target, event.shift_key());
+            // Ctrl queues: Firefox opens its context menu on Shift+right-click.
+            super::village::orders::at_pointer(&mut client, target, event.ctrl_key());
             return;
         }
         if event.button() == 0 && client.village.placement.is_some() {

@@ -49,10 +49,10 @@ test("shift right-click walks successive destinations and clears authoritative m
     }).observe(document.body, { childList: true, subtree: true });
   });
   await page.mouse.click(900, 430, { button: "right" });
-  await page.keyboard.down("Shift");
+  await page.keyboard.down("Control");
   await page.mouse.click(450, 460, { button: "right" });
   await page.mouse.click(950, 480, { button: "right" });
-  await page.keyboard.up("Shift");
+  await page.keyboard.up("Control");
   await expect(
     page.locator(`#waypoint-markers g[data-unit="${scout.id}"]`),
   ).toHaveCount(3);
@@ -93,9 +93,9 @@ test("shift right-click walks successive destinations and clears authoritative m
       (final?.y ?? NaN) - (last?.y ?? NaN),
     ),
   ).toBeLessThan(18);
-  await page.keyboard.down("Shift");
+  await page.keyboard.down("Control");
   await page.mouse.click(450, 460, { button: "right" });
-  await page.keyboard.up("Shift");
+  await page.keyboard.up("Control");
   await expect(page.locator("#waypoint-markers g")).toHaveCount(1);
   await page.locator("#stop-units").click();
   await expect(page.locator("#waypoint-markers g")).toHaveCount(0);

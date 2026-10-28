@@ -22,7 +22,7 @@ economic buildings, then A places a Farm when a completed Mill is available.
 Ctrl+0–9 assigns owned living units to a local control group; 0–9 recalls it,
 a second tap within 350 ms centers its centroid, and Shift+number adds the
 current selection to that group. Editable fields and dialogs keep their keys.
-Shift+right-click queues up to sixteen movement destinations, including the
+Ctrl+right-click queues up to sixteen movement destinations, including the
 active leg. Numbered flags and connecting lines show the authoritative queue
 for selected units. Plain orders and Stop replace or clear it. A blocked leg
 is skipped when reached; later valid destinations still execute deterministically.

@@ -65,9 +65,9 @@ for (const [kind, unitKind] of [
     expect(orders[0]?.[2]).toBe(5);
     expect(orders[0]?.[8]).toBe(3);
     expect(orders[0]?.at(-2)).toBe(0);
-    await page.keyboard.down("Shift");
+    await page.keyboard.down("Control");
     await page.mouse.click(1150, 220, { button: "right" });
-    await page.keyboard.up("Shift");
+    await page.keyboard.up("Control");
     await expect.poll(() => orders.length).toBe(2);
     expect(orders[1]?.at(-2)).toBe(1);
     await page.locator("#attack-move-units").click();
