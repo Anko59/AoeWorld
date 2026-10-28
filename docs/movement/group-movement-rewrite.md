@@ -454,17 +454,16 @@ member at its assigned destination: a give-up cannot pass as arrival.
 | Same, 6-tile forest with a 2-tile pass | first 2238, last 3955 (1.70× open); 0 stop over 8 tiles short (PR 3; was 14); single file for 1,737 ticks, 78 tiles long | ≤ 1.6× (6) |
 | 30 militia and one sealed in, enemy 3 tiles past the goal | (PR 3) the 30 reach the goal between ticks 2533 and 3019; first strike on the enemy at 2572, before the last arrival and before the sealed unit gives up at 2753; before PR 3 the first strike came at 3082 | kept |
 | Re-order 10 of 60 | (before PR 1) the other 50 left the group, stopped at once, none arrived; now all 50 stay grouped and arrive | all 50 arrive (1) |
-| Attack-move, 60 vs 10 | (PR 4) all 10 die by tick 1366; all 60 survive and stand within a tile of their own slot; with the first PR 4 look (13x13 tiles) 1564 and 56; before: 8 of 10 died, 55 idle near x 75 of 140, none at the goal | kept (4) |
-| Attack-move, 24 through 5 standing ground (the PR 4 showcase) | (PR 4) members break off within their own 4-tile sight from tick 101; 5 s later 13 fight and the other 11 march at the group's pace; no unit stands in the attack pose out of reach; with the 13x13-tile look: from tick 37, up to 8.4 tiles away, 19 broken off 5 s later and 13 of them standing out of reach (6,871 member-ticks) | kept (4) |
+| Attack-move, 60 vs 10 | (PR 4) all 10 die by tick 1366; all 60 survive and stand within a tile of their own slot; with PR 6 and no straggler wait for attack-move groups, tick 1210; with the first PR 4 look (13x13 tiles) 1564 and 56; before: 8 of 10 died, 55 idle near x 75 of 140, none at the goal | kept (4) |
+| Attack-move, 24 through 5 standing ground (the PR 4 showcase) | (PR 4) members break off within their own 4-tile sight from tick 101; 5 s later 13 fight and the other 11 march at the group's pace; no unit stands in the attack pose out of reach; with PR 6: from tick 81, 5 s later 17 fight and 7 march, group pace 42/45 of militia speed; with the 13x13-tile look: from tick 37, up to 8.4 tiles away, 19 broken off 5 s later and 13 of them standing out of reach (6,871 member-ticks) | kept (4) |
 | Head-on, 3 vs 3, bridge | no deadlock: first crossing tick 181, all across 251 | both cross within 3 s (8) |
 | 4 fishing ships, 1-tile river | all 4 gather orders refused; 3-tile river: 2 refused | all 4 work (9) |
 | 12 villagers, one gold mine | 2 carry gold by 10 s, 9 by 30 s, 10 by 60 s; 2 idle | all 12 by 10 s (10) |
-| 40 vs 40 melee | (PR 4, members engage one by one, only for an enemy in sight with a free spot) first blow tick 234; 36 distinct strikers in 5 s (lower bound), 79 in 60 s; 2 and 7 alive; with the 13x13-tile look: tick 270, 6 and 64, 21 and 14; before PR 4: tick 304, 12 and 36, 29 and 26 alive | ≥ 90 % strike in 5 s (10) |
+| 40 vs 40 melee | (PR 4, members engage one by one, only for an enemy in sight with a free spot) first blow tick 234; 36 distinct strikers in 5 s (lower bound), 79 in 60 s; 2 and 7 alive; with PR 6: tick 185, 36 and 78, 1 and 8 alive; with the 13x13-tile look: tick 270, 6 and 64, 21 and 14; before PR 4: tick 304, 12 and 36, 29 and 26 alive | ≥ 90 % strike in 5 s (10) |
 
 Matched `make perf-groups`: 12-CPU slot, shared host, fog on, 200 Line armies
 (30–79 units), 10,900 units, 100 warm-up ticks, 300 ticks/window. Before is
-clean `fe8586ee`; initial PR 6 is `1b5a3aa6`. Optimization keeps every scenario
-result above and the canonical replay pins unchanged.
+clean `fe8586ee`; initial PR 6 is `1b5a3aa6`.
 
 | Plain window (ms, p50 / p95) | Before PR 6 | Initial PR 6 | Optimized |
 | --- | --- | --- | --- |
@@ -472,29 +471,18 @@ result above and the canonical replay pins unchanged.
 | Whole tick | 5.100 / 5.482 | 11.792 / 13.097 | 5.507 / 6.407 |
 
 PR 3 and PR 4 as built: a member that cannot move for 240 ticks after the
-anchor arrived stops where it stands; the column is dropped at anchor arrival;
-every 4 ticks an attack-move group makes one bounded look over its extent
-(at most 2,048 bucket entries and 32 enemies); a member breaks off only for an
-enemy within its own sight that has a free melee spot (or is in reach), at most
-eight per look; a unit that chose its own target (acquisition, attack-move)
-gives it up when every spot around it is taken instead of standing out of
-reach, and the client draws the attack pose only with the target in reach.
-Members fight alone and march on
-as a one-unit attack-move group to their slot at the group destination (a
-shortcut: the design's `Engaged` state inside the group needs PR 6's group
-ids, because `stop_movement` still calls `leave_group`). A group leader's
-obstruction no longer triggers the 240-tick give-up, which had ended the whole
-group's route. The remaining legs of a queued order are not resumed by a leaver.
+anchor arrived stops where it stands. Every 4 ticks an attack-move group looks
+once over its extent (at most 2,048 bucket entries, 32 enemies); a member breaks
+off only for an enemy in its own sight with a free melee spot, at most eight
+per look, and gives it up if every spot is taken. Members fight alone and march
+on as a one-unit attack-move group to their slot (the design's `Engaged` state
+needs group ids, because `stop_movement` still calls `leave_group`). A leader's
+obstruction no longer triggers the 240-tick give-up; a leaver loses queued legs.
 
-The initial regression came chiefly from repeated hard-body sweeps, not slot
-assignment or the clearance field. Movement-only Callgrind falls from
-96,413,953 to 44,116,679 instructions. The optimized p50 meets 4.9 ms; the p95
-remains above the historical PR 5 result. See [profiling](group-profiling.md)
-for reproduction, the fresh PR 6 comparison, source costs, phase/span splits,
-activity census and validation. Spans overlap and include instrumentation cost;
-the later profiled window has different activity from the plain window.
-These open synthetic scenes do not qualify RTS performance or dedicated
-hardware; PRs 7/11 remain necessary for crowding/performance closure.
+The initial regression came from repeated hard-body sweeps, not slots or
+clearance; movement-only Callgrind falls from 96,413,953 to 44,116,679
+instructions. See [profiling](group-profiling.md) for reproduction and costs. These synthetic scenes do not qualify RTS
+performance or dedicated hardware; PRs 7/11 remain necessary.
 
 Implementation evidence and differences from the design:
 - S1 never formed a column on open ground; the obstacle caused it. Column
@@ -502,12 +490,11 @@ Implementation evidence and differences from the design:
   of stretch and frontage below one infantry diameter. It stays zero.
 - Hard bodies remain until PR 7. Open slots leave a passing lane plus a
   snapshot step; narrow files need only a diameter plus that step. A half-tile
-  lag slows the anchor to 0.75×; catch-up is exactly 1.25×, capped by own speed.
+  lag slows the anchor to 0.75×, except for attack-move groups (contact would
+  slow the army: pace 42/45); catch-up is exactly 1.25×, capped by own speed.
   Initial offsets blend toward the fixed destination layout while walking.
 - Five clearance samples cover eight tiles ahead/behind. Static obstruction
   for 120 ticks permits at most four detached scheduler requests per tick;
-  members keep their slot/group and rejoin within two tiles. Sealed members
-  can move inside their tile after ray removal, then give up independently.
-- Scheduler storage still belongs to a member, with route handover when it
-  leaves/detaches. Independent group ids / in-group Engaged remain absent:
-  PR 4 one-unit resumes stay; a leaver still loses old queued legs.
+  members rejoin within two tiles. Sealed members give up independently.
+- Scheduler storage belongs to a member (route handover on leave/detach); group
+  ids and in-group Engaged remain absent: PR 4 one-unit resumes stay.

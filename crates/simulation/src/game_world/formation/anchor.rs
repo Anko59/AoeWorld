@@ -140,7 +140,12 @@ impl GameWorld {
 
 impl GameWorld {
     pub(super) fn formation_cohesive(&self, group: &Group) -> bool {
+        // An attack-move group meets enemies on the way: bodies in its path
+        // hold marching members back, and the blend toward the destination
+        // layout makes the outermost slot run away at exactly the catch-up
+        // pace. Waiting for them would slow the whole army at every contact.
         group.direct
+            || group.attack_move
             || group.members.iter().all(|member| {
                 let position = self.units[self.lookup[&member.id]].state.position;
                 member.arrived

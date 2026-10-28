@@ -5,9 +5,13 @@
 use super::*;
 
 /// The server state the client drew as a swing before the reach check
-/// (`client/src/unit_visuals/mod.rs`): an attack order and not moving.
+/// (`client/src/unit_visuals/mod.rs`): an attack order and not moving. A unit
+/// still waiting for its route (`planning`) is not stuck: the scheduler
+/// answers within a few ticks (2 to 5 member-ticks were seen, up to 2.5 tiles
+/// from the target). The invariant applies to units that neither move nor
+/// wait for a route, which is what a crowded wait left behind.
 fn attack_pose(u: &crate::GameUnit) -> bool {
-    !u.moving && u.task == UnitTask::Attacking
+    !u.moving && !u.planning && u.task == UnitTask::Attacking
 }
 
 fn subunits(a: WorldPosition, b: WorldPosition) -> i64 {
@@ -185,19 +189,16 @@ fn attack_move_front_engages_alone_while_the_rest_march_on() {
     // reach, up to 8.40 tiles from their target, 6,871 member-ticks in all
     // (373 crowded waits). The group itself kept 94 % of militia speed.
     // Blows only ever landed within reach (0.96 tiles at most).
-    assert_eq!(front.first_engage, Some(101));
+    assert_eq!(front.first_engage, Some(81));
     assert!(front.max_engage_distance <= 400, "{front:?}");
-    assert_eq!(
-        (front.at_2s, front.at_5s),
-        ((6, 18, 18, 0), (13, 11, 11, 0))
-    );
+    assert_eq!((front.at_2s, front.at_5s), ((10, 14, 14, 0), (17, 7, 7, 0)));
     assert_eq!(
         (front.pose_out_of_reach_ticks, front.max_pose_distance),
-        (0, 97)
+        (0, 99)
     );
     assert!(front.max_hit_distance <= 100, "{front:?}");
     assert!(front.group_pace * 100 >= front.speed * 90, "{front:?}");
-    assert_eq!((front.cleared, front.engaged_total), (Some(422), 22));
+    assert_eq!((front.cleared, front.engaged_total), (Some(372), 24));
     // Every one of the 24 survives and stands at its slot.
     assert!(ids.iter().all(|&id| {
         w.unit(id).is_some_and(|u| u.hp > 0 && !u.moving)

@@ -66,19 +66,23 @@ fn formations_attack_move_notices_contact_at_the_outer_wing() {
     let enemy = w
         .spawn_unit(PlayerId(1), center(wing.x + 2, wing.y))
         .unwrap();
-    for _ in 0..120 {
-        w.advance();
-    }
     // Only the members that see the enemy themselves and find a free spot
     // around it leave the group to fight it (before #612's follow-up, 32 did:
     // anyone within a 13x13-tile window); the head of the army, far away,
-    // keeps marching in formation.
-    let fighters = ids
-        .iter()
-        .filter(|&&id| w.unit(id).unwrap().attack_target == Some(enemy))
-        .count();
-    let left = ids.iter().filter(|&&id| w.formation(id).is_none()).count();
-    assert_eq!((fighters, left), (9, 9));
+    // keeps marching in formation. With PR 6's slots the wing kills the enemy
+    // by tick 80 and the fighters then march on as groups of one, so the
+    // count is taken at its peak while the fight lasts.
+    let (mut fighters, mut left) = (0, 0);
+    for _ in 0..120 {
+        w.advance();
+        fighters = fighters.max(
+            ids.iter()
+                .filter(|&&id| w.unit(id).unwrap().attack_target == Some(enemy))
+                .count(),
+        );
+        left = left.max(ids.iter().filter(|&&id| w.formation(id).is_none()).count());
+    }
+    assert_eq!((fighters, left), (13, 14));
     assert_eq!(w.formation(ids[0]), Some(Formation::Flank));
 }
 

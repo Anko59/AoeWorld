@@ -77,12 +77,14 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
     );
     // S5, fixed by PR 4: each member that sees an enemy, and finds a free
     // spot around it, fights it alone and the rest march on. All ten enemies
-    // die by tick 1366 (before PR 4 two survived; with the 13x13-tile look
+    // die by tick 1210 (before PR 4 two survived; with the 13x13-tile look
     // the last died at tick 1564, 24 strikers, four of ours fell), and then
     // all 60 walk on to their own slots at the destination, within a tile.
-    assert_eq!((cleared, foes_alive), (Some(1366), 0));
+    // PR 6's body-spaced slots moved contact from tick 1366 (29 strikers), and an attack-move group no
+    // longer waits for stragglers (1343 with the half-tile wait).
+    assert_eq!((cleared, foes_alive), (Some(1210), 0));
     assert_eq!((survivors, own_idle, still_moving), (60, 60, 0));
-    assert_eq!((at_destination, strikers.len()), (60, 29));
+    assert_eq!((at_destination, strikers.len()), (60, 33));
     assert!(
         within_1 * 100 >= survivors * 95,
         "{within_1} of {survivors}"
@@ -145,7 +147,9 @@ fn forty_against_forty_melee_strike_count() {
             ("east_alive", alive(&east) as i64),
         ],
     );
-    // S7: five seconds after the first blow 36 of the 80 units have been
+    // S7 (PR 4 on PR 5's parent: first blow 234, 36 in 5 s, 2 and 7 alive;
+    // PR 6's slots and an unwaiting attack-move group bring contact at tick
+    // 185 (169 with the wait), 36 in 5 s): five seconds after the first blow 36 of the 80 units have been
     // seen to strike (a lower bound: two blows on one victim in a tick count
     // once), and 79 over the whole fight. A member breaks off only for an
     // enemy in its own sight with a free spot around it, and a unit whose
@@ -155,7 +159,7 @@ fn forty_against_forty_melee_strike_count() {
     // flips this: at least 90 % of the melee units strike within 5 s.
     assert_eq!(
         (first_strike, within_5s, strikers.len()),
-        (Some(234), 36, 79)
+        (Some(185), 36, 78)
     );
-    assert_eq!((alive(&west), alive(&east)), (2, 7));
+    assert_eq!((alive(&west), alive(&east)), (1, 8));
 }
