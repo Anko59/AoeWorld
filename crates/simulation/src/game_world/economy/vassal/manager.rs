@@ -48,6 +48,7 @@ impl GameWorld {
             let mut budget = Budget::default();
             self.vassal_train(&mut snapshot, &mut budget, &mut work);
             self.vassal_reseeds(&snapshot, &mut budget, &mut work);
+            self.vassal_refresh_wood(&mut snapshot, &mut budget, &mut work);
             self.vassal_idle(id, &mut snapshot, &mut budget, &mut work, changed);
         }
         self.economy.vassals.work = work;
@@ -111,6 +112,33 @@ impl GameWorld {
                 break;
             }
             let _ = self.issue_farm_reseed(s.player, b.id, true);
+        }
+    }
+    fn vassal_refresh_wood(
+        &mut self,
+        s: &mut Snapshot,
+        budget: &mut Budget,
+        work: &mut VassalWork,
+    ) {
+        let targets: Vec<_> = s
+            .units
+            .iter()
+            .filter_map(|u| {
+                let task = self.economy.gatherers.get(&u.id)?;
+                (self.vassal_controller(u.id) == Some(s.vassal)
+                    && task.kind == aoe_map::ResourceKind::Wood
+                    && u.carried.is_none())
+                .then_some((u.id, task.tile))
+            })
+            .collect();
+        for (worker, tile) in targets {
+            if !s.buildings.iter().any(|b| {
+                b.kind.accepts(aoe_map::ResourceKind::Wood)
+                    && super::super::dropoff::ring_distance(b.footprint, tile) <= 64
+            }) && self.vassal_build_near(worker, BuildingKind::LumberCamp, tile, s, budget, work)
+            {
+                break;
+            }
         }
     }
     fn vassal_idle(

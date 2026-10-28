@@ -342,3 +342,93 @@ fn local_placement_keeps_farms_arches_and_live_units_reserved() {
         Err(EconomyError::InvalidFootprint)
     );
 }
+
+#[test]
+fn farm_foundation_stays_near_a_food_dropoff_when_worker_is_far() {
+    let (mut w, _, _) = active();
+    let workers: Vec<_> = w
+        .units()
+        .filter(|u| u.kind == UnitKind::Villager)
+        .map(|u| u.id)
+        .collect();
+    for worker in workers {
+        w.remove_unit(worker);
+    }
+    w.insert_building(
+        PlayerId(0),
+        BuildingKind::Mill,
+        aoe_core::TileRect::from_xywh(105, 105, 2, 2),
+        true,
+    )
+    .unwrap();
+    w.spawn_villager(
+        PlayerId(0),
+        WorldPosition::from_tile_center(TileCoord::new(130, 105)).unwrap(),
+    )
+    .unwrap();
+    pass(&mut w);
+    let farm = w
+        .player_buildings_of(PlayerId(0), BuildingKind::Farm)
+        .next()
+        .unwrap();
+    let mill = w
+        .player_buildings_of(PlayerId(0), BuildingKind::Mill)
+        .next()
+        .unwrap();
+    let point = farm.footprint.min;
+    let dx = point.x
+        - point
+            .x
+            .clamp(mill.footprint.min.x - 1, mill.footprint.max.x);
+    let dy = point.y
+        - point
+            .y
+            .clamp(mill.footprint.min.y - 1, mill.footprint.max.y);
+    let distance = dx * dx + dy * dy;
+    assert!(
+        distance <= 16,
+        "farm squared distance from mill ring: {distance}"
+    );
+}
+
+#[test]
+fn nearest_unfinished_building_wins_over_lower_id() {
+    let (mut w, _, _) = active();
+    let workers: Vec<_> = w
+        .units()
+        .filter(|u| u.kind == UnitKind::Villager)
+        .map(|u| u.id)
+        .collect();
+    for worker in workers {
+        w.remove_unit(worker);
+    }
+    let far = w
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::House,
+            aoe_core::TileRect::from_xywh(120, 120, 2, 2),
+            false,
+        )
+        .unwrap();
+    let near = w
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::House,
+            aoe_core::TileRect::from_xywh(100, 100, 2, 2),
+            false,
+        )
+        .unwrap();
+    let worker = w
+        .spawn_villager(
+            PlayerId(0),
+            WorldPosition::from_tile_center(TileCoord::new(97, 100)).unwrap(),
+        )
+        .unwrap();
+    pass(&mut w);
+    assert_eq!(
+        w.economy.builders.get(&worker).unwrap().building,
+        near,
+        "near is 2 tiles away; far is over 20 tiles away (id {})",
+        far.0
+    );
+}

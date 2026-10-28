@@ -68,6 +68,10 @@ impl GameWorld {
                 return false;
             }
             if let Ok(id) = self.issue_build(s.player, &[worker], kind, tile, false) {
+                s.home.site_after = 0;
+                if let Some(home) = self.economy.vassal_homes.get_mut(&s.vassal) {
+                    home.site_after = 0;
+                }
                 if let Some(b) = self.building(id) {
                     s.buildings.push(b.clone());
                 }

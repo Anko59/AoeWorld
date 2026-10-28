@@ -151,3 +151,96 @@ fn a_long_dropoff_trip_still_replaces_a_tree_in_the_reachable_work_area() {
     );
     assert_eq!(task.node, next.id);
 }
+
+#[test]
+fn vassal_refreshes_lumber_camp_after_tree_depletion() {
+    use crate::{Age, Stockpile, VASSAL_RULES};
+    let (mut world, old) = cleared_work_area(ResourceKind::Wood);
+    world.set_fog_disabled(true);
+    let next = ResourceNode::starting(
+        TileCoord::new(old.tile.x + 2, old.tile.y),
+        ResourceKind::Wood,
+    )
+    .unwrap();
+    let Terrain::Map { generator, overlay } = &mut world.terrain else {
+        unreachable!()
+    };
+    overlay.insert_starting_resource(generator, next).unwrap();
+    let camp_rect = aoe_core::TileRect::from_xywh(old.tile.x - 10, old.tile.y - 1, 2, 2);
+    let camp = world
+        .insert_building(
+            PlayerId(0),
+            crate::BuildingKind::LumberCamp,
+            camp_rect,
+            true,
+        )
+        .unwrap();
+    let castle_rect = aoe_core::TileRect::from_xywh(old.tile.x - 5, old.tile.y + 8, 4, 4);
+    let castle = world
+        .insert_building(PlayerId(0), crate::BuildingKind::Castle, castle_rect, true)
+        .unwrap();
+    let p = world.economy.players.get_mut(&PlayerId(0)).unwrap();
+    p.age = Age::Castle;
+    p.stockpile = Stockpile {
+        food: 0,
+        wood: 1000,
+        gold: 0,
+        stone: 0,
+    };
+    let worker = world
+        .spawn_villager(
+            PlayerId(0),
+            position(TileCoord::new(old.tile.x - 1, old.tile.y)).unwrap(),
+        )
+        .unwrap();
+    let vassal = world
+        .spawn_kind(
+            PlayerId(0),
+            UnitKind::Vassal,
+            position(TileCoord::new(old.tile.x - 6, old.tile.y + 8)).unwrap(),
+        )
+        .unwrap();
+    world.bind_vassal(vassal, castle, castle_rect);
+    world.issue_garrison(PlayerId(0), vassal, castle).unwrap();
+    world.advance_garrisons(&mut Vec::new());
+    let mut task = GatherTask::new(old.id, old.tile, ResourceKind::Wood, None);
+    task.dropoff = Some(camp);
+    task.work_tile = Some(TileCoord::new(old.tile.x - 1, old.tile.y));
+    let Terrain::Map { generator, overlay } = &mut world.terrain else {
+        unreachable!()
+    };
+    overlay
+        .deplete(generator, old.id, old.initial_amount)
+        .unwrap();
+    assert!(world.resume_resource(worker, &mut task));
+    assert_eq!(task.node, next.id);
+    assert_eq!(
+        super::super::super::dropoff::ring_distance(camp_rect, old.tile),
+        64
+    );
+    assert_eq!(
+        super::super::super::dropoff::ring_distance(camp_rect, next.tile),
+        100
+    );
+    world.economy.gatherers.insert(worker, task);
+    world
+        .economy
+        .vassals
+        .controlled
+        .insert(worker, (vassal, ResourceKind::Wood));
+    world
+        .economy
+        .vassal_homes
+        .get_mut(&vassal)
+        .unwrap()
+        .workers
+        .insert(worker);
+    world.tick = aoe_core::Tick(VASSAL_RULES.period_ticks);
+    world.advance_vassals(&mut Vec::new());
+    assert_eq!(
+        world
+            .player_buildings_of(PlayerId(0), crate::BuildingKind::LumberCamp)
+            .count(),
+        2
+    );
+}
