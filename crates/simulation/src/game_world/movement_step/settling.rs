@@ -121,6 +121,12 @@ impl GameWorld {
         if self.units[index].order.is_none() {
             return false;
         }
+        // A group leader's order is the whole group's route. Its own body
+        // being blocked while it steers to its slot must not end that route;
+        // the group's per-member stall wait covers a boxed-in unit.
+        if self.units[index].formation.is_some() {
+            return false;
+        }
         if obstruction.blocked < 16 {
             return false;
         }

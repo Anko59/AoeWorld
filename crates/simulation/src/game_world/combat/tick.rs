@@ -293,12 +293,17 @@ impl GameWorld {
 
     /// Stops the attack: the target is gone, unreachable or friendly.
     pub(crate) fn end_attack(&mut self, id: EntityId, changed: &mut Vec<EntityId>) {
-        self.combat.attackers.remove(&id);
+        let ended = self.combat.attackers.remove(&id);
         let Some(&index) = self.lookup.get(&id) else {
             return;
         };
         if self.units[index].state.hp > 0 {
             self.stop_movement(index);
+            if let Some(slot) = ended.and_then(|a| a.resume) {
+                self.combat
+                    .resuming
+                    .insert(id, crate::game_world::formation::Resume::new(slot));
+            }
             let state = &mut self.units[index].state;
             state.attack_target = None;
             state.task = if state.carried.is_some() {

@@ -30,6 +30,17 @@ impl Group {
         self.refresh_column_order();
     }
 
+    /// After members left: rebuild the id lookup and the derived column order.
+    pub(super) fn forget_departures(&mut self) {
+        self.member_lookup = self
+            .members
+            .iter()
+            .enumerate()
+            .map(|(at, m)| (m.id, at))
+            .collect();
+        self.refresh_column_order();
+    }
+
     pub(super) fn refresh_column_order(&mut self) {
         // Choose the front's centre before its wings. Sorting belongs to order
         // issuance/shape changes; ticks only walk this fixed order in O(n).
@@ -53,6 +64,19 @@ impl GameWorld {
         navigating: bool,
         work: &mut u32,
     ) {
+        if !navigating {
+            // The anchor has arrived: nothing is left to funnel behind. Every
+            // member walks to its own slot (or back along the shared trail)
+            // instead of queueing behind a predecessor.
+            if group.column {
+                group.column = false;
+                for member in &mut group.members {
+                    member.cache = None;
+                    member.detour.clear();
+                }
+            }
+            return;
+        }
         let mut anchor = group.anchor;
         if navigating {
             let x = i64::from(group.travel_heading.x);

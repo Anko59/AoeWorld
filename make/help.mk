@@ -91,6 +91,7 @@ help:
 	@echo '  make perf-timing    Collect informational Criterion microbenchmarks'
 	@echo '  make perf-scale     Measure 100 players and 100k units on a 16k-tile map (reports/scale/)'
 	@echo '  make perf-scale-smoke  Run the tiny scale benchmark that CI executes'
+	@echo '  make perf-groups    Measure 200 armies (11k movers) crossing; reports the movement span split'
 	@echo '  make perf-wasm-functions Report Binaryen metrics for each client function'
 	@echo '  make perf-baseline-propose Write a reviewable baseline proposal'
 	@echo '  make perf-comment   Post the informational CI performance comment on a pull request'

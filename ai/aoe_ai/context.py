@@ -178,12 +178,13 @@ class Context:
         return self.economy.population_cap - self.economy.population - self.queued
 
     # ----- orders ----------------------------------------------------------
-    def order(self, name: str, *args: Any) -> int:
-        """Send an order and remember it until its verdict arrives."""
+    def order(self, name: str, *args: Any, **options: Any) -> int:
+        """Send an order and remember it until its verdict arrives. Keyword
+        options (for example ``attack_move=True``) go to the client as given."""
         if name in UNIT_ORDERS and args:
             first = args[0]
             self.busy.update(first if isinstance(first, (list, tuple)) else (first,))
-        sequence = getattr(self.client, name)(*args)
+        sequence = getattr(self.client, name)(*args, **options)
         tracked = self.board.tracked
         tracked[sequence] = Tracked(name, args, self.tick)
         if len(tracked) > 4096:

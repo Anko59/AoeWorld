@@ -41,6 +41,7 @@ impl GameWorld {
                 point(hash, m.offset);
                 hash.update(&m.carry.to_le_bytes());
                 hash.update(&(m.probe as u64).to_le_bytes());
+                hash.update(&m.stalled.to_le_bytes());
                 hash.update(&(m.detour.len() as u64).to_le_bytes());
                 for tile in &m.detour {
                     hash.update(&tile.x.to_le_bytes());

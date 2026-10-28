@@ -58,7 +58,7 @@ impl GameWorld {
             return Err(GameWorldError::Unreachable);
         }
         if origin == destination {
-            self.break_formation(id);
+            self.leave_group(id);
             self.move_queues.remove(&id);
             self.clear_planner(index);
             self.units[index].last_movement_error = None;
@@ -85,7 +85,7 @@ impl GameWorld {
                 }
             };
         let speed_carry = self.units[index].order.map_or(0, |order| order.speed_carry);
-        self.break_formation(id);
+        self.leave_group(id);
         self.move_queues.remove(&id);
         let dx = i64::from(waypoint.x) - i64::from(origin.x);
         let dy = i64::from(waypoint.y) - i64::from(origin.y);

@@ -121,9 +121,10 @@ fn measure(installed: bool) {
     assert_eq!(
         world.canonical_hash(),
         [
-            // Stance and autonomous targeting state extend the canonical hash.
-            49, 14, 173, 216, 135, 59, 124, 136, 24, 1, 111, 197, 79, 223, 244, 16, 25, 144, 63, 21,
-            154, 213, 38, 116, 124, 114, 206, 11, 212, 81, 172, 2,
+            // Stance and autonomous targeting state extend the canonical hash, as do the
+            // attack-move resume slots and the per-member stall counter of group movement.
+            65, 144, 167, 243, 121, 169, 58, 25, 0, 255, 59, 135, 146, 88, 127, 58, 86, 36, 85, 66,
+            65, 91, 52, 56, 30, 41, 95, 67, 164, 216, 240, 55,
         ]
     );
     if installed {

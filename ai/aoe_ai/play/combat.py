@@ -305,7 +305,9 @@ class CombatManager:
                 mem.marched[unit.id] = ctx.tick
                 mem.march_progress[unit.id] = (unit.tile, ctx.tick)
             if len(members) > 1:
+                # Attack-move: each soldier fights what it meets on the way and
+                # then walks on to its slot, instead of ignoring the enemy.
                 ctx.order("formation_move", [u.id for u in members], *target,
-                          getattr(Formation, ctx.config.army_formation))
+                          getattr(Formation, ctx.config.army_formation), attack_move=True)
             else:
                 ctx.order("move", members[0].id, *target)

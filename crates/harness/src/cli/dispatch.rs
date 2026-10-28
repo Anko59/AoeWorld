@@ -104,6 +104,7 @@ pub(super) fn run(
         Command::PerfStress => perf_stress::run()?,
         Command::PerfTimingReport => perf_timing::report()?,
         Command::PerfScale(options) => perf_scale::run(options)?,
+        Command::PerfGroups(options) => perf_scale::groups::run(options)?,
         Command::ScaleMatch(options) => perf_scale::scale_match::run(options)?,
         Command::PerfSoak10 => perf_soak::run(600, "soak-10")?,
         Command::PerfSoak30 => perf_soak::run(1_800, "soak-30")?,

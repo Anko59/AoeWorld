@@ -169,7 +169,7 @@ fn formations_queue_turns_and_replay_in_canonical_member_order() {
 }
 
 #[test]
-fn formations_reject_invalid_groups_atomically_and_break_for_combat() {
+fn formations_reject_invalid_groups_atomically_and_release_only_the_attacker() {
     let mut w = wide_world();
     w.set_fog_disabled(true);
     let ids = army(&mut w, 4);
@@ -201,13 +201,20 @@ fn formations_reject_invalid_groups_atomically_and_break_for_combat() {
         assert_eq!(before, w.canonical_hash());
     }
     w.issue_attack(PlayerId(0), ids[1], enemy).unwrap();
-    assert!(ids.iter().all(|&id| w.formation(id).is_none()));
+    // Only the attacker leaves; the other three keep marching in their group.
+    assert!(w.formation(ids[1]).is_none());
+    assert!(
+        [ids[0], ids[2], ids[3]]
+            .iter()
+            .all(|&id| w.formation(id) == Some(Formation::Flank))
+    );
     assert_eq!(w.unit(ids[1]).unwrap().attack_target, Some(enemy));
     assert_eq!(w.route_accounting_error(), None);
 }
 
 #[test]
-fn formations_attack_move_engages_visible_enemies_and_stop_clears_the_group() {
+fn formations_attack_move_engages_visible_enemies_member_by_member_and_stops_release_the_group_unit_by_unit()
+ {
     let mut w = wide_world();
     w.set_fog_disabled(true);
     let ids = army(&mut w, 4);
@@ -223,9 +230,23 @@ fn formations_attack_move_engages_visible_enemies_and_stop_clears_the_group() {
         true,
     )
     .unwrap();
-    run(&mut w, 500);
-    assert!(ids.iter().all(|&id| w.formation(id).is_none()));
-    assert!(w.unit(enemy).is_none_or(|u| u.hp < u.max_hp));
+    let mut first_hit = None;
+    for tick in 1..=500 {
+        w.advance();
+        if first_hit.is_none() && w.unit(enemy).is_none_or(|u| u.hp < u.max_hp) {
+            let left = ids.iter().filter(|&&id| w.formation(id).is_none()).count();
+            first_hit = Some((tick, left));
+        }
+    }
+    // Contact is per member: all four were within reach of the lone enemy and
+    // left the group to fight it. Once it died each one marched on again, as
+    // a group of one with the same attack-move order and its own slot.
+    assert_eq!(first_hit, Some((275, 4)));
+    assert!(w.unit(enemy).is_none_or(|u| u.hp == 0));
+    assert!(
+        ids.iter()
+            .all(|&id| { w.formation(id) == Some(Formation::Line) && w.unit(id).unwrap().moving })
+    );
     w.issue_formation_move(
         PlayerId(0),
         &ids,
@@ -235,7 +256,17 @@ fn formations_attack_move_engages_visible_enemies_and_stop_clears_the_group() {
         false,
     )
     .unwrap();
+    // A stop releases only that unit; the rest of the group keeps marching.
     w.issue_stop(PlayerId(0), ids[0]).unwrap();
+    assert!(w.formation(ids[0]).is_none());
+    assert!(
+        ids[1..]
+            .iter()
+            .all(|&id| w.formation(id) == Some(Formation::Box))
+    );
+    for &id in &ids[1..] {
+        w.issue_stop(PlayerId(0), id).unwrap();
+    }
     assert!(ids.iter().all(|&id| w.formation(id).is_none()));
     assert_eq!(w.route_scheduler_stats().planners, 0);
 }

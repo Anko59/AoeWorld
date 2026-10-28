@@ -1,6 +1,7 @@
 //! Local steering never creates a route planner. Visibility probes have a
 //! fixed radius and cache tile pairs; the shared breadcrumb trail handles bends.
 use super::*;
+use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
 pub(crate) const STEERING_WORK_PER_TICK: u32 = 16_384;
 
@@ -48,6 +49,18 @@ impl GameWorld {
                     continue;
                 };
                 let unit = self.units[index].state;
+                if !navigating && member.stalled >= GIVE_UP_AFTER_TICKS {
+                    // Boxed in since the anchor arrived: stand here. The rest
+                    // of the group is not held back by one unreachable slot.
+                    let state = &mut self.units[index].state;
+                    state.moving = false;
+                    state.task = UnitTask::Idle;
+                    self.units[index].obstruction = None;
+                    if self.units[index].state != unit {
+                        changed.push(member.id);
+                    }
+                    continue;
+                }
                 let desired = column.get(at).copied().unwrap_or_else(|| {
                     layout::oriented(group.anchor, member.offset, group.heading)
                 });
@@ -148,15 +161,23 @@ impl GameWorld {
                 }
                 self.observe_unit_progress(index);
                 let at_goal = next == target;
+                // Only a real slot ends a member's march. A held or trail
+                // point is a place to pass, not an arrival.
+                let arrived = at_goal && matches!(goal, Goal::Slot | Goal::Squeeze);
+                member.stalled = if navigating || arrived || next != unit.position {
+                    0
+                } else {
+                    member.stalled.saturating_add(1)
+                };
                 if at_goal && matches!(goal, Goal::Slot | Goal::Squeeze) {
                     self.units[index].obstruction = None;
                 }
                 if at_goal && matches!(goal, Goal::Trail(_) | Goal::Hold) {
                     member.cache = None;
                 }
-                assembled &= at_goal && !matches!(goal, Goal::Hold | Goal::Trail(_));
+                assembled &= arrived;
                 let state = &mut self.units[index].state;
-                state.moving = navigating || !at_goal;
+                state.moving = navigating || !arrived;
                 if member.id != leader {
                     state.planning = false;
                 }
@@ -165,7 +186,7 @@ impl GameWorld {
                 } else {
                     UnitTask::Idle
                 };
-                state.facing = if !navigating && at_goal {
+                state.facing = if !navigating && arrived {
                     group.facing
                 } else {
                     facing_for(

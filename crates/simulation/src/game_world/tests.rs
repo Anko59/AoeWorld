@@ -3,6 +3,7 @@ use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
 use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, MovementOutcome, ResourceOverlay};
 
 mod formations;
+mod group_baseline;
 mod spacing;
 mod visibility;
 mod visibility_fanout;

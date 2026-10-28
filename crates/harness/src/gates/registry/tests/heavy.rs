@@ -35,6 +35,7 @@ fn the_committed_registry_marks_the_compiling_and_testing_gates_heavy() {
         "fuzz-smoke",
         "perf-ci",
         "perf-full",
+        "perf-groups",
         "perf-instructions",
         "perf-pressure",
         "perf-scale",

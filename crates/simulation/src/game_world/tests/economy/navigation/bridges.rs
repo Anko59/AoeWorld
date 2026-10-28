@@ -9,6 +9,8 @@ use river_fixture::{clear_nodes, river_lane, river_width};
 mod angles;
 #[path = "bridges/bridge_queue_tests.rs"]
 mod bridge_queue_tests;
+#[path = "bridges/head_on.rs"]
+mod head_on;
 
 fn setup_axis(horizontal: bool) -> (GameWorld, EntityId) {
     let mut world = river_width(horizontal, 30..34);

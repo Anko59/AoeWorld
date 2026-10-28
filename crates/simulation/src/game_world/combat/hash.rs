@@ -76,6 +76,13 @@ impl Combat {
             } else {
                 hash.update(&[0]);
             }
+            if let Some(slot) = attacker.resume {
+                hash.update(&[1]);
+                hash.update(&slot.x.to_le_bytes());
+                hash.update(&slot.y.to_le_bytes());
+            } else {
+                hash.update(&[0]);
+            }
             if let Some(tile) = attacker.goal_tile {
                 hash.update(&[1]);
                 hash.update(&tile.x.to_le_bytes());
@@ -99,6 +106,13 @@ impl Combat {
                     hash.update(&[0]);
                 }
             }
+        }
+        hash.update(&(self.resuming.len() as u64).to_le_bytes());
+        for (id, resume) in &self.resuming {
+            hash.update(&id.0.to_le_bytes());
+            hash.update(&resume.slot.x.to_le_bytes());
+            hash.update(&resume.slot.y.to_le_bytes());
+            hash.update(&[resume.empty]);
         }
         hash.update(&(self.dying.len() as u64).to_le_bytes());
         for (due, id) in &self.dying {

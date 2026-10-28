@@ -110,12 +110,19 @@ class FakeClient:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple]] = []
+        self.options: dict[int, dict] = {}
 
     def __getattr__(self, name: str) -> Any:
-        def call(*args):
+        def call(*args, **options):
             self.calls.append((name, args))
+            if options:
+                self.options[len(self.calls)] = options
             return len(self.calls)
         return call
+
+    def options_of(self, name: str) -> list[dict]:
+        """Keyword options of each call to `name`, in call order."""
+        return [self.options.get(i + 1, {}) for i, (n, _) in enumerate(self.calls) if n == name]
 
     def named(self, name: str) -> list[tuple]:
         return [args for n, args in self.calls if n == name]
