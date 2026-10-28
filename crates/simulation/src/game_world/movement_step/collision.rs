@@ -11,7 +11,7 @@ type Cells = HashMap<u64, Vec<EntityId>, BuildHasherDefault<CellHasher>>;
 // Coordinates are internal integer keys. Mix the packed pair once instead of
 // running the general-purpose keyed byte hasher on every neighbour probe.
 #[derive(Debug, Default)]
-struct CellHasher(u64);
+pub(crate) struct CellHasher(u64);
 impl Hasher for CellHasher {
     fn finish(&self) -> u64 {
         self.0
@@ -26,7 +26,7 @@ impl Hasher for CellHasher {
     }
 }
 
-fn key(tile: TileCoord) -> u64 {
+pub(crate) fn key(tile: TileCoord) -> u64 {
     u64::from(tile.x as u32) | (u64::from(tile.y as u32) << 32)
 }
 

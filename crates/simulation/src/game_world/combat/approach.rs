@@ -94,7 +94,12 @@ impl GameWorld {
         let origin = unit.position.tile_floor();
         let mut melee =
             Self::uses_melee_position(unit.kind).then(|| self.melee_positions(id, goal));
-        if let Some(points) = &mut melee {
+        // Candidates are nearest first. Only the first four free ones get the
+        // cheap straight-line proof, so test them lazily: the rest are needed
+        // only by the bounded search below, after its budget check.
+        let mut untested = 0;
+        let mut free = Vec::new();
+        if let Some(points) = &melee {
             if points.is_empty() {
                 return Ok(AttackSearch {
                     destination: None,
@@ -102,15 +107,13 @@ impl GameWorld {
                     wait: None,
                 });
             }
-            points.retain(|&at| self.interaction_point_free(id, at));
-            if points.is_empty() {
-                return Ok(AttackSearch {
-                    destination: None,
-                    far: false,
-                    wait: Some(SearchWait::Crowded),
-                });
-            }
-            for &at in points.iter().take(4) {
+            while untested < points.len() && free.len() < 4 {
+                let at = points[untested];
+                untested += 1;
+                if !self.interaction_point_free(id, at) {
+                    continue;
+                }
+                free.push(at);
                 if self.attack_line_clear(unit.kind, unit.position, at) {
                     return Ok(AttackSearch {
                         destination: Some(at),
@@ -118,6 +121,13 @@ impl GameWorld {
                         wait: None,
                     });
                 }
+            }
+            if free.is_empty() {
+                return Ok(AttackSearch {
+                    destination: None,
+                    far: false,
+                    wait: Some(SearchWait::Crowded),
+                });
             }
         }
         if self.combat.position_searches == 0 {
@@ -128,6 +138,15 @@ impl GameWorld {
             });
         }
         self.combat.position_searches -= 1;
+        if let Some(points) = &mut melee {
+            free.extend(
+                points[untested..]
+                    .iter()
+                    .copied()
+                    .filter(|&at| self.interaction_point_free(id, at)),
+            );
+            *points = free;
+        }
         let _span = self
             .planning_probe
             .as_ref()

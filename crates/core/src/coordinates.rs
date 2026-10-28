@@ -73,6 +73,7 @@ impl WorldPosition {
         })
     }
 
+    #[inline]
     pub fn tile_floor(self) -> TileCoord {
         TileCoord::new(
             self.x.div_euclid(FIXED_SUBUNITS_PER_TILE),
