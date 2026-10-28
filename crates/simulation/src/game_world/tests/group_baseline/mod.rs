@@ -9,6 +9,7 @@ use aoe_core::{CombatStance, Formation};
 
 mod arrival;
 mod clash;
+mod front;
 mod open_ground;
 mod reorder;
 

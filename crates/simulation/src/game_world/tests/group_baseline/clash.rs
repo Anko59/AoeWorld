@@ -75,18 +75,19 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
             ("slot_within_2_tiles", within_2 as i64),
         ],
     );
-    // S5, fixed by PR 4: each member that meets the enemy fights it alone and
-    // the rest march on. All ten enemies die (the last at tick 1564; before,
-    // two survived), and then every one of the 56 survivors (four fell) walks
-    // on to its own slot at the destination and stands there, within a tile.
-    assert_eq!((cleared, foes_alive), (Some(1564), 0));
-    assert_eq!((survivors, own_idle, still_moving), (56, 56, 0));
-    assert_eq!((at_destination, strikers.len()), (56, 24));
+    // S5, fixed by PR 4: each member that sees an enemy, and finds a free
+    // spot around it, fights it alone and the rest march on. All ten enemies
+    // die by tick 1366 (before PR 4 two survived; with the 13x13-tile look
+    // the last died at tick 1564, 24 strikers, four of ours fell), and then
+    // all 60 walk on to their own slots at the destination, within a tile.
+    assert_eq!((cleared, foes_alive), (Some(1366), 0));
+    assert_eq!((survivors, own_idle, still_moving), (60, 60, 0));
+    assert_eq!((at_destination, strikers.len()), (60, 29));
     assert!(
         within_1 * 100 >= survivors * 95,
         "{within_1} of {survivors}"
     );
-    assert_eq!((within_1, within_2), (56, 56));
+    assert_eq!((within_1, within_2), (60, 60));
 }
 
 #[test]
@@ -144,15 +145,17 @@ fn forty_against_forty_melee_strike_count() {
             ("east_alive", alive(&east) as i64),
         ],
     );
-    // S7: five seconds after the first blow only 6 of the 80 units have been
+    // S7: five seconds after the first blow 36 of the 80 units have been
     // seen to strike (a lower bound: two blows on one victim in a tick count
-    // once), though over the whole fight 64 do. Since PR 4 the members meet
-    // the enemy one by one instead of as a group (before: first blow at tick
-    // 304, 12 strikers in 5 s, 36 in all, 29 and 26 alive). PR 10 flips this:
-    // at least 90 % of the melee units strike within 5 s.
+    // once), and 79 over the whole fight. A member breaks off only for an
+    // enemy in its own sight with a free spot around it, and a unit whose
+    // chosen enemy is ringed by others looks for another instead of standing
+    // out of reach (before: first blow at tick 270, 6 strikers in 5 s, 64 in
+    // all, 21 and 14 alive; before PR 4: tick 304, 12, 36, 29 and 26). PR 10
+    // flips this: at least 90 % of the melee units strike within 5 s.
     assert_eq!(
         (first_strike, within_5s, strikers.len()),
-        (Some(270), 6, 64)
+        (Some(234), 36, 79)
     );
-    assert_eq!((alive(&west), alive(&east)), (21, 14));
+    assert_eq!((alive(&west), alive(&east)), (2, 7));
 }

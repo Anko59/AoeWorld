@@ -87,7 +87,12 @@ impl GameWorld {
             let Some(area) = self.acquisition_area(&u) else {
                 continue;
             };
-            if let Some(target) = self.acquire_target(&area, building_attack.is_none()) {
+            // A melee unit does not take on an enemy whose every spot is
+            // taken: it would only stand and wait out of reach.
+            if let Some(target) = self
+                .acquire_target(&area, building_attack.is_none())
+                .filter(|&target| self.attack_spot_free(id, target))
+            {
                 if building_attack.is_some() {
                     self.stop_movement(self.lookup[&id]);
                 }

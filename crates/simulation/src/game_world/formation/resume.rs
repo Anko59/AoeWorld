@@ -43,7 +43,12 @@ impl GameWorld {
             if !(self.tick.0 + u64::from(id.0)).is_multiple_of(4) {
                 continue;
             }
-            if let Some(target) = self.probe_for_target(id) {
+            // An enemy whose every melee spot is taken is not a fight to
+            // stand and wait for: the member marches on, as the group does.
+            if let Some(target) = self
+                .probe_for_target(id)
+                .filter(|&target| self.attack_spot_free(id, target))
+            {
                 self.begin_autonomous_attack(id, target, unit.position);
                 changed.push(id);
             } else if resume.empty + 1 < EMPTY_LOOKS {

@@ -116,6 +116,35 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     }
 }
 
+/// `unit_pose`, except that a soldier whose target lies beyond its reach
+/// stands: waiting for a free spot or for its route is not a swing. The reach
+/// is the base range (a tile for melee) plus a tile of slack for range
+/// research and interpolation. `target_distance` is in subunits, to a unit's
+/// centre or a building's footprint; an unknown target counts as in reach.
+pub(crate) fn scene_pose(
+    u: &GameplayUnitState,
+    animal: Option<&AnimalState>,
+    target_distance: Option<i64>,
+) -> Pose {
+    let pose = unit_pose(u, animal);
+    if u.moving || u.task != UnitTask::Attacking || u.hp == 0 {
+        return pose;
+    }
+    let range = crate::building_ui::content::rules().units[u.kind as usize]
+        .combat
+        .range;
+    let reach = (i64::from(range).max(1) + 1) * i64::from(FIXED_SUBUNITS_PER_TILE);
+    if target_distance.is_none_or(|d| d <= reach) {
+        return pose;
+    }
+    if pose == Pose::MilitiaAttack {
+        return Pose::MilitiaStand;
+    }
+    military_poses(u.kind)
+        .filter(|poses| poses[2] == pose)
+        .map_or(pose, |poses| poses[0])
+}
+
 /// A shepherd walking to its sheep (or to a sheep carcass) is drawn as an
 /// ordinary walking villager; the herding walk is for leading a living sheep.
 pub(crate) fn walks_as_villager(u: &GameplayUnitState, animal: Option<&AnimalState>) -> bool {

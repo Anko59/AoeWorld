@@ -61,7 +61,9 @@ fan-out measurement; its numbers and hot spots are in
 
 `make perf-groups` places about 11,000 militia in 200 armies on open procedural
 ground, sends neighbouring armies through each other and reports the movement
-phase and the movement span split (`PERF_GROUPS_ARGS` passes flags). It is the
+phase and the movement span split (`PERF_GROUPS_ARGS` passes flags;
+`PERF_GROUPS_ARGS=--attack-move` makes the crossing armies attack-move, so the
+run also prices the attack-move look and the fights). It is the
 baseline for the [group movement rewrite](movement/group-movement-rewrite.md).
 
 `make perf-timing` runs pinned Criterion 0.8.2 benchmarks for a synthetic

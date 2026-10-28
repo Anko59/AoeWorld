@@ -123,6 +123,10 @@ impl GameWorld {
                 }
             }
             if free.is_empty() {
+                #[cfg(test)]
+                {
+                    self.combat.waits.0 += 1;
+                }
                 return Ok(AttackSearch {
                     destination: None,
                     far: false,
@@ -131,6 +135,10 @@ impl GameWorld {
             }
         }
         if self.combat.position_searches == 0 {
+            #[cfg(test)]
+            {
+                self.combat.waits.1 += 1;
+            }
             return Ok(AttackSearch {
                 destination: None,
                 far: false,
