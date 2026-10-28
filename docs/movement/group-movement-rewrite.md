@@ -452,7 +452,7 @@ own. Revision `6376d14b` plus the PR 0 tests.
 | --- | --- | --- |
 | 60 militia, Line, 100 open tiles | first stop tick 2159, last 2328 (+169 ticks); no column; never longer than 10 tiles | last within 60 ticks of first (6) |
 | Same, 6-tile forest with a 2-tile pass | first 2205, last 3955 (1.70× open); 14 stop over 8 tiles short; single file for 1,828 ticks, 78 tiles long | ≤ 1.6× (6); 0 stop short (3) |
-| Re-order 10 of 60 | the other 50 leave the group, stop at once, none arrives | all 50 arrive (1) |
+| Re-order 10 of 60 | (before PR 1) the other 50 left the group, stopped at once, none arrived; now all 50 stay grouped and arrive | all 50 arrive (1) |
 | Attack-move, 60 vs 10 | 8 of 10 die, 55 survive, all idle near x 75 of 140, none at the goal | all 10 die; 95 % reach slots (4) |
 | Head-on, 3 vs 3, bridge | no deadlock: first crossing tick 181, all across 251 | both cross within 3 s (8) |
 | 4 fishing ships, 1-tile river | all 4 gather orders refused; 3-tile river: 2 refused | all 4 work (9) |

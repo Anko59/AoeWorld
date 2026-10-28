@@ -30,6 +30,17 @@ impl Group {
         self.refresh_column_order();
     }
 
+    /// After members left: rebuild the id lookup and the derived column order.
+    pub(super) fn forget_departures(&mut self) {
+        self.member_lookup = self
+            .members
+            .iter()
+            .enumerate()
+            .map(|(at, m)| (m.id, at))
+            .collect();
+        self.refresh_column_order();
+    }
+
     pub(super) fn refresh_column_order(&mut self) {
         // Choose the front's centre before its wings. Sorting belongs to order
         // issuance/shape changes; ticks only walk this fixed order in O(n).

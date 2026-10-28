@@ -139,27 +139,74 @@ fn formations_attack_move_engages_visible_buildings() {
     );
 }
 
+/// Whether `id` stands within `tiles` tiles of `to`.
+fn near(w: &GameWorld, id: EntityId, to: WorldPosition, tiles: i32) -> bool {
+    let p = w.unit(id).unwrap().position;
+    let (x, y) = (i64::from(p.x - to.x), i64::from(p.y - to.y));
+    x * x + y * y <= i64::from(tiles * 1024).pow(2)
+}
+
+fn march_sixty(w: &mut GameWorld) -> (Vec<EntityId>, WorldPosition) {
+    w.set_fog_disabled(true);
+    let ids = army(w, 60);
+    let goal = center(140, 43);
+    w.issue_formation_move(PlayerId(0), &ids, Formation::Line, goal, false, false)
+        .unwrap();
+    for _ in 0..100 {
+        w.advance();
+    }
+    (ids, goal)
+}
+
 #[test]
-fn formations_stop_and_casualty_release_routes_and_preserve_refused_orders() {
+fn formations_lose_only_the_units_that_are_reordered_or_killed() {
     let mut w = wide_world();
-    let ids = army(&mut w, 50);
-    w.issue_formation_move(
-        PlayerId(0),
-        &ids,
-        Formation::Line,
-        center(1000, 40),
-        false,
-        false,
-    )
-    .unwrap();
-    w.economy.blocked_tiles.insert(TileCoord::new(60, 60));
+    let (ids, goal) = march_sixty(&mut w);
+    // A refused order changes nothing.
+    w.economy.blocked_tiles.insert(TileCoord::new(60, 10));
     let before = w.canonical_hash();
-    assert!(w.issue_move(ids[10], center(60, 60)).is_err());
+    assert!(w.issue_move(ids[30], center(60, 10)).is_err());
     assert_eq!(w.canonical_hash(), before);
+    // Ten members take a new order and the first member, which carries the
+    // group's route, dies.
+    let away = center(60, 90);
+    for &id in &ids[20..30] {
+        w.issue_move(id, away).unwrap();
+    }
     w.kill_unit(w.lookup[&ids[0]]);
-    assert!(ids.iter().all(|&id| w.formation(id).is_none()));
+    let rest = [&ids[1..20], &ids[30..]].concat();
+    assert_eq!(rest.len(), 49);
+    assert!(
+        rest.iter()
+            .all(|&id| w.formation(id) == Some(Formation::Line))
+    );
+    assert!(rest.iter().all(|&id| w.unit(id).unwrap().moving));
+    for _ in 0..4000 {
+        w.advance();
+    }
+    // All forty-nine reach the destination together, still in formation.
+    assert!(rest.iter().all(|&id| near(&w, id, goal, 8)), "{rest:?}");
+    assert!(rest.iter().all(|&id| !w.unit(id).unwrap().moving));
+    assert!(rest.iter().all(|&id| w.formation(id).is_some()));
+    assert!(ids[20..30].iter().all(|&id| near(&w, id, away, 2)));
     assert_eq!(w.route_accounting_error(), None);
     assert_eq!(w.route_scheduler_stats().planners, 0);
+    assert_eq!(w.active_mover_count(), 0);
+}
+
+#[test]
+fn formations_keep_marching_when_their_route_carrier_is_stopped() {
+    let mut w = wide_world();
+    let (ids, goal) = march_sixty(&mut w);
+    w.issue_stop(PlayerId(0), ids[0]).unwrap();
+    assert!(w.formation(ids[0]).is_none());
+    assert!(!w.unit(ids[0]).unwrap().moving);
+    for _ in 0..4000 {
+        w.advance();
+    }
+    assert!(ids[1..].iter().all(|&id| near(&w, id, goal, 8)));
+    assert!(ids[1..].iter().all(|&id| w.formation(id).is_some()));
+    assert_eq!(w.route_accounting_error(), None);
     assert_eq!(w.active_mover_count(), 0);
 }
 

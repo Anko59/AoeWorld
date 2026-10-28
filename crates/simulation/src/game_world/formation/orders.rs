@@ -51,9 +51,7 @@ impl GameWorld {
             }
         };
         // Validation and the shared route preparation precede every task change.
-        for &id in &ids {
-            self.break_formation(id);
-        }
+        self.leave_groups(&ids);
         for &id in &ids {
             let i = self.lookup[&id];
             self.stop_movement(i);

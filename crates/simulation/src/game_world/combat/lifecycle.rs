@@ -52,7 +52,7 @@ impl GameWorld {
     pub(crate) fn stop_movement(&mut self, index: usize) {
         self.units[index].obstruction = None;
         let id = self.units[index].state.id;
-        self.break_formation(id);
+        self.leave_group(id);
         self.destinations.remove(id);
         self.clear_planner(index);
         let unit = &mut self.units[index];
@@ -123,7 +123,7 @@ impl GameWorld {
     pub(crate) fn remove_unit(&mut self, id: EntityId) {
         self.economy.embarked.remove(&id);
         self.cancel_auto_scout(id);
-        self.break_formation(id);
+        self.leave_group(id);
         self.destinations.remove(id);
         let Some(&index) = self.lookup.get(&id) else {
             return;

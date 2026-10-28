@@ -127,7 +127,7 @@ impl GameWorld {
         target: EntityId,
         origin: WorldPosition,
     ) {
-        self.break_formation(id);
+        self.leave_group(id);
         self.begin_attack(id, target);
         if let Some(a) = self.combat.attackers.get_mut(&id) {
             a.origin = Some(origin);
