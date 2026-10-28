@@ -40,8 +40,9 @@ fn sixty_militia_in_line_cross_open_ground() {
     );
     assert_eq!((m.column_ticks, m.longest_tiles), (0, 8));
     assert_eq!(m.min_frontage_when_long, i64::MAX);
-    // Regenerate this current-output pin for the intentional PR 6 layout.
-    assert_eq!((m.first(), m.last()), (2222, 2233));
+    // Rear-only open-ground cohesion advances first/last arrival; the exact
+    // slots, shape and three-second settling bound above stay unchanged.
+    assert_eq!((m.first(), m.last()), (2179, 2223));
 }
 
 #[test]
@@ -56,5 +57,5 @@ fn sixty_militia_in_line_cross_a_two_tile_forest_pass() {
     );
     assert_eq!((pass.column_ticks, pass.longest_tiles), (0, 16));
     assert_eq!(pass.min_frontage_when_long, i64::MAX);
-    assert_eq!((pass.first(), pass.last()), (2803, 2879));
+    assert_eq!((pass.first(), pass.last()), (2758, 2893));
 }

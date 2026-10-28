@@ -1,6 +1,36 @@
 use super::*;
 
 #[test]
+fn cohesion_waits_only_for_rear_stragglers() {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
+    let at = WorldPosition::new(100 * 1024, 100 * 1024);
+    let id = w.spawn_kind(PlayerId(0), UnitKind::Militia, at).unwrap();
+    w.issue_formation_move(
+        PlayerId(0),
+        &[id],
+        Formation::Line,
+        WorldPosition::new(125 * 1024, 100 * 1024),
+        false,
+        false,
+    )
+    .unwrap();
+    let mut group = w.formations.remove(&id).unwrap();
+    for (dx, dy, cohesive) in [(0, 10, true), (-10, 0, true), (1, 0, true), (3, 0, false)] {
+        group.members[0].ideal = WorldPosition::new(at.x + dx * 1024, at.y + dy * 1024);
+        assert_eq!(w.formation_cohesive(&group), cohesive, "delta={dx},{dy}");
+    }
+}
+
+impl GameWorld {
+    /// Test-only observation of the shared anchor; no simulation instrumentation.
+    pub(crate) fn group_march_probe(&self, id: EntityId) -> (i64, i64, (u64, u64), (u64, u64)) {
+        let leader = self.units[self.lookup[&id]].formation.unwrap();
+        let group = &self.formations[&leader];
+        (group.progress, group.form_distance, group.speed, group.pace)
+    }
+}
+
+#[test]
 fn rotation_preserves_cardinal_and_diagonal_integer_rounding() {
     let anchor = WorldPosition::new(1000, 2000);
     let offset = WorldPosition::new(37, -71);

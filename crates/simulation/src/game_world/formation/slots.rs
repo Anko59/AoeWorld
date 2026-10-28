@@ -13,6 +13,13 @@ pub(super) fn class(kind: UnitKind) -> u8 {
 }
 
 impl Group {
+    pub(super) fn tight_destination(&self) -> bool {
+        let left = self.members.iter().map(|m| m.offset.x).min().unwrap_or(0);
+        self.members
+            .iter()
+            .any(|m| m.offset.x > left && m.offset.x - left < self.gap - 2)
+    }
+
     /// Members always stay in canonical id order. Dense armies need one
     /// indexed read; sparse selections and departures use binary search.
     pub(super) fn member_index(&self, id: EntityId) -> Option<usize> {
@@ -54,6 +61,44 @@ pub(super) fn packed(rank: usize, count: usize, files: usize, gap: i32) -> World
 }
 
 impl GameWorld {
+    pub(super) fn formation_layout_clear(&self, group: &Group, heading: WorldPosition) -> bool {
+        // A destination already laid out in tight files still needs the
+        // original packing phase: its forming blend can be wider than those
+        // final offsets, even when the offsets themselves fit the passage.
+        if group.tight_destination() {
+            return false;
+        }
+        let rotation = layout::Rotation::new(heading);
+        let mut cursor = group.path_cursor;
+        let look = 8 * 1024 + i64::from(group.half_width);
+        let (behind, _) = group
+            .path
+            .point((group.progress - look).max(0), &mut cursor);
+        let (ahead, _) = group
+            .path
+            .point((group.progress + look).min(group.path.end()), &mut cursor);
+        group
+            .members
+            .iter()
+            .filter(|m| !m.detached && !m.arrived)
+            .all(|m| {
+                let unit = self.units[self.lookup[&m.id]].state;
+                self.body_step_clear(
+                    unit.kind,
+                    rotation.oriented(behind, m.offset),
+                    rotation.oriented(ahead, m.offset),
+                ) && self.body_step_clear(
+                    unit.kind,
+                    unit.position,
+                    path::step(
+                        unit.position,
+                        rotation.oriented(group.anchor, m.offset),
+                        2 * 1024,
+                    ),
+                )
+            })
+    }
+
     pub(super) fn assign_group_slots(&self, group: &mut Group) {
         let count = group.members.len();
         let mut slots = layout::slots(group.form, count)
@@ -62,7 +107,24 @@ impl GameWorld {
             .collect::<Vec<_>>();
         let clearance = self.static_clearance(UnitKind::Militia, group.destination.tile_floor());
         let half_width = slots.iter().map(|p| p.x.abs()).max().unwrap_or(0) + group.gap / 2;
-        if clearance < 15 && i32::from(clearance) * 512 < half_width {
+        let largest = group
+            .members
+            .iter()
+            .map(|m| self.units[self.lookup[&m.id]].state.kind)
+            .max_by_key(|kind| kind.collision_radius())
+            .unwrap_or(UnitKind::Militia);
+        // Circular clearance also sees obstacles ahead/behind (including the
+        // map edge). Keep the full, passable destination block in that case:
+        // tight marching files leave no room to pass an already arrived row.
+        if clearance < 15
+            && i32::from(clearance) * 512 < half_width
+            && slots.iter().any(|&offset| {
+                !self.body_position_clear(
+                    largest,
+                    layout::oriented(group.destination, offset, group.heading),
+                )
+            })
+        {
             let files = (i32::from(clearance) * 1024 / group.narrow_gap).max(1) as usize;
             slots = (0..count)
                 .map(|rank| packed(rank, count, files, group.narrow_gap))

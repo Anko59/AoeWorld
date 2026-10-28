@@ -144,13 +144,16 @@ impl GameWorld {
             }
             clearance = clearance.min(value);
         }
-        let files = if clearance < 15 && i32::from(clearance) * 512 < group.half_width {
+        let heading = block_heading(group);
+        let files = if clearance < 15
+            && i32::from(clearance) * 512 < group.half_width
+            && !self.formation_layout_clear(group, heading)
+        {
             (i32::from(clearance) * 1024 / group.narrow_gap).max(1) as usize
         } else {
             group.members.len()
         };
         let count = group.members.len();
-        let heading = block_heading(group);
         let rotation = layout::Rotation::new(heading);
         let forming = (group.progress - group.form_start).clamp(0, group.form_distance);
         for member in &mut group.members {

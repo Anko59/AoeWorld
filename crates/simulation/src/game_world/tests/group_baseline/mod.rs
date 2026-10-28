@@ -12,6 +12,7 @@ mod clash;
 mod front;
 mod open_ground;
 mod reorder;
+mod showcase;
 
 /// `count` militia of `player` in rows of `columns`, one tile apart.
 pub(super) fn block(

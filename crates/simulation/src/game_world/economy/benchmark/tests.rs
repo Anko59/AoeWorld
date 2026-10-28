@@ -90,9 +90,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // PR 6: destination slots, moving blocks and canonical member progress.
+        // Rear-only open-ground cohesion changes formation progress at tick 384.
         // The workload includes formation marches; the 1/4-worker comparison stays.
-        "add811502f5f8b43283d0156638c4ddec4dcbcf741fea94d27ef6187aa791731"
+        "4967b8870d345656515fd7ce78d9b62d5e11a4bc38da7d75d5816c063a92c5e1"
     );
 }
 

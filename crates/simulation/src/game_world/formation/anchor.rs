@@ -25,8 +25,8 @@ impl GameWorld {
                     / u128::from(previous_denominator)) as u64;
             }
             let denom = denominator * 4;
-            // Use a half-tile lag threshold for speed matching. While the block
-            // forms, pace stays at 0.75 rather than stopping for assembly.
+            // Only a rear straggler slows the anchor; lateral assembly and
+            // members already ahead must not throttle the whole march.
             let pace = speed
                 * if self.formation_cohesive(&group) {
                     4
@@ -144,15 +144,48 @@ impl GameWorld {
         // hold marching members back, and the blend toward the destination
         // layout makes the outermost slot run away at exactly the catch-up
         // pace. Waiting for them would slow the whole army at every contact.
-        group.direct
-            || group.attack_move
-            || group.members.iter().all(|member| {
-                let position = self.units[self.lookup[&member.id]].state.position;
-                member.arrived
-                    || member.detached
-                    || member.blocked >= 240
-                    || path::squared(member.ideal, position) <= 512_i64.pow(2)
-            })
+        if group.direct || group.attack_move {
+            return true;
+        }
+        let (x, y) = (
+            i64::from(group.travel_heading.x),
+            i64::from(group.travel_heading.y),
+        );
+        let span = (x * x + y * y).isqrt().max(1);
+        // Hard-body files still need close cohesion while squeezing past
+        // real obstacles. A nearby edge outside the block is not a squeeze.
+        let mut cursor = group.path_cursor;
+        let near_terrain = [-8, -4, 0, 4, 8].into_iter().any(|delta| {
+            let at = (group.progress + delta * 1024).clamp(0, group.path.end());
+            let (point, _) = group.path.point(at, &mut cursor);
+            self.static_clearance(UnitKind::Militia, point.tile_floor()) < 15
+        });
+        let constrained = group.tight_destination()
+            || (near_terrain && !self.formation_layout_clear(group, group.travel_heading));
+        group.members.iter().all(|member| {
+            if member.arrived || member.detached || member.blocked >= 240 {
+                return true;
+            }
+            let unit = self.units[self.lookup[&member.id]].state;
+            let position = unit.position;
+            let clear = group
+                .static_area
+                .is_some_and(|area| area.covers(position, unit.kind.collision_radius(), 0));
+            let obstructed = !clear
+                && self.static_clearance(unit.kind, position.tile_floor()) < 15
+                && !self.body_step_clear(
+                    unit.kind,
+                    position,
+                    path::step(position, member.goal, 2 * 1024),
+                );
+            if constrained || obstructed {
+                path::squared(member.ideal, position) <= 512_i64.pow(2)
+            } else {
+                i64::from(member.ideal.x - position.x) * x
+                    + i64::from(member.ideal.y - position.y) * y
+                    <= 2 * 1024 * span
+            }
+        })
     }
 
     fn refresh_group_path(&self, index: usize, group: &mut Group, order: MovementOrder) {
