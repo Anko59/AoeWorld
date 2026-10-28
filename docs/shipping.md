@@ -268,7 +268,7 @@ distribution against the target; pull requests without a marker are counted
 apart. `make ship` adds one line with the same distribution to the "For AI"
 part; a `gh` failure there only says the line is unavailable.
 
-The agent picks the level. A video is required only for a change a player sees (`Change::visible`: non-test files of the client, rendering, simulation, map, assets, scenario crates, `web/`, `browser/`); others may film a terminal session, timing or API diff. Record it with `make showcase` ([showcase videos](showcase.md)). Duration and
+The agent picks the level. A video is optional at every level. Attach one only when it shows the game itself, the change in play before and after; the owner reads the description, so a change with nothing to see in the game (perf, AI decisions, tooling) ships without one, never with text cards alone. Record it with `make showcase` ([showcase videos](showcase.md)). Duration and
 audio-stream presence are checked with ffmpeg from the pinned browser image. High and max levels require an audio stream; reviewers decide
 whether that track contains speech.
 

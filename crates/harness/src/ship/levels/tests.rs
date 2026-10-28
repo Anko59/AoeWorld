@@ -31,20 +31,6 @@ fn change(lines: u64, suites: &[&str], files: &[&str]) -> Change {
 }
 
 #[test]
-fn browser_test_tooling_is_not_visible_but_web_code_is() {
-    for path in [
-        "browser/quarantine-reporter.ts",
-        "browser/tests/play.spec.ts",
-        "browser/playwright.config.ts",
-        "browser/server.ts",
-        "browser/qa-worker.mjs",
-    ] {
-        assert!(!change(1, &[], &[path]).visible(), "{path}");
-    }
-    assert!(change(1, &[], &["web/game.ts"]).visible());
-}
-
-#[test]
 fn the_committed_config_is_strict_and_matches_the_registry() {
     let levels = committed();
     assert_eq!(levels.spec(Level::Low).video_max_seconds, None);

@@ -1,7 +1,8 @@
 # Showcase videos
 
-Every pull request above `low` carries a showcase video that sells the change
-in its "What" section ([shipping](shipping.md)). `make showcase` records it from
+A pull request above `low` may carry a showcase video of in-game footage that
+shows the change in its "What" section; text cards only frame the footage and
+never replace it ([shipping](shipping.md)). `make showcase` records it from
 a storyboard the agent writes; `make ship SHIP_VIDEO=…` then uploads it.
 
 ```sh
@@ -329,9 +330,8 @@ which `record.mjs` mirrors; `Origins` in `origins.rs` chooses the origins.
 Limit: a filmed app is itself reachable without restriction, so a page can
 drive any endpoint that app serves.
 
-Not being a frontend change is never a reason for no video: use before/after
-terminal scenes for the harness, timings for performance, request/response for
-protocols, a filmed agent session for developer experience.
+A change with nothing to see in the game (harness, performance, protocols, AI
+decisions) ships without a video; its description carries the numbers.
 
 ## Narration
 
