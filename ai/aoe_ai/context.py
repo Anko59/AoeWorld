@@ -60,6 +60,8 @@ class Context:
         #: Set by a manager that needs the Town Center's queue to drain.
         self.hold_town_center = False
         self.saving_castle = False
+        #: Production kinds that must not start new training this decision.
+        self.draining: set = set()
         #: Units that already got an order this decision.
         self.busy: set[int] = set()
         self._resources: dict[Any, list] = {}

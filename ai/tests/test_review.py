@@ -282,3 +282,15 @@ def test_first_castle_army_upgrade_uses_its_exact_budget_before_optional_spendin
         researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.CASTLE_AGE]))
     _, client = play(world)
     assert (600, Tech.CROSSBOWMAN) in client.named("research")
+
+
+def test_first_castle_army_upgrade_stops_new_training_that_would_spend_its_food():
+    units, buildings = base(30)
+    units += [unit(300, UnitKind.ARCHER), unit(301, UnitKind.SPEARMAN)]
+    buildings += [building(600, BuildingKind.ARCHERY_RANGE, queue=1), building(601, BuildingKind.BARRACKS)]
+    world = FakeWorld(units, buildings, eco=economy(food=110, wood=500, gold=500,
+        population=33, cap=60, age=Age.CASTLE,
+        researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.CASTLE_AGE]))
+    _, client = play(world)
+    assert not client.named("train")
+    assert not client.named("research")

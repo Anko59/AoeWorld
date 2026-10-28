@@ -57,17 +57,27 @@ class ResearchManager:
             if eco.has_researched(tech) or ctx.board.cooling("research:" + str(tech), ctx.tick):
                 continue
             builders = [b for b in ctx.buildings if b.kind == kind and b.complete and b.idle]
+            cost = tech_cost(tech)
+            base = {Tech.CROSSBOWMAN: UnitKind.ARCHER, Tech.PIKEMAN: UnitKind.SPEARMAN}.get(tech)
+            first_army = (ctx.castle and ctx.board.stats.get("castle_units_peak", 0) == 0
+                          and any(unit.kind == base for unit in ctx.army)
+                          and any(b.kind == kind and b.complete for b in ctx.buildings))
+            if first_army and not (builders and ctx.can_afford(cost)):
+                # Continuous Feudal training keeps every production queue full and
+                # spends each food increment on the next soldier, so the upgrade's
+                # price is never in stock while its building is idle: stop new
+                # training, let the queues drain and keep the price back.
+                ctx.draining.update((BuildingKind.BARRACKS, BuildingKind.ARCHERY_RANGE, BuildingKind.STABLE))
+                ctx.spend(cost)
+                ctx.hold_town_center = True
+                return
             if not builders:
                 continue
-            cost = tech_cost(tech)
             # Keep a float for units: upgrades only from a comfortable stockpile.
-            padded = (cost[0] + 100, cost[1] + 75, cost[2], cost[3])
-            base = {Tech.CROSSBOWMAN: UnitKind.ARCHER, Tech.PIKEMAN: UnitKind.SPEARMAN}.get(tech)
-            if (ctx.castle and ctx.board.stats.get("castle_units_peak", 0) == 0
-                    and any(unit.kind == base for unit in ctx.army)):
+            padded = cost if first_army else (cost[0] + 100, cost[1] + 75, cost[2], cost[3])
+            if first_army:
                 # Fund the first Castle army before restarting villager spending.
                 ctx.hold_town_center = True
-                padded = cost
             if ctx.can_afford(padded):
                 ctx.spend(cost)
                 ctx.order("research", builders[0].id, tech)
