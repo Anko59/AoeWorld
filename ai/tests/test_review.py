@@ -294,3 +294,17 @@ def test_first_castle_army_upgrade_stops_new_training_that_would_spend_its_food(
     _, client = play(world)
     assert not client.named("train")
     assert not client.named("research")
+
+
+def test_first_castle_army_pause_ends_once_its_upgrade_is_researching_or_bought():
+    # Training resumes while the first upgrade researches and after either is bought.
+    for range_tech, researched in ((Tech.CROSSBOWMAN, []), (None, [Tech.CROSSBOWMAN])):
+        units, buildings = base(30)
+        units += [unit(300, UnitKind.ARCHER), unit(301, UnitKind.SPEARMAN)]
+        buildings += [building(600, BuildingKind.ARCHERY_RANGE, researching=range_tech),
+                      building(601, BuildingKind.BARRACKS)]
+        world = FakeWorld(units, buildings, eco=economy(food=400, wood=500, gold=500,
+            population=33, cap=60, age=Age.CASTLE,
+            researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.CASTLE_AGE, *researched]))
+        _, client = play(world)
+        assert client.named("train"), (range_tech, researched)

@@ -59,7 +59,13 @@ class ResearchManager:
             builders = [b for b in ctx.buildings if b.kind == kind and b.complete and b.idle]
             cost = tech_cost(tech)
             base = {Tech.CROSSBOWMAN: UnitKind.ARCHER, Tech.PIKEMAN: UnitKind.SPEARMAN}.get(tech)
-            first_army = (ctx.castle and ctx.board.stats.get("castle_units_peak", 0) == 0
+            # Only the first Castle upgrade is funded first: once either is bought
+            # or one is researching, training resumes.
+            started = (eco.has_researched(Tech.CROSSBOWMAN) or eco.has_researched(Tech.PIKEMAN)
+                       or any(b.researching is not None for b in ctx.buildings
+                              if b.kind in (BuildingKind.BARRACKS, BuildingKind.ARCHERY_RANGE)))
+            first_army = (ctx.castle and not started
+                          and ctx.board.stats.get("castle_units_peak", 0) == 0
                           and any(unit.kind == base for unit in ctx.army)
                           and any(b.kind == kind and b.complete for b in ctx.buildings))
             if first_army and not (builders and ctx.can_afford(cost)):
