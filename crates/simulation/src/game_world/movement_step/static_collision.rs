@@ -67,7 +67,7 @@ fn sweeps_corner(a: WorldPosition, b: WorldPosition, tile: TileCoord, radius: i6
 }
 
 impl GameWorld {
-    pub(super) fn body_step_clear(
+    pub(in crate::game_world) fn body_step_clear(
         &self,
         kind: UnitKind,
         from: WorldPosition,

@@ -90,8 +90,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Current combat stance and targeting state; 1/4-worker comparison above stays.
-        "9fae16ec8bcf2395af3e50a4158893319da4f6480c9abf984dcd22076422cac4"
+        // PR 6: destination slots, moving blocks and canonical member progress.
+        // The workload includes formation marches; the 1/4-worker comparison stays.
+        "add811502f5f8b43283d0156638c4ddec4dcbcf741fea94d27ef6187aa791731"
     );
 }
 

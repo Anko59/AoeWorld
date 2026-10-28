@@ -442,13 +442,13 @@ one client branch at a time. PR 6 needs PR 5, and PRs 7–11 build on PR 6.
 - DE ship radii and head-on corridor behaviour are unpublished [G]; PRs 8–9
   are judged on their scenarios.
 
-## 8. Measured baseline (PR 0)
+## 8. Measured baseline and PR 6 results
 
-Scenario tests in `tests/group_baseline/` and beside their subsystems assert
-today's numbers exactly (20 ticks/s, deterministic); each later PR flips its
-own. Revision `6376d14b` plus the PR 0 tests.
+At 20 ticks/s, `tests/group_baseline/` pins current output exactly. Before is
+PRs 0–4; PR 5 (`fe8586ee`) leaves movement unchanged. PR 6 requires every
+member at its assigned destination: a give-up cannot pass as arrival.
 
-| Scenario | Today | Target (PR) |
+| Scenario | Before | PR 6 / remaining target |
 | --- | --- | --- |
 | 60 militia, Line, 100 open tiles | first stop tick 2159, last 2328 (+169 ticks); no column; never longer than 10 tiles | last within 60 ticks of first (6) |
 | Same, 6-tile forest with a 2-tile pass | first 2238, last 3955 (1.70× open); 0 stop over 8 tiles short (PR 3; was 14); single file for 1,737 ticks, 78 tiles long | ≤ 1.6× (6) |
@@ -461,21 +461,14 @@ own. Revision `6376d14b` plus the PR 0 tests.
 | 12 villagers, one gold mine | 2 carry gold by 10 s, 9 by 30 s, 10 by 60 s; 2 idle | all 12 by 10 s (10) |
 | 40 vs 40 melee | (PR 4, members engage one by one, only for an enemy in sight with a free spot) first blow tick 234; 36 distinct strikers in 5 s (lower bound), 79 in 60 s; 2 and 7 alive; with the 13x13-tile look: tick 270, 6 and 64, 21 and 14; before PR 4: tick 304, 12 and 36, 29 and 26 alive | ≥ 90 % strike in 5 s (10) |
 
-`make perf-groups` (release, 6-CPU slot, shared host, fog on, `6376d14b`): 200
-armies of 30-79 Line militia, 10,900 movers, all still marching, on uniform
-open ground (no trees, water or route search), neighbours passing through each
-other. Movement phase p50 9.8 ms, p95 13.9 ms over 300 ticks; whole tick p50
-10.3 ms, p95 14.4 ms. A second window with the movement spans on (clock and
-atomic overhead included, spans overlap): `sidestep` 3.27 M calls, 7.57 s;
-`avoidance_query` 1.04 M calls, 2.31 s; `local_refinement` 1,200 calls, 2 ms;
-`arrival_search` none yet. Every mover enters the sidestep path every tick, so
-§5.2's refused-mover cost is real. This workload has no bridge, forest pass or
-mine and a lighter movement phase than the owner's 40 ms at 11k units (§5.1);
-the 100-player replay workload is still to do.
+Matched `make perf-groups`: 12-CPU slot, shared host, fog on, 200 Line armies
+(30–79 units), 10,900 units, 100 warm-up ticks, 300 ticks/window. Before is
+clean `fe8586ee`; after is PR 6.
 
-What the code contradicted: S1's column does not form for 60 units on open
-ground (only at an obstacle); the suspected bridge deadlock did not reproduce
-(§4.2); the S4 assertion sits at `pressure.rs:160`, not `:143`.
+| Plain window (ms, p50 / p95) | Before | After |
+| --- | --- | --- |
+| Movement | 4.895 / 5.254 | 11.104 / 12.328 |
+| Whole tick | 5.100 / 5.482 | 11.792 / 13.097 |
 
 PR 3 and PR 4 as built: a member that cannot move for 240 ticks after the
 anchor arrived stops where it stands; the column is dropped at anchor arrival;

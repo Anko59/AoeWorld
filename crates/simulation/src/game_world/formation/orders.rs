@@ -28,8 +28,9 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition.into());
         }
         let leader = ids[0];
+        let existing = self.units[self.lookup[&leader]].formation.unwrap_or(leader);
         if queued
-            && let Some(group) = self.formations.get_mut(&leader)
+            && let Some(group) = self.formations.get_mut(&existing)
             && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
             && !group.settled
         {
@@ -49,6 +50,11 @@ impl GameWorld {
                 self.store_planner(index, previous);
                 return Err(error.into());
             }
+        };
+        let (waypoint, route) = if self.has_route_navigation() {
+            (waypoint, route)
+        } else {
+            (destination, VecDeque::new())
         };
         // Validation and the shared route preparation precede every task change.
         self.leave_groups(&ids);
@@ -76,18 +82,43 @@ impl GameWorld {
             heading
         };
         let facing = facing_for(i64::from(heading.x), i64::from(heading.y), Facing::South);
+        let positions = ids
+            .iter()
+            .map(|id| self.units[self.lookup[id]].state.position)
+            .collect::<Vec<_>>();
+        let (diameter, step) = ids.iter().fold((0, 0), |(diameter, step), id| {
+            let unit = self.units[self.lookup[id]].state;
+            let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
+            (
+                diameter.max(unit.kind.collision_radius() * 2),
+                step.max(speed.div_ceil(denominator).min(512) as i32),
+            )
+        });
+        // Hard bodies need room for a late member to pass between occupied slots,
+        // plus one snapshot step. Narrow files use just diameter plus a step.
+        let gap = diameter * 2 + step + 16;
         let members = ids
             .iter()
             .copied()
-            .zip(layout::slots(form, ids.len()))
-            .map(|(id, offset)| Member {
+            .map(|id| Member {
                 id,
-                offset,
+                offset: WorldPosition::new(0, 0),
+                start_offset: WorldPosition::new(0, 0),
+                goal: destination,
+                target: origin,
+                center: origin,
+                ideal: origin,
+                target_progress: 0,
                 carry: 0,
-                probe: 0,
-                cache: None,
-                detour: VecDeque::new(),
+                rank: 0,
+                cursor: 0,
+                progress: 0,
+                blocked: 0,
+                detour_progress: 0,
+                arrived: false,
+                detached: false,
                 stalled: 0,
+                remaining: i64::MAX,
             })
             .collect();
         let mut group = Group {
@@ -98,22 +129,33 @@ impl GameWorld {
             travel_heading: heading,
             facing,
             speed: (0, 1),
-            ready: false,
+            pace: (0, 1),
             settled: false,
-            column: false,
-            column_order: Vec::new(),
+            direct: direct_order(origin, destination, &positions),
+            gap,
+            narrow_gap: diameter + step + 16,
+            form_start: 0,
+            form_distance: 0,
+            half_width: 0,
             member_lookup: Default::default(),
             destination,
             queue: VecDeque::new(),
             attack_move,
-            trail: VecDeque::from([origin]),
+            path: path::Path::new(
+                std::iter::once(origin)
+                    .chain(std::iter::once(waypoint))
+                    .chain(
+                        route
+                            .iter()
+                            .filter_map(|&tile| WorldPosition::from_tile_center(tile).ok()),
+                    ),
+            ),
+            progress: 0,
+            path_cursor: 0,
         };
         group.speed = self.group_speed(&group);
-        let positions = ids
-            .iter()
-            .map(|id| self.units[self.lookup[id]].state.position)
-            .collect::<Vec<_>>();
-        group.assign_offsets(&positions);
+        group.pace = group.speed;
+        self.assign_group_slots(&mut group);
         self.formations.insert(leader, group);
         self.install_formation_route(
             index,
@@ -129,7 +171,7 @@ impl GameWorld {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn install_formation_route(
+    pub(super) fn install_formation_route(
         &mut self,
         index: usize,
         origin: WorldPosition,
@@ -183,12 +225,20 @@ impl GameWorld {
             if let Ok((waypoint, route, planner, planning, fast_tried)) =
                 self.order_route(index, group.anchor, destination)
             {
+                let (waypoint, route) = if self.has_route_navigation() {
+                    (waypoint, route)
+                } else {
+                    (destination, VecDeque::new())
+                };
                 group.destination = destination;
                 group.attack_move = attack_move;
                 group.heading = WorldPosition::new(
                     destination.x - group.anchor.x,
                     destination.y - group.anchor.y,
                 );
+                if group.heading == WorldPosition::new(0, 0) {
+                    group.heading = group.travel_heading;
+                }
                 group.travel_heading = group.heading;
                 group.facing = facing_for(
                     i64::from(group.heading.x),
@@ -200,9 +250,21 @@ impl GameWorld {
                     .iter()
                     .map(|m| self.units[self.lookup[&m.id]].state.position)
                     .collect::<Vec<_>>();
-                group.assign_offsets(&positions);
+                group.direct = direct_order(group.anchor, destination, &positions);
+                group.path = path::Path::new(
+                    std::iter::once(group.anchor)
+                        .chain(std::iter::once(waypoint))
+                        .chain(
+                            route
+                                .iter()
+                                .filter_map(|&tile| WorldPosition::from_tile_center(tile).ok()),
+                        ),
+                );
+                group.progress = 0;
+                group.path_cursor = 0;
+                self.reset_group_detours(group);
+                self.assign_group_slots(group);
                 group.settled = false;
-                group.ready = false;
                 self.install_formation_route(
                     index,
                     group.anchor,
@@ -217,4 +279,20 @@ impl GameWorld {
             }
         }
     }
+}
+
+fn direct_order(
+    origin: WorldPosition,
+    destination: WorldPosition,
+    positions: &[WorldPosition],
+) -> bool {
+    let travel = path::distance(origin, destination);
+    let (mut min, mut max) = (origin, origin);
+    for p in positions {
+        min.x = min.x.min(p.x);
+        min.y = min.y.min(p.y);
+        max.x = max.x.max(p.x);
+        max.y = max.y.max(p.y);
+    }
+    travel < 20 * 1024 || path::distance(min, max) > travel
 }

@@ -1,59 +1,60 @@
-//! S1-S3: a long Line order on open ground, and through a 2-tile forest pass.
+//! S1-S3: block movement on open ground and through a two-tile forest pass.
 use super::*;
 
 const START: (i32, i32) = (40, 40);
 
-fn line_order(w: &mut GameWorld, ids: &[EntityId], to: WorldPosition) {
-    w.issue_formation_move(PlayerId(0), ids, Formation::Line, to, false, false)
+fn line_march(pass: bool) -> March {
+    let mut w = wide_world();
+    w.set_fog_disabled(true);
+    if pass {
+        forest(&mut w, TileRect::from_xywh(70, 20, 6, 22));
+        forest(&mut w, TileRect::from_xywh(70, 44, 6, 22));
+    }
+    let ids = block(&mut w, PlayerId(0), START, 10, 60);
+    let to = center(140, 43);
+    w.issue_formation_move(PlayerId(0), &ids, Formation::Line, to, false, false)
         .unwrap();
+    let m = march(&mut w, &ids, to, if pass { 6000 } else { 4000 });
+    note(
+        if pass { "line60-pass" } else { "line60-open" },
+        &m.fields(),
+    );
+    for &id in &ids {
+        assert_eq!(
+            w.unit(id).unwrap().position,
+            w.formation_destination_slot(id).unwrap(),
+            "pass={pass} id={id:?}: an arrival is its assigned slot, not the give-up timer"
+        );
+    }
+    m
 }
 
 #[test]
 fn sixty_militia_in_line_cross_open_ground() {
-    let mut w = wide_world();
-    w.set_fog_disabled(true);
-    let ids = block(&mut w, PlayerId(0), START, 10, 60);
-    let to = center(140, 43);
-    line_order(&mut w, &ids, to);
-    let m = march(&mut w, &ids, to, 4000);
-    note("line60-open", &m.fields());
-    // Measured: the first unit stops at tick 2159 and the last at 2328, so the
-    // tail arrives 169 ticks (8.5 s) after the head.
-    // PR 6 flips this: the last arrival is within 60 ticks (3 s) of the first.
-    assert_eq!((m.first(), m.last()), (2159, 2328));
+    let m = line_march(false);
     assert_eq!(m.stopped(), 60);
     assert_eq!(m.stopped_short, 0);
-    // No single-file column forms on open ground, and the block never
-    // stretches beyond ten tiles. The column appears only at an obstacle.
-    assert_eq!((m.column_ticks, m.longest_tiles), (0, 10));
+    assert!(
+        m.last() - m.first() <= 60,
+        "last arrival must follow the first within three seconds: {m:?}"
+    );
+    assert_eq!((m.column_ticks, m.longest_tiles), (0, 8));
+    assert_eq!(m.min_frontage_when_long, i64::MAX);
+    // Regenerate this current-output pin for the intentional PR 6 layout.
+    assert_eq!((m.first(), m.last()), (2222, 2233));
 }
 
 #[test]
 fn sixty_militia_in_line_cross_a_two_tile_forest_pass() {
-    let mut w = wide_world();
-    w.set_fog_disabled(true);
-    // Six tiles of trees across x 70..76, open only at y 42 and 43.
-    forest(&mut w, TileRect::from_xywh(70, 20, 6, 22));
-    forest(&mut w, TileRect::from_xywh(70, 44, 6, 22));
-    let ids = block(&mut w, PlayerId(0), START, 10, 60);
-    let to = center(140, 43);
-    line_order(&mut w, &ids, to);
-    let m = march(&mut w, &ids, to, 6000);
-    note("line60-pass", &m.fields());
-    // Measured: the last unit stops at tick 3955, 1.70 times the open-ground
-    // 2328. PR 6 flips this to at most 1.6 times.
-    assert_eq!((m.first(), m.last()), (2238, 3955));
-    assert_eq!(m.last() * 100 / 2328, 169);
-    assert_eq!(m.stopped(), 60);
-    // S3, fixed by PR 3: nobody stops short. Before, 14 units went idle more
-    // than eight tiles from the destination while the head had arrived; now a
-    // unit stops only at its own slot, so the anchor's arrival does not end
-    // the march of those still behind the pass.
-    assert_eq!(m.stopped_short, 0);
-    // S1: the group is single file (never more than one tile across) for 1,737
-    // ticks and stretches 78 tiles. PR 6 deletes the column.
-    assert_eq!(
-        (m.column_ticks, m.longest_tiles, m.min_frontage_when_long),
-        (1737, 78, 0)
+    let open = line_march(false);
+    let pass = line_march(true);
+    assert_eq!(pass.stopped(), 60);
+    assert_eq!(pass.stopped_short, 0);
+    assert!(
+        pass.last() * 10 <= open.last() * 16,
+        "pass/open must be at most 1.6: {pass:?} / {open:?}"
     );
+    assert_eq!((pass.column_ticks, pass.longest_tiles), (0, 16));
+    assert_eq!(pass.min_frontage_when_long, i64::MAX);
+    assert_eq!((pass.first(), pass.last()), (2803, 2879));
 }

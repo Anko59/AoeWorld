@@ -42,6 +42,7 @@ fn formations_measure_individual_army_baseline() {
 }
 
 mod behavior;
+mod block;
 mod chokepoint;
 
 #[test]

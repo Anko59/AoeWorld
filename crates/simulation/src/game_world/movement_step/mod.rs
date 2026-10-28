@@ -19,6 +19,7 @@ use aoe_core::{ChunkCoord, EntityId, PlayerId, WorldPosition};
 
 mod avoidance;
 mod collision;
+mod group;
 mod static_collision;
 pub(crate) use collision::{CellHasher, CollisionIndex, key as tile_key};
 mod lookahead;
@@ -40,6 +41,7 @@ pub(crate) struct FastStep {
     vision_stale: bool,
     /// Earlier movers can change whether this unit must leave a gap.
     following: bool,
+    member: Option<super::formation::Motion>,
 }
 
 /// Per-tick dense lookups that replace ordered-map reads on the per-mover path.
@@ -93,6 +95,7 @@ impl Tables {
 /// Non-canonical high-water buffers shared by successive movement ticks.
 #[derive(Debug, Default)]
 pub(crate) struct Scratch {
+    pub(crate) group_phase: bool,
     pub(crate) movers: Vec<EntityId>,
     pub(crate) proposals: Vec<Option<FastStep>>,
     tables: Tables,
@@ -133,6 +136,7 @@ impl GameWorld {
             scratch.proposals.clear();
             return;
         }
+        let group_phase = scratch.group_phase;
         #[cfg(not(target_arch = "wasm32"))]
         {
             let Scratch {
@@ -151,7 +155,13 @@ impl GameWorld {
             for turn in 0..count {
                 let id = movers[(start + turn) % count];
                 if let Some(&index) = self.lookup.get(&id)
-                    && self.units[index].order.is_some()
+                    && if group_phase {
+                        self.units[index].formation.is_some()
+                    } else {
+                        self.units[index].order.is_some()
+                            && (self.units[index].formation.is_none()
+                                || self.is_detached_member(index))
+                    }
                 {
                     turns[turn] = jobs.len();
                     jobs.push(index);
@@ -161,14 +171,18 @@ impl GameWorld {
                 proposals.clear();
                 return;
             }
-            let dense = followers.refresh(
-                &self.followers,
-                self.config.width_tiles,
-                self.config.height_tiles,
-            );
+            let dense = !group_phase
+                && followers.refresh(
+                    &self.followers,
+                    self.config.width_tiles,
+                    self.config.height_tiles,
+                );
             tables.refresh(self);
             par_map_into(jobs.len(), proposals, |slot| {
                 let index = jobs[slot];
+                if group_phase {
+                    return self.propose_group_step(index, tables);
+                }
                 let following = if dense {
                     self.following_unit_in(index, followers)
                 } else {
@@ -185,6 +199,9 @@ impl GameWorld {
             } = scratch;
             par_map_into(count, proposals, |turn| {
                 let index = *self.lookup.get(&movers[(start + turn) % count])?;
+                if group_phase {
+                    return self.propose_group_step(index, tables);
+                }
                 self.propose_step(index, tables, self.following_unit(index))
             });
         }
@@ -206,7 +223,7 @@ impl GameWorld {
         if stored.obstruction.is_some_and(|o| o.blocked >= 16) {
             return None;
         }
-        if stored.formation.is_some() {
+        if stored.formation.is_some() && !self.is_detached_member(index) {
             return None;
         }
         let mut order = stored.order?;
@@ -331,6 +348,7 @@ impl GameWorld {
             pops,
             keeps_moving,
             following,
+            member: None,
         })
     }
 
@@ -362,7 +380,7 @@ impl GameWorld {
     /// when an assumption of the proposal no longer holds.
     pub(crate) fn apply_step(
         &mut self,
-        step: FastStep,
+        mut step: FastStep,
         still_moving: &mut Vec<EntityId>,
         changed: &mut Vec<EntityId>,
     ) -> bool {
@@ -373,7 +391,9 @@ impl GameWorld {
         if self.units.get(index).is_none_or(|unit| unit.state.id != id) {
             return false;
         }
-        if step.following != self.following_unit(index)
+        if let Some(motion) = step.member {
+            self.adjust_group_step(&mut step, motion);
+        } else if step.following != self.following_unit(index)
             || self.arrival_slot_occupied(index)
             // Terrain and buildings were proved by the proposal and cannot
             // change during the apply phase. Only earlier movers' new
@@ -389,6 +409,7 @@ impl GameWorld {
             return false;
         }
         let stored = &mut self.units[index];
+        let from = stored.state.position;
         let state_changed = stored.state != step.state;
         let position_changed = stored.state.position != step.state.position;
         let previous_tile = stored.state.position.tile_floor();
@@ -402,6 +423,9 @@ impl GameWorld {
         }
         if step.following {
             self.record_unit_obstruction(index);
+        }
+        if let Some(motion) = step.member {
+            self.finish_formation_member(id, motion, from, step.state.position);
         }
         self.observe_unit_progress(index);
         // Wildlife's unit cells follow every step, before vision, as in the

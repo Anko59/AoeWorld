@@ -64,9 +64,15 @@ fn formations_share_one_centroid_route_and_use_the_slowest_speed() {
     run(&mut w, 100);
     let start = w.formation_anchor(ids[0]).unwrap();
     let (speed, denom) = w.movement_speed(UnitKind::Archer, PlayerId(0));
+    let carry = w.units[w.lookup[&ids[0]]].order.unwrap().speed_carry;
     run(&mut w, 100);
     let end = w.formation_anchor(ids[0]).unwrap();
-    assert_eq!(end.x - start.x, (100 * speed / denom) as i32);
+    // Speed matching preserves fractional credit earned while forming.
+    assert_eq!(end.x - start.x, 4916);
+    assert_eq!(
+        end.x - start.x,
+        ((100 * speed * 4 + carry) / (denom * 4)) as i32
+    );
     assert_eq!(end.y, start.y);
     assert_eq!(w.route_scheduler_stats().metrics.orders - before, 1);
     assert!(

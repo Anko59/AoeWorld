@@ -51,7 +51,7 @@ pub(super) struct March {
     pub idle_at: Vec<Option<u32>>,
     /// Units that stopped more than eight tiles from the destination.
     pub stopped_short: usize,
-    /// Ticks the group spent in column mode (single file).
+    /// Ticks stretched beyond twenty tiles with frontage below one body diameter.
     pub column_ticks: u32,
     /// Narrowest frontage (tiles across the heading) seen while the longest
     /// stretch along the heading exceeded twenty tiles.
@@ -116,7 +116,9 @@ pub(super) fn march(
         if along > 20 {
             out.min_frontage_when_long = out.min_frontage_when_long.min(across);
         }
-        out.column_ticks += u32::from(w.formation_is_column(ids[0]) == Some(true));
+        // Geometric single file after removing the old mode flag: a long
+        // column whose whole lateral span is less than one infantry diameter.
+        out.column_ticks += u32::from(along > 20 && max.1 - min.1 < 410);
         if out.stopped() == ids.len() {
             break;
         }

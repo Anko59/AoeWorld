@@ -230,9 +230,10 @@ impl GameWorld {
             ((i64::from(from.x) + i64::from(to.x)) / 2) as i32,
             ((i64::from(from.y) + i64::from(to.y)) / 2) as i32,
         );
-        let passing = self.units[index]
-            .obstruction
-            .is_some_and(|o| o.pass_until > self.tick.0);
+        let passing = self.units[index].formation.is_none()
+            && self.units[index]
+                .obstruction
+                .is_some_and(|o| o.pass_until > self.tick.0);
         !self.collisions.blocked(
             midpoint,
             unit.kind.collision_radius() + 768,

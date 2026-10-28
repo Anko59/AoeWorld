@@ -78,25 +78,17 @@ impl GameWorld {
         form: Formation,
     ) -> Result<(), EconomyError> {
         let (ids, centroid) = self.formation_members(player, ids)?;
-        let positions = ids
-            .iter()
-            .map(|id| self.units[self.lookup[id]].state.position)
-            .collect::<Vec<_>>();
-        if let Some(group) = self.formations.get_mut(&ids[0])
-            && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
-        {
-            group.form = form;
-            for (member, offset) in group.members.iter_mut().zip(layout::slots(form, ids.len())) {
-                member.offset = offset;
-                member.cache = None;
-                member.detour.clear();
-                member.probe = 0;
+        let carrier = self.units[self.lookup[&ids[0]]].formation.unwrap_or(ids[0]);
+        if let Some(mut group) = self.formations.remove(&carrier) {
+            if group.members.iter().map(|m| m.id).eq(ids.iter().copied()) {
+                group.form = form;
+                self.reset_group_detours(&mut group);
+                self.assign_group_slots(&mut group);
+                group.settled = false;
+                self.formations.insert(carrier, group);
+                return Ok(());
             }
-            group.ready = false;
-            group.column = false;
-            group.assign_offsets(&positions);
-            group.settled = false;
-            return Ok(());
+            self.formations.insert(carrier, group);
         }
         let at = self.formation_origin(&ids, centroid)?;
         self.issue_formation_move(player, &ids, form, at, false, false)

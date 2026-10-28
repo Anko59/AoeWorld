@@ -2,14 +2,14 @@ use super::*;
 use aoe_core::Formation;
 
 #[test]
-fn formations_wide_staggered_wings_can_start_assembling_with_bounded_rays() {
+fn formations_wide_staggered_wings_move_with_body_spacing_and_no_rays() {
     let mut w = wide_world();
     w.set_fog_disabled(true);
     let origin = center(200, 200);
     let ids = (0..4096)
         .map(|n| {
             // A valid radius-separated army; a 4,096-body perfect overlap has
-            // no physical packing and does not isolate the ray-work limit.
+            // no physical packing and does not isolate wide-block steering.
             w.spawn_kind(
                 PlayerId(0),
                 UnitKind::Militia,
@@ -34,17 +34,17 @@ fn formations_wide_staggered_wings_can_start_assembling_with_bounded_rays() {
         .iter()
         .min_by_key(|&&id| w.formation_slot(id).unwrap().y)
         .unwrap();
-    assert!(w.formation_slot(wing).unwrap().y < origin.y - 90 * 1024);
+    assert_eq!(w.formation_slot(wing).unwrap().y, 120_597);
     let from = w.unit(wing).unwrap().position;
     for _ in 0..200 {
         w.advance();
     }
     assert!(
         w.unit(wing).unwrap().position.y < from.y - 1024,
-        "an open slot beyond the ray allowance must still make local progress: {:?}",
+        "an open outer slot must make local progress: {:?}",
         w.unit(wing)
     );
-    assert!(w.route_scheduler_stats().metrics.formation_steering_work <= 200 * 16_384);
+    assert_eq!(w.route_scheduler_stats().metrics.formation_steering_work, 0);
 }
 
 #[test]
@@ -295,9 +295,9 @@ fn formations_thousands_of_members_share_one_search_with_bounded_local_work() {
         let before = w.route_scheduler_stats().metrics;
         w.advance();
         let after = w.route_scheduler_stats().metrics;
-        assert!(
-            after.formation_steering_work - before.formation_steering_work
-                <= u64::from(crate::game_world::formation::STEERING_WORK_PER_TICK)
+        assert_eq!(
+            after.formation_steering_work - before.formation_steering_work,
+            0
         );
         assert!(
             after.fair_work + after.lookahead_work - before.fair_work - before.lookahead_work
@@ -427,7 +427,13 @@ fn formations_queued_attack_move_starts_combat_on_its_own_leg() {
     // The queued attack-move leg fought on its own leg and killed the enemy;
     // then every member marched on again toward its slot.
     assert!(w.unit(enemy).is_none_or(|u| u.hp == 0));
-    assert!(ids.iter().all(|&id| w.formation(id).is_some()));
+    assert!(
+        ids.iter().all(|&id| w.formation(id).is_some()),
+        "units={:?} attackers={:?} resuming={:?}",
+        ids.iter().map(|&id| w.unit(id)).collect::<Vec<_>>(),
+        w.combat.attackers,
+        w.combat.resuming
+    );
 }
 
 #[test]

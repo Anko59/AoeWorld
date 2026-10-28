@@ -11,67 +11,64 @@ impl GameWorld {
             hash.update(&p.x.to_le_bytes());
             hash.update(&p.y.to_le_bytes());
         };
-        for (id, g) in &self.formations {
+        for (id, group) in &self.formations {
             hash.update(&id.0.to_le_bytes());
             hash.update(&[
-                g.form as u8,
-                g.facing as u8,
-                u8::from(g.ready),
-                u8::from(g.settled),
-                u8::from(g.column),
-                u8::from(g.attack_move),
+                group.form as u8,
+                group.facing as u8,
+                u8::from(group.settled),
+                u8::from(group.direct),
+                u8::from(group.attack_move),
             ]);
-            for p in [g.anchor, g.heading, g.travel_heading, g.destination] {
+            for p in [
+                group.anchor,
+                group.heading,
+                group.travel_heading,
+                group.destination,
+            ] {
                 point(hash, p);
             }
-            hash.update(&g.speed.0.to_le_bytes());
-            hash.update(&g.speed.1.to_le_bytes());
-            hash.update(&(g.queue.len() as u64).to_le_bytes());
-            for &(p, attack_move) in &g.queue {
+            for value in [
+                group.speed.0,
+                group.speed.1,
+                group.pace.0,
+                group.pace.1,
+                group.path_cursor as u64,
+            ] {
+                hash.update(&value.to_le_bytes());
+            }
+            hash.update(&group.progress.to_le_bytes());
+            hash.update(&group.gap.to_le_bytes());
+            hash.update(&group.narrow_gap.to_le_bytes());
+            hash.update(&group.form_start.to_le_bytes());
+            hash.update(&group.form_distance.to_le_bytes());
+            hash.update(&group.half_width.to_le_bytes());
+            hash.update(&(group.queue.len() as u64).to_le_bytes());
+            for &(p, attack_move) in &group.queue {
                 point(hash, p);
                 hash.update(&[u8::from(attack_move)]);
             }
-            hash.update(&(g.trail.len() as u64).to_le_bytes());
-            for &p in &g.trail {
+            hash.update(&(group.path.points.len() as u64).to_le_bytes());
+            for (&p, &length) in group.path.points.iter().zip(&group.path.lengths) {
                 point(hash, p);
+                hash.update(&length.to_le_bytes());
             }
-            hash.update(&(g.members.len() as u64).to_le_bytes());
-            for m in &g.members {
-                hash.update(&m.id.0.to_le_bytes());
-                point(hash, m.offset);
-                hash.update(&m.carry.to_le_bytes());
-                hash.update(&(m.probe as u64).to_le_bytes());
-                hash.update(&m.stalled.to_le_bytes());
-                hash.update(&(m.detour.len() as u64).to_le_bytes());
-                for tile in &m.detour {
-                    hash.update(&tile.x.to_le_bytes());
-                    hash.update(&tile.y.to_le_bytes());
-                }
-                if let Some((a, b, h, goal)) = m.cache {
-                    hash.update(&[1]);
-                    for t in [a, b] {
-                        hash.update(&t.x.to_le_bytes());
-                        hash.update(&t.y.to_le_bytes());
-                    }
-                    point(hash, h);
-                    match goal {
-                        steering::Goal::Slot => {
-                            hash.update(&[0]);
-                        }
-                        steering::Goal::Squeeze => {
-                            hash.update(&[1]);
-                        }
-                        steering::Goal::Trail(p) => {
-                            hash.update(&[2]);
-                            point(hash, p);
-                        }
-                        steering::Goal::Hold => {
-                            hash.update(&[3]);
-                        }
-                    }
-                } else {
-                    hash.update(&[0]);
-                }
+            hash.update(&(group.members.len() as u64).to_le_bytes());
+            for member in &group.members {
+                hash.update(&member.id.0.to_le_bytes());
+                point(hash, member.offset);
+                point(hash, member.start_offset);
+                point(hash, member.goal);
+                point(hash, member.ideal);
+                hash.update(&member.carry.to_le_bytes());
+                hash.update(&(member.rank as u64).to_le_bytes());
+                hash.update(&(member.cursor as u64).to_le_bytes());
+                hash.update(&member.progress.to_le_bytes());
+                hash.update(&member.stalled.to_le_bytes());
+                hash.update(&member.remaining.to_le_bytes());
+                hash.update(&member.blocked.to_le_bytes());
+                hash.update(&member.detour_progress.to_le_bytes());
+                hash.update(&[u8::from(member.arrived), u8::from(member.detached)]);
             }
         }
     }

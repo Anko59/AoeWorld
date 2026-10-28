@@ -4,31 +4,45 @@ use super::*;
 use aoe_core::{Formation, MAX_FORMATION_MEMBERS, MAX_MOVE_DESTINATIONS};
 
 mod anchor;
-mod arrival;
-mod column;
 mod combat;
+mod detach;
 mod hash;
 pub(super) mod layout;
 mod orders;
+mod path;
 mod resume;
 mod selection;
+mod slots;
 mod steering;
+pub(crate) use path::step as group_step;
 pub(crate) use resume::Resume;
-pub(crate) use steering::STEERING_WORK_PER_TICK;
+pub(crate) use steering::Motion;
+#[cfg(test)]
+pub(crate) use steering::matched_speed;
 
 #[derive(Debug)]
 pub(crate) struct Member {
     id: EntityId,
     offset: WorldPosition,
+    start_offset: WorldPosition,
+    goal: WorldPosition,
+    target: WorldPosition,
+    center: WorldPosition,
+    ideal: WorldPosition,
+    target_progress: i64,
     carry: u64,
-    probe: usize,
-    /// A tile-pair visibility result; immediate steps are always revalidated.
-    cache: Option<(TileCoord, TileCoord, WorldPosition, steering::Goal)>,
-    detour: VecDeque<WorldPosition>,
+    rank: usize,
+    cursor: usize,
+    progress: i64,
+    blocked: u16,
+    detour_progress: i64,
+    arrived: bool,
+    detached: bool,
     /// Ticks since the anchor arrived that this member neither reached its
-    /// slot nor moved. At `GIVE_UP_AFTER_TICKS` it stops where it stands, so
+    /// slot nor reduced its distance by half a tile. At `GIVE_UP_AFTER_TICKS` it stops where it stands, so
     /// one boxed-in unit cannot keep the whole group unsettled.
     stalled: u16,
+    remaining: i64,
 }
 
 #[derive(Debug)]
@@ -38,22 +52,26 @@ pub(crate) struct Group {
     anchor: WorldPosition,
     /// Stable order orientation; tile refinement must not rotate the whole army.
     heading: WorldPosition,
-    /// Current anchor path leg, used while following a column around bends.
+    /// Current anchor path leg; the destination's orientation stays fixed.
     travel_heading: WorldPosition,
     facing: Facing,
     speed: (u64, u64),
-    ready: bool,
+    pace: (u64, u64),
     settled: bool,
-    column: bool,
-    /// Derived solely from the hashed member offsets and ids, rebuilt on orders.
-    column_order: Vec<usize>,
+    direct: bool,
+    gap: i32,
+    narrow_gap: i32,
+    form_start: i64,
+    form_distance: i64,
+    half_width: i32,
     /// Point lookups only; member storage always remains in canonical id order.
     member_lookup: std::collections::HashMap<EntityId, usize>,
     destination: WorldPosition,
     queue: VecDeque<(WorldPosition, bool)>,
     attack_move: bool,
-    /// At most 128 tile crossings, shared by every member while squeezing.
-    trail: VecDeque<WorldPosition>,
+    path: path::Path,
+    progress: i64,
+    path_cursor: usize,
 }
 
 impl GameWorld {
@@ -71,7 +89,11 @@ impl GameWorld {
         let leader = self.units[*self.lookup.get(&id)?].formation?;
         let group = self.formations.get(&leader)?;
         let member = group.members.iter().find(|m| m.id == id)?;
-        Some(layout::oriented(group.anchor, member.offset, group.heading))
+        Some(if group.anchor == group.destination {
+            member.goal
+        } else {
+            layout::oriented(group.anchor, member.offset, group.heading)
+        })
     }
 
     /// Where the member's slot lies once the group has reached its destination.
@@ -80,18 +102,7 @@ impl GameWorld {
         let leader = self.units[*self.lookup.get(&id)?].formation?;
         let group = self.formations.get(&leader)?;
         let member = group.members.iter().find(|m| m.id == id)?;
-        Some(layout::oriented(
-            group.destination,
-            member.offset,
-            group.heading,
-        ))
-    }
-
-    /// Whether the group is marching single file; baseline scenarios read it.
-    #[cfg(test)]
-    pub(crate) fn formation_is_column(&self, id: EntityId) -> Option<bool> {
-        let leader = self.units[*self.lookup.get(&id)?].formation?;
-        Some(self.formations.get(&leader)?.column)
+        Some(member.goal)
     }
 
     /// One unit leaves its group: a death, a stop, a single-unit move or
@@ -118,8 +129,16 @@ impl GameWorld {
                     .members
                     .retain(|m| leavers.binary_search(&m.id).is_err());
                 // Members stay in id order, so the first is the new carrier.
-                if let Some(carrier) = group.members.first().map(|m| m.id) {
+                if let Some(carrier) = group
+                    .members
+                    .iter()
+                    .find(|member| !member.detached)
+                    .or_else(|| group.members.first())
+                    .map(|member| member.id)
+                {
                     group.forget_departures();
+                    let at = group.member_lookup[&carrier];
+                    group.members[at].detached = false;
                     if carrier != leader {
                         self.hand_over_route(leader, carrier);
                         for member in &group.members {

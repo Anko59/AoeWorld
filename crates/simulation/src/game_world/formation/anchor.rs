@@ -14,17 +14,27 @@ impl GameWorld {
         let Some(mut group) = self.formations.remove(&leader) else {
             return false;
         };
+        let previous_denominator = group.speed.1;
         group.speed = self.group_speed(&group);
         if let Some(mut order) = self.units[index].order {
-            let (speed, denom) = group.speed;
-            // A stretched column slows the anchor while members catch up.
-            // Stopping it completely strands the front on intermediate slots
-            // and lets one delayed member halt the whole formation forever.
-            let pace = if group.ready && self.formation_cohesive(&group) {
-                speed
-            } else {
-                speed / 2
-            };
+            let (speed, denominator) = group.speed;
+            if denominator != previous_denominator {
+                // Carry is fractional distance. A change of slowest member
+                // must not reinterpret the old denominator as whole steps.
+                order.speed_carry = (u128::from(order.speed_carry) * u128::from(denominator)
+                    / u128::from(previous_denominator)) as u64;
+            }
+            let denom = denominator * 4;
+            // Use a half-tile lag threshold for speed matching. While the block
+            // forms, pace stays at 0.75 rather than stopping for assembly.
+            let pace = speed
+                * if self.formation_cohesive(&group) {
+                    4
+                } else {
+                    3
+                };
+            group.pace = (pace, denom);
+            self.refresh_group_path(index, &mut group, order);
             let mut credit = u128::from(order.speed_carry) + u128::from(pace);
             order.speed_carry = 0;
             for _ in 0..32 {
@@ -61,12 +71,7 @@ impl GameWorld {
                     break;
                 }
                 group.anchor = next;
-                if group.trail.back().is_none_or(|p| p.tile_floor() != to) {
-                    if group.trail.len() == 128 {
-                        group.trail.pop_front();
-                    }
-                    group.trail.push_back(next);
-                }
+                group.progress += i64::from(step);
                 if !arrived {
                     order.speed_carry = (credit % u128::from(denom)) as u64;
                     self.units[index].state.planning = false;
@@ -116,6 +121,7 @@ impl GameWorld {
                             speed_carry: 0,
                             ..order
                         };
+                        self.refresh_group_path(index, &mut group, order);
                         self.units[index].state.planning = false;
                         if credit < u128::from(denom) {
                             order.speed_carry = credit as u64;
@@ -134,27 +140,26 @@ impl GameWorld {
 
 impl GameWorld {
     pub(super) fn formation_cohesive(&self, group: &Group) -> bool {
-        if group.column {
-            let mut previous = group.anchor;
-            return group.column_order.iter().all(|&at| {
-                let m = &group.members[at];
-                self.unit(m.id).is_none_or(|u| {
-                    let dx = i64::from(u.position.x) - i64::from(previous.x);
-                    let dy = i64::from(u.position.y) - i64::from(previous.y);
-                    previous = u.position;
-                    dx * dx + dy * dy <= (6 * 1024_i64).pow(2)
-                })
-            });
-        }
-        group.members.iter().all(|m| {
-            self.unit(m.id).is_none_or(|u| {
-                let dx = i64::from(u.position.x) - i64::from(group.anchor.x);
-                let dy = i64::from(u.position.y) - i64::from(group.anchor.y);
-                let x = i64::from(m.offset.x);
-                let y = i64::from(m.offset.y);
-                let radius = (x * x + y * y).isqrt() + 8 * 1024;
-                dx * dx + dy * dy <= radius * radius
+        group.direct
+            || group.members.iter().all(|member| {
+                let position = self.units[self.lookup[&member.id]].state.position;
+                member.arrived
+                    || member.detached
+                    || member.blocked >= 240
+                    || path::squared(member.ideal, position) <= 512_i64.pow(2)
             })
-        })
+    }
+
+    fn refresh_group_path(&self, index: usize, group: &mut Group, order: MovementOrder) {
+        let end = group.progress + i64::from(order.segment_length.saturating_sub(order.travelled));
+        let mut cursor = group.path_cursor;
+        if group.path.end() < end || group.path.point(end, &mut cursor).0 != order.waypoint {
+            group.path.continue_from(
+                group.progress,
+                group.anchor,
+                std::iter::once(order.waypoint).chain(self.units[index].route.iter().copied()),
+            );
+        }
+        group.path.point(group.progress, &mut group.path_cursor);
     }
 }
