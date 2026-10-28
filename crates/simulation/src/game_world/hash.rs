@@ -76,8 +76,6 @@ impl GameWorld {
         for unit in &self.units {
             hash.update(&unit.state.id.0.to_le_bytes());
             hash.update(&self.collisions.sampling_slot(unit.state.id).to_le_bytes());
-            // Both cyclic neighbour windows carry mutable sampling order.
-            hash.update(&self.followers.sampling_slot(unit.state.id).to_le_bytes());
             let wildlife_slot = match unit.wildlife_slot {
                 usize::MAX => u64::MAX,
                 slot => slot as u64,

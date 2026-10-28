@@ -10,6 +10,7 @@ use aoe_core::{CombatStance, Formation};
 mod arrival;
 mod clash;
 mod front;
+mod jams;
 mod open_ground;
 mod reorder;
 mod showcase;
@@ -144,6 +145,26 @@ pub(super) fn new_hits(
         }
     }
     out
+}
+
+/// Militia strike immediately when their cooldown advances. Unlike a victim's
+/// last-hit field this observes every blow, including simultaneous attackers.
+pub(super) fn new_melee_hits(
+    w: &GameWorld,
+    attackers: &[EntityId],
+    seen: &mut std::collections::BTreeMap<EntityId, u64>,
+) -> Vec<EntityId> {
+    attackers
+        .iter()
+        .copied()
+        .filter(|id| {
+            let Some(&index) = w.lookup.get(id) else {
+                return false;
+            };
+            let next = w.units[index].next_hit_tick;
+            next > seen.insert(*id, next).unwrap_or(0)
+        })
+        .collect()
 }
 
 /// Print the numbers a later PR must beat; `--no-capture` shows them.

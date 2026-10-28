@@ -201,10 +201,9 @@ group then unit id; the parallel phase reads only the snapshot.
 
 ### 4.1 How AoE2 units avoid each other
 
-- **Model [F A1, A2].** A *hard* radius is never entered; a larger *soft*
-  radius is preferred. Units predict positions; the lower-priority unit slows
-  or stops; resolutions are remembered (no "merry-go-round"). A unit that
-  cannot step aside is *pushed* by the higher-priority one; in a "stacked
+- **Model [F A1, A2].** A *hard* radius is never entered; a larger *soft* radius is preferred. Units
+  predict positions; the lower-priority unit slows or stops; resolutions are remembered (no "merry-
+  go-round"). A unit that cannot step aside is *pushed* by the higher-priority one; in a "stacked
   canyon" pushes chain and are undone after the group passes.
 - **DE pushing [F].** Blocked units make blockers move aside (developer,
   2019: <https://steamcommunity.com/app/813780/discussions/0/2803982773091323561/>);
@@ -242,14 +241,10 @@ group then unit id; the parallel phase reads only the snapshot.
   spots are taken). A briefly blocked fishing ship goes idle (player report,
   <https://forums.ageofempires.com/t/fishing-ships-idle/62687>). No source on
   galleys passing in channels.
-- **Melee and work spots.** 39284 hotfix improved melee pathing; 61321 stops
-  melee on attack-move going idle; 81058 retargets a same-type unit when the
-  bumped target is unreachable; 177723 improves large lumberjack groups;
-  104954 stops villagers looping at a resource. No source gives fixed work
-  spots or a melee cap; geometry (radius around the footprint) is the likely
-  limit [G].
-
-### 4.2 Current code (cause of S7)
+- **Melee and work spots.** 39284 hotfix improved melee pathing; 61321 stops melee on attack-move
+  going idle; 81058 retargets a same-type unit when the bumped target is unreachable; 177723
+  improves large lumberjack groups; 104954 stops villagers looping at a resource. No source gives
+  fixed work spots or a melee cap; geometry (radius around the footprint) is the likely limit [G].### 4.2 Current code (cause of S7)
 
 Unit bodies are hard circles: `collision_sweep` rejects any overlap
 (`movement_step/collision.rs:214-299`). The only relief is a same-player
@@ -258,23 +253,19 @@ squeeze after **64** blocked ticks, 3.2 s (`movement_step/settling.rs:20`), for
 (`Gathering`, `Fishing`, `Attacking`, ...) never pass (`collision.rs:152-164`,
 `:248`).
 
-- **Bridge:** a centre may sit at most `512 - r` off the deck axis
-  (`collision.rs:356-398`); sidesteps are six fixed-angle tries
-  (`movement_step/avoidance.rs:179-237`); different players never squeeze, so
-  a head-on meeting can deadlock (plausible, not yet reproduced).
-- **Narrow rivers:** ships use 512 for bodies *and* terrain
-  (`collision.rs:175-181`); `body_position_clear` rejects a circle touching any
-  non-water tile (`collision.rs:303-334`), so a 1-tile channel admits only the
-  exact centreline, two ships never pass, and a fishing ship at work is a wall.
-- **Villagers at resources:** spots are a diameter plus 16 apart on the
-  footprint perimeter (`movement_step/slots.rs:14-36`); working villagers are
-  walls; arrivals with over 32 reservations count as full
-  (`spacing/destinations.rs`); cells with over 32 bodies refuse traffic
+- **Bridge:** a centre may sit at most `512 - r` off the deck axis (`collision.rs:356-398`);
+  sidesteps are six fixed-angle tries (`movement_step/avoidance.rs:179-237`); different players
+  never squeeze, so a head-on meeting can deadlock (plausible, not yet reproduced).
+- **Narrow rivers:** ships use 512 for bodies *and* terrain (`collision.rs:175-181`);
+  `body_position_clear` rejects a circle touching any non-water tile (`collision.rs:303-334`), so a
+  1-tile channel admits only the exact centreline, two ships never pass, and a fishing ship at work
+  is a wall.
+- **Villagers at resources:** spots are a diameter plus 16 apart on the footprint perimeter
+  (`movement_step/slots.rs:14-36`); working villagers are walls; arrivals with over 32 reservations
+  count as full (`spacing/destinations.rs`); cells with over 32 bodies refuse traffic
   (`collision.rs:8`, `:135`, `:277-297`); redirects only within 3 tiles.
-- **Melee:** standing attackers are walls to friends; a melee unit needs a
-  free perimeter point; enemy bodies are hard.
-
-### 4.3 Avoidance design
+- **Melee:** standing attackers are walls to friends; a melee unit needs a free perimeter point;
+  enemy bodies are hard.### 4.3 Avoidance design
 
 Unit-unit contact becomes **separation with priority**, not a veto. Terrain
 and buildings stay hard (existing exact sweeps, `static_collision.rs`).
@@ -435,18 +426,18 @@ one client branch at a time. PR 6 needs PR 5, and PRs 7–11 build on PR 6.
 
 ## 7. Open questions
 
-- Should plain-move members hit back at melee range while marching? AoE2
-  suggests not [G]; §3.4 already gives fighting on arrival.
-- `h`, the two-body stack limit, the 1.25 catch-up, `L` and `K` are AoeWorld
-  choices [G]. Tune them on the scenario metrics, not by feel.
-- DE ship radii and head-on corridor behaviour are unpublished [G]; PRs 8–9
-  are judged on their scenarios.
+- Should plain-move members hit back at melee range while marching? AoE2 suggests not [G]; §3.4
+  already gives fighting on arrival.
+- `h`, the two-body stack limit, the 1.25 catch-up, `L` and `K` are AoeWorld choices [G]. Tune them
+  on the scenario metrics, not by feel.
+- DE ship radii and head-on corridor behaviour are unpublished [G]; PRs 8–9 are judged on their
+  scenarios.
 
 ## 8. Measured baseline and PR 6 results
 
-At 20 ticks/s, `tests/group_baseline/` pins current output exactly. Before is
-PRs 0–4; PR 5 (`fe8586ee`) leaves movement unchanged. PR 6 requires every
-member at its assigned destination: a give-up cannot pass as arrival.
+At 20 ticks/s, `tests/group_baseline/` pins current output exactly. Before is PRs 0–4; PR 5
+(`fe8586ee`) leaves movement unchanged. PR 6 requires every member at its assigned destination: a
+give-up cannot pass as arrival.
 
 | Scenario | Before | PR 6 / remaining target |
 | --- | --- | --- |

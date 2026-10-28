@@ -40,8 +40,6 @@ pub(crate) struct FastStep {
     keeps_moving: bool,
     bucket: ChunkCoord,
     vision_stale: bool,
-    /// Earlier movers can change whether this unit must leave a gap.
-    following: bool,
     member: Option<super::formation::Motion>,
 }
 
@@ -110,8 +108,6 @@ pub(crate) struct Scratch {
     jobs: Vec<usize>,
     #[cfg(not(target_arch = "wasm32"))]
     turns: Vec<usize>,
-    #[cfg(not(target_arch = "wasm32"))]
-    followers: super::spacing::Snapshot,
 }
 
 impl Scratch {
@@ -149,7 +145,6 @@ impl GameWorld {
             let Scratch {
                 jobs,
                 turns,
-                followers,
                 tables,
                 proposals,
                 ..
@@ -178,24 +173,13 @@ impl GameWorld {
                 proposals.clear();
                 return;
             }
-            let dense = !group_phase
-                && followers.refresh(
-                    &self.followers,
-                    self.config.width_tiles,
-                    self.config.height_tiles,
-                );
             tables.refresh(self, group_phase);
             par_map_into(jobs.len(), proposals, |slot| {
                 let index = jobs[slot];
                 if group_phase {
                     return self.propose_group_step(index, tables);
                 }
-                let following = if dense {
-                    self.following_unit_in(index, followers)
-                } else {
-                    self.following_unit(index)
-                };
-                self.propose_step(index, tables, following)
+                self.propose_step(index, tables)
             });
         }
         #[cfg(target_arch = "wasm32")]
@@ -209,7 +193,7 @@ impl GameWorld {
                 if group_phase {
                     return self.propose_group_step(index, tables);
                 }
-                self.propose_step(index, tables, self.following_unit(index))
+                self.propose_step(index, tables)
             });
         }
     }
@@ -225,7 +209,7 @@ impl GameWorld {
 
     /// The single-position-update cases of the sequential waypoint loop. `None`
     /// hands the unit to the sequential path.
-    fn propose_step(&self, index: usize, tables: &Tables, following: bool) -> Option<FastStep> {
+    fn propose_step(&self, index: usize, tables: &Tables) -> Option<FastStep> {
         let stored = &self.units[index];
         if stored.obstruction.is_some_and(|o| o.blocked >= 16) {
             return None;
@@ -241,11 +225,6 @@ impl GameWorld {
         let id = state.id;
         let economy = tables.economy(self, state.player);
         let (speed, denominator) = self.movement_speed_with(state.kind, economy);
-        let speed = if following && !self.local_retry(id) {
-            0
-        } else {
-            speed
-        };
         let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
         order.speed_carry = 0;
         let remaining = order.segment_length.saturating_sub(order.travelled);
@@ -354,7 +333,6 @@ impl GameWorld {
             order: final_order,
             pops,
             keeps_moving,
-            following,
             member: None,
         })
     }
@@ -400,8 +378,7 @@ impl GameWorld {
         }
         if let Some(motion) = step.member {
             self.adjust_group_step(&mut step, motion);
-        } else if step.following != self.following_unit(index)
-            || self.arrival_slot_occupied(index)
+        } else if self.arrival_slot_occupied(index)
             // Terrain and buildings were proved by the proposal and cannot
             // change during the apply phase. Only earlier movers' new
             // positions can: re-sweep the bodies, not the static footprints.
@@ -437,9 +414,6 @@ impl GameWorld {
         }
         if step.pops > 0 {
             stored.route.pop_front();
-        }
-        if step.following {
-            self.record_unit_obstruction(index);
         }
         if let Some(motion) = step.member {
             self.finish_formation_member(id, motion, from, step.state.position);

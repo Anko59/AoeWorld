@@ -111,7 +111,14 @@ fn scale_tail_movers_have_a_bounded_obstruction_budget() {
     fs::create_dir_all(out.parent().unwrap()).unwrap();
     fs::write(out, census(&built.world, &built.players).to_string()).unwrap();
     for unit in built.world.units() {
-        assert!(built.world.movement_obstruction_ticks(unit.id).unwrap_or(0) <= 128);
+        assert!(
+            built.world.movement_obstruction_ticks(unit.id).unwrap_or(0) <= 128,
+            "blocked tail: {unit:?}, obstruction={:?}, formation={:?}, destination={:?}, gather={:?}",
+            built.world.movement_obstruction_ticks(unit.id),
+            built.world.formation(unit.id),
+            built.world.movement_order(unit.id),
+            built.world.gather_target(unit.id),
+        );
     }
 }
 

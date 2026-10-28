@@ -2,7 +2,7 @@
 use super::*;
 
 mod avoidance;
-mod following_tests;
+mod idle_tests;
 mod performance;
 mod settling;
 

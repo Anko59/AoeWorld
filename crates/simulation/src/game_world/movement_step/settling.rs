@@ -10,20 +10,22 @@ pub(crate) struct Obstruction {
     pub(crate) side: i8,
     pub(crate) last_tick: u64,
     pub(crate) search_tick: u64,
-    /// Until this tick the mover may pass through friendly traffic.
+    /// Until this tick the mover may overlap other bodies down to their hard
+    /// distance (`collision::hard_distance`).
     pub(crate) pass_until: u64,
 }
 
-/// Obstructed ticks without progress before a mover squeezes through its own
-/// player's traffic, as AoE2 units shuffle through a friendly crowd instead
-/// of standing in a permanent gridlock. Enemies and settled workers still block.
-pub(crate) const PASS_AFTER_TICKS: u16 = 64;
+/// Obstructed ticks without progress before a mover may overlap other bodies
+/// down to their hard distance, as AoE2 units shuffle past each other instead
+/// of waiting in a gridlock (design 4.3). 32 ticks is 1.6 s: briefly blocked
+/// traffic still waits for the gap, a head-on pair separates at once.
+pub(crate) const PASS_AFTER_TICKS: u16 = 32;
 /// How long one squeeze lasts once granted, so the mover clears the crowd
 /// rather than colliding again after its first half tile of progress.
 const PASS_TICKS: u64 = 40;
 /// Obstructed ticks without progress after which a mover that cannot reach
 /// its goal gives up (12 s at 20 Hz), so a permanently boxed-in unit does not
-/// stay an active mover forever. Squeezing through friends, the 160-tick
+/// stay an active mover forever. The 160-tick
 /// waits in the congestion tests and a normal queue all end well before it.
 pub(crate) const GIVE_UP_AFTER_TICKS: u16 = 240;
 
@@ -41,6 +43,32 @@ impl GameWorld {
             .get(*self.lookup.get(&id)?)?
             .obstruction
             .map(|o| o.blocked)
+    }
+
+    /// Work traffic may leave a narrow pocket near its goal, but never
+    /// compress into a physically occupied work endpoint.
+    pub(super) fn free_work_approach(&self, index: usize, goal: WorldPosition) -> bool {
+        let id = self.units[index].state.id;
+        match self.work_approach_clearance {
+            Some((cached, at, clear)) if cached == id && at == goal => clear,
+            _ => self.has_work_task(id) && !self.local_position_occupied(index, goal),
+        }
+    }
+
+    /// No other body moves during this unit's sequential turn. Clear the
+    /// derived answer before the next mover and before formation/spacing work.
+    pub(crate) fn cache_work_approach(&mut self, index: usize) {
+        let unit = self.units[index].state;
+        self.work_approach_clearance = self.units[index]
+            .obstruction
+            .filter(|o| o.pass_until > self.tick.0 && distance(unit.position, o.goal) <= 2048)
+            .map(|o| {
+                (
+                    unit.id,
+                    o.goal,
+                    self.has_work_task(unit.id) && !self.local_position_occupied(index, o.goal),
+                )
+            });
     }
 
     pub(crate) fn record_unit_obstruction(&mut self, index: usize) {
@@ -132,7 +160,20 @@ impl GameWorld {
         }
         let unit = self.units[index].state;
         let plain_move = self.can_adjust_arrival(index);
-        let nearby = (plain_move
+        // A builder at a legal fractional contact must hand back a taken
+        // tile so construction can retry a different perimeter work spot.
+        let build_arrival = self
+            .economy
+            .builders
+            .get(&unit.id)
+            .and_then(|task| self.building(task.building))
+            .is_some_and(|building| {
+                super::super::economy::placement::adjacent(
+                    building.footprint,
+                    unit.position.tile_floor(),
+                )
+            });
+        let nearby = ((plain_move || build_arrival)
             && distance(unit.position, obstruction.goal) <= 768
             && self.position_occupied(index, obstruction.goal, true)
             || self.at_gather_arrival(index))

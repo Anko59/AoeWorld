@@ -117,8 +117,8 @@ impl GameWorld {
             .get(&unit.id)
             .is_some_and(|task| match task.phase {
                 super::GatherPhase::Approaching => {
+                    // Settlement separately proves actual full-body clearance.
                     self.at_work_position(unit.id, task.tile)
-                        && !self.destination_point_reserved(unit.position, unit.id)
                 }
                 super::GatherPhase::Returning => task
                     .dropoff

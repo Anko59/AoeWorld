@@ -148,6 +148,8 @@ pub struct GameWorld {
     pub(crate) active_movers: Vec<EntityId>,
     pub(crate) movement_scratch: movement_step::Scratch,
     pub(crate) collisions: movement_step::CollisionIndex,
+    /// Derived clearance valid only while one sequential mover owns the turn.
+    pub(crate) work_approach_clearance: Option<(EntityId, WorldPosition, bool)>,
     pub(crate) local_refinement_left: u32,
     pub(crate) formations: BTreeMap<EntityId, formation::Group>,
     pub(crate) move_queues: BTreeMap<EntityId, VecDeque<WorldPosition>>,
@@ -177,7 +179,6 @@ pub struct GameWorld {
     pub(crate) route_metrics: route_scheduler::RouteMetrics,
     pub(crate) planning_probe: Option<std::sync::Arc<dyn PlanningProbe>>,
     pub(crate) idle_spacing: spacing::IdleSpacing,
-    pub(crate) followers: spacing::Followers,
 }
 impl GameWorld {
     pub fn new(config: WorldConfig) -> Result<Self, GameWorldError> {
@@ -201,6 +202,7 @@ impl GameWorld {
             chunks: BTreeMap::new(),
             active_movers: Vec::new(),
             movement_scratch: Default::default(),
+            work_approach_clearance: None,
             collisions: Default::default(),
             local_refinement_left: 4,
             move_queues: BTreeMap::new(),
@@ -222,7 +224,6 @@ impl GameWorld {
             planning_probe: None,
             route_queued: BTreeSet::new(),
             idle_spacing: Default::default(),
-            followers: Default::default(),
         }
     }
 

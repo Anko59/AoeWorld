@@ -69,3 +69,74 @@ fn four_fishing_ships_in_a_one_tile_river() {
     assert_eq!(narrow, (4, 0, 4));
     assert_eq!(wide, (2, 2, 2));
 }
+
+/// Ships sail a channel `width` tiles wide: each `(kind, start, goal)` is an x
+/// offset along it and a row inside it. Returns the tick everyone arrived (0:
+/// never) and how many never did.
+fn channel(width: i32, ships: &[(UnitKind, i32, i32, i32, i32, u16)]) -> (u32, usize) {
+    let mut w = coast();
+    w.set_fog_disabled(true);
+    let (_, water) = bank(&w);
+    let base = TileCoord::new(water.x + 2, water.y + 4);
+    for x in base.x - 2..base.x + 20 {
+        for y in 0..w.config().height_tiles {
+            if !(base.y..base.y + width).contains(&y) {
+                w.economy.blocked_tiles.insert(TileCoord::new(x, y));
+            }
+        }
+    }
+    let mut actors = Vec::new();
+    for &(kind, from_x, from_y, to_x, to_y, owner) in ships {
+        let id = ship(
+            &mut w,
+            kind,
+            TileCoord::new(base.x + from_x, base.y + from_y),
+            owner,
+        );
+        let goal = at(TileCoord::new(base.x + to_x, base.y + to_y));
+        let ordered = w.issue_move(id, goal).is_ok();
+        actors.push((id, w.movement_order(id).map(|o| o.destination), ordered));
+    }
+    let mut done = 0;
+    for tick in 1..=1600 {
+        w.advance();
+        if done == 0
+            && actors
+                .iter()
+                .all(|&(id, goal, _)| Some(w.unit(id).unwrap().position) == goal)
+        {
+            done = tick;
+        }
+    }
+    let never = actors
+        .iter()
+        .filter(|&&(id, goal, _)| Some(w.unit(id).unwrap().position) != goal)
+        .count();
+    (done, never)
+}
+
+#[test]
+#[ignore = "recording, PR 9/10"]
+fn boats_in_narrow_rivers() {
+    let g = UnitKind::Galley;
+    let f = UnitKind::FishingShip;
+    let r = [
+        // One ship alone in a one-tile river.
+        channel(1, &[(f, 0, 0, 14, 0, 0)]),
+        // A galley following a fishing ship in a one-tile river.
+        channel(1, &[(f, 4, 0, 16, 0, 0), (g, 0, 0, 14, 0, 0)]),
+        // Two galleys passing head-on in a two-tile river.
+        channel(2, &[(g, 0, 0, 14, 0, 0), (g, 14, 1, 0, 1, 0)]),
+        // Two galleys head-on along the same row of a two-tile river.
+        channel(2, &[(g, 0, 0, 14, 0, 0), (g, 14, 0, 0, 0, 0)]),
+        // A fishing ship and a galley head-on along one row of a two-tile river.
+        channel(2, &[(f, 0, 0, 14, 0, 0), (g, 14, 0, 0, 0, 0)]),
+        // Two fishing ships head-on in a one-tile river.
+        channel(1, &[(f, 0, 0, 14, 0, 0), (f, 14, 0, 0, 0, 0)]),
+        // The same two fishing ships belonging to different players.
+        channel(1, &[(f, 0, 0, 14, 0, 0), (f, 14, 0, 0, 0, 1)]),
+        // Two enemy galleys head-on along one row of a two-tile river.
+        channel(2, &[(g, 0, 0, 14, 0, 0), (g, 14, 0, 0, 0, 1)]),
+    ];
+    panic!("record {r:?}");
+}

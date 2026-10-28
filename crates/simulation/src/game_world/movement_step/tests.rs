@@ -105,7 +105,7 @@ fn an_idle_population_does_not_build_movement_tables() {
 }
 
 #[test]
-fn late_game_proposals_use_no_per_unit_neighbour_hash_lookups() {
+fn late_game_proposals_keep_rotation_order_among_idle_crowds() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
     for n in 0..1_000 {
         world
@@ -125,12 +125,9 @@ fn late_game_proposals_use_no_per_unit_neighbour_hash_lookups() {
             .unwrap();
         movers.push(id);
     }
-    world.followers.reset_neighbour_lookups();
     let mut scratch = Scratch::default();
     world.propose_steps_into(&movers, 7, &mut scratch);
     assert_eq!(scratch.jobs.len(), 64);
-    assert_eq!(scratch.followers.cell_count(), 4);
-    assert_eq!(world.followers.neighbour_lookups(), 0);
     for turn in 0..64 {
         assert_eq!(
             scratch.take_step(turn).unwrap().state.id,

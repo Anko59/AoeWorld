@@ -350,3 +350,22 @@ fn default_village_hunter_clears_traffic_and_delivers_sheep() {
         w.units[w.lookup[&worker]].obstruction
     );
 }
+
+#[test]
+fn a_future_work_reservation_does_not_veto_a_free_gather_arrival() {
+    let mut w = super::super::far_orders::wide_world();
+    let tile = TileCoord::new(40, 30);
+    let node = aoe_map::ResourceNode::starting(tile, aoe_map::ResourceKind::Wood).unwrap();
+    if let Terrain::Map { generator, overlay } = &mut w.terrain {
+        overlay.insert_starting_resource(generator, node).unwrap();
+    }
+    let contact = WorldPosition::new(tile.x * 1024 - 213, tile.y * 1024 + 512);
+    let worker = w.spawn_villager(PlayerId(0), contact).unwrap();
+    w.issue_gather(PlayerId(0), worker, node.id).unwrap();
+    let later = w.spawn_villager(PlayerId(0), at(20, 30)).unwrap();
+    w.issue_task_move(later, contact).unwrap();
+    let index = w.lookup[&worker];
+    assert!(w.destination_point_reserved(contact, worker));
+    assert!(w.arrival_position_free(index));
+    assert!(w.at_gather_arrival(index));
+}

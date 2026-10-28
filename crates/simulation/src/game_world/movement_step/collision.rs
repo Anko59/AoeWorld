@@ -1,9 +1,12 @@
 //! Fine collision cells complement the wildlife index. Normal cells are exact;
 //! overfull spawn cells admit outward escape, but never new arrivals.
-use crate::{GameWorld, Terrain, UnitKind, UnitTask};
+use crate::{GameWorld, UnitKind, UnitTask};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
+
+#[path = "collision/bridge.rs"]
+mod bridge;
 
 const CELL_LIMIT: usize = 32;
 type Cells = HashMap<u64, Vec<EntityId>, BuildHasherDefault<CellHasher>>;
@@ -179,9 +182,16 @@ impl CollisionIndex {
     }
 }
 
+/// Hard shares of the radii sum: friendly traffic 50%, workers 75%, others 100%.
+/// Ships keep whole hulls; see group-movement-rewrite.md section 4.3.
+const HARD_FRIEND_MOVING: i64 = 50;
+const HARD_FRIEND_IDLE: i64 = 50;
+const HARD_FRIEND_WORKING: i64 = 75;
+const HARD_OTHER: i64 = 100;
+
 impl crate::GameUnit {
-    /// A body working in place: friendly traffic never squeezes through it.
-    fn settled_worker(&self) -> bool {
+    /// A body working in place: friendly traffic keeps most of its distance.
+    fn working(&self) -> bool {
         !self.moving
             // A pursuit waiting for a route still occupies a combat position.
             // Its truthful Moving task must not grant friendly passing rights.
@@ -196,6 +206,23 @@ impl crate::GameUnit {
                     | UnitTask::Attacking
             ))
     }
+}
+
+/// The centre distance below which `unit` may never enter `other`.
+pub(crate) fn hard_distance(unit: &crate::GameUnit, other: &crate::GameUnit) -> i64 {
+    let sum = i64::from(unit.kind.collision_radius() + other.kind.collision_radius());
+    let percent = if unit.kind.is_naval() {
+        100
+    } else if unit.player != other.player {
+        HARD_OTHER
+    } else if other.moving {
+        HARD_FRIEND_MOVING
+    } else if other.working() {
+        HARD_FRIEND_WORKING
+    } else {
+        HARD_FRIEND_IDLE
+    };
+    sum * percent / 100
 }
 
 impl UnitKind {
@@ -286,19 +313,24 @@ impl GameWorld {
         );
         let own_radius = unit.kind.collision_radius();
         let (maximum_radius, padding) = bounds.unwrap_or((512, 0));
-        // Preserve the legacy whole-tile overflow policy exactly. Otherwise
-        // only bodies within the actual half-step swept AABB can intersect.
+        // Overflow keeps whole-tile bounds; otherwise use the half-step swept AABB.
         let reach = own_radius
             + if bounds.is_some() && !self.collisions.has_overfull_cells() {
                 maximum_radius + padding + ((dx.abs().max(dy.abs()) + 1) / 2) as i32
             } else {
                 768 + padding
             };
-        let passing = self.units[index].formation.is_none()
-            && self.units[index]
-                .obstruction
-                .is_some_and(|o| o.pass_until > self.tick.0);
-        // The swept box widened by the largest possible touching neighbor.
+        // Active attack jobs keep full-body approaches, including truthful Moving waits.
+        let soft = !self.combat.attackers.contains_key(&unit.id)
+            && self.units[index].formation.is_none()
+            && self.units[index].obstruction.is_some_and(|o| {
+                let (x, y) = (
+                    i64::from(o.goal.x) - i64::from(from.x),
+                    i64::from(o.goal.y) - i64::from(from.y),
+                );
+                o.pass_until > self.tick.0
+                    && (x * x + y * y > 2048 * 2048 || self.free_work_approach(index, o.goal))
+            });
         let culling = bounds.map(|_| {
             let broad_radius = i64::from(own_radius + maximum_radius + padding);
             (
@@ -327,21 +359,19 @@ impl GameWorld {
                     return false;
                 }
 
-                if other.hp == 0
-                    || (stationary && other.moving)
-                    || (passing && other.player == unit.player && !other.settled_worker())
-                {
+                if other.hp == 0 || (stationary && other.moving) {
                     return false;
                 }
-                let r = i64::from(own_radius + other.kind.collision_radius() + padding);
+                let r = if soft {
+                    hard_distance(&unit, &other)
+                } else {
+                    i64::from(own_radius + other.kind.collision_radius())
+                } + i64::from(padding);
                 let x = i64::from(other.position.x) - i64::from(from.x);
                 let y = i64::from(other.position.y) - i64::from(from.y);
                 let start = x * x + y * y;
                 let dot = x * dx + y * dy;
-                // Existing overlaps may separate in any direction that does not
-                // bring the centres closer: a nearly concentric pair has no
-                // single "away" direction. Priority never permits tunnelling
-                // through a body that is already separated from the mover.
+                // Spawn overlaps may separate without moving closer; separated bodies stay hard.
                 if start < r * r {
                     if padding > 0 {
                         return true;
@@ -419,69 +449,5 @@ impl GameWorld {
             }
         }
         true
-    }
-}
-
-impl GameWorld {
-    // Raster bridge links form a one-tile-wide continuous deck. On a diagonal
-    // link its sides cross water tile corners: water there is not a solid wall.
-    // Foundations/buildings are still checked independently above.
-    pub(super) fn bridge_water_clear(&self, tile: TileCoord) -> bool {
-        let Terrain::Map { generator, overlay } = &self.terrain else {
-            return false;
-        };
-        !overlay.blocks_tile(tile)
-            && generator
-                .tile_and_node_with_cancel(tile, &|| false)
-                .ok()
-                .flatten()
-                .is_some_and(|(t, node)| {
-                    t.water != aoe_map::WaterKind::None
-                        && node.is_none_or(|n| !overlay.blocks_node(n))
-                })
-    }
-
-    pub(super) fn on_bridge_corridor(&self, at: WorldPosition, radius: i32) -> bool {
-        let Terrain::Map { overlay, .. } = &self.terrain else {
-            return false;
-        };
-        let here = at.tile_floor();
-        let margin = i128::from(512 - radius);
-        for y in -1..=1 {
-            for x in -1..=1 {
-                let from = TileCoord::new(here.x + x, here.y + y);
-                let Some(mask) = overlay.bridge_connections(from) else {
-                    continue;
-                };
-                let Ok(start) = WorldPosition::from_tile_center(from) else {
-                    continue;
-                };
-                for dy in -1..=1 {
-                    for dx in -1..=1 {
-                        if mask & (1 << ((dy + 1) * 3 + dx + 1)) == 0 {
-                            continue;
-                        }
-                        let to = TileCoord::new(from.x + dx, from.y + dy);
-                        if overlay.bridge_edge(from, to) != Some(true) {
-                            continue;
-                        }
-                        let vx = i128::from(dx * 1024);
-                        let vy = i128::from(dy * 1024);
-                        let px = i128::from(at.x - start.x);
-                        let py = i128::from(at.y - start.y);
-                        let len = vx * vx + vy * vy;
-                        let dot = px * vx + py * vy;
-                        if len > 0
-                            && dot >= 0
-                            && dot <= len
-                            && (px * vy - py * vx).pow(2) <= margin * margin * len
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        false
     }
 }

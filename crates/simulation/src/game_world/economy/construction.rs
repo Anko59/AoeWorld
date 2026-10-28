@@ -276,7 +276,7 @@ impl GameWorld {
         candidates.retain(|tile| self.tile_passable(*tile));
         candidates.sort_by_key(|tile| {
             (
-                *tile != origin && self.work_spot_busy(*tile, id),
+                self.work_spot_busy(*tile, id),
                 distance_squared(origin, *tile),
                 tile.y,
                 tile.x,

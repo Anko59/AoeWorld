@@ -210,25 +210,3 @@ fn spawn_overlap_repair_cannot_push_a_body_into_a_separated_neighbour() {
         }
     }
 }
-
-#[test]
-fn land_and_water_followers_do_not_share_an_obstruction_window() {
-    let mut w = world();
-    let origin = at(30, 30);
-    let a = w.spawn_villager(PlayerId(0), origin).unwrap();
-    let b = w
-        .spawn_villager(PlayerId(0), WorldPosition::new(origin.x + 400, origin.y))
-        .unwrap();
-    for id in [a, b] {
-        w.issue_task_move(id, at(50, 30)).unwrap();
-    }
-    assert!(w.following_unit(w.lookup[&a]));
-    // Probe domain filtering independently of terrain and naval path admission.
-    let i = w.lookup[&b];
-    let body = w.units[i].state;
-    w.untrack_unit_cell(b, crate::game_world::wildlife::cell(body.position));
-    w.units[i].state.kind = UnitKind::FishingShip;
-    let body = w.units[i].state;
-    w.track_unit_cell(&body);
-    assert!(!w.following_unit(w.lookup[&a]));
-}

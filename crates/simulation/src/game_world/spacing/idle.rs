@@ -141,6 +141,12 @@ impl IdleSpacing {
             _ => {}
         }
     }
+    pub(crate) fn contains(&self, id: EntityId) -> bool {
+        self.slots
+            .get(id.0 as usize)
+            .is_some_and(|&slot| slot != usize::MAX)
+    }
+
     pub(crate) fn relocate(&mut self, id: EntityId, from: TileCoord, to: TileCoord) {
         if from == to {
             return;

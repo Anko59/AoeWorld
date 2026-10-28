@@ -78,8 +78,7 @@ fn two_players_meeting_on_a_one_tile_bridge() {
         "group-baseline bridge-head-on: first_cross={first_cross:?} all_across={all_across:?} last_position_change={last_move}"
     );
     // The design suspected a deadlock; there is none. Three units each side
-    // swap banks over the bridge in single file: the first crosses at tick 181,
-    // all six at tick 251, and nothing moves after tick 380.
+    // PR 7 graded squeezing preserves the rebased bridge timing: 181/251/380.
     // PR 8 keeps this passing and makes the pass faster than 3 s (60 ticks)
     // from the first meeting.
     assert_eq!((west_across, east_across, on_deck, moving), (3, 3, 0, 0));
