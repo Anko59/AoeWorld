@@ -13,16 +13,20 @@ pub(super) fn projectiles(
         .filter(|p| region.contains(p.position(world.tick()).tile_floor()))
         .map(|p| {
             // Reveal only the visible remainder: endpoints in black/fog must not
-            // disclose an unseen firing position or target.
+            // disclose an unseen firing position or target. A visible firing
+            // position keeps the true launch, so the client can pitch the
+            // flight along its arc and time the shooter's release.
             let position = p.position(world.tick());
             let visible = |at: aoe_core::WorldPosition| {
                 world.visibility(player, at.tile_floor()) == aoe_simulation::TileVisibility::Visible
             };
+            let seen = visible(p.from);
             aoe_protocol::ProjectileState {
                 id: p.id,
-                from: position,
+                attacker: seen.then_some(p.attacker),
+                from: if seen { p.from } else { position },
                 to: if visible(p.to) { p.to } else { position },
-                launched: world.tick(),
+                launched: if seen { p.launched } else { world.tick() },
                 impact: p.impact,
                 kind: match p.kind {
                     aoe_simulation::ProjectileKind::Stone => aoe_protocol::ProjectileKind::Stone,

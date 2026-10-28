@@ -10,6 +10,8 @@ pub enum ProjectileKind {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProjectileState {
     pub id: u64,
+    /// The shooter, only while its firing position is visible to the viewer.
+    pub attacker: Option<EntityId>,
     pub from: WorldPosition,
     pub to: WorldPosition,
     pub launched: Tick,

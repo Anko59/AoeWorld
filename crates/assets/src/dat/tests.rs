@@ -12,6 +12,7 @@ mod corpse_tests;
 mod fishing_tests;
 mod interface;
 mod inventory;
+mod release;
 mod trees;
 fn le16(out: &mut Vec<u8>, value: i16) {
     out.extend_from_slice(&value.to_le_bytes());

@@ -328,6 +328,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                         .canvas
                         .set_attribute("data-projectiles", &projectiles.len().to_string());
                     client.village.projectile_tick = tick.0;
+                    record_shots(&mut client.village, &projectiles, tick.0);
                     client.village.projectiles = projectiles;
                     client.rendered_frame.clear();
                 }
@@ -455,4 +456,22 @@ pub(super) fn merge_buildings(
     }
     (merged.len() <= aoe_protocol::MAX_RETAINED_BUILDINGS)
         .then(|| merged.into_values().cloned().collect())
+}
+
+/// Remembers when each shooter last released, so its animation can be phased
+/// to the shot. Entries of idle shooters expire after half a minute.
+fn record_shots(
+    village: &mut village::Village,
+    projectiles: &[aoe_protocol::ProjectileState],
+    tick: u64,
+) {
+    for shot in projectiles {
+        if let Some(attacker) = shot.attacker {
+            let last = village.last_shot.entry(attacker).or_insert(shot.launched.0);
+            *last = (*last).max(shot.launched.0);
+        }
+    }
+    village
+        .last_shot
+        .retain(|_, launched| tick.saturating_sub(*launched) < 600);
 }

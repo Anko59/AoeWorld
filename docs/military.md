@@ -115,8 +115,12 @@ facings, native frame durations, player colour and die/decay timing.
 | Man-at-Arms | 1044 | 1048 | 1038 | 1041 | 1045 |
 | Scout Cavalry | 2085 | 2089 | 2079 | 2082 | 2086 |
 
-Projectile graphics 3378/3399 select SLP **3799/3820**, five drawn directional
-cells each. Long actor animations sample alternate native cells while keeping
+Projectile graphics 3378/3399 select SLP **3799/3820**. Each keeps five level-flight cells
+(five mirrored rows; the atlas budget has no room for more); the client picks the cell from the flight's
+screen direction. Archers,
+skirmishers and crossbowmen release on frame 5 (the DAT frame delay): the client
+phases their attack animation to the newest shot's launch tick, which the
+projectile message carries with its `attacker` while the firing position is seen. Long actor animations sample alternate native cells while keeping
 the native loop duration. Death is one-shot. Source prefixes remain checked
 for truncation/duplicates. The combined synthetic native/DE selection pins
 **4,628** frames under the unchanged **5,120** cap, four 2048² pages/64 MiB.

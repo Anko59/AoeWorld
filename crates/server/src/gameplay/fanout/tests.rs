@@ -294,6 +294,7 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
     // without depending on combat wind-up or attack-range timing.
     built.sessions[0].projectiles = vec![ProjectileState {
         id: 1,
+        attacker: None,
         from: at(20, 20),
         to: at(22, 20),
         launched: built.tick,
