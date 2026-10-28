@@ -186,7 +186,7 @@ async fn ground_farms_remain_selectable_and_do_not_hide_units() {
 }
 
 #[wasm_bindgen_test]
-async fn building_selection_prefers_resources_and_keeps_building_depth_order() {
+async fn building_selection_obeys_draw_depth_for_resources_and_other_buildings() {
     let mut client = fixture(1.0).await;
     let scout = client.units.get_mut(&EntityId(1)).unwrap();
     scout.position = WorldPosition::from_tile_center(TileCoord::new(101, 101)).unwrap();
@@ -220,9 +220,9 @@ async fn building_selection_prefers_resources_and_keeps_building_depth_order() {
     });
     click(&mut client, [0.0, -90.0]);
     assert_eq!(
-        client.selected.resource_id,
-        Some(berry.id),
-        "berries behind the roof remain selectable"
+        client.selected.building_id,
+        Some(EntityId(8)),
+        "roof hides berries behind it"
     );
     let foreground =
         aoe_map::ResourceNode::starting(TileCoord::new(100, 101), aoe_map::ResourceKind::Food)
@@ -263,7 +263,7 @@ async fn building_selection_prefers_resources_and_keeps_building_depth_order() {
 }
 
 #[wasm_bindgen_test]
-async fn enemy_behind_tree_remains_an_attack_target() {
+async fn enemy_unit_behind_tree_remains_an_attack_target() {
     let mut client = fixture(1.0).await;
     client.village.buildings.clear();
     let mut primary = client.units.get(&EntityId(1)).unwrap().clone();
@@ -345,6 +345,52 @@ async fn gold_behind_a_tree_remains_a_resource_target() {
     assert_eq!(
         picking::resource(&client, ScreenPoint { x: 640.0, y: 220.0 }),
         Some((gold.id, aoe_protocol::ResourceKind::Gold))
+    );
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn a_tree_rectangle_behind_an_enemy_building_does_not_hide_it() {
+    let mut client = fixture(1.0).await;
+    client.units.clear();
+    let enemy = if crate::playground::game::village::owner(&client) == PlayerId(1) {
+        PlayerId(2)
+    } else {
+        PlayerId(1)
+    };
+    client.village.buildings[0].player = enemy;
+    let tree = aoe_map::ResourceNode::starting(TileCoord::new(98, 98), aoe_map::ResourceKind::Wood)
+        .unwrap();
+    client.resources.apply(aoe_protocol::ResourceState {
+        snapshot_page: None,
+        subscription_revision: 1,
+        from_revision: None,
+        revision: 0,
+        changes: vec![aoe_protocol::ResourceAmount {
+            id: tree.id,
+            remaining: tree.initial_amount,
+        }],
+    });
+    client.fog.apply(aoe_protocol::FogState {
+        revision: 1,
+        tick: aoe_core::Tick(0),
+        region: TileRect::from_xywh(0, 0, 1, 1),
+        tiles: vec![],
+        overview: vec![],
+        disabled: true,
+    });
+    // The roof is drawn in front of the tree: it keeps the click for selection
+    // and for attack, and the tree does not become a gather target.
+    click(&mut client, [0.0, -90.0]);
+    assert_eq!(client.selected.building_id, Some(EntityId(8)));
+    assert_eq!(client.selected.resource_id, None);
+    assert_eq!(
+        picking::enemy_building(&client, ScreenPoint { x: 640.0, y: 270.0 }),
+        Some(EntityId(8))
+    );
+    assert_eq!(
+        picking::resource(&client, ScreenPoint { x: 640.0, y: 180.0 }),
+        None
     );
     client.canvas.remove();
 }

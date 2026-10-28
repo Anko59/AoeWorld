@@ -220,15 +220,38 @@ fn validate_open_map(hash: &str, directory: &Path) -> Result<()> {
 
 /// A pack converted by an older importer parses in the server but makes the
 /// browser fail while reading its building recipes, which leaves the page on
-/// "Unavailable" with no connection. Refuse it here with the regeneration step.
+/// "Unavailable" with no connection. A pack that has building recipes but no
+/// attached Definitive Edition overlay loads and then draws squares for the
+/// bridges, galleys and kings. Refuse both here with the regeneration step.
 fn verify_asset_pack(pack: &Path) -> Result<()> {
-    aoe_assets::pack::verify(pack).map(drop).map_err(|error| {
+    let manifest = aoe_assets::pack::verify(pack).map_err(|error| {
         format!(
             "AOE_ASSET_PACK {} is not valid for this build ({error}); regenerate it with `make assets-import` and use the new hash",
             pack.display()
         )
-        .into()
-    })
+    })?;
+    require_building_overlay(pack, !manifest.buildings.is_empty())?;
+    Ok(())
+}
+
+fn require_building_overlay(pack: &Path, has_building_recipes: bool) -> Result<()> {
+    if !has_building_recipes {
+        return Ok(());
+    }
+    let overlay = pack.join("buildings");
+    let reason = if !overlay.join("manifest.json").is_file() {
+        "has no attached Definitive Edition building overlay".to_owned()
+    } else if let Err(error) = aoe_assets::pack::verify(&overlay) {
+        format!("has an invalid building overlay ({error})")
+    } else {
+        return Ok(());
+    };
+    Err(format!(
+        "AOE_ASSET_PACK {} {reason}; run `make assets-import-de DE_DIR=<install>` (AOE_ASSET_PACK=<this pack> to attach to it) so buildings and units are not drawn as squares",
+        pack.display()
+    )
+    .replace(['\r', '\n'], " ")
+    .into())
 }
 
 pub fn start() -> Result<()> {

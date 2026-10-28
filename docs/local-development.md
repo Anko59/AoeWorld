@@ -24,4 +24,7 @@ change scenario settings without rebuilding; source changes still need `make dev
 Set `AOE_ASSET_PACK=local-assets/packs/<pack-hash>` for `make dev` to enable the
 game and the imported sprite viewer described in [assets](assets.md). The pack is
 verified first; one converted by an older importer is refused with the
-`make assets-import` step instead of leaving the page on "Unavailable".
+`make assets-import` step instead of leaving the page on "Unavailable". A pack
+with building recipes but no attached Definitive Edition overlay (its
+`buildings` link) is refused with the `make assets-import-de` step, because it
+would draw squares for bridges, galleys and kings.

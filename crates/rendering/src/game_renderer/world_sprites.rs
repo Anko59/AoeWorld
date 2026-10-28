@@ -470,11 +470,9 @@ pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneC
             .iter()
             .find(|b| Some(b.unit_id) == unit.kind.building_id())
             .is_some_and(|b| {
-                let parts = if unit.kind.is_foundation() {
-                    &b.construction
-                } else {
-                    &b.parts
-                };
+                // A healthy wall draws frame 0 of each part; only damage animates.
+                let wall = unit.kind == crate::SceneUnitKind::PalisadeWall;
+                let parts: &[_] = if wall { &[] } else { &b.parts };
                 let damage = usize::from(unit.visual.damage_stage())
                     .checked_sub(1)
                     .and_then(|i| b.damage.get(i))

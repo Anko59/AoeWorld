@@ -415,6 +415,27 @@ fn damage_overlay_uses_selected_stage_and_animates() {
 }
 
 #[wasm_bindgen_test]
+fn healthy_palisade_wall_does_not_animate_but_its_damage_overlay_does() {
+    let mut art = art();
+    let wall = unit(SceneUnitKind::PalisadeWall);
+    art.compositions[0].unit_id = wall.kind.building_id().unwrap();
+    let mut part = art.compositions[0].parts[0].clone();
+    part.animation = art.village[1][..2].to_vec();
+    part.frame_rate = 0.2;
+    art.compositions[0].parts = vec![part.clone()];
+    assert!(!super::super::scene_unit_animates(&art, wall, camera()));
+    art.compositions[0].damage = vec![crate::BuildingDamage {
+        damage_percent: 25,
+        apply_mode: 0,
+        parts: vec![part],
+    }];
+    assert!(!super::super::scene_unit_animates(&art, wall, camera()));
+    let mut damaged = wall;
+    damaged.visual = damaged.visual.with_damage_stage(1);
+    assert!(super::super::scene_unit_animates(&art, damaged, camera()));
+}
+
+#[wasm_bindgen_test]
 fn damage_stage_uses_exact_hp_thresholds_and_repairs() {
     let mut art = art();
     art.compositions[0].damage = [25, 50, 75]

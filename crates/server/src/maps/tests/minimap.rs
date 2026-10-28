@@ -1,7 +1,8 @@
 use super::super::minimap::{
-    FLAT_SHADE, MAX_CACHED_MINIMAPS, MAX_MINIMAP_BYTES, MAX_MINIMAP_SAMPLES_PER_AXIS,
-    MINIMAP_HEADER_BYTES, MINIMAP_MAGIC, MinimapCache, MinimapClass, MinimapError, classify,
-    minimap, minimap_raster, minimap_samples, minimap_tile, package_minimap,
+    FLAT_SHADE, MAX_BACKGROUND_MINIMAPS, MAX_CACHED_MINIMAPS, MAX_MINIMAP_BYTES,
+    MAX_MINIMAP_SAMPLES_PER_AXIS, MINIMAP_HEADER_BYTES, MINIMAP_MAGIC, MinimapCache, MinimapClass,
+    MinimapError, classify, finish, minimap, minimap_raster, minimap_samples, minimap_tile,
+    package_minimap,
 };
 use super::MemoryPageProvider;
 use aoe_core::TileCoord;
@@ -318,5 +319,62 @@ async fn endpoint_serves_one_cached_binary_raster_per_package() {
             .await
             .expect_err("unknown package"),
         StatusCode::NOT_FOUND
+    );
+}
+
+fn slow_task(
+    release: &Arc<std::sync::atomic::AtomicBool>,
+    raster: u8,
+) -> tokio::task::JoinHandle<Result<Vec<u8>, MinimapError>> {
+    let release = release.clone();
+    tokio::task::spawn_blocking(move || {
+        while !release.load(std::sync::atomic::Ordering::Acquire) {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        Ok(vec![raster])
+    })
+}
+
+#[tokio::test]
+async fn a_raster_past_its_deadline_is_cached_for_the_retry_with_bounded_background_work() {
+    let minimaps = Arc::new(tokio::sync::Mutex::new(MinimapCache::default()));
+    let release = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let budget = std::time::Duration::from_millis(20);
+    for index in 0..=MAX_BACKGROUND_MINIMAPS {
+        let mut cache = minimaps.lock().await;
+        let result = finish(
+            &mut cache,
+            &minimaps,
+            index.to_string(),
+            budget,
+            slow_task(&release, index as u8),
+            (),
+        )
+        .await;
+        assert_eq!(
+            result.expect_err("past deadline"),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        // The same hash is never computed twice at once.
+        assert_eq!(
+            cache.pending.contains(&index.to_string()),
+            index < MAX_BACKGROUND_MINIMAPS
+        );
+    }
+    assert_eq!(minimaps.lock().await.pending.len(), MAX_BACKGROUND_MINIMAPS);
+    release.store(true, std::sync::atomic::Ordering::Release);
+    for _ in 0..200 {
+        if minimaps.lock().await.pending.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let mut cache = minimaps.lock().await;
+    assert!(cache.pending.is_empty());
+    assert_eq!(cache.get("0").as_deref(), Some(&[0_u8][..]));
+    assert_eq!(cache.get("1").as_deref(), Some(&[1_u8][..]));
+    assert!(
+        cache.get("2").is_none(),
+        "the over-limit raster was not kept"
     );
 }

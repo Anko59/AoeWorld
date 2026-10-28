@@ -79,11 +79,13 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
         .map(|(_, id, a, e)| (id, a, e))
 }
 
-pub(super) fn enemy_building(client: &Client, point: ScreenPoint) -> Option<EntityId> {
-    if resource_target(client, point).is_some() {
+pub(in super::super) fn enemy_building(client: &Client, point: ScreenPoint) -> Option<EntityId> {
+    let (depth, id) = building_target(client, point)?;
+    if resource_target(client, point)
+        .is_some_and(|(d, r, _)| !in_front((depth, u64::from(id.0)), (d, r)))
+    {
         return None;
     }
-    let (_, id) = building_target(client, point)?;
     client
         .village
         .buildings
@@ -109,13 +111,22 @@ pub(in super::super) fn click(client: &mut Client, point: ScreenPoint, unit: Opt
         client.selected.units(vec![id]);
         return;
     }
-    if let Some((_, id, _)) = resource_target(client, point) {
-        client.selected.resource(id);
-    } else if let Some((_, id)) = building_target(client, point) {
+    let resource = resource_target(client, point);
+    if let Some((depth, id)) = building_target(client, point)
+        && resource.is_none_or(|(d, r, _)| in_front((depth, u64::from(id.0)), (d, r)))
+    {
         client.selected.building(id);
+    } else if let Some((_, id, _)) = resource {
+        client.selected.resource(id);
     } else {
         client.selected = Default::default();
     }
+}
+
+// Rendering sorts by body depth, then entity ID. Storage order and the
+// inverse-projected ground tile must not select something behind a roof.
+fn in_front(a: (f64, u64), b: (f64, u64)) -> bool {
+    a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).is_ge()
 }
 
 fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId)> {
@@ -252,8 +263,10 @@ pub(in super::super) fn resource(
     client: &Client,
     point: ScreenPoint,
 ) -> Option<(u64, ResourceKind)> {
-    let (_, id, kind) = resource_target(client, point)?;
-    Some((id, kind))
+    let (depth, id, kind) = resource_target(client, point)?;
+    building_target(client, point)
+        .is_none_or(|(d, b)| in_front((depth, id), (d, u64::from(b.0))))
+        .then_some((id, kind))
 }
 
 fn resource_target(client: &Client, point: ScreenPoint) -> Option<(f64, u64, ResourceKind)> {
