@@ -147,6 +147,9 @@ fn assert_nothing_unseen(world: &GameWorld, viewer: PlayerId, messages: &[Gamepl
                 for projectile in projectiles {
                     assert!(visible(projectile.from), "a projectile appeared in the fog");
                     assert!(projectile.to == projectile.from || visible(projectile.to));
+                    // A shooter is named, and the true launch kept, only while
+                    // its firing position is in sight.
+                    assert!(projectile.attacker.is_none() || visible(projectile.from));
                 }
             }
             _ => {}

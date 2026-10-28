@@ -262,6 +262,7 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         walking: None,
         attack_graphic: None,
         projectile_unit: None,
+        frame_delay: None,
         attack_range: None,
         blast_radius: None,
         reload_time: None,
@@ -294,7 +295,10 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         out.blast_radius = Some(r.f32()?);
         out.reload_time = Some(r.f32()?);
         out.projectile_unit = Some(r.i16()?);
-        r.skip(COMBAT_TAIL - 30)?;
+        r.skip(3)?; // accuracy percent and tower mode
+        // Animation frame at which the strike or the projectile is released.
+        out.frame_delay = Some(r.i16()?);
+        r.skip(COMBAT_TAIL - 35)?;
         out.attack_graphic = Some(r.i16()?);
         r.skip(12)?;
     }

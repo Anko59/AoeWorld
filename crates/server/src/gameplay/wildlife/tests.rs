@@ -134,3 +134,34 @@ async fn leaving_sight_removes_enemy_and_wolf_and_resync_does_not_restore_them()
         }
     }
 }
+
+#[test]
+fn a_shooter_is_named_with_its_true_launch_only_while_its_position_is_seen() {
+    use aoe_simulation::UnitKind;
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let archer = world
+        .spawn_kind(PlayerId(0), UnitKind::Archer, at(100, 100))
+        .unwrap();
+    let target = world.spawn_villager(PlayerId(1), at(103, 100)).unwrap();
+    world.issue_attack(PlayerId(0), archer, target).unwrap();
+    world.advance();
+    let launched = world.projectiles().next().expect("a shot").launched;
+    for _ in 0..3 {
+        world.advance();
+    }
+    let region = TileRect::from_xywh(0, 0, 256, 256);
+    // The shooter's own player sees it all: the shooter and its true launch.
+    let own = super::projectiles(&world, region, PlayerId(0));
+    assert_eq!(own.len(), 1);
+    assert_eq!(own[0].attacker, Some(archer));
+    assert_eq!(own[0].launched, launched);
+    assert_eq!(own[0].from, world.projectiles().next().unwrap().from);
+    // A bystander who sees only the flight learns neither shooter nor launch.
+    let seen = super::projectiles(&world, region, PlayerId(1));
+    for shot in seen {
+        let origin_seen = shot.attacker.is_some();
+        assert_eq!(shot.launched == launched, origin_seen);
+        assert!(origin_seen || shot.launched == world.tick());
+    }
+}

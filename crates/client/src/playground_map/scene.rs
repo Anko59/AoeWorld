@@ -287,7 +287,7 @@ pub(in super::super) fn units(
                 facing = crate::unit_visuals::packed_frame(
                     pose,
                     facing,
-                    client.last_frame,
+                    projectiles::pose_clock(client, unit, pose),
                     unit.death_tick,
                     client.village.tick,
                     client.config.tick_hz,

@@ -44,6 +44,7 @@ fn projectile_wire_is_bounded_ordered_and_pins_the_appended_variant() {
     use aoe_core::{Tick, WorldPosition};
     let p = ProjectileState {
         id: 7,
+        attacker: Some(EntityId(3)),
         from: WorldPosition::new(1024, 2048),
         to: WorldPosition::new(4096, 2048),
         launched: Tick(10),

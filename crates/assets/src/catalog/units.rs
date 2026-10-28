@@ -2,6 +2,9 @@
 //! Five stored rows supply eight facings. Pixels remain in the private pack.
 #[path = "units/castle.rs"]
 mod castle;
+#[path = "units/projectile.rs"]
+mod projectile;
+pub use projectile::{PROJECTILE_PHASES, projectile_facing, release_frame};
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Pose {
@@ -204,11 +207,8 @@ impl ActorSource {
         }
         match self.id {
             4500 => 0,
-            // Five screen rows sampled from the sixteen native directions.
-            // Frame zero in each block is the steepest pitch; these offsets pick
-            // the level-flight cell that matches the projected arc.
-            3799 => [6, 49, 93, 137, 175][row],
-            3820 => [5, 45, 84, 125, 169][row],
+            // Flight cells by direction and pitch; see `projectile`.
+            3799 | 3820 => projectile::source_cell(self.id, row),
             _ => row * self.stride as usize + phase,
         }
     }
@@ -235,6 +235,15 @@ const fn sprite(id: u32, stride: u8, millis: u16) -> ActorSource {
         stride,
         millis,
         phases: 0,
+    }
+}
+
+const fn flight(id: u32) -> ActorSource {
+    ActorSource {
+        id,
+        stride: PROJECTILE_PHASES,
+        millis: 100,
+        phases: PROJECTILE_PHASES,
     }
 }
 
@@ -311,8 +320,8 @@ pub const SPRITES: [ActorSource; 130] = [
     sprite(1045, 5, 6000),
     sprite(2085, 10, 200),
     sprite(2089, 10, 110),
-    sprite(3799, 1, 100),
-    sprite(3820, 1, 100),
+    flight(3799),
+    flight(3820),
     sprite(1512, 15, 133),
     castle::SPRITES[0],
     castle::SPRITES[1],

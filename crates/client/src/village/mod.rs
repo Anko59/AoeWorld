@@ -45,6 +45,8 @@ pub(crate) struct Village {
     pub wildlife_tick: u64,
     pub projectiles: Vec<aoe_protocol::ProjectileState>,
     pub projectile_tick: u64,
+    /// Launch tick of each visible shooter's newest shot, to time its release.
+    pub last_shot: std::collections::BTreeMap<aoe_core::EntityId, u64>,
     pub gate_art: std::cell::RefCell<crate::building_ui::GateArt>,
 }
 

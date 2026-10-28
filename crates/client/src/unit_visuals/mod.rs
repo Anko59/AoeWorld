@@ -352,6 +352,62 @@ pub(crate) fn packed_frame(
     (facing % 8) | (phase << 3)
 }
 
+/// The animation clock, in milliseconds, of a `kind` of unit drawn in
+/// `pose`, given the launch tick of its newest shot and the live tick on the
+/// frame at `hz`. Shooters play their attack so that the release frame falls
+/// on the tick of that shot and repeats every reload; until a first shot is
+/// seen they hold the first frame. Every other pose runs on `frame_time`.
+pub(crate) fn pose_clock(
+    pose: Pose,
+    kind: UnitKind,
+    (shot, live_tick, hz): (Option<u64>, f64, f64),
+    frame_time: f64,
+) -> f64 {
+    let Some(release) = aoe_assets::catalog::units::release_frame(pose) else {
+        return frame_time;
+    };
+    let period = f64::from(
+        crate::building_ui::content::rules().units[kind as usize]
+            .combat
+            .attack_period_centiseconds,
+    ) * 10.0;
+    let source = sprites()[pose as usize];
+    shot_clock(
+        shot,
+        live_tick,
+        hz,
+        period,
+        (
+            f64::from(source.stride) * f64::from(source.millis),
+            f64::from(source.millis),
+        ),
+        release,
+    )
+}
+
+/// Milliseconds into an attack animation of `(length, frame)` milliseconds
+/// whose `release` frame falls on the shot launched at tick `shot`; shots
+/// repeat every `period` milliseconds and the animation holds its first frame
+/// between them, as it does before any shot or after a long pause.
+fn shot_clock(
+    shot: Option<u64>,
+    now_tick: f64,
+    hz: f64,
+    period: f64,
+    (length, frame): (f64, f64),
+    release: u8,
+) -> f64 {
+    let Some(shot) = shot else {
+        return 0.0;
+    };
+    let age = ((now_tick - shot as f64) * 1000.0 / hz).max(0.0);
+    if period <= 0.0 || age > period * 3.0 {
+        return 0.0;
+    }
+    let phase = (age + f64::from(release) * frame) % period;
+    if phase < length { phase } else { 0.0 }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum ClickOrder {
     Move,
@@ -388,4 +444,42 @@ pub(crate) fn actor_hit(bounds: [f64; 4], foot: [f64; 2], point: [f64; 2], zoom:
         && point[1] >= bounds[1]
         && point[1] <= bounds[3])
         || dx * dx + dy * dy <= (5.0 * zoom).powi(2)
+}
+
+#[cfg(test)]
+mod release_tests {
+    use super::shot_clock;
+    use wasm_bindgen_test::wasm_bindgen_test;
+
+    // An archer's attack: ten 70 ms frames released at frame 5, reloading
+    // every 2 s, at 20 ticks a second.
+    const ANIMATION: (f64, f64) = (700.0, 70.0);
+    fn clock(shot: Option<u64>, now: f64) -> f64 {
+        shot_clock(shot, now, 20.0, 2000.0, ANIMATION, 5)
+    }
+
+    #[wasm_bindgen_test]
+    fn the_release_frame_plays_on_the_tick_of_every_shot() {
+        for k in 0..3 {
+            assert_eq!(clock(Some(100), 100.0 + 40.0 * f64::from(k)), 350.0);
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn the_windup_plays_before_the_next_shot_and_the_rest_after_it() {
+        // 350 ms before the second shot the animation starts at its first frame.
+        assert_eq!(clock(Some(100), 140.0 - 7.0), 0.0);
+        assert_eq!(clock(Some(100), 140.0 - 3.5), 175.0);
+        // 345 ms after a shot the animation is at its last frame (frame 9).
+        assert!((clock(Some(100), 106.9) - 695.0).abs() < 1e-6);
+    }
+
+    #[wasm_bindgen_test]
+    fn the_first_frame_is_held_between_swings_before_a_shot_and_after_a_pause() {
+        assert_eq!(clock(Some(100), 112.0), 0.0);
+        assert_eq!(clock(None, 112.0), 0.0);
+        assert_eq!(clock(Some(100), 100.0 + 20.0 * 7.0), 0.0);
+        // A shot newer than the clock (clock skew) holds the release frame.
+        assert_eq!(clock(Some(100), 99.0), 350.0);
+    }
 }

@@ -121,26 +121,72 @@ fn vassal_uses_king_poses_with_native_timing() {
     assert!(crate::dat::table::DARK_AGE.iter().any(|(_, id)| *id == 434));
 }
 
+/// Unpacks a projectile `facing | phase << 3` into the native SLP direction
+/// block and pitch cell it draws, and whether it is mirrored.
+fn cell(pose: Pose, packed: u8) -> (usize, usize, bool) {
+    let source = SPRITES[pose as usize];
+    let facing = usize::from(packed & 7);
+    let row = [0, 1, 2, 3, 4, 3, 2, 1][facing];
+    let frame = source.source_frame(row, usize::from(packed >> 3));
+    let per = if pose == Pose::Arrow { 11 } else { 10 };
+    (frame / per, frame % per, (1..=3).contains(&facing))
+}
+
 #[test]
-fn projectile_rows_use_the_native_flight_pitch_for_each_screen_direction() {
-    // The 32-angle DAT graphics store sixteen rows, each with pitch frames.
-    // Frame zero is steeply pitched; these samples match level projected flight.
-    for (pose, expected) in [
-        (Pose::Arrow, [6, 49, 93, 137, 175]),
-        (Pose::Javelin, [5, 45, 84, 125, 169]),
-    ] {
+fn projectile_cells_cover_every_direction_within_twenty_three_degrees() {
+    use crate::catalog::units::projectile_facing;
+    for pose in [Pose::Arrow, Pose::Javelin] {
         let source = SPRITES[pose as usize];
         assert_eq!(source.selected_frames(), 5);
-        assert_eq!(
-            (0..5)
-                .map(|row| source.source_frame(row, 0))
-                .collect::<Vec<_>>(),
-            expected
-        );
-        assert!(
-            expected
-                .into_iter()
-                .all(|frame| frame < source.frames() as usize)
-        );
+        let per = if pose == Pose::Arrow { 11 } else { 10 };
+        for degrees in 0..360 {
+            // Screen direction of the flight, measured from south through west.
+            let angle = f64::from(degrees).to_radians();
+            let (east, south) = (angle.sin(), angle.cos());
+            let (block, pitch, mirrored) = cell(pose, projectile_facing(east, south));
+            assert!(!mirrored || east > 0.0);
+            assert!(block * per + pitch < source.frames() as usize);
+            let drawn = (block as f64 * 11.25).min(180.0);
+            let wanted = if degrees <= 180 {
+                degrees
+            } else {
+                360 - degrees
+            };
+            assert!(
+                (drawn - f64::from(wanted)).abs() <= 22.5 + 1e-9,
+                "{pose:?} {degrees}: drew {drawn}"
+            );
+        }
     }
+}
+
+#[test]
+fn projectile_facing_follows_the_cardinal_screen_directions() {
+    use crate::catalog::units::projectile_facing as facing;
+    // West is the unmirrored native row, east its mirror, level at cell 5.
+    assert_eq!(cell(Pose::Arrow, facing(-1.0, 0.0)), (8, 5, false));
+    assert_eq!(cell(Pose::Arrow, facing(1.0, 0.0)), (8, 5, true));
+    assert_eq!(facing(1.0, 0.0) & 7, 2);
+    assert_eq!(facing(-1.0, 0.0) & 7, 6);
+    assert_eq!(facing(0.0, 1.0) & 7, 0);
+    assert_eq!(facing(0.0, -1.0) & 7, 4);
+    assert_eq!(cell(Pose::Javelin, facing(0.0, -1.0)).0, 16);
+    assert_eq!(cell(Pose::Arrow, facing(0.0, -1.0)).0, 15);
+}
+
+#[test]
+fn every_shooting_attack_releases_inside_its_animation() {
+    use crate::catalog::units::release_frame;
+    for pose in [
+        Pose::ArcherAttack,
+        Pose::SkirmisherAttack,
+        Pose::CrossbowmanAttack,
+        Pose::EliteSkirmisherAttack,
+    ] {
+        let release = release_frame(pose).unwrap();
+        assert!(release > 0 && release < SPRITES[pose as usize].stride);
+    }
+    // Melee and siege poses release nothing mid-animation.
+    assert_eq!(release_frame(Pose::KnightAttack), None);
+    assert_eq!(release_frame(Pose::MangonelAttack), None);
 }

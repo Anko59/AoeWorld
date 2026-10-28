@@ -103,6 +103,8 @@ pub struct Unit {
     pub walking: Option<[i16; 2]>,
     pub attack_graphic: Option<i16>,
     pub projectile_unit: Option<i16>,
+    /// Attack-animation frame that releases the strike or projectile.
+    pub frame_delay: Option<i16>,
     pub attack_range: Option<f32>,
     pub blast_radius: Option<f32>,
     pub reload_time: Option<f32>,

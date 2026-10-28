@@ -447,6 +447,7 @@ async fn projectile_scene_uses_native_arrow_and_javelin_and_current_fog() {
     for kind in [ProjectileKind::Arrow, ProjectileKind::Javelin] {
         client.village.projectiles = vec![ProjectileState {
             id: 1,
+            attacker: None,
             from: WorldPosition::from_tile_center(TileCoord::new(282, 603)).unwrap(),
             to: WorldPosition::from_tile_center(TileCoord::new(284, 603)).unwrap(),
             launched: Tick(10),

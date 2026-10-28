@@ -53,6 +53,15 @@ impl Presentation {
         true
     }
 
+    /// The newest received tick advanced by the wall time since it arrived,
+    /// at most one tick and a half, for effects that are not lagged like
+    /// unit positions. `None` before any snapshot.
+    pub(crate) fn live_tick(&self, time: f64) -> Option<f64> {
+        let (tick, received) = self.anchor?;
+        let ahead = ((time - received) * self.tick_hz / 1_000.0).clamp(0.0, 1.5);
+        Some(tick as f64 + ahead)
+    }
+
     /// Leave positions unchanged between Canvas presentations, including picking.
     pub(crate) fn advance(&mut self, time: f64, canvas: bool) {
         if !time.is_finite() || self.last_draw.is_some_and(|old| time < old) {
