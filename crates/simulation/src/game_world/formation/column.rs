@@ -64,6 +64,19 @@ impl GameWorld {
         navigating: bool,
         work: &mut u32,
     ) {
+        if !navigating {
+            // The anchor has arrived: nothing is left to funnel behind. Every
+            // member walks to its own slot (or back along the shared trail)
+            // instead of queueing behind a predecessor.
+            if group.column {
+                group.column = false;
+                for member in &mut group.members {
+                    member.cache = None;
+                    member.detour.clear();
+                }
+            }
+            return;
+        }
         let mut anchor = group.anchor;
         if navigating {
             let x = i64::from(group.travel_heading.x);

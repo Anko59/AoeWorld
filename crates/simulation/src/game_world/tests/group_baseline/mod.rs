@@ -5,8 +5,9 @@
 //! Ticks are 20 Hz; positions are 1,024 subunits per tile.
 use super::far_orders::{center, wide_world};
 use super::*;
-use aoe_core::Formation;
+use aoe_core::{CombatStance, Formation};
 
+mod arrival;
 mod clash;
 mod open_ground;
 mod reorder;

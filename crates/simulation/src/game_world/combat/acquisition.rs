@@ -81,9 +81,6 @@ impl GameWorld {
                 || u.stance == CombatStance::NoAttack
                 || (!matches!(u.task, UnitTask::Idle) && building_attack.is_none())
                 || self.embarked(id)
-                || self
-                    .formation_destinations(id)
-                    .is_some_and(|orders| !orders.is_empty())
             {
                 continue;
             }

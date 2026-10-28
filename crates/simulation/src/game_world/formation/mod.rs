@@ -23,6 +23,10 @@ pub(crate) struct Member {
     /// A tile-pair visibility result; immediate steps are always revalidated.
     cache: Option<(TileCoord, TileCoord, WorldPosition, steering::Goal)>,
     detour: VecDeque<WorldPosition>,
+    /// Ticks since the anchor arrived that this member neither reached its
+    /// slot nor moved. At `GIVE_UP_AFTER_TICKS` it stops where it stands, so
+    /// one boxed-in unit cannot keep the whole group unsettled.
+    stalled: u16,
 }
 
 #[derive(Debug)]

@@ -1,0 +1,92 @@
+//! S3 and S6, fixed by PR 3: every member walks to its own slot and stops
+//! only there, and members that have arrived fight while others still walk.
+use super::*;
+
+/// Trees on the eight tiles around `(x, y)`: a unit standing there is sealed in.
+fn seal(w: &mut GameWorld, (x, y): (i32, i32)) {
+    forest(w, TileRect::from_xywh(x - 1, y - 1, 3, 1));
+    forest(w, TileRect::from_xywh(x - 1, y + 1, 3, 1));
+    forest(w, TileRect::from_xywh(x - 1, y, 1, 1));
+    forest(w, TileRect::from_xywh(x + 1, y, 1, 1));
+}
+
+#[test]
+fn a_sealed_member_does_not_hold_back_the_others_who_fight_on_arrival() {
+    let mut w = wide_world();
+    w.set_fog_disabled(true);
+    let mut ids = block(&mut w, PlayerId(0), (40, 40), 10, 30);
+    // The thirty-first militia is walled in on all sides and cannot move.
+    let sealed_at = (40, 60);
+    seal(&mut w, sealed_at);
+    let sealed = w
+        .spawn_kind(
+            PlayerId(0),
+            UnitKind::Militia,
+            center(sealed_at.0, sealed_at.1),
+        )
+        .unwrap();
+    ids.push(sealed);
+    let to = center(100, 43);
+    // One enemy waits two tiles beyond the front of the destination line. It
+    // never attacks, so only our units open the fight.
+    let foe = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, center(103, 43))
+        .unwrap();
+    w.issue_stance(PlayerId(1), &[foe], CombatStance::NoAttack)
+        .unwrap();
+    w.issue_formation_move(PlayerId(0), &ids, Formation::Line, to, false, false)
+        .unwrap();
+    let healthy = &ids[..30];
+    let mut arrived_at: Vec<Option<u32>> = vec![None; ids.len()];
+    let mut seen = Default::default();
+    let mut first_hit = None;
+    for tick in 1..=4000_u32 {
+        w.advance();
+        if first_hit.is_none() && !new_hits(&w, &[foe], &mut seen).is_empty() {
+            first_hit = Some(tick);
+        }
+        for (n, &id) in ids.iter().enumerate() {
+            if arrived_at[n].is_none() && !w.unit(id).unwrap().moving {
+                arrived_at[n] = Some(tick);
+            }
+        }
+    }
+    let arrivals = |range: &[Option<u32>]| range.iter().flatten().copied().collect::<Vec<_>>();
+    let healthy_arrivals = arrivals(&arrived_at[..30]);
+    let (first, last) = (
+        healthy_arrivals.iter().min().copied(),
+        healthy_arrivals.iter().max().copied(),
+    );
+    let sealed_unit = w.unit(sealed).unwrap();
+    let stuck_arrival = arrived_at[30];
+    let foe_hp = w.unit(foe).map_or(0, |u| u.hp);
+    note(
+        "sealed-member",
+        &[
+            ("healthy_arrived", healthy_arrivals.len() as i64),
+            ("first_arrival", first.map_or(-1, i64::from)),
+            ("last_arrival", last.map_or(-1, i64::from)),
+            ("first_hit", first_hit.map_or(-1, i64::from)),
+            ("sealed_arrival", stuck_arrival.map_or(-1, i64::from)),
+            ("foe_hp", i64::from(foe_hp)),
+        ],
+    );
+    // The sealed unit never moves; it stops where it stands once the anchor
+    // has arrived and it has stalled for the give-up wait.
+    assert_eq!(sealed_unit.position, center(sealed_at.0, sealed_at.1));
+    assert_eq!(stuck_arrival, Some(2753));
+    // Every other unit is at the destination: at its slot, or fighting beside it.
+    assert!(
+        healthy
+            .iter()
+            .all(|&id| tiles_between(w.unit(id).unwrap().position, to) <= 8)
+    );
+    // The first arrivals strike the enemy at tick 2572, long before the last
+    // healthy unit arrives (3019) and before the sealed one gives up (2753).
+    assert_eq!((first, last), (Some(2533), Some(3019)));
+    assert_eq!(
+        (first_hit, healthy_arrivals.len(), foe_hp),
+        (Some(2572), 30, 0)
+    );
+    assert!(first_hit < last && first_hit < stuck_arrival);
+}

@@ -82,7 +82,7 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     // Radius collision, persistent work reservations and bounded position
     // searches deliberately change this current checkpoint. Friendly
     // squeeze-through, worksite-only gather redirects and the bounded obstruction
-    // give-up change it again. Preserve the
+    // give-up change it again, as do per-unit group exits and arrival. Preserve the
     // exact workload, activity floors and complete 1/4-worker comparison.
     let single = run(1);
     assert_eq!(single, run(4));
@@ -91,7 +91,7 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     assert_eq!(
         checkpoint,
         // Current combat stance and targeting state; 1/4-worker comparison above stays.
-        "c6b6c243bd7920954327fcca42ffc110b6acdb7637f8b10bbdbf2e937fe4112f"
+        "469937b9beb7451540f5f8bb2186b2fa813e7c987def130c2b85615c9d755353"
     );
 }
 

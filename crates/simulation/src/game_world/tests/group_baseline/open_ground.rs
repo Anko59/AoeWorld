@@ -42,16 +42,18 @@ fn sixty_militia_in_line_cross_a_two_tile_forest_pass() {
     note("line60-pass", &m.fields());
     // Measured: the last unit stops at tick 3955, 1.70 times the open-ground
     // 2328. PR 6 flips this to at most 1.6 times.
-    assert_eq!((m.first(), m.last()), (2205, 3955));
+    assert_eq!((m.first(), m.last()), (2238, 3955));
     assert_eq!(m.last() * 100 / 2328, 169);
     assert_eq!(m.stopped(), 60);
-    // S3: 14 units stop more than eight tiles from the destination while the
-    // head has arrived. PR 3 flips this to 0: every unit walks to its own slot.
-    assert_eq!(m.stopped_short, 14);
-    // S1: the group is single file (never more than one tile across) for 1,828
+    // S3, fixed by PR 3: nobody stops short. Before, 14 units went idle more
+    // than eight tiles from the destination while the head had arrived; now a
+    // unit stops only at its own slot, so the anchor's arrival does not end
+    // the march of those still behind the pass.
+    assert_eq!(m.stopped_short, 0);
+    // S1: the group is single file (never more than one tile across) for 1,737
     // ticks and stretches 78 tiles. PR 6 deletes the column.
     assert_eq!(
         (m.column_ticks, m.longest_tiles, m.min_frontage_when_long),
-        (1828, 78, 0)
+        (1737, 78, 0)
     );
 }

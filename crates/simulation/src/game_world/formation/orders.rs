@@ -87,6 +87,7 @@ impl GameWorld {
                 probe: 0,
                 cache: None,
                 detour: VecDeque::new(),
+                stalled: 0,
             })
             .collect();
         let mut group = Group {
