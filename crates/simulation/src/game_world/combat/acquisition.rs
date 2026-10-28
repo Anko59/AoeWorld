@@ -84,25 +84,8 @@ impl GameWorld {
             {
                 continue;
             }
-            let Some((_, _, los)) = self.unit_observer(&u) else {
+            let Some(area) = self.acquisition_area(&u) else {
                 continue;
-            };
-            let Some(stats) = self.unit_stats(id) else {
-                continue;
-            };
-            let range = super::super::navy::attack_range(&stats);
-            let max = if u.stance == CombatStance::StandGround {
-                range.min(i64::from(los) * MELEE_RANGE_SUBUNITS)
-            } else {
-                i64::from(los) * MELEE_RANGE_SUBUNITS
-            };
-            let area = TargetArea {
-                player: u.player,
-                source: Goal::Unit(u.position, u.kind.collision_radius()),
-                min: i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS,
-                max,
-                actor: id,
-                ram: u.kind == UnitKind::BatteringRam,
             };
             if let Some(target) = self.acquire_target(&area, building_attack.is_none()) {
                 if building_attack.is_some() {
@@ -118,17 +101,50 @@ impl GameWorld {
         }
     }
 
-    pub(super) fn begin_autonomous_attack(
+    /// The sight and range window within which an idle unit looks for enemies.
+    pub(super) fn acquisition_area(&self, u: &crate::GameUnit) -> Option<TargetArea> {
+        let (_, _, los) = self.unit_observer(u)?;
+        let stats = self.unit_stats(u.id)?;
+        let range = super::super::navy::attack_range(&stats);
+        let max = if u.stance == CombatStance::StandGround {
+            range.min(i64::from(los) * MELEE_RANGE_SUBUNITS)
+        } else {
+            i64::from(los) * MELEE_RANGE_SUBUNITS
+        };
+        Some(TargetArea {
+            player: u.player,
+            source: Goal::Unit(u.position, u.kind.collision_radius()),
+            min: i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS,
+            max,
+            actor: u.id,
+            ram: u.kind == UnitKind::BatteringRam,
+        })
+    }
+
+    /// One bounded look for an enemy, as an idle unit would make.
+    pub(crate) fn probe_for_target(&mut self, id: EntityId) -> Option<EntityId> {
+        let u = self.unit(id)?;
+        if u.stance == CombatStance::NoAttack || u.auto_scout {
+            return None;
+        }
+        let area = self.acquisition_area(&u)?;
+        self.acquire_target(&area, true)
+    }
+
+    pub(crate) fn begin_autonomous_attack(
         &mut self,
         id: EntityId,
         target: EntityId,
         origin: WorldPosition,
     ) {
+        // An attack-move member between fights keeps its way back to its slot.
+        let resume = self.combat.resuming.remove(&id).map(|r| r.slot);
         self.leave_group(id);
         self.begin_attack(id, target);
         if let Some(a) = self.combat.attackers.get_mut(&id) {
             a.origin = Some(origin);
             a.repath_tick = self.tick.0;
+            a.resume = resume;
         }
     }
 

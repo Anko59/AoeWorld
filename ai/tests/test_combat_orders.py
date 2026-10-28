@@ -138,6 +138,8 @@ def test_marching_an_army_uses_one_formation_and_keeps_stragglers_local():
     groups = client.named("formation_move")
     assert len(groups) == 1 and groups[0][0] == list(range(300,314))
     assert groups[0][3] == Formation.LINE
+    # The march is an attack-move, so soldiers answer enemies they meet.
+    assert client.options_of("formation_move") == [{"attack_move": True}]
     assert len(client.named("move")) == 1 and client.named("move")[0][0] == 400
     assert ctx.busy == {u.id for u in army}
     # The same idle report immediately afterwards must not reset the shared route.

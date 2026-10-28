@@ -10,8 +10,10 @@ mod combat;
 mod hash;
 pub(super) mod layout;
 mod orders;
+mod resume;
 mod selection;
 mod steering;
+pub(crate) use resume::Resume;
 pub(crate) use steering::STEERING_WORK_PER_TICK;
 
 #[derive(Debug)]
@@ -72,29 +74,24 @@ impl GameWorld {
         Some(layout::oriented(group.anchor, member.offset, group.heading))
     }
 
+    /// Where the member's slot lies once the group has reached its destination.
+    #[cfg(test)]
+    pub(crate) fn formation_destination_slot(&self, id: EntityId) -> Option<WorldPosition> {
+        let leader = self.units[*self.lookup.get(&id)?].formation?;
+        let group = self.formations.get(&leader)?;
+        let member = group.members.iter().find(|m| m.id == id)?;
+        Some(layout::oriented(
+            group.destination,
+            member.offset,
+            group.heading,
+        ))
+    }
+
     /// Whether the group is marching single file; baseline scenarios read it.
     #[cfg(test)]
     pub(crate) fn formation_is_column(&self, id: EntityId) -> Option<bool> {
         let leader = self.units[*self.lookup.get(&id)?].formation?;
         Some(self.formations.get(&leader)?.column)
-    }
-
-    /// An attack-move contact releases the entire formation. Orders, stops and
-    /// casualties release only the units they touch: see `leave_group`.
-    pub(crate) fn break_formation(&mut self, id: EntityId) {
-        let Some(leader) = self.lookup.get(&id).and_then(|&i| self.units[i].formation) else {
-            return;
-        };
-        let Some(group) = self.formations.remove(&leader) else {
-            return;
-        };
-        for member in group.members {
-            let Some(&index) = self.lookup.get(&member.id) else {
-                continue;
-            };
-            self.units[index].formation = None;
-            self.stop_member(index);
-        }
     }
 
     /// One unit leaves its group: a death, a stop, a single-unit move or

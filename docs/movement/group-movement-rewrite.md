@@ -454,11 +454,11 @@ own. Revision `6376d14b` plus the PR 0 tests.
 | Same, 6-tile forest with a 2-tile pass | first 2238, last 3955 (1.70× open); 0 stop over 8 tiles short (PR 3; was 14); single file for 1,737 ticks, 78 tiles long | ≤ 1.6× (6) |
 | 30 militia and one sealed in, enemy 3 tiles past the goal | (PR 3) the 30 reach the goal between ticks 2533 and 3019; first strike on the enemy at 2572, before the last arrival and before the sealed unit gives up at 2753; before PR 3 the first strike came at 3082 | kept |
 | Re-order 10 of 60 | (before PR 1) the other 50 left the group, stopped at once, none arrived; now all 50 stay grouped and arrive | all 50 arrive (1) |
-| Attack-move, 60 vs 10 | 8 of 10 die, 55 survive, all idle near x 75 of 140, none at the goal | all 10 die; 95 % reach slots (4) |
+| Attack-move, 60 vs 10 | (PR 4) all 10 die by tick 1564; 56 survive (4 fell) and all 56 stand within a tile of their own slot; before: 8 of 10 died, 55 idle near x 75 of 140, none at the goal | kept (4) |
 | Head-on, 3 vs 3, bridge | no deadlock: first crossing tick 181, all across 251 | both cross within 3 s (8) |
 | 4 fishing ships, 1-tile river | all 4 gather orders refused; 3-tile river: 2 refused | all 4 work (9) |
 | 12 villagers, one gold mine | 2 carry gold by 10 s, 9 by 30 s, 10 by 60 s; 2 idle | all 12 by 10 s (10) |
-| 40 vs 40 melee | first blow tick 304; 12 distinct strikers in 5 s (lower bound), 36 in 60 s; 29 and 26 alive | ≥ 90 % strike in 5 s (10) |
+| 40 vs 40 melee | (PR 4, members engage one by one) first blow tick 270; 6 distinct strikers in 5 s (lower bound), 64 in 60 s; 21 and 14 alive; before: tick 304, 12 and 36, 29 and 26 alive | ≥ 90 % strike in 5 s (10) |
 
 `make perf-groups` (release, 6-CPU slot, shared host, fog on, `6376d14b`): 200
 armies of 30-79 Line militia, 10,900 movers, all still marching, on uniform
@@ -475,3 +475,12 @@ the 100-player replay workload is still to do.
 What the code contradicted: S1's column does not form for 60 units on open
 ground (only at an obstacle); the suspected bridge deadlock did not reproduce
 (§4.2); the S4 assertion sits at `pressure.rs:160`, not `:143`.
+
+PR 3 and PR 4 as built: a member that cannot move for 240 ticks after the
+anchor arrived stops where it stands; the column is dropped at anchor arrival;
+attack-move members probe eight per group per tick, fight alone, and march on
+as a one-unit attack-move group to their slot at the group destination (a
+shortcut: the design's `Engaged` state inside the group needs PR 6's group
+ids, because `stop_movement` still calls `leave_group`). A group leader's
+obstruction no longer triggers the 240-tick give-up, which had ended the whole
+group's route. The remaining legs of a queued order are not resumed by a leaver.

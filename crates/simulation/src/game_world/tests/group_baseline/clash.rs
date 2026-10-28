@@ -2,7 +2,7 @@
 use super::*;
 
 #[test]
-fn attack_move_into_ten_enemies_does_not_resume_the_march() {
+fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
     let mut w = wide_world();
     w.set_fog_disabled(true);
     let ids = block(&mut w, PlayerId(0), (40, 40), 10, 60);
@@ -10,6 +10,11 @@ fn attack_move_into_ten_enemies_does_not_resume_the_march() {
     let to = center(140, 43);
     w.issue_formation_move(PlayerId(0), &ids, Formation::Line, to, false, true)
         .unwrap();
+    // Each unit's slot at the destination, before the march starts.
+    let slots = ids
+        .iter()
+        .map(|&id| (id, w.formation_destination_slot(id).unwrap()))
+        .collect::<Vec<_>>();
     let mut cleared = None;
     let mut strikers = std::collections::BTreeSet::new();
     let mut seen = Default::default();
@@ -31,6 +36,19 @@ fn attack_move_into_ten_enemies_does_not_resume_the_march() {
                 .is_some_and(|u| u.hp > 0 && tiles_between(u.position, to) <= 8)
         })
         .count();
+    let apart = |&&(id, slot): &&(EntityId, WorldPosition)| {
+        w.unit(id)
+            .filter(|u| u.hp > 0)
+            .map(|u| tiles_between(u.position, slot))
+    };
+    let at_slot = |tiles: i64| {
+        slots
+            .iter()
+            .filter_map(|s| apart(&s))
+            .filter(|&d| d <= tiles)
+            .count()
+    };
+    let (within_1, within_2) = (at_slot(1), at_slot(2));
     let still_moving = ids
         .iter()
         .filter(|&&id| w.unit(id).is_some_and(|u| u.moving))
@@ -43,12 +61,6 @@ fn attack_move_into_ten_enemies_does_not_resume_the_march() {
         .iter()
         .filter(|&&f| w.unit(f).is_some_and(|u| u.task == UnitTask::Idle))
         .count();
-    let centroid_x = ids
-        .iter()
-        .filter_map(|&f| w.unit(f))
-        .map(|u| i64::from(u.position.x) / 1024)
-        .sum::<i64>()
-        / 60;
     note(
         "attack-move-10",
         &[
@@ -57,19 +69,24 @@ fn attack_move_into_ten_enemies_does_not_resume_the_march() {
             ("survivors", survivors as i64),
             ("foes_alive", foes_alive as i64),
             ("own_idle", own_idle as i64),
-            ("centroid_x", centroid_x),
             ("at_destination", at_destination as i64),
             ("still_moving", still_moving as i64),
+            ("slot_within_1_tile", within_1 as i64),
+            ("slot_within_2_tiles", within_2 as i64),
         ],
     );
-    // S5: the group dissolves on contact and never resumes its march. After
-    // 4,000 ticks every survivor stands idle near x 75 of 140; none is at the
-    // destination. Two of the ten enemies are still alive.
-    // PR 4 flips this: all ten die, and at least 95 % of survivors reach their
-    // slots.
-    assert_eq!((cleared, foes_alive), (None, 2));
-    assert_eq!((survivors, own_idle, centroid_x), (55, 55, 75));
-    assert_eq!((at_destination, still_moving, strikers.len()), (0, 0, 15));
+    // S5, fixed by PR 4: each member that meets the enemy fights it alone and
+    // the rest march on. All ten enemies die (the last at tick 1564; before,
+    // two survived), and then every one of the 56 survivors (four fell) walks
+    // on to its own slot at the destination and stands there, within a tile.
+    assert_eq!((cleared, foes_alive), (Some(1564), 0));
+    assert_eq!((survivors, own_idle, still_moving), (56, 56, 0));
+    assert_eq!((at_destination, strikers.len()), (56, 24));
+    assert!(
+        within_1 * 100 >= survivors * 95,
+        "{within_1} of {survivors}"
+    );
+    assert_eq!((within_1, within_2), (56, 56));
 }
 
 #[test]
@@ -127,13 +144,15 @@ fn forty_against_forty_melee_strike_count() {
             ("east_alive", alive(&east) as i64),
         ],
     );
-    // S7: five seconds after the first blow only 12 of the 80 units have been
+    // S7: five seconds after the first blow only 6 of the 80 units have been
     // seen to strike (a lower bound: two blows on one victim in a tick count
-    // once). PR 10 flips this: at least 90 % of the melee units strike within
-    // 5 s.
+    // once), though over the whole fight 64 do. Since PR 4 the members meet
+    // the enemy one by one instead of as a group (before: first blow at tick
+    // 304, 12 strikers in 5 s, 36 in all, 29 and 26 alive). PR 10 flips this:
+    // at least 90 % of the melee units strike within 5 s.
     assert_eq!(
         (first_strike, within_5s, strikers.len()),
-        (Some(304), 12, 36)
+        (Some(270), 6, 64)
     );
-    assert_eq!((alive(&west), alive(&east)), (29, 26));
+    assert_eq!((alive(&west), alive(&east)), (21, 14));
 }

@@ -61,17 +61,23 @@ fn formations_attack_move_notices_contact_at_the_outer_wing() {
         true,
     )
     .unwrap();
-    // The last ranks begin far outside the centroid's engagement window.
+    // The last ranks begin far from the army's centre.
     let wing = w.unit(*ids.last().unwrap()).unwrap().position.tile_floor();
-    w.spawn_unit(PlayerId(1), center(wing.x + 2, wing.y))
+    let enemy = w
+        .spawn_unit(PlayerId(1), center(wing.x + 2, wing.y))
         .unwrap();
     for _ in 0..120 {
         w.advance();
-        if w.formation(ids[0]).is_none() {
-            return;
-        }
     }
-    panic!("contact at a distant wing must release the army into combat");
+    // Only the members near the enemy leave the group to fight it; the head
+    // of the army, far away, keeps marching in formation.
+    let fighters = ids
+        .iter()
+        .filter(|&&id| w.unit(id).unwrap().attack_target == Some(enemy))
+        .count();
+    let left = ids.iter().filter(|&&id| w.formation(id).is_none()).count();
+    assert_eq!((fighters, left), (32, 32));
+    assert_eq!(w.formation(ids[0]), Some(Formation::Flank));
 }
 
 #[test]
@@ -88,7 +94,7 @@ fn formations_attack_move_does_not_hide_an_enemy_behind_a_dense_own_army() {
             .unwrap()
         })
         .collect::<Vec<_>>();
-    w.spawn_unit(PlayerId(1), center(45, 45)).unwrap();
+    let enemy = w.spawn_unit(PlayerId(1), center(45, 45)).unwrap();
     w.issue_formation_move(
         PlayerId(0),
         &ids,
@@ -101,10 +107,14 @@ fn formations_attack_move_does_not_hide_an_enemy_behind_a_dense_own_army() {
     for _ in 0..16 {
         w.advance();
     }
-    assert!(
-        ids.iter().all(|&id| w.formation(id).is_none()),
-        "own units must not starve enemy discovery"
-    );
+    // Enemy discovery is not starved by the own units around it: 88 members
+    // found it and left the group within 16 ticks; the other 112 still march.
+    let fighters = ids
+        .iter()
+        .filter(|&&id| w.unit(id).unwrap().attack_target == Some(enemy))
+        .count();
+    let left = ids.iter().filter(|&&id| w.formation(id).is_none()).count();
+    assert_eq!((fighters, left), (88, 88));
 }
 
 #[test]
@@ -132,11 +142,14 @@ fn formations_attack_move_engages_visible_buildings() {
     for _ in 0..16 {
         w.advance();
     }
-    assert!(ids.iter().all(|&id| w.formation(id).is_none()));
-    assert!(
-        ids.iter()
-            .any(|&id| w.unit(id).unwrap().attack_target == Some(building))
-    );
+    // Three of the four are within reach of the house and attack it; the
+    // fourth keeps marching in the group.
+    let fighters = ids
+        .iter()
+        .filter(|&&id| w.unit(id).unwrap().attack_target == Some(building))
+        .count();
+    let left = ids.iter().filter(|&&id| w.formation(id).is_none()).count();
+    assert_eq!((fighters, left), (3, 3));
 }
 
 /// Whether `id` stands within `tiles` tiles of `to`.
@@ -406,8 +419,10 @@ fn formations_queued_attack_move_starts_combat_on_its_own_leg() {
     for _ in 0..200 {
         w.advance();
     }
-    assert!(ids.iter().all(|&id| w.formation(id).is_none()));
-    assert!(w.unit(enemy).is_none_or(|u| u.hp < u.max_hp));
+    // The queued attack-move leg fought on its own leg and killed the enemy;
+    // then every member marched on again toward its slot.
+    assert!(w.unit(enemy).is_none_or(|u| u.hp == 0));
+    assert!(ids.iter().all(|&id| w.formation(id).is_some()));
 }
 
 #[test]

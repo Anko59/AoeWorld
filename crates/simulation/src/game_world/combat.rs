@@ -79,6 +79,9 @@ pub(crate) struct Attacker {
     pub(crate) goal_tile: Option<aoe_core::TileCoord>,
     /// Origin for autonomous pursuit; explicit orders override the stance.
     pub(crate) origin: Option<aoe_core::WorldPosition>,
+    /// An attack-move member's slot at the group destination. When the fight
+    /// ends and nothing else is in reach, the member marches there again.
+    pub(crate) resume: Option<aoe_core::WorldPosition>,
 }
 
 #[derive(Debug)]
@@ -98,6 +101,8 @@ pub(crate) struct Combat {
     pub(crate) next_projectile: u64,
     pub(crate) tower_ready: BTreeMap<EntityId, u64>,
     pub(crate) attackers: BTreeMap<EntityId, Attacker>,
+    /// Attack-move members between fights, waiting to march on to their slots.
+    pub(crate) resuming: BTreeMap<EntityId, super::formation::Resume>,
     /// `(tick at which the body is removed, unit)` in death order.
     pub(crate) dying: BTreeSet<(u64, EntityId)>,
     pub(crate) stats: CombatStats,
@@ -123,6 +128,7 @@ impl Default for Combat {
             next_projectile: 0,
             tower_ready: Default::default(),
             attackers: Default::default(),
+            resuming: Default::default(),
             dying: Default::default(),
             stats: Default::default(),
             telemetry: Default::default(),
@@ -264,6 +270,7 @@ impl GameWorld {
     /// the unit (`StoredUnit::next_hit_tick`), so no order sequence can speed it up.
     pub(crate) fn begin_attack(&mut self, id: EntityId, target: EntityId) {
         self.cancel_auto_scout(id);
+        self.combat.resuming.remove(&id);
         let Some(&index) = self.lookup.get(&id) else {
             return;
         };
@@ -278,6 +285,7 @@ impl GameWorld {
                     .attack_goal(target, self.units[index].state.player)
                     .map(|g| g.centre().tile_floor()),
                 origin: None,
+                resume: None,
             },
         );
         let state = &mut self.units[index].state;
