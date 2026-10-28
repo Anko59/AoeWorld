@@ -90,20 +90,8 @@ fn levels_fit_the_change_and_the_video() {
             .check(&cfg(), &Change::lines(500), Some((48, false)))
             .is_ok()
     );
-    let mut visible = Change::lines(500);
-    visible.parts.push(crate::ship::levels::Part {
-        path: "crates/client/src/hud.rs".into(),
-        lines: 500,
-        suites: Default::default(),
-        behaviour: true,
-    });
-    assert!(
-        medium
-            .check(&cfg(), &visible, None)
-            .unwrap_err()
-            .contains("needs a showcase video")
-    );
-    // A change no player sees (harness, tooling) needs no video.
+    // A video is the agent's choice: in-game footage when there is something
+    // to see, none otherwise.
     assert!(medium.check(&cfg(), &Change::lines(500), None).is_ok());
     assert!(
         medium

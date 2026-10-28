@@ -28,29 +28,6 @@ pub(crate) struct Change {
     pub(crate) uncommitted: usize,
 }
 
-/// Where a change shows on screen: gameplay, rendering, maps, assets and the UI.
-const VISIBLE: &[&str] = &[
-    "crates/client/",
-    "crates/rendering/",
-    "crates/simulation/",
-    "crates/map/",
-    "crates/assets/",
-    "crates/scenario/",
-    "web/",
-];
-
-impl Change {
-    /// Whether a player would see the change: a non-test file under [`VISIBLE`]. Only then
-    /// does a PR need a showcase video; harness, protocol, server and tooling changes do not.
-    /// All of `browser/` is test/QA tooling, including reporters, config and fixtures.
-    pub(crate) fn visible(&self) -> bool {
-        self.parts.iter().any(|part| {
-            VISIBLE.iter().any(|prefix| part.path.starts_with(prefix))
-                && !crate::agents::is_test_path(&part.path.to_ascii_lowercase())
-        })
-    }
-}
-
 /// One changed file: its added lines and the suites it selects.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Part {

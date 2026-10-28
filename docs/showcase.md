@@ -1,7 +1,8 @@
 # Showcase videos
 
-Every pull request above `low` carries a showcase video that sells the change
-in its "What" section ([shipping](shipping.md)). `make showcase` records it from
+A pull request above `low` may carry a showcase video of in-game footage that
+shows the change in its "What" section; text cards only frame the footage and
+never replace it ([shipping](shipping.md)). `make showcase` records it from
 a storyboard the agent writes; `make ship SHIP_VIDEO=…` then uploads it.
 
 ```sh
