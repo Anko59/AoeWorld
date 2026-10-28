@@ -246,3 +246,20 @@ fn grouped_vassal_training_skips_castles_with_a_home_or_pending_unit() {
     pending.record(1, EntityId(2));
     assert_eq!(choose(&pending), None);
 }
+
+#[wasm_bindgen_test]
+fn a_rally_order_reaches_every_selected_owned_training_building() {
+    let mut buildings = vec![barracks(1, 0), barracks(2, 0), barracks(3, 0)];
+    buildings[2].player = PlayerId(1);
+    let mut selected = Selection::default();
+    selected.same_buildings(
+        buildings.iter().map(|b| (b.id, b.player, b.kind, true)),
+        PlayerId(0),
+        BuildingKind::Barracks,
+        EntityId(2),
+    );
+    assert_eq!(
+        super::super::rally::rally_buildings(&buildings, &selected, PlayerId(0)),
+        vec![EntityId(1), EntityId(2)]
+    );
+}

@@ -116,9 +116,9 @@ test("explicit and queued Move keep their meaning beside a transport", async ({
   await expect.poll(() => commands.some((bytes) => bytes[0] === 2)).toBe(true);
   expect(commands.some((bytes) => bytes[0] === 28)).toBe(false);
   await selectWorker(page);
-  await page.keyboard.down("Shift");
+  await page.keyboard.down("Control");
   await page.mouse.click(ship.x, ship.y, { button: "right" });
-  await page.keyboard.up("Shift");
+  await page.keyboard.up("Control");
   await expect.poll(() => commands.some((bytes) => bytes[0] === 21)).toBe(true);
   expect(commands.some((bytes) => bytes[0] === 27)).toBe(false);
 });

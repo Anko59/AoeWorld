@@ -64,6 +64,9 @@ test("period and the idle villager counter cycle owned workers and centre the ca
   await inputFixture(page, renderer);
   await page.mouse.move(640, 360);
   await expect(page.locator("#idle-villager-count")).toHaveText("2");
+  // Idle workers are flagged on the map and the finder is highlighted.
+  await expect(page.locator("#idle-villagers")).toHaveClass(/has-idle/);
+  await expect(page.locator("#idle-markers .idle-marker")).toHaveCount(2);
   for (const [id, x, y, button] of [
     [2, 8194.5, 8194.5, false],
     [3, 8196.5, 8194.5, true],

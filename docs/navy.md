@@ -18,7 +18,7 @@ not at order time. The ship shows its passenger count both above the hull and
 in the selection panel. Passengers leave the map and stop providing vision or
 accepting orders. Select the loaded ship and right-click a dry shore to sail
 there and unload, or choose **Unload passengers** and then the shore. Explicit
-Move and Shift-queued Move retain ordinary movement behavior. Ownership,
+Move and Ctrl-queued Move retain ordinary movement behavior. Ownership,
 capacity and landing terrain are authoritative. Sinking a loaded transport
 kills its cargo. A new Move or Stop cancels a pending rendezvous.
 Transport orders use the ordinary Rust and Python SDKs too. Shore discovery

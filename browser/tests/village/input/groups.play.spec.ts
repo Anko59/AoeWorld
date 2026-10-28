@@ -27,9 +27,9 @@ test("all ten control groups assign, select, extend and double-tap center", asyn
     "2 Villagers selected",
   );
   const before = commands.length;
-  await page.keyboard.down("Shift");
+  await page.keyboard.down("Control");
   await page.mouse.click(1000, 400, { button: "right" });
-  await page.keyboard.up("Shift");
+  await page.keyboard.up("Control");
   await expect.poll(() => commands.length).toBe(before + 2);
   expect(commands.slice(before).map((c) => c[0])).toEqual([21, 21]);
   expect(commands.slice(before).map((c) => c[2])).toEqual([2, 3]);
