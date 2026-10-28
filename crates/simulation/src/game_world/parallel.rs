@@ -53,3 +53,17 @@ pub(crate) fn par_each_mut<T: Send>(items: &mut [T], f: impl Fn(&mut T) + Sync +
 pub(crate) fn par_each_mut<T: Send>(items: &mut [T], f: impl Fn(&mut T) + Sync + Send) {
     items.iter_mut().for_each(f);
 }
+
+impl crate::GameWorld {
+    /// Diagnostic pool size; timing reports distinguish quota from workers.
+    pub fn movement_worker_count(&self) -> usize {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            rayon::current_num_threads()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            1
+        }
+    }
+}

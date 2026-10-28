@@ -18,6 +18,21 @@ pub(crate) struct Motion {
     pub(crate) facing: Facing,
     pub(crate) obstructed: bool,
     pub(crate) path_progress: i64,
+    pub(crate) neighbor_radius: i32,
+    pub(crate) certified: bool,
+    pub(crate) static_clear: bool,
+    pub(crate) remaining: i64,
+    pub(crate) near_center: bool,
+}
+
+impl Motion {
+    /// Pure member bookkeeping belongs to the parallel proposal. An ordered
+    /// collision adjustment rebuilds it from the final position.
+    pub(crate) fn at(mut self, position: WorldPosition) -> Self {
+        self.remaining = path::distance(position, self.goal);
+        self.near_center = path::squared(position, self.center) <= 512_i64.pow(2);
+        self
+    }
 }
 
 pub(crate) fn matched_speed(pace: (u64, u64), own: (u64, u64)) -> u64 {
@@ -38,19 +53,44 @@ impl GameWorld {
         self.rejoin_detached_members();
         let leaders = self.formations.keys().copied().collect::<Vec<_>>();
         let mut movers = Vec::new();
-        for &leader in &leaders {
-            let Some(mut group) = self.formations.remove(&leader) else {
-                continue;
-            };
-            if !group.settled {
-                self.prepare_group_targets(leader, &mut group);
+        // Groups read the same unit snapshot and own disjoint member state.
+        // Temporarily detach the map so no parallel task can observe another
+        // group's intermediate targets. Canonical apply order stays unchanged.
+        {
+            let _span = self
+                .planning_probe
+                .as_ref()
+                .and_then(|p| p.movement_span("group_prepare"));
+            let mut groups = std::mem::take(&mut self.formations);
+            {
+                let mut jobs = groups
+                    .iter_mut()
+                    .map(|(&id, group)| (id, group))
+                    .collect::<Vec<_>>();
+                crate::game_world::parallel::par_each_mut(&mut jobs, |(leader, group)| {
+                    if !group.settled {
+                        self.prepare_group_targets(*leader, group);
+                    }
+                });
+            }
+            self.formations = groups;
+            for group in self.formations.values().filter(|group| !group.settled) {
                 movers.extend(group.members.iter().filter(|m| !m.detached).map(|m| m.id));
             }
-            self.formations.insert(leader, group);
         }
         // The BTreeMap and canonical member storage give group-then-unit order.
         scratch.group_phase = true;
-        self.propose_steps_into(&movers, 0, scratch);
+        {
+            let _span = self
+                .planning_probe
+                .as_ref()
+                .and_then(|p| p.movement_span("group_propose"));
+            self.propose_steps_into(&movers, 0, scratch);
+        }
+        let _apply_span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|p| p.movement_span("group_apply"));
         let mut unused = Vec::new();
         for turn in 0..movers.len() {
             if let Some(step) = scratch.take_step(turn) {
@@ -95,7 +135,14 @@ impl GameWorld {
         for delta in [-8, -4, 0, 4, 8] {
             let progress = (group.progress + delta * 1024).clamp(0, group.path.end());
             let (point, _) = group.path.point(progress, &mut cursor);
-            clearance = clearance.min(self.static_clearance(UnitKind::Militia, point.tile_floor()));
+            let value = self.static_clearance(UnitKind::Militia, point.tile_floor());
+            if delta == 0 {
+                group.static_area = crate::game_world::movement_step::certificates::StaticArea::new(
+                    point.tile_floor(),
+                    value,
+                );
+            }
+            clearance = clearance.min(value);
         }
         let files = if clearance < 15 && i32::from(clearance) * 512 < group.half_width {
             (i32::from(clearance) * 1024 / group.narrow_gap).max(1) as usize
@@ -104,6 +151,7 @@ impl GameWorld {
         };
         let count = group.members.len();
         let heading = block_heading(group);
+        let rotation = layout::Rotation::new(heading);
         let forming = (group.progress - group.form_start).clamp(0, group.form_distance);
         for member in &mut group.members {
             let unit = self.units[self.lookup[&member.id]].state;
@@ -127,11 +175,12 @@ impl GameWorld {
             // inside bend, projecting the body alone can keep selecting the
             // preceding leg forever even after the anchor has passed the turn.
             let (_, local_heading) = group.path.point(member.progress, &mut member.cursor);
-            let center = layout::oriented(
-                unit.position,
-                WorldPosition::new(-offset.x, 0),
-                local_heading,
-            );
+            let local_rotation = if local_heading == heading {
+                rotation
+            } else {
+                layout::Rotation::new(local_heading)
+            };
+            let center = local_rotation.oriented(unit.position, WorldPosition::new(-offset.x, 0));
             let mut projected_cursor = member.cursor;
             let projected = group.path.project(center, &mut projected_cursor);
             if projected > member.progress {
@@ -142,12 +191,19 @@ impl GameWorld {
                 .max(member.progress)
                 .min(member.progress + 1024);
             let mut at = member.cursor;
-            let (point, local_heading) = group.path.point(member.target_progress, &mut at);
-            member.center = layout::oriented(point, WorldPosition::new(offset.x, 0), local_heading);
+            let (point, next_heading) = group.path.point(member.target_progress, &mut at);
+            let next_rotation = if next_heading == local_heading {
+                local_rotation
+            } else if next_heading == heading {
+                rotation
+            } else {
+                layout::Rotation::new(next_heading)
+            };
+            member.center = next_rotation.oriented(point, WorldPosition::new(offset.x, 0));
             member.ideal = if !navigating || group.direct {
                 member.goal
             } else {
-                layout::oriented(group.anchor, offset, heading)
+                rotation.oriented(group.anchor, offset)
             };
             member.target = member.ideal;
             if navigating && !group.direct && !member.arrived {
@@ -165,11 +221,28 @@ impl GameWorld {
         }
     }
 
+    /// Every member's earned distance is at most ceil(1.25 * pace), capped
+    /// at 512. Integer direction rounding adds less than one subunit; two
+    /// extra subunits make the ordered-batch separation certificate strict.
+    pub(crate) fn formation_step_bound(&self) -> i32 {
+        self.formations
+            .values()
+            .filter(|group| !group.settled)
+            .map(|group| {
+                (u128::from(group.pace.0) * 5)
+                    .div_ceil(u128::from(group.pace.1) * 4)
+                    .min(512) as i32
+                    + 2
+            })
+            .max()
+            .unwrap_or(2)
+    }
+
     pub(crate) fn formation_motion(&self, index: usize) -> Option<Motion> {
         let unit = &self.units[index];
         let leader = unit.formation?;
         let group = self.formations.get(&leader)?;
-        let member = &group.members[*group.member_lookup.get(&unit.state.id)?];
+        let member = &group.members[group.member_index(unit.state.id)?];
         if member.detached {
             return None;
         }
@@ -191,6 +264,13 @@ impl GameWorld {
             facing: group.facing,
             obstructed: false,
             path_progress: member.target_progress,
+            neighbor_radius: 512,
+            remaining: 0,
+            near_center: false,
+            certified: false,
+            static_clear: group.static_area.is_some_and(|area| {
+                area.covers(unit.state.position, unit.state.kind.collision_radius(), 513)
+            }),
         })
     }
 
@@ -208,17 +288,17 @@ impl GameWorld {
         else {
             return;
         };
-        let Some(&at) = group.member_lookup.get(&id) else {
+        let Some(at) = group.member_index(id) else {
             return;
         };
         let member = &mut group.members[at];
-        if path::squared(to, motion.center) <= 512_i64.pow(2) {
+        if motion.near_center {
             member.progress = member.progress.max(motion.path_progress);
         }
         member.carry = motion.carry;
         let arrived = motion.final_leg && to == motion.goal;
         member.arrived |= arrived;
-        let remaining = path::distance(to, motion.goal);
+        let remaining = motion.remaining;
         let progress = remaining <= member.remaining.saturating_sub(512);
         member.stalled = if motion.navigating || arrived || progress {
             member.remaining = remaining;

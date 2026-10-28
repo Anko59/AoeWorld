@@ -18,6 +18,7 @@ use crate::{GameUnit, GameWorld, MovementOrder, UnitTask};
 use aoe_core::{ChunkCoord, EntityId, PlayerId, WorldPosition};
 
 mod avoidance;
+pub(in crate::game_world) mod certificates;
 mod collision;
 mod group;
 mod static_collision;
@@ -52,10 +53,16 @@ struct Tables {
     /// Entities with a gather, hunt, attack or build job: their task is not
     /// overwritten by movement.
     busy: Vec<bool>,
+    neighbor_radius: [i32; 2],
+    group_step_bound: i32,
 }
 
 impl Tables {
-    fn refresh(&mut self, world: &GameWorld) {
+    fn refresh(&mut self, world: &GameWorld, group_phase: bool) {
+        if group_phase {
+            self.neighbor_radius = world.collisions.maximum_radii();
+            self.group_step_bound = world.formation_step_bound();
+        }
         self.economies.clear();
         for economy in world.players().filter(|p| usize::from(p.player.0) < 4_096) {
             let at = usize::from(economy.player.0);
@@ -177,7 +184,7 @@ impl GameWorld {
                     self.config.width_tiles,
                     self.config.height_tiles,
                 );
-            tables.refresh(self);
+            tables.refresh(self, group_phase);
             par_map_into(jobs.len(), proposals, |slot| {
                 let index = jobs[slot];
                 if group_phase {
@@ -193,7 +200,7 @@ impl GameWorld {
         }
         #[cfg(target_arch = "wasm32")]
         {
-            scratch.tables.refresh(self);
+            scratch.tables.refresh(self, group_phase);
             let Scratch {
                 tables, proposals, ..
             } = scratch;
@@ -416,8 +423,18 @@ impl GameWorld {
         if step.state.planning && !stored.state.planning {
             stored.planning_since = self.tick.0;
         }
-        stored.state = step.state;
-        stored.order = step.order;
+        if step.member.is_some() {
+            // A group proposal changes only these motion fields. Its route
+            // carrier and unrelated combat/economy state stay in place.
+            stored.state.previous_position = step.state.previous_position;
+            stored.state.position = step.state.position;
+            stored.state.moving = step.state.moving;
+            stored.state.task = step.state.task;
+            stored.state.facing = step.state.facing;
+        } else {
+            stored.state = step.state;
+            stored.order = step.order;
+        }
         if step.pops > 0 {
             stored.route.pop_front();
         }

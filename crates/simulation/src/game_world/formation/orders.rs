@@ -137,7 +137,7 @@ impl GameWorld {
             form_start: 0,
             form_distance: 0,
             half_width: 0,
-            member_lookup: Default::default(),
+            static_area: None,
             destination,
             queue: VecDeque::new(),
             attack_move,

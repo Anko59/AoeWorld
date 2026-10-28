@@ -67,13 +67,8 @@ impl Path {
         let heading = WorldPosition::new(to.x - from.x, to.y - from.y);
         let span = (self.lengths[*cursor + 1] - self.lengths[*cursor]).max(1);
         let along = progress - self.lengths[*cursor];
-        (
-            WorldPosition::new(
-                from.x + (i64::from(heading.x) * along / span) as i32,
-                from.y + (i64::from(heading.y) * along / span) as i32,
-            ),
-            heading,
-        )
+        let (x, y) = delta(i64::from(heading.x), i64::from(heading.y), along, span);
+        (WorldPosition::new(from.x + x, from.y + y), heading)
     }
 
     /// Projection onto a fixed local window. A member cannot jump to a distant
@@ -89,8 +84,14 @@ impl Path {
             let b = self.points[at + 1];
             let (dx, dy) = (i64::from(b.x - a.x), i64::from(b.y - a.y));
             let span = (self.lengths[at + 1] - self.lengths[at]).max(1);
-            let dot = i64::from(position.x - a.x) * dx + i64::from(position.y - a.y) * dy;
-            let along = (dot / span).clamp(
+            let projected = if dy == 0 && dx.abs() == span {
+                i64::from(position.x - a.x) * dx.signum()
+            } else if dx == 0 && dy.abs() == span {
+                i64::from(position.y - a.y) * dy.signum()
+            } else {
+                (i64::from(position.x - a.x) * dx + i64::from(position.y - a.y) * dy) / span
+            };
+            let along = projected.clamp(
                 if at == 0 { i64::MIN } else { 0 },
                 if at + 2 == self.points.len() {
                     i64::MAX
@@ -98,10 +99,8 @@ impl Path {
                     span
                 },
             );
-            let point = WorldPosition::new(
-                a.x + (dx * along / span) as i32,
-                a.y + (dy * along / span) as i32,
-            );
+            let (x, y) = delta(dx, dy, along, span);
+            let point = WorldPosition::new(a.x + x, a.y + y);
             let candidate = (squared(position, point), at, self.lengths[at] + along);
             if candidate < best {
                 best = candidate;
@@ -131,6 +130,16 @@ impl Path {
         for point in points {
             self.push(point);
         }
+    }
+}
+
+fn delta(dx: i64, dy: i64, along: i64, span: i64) -> (i32, i32) {
+    if dy == 0 && dx.abs() == span {
+        ((dx.signum() * along) as i32, 0)
+    } else if dx == 0 && dy.abs() == span {
+        (0, (dy.signum() * along) as i32)
+    } else {
+        ((dx * along / span) as i32, (dy * along / span) as i32)
     }
 }
 

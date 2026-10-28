@@ -64,8 +64,8 @@ pub(crate) struct Group {
     form_start: i64,
     form_distance: i64,
     half_width: i32,
-    /// Point lookups only; member storage always remains in canonical id order.
-    member_lookup: std::collections::HashMap<EntityId, usize>,
+    /// Rebuilt during target preparation, never retained as canonical state.
+    static_area: Option<super::movement_step::certificates::StaticArea>,
     destination: WorldPosition,
     queue: VecDeque<(WorldPosition, bool)>,
     attack_move: bool,
@@ -137,7 +137,7 @@ impl GameWorld {
                     .map(|member| member.id)
                 {
                     group.forget_departures();
-                    let at = group.member_lookup[&carrier];
+                    let at = group.member_index(carrier).expect("remaining carrier");
                     group.members[at].detached = false;
                     if carrier != leader {
                         self.hand_over_route(leader, carrier);
@@ -206,3 +206,6 @@ impl GameWorld {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

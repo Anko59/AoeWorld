@@ -10,7 +10,15 @@ impl GameWorld {
         kind: UnitKind,
         from: WorldPosition,
         to: WorldPosition,
+        certified: bool,
     ) -> bool {
+        if certified {
+            // Clearance proves tile bodies/buildings, but not elevation edges.
+            return from.tile_floor() == to.tile_floor()
+                || self
+                    .unit_step_clear(kind, from.tile_floor(), to.tile_floor())
+                    .unwrap_or(false);
+        }
         self.body_step_clear(kind, from, to)
             && self
                 .unit_step_clear(kind, from.tile_floor(), to.tile_floor())
@@ -18,23 +26,71 @@ impl GameWorld {
             && self.building_step_clear(from.tile_floor(), to.tile_floor())
     }
 
+    fn group_sweep_clear(
+        &self,
+        index: usize,
+        from: WorldPosition,
+        to: WorldPosition,
+        maximum_radius: i32,
+        padding: i32,
+    ) -> bool {
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|p| p.movement_span("avoidance_query"));
+        self.collision_sweep_bounded(
+            index,
+            from,
+            to,
+            false,
+            false,
+            Some((maximum_radius, padding)),
+        )
+    }
+
     pub(super) fn propose_group_step(&self, index: usize, tables: &Tables) -> Option<FastStep> {
         let mut motion = self.formation_motion(index)?;
         let stored = &self.units[index];
         let mut state = stored.state;
         let from = state.position;
+        motion.neighbor_radius = tables.neighbor_radius[usize::from(state.kind.is_naval())];
         let mut position = if motion.done {
             from
         } else {
             group_step(from, motion.target, motion.budget)
         };
-        if !self.group_static_step_clear(state.kind, from, position) {
+        let primary_static =
+            self.group_static_step_clear(state.kind, from, position, motion.static_clear);
+        if !primary_static {
             motion.obstructed = true;
             position = group_step(from, motion.center, motion.budget);
         }
-        if !self.local_unit_step_clear(index, from, position) {
+        // Static terrain/buildings do not mutate during the movement phase.
+        // The primary sweep already checked the body; only a fallback needs it.
+        if !primary_static
+            && !motion.static_clear
+            && !self.body_step_clear(state.kind, from, position)
+        {
             position = from;
+        } else {
+            // Overflow samples only 32 bodies. Even if an earlier ordered
+            // step later removes the overflow, that snapshot proves nothing
+            // about the omitted bodies: retain the ordinary ordered recheck.
+            motion.certified = !self.collisions.has_overfull_cells()
+                && self.group_sweep_clear(
+                    index,
+                    from,
+                    position,
+                    motion.neighbor_radius,
+                    tables.group_step_bound,
+                );
+            if !motion.certified
+                && !self.group_sweep_clear(index, from, position, motion.neighbor_radius, 0)
+            {
+                position = from;
+            }
         }
+        motion = motion.at(position);
         group_state(&mut state, motion, position);
         Some(FastStep {
             index,
@@ -54,19 +110,31 @@ impl GameWorld {
         let from = self.units[index].state.position;
         if !motion.done
             && ((step.state.position == from && from != motion.target)
-                || !self.local_unit_step_clear(index, from, step.state.position))
+                || ((!motion.certified || self.collisions.has_overfull_cells())
+                    && !self.group_sweep_clear(
+                        index,
+                        from,
+                        step.state.position,
+                        motion.neighbor_radius,
+                        0,
+                    )))
         {
             self.record_obstruction_towards(index, motion.target);
             let mut proposed = group_step(from, motion.target, motion.budget);
-            let terrain_clear = self.group_static_step_clear(step.state.kind, from, proposed);
-            step.member = Some(Motion {
-                obstructed: motion.obstructed || !terrain_clear,
-                ..motion
-            });
+            let terrain_clear =
+                self.group_static_step_clear(step.state.kind, from, proposed, motion.static_clear);
+
             if !terrain_clear {
                 proposed = group_step(from, motion.center, motion.budget);
             }
             let position = self.avoid_unit_step(index, proposed);
+            step.member = Some(
+                Motion {
+                    obstructed: motion.obstructed || !terrain_clear,
+                    ..motion
+                }
+                .at(position),
+            );
             step.state = self.units[index].state;
             group_state(&mut step.state, motion, position);
             step.bucket = ChunkCoord::from_position(position);

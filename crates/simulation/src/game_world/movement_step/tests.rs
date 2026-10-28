@@ -2,6 +2,70 @@ use super::*;
 use aoe_core::{Seed, TileCoord, WorldConfig};
 
 #[test]
+fn group_neighbor_radius_bound_grows_at_spawn_and_stays_conservative_after_removal() {
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
+    let center = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    world
+        .spawn_kind(PlayerId(0), crate::UnitKind::Militia, center(20, 20))
+        .unwrap();
+    let mut tables = Tables::default();
+    tables.refresh(&world, true);
+    assert_eq!(tables.neighbor_radius, [205, 0]);
+    let large = world
+        .spawn_kind(PlayerId(0), crate::UnitKind::Mangonel, center(30, 20))
+        .unwrap();
+    tables.refresh(&world, true);
+    assert_eq!(tables.neighbor_radius, [512, 0]);
+    world.remove_unit(large);
+    tables.refresh(&world, true);
+    assert_eq!(tables.neighbor_radius, [512, 0]);
+}
+
+#[test]
+fn a_snapshot_with_overfull_cells_cannot_certify_an_ordered_group_step() {
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
+    let center = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let mover = world
+        .spawn_kind(PlayerId(0), crate::UnitKind::Militia, center(20, 20))
+        .unwrap();
+    let mut crowd = Vec::new();
+    for _ in 0..33 {
+        crowd.push(
+            world
+                .spawn_kind(PlayerId(1), crate::UnitKind::Militia, center(100, 100))
+                .unwrap(),
+        );
+    }
+    world
+        .issue_formation_move(
+            PlayerId(0),
+            &[mover],
+            aoe_core::Formation::Line,
+            center(80, 20),
+            false,
+            false,
+        )
+        .unwrap();
+    world.advance();
+    let mut tables = Tables::default();
+    tables.refresh(&world, true);
+    let index = world.lookup[&mover];
+    let proposal = world.propose_group_step(index, &tables).unwrap();
+    assert!(world.collisions.has_overfull_cells());
+    assert!(!proposal.member.unwrap().certified);
+    // A preceding ordered write can remove overflow. The old proposal must
+    // still recheck: its snapshot sampled only 32 members of the overfull cell.
+    world.remove_unit(crowd.pop().unwrap());
+    assert!(!world.collisions.has_overfull_cells());
+    assert!(!proposal.member.unwrap().certified);
+    tables.refresh(&world, true);
+    let proposal = world
+        .propose_group_step(world.lookup[&mover], &tables)
+        .unwrap();
+    assert!(proposal.member.unwrap().certified);
+}
+
+#[test]
 fn movement_reuses_proposals_and_dense_tables_between_ticks() {
     let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
     for n in 0..64 {

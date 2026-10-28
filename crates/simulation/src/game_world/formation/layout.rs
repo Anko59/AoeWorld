@@ -42,20 +42,48 @@ pub(crate) fn slots(form: Formation, count: usize) -> Vec<WorldPosition> {
     slots
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct Rotation {
+    x: i64,
+    y: i64,
+    length: i64,
+}
+impl Rotation {
+    pub(super) fn new(heading: WorldPosition) -> Self {
+        let (x, y) = (i64::from(heading.x), i64::from(heading.y));
+        let length = if x == 0 {
+            y.abs()
+        } else if y == 0 {
+            x.abs()
+        } else {
+            (x * x + y * y).isqrt()
+        }
+        .max(1);
+        Self { x, y, length }
+    }
+    pub(super) fn oriented(self, anchor: WorldPosition, offset: WorldPosition) -> WorldPosition {
+        let (across, along) = (i64::from(offset.x), i64::from(offset.y));
+        let (dx, dy) = if self.y == 0 && self.x != 0 {
+            (self.x.signum() * along, self.x.signum() * across)
+        } else if self.x == 0 && self.y != 0 {
+            (-self.y.signum() * across, self.y.signum() * along)
+        } else {
+            (
+                (-self.y * across + self.x * along) / self.length,
+                (self.x * across + self.y * along) / self.length,
+            )
+        };
+        WorldPosition::new(
+            anchor.x.saturating_add(dx as i32),
+            anchor.y.saturating_add(dy as i32),
+        )
+    }
+}
+
 pub(super) fn oriented(
     anchor: WorldPosition,
     offset: WorldPosition,
     heading: WorldPosition,
 ) -> WorldPosition {
-    let x = i64::from(heading.x);
-    let y = i64::from(heading.y);
-    let length = (x * x + y * y).isqrt().max(1);
-    WorldPosition::new(
-        anchor
-            .x
-            .saturating_add(((-y * i64::from(offset.x) + x * i64::from(offset.y)) / length) as i32),
-        anchor
-            .y
-            .saturating_add(((x * i64::from(offset.x) + y * i64::from(offset.y)) / length) as i32),
-    )
+    Rotation::new(heading).oriented(anchor, offset)
 }

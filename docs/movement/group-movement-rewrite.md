@@ -463,12 +463,13 @@ member at its assigned destination: a give-up cannot pass as arrival.
 
 Matched `make perf-groups`: 12-CPU slot, shared host, fog on, 200 Line armies
 (30–79 units), 10,900 units, 100 warm-up ticks, 300 ticks/window. Before is
-clean `fe8586ee`; after is PR 6.
+clean `fe8586ee`; initial PR 6 is `1b5a3aa6`. Optimization keeps every scenario
+result above and the canonical replay pins unchanged.
 
-| Plain window (ms, p50 / p95) | Before | After |
-| --- | --- | --- |
-| Movement | 4.895 / 5.254 | 11.104 / 12.328 |
-| Whole tick | 5.100 / 5.482 | 11.792 / 13.097 |
+| Plain window (ms, p50 / p95) | Before PR 6 | Initial PR 6 | Optimized |
+| --- | --- | --- | --- |
+| Movement | 4.895 / 5.254 | 11.104 / 12.328 | **4.835 / 5.756** |
+| Whole tick | 5.100 / 5.482 | 11.792 / 13.097 | 5.507 / 6.407 |
 
 PR 3 and PR 4 as built: a member that cannot move for 240 ticks after the
 anchor arrived stops where it stands; the column is dropped at anchor arrival;
@@ -484,3 +485,29 @@ shortcut: the design's `Engaged` state inside the group needs PR 6's group
 ids, because `stop_movement` still calls `leave_group`). A group leader's
 obstruction no longer triggers the 240-tick give-up, which had ended the whole
 group's route. The remaining legs of a queued order are not resumed by a leaver.
+
+The initial regression came chiefly from repeated hard-body sweeps, not slot
+assignment or the clearance field. Movement-only Callgrind falls from
+96,413,953 to 44,116,679 instructions. The optimized p50 meets 4.9 ms; the p95
+remains above the historical PR 5 result. See [profiling](group-profiling.md)
+for reproduction, the fresh PR 6 comparison, source costs, phase/span splits,
+activity census and validation. Spans overlap and include instrumentation cost;
+the later profiled window has different activity from the plain window.
+These open synthetic scenes do not qualify RTS performance or dedicated
+hardware; PRs 7/11 remain necessary for crowding/performance closure.
+
+Implementation evidence and differences from the design:
+- S1 never formed a column on open ground; the obstacle caused it. Column
+  mode is now deleted; the replacement geometry counter requires >20 tiles
+  of stretch and frontage below one infantry diameter. It stays zero.
+- Hard bodies remain until PR 7. Open slots leave a passing lane plus a
+  snapshot step; narrow files need only a diameter plus that step. A half-tile
+  lag slows the anchor to 0.75×; catch-up is exactly 1.25×, capped by own speed.
+  Initial offsets blend toward the fixed destination layout while walking.
+- Five clearance samples cover eight tiles ahead/behind. Static obstruction
+  for 120 ticks permits at most four detached scheduler requests per tick;
+  members keep their slot/group and rejoin within two tiles. Sealed members
+  can move inside their tile after ray removal, then give up independently.
+- Scheduler storage still belongs to a member, with route handover when it
+  leaves/detaches. Independent group ids / in-group Engaged remain absent:
+  PR 4 one-unit resumes stay; a leaver still loses old queued legs.

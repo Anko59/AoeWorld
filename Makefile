@@ -191,6 +191,7 @@ doctor:
 recover:
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- recover
 
+include make/profiling.mk
 include make/agents.mk make/ship.mk make/qualification.mk make/heavy.mk make/phony.mk make/help.mk make/assets.mk make/geodata.mk make/release.mk make/sdk.mk
 
 structure-check:

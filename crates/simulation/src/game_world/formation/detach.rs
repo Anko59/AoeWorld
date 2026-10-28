@@ -28,9 +28,8 @@ impl GameWorld {
             .and_then(|leader| self.formations.get(&leader))
             .and_then(|group| {
                 group
-                    .member_lookup
-                    .get(&unit.state.id)
-                    .map(|&at| group.members[at].detached)
+                    .member_index(unit.state.id)
+                    .map(|at| group.members[at].detached)
             })
             .unwrap_or(false)
     }
@@ -55,7 +54,9 @@ impl GameWorld {
             return;
         };
         let group = &self.formations[&leader];
-        let at = group.member_lookup[&id];
+        let Some(at) = group.member_index(id) else {
+            return;
+        };
         let goal = group.members[at].goal;
         let replacement = group
             .members
@@ -100,7 +101,9 @@ impl GameWorld {
         else {
             return;
         };
-        let at = group.member_lookup[&id];
+        let Some(at) = group.member_index(id) else {
+            return;
+        };
         group.members[at].detached = true;
     }
 
@@ -144,7 +147,10 @@ impl GameWorld {
             else {
                 continue;
             };
-            let member = &mut group.members[group.member_lookup[&id]];
+            let Some(at) = group.member_index(id) else {
+                continue;
+            };
+            let member = &mut group.members[at];
             member.detached = false;
             member.blocked = 0;
             member.stalled = if timed_out { GIVE_UP_AFTER_TICKS } else { 0 };

@@ -36,9 +36,22 @@ pub(crate) struct CollisionIndex {
     slots: Vec<usize>,
     indices: Vec<usize>,
     recycled: Vec<Vec<EntityId>>,
+    overfull_cells: usize,
+    maximum_radii: [i32; 2],
 }
 
 impl CollisionIndex {
+    /// Kinds are fixed at spawn. Retain the largest observed radius after
+    /// removal: an upper bound avoids a population scan on every group tick.
+    pub(crate) fn observe_kind(&mut self, kind: UnitKind) {
+        let radius = &mut self.maximum_radii[usize::from(kind.is_naval())];
+        *radius = (*radius).max(kind.collision_radius());
+    }
+
+    pub(super) fn maximum_radii(&self) -> [i32; 2] {
+        self.maximum_radii
+    }
+
     pub(crate) fn unit_index(&self, id: EntityId) -> usize {
         self.indices[id.0 as usize]
     }
@@ -72,6 +85,7 @@ impl CollisionIndex {
             .or_insert_with(|| recycled.pop().unwrap_or_default());
         self.slots[at] = cell.len();
         cell.push(id);
+        self.overfull_cells += usize::from(cell.len() == CELL_LIMIT + 1);
     }
 
     pub(crate) fn remove(&mut self, id: EntityId, tile: TileCoord, naval: bool) {
@@ -90,6 +104,7 @@ impl CollisionIndex {
         if cell.get(slot) != Some(&id) {
             return;
         }
+        self.overfull_cells -= usize::from(cell.len() == CELL_LIMIT + 1);
         cell.swap_remove(slot);
         self.slots[id.0 as usize] = usize::MAX;
         if let Some(displaced) = cell.get(slot) {
@@ -109,6 +124,10 @@ impl CollisionIndex {
             self.remove(id, from, naval);
             self.insert(id, to, naval, index);
         }
+    }
+
+    pub(super) fn has_overfull_cells(&self) -> bool {
+        self.overfull_cells != 0
     }
 
     /// At most sixteen cells, with 32 body tests per cell. Hash iteration never
@@ -219,6 +238,20 @@ impl GameWorld {
         stationary: bool,
         repairing_spawn: bool,
     ) -> bool {
+        self.collision_sweep_bounded(index, from, to, stationary, repairing_spawn, None)
+    }
+
+    /// A movement-batch bound on neighbor radius and displacement. Padding
+    /// requires strict separation, including already overlapping bodies.
+    pub(in crate::game_world) fn collision_sweep_bounded(
+        &self,
+        index: usize,
+        from: WorldPosition,
+        to: WorldPosition,
+        stationary: bool,
+        repairing_spawn: bool,
+        bounds: Option<(i32, i32)>,
+    ) -> bool {
         let unit = self.units[index].state;
         let dx = i64::from(to.x) - i64::from(from.x);
         let dy = i64::from(to.y) - i64::from(from.y);
@@ -230,13 +263,31 @@ impl GameWorld {
             ((i64::from(from.x) + i64::from(to.x)) / 2) as i32,
             ((i64::from(from.y) + i64::from(to.y)) / 2) as i32,
         );
+        let (maximum_radius, padding) = bounds.unwrap_or((512, 0));
+        // Preserve the legacy whole-tile overflow policy exactly. Otherwise
+        // only bodies within the actual half-step swept AABB can intersect.
+        let reach = unit.kind.collision_radius()
+            + if bounds.is_some() && !self.collisions.has_overfull_cells() {
+                maximum_radius + padding + ((dx.abs().max(dy.abs()) + 1) / 2) as i32
+            } else {
+                768 + padding
+            };
         let passing = self.units[index].formation.is_none()
             && self.units[index]
                 .obstruction
                 .is_some_and(|o| o.pass_until > self.tick.0);
+        let broad_radius = i64::from(unit.kind.collision_radius() + maximum_radius + padding);
+        let (min_x, max_x) = (
+            i64::from(from.x.min(to.x)) - broad_radius,
+            i64::from(from.x.max(to.x)) + broad_radius,
+        );
+        let (min_y, max_y) = (
+            i64::from(from.y.min(to.y)) - broad_radius,
+            i64::from(from.y.max(to.y)) + broad_radius,
+        );
         !self.collisions.blocked(
             midpoint,
-            unit.kind.collision_radius() + 768,
+            reach,
             unit.kind.is_naval(),
             self.tick.0.wrapping_add(u64::from(unit.id.0)),
             |id| {
@@ -244,13 +295,24 @@ impl GameWorld {
                     return false;
                 }
                 let other = self.units[self.collisions.unit_index(id)].state;
+                if bounds.is_some()
+                    && (i64::from(other.position.x) < min_x
+                        || i64::from(other.position.x) > max_x
+                        || i64::from(other.position.y) < min_y
+                        || i64::from(other.position.y) > max_y)
+                {
+                    return false;
+                }
+
                 if other.hp == 0
                     || (stationary && other.moving)
                     || (passing && other.player == unit.player && !other.settled_worker())
                 {
                     return false;
                 }
-                let r = i64::from(unit.kind.collision_radius() + other.kind.collision_radius());
+                let r = i64::from(
+                    unit.kind.collision_radius() + other.kind.collision_radius() + padding,
+                );
                 let x = i64::from(other.position.x) - i64::from(from.x);
                 let y = i64::from(other.position.y) - i64::from(from.y);
                 let start = x * x + y * y;
@@ -260,6 +322,9 @@ impl GameWorld {
                 // single "away" direction. Priority never permits tunnelling
                 // through a body that is already separated from the mover.
                 if start < r * r {
+                    if padding > 0 {
+                        return true;
+                    }
                     let x = i64::from(other.position.x) - i64::from(to.x);
                     let y = i64::from(other.position.y) - i64::from(to.y);
                     return !repairing_spawn && x * x + y * y < start;

@@ -34,3 +34,7 @@ harness = false
 [[bench]]
 name = "movement_instructions"
 harness = false
+
+[[bench]]
+name = "group_instructions"
+harness = false

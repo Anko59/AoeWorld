@@ -13,13 +13,21 @@ pub(super) fn class(kind: UnitKind) -> u8 {
 }
 
 impl Group {
+    /// Members always stay in canonical id order. Dense armies need one
+    /// indexed read; sparse selections and departures use binary search.
+    pub(super) fn member_index(&self, id: EntityId) -> Option<usize> {
+        let first = self.members.first()?.id.0;
+        if let Some(at) = id.0.checked_sub(first).map(|n| n as usize)
+            && self.members.get(at).is_some_and(|member| member.id == id)
+        {
+            return Some(at);
+        }
+        self.members
+            .binary_search_by_key(&id, |member| member.id)
+            .ok()
+    }
+
     pub(super) fn forget_departures(&mut self) {
-        self.member_lookup = self
-            .members
-            .iter()
-            .enumerate()
-            .map(|(at, member)| (member.id, at))
-            .collect();
         let mut order = (0..self.members.len()).collect::<Vec<_>>();
         order.sort_unstable_by_key(|&at| {
             let member = &self.members[at];

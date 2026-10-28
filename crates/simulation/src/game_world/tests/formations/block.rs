@@ -239,3 +239,120 @@ fn blocked_member_routes_out_of_a_west_facing_pocket_and_rejoins() {
         assert_eq!(w.active_mover_count(), 0);
     }
 }
+
+#[test]
+fn bounded_group_sweeps_match_full_sweeps_with_large_bodies_and_overfull_cells() {
+    for overfull in [false, true] {
+        let mut w = wide_world();
+        let mover = w
+            .spawn_kind(PlayerId(0), UnitKind::Militia, center(40, 40))
+            .unwrap();
+        for (n, kind) in [UnitKind::Militia, UnitKind::Scout, UnitKind::Mangonel]
+            .into_iter()
+            .enumerate()
+        {
+            w.spawn_kind(PlayerId(1), kind, center(41 + n as i32, 40))
+                .unwrap();
+        }
+        if overfull {
+            for _ in 0..40 {
+                w.spawn_kind(PlayerId(1), UnitKind::Militia, center(40, 41))
+                    .unwrap();
+            }
+        }
+        let index = w.lookup[&mover];
+        for x in -8..=8 {
+            for y in -8..=8 {
+                let from = WorldPosition::new(center(40, 40).x + x * 96, center(40, 40).y + y * 96);
+                for (dx, dy) in [(47, 0), (0, -47), (33, 33)] {
+                    let to = WorldPosition::new(from.x + dx, from.y + dy);
+                    assert_eq!(
+                        w.collision_sweep_bounded(index, from, to, false, false, Some((512, 0))),
+                        w.collision_sweep(index, from, to, false, false)
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn group_sweep_certificate_survives_every_direction_of_a_bounded_neighbor_step() {
+    let mut w = wide_world();
+    let mover = w
+        .spawn_kind(PlayerId(0), UnitKind::Militia, center(40, 40))
+        .unwrap();
+    let other = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, center(41, 40))
+        .unwrap();
+    let (index, neighbor) = (w.lookup[&mover], w.lookup[&other]);
+    let from = w.unit(mover).unwrap().position;
+    let to = WorldPosition::new(from.x + 47, from.y);
+    let (mut certified, mut uncertified) = (0, 0);
+    let relocate = |w: &mut GameWorld, at| {
+        let old = w.units[neighbor].state.position.tile_floor();
+        w.units[neighbor].state.position = at;
+        let unit = w.units[neighbor].state;
+        w.track_unit_step(other, old, &unit);
+    };
+    for x in -8..=8 {
+        for y in -8..=8 {
+            let base = WorldPosition::new(from.x + x * 96, from.y + y * 96);
+            relocate(&mut w, base);
+            if !w.collision_sweep_bounded(index, from, to, false, false, Some((205, 64))) {
+                uncertified += 1;
+                continue;
+            }
+            certified += 1;
+            for (dx, dy) in [
+                (64, 0),
+                (-64, 0),
+                (0, 64),
+                (0, -64),
+                (45, 45),
+                (-45, 45),
+                (45, -45),
+                (-45, -45),
+            ] {
+                relocate(&mut w, WorldPosition::new(base.x + dx, base.y + dy));
+                assert!(w.collision_sweep(index, from, to, false, false));
+            }
+        }
+    }
+    assert!(certified > 0 && uncertified > 0);
+}
+
+#[test]
+fn clearance_region_certificates_match_static_sweeps_near_a_forest() {
+    use crate::game_world::movement_step::certificates::StaticArea;
+    let mut w = wide_world();
+    super::super::group_baseline::forest(&mut w, TileRect::from_xywh(45, 32, 1, 20));
+    let origin = center(40, 40);
+    let clearance = w.static_clearance(UnitKind::Militia, origin.tile_floor());
+    let area = StaticArea::new(origin.tile_floor(), clearance).unwrap();
+    let mut count = 0;
+    for x in -10..=10 {
+        for y in -10..=10 {
+            let from = WorldPosition::new(origin.x + x * 512, origin.y + y * 512);
+            if area.covers(from, UnitKind::Militia.collision_radius(), 513) {
+                count += 1;
+                for (dx, dy) in [
+                    (512, 0),
+                    (-512, 0),
+                    (0, 512),
+                    (0, -512),
+                    (362, 362),
+                    (-362, -362),
+                ] {
+                    assert!(w.body_step_clear(
+                        UnitKind::Militia,
+                        from,
+                        WorldPosition::new(from.x + dx, from.y + dy)
+                    ));
+                }
+            }
+        }
+    }
+    assert!(count > 0 && count < 21 * 21);
+    assert!(StaticArea::new(origin.tile_floor(), 0).is_none());
+}

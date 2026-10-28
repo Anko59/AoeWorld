@@ -154,12 +154,12 @@ impl GameWorld {
             );
         }
         let researched = economy.map_or(0, |p| p.researched);
-        let stats = super::super::combat::military::researched_stats(
+        let hundredths = super::super::combat::military::apply_movement_speed(
             kind,
+            super::super::combat::unit_combat(kind).speed_hundredths,
             economy.is_some_and(|p| p.age >= crate::Age::Feudal),
-            researched,
         );
-        if let Some(hundredths) = stats.speed_hundredths {
+        if let Some(hundredths) = hundredths {
             (
                 u64::from(hundredths) * FIXED_SUBUNITS_PER_TILE as u64,
                 100 * u64::from(self.config.tick_hz),
