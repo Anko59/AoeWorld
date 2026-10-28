@@ -204,7 +204,8 @@ pub(in super::super) fn update(client: &Client) {
             0.0,
             0.0,
             y,
-            0.0,
+            // Garrisoned occupants (the unit-only `capacity` slot): the map flag.
+            building.garrison.len() as f64,
             0.0,
             f64::from(building.player.0),
             flag(building.player == owner),

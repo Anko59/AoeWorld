@@ -78,6 +78,12 @@ test("villagers garrison through the cursor and eject individually or together",
   await page.mouse.click(center.x, center.y);
   await expect(page.locator("#selection-name")).toHaveText("Town Center");
   await expect(page.locator("#garrison-count")).toHaveText("2 / 15");
+  // The map shows a flag with the occupant count above the garrisoned building.
+  const flag = page.locator(
+    `#garrison-flags .garrison-flag[data-building-id="${center.id}"]`,
+  );
+  await expect(flag).toHaveText("2");
+  await expect(flag).toBeVisible();
   await expect(page.locator("#garrison-units button")).toHaveCount(2);
   for (const worker of villagers.slice(0, 2)) {
     const button = page.locator(
@@ -105,6 +111,7 @@ test("villagers garrison through the cursor and eject individually or together",
     .toBe(villagers.length - 1);
   await page.locator("#ungarrison").click();
   await expect(page.locator("#garrison-count")).toHaveText("0 / 15");
+  await expect(page.locator("#garrison-flags .garrison-flag")).toHaveCount(0);
   await expect
     .poll(
       async () =>

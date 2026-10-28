@@ -41,7 +41,7 @@ export function initInterface() {
     Object.assign(box.style,{left:`${Math.min(drag[0],event.clientX)}px`,top:`${Math.min(drag[1],event.clientY)}px`,width:`${width}px`,height:`${height}px`});
   });
   for (const event of ['pointerup','pointercancel','lostpointercapture']) document.addEventListener(event,()=>{ drag=null;box.hidden=true; });
-  let previousSelection='', previousLoads='', previousHealth='', previousIdle='';
+  let previousSelection='', previousLoads='', previousHealth='', previousIdle='', previousFlags='';
   const update = state => {
     ['wood','food','gold','stone'].forEach((resource,index) => {
       text(`stockpile-${resource}`,state.stockpile[index]); text(`workers-${resource}`,state.workers[index]);
@@ -107,6 +107,8 @@ export function initInterface() {
     // Own idle workers carry a marker so they can be found on the map.
     const idle=state.actors.filter(a=>a.owned && a.hp>0 && a.task==='Idle' && (a.kind==='Villager' || a.kind==='FishingShip') && a.x>0 && a.y>54 && a.y<innerHeight-208).map(a=>`<span class="idle-marker" style="left:${a.x-6}px;top:${a.head-16}px">z</span>`).join('');
     if (idle!==previousIdle) { byId('idle-markers').innerHTML=idle; previousIdle=idle; }
+    const flags=state.actors.filter(actor=>actor.hp>0 && actor.garrison>0 && actor.x>0 && actor.y>54 && actor.y<innerHeight-208).map(actor=>`<span class="garrison-flag" data-building-id="${actor.id}" title="${actor.garrison} garrisoned" style="left:${actor.x}px;top:${actor.y-48}px">${actor.garrison}</span>`).join('');
+    if (flags!==previousFlags) { byId('garrison-flags').innerHTML=flags; previousFlags=flags; }
     const loads=state.actors.filter(actor=>actor.hp>0 && actor.load && actor.x>0 && actor.y>54 && actor.y<innerHeight-208);
     const signature=JSON.stringify(loads);
     if (signature!==previousLoads) {
@@ -123,7 +125,7 @@ export function initInterface() {
     let at=18;
     for (let index=0;index<values[13];index++,at+=18) {
       const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity,range,player,owned]=values.subarray(at,at+18);
-      state.actors.push({id,player,owned:!!owned,kind:kinds[kind],x,y,selected:!!selected,hp,maxHp,head,task:tasks[task],load:kind===1 && amount?[resources[resource],amount]:null});
+      state.actors.push({id,player,owned:!!owned,kind:kinds[kind],x,y,selected:!!selected,hp,maxHp,head,task:tasks[task],load:kind===1 && amount?[resources[resource],amount]:null,garrison:owned&&buildingKinds.includes(kinds[kind])?capacity:0});
       if (selected) state.selected.push({id,player,owned:!!owned,kind:kinds[kind],name:names[kind],task:tasks[task],resource:resources[resource],amount,hp,maxHp,attack,melee,pierce,capacity,range});
     }
     for (let index=0;index<values[14];index++,at+=3) state.queue.push([values[at],values[at+1],values[at+2]]);
