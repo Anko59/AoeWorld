@@ -242,6 +242,9 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         let blocker = map::feedback::blocker_at(client, destination.tile_floor());
         client.order_feedback.record(sequence, blocker);
     }
+    if client.village.attack_move {
+        super::waypoints::ping(client, destination);
+    }
     client.village.move_cursor = false;
     client.village.attack_move = false;
     let _ = client.canvas.set_attribute("data-order-mode", "");

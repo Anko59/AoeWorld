@@ -71,9 +71,23 @@ for (const [kind, unitKind] of [
     await expect.poll(() => orders.length).toBe(2);
     expect(orders[1]?.at(-2)).toBe(1);
     await page.locator("#attack-move-units").click();
+    await expect(canvas).toHaveAttribute("data-order-mode", "attack-move");
+    // The armed mode has its own cursor, not the plain move crosshair.
+    await expect
+      .poll(() =>
+        canvas.evaluate((c) =>
+          getComputedStyle(c).cursor.includes("cursor-attack-move"),
+        ),
+      )
+      .toBe(true);
     await page.mouse.click(1120, 230, { button: "right" });
     await expect.poll(() => orders.length).toBe(3);
     expect(orders[2]?.at(-1)).toBe(1);
+    // A red ring marks the destination briefly, then removes itself.
+    const ring = page.locator('.order-ping[data-order-ping="attack-move"]');
+    await expect(ring).toHaveCount(1);
+    await expect(ring).toHaveCount(0, { timeout: 3000 });
+    await expect(canvas).toHaveAttribute("data-order-mode", "");
     await page.locator("#attack-move-units").click();
     await page.locator("#stop-units").click();
     await expect(canvas).toHaveAttribute("data-order-mode", "");

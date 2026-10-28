@@ -60,6 +60,17 @@ window.aoeWaypoints = values => {
     else if (unit.line.getAttribute('points') !== unit.points) unit.line.setAttribute('points', unit.points);
   }
 };
+// A brief ring where an attack-move was ordered; it removes itself.
+window.aoeOrderPing = (x, y) => {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  const ring = document.createElement('div');
+  ring.className = 'order-ping';
+  ring.dataset.orderPing = 'attack-move';
+  ring.style.left = `${x}px`;
+  ring.style.top = `${y}px`;
+  document.body.append(ring);
+  setTimeout(() => ring.remove(), 900);
+};
 export function updateDetails(values) {
   byId('scene').dataset.connected = String(values[0] === 1);
   if (values[1] >= 0) {
