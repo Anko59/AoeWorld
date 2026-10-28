@@ -7,9 +7,25 @@ pub(crate) struct Obstruction {
     pub(crate) goal: WorldPosition,
     pub(crate) remaining: u32,
     pub(crate) blocked: u16,
+    pub(crate) side: i8,
     pub(crate) last_tick: u64,
     pub(crate) search_tick: u64,
+    /// Until this tick the mover may pass through friendly traffic.
+    pub(crate) pass_until: u64,
 }
+
+/// Obstructed ticks without progress before a mover squeezes through its own
+/// player's traffic, as AoE2 units shuffle through a friendly crowd instead
+/// of standing in a permanent gridlock. Enemies and settled workers still block.
+pub(crate) const PASS_AFTER_TICKS: u16 = 64;
+/// How long one squeeze lasts once granted, so the mover clears the crowd
+/// rather than colliding again after its first half tile of progress.
+const PASS_TICKS: u64 = 40;
+/// Obstructed ticks without progress after which a mover that cannot reach
+/// its goal gives up (12 s at 20 Hz), so a permanently boxed-in unit does not
+/// stay an active mover forever. Squeezing through friends, the 160-tick
+/// waits in the congestion tests and a normal queue all end well before it.
+pub(crate) const GIVE_UP_AFTER_TICKS: u16 = 240;
 
 fn distance(a: WorldPosition, b: WorldPosition) -> u32 {
     crate::game_path::segment_length(
@@ -28,26 +44,48 @@ impl GameWorld {
     }
 
     pub(crate) fn record_unit_obstruction(&mut self, index: usize) {
-        let unit = &mut self.units[index];
-        let Some(order) = unit.order else {
+        let Some(order) = self.units[index].order else {
             return;
         };
+        self.record_obstruction_towards(index, order.destination);
+    }
+
+    pub(crate) fn record_obstruction_towards(&mut self, index: usize, goal: WorldPosition) {
+        let unit = &mut self.units[index];
         let obstruction = unit.obstruction.get_or_insert(Obstruction {
-            goal: order.destination,
-            remaining: distance(unit.state.position, order.destination),
+            goal,
+            remaining: distance(unit.state.position, goal),
             blocked: 0,
+            side: 1,
             last_tick: u64::MAX,
             search_tick: u64::MAX,
+            pass_until: 0,
         });
         if obstruction.last_tick != self.tick.0 {
+            if obstruction.blocked > 0 && obstruction.blocked.is_multiple_of(48) {
+                obstruction.side = -obstruction.side;
+            }
             obstruction.blocked = obstruction.blocked.saturating_add(1);
             obstruction.last_tick = self.tick.0;
+            if obstruction.blocked >= PASS_AFTER_TICKS {
+                obstruction.pass_until = self.tick.0 + PASS_TICKS;
+            }
         }
     }
 
     pub(crate) fn take_local_retry(&mut self, index: usize) -> bool {
         let unit = self.units[index].state;
-        if !self.local_retry(unit.id)
+        // A mover can alternate a clear step and a blocked sidestep. An
+        // absolute eight-tick phase can then miss every blocked step forever.
+        // Seed the first retry by id, then measure elapsed time between tries.
+        let due = self.units[index].obstruction.is_some_and(|o| {
+            if o.search_tick == u64::MAX {
+                self.local_retry(unit.id) || o.blocked >= 8
+            } else {
+                self.tick.0.saturating_sub(o.search_tick) >= 8
+            }
+        });
+        if !due
             && !(self.has_work_task(unit.id) && self.local_position_occupied(index, unit.position))
         {
             return false;
@@ -64,7 +102,7 @@ impl GameWorld {
 
     pub(crate) fn observe_unit_progress(&mut self, index: usize) {
         let unit = &mut self.units[index];
-        if unit.order.is_none() {
+        if unit.order.is_none() && unit.formation.is_none() {
             unit.obstruction = None;
         } else if let Some(obstruction) = &mut unit.obstruction {
             let remaining = distance(unit.state.position, obstruction.goal);
@@ -88,19 +126,22 @@ impl GameWorld {
         }
         let unit = self.units[index].state;
         let plain_move = self.can_adjust_arrival(index);
-        let nearby = distance(unit.position, obstruction.goal) <= 3 * 1024
-            && (plain_move || self.at_gather_arrival(index))
+        let nearby = (plain_move
+            && distance(unit.position, obstruction.goal) <= 768
+            && self.position_occupied(index, obstruction.goal, true)
+            || self.at_gather_arrival(index))
             && self.arrival_position_free(index);
-        let full_worksite = !nearby
-            && distance(unit.position, obstruction.goal) <= 3 * 1024
-            && self.local_retry(unit.id)
-            && self.redirect_gather_arrival(index) == Some(false)
-            && obstruction.blocked >= 32;
-        if !nearby && !full_worksite && obstruction.blocked < 128 {
+        if !nearby && obstruction.blocked < GIVE_UP_AFTER_TICKS {
+            if self.local_retry(unit.id) && obstruction.blocked >= 16 {
+                self.redirect_gather_arrival(index);
+            }
+            // A unit obstruction is temporary: keep the order while yielding
+            // and re-pathing, until the bounded give-up below.
             return false;
         }
         self.clear_planner(index);
-        // Congestion is temporary, not a static-navigation unreachable proof.
+        // Giving up reports the goal as unreachable for now, as on dev; an
+        // arrival beside a taken goal (`nearby`) is a success and has no error.
         let stored = &mut self.units[index];
         stored.order = None;
         stored.route.clear();

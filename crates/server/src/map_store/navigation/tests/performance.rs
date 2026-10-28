@@ -1,3 +1,5 @@
+// Radius geometry, exact static sweeps and local rejoining intentionally
+// change these current pins. Preserve workloads, floors and replay comparisons.
 //! Identical deterministic orders for lazy and installed package navigation.
 //! Synthetic terrain isolates navigation, not a finished France match.
 use super::*;
@@ -111,7 +113,8 @@ fn measure(installed: bool) {
     // Pin the current authoritative result in both physical cache modes. Re-pinned
     // for the bundled economy reservations, Vassal and walking changes, which alter
     // this workload's gatherer and route outcomes; both cache modes still agree.
-    // Swept avoidance adds current obstruction/arrival state. Regenerated with
+    // Swept avoidance adds current obstruction/arrival state; friendly
+    // squeeze-through and worksite-only gather redirects change it again. Regenerated with
     // `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server
     // AOE_NATIVE_TEST_FILTER='test(large_navigation_)'`; both cache modes retain
     // their identical workload, canonical state and no-construction assertions.
@@ -119,8 +122,8 @@ fn measure(installed: bool) {
         world.canonical_hash(),
         [
             // Stance and autonomous targeting state extend the canonical hash.
-            31, 11, 2, 147, 20, 88, 205, 29, 131, 204, 87, 30, 36, 181, 226, 242, 103, 162, 0, 176,
-            133, 201, 56, 119, 24, 6, 206, 129, 207, 139, 20, 11,
+            49, 14, 173, 216, 135, 59, 124, 136, 24, 1, 111, 197, 79, 223, 244, 16, 25, 144, 63, 21,
+            154, 213, 38, 116, 124, 114, 206, 11, 212, 81, 172, 2,
         ]
     );
     if installed {

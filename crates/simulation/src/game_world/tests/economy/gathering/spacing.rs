@@ -2,8 +2,7 @@ use super::*;
 
 #[test]
 fn gatherers_choose_distinct_available_work_tiles_in_a_deposit_area() {
-    // Trees now take at most two workers; the six-worker case belongs on a
-    // larger deposit. The separate occupancy tests require lumberjack fan-out.
+    // Reservations are exact perimeter points; terrain tiles may be shared.
     let (package, pages, water) = fixture::flat_fixture(false);
     let generator = package
         .generator_with_environment(pages.clone(), water.clone(), Vec::new(), Vec::new())
@@ -60,8 +59,9 @@ fn gatherers_choose_distinct_available_work_tiles_in_a_deposit_area() {
         .iter()
         .map(|&id| {
             w.movement_order(id)
-                .map_or(w.unit(id).unwrap().position.tile_floor(), |o| o.target_tile)
+                .map_or(w.unit(id).unwrap().position, |o| o.destination)
         })
+        .map(|p| (p.x, p.y))
         .collect::<BTreeSet<_>>();
     assert_eq!(
         goals.len(),
@@ -71,7 +71,10 @@ fn gatherers_choose_distinct_available_work_tiles_in_a_deposit_area() {
     advance(&mut w, 250);
     let tiles = ids
         .iter()
-        .map(|&id| w.unit(id).unwrap().position.tile_floor())
+        .map(|&id| {
+            let p = w.unit(id).unwrap().position;
+            (p.x, p.y)
+        })
         .collect::<BTreeSet<_>>();
     assert_eq!(
         tiles.len(),
@@ -81,6 +84,13 @@ fn gatherers_choose_distinct_available_work_tiles_in_a_deposit_area() {
             .map(|id| (w.unit(*id), w.movement_order(*id), w.gather_target(*id)))
             .collect::<Vec<_>>()
     );
+    for (i, &a) in ids.iter().enumerate() {
+        for &b in &ids[i + 1..] {
+            let a = w.unit(a).unwrap().position;
+            let b = w.unit(b).unwrap().position;
+            assert!(i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2) >= 410_i64.pow(2));
+        }
+    }
     for id in &ids {
         let target = generator
             .resource_by_id(w.gather_target(*id).expect("every worker keeps a job"))

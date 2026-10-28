@@ -1,7 +1,11 @@
-//! Congestion must leave the movement work list in bounded time.
+//! Temporary congestion preserves orders and bounds work on every tick.
 use super::*;
 
 fn boxed_mover(destination: WorldPosition) -> (GameWorld, EntityId) {
+    boxed_mover_by(destination, PlayerId(0))
+}
+
+fn boxed_mover_by(destination: WorldPosition, ring: PlayerId) -> (GameWorld, EntityId) {
     let mut w = world();
     w.set_fog_disabled(true);
     let mover = w.spawn_villager(PlayerId(0), at(40, 30)).unwrap();
@@ -18,7 +22,7 @@ fn boxed_mover(destination: WorldPosition) -> (GameWorld, EntityId) {
         (1, 1),
     ] {
         w.spawn_villager(
-            PlayerId(0),
+            ring,
             WorldPosition::new(at(40, 30).x + dx * 640, at(40, 30).y + dy * 640),
         )
         .unwrap();
@@ -28,9 +32,12 @@ fn boxed_mover(destination: WorldPosition) -> (GameWorld, EntityId) {
 
 #[test]
 fn blocked_near_arrival_accepts_a_free_spot_and_stays_settled() {
-    let (mut w, mover) = boxed_mover(at(42, 30));
+    let mut w = world();
+    let mover = w.spawn_villager(PlayerId(0), at(40, 30)).unwrap();
+    w.spawn_villager(PlayerId(0), at(42, 30)).unwrap();
+    w.issue_move(mover, at(42, 30)).unwrap();
     for _ in 0..160 {
-        w.advance_movement();
+        movement_tick(&mut w);
     }
     assert!(
         w.movement_order(mover).is_none(),
@@ -41,18 +48,19 @@ fn blocked_near_arrival_accepts_a_free_spot_and_stays_settled() {
     let position = w.unit(mover).unwrap().position;
     assert!(distance(position, at(42, 30)) <= (3 * 1024_i64).pow(2));
     for _ in 0..80 {
-        assert!(w.advance_movement().is_empty());
+        assert!(movement_tick(&mut w).is_empty());
         assert_eq!(w.unit(mover).unwrap().position, position);
     }
 }
 
 #[test]
 fn a_future_destination_reservation_does_not_keep_a_free_arrival_moving() {
-    let (mut w, mover) = boxed_mover(at(42, 30));
+    let mut w = world();
+    let mover = w.spawn_villager(PlayerId(0), at(40, 30)).unwrap();
     let later = w.spawn_villager(PlayerId(0), at(20, 30)).unwrap();
     w.issue_move(later, at(40, 30)).unwrap();
     for _ in 0..32 {
-        w.advance_movement();
+        movement_tick(&mut w);
     }
     assert!(w.movement_order(mover).is_none());
     assert_eq!(w.movement_failure(mover), None);
@@ -61,7 +69,7 @@ fn a_future_destination_reservation_does_not_keep_a_free_arrival_moving() {
 }
 
 #[test]
-fn a_full_worksite_stops_an_obstructed_approach_without_endless_sidestep_attempts() {
+fn a_full_worksite_waits_and_resumes_when_a_physical_work_spot_opens() {
     let mut w = super::super::far_orders::wide_world();
     w.set_fog_disabled(true);
     let node = aoe_map::ResourceNode::starting(TileCoord::new(40, 30), aoe_map::ResourceKind::Wood)
@@ -73,52 +81,88 @@ fn a_full_worksite_stops_an_obstructed_approach_without_endless_sidestep_attempt
     // the crowd closes it after the approach was admitted.
     let worker = w.spawn_villager(PlayerId(0), at(35, 30)).unwrap();
     w.issue_gather(PlayerId(0), worker, node.id).unwrap();
-    for (dx, dy) in [
-        (-1, -1),
-        (0, -1),
-        (1, -1),
-        (-1, 0),
-        (1, 0),
-        (-1, 1),
-        (0, 1),
-        (1, 1),
-    ] {
-        w.spawn_villager(PlayerId(0), at(40 + dx, 30 + dy)).unwrap();
-    }
+    let blockers = crate::game_world::movement_step::slots::perimeter_positions(
+        TileRect::from_xywh(40, 30, 1, 1),
+        UnitKind::Villager,
+    )
+    .into_iter()
+    .map(|p| w.spawn_villager(PlayerId(0), p).unwrap())
+    .collect::<Vec<_>>();
     for _ in 0..160 {
-        w.advance_movement();
+        w.advance();
     }
-    assert!(w.movement_order(worker).is_none());
+    assert_eq!(w.gather_target(worker), Some(node.id));
+    assert_eq!(w.movement_failure(worker), None);
+    assert_ne!(w.unit(worker).unwrap().task, UnitTask::Gathering);
+    for id in blockers {
+        w.remove_unit(id);
+    }
+    for _ in 0..200 {
+        w.advance();
+    }
+    assert_eq!(w.unit(worker).unwrap().task, UnitTask::Gathering);
+    assert!(w.at_work_position(worker, node.tile));
+}
+
+#[test]
+fn boxed_far_order_retains_its_goal_without_a_false_static_failure() {
+    let (mut w, mover) = boxed_mover_by(at(70, 30), PlayerId(1));
+    for _ in 0..160 {
+        movement_tick(&mut w);
+    }
+    assert!(w.movement_order(mover).is_some());
+    assert_eq!(w.movement_failure(mover), None);
+    // The smaller body has room to yield inside a sealed foreign ring, but
+    // cannot pass through it or misreport the original goal as unreachable.
+    assert!(distance(w.unit(mover).unwrap().position, at(40, 30)) <= 640_i64.pow(2));
+    assert_eq!(w.movement_order(mover).unwrap().destination, at(70, 30));
+}
+
+#[test]
+fn a_sustained_friendly_gridlock_lets_the_mover_squeeze_through() {
+    let (mut w, mover) = boxed_mover(at(70, 30));
+    for _ in 0..160 {
+        movement_tick(&mut w);
+    }
+    assert_eq!(w.movement_failure(mover), None);
+    // Idle villagers of the same player do not seal a permanent box: after
+    // sustained obstruction the mover shuffles through them toward its goal.
+    let position = w.unit(mover).unwrap().position;
+    assert!(position.x - at(40, 30).x >= 1024, "{position:?}");
     assert_eq!(
-        w.movement_failure(worker),
-        Some(GameWorldError::Unreachable)
+        w.movement_order(mover).map(|o| o.destination),
+        Some(at(70, 30))
     );
 }
 
 #[test]
-fn boxed_far_order_exhausts_avoidance_instead_of_sidestep_oscillation() {
-    let (mut w, mover) = boxed_mover(at(70, 30));
-    for _ in 0..160 {
-        w.advance_movement();
+fn a_permanently_boxed_in_mover_gives_up_and_goes_idle() {
+    use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
+    // A sealed ring of another player's bodies cannot be squeezed through.
+    let (mut w, mover) = boxed_mover_by(at(70, 30), PlayerId(1));
+    for _ in 0..GIVE_UP_AFTER_TICKS / 2 {
+        movement_tick(&mut w);
     }
-    assert!(
-        w.movement_order(mover).is_none(),
-        "blocked order retries forever"
-    );
-    assert_eq!(
-        w.units[w.lookup[&mover]].last_movement_error,
-        Some(GameWorldError::Unreachable)
-    );
-    assert_eq!(w.active_mover_count(), 0);
-}
-
-#[test]
-fn a_new_order_can_resume_as_soon_as_temporary_traffic_clears() {
-    let (mut w, mover) = boxed_mover(at(70, 30));
-    for _ in 0..160 {
-        w.advance_movement();
+    assert!(w.movement_order(mover).is_some(), "still within the wait");
+    for _ in 0..4 * u32::from(GIVE_UP_AFTER_TICKS) {
+        movement_tick(&mut w);
     }
+    assert!(w.movement_order(mover).is_none(), "gave up");
     assert_eq!(w.movement_failure(mover), Some(GameWorldError::Unreachable));
+    assert_eq!(w.active_mover_count(), 0);
+    assert_eq!(w.unit(mover).unwrap().task, UnitTask::Idle);
+    assert!(!w.unit(mover).unwrap().moving);
+}
+
+#[test]
+fn a_briefly_blocked_mover_arrives_when_the_crowd_clears_before_the_give_up() {
+    use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
+    let (mut w, mover) = boxed_mover_by(at(70, 30), PlayerId(1));
+    for _ in 0..GIVE_UP_AFTER_TICKS - 20 {
+        movement_tick(&mut w);
+    }
+    assert!(w.movement_order(mover).is_some());
+    assert_eq!(w.movement_failure(mover), None);
     let others = w
         .units()
         .filter(|u| u.id != mover)
@@ -127,9 +171,32 @@ fn a_new_order_can_resume_as_soon_as_temporary_traffic_clears() {
     for id in others {
         w.remove_unit(id);
     }
-    assert!(w.issue_move(mover, at(70, 30)).is_ok());
     for _ in 0..1200 {
-        w.advance_movement();
+        movement_tick(&mut w);
+    }
+    assert_eq!(w.unit(mover).unwrap().position, at(70, 30));
+    assert!(w.movement_order(mover).is_none());
+    assert_eq!(w.movement_failure(mover), None);
+}
+
+#[test]
+fn the_original_order_resumes_as_soon_as_temporary_traffic_clears() {
+    let (mut w, mover) = boxed_mover(at(70, 30));
+    for _ in 0..160 {
+        movement_tick(&mut w);
+    }
+    assert_eq!(w.movement_failure(mover), None);
+    let others = w
+        .units()
+        .filter(|u| u.id != mover)
+        .map(|u| u.id)
+        .collect::<Vec<_>>();
+    for id in others {
+        w.remove_unit(id);
+    }
+    assert!(w.movement_order(mover).is_some());
+    for _ in 0..1200 {
+        movement_tick(&mut w);
     }
     assert_eq!(w.unit(mover).unwrap().position, at(70, 30));
     assert!(w.movement_order(mover).is_none());
@@ -186,20 +253,37 @@ fn movement_probe_observes_bounded_searches_without_changing_replay() {
     let (mut plain, _) = boxed_mover(at(70, 30));
     let probe = Arc::new(Probe::default());
     measured.set_planning_probe(probe.clone());
+    let mut before = 0;
     for _ in 0..160 {
-        assert_eq!(measured.advance_movement(), plain.advance_movement());
+        assert_eq!(movement_tick(&mut measured), movement_tick(&mut plain));
         assert_eq!(measured.canonical_hash(), plain.canonical_hash());
+        let now = probe.1.load(Ordering::Relaxed);
+        // Measured: never more than one sidestep search on a tick.
+        assert!(now - before <= 1, "sidesteps on one tick: {}", now - before);
+        before = now;
     }
-    assert!(measured.movement_order(mover).is_none());
+    assert!(measured.movement_order(mover).is_some());
     let searches = probe.0.load(Ordering::Relaxed);
     assert!(searches > 0 && searches <= 16, "searches: {searches}");
     let sidesteps = probe.1.load(Ordering::Relaxed);
-    assert!(sidesteps <= 16, "sidesteps: {sidesteps}");
-    for _ in 0..80 {
-        assert!(measured.advance_movement().is_empty());
+    // Measured: 15 searches and 53 sidesteps (at most 1 per tick) in 160
+    // ticks; the bounds sit just above, so a retry storm still fails.
+    assert!(sidesteps <= 56, "sidesteps: {sidesteps}");
+    // Repeated obstruction remains bounded on each tick, without cancelling
+    // the command. Releasing the crowd lets the same command complete.
+    for id in measured
+        .units()
+        .filter(|u| u.id != mover)
+        .map(|u| u.id)
+        .collect::<Vec<_>>()
+    {
+        measured.remove_unit(id);
     }
-    assert_eq!(probe.0.load(Ordering::Relaxed), searches);
-    assert_eq!(probe.1.load(Ordering::Relaxed), sidesteps);
+    for _ in 0..1200 {
+        movement_tick(&mut measured);
+    }
+    assert!(measured.movement_order(mover).is_none());
+    assert_eq!(measured.unit(mover).unwrap().position, at(70, 30));
 }
 
 #[test]
@@ -224,7 +308,7 @@ fn blocked_worker_accepts_a_free_spot_adjacent_to_its_resource() {
         .unwrap();
     }
     for _ in 0..32 {
-        w.advance_movement();
+        movement_tick(&mut w);
     }
     assert!(
         w.movement_order(worker).is_none(),

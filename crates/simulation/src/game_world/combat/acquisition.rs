@@ -101,7 +101,7 @@ impl GameWorld {
             };
             let area = TargetArea {
                 player: u.player,
-                source: Goal::Unit(u.position),
+                source: Goal::Unit(u.position, u.kind.collision_radius()),
                 min: i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS,
                 max,
                 actor: id,

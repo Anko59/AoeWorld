@@ -55,7 +55,12 @@ fn demolition_detonation_damages_nearby_enemy_ships_and_consumes_the_attacker() 
     let demo = ship(&mut world, UnitKind::DemolitionShip, water, 0);
     let near = TileCoord::new(water.x + 1, water.y);
     let first = ship(&mut world, UnitKind::Galley, near, 1);
-    let second = ship(&mut world, UnitKind::Galley, near, 1);
+    let second = ship(
+        &mut world,
+        UnitKind::Galley,
+        TileCoord::new(near.x, near.y + 1),
+        1,
+    );
     let distant = ship(
         &mut world,
         UnitKind::Galley,

@@ -352,7 +352,12 @@ fn attack_orders_apply_with_typed_rejections_and_reach_the_wire_state() {
     use aoe_protocol::UnitTask;
     let (mut world, scout) = aoe_simulation::GameWorld::default_with_village(Seed(1));
     let position = world.unit(scout).unwrap().position;
-    let enemy = world.spawn_militia(PlayerId(1), position).unwrap();
+    let enemy = world
+        .spawn_militia(
+            PlayerId(1),
+            aoe_core::WorldPosition::new(position.x + 512, position.y),
+        )
+        .unwrap();
     let attack = |entity_id, target_id| PendingAction::Attack {
         entity_id,
         target_id,
@@ -409,29 +414,34 @@ fn a_wall_order_at_the_coordinate_limit_is_rejected_as_invalid_placement() {
 fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
     use aoe_core::{PlayerId, TileCoord, WorldConfig};
     use aoe_simulation::GameWorld;
-    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
     let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
-    world
-        .initialize_village(PlayerId(0), TileCoord::new(20, 20))
-        .unwrap();
-    world.set_fog_disabled(true);
-    let builder = world.spawn_villager(PlayerId(0), at(110, 110)).unwrap();
-    let attacker = world.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
-    let target = world.spawn_villager(PlayerId(1), at(106, 100)).unwrap();
-    // Four solid house foundations enclose all eight neighboring tiles.
-    // Completed Town Centers have open arches, so cannot serve as solid walls.
-    for (x, y) in [(98, 99), (100, 98), (101, 100), (99, 101)] {
+    let build = || {
+        let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
         world
-            .issue_build(
-                PlayerId(0),
-                &[builder],
-                aoe_simulation::BuildingKind::House,
-                TileCoord::new(x, y),
-                false,
-            )
+            .initialize_village(PlayerId(0), TileCoord::new(20, 20))
             .unwrap();
-    }
-    let before = world.canonical_hash();
+        world.set_fog_disabled(true);
+        let builder = world.spawn_villager(PlayerId(0), at(110, 110)).unwrap();
+        let attacker = world.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
+        let target = world.spawn_villager(PlayerId(1), at(106, 100)).unwrap();
+        // Four solid house foundations enclose all eight neighboring tiles.
+        // Completed Town Centers have open arches, so cannot serve as solid walls.
+        for (x, y) in [(98, 99), (100, 98), (101, 100), (99, 101)] {
+            world
+                .issue_build(
+                    PlayerId(0),
+                    &[builder],
+                    aoe_simulation::BuildingKind::House,
+                    TileCoord::new(x, y),
+                    false,
+                )
+                .unwrap();
+        }
+        (world, attacker, target)
+    };
+    let (mut world, attacker, target) = build();
+    let (mut control, _, _) = build();
+    assert_eq!(world.canonical_hash(), control.canonical_hash());
     assert_eq!(
         apply(
             &mut world,
@@ -443,7 +453,12 @@ fn an_attack_without_a_reachable_position_reports_an_unreachable_route() {
         ),
         CommandResult::RejectedUnreachable,
     );
-    assert_eq!(world.canonical_hash(), before);
+    assert!(world.movement_order(attacker).is_none());
+    // A rejected search only spends the tick's hashed position-search budget,
+    // which the next tick refills: afterwards the world equals an unasked one.
+    world.advance();
+    control.advance();
+    assert_eq!(world.canonical_hash(), control.canonical_hash());
 }
 
 #[test]

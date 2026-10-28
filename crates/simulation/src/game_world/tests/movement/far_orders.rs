@@ -35,9 +35,12 @@ fn a_prepared_near_order_waits_for_endpoint_refinement_before_approaching() {
             break;
         }
     }
+    let tile = world.unit(unit).unwrap().position.tile_floor();
+    assert_ne!(tile, TileCoord::new(20, 20));
     assert_eq!(
-        world.unit(unit).unwrap().position.tile_floor(),
-        TileCoord::new(20, 19)
+        tile.x.abs_diff(20) + tile.y.abs_diff(20),
+        1,
+        "stop at a closest legal endpoint after the destination closes"
     );
     assert_eq!(
         world.movement_failure(unit),
@@ -347,7 +350,11 @@ fn a_unit_crosses_3900_tiles_and_takes_the_distant_river_gateway() {
         world.advance();
         if tick >= 1_000 && !blocked_while_moving {
             let index = *world.lookup.get(&unit).unwrap();
-            if let Some(tile) = world.units[index].route.front().copied()
+            if let Some(tile) = world.units[index]
+                .route
+                .front()
+                .copied()
+                .map(WorldPosition::tile_floor)
                 && tile != world.unit(unit).unwrap().position.tile_floor()
             {
                 let footprint = TileRect::from_xywh(tile.x, tile.y, 1, 1);

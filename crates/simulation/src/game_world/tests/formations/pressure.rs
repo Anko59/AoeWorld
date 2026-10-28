@@ -7,9 +7,18 @@ fn formations_wide_staggered_wings_can_start_assembling_with_bounded_rays() {
     w.set_fog_disabled(true);
     let origin = center(200, 200);
     let ids = (0..4096)
-        .map(|_| {
-            w.spawn_kind(PlayerId(0), UnitKind::Militia, origin)
-                .unwrap()
+        .map(|n| {
+            // A valid radius-separated army; a 4,096-body perfect overlap has
+            // no physical packing and does not isolate the ray-work limit.
+            w.spawn_kind(
+                PlayerId(0),
+                UnitKind::Militia,
+                WorldPosition::new(
+                    origin.x + (n % 64 - 32) * 512,
+                    origin.y + (n / 64 - 32) * 512,
+                ),
+            )
+            .unwrap()
         })
         .collect::<Vec<_>>();
     w.issue_formation_move(
@@ -21,14 +30,21 @@ fn formations_wide_staggered_wings_can_start_assembling_with_bounded_rays() {
         false,
     )
     .unwrap();
-    assert!(w.formation_slot(ids[0]).unwrap().y < origin.y - 90 * 1024);
+    let wing = *ids
+        .iter()
+        .min_by_key(|&&id| w.formation_slot(id).unwrap().y)
+        .unwrap();
+    assert!(w.formation_slot(wing).unwrap().y < origin.y - 90 * 1024);
+    let from = w.unit(wing).unwrap().position;
     for _ in 0..200 {
         w.advance();
     }
     assert!(
-        w.unit(ids[0]).unwrap().position.y < origin.y - 1024,
-        "an open slot beyond the ray allowance must still make local progress"
+        w.unit(wing).unwrap().position.y < from.y - 1024,
+        "an open slot beyond the ray allowance must still make local progress: {:?}",
+        w.unit(wing)
     );
+    assert!(w.route_scheduler_stats().metrics.formation_steering_work <= 200 * 16_384);
 }
 
 #[test]
@@ -323,14 +339,18 @@ fn formations_queued_attack_move_starts_combat_on_its_own_leg() {
     let mut started_queued_leg = false;
     for _ in 0..150 {
         w.advance();
-        if w.route_scheduler_stats().metrics.orders == 2 {
+        // The queued leg may acquire contact and issue its attack orders in
+        // this same tick, so the observable counter can jump past two.
+        if w.route_scheduler_stats().metrics.orders >= 2 {
             started_queued_leg = true;
             break;
         }
         assert_eq!(
             w.formation(ids[0]),
             Some(Formation::Line),
-            "the first leg is an ordinary move"
+            "the first leg is an ordinary move: orders={} units={:?}",
+            w.route_scheduler_stats().metrics.orders,
+            ids.iter().map(|&id| w.unit(id)).collect::<Vec<_>>()
         );
         let unit = w.unit(enemy).unwrap();
         assert_eq!(unit.hp, unit.max_hp, "no combat before the queued leg");

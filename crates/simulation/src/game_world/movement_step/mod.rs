@@ -18,9 +18,13 @@ use crate::{GameUnit, GameWorld, MovementOrder, UnitTask};
 use aoe_core::{ChunkCoord, EntityId, PlayerId, WorldPosition};
 
 mod avoidance;
+mod collision;
+mod static_collision;
+pub(crate) use collision::CollisionIndex;
 mod lookahead;
 mod refinement;
-mod settling;
+pub(crate) mod settling;
+pub(crate) mod slots;
 pub(crate) use settling::Obstruction;
 
 /// A proposed tick of one mover.
@@ -270,7 +274,7 @@ impl GameWorld {
                 .route
                 .front()
                 .inspect(|_| pops = 1)
-                .and_then(|tile| WorldPosition::from_tile_center(*tile).ok())
+                .copied()
                 .or_else(|| {
                     (order.waypoint != order.destination
                         && order.waypoint.tile_floor() == order.destination.tile_floor())

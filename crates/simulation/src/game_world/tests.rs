@@ -458,3 +458,6 @@ mod starting_kit;
 
 #[path = "tests/navy/mod.rs"]
 mod navy;
+
+#[path = "tests/movement/aoe2_model.rs"]
+mod aoe2_model;

@@ -146,7 +146,11 @@ impl GameWorld {
                     }
                     self.update_unit_vision(member.id);
                 }
+                self.observe_unit_progress(index);
                 let at_goal = next == target;
+                if at_goal && matches!(goal, Goal::Slot | Goal::Squeeze) {
+                    self.units[index].obstruction = None;
+                }
                 if at_goal && matches!(goal, Goal::Trail(_) | Goal::Hold) {
                     member.cache = None;
                 }
@@ -189,7 +193,7 @@ impl GameWorld {
     }
 
     fn formation_local_step(
-        &self,
+        &mut self,
         index: usize,
         to: WorldPosition,
         budget: i32,
@@ -201,7 +205,11 @@ impl GameWorld {
         }
         let target = detour.front().copied().unwrap_or(to);
         let proposed = local_step(from, target, budget);
-        if !self.local_unit_step_clear(index, from, proposed)
+        let blocked = !self.local_unit_step_clear(index, from, proposed);
+        if blocked {
+            self.record_obstruction_towards(index, to);
+        }
+        if blocked
             && self.local_retry(self.units[index].state.id)
             && let Some(path) = self.local_unit_route(index, to)
             && !path.is_empty()

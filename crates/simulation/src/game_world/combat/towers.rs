@@ -95,7 +95,7 @@ impl GameWorld {
             source: if tower.kind == BuildingKind::Castle {
                 Goal::Building(footprint)
             } else {
-                Goal::Unit(at)
+                Goal::Unit(at, 0)
             },
             min: i64::from(arrow.min_range) * i64::from(FIXED_SUBUNITS_PER_TILE),
             max: i64::from(arrow.range) * i64::from(FIXED_SUBUNITS_PER_TILE),

@@ -83,7 +83,13 @@ impl GameWorld {
             };
             let unit = &self.units[index];
             tiles.push(unit.state.position.tile_floor());
-            tiles.extend(unit.route.iter().take(2).copied());
+            tiles.extend(
+                unit.route
+                    .iter()
+                    .take(2)
+                    .copied()
+                    .map(aoe_core::WorldPosition::tile_floor),
+            );
             if let Some(planner) = &unit.planner {
                 tiles.extend(planner.preparation_tiles());
             }

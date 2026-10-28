@@ -176,8 +176,8 @@ fn a_far_firing_tile_is_found_once_and_reused_while_the_target_stays_put() {
     for _ in 0..40 {
         world.advance();
         assert_eq!(
-            world.combat.far_searches,
-            crate::game_world::combat::MAX_FAR_SEARCHES_PER_TICK,
+            world.combat.position_searches,
+            crate::game_world::combat::MAX_POSITION_SEARCHES_PER_TICK,
             "a reused firing tile costs no search budget"
         );
     }
@@ -201,6 +201,8 @@ fn repeated_far_searches_are_capped_per_tick_and_deferred_ones_retry_next_tick()
         });
         entry.repath_tick = 0;
     }
+    // Initial command admission shares the budget; measure a fresh tick.
+    world.refill_route_budgets();
     world.advance();
     let now = world.tick.0;
     let deferred = |world: &GameWorld| {
@@ -240,6 +242,8 @@ fn first_far_searches_count_against_the_per_tick_budget() {
         entry.far = None;
         entry.repath_tick = 0;
     }
+    // Initial command admission shares the budget; measure a fresh tick.
+    world.refill_route_budgets();
     world.advance();
     let searched = ids
         .iter()

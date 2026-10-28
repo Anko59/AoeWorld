@@ -28,8 +28,8 @@ const NEIGHBOURS: [(i32, i32); 8] = [
     (-1, 1),
     (1, 1),
 ];
-/// Full searches for a unit that already needed the far fallback, per tick.
-pub(crate) const MAX_FAR_SEARCHES_PER_TICK: u32 = 4;
+/// Expensive position searches, shared by new orders and combat retries.
+pub(crate) const MAX_POSITION_SEARCHES_PER_TICK: u32 = 4;
 /// A far firing tile is reused while the target keeps its tile and the
 /// attacker is farther than this: the local search could not meet it anyway.
 pub(crate) const FAR_REUSE_TILES: i64 = 64;
@@ -41,10 +41,18 @@ pub(crate) struct FarAttack {
     pub(crate) destination: WorldPosition,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SearchWait {
+    Budget,
+    Crowded,
+}
+
 pub(crate) struct AttackSearch {
     pub(crate) destination: Option<WorldPosition>,
     /// The local search hit its cap and the far fallback decided.
     pub(crate) far: bool,
+    /// Unit congestion or the shared budget deferred this search.
+    pub(crate) wait: Option<SearchWait>,
 }
 
 impl GameWorld {
@@ -70,19 +78,12 @@ impl GameWorld {
         self.combat.stats.attack_searches += 1;
         true
     }
+
     /// Search outward from the attacker, prioritizing travel distance plus a
     /// lower bound on distance still needed to reach attack range. Reaching a
     /// tile proves connectivity; merely being passable near the target does not.
-    pub(crate) fn attack_destination(
-        &self,
-        id: EntityId,
-        goal: &Goal,
-    ) -> Result<Option<WorldPosition>, GameWorldError> {
-        Ok(self.attack_search(id, goal)?.destination)
-    }
-
     pub(crate) fn attack_search(
-        &self,
+        &mut self,
         id: EntityId,
         goal: &Goal,
     ) -> Result<AttackSearch, GameWorldError> {
@@ -91,6 +92,46 @@ impl GameWorld {
         let range = super::super::navy::attack_range(&stats);
         let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
         let origin = unit.position.tile_floor();
+        let mut melee =
+            Self::uses_melee_position(unit.kind).then(|| self.melee_positions(id, goal));
+        if let Some(points) = &mut melee {
+            if points.is_empty() {
+                return Ok(AttackSearch {
+                    destination: None,
+                    far: false,
+                    wait: None,
+                });
+            }
+            points.retain(|&at| self.interaction_point_free(id, at));
+            if points.is_empty() {
+                return Ok(AttackSearch {
+                    destination: None,
+                    far: false,
+                    wait: Some(SearchWait::Crowded),
+                });
+            }
+            for &at in points.iter().take(4) {
+                if self.attack_line_clear(unit.kind, unit.position, at) {
+                    return Ok(AttackSearch {
+                        destination: Some(at),
+                        far: false,
+                        wait: None,
+                    });
+                }
+            }
+        }
+        if self.combat.position_searches == 0 {
+            return Ok(AttackSearch {
+                destination: None,
+                far: false,
+                wait: Some(SearchWait::Budget),
+            });
+        }
+        self.combat.position_searches -= 1;
+        let _span = self
+            .planning_probe
+            .as_ref()
+            .and_then(|p| p.movement_span("attack_position_search"));
         let estimate = |at: WorldPosition| {
             // Diagonal steps cost 1448 rather than sqrt(2)*1024. This small
             // discount keeps the Euclidean lower bound below that grid cost.
@@ -118,10 +159,20 @@ impl GameWorld {
                 .map_err(|_| GameWorldError::InvalidPosition)?;
             let distance = goal.distance_squared(at);
             if distance <= range * range && distance >= min * min {
-                return Ok(AttackSearch {
-                    destination: Some(at),
-                    far: false,
-                });
+                let destination = if let Some(points) = &melee {
+                    points.iter().copied().find(|p| p.tile_floor() == tile)
+                } else if self.interaction_point_free(id, at) {
+                    Some(at)
+                } else {
+                    None
+                };
+                if let Some(destination) = destination {
+                    return Ok(AttackSearch {
+                        destination: Some(destination),
+                        far: false,
+                        wait: None,
+                    });
+                }
             }
             expanded += 1;
             if expanded >= MAX_ATTACK_SEARCH_TILES {
@@ -178,11 +229,13 @@ impl GameWorld {
             return Ok(AttackSearch {
                 destination: self.far_attack_destination(unit.kind, origin, goal, range, min)?,
                 far: true,
+                wait: None,
             });
         }
         Ok(AttackSearch {
             destination: None,
             far: false,
+            wait: None,
         })
     }
 
@@ -204,7 +257,7 @@ impl GameWorld {
         let centre = goal.centre().tile_floor();
         let reach = i32::try_from(range / MELEE_RANGE_SUBUNITS).unwrap_or(0) + 2;
         let span = match goal {
-            Goal::Unit(_) => 0,
+            Goal::Unit(_, _) => 0,
             Goal::Building(rect) => rect.width().max(rect.height()),
         };
         let radius = reach + span;

@@ -257,7 +257,7 @@ fn destroying_a_house_uses_its_armour_and_removes_only_its_housing() {
     );
     assert!(!world.tile_passable(TileCoord::new(100, 100)));
     world.economy.buildings.get_mut(&house).unwrap().hp = 4;
-    let enemy = world.spawn_militia(PlayerId(0), at(99, 100)).unwrap();
+    let enemy = world.spawn_militia(PlayerId(0), at(99, 101)).unwrap();
     world.issue_attack(PlayerId(0), enemy, house).unwrap();
     world.advance();
     assert!(world.building(house).is_none());

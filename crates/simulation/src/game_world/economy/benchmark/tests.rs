@@ -1,3 +1,8 @@
+// Radius geometry, exact static sweeps and local rejoining intentionally
+// change these current pins. Preserve workloads, floors and replay comparisons.
+// Radius collision and persistent work reservations, bounded position searches
+// and continuous yielding intentionally change this current replay checkpoint.
+// Keep the same workload, activity floors and independent replay comparisons.
 use super::*;
 use crate::UnitTask;
 
@@ -74,23 +79,19 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
             world.canonical_hash()
         })
     }
-    // Check the complete new economy across worker counts at the exact
-    // profiling checkpoint. Existing movement/replay regression pins stay intact.
+    // Radius collision, persistent work reservations and bounded position
+    // searches deliberately change this current checkpoint. Friendly
+    // squeeze-through, worksite-only gather redirects and the bounded obstruction
+    // give-up change it again. Preserve the
+    // exact workload, activity floors and complete 1/4-worker comparison.
     let single = run(1);
     assert_eq!(single, run(4));
-    // The combined bundle adds reservation-aware mixed resource jobs and
-    // reachable mature deposits to the same actor/queue workload, plus current
-    // Vassal/water state hashing. Regenerated from the focused checkpoint run;
-    // preserve every activity floor and complete 1/4-worker replay comparison.
-    // Swept avoidance, contact drop-off and reservation-aware local refinement
-    // extend the combined current checkpoint without changing this workload.
-    // Regenerate with `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation
-    // AOE_NATIVE_TEST_FILTER='test(late_game_full_population_replays_at_the_profile_checkpoint)'`.
+    // Regenerate with the focused late_game_full_population_replays test.
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
         // Current combat stance and targeting state; 1/4-worker comparison above stays.
-        "aac7700521f7c864c96df7b5ee84c8d43b0c2a2b1fd855d60032ca54a20f9b42"
+        "c6b6c243bd7920954327fcca42ffc110b6acdb7637f8b10bbdbf2e937fe4112f"
     );
 }
 

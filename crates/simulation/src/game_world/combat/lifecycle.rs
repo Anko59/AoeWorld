@@ -158,6 +158,7 @@ impl GameWorld {
         self.units.swap_remove(index);
         if let Some(moved) = self.units.get(index) {
             self.lookup.insert(moved.state.id, index);
+            self.collisions.reindex(moved.state.id, index);
         }
     }
 

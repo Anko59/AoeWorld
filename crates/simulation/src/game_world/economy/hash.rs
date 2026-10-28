@@ -170,6 +170,16 @@ impl Economy {
                     hash.update(&[0]);
                 }
             }
+            match task.work_position {
+                Some(at) => {
+                    hash.update(&[1]);
+                    hash.update(&at.x.to_le_bytes());
+                    hash.update(&at.y.to_le_bytes());
+                }
+                None => {
+                    hash.update(&[0]);
+                }
+            }
             match task.work_tile {
                 Some(tile) => {
                     hash.update(&[1]);

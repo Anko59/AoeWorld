@@ -60,7 +60,7 @@ fn formations_measure_warm_army_movement_and_route_searches() {
             let to = w.formation_anchor(ids[0]).unwrap();
             assert!(
                 to.x > from.x + 1024,
-                "the measurement must include actual centroid travel"
+                "the measurement must include actual centroid travel: from={from:?} to={to:?}"
             );
         }
     }

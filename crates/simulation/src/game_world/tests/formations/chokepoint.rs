@@ -64,7 +64,7 @@ fn twenty_unit_formation_crosses_a_two_tile_forest_pass_without_stacking() {
                 let dx = i64::from(position.x) - i64::from(other.x);
                 let dy = i64::from(position.y) - i64::from(other.y);
                 assert!(
-                    dx * dx + dy * dy >= 640 * 640,
+                    dx * dx + dy * dy >= 410 * 410,
                     "stack at tick {tick}: {id:?}"
                 );
             }
@@ -198,4 +198,57 @@ fn final_destination_inside_forest_pass_settles_in_column() {
     );
     assert_eq!(w.route_scheduler_stats().metrics.orders, 1);
     assert_eq!(w.route_accounting_error(), None);
+}
+
+#[test]
+fn every_member_makes_progress_through_the_two_tile_gap() {
+    let (mut w, ids) = forest_pass_army();
+    w.issue_formation_move(
+        PlayerId(0),
+        &ids,
+        Formation::Line,
+        center(95, 50),
+        false,
+        false,
+    )
+    .unwrap();
+    let mut previous = ids
+        .iter()
+        .map(|&id| (w.unit(id).unwrap().position, 0))
+        .collect::<Vec<_>>();
+    for tick in 0..3500 {
+        w.advance();
+        for (n, &id) in ids.iter().enumerate() {
+            let u = w.unit(id).unwrap();
+            if u.position != previous[n].0 || (!u.moving && u.position.tile_floor().x > 85) {
+                previous[n].1 = 0;
+            } else {
+                previous[n].1 += 1;
+            }
+            assert!(
+                previous[n].1 <= 240,
+                "member {id:?} stalled at tick {tick}: {u:?}, slot={:?}, formations={:?}, units={:?}",
+                w.formation_slot(id),
+                w.formations,
+                ids.iter().map(|id| w.unit(*id)).collect::<Vec<_>>()
+            );
+            for &other in &ids[n + 1..] {
+                let p = w.unit(other).unwrap().position;
+                let dx = i64::from(u.position.x) - i64::from(p.x);
+                let dy = i64::from(u.position.y) - i64::from(p.y);
+                assert!(
+                    dx * dx + dy * dy >= 410 * 410,
+                    "radius collision at {tick}: {id:?}/{other:?}"
+                );
+            }
+            previous[n].0 = u.position;
+        }
+    }
+    for id in ids {
+        assert_eq!(
+            w.unit(id).unwrap().position,
+            w.formation_slot(id).unwrap(),
+            "{id:?}"
+        );
+    }
 }

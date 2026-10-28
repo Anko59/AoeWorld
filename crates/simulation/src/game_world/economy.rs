@@ -353,6 +353,7 @@ pub(crate) struct GatherTask {
     tile: TileCoord,
     /// Last reached work spot: certifies the local area after a long return.
     work_tile: Option<TileCoord>,
+    pub(crate) work_position: Option<aoe_core::WorldPosition>,
     kind: ResourceKind,
     phase: GatherPhase,
     approach_failures: u8,

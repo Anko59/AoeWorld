@@ -103,8 +103,8 @@ impl GameWorld {
         let dx = i64::from(group.travel_heading.x);
         let dy = i64::from(group.travel_heading.y);
         let length = (dx * dx + dy * dy).isqrt().max(1);
-        let gap_x = (dx * 1024 / length) as i32;
-        let gap_y = (dy * 1024 / length) as i32;
+        let gap_x = (dx * 1040 / length) as i32;
+        let gap_y = (dy * 1040 / length) as i32;
         let mut targets = vec![group.anchor; group.members.len()];
         for (rank, &at) in group.column_order.iter().enumerate() {
             let Some(unit) = self.unit(group.members[at].id) else {

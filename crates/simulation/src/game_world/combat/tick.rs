@@ -6,7 +6,7 @@ use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, Tick, TileRect, Worl
 /// What an attacker is walking to and hitting.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Goal {
-    Unit(WorldPosition),
+    Unit(WorldPosition, i32),
     Building(TileRect),
 }
 
@@ -14,7 +14,7 @@ impl Goal {
     pub(crate) fn distance_squared(&self, from: WorldPosition) -> i64 {
         let (x, y) = (i64::from(from.x), i64::from(from.y));
         let (cx, cy) = match *self {
-            Goal::Unit(at) => (i64::from(at.x), i64::from(at.y)),
+            Goal::Unit(at, _) => (i64::from(at.x), i64::from(at.y)),
             Goal::Building(rect) => {
                 let tile = i64::from(FIXED_SUBUNITS_PER_TILE);
                 (
@@ -27,7 +27,7 @@ impl Goal {
     }
     pub(in crate::game_world) fn centre(&self) -> WorldPosition {
         match *self {
-            Goal::Unit(at) => at,
+            Goal::Unit(at, _) => at,
             Goal::Building(rect) => WorldPosition::new(
                 (rect.min.x + rect.max.x) * FIXED_SUBUNITS_PER_TILE / 2,
                 (rect.min.y + rect.max.y) * FIXED_SUBUNITS_PER_TILE / 2,
@@ -41,10 +41,10 @@ impl GameWorld {
     pub(crate) fn attack_goal(&self, target: EntityId, attacker: PlayerId) -> Option<Goal> {
         if let Some(unit) = self.unit(target) {
             return (unit.hp > 0 && unit.player != attacker && !self.embarked(target))
-                .then_some(Goal::Unit(unit.position));
+                .then_some(Goal::Unit(unit.position, unit.kind.collision_radius()));
         }
         if let Some(animal) = self.animal(target) {
-            return (animal.hp > 0).then_some(Goal::Unit(animal.position));
+            return (animal.hp > 0).then_some(Goal::Unit(animal.position, 205));
         }
         self.economy
             .buildings
@@ -55,7 +55,6 @@ impl GameWorld {
 
     pub(crate) fn advance_combat(&mut self, changed: &mut Vec<EntityId>) {
         self.combat.stats = Default::default();
-        self.combat.far_searches = super::approach::MAX_FAR_SEARCHES_PER_TICK;
         self.advance_projectiles(changed);
         let now = self.tick.0;
         while let Some(&(due, id)) = self.combat.dying.first() {
@@ -75,7 +74,7 @@ impl GameWorld {
             self.step_attacker(id, now, changed);
         }
         if self.combat.searches_used < super::approach::MAX_ATTACK_SEARCHES_PER_TICK
-            && self.combat.far_searches > 0
+            && self.combat.position_searches > 0
         {
             self.combat.pursuit_cursor = None;
         }
@@ -111,7 +110,13 @@ impl GameWorld {
         let stats = self.unit_stats(id).unwrap_or(*unit_combat(before.kind));
         let range = super::super::navy::attack_range(&stats);
         let distance = goal.distance_squared(before.position);
-        if distance > range * range {
+        let approaching_slot = Self::uses_melee_position(before.kind)
+            && (!self.arrival_position_free(index)
+                || self.units[index].order.is_some_and(|o| {
+                    super::super::movement_step::slots::squared(before.position, o.destination)
+                        > 64 * 64
+                }));
+        if distance > range * range || approaching_slot {
             self.approach(id, index, attacker, goal, now, changed);
             return;
         }
@@ -125,7 +130,7 @@ impl GameWorld {
         }
         let state = &mut self.units[index].state;
         match goal {
-            Goal::Unit(target) => state.face_towards(target),
+            Goal::Unit(target, _) => state.face_towards(target),
             Goal::Building(footprint) => state.face_footprint(footprint),
         }
         state.task = UnitTask::Attacking;
@@ -176,42 +181,60 @@ impl GameWorld {
             let counts_as_far = attacker.far.is_some()
                 || i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
                     > super::approach::FAR_REUSE_TILES;
-            let destination =
-                if !counts_as_far && attacker.goal_tile == Some(centre) && order.is_some() {
-                    order.map(|o| o.destination)
-                } else if let Some(far) = reusable {
-                    Some(far.destination)
-                } else if (counts_as_far && self.combat.far_searches == 0)
-                    || !self.reserve_pursuit_search(id)
-                {
-                    // Over this tick's budget: keep walking and look again next tick.
-                    if let Some(entry) = self.combat.attackers.get_mut(&id) {
+            // An unchanged nearby target keeps its route, unless a melee
+            // attacker's reserved position has since been taken.
+            let retained = order.filter(|o| {
+                !counts_as_far
+                    && attacker.goal_tile == Some(centre)
+                    && (!Self::uses_melee_position(before.kind)
+                        || self.interaction_point_free(id, o.destination))
+            });
+            let destination = if let Some(order) = retained {
+                Some(order.destination)
+            } else if let Some(far) = reusable {
+                Some(far.destination)
+            } else if (counts_as_far && self.combat.position_searches == 0)
+                || !self.reserve_pursuit_search(id)
+            {
+                // Over this tick's budget: keep walking and look again next tick.
+                if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                    entry.repath_tick = now.saturating_add(1);
+                }
+                self.units[index].state.task = UnitTask::Attacking;
+                if self.units[index].state != before {
+                    changed.push(self.units[index].state.id);
+                }
+                return;
+            } else {
+                let search = self.attack_search(id, &goal).ok();
+                if let Some(wait) = search.as_ref().and_then(|s| s.wait) {
+                    if wait == super::SearchWait::Budget
+                        && let Some(entry) = self.combat.attackers.get_mut(&id)
+                    {
                         entry.repath_tick = now.saturating_add(1);
                     }
+                    // Preserve the order and job. Crowding or a spent budget
+                    // is not proof that the target is unreachable.
                     self.units[index].state.task = UnitTask::Attacking;
                     if self.units[index].state != before {
-                        changed.push(self.units[index].state.id);
+                        changed.push(id);
                     }
                     return;
-                } else {
-                    let search = self.attack_search(id, &goal).ok();
-                    if counts_as_far {
-                        self.combat.far_searches -= 1;
-                    }
-                    let far = search
-                        .as_ref()
-                        .filter(|search| search.far)
-                        .and_then(|search| search.destination)
-                        .map(|destination| super::approach::FarAttack {
-                            centre,
-                            destination,
-                        });
-                    if let Some(entry) = self.combat.attackers.get_mut(&id) {
-                        entry.far = far;
-                        entry.goal_tile = Some(centre);
-                    }
-                    search.and_then(|search| search.destination)
-                };
+                }
+                let far = search
+                    .as_ref()
+                    .filter(|search| search.far)
+                    .and_then(|search| search.destination)
+                    .map(|destination| super::approach::FarAttack {
+                        centre,
+                        destination,
+                    });
+                if let Some(entry) = self.combat.attackers.get_mut(&id) {
+                    entry.far = far;
+                    entry.goal_tile = Some(centre);
+                }
+                search.and_then(|search| search.destination)
+            };
             // A far chase follows its target loosely: it is re-planned once
             // the target has moved more than a quarter of the remaining way.
             // Re-planning every attacker each second toward a target a few
@@ -226,6 +249,9 @@ impl GameWorld {
                         .max((order.target_tile.y - to.y).abs());
                     let remaining = (here.x - to.x).abs().max((here.y - to.y).abs());
                     moved > (remaining / 4).max(0)
+                        || (remaining <= 4
+                            && super::super::movement_step::slots::squared(order.destination, at)
+                                > 128 * 128)
                 }
                 (Some(_), None) => true,
             };

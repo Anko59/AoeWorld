@@ -1,3 +1,5 @@
+// Radius geometry, exact static sweeps and local rejoining intentionally
+// change these current pins. Preserve workloads, floors and replay comparisons.
 //! Pin the current deterministic state stream delivered to every session.
 use super::scenario::{SEATS, SessionLog, run};
 use aoe_core::PlayerId;
@@ -60,10 +62,10 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// 138/421/407 messages). Regenerated with the focused command above.
 const PINNED: [(usize, u64); SEATS + 1] = [
     (407, 12752679128811070264),
-    (145, 17177950914196634250),
+    (186, 12793456404677199887),
     (60, 6795566676495521442),
-    (373, 14514470042877463862),
-    (425, 11566207422694317532),
+    (176, 14877571387585192722),
+    (420, 3705185702109814151),
     (407, 16830935279046132027),
 ];
 

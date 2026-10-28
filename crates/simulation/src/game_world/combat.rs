@@ -17,6 +17,7 @@ mod lifecycle;
 pub(crate) mod military;
 mod projectiles;
 mod retaliation;
+mod spots;
 mod table;
 mod targeting;
 mod telemetry;
@@ -25,7 +26,8 @@ pub use telemetry::CombatTelemetry;
 mod towers;
 
 #[cfg(test)]
-pub(crate) use approach::{FarAttack, MAX_FAR_SEARCHES_PER_TICK};
+pub(crate) use approach::FarAttack;
+pub(crate) use approach::{MAX_POSITION_SEARCHES_PER_TICK, SearchWait};
 pub(crate) use hash::hash_hit;
 pub use military::{apply_research_stats, researched_stats};
 pub use projectiles::{Projectile, ProjectileKind};
@@ -79,7 +81,7 @@ pub(crate) struct Attacker {
     pub(crate) origin: Option<aoe_core::WorldPosition>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Combat {
     pub(crate) seekers: BTreeSet<EntityId>,
     pub(crate) seeker_cursor: EntityId,
@@ -100,8 +102,33 @@ pub(crate) struct Combat {
     pub(crate) dying: BTreeSet<(u64, EntityId)>,
     pub(crate) stats: CombatStats,
     telemetry: telemetry::Telemetry,
-    /// Far firing-tile searches still allowed this tick.
-    pub(crate) far_searches: u32,
+    /// Expensive firing-position searches still allowed this tick.
+    pub(crate) position_searches: u32,
+}
+
+impl Default for Combat {
+    fn default() -> Self {
+        Self {
+            seekers: Default::default(),
+            seeker_cursor: Default::default(),
+            tower_cursor: Default::default(),
+            tower_targets: Default::default(),
+            target_rounds: Default::default(),
+            search_tick: 0,
+            searches_used: 0,
+            pursuit_cursor: None,
+            pursuit_floor: None,
+            healers: Default::default(),
+            projectiles: Default::default(),
+            next_projectile: 0,
+            tower_ready: Default::default(),
+            attackers: Default::default(),
+            dying: Default::default(),
+            stats: Default::default(),
+            telemetry: Default::default(),
+            position_searches: MAX_POSITION_SEARCHES_PER_TICK,
+        }
+    }
 }
 
 impl Combat {
@@ -173,7 +200,11 @@ impl GameWorld {
             self.combat.searches_used,
             self.combat.stats.attack_searches,
         );
-        if goal.distance_squared(unit.position) <= range * range {
+        let mut initial_far = None;
+        let mut retry_next_tick = false;
+        if goal.distance_squared(unit.position) <= range * range
+            && (!Self::uses_melee_position(unit.kind) || self.arrival_position_free(index))
+        {
             self.stop_movement(index);
         } else if !self.reserve_attack_search() {
             self.stop_unit_orders(index);
@@ -183,14 +214,27 @@ impl GameWorld {
             }
             return Ok(());
         } else {
-            let destination = self.attack_destination(id, &goal);
-            match destination {
-                Ok(Some(destination)) => {
-                    self.issue_task_move(id, destination)?;
+            match self.attack_search(id, &goal) {
+                Ok(search) if search.destination.is_some() || search.wait.is_some() => {
+                    if let Some(destination) = search.destination {
+                        self.issue_task_move(id, destination)?;
+                        if search.far {
+                            initial_far = Some(approach::FarAttack {
+                                centre: goal.centre().tile_floor(),
+                                destination,
+                            });
+                        }
+                    } else {
+                        // Crowding or a spent position budget defers the
+                        // approach; it is not proof that the target is unreachable.
+                        self.stop_movement(index);
+                        retry_next_tick = search.wait == Some(SearchWait::Budget);
+                    }
                 }
                 result => {
-                    // Rejected validation is atomic. Failed local searches are
-                    // still bounded per order; server admission caps the burst.
+                    // Rejected validation leaves the pursuit admission intact.
+                    // The expensive position search it ran still spends the
+                    // shared per-tick budget, so rejected orders stay bounded.
                     (
                         self.combat.search_tick,
                         self.combat.searches_used,
@@ -207,6 +251,12 @@ impl GameWorld {
         self.economy.builders.remove(&id);
         self.cancel_transport_journey(id);
         self.begin_attack(id, target);
+        if let Some(entry) = self.combat.attackers.get_mut(&id) {
+            entry.far = initial_far;
+            if retry_next_tick {
+                entry.repath_tick = self.tick.0.saturating_add(1);
+            }
+        }
         Ok(())
     }
 

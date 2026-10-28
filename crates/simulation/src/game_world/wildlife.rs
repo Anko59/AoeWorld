@@ -225,6 +225,12 @@ impl GameWorld {
     }
 
     pub(crate) fn track_unit_cell(&mut self, unit: &GameUnit) {
+        self.collisions.insert(
+            unit.id,
+            unit.position.tile_floor(),
+            unit.kind.is_naval(),
+            self.lookup[&unit.id],
+        );
         let units = self
             .wildlife
             .unit_cells
@@ -248,6 +254,12 @@ impl GameWorld {
         previous_tile: TileCoord,
         unit: &GameUnit,
     ) {
+        self.collisions.relocate(
+            id,
+            previous_tile,
+            unit.position.tile_floor(),
+            unit.kind.is_naval(),
+        );
         if self.followers.contains(id) {
             self.followers
                 .relocate(id, previous_tile, unit.position.tile_floor());
@@ -292,12 +304,22 @@ impl GameWorld {
     }
 
     pub(crate) fn untrack_unit_at(&mut self, id: EntityId, at: WorldPosition) {
+        self.collisions.remove(
+            id,
+            at.tile_floor(),
+            self.units[self.lookup[&id]].state.kind.is_naval(),
+        );
         self.idle_spacing.remove(id, at.tile_floor());
         self.followers.remove(id, at.tile_floor());
         self.untrack_unit_cell(id, cell(at));
     }
 
     pub(crate) fn track_unit_death(&mut self, id: EntityId, at: WorldPosition) {
+        self.collisions.remove(
+            id,
+            at.tile_floor(),
+            self.units[self.lookup[&id]].state.kind.is_naval(),
+        );
         self.idle_spacing.remove(id, at.tile_floor());
         self.followers.remove(id, at.tile_floor());
         let slot = self.units[self.lookup[&id]].wildlife_slot;

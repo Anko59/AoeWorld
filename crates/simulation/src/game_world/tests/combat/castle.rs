@@ -154,6 +154,8 @@ fn monks_choose_nearest_then_id_across_buckets_and_recheck_full_health() {
         w.units.swap(a, b);
         w.lookup.insert(first, b);
         w.lookup.insert(second, a);
+        w.collisions.reindex(first, b);
+        w.collisions.reindex(second, a);
         w.tick = aoe_core::Tick(8);
         let mut changed = Vec::new();
         w.advance_combat(&mut changed);

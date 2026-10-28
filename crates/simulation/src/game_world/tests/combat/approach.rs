@@ -149,12 +149,10 @@ fn an_unchanged_firing_destination_keeps_the_one_second_repath_cadence() {
     let attacker = w.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
     let target = w.spawn_villager(PlayerId(1), at(110, 100)).unwrap();
     w.issue_attack(PlayerId(0), attacker, target).unwrap();
+    let destination = w.movement_order(attacker).unwrap().destination;
     let first_due = w.combat.attackers[&attacker].repath_tick;
     advance(&mut w, 20);
-    assert_eq!(
-        w.movement_order(attacker).unwrap().destination,
-        at(109, 100)
-    );
+    assert_eq!(w.movement_order(attacker).unwrap().destination, destination);
     assert_eq!(w.combat.attackers[&attacker].repath_tick, first_due + 20);
 }
 
@@ -173,11 +171,19 @@ fn a_trapped_archer_rejects_an_attack_outside_its_range() {
         }
     }
     let before = w.canonical_hash();
+    let budget = w.combat.position_searches;
     let error = w.issue_attack(PlayerId(0), archer, target).unwrap_err();
     assert!(
         error.to_string().contains("reachable attack position"),
         "{error}"
     );
+    assert_eq!(
+        w.combat.position_searches,
+        budget - 1,
+        "failed search consumes its work allowance"
+    );
+    // The allowance is the only hashed state a rejection may spend.
+    w.combat.position_searches = budget;
     assert_eq!(
         w.canonical_hash(),
         before,

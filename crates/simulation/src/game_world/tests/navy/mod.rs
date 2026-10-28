@@ -109,3 +109,5 @@ fn land_formations_reject_ships_atomically() {
     );
     assert_eq!(before, world.canonical_hash());
 }
+
+mod traffic;

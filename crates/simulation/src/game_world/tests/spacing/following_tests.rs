@@ -168,7 +168,7 @@ fn distant_idle_crowds_do_not_hide_a_close_moving_leader() {
     let leader = w
         .spawn_villager(
             PlayerId(0),
-            WorldPosition::new(position.x + 700, position.y),
+            WorldPosition::new(position.x + 400, position.y),
         )
         .unwrap();
     for id in [follower, leader] {

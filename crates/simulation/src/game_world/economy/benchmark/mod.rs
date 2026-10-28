@@ -202,7 +202,7 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
             if !assigned {
                 let free_slots = nodes
                     .iter()
-                    .filter(|n| world.node_has_work_slot(n.id, n.kind, id))
+                    .filter(|n| world.node_has_work_slot(n.id, id))
                     .count();
                 let free_spots = nodes
                     .iter()

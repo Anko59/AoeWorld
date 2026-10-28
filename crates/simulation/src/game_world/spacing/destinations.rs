@@ -1,56 +1,100 @@
-//! Derived destination occupancy, updated by order issuance and changed movers.
-//! It carries no gameplay state: every lookup validates against the live order.
+//! Radius reservations for move endpoints and persistent work positions.
 use super::*;
-use std::cmp::Reverse;
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Default)]
 pub(crate) struct Destinations {
     by_tile: BTreeMap<TileCoord, BTreeSet<EntityId>>,
-    by_unit: BTreeMap<EntityId, TileCoord>,
+    by_unit: BTreeMap<EntityId, [Option<TileCoord>; 2]>,
 }
 impl Destinations {
     pub(crate) fn remove(&mut self, id: EntityId) {
-        if let Some(tile) = self.by_unit.remove(&id)
-            && let Some(ids) = self.by_tile.get_mut(&tile)
-        {
-            ids.remove(&id);
-            if ids.is_empty() {
-                self.by_tile.remove(&tile);
+        if let Some(tiles) = self.by_unit.remove(&id) {
+            for tile in tiles.into_iter().flatten() {
+                if let Some(ids) = self.by_tile.get_mut(&tile) {
+                    ids.remove(&id);
+                    if ids.is_empty() {
+                        self.by_tile.remove(&tile);
+                    }
+                }
             }
         }
     }
-    fn insert(&mut self, id: EntityId, tile: TileCoord) {
+    fn insert(&mut self, id: EntityId, tiles: [Option<TileCoord>; 2]) {
+        if self.by_unit.get(&id) == Some(&tiles) {
+            return;
+        }
         self.remove(id);
-        self.by_unit.insert(id, tile);
-        self.by_tile.entry(tile).or_default().insert(id);
+        if tiles == [None, None] {
+            return;
+        }
+        self.by_unit.insert(id, tiles);
+        for tile in tiles.into_iter().flatten() {
+            self.by_tile.entry(tile).or_default().insert(id);
+        }
     }
 }
 
 impl GameWorld {
+    fn reserved_positions(&self, id: EntityId) -> [Option<WorldPosition>; 2] {
+        [
+            self.movement_order(id).map(|o| o.destination),
+            self.economy
+                .gatherers
+                .get(&id)
+                .and_then(|t| t.work_position),
+        ]
+    }
+
     pub(crate) fn index_destination(&mut self, id: EntityId) {
-        self.destinations.remove(id);
-        let order = self.movement_order(id);
+        let tiles = self
+            .reserved_positions(id)
+            .map(|p| p.map(WorldPosition::tile_floor));
+        self.destinations.insert(id, tiles);
         self.refresh_spacing_order(id);
-        if let Some(order) = order {
-            self.destinations.insert(id, order.target_tile);
+    }
+
+    pub(crate) fn destination_point_reserved(&self, at: WorldPosition, except: EntityId) -> bool {
+        let Some(unit) = self.unit(except) else {
+            return true;
+        };
+        let reach = unit.kind.collision_radius() + 512;
+        let min = WorldPosition::new(at.x - reach, at.y - reach).tile_floor();
+        let max = WorldPosition::new(at.x + reach, at.y + reach).tile_floor();
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
+                let Some(ids) = self.destinations.by_tile.get(&TileCoord::new(x, y)) else {
+                    continue;
+                };
+                // An overfull arrival cell is unavailable, never sampled clear.
+                if ids.len() > 32 {
+                    return true;
+                }
+                for &id in ids {
+                    if id == except {
+                        continue;
+                    }
+                    let Some(other) = self.unit(id) else {
+                        continue;
+                    };
+                    if unit.kind.is_naval() != other.kind.is_naval() {
+                        continue;
+                    }
+                    let r = i64::from(unit.kind.collision_radius() + other.kind.collision_radius());
+                    if self
+                        .reserved_positions(id)
+                        .into_iter()
+                        .flatten()
+                        .any(|p| super::super::movement_step::slots::squared(at, p) < r * r)
+                    {
+                        return true;
+                    }
+                }
+            }
         }
+        false
     }
 
-    fn destination_reserved(&self, tile: TileCoord, except: EntityId) -> bool {
-        self.destinations.by_tile.get(&tile).is_some_and(|ids| {
-            ids.iter().any(|&id| {
-                id != except
-                    && self
-                        .movement_order(id)
-                        .is_some_and(|o| o.target_tile == tile)
-            })
-        })
-    }
-
-    /// All normal move commands use the same compact, deterministic ring scan.
-    /// Reservations survive tick boundaries, including commands split by transport.
-    /// At most 289 slots are visited; congestion never rejects a legal click.
     pub(crate) fn spread_destination(
         &self,
         id: EntityId,
@@ -67,6 +111,8 @@ impl GameWorld {
         self.destination_slot(id, click, true)
     }
 
+    /// Half-tile slots allow several infantry to share a tile. A bounded flood
+    /// certifies connectivity to the click, so slots cannot jump across a wall.
     fn destination_slot(
         &self,
         id: EntityId,
@@ -81,95 +127,86 @@ impl GameWorld {
         {
             return Err(GameWorldError::InvalidPosition);
         }
-        let busy = |tile| {
-            if occupants {
-                // Replacing an occupied short order with its own tile cancels
-                // it before the mover takes a step. Seek another arrival;
-                // bounded obstruction settling handles a truly boxed-in unit.
-                tile == unit.position.tile_floor() || self.work_spot_busy(tile, id)
-            } else {
-                self.destination_reserved(tile, id)
-            }
+        let busy = |at| {
+            self.destination_point_reserved(at, id)
+                || (occupants
+                    && (!self.arrival_point_free(self.lookup[&id], at) || at == unit.position))
         };
-        if !busy(target) {
+        if !busy(click) {
             return Ok(click);
         }
-        // Walk outward from the click, rather than jumping over walls to a
-        // geometrically near but disconnected tile. Both the frontier and the
-        // visited set are bounded by the 17x17 local square.
-        let mut frontier = BinaryHeap::from([Reverse((0, target))]);
-        let mut visited = BTreeSet::from([target]);
-        while let Some(Reverse((_, tile))) = frontier.pop() {
-            if !busy(tile) {
-                return WorldPosition::from_tile_center(tile).map_err(Into::into);
+        let mut seen = BTreeSet::from([target]);
+        let mut queue = std::collections::VecDeque::from([target]);
+        let mut best = None;
+        while let Some(tile) = queue.pop_front() {
+            let center = WorldPosition::from_tile_center(tile)?;
+            for (dx, dy) in [(0, 0), (-256, -256), (256, -256), (-256, 256), (256, 256)] {
+                let at = WorldPosition::new(center.x + dx, center.y + dy);
+                if !busy(at) && self.body_position_clear(unit.kind, at) {
+                    let key = (
+                        super::super::movement_step::slots::squared(at, click),
+                        at.y,
+                        at.x,
+                    );
+                    if best.is_none_or(|(old, _)| key < old) {
+                        best = Some((key, at));
+                    }
+                }
             }
-            for (dx, dy) in [
-                (-1, 0),
-                (0, -1),
-                (1, 0),
-                (0, 1),
-                (-1, -1),
-                (1, -1),
-                (-1, 1),
-                (1, 1),
-            ] {
+            // Once a near slot is found, no farther ring can improve it.
+            if seen.len() >= 289 {
+                continue;
+            }
+            for (dx, dy) in [(-1, 0), (0, -1), (1, 0), (0, 1)] {
                 let next = TileCoord::new(tile.x + dx, tile.y + dy);
                 if next.x.abs_diff(target.x) > 8
                     || next.y.abs_diff(target.y) > 8
-                    || visited.contains(&next)
+                    || seen.contains(&next)
                 {
                     continue;
                 }
-                let Ok(position) = WorldPosition::from_tile_center(next) else {
+                let Ok(next_position) = WorldPosition::from_tile_center(next) else {
                     continue;
                 };
-                if self.config.valid_ground_position(position)
+                if best.is_some_and(|(key, _)| {
+                    super::super::movement_step::slots::squared(next_position, click)
+                        .saturating_sub(1024 * 1024)
+                        > key.0
+                }) {
+                    continue;
+                }
+                if self.config.valid_ground_position(next_position)
                     && self.building_step_clear(tile, next)
                     && self.unit_step_clear(unit.kind, tile, next)?
                 {
-                    visited.insert(next);
-                    let dx = next.x - target.x;
-                    let dy = next.y - target.y;
-                    frontier.push(Reverse((dx * dx + dy * dy, next)));
+                    seen.insert(next);
+                    queue.push_back(next);
                 }
             }
         }
-        Ok(click)
+        Ok(best.map_or(click, |(_, at)| at))
     }
 
-    /// Work spots prefer unreserved adjacent tiles, then distance and tile order.
-    /// Exact idle-tile membership includes workers whose approach just ended.
-    /// Crowded cells cannot hide a worker behind a sampled neighbour window.
+    /// Older tile callers (construction/drop-off) ask about the centre only;
+    /// movement and resource work always reserve the actual sub-tile point.
     pub(crate) fn work_spot_busy(&self, tile: TileCoord, except: EntityId) -> bool {
-        self.destination_reserved(tile, except) || self.idle_spacing.occupied(tile, except)
+        let Ok(at) = WorldPosition::from_tile_center(tile) else {
+            return true;
+        };
+        self.destination_point_reserved(at, except)
+            || self
+                .lookup
+                .get(&except)
+                .is_none_or(|&i| self.position_occupied(i, at, true))
     }
 
-    /// The actor already occupies this spot. A future arrival reservation
-    /// cannot make it keep walking; that arrival must find another free slot.
     pub(crate) fn arrival_position_free(&self, index: usize) -> bool {
         self.arrival_point_free(index, self.units[index].state.position)
     }
-
     pub(crate) fn arrival_point_free(&self, index: usize, at: WorldPosition) -> bool {
-        let unit = self.units[index].state;
         !self.local_position_occupied(index, at)
-            && !self
-                .spacing_units(at, u64::from(unit.id.0), unit.id)
-                .any(|other| {
-                    other.kind.is_naval() == unit.kind.is_naval()
-                        && other.position.tile_floor() == at.tile_floor()
-                })
     }
-
     pub(crate) fn arrival_tile_has_idle(&self, index: usize, at: WorldPosition) -> bool {
-        let unit = self.units[index].state;
-        self.spacing_units(at, u64::from(unit.id.0), unit.id)
-            .any(|other| {
-                let state = self.units[self.lookup[&other.id]].state;
-                other.kind.is_naval() == unit.kind.is_naval()
-                    && other.position.tile_floor() == at.tile_floor()
-                    && !state.moving
-                    && !state.planning
-            })
+        self.position_occupied(index, at, true)
     }
 }
