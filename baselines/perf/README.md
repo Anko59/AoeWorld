@@ -57,6 +57,7 @@ baseline); DHAT allocation baselines were removed. See
 All seven instruction baselines and references were re-taken the same day on
 `dev` 96029c0e (Rust 1.99.1, Gungraun 0.19.4): the 25% window had let
 `smoke_ticks` drift +23.4% (4,959,397 to 6,118,714) since #610; late game
-moved +1.6% (236,784,665 to 240,557,748) and advance +1.2%. The smoke drift is
-unexplained and should be investigated separately; the new references anchor
-the creep guard from here.
+moved +1.6% (236,784,665 to 240,557,748) and advance +1.2%. The smoke drift came
+from #617's free-spot check; #619 cut it to 5,275,671, the smoke baseline. Its
+reference stays at the pre-#617 4,986,840, so the remaining +5.8% counts
+against the creep guard; the other references anchor it from here.
