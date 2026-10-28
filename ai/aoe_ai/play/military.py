@@ -56,7 +56,7 @@ class MilitaryManager:
         for building in ctx.buildings:
             if building.kind not in TRAINERS or not building.complete:
                 continue
-            if building.queue_length >= 2 or building.researching is not None:
+            if building.queue_length >= 2 or building.researching is not None or building.kind in ctx.draining:
                 continue
             if ctx.free_population() <= 0:
                 return
