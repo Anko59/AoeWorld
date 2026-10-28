@@ -37,3 +37,7 @@ harness = false
 [[bench]]
 name = "late_game_instructions"
 harness = false
+
+[[bench]]
+name = "movement_instructions"
+harness = false

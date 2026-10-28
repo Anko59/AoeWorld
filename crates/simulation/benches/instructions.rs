@@ -6,7 +6,7 @@ use gungraun::{Callgrind, Dhat, EntryPoint};
 use std::hint::black_box;
 
 mod support;
-use support::setup_late_game;
+use support::{four_ticks, setup_distributed, setup_late_game, setup_smoke};
 
 fn setup() -> World {
     World::new(SMOKE)
@@ -49,9 +49,39 @@ fn late_game(mut world: GameWorld) -> GameWorld {
     black_box(world)
 }
 
+// The ticks `perf-smoke` and `perf-ci` time for their population workloads,
+// where movement, collision and reservation costs show up.
+#[library_benchmark(
+    setup = setup_smoke,
+    config = LibraryBenchmarkConfig::default().tool(
+        Callgrind::with_args(["--instr-atstart=no"])
+            .entry_point(EntryPoint::None)
+    )
+)]
+fn smoke_ticks(world: GameWorld) -> GameWorld {
+    four_ticks(world)
+}
+
+#[library_benchmark(
+    setup = setup_distributed,
+    config = LibraryBenchmarkConfig::default().tool(
+        Callgrind::with_args(["--instr-atstart=no"])
+            .entry_point(EntryPoint::None)
+    )
+)]
+fn distributed_ticks(world: GameWorld) -> GameWorld {
+    four_ticks(world)
+}
+
 library_benchmark_group!(
     name = simulation,
-    benchmarks = [advance, viewport_query, late_game]
+    benchmarks = [
+        advance,
+        viewport_query,
+        late_game,
+        smoke_ticks,
+        distributed_ticks
+    ]
 );
 
 main!(
