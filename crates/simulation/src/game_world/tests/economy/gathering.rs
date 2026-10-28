@@ -380,6 +380,7 @@ fn gatherer_at(world: &mut GameWorld, node: ResourceNode) -> EntityId {
         .expect("villager spawn")
 }
 
+mod crowd;
 mod replay;
 
 fn place_at_work(world: &mut GameWorld, id: EntityId) {

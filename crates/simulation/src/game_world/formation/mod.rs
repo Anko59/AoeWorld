@@ -68,6 +68,13 @@ impl GameWorld {
         Some(layout::oriented(group.anchor, member.offset, group.heading))
     }
 
+    /// Whether the group is marching single file; baseline scenarios read it.
+    #[cfg(test)]
+    pub(crate) fn formation_is_column(&self, id: EntityId) -> Option<bool> {
+        let leader = self.units[*self.lookup.get(&id)?].formation?;
+        Some(self.formations.get(&leader)?.column)
+    }
+
     /// A replacement/combat/stop order releases the entire formation.
     pub(crate) fn break_formation(&mut self, id: EntityId) {
         let Some(leader) = self.lookup.get(&id).and_then(|&i| self.units[i].formation) else {

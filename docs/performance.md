@@ -59,6 +59,11 @@ fail the workload.
 fan-out measurement; its numbers and hot spots are in
 [scale measurements](scale/measurements.md).
 
+`make perf-groups` places about 11,000 militia in 200 armies on open procedural
+ground, sends neighbouring armies through each other and reports the movement
+phase and the movement span split (`PERF_GROUPS_ARGS` passes flags). It is the
+baseline for the [group movement rewrite](movement/group-movement-rewrite.md).
+
 `make perf-timing` runs pinned Criterion 0.8.2 benchmarks for a synthetic
 simulation tick, viewport query, 1,000-entity snapshot encode/decode, and
 256-color palette decode. Nightly CI uploads `reports/perf/timing.json` and

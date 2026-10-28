@@ -137,6 +137,14 @@ perf-scale-smoke: tools slot-bootstrap
 perf-scale-smoke-steps:
 	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-scale --players 4 --units-per-player 500 --side-tiles 4000 --ticks 50 --fog-off-ticks 10 --server-ticks 5 --subscribers 4 --out reports/perf/perf-scale-smoke.json
 
+# About 11,000 military movers in 200 armies on open ground: the movement span split
+# (docs/movement/group-movement-rewrite.md section 5.2). PERF_GROUPS_ARGS passes harness flags.
+perf-groups: tools slot-bootstrap
+	@$(SLOT_RUN) perf-groups -- make --no-print-directory perf-groups-steps
+
+perf-groups-steps:
+	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-groups $(PERF_GROUPS_ARGS)
+
 # Per-function Binaryen metrics retain the names in wasm-bindgen's output.
 .PHONY: perf-wasm-functions perf-wasm-functions-steps
 perf-wasm-functions: build-wasm analysis-tools slot-bootstrap
@@ -408,6 +416,7 @@ perf-soak-30-steps:
   perf-timing \
   perf-scale \
   perf-scale-smoke \
+  perf-groups \
   perf-wasm-size \
   perf-baseline-propose \
   perf-comment \
