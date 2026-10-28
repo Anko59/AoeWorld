@@ -361,8 +361,8 @@ in-flight allocations. Compare process/container RSS separately. Quantiles and
 summaries run on request; the tick records only its existing phase counters
 and a timestamp.
 
-In the game, append `?perf=1` to the URL or press **F3** or **Ctrl+right-click** on the scene to toggle the overlay.
-Ctrl+right-click remains a queued movement order.
+In the game, append `?perf=1` to the URL or press **F3** to toggle the overlay;
+Ctrl+right-click is a queued movement order.
 `window.aoePerformance` exposes `enabled`, `frameMs`, `cpuMs` (`decode`, `upload`,
 `draw`, `ui`), `gpuMs`, `gpuStatus`, `frames`, `totalsMs`, and `enable(bool)`.
 Each frame publishes the preceding frame interval and CPU sections accumulated
