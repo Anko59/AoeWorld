@@ -100,7 +100,10 @@ obstruction policy is unpublished.
   four-search allowance; an escape must gain at least half a tile laterally.
   The final destination and queued orders stay intact. This permits a detour
   that initially moves away from the target rather than returning to the same
-  pocket, without displacing stationary workers.
+  pocket, without displacing stationary workers. A mover that makes no
+  progress for 240 obstructed ticks (12 s) gives up: the order ends, the unit
+  goes idle and reports the goal unreachable, so a permanently boxed-in unit
+  does not stay an active mover forever. Shorter waits keep the order.
   Steering tries four lateral directions, then two retreat directions after
   sustained obstruction. Each swept probe reads at most sixteen one-tile
   collision cells and 32 entries per cell. Normal cells are exact; an overfull

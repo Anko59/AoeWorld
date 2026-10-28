@@ -1,5 +1,5 @@
 //! Hysteresis counts obstruction until real progress, never sidestep distance.
-use crate::{GameWorld, UnitTask};
+use crate::{GameWorld, GameWorldError, UnitTask};
 use aoe_core::WorldPosition;
 
 #[derive(Clone, Copy, Debug)]
@@ -21,6 +21,11 @@ pub(crate) const PASS_AFTER_TICKS: u16 = 64;
 /// How long one squeeze lasts once granted, so the mover clears the crowd
 /// rather than colliding again after its first half tile of progress.
 const PASS_TICKS: u64 = 40;
+/// Obstructed ticks without progress after which a mover that cannot reach
+/// its goal gives up (12 s at 20 Hz), so a permanently boxed-in unit does not
+/// stay an active mover forever. Squeezing through friends, the 160-tick
+/// waits in the congestion tests and a normal queue all end well before it.
+pub(crate) const GIVE_UP_AFTER_TICKS: u16 = 240;
 
 fn distance(a: WorldPosition, b: WorldPosition) -> u32 {
     crate::game_path::segment_length(
@@ -126,16 +131,17 @@ impl GameWorld {
             && self.position_occupied(index, obstruction.goal, true)
             || self.at_gather_arrival(index))
             && self.arrival_position_free(index);
-        if !nearby {
+        if !nearby && obstruction.blocked < GIVE_UP_AFTER_TICKS {
             if self.local_retry(unit.id) && obstruction.blocked >= 16 {
                 self.redirect_gather_arrival(index);
             }
-            // A unit obstruction is temporary. Keep the order while yielding
-            // and re-pathing; only static navigation may prove unreachable.
+            // A unit obstruction is temporary: keep the order while yielding
+            // and re-pathing, until the bounded give-up below.
             return false;
         }
         self.clear_planner(index);
-        // Congestion is temporary, not a static-navigation unreachable proof.
+        // Giving up reports the goal as unreachable for now, as on dev; an
+        // arrival beside a taken goal (`nearby`) is a success and has no error.
         let stored = &mut self.units[index];
         stored.order = None;
         stored.route.clear();
@@ -143,7 +149,7 @@ impl GameWorld {
         stored.state.previous_position = unit.position;
         stored.state.moving = false;
         stored.state.planning = false;
-        stored.last_movement_error = None;
+        stored.last_movement_error = (!nearby).then_some(GameWorldError::Unreachable);
         if plain_move && stored.state.task == UnitTask::Moving {
             stored.state.task = if unit.carried.is_some() {
                 UnitTask::Carrying

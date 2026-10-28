@@ -136,6 +136,50 @@ fn a_sustained_friendly_gridlock_lets_the_mover_squeeze_through() {
 }
 
 #[test]
+fn a_permanently_boxed_in_mover_gives_up_and_goes_idle() {
+    use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
+    // A sealed ring of another player's bodies cannot be squeezed through.
+    let (mut w, mover) = boxed_mover_by(at(70, 30), PlayerId(1));
+    for _ in 0..GIVE_UP_AFTER_TICKS / 2 {
+        movement_tick(&mut w);
+    }
+    assert!(w.movement_order(mover).is_some(), "still within the wait");
+    for _ in 0..4 * u32::from(GIVE_UP_AFTER_TICKS) {
+        movement_tick(&mut w);
+    }
+    assert!(w.movement_order(mover).is_none(), "gave up");
+    assert_eq!(w.movement_failure(mover), Some(GameWorldError::Unreachable));
+    assert_eq!(w.active_mover_count(), 0);
+    assert_eq!(w.unit(mover).unwrap().task, UnitTask::Idle);
+    assert!(!w.unit(mover).unwrap().moving);
+}
+
+#[test]
+fn a_briefly_blocked_mover_arrives_when_the_crowd_clears_before_the_give_up() {
+    use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
+    let (mut w, mover) = boxed_mover_by(at(70, 30), PlayerId(1));
+    for _ in 0..GIVE_UP_AFTER_TICKS - 20 {
+        movement_tick(&mut w);
+    }
+    assert!(w.movement_order(mover).is_some());
+    assert_eq!(w.movement_failure(mover), None);
+    let others = w
+        .units()
+        .filter(|u| u.id != mover)
+        .map(|u| u.id)
+        .collect::<Vec<_>>();
+    for id in others {
+        w.remove_unit(id);
+    }
+    for _ in 0..1200 {
+        movement_tick(&mut w);
+    }
+    assert_eq!(w.unit(mover).unwrap().position, at(70, 30));
+    assert!(w.movement_order(mover).is_none());
+    assert_eq!(w.movement_failure(mover), None);
+}
+
+#[test]
 fn the_original_order_resumes_as_soon_as_temporary_traffic_clears() {
     let (mut w, mover) = boxed_mover(at(70, 30));
     for _ in 0..160 {
@@ -209,15 +253,22 @@ fn movement_probe_observes_bounded_searches_without_changing_replay() {
     let (mut plain, _) = boxed_mover(at(70, 30));
     let probe = Arc::new(Probe::default());
     measured.set_planning_probe(probe.clone());
+    let mut before = 0;
     for _ in 0..160 {
         assert_eq!(movement_tick(&mut measured), movement_tick(&mut plain));
         assert_eq!(measured.canonical_hash(), plain.canonical_hash());
+        let now = probe.1.load(Ordering::Relaxed);
+        // Measured: never more than one sidestep search on a tick.
+        assert!(now - before <= 1, "sidesteps on one tick: {}", now - before);
+        before = now;
     }
     assert!(measured.movement_order(mover).is_some());
     let searches = probe.0.load(Ordering::Relaxed);
-    assert!(searches > 0 && searches <= 20, "searches: {searches}");
+    assert!(searches > 0 && searches <= 16, "searches: {searches}");
     let sidesteps = probe.1.load(Ordering::Relaxed);
-    assert!(sidesteps <= 160, "sidesteps: {sidesteps}");
+    // Measured: 15 searches and 53 sidesteps (at most 1 per tick) in 160
+    // ticks; the bounds sit just above, so a retry storm still fails.
+    assert!(sidesteps <= 56, "sidesteps: {sidesteps}");
     // Repeated obstruction remains bounded on each tick, without cancelling
     // the command. Releasing the crowd lets the same command complete.
     for id in measured

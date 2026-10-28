@@ -23,7 +23,7 @@ mod static_collision;
 pub(crate) use collision::CollisionIndex;
 mod lookahead;
 mod refinement;
-mod settling;
+pub(crate) mod settling;
 pub(crate) mod slots;
 pub(crate) use settling::Obstruction;
 
