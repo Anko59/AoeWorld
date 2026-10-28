@@ -31,10 +31,6 @@ fetched. `make ship` names it when under 50 GiB is free.
 bootstrap still needs enough disk to build the checking binary on a cold start.
 This is an admission check; other processes can consume disk afterward.
 
-Showcase videos are required for player-visible changes. All of `browser/`
-is test/QA infrastructure (specs, fixtures, reporters and Playwright config),
-so changes there alone do not require one. Player-facing `web/` code still does.
-
 Hook builds retain two judge revisions and clean their shared Cargo target
 under `build.lock`: incremental output first, then `cargo clean` above 2 GiB.
 After a ship pushes and arms

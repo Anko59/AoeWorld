@@ -330,9 +330,8 @@ which `record.mjs` mirrors; `Origins` in `origins.rs` chooses the origins.
 Limit: a filmed app is itself reachable without restriction, so a page can
 drive any endpoint that app serves.
 
-Not being a frontend change is never a reason for no video: use before/after
-terminal scenes for the harness, timings for performance, request/response for
-protocols, a filmed agent session for developer experience.
+A change with nothing to see in the game (harness, performance, protocols, AI
+decisions) ships without a video; its description carries the numbers.
 
 ## Narration
 
