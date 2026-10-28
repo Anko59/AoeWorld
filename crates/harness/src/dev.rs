@@ -218,6 +218,19 @@ fn validate_open_map(hash: &str, directory: &Path) -> Result<()> {
     .into())
 }
 
+/// A pack converted by an older importer parses in the server but makes the
+/// browser fail while reading its building recipes, which leaves the page on
+/// "Unavailable" with no connection. Refuse it here with the regeneration step.
+fn verify_asset_pack(pack: &Path) -> Result<()> {
+    aoe_assets::pack::verify(pack).map(drop).map_err(|error| {
+        format!(
+            "AOE_ASSET_PACK {} is not valid for this build ({error}); regenerate it with `make assets-import` and use the new hash",
+            pack.display()
+        )
+        .into()
+    })
+}
+
 pub fn start() -> Result<()> {
     let root = std::env::current_dir()?.canonicalize()?;
     let scenario = std::env::var("AOE_SCENARIO").unwrap_or_else(|_| "smoke".to_owned());
@@ -225,6 +238,9 @@ pub fn start() -> Result<()> {
     let open_map =
         std::env::var_os("AOE_OPEN_MAP_PACKAGE").map(|value| value.to_string_lossy().into_owned());
     let port = dev_port(std::env::var("DEV_PORT").ok().as_deref())?;
+    if let Some(pack) = asset_pack.as_deref().filter(|pack| !pack.is_empty()) {
+        verify_asset_pack(Path::new(pack))?;
+    }
     let build = build_identity(&root)?;
     ai::install(&root)?;
     start_with(
