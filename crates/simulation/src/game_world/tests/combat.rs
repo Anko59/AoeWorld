@@ -12,6 +12,7 @@ mod military;
 mod research_tests;
 mod scale;
 mod telemetry_tests;
+mod tower_budget;
 
 pub(super) fn at(x: i32, y: i32) -> WorldPosition {
     WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap()

@@ -1,7 +1,7 @@
 //! Defensive buildings share indexed targeting and the existing arrow system.
 use super::{targeting::TargetArea, tick::Goal};
 use crate::{BuildingKind, EconomyError, GameWorld};
-use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, WorldPosition};
+use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId};
 use std::ops::Bound::{Excluded, Unbounded};
 
 impl GameWorld {
@@ -86,17 +86,10 @@ impl GameWorld {
     ) -> Option<TargetArea> {
         let tower = self.building(id)?;
         let footprint = tower.footprint;
-        let at = WorldPosition::new(
-            (footprint.min.x + footprint.max.x) * FIXED_SUBUNITS_PER_TILE / 2,
-            (footprint.min.y + footprint.max.y) * FIXED_SUBUNITS_PER_TILE / 2,
-        );
         Some(TargetArea {
             player: tower.player,
-            source: if tower.kind == BuildingKind::Castle {
-                Goal::Building(footprint)
-            } else {
-                Goal::Unit(at, 0)
-            },
+            // Ranges are measured from the building edge, as in AoE2.
+            source: Goal::Building(footprint),
             min: i64::from(arrow.min_range) * i64::from(FIXED_SUBUNITS_PER_TILE),
             max: i64::from(arrow.range) * i64::from(FIXED_SUBUNITS_PER_TILE),
             actor: id,
