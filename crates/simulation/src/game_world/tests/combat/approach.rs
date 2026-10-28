@@ -170,7 +170,7 @@ fn a_trapped_archer_rejects_an_attack_outside_its_range() {
             }
         }
     }
-    let before = w.unit(archer).unwrap();
+    let before = w.canonical_hash();
     let budget = w.combat.position_searches;
     let error = w.issue_attack(PlayerId(0), archer, target).unwrap_err();
     assert!(
@@ -178,13 +178,15 @@ fn a_trapped_archer_rejects_an_attack_outside_its_range() {
         "{error}"
     );
     assert_eq!(
-        w.unit(archer).unwrap(),
-        before,
-        "rejection leaves the actor state intact"
-    );
-    assert_eq!(
         w.combat.position_searches,
         budget - 1,
         "failed search consumes its work allowance"
+    );
+    // The allowance is the only hashed state a rejection may spend.
+    w.combat.position_searches = budget;
+    assert_eq!(
+        w.canonical_hash(),
+        before,
+        "rejection leaves the order state intact"
     );
 }

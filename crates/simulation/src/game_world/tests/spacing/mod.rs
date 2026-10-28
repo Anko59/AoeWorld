@@ -57,6 +57,8 @@ fn ten_villagers_share_a_click_but_arrive_at_distinct_radius_clear_positions() {
         })
         .collect::<BTreeSet<_>>();
     assert_eq!(points.len(), ids.len());
+    // Measured: the ten bodies settle on six tiles, 415 apart at the closest.
+    assert!(tiles.len() >= 6, "destinations: {tiles:?}");
     for (i, &a) in ids.iter().enumerate() {
         for &b in &ids[i + 1..] {
             assert!(

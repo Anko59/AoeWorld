@@ -18,8 +18,13 @@ fn a_short_move_to_an_occupied_tile_does_not_cancel_at_its_origin() {
         clearance(&w, &[scout, occupant], tick);
     }
     let arrival = w.unit(scout).unwrap().position;
-    assert_ne!(arrival, origin);
-    assert!(distance(arrival, click) <= 2 * 1024_i64.pow(2));
+    // Measured: the scout settles exactly half a tile beside the occupant,
+    // clear of the scout (256) plus villager (205) radii.
+    assert_eq!(arrival, WorldPosition::new(32_768, 31_232));
+    assert_eq!(
+        distance(arrival, w.unit(occupant).unwrap().position),
+        512_i64.pow(2)
+    );
     assert!(distance(arrival, w.unit(occupant).unwrap().position) >= 461_i64.pow(2));
     assert!(w.movement_order(scout).is_none());
     assert_eq!(w.movement_failure(scout), None);
@@ -152,7 +157,11 @@ fn local_avoidance_slots_skip_idle_occupants_in_nearest_tile_order() {
     for _ in 0..600 {
         movement_tick(&mut w);
     }
-    assert!(distance(w.unit(mover).unwrap().position, at(50, 30)) <= 1024_i64.pow(2));
+    // Measured: the free spot nearest the taken slot is half a tile west of it.
+    assert_eq!(
+        w.unit(mover).unwrap().position,
+        WorldPosition::new(51_200, 31_232)
+    );
     clearance(&w, &[mover, worker], 600);
     assert_eq!(w.unit(worker).unwrap().position, at(50, 30));
 
@@ -173,7 +182,12 @@ fn local_avoidance_slots_skip_idle_occupants_in_nearest_tile_order() {
     assert!(w.movement_order(mover).is_none());
     let all = w.units().map(|u| u.id).collect::<Vec<_>>();
     clearance(&w, &all, 800);
-    assert!(distance(w.unit(mover).unwrap().position, at(50, 30)) <= (2 * 1024_i64).pow(2));
+    // Measured: radii (205 each) let the mover settle between two block
+    // members, half a tile west of the requested centre.
+    assert_eq!(
+        w.unit(mover).unwrap().position,
+        WorldPosition::new(51_200, 31_232)
+    );
 }
 
 #[test]
