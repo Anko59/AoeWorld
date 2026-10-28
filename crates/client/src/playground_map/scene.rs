@@ -212,6 +212,35 @@ fn bounds(triangle: &ProjectedSurfaceTriangle) -> ([f64; 2], [f64; 2]) {
 #[path = "scene/tests/contacts.rs"]
 mod tests;
 
+/// Subunits from an attacker to its target's centre, or to the edge of a
+/// building's footprint; `None` while the client does not know the target.
+fn target_distance(client: &Client, unit: &aoe_protocol::GameplayUnitState) -> Option<i64> {
+    let target = unit.attack_target?;
+    let (x, y) = (i64::from(unit.position.x), i64::from(unit.position.y));
+    let (tx, ty) = if let Some(other) = client.units.get(&target) {
+        (i64::from(other.position.x), i64::from(other.position.y))
+    } else {
+        let footprint = client
+            .village
+            .buildings
+            .iter()
+            .find(|b| b.id == target)?
+            .footprint;
+        let tile = i64::from(aoe_core::FIXED_SUBUNITS_PER_TILE);
+        (
+            x.clamp(
+                i64::from(footprint.min.x) * tile,
+                i64::from(footprint.max.x) * tile,
+            ),
+            y.clamp(
+                i64::from(footprint.min.y) * tile,
+                i64::from(footprint.max.y) * tile,
+            ),
+        )
+    };
+    Some(((x - tx).pow(2) + (y - ty).pow(2)).isqrt())
+}
+
 pub(in super::super) fn units(
     client: &Client,
     scene: &PreparedScene,
@@ -249,7 +278,7 @@ pub(in super::super) fn units(
                 || unit.hunt_target.is_some()
             {
                 let pose = crate::unit_visuals::lifecycle_pose(
-                    crate::unit_visuals::unit_pose(unit, animal),
+                    crate::unit_visuals::scene_pose(unit, animal, target_distance(client, unit)),
                     unit.death_tick,
                     client.village.tick,
                     client.config.tick_hz,

@@ -69,14 +69,16 @@ fn formations_attack_move_notices_contact_at_the_outer_wing() {
     for _ in 0..120 {
         w.advance();
     }
-    // Only the members near the enemy leave the group to fight it; the head
-    // of the army, far away, keeps marching in formation.
+    // Only the members that see the enemy themselves and find a free spot
+    // around it leave the group to fight it (before #612's follow-up, 32 did:
+    // anyone within a 13x13-tile window); the head of the army, far away,
+    // keeps marching in formation.
     let fighters = ids
         .iter()
         .filter(|&&id| w.unit(id).unwrap().attack_target == Some(enemy))
         .count();
     let left = ids.iter().filter(|&&id| w.formation(id).is_none()).count();
-    assert_eq!((fighters, left), (32, 32));
+    assert_eq!((fighters, left), (9, 9));
     assert_eq!(w.formation(ids[0]), Some(Formation::Flank));
 }
 
@@ -107,14 +109,17 @@ fn formations_attack_move_does_not_hide_an_enemy_behind_a_dense_own_army() {
     for _ in 0..16 {
         w.advance();
     }
-    // Enemy discovery is not starved by the own units around it: 88 members
-    // found it and left the group within 16 ticks; the other 112 still march.
+    // Enemy discovery is not starved by the own units around it: within 16
+    // ticks 8 members found it and a free spot around it and left the group;
+    // the other 192 still march. (Before each
+    // member broke off for any enemy in a 13x13-tile window: 88 stood around
+    // the one enemy, most of them unable to reach it.)
     let fighters = ids
         .iter()
         .filter(|&&id| w.unit(id).unwrap().attack_target == Some(enemy))
         .count();
     let left = ids.iter().filter(|&&id| w.formation(id).is_none()).count();
-    assert_eq!((fighters, left), (88, 88));
+    assert_eq!((fighters, left), (8, 8));
 }
 
 #[test]
@@ -126,7 +131,7 @@ fn formations_attack_move_engages_visible_buildings() {
         .insert_building(
             PlayerId(1),
             BuildingKind::House,
-            TileRect::from_xywh(48, 40, 2, 2),
+            TileRect::from_xywh(46, 40, 2, 2),
             true,
         )
         .unwrap();
@@ -142,8 +147,8 @@ fn formations_attack_move_engages_visible_buildings() {
     for _ in 0..16 {
         w.advance();
     }
-    // Three of the four are within reach of the house and attack it; the
-    // fourth keeps marching in the group.
+    // Three of the four see the house (militia sight is 4 tiles) and attack
+    // it; the fourth keeps marching in the group.
     let fighters = ids
         .iter()
         .filter(|&&id| w.unit(id).unwrap().attack_target == Some(building))

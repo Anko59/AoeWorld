@@ -44,6 +44,49 @@ impl GameWorld {
         points
     }
 
+    /// Whether the attacker could fight `target` now: it is in reach, or it
+    /// fights at range, or a melee spot around the target is free. When every
+    /// spot is taken an attack would only stand and wait (`SearchWait::Crowded`).
+    pub(crate) fn attack_spot_free(&self, id: EntityId, target: EntityId) -> bool {
+        let (Some(unit), Some(stats)) = (self.unit(id), self.unit_stats(id)) else {
+            return false;
+        };
+        let Some(goal) = self.attack_goal(target, unit.player) else {
+            return false;
+        };
+        let range = super::super::navy::attack_range(&stats);
+        !Self::uses_melee_position(unit.kind)
+            || goal.distance_squared(unit.position) <= range * range
+            || self
+                .melee_positions(id, &goal)
+                .into_iter()
+                .any(|at| self.interaction_point_free(id, at))
+    }
+
+    /// An attack the unit chose itself (acquisition, or an attack-move
+    /// member) gives up a target whose every spot is taken (`wait` is
+    /// `Crowded`) while it stands, with no route, out of reach: it looks for another enemy or marches on rather than
+    /// wait there. An explicit order keeps waiting.
+    pub(super) fn gives_up_ringed_target(
+        &self,
+        id: EntityId,
+        attacker: &super::Attacker,
+        goal: Goal,
+        wait: Option<super::SearchWait>,
+        standing: bool,
+    ) -> bool {
+        wait == Some(super::SearchWait::Crowded)
+            && standing
+            && (attacker.origin.is_some() || attacker.resume.is_some())
+            && self
+                .unit(id)
+                .zip(self.unit_stats(id))
+                .is_some_and(|(u, stats)| {
+                    let range = super::super::navy::attack_range(&stats);
+                    goal.distance_squared(u.position) > range * range
+                })
+    }
+
     /// A bounded static ray proves a cheap nearby endpoint. Other endpoints
     /// use the shared full-search budget instead of unbounded rays.
     pub(super) fn attack_line_clear(

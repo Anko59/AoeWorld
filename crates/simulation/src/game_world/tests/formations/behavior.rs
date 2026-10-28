@@ -238,10 +238,11 @@ fn formations_attack_move_engages_visible_enemies_member_by_member_and_stops_rel
             first_hit = Some((tick, left));
         }
     }
-    // Contact is per member: all four were within reach of the lone enemy and
-    // left the group to fight it. Once it died each one marched on again, as
+    // Contact is per member: all four came to see the lone enemy and left the
+    // group to fight it (the first blow at tick 315: members look within their
+    // own 4-tile sight, not a 13x13-tile window, which struck at tick 275). Once it died each one marched on again, as
     // a group of one with the same attack-move order and its own slot.
-    assert_eq!(first_hit, Some((275, 4)));
+    assert_eq!(first_hit, Some((315, 4)));
     assert!(w.unit(enemy).is_none_or(|u| u.hp == 0));
     assert!(
         ids.iter()

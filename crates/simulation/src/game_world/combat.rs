@@ -109,6 +109,9 @@ pub(crate) struct Combat {
     telemetry: telemetry::Telemetry,
     /// Expensive firing-position searches still allowed this tick.
     pub(crate) position_searches: u32,
+    /// Deferred approaches since the world began: (crowded, budget).
+    #[cfg(test)]
+    pub(crate) waits: (u64, u64),
 }
 
 impl Default for Combat {
@@ -133,6 +136,8 @@ impl Default for Combat {
             stats: Default::default(),
             telemetry: Default::default(),
             position_searches: MAX_POSITION_SEARCHES_PER_TICK,
+            #[cfg(test)]
+            waits: (0, 0),
         }
     }
 }
@@ -293,8 +298,10 @@ impl GameWorld {
         state.task = UnitTask::Attacking;
     }
 
-    /// A move or gather order replaces any attack order.
+    /// A move, gather or stop order replaces any attack order, and with it an
+    /// attack-move member's pending way back to its slot.
     pub(crate) fn cancel_attack(&mut self, id: EntityId) {
+        self.combat.resuming.remove(&id);
         if self.combat.attackers.remove(&id).is_some()
             && let Some(&index) = self.lookup.get(&id)
         {

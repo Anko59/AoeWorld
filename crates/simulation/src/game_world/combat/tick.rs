@@ -207,7 +207,12 @@ impl GameWorld {
                 return;
             } else {
                 let search = self.attack_search(id, &goal).ok();
-                if let Some(wait) = search.as_ref().and_then(|s| s.wait) {
+                let wait = search.as_ref().and_then(|s| s.wait);
+                if self.gives_up_ringed_target(id, &attacker, goal, wait, order.is_none()) {
+                    self.end_attack(id, changed);
+                    return;
+                }
+                if let Some(wait) = wait {
                     if wait == super::SearchWait::Budget
                         && let Some(entry) = self.combat.attackers.get_mut(&id)
                     {

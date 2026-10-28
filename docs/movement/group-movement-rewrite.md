@@ -454,11 +454,12 @@ own. Revision `6376d14b` plus the PR 0 tests.
 | Same, 6-tile forest with a 2-tile pass | first 2238, last 3955 (1.70× open); 0 stop over 8 tiles short (PR 3; was 14); single file for 1,737 ticks, 78 tiles long | ≤ 1.6× (6) |
 | 30 militia and one sealed in, enemy 3 tiles past the goal | (PR 3) the 30 reach the goal between ticks 2533 and 3019; first strike on the enemy at 2572, before the last arrival and before the sealed unit gives up at 2753; before PR 3 the first strike came at 3082 | kept |
 | Re-order 10 of 60 | (before PR 1) the other 50 left the group, stopped at once, none arrived; now all 50 stay grouped and arrive | all 50 arrive (1) |
-| Attack-move, 60 vs 10 | (PR 4) all 10 die by tick 1564; 56 survive (4 fell) and all 56 stand within a tile of their own slot; before: 8 of 10 died, 55 idle near x 75 of 140, none at the goal | kept (4) |
+| Attack-move, 60 vs 10 | (PR 4) all 10 die by tick 1366; all 60 survive and stand within a tile of their own slot; with the first PR 4 look (13x13 tiles) 1564 and 56; before: 8 of 10 died, 55 idle near x 75 of 140, none at the goal | kept (4) |
+| Attack-move, 24 through 5 standing ground (the PR 4 showcase) | (PR 4) members break off within their own 4-tile sight from tick 101; 5 s later 13 fight and the other 11 march at the group's pace; no unit stands in the attack pose out of reach; with the 13x13-tile look: from tick 37, up to 8.4 tiles away, 19 broken off 5 s later and 13 of them standing out of reach (6,871 member-ticks) | kept (4) |
 | Head-on, 3 vs 3, bridge | no deadlock: first crossing tick 181, all across 251 | both cross within 3 s (8) |
 | 4 fishing ships, 1-tile river | all 4 gather orders refused; 3-tile river: 2 refused | all 4 work (9) |
 | 12 villagers, one gold mine | 2 carry gold by 10 s, 9 by 30 s, 10 by 60 s; 2 idle | all 12 by 10 s (10) |
-| 40 vs 40 melee | (PR 4, members engage one by one) first blow tick 270; 6 distinct strikers in 5 s (lower bound), 64 in 60 s; 21 and 14 alive; before: tick 304, 12 and 36, 29 and 26 alive | ≥ 90 % strike in 5 s (10) |
+| 40 vs 40 melee | (PR 4, members engage one by one, only for an enemy in sight with a free spot) first blow tick 234; 36 distinct strikers in 5 s (lower bound), 79 in 60 s; 2 and 7 alive; with the 13x13-tile look: tick 270, 6 and 64, 21 and 14; before PR 4: tick 304, 12 and 36, 29 and 26 alive | ≥ 90 % strike in 5 s (10) |
 
 `make perf-groups` (release, 6-CPU slot, shared host, fog on, `6376d14b`): 200
 armies of 30-79 Line militia, 10,900 movers, all still marching, on uniform
@@ -478,7 +479,13 @@ ground (only at an obstacle); the suspected bridge deadlock did not reproduce
 
 PR 3 and PR 4 as built: a member that cannot move for 240 ticks after the
 anchor arrived stops where it stands; the column is dropped at anchor arrival;
-attack-move members probe eight per group per tick, fight alone, and march on
+every 4 ticks an attack-move group makes one bounded look over its extent
+(at most 2,048 bucket entries and 32 enemies); a member breaks off only for an
+enemy within its own sight that has a free melee spot (or is in reach), at most
+eight per look; a unit that chose its own target (acquisition, attack-move)
+gives it up when every spot around it is taken instead of standing out of
+reach, and the client draws the attack pose only with the target in reach.
+Members fight alone and march on
 as a one-unit attack-move group to their slot at the group destination (a
 shortcut: the design's `Engaged` state inside the group needs PR 6's group
 ids, because `stop_movement` still calls `leave_group`). A group leader's

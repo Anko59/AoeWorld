@@ -238,3 +238,26 @@ fn hunt_work_poses_play_only_in_reach_and_never_while_a_route_is_planned() {
         Pose::ShepherdWalk
     );
 }
+
+// A soldier waiting out of reach (every melee spot taken, or a route still
+// pending) stands; it swings only with its target within reach.
+#[wasm_bindgen_test]
+fn soldiers_swing_only_with_their_target_in_reach() {
+    use crate::unit_visuals::{Pose, scene_pose};
+    const TILE: i64 = aoe_core::FIXED_SUBUNITS_PER_TILE as i64;
+    let mut u = villager(UnitTask::Attacking, None);
+    u.kind = UnitKind::Militia;
+    u.attack_target = Some(EntityId(9));
+    assert_eq!(scene_pose(&u, None, Some(TILE)), Pose::MilitiaAttack);
+    assert_eq!(scene_pose(&u, None, None), Pose::MilitiaAttack);
+    assert_eq!(scene_pose(&u, None, Some(4 * TILE)), Pose::MilitiaStand);
+    u.moving = true;
+    assert_eq!(scene_pose(&u, None, Some(4 * TILE)), Pose::MilitiaWalk);
+    u.moving = false;
+    u.kind = UnitKind::ManAtArms;
+    assert_eq!(scene_pose(&u, None, Some(4 * TILE)), Pose::ManAtArmsStand);
+    // An archer shoots from four tiles; past its range it stands as well.
+    u.kind = UnitKind::Archer;
+    assert_eq!(scene_pose(&u, None, Some(4 * TILE)), Pose::ArcherAttack);
+    assert_eq!(scene_pose(&u, None, Some(9 * TILE)), Pose::ArcherStand);
+}

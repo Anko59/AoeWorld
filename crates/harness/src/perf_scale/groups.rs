@@ -38,6 +38,10 @@ pub struct Options {
     seed: u64,
     #[arg(long)]
     fog_off: bool,
+    /// Attack-move instead of move: crossing armies of different players
+    /// meet, so the run also measures the attack-move look and the fights.
+    #[arg(long)]
+    attack_move: bool,
     #[arg(long, default_value = "reports/perf/perf-groups.json")]
     out: PathBuf,
 }
@@ -111,8 +115,14 @@ fn deploy(world: &mut GameWorld, o: &Options) -> Result<Armies, BoxError> {
         let player = PlayerId((i % u32::from(o.players)) as u16);
         let mut last = None;
         let ok = nearby(x1 + 4, y1 + 4).any(|(x, y)| {
-            let sent =
-                world.issue_formation_move(player, ids, Formation::Line, at(x, y), false, false);
+            let sent = world.issue_formation_move(
+                player,
+                ids,
+                Formation::Line,
+                at(x, y),
+                false,
+                o.attack_move,
+            );
             last = sent.err();
             last.is_none()
         });
@@ -203,6 +213,7 @@ pub fn run(o: Options) -> Result<(), BoxError> {
             "fog": !o.fog_off, "warmup_ticks": o.warmup_ticks, "ticks_per_window": o.ticks,
             "map": "uniform open ground (no trees, water, buildings or route planning)",
             "orders": "Line formation moves to the mirror cell in a block of four grid columns; every third army also changes row",
+            "attack_move": o.attack_move,
         },
         "build_seconds": round(build_s),
         "census_end_of_plain_window": census_plain,
@@ -242,11 +253,13 @@ mod tests {
             ticks: 10,
             seed: 1,
             fog_off: false,
+            attack_move: true,
             out: out.clone(),
         })
         .unwrap();
         let report: Value = serde_json::from_str(&fs::read_to_string(out).unwrap()).unwrap();
         assert_eq!(report["workload"]["armies"], 6);
+        assert_eq!(report["workload"]["attack_move"], true);
         assert_eq!(report["plain_window"]["tick"]["samples"], 10);
         for span in [
             "avoidance_query",
