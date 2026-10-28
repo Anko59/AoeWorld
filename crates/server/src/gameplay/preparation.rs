@@ -71,12 +71,19 @@ impl Preparation {
         let (pending, complete) = (self.pending.clone(), ready.clone());
         tokio::spawn(async move {
             let _ = result.await;
+            // Publish readiness before leaving `pending`, so that an empty
+            // `pending` map implies every launched flag is already set.
+            complete.store(true, Ordering::Release);
             if let Ok(mut pending) = pending.lock() {
                 pending.remove(&key);
             }
-            complete.store(true, Ordering::Release);
         });
         Ok(ready)
+    }
+
+    /// True while a terrain warm-up is still running.
+    fn busy(&self) -> bool {
+        self.pending.lock().is_ok_and(|pending| !pending.is_empty())
     }
 
     pub(super) fn close(&self) {
@@ -177,6 +184,19 @@ impl Preparation {
 mod tests;
 
 impl super::GameplayService {
+    /// Returns once every terrain warm-up launched so far has finished, so
+    /// each command accepted before the call is applied by the next tick.
+    ///
+    /// Commands wait for their terrain, which is warmed on background
+    /// threads, so the tick that applies a command otherwise depends on
+    /// wall-clock timing. A harness that needs one tick-exact history awaits
+    /// this after issuing commands; a live match never needs it.
+    pub async fn settle_preparation(&self) {
+        while self.preparation.busy() {
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        }
+    }
+
     pub(crate) fn install_initial_terrain(&self, cache: crate::terrain_cache::TerrainCache) {
         if let Ok(mut target) = self.preparation.terrain_cache.lock() {
             *target = cache;

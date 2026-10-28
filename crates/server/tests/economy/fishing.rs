@@ -176,6 +176,7 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
             aoe_core::WorldPosition::from_tile_center(survey).unwrap(),
         )
         .await;
+    service.settle_preparation().await;
     let mut fog = fog;
     for _ in 0..2000 {
         if dock_explored(&fog, site) {
@@ -199,6 +200,7 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
         .min_by_key(|n| n.tile.x.abs_diff(start.x).pow(2) + n.tile.y.abs_diff(start.y).pow(2))
         .unwrap();
     service.queue_gather(session, 2, workers[0], wood.id).await;
+    service.settle_preparation().await;
     let (mut stock, mut stage, mut ship, mut depleted, mut fishing) = (200, 0, None, false, false);
     for _ in 0..12_000 {
         service.tick().await;
@@ -226,6 +228,7 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
                             service
                                 .queue_train(session, 4, b.id, UnitKind::FishingShip)
                                 .await;
+                            service.settle_preparation().await;
                             stage = 2;
                         }
                     }
@@ -243,6 +246,7 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
                                         .unwrap(),
                                 )
                                 .await;
+                            service.settle_preparation().await;
                             stage = 3;
                         }
                         fishing |= Some(u.id) == ship && u.task == UnitTask::Fishing;
@@ -265,6 +269,7 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
             service
                 .queue_gather(session, 6, ship.unwrap(), fish.id)
                 .await;
+            service.settle_preparation().await;
             stage = 4;
         }
         if stage == 0 && stock >= 240 {
@@ -278,6 +283,7 @@ async fn coastal_village_builds_dock_trains_ship_and_feeds_fish_depletion() {
                     false,
                 )
                 .await;
+            service.settle_preparation().await;
             stage = 1;
         }
         if stage == 5 {
