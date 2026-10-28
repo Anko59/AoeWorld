@@ -41,7 +41,7 @@ export function initInterface() {
     Object.assign(box.style,{left:`${Math.min(drag[0],event.clientX)}px`,top:`${Math.min(drag[1],event.clientY)}px`,width:`${width}px`,height:`${height}px`});
   });
   for (const event of ['pointerup','pointercancel','lostpointercapture']) document.addEventListener(event,()=>{ drag=null;box.hidden=true; });
-  let previousSelection='', previousLoads='', previousHealth='';
+  let previousSelection='', previousLoads='', previousHealth='', previousIdle='';
   const update = state => {
     ['wood','food','gold','stone'].forEach((resource,index) => {
       text(`stockpile-${resource}`,state.stockpile[index]); text(`workers-${resource}`,state.workers[index]);
@@ -49,8 +49,10 @@ export function initInterface() {
     text('population',state.population.join('/'));
     text('idle-villager-count',state.idleVillagers);
     byId('idle-villagers').disabled=state.idleVillagers===0;
+    byId('idle-villagers').classList.toggle('has-idle',state.idleVillagers>0);
     text('idle-military-count',state.idleMilitary);
     byId('idle-military').disabled=state.idleMilitary===0;
+    byId('idle-military').classList.toggle('has-idle',state.idleMilitary>0);
     const minutes=Math.floor(state.seconds/60), seconds=state.seconds%60;
     text('game-clock',`${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`);
     text('connection',state.status);
@@ -102,6 +104,9 @@ export function initInterface() {
     attribute(scene(),'data-village-art',state.art?'native':'markers');
     const health=state.actors.filter(a=>a.selected && a.hp>0 && !buildingKinds.includes(a.kind)).map(a=>`<span class="unit-hp-bar" style="left:${a.x-18}px;top:${a.head}px"><span style="width:${100*a.hp/a.maxHp}%"></span></span>`).join('');
     if (health!==previousHealth) { byId('unit-health-bars').innerHTML=health; previousHealth=health; }
+    // Own idle workers carry a marker so they can be found on the map.
+    const idle=state.actors.filter(a=>a.owned && a.hp>0 && a.task==='Idle' && (a.kind==='Villager' || a.kind==='FishingShip') && a.x>0 && a.y>54 && a.y<innerHeight-208).map(a=>`<span class="idle-marker" style="left:${a.x-6}px;top:${a.head-16}px">z</span>`).join('');
+    if (idle!==previousIdle) { byId('idle-markers').innerHTML=idle; previousIdle=idle; }
     const loads=state.actors.filter(actor=>actor.hp>0 && actor.load && actor.x>0 && actor.y>54 && actor.y<innerHeight-208);
     const signature=JSON.stringify(loads);
     if (signature!==previousLoads) {

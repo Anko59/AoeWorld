@@ -4,22 +4,30 @@ use crate::playground::game::map;
 use aoe_core::{FIXED_SUBUNITS_PER_TILE, ScreenPoint, WorldPosition};
 use aoe_protocol::{GameplayClientMessage as Message, RallyTarget};
 
+/// Every selected training building of the owner takes the same rally, not
+/// only the primary one.
+pub(super) fn rally_buildings(
+    buildings: &[aoe_protocol::GameplayBuildingState],
+    selected: &super::selection::Selection,
+    player: aoe_core::PlayerId,
+) -> Vec<aoe_core::EntityId> {
+    buildings
+        .iter()
+        .filter(|b| selected.has_building(b.id) && b.player == player)
+        .filter(|b| {
+            aoe_protocol::UnitKind::ALL
+                .iter()
+                .any(|kind| crate::building_ui::rules(b.kind).trains(*kind as u8))
+        })
+        .map(|b| b.id)
+        .collect()
+}
+
 pub(super) fn at_pointer(client: &mut Client, point: ScreenPoint) -> bool {
-    let Some(building) = client
-        .village
-        .buildings
-        .iter()
-        .find(|b| Some(b.id) == client.selected.building_id && b.player == owner(client))
-    else {
-        return false;
-    };
-    if !aoe_protocol::UnitKind::ALL
-        .iter()
-        .any(|kind| crate::building_ui::rules(building.kind).trains(*kind as u8))
-    {
+    let ids = rally_buildings(&client.village.buildings, &client.selected, owner(client));
+    if ids.is_empty() {
         return false;
     }
-    let id = building.id;
     let Some(world) = map::world_at_screen(client, point) else {
         return true;
     };
@@ -49,15 +57,17 @@ pub(super) fn at_pointer(client: &mut Client, point: ScreenPoint) -> bool {
     } else {
         RallyTarget::Ground(position)
     };
-    let sequence = client.next_sequence;
-    super::orders::send(
-        client,
-        Message::SetRallyOrder {
-            sequence,
-            building_id: id,
-            target,
-        },
-    );
+    for building_id in ids {
+        let sequence = client.next_sequence;
+        super::orders::send(
+            client,
+            Message::SetRallyOrder {
+                sequence,
+                building_id,
+                target,
+            },
+        );
+    }
     true
 }
 

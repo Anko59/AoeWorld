@@ -88,7 +88,9 @@ progress::-webkit-progress-value { background:linear-gradient(90deg,#8b9b62,#dec
 #game-error[hidden] { display:none; }
 #game-error a { color:#ffe2a0; text-decoration:underline; white-space:nowrap; }
 #drag-box { position:fixed; border:1px solid #eedb91; background:#d3d89e18; pointer-events:none; z-index:1; }
-#carried-loads { position:fixed; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
+#carried-loads,#idle-markers { position:fixed; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
+.idle-marker { position:absolute; width:12px; height:14px; color:#1d1606; background:#f2c84b; border:1px solid #6b4f12; border-radius:3px; font:bold 10px/13px sans-serif; text-align:center; }
+#idle-villagers.has-idle,#idle-military.has-idle { background:#7a5a14; border-color:#f2c84b; color:#fff3c4; box-shadow:0 0 6px #f2c84b; }
 .load-badge { position:absolute; display:flex; align-items:center; gap:2px; color:#f6e8bf; background:#17251de6; border:1px solid #8b9a7e; border-radius:3px; padding:1px 3px; font-size:9px; }
 .load-badge .icon { width:14px; height:14px; }
 .diagnostics { position:fixed; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); pointer-events:none; }
@@ -247,5 +249,6 @@ html[data-interface-art=original] #vassal-status { color:#4b3218; font-weight:60
 #minimap.expanded #minimap-zoom { right:85px; top:6px; }
 #strategic-scene { position:fixed; inset:0; width:100%; height:100%; pointer-events:none; }
 html[data-lod=map] #unit-health-bars,html[data-lod=map] #carried-loads,
-html[data-lod=markers] #unit-health-bars,html[data-lod=markers] #carried-loads { display:none; }
+html[data-lod=markers] #unit-health-bars,html[data-lod=markers] #carried-loads,
+html[data-lod=map] #idle-markers,html[data-lod=markers] #idle-markers { display:none; }
 #strategic-label { position:fixed; top:64px; right:12px; pointer-events:none; padding:5px 9px; background:#142019ee; color:#e9efdb; font:12px monospace; z-index:1; }
