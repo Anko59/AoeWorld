@@ -232,7 +232,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             let resources = map::scene_resources(&client);
             let grid = client.grid;
             let animation = (time / 100.0) as usize;
-            if let Err(error) = map::render_cache::render_if_changed(
+            match map::render_cache::render_if_changed(
                 &mut client,
                 &scene,
                 &units,
@@ -241,13 +241,17 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 animation,
                 grid,
             ) {
-                if matches!(
-                    recovery::restart(&client.renderer, Some(client.camera), &error),
-                    Ok(true)
-                ) {
-                    return;
+                Ok(true) => strategic::present(),
+                Ok(false) => {}
+                Err(error) => {
+                    if matches!(
+                        recovery::restart(&client.renderer, Some(client.camera), &error),
+                        Ok(true)
+                    ) {
+                        return;
+                    }
+                    client.status = error;
                 }
-                client.status = error;
             }
         }
         drop(draw);

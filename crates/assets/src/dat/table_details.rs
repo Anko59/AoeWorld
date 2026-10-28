@@ -12,7 +12,12 @@ pub(super) fn compositions(
         .filter_map(|u| file.building_composition(u.id).ok())
         .map(|mut b| {
             if let Some(pack) = pack {
-                for part in b.parts.iter_mut().chain(&mut b.construction) {
+                for part in b
+                    .parts
+                    .iter_mut()
+                    .chain(&mut b.construction)
+                    .chain(b.damage.iter_mut().flat_map(|d| &mut d.parts))
+                {
                     part.available = pack.contains(&part.slp_id);
                 }
             }

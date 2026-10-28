@@ -13,7 +13,6 @@ const MAX_COMBAT_ENTRIES: usize = 64;
 const TASK_BYTES: usize = 59;
 /// Fixed bytes of a unit before the damage-sprite count.
 const DAMAGE_COUNT_AT: usize = 145;
-const DAMAGE_SPRITE_BYTES: usize = 5;
 const COMBAT_TAIL: usize = 56;
 const CREATABLE_BYTES: usize = 65;
 
@@ -229,7 +228,16 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
     r.pos = start + DAMAGE_COUNT_AT;
     let sprites = usize::from(r.u8()?);
     r.bounded(sprites, MAX_DAMAGE_SPRITES, "damage sprites")?;
-    r.skip(sprites * DAMAGE_SPRITE_BYTES + 6)?; // sprites, selection and dying sounds, flags
+    let damage_graphics = (0..sprites)
+        .map(|_| {
+            Ok(super::DamageGraphic {
+                graphic_id: r.i16()?,
+                damage_percent: r.i16()?,
+                apply_mode: r.u8()?,
+            })
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
+    r.skip(6)?; // selection and dying sounds, flags
     let name = text(r.take(name_len)?);
     r.skip(4)?; // repeated ids
     let mut out = Unit {
@@ -238,6 +246,7 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
         name,
         icon_id,
         hit_points,
+        damage_graphics,
         line_of_sight,
         garrison_capacity,
         collision_size,

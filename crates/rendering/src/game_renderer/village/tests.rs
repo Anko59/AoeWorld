@@ -109,6 +109,7 @@ pub(super) fn art() -> GameArt {
                 })
                 .collect(),
             construction: Vec::new(),
+            damage: Vec::new(),
         }],
         foundation: Default::default(),
         walking: vec![frame(900); 50],
@@ -478,3 +479,6 @@ fn a_farm_under_construction_draws_no_scaffolding() {
     );
     assert_eq!(emitted, 0);
 }
+
+#[path = "tests/siege.rs"]
+mod siege;

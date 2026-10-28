@@ -109,10 +109,19 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
                 .any(|v| !v.is_finite() || *v <= 0.0 || *v > 128.0)
             || building.parts.len() > 256
             || building.construction.len() > 256
+            || building.damage.len() > 7
+            || building.damage.iter().any(|d| {
+                !(0..=100).contains(&d.damage_percent) || d.apply_mode > 2 || d.parts.len() > 256
+            })
         {
             return Err(invalid("manifest", 0, "invalid building recipe"));
         }
-        for part in building.parts.iter().chain(&building.construction) {
+        for part in building
+            .parts
+            .iter()
+            .chain(&building.construction)
+            .chain(building.damage.iter().flat_map(|d| &d.parts))
+        {
             if part.frames == 0
                 || part.angles == 0
                 || u32::from(part.frames) * u32::from(part.angles) > 256

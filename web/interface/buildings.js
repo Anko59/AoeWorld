@@ -96,7 +96,7 @@ export function initBuildings() {
     const villager=byId('selection').dataset.villagers==='true';
     build.hidden=!villager;military.hidden=!villager;if(!villager)open=false;
     buttons.forEach((b,i)=>{b.hidden=!villager||open!==category(i);b.disabled=state[buildStart+i]!==1;const [id,name,key,cost]=commands[i];b.title=`${name} · ${cost} · ${category(i)==='military'?'V':'B'} ${key}${(i>=15&&i<=18||id==='town-center')&&state[0]<2?' · requires Castle Age':state[0]===0&&(i>=9&&i<=13||i===19)?' · requires Feudal Age':''}`;b.setAttribute('aria-label',b.title);});
-    if(open){for(const id of ['move-units','stop-units'])byId(id).hidden=true;byId('command-context').textContent=open==='military'?'Military buildings':'Economic buildings';byId('command-hint').textContent=byId('scene').dataset.orderMode==='build'?'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels':'Choose a building · Esc closes the menu';}
+    if(open){for(const id of ['move-units','stop-units'])byId(id).hidden=true;byId('command-context').textContent=open==='military'?'Military buildings':'Economic buildings';byId('command-hint').textContent=byId('scene').dataset.orderMode==='build'?(byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels'):'Choose a building · Esc closes the menu';}
     grid.classList.toggle('building-menu-open',Boolean(open));
     build.setAttribute('aria-expanded',String(open==='economy'));military.setAttribute('aria-expanded',String(open==='military'));
     const active=Array.from(grid.children).filter(n=>n.tagName==='BUTTON'&&!n.hidden).length;
@@ -177,6 +177,9 @@ export function initBuildings() {
       byId('scene').dataset.placementValid=String(v.length>0&&v[0]===1);
       byId('scene').dataset.placementCount=String(v[1]??0);
       byId('scene').dataset.placementInvalid=String(v[2]??0);
+      const reasons=['','Drag between two land banks','Bridge is too long or has an invalid direction','Bridge start must be on land','Bridge end must be on land','Not enough resources for this bridge','Bridge tiles must be clear and cross water'];
+      byId('scene').title=reasons[v[3]??0]??'';
+      if(open&&byId('scene').dataset.orderMode==='build')byId('command-hint').textContent=byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels';
     },
   };
 }

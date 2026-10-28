@@ -204,8 +204,11 @@ impl ActorSource {
         }
         match self.id {
             4500 => 0,
-            3799 => [0, 44, 88, 132, 165][row],
-            3820 => row * 40,
+            // Five screen rows sampled from the sixteen native directions.
+            // Frame zero in each block is the steepest pitch; these offsets pick
+            // the level-flight cell that matches the projected arc.
+            3799 => [6, 49, 93, 137, 175][row],
+            3820 => [5, 45, 84, 125, 169][row],
             _ => row * self.stride as usize + phase,
         }
     }

@@ -120,3 +120,27 @@ fn vassal_uses_king_poses_with_native_timing() {
     }
     assert!(crate::dat::table::DARK_AGE.iter().any(|(_, id)| *id == 434));
 }
+
+#[test]
+fn projectile_rows_use_the_native_flight_pitch_for_each_screen_direction() {
+    // The 32-angle DAT graphics store sixteen rows, each with pitch frames.
+    // Frame zero is steeply pitched; these samples match level projected flight.
+    for (pose, expected) in [
+        (Pose::Arrow, [6, 49, 93, 137, 175]),
+        (Pose::Javelin, [5, 45, 84, 125, 169]),
+    ] {
+        let source = SPRITES[pose as usize];
+        assert_eq!(source.selected_frames(), 5);
+        assert_eq!(
+            (0..5)
+                .map(|row| source.source_frame(row, 0))
+                .collect::<Vec<_>>(),
+            expected
+        );
+        assert!(
+            expected
+                .into_iter()
+                .all(|frame| frame < source.frames() as usize)
+        );
+    }
+}

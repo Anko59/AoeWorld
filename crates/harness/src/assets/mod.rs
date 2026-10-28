@@ -139,9 +139,16 @@ pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error
             dat_table::run(&input, Path::new("local-assets/dat-table"))?;
         }
         AssetCommand::ImportDe { install, base } => {
-            let report = aoe_assets::de::import(&install, Path::new("local-assets/packs"))?;
+            let packs = Path::new("local-assets/packs");
+            let report = aoe_assets::de::import(&install, packs)?;
+            let base = match base {
+                Some(base) => Some(base),
+                None => overlay::default_base(packs, &report.pack)?,
+            };
             if let Some(base) = base {
                 overlay::attach(&base, &report.pack)?;
+            } else {
+                println!("no unique base pack to attach; set AOE_ASSET_PACK=<base> when importing");
             }
             println!("{}", report.pack.display());
             for entry in &report.entries {

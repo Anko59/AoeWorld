@@ -24,6 +24,45 @@ pub fn encode(buildings: &[BuildingComposition], frames: &[FrameRecord]) -> Resu
         }
         parts(&mut bytes, &building.parts, frames)?;
         parts(&mut bytes, &building.construction, frames)?;
+        if building.damage.len() > 7 {
+            return Err(invalid("recipes", 0, "too many damage states"));
+        }
+        let mut shared = Vec::new();
+        for part in building.damage.iter().flat_map(|d| &d.parts) {
+            let mut key = part.clone();
+            key.graphic_id = 0;
+            key.slp_id = 0;
+            key.layer = 0;
+            key.offset = [0; 2];
+            if !shared.contains(&key) {
+                shared.push(key);
+            }
+        }
+        parts(&mut bytes, &shared, frames)?;
+        bytes.push(building.damage.len() as u8);
+        for damage in &building.damage {
+            bytes.extend(damage.damage_percent.to_le_bytes());
+            bytes.push(damage.apply_mode);
+            if damage.parts.len() > 256 {
+                return Err(invalid("recipes", 0, "too many damage parts"));
+            }
+            bytes.extend((damage.parts.len() as u16).to_le_bytes());
+            for part in &damage.parts {
+                let mut key = part.clone();
+                key.graphic_id = 0;
+                key.slp_id = 0;
+                key.layer = 0;
+                key.offset = [0; 2];
+                let index = shared
+                    .iter()
+                    .position(|p| *p == key)
+                    .ok_or_else(|| invalid("recipes", 0, "missing shared damage part"))?;
+                bytes.extend((index as u16).to_le_bytes());
+                for offset in part.offset {
+                    bytes.extend(offset.to_le_bytes());
+                }
+            }
+        }
     }
     if bytes.len() > 32768 {
         return Err(invalid("recipes", 0, "compiled recipes exceed 32 KiB"));

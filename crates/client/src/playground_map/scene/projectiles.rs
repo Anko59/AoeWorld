@@ -42,6 +42,9 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
         {
             continue;
         }
+        // A bounded parabola keeps the launch and impact heights unchanged.
+        let distance = (to[0] - from[0]).hypot(to[1] - from[1]);
+        let arc = 4.0 * fraction * (1.0 - fraction) * (distance * 0.25).min(8.0);
         let pose = if shot.kind == ProjectileKind::Stone {
             Pose::Stone
         } else if shot.kind == ProjectileKind::Arrow {
@@ -58,7 +61,8 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
             elevation_meters: scene
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position))
-                + 1.0,
+                + 1.0
+                + arc,
         });
     }
 }

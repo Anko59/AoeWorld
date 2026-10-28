@@ -270,7 +270,12 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
         None => Vec::new(),
     };
     for building in &mut buildings {
-        for part in building.parts.iter_mut().chain(&mut building.construction) {
+        for part in building
+            .parts
+            .iter_mut()
+            .chain(&mut building.construction)
+            .chain(building.damage.iter_mut().flat_map(|d| &mut d.parts))
+        {
             part.available = sprites.iter().any(|s| s.id == part.source);
         }
     }

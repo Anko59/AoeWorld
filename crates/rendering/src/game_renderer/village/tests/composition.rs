@@ -391,3 +391,66 @@ fn castle_buildings_clear_their_foundations_while_only_bridges_stay_below_actors
         assert!(super::super::scene_unit_depth(bridge) < super::super::scene_unit_depth(actor));
     }
 }
+
+#[wasm_bindgen_test]
+fn damage_overlay_uses_selected_stage_and_animates() {
+    let mut art = art();
+    let mut flame = art.compositions[0].parts[1].clone();
+    flame.animation = art.village[1][..2].to_vec();
+    flame.angles = 1;
+    flame.frame_rate = 0.1;
+    art.compositions[0].damage = vec![crate::BuildingDamage {
+        damage_percent: 25,
+        apply_mode: 0,
+        parts: vec![flame.clone()],
+    }];
+    let mut building = unit(SceneUnitKind::TownCenter);
+    let healthy = super::super::world_sprite_frames(&art, &[], &[], &[building], camera(), 0);
+    building.visual = building.visual.with_damage_stage(1);
+    let burning = super::super::world_sprite_frames(&art, &[], &[], &[building], camera(), 0);
+    let next = super::super::world_sprite_frames(&art, &[], &[], &[building], camera(), 1);
+    assert_eq!(burning.len(), healthy.len() + 1);
+    assert_eq!(burning.last().unwrap().1.atlas, flame.animation[0].atlas);
+    assert_eq!(next.last().unwrap().1.atlas, flame.animation[1].atlas);
+}
+
+#[wasm_bindgen_test]
+fn healthy_palisade_wall_does_not_animate_but_its_damage_overlay_does() {
+    let mut art = art();
+    let wall = unit(SceneUnitKind::PalisadeWall);
+    art.compositions[0].unit_id = wall.kind.building_id().unwrap();
+    let mut part = art.compositions[0].parts[0].clone();
+    part.animation = art.village[1][..2].to_vec();
+    part.frame_rate = 0.2;
+    art.compositions[0].parts = vec![part.clone()];
+    assert!(!super::super::scene_unit_animates(&art, wall, camera()));
+    art.compositions[0].damage = vec![crate::BuildingDamage {
+        damage_percent: 25,
+        apply_mode: 0,
+        parts: vec![part],
+    }];
+    assert!(!super::super::scene_unit_animates(&art, wall, camera()));
+    let mut damaged = wall;
+    damaged.visual = damaged.visual.with_damage_stage(1);
+    assert!(super::super::scene_unit_animates(&art, damaged, camera()));
+}
+
+#[wasm_bindgen_test]
+fn damage_stage_uses_exact_hp_thresholds_and_repairs() {
+    let mut art = art();
+    art.compositions[0].damage = [25, 50, 75]
+        .into_iter()
+        .map(|damage_percent| crate::BuildingDamage {
+            damage_percent,
+            apply_mode: 0,
+            parts: Vec::new(),
+        })
+        .collect();
+    let building = &art.compositions[0];
+    assert_eq!(building.damage_stage(751, 1000), 0);
+    assert_eq!(building.damage_stage(750, 1000), 1);
+    assert_eq!(building.damage_stage(500, 1000), 2);
+    assert_eq!(building.damage_stage(250, 1000), 3);
+    assert_eq!(building.damage_stage(1000, 1000), 0);
+    assert_eq!(building.damage_stage(0, 0), 0);
+}

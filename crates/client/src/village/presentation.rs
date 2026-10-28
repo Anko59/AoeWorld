@@ -47,9 +47,39 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
         );
     }
 
-    // Strategic actors update at HUD cadence. Never inspect resident resources
-    // or build a detailed picking scene for a distant overview.
+    // Strategic actors update at HUD cadence. Never build a detailed picking
+    // scene for a distant overview.
     if crate::playground::game::strategic::active(client) {
+        // The map LOD still needs the resources an RTS player scouts for.
+        // Forests are already painted into the terrain raster; send only the
+        // deposits that would otherwise disappear when sprites stop drawing.
+        // The scan is bounded by the resident terrain chunks (a fixed residency
+        // budget), not by map size, and stops at the marker cap. Starting nodes
+        // go first so the cap never drops them, and a node that also appears in
+        // a chunk is sent once.
+        let mut sent = std::collections::HashSet::new();
+        let natural = client
+            .terrain_chunks
+            .values()
+            .flat_map(|chunk| chunk.resources().map(|(node, _)| *node));
+        for node in client.resources.starting_nodes().chain(natural) {
+            if values[7] >= 2048.0 {
+                break;
+            }
+            if node.kind as u8 == 1
+                || client.fog.state([node.tile.x, node.tile.y]) == 0
+                || !client.resources.visible(node.id)
+                || !sent.insert(node.id)
+            {
+                continue;
+            }
+            values[7] += 1.0;
+            marker(
+                &mut values,
+                node.kind as u8 as f64,
+                [f64::from(node.tile.x) + 0.5, f64::from(node.tile.y) + 0.5],
+            );
+        }
         return values;
     }
     let focus = client.selected.units.iter().find_map(|id| {

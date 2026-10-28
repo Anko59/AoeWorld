@@ -98,12 +98,36 @@ pub struct BuildingPart {
     pub depth: f32,
 }
 
+pub struct BuildingDamage {
+    pub damage_percent: u8,
+    pub apply_mode: u8,
+    pub parts: Vec<BuildingPart>,
+}
+
 pub struct BuildingArt {
     pub unit_id: i32,
     pub footprint: [f32; 2],
     pub foundation_material: Option<u8>,
     pub parts: Vec<BuildingPart>,
     pub construction: Vec<BuildingPart>,
+    pub damage: Vec<BuildingDamage>,
+}
+
+impl BuildingArt {
+    pub fn damage_stage(&self, hp: u16, max_hp: u16) -> u8 {
+        if max_hp == 0 {
+            return 0;
+        }
+        self.damage
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| {
+                u32::from(max_hp.saturating_sub(hp)) * 100
+                    >= u32::from(max_hp) * u32::from(d.damage_percent)
+            })
+            .max_by_key(|(_, d)| d.damage_percent)
+            .map_or(0, |(i, _)| (i + 1) as u8)
+    }
 }
 
 impl Renderer {

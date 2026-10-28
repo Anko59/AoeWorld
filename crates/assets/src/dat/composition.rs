@@ -22,6 +22,13 @@ pub struct BuildingPart {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BuildingDamage {
+    pub damage_percent: i16,
+    pub apply_mode: u8,
+    pub parts: Vec<BuildingPart>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BuildingComposition {
     pub unit_id: i32,
     pub footprint: [f32; 2],
@@ -30,6 +37,7 @@ pub struct BuildingComposition {
     pub foundation_size: [u16; 2],
     pub parts: Vec<BuildingPart>,
     pub construction: Vec<BuildingPart>,
+    pub damage: Vec<BuildingDamage>,
 }
 
 impl DatFile {
@@ -75,6 +83,23 @@ impl DatFile {
             &mut construction,
         )?;
         construction.sort_by_key(|p| p.layer);
+        let mut damage = Vec::new();
+        for state in &unit.damage_graphics {
+            let mut parts = Vec::new();
+            self.append_graphic(
+                i32::from(state.graphic_id),
+                [0; 2],
+                [0.0; 2],
+                &mut Vec::new(),
+                &mut parts,
+            )?;
+            parts.sort_by_key(|p| p.layer);
+            damage.push(BuildingDamage {
+                damage_percent: state.damage_percent,
+                apply_mode: state.apply_mode,
+                parts,
+            });
+        }
         Ok(BuildingComposition {
             unit_id: id,
             footprint: unit.footprint,
@@ -85,6 +110,7 @@ impl DatFile {
                 .map_or([0; 2], |t| t.dimensions),
             parts,
             construction,
+            damage,
         })
     }
 

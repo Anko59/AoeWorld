@@ -218,6 +218,42 @@ fn validate_open_map(hash: &str, directory: &Path) -> Result<()> {
     .into())
 }
 
+/// A pack converted by an older importer parses in the server but makes the
+/// browser fail while reading its building recipes, which leaves the page on
+/// "Unavailable" with no connection. A pack that has building recipes but no
+/// attached Definitive Edition overlay loads and then draws squares for the
+/// bridges, galleys and kings. Refuse both here with the regeneration step.
+fn verify_asset_pack(pack: &Path) -> Result<()> {
+    let manifest = aoe_assets::pack::verify(pack).map_err(|error| {
+        format!(
+            "AOE_ASSET_PACK {} is not valid for this build ({error}); regenerate it with `make assets-import` and use the new hash",
+            pack.display()
+        )
+    })?;
+    require_building_overlay(pack, !manifest.buildings.is_empty())?;
+    Ok(())
+}
+
+fn require_building_overlay(pack: &Path, has_building_recipes: bool) -> Result<()> {
+    if !has_building_recipes {
+        return Ok(());
+    }
+    let overlay = pack.join("buildings");
+    let reason = if !overlay.join("manifest.json").is_file() {
+        "has no attached Definitive Edition building overlay".to_owned()
+    } else if let Err(error) = aoe_assets::pack::verify(&overlay) {
+        format!("has an invalid building overlay ({error})")
+    } else {
+        return Ok(());
+    };
+    Err(format!(
+        "AOE_ASSET_PACK {} {reason}; run `make assets-import-de DE_DIR=<install>` (AOE_ASSET_PACK=<this pack> to attach to it) so buildings and units are not drawn as squares",
+        pack.display()
+    )
+    .replace(['\r', '\n'], " ")
+    .into())
+}
+
 pub fn start() -> Result<()> {
     let root = std::env::current_dir()?.canonicalize()?;
     let scenario = std::env::var("AOE_SCENARIO").unwrap_or_else(|_| "smoke".to_owned());
@@ -225,6 +261,9 @@ pub fn start() -> Result<()> {
     let open_map =
         std::env::var_os("AOE_OPEN_MAP_PACKAGE").map(|value| value.to_string_lossy().into_owned());
     let port = dev_port(std::env::var("DEV_PORT").ok().as_deref())?;
+    if let Some(pack) = asset_pack.as_deref().filter(|pack| !pack.is_empty()) {
+        verify_asset_pack(Path::new(pack))?;
+    }
     let build = build_identity(&root)?;
     ai::install(&root)?;
     start_with(

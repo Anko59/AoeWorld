@@ -11,6 +11,7 @@ fn explored_foundations_keep_dirt_and_crop_materials_before_fog_shading() {
         foundation_material: Some(17),
         parts: Vec::new(),
         construction: Vec::new(),
+        damage: Vec::new(),
     });
     for (kind, expected) in [(SceneUnitKind::TownCenter, 2), (SceneUnitKind::Farm, 17)] {
         let mut terrain = vec![SceneTerrain {
@@ -127,6 +128,7 @@ fn farm_crops_stay_in_the_footprint_and_neighbouring_margins_do_not_erase_them()
         foundation_material: Some(17),
         parts: Vec::new(),
         construction: Vec::new(),
+        damage: Vec::new(),
     });
     let farm = unit(SceneUnitKind::Farm);
     let mut house = unit(SceneUnitKind::House);

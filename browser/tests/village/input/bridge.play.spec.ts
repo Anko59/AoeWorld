@@ -252,6 +252,13 @@ test("diagonal drag previews every bridge cell and marks an endpoint in a two-ti
     "data-placement-invalid",
     "1",
   );
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "title",
+    "Bridge end must be on land",
+  );
+  await expect(page.locator("#command-hint")).toHaveText(
+    "Bridge end must be on land",
+  );
   const to = point(8191.5, 8189.5);
   await page.mouse.move(to.x, to.y, { steps: 5 });
   await expect(page.locator("#scene")).toHaveAttribute(

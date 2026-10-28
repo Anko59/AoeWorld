@@ -179,6 +179,11 @@ the client and DE previews share the blend calculation.
 DE draws farms with terrain textures (`g_fm1`, `g_fm2`), imported at x1 scale as
 opaque 1024x1024 frames.
 
+Without `AOE_ASSET_PACK`, the import also attaches the new overlay to the
+only existing pack that has no `buildings` link, so the next game uses the
+imported art without a pack switch. Pass `AOE_ASSET_PACK=<base>` to choose the
+target explicitly when several packs remain.
+
 Run `make test-assets-de` (or `make test-assets-de DE_DIR=/path/to/AoE2DE`)
 for the real-house decoder and player-plane checks. This dedicated target takes
 a heavy slot, mounts `DE_DIR` read-only at `/de-install`, and sets `AOE_DE_DIR`

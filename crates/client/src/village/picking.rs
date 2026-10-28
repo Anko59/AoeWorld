@@ -4,7 +4,7 @@ use aoe_core::{EntityId, ScreenPoint};
 use aoe_protocol::ResourceKind;
 use aoe_rendering::{SceneCamera, resource_sprite_bounds, scene_resource_frame};
 
-/// Shared pointer target for orders and cursor feedback, frontmost first.
+/// Shared pointer target for orders and cursor feedback, units before scenery.
 pub(in super::super) fn actor(
     client: &Client,
     point: ScreenPoint,
@@ -20,8 +20,6 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
     if crate::playground::game::strategic::active(client) {
         return None;
     }
-    let building = building_target(client, point);
-    let resource = resource_target(client, point);
     let scene = map::scene::prepare(client);
     let terrain_depth = aoe_rendering::surface_depth_at(&scene.triangles, point);
     let rendered = map::scene::units(client, &scene);
@@ -46,8 +44,8 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
     units
         .chain(animals)
         .filter_map(|(id, animal, enemy)| {
-            // Keep bounds and roof ordering on the same submitted pose as the
-            // hotspot. New simulation poses may still be waiting for the GPU.
+            // Keep bounds on the same submitted pose as the hotspot. New
+            // simulation poses may still be waiting for the GPU.
             let unit = client.rendered_frame.unit(id).or_else(|| {
                 rendered
                     .binary_search_by_key(&id, |u| u.id)
@@ -69,26 +67,19 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
             )
             .unwrap_or(fallback);
             let depth = aoe_rendering::scene_unit_depth(unit);
-            let key = (depth, u64::from(id.0));
-            (building.is_none_or(|(d, id)| in_front(key, (d, u64::from(id.0))))
-                // As in AoE2, the player's own units win over a resource
-                // under them, such as a new Fishing Ship over shore fish.
-                && (!(animal || enemy)
-                    || resource.is_none_or(|(d, id, _)| in_front(key, (d, id))))
-                && crate::unit_visuals::actor_hit(
-                    bounds,
-                    [screen.x, screen.y],
-                    [point.x, point.y],
-                    client.camera.zoom,
-                )
-                && terrain_depth.is_none_or(|surface| surface <= depth + 1e-6))
+            (crate::unit_visuals::actor_hit(
+                bounds,
+                [screen.x, screen.y],
+                [point.x, point.y],
+                client.camera.zoom,
+            ) && terrain_depth.is_none_or(|surface| surface <= depth + 1e-6))
             .then_some((depth, id, animal, enemy))
         })
         .max_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
         .map(|(_, id, a, e)| (id, a, e))
 }
 
-pub(super) fn enemy_building(client: &Client, point: ScreenPoint) -> Option<EntityId> {
+pub(in super::super) fn enemy_building(client: &Client, point: ScreenPoint) -> Option<EntityId> {
     let (depth, id) = building_target(client, point)?;
     if resource_target(client, point)
         .is_some_and(|(d, r, _)| !in_front((depth, u64::from(id.0)), (d, r)))
@@ -358,7 +349,13 @@ fn resource_unchecked(
                 r.position,
             ))
         })
-        .max_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
+        .max_by(|a, b| {
+            let non_tree = |kind| kind != 1 && kind != aoe_rendering::SceneResource::CHOPPED_TREE;
+            non_tree(a.2)
+                .cmp(&non_tree(b.2))
+                .then_with(|| a.0.total_cmp(&b.0))
+                .then(a.1.cmp(&b.1))
+        })
         .map(|(_, id, kind, position)| {
             (
                 id,

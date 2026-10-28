@@ -1,6 +1,7 @@
 use super::*;
 use std::cell::{Cell, RefCell};
 mod open_map;
+mod pack;
 #[derive(Default)]
 struct FakeRuntime {
     calls: RefCell<Vec<Vec<String>>>,

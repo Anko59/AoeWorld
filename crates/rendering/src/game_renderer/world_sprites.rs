@@ -235,7 +235,12 @@ pub(super) fn emit_world_sprite_frames(
             .then(|| art.fishing[9].get(direction).copied())
             .flatten()
             .map(world_frame);
-        for frame in std::iter::once(frame).chain(net) {
+        // Siege bodies are DAT deltas over the wheels, rails or log base row.
+        let mut shadow_emitted = false;
+        for frame in std::iter::once(frame)
+            .chain(net)
+            .chain(village::siege_body_frame(art, unit))
+        {
             let scale = camera.zoom as f32;
             let width = f64::from(frame.size[0]) * camera.zoom;
             let height = f64::from(frame.size[1]) * camera.zoom;
@@ -278,9 +283,11 @@ pub(super) fn emit_world_sprite_frames(
             scaled_frame.size = scaled_frame.size.map(|value| value * scale);
             scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
             let depth = object_depth(object);
-            if let Some((shadow, shadow_frame)) =
-                alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
+            if !shadow_emitted
+                && let Some((shadow, shadow_frame)) =
+                    alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
             {
+                shadow_emitted = true;
                 emit((shadow, shadow_frame, depth, object.stable_id()));
             }
             emit((sprite, scaled_frame, depth, object.stable_id()));
@@ -454,7 +461,7 @@ pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneC
                 .is_some()
             });
     }
-    if unit.kind.is_foundation() || unit.kind == crate::SceneUnitKind::PalisadeWall {
+    if unit.kind.is_foundation() {
         return false;
     }
     if unit.kind.building_id().is_some() {
@@ -463,12 +470,15 @@ pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneC
             .iter()
             .find(|b| Some(b.unit_id) == unit.kind.building_id())
             .is_some_and(|b| {
-                let parts = if unit.kind.is_foundation() {
-                    &b.construction
-                } else {
-                    &b.parts
-                };
-                parts.iter().any(|p| {
+                // A healthy wall draws frame 0 of each part; only damage animates.
+                let wall = unit.kind == crate::SceneUnitKind::PalisadeWall;
+                let parts: &[_] = if wall { &[] } else { &b.parts };
+                let damage = usize::from(unit.visual.damage_stage())
+                    .checked_sub(1)
+                    .and_then(|i| b.damage.get(i))
+                    .into_iter()
+                    .flat_map(|d| &d.parts);
+                parts.iter().chain(damage).any(|p| {
                     p.frame_rate > 0.0
                         && p.animation.len() > 1
                         && scene_sprite(

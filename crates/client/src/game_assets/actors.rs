@@ -25,8 +25,8 @@ pub(super) fn select(
     selected: &mut Vec<usize>,
     domains: &mut Vec<AtlasDomain>,
 ) -> Result<Vec<Option<std::ops::Range<usize>>>, JsValue> {
-    let mut ranges = Vec::new();
-    for &source in sprites() {
+    let mut ranges: Vec<Option<std::ops::Range<usize>>> = Vec::new();
+    for (semantic, &source) in sprites().iter().enumerate() {
         let identity = source.manifest_source();
         let Some(frames) = source_frames(manifest, &identity, source.frames()) else {
             if source_present(manifest, &identity) {
@@ -37,6 +37,22 @@ pub(super) fn select(
             ranges.push(None);
             continue;
         };
+        if let Some(prior) = sprites()[..semantic]
+            .iter()
+            .enumerate()
+            .find_map(|(i, old)| {
+                (old.id == source.id
+                    && old.stride == source.stride
+                    && old.sample_step() == source.sample_step()
+                    && aoe_assets::catalog::runtime::actor_maskable(i)
+                        == aoe_assets::catalog::runtime::actor_maskable(semantic))
+                .then(|| ranges[i].clone())
+                .flatten()
+            })
+        {
+            ranges.push(Some(prior));
+            continue;
+        }
         if source.selected_frames() > MAX_SELECTED_FRAMES.saturating_sub(selected.len()) {
             return Err(JsValue::from_str("Too many actor animation frames"));
         }

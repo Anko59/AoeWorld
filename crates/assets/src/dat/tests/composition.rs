@@ -362,3 +362,40 @@ fn measured_castle_composite_back_references_emit_each_layer_once() {
         }
     }
 }
+
+#[test]
+fn unit_damage_graphics_preserve_threshold_and_apply_mode() {
+    let mut bytes = fixture(0);
+    let name = bytes.windows(5).position(|w| w == b"HOUS\0").unwrap();
+    let start = name - (146 + 2 * 5 + 6);
+    bytes[start + 146..start + 151].copy_from_slice(&[3, 0, 50, 0, 1]);
+    bytes[start + 151..start + 156].copy_from_slice(&[4, 0, 75, 0, 2]);
+    let file = parse(&bytes).unwrap();
+    let damage = &file.unit(0).unwrap().damage_graphics;
+    assert_eq!(
+        damage
+            .iter()
+            .map(|d| (d.graphic_id, d.damage_percent, d.apply_mode))
+            .collect::<Vec<_>>(),
+        [(3, 50, 1), (4, 75, 2)]
+    );
+}
+
+#[test]
+fn building_composition_retains_damage_graphic_stages() {
+    let mut bytes = fixture(0);
+    let name = bytes.windows(5).position(|w| w == b"HOUS\0").unwrap();
+    let start = name - (146 + 2 * 5 + 6);
+    bytes[start + 146..start + 151].copy_from_slice(&[3, 0, 25, 0, 0]);
+    bytes[start + 151..start + 156].copy_from_slice(&[4, 0, 75, 0, 0]);
+    let file = parse(&bytes).unwrap();
+    let stages = file.building_composition(0).unwrap().damage;
+    assert_eq!(
+        stages
+            .iter()
+            .map(|stage| (stage.damage_percent, stage.apply_mode))
+            .collect::<Vec<_>>(),
+        [(25, 0), (75, 0)]
+    );
+    assert!(stages.iter().all(|stage| !stage.parts.is_empty()));
+}

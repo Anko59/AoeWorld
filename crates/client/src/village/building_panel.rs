@@ -151,7 +151,28 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
         let invalid = (0..tiles.len())
             .filter(|i| !available || !construction::tile_valid(client, kind, &tiles, *i))
             .count();
-        state.extend([tiles.len() as f64, invalid as f64]);
+        let reason = if !bridge || valid {
+            0
+        } else if tiles.len() < 2 {
+            1
+        } else if !geometry {
+            2
+        } else if tiles.first().is_some_and(|tile| {
+            map::terrain_tile(client, tile.x, tile.y)
+                .is_some_and(|ground| ground.water != aoe_map::WaterKind::None)
+        }) {
+            3
+        } else if tiles.last().is_some_and(|tile| {
+            map::terrain_tile(client, tile.x, tile.y)
+                .is_some_and(|ground| ground.water != aoe_map::WaterKind::None)
+        }) {
+            4
+        } else if !available {
+            5
+        } else {
+            6
+        };
+        state.extend([tiles.len() as f64, invalid as f64, f64::from(reason)]);
         let age = client
             .village
             .players

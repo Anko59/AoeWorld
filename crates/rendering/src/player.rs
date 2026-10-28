@@ -89,6 +89,13 @@ impl SceneUnitVisual {
     pub(crate) fn invalid_ghost(self) -> bool {
         self.0 & 4096 != 0
     }
+    pub fn with_damage_stage(mut self, stage: u8) -> Self {
+        self.0 = (self.0 & 0x1fff) | u16::from(stage.min(7)) << 13;
+        self
+    }
+    pub fn damage_stage(self) -> u8 {
+        (self.0 >> 13) as u8
+    }
     pub fn new(moving: bool) -> Self {
         Self(u16::from(moving))
     }
