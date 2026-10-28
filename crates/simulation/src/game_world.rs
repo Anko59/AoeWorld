@@ -9,6 +9,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex};
 /// One chunk's shared candidate resource nodes.
 pub(crate) type ChunkNodes = Arc<Vec<ResourceNode>>;
+#[path = "terrain/clearance.rs"]
+mod clearance;
 mod combat;
 mod economy;
 mod facing;
@@ -150,6 +152,7 @@ pub struct GameWorld {
     pub(crate) move_queues: BTreeMap<EntityId, VecDeque<WorldPosition>>,
     pub(crate) destinations: spacing::Destinations,
     pub(crate) terrain: Terrain,
+    pub(crate) clearance: Mutex<clearance::Field>,
     /// Candidate resource nodes per generator chunk, built on the first
     /// replacement search that touches the chunk and reused by later ones.
     /// See `GameWorld::chunk_resource_nodes`.
@@ -183,6 +186,7 @@ impl GameWorld {
     fn from_valid_config(config: WorldConfig) -> Self {
         Self {
             terrain: Terrain::uniform(config.seed.0),
+            clearance: Mutex::new(Default::default()),
             config,
             tick: Tick(0),
             next_entity_id: 0,

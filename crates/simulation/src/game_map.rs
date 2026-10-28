@@ -14,6 +14,7 @@ impl GameWorld {
             .map_err(|_| GameWorldError::InvalidPosition)?;
         let config = cavalry_config(WorldConfig::new(width, width, Seed(package.request.seed))?);
         Ok(Self {
+            clearance: Mutex::new(Default::default()),
             terrain: Terrain::from_package(&package),
             config,
             tick: Tick(0),
@@ -62,6 +63,7 @@ impl GameWorld {
             .map_err(|_| GameWorldError::InvalidPosition)?;
         let config = cavalry_config(WorldConfig::new(width, width, Seed(package.request.seed))?);
         Ok(Self {
+            clearance: Mutex::new(Default::default()),
             terrain: Terrain::from_prepared_package(
                 &package,
                 elevation_pages,
@@ -114,6 +116,7 @@ impl GameWorld {
             .map_err(|_| GameWorldError::InvalidPosition)?;
         let config = cavalry_config(WorldConfig::new(width, width, Seed(package.request.seed))?);
         Ok(Self {
+            clearance: Mutex::new(Default::default()),
             terrain: Terrain::from_page_provider(&package, provider)
                 .map_err(|_| GameWorldError::InvalidTerrain)?,
             config,

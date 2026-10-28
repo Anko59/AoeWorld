@@ -21,7 +21,7 @@ fn advance(world: &mut GameWorld, ticks: u32) {
     }
 }
 
-fn coast() -> GameWorld {
+pub(super) fn coast() -> GameWorld {
     coast_coverage(100)
 }
 
