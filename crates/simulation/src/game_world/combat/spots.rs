@@ -57,10 +57,53 @@ impl GameWorld {
         let range = super::super::navy::attack_range(&stats);
         !Self::uses_melee_position(unit.kind)
             || goal.distance_squared(unit.position) <= range * range
-            || self
-                .melee_positions(id, &goal)
-                .into_iter()
-                .any(|at| self.interaction_point_free(id, at))
+            || self.melee_position_free(id, &goal)
+    }
+
+    /// `melee_positions(id, goal).any(interaction_point_free)` without
+    /// building or sorting the list: the first free legal spot ends the scan.
+    fn melee_position_free(&self, id: EntityId, goal: &Goal) -> bool {
+        let (Some(unit), Some(stats)) = (self.unit(id), self.unit_stats(id)) else {
+            return false;
+        };
+        let range = super::super::navy::attack_range(&stats);
+        let valid = |at: WorldPosition| {
+            goal.distance_squared(at) <= range * range
+                && self.config.valid_ground_position(at)
+                && !self.economy.blocked_tiles.contains(&at.tile_floor())
+                && self
+                    .unit_tile_passable(unit.kind, at.tile_floor(), &|| false)
+                    .unwrap_or(false)
+                && self.body_position_clear(unit.kind, at)
+        };
+        // Some(true): a free spot; Some(false): legal spots, all taken.
+        let scan = |points: Vec<WorldPosition>| {
+            let mut any_valid = false;
+            for at in points {
+                // A free point is legal by definition (`interaction_point_free`
+                // repeats every other legality test), so only a taken one
+                // needs the separate legality check.
+                if goal.distance_squared(at) <= range * range {
+                    if self.interaction_point_free(id, at) {
+                        return Some(true);
+                    }
+                    any_valid = any_valid || valid(at);
+                }
+            }
+            any_valid.then_some(false)
+        };
+        let ring = match goal {
+            Goal::Building(rect) => perimeter_positions(*rect, unit.kind),
+            Goal::Unit(at, target_radius) => circle_positions(
+                *at,
+                (unit.kind.collision_radius() + target_radius + 8).min(range as i32),
+            ),
+        };
+        match (scan(ring), goal) {
+            (Some(free), _) => free,
+            (None, Goal::Unit(at, _)) => scan(circle_positions(*at, range as i32)) == Some(true),
+            (None, _) => false,
+        }
     }
 
     /// An attack the unit chose itself (acquisition, or an attack-move
