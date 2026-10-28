@@ -35,9 +35,9 @@ impl GameWorld {
         if self.units[index].state.hp == 0 || self.embarked(id) {
             return Err(GameWorldError::UnknownEntity);
         }
-        if !self.config.valid_ground_position(destination) {
-            return Err(GameWorldError::InvalidPosition);
-        }
+        // Snap into the legal edge band (as on dev), keeping the exact point:
+        // radius movement honours positions inside a tile.
+        let destination = self.config.clamp_ground_position(destination);
         if !self.vassal_position_allowed(id, destination) {
             return Err(GameWorldError::VassalLeash);
         }

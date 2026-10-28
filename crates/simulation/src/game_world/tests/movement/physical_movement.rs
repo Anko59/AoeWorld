@@ -256,3 +256,22 @@ fn multi_waypoint_hundred_kilometers_finishes_in_666667_fractional_ticks() {
     assert_eq!(world.movement_order(unit), None);
     assert_eq!(world.unit(unit).expect("unit").position, start);
 }
+
+#[test]
+fn a_move_into_the_map_edge_band_snaps_inside_it_instead_of_being_rejected() {
+    let config = WorldConfig::new(64, 64, Seed(7)).expect("config");
+    let (mut world, id) = GameWorld::with_cavalry(config).expect("world");
+    for beyond in [
+        WorldPosition::new(-5_000, 70_000_000),
+        WorldPosition::new(70_000_000, -5_000),
+        WorldPosition::new(0, 0),
+    ] {
+        world.issue_move(id, beyond).expect("snapped, not rejected");
+        let destination = world.movement_order(id).unwrap().destination;
+        assert!(
+            world.config().valid_ground_position(destination),
+            "{destination:?}"
+        );
+        assert_ne!(destination, beyond);
+    }
+}
