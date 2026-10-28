@@ -1,20 +1,24 @@
 //! Radius reservations for move endpoints and persistent work positions.
 use super::*;
-use std::collections::{BTreeMap, BTreeSet};
+use crate::game_world::movement_step::{CellHasher, tile_key};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::hash::BuildHasherDefault;
 
 #[derive(Debug, Default)]
 pub(crate) struct Destinations {
-    by_tile: BTreeMap<TileCoord, BTreeSet<EntityId>>,
+    /// Probed for every nearby tile of every reservation query. Only
+    /// membership questions are asked of it, so hash order decides nothing.
+    by_tile: HashMap<u64, BTreeSet<EntityId>, BuildHasherDefault<CellHasher>>,
     by_unit: BTreeMap<EntityId, [Option<TileCoord>; 2]>,
 }
 impl Destinations {
     pub(crate) fn remove(&mut self, id: EntityId) {
         if let Some(tiles) = self.by_unit.remove(&id) {
             for tile in tiles.into_iter().flatten() {
-                if let Some(ids) = self.by_tile.get_mut(&tile) {
+                if let Some(ids) = self.by_tile.get_mut(&tile_key(tile)) {
                     ids.remove(&id);
                     if ids.is_empty() {
-                        self.by_tile.remove(&tile);
+                        self.by_tile.remove(&tile_key(tile));
                     }
                 }
             }
@@ -30,7 +34,7 @@ impl Destinations {
         }
         self.by_unit.insert(id, tiles);
         for tile in tiles.into_iter().flatten() {
-            self.by_tile.entry(tile).or_default().insert(id);
+            self.by_tile.entry(tile_key(tile)).or_default().insert(id);
         }
     }
 }
@@ -55,15 +59,20 @@ impl GameWorld {
     }
 
     pub(crate) fn destination_point_reserved(&self, at: WorldPosition, except: EntityId) -> bool {
-        let Some(unit) = self.unit(except) else {
+        let Some(&index) = self.lookup.get(&except) else {
             return true;
         };
+        let unit = &self.units[index].state;
         let reach = unit.kind.collision_radius() + 512;
         let min = WorldPosition::new(at.x - reach, at.y - reach).tile_floor();
         let max = WorldPosition::new(at.x + reach, at.y + reach).tile_floor();
         for y in min.y..=max.y {
             for x in min.x..=max.x {
-                let Some(ids) = self.destinations.by_tile.get(&TileCoord::new(x, y)) else {
+                let Some(ids) = self
+                    .destinations
+                    .by_tile
+                    .get(&tile_key(TileCoord::new(x, y)))
+                else {
                     continue;
                 };
                 // An overfull arrival cell is unavailable, never sampled clear.

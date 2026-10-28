@@ -107,10 +107,23 @@ phase and gatherer reservations bundled with it. On 2026-10-27, rebased onto
 #573's unit avoidance, the same workload measured 431,004,141 instructions, 10,168
 allocations and 4,751,988 allocated bytes in CI, and these became the baselines:
 blocked gatherers re-planned whole approaches under avoidance (8,531 route searches
-per 64 ticks against 906). The radius-movement change that follows cuts the tick
-to about 247M instructions and re-takes the baseline downward. The −40.2%
-above therefore holds only for dev before #573; this batch's net late-game claim
-is the 431M measured on top of it.
+per 64 ticks against 906). The radius-movement change that follows cut the tick
+to about 260M instructions. The −40.2% above therefore holds only for dev before
+#573; this batch's net late-game claim is the 431M measured on top of it.
+
+The same radius movement made the small workloads' ticks slower: smoke +63%
+instructions (4.93M to 8.03M for the four ticks `perf-smoke` times) and
+target-distributed +22%. Deterministic profiles traced it to lazy-evaluable
+melee candidate checks in `attack_search`, a second full swept-collision and
+terrain pass in `apply_step`, a `BTreeMap` probe per nearby tile in
+`destination_point_reserved`, and a 16 MiB zero-fill on the first movement tick
+of a 16,384-tile map. `simulation::smoke_ticks` and `simulation::distributed_ticks`
+(`make perf-instructions`; `--bench movement_instructions` iterates the same
+kernels with late game alone) count those four ticks over the exact
+`perf-smoke`/`perf-ci` population and orders, single-worker, and are baselined
+in `baselines/perf/micro.json` and shown in the CI performance comment. The
+fix leaves smoke at 4.96M, distributed at 10.3M and late game at 236.8M, which
+became the baselines.
 
 ## Native building atlas
 

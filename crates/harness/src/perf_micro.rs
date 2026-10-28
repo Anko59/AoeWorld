@@ -1,9 +1,13 @@
 //! Parse exact Gungraun JSON samples and compare reviewed microbench baselines.
 use crate::perf::{Comparison, compare};
-use aoe_scenario::{LATE_GAME, SMOKE};
+use aoe_scenario::{LATE_GAME, SMOKE, TARGET_DISTRIBUTED};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeMap, error::Error, fs, path::Path};
+
+/// Simulation (advance, viewport, late game, smoke and distributed ticks),
+/// protocol (1) and assets (1).
+const CASES: usize = 7;
 
 #[derive(Deserialize, Serialize)]
 struct Baseline {
@@ -14,6 +18,7 @@ struct Baseline {
     allow_aslr: bool,
     smoke_workload_hash: String,
     late_game_workload_hash: String,
+    target_distributed_workload_hash: String,
     instructions: BTreeMap<String, u64>,
     allocation_bytes: BTreeMap<String, u64>,
     allocation_count: BTreeMap<String, u64>,
@@ -102,8 +107,8 @@ fn observed_samples_at(
 }
 
 fn proposal(observed: &BTreeMap<String, Metrics>) -> Result<Baseline, Box<dyn Error>> {
-    if observed.len() != 5 {
-        return Err("initial proposal requires five benchmark cases".into());
+    if observed.len() != CASES {
+        return Err(format!("initial proposal requires {CASES} benchmark cases").into());
     }
     Ok(Baseline {
         version: 1,
@@ -113,6 +118,7 @@ fn proposal(observed: &BTreeMap<String, Metrics>) -> Result<Baseline, Box<dyn Er
         allow_aslr: true,
         smoke_workload_hash: SMOKE.workload_hash(),
         late_game_workload_hash: LATE_GAME.workload_hash(),
+        target_distributed_workload_hash: TARGET_DISTRIBUTED.workload_hash(),
         instructions: observed
             .iter()
             .map(|(name, value)| (name.clone(), value.instructions))
@@ -155,7 +161,7 @@ fn compare_observed(
     baseline: Baseline,
     observed: BTreeMap<String, Metrics>,
 ) -> Result<Vec<Comparison>, Box<dyn Error>> {
-    if baseline.instructions.len() != 5
+    if baseline.instructions.len() != CASES
         || baseline.version != 1
         || baseline.toolchain != "rustc 1.99.1"
         || baseline.gungraun != "0.19.4"
@@ -163,6 +169,7 @@ fn compare_observed(
         || !baseline.allow_aslr
         || baseline.smoke_workload_hash != SMOKE.workload_hash()
         || baseline.late_game_workload_hash != LATE_GAME.workload_hash()
+        || baseline.target_distributed_workload_hash != TARGET_DISTRIBUTED.workload_hash()
     {
         return Err("microbenchmark baseline identity is incompatible".into());
     }

@@ -20,7 +20,7 @@ use aoe_core::{ChunkCoord, EntityId, PlayerId, WorldPosition};
 mod avoidance;
 mod collision;
 mod static_collision;
-pub(crate) use collision::CollisionIndex;
+pub(crate) use collision::{CellHasher, CollisionIndex, key as tile_key};
 mod lookahead;
 mod refinement;
 pub(crate) mod settling;
@@ -375,10 +375,15 @@ impl GameWorld {
         }
         if step.following != self.following_unit(index)
             || self.arrival_slot_occupied(index)
-            || !self.local_unit_step_clear(
+            // Terrain and buildings were proved by the proposal and cannot
+            // change during the apply phase. Only earlier movers' new
+            // positions can: re-sweep the bodies, not the static footprints.
+            || !self.collision_sweep(
                 index,
                 self.units[index].state.position,
                 step.state.position,
+                false,
+                false,
             )
         {
             return false;

@@ -29,7 +29,12 @@ impl Snapshot {
         for at in self.touched.drain(..) {
             self.cells[at] = 0;
         }
-        self.cells.resize(count, 0);
+        if self.cells.len() != count {
+            // Every populated cell was just zeroed, so a fresh zeroed block is
+            // equivalent. It comes from the allocator's zeroed pages, so a
+            // large map's first tick does not write 16 MiB.
+            self.cells = vec![0; count];
+        }
         self.columns = columns;
         self.rows = rows;
         self.ranges.clear();

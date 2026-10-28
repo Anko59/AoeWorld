@@ -56,7 +56,7 @@ fn missing_samples_cannot_pass() {
 #[test]
 fn baseline_identity_case_set_and_regressions_are_checked() {
     let mut observed = BTreeMap::new();
-    for name in ["a", "b", "c", "d", "e"] {
+    for name in ["a", "b", "c", "d", "e", "f", "g"] {
         observed.insert(
             name.to_owned(),
             Metrics {
@@ -77,7 +77,7 @@ fn baseline_identity_case_set_and_regressions_are_checked() {
     let baseline = proposal(&observed).expect("proposal");
     observed.get_mut("a").expect("case").instructions = 126;
     let results = compare_observed(baseline, observed).expect("comparison");
-    assert_eq!(results.len(), 15);
+    assert_eq!(results.len(), 21);
     assert_eq!(results[0].verdict, Verdict::Regression);
     assert!(
         results[1..]
@@ -97,10 +97,12 @@ fn proposal_reads_both_suite_files_without_changing_baseline() {
     fs::write(
         &simulation,
         format!(
-            "{}\n{}\n{}\n",
+            "{}\n{}\n{}\n{}\n{}\n",
             line("a", 100),
             line("b", 100),
-            line("e", 100)
+            line("e", 100),
+            line("f", 100),
+            line("g", 100)
         ),
     )
     .expect("simulation samples");
@@ -110,7 +112,7 @@ fn proposal_reads_both_suite_files_without_changing_baseline() {
         observed_samples_at(&simulation, &protocol, &assets)
             .expect("samples")
             .len(),
-        5
+        7
     );
     let original =
         proposal(&observed_samples_at(&simulation, &protocol, &assets).expect("samples"))
@@ -123,7 +125,7 @@ fn proposal_reads_both_suite_files_without_changing_baseline() {
         comparisons_at(&baseline, &simulation, &protocol, &assets)
             .expect("comparison")
             .len(),
-        15
+        21
     );
     assert!(proposed.is_file());
     fs::write(&protocol, format!("{}\n", line("a", 100))).expect("duplicate");
@@ -132,7 +134,7 @@ fn proposal_reads_both_suite_files_without_changing_baseline() {
 
 #[test]
 fn late_game_identity_and_complete_case_set_are_required() {
-    let observed: BTreeMap<_, _> = ["a", "b", "c", "d", "e"]
+    let observed: BTreeMap<_, _> = ["a", "b", "c", "d", "e", "f", "g"]
         .into_iter()
         .map(|name| {
             (
