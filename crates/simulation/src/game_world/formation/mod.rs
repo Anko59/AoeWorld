@@ -61,6 +61,8 @@ pub(crate) struct Group {
     direct: bool,
     gap: i32,
     narrow_gap: i32,
+    /// Derived from the hashed offsets/gap whenever ranks or membership change.
+    slots_tight: bool,
     form_start: i64,
     form_distance: i64,
     half_width: i32,

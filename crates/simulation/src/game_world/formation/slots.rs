@@ -14,10 +14,7 @@ pub(super) fn class(kind: UnitKind) -> u8 {
 
 impl Group {
     pub(super) fn tight_destination(&self) -> bool {
-        let left = self.members.iter().map(|m| m.offset.x).min().unwrap_or(0);
-        self.members
-            .iter()
-            .any(|m| m.offset.x > left && m.offset.x - left < self.gap - 2)
+        self.slots_tight
     }
 
     /// Members always stay in canonical id order. Dense armies need one
@@ -47,6 +44,11 @@ impl Group {
         for (rank, at) in order.into_iter().enumerate() {
             self.members[at].rank = rank;
         }
+        let left = self.members.iter().map(|m| m.offset.x).min().unwrap_or(0);
+        self.slots_tight = self
+            .members
+            .iter()
+            .any(|m| m.offset.x > left && m.offset.x - left < self.gap - 2);
     }
 }
 

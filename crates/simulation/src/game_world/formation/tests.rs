@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn formation_certificate_bound_respects_homogeneous_physical_speed_and_carry() {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
+    let at = WorldPosition::new(100 * 1024, 100 * 1024);
+    let id = w.spawn_kind(PlayerId(0), UnitKind::Militia, at).unwrap();
+    w.issue_formation_move(
+        PlayerId(0),
+        &[id],
+        Formation::Line,
+        WorldPosition::new(125 * 1024, at.y),
+        false,
+        false,
+    )
+    .unwrap();
+    w.formations.get_mut(&id).unwrap().members[0].carry = (1_u64 << 32) - 1;
+    let motion = w.formation_motion(w.lookup[&id]).unwrap();
+    let (speed, denominator) = w.movement_speed(UnitKind::Militia, PlayerId(0));
+    assert_eq!(motion.budget, speed.div_ceil(denominator) as i32);
+    assert_eq!(w.formation_step_bound(), motion.budget + 2);
+}
+
+#[test]
 fn cohesion_waits_only_for_rear_stragglers() {
     let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
     let at = WorldPosition::new(100 * 1024, 100 * 1024);

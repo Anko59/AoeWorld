@@ -134,6 +134,7 @@ impl GameWorld {
             direct: direct_order(origin, destination, &positions),
             gap,
             narrow_gap: diameter + step + 16,
+            slots_tight: false,
             form_start: 0,
             form_distance: 0,
             half_width: 0,

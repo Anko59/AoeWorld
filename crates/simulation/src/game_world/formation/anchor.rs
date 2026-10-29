@@ -168,10 +168,10 @@ impl GameWorld {
             }
             let unit = self.units[self.lookup[&member.id]].state;
             let position = unit.position;
-            let clear = group
-                .static_area
-                .is_some_and(|area| area.covers(position, unit.kind.collision_radius(), 0));
-            let obstructed = !clear
+            let obstructed = !constrained
+                && !group
+                    .static_area
+                    .is_some_and(|area| area.covers(position, unit.kind.collision_radius(), 0))
                 && self.static_clearance(unit.kind, position.tile_floor()) < 15
                 && !self.body_step_clear(
                     unit.kind,

@@ -232,10 +232,22 @@ impl GameWorld {
             .values()
             .filter(|group| !group.settled)
             .map(|group| {
-                (u128::from(group.pace.0) * 5)
-                    .div_ceil(u128::from(group.pace.1) * 4)
-                    .min(512) as i32
-                    + 2
+                let mut bound =
+                    (u128::from(group.pace.0) * 5).div_ceil(u128::from(group.pace.1) * 4);
+                if let Some(first) = group.members.first() {
+                    let unit = self.units[self.lookup[&first.id]].state;
+                    if group.members.iter().all(|member| {
+                        let other = self.units[self.lookup[&member.id]].state;
+                        other.kind == unit.kind && other.player == unit.player
+                    }) {
+                        // Every member has this current physical cap, including
+                        // upgrades after anchor arrival. Mixed groups retain
+                        // the conservative 1.25x-pace bound.
+                        let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
+                        bound = bound.min(u128::from(speed.div_ceil(denominator)));
+                    }
+                }
+                bound.min(512) as i32 + 2
             })
             .max()
             .unwrap_or(2)
