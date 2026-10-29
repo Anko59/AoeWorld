@@ -184,6 +184,12 @@ pub(crate) fn write_pack(
     buildings: Vec<crate::dat::BuildingComposition>,
     mut render: impl FnMut(usize, usize) -> Result<Planes, Error>,
 ) -> Result<PathBuf, Error> {
+    let total = sprites.iter().try_fold(0_usize, |sum, sprite| {
+        sum.checked_add(sprite.frames).filter(|&n| n <= MAX_FRAMES)
+    });
+    if total.is_none() {
+        return Err(invalid("atlas", 0, "too many sprite frames"));
+    }
     fs::create_dir_all(output_root)?;
     let destination = output_root.join(&hash);
     if destination.exists() {
@@ -223,9 +229,6 @@ pub(crate) fn write_pack(
                     anchor_y: frame.hotspot_y,
                 });
             }
-        }
-        if frames.len() > MAX_FRAMES {
-            return Err(invalid("atlas", 0, "too many sprite frames"));
         }
         pages.push(save_page(&temporary, pages.len(), page)?);
         let manifest = Manifest {
