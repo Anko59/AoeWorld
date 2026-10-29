@@ -293,7 +293,11 @@ and buildings stay hard (existing exact sweeps, `static_collision.rs`).
 6. **Narrow water.** Ships get a terrain radius of 0.25 tile, separate from
    the 0.5 body radius, so one ship sails any 1-tile channel and two pass in 2
    tiles. Working fishing ships are soft (`h` 0.5 to friendly ships); a
-   blocked fishing ship keeps its job rather than going idle.
+   blocked fishing ship keeps its job rather than going idle. In a verified
+   1-tile lane opposing moving hulls use `h` 0.5: the legal lateral centre
+   separation is only 0.5 tile, so `h` 0.85 cannot pass. Idle enemy hulls and
+   moving traffic in wider water keep full separation. Each mover bears right
+   and trims its lateral step to the exact terrain boundary [G].
 7. **Villagers at resources.** Perimeter spots (`slots.rs`) become
    preferences: work starts within reach of the footprint even if the spot is
    taken, with at most two bodies per point. Working villagers are soft to

@@ -1,6 +1,6 @@
 //! Work positions reserve circles around the resource footprint, not whole tiles.
 use super::*;
-use crate::game_world::movement_step::slots::{perimeter_positions, squared};
+use crate::game_world::movement_step::slots::{perimeter_positions, squared, within_work_reach};
 use std::collections::BTreeSet;
 
 impl GameWorld {
@@ -29,7 +29,29 @@ impl GameWorld {
             return Vec::new();
         };
         let rect = aoe_core::TileRect::from_xywh(target.x, target.y, 1, 1);
-        let mut candidates = perimeter_positions(rect, unit.kind);
+        let mut candidates = if unit.kind.is_naval() {
+            // Half-tile hull separation with quarter-tile shore clearance:
+            // sample both legal lanes, instead of two outer hull corners.
+            let mut points = Vec::new();
+            for dy in -1..=1 {
+                for dx in -1..=1 {
+                    for y in [256, 768] {
+                        for x in [256, 768] {
+                            let at = aoe_core::WorldPosition::new(
+                                (target.x + dx) * 1024 + x,
+                                (target.y + dy) * 1024 + y,
+                            );
+                            if within_work_reach(unit.kind, at, target) {
+                                points.push(at);
+                            }
+                        }
+                    }
+                }
+            }
+            points
+        } else {
+            perimeter_positions(rect, unit.kind)
+        };
         // A worker already in contact need not walk to a canonical candidate.
         if self.at_work_position(id, target) {
             candidates.push(unit.position);
@@ -48,6 +70,30 @@ impl GameWorld {
         target: TileCoord,
     ) -> Result<(), EconomyError> {
         self.approach_resource_in(id, target, None)
+    }
+
+    /// Traffic is temporary. Retry a valid fishing job at most once a second,
+    /// retaining its reservation instead of dropping the profession to Idle.
+    pub(super) fn retry_fishing_approach(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
+        let Some(left) = self.resource_remaining(task.node) else {
+            return false;
+        };
+        if left == 0 {
+            return self.resume_resource(id, task);
+        }
+        if self.tick.0 < task.retry_tick {
+            return true;
+        }
+        task.retry_tick = self.tick.0 + u64::from(self.config.tick_hz);
+        if self.approach_resource(id, task.tile).is_ok() {
+            task.work_position = self.movement_order(id).map(|o| o.destination);
+            task.approach_failures = 0;
+            task.retry_tick = 0;
+            if let Some(&index) = self.lookup.get(&id) {
+                self.units[index].state.task = UnitTask::Moving;
+            }
+        }
+        true
     }
 
     pub(super) fn approach_resource_in(

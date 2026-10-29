@@ -135,7 +135,7 @@ impl CollisionIndex {
 
     /// At most sixteen cells, with 32 body tests per cell. Hash iteration never
     /// determines a decision: cells and each cell's cyclic window are canonical.
-    fn blocked(
+    pub(super) fn blocked(
         &self,
         (at, reach): (WorldPosition, i32),
         naval: bool,
@@ -183,7 +183,7 @@ impl CollisionIndex {
 }
 
 /// Hard shares of the radii sum: friendly traffic 50%, workers 75%, others 100%.
-/// Ships keep whole hulls; see group-movement-rewrite.md section 4.3.
+/// Ships keep whole hulls outside narrow-water and fishing contacts (contact.rs).
 const HARD_FRIEND_MOVING: i64 = 50;
 const HARD_FRIEND_IDLE: i64 = 50;
 const HARD_FRIEND_WORKING: i64 = 75;
@@ -225,32 +225,6 @@ pub(crate) fn hard_distance(unit: &crate::GameUnit, other: &crate::GameUnit) -> 
     sum * percent / 100
 }
 
-impl UnitKind {
-    /// Equal collision axes in the complete classic DAT table, rounded up to
-    /// fixed subunits. See docs/movement/aoe2-model.md for source and confidence.
-    pub const fn collision_radius(self) -> i32 {
-        const RADIUS: [i16; 256] = {
-            let mut table = [205; 256];
-            table[UnitKind::Scout as usize] = 256;
-            table[UnitKind::Knight as usize] = 256;
-            table[UnitKind::LightCavalry as usize] = 256;
-            table[UnitKind::Vassal as usize] = 308;
-            table[UnitKind::General as usize] = 410;
-            table[UnitKind::BatteringRam as usize] = 461;
-            table[UnitKind::FishingShip as usize] = 512;
-            table[UnitKind::Galley as usize] = 512;
-            table[UnitKind::FireShip as usize] = 512;
-            table[UnitKind::DemolitionShip as usize] = 512;
-            table[UnitKind::TransportShip as usize] = 512;
-            table[UnitKind::WarGalley as usize] = 512;
-            table[UnitKind::Mangonel as usize] = 512;
-            table
-        };
-        // One load: this runs for every body tested in a collision scan.
-        RADIUS[self as usize] as i32
-    }
-}
-
 impl GameWorld {
     pub(super) fn collision_occupied(
         &self,
@@ -269,7 +243,11 @@ impl GameWorld {
                     return false;
                 }
                 let other = &self.units[self.collisions.unit_index(id)].state;
-                let r = i64::from(unit.kind.collision_radius() + other.kind.collision_radius());
+                let r = self
+                    .naval_worker_distance(&unit, &other)
+                    .unwrap_or_else(|| {
+                        i64::from(unit.kind.collision_radius() + other.kind.collision_radius())
+                    });
                 let x = i64::from(at.x) - i64::from(other.position.x);
                 let y = i64::from(at.y) - i64::from(other.position.y);
                 other.hp > 0 && (!stationary || !other.moving) && x * x + y * y < r * r
@@ -331,6 +309,7 @@ impl GameWorld {
                 o.pass_until > self.tick.0
                     && (x * x + y * y > 2048 * 2048 || self.free_work_approach(index, o.goal))
             });
+        let narrow_water = unit.kind.is_naval() && unit.moving && self.narrow_water_lane(from);
         let culling = bounds.map(|_| {
             let broad_radius = i64::from(own_radius + maximum_radius + padding);
             (
@@ -362,7 +341,11 @@ impl GameWorld {
                 if other.hp == 0 || (stationary && other.moving) {
                     return false;
                 }
-                let r = if soft {
+                let r = if let Some(r) = self.naval_worker_distance(&unit, &other) {
+                    r
+                } else if narrow_water && other.moving {
+                    i64::from(own_radius + other.kind.collision_radius()) / 2
+                } else if soft {
                     hard_distance(&unit, &other)
                 } else {
                     i64::from(own_radius + other.kind.collision_radius())
@@ -421,7 +404,7 @@ impl GameWorld {
         if !self.config.valid_ground_position(at) {
             return false;
         }
-        let r = kind.collision_radius();
+        let r = kind.terrain_radius();
         let mut bridge = None;
         let here = at.tile_floor();
         let min = WorldPosition::new(at.x - r, at.y - r).tile_floor();

@@ -197,6 +197,9 @@ impl GameWorld {
         if budget == 0 {
             return from;
         }
+        if let Some(next) = self.water_head_on_step(index, proposed) {
+            return next;
+        }
         let side = self.units[index].obstruction.map_or(1, |o| o.side) as i64;
         let yield_back = self.units[index]
             .obstruction

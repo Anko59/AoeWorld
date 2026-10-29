@@ -1,12 +1,21 @@
-//! S7: fishing ships in a river. Records today's behaviour; PR 9 of the
-//! group-movement rewrite (docs/movement/group-movement-rewrite.md, section
-//! 6) makes four ships work in a river one tile wide.
+//! PR 9: narrow-water traffic and fishing work, including a temporarily
+//! blocked job. Terrain stays hard; compressed one-tile traffic never tunnels.
 use super::*;
 use aoe_map::ObjectKind;
 
+fn record(name: &str, value: &impl std::fmt::Debug) {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reports/movement");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join(format!("water-{name}.txt")),
+        format!("{value:?}\n"),
+    )
+    .unwrap();
+}
+
 /// Four fishing ships, two each side of one fish, in a channel `width` tiles
 /// wide beside it. Returns (orders refused, ships with a catch, idle ships).
-fn fish_in_river(width: i32) -> (usize, usize, usize) {
+fn fish_river_fixture(width: i32) -> (GameWorld, aoe_map::ResourceNode, i32) {
     let mut w = coast();
     w.set_fog_disabled(true);
     let crate::Terrain::Map { generator, .. } = w.terrain() else {
@@ -36,6 +45,11 @@ fn fish_in_river(width: i32) -> (usize, usize, usize) {
             }
         }
     }
+    (w, *fish, river)
+}
+
+fn fish_in_river(width: i32) -> (usize, usize, usize) {
+    let (mut w, fish, river) = fish_river_fixture(width);
     let ships = [-6, -4, 4, 6].map(|dx| {
         let at = TileCoord::new(fish.tile.x + dx, river);
         ship(&mut w, UnitKind::FishingShip, at, 0)
@@ -62,12 +76,35 @@ fn four_fishing_ships_in_a_one_tile_river() {
     let narrow = fish_in_river(1);
     let wide = fish_in_river(3);
     eprintln!("group-baseline river-fishing: one_tile={narrow:?} three_tile={wide:?}");
-    // S7: in a one-tile river every gather order is refused as unreachable
-    // (the design blames the 512-subunit hull against the terrain check; not
-    // yet confirmed), so none catches a fish and all four idle. PR 9 flips this: all four work. A three-tile channel
-    // already admits two of the four.
-    assert_eq!(narrow, (4, 0, 4));
-    assert_eq!(wide, (2, 2, 2));
+    record("fishing", &(narrow, wide));
+    assert_eq!(narrow, (0, 4, 0));
+    assert_eq!(wide, (0, 4, 0));
+}
+
+#[test]
+fn a_blocked_fishing_ship_keeps_its_job_until_the_channel_clears() {
+    let (mut w, fish, river) = fish_river_fixture(1);
+    let id = ship(
+        &mut w,
+        UnitKind::FishingShip,
+        TileCoord::new(fish.tile.x - 6, river),
+        0,
+    );
+    w.issue_gather(PlayerId(0), id, fish.id).unwrap();
+    let blocker = ship(
+        &mut w,
+        UnitKind::Galley,
+        TileCoord::new(fish.tile.x - 3, river),
+        1,
+    );
+    w.issue_stance(PlayerId(1), &[blocker], aoe_core::CombatStance::NoAttack)
+        .unwrap();
+    advance(&mut w, 320);
+    assert_eq!(w.gather_target(id), Some(fish.id));
+    assert_ne!(w.unit(id).unwrap().task, UnitTask::Idle);
+    w.remove_unit(blocker);
+    advance(&mut w, 600);
+    assert!(w.unit(id).unwrap().carried.is_some());
 }
 
 /// Ships sail a channel `width` tiles wide: each `(kind, start, goal)` is an x
@@ -95,28 +132,39 @@ fn channel(width: i32, ships: &[(UnitKind, i32, i32, i32, i32, u16)]) -> (u32, u
         );
         let goal = at(TileCoord::new(base.x + to_x, base.y + to_y));
         let ordered = w.issue_move(id, goal).is_ok();
-        actors.push((id, w.movement_order(id).map(|o| o.destination), ordered));
+        assert!(ordered, "{kind:?} order refused");
+        actors.push((id, w.movement_order(id).map(|o| o.destination)));
     }
     let mut done = 0;
     for tick in 1..=1600 {
         w.advance();
+        for (n, &(id, _)) in actors.iter().enumerate() {
+            let unit = w.unit(id).unwrap();
+            assert!(w.body_position_clear(unit.kind, unit.position));
+            for &(other, _) in &actors[n + 1..] {
+                let at = w.unit(other).unwrap().position;
+                let distance = i64::from(unit.position.x - at.x).pow(2)
+                    + i64::from(unit.position.y - at.y).pow(2);
+                let hard: i64 = if width == 1 { 512 } else { 1024 };
+                assert!(distance >= hard * hard, "hull hard distance at tick {tick}");
+            }
+        }
         if done == 0
             && actors
                 .iter()
-                .all(|&(id, goal, _)| Some(w.unit(id).unwrap().position) == goal)
+                .all(|&(id, goal)| Some(w.unit(id).unwrap().position) == goal)
         {
             done = tick;
         }
     }
     let never = actors
         .iter()
-        .filter(|&&(id, goal, _)| Some(w.unit(id).unwrap().position) != goal)
+        .filter(|&&(id, goal)| Some(w.unit(id).unwrap().position) != goal)
         .count();
     (done, never)
 }
 
 #[test]
-#[ignore = "recording, PR 9/10"]
 fn boats_in_narrow_rivers() {
     let g = UnitKind::Galley;
     let f = UnitKind::FishingShip;
@@ -138,5 +186,12 @@ fn boats_in_narrow_rivers() {
         // Two enemy galleys head-on along one row of a two-tile river.
         channel(2, &[(g, 0, 0, 14, 0, 0), (g, 14, 0, 0, 0, 1)]),
     ];
-    panic!("record {r:?}");
+    // Fourteen tiles take 223 ticks at fishing-ship speed. Allow at most
+    // 77 further ticks for contact and routing; nobody may give up as arrived.
+    record("boats", &r);
+    assert!(
+        r.iter()
+            .all(|&(tick, never)| (1..=300).contains(&tick) && never == 0),
+        "{r:?}"
+    );
 }

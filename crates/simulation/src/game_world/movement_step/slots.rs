@@ -41,6 +41,16 @@ pub(crate) fn footprint_distance_squared(at: WorldPosition, rect: TileRect) -> i
     squared(at, WorldPosition::new(x, y))
 }
 
+pub(crate) fn within_work_reach(
+    kind: UnitKind,
+    at: WorldPosition,
+    tile: aoe_core::TileCoord,
+) -> bool {
+    let range = i64::from(kind.collision_radius() + if kind.is_naval() { 256 } else { 104 });
+    let rect = TileRect::from_xywh(tile.x, tile.y, 1, 1);
+    !rect.contains(at.tile_floor()) && footprint_distance_squared(at, rect) <= range * range
+}
+
 impl GameWorld {
     pub(crate) fn interaction_point_free(&self, id: EntityId, at: WorldPosition) -> bool {
         let Some(&index) = self.lookup.get(&id) else {
@@ -61,10 +71,6 @@ impl GameWorld {
         let Some(unit) = self.unit(id) else {
             return false;
         };
-        let range =
-            i64::from(unit.kind.collision_radius() + if unit.kind.is_naval() { 256 } else { 104 });
-        let rect = TileRect::from_xywh(tile.x, tile.y, 1, 1);
-        !rect.contains(unit.position.tile_floor())
-            && footprint_distance_squared(unit.position, rect) <= range * range
+        within_work_reach(unit.kind, unit.position, tile)
     }
 }

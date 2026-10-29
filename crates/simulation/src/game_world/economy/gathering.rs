@@ -283,6 +283,12 @@ impl GameWorld {
         }
         if task.phase == GatherPhase::Approaching && self.units[index].last_movement_error.is_some()
         {
+            if task.fish.is_some()
+                && self.units[index].state.kind == UnitKind::FishingShip
+                && self.units[index].last_movement_error == Some(GameWorldError::Unreachable)
+            {
+                return self.retry_fishing_approach(id, task);
+            }
             if task.farm.is_some() || task.fish.is_some() || task.approach_failures >= 8 {
                 return false;
             }

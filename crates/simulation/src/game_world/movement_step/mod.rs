@@ -20,6 +20,7 @@ use aoe_core::{ChunkCoord, EntityId, PlayerId, WorldPosition};
 mod avoidance;
 pub(in crate::game_world) mod certificates;
 mod collision;
+mod contact;
 mod group;
 mod static_collision;
 pub(crate) use collision::{CellHasher, CollisionIndex, key as tile_key};

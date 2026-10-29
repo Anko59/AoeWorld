@@ -89,7 +89,9 @@ impl GameWorld {
                     if unit.kind.is_naval() != other.kind.is_naval() {
                         continue;
                     }
-                    let r = i64::from(unit.kind.collision_radius() + other.kind.collision_radius());
+                    let r = self.naval_worker_distance(unit, &other).unwrap_or_else(|| {
+                        i64::from(unit.kind.collision_radius() + other.kind.collision_radius())
+                    });
                     if self
                         .reserved_positions(id)
                         .into_iter()
