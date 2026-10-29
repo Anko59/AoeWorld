@@ -107,6 +107,7 @@ impl GameWorld {
         if building.training_queue.is_empty() {
             self.economy.active_training.remove(&center);
         }
+        self.cancel_general_recruit(center);
         if entry.kind == UnitKind::Villager {
             if let Some(state) = self.economy.players.get_mut(&player) {
                 state.stockpile.food = state
@@ -210,6 +211,9 @@ impl GameWorld {
             let kind = kind.upgraded(self.player_economy(player).map_or(0, |p| p.researched));
             let spawned = self.spawn_kind(player, kind, position);
             if let Ok(unit) = spawned {
+                if kind == UnitKind::General {
+                    self.bind_general_castle(unit, id);
+                }
                 if kind == UnitKind::Vassal {
                     self.bind_vassal(unit, id, footprint);
                 }
@@ -219,6 +223,7 @@ impl GameWorld {
                         self.economy.active_training.remove(&id);
                     }
                 }
+                self.finish_general_recruit(id, unit);
                 if let Some(rally) = rally {
                     self.apply_rally(unit, rally);
                 }

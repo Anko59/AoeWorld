@@ -15,6 +15,7 @@ mod farming;
 mod fishing;
 pub(crate) mod fixture;
 mod gathering;
+mod general;
 mod market;
 mod rejections;
 #[path = "economy/navigation/resource_collision.rs"]

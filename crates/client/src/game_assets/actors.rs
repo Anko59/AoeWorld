@@ -26,8 +26,22 @@ pub(super) fn select(
     domains: &mut Vec<AtlasDomain>,
 ) -> Result<Vec<Option<std::ops::Range<usize>>>, JsValue> {
     let mut ranges: Vec<Option<std::ops::Range<usize>>> = Vec::new();
+    let base_end = selected.len();
     for (semantic, &source) in sprites().iter().enumerate() {
         let identity = source.manifest_source();
+        if matches!(source.id, 3789 | 3786 | 3793)
+            && source_present(manifest, &identity)
+            && manifest
+                .frames
+                .iter()
+                .filter(|f| f.source == identity)
+                .count()
+                != 5
+        {
+            return Err(JsValue::from_str(
+                "Unsupported General keyframe topology; regenerate the DE pack",
+            ));
+        }
         let Some(frames) = source_frames(manifest, &identity, source.frames()) else {
             if source_present(manifest, &identity) {
                 return Err(JsValue::from_str(
@@ -37,6 +51,29 @@ pub(super) fn select(
             ranges.push(None);
             continue;
         };
+        if let Some(role) = source.base_role() {
+            let resident = if role == AssetRole::CavalryStanding {
+                (0..5)
+                    .map(|row| frames[source.source_frame(row, 0)])
+                    .collect()
+            } else {
+                frames.clone()
+            };
+            if let Some(start) = selected[..base_end]
+                .windows(resident.len())
+                .enumerate()
+                .find_map(|(start, window)| {
+                    (window == resident
+                        && domains[start..start + resident.len()]
+                            .iter()
+                            .all(|d| *d == AtlasDomain::Objects))
+                    .then_some(start)
+                })
+            {
+                ranges.push(Some(start..start + resident.len()));
+                continue;
+            }
+        }
         if let Some(prior) = sprites()[..semantic]
             .iter()
             .enumerate()
@@ -80,28 +117,41 @@ pub(super) fn resolve(
 ) -> Vec<Vec<GameFrame>> {
     ranges
         .iter()
-        .map(|range| {
+        .enumerate()
+        .map(|(semantic, range)| {
             let Some(range) = range else {
                 return Vec::new();
             };
-            let stride = range.len() / 5;
+            let source = sprites()[semantic];
+            let indices: Vec<_> = if source.base_role() == Some(AssetRole::CavalryWalking)
+                && range.len() == source.frames() as usize
+            {
+                (0..5)
+                    .flat_map(|row| {
+                        (0..usize::from(source.stride))
+                            .step_by(usize::from(source.sample_step()))
+                            .map(move |phase| range.start + source.source_frame(row, phase))
+                    })
+                    .collect()
+            } else {
+                range.clone().collect()
+            };
+            let stride = indices.len() / 5;
             let cell = |index: usize| {
-                let f = &manifest.frames[selected[index]];
+                let f = &manifest.frames[selected[indices[index]]];
                 (
                     &f.source, f.page, f.x, f.y, f.width, f.height, f.anchor_x, f.anchor_y,
                 )
             };
             if stride > 1
                 && (0..5).all(|row| {
-                    let start = range.start + row * stride;
+                    let start = row * stride;
                     (1..stride).all(|phase| cell(start) == cell(start + phase))
                 })
             {
-                (0..5)
-                    .map(|row| records[range.start + row * stride])
-                    .collect()
+                (0..5).map(|row| records[indices[row * stride]]).collect()
             } else {
-                records[range.clone()].to_vec()
+                indices.into_iter().map(|index| records[index]).collect()
             }
         })
         .collect()

@@ -1,6 +1,6 @@
 use super::{DamageKind, UnitCombat, UnitCost, UnitKind, UnitTraining};
 /// Indexed by `UnitKind as usize`; a test pins the order.
-pub const UNIT_COMBAT: [UnitCombat; 23] = [
+pub const UNIT_COMBAT: [UnitCombat; 24] = [
     UnitCombat {
         kind: UnitKind::Villager,
         hp: 25,
@@ -253,6 +253,14 @@ pub const UNIT_COMBAT: [UnitCombat; 23] = [
         (200, 100),
         (0, 0, 6),
         (1_000, 0, 1_000),
+        60,
+    ),
+    troop(
+        UnitKind::General,
+        (350, 22, 5, 6),
+        (180, 140),
+        (1, 0, 9),
+        (800, 0, 800),
         60,
     ),
 ];

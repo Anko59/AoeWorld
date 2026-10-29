@@ -43,6 +43,9 @@ export async function bundleProof(page: Page, url: string, film = false) {
     cargo,
     0, // Combined wire: no Vassal home Castle.
     0, // Combined wire: no Vassal manager.
+    0, // Aggressive stance.
+    0, // No General commander.
+    0, // No General summary.
   ];
   const building = (
     id: number,

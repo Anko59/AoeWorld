@@ -58,7 +58,16 @@ pub(super) fn present(client: &Client) {
         .iter()
         .find_map(|id| client.units.get(id).filter(|u| u.player == player))
     {
-        if u.managed_by.is_some() {
+        if let Some(g) = u.general {
+            let state = match g.state {
+                aoe_protocol::GeneralState::Marching => "marching",
+                aoe_protocol::GeneralState::Fighting => "fighting",
+                aoe_protocol::GeneralState::Retreating => "retreating",
+            };
+            label = format!("General · {}/100 soldiers · {state}", g.army_size);
+        } else if u.commanded_by.is_some() {
+            label = "Commanded by General".into();
+        } else if u.managed_by.is_some() {
             label = "Managed by Vassal".into();
         } else if u.kind == UnitKind::Vassal {
             label = "Garrison in its home Castle to manage the economy within 100 tiles".into();

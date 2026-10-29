@@ -155,8 +155,28 @@ impl UnitFrame {
                     (target != ABSENT).then_some(EntityId(target)),
                 );
                 state.cargo_count = world.transport_cargo(unit.id).len() as u8;
-                state.home_castle = world.vassal_castle(unit.id);
+                state.home_castle = world
+                    .vassal_castle(unit.id)
+                    .or_else(|| world.general_castle(unit.id));
                 state.managed_by = world.vassal_controller(unit.id);
+                state.commanded_by = world.general_controller(unit.id);
+                state.general =
+                    world
+                        .general_status(unit.id)
+                        .map(|g| aoe_protocol::GeneralStatus {
+                            army_size: g.army_size,
+                            state: match g.state {
+                                aoe_simulation::GeneralState::Marching => {
+                                    aoe_protocol::GeneralState::Marching
+                                }
+                                aoe_simulation::GeneralState::Fighting => {
+                                    aoe_protocol::GeneralState::Fighting
+                                }
+                                aoe_simulation::GeneralState::Retreating => {
+                                    aoe_protocol::GeneralState::Retreating
+                                }
+                            },
+                        });
                 states.push(state);
                 if world.unit_visible_to(unit.player, unit.id)
                     && let Some(list) = list_of

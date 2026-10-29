@@ -130,3 +130,30 @@ pub(super) fn duplicate_actor(index: usize) -> bool {
                     == super::super::runtime::actor_maskable(index)
         })
 }
+
+pub(super) fn actor_frames() -> usize {
+    super::super::units::SPRITES
+        .iter()
+        .enumerate()
+        .filter(|(index, source)| !duplicate_actor(*index) && source.base_role().is_none())
+        .map(|(_, s)| s.selected_frames())
+        .sum()
+}
+
+#[test]
+fn unsupported_general_source_topology_is_rejected() {
+    let mut manifest = super::synthetic_manifest();
+    let mut extra = manifest
+        .frames
+        .iter()
+        .find(|f| f.source == "de/u_cav_hero_joan_idleA_x1.sld")
+        .expect("hero source")
+        .clone();
+    extra.frame = 5;
+    manifest.frames.push(extra);
+    assert!(
+        super::prove(&manifest).is_err(),
+        "unsupported hero source must be regenerated"
+    );
+    manifest.frames.pop();
+}

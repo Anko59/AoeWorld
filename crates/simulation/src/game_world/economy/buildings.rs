@@ -349,7 +349,7 @@ pub const BUILDING_RULES: [BuildingRules; 21] = [
         200,
         4800,
         (4, 11),
-        &[UnitKind::Vassal],
+        &[UnitKind::Vassal, UnitKind::General],
         None,
     ),
     castle(

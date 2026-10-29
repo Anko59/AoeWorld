@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 20;
+pub const VERSION: u8 = 21;
 
 pub mod buildings;
 pub mod candidates;

@@ -168,6 +168,7 @@ fn in_reach(u: &GameplayUnitState, animal: Option<&AnimalState>) -> bool {
 fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
     use Pose::*;
     Some(match kind {
+        UnitKind::General => [GeneralStand, GeneralWalk, GeneralAttack, GeneralDie],
         UnitKind::Vassal => [KingStand, KingWalk, KingStand, KingDie],
         UnitKind::Archer => [ArcherStand, ArcherWalk, ArcherAttack, ArcherDie],
         UnitKind::Skirmisher => [
@@ -281,6 +282,7 @@ fn decay_pair(pose: Pose) -> Option<(Pose, Pose)> {
     use Pose::*;
     [
         (KingDie, KingDecay),
+        (GeneralDie, GeneralDecay),
         (MilitiaDie, MilitiaDecay),
         (ArcherDie, ArcherDecay),
         (SkirmisherDie, SkirmisherDecay),

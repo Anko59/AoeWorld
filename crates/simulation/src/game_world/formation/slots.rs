@@ -104,10 +104,16 @@ impl GameWorld {
 
     pub(super) fn assign_group_slots(&self, group: &mut Group) {
         let count = group.members.len();
-        let mut slots = layout::slots(group.form, count)
-            .into_iter()
-            .map(|p| WorldPosition::new(p.x * group.gap / 1040, p.y * group.gap / 1040))
-            .collect::<Vec<_>>();
+        let mut roles = self.general_role_slots(group.members.iter().map(|m| m.id), group.gap);
+        let mut slots = roles.as_ref().map_or_else(
+            || {
+                layout::slots(group.form, count)
+                    .into_iter()
+                    .map(|p| WorldPosition::new(p.x * group.gap / 1040, p.y * group.gap / 1040))
+                    .collect::<Vec<_>>()
+            },
+            |roles| roles.iter().map(|&(_, p)| p).collect(),
+        );
         let clearance = self.static_clearance(UnitKind::Militia, group.destination.tile_floor());
         let half_width = slots.iter().map(|p| p.x.abs()).max().unwrap_or(0) + group.gap / 2;
         let largest = group
@@ -129,84 +135,104 @@ impl GameWorld {
             })
         {
             let files = (i32::from(clearance) * 1024 / group.narrow_gap).max(1) as usize;
+            // A destination in a passage uses the same packed block as any
+            // other army. Retain role depth when assigning those narrow files.
+            if let Some(roles) = &mut roles {
+                roles.sort_unstable_by_key(|&(id, p)| (std::cmp::Reverse(p.y), p.x, id));
+            }
             slots = (0..count)
                 .map(|rank| packed(rank, count, files, group.narrow_gap))
                 .collect();
+            slots.sort_unstable_by_key(|p| (std::cmp::Reverse(p.y), p.x));
+            if let Some(roles) = &mut roles {
+                for ((_, point), slot) in roles.iter_mut().zip(&slots) {
+                    *point = *slot;
+                }
+            }
         }
-        let mut members = (0..count).collect::<Vec<_>>();
-        members.sort_unstable_by_key(|&at| {
-            let member = &group.members[at];
-            let unit = self.units[self.lookup[&member.id]].state;
-            let x = i128::from(group.heading.x);
-            let y = i128::from(group.heading.y);
-            (
-                class(unit.kind),
-                x * i128::from(unit.position.y) - y * i128::from(unit.position.x),
-                std::cmp::Reverse(
-                    x * i128::from(unit.position.x) + y * i128::from(unit.position.y),
-                ),
-                member.id,
-            )
-        });
-        if group.form == Formation::Box {
-            slots.sort_unstable_by_key(|p| {
+        let assignments = if let Some(roles) = roles {
+            roles
+                .into_iter()
+                .filter_map(|(id, offset)| group.member_index(id).map(|at| (at, offset)))
+                .collect()
+        } else {
+            let mut members = (0..count).collect::<Vec<_>>();
+            members.sort_unstable_by_key(|&at| {
+                let member = &group.members[at];
+                let unit = self.units[self.lookup[&member.id]].state;
+                let x = i128::from(group.heading.x);
+                let y = i128::from(group.heading.y);
                 (
-                    std::cmp::Reverse(p.x.abs().max(p.y.abs())),
-                    std::cmp::Reverse(p.y),
-                    p.x,
+                    class(unit.kind),
+                    x * i128::from(unit.position.y) - y * i128::from(unit.position.x),
+                    std::cmp::Reverse(
+                        x * i128::from(unit.position.x) + y * i128::from(unit.position.y),
+                    ),
+                    member.id,
                 )
             });
-        } else {
-            slots.sort_unstable_by_key(|p| (std::cmp::Reverse(p.y), p.x));
-        }
-        // Allocate class bands first, then lateral files. Preserve facing
-        // order inside each file so a late member never has to pass a teammate
-        // that already occupies its destination. This replaces arrival swaps.
-        let mut assignments = Vec::with_capacity(count);
-        let mut start = 0;
-        while start < count {
-            let role = class(
-                self.units[self.lookup[&group.members[members[start]].id]]
-                    .state
-                    .kind,
-            );
-            let mut end = start + 1;
-            while end < count
-                && class(
-                    self.units[self.lookup[&group.members[members[end]].id]]
-                        .state
-                        .kind,
-                ) == role
-            {
-                end += 1;
-            }
-            slots[start..end].sort_unstable_by_key(|point| (point.x, std::cmp::Reverse(point.y)));
-            let mut file = start;
-            while file < end {
-                let mut next = file + 1;
-                while next < end && slots[next].x == slots[file].x {
-                    next += 1;
-                }
-                members[file..next].sort_unstable_by_key(|&at| {
-                    let unit = self.units[self.lookup[&group.members[at].id]].state;
+            if group.form == Formation::Box {
+                slots.sort_unstable_by_key(|p| {
                     (
-                        std::cmp::Reverse(
-                            i128::from(group.heading.x) * i128::from(unit.position.x)
-                                + i128::from(group.heading.y) * i128::from(unit.position.y),
-                        ),
-                        unit.id,
+                        std::cmp::Reverse(p.x.abs().max(p.y.abs())),
+                        std::cmp::Reverse(p.y),
+                        p.x,
                     )
                 });
-                assignments.extend(
-                    members[file..next]
-                        .iter()
-                        .copied()
-                        .zip(slots[file..next].iter().copied()),
-                );
-                file = next;
+            } else {
+                slots.sort_unstable_by_key(|p| (std::cmp::Reverse(p.y), p.x));
             }
-            start = end;
-        }
+            // Allocate class bands first, then lateral files. Preserve facing
+            // order inside each file so a late member never has to pass a teammate
+            // that already occupies its destination. This replaces arrival swaps.
+            let mut assignments = Vec::with_capacity(count);
+            let mut start = 0;
+            while start < count {
+                let role = class(
+                    self.units[self.lookup[&group.members[members[start]].id]]
+                        .state
+                        .kind,
+                );
+                let mut end = start + 1;
+                while end < count
+                    && class(
+                        self.units[self.lookup[&group.members[members[end]].id]]
+                            .state
+                            .kind,
+                    ) == role
+                {
+                    end += 1;
+                }
+                slots[start..end]
+                    .sort_unstable_by_key(|point| (point.x, std::cmp::Reverse(point.y)));
+                let mut file = start;
+                while file < end {
+                    let mut next = file + 1;
+                    while next < end && slots[next].x == slots[file].x {
+                        next += 1;
+                    }
+                    members[file..next].sort_unstable_by_key(|&at| {
+                        let unit = self.units[self.lookup[&group.members[at].id]].state;
+                        (
+                            std::cmp::Reverse(
+                                i128::from(group.heading.x) * i128::from(unit.position.x)
+                                    + i128::from(group.heading.y) * i128::from(unit.position.y),
+                            ),
+                            unit.id,
+                        )
+                    });
+                    assignments.extend(
+                        members[file..next]
+                            .iter()
+                            .copied()
+                            .zip(slots[file..next].iter().copied()),
+                    );
+                    file = next;
+                }
+                start = end;
+            }
+            assignments
+        };
         let mut reserved = BTreeMap::<TileCoord, Vec<(WorldPosition, i32)>>::new();
         for (at, offset) in assignments {
             self.group_work.members(1);

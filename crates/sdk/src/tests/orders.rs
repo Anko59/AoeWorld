@@ -273,7 +273,7 @@ fn vassal_rules_and_train_order_share_the_server_roster() {
     use crate::{BuildingKind, UnitKind, rules};
     assert_eq!(
         rules::trainable(BuildingKind::Castle),
-        vec![UnitKind::Vassal]
+        vec![UnitKind::Vassal, UnitKind::General]
     );
     let cost = rules::unit_cost(UnitKind::Vassal);
     assert_eq!(

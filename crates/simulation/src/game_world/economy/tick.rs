@@ -72,6 +72,7 @@ impl GameWorld {
             && self.economy.ejections.is_empty()
             && self.economy.buildings.is_empty()
             && self.wildlife.is_idle()
+            && self.economy.generals.armies.is_empty()
         {
             self.refill_route_budgets();
             if !changed.is_empty() {
@@ -90,6 +91,7 @@ impl GameWorld {
         self.advance_research(&mut changed);
         self.advance_training(&mut changed);
         probe(TickPhase::ResearchTraining);
+        self.advance_generals(&mut changed);
         self.advance_vassals(&mut changed);
         probe(TickPhase::VassalEconomy);
         self.remember_visible_buildings();

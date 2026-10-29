@@ -18,6 +18,7 @@ use std::{
 
 mod compose;
 mod farm;
+mod general;
 mod preview;
 mod select;
 mod table;
@@ -29,7 +30,7 @@ const MAX_SLD: u64 = 64 * 1024 * 1024;
 const GRAPHICS: &str = "resources/_common/drs/graphics";
 const TEXTURES: &str = "resources/_common/terrain/textures/2x";
 /// Folded into the pack hash so a change of the conversion rules makes a new pack.
-const CONVERSION: &str = "de-sld-rgb565-weighted-player";
+const CONVERSION: &str = "de-sld-rgb565-weighted-player-general-keyframes";
 
 /// What one selected source contributed to the pack.
 #[derive(Clone, Debug)]
@@ -117,6 +118,11 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         hasher.update(file.as_bytes());
         hasher.update(hash.as_bytes());
         let frames = sld::parse(&bytes)?;
+        let frames = if item.building == "general" {
+            general::sample(item.role, frames)?
+        } else {
+            frames
+        };
         if frames.is_empty() {
             return Err(crate::invalid(
                 "DE",

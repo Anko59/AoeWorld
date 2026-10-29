@@ -60,13 +60,15 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// Rebased onto #573: avoidance, arrival slots and contact drop-off combine
 /// with gatherer reservations; sessions 1, 4 and 5 change (409/407/407 to
 /// 138/421/407 messages). Regenerated with the focused command above.
+/// General commander/army fields extend the current unit wire. Message counts
+/// and every workload, replay and visibility assertion stay unchanged.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 12752679128811070264),
-    (186, 12793456404677199887),
-    (60, 6795566676495521442),
-    (176, 14877571387585192722),
-    (420, 3705185702109814151),
-    (407, 16830935279046132027),
+    (407, 11844932792564418408),
+    (186, 11468349613711209831),
+    (60, 2503450107005547018),
+    (176, 11250701468056754810),
+    (420, 9409705769901466855),
+    (407, 9729438505887249003),
 ];
 
 #[tokio::test(flavor = "multi_thread")]

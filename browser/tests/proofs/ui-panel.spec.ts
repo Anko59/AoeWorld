@@ -4,6 +4,7 @@ import { test } from "../../server.js";
 import { forceWebGl } from "../rendering/backends.js";
 import { bundleProof } from "./bundle.js";
 import { castleProof } from "./castle.js";
+import { generalProof } from "./general.js";
 import { centerVillage } from "../village/fixtures/resources.js";
 
 test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
@@ -31,6 +32,10 @@ test("local original panel proof with real selection and training", async ({
   expect(health.ok()).toBe(true);
   await page.setViewportSize({ width: 1280, height: 720 });
   if (config.renderer !== "webgpu") await forceWebGl(page);
+  if (config.phase === "general") {
+    await generalProof(page, config.url);
+    return;
+  }
   if (config.phase.startsWith("bundle")) {
     await bundleProof(page, config.url, config.phase === "bundle-film");
     return;

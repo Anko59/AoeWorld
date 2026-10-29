@@ -37,6 +37,12 @@ impl Unit {
     pub fn managed_by(&self) -> Option<EntityId> {
         self.state.managed_by
     }
+    pub fn commanded_by(&self) -> Option<EntityId> {
+        self.state.commanded_by
+    }
+    pub fn general(&self) -> Option<aoe_protocol::GeneralStatus> {
+        self.state.general
+    }
     pub fn cargo_count(&self) -> u8 {
         self.state.cargo_count
     }

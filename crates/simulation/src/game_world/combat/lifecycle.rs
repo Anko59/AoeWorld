@@ -24,6 +24,9 @@ impl GameWorld {
             return Err(crate::EconomyError::NotOwner);
         }
         self.stop_unit_orders(index);
+        if unit.kind == crate::UnitKind::General {
+            self.stop_general(id);
+        }
         Ok(())
     }
 
@@ -71,6 +74,7 @@ impl GameWorld {
         let player = self.units[index].state.player;
         self.combat.hp_quarters[id.0 as usize] = 0;
         self.forget_vassal(id);
+        self.forget_general(id);
         self.sink_cargo(id);
         let death_hunt = self
             .hunting_target(id)

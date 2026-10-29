@@ -41,7 +41,9 @@ pub(crate) mod training;
 pub use training::rally::{RallyPoint, RallyTarget};
 #[path = "economy/construction/bridge.rs"]
 mod bridge;
+mod general;
 mod vassal;
+pub use general::{GeneralState, GeneralStatus, GeneralWork};
 pub use vassal::{VASSAL_RULES, VassalRules, VassalWork};
 mod wall;
 
@@ -79,6 +81,7 @@ pub enum UnitKind {
     TransportShip,
     WarGalley,
     Vassal,
+    General,
 }
 impl UnitKind {
     pub const fn is_naval(self) -> bool {

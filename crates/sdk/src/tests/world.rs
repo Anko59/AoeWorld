@@ -46,7 +46,7 @@ fn authoritative_move_queues_replace_the_current_subscription_and_ignore_stale_f
 
 fn welcome() -> M {
     M::Welcome {
-        version: 2,
+        version: 3,
         world_id: 11,
         map_content_hash: None,
         map_metadata: None,
@@ -83,6 +83,8 @@ fn unit(id: u32, player: PlayerId, kind: UnitKind) -> GameplayUnitState {
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
+        commanded_by: None,
+        general: None,
         stance: Default::default(),
     }
 }

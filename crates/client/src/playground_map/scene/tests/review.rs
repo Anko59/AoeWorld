@@ -209,6 +209,8 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
                 cargo_count: 0,
                 home_castle: None,
                 managed_by: None,
+                commanded_by: None,
+                general: None,
                 stance: Default::default(),
             },
         )]),
