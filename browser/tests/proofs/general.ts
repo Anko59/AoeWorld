@@ -107,7 +107,7 @@ export async function generalProof(page: Page, url: string) {
     .toBe(true);
   await select("General");
   await expect(page.locator("#vassal-status")).toHaveText(
-    "General · 14/100 soldiers · marching",
+    "General · 14/100 soldiers · idle",
   );
   await capture("command");
   await page.mouse.move(640, 360);
