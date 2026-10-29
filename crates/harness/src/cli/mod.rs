@@ -98,7 +98,6 @@ enum Command {
     PerfFull,
     PerfPressure,
     PerfStress,
-    PerfTimingReport,
     /// Headless 100-player, 100,000-unit tick and server fan-out measurement.
     PerfScale(perf_scale::Options),
     /// Hundreds of armies crossing on open ground: the movement span split for group movement.

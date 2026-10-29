@@ -2,7 +2,7 @@ use aoe_core::Region;
 use aoe_scenario::SMOKE;
 use aoe_simulation::{GameWorld, World};
 use gungraun::prelude::*;
-use gungraun::{Callgrind, Dhat, EntryPoint};
+use gungraun::{Callgrind, EntryPoint};
 use std::hint::black_box;
 
 mod support;
@@ -84,7 +84,4 @@ library_benchmark_group!(
     ]
 );
 
-main!(
-    config = LibraryBenchmarkConfig::default().tool(Dhat::default()),
-    library_benchmark_groups = simulation
-);
+main!(library_benchmark_groups = simulation);

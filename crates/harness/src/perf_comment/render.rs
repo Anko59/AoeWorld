@@ -155,6 +155,7 @@ fn wasm_note(wasm: Option<WasmRule>, pr_gzip: Option<u64>) -> String {
 fn rows(devs: &[&Report], pr: Option<&Report>, wasm: Option<WasmRule>, noise: &Noise) -> Vec<Row> {
     let mut out = Vec::new();
     let latest = devs.first();
+    let pr_report = pr;
     out.push(deterministic(
         "Optimized WASM raw (bytes)",
         latest.and_then(|r| r.wasm_raw),
@@ -185,11 +186,15 @@ fn rows(devs: &[&Report], pr: Option<&Report>, wasm: Option<WasmRule>, noise: &N
         })
         .collect();
     for (kernel, (dev, pr)) in kernels {
+        let note = match pr_report.and_then(|r| r.instruction_notes.get(kernel)) {
+            Some(gate) => format!("deterministic; {gate}"),
+            None => "deterministic".to_owned(),
+        };
         out.push(deterministic(
             &format!("Instructions: {kernel}"),
             dev,
             pr,
-            "deterministic",
+            &note,
         ));
     }
     let Some(latest) = latest else {
@@ -335,7 +340,7 @@ artifact: `dev` values are missing below and only this pull request's absolute n
 nothing was measured for this pull request.\n\n"
         )),
     }
-    text.push_str("Informational only: failing checks stay the checks, and this comment never gates a merge.\n\n");
+    text.push_str("This comment never gates a merge. `make perf-ci` does: instruction rows warn above +1% of their baseline and fail above +3% (or +10% of the fixed reference); timing rows are informational.\n\n");
     if let Some(measured) = pr.is_some().then(|| {
         let reports: Vec<&Report> = devs.iter().map(|(_, report)| report).collect();
         rows(&reports, pr, wasm, noise)

@@ -1,6 +1,5 @@
 use aoe_core::{EntityId, PlayerId, Position, Region, Tick};
 use aoe_protocol::{EntityState, ServerMessage, encode_server};
-use gungraun::Dhat;
 use gungraun::prelude::*;
 use std::hint::black_box;
 
@@ -39,7 +38,4 @@ fn snapshot_encode(message: ServerMessage) -> usize {
 
 library_benchmark_group!(name = protocol, benchmarks = [snapshot_encode]);
 
-main!(
-    config = LibraryBenchmarkConfig::default().tool(Dhat::default()),
-    library_benchmark_groups = protocol
-);
+main!(library_benchmark_groups = protocol);

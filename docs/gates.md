@@ -23,7 +23,6 @@ Registry v2 drives selection and dependency plans. The opt-in gate-run CLI execu
 | test-e2e | `make test-e2e` | test-unit, browser-check, build-wasm | browser | [Pr, Ci, Nightly] | 2400 | yes | Playwright result and screenshots |
 | perf-smoke | `make perf-smoke` | test-unit | native | [Pr, Ci, Nightly] | 600 | yes | versioned synthetic JSON report |
 | perf-ci | `make perf-ci` | perf-smoke, perf-instructions, perf-wasm-size | performance | [Pr, Ci, Nightly] | 1800 | yes | target counts and baseline comparisons |
-| perf-timing | `make perf-timing` | perf-ci | performance | [Nightly] | 900 | yes | informational Criterion raw samples and versioned report |
 | perf-scale-smoke | `make perf-scale-smoke` | — | performance | [Nightly] | 900 | yes | 4-player, 2,000-unit, 50-tick run of the scale benchmark writing valid JSON |
 | perf-scale | `make perf-scale` | — | performance | [] | 3600 | yes | per-phase tick times, memory and server fan-out for 100 players and 100k units, as JSON |
 | perf-groups | `make perf-groups` | — | performance | [] | 1800 | yes | movement phase times and movement span split for about 11,000 movers in 200 armies, as JSON |

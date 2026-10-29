@@ -480,7 +480,9 @@ See [delivery timeline](timeline.md) for `make timeline`, stage journals and his
 
 - `ship` runs the `preflight` cadence (recorded as `cadence` in the evidence),
   not every `pr`-cadence gate: browser, WASM, fuzz and target performance
-  gates run in CI, whose `required` check gates the merge. Coverage is not
+  gates run in CI, whose `required` check gates the merge.
+  `perf-ci` gates instruction counts and WASM size, never elapsed time
+  ([thresholds](performance.md#instruction-gate)). Coverage is not
   a `pr` gate: it takes 18 to 34 minutes, so it runs on every push to `dev`
   or `main` and nightly, where a drop is seen within one merge.
 - Gates run in the checkout as written (`make <gate>`), not in an exported

@@ -1,5 +1,4 @@
 use aoe_assets::palette;
-use gungraun::Dhat;
 use gungraun::prelude::*;
 use std::hint::black_box;
 
@@ -22,7 +21,4 @@ fn palette_decode(source: Vec<u8>) -> usize {
 
 library_benchmark_group!(name = assets, benchmarks = [palette_decode]);
 
-main!(
-    config = LibraryBenchmarkConfig::default().tool(Dhat::default()),
-    library_benchmark_groups = assets
-);
+main!(library_benchmark_groups = assets);

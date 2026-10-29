@@ -29,39 +29,56 @@ pub struct Comparison {
     pub baseline: Option<u64>,
     pub threshold_percent: u8,
     pub verdict: Verdict,
+    /// Why a passing row deserves attention (a warning, creep, a refresh).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
-/// Sizes and counts (WASM bytes, instructions, allocations) are trends, not
-/// budgets: every run reports them against the baseline and only a jump of more
-/// than this percent blocks.
+/// WASM bytes are a trend, not a budget: every run reports them against the
+/// baseline and only a jump of more than this percent blocks. Instruction
+/// counts are tighter (`perf_micro`).
 pub const THRESHOLD_PERCENT: u8 = 25;
 
-/// `actual` regresses against `reference` under [`THRESHOLD_PERCENT`].
-fn over(actual: u64, reference: u64) -> bool {
-    u128::from(actual) * 100
-        > u128::from(reference) * u128::from(100 + u16::from(THRESHOLD_PERCENT))
+/// `actual` exceeds `reference` by more than `percent`.
+pub fn over(actual: u64, reference: u64, percent: u8) -> bool {
+    u128::from(actual) * 100 > u128::from(reference) * u128::from(100 + u16::from(percent))
 }
 
-/// The smallest observed value [`over`] flags as a regression: the cap a gate
-/// compares against, derived from the same threshold as the verdict.
-pub fn regression_floor(reference: u64) -> u64 {
-    let scaled = u128::from(reference) * u128::from(100 + u16::from(THRESHOLD_PERCENT));
+/// The smallest observed value [`over`] flags at `percent`.
+pub fn floor_at(reference: u64, percent: u8) -> u64 {
+    let scaled = u128::from(reference) * u128::from(100 + u16::from(percent));
     (scaled / 100 + 1) as u64
 }
 
+/// The smallest observed value the WASM gate calls a regression: the cap a
+/// gate compares against, derived from the same threshold as the verdict.
+pub fn regression_floor(reference: u64) -> u64 {
+    floor_at(reference, THRESHOLD_PERCENT)
+}
+
 pub fn compare(metric: &str, observed: Option<u64>, baseline: Option<u64>) -> Comparison {
+    compare_at(metric, observed, baseline, THRESHOLD_PERCENT)
+}
+
+pub fn compare_at(
+    metric: &str,
+    observed: Option<u64>,
+    baseline: Option<u64>,
+    percent: u8,
+) -> Comparison {
     let verdict = match (observed, baseline) {
         (None, _) => Verdict::Inconclusive,
         (Some(_), None) => Verdict::Unbaselined,
-        (Some(actual), Some(reference)) if over(actual, reference) => Verdict::Regression,
+        (Some(actual), Some(reference)) if over(actual, reference, percent) => Verdict::Regression,
         _ => Verdict::Pass,
     };
     Comparison {
         metric: metric.to_owned(),
         observed,
         baseline,
-        threshold_percent: THRESHOLD_PERCENT,
+        threshold_percent: percent,
         verdict,
+        note: None,
     }
 }
 
@@ -356,6 +373,11 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
             }
         }
     }
+    for item in &comparisons {
+        if let Some(note) = &item.note {
+            notes.push(format!("{}: {note}", item.metric));
+        }
+    }
     let verdict = if comparisons
         .iter()
         .any(|item| item.verdict == Verdict::Regression)
@@ -397,6 +419,9 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
     fs::write(format!("reports/perf/{mode}.json"), json)?;
     fs::write(format!("reports/perf/{mode}.md"), summary(&report))?;
     print!("{}", comparison_summary(&report.comparisons));
+    for note in &report.notes {
+        println!("note: {note}");
+    }
     println!("report: reports/perf/{mode}.json ({:?})", report.verdict);
     if matches!(mode, "ci" | "full") && verdict != Verdict::Pass {
         return Err(format!("required performance comparisons are {verdict:?}").into());

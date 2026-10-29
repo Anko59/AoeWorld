@@ -5,6 +5,8 @@ use super::{comment_args, epoch_seconds, format_duration, own_comment, parse_job
 use std::{fs, path::Path};
 use tempfile::tempdir;
 
+mod notes;
+
 /// One artifact directory: `ci.json` plus the optional sibling files.
 fn fixture(
     dir: &Path,

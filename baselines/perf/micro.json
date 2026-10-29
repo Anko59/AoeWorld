@@ -8,30 +8,21 @@
   "late_game_workload_hash": "36c2ec66e60a9bfbe2ab7aa381bdc9a5f3c7867b90a9620070955cab0c662a4d",
   "instructions": {
     "instructions::assets::palette_decode": 243938,
-    "instructions::protocol::snapshot_encode": 207527,
-    "instructions::simulation::advance": 712509,
-    "instructions::simulation::distributed_ticks": 10326387,
-    "instructions::simulation::late_game": 236784665,
-    "instructions::simulation::smoke_ticks": 4959397,
+    "instructions::protocol::snapshot_encode": 206498,
+    "instructions::simulation::advance": 721238,
+    "instructions::simulation::distributed_ticks": 10330744,
+    "instructions::simulation::late_game": 240557748,
+    "instructions::simulation::smoke_ticks": 5275671,
     "instructions::simulation::viewport_query": 183030
   },
-  "allocation_bytes": {
-    "instructions::assets::palette_decode": 17152,
-    "instructions::protocol::snapshot_encode": 16376,
-    "instructions::simulation::advance": 0,
-    "instructions::simulation::distributed_ticks": 17809120,
-    "instructions::simulation::late_game": 4246429,
-    "instructions::simulation::smoke_ticks": 358380,
-    "instructions::simulation::viewport_query": 54024
-  },
-  "allocation_count": {
-    "instructions::assets::palette_decode": 257,
-    "instructions::protocol::snapshot_encode": 11,
-    "instructions::simulation::advance": 0,
-    "instructions::simulation::distributed_ticks": 219,
-    "instructions::simulation::late_game": 6079,
-    "instructions::simulation::smoke_ticks": 484,
-    "instructions::simulation::viewport_query": 9
-  },
-  "target_distributed_workload_hash": "68a0166d5342976e059eb2c5c0ab97ce2dfad5f3c6aeacef207c8d7618ee6d9c"
+  "target_distributed_workload_hash": "68a0166d5342976e059eb2c5c0ab97ce2dfad5f3c6aeacef207c8d7618ee6d9c",
+  "instruction_reference": {
+    "instructions::assets::palette_decode": 243938,
+    "instructions::protocol::snapshot_encode": 206498,
+    "instructions::simulation::advance": 721238,
+    "instructions::simulation::distributed_ticks": 10330744,
+    "instructions::simulation::late_game": 240557748,
+    "instructions::simulation::smoke_ticks": 4986840,
+    "instructions::simulation::viewport_query": 183030
+  }
 }
