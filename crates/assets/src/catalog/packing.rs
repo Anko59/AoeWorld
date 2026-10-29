@@ -14,6 +14,8 @@ pub const PAGE_COUNT: usize = 5;
 pub const PAGE_BYTES: usize = PAGE_SIDE as usize * PAGE_SIDE as usize * 4;
 pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 83,886,080 bytes.
 pub const MAX_SELECTED_FRAMES: usize = 5120;
+/// Logical indices are u16, allowing indices 0 through 65535.
+pub const MAX_LOGICAL_FRAMES: usize = u16::MAX as usize + 1;
 /// Bound logical placement metadata independently of resident GPU storage.
 pub const MAX_LOGICAL_PAGES: usize = 256;
 pub const MAX_FRAME_EXTENT: u16 = PAGE_SIDE - 4;
@@ -109,7 +111,9 @@ impl std::error::Error for PackingError {}
 /// Returns exactly one placement per input, at its original semantic index.
 /// Packing failure is atomic: no partial placements escape the helper.
 pub fn pack_frames(frames: &[FrameExtent]) -> Result<Vec<Placement>, PackingError> {
-    pack_frames_with_pages(frames, 2, PAGE_COUNT - 2)
+    pack_with_allocator_and_pages(frames, 2, PAGE_COUNT - 2, MAX_SELECTED_FRAMES, |count| {
+        vec![Placement::default(); count]
+    })
 }
 
 /// Pack metadata into a bounded logical atlas; this does not allocate pixels or
@@ -120,9 +124,13 @@ pub fn pack_frames_with_pages(
     terrain_pages: usize,
     object_pages: usize,
 ) -> Result<Vec<Placement>, PackingError> {
-    pack_with_allocator_and_pages(frames, terrain_pages, object_pages, |count| {
-        vec![Placement::default(); count]
-    })
+    pack_with_allocator_and_pages(
+        frames,
+        terrain_pages,
+        object_pages,
+        MAX_LOGICAL_FRAMES,
+        |count| vec![Placement::default(); count],
+    )
 }
 
 // Private allocation seam lets native tests prove validation precedes metadata
@@ -132,24 +140,25 @@ fn pack_with_allocator(
     frames: &[FrameExtent],
     allocate: impl FnOnce(usize) -> Vec<Placement>,
 ) -> Result<Vec<Placement>, PackingError> {
-    pack_with_allocator_and_pages(frames, 2, PAGE_COUNT - 2, allocate)
+    pack_with_allocator_and_pages(frames, 2, PAGE_COUNT - 2, MAX_SELECTED_FRAMES, allocate)
 }
 
 fn pack_with_allocator_and_pages(
     frames: &[FrameExtent],
     terrain_pages: usize,
     object_pages: usize,
+    frame_limit: usize,
     allocate: impl FnOnce(usize) -> Vec<Placement>,
 ) -> Result<Vec<Placement>, PackingError> {
     let page_count = terrain_pages
         .checked_add(object_pages)
         .filter(|&count| terrain_pages > 0 && object_pages > 0 && count <= MAX_LOGICAL_PAGES)
         .ok_or(PackingError::InvalidPageBudget)?;
-    validate(frames)?;
+    validate(frames, frame_limit)?;
     let mut placements = allocate(frames.len());
-    // Fixed 10 KiB index scratch. In-place sorting avoids quadratic startup
-    // comparisons for a larger animation catalog and does not allocate.
-    let mut indices = [0_u16; MAX_SELECTED_FRAMES];
+    // At most 128 KiB of indices, allocated on the heap for WASM stack safety.
+    // In-place sorting avoids quadratic startup comparisons.
+    let mut indices = vec![0_u16; frames.len()];
     for (index, slot) in indices[..frames.len()].iter_mut().enumerate() {
         *slot = index as u16;
     }
@@ -207,11 +216,11 @@ fn order_indices(frames: &[FrameExtent], indices: &mut [u16], mut compared: impl
     });
 }
 
-fn validate(frames: &[FrameExtent]) -> Result<(), PackingError> {
-    if frames.len() > MAX_SELECTED_FRAMES {
+fn validate(frames: &[FrameExtent], limit: usize) -> Result<(), PackingError> {
+    if frames.len() > limit {
         return Err(PackingError::TooManyFrames {
             count: frames.len(),
-            limit: MAX_SELECTED_FRAMES,
+            limit,
         });
     }
     for (index, frame) in frames.iter().enumerate() {

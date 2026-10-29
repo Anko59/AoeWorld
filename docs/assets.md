@@ -70,8 +70,10 @@ space when the initial shelf layout fails, with the same page and gutter limits.
 metadata keyed by native SHA-256 digests of complete source bytes; repeated
 WebGPU passes still decode one source plane at a time, without a pixel cache.
 The placement algorithm can also describe up to 256 logical pages with separate
-terrain and object budgets, while retaining the 5,120-frame bound. This allocates
-placement metadata only; it does not stream pages or change the five-page client.
+terrain and object budgets and up to 65,536 frames. Sorting uses at most 128 KiB
+of heap index scratch; the dense retry retains its existing per-page free-region
+bound and can still reject fragmented layouts. This allocates placement metadata
+only; it does not stream pages or change the five-page, 5,120-frame client.
 Regenerate local packs after catalog changes:
 stale DAT recipes can exhaust the atlas through fallback art selection.
 The gather-point flag uses DAT unit 720 / SLP 4480 when present. The trial

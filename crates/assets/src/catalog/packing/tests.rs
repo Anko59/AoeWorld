@@ -32,10 +32,44 @@ fn logical_page_budget_can_exceed_the_current_runtime_atlas() {
     assert_eq!(dense_placements, placed);
     for (terrain, objects) in [(0, 1), (1, 0), (usize::MAX, 1), (1, MAX_LOGICAL_PAGES)] {
         assert_eq!(
-            pack_with_allocator_and_pages(&frames, terrain, objects, |_| panic!("allocated")),
+            pack_with_allocator_and_pages(
+                &frames,
+                terrain,
+                objects,
+                MAX_LOGICAL_FRAMES,
+                |_| panic!("allocated")
+            ),
             Err(PackingError::InvalidPageBudget)
         );
     }
+}
+
+#[test]
+fn logical_atlas_accepts_more_frames_than_the_resident_atlas() {
+    let frames = vec![object(1, 1); 10_000];
+    let placed = pack_frames_with_pages(&frames, 2, 6).unwrap();
+    assert_eq!(placed.len(), frames.len());
+    assert!(placed.iter().all(|p| p.page >= 2 && p.page < 8));
+    assert!(matches!(
+        pack_frames(&frames),
+        Err(PackingError::TooManyFrames { .. })
+    ));
+}
+
+#[test]
+fn logical_frame_indices_cover_the_full_u16_range_and_reject_excess() {
+    let frames = vec![object(1, 1); MAX_LOGICAL_FRAMES];
+    let placed = pack_frames_with_pages(&frames, 1, 1).unwrap();
+    assert_eq!(placed.len(), MAX_LOGICAL_FRAMES);
+    assert_ne!(placed[0], placed[MAX_LOGICAL_FRAMES - 1]);
+    let excess = vec![object(1, 1); MAX_LOGICAL_FRAMES + 1];
+    assert_eq!(
+        pack_with_allocator_and_pages(&excess, 1, 1, MAX_LOGICAL_FRAMES, |_| panic!("allocated")),
+        Err(PackingError::TooManyFrames {
+            count: MAX_LOGICAL_FRAMES + 1,
+            limit: MAX_LOGICAL_FRAMES
+        })
+    );
 }
 
 #[test]
