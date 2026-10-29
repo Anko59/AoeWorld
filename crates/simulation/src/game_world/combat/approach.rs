@@ -88,12 +88,12 @@ impl GameWorld {
         goal: &Goal,
     ) -> Result<AttackSearch, GameWorldError> {
         let unit = self.unit(id).ok_or(GameWorldError::UnknownEntity)?;
-        let stats = self.unit_stats(id).ok_or(GameWorldError::UnknownEntity)?;
+        let stats = self.unit_state_stats(&unit);
         let range = super::super::navy::attack_range(&stats);
         let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
         let origin = unit.position.tile_floor();
         let mut melee =
-            Self::uses_melee_position(unit.kind).then(|| self.melee_positions(id, goal));
+            Self::uses_melee_position(unit.kind).then(|| self.melee_positions(&unit, range, goal));
         // Candidates are nearest first. Only the first four free ones get the
         // cheap straight-line proof, so test them lazily: the rest are needed
         // only by the bounded search below, after its budget check.
@@ -114,7 +114,7 @@ impl GameWorld {
                     continue;
                 }
                 free.push(at);
-                if self.attack_line_clear(unit.kind, unit.position, at) {
+                if self.interaction_line_clear(unit.kind, unit.position, at) {
                     return Ok(AttackSearch {
                         destination: Some(at),
                         far: false,
@@ -123,6 +123,15 @@ impl GameWorld {
                 }
             }
             if free.is_empty() {
+                // In a crowd the endpoint is a preference. Static route
+                // admission and physical sweeps still prove every step.
+                if self.crowded_melee_contact(id, goal) {
+                    return Ok(AttackSearch {
+                        destination: Some(points[0]),
+                        far: false,
+                        wait: None,
+                    });
+                }
                 #[cfg(test)]
                 {
                     self.combat.waits.0 += 1;

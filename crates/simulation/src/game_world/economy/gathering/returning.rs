@@ -167,10 +167,16 @@ impl GameWorld {
             && !self.node_has_work_slot(task.node, id))
             || self.approach_resource(id, task.tile).is_err()
         {
-            return task.farm.is_none()
-                && task.animal.is_none()
-                && task.fish.is_none()
-                && self.replacement_resource(id, task);
+            if !(task.farm.is_none() && task.animal.is_none() && task.fish.is_none()) {
+                return false;
+            }
+            let queued = self.node_has_work_slot(task.node, id)
+                && (self.units[self.lookup[&id]].last_movement_error.is_none()
+                    || self.gather_traffic_blocked(id))
+                && self.queue_resource_approach(id, task.tile);
+            if !queued {
+                return self.replacement_resource(id, task);
+            }
         }
         task.work_position = self
             .movement_order(id)

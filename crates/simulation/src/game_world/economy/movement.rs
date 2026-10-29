@@ -12,6 +12,17 @@ impl GameWorld {
         self.economy.gatherers.contains_key(&id) || self.economy.builders.contains_key(&id)
     }
 
+    pub(crate) fn land_resource_approach(&self, index: usize) -> bool {
+        let unit = self.units[index].state;
+        unit.kind == UnitKind::Villager
+            && self.economy.gatherers.get(&unit.id).is_some_and(|task| {
+                task.phase == super::GatherPhase::Approaching
+                    && task.farm.is_none()
+                    && task.animal.is_none()
+                    && task.fish.is_none()
+            })
+    }
+
     /// Reassign an obstructed work approach to a physically free legal slot.
     /// `Some(false)` proves this bounded job perimeter is currently full.
     pub(crate) fn redirect_gather_arrival(&mut self, index: usize) -> Option<bool> {
@@ -32,13 +43,33 @@ impl GameWorld {
             }
             let current = self.units[index].order.map(|o| o.destination);
             let best = self.resource_work_spot(unit.id, target);
-            if best.is_some() && best == current {
+            if let Some(at) = best.filter(|best| Some(*best) == current) {
+                if self.units[index]
+                    .obstruction
+                    .is_some_and(|o| o.blocked >= 16)
+                    && !self.interaction_line_clear(unit.kind, unit.position, at)
+                    && self.repick_obstructed_gatherer(unit.id)
+                {
+                    self.units[index].obstruction = None;
+                }
                 return Some(true);
             }
             let obstruction = self.units[index].obstruction;
             let queue = self.move_queues.remove(&unit.id);
-            let success = self.approach_resource(unit.id, target).is_ok();
-            self.units[index].obstruction = obstruction;
+            let attempt = self.approach_resource(unit.id, target);
+            let unavailable = matches!(
+                &attempt,
+                Err(super::EconomyError::Movement(
+                    crate::GameWorldError::Unreachable
+                ))
+            );
+            let success = attempt.is_ok() || self.repick_obstructed_gatherer(unit.id);
+            let changed_node = self
+                .economy
+                .gatherers
+                .get(&unit.id)
+                .is_some_and(|t| t.tile != target);
+            self.units[index].obstruction = if changed_node { None } else { obstruction };
             if let Some(queue) = queue {
                 self.move_queues.insert(unit.id, queue);
             }
@@ -49,7 +80,17 @@ impl GameWorld {
                 self.economy.gatherers.set_work_position(unit.id, at);
                 self.index_destination(unit.id);
             }
-            return Some(success);
+            return if success {
+                Some(true)
+            } else if unavailable
+                && self.land_resource_approach(index)
+                && current.is_some_and(|at| !self.work_queue_point_clear(index, at))
+            {
+                Some(false)
+            } else {
+                // A spent route/search budget is not proof that the job is full.
+                None
+            };
         }
         let footprint = match task.phase {
             super::GatherPhase::Approaching => {

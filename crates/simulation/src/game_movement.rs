@@ -36,6 +36,7 @@ impl GameWorld {
     /// Moves every active mover once and returns the ids it touched, in
     /// arbitrary order; the tick collation sorts and fetches final states.
     pub(crate) fn advance_movement(&mut self) -> Vec<EntityId> {
+        self.economy.gather_repick_budget = 4;
         // Waiting units search first, fairly per player, so a route found now
         // is walked this tick; walking units plan ahead from what is left.
         let mut changed = Vec::new();
@@ -66,6 +67,7 @@ impl GameWorld {
         self.propose_steps_into(&movers, start, &mut scratch);
         for turn in 0..mover_count {
             self.work_approach_clearance = None;
+            self.melee_traffic_clearance = None;
             let id = movers[(start + turn) % mover_count];
             if let Some(&index) = self.lookup.get(&id)
                 && self.settle_obstructed_unit(index)
@@ -284,6 +286,7 @@ impl GameWorld {
             self.observe_unit_progress(index);
         }
         self.work_approach_clearance = None;
+        self.melee_traffic_clearance = None;
         still_moving.sort_unstable();
         self.active_movers = still_moving;
         self.advance_formations(&mut changed, &mut scratch);

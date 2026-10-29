@@ -71,15 +71,20 @@ impl GameWorld {
                     continue;
                 };
                 let other = &self.units[other_index];
-                // A passer-by does not dislodge an idle villager from its work.
-                if other.state.hp == 0 || other.order.is_some() {
+                let yield_to_mover = other.order.is_some()
+                    && other.state.moving
+                    && other.state.player == unit.player
+                    && !unit.kind.is_naval()
+                    && unit.task == crate::UnitTask::Gathering;
+                if other.state.hp == 0 || (other.order.is_some() && !yield_to_mover) {
                     continue;
                 }
                 let (mut dx, mut dy) = delta(unit.position, other.state.position);
                 let clearance =
                     i64::from(unit.kind.collision_radius() + other.state.kind.collision_radius());
+                let preferred = clearance + if yield_to_mover { 96 } else { 0 };
                 if unit.kind.is_naval() != other.state.kind.is_naval()
-                    || dx * dx + dy * dy >= clearance * clearance
+                    || dx * dx + dy * dy >= preferred * preferred
                 {
                     continue;
                 }
@@ -138,6 +143,14 @@ impl GameWorld {
     fn separation_clear(&self, index: usize, at: WorldPosition) -> bool {
         let unit = self.units[index].state;
         let tile = at.tile_floor();
+        if self.economy.gatherers.get(&unit.id).is_some_and(|task| {
+            unit.task == crate::UnitTask::Gathering
+                && task
+                    .work_position
+                    .is_some_and(|spot| super::movement_step::slots::squared(at, spot) > 153 * 153)
+        }) {
+            return false;
+        }
         if !self.vassal_position_allowed(unit.id, at)
             || !self.body_position_clear(unit.kind, at)
             || !self.collision_sweep(index, unit.position, at, false, true)

@@ -29,12 +29,7 @@ pub(super) fn cell_value(
     cell: (i32, i32),
     vertex: u8,
 ) -> u64 {
-    let mut hash = blake3::Hasher::new_keyed(&generator.geography_key);
-    hash.update(domain);
-    hash.update(&cell.0.to_le_bytes());
-    hash.update(&cell.1.to_le_bytes());
-    hash.update(&vertex.to_le_bytes());
-    u64::from_le_bytes(hash.finalize().as_bytes()[..8].try_into().unwrap_or([0; 8]))
+    super::coordinate_hash(&generator.geography_key, domain, cell.0, cell.1, &[vertex])
 }
 
 pub(super) fn point_in_polygon(vertices: &[TileCoord], point: TileCoord) -> bool {

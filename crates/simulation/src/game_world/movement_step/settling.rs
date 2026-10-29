@@ -59,6 +59,16 @@ impl GameWorld {
     /// derived answer before the next mover and before formation/spacing work.
     pub(crate) fn cache_work_approach(&mut self, index: usize) {
         let unit = self.units[index].state;
+        self.melee_traffic_clearance = unit
+            .attack_target
+            .and_then(|target| self.attack_goal(target, unit.player))
+            .map(|goal| {
+                (
+                    unit.id,
+                    unit.position,
+                    self.melee_contact_traffic(unit.id, &goal),
+                )
+            });
         self.work_approach_clearance = self.units[index]
             .obstruction
             .filter(|o| o.pass_until > self.tick.0 && distance(unit.position, o.goal) <= 2048)
@@ -179,12 +189,17 @@ impl GameWorld {
             || self.at_gather_arrival(index))
             && self.arrival_position_free(index);
         if !nearby && obstruction.blocked < GIVE_UP_AFTER_TICKS {
-            if self.local_retry(unit.id) && obstruction.blocked >= 16 {
-                self.redirect_gather_arrival(index);
+            let unavailable = if self.local_retry(unit.id) && obstruction.blocked >= 16 {
+                let land_work = self.land_resource_approach(index);
+                self.redirect_gather_arrival(index) == Some(false) && land_work
+            } else {
+                false
+            };
+            // End a proved unavailable work approach. Other obstructions keep
+            // yielding/re-pathing until the ordinary bounded give-up below.
+            if !unavailable {
+                return false;
             }
-            // A unit obstruction is temporary: keep the order while yielding
-            // and re-pathing, until the bounded give-up below.
-            return false;
         }
         self.clear_planner(index);
         // Giving up reports the goal as unreachable for now, as on dev; an

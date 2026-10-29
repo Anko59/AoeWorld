@@ -150,7 +150,12 @@ impl Economy {
             }
             hash.update(&task.tile.x.to_le_bytes());
             hash.update(&task.tile.y.to_le_bytes());
-            hash.update(&[task.kind as u8, task.phase as u8, task.approach_failures]);
+            hash.update(&[
+                task.kind as u8,
+                task.phase as u8,
+                task.approach_failures,
+                u8::from(task.crowded),
+            ]);
             hash.update(&task.credits.to_le_bytes());
             match task.dropoff {
                 Some(id) => {

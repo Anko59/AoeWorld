@@ -90,8 +90,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // PR 7 removes follower waits and admits bounded work traffic toward free endpoints.
-        "d2044f50a2e6e8bd97e6cf7cf0b2032bed38c0c6e416e3b63e362a9a1e7e9879"
+        // PR 10 ends unavailable land-work queues and hashes legal crowded contact.
+        "888ae8bff22a12708cca00c7c45be5ed7086ffcb5c51aedeb8e3ce2157428c42"
     );
 }
 

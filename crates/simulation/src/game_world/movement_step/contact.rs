@@ -1,4 +1,4 @@
-//! Naval hulls, shore clearance and bounded right-hand passing.
+//! Body clearance and bounded contact policy for land and water.
 use crate::{GameUnit, GameWorld, UnitKind, UnitTask};
 use aoe_core::{TileCoord, WorldPosition};
 
@@ -37,6 +37,140 @@ impl UnitKind {
 }
 
 impl GameWorld {
+    #[inline(always)]
+    fn stationary_work_distance(&self, unit: &GameUnit, other: &GameUnit) -> Option<i64> {
+        if unit.kind.is_naval()
+            || unit.player != other.player
+            || other.moving
+            || !(other.working() || self.economy.gatherers.contains_key(&other.id))
+        {
+            return None;
+        }
+        let sum = i64::from(unit.kind.collision_radius() + other.kind.collision_radius());
+        Some((sum * 75 + 99) / 100)
+    }
+
+    #[inline(always)]
+    pub(super) fn movement_contact_distance(
+        &self,
+        unit: &GameUnit,
+        other: &GameUnit,
+        soft: bool,
+        narrow: bool,
+        work_squeeze: bool,
+    ) -> i64 {
+        let sum = i64::from(unit.kind.collision_radius() + other.kind.collision_radius());
+        if let Some(r) = self.naval_worker_distance(unit, other) {
+            return r;
+        }
+        if narrow && other.moving {
+            return sum / 2;
+        }
+        if (soft || work_squeeze)
+            && let Some(r) = self.stationary_work_distance(unit, other)
+        {
+            return r;
+        }
+        if soft {
+            super::collision::hard_distance(unit, other)
+        } else {
+            sum
+        }
+    }
+
+    /// A preference is not a full-body veto once actual, legal work contact
+    /// was reached. Working friends retain their graded hard distance.
+    pub(crate) fn work_contact_clear(&self, index: usize) -> bool {
+        self.work_point_clear(index, self.units[index].state.position)
+    }
+
+    pub(crate) fn work_point_clear(&self, index: usize, at: WorldPosition) -> bool {
+        self.work_point_clear_for::<false>(index, at)
+    }
+
+    /// A queue may wait for moving or idle friendly traffic, but cannot take
+    /// a settled worker's hard contact circle or a stationary enemy's body.
+    pub(crate) fn work_queue_point_clear(&self, index: usize, at: WorldPosition) -> bool {
+        self.work_point_clear_for::<true>(index, at)
+    }
+
+    fn work_point_clear_for<const QUEUE: bool>(&self, index: usize, at: WorldPosition) -> bool {
+        let unit = self.units[index].state;
+        !self.collisions.blocked(
+            (at, unit.kind.collision_radius() + 512),
+            unit.kind.is_naval(),
+            self.tick.0.wrapping_add(u64::from(unit.id.0)),
+            &self.group_work,
+            |id| {
+                if id == unit.id {
+                    return false;
+                }
+                let other = self.units[self.collisions.unit_index(id)].state;
+                if other.hp == 0
+                    || (QUEUE
+                        && (other.moving
+                            || (other.player == unit.player
+                                && !other.working()
+                                && !self.economy.gatherers.contains_key(&other.id))))
+                {
+                    return false;
+                }
+                let r = self
+                    .naval_worker_distance(&unit, &other)
+                    .or_else(|| self.stationary_work_distance(&unit, &other))
+                    .unwrap_or_else(|| {
+                        i64::from(unit.kind.collision_radius() + other.kind.collision_radius())
+                    });
+                let x = i64::from(at.x - other.position.x);
+                let y = i64::from(at.y - other.position.y);
+                x * x + y * y < r * r
+            },
+            |_| true,
+        )
+    }
+
+    /// Bounded local demand: at most sixteen cells and an early exit once
+    /// enough friendly centres fill a normal contact ring.
+    pub(crate) fn friendly_contact_pressure(&self, index: usize, capacity: usize) -> bool {
+        self.friendly_contact_pressure_at(index, self.units[index].state.position, capacity)
+    }
+
+    pub(crate) fn friendly_contact_pressure_at(
+        &self,
+        index: usize,
+        at: WorldPosition,
+        capacity: usize,
+    ) -> bool {
+        let unit = self.units[index].state;
+        if !self
+            .collisions
+            .contact_may_be_crowded(at, capacity, &self.group_work)
+        {
+            return false;
+        }
+        let mut count = 1;
+        self.collisions.blocked(
+            (at, 1536),
+            false,
+            self.tick.0,
+            &self.group_work,
+            |id| {
+                if id == unit.id {
+                    return false;
+                }
+                let other = self.units[self.collisions.unit_index(id)].state;
+                let x = i64::from(other.position.x - at.x);
+                let y = i64::from(other.position.y - at.y);
+                if other.hp > 0 && other.player == unit.player && x * x + y * y <= 1536 * 1536 {
+                    count += 1;
+                }
+                count >= capacity
+            },
+            |_| true,
+        )
+    }
+
+    #[inline(always)]
     pub(crate) fn naval_worker_distance(&self, unit: &GameUnit, other: &GameUnit) -> Option<i64> {
         (unit.kind.is_naval()
             && other.kind == UnitKind::FishingShip
@@ -150,3 +284,6 @@ impl GameWorld {
             .then_some(forward)
     }
 }
+
+#[cfg(test)]
+mod tests;

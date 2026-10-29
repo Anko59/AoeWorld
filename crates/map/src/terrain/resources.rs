@@ -182,10 +182,11 @@ fn patch_slot(tile: TileCoord, root: TileCoord, count: usize) -> Option<u8> {
 }
 
 pub(super) fn detail_key(generator: &MapChunkGenerator) -> [u8; 32] {
-    let mut hash = blake3::Hasher::new_keyed(&generator.geography_key);
-    hash.update(b"resource-detail");
-    hash.update(&generator.procedural_seed.to_le_bytes());
-    *hash.finalize().as_bytes()
+    const DOMAIN: &[u8] = b"resource-detail";
+    let mut input = [0; DOMAIN.len() + 8];
+    input[..DOMAIN.len()].copy_from_slice(DOMAIN);
+    input[DOMAIN.len()..].copy_from_slice(&generator.procedural_seed.to_le_bytes());
+    *blake3::keyed_hash(&generator.geography_key, &input).as_bytes()
 }
 
 fn node(

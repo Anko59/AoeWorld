@@ -244,3 +244,149 @@ fn vassal_refreshes_lumber_camp_after_tree_depletion() {
         2
     );
 }
+
+fn direct_work_reach(w: &GameWorld, kind: UnitKind, start: TileCoord) -> Vec<TileCoord> {
+    let mut seen = std::collections::BTreeSet::from([start]);
+    let mut queue = std::collections::VecDeque::from([start]);
+    while let Some(tile) = queue.pop_front() {
+        for (dx, dy) in [
+            (0, -1),
+            (-1, 0),
+            (1, 0),
+            (0, 1),
+            (-1, -1),
+            (1, -1),
+            (-1, 1),
+            (1, 1),
+        ] {
+            let next = TileCoord::new(tile.x + dx, tile.y + dy);
+            if seen.len() < 1024
+                && !seen.contains(&next)
+                && w.building_step_clear(tile, next)
+                && w.unit_step_clear(kind, tile, next).unwrap_or(false)
+            {
+                seen.insert(next);
+                queue.push_back(next);
+            }
+        }
+    }
+    seen.into_iter().collect()
+}
+
+#[test]
+fn work_reach_cache_matches_direct_edges_after_ground_changes() {
+    let mut w = GameWorld::new(WorldConfig::new(128, 128, Seed(1)).unwrap()).unwrap();
+    let check = |w: &GameWorld| {
+        for kind in [UnitKind::Villager, UnitKind::Militia, UnitKind::FishingShip] {
+            for start in [TileCoord::new(40, 40), TileCoord::new(42, 42)] {
+                assert_eq!(
+                    w.replacement_reach(kind, start).tiles,
+                    direct_work_reach(w, kind, start)
+                );
+            }
+        }
+    };
+    check(&w);
+    let house = w
+        .insert_building(
+            PlayerId(0),
+            crate::BuildingKind::House,
+            TileRect::from_xywh(41, 40, 2, 2),
+            true,
+        )
+        .unwrap();
+    check(&w);
+    w.remove_building(house);
+    check(&w);
+}
+
+#[test]
+fn queued_land_work_waits_for_movers_without_targeting_a_settled_body() {
+    let (mut w, node) = cleared_work_area(ResourceKind::Wood);
+    let id = w
+        .spawn_villager(
+            PlayerId(0),
+            position(TileCoord::new(node.tile.x - 2, node.tile.y)).unwrap(),
+        )
+        .unwrap();
+    w.issue_gather(PlayerId(0), id, node.id).unwrap();
+    let points = w.static_work_positions(UnitKind::Villager, node.tile);
+    let occupants = points
+        .inner
+        .iter()
+        .enumerate()
+        .map(|(i, &at)| w.spawn_villager(PlayerId(u16::from(i != 0)), at).unwrap())
+        .collect::<Vec<_>>();
+    w.issue_gather(PlayerId(0), occupants[0], node.id).unwrap();
+    w.advance();
+    assert_eq!(
+        w.unit(occupants[0]).unwrap().task,
+        crate::UnitTask::Gathering
+    );
+    assert!(
+        !w.queue_resource_approach(id, node.tile),
+        "settled occupants cannot clear a queue"
+    );
+    let first = w.unit(occupants[0]).unwrap().position;
+    w.issue_move(occupants[0], WorldPosition::new(first.x - 1024, first.y))
+        .unwrap();
+    assert!(w.unit(occupants[0]).unwrap().moving);
+    assert!(
+        w.queue_resource_approach(id, node.tile),
+        "moving traffic can clear the work point"
+    );
+    for _ in 0..200 {
+        w.advance();
+        if w.unit(id).unwrap().carried.is_some() {
+            return;
+        }
+    }
+    panic!("queued work must finish its approach and collect");
+}
+
+#[test]
+fn an_unavailable_land_work_point_ends_its_old_order_while_the_owner_collects() {
+    let (mut w, node) = cleared_work_area(ResourceKind::Gold);
+    w.set_fog_disabled(true);
+    let room = TileCoord::new(node.tile.x - 1, node.tile.y - 1);
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            let tile = TileCoord::new(room.x + dx, room.y + dy);
+            if tile != room && tile != node.tile {
+                w.insert_building(
+                    PlayerId(0),
+                    crate::BuildingKind::PalisadeWall,
+                    TileRect::from_xywh(tile.x, tile.y, 1, 1),
+                    true,
+                )
+                .unwrap();
+            }
+        }
+    }
+    let actor = w
+        .spawn_villager(
+            PlayerId(0),
+            WorldPosition::new(node.tile.x * 1024 - 774, node.tile.y * 1024 - 274),
+        )
+        .unwrap();
+    w.issue_gather(PlayerId(0), actor, node.id).unwrap();
+    let goal = w.movement_order(actor).unwrap().destination;
+    assert_eq!(goal.tile_floor(), room);
+    let owner = w.spawn_villager(PlayerId(0), goal).unwrap();
+    w.issue_gather(PlayerId(0), owner, node.id).unwrap();
+    for _ in 0..128 {
+        w.advance();
+        assert!(w.movement_obstruction_ticks(actor).unwrap_or(0) <= 128);
+    }
+    assert!(
+        w.gather_target(actor).is_none(),
+        "unavailable work must end, not keep circling: {:?}",
+        w.unit(actor)
+    );
+    assert!(w.movement_order(actor).is_none());
+    assert_eq!(w.unit(actor).unwrap().task, crate::UnitTask::Idle);
+    assert!(
+        w.unit(owner).unwrap().carried.is_some(),
+        "the reachable owner keeps collecting"
+    );
+}

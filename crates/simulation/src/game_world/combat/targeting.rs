@@ -55,6 +55,85 @@ impl TargetArea {
 }
 
 impl GameWorld {
+    /// A live unit or building of another player, else `None`.
+    pub(crate) fn attack_goal(&self, target: EntityId, attacker: PlayerId) -> Option<Goal> {
+        if let Some(unit) = self.unit(target) {
+            return (unit.hp > 0 && unit.player != attacker && !self.embarked(target))
+                .then_some(Goal::Unit(unit.position, unit.kind.collision_radius()));
+        }
+        if let Some(animal) = self.animal(target) {
+            return (animal.hp > 0).then_some(Goal::Unit(animal.position, 205));
+        }
+        self.economy
+            .buildings
+            .get(&target)
+            .filter(|building| building.hp > 0 && building.player != attacker)
+            .map(|building| Goal::Building(building.footprint))
+    }
+
+    /// Melee contact uses the fine movement cells, reserving the full bounded
+    /// sample before probing so troops leave the defensive half untouched.
+    pub(super) fn acquire_contact_target(&mut self, area: &TargetArea) -> Option<EntityId> {
+        let Goal::Unit(at, _) = area.source else {
+            return None;
+        };
+        let reach = i32::try_from(area.max).unwrap_or(i32::MAX);
+        let min =
+            WorldPosition::new(at.x.saturating_sub(reach), at.y.saturating_sub(reach)).tile_floor();
+        let max =
+            WorldPosition::new(at.x.saturating_add(reach), at.y.saturating_add(reach)).tile_floor();
+        let naval = self.collisions.maximum_radii()[1] != 0;
+        let needed = (i64::from(max.x) - i64::from(min.x) + 1)
+            * (i64::from(max.y) - i64::from(min.y) + 1)
+            * 32
+            * if naval { 2 } else { 1 };
+        if i64::from(
+            (MAX_TARGET_INSPECTIONS / 2).saturating_sub(self.combat.stats.targeting_scanned),
+        ) < needed
+        {
+            return None;
+        }
+        // Rotate on actual probes; global tick phases can hide crowded bodies.
+        let round = self.combat.target_rounds.entry(area.actor).or_default();
+        let salt = round.wrapping_add(u64::from(area.actor.0));
+        *round = round.saturating_add(32);
+        let mut best = None;
+        let mut scanned = 0;
+        for water in [false, true].into_iter().take(if naval { 2 } else { 1 }) {
+            self.collisions.blocked(
+                (at, reach),
+                water,
+                salt,
+                &self.group_work,
+                |id| {
+                    scanned += 1;
+                    let u = self.units[self.collisions.unit_index(id)].state;
+                    let goal = Goal::Unit(u.position, u.kind.collision_radius());
+                    if u.player == area.player
+                        || u.hp == 0
+                        || self.embarked(id)
+                        || !area.accepts(goal)
+                        || !self.unit_visible_to(area.player, id)
+                        || (area.ram
+                            && !matches!(u.kind, UnitKind::Mangonel | UnitKind::BatteringRam))
+                    {
+                        return false;
+                    }
+                    let civilian = matches!(
+                        u.kind,
+                        UnitKind::Villager | UnitKind::FishingShip | UnitKind::TransportShip
+                    );
+                    let key = (u8::from(civilian), area.distance(goal), id);
+                    best = Some(best.map_or(key, |old| std::cmp::min(old, key)));
+                    false
+                },
+                |_| false,
+            );
+        }
+        self.combat.stats.targeting_scanned += scanned;
+        best.map(|(_, _, id)| id)
+    }
+
     /// Units precede structures. Stable (class, distance, id) ordering within
     /// a rotating bounded sample; no sort/allocation proportional to a crowd.
     pub(super) fn acquire_target(

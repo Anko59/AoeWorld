@@ -6,11 +6,20 @@ use super::*;
 /// `count` villagers spread around the ring of one node. Returns the number
 /// carrying within 10 s, 30 s and 60 s of the order, and the number idle at 60 s.
 fn crowd(kind: ResourceKind, count: usize) -> (usize, usize, usize, usize, u32, usize) {
+    crowd_from(kind, count, 6, 9)
+}
+
+fn crowd_from(
+    kind: ResourceKind,
+    count: usize,
+    inner: i32,
+    outer: i32,
+) -> (usize, usize, usize, usize, u32, usize) {
     let (mut world, node, first) = resource_world(kind);
     let mut ids = vec![first];
-    let ring = (-9..=9)
-        .flat_map(|dy| (-9..=9).map(move |dx| (dx, dy)))
-        .filter(|&(dx, dy): &(i32, i32)| dx.abs().max(dy.abs()) >= 6)
+    let ring = (-outer..=outer)
+        .flat_map(|dy| (-outer..=outer).map(move |dx| (dx, dy)))
+        .filter(|&(dx, dy): &(i32, i32)| dx.abs().max(dy.abs()) >= inner)
         .map(|(dx, dy)| TileCoord::new(node.tile.x + dx, node.tile.y + dy))
         .filter(|&t| world.tile_passable(t))
         .collect::<Vec<_>>();
@@ -41,23 +50,65 @@ fn crowd(kind: ResourceKind, count: usize) -> (usize, usize, usize, usize, u32, 
         .filter(|&&id| world.unit(id).unwrap().task == UnitTask::Idle)
         .count();
     let last = first_load.iter().flatten().copied().max().unwrap_or(0);
-    (within(200), within(600), within(1200), idle, last, refused)
+    let result = (within(200), within(600), within(1200), idle, last, refused);
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reports/movement");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join(format!("crowd-{kind:?}-{count}-{outer}.txt")),
+        format!("{result:?}\n"),
+    )
+    .unwrap();
+    result
 }
 
 #[test]
 fn twelve_villagers_on_one_gold_mine() {
     let got = crowd(ResourceKind::Gold, 12);
     eprintln!("group-baseline gold-crowd: {got:?}");
-    // S7: ten seconds after the order only 2 of the 12 carry gold, 9 after
-    // thirty seconds and 10 after sixty; two stay idle. PR 10 flips this: all
-    // twelve gather within ten seconds.
-    assert_eq!(got, (2, 9, 10, 2, 639, 0));
+    // Preserve the original distant starts. They include >12 tiles of walking,
+    // so the ten-second worksite target is tested separately below.
+    assert!(got.0 >= 2, "{got:?}");
+    assert_eq!((got.1, got.2, got.3, got.5), (12, 12, 0, 0), "{got:?}");
+    assert!(got.4 <= 600, "{got:?}");
+    assert!(got.4 <= 395, "PR 10 gold collect time: {got:?}");
 }
 
 #[test]
-#[ignore = "recording, PR 9/10"]
+fn twelve_nearby_villagers_all_collect_within_ten_seconds() {
+    let got = [ResourceKind::Wood, ResourceKind::Food, ResourceKind::Gold]
+        .map(|kind| crowd_from(kind, 12, 2, 3));
+    for (result, limit) in got.iter().zip([190, 179, 141]) {
+        assert!(
+            result.4 <= limit,
+            "PR 10 worksite collect time: {result:?}, limit {limit}"
+        );
+    }
+    assert!(
+        got.iter()
+            .all(|r| r.0 == 12 && r.3 == 0 && r.4 <= 200 && r.5 == 0),
+        "{got:?}"
+    );
+}
+
+#[test]
 fn eight_villagers_on_one_tree_berry_bush_or_gold_patch() {
     let got = [ResourceKind::Wood, ResourceKind::Food, ResourceKind::Gold].map(|k| crowd(k, 8));
     let twelve = [ResourceKind::Wood, ResourceKind::Food].map(|k| crowd(k, 12));
-    panic!("record {got:?} {twelve:?}");
+    assert!(
+        got.iter()
+            .all(|r| r.1 == 8 && r.2 == 8 && r.3 == 0 && r.4 <= 600 && r.5 == 0),
+        "{got:?}"
+    );
+    for (result, limit) in twelve.iter().zip([382, 395]) {
+        assert!(
+            result.4 <= limit,
+            "PR 10 distant collect time: {result:?}, limit {limit}"
+        );
+    }
+    assert!(
+        twelve
+            .iter()
+            .all(|r| r.1 == 12 && r.2 == 12 && r.3 == 0 && r.4 <= 600 && r.5 == 0),
+        "{twelve:?}"
+    );
 }

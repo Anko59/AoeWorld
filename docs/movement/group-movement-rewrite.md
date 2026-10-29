@@ -303,8 +303,8 @@ and buildings stay hard (existing exact sweeps, `static_collision.rs`).
    taken, with at most two bodies per point. Working villagers are soft to
    passing friends. The overfull-cell and over-32-reservation vetoes become a
    density cost, so a crowded mine sends late arrivals to the next free side.
-8. **Melee in crowds.** A melee unit within `attack_range + r` of the target
-   surface strikes even if its perimeter point is taken; friendly attackers
+8. **Melee in crowds.** A melee unit already within its actual attack range
+   strikes even if its preferred perimeter point is taken; friendly attackers
    are soft; enemies obey `h` 0.85, keeping DE's limited melee stacking.
 9. **Removed.** The follower speed-0 rule (`spacing.rs:37-106` and
    `spacing/followers*`), the 64-tick squeeze, the idle push
@@ -493,3 +493,8 @@ Implementation evidence and differences from the design:
   members rejoin within two tiles. Sealed members give up independently.
 - Scheduler storage belongs to a member (route handover on leave/detach); group
   ids and in-group Engaged remain absent: PR 4 one-unit resumes stay.
+- PR 10: nearby 12 wood/berry/gold workers first collect by ticks 190/179/141;
+  original distant starts all 12 by 382/395/395, with no idle or refused jobs.
+  Four-rank 40-v-40 fronts: 47/75 -> 79/80 early/total strikers; the 90% floor holds.
+  Ten-rank marching recording: 36 -> 49 early, all 80 total; rear travel still limits 5 s.
+  Actual reach stays hard, pace is 43/45; enemies retain full body separation [G].

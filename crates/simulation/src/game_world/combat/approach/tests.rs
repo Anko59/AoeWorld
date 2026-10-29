@@ -75,3 +75,57 @@ fn proofs_stay_bounded_when_every_tile_is_a_separate_islet() {
     assert_eq!(proofs.get(), MAX_HIERARCHY_PROOFS);
     assert!(found.is_some(), "past the cap the next tile is walked to");
 }
+
+#[test]
+fn contact_retargets_leave_the_defensive_half_of_the_scan_budget() {
+    use crate::UnitKind;
+    use aoe_core::{PlayerId, WorldConfig};
+    let mut w = GameWorld::new(WorldConfig::default()).unwrap();
+    w.set_fog_disabled(true);
+    let at = |x| WorldPosition::from_tile_center(TileCoord::new(x, 50)).unwrap();
+    let actor = w
+        .spawn_kind(PlayerId(0), UnitKind::Militia, at(50))
+        .unwrap();
+    let distant = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, at(60))
+        .unwrap();
+    w.spawn_kind(PlayerId(1), UnitKind::Militia, at(49))
+        .unwrap();
+    w.begin_autonomous_attack(actor, distant, at(50));
+    w.tick.0 = (4 - u64::from(actor.0) % 4) % 4;
+    let index = w.lookup[&actor];
+    let attacker = w.combat.attackers[&actor];
+    let goal = w.attack_goal(distant, PlayerId(0));
+    let stats = w.unit_stats(actor).unwrap();
+    let half = super::super::targeting::MAX_TARGET_INSPECTIONS / 2;
+    w.combat.stats.targeting_scanned = half - 1;
+    w.refresh_contact_target(index, attacker, goal, &stats, &mut Vec::new());
+    assert!(w.combat.stats.targeting_scanned <= half);
+}
+
+#[test]
+fn contact_probe_keeps_its_route_until_the_next_blow_is_ready() {
+    use crate::UnitKind;
+    use aoe_core::{PlayerId, WorldConfig};
+    let mut w = GameWorld::new(WorldConfig::default()).unwrap();
+    w.set_fog_disabled(true);
+    let at = |x| WorldPosition::from_tile_center(TileCoord::new(x, 50)).unwrap();
+    let actor = w
+        .spawn_kind(PlayerId(0), UnitKind::Militia, at(50))
+        .unwrap();
+    let distant = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, at(60))
+        .unwrap();
+    w.spawn_kind(PlayerId(1), UnitKind::Militia, at(49))
+        .unwrap();
+    w.begin_autonomous_attack(actor, distant, at(50));
+    w.tick.0 = (4 - u64::from(actor.0) % 4) % 4;
+    let index = w.lookup[&actor];
+    w.units[index].next_hit_tick = w.tick.0 + 10;
+    let attacker = w.combat.attackers[&actor];
+    let goal = w.attack_goal(distant, PlayerId(0));
+    let stats = w.unit_stats(actor).unwrap();
+    let result = w.refresh_contact_target(index, attacker, goal, &stats, &mut Vec::new());
+    assert_eq!(result.target, distant);
+    assert_eq!(w.combat.stats.targeting_scanned, 0);
+}
