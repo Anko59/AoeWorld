@@ -104,7 +104,14 @@ pub(super) const fn building_armour(kind: BuildingKind) -> Classes {
     }
 }
 
-pub(super) const fn building_attacks(kind: BuildingKind) -> Classes {
+pub(super) const fn building_attacks(kind: BuildingKind, secondary: bool) -> Classes {
+    if secondary {
+        match kind {
+            BuildingKind::WatchTower => return &[(StoneDefense, 5), (Ship, 7), (FishingShip, 7)],
+            BuildingKind::Castle => return &[(StoneDefense, 11), (Ship, 11), (FishingShip, 11)],
+            _ => {}
+        }
+    }
     match kind {
         // Town Centers fire only secondary arrows, which carry these attacks.
         BuildingKind::TownCenter => &[(Building, 5), (Ship, 5), (FishingShip, 5)],

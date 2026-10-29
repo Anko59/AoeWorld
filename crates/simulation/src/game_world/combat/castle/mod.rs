@@ -33,7 +33,11 @@ impl GameWorld {
         for (id, d) in hits {
             let unit = i64::from(FIXED_SUBUNITS_PER_TILE);
             let divisor = if d <= unit * unit / 4 { 1 } else { 2 };
-            let bonus = self.unit_damage_bonus(UnitKind::Mangonel, id);
+            let bonus = if id == p.target {
+                p.bonus
+            } else {
+                self.unit_damage_bonus(UnitKind::Mangonel, id)
+            };
             self.resolve_hit(
                 (p.attacker, p.player),
                 id,
@@ -61,7 +65,11 @@ impl GameWorld {
                     (p.attacker, p.player),
                     id,
                     p.attack,
-                    self.unit_damage_bonus(UnitKind::Mangonel, id),
+                    if id == p.target {
+                        p.bonus
+                    } else {
+                        self.unit_damage_bonus(UnitKind::Mangonel, id)
+                    },
                     crate::DamageKind::Melee,
                     changed,
                 );
@@ -152,6 +160,9 @@ impl GameWorld {
                 && let Some(&i) = self.lookup.get(&target)
             {
                 self.units[i].state.hp += 1;
+                if self.units[i].state.hp == self.units[i].state.max_hp {
+                    self.combat.hp_quarters[target.0 as usize] = 0;
+                }
                 changed.push(target);
             }
         }

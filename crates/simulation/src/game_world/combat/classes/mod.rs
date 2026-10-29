@@ -9,9 +9,15 @@ use profiles::{Class, building_armour, building_attacks, unit_armour, unit_attac
 
 const UNITS: usize = super::UNIT_COMBAT.len();
 const KINDS: usize = UNITS + super::BUILDING_COMBAT.len();
-static BONUSES: [[[u16; KINDS]; KINDS]; 2] = bonus_tables();
+static BONUSES: [[[u16; KINDS]; KINDS]; 2] = bonus_tables(false);
+static SECONDARY_BONUSES: [[[u16; KINDS]; 2]; 2] = {
+    let t = bonus_tables(true);
+    let tower = UNITS + BuildingKind::WatchTower as usize;
+    let castle = UNITS + BuildingKind::Castle as usize;
+    [[t[0][tower], t[0][castle]], [t[1][tower], t[1][castle]]]
+};
 
-const fn bonus_tables() -> [[[u16; KINDS]; KINDS]; 2] {
+const fn bonus_tables(secondary: bool) -> [[[u16; KINDS]; KINDS]; 2] {
     let mut tables = [[[0; KINDS]; KINDS]; 2];
     let mut masonry = 0;
     while masonry < 2 {
@@ -20,7 +26,7 @@ const fn bonus_tables() -> [[[u16; KINDS]; KINDS]; 2] {
             let attacks = if a < UNITS {
                 unit_attacks(super::UNIT_COMBAT[a].kind)
             } else {
-                building_attacks(super::BUILDING_COMBAT[a - UNITS].kind)
+                building_attacks(super::BUILDING_COMBAT[a - UNITS].kind, secondary)
             };
             let mut v = 0;
             while v < KINDS {
@@ -94,6 +100,21 @@ impl GameWorld {
 
     pub(super) fn building_damage_bonus(&self, kind: BuildingKind, target: EntityId) -> u16 {
         self.class_damage_bonus(UNITS + kind as usize, target)
+    }
+
+    pub(super) fn secondary_damage_bonus(&self, kind: BuildingKind, target: EntityId) -> u16 {
+        let index = match kind {
+            BuildingKind::WatchTower => 0,
+            BuildingKind::Castle => 1,
+            _ => return self.building_damage_bonus(kind, target),
+        };
+        if let Some(v) = self.unit(target) {
+            return SECONDARY_BONUSES[0][index][v.kind as usize];
+        }
+        self.building(target).map_or(0, |v| {
+            SECONDARY_BONUSES[usize::from(self.building_has_masonry(v))][index]
+                [UNITS + v.kind as usize]
+        })
     }
 
     fn class_damage_bonus(&self, attacker: usize, target: EntityId) -> u16 {

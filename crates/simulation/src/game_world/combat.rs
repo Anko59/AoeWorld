@@ -14,6 +14,8 @@ mod castle;
 #[path = "combat/classes/mod.rs"]
 mod classes;
 mod cost;
+#[path = "combat/damage/mod.rs"]
+mod damage;
 mod hash;
 mod lifecycle;
 pub(crate) mod military;
@@ -88,6 +90,9 @@ pub(crate) struct Attacker {
 
 #[derive(Debug)]
 pub(crate) struct Combat {
+    /// Fraction above displayed HP, indexed by allocated identity. Shelter and
+    /// transport preserve identities; allocation happens at spawn, never a hit.
+    pub(crate) hp_quarters: Vec<u8>,
     pub(crate) seekers: BTreeSet<EntityId>,
     pub(crate) seeker_cursor: EntityId,
     pub(crate) tower_cursor: EntityId,
@@ -119,6 +124,7 @@ pub(crate) struct Combat {
 impl Default for Combat {
     fn default() -> Self {
         Self {
+            hp_quarters: Vec::new(),
             seekers: Default::default(),
             seeker_cursor: Default::default(),
             tower_cursor: Default::default(),

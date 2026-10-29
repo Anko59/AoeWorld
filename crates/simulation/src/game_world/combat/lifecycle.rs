@@ -69,6 +69,7 @@ impl GameWorld {
         self.stop_movement(index);
         let id = self.units[index].state.id;
         let player = self.units[index].state.player;
+        self.combat.hp_quarters[id.0 as usize] = 0;
         self.forget_vassal(id);
         self.sink_cargo(id);
         let death_hunt = self

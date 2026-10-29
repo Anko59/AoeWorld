@@ -1,7 +1,7 @@
 //! Per-tick attack resolution for units that hold an attack order.
-use super::{Attacker, HitRecord, MELEE_RANGE_SUBUNITS, unit_combat};
+use super::{Attacker, MELEE_RANGE_SUBUNITS, unit_combat};
 use crate::{GameWorld, UnitTask};
-use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, Tick, TileRect, WorldPosition};
+use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, TileRect, WorldPosition};
 
 /// What an attacker is walking to and hitting.
 #[derive(Clone, Copy, Debug)]
@@ -348,9 +348,9 @@ impl GameWorld {
             self.launch_projectile(
                 attacker_id,
                 target,
-                stats.attack,
-                bonus,
+                (stats.attack, bonus),
                 super::ProjectileKind::Stone,
+                false,
             );
             return;
         }
@@ -363,7 +363,7 @@ impl GameWorld {
             } else {
                 super::ProjectileKind::Arrow
             };
-            self.launch_projectile(attacker_id, target, stats.attack, bonus, kind);
+            self.launch_projectile(attacker_id, target, (stats.attack, bonus), kind, false);
             return;
         }
         self.resolve_hit(
@@ -376,88 +376,7 @@ impl GameWorld {
         );
     }
 
-    /// Both melee and tower arrows share armour, death and retaliation logic.
-    pub(in crate::game_world) fn resolve_hit(
-        &mut self,
-        source: (EntityId, PlayerId),
-        target: EntityId,
-        attack: u16,
-        bonus: u16,
-        kind: super::DamageKind,
-        changed: &mut Vec<EntityId>,
-    ) {
-        let (attacker_id, attacker_player) = source;
-        let hit = HitRecord {
-            attacker: attacker_id,
-            tick: Tick(self.tick.0),
-        };
-        self.combat.stats.hits += 1;
-        if let Some(&victim_index) = self.lookup.get(&target) {
-            if self.units[victim_index].state.hp == 0 || self.embarked(target) {
-                return;
-            }
-            let (melee, pierce) = self.unit_armour(target).unwrap_or_default();
-            let victim = &mut self.units[victim_index].state;
-            let damage = super::table::damage_with_bonus(attack, kind, melee, pierce, bonus);
-            victim.hp = victim.hp.saturating_sub(damage);
-            victim.last_hit = Some(hit);
-            let (hp, victim_player) = (victim.hp, victim.player);
-            self.record_combat_hit(
-                Some(attacker_player),
-                victim_player,
-                kind == super::DamageKind::Pierce,
-                hp == 0,
-            );
-            if hp == 0 {
-                self.kill_unit(victim_index);
-                self.finish_target_attack(attacker_id, target, changed);
-            } else if attacker_player != victim_player {
-                self.retaliate(victim_index, attacker_id, changed);
-            }
-            changed.push(self.units[victim_index].state.id);
-        } else if self.animal(target).is_some() {
-            if self.strike_animal(target, attacker_id, attack) {
-                self.finish_target_attack(attacker_id, target, changed);
-            }
-        } else if let Some(building) = self.building(target) {
-            let armour = super::table::age_armour(building.kind, building.age);
-            let masonry = self.building_has_masonry(building);
-            let damage = super::table::damage_with_bonus(
-                attack,
-                kind,
-                armour.melee_armour + i16::from(masonry),
-                armour.pierce_armour + u16::from(masonry),
-                bonus,
-            );
-            let Some(building) = self.economy.buildings.get_mut(&target) else {
-                return;
-            };
-            building.hp = building.hp.saturating_sub(damage);
-            building.last_hit = Some(hit);
-            let occupants: Vec<_> = building.garrison.iter().map(|g| g.unit.id).collect();
-            let (building_kind, footprint) = (building.kind, building.footprint);
-            let (player, killed) = (building.player, building.hp == 0);
-            self.record_combat_hit(
-                Some(attacker_player),
-                player,
-                kind == super::DamageKind::Pierce,
-                killed,
-            );
-            if killed {
-                // Ejection restores map units during this hit. Include their
-                // identities in the ordinary delta for simulation consumers.
-                changed.extend(occupants);
-                if building_kind == crate::BuildingKind::Bridge {
-                    let rect = footprint;
-                    changed.extend(self.query(rect).0.into_iter().map(|u| u.id));
-                }
-                self.destroy_building(target);
-                self.finish_target_attack(attacker_id, target, changed);
-            }
-        }
-    }
-
-    fn finish_target_attack(
+    pub(super) fn finish_target_attack(
         &mut self,
         attacker: EntityId,
         target: EntityId,

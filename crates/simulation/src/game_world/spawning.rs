@@ -23,6 +23,7 @@ impl GameWorld {
             u32::try_from(self.next_entity_id).map_err(|_| GameWorldError::EntityIdExhausted)?,
         );
         self.next_entity_id += 1;
+        self.combat.hp_quarters.push(0);
         Ok(id)
     }
     pub fn spawn_unit(

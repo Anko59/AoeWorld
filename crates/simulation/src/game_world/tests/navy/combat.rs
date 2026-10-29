@@ -1,6 +1,38 @@
 use super::*;
 
 #[test]
+fn secondary_castle_arrows_carry_their_own_anti_ship_bonus() {
+    for (victim, expected) in [
+        (UnitKind::Galley, 931),         // 5 primary + four (5 + 11 Ships).
+        (UnitKind::FishingShip, 906),    // 10 primary + four (10 + 11 Fishing Ships).
+        (UnitKind::FireShip, 955),       // Ship armour 6 reduces only the secondary bonus.
+        (UnitKind::DemolitionShip, 928), // Ship armour 3, pierce armour 3.
+    ] {
+        let mut w = coast();
+        let (land, water) = bank(&w);
+        let castle = w
+            .insert_building(
+                PlayerId(0),
+                crate::BuildingKind::Castle,
+                TileRect::from_xywh(land.x - 4, land.y - 1, 4, 4),
+                true,
+            )
+            .unwrap();
+        let target = ship(&mut w, victim, water, 1);
+        let unit = &mut w.units[w.lookup[&target]].state;
+        unit.hp = 1000;
+        unit.max_hp = 1000;
+        if victim != UnitKind::FishingShip {
+            w.issue_stance(PlayerId(1), &[target], aoe_core::CombatStance::NoAttack)
+                .unwrap();
+        }
+        w.issue_attack(PlayerId(0), castle, target).unwrap();
+        advance(&mut w, 25);
+        assert_eq!(w.unit(target).unwrap().hp, expected, "{victim:?}");
+    }
+}
+
+#[test]
 fn hidden_naval_class_damage_includes_ship_armour_and_separate_fire_melee() {
     for (victim, galley, war_galley, fire) in [
         (UnitKind::FishingShip, 8, 9, 3),

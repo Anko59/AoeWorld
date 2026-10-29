@@ -58,6 +58,7 @@ impl Combat {
             hash.update(&[p.kind as u8]);
             hash.update(&p.attack.to_le_bytes());
             hash.update(&p.bonus.to_le_bytes());
+            hash.update(&[u8::from(p.secondary)]);
         }
         hash.update(&(self.tower_ready.len() as u64).to_le_bytes());
         for (id, ready) in &self.tower_ready {
@@ -118,6 +119,15 @@ impl Combat {
         for (due, id) in &self.dying {
             hash.update(&due.to_le_bytes());
             hash.update(&id.0.to_le_bytes());
+        }
+        // Only non-integral HP contributes additional state. Whole HP already
+        // belongs to unit/building storage; identities give a canonical order.
+        for (id, &quarter) in self.hp_quarters.iter().enumerate() {
+            if quarter != 0 {
+                hash.update(b"fractional-hp");
+                hash.update(&(id as u32).to_le_bytes());
+                hash.update(&[quarter]);
+            }
         }
     }
 }

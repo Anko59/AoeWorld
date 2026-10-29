@@ -22,6 +22,7 @@ pub struct Projectile {
     pub kind: ProjectileKind,
     pub(crate) attack: u16,
     pub(crate) bonus: u16,
+    pub(crate) secondary: bool,
 }
 impl Projectile {
     pub fn position(&self, tick: Tick) -> WorldPosition {
@@ -48,9 +49,9 @@ impl GameWorld {
         &mut self,
         attacker: EntityId,
         target: EntityId,
-        attack: u16,
-        bonus: u16,
+        damage: (u16, u16),
         kind: ProjectileKind,
+        secondary: bool,
     ) {
         if self.combat.projectiles.len() >= self.economy.limits.projectiles {
             return;
@@ -128,8 +129,9 @@ impl GameWorld {
                 launched: self.tick,
                 impact: Tick(self.tick.0.saturating_add(ticks)),
                 kind,
-                attack,
-                bonus,
+                attack: damage.0,
+                bonus: damage.1,
+                secondary,
             },
         );
     }
@@ -150,14 +152,7 @@ impl GameWorld {
                     let dy = i64::from(u.position.y) - i64::from(p.to.y);
                     dx * dx + dy * dy <= i64::from(FIXED_SUBUNITS_PER_TILE / 2).pow(2)
                 }) {
-                    self.resolve_hit(
-                        (p.attacker, p.player),
-                        p.target,
-                        p.attack,
-                        p.bonus,
-                        super::DamageKind::Pierce,
-                        changed,
-                    );
+                    self.resolve_projectile_hit(p, changed);
                 }
             }
         }

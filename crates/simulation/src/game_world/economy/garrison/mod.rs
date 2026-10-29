@@ -228,6 +228,9 @@ impl GameWorld {
             for occupant in &mut building.garrison {
                 if self.tick.0 >= occupant.heal_at {
                     occupant.unit.hp = occupant.unit.hp.saturating_add(1).min(occupant.unit.max_hp);
+                    if occupant.unit.hp == occupant.unit.max_hp {
+                        self.combat.hp_quarters[occupant.unit.id.0 as usize] = 0;
+                    }
                     occupant.heal_at =
                         self.tick.0 + building.kind.heal_seconds() * u64::from(self.config.tick_hz);
                 }

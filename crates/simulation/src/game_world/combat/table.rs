@@ -182,15 +182,24 @@ pub(super) const fn damage_with_bonus(
     pierce_armour: u16,
     bonus: u16,
 ) -> u16 {
+    let damage = damage_components(attack, kind, melee_armour, pierce_armour, bonus);
+    if damage < 1 { 1 } else { damage }
+}
+
+pub(super) const fn damage_components(
+    attack: u16,
+    kind: DamageKind,
+    melee_armour: i16,
+    pierce_armour: u16,
+    bonus: u16,
+) -> u16 {
     let armour = match kind {
         DamageKind::Melee => melee_armour as i32,
         DamageKind::Pierce => pierce_armour as i32,
     };
     let base = attack as i32 - armour;
     let damage = (if base > 0 { base } else { 0 }) + bonus as i32;
-    if damage < 1 {
-        1
-    } else if damage > u16::MAX as i32 {
+    if damage > u16::MAX as i32 {
         u16::MAX
     } else {
         damage as u16

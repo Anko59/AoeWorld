@@ -102,9 +102,9 @@ Buildings armour is always zero. Extra classes and nonzero class armour:
 | Stable | — | — |
 | Blacksmith | — | — |
 | Market | — | — |
-| WatchTower | Stone Defense | Spearmen +2; Ships +7; Fishing Ships +7 |
+| WatchTower | Stone Defense | Primary: Spearmen +2; all arrows: Ships/Fishing Ships +7; secondary: Stone Defense +5 |
 | PalisadeGate | Walls/Gates | — |
-| Castle | Castles; All Buildings armour 8 | Spearmen +2 |
+| Castle | Castles; All Buildings armour 8 | Primary: Spearmen +2; secondary: Ships/Fishing Ships/Stone Defense +11 |
 | Monastery | — | — |
 | University | — | — |
 | SiegeWorkshop | — | — |
@@ -133,3 +133,51 @@ walls, or civilization-specific bonus resistance exist in the current roster.
 Vassal and Bridge are project-specific choices, not claims about DE units.
 Independent licensed DE extraction and dedicated-hardware qualification remain
 external work. Instruction workloads are synthetic performance evidence.
+
+## Elevation and other combat rules
+
+[Elevation](https://ageofempires.fandom.com/wiki/Elevation) and the
+[damage formula](https://ageofempires.fandom.com/wiki/Armor_class_(Age_of_Empires_II))
+specify damage multipliers of 1.25 downhill and 0.75 uphill, independent of
+the number of elevation levels. Apply them to the sum after armour and bonus
+armour, before the minimum-one floor. The simulation compares terrain's
+quantized game height at entity positions (building footprint centres).
+It does not compare the projectile's height in flight. A flat uniform world
+has no elevation advantage.
+
+DE keeps fractional HP and displays the integer part, dying below one HP.
+Quarter-point integer remainders preserve 1.25/0.75 damage exactly, including
+across repeated attacks, healing, shelter, and replay. For example, four
+downhill hits of one unmodified damage remove five HP in total. Zero damage
+before multipliers still becomes exactly one, never 1.25.
+
+[Projectile duplication](https://ageofempires.fandom.com/wiki/Projectile_duplication)
+distinguishes primary and secondary arrows: only the primary receives hill
+bonuses. Town Centers have no primary arrow. Towers have one primary; Castles
+have one primary and four or more secondary arrows. Secondary arrows use their
+own classes, listed above, rather than inheriting the primary's Spearmen bonus.
+[Castle](https://ageofempires.fandom.com/wiki/Castle_(Age_of_Empires_II)) and
+[Watch Tower](https://ageofempires.fandom.com/wiki/Watch_Tower_(Age_of_Empires_II))
+document their separate secondary anti-ship and Stone Defense attacks.
+
+Elevation is evaluated at impact using a living shooter's current location.
+A dead or removed shooter gives neither advantage nor disadvantage. This is
+the DE behavior described in the elevation discussion of the
+[DE mechanics infosheet](https://steamcommunity.com/sharedfiles/filedetails/?id=2169547705).
+Stored projectile attack and bonus values remain fixed at launch.
+
+Existing rules retained and covered by simulation tests: minimum damage one;
+fixed aim points that moving targets can dodge; Ballistics prediction;
+Mangonel one-tile area damage including friendly units and buildings.
+[Mangonel](https://ageofempires.fandom.com/wiki/Mangonel_(Age_of_Empires_II)) and
+[Area of Effect](https://ageofempires.fandom.com/wiki/Area_of_Effect) describe
+the corresponding DE rules. The current full/half blast bands remain an
+approximation of DE's continuous taper and exact Genie hitbox geometry.
+
+Not done: random accuracy rolls (no accuracy/RNG firing system); projectile
+collision with unintended targets and the resulting miss multipliers; full
+Mangonel secondary-stone fan-out and Genie blast geometry; directional cliff
+bonuses; cracked-desert building vulnerability (no corresponding DE terrain
+identity); civilization-specific modifiers. The current roster has no unit
+with innate melee trample damage. These are limits, not claims of full Genie
+engine equivalence.
