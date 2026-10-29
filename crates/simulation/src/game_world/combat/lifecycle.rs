@@ -23,6 +23,9 @@ impl GameWorld {
         if unit.player != player {
             return Err(crate::EconomyError::NotOwner);
         }
+        if let Some(g) = self.general_controller(id) {
+            self.restore_general_stance(g, id);
+        }
         self.stop_unit_orders(index);
         if unit.kind == crate::UnitKind::General {
             self.stop_general(id);
@@ -126,6 +129,10 @@ impl GameWorld {
 
     /// Removes a unit from every index. Its slot is filled by the last unit.
     pub(crate) fn remove_unit(&mut self, id: EntityId) {
+        self.stop_general(id);
+        if let Some(g) = self.general_controller(id) {
+            self.restore_general_stance(g, id);
+        }
         self.economy.embarked.remove(&id);
         self.cancel_auto_scout(id);
         self.leave_group(id);

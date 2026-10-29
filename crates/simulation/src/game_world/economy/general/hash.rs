@@ -29,6 +29,13 @@ impl Economy {
             for id in &a.members {
                 h.update(&id.0.to_le_bytes());
             }
+            for saved in a.stances {
+                h.update(&[u8::from(saved.is_some())]);
+                if let Some(saved) = saved {
+                    h.update(&saved.id.0.to_le_bytes());
+                    h.update(&[saved.original as u8, saved.reason as u8]);
+                }
+            }
         }
         h.update(&(m.recruits.len() as u64).to_le_bytes());
         for (building, (g, k)) in &m.recruits {

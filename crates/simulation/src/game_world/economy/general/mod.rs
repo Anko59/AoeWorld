@@ -6,7 +6,9 @@ mod decisions;
 mod formation;
 mod hash;
 mod reinforcement;
+mod stances;
 mod survey;
+use stances::StanceOverride;
 
 pub const GENERAL_ARMY_LIMIT: usize = 100;
 pub const GENERAL_CADENCE: u64 = 10;
@@ -41,6 +43,7 @@ pub(crate) struct Army {
     pub scan: (usize, usize),
     pub retreat_until: u64,
     pub routed: Option<WorldPosition>,
+    stances: [Option<StanceOverride>; GENERAL_ARMY_LIMIT + 1],
 }
 #[derive(Debug, Default)]
 pub(crate) struct Manager {
@@ -104,6 +107,7 @@ impl GameWorld {
                 scan: (0, 0),
                 retreat_until: 0,
                 routed: None,
+                stances: [None; GENERAL_ARMY_LIMIT + 1],
             },
         );
         let mut work = GeneralWork::default();
@@ -150,6 +154,10 @@ impl GameWorld {
         self.economy.generals.work
     }
     pub(crate) fn forget_general(&mut self, id: EntityId) {
+        self.restore_general_stances(id);
+        if let Some(g) = self.general_controller(id) {
+            self.restore_general_stance(g, id);
+        }
         if let Some(army) = self.economy.generals.armies.remove(&id) {
             for member in army.members {
                 self.economy.generals.controlled.remove(&member);
@@ -166,13 +174,19 @@ impl GameWorld {
         }
     }
     pub(crate) fn stop_general(&mut self, id: EntityId) {
+        self.restore_general_stances(id);
         let Some(a) = self.economy.generals.armies.get_mut(&id) else {
             return;
         };
         a.destination = None;
         a.routed = None;
-        let members: Vec<_> = a.members.iter().copied().collect();
-        for member in members {
+        a.state = GeneralState::Marching;
+        a.retreat_until = 0;
+        let mut members = [None; GENERAL_ARMY_LIMIT];
+        for (slot, &id) in members.iter_mut().zip(&a.members) {
+            *slot = Some(id);
+        }
+        for member in members.into_iter().flatten() {
             if let Some(&index) = self.lookup.get(&member) {
                 self.stop_unit_orders(index);
             }

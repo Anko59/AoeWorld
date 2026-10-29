@@ -76,6 +76,7 @@ impl GameWorld {
         if old_state != state {
             a.routed = None;
         }
+        self.reconcile_general_stances(u.id, state, destination);
         if state != GeneralState::Fighting {
             if let Some(to) = destination {
                 self.general_formation(
@@ -89,21 +90,20 @@ impl GameWorld {
             }
             return;
         }
-        // Stable high-value / wounded target order; ties always break by id.
+        // Class, wounded fraction, distance, then entity id.
         let target = survey
             .enemies
             .iter()
             .min_by_key(|v| {
-                let valuable = matches!(
-                    v.kind,
-                    UnitKind::Mangonel
-                        | UnitKind::Monk
-                        | UnitKind::General
-                        | UnitKind::Archer
-                        | UnitKind::Crossbowman
-                );
+                let priority = match v.kind {
+                    k if role(k) == Some(3) => 0,
+                    UnitKind::Monk => 1,
+                    UnitKind::General | UnitKind::Vassal => 2,
+                    k if role(k) == Some(1) => 3,
+                    _ => 4,
+                };
                 (
-                    u8::from(!valuable),
+                    priority,
                     u32::from(v.hp) * 1000 / u32::from(v.max_hp),
                     distance(v.position, u.position),
                     v.id,
@@ -122,11 +122,15 @@ impl GameWorld {
             work.orders += 1;
             if v.hp * 3 < v.max_hp {
                 let home = self.economy.generals.armies[&u.id].home;
-                let _ = self.issue_stance(u.player, &[v.id], CombatStance::NoAttack);
+                self.general_override_stance(
+                    u.id,
+                    v.id,
+                    CombatStance::NoAttack,
+                    stances::Reason::Wounded,
+                );
                 let _ = self.issue_move(v.id, home);
             } else {
-                let _ = self.issue_stance(u.player, &[v.id], CombatStance::Aggressive);
-                let siege = matches!(v.kind, UnitKind::Mangonel | UnitKind::BatteringRam);
+                let siege = role(v.kind) == Some(3);
                 if let Some(to) = if siege {
                     building.or(target)
                 } else {

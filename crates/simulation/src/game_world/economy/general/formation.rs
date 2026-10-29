@@ -21,15 +21,14 @@ impl GameWorld {
         {
             return;
         }
-        let _ = self.issue_stance(
-            player,
-            &ids,
-            if retreat {
-                aoe_core::CombatStance::NoAttack
+        for &id in &ids {
+            let (stance, reason) = if retreat {
+                (aoe_core::CombatStance::NoAttack, stances::Reason::Retreat)
             } else {
-                aoe_core::CombatStance::Defensive
-            },
-        );
+                (aoe_core::CombatStance::Defensive, stances::Reason::March)
+            };
+            self.general_override_stance(g, id, stance, reason);
+        }
         if let Some(a) = self.economy.generals.armies.get_mut(&g) {
             a.routed = Some(to);
         }

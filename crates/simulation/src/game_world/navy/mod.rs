@@ -99,6 +99,10 @@ impl GameWorld {
             return Ok(());
         }
         for (id, index, at) in passengers {
+            self.stop_general(id);
+            if let Some(g) = self.general_controller(id) {
+                self.restore_general_stance(g, id);
+            }
             self.stop_unit_orders(index);
             self.cancel_hunt(id);
             self.move_queues.remove(&id);

@@ -2,6 +2,8 @@ use super::*;
 use crate::{Age, GeneralState, Stockpile};
 
 mod movement;
+mod stances;
+mod targets;
 
 fn setup() -> (GameWorld, EntityId) {
     let (mut w, _, _) = village();

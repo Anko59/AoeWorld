@@ -49,18 +49,27 @@ that trained it (nearest completed Castle for scenario-spawned Generals).
 The Castle's outside rendezvous survives destruction. Retreat lasts at least
 five seconds; once safe, the army regroups and resumes its retained destination.
 
-In a favourable fight, soldiers focus visible siege, monks, leaders and archers,
-then wounded targets, with distance and entity ID resolving ties. Siege prefers
+In a favourable fight, soldiers focus visible siege (including Mangonels and
+Battering Rams), then Monks, then leaders (Generals and Vassals), then all
+archer kinds (including Skirmishers), then other wounded targets. Within each
+class, the lowest remaining HP fraction wins, then distance and entity ID
+resolve ties. Siege prefers
 visible buildings. Units below one-third HP withdraw toward home. A rotating
 16-member micro window prevents a large army from monopolising orders.
-Retreat suppresses ordinary autonomous acquisition; fighting restores it.
+The General records each soldier's original stance before a march, retreat or
+wounded withdrawal overrides it. The original stance returns when that reason
+ends, including healing, arrival, fighting, regrouping without a destination,
+Stop, release, death or sheltering/transport of the commander. Restoration
+covers the whole army independently of the combat micro window.
 The estimator is deliberately simple, with no opponent-state or fog bypass.
 
 ## Determinism and work limits
 
 All state uses integers and ordered indexes and participates in canonical
 hashing: homes, destinations, membership, queued recruits, scan cursors, rotation
-and retreat deadlines. No randomness, wall clock, network or client decisions.
+and retreat deadlines, plus the original stances and override reasons in 101
+inline slots per army. Stance bookkeeping allocates nothing per decision.
+No randomness, wall clock, network or client decisions.
 
 At 20 Hz, admission runs every ten ticks. At most eight Generals are admitted,
 rotating by entity ID. Each scans at most 1,024 spatial unit entries, 625 nearby
