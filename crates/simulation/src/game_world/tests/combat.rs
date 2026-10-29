@@ -9,6 +9,7 @@ mod benchmark;
 mod buildings;
 mod garrison;
 mod hidden_bonuses;
+mod hills_tests;
 mod military;
 mod research_tests;
 mod scale;

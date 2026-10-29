@@ -157,13 +157,19 @@ impl GameWorld {
                             .div_ceil(100),
                 );
                 let bonus = self.building_damage_bonus(tower_kind, target);
-                for _ in 0..arrows {
+                let extra_bonus = if arrows > 1 {
+                    self.secondary_damage_bonus(tower_kind, target)
+                } else {
+                    bonus
+                };
+                for index in 0..arrows {
+                    let secondary = index > 0 || tower_kind == BuildingKind::TownCenter;
                     self.launch_projectile(
                         id,
                         target,
-                        arrow.attack,
-                        bonus,
+                        (arrow.attack, if secondary { extra_bonus } else { bonus }),
                         super::ProjectileKind::Arrow,
+                        secondary,
                     );
                 }
             }
