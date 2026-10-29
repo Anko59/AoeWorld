@@ -17,6 +17,25 @@ fn object(width: u16, height: u16) -> FrameExtent {
     }
 }
 
+#[test]
+fn ordering_large_reverse_catalog_has_bounded_comparisons() {
+    let frames: Vec<_> = (0..MAX_SELECTED_FRAMES)
+        .map(|i| object(1, (i % 2044 + 1) as u16))
+        .collect();
+    let mut indices: Vec<u16> = (0..frames.len() as u16).collect();
+    let mut comparisons = 0;
+    order_indices(&frames, &mut indices, || comparisons += 1);
+    assert!(
+        comparisons <= frames.len() * 32,
+        "{comparisons} comparisons"
+    );
+    assert!(indices.windows(2).all(|pair| precedes(
+        &frames,
+        usize::from(pair[0]),
+        usize::from(pair[1])
+    )));
+}
+
 fn reject_before_allocation(frames: &[FrameExtent], error: PackingError) {
     assert_eq!(
         pack_with_allocator(frames, |_| panic!("allocated before validation")),

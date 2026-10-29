@@ -116,17 +116,13 @@ fn pack_with_allocator(
 ) -> Result<Vec<Placement>, PackingError> {
     validate(frames)?;
     let mut placements = allocate(frames.len());
-    // Fixed 10 KiB index scratch: bounded startup-only insertion sort, avoiding
-    // generic quicksort's WASM code size and a second heap allocation.
+    // Fixed 10 KiB index scratch. In-place sorting avoids quadratic startup
+    // comparisons for a larger animation catalog and does not allocate.
     let mut indices = [0_u16; MAX_SELECTED_FRAMES];
-    for index in 0..frames.len() {
-        let mut slot = index;
-        while slot > 0 && precedes(frames, index, usize::from(indices[slot - 1])) {
-            indices[slot] = indices[slot - 1];
-            slot -= 1;
-        }
-        indices[slot] = index as u16;
+    for (index, slot) in indices[..frames.len()].iter_mut().enumerate() {
+        *slot = index as u16;
     }
+    order_indices(frames, &mut indices[..frames.len()], || {});
     let mut cursors: [Page; PAGE_COUNT] = std::array::from_fn(|_| Page::new());
     for &index in &indices[..frames.len()] {
         let index = usize::from(index);
@@ -158,6 +154,20 @@ fn pack_with_allocator(
         }
     }
     Ok(placements)
+}
+
+fn order_indices(frames: &[FrameExtent], indices: &mut [u16], mut compared: impl FnMut()) {
+    indices.sort_unstable_by(|&a, &b| {
+        compared();
+        let (a, b) = (usize::from(a), usize::from(b));
+        if a == b {
+            std::cmp::Ordering::Equal
+        } else if precedes(frames, a, b) {
+            std::cmp::Ordering::Less
+        } else {
+            std::cmp::Ordering::Greater
+        }
+    });
 }
 
 fn validate(frames: &[FrameExtent]) -> Result<(), PackingError> {
