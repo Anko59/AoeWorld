@@ -6,8 +6,7 @@ use super::movement::MovementProbe;
 use super::stats::{Series, memory, round};
 use super::world::BoxError;
 use super::{PHASES, git};
-use aoe_core::{Formation, PlayerId, Seed, WorldConfig, WorldPosition};
-use aoe_simulation::{GameWorld, TickPhase, UnitKind, WorldLimits};
+use aoe_simulation::{GameWorld, TickPhase};
 use clap::Args;
 use serde_json::json;
 use std::{fs, path::PathBuf, sync::Arc, time::Instant};
@@ -42,101 +41,35 @@ pub struct Options {
     /// meet, so the run also measures the attack-move look and the fights.
     #[arg(long)]
     attack_move: bool,
+    /// Time coarse prepare/propose/apply stages instead of individual queries.
+    #[arg(long)]
+    coarse_groups: bool,
     #[arg(long, default_value = "reports/perf/perf-groups.json")]
     out: PathBuf,
 }
 
-fn at(x: i32, y: i32) -> WorldPosition {
-    // The centre of tile (x, y): 1,024 subunits per tile.
-    WorldPosition::new(x * 1024 + 512, y * 1024 + 512)
-}
-
-/// Each army marches to the mirror cell inside its block of four columns, so
-/// the pairs 0-3 and 1-2 pass through each other; every third army also
-/// crosses to the other row of its pair of rows.
-fn partner(index: u32, columns: u32) -> u32 {
-    let (cx, cy) = (index % columns, index / columns);
-    let py = if index.is_multiple_of(3) { cy ^ 1 } else { cy };
-    py * columns + (cx ^ 3)
-}
-
-struct Armies {
-    ids: Vec<Vec<aoe_core::EntityId>>,
-    orders_ok: u32,
-    spawned: u32,
-    refused: std::collections::BTreeMap<String, u32>,
-}
-
-/// Trees and water close some tiles: try the nearest others.
-fn nearby(x: i32, y: i32) -> impl Iterator<Item = (i32, i32)> {
-    (0..64).map(move |k| (x + k % 8 * (1 - k / 8 % 2 * 2), y + k / 8))
-}
-
-fn deploy(world: &mut GameWorld, o: &Options) -> Result<Armies, BoxError> {
-    let columns = 20_u32;
-    let rows = o.armies.div_ceil(columns);
-    let (cell, side) = (o.cell_tiles, o.side_tiles as i32);
-    let origin = (
-        (side - columns as i32 * cell) / 2,
-        (side - rows as i32 * cell) / 2,
-    );
-    let corner = |i: u32| {
-        (
-            origin.0 + (i % columns) as i32 * cell,
-            origin.1 + (i / columns) as i32 * cell,
-        )
-    };
-    let mut out = Armies {
-        ids: Vec::new(),
-        orders_ok: 0,
-        spawned: 0,
-        refused: Default::default(),
-    };
-    for i in 0..o.armies {
-        let player = PlayerId((i % u32::from(o.players)) as u16);
-        let size = o.min_size + (i * 17) % (o.max_size - o.min_size + 1);
-        let (x0, y0) = corner(i);
-        let mut ids = Vec::new();
-        for n in 0..size as i32 {
-            let wanted = (x0 + n % 10, y0 + n / 10);
-            let spawned = nearby(wanted.0, wanted.1)
-                .find_map(|(x, y)| world.spawn_kind(player, UnitKind::Militia, at(x, y)).ok());
-            ids.extend(spawned);
-        }
-        out.spawned += ids.len() as u32;
-        out.ids.push(ids);
-    }
-    for i in 0..o.armies {
-        let ids = &out.ids[i as usize];
-        if ids.is_empty() {
-            continue;
-        }
-        let (x1, y1) = corner(partner(i, columns).min(o.armies - 1));
-        let player = PlayerId((i % u32::from(o.players)) as u16);
-        let mut last = None;
-        let ok = nearby(x1 + 4, y1 + 4).any(|(x, y)| {
-            let sent = world.issue_formation_move(
-                player,
-                ids,
-                Formation::Line,
-                at(x, y),
-                false,
-                o.attack_move,
-            );
-            last = sent.err();
-            last.is_none()
-        });
-        out.orders_ok += u32::from(ok);
-        if let Some(error) = last.filter(|_| !ok) {
-            *out.refused.entry(format!("{error:?}")).or_default() += 1;
+impl Options {
+    fn parameters(&self) -> super::groups_workload::Parameters {
+        super::groups_workload::Parameters {
+            armies: self.armies,
+            min_size: self.min_size,
+            max_size: self.max_size,
+            cell_tiles: self.cell_tiles,
+            side_tiles: self.side_tiles,
+            players: self.players,
+            seed: self.seed,
+            fog_off: self.fog_off,
+            attack_move: self.attack_move,
         }
     }
-    Ok(out)
 }
 
-fn window(world: &mut GameWorld, ticks: u32) -> (Series, Series, Series) {
+type Window = (Series, Series, Series, [Series; PHASES.len()]);
+
+fn window(world: &mut GameWorld, ticks: u32) -> Window {
     let (mut tick, mut movement, mut rest) =
         (Series::default(), Series::default(), Series::default());
+    let mut phases = std::array::from_fn(|_| Series::default());
     for _ in 0..ticks {
         let begin = Instant::now();
         let mut last = begin;
@@ -146,32 +79,21 @@ fn window(world: &mut GameWorld, ticks: u32) -> (Series, Series, Series) {
             spent[phase as usize] += (now - last).as_nanos();
             last = now;
         });
-        tick.push_ms(begin.elapsed().as_nanos());
+        let end = Instant::now();
+        spent[PHASES.len() - 1] += (end - last).as_nanos();
+        tick.push_ms((end - begin).as_nanos());
         movement.push_ms(spent[0]);
         rest.push_ms(spent[1..].iter().sum());
+        for (series, nanos) in phases.iter_mut().zip(spent) {
+            series.push_ms(nanos);
+        }
     }
-    (tick, movement, rest)
+    (tick, movement, rest, phases)
 }
 
 pub fn run(o: Options) -> Result<(), BoxError> {
     let started = Instant::now();
-    let mut world = GameWorld::new(WorldConfig::new(
-        o.side_tiles as i32,
-        o.side_tiles as i32,
-        Seed(o.seed),
-    )?)?;
-    world.set_limits(WorldLimits {
-        players: 4_096,
-        buildings: 1 << 20,
-        gatherers: 1 << 20,
-        builders: 1 << 20,
-        hunters: 1 << 20,
-        animals: 1 << 20,
-        projectiles: 1 << 20,
-        population: 2_000,
-    });
-    world.set_fog_disabled(o.fog_off);
-    let armies = deploy(&mut world, &o)?;
+    let (mut world, armies) = super::groups_workload::build(&o.parameters())?;
     let build_s = started.elapsed().as_secs_f64();
     eprintln!(
         "perf-groups: {} units in {} armies, {} orders accepted",
@@ -198,13 +120,25 @@ pub fn run(o: Options) -> Result<(), BoxError> {
         })
     };
     let census_plain = census(&world);
-    let probe = Arc::new(MovementProbe::default());
+    let probe = Arc::new(if o.coarse_groups {
+        MovementProbe::coarse()
+    } else {
+        MovementProbe::default()
+    });
     world.set_planning_probe(probe.clone());
     let profiled = window(&mut world, o.ticks);
     let spans = probe.drain();
-    let summarize = |w: &(Series, Series, Series)| json!({ "tick": w.0.summary(), "movement": w.1.summary(), "other_phases": w.2.summary() });
+    let summarize = |w: &Window| {
+        json!({ "tick": w.0.summary(), "movement": w.1.summary(),
+        "other_phases": w.2.summary(), "phases": PHASES.iter().zip(&w.3)
+            .map(|(&name, series)| (name.to_owned(), series.summary()))
+            .collect::<serde_json::Map<_, _>>() })
+    };
     let report = json!({
         "version": 1,
+        "execution": { "workers": world.movement_worker_count(),
+            "available_parallelism": std::thread::available_parallelism().map(|n| n.get()).ok(),
+            "slot_cpus": std::env::var("AOE_SLOT_CPUS").ok() },
         "revision": git(&["rev-parse", "HEAD"]),
         "dirty": !git(&["status", "--porcelain"]).is_empty(),
         "workload": {
@@ -221,6 +155,7 @@ pub fn run(o: Options) -> Result<(), BoxError> {
         "plain_window": summarize(&plain),
         "profiled_window": summarize(&profiled),
         "movement_spans_profiled_window": spans,
+        "coarse_groups": o.coarse_groups,
         "memory": memory(),
         "note": "spans are inclusive and overlap; the profiled window adds clock and atomic cost",
     });
@@ -239,6 +174,35 @@ mod tests {
     use serde_json::Value;
 
     #[test]
+    fn report_omits_spans_that_were_not_selected_for_measurement() {
+        use aoe_simulation::PlanningProbe;
+        for (probe, enabled, disabled) in [
+            (MovementProbe::default(), "avoidance_query", "group_apply"),
+            (MovementProbe::coarse(), "group_apply", "avoidance_query"),
+        ] {
+            drop(probe.movement_span(enabled).unwrap());
+            assert!(probe.movement_span(disabled).is_none());
+            let report = probe.drain();
+            assert_eq!(report[enabled]["calls"], 1);
+            assert!(report.get(disabled).is_none());
+        }
+    }
+
+    #[test]
+    fn instruction_kernel_uses_the_cli_default_workload() {
+        #[derive(clap::Parser)]
+        struct Cli {
+            #[command(flatten)]
+            options: Options,
+        }
+        let cli = <Cli as clap::Parser>::parse_from(["perf-groups"]);
+        assert_eq!(
+            cli.options.parameters(),
+            super::super::groups_workload::Parameters::default()
+        );
+    }
+
+    #[test]
     fn a_tiny_run_writes_a_report_with_every_movement_span() {
         let directory = tempfile::tempdir().unwrap();
         let out = directory.path().join("groups.json");
@@ -254,6 +218,7 @@ mod tests {
             seed: 1,
             fog_off: false,
             attack_move: true,
+            coarse_groups: false,
             out: out.clone(),
         })
         .unwrap();
@@ -261,6 +226,9 @@ mod tests {
         assert_eq!(report["workload"]["armies"], 6);
         assert_eq!(report["workload"]["attack_move"], true);
         assert_eq!(report["plain_window"]["tick"]["samples"], 10);
+        for phase in PHASES {
+            assert_eq!(report["plain_window"]["phases"][phase]["samples"], 10);
+        }
         for span in [
             "avoidance_query",
             "local_refinement",

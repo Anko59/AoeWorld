@@ -40,8 +40,17 @@ fn a_sealed_member_does_not_hold_back_the_others_who_fight_on_arrival() {
     let mut arrived_at: Vec<Option<u32>> = vec![None; ids.len()];
     let mut seen = Default::default();
     let mut first_hit = None;
+    let mut anchor_arrival = None;
     for tick in 1..=4000_u32 {
         w.advance();
+        assert_eq!(
+            w.unit(sealed).unwrap().position,
+            center(sealed_at.0, sealed_at.1),
+            "tick {tick}"
+        );
+        if anchor_arrival.is_none() && w.formation_anchor(ids[0]) == Some(to) {
+            anchor_arrival = Some(tick);
+        }
         if first_hit.is_none() && !new_hits(&w, &[foe], &mut seen).is_empty() {
             first_hit = Some(tick);
         }
@@ -74,19 +83,30 @@ fn a_sealed_member_does_not_hold_back_the_others_who_fight_on_arrival() {
     // The sealed unit never moves; it stops where it stands once the anchor
     // has arrived and it has stalled for the give-up wait.
     assert_eq!(sealed_unit.position, center(sealed_at.0, sealed_at.1));
-    assert_eq!(stuck_arrival, Some(2753));
+    assert_eq!(
+        sealed_unit.position.tile_floor(),
+        TileCoord::new(sealed_at.0, sealed_at.1)
+    );
+    assert!(w.body_position_clear(sealed_unit.kind, sealed_unit.position));
+    assert_eq!(stuck_arrival, Some(1910));
+    assert_eq!(
+        stuck_arrival,
+        anchor_arrival.map(|tick| tick
+            + u32::from(crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS))
+    );
+    assert!(!sealed_unit.moving && !sealed_unit.planning && sealed_unit.task == UnitTask::Idle);
     // Every other unit is at the destination: at its slot, or fighting beside it.
     assert!(
         healthy
             .iter()
             .all(|&id| tiles_between(w.unit(id).unwrap().position, to) <= 8)
     );
-    // The first arrivals strike the enemy at tick 2572, long before the last
-    // healthy unit arrives (3019) and before the sealed one gives up (2753).
-    assert_eq!((first, last), (Some(2533), Some(3019)));
+    // Block movement reaches the same original scene sooner. First arrivals
+    // fight before the healthy tail arrives and the sealed member times out.
+    assert_eq!((first, last), (Some(1670), Some(1833)));
     assert_eq!(
         (first_hit, healthy_arrivals.len(), foe_hp),
-        (Some(2572), 30, 0)
+        (Some(1738), 30, 0)
     );
     assert!(first_hit < last && first_hit < stuck_arrival);
 }

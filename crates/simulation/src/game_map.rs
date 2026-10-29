@@ -14,6 +14,7 @@ impl GameWorld {
             .map_err(|_| GameWorldError::InvalidPosition)?;
         let config = cavalry_config(WorldConfig::new(width, width, Seed(package.request.seed))?);
         Ok(Self {
+            clearance: Mutex::new(Default::default()),
             terrain: Terrain::from_package(&package),
             config,
             tick: Tick(0),
@@ -45,6 +46,7 @@ impl GameWorld {
             active_route_searches: 0,
             partial_kits: 0,
             route_slots: BTreeMap::new(),
+            group_work: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
             route_queued: Default::default(),
@@ -62,6 +64,7 @@ impl GameWorld {
             .map_err(|_| GameWorldError::InvalidPosition)?;
         let config = cavalry_config(WorldConfig::new(width, width, Seed(package.request.seed))?);
         Ok(Self {
+            clearance: Mutex::new(Default::default()),
             terrain: Terrain::from_prepared_package(
                 &package,
                 elevation_pages,
@@ -100,6 +103,7 @@ impl GameWorld {
             active_route_searches: 0,
             partial_kits: 0,
             route_slots: BTreeMap::new(),
+            group_work: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
             route_queued: Default::default(),
@@ -114,6 +118,7 @@ impl GameWorld {
             .map_err(|_| GameWorldError::InvalidPosition)?;
         let config = cavalry_config(WorldConfig::new(width, width, Seed(package.request.seed))?);
         Ok(Self {
+            clearance: Mutex::new(Default::default()),
             terrain: Terrain::from_page_provider(&package, provider)
                 .map_err(|_| GameWorldError::InvalidTerrain)?,
             config,
@@ -146,6 +151,7 @@ impl GameWorld {
             active_route_searches: 0,
             partial_kits: 0,
             route_slots: BTreeMap::new(),
+            group_work: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
             route_queued: Default::default(),

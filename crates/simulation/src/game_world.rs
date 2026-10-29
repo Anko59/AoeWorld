@@ -9,6 +9,8 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Mutex};
 /// One chunk's shared candidate resource nodes.
 pub(crate) type ChunkNodes = Arc<Vec<ResourceNode>>;
+#[path = "terrain/clearance.rs"]
+mod clearance;
 mod combat;
 mod economy;
 mod facing;
@@ -150,6 +152,7 @@ pub struct GameWorld {
     pub(crate) move_queues: BTreeMap<EntityId, VecDeque<WorldPosition>>,
     pub(crate) destinations: spacing::Destinations,
     pub(crate) terrain: Terrain,
+    pub(crate) clearance: Mutex<clearance::Field>,
     /// Candidate resource nodes per generator chunk, built on the first
     /// replacement search that touches the chunk and reused by later ones.
     /// See `GameWorld::chunk_resource_nodes`.
@@ -169,6 +172,7 @@ pub struct GameWorld {
     /// (player, far) classes whose units waited for a slot in the last fair
     /// pass: an order issued or planned ahead later does not jump that queue.
     pub(crate) route_queued: BTreeSet<(PlayerId, bool)>,
+    pub(crate) group_work: std::sync::Arc<route_scheduler::GroupWork>,
     pub(crate) route_metrics: route_scheduler::RouteMetrics,
     pub(crate) planning_probe: Option<std::sync::Arc<dyn PlanningProbe>>,
     pub(crate) idle_spacing: spacing::IdleSpacing,
@@ -183,6 +187,7 @@ impl GameWorld {
     fn from_valid_config(config: WorldConfig) -> Self {
         Self {
             terrain: Terrain::uniform(config.seed.0),
+            clearance: Mutex::new(Default::default()),
             config,
             tick: Tick(0),
             next_entity_id: 0,
@@ -211,6 +216,7 @@ impl GameWorld {
             active_route_searches: 0,
             partial_kits: 0,
             route_slots: BTreeMap::new(),
+            group_work: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
             route_queued: BTreeSet::new(),

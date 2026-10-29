@@ -7,20 +7,24 @@ use std::sync::{
 };
 use std::time::Instant;
 
-const NAMES: [&str; 4] = [
+const NAMES: [&str; 7] = [
     "avoidance_query",
     "local_refinement",
     "sidestep",
     "arrival_search",
+    "group_prepare",
+    "group_propose",
+    "group_apply",
 ];
 #[derive(Debug, Default)]
 pub(super) struct MovementProbe {
-    nanos: Arc<[AtomicU64; 4]>,
-    calls: Arc<[AtomicU64; 4]>,
+    coarse: bool,
+    nanos: Arc<[AtomicU64; 7]>,
+    calls: Arc<[AtomicU64; 7]>,
 }
 struct Span {
-    nanos: Arc<[AtomicU64; 4]>,
-    calls: Arc<[AtomicU64; 4]>,
+    nanos: Arc<[AtomicU64; 7]>,
+    calls: Arc<[AtomicU64; 7]>,
     at: usize,
     start: Instant,
 }
@@ -35,19 +39,30 @@ impl PlanningProbe for MovementProbe {
     fn begin(&self) {}
     fn end(&self) {}
     fn movement_span(&self, name: &'static str) -> Option<Box<dyn aoe_map::NavigationSpan>> {
+        let at = NAMES.iter().position(|&n| n == name)?;
+        if (at >= 4) != self.coarse {
+            return None;
+        }
         Some(Box::new(Span {
             nanos: self.nanos.clone(),
             calls: self.calls.clone(),
-            at: NAMES.iter().position(|&n| n == name)?,
+            at,
             start: Instant::now(),
         }))
     }
 }
 impl MovementProbe {
+    pub(super) fn coarse() -> Self {
+        Self {
+            coarse: true,
+            ..Self::default()
+        }
+    }
     pub(super) fn drain(&self) -> Value {
         NAMES
             .iter()
             .enumerate()
+            .filter(|(at, _)| (*at >= 4) == self.coarse)
             .map(|(at, &name)| {
                 (
                     name.to_owned(),

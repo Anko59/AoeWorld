@@ -1,4 +1,4 @@
-//! A shared anchor must feed a spaced column through the pass, then re-form.
+//! A shared block narrows to parallel files through the pass, then expands.
 use super::*;
 use aoe_core::Formation;
 
@@ -48,6 +48,7 @@ fn twenty_unit_formation_crosses_a_two_tile_forest_pass_without_stacking() {
     )
     .unwrap();
     let mut crossed = BTreeSet::new();
+    let mut parallel_files = false;
     for tick in 0..3500 {
         // No idle separation: the formation's movement must maintain clearance.
         w.advance_movement();
@@ -63,6 +64,10 @@ fn twenty_unit_formation_crosses_a_two_tile_forest_pass_without_stacking() {
                 let other = w.unit(other).unwrap().position;
                 let dx = i64::from(position.x) - i64::from(other.x);
                 let dy = i64::from(position.y) - i64::from(other.y);
+                parallel_files |= (64..70).contains(&tile.x)
+                    && (64..70).contains(&other.tile_floor().x)
+                    && dx.abs() < 205
+                    && dy.abs() >= 410;
                 assert!(
                     dx * dx + dy * dy >= 410 * 410,
                     "stack at tick {tick}: {id:?}"
@@ -70,6 +75,10 @@ fn twenty_unit_formation_crosses_a_two_tile_forest_pass_without_stacking() {
             }
         }
     }
+    assert!(
+        parallel_files,
+        "the two-tile pass must carry bodies side by side"
+    );
     assert_eq!(
         crossed.len(),
         20,
@@ -151,7 +160,7 @@ fn queued_waypoint_inside_forest_pass_continues_on_anchor_arrival() {
 }
 
 #[test]
-fn final_destination_inside_forest_pass_settles_in_column() {
+fn final_destination_inside_forest_pass_settles_at_every_valid_slot() {
     let (mut w, ids) = forest_pass_army();
     let destination = center(67, 50);
     w.issue_formation_move(
@@ -180,11 +189,10 @@ fn final_destination_inside_forest_pass_settles_in_column() {
             unit.position
         })
         .collect::<Vec<_>>();
-    assert!(
-        ids.iter()
-            .any(|&id| { w.unit(id).unwrap().position != w.formation_slot(id).unwrap() })
-    );
-    let work = w.route_scheduler_stats().metrics.formation_steering_work;
+    for &id in &ids {
+        assert_eq!(w.unit(id).unwrap().position, w.formation_slot(id).unwrap());
+    }
+    let work = w.route_scheduler_stats().metrics.group_path_work;
     for _ in 0..128 {
         w.advance();
         for (&id, &position) in ids.iter().zip(&positions) {
@@ -192,10 +200,7 @@ fn final_destination_inside_forest_pass_settles_in_column() {
             assert!(!w.unit(id).unwrap().moving);
         }
     }
-    assert_eq!(
-        w.route_scheduler_stats().metrics.formation_steering_work,
-        work
-    );
+    assert_eq!(w.route_scheduler_stats().metrics.group_path_work, work);
     assert_eq!(w.route_scheduler_stats().metrics.orders, 1);
     assert_eq!(w.route_accounting_error(), None);
 }

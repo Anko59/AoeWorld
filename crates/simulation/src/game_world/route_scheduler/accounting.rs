@@ -108,10 +108,12 @@ impl GameWorld {
 
     pub fn route_scheduler_stats(&self) -> RouteSchedulerStats {
         let mut waiting = BTreeMap::<PlayerId, usize>::new();
+        let mut metrics = self.route_metrics.clone();
+        self.group_work.snapshot(&mut metrics);
         let mut stats = RouteSchedulerStats {
             planners: self.active_planner_count,
             searches: self.active_route_searches,
-            metrics: self.route_metrics.clone(),
+            metrics,
             world_capacity_exhausted: self.active_planner_count >= MAX_ACTIVE_ROUTE_PLANNERS
                 || self.active_route_searches >= MAX_ACTIVE_ROUTE_SEARCHES,
             ..RouteSchedulerStats::default()

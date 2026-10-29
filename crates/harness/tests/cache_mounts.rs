@@ -193,6 +193,10 @@ fn workspace_named(prefix: &str) -> tempfile::TempDir {
         ("make/geodata.mk", include_str!("../../../make/geodata.mk")),
         ("make/release.mk", include_str!("../../../make/release.mk")),
         ("make/sdk.mk", include_str!("../../../make/sdk.mk")),
+        (
+            "make/profiling.mk",
+            include_str!("../../../make/profiling.mk"),
+        ),
     ] {
         fs::write(workspace.path().join(included.0), included.1).unwrap();
     }

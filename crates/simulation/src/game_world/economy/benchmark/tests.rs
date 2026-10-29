@@ -90,8 +90,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Current combat stance and targeting state; 1/4-worker comparison above stays.
-        "9fae16ec8bcf2395af3e50a4158893319da4f6480c9abf984dcd22076422cac4"
+        // Rear-only open-ground cohesion changes formation progress at tick 384.
+        // The workload includes formation marches; the 1/4-worker comparison stays.
+        "4967b8870d345656515fd7ce78d9b62d5e11a4bc38da7d75d5816c063a92c5e1"
     );
 }
 

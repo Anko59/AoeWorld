@@ -155,6 +155,9 @@ impl GameWorld {
         changed: &mut Vec<EntityId>,
     ) {
         let before = self.units[index].state;
+        // An approach is not a stationary swing, including route and
+        // search-budget waits. Preserve the attack job/target for retry.
+        self.mark_attack_approach(index);
         let order = self.units[index].order;
         if order.is_none() && self.units[index].last_movement_error.is_some() {
             self.end_attack(id, changed);
@@ -200,7 +203,6 @@ impl GameWorld {
                 if let Some(entry) = self.combat.attackers.get_mut(&id) {
                     entry.repath_tick = now.saturating_add(1);
                 }
-                self.units[index].state.task = UnitTask::Attacking;
                 if self.units[index].state != before {
                     changed.push(self.units[index].state.id);
                 }
@@ -220,7 +222,6 @@ impl GameWorld {
                     }
                     // Preserve the order and job. Crowding or a spent budget
                     // is not proof that the target is unreachable.
-                    self.units[index].state.task = UnitTask::Attacking;
                     if self.units[index].state != before {
                         changed.push(id);
                     }
@@ -267,7 +268,7 @@ impl GameWorld {
                 }
             }
         }
-        self.units[index].state.task = UnitTask::Attacking;
+        self.mark_attack_approach(index);
         if self.units[index].state != before {
             changed.push(self.units[index].state.id);
         }

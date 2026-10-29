@@ -97,7 +97,7 @@ impl GameWorld {
             min = (min.0.min(tile.x), min.1.min(tile.y));
             max = (max.0.max(tile.x), max.1.max(tile.y));
             widest = widest.max(i32::from(los));
-            let slot = layout::oriented(group.destination, member.offset, group.heading);
+            let slot = member.goal;
             let sight = i64::from(los) * i64::from(FIXED_SUBUNITS_PER_TILE);
             lookers.push((member.id, unit.position, sight, slot));
         }

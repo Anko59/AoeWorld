@@ -64,9 +64,15 @@ fn formations_share_one_centroid_route_and_use_the_slowest_speed() {
     run(&mut w, 100);
     let start = w.formation_anchor(ids[0]).unwrap();
     let (speed, denom) = w.movement_speed(UnitKind::Archer, PlayerId(0));
+    let carry = w.units[w.lookup[&ids[0]]].order.unwrap().speed_carry;
     run(&mut w, 100);
     let end = w.formation_anchor(ids[0]).unwrap();
-    assert_eq!(end.x - start.x, (100 * speed / denom) as i32);
+    // Speed matching preserves fractional credit earned while forming.
+    assert_eq!(end.x - start.x, 4915);
+    assert_eq!(
+        end.x - start.x,
+        ((100 * speed * 4 + carry) / (denom * 4)) as i32
+    );
     assert_eq!(end.y, start.y);
     assert_eq!(w.route_scheduler_stats().metrics.orders - before, 1);
     assert!(
@@ -239,10 +245,10 @@ fn formations_attack_move_engages_visible_enemies_member_by_member_and_stops_rel
         }
     }
     // Contact is per member: all four came to see the lone enemy and left the
-    // group to fight it (the first blow at tick 315: members look within their
+    // group to fight it (the first blow at tick 262, 315 before PR 6's slots: members look within their
     // own 4-tile sight, not a 13x13-tile window, which struck at tick 275). Once it died each one marched on again, as
     // a group of one with the same attack-move order and its own slot.
-    assert_eq!(first_hit, Some((315, 4)));
+    assert_eq!(first_hit, Some((262, 4)));
     assert!(w.unit(enemy).is_none_or(|u| u.hp == 0));
     assert!(
         ids.iter()

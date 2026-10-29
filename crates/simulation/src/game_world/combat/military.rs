@@ -3,6 +3,16 @@ use super::{BuildingAttack, DamageKind, UnitCombat, building_combat, unit_combat
 use crate::{BuildingKind, GameWorld, Tech, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
+/// The movement projection of the same research rules, without constructing
+/// and adjusting unrelated attack/armour fields for every moving body.
+pub(crate) fn apply_movement_speed(kind: UnitKind, base: Option<u32>, feudal: bool) -> Option<u32> {
+    if kind == UnitKind::Scout && feudal {
+        Some(155)
+    } else {
+        base
+    }
+}
+
 pub fn researched_stats(kind: UnitKind, feudal: bool, researched: u64) -> UnitCombat {
     apply_research_stats(*unit_combat(kind), feudal, researched)
 }
@@ -10,6 +20,7 @@ pub fn researched_stats(kind: UnitKind, feudal: bool, researched: u64) -> UnitCo
 /// Apply effects to supplied base data, including the browser's runtime asset.
 pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u64) -> UnitCombat {
     let kind = s.kind;
+    s.speed_hundredths = apply_movement_speed(kind, s.speed_hundredths, feudal);
     let has = |t: Tech| researched & t.bit() != 0;
     let infantry = matches!(
         kind,
@@ -30,7 +41,6 @@ pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u64) ->
     if kind == UnitKind::Scout && feudal {
         s.attack += 2;
         s.los = if has(Tech::CastleAge) { 8 } else { 6 };
-        s.speed_hundredths = Some(155);
     }
     if has(Tech::Forging) && (infantry || cavalry) {
         s.attack += 1;

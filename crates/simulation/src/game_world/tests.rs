@@ -2,6 +2,8 @@ use super::*;
 use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
 use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, MovementOutcome, ResourceOverlay};
 
+#[path = "../terrain/tests/clearance.rs"]
+mod clearance;
 mod formations;
 mod group_baseline;
 mod spacing;

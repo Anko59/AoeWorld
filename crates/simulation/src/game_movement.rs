@@ -294,7 +294,7 @@ impl GameWorld {
         }
         still_moving.sort_unstable();
         self.active_movers = still_moving;
-        self.advance_formations(&mut changed);
+        self.advance_formations(&mut changed, &mut scratch);
         self.flush_vision_batch();
         self.engage_formations(&mut changed);
         self.plan_routes_ahead(&movers, start, lookahead_budget);

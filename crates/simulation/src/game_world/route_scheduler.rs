@@ -17,7 +17,7 @@ mod issue;
 mod metrics;
 mod order;
 pub use accounting::RouteSchedulerStats;
-pub(crate) use metrics::PlanningMeasurement;
+pub(crate) use metrics::{GroupWork, PlanningMeasurement};
 pub use metrics::{PlanningProbe, RouteMetrics};
 
 /// Retained search frontiers one player may hold at once.

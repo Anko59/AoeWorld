@@ -1,7 +1,9 @@
 //! Integer wildlife state, local AI and villager hunting jobs.
+use super::movement_step::CellHasher;
 use super::{EconomyError, GameUnit, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, TileCoord, WorldPosition};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::hash::BuildHasherDefault;
 
 mod ai;
 mod carcass;
@@ -104,7 +106,7 @@ pub(crate) struct Wildlife {
     engaged: BTreeSet<EntityId>,
     /// Units mirrored by wildlife cell. Only point lookups and per-cell
     /// edits are made, so the hash map never biases a scan order.
-    unit_cells: HashMap<u64, Vec<CellUnit>>,
+    unit_cells: HashMap<u64, Vec<CellUnit>, BuildHasherDefault<CellHasher>>,
     hunts: BTreeMap<EntityId, HuntJob>,
     due: BTreeSet<(u64, EntityId)>,
     stats: WildlifeStats,
@@ -225,6 +227,7 @@ impl GameWorld {
     }
 
     pub(crate) fn track_unit_cell(&mut self, unit: &GameUnit) {
+        self.collisions.observe_kind(unit.kind);
         self.collisions.insert(
             unit.id,
             unit.position.tile_floor(),
@@ -254,20 +257,20 @@ impl GameWorld {
         previous_tile: TileCoord,
         unit: &GameUnit,
     ) {
-        self.collisions.relocate(
-            id,
-            previous_tile,
-            unit.position.tile_floor(),
-            unit.kind.is_naval(),
-        );
-        if self.followers.contains(id) {
-            self.followers
-                .relocate(id, previous_tile, unit.position.tile_floor());
-        } else if self.units[self.lookup[&id]].formation.is_none() {
-            self.idle_spacing
-                .relocate(id, previous_tile, unit.position.tile_floor());
+        let tile = unit.position.tile_floor();
+        // These indices store tile membership, not sub-tile positions. Every
+        // relocate is a no-op inside a tile; keep the exact wildlife mirror
+        // update below, which animals and spacing queries do observe.
+        if previous_tile != tile {
+            self.collisions
+                .relocate(id, previous_tile, tile, unit.kind.is_naval());
+            if self.followers.contains(id) {
+                self.followers.relocate(id, previous_tile, tile);
+            } else if self.units[self.lookup[&id]].formation.is_none() {
+                self.idle_spacing.relocate(id, previous_tile, tile);
+            }
         }
-        let (old, new) = (cell_of(previous_tile), cell(unit.position));
+        let (old, new) = (cell_of(previous_tile), cell_of(tile));
         if old == new {
             let slot = self.units[self.lookup[&id]].wildlife_slot;
             if let Some(units) = self.wildlife.unit_cells.get_mut(&unit_key(old))
