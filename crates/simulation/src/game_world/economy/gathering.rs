@@ -6,6 +6,10 @@ use crate::{GameWorld, GameWorldError, PreparedResourceDepletion, Terrain};
 use aoe_core::{EntityId, PlayerId, TileCoord};
 use aoe_map::ResourceKind;
 
+/// Failed approaches a gather job tolerates before it is given up. Land jobs
+/// count one per replacement/queue attempt; fishing jobs one per second-long retry.
+const MAX_APPROACH_FAILURES: u8 = 8;
+
 mod approach;
 mod chunks;
 mod jobs;
@@ -303,7 +307,10 @@ impl GameWorld {
             {
                 return self.retry_fishing_approach(id, task);
             }
-            if task.farm.is_some() || task.fish.is_some() || task.approach_failures >= 8 {
+            if task.farm.is_some()
+                || task.fish.is_some()
+                || task.approach_failures >= MAX_APPROACH_FAILURES
+            {
                 return false;
             }
             task.approach_failures += 1;
