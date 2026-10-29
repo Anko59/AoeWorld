@@ -14,6 +14,7 @@ const MAX_APPROACH_ATTEMPTS: u8 = 6;
 const APPROACH_TILE_TRIES: usize = 6;
 
 mod continuation;
+mod repair;
 
 #[cfg(test)]
 mod tests;
@@ -412,42 +413,6 @@ impl GameWorld {
         changed.extend(touched);
     }
 
-    /// Integer repair work, priced at half the building's original cost for
-    /// a full HP bar. HP thresholds retain fractional resource costs without
-    /// introducing a clock or an unbounded per-builder accumulator.
-    fn repair_building(&mut self, id: EntityId, builders: u64) {
-        let Some(b) = self.economy.buildings.get(&id) else {
-            return;
-        };
-        let hp = u64::from(b.hp);
-        let max = u64::from(b.max_hp);
-        let next = (hp + ((builders + 2) * max / b.work_total.max(1)).max(1)).min(max);
-        let cost = b.construction_cost();
-        let charge = |amount| {
-            ((u64::from(amount) * next / (2 * max)) - (u64::from(amount) * hp / (2 * max))) as u32
-        };
-        let Some(player) = self.economy.players.get_mut(&b.player) else {
-            return;
-        };
-        let s = &mut player.stockpile;
-        let bill = super::Stockpile {
-            food: charge(cost.food),
-            wood: charge(cost.wood),
-            gold: charge(cost.gold),
-            stone: charge(cost.stone),
-        };
-        if s.food < bill.food || s.wood < bill.wood || s.gold < bill.gold || s.stone < bill.stone {
-            return;
-        }
-        s.food -= bill.food;
-        s.wood -= bill.wood;
-        s.gold -= bill.gold;
-        s.stone -= bill.stone;
-        if let Some(building) = self.economy.buildings.get_mut(&id) {
-            building.hp = next as u16;
-        }
-    }
-
     /// `builders + 2` work per tick (one builder adds 3, matching the base
     /// time). Completion memberships are collected once by the caller.
     fn add_work(
@@ -463,6 +428,9 @@ impl GameWorld {
         // Work adds only the hit points it earns, so combat damage persists.
         let earned = max_hp * building.work_done / total - earned_before;
         building.hp = (u64::from(building.hp) + earned).clamp(1, max_hp) as u16;
+        if building.hp == building.max_hp {
+            self.combat.hp_quarters[id.0 as usize] = 0;
+        }
         if building.work_done < building.work_total {
             return None;
         }
