@@ -210,7 +210,7 @@ mirror!(
     ]
 );
 
-mirror!(GeneralState, aoe_sdk::GeneralState, [Marching, Fighting, Retreating]);
+mirror!(GeneralState, aoe_sdk::GeneralState, [Idle, Marching, Fighting, Retreating]);
 
 pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<CombatStance>()?;
