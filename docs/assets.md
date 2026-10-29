@@ -69,6 +69,9 @@ space through the shared domain. A bounded MaxRects retry recovers fragmented
 space when the initial shelf layout fails, with the same page and gutter limits. PNG validation caches only bounded
 metadata keyed by native SHA-256 digests of complete source bytes; repeated
 WebGPU passes still decode one source plane at a time, without a pixel cache.
+The placement algorithm can also describe up to 256 logical pages with separate
+terrain and object budgets, while retaining the 5,120-frame bound. This allocates
+placement metadata only; it does not stream pages or change the five-page client.
 Regenerate local packs after catalog changes:
 stale DAT recipes can exhaust the atlas through fallback art selection.
 The gather-point flag uses DAT unit 720 / SLP 4480 when present. The trial

@@ -139,15 +139,17 @@ pub(super) fn pack(
     frames: &[FrameExtent],
     indices: &[u16],
     placements: &mut [Placement],
+    terrain_pages: usize,
+    page_count: usize,
 ) -> Result<(), PackingError> {
-    let mut pages: [DensePage; PAGE_COUNT] = std::array::from_fn(|_| DensePage::new());
+    let mut pages: Vec<DensePage> = (0..page_count).map(|_| DensePage::new()).collect();
     for &index in indices {
         let index = usize::from(index);
         let frame = frames[index];
         let (primary, spare) = match frame.domain {
-            AtlasDomain::Terrain => (0..2, 0..0),
-            AtlasDomain::Objects => (2..PAGE_COUNT, 0..0),
-            AtlasDomain::Shared => (2..PAGE_COUNT, 0..2),
+            AtlasDomain::Terrain => (0..terrain_pages, 0..0),
+            AtlasDomain::Objects => (terrain_pages..page_count, 0..0),
+            AtlasDomain::Shared => (terrain_pages..page_count, 0..terrain_pages),
         };
         let mut placed = false;
         for page in primary.chain(spare) {
