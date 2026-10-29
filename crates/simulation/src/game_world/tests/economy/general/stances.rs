@@ -80,7 +80,7 @@ fn stop_restores_stances_and_cancels_retreat_without_a_destination() {
     restored(&w, &members);
     decide(&mut w);
     restored(&w, &members);
-    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Marching);
+    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Idle);
     assert!(
         members
             .iter()
@@ -148,7 +148,7 @@ fn retreat_without_a_destination_restores_the_whole_army_when_safe() {
     w.units[w.lookup[&g]].state.hp = w.unit(g).unwrap().max_hp;
     w.tick.0 += 100;
     decide(&mut w);
-    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Marching);
+    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Idle);
     restored(&w, &members);
 }
 

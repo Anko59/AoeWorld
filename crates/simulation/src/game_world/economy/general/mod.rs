@@ -15,6 +15,7 @@ pub const GENERAL_CADENCE: u64 = 10;
 pub const GENERAL_ADMISSIONS: usize = 8;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GeneralState {
+    Idle,
     Marching,
     Fighting,
     Retreating,
@@ -102,7 +103,7 @@ impl GameWorld {
                 pending: BTreeMap::new(),
                 members: BTreeSet::new(),
                 destination: None,
-                state: GeneralState::Marching,
+                state: GeneralState::Idle,
                 micro_after: 0,
                 scan: (0, 0),
                 retreat_until: 0,
@@ -180,7 +181,7 @@ impl GameWorld {
         };
         a.destination = None;
         a.routed = None;
-        a.state = GeneralState::Marching;
+        a.state = GeneralState::Idle;
         a.retreat_until = 0;
         let mut members = [None; GENERAL_ARMY_LIMIT];
         for (slot, &id) in members.iter_mut().zip(&a.members) {

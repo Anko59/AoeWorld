@@ -99,6 +99,7 @@ impl UnitState {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum GeneralState {
+    Idle,
     Marching,
     Fighting,
     Retreating,

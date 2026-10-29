@@ -257,8 +257,13 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
         buildings: vec![],
     };
     let bytes = encode_server(&message(u)).unwrap();
-    assert!(bytes.ends_with(&[0, 0, 1, 100, 2, 0, 0]));
+    // GeneralState gained Idle at index 0 (in place, no migration): Retreating is now 3.
+    assert!(bytes.ends_with(&[0, 0, 1, 100, 3, 0, 0]));
     assert_eq!(decode_server(&bytes).unwrap(), message(u));
+    u.general.as_mut().unwrap().state = crate::GeneralState::Idle;
+    let idle = encode_server(&message(u)).unwrap();
+    assert!(idle.ends_with(&[0, 0, 1, 100, 0, 0, 0]));
+    assert_eq!(decode_server(&idle).unwrap(), message(u));
     u.general.as_mut().unwrap().army_size = 101;
     assert!(encode_server(&message(u)).is_err());
     u.general = None;

@@ -166,6 +166,9 @@ impl UnitFrame {
                         .map(|g| aoe_protocol::GeneralStatus {
                             army_size: g.army_size,
                             state: match g.state {
+                                aoe_simulation::GeneralState::Idle => {
+                                    aoe_protocol::GeneralState::Idle
+                                }
                                 aoe_simulation::GeneralState::Marching => {
                                     aoe_protocol::GeneralState::Marching
                                 }

@@ -69,6 +69,7 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
         .map(|g| aoe_protocol::GeneralStatus {
             army_size: g.army_size,
             state: match g.state {
+                aoe_simulation::GeneralState::Idle => aoe_protocol::GeneralState::Idle,
                 aoe_simulation::GeneralState::Marching => aoe_protocol::GeneralState::Marching,
                 aoe_simulation::GeneralState::Fighting => aoe_protocol::GeneralState::Fighting,
                 aoe_simulation::GeneralState::Retreating => aoe_protocol::GeneralState::Retreating,

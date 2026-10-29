@@ -19,6 +19,7 @@ class Formation:
     def __hash__(self) -> int: ...
 
 class GeneralState:
+    IDLE: GeneralState
     MARCHING: GeneralState
     FIGHTING: GeneralState
     RETREATING: GeneralState

@@ -132,6 +132,20 @@ fn reinforcements_balance_available_production_and_reserve_the_cap() {
     );
 }
 #[test]
+fn general_is_idle_until_ordered_and_idle_again_after_stop() {
+    let (mut w, _) = setup();
+    let g = soldier(&mut w, UnitKind::General, 103, 103);
+    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Idle);
+    decide(&mut w);
+    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Idle);
+    w.issue_move(g, at(145, 103)).unwrap();
+    decide(&mut w);
+    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Marching);
+    w.issue_stop(PlayerId(0), g).unwrap();
+    decide(&mut w);
+    assert_eq!(w.general_status(g).unwrap().state, GeneralState::Idle);
+}
+#[test]
 fn march_uses_shared_formation_with_role_ordering() {
     let (mut w, _) = setup();
     let kinds = [

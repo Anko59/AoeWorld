@@ -64,6 +64,8 @@ impl GameWorld {
             GeneralState::Retreating
         } else if !survey.enemies.is_empty() || !survey.buildings.is_empty() {
             GeneralState::Fighting
+        } else if a.destination.is_none() {
+            GeneralState::Idle
         } else {
             GeneralState::Marching
         };

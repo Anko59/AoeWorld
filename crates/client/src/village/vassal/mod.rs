@@ -60,6 +60,7 @@ pub(super) fn present(client: &Client) {
     {
         if let Some(g) = u.general {
             let state = match g.state {
+                aoe_protocol::GeneralState::Idle => "idle",
                 aoe_protocol::GeneralState::Marching => "marching",
                 aoe_protocol::GeneralState::Fighting => "fighting",
                 aoe_protocol::GeneralState::Retreating => "retreating",

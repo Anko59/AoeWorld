@@ -81,8 +81,8 @@ entries and 6,024 building/tile visits. Formation membership is at most 101.
 More than eight active Generals share the admission budget; their decisions
 become less frequent. This bounds work, but is not 1,000-player qualification.
 
-The HUD shows the selected owned General's army size and marching, fighting or
-retreating state. Commander, home and summary fields are owner-only. Rust and
+The HUD shows the selected owned General's army size and idle (no march
+destination), marching, fighting or retreating state. Commander, home and summary fields are owner-only. Rust and
 Python SDKs expose the current General unit identity and summary; ordinary move
 and stop orders control it. The wire has one current format, with no migration.
 
