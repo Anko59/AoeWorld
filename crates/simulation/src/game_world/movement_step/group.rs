@@ -122,7 +122,6 @@ impl GameWorld {
             order: stored.order,
             pops: 0,
             keeps_moving: false,
-            following: false,
             member: Some(motion),
         })
     }

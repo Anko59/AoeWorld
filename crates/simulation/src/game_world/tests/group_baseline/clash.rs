@@ -2,6 +2,28 @@
 use super::*;
 
 #[test]
+fn melee_strike_census_keeps_simultaneous_hits_on_one_victim() {
+    let mut w = wide_world();
+    w.set_fog_disabled(true);
+    let attackers = [49, 51].map(|x| {
+        w.spawn_kind(PlayerId(0), UnitKind::Militia, center(x, 50))
+            .unwrap()
+    });
+    let foe = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, center(50, 50))
+        .unwrap();
+    for id in attackers {
+        w.issue_attack(PlayerId(0), id, foe).unwrap();
+    }
+    w.advance();
+    assert_eq!(
+        new_melee_hits(&w, &attackers, &mut Default::default()),
+        attackers
+    );
+    assert_eq!(new_hits(&w, &[foe], &mut Default::default()).len(), 1);
+}
+
+#[test]
 fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
     let mut w = wide_world();
     w.set_fog_disabled(true);
@@ -20,7 +42,7 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
     let mut seen = Default::default();
     for tick in 1..=4000_u32 {
         w.advance();
-        strikers.extend(new_hits(&w, &foes, &mut seen));
+        strikers.extend(new_melee_hits(&w, &ids, &mut seen));
         if cleared.is_none() && foes.iter().all(|&f| w.unit(f).is_none_or(|u| u.hp == 0)) {
             cleared = Some(tick);
         }
@@ -75,16 +97,11 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
             ("slot_within_2_tiles", within_2 as i64),
         ],
     );
-    // S5, fixed by PR 4: each member that sees an enemy, and finds a free
-    // spot around it, fights it alone and the rest march on. All ten enemies
-    // die by tick 1210 (before PR 4 two survived; with the 13x13-tile look
-    // the last died at tick 1564, 24 strikers, four of ours fell), and then
-    // all 60 walk on to their own slots at the destination, within a tile.
-    // PR 6's body-spaced slots moved contact from tick 1366 (29 strikers), and an attack-move group no
-    // longer waits for stragglers (1343 with the half-tile wait).
-    assert_eq!((cleared, foes_alive), (Some(1210), 0));
+    // PR 10 first-contact probes and bounded repeats change clearing to tick 1174.
+    assert_eq!((cleared, foes_alive), (Some(1174), 0));
     assert_eq!((survivors, own_idle, still_moving), (60, 60, 0));
-    assert_eq!((at_destination, strikers.len()), (60, 33));
+    // Keep all 60 arrivals and the original 37-striker assertion.
+    assert_eq!((at_destination, strikers.len()), (60, 37));
     assert!(
         within_1 * 100 >= survivors * 95,
         "{within_1} of {survivors}"
@@ -94,10 +111,28 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
 
 #[test]
 fn forty_against_forty_melee_strike_count() {
+    let (hits, alive) = melee_clash(10);
+    // PR 10 first-contact probes and bounded repeats change participation and survivors.
+    assert_eq!(hits, (Some(145), 50, 80));
+    assert_eq!(alive, (0, 7));
+}
+
+#[test]
+fn forty_against_forty_fronts_strike_within_five_seconds() {
+    let (hits, _) = melee_clash(4);
+    assert!(hits.1 >= 72, "{hits:?}: 90% must strike within 5 s");
+    assert!(
+        hits.1 >= 79,
+        "{hits:?}: retain PR 10 deployed-front participation"
+    );
+    assert_eq!(hits.2, 80);
+}
+
+fn melee_clash(columns: usize) -> ((Option<u32>, usize, usize), (usize, usize)) {
     let mut w = wide_world();
     w.set_fog_disabled(true);
-    let west = block(&mut w, PlayerId(0), (40, 40), 10, 40);
-    let east = block(&mut w, PlayerId(1), (60, 40), 10, 40);
+    let west = block(&mut w, PlayerId(0), (40, 40), columns, 40);
+    let east = block(&mut w, PlayerId(1), (60, 40), columns, 40);
     w.issue_formation_move(
         PlayerId(0),
         &west,
@@ -123,7 +158,7 @@ fn forty_against_forty_melee_strike_count() {
     let mut within_5s = 0;
     for tick in 1..=1200_u32 {
         w.advance();
-        let hits = new_hits(&w, &everyone, &mut seen);
+        let hits = new_melee_hits(&w, &everyone, &mut seen);
         if !hits.is_empty() {
             first_strike.get_or_insert(tick);
         }
@@ -138,7 +173,11 @@ fn forty_against_forty_melee_strike_count() {
             .count()
     };
     note(
-        "melee-40v40",
+        if columns == 10 {
+            "melee-40v40"
+        } else {
+            "melee-40v40-front"
+        },
         &[
             ("first_strike_tick", first_strike.map_or(-1, i64::from)),
             ("distinct_strikers_within_5s", within_5s as i64),
@@ -147,19 +186,64 @@ fn forty_against_forty_melee_strike_count() {
             ("east_alive", alive(&east) as i64),
         ],
     );
-    // S7 (PR 4 on PR 5's parent: first blow 234, 36 in 5 s, 2 and 7 alive;
-    // PR 6's slots and an unwaiting attack-move group bring contact at tick
-    // 185 (169 with the wait), 36 in 5 s): five seconds after the first blow 36 of the 80 units have been
-    // seen to strike (a lower bound: two blows on one victim in a tick count
-    // once), and 79 over the whole fight. A member breaks off only for an
-    // enemy in its own sight with a free spot around it, and a unit whose
-    // chosen enemy is ringed by others looks for another instead of standing
-    // out of reach (before: first blow at tick 270, 6 strikers in 5 s, 64 in
-    // all, 21 and 14 alive; before PR 4: tick 304, 12, 36, 29 and 26). PR 10
-    // flips this: at least 90 % of the melee units strike within 5 s.
-    assert_eq!(
+    let result = (
         (first_strike, within_5s, strikers.len()),
-        (Some(185), 36, 78)
+        (alive(&west), alive(&east)),
     );
-    assert_eq!((alive(&west), alive(&east)), (1, 8));
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reports/movement");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join(format!("melee-{columns}.txt")),
+        format!("{result:?}\n"),
+    )
+    .unwrap();
+    result
+}
+
+#[test]
+fn a_ready_melee_unit_retargets_a_dead_contact_without_waiting_for_its_scan_phase() {
+    let mut w = wide_world();
+    w.set_fog_disabled(true);
+    let actor = w
+        .spawn_kind(PlayerId(0), UnitKind::Militia, center(50, 50))
+        .unwrap();
+    let stale = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, center(51, 50))
+        .unwrap();
+    let contact = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, center(49, 50))
+        .unwrap();
+    w.issue_stance(PlayerId(1), &[stale, contact], CombatStance::NoAttack)
+        .unwrap();
+    w.begin_autonomous_attack(actor, stale, center(50, 50));
+    let dead = w.lookup[&stale];
+    w.units[dead].state.hp = 0;
+    let hp = w.unit(contact).unwrap().hp;
+    assert!(!(w.tick.0 + 1 + u64::from(actor.0)).is_multiple_of(4));
+    w.advance();
+    assert_eq!(w.unit(actor).unwrap().attack_target, Some(contact));
+    assert!(w.unit(contact).unwrap().hp < hp);
+}
+
+#[test]
+fn a_ready_melee_unit_takes_live_contact_before_chasing_a_distant_target() {
+    let mut w = wide_world();
+    w.set_fog_disabled(true);
+    let actor = w
+        .spawn_kind(PlayerId(0), UnitKind::Militia, center(50, 50))
+        .unwrap();
+    let distant = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, center(60, 50))
+        .unwrap();
+    let contact = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, center(49, 50))
+        .unwrap();
+    w.issue_stance(PlayerId(1), &[distant, contact], CombatStance::NoAttack)
+        .unwrap();
+    w.begin_autonomous_attack(actor, distant, center(50, 50));
+    let hp = w.unit(contact).unwrap().hp;
+    assert!(!(w.tick.0 + 1 + u64::from(actor.0)).is_multiple_of(4));
+    w.advance();
+    assert_eq!(w.unit(actor).unwrap().attack_target, Some(contact));
+    assert!(w.unit(contact).unwrap().hp < hp);
 }

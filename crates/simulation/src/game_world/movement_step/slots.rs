@@ -1,6 +1,6 @@
 //! Deterministic sub-tile positions around a target's static footprint.
 use crate::{GameWorld, UnitKind};
-use aoe_core::{EntityId, TileRect, WorldPosition};
+use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
 
 pub(crate) fn squared(a: WorldPosition, b: WorldPosition) -> i64 {
     let x = i64::from(a.x) - i64::from(b.x);
@@ -41,30 +41,68 @@ pub(crate) fn footprint_distance_squared(at: WorldPosition, rect: TileRect) -> i
     squared(at, WorldPosition::new(x, y))
 }
 
+pub(crate) fn within_work_reach(
+    kind: UnitKind,
+    at: WorldPosition,
+    tile: aoe_core::TileCoord,
+) -> bool {
+    let range = i64::from(kind.collision_radius() + if kind.is_naval() { 256 } else { 104 });
+    let rect = TileRect::from_xywh(tile.x, tile.y, 1, 1);
+    !rect.contains(at.tile_floor()) && footprint_distance_squared(at, rect) <= range * range
+}
+
 impl GameWorld {
+    /// A bounded static ray proves a cheap nearby endpoint. Other endpoints
+    /// use the shared full-search budget instead of unbounded rays.
+    pub(crate) fn interaction_line_clear(
+        &self,
+        kind: UnitKind,
+        from: WorldPosition,
+        to: WorldPosition,
+    ) -> bool {
+        let a = from.tile_floor();
+        let b = to.tile_floor();
+        let dx = b.x - a.x;
+        let dy = b.y - a.y;
+        let count = dx.abs().max(dy.abs());
+        if count > 64 {
+            return false;
+        }
+        let mut steps = self.economy.work_positions.steps();
+        let mut previous = a;
+        for n in 1..=count.max(1) {
+            let tile = TileCoord::new(a.x + dx * n / count.max(1), a.y + dy * n / count.max(1));
+            if !steps.probe(self, kind, previous, tile).unwrap_or(false) {
+                return false;
+            }
+            previous = tile;
+        }
+        true
+    }
+
     pub(crate) fn interaction_point_free(&self, id: EntityId, at: WorldPosition) -> bool {
         let Some(&index) = self.lookup.get(&id) else {
             return false;
         };
         let kind = self.units[index].state.kind;
+        self.interaction_static_clear(kind, at)
+            && !self.destination_point_reserved(at, id)
+            && !self.position_occupied(index, at, true)
+    }
+
+    pub(crate) fn interaction_static_clear(&self, kind: UnitKind, at: WorldPosition) -> bool {
         self.config.valid_ground_position(at)
             && !self.economy.blocked_tiles.contains(&at.tile_floor())
             && self
                 .unit_tile_passable(kind, at.tile_floor(), &|| false)
                 .unwrap_or(false)
             && self.body_position_clear(kind, at)
-            && !self.destination_point_reserved(at, id)
-            && !self.position_occupied(index, at, true)
     }
 
     pub(crate) fn at_work_position(&self, id: EntityId, tile: aoe_core::TileCoord) -> bool {
         let Some(unit) = self.unit(id) else {
             return false;
         };
-        let range =
-            i64::from(unit.kind.collision_radius() + if unit.kind.is_naval() { 256 } else { 104 });
-        let rect = TileRect::from_xywh(tile.x, tile.y, 1, 1);
-        !rect.contains(unit.position.tile_floor())
-            && footprint_distance_squared(unit.position, rect) <= range * range
+        within_work_reach(unit.kind, unit.position, tile)
     }
 }

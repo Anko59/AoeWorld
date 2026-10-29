@@ -74,3 +74,40 @@ fn resumes_house_after(pause: u32) {
         world.unit(builder)
     );
 }
+
+#[test]
+fn a_builder_retries_an_occupied_work_tile_from_a_legal_fractional_arrival() {
+    let (mut world, _, _) = village();
+    let goal = WorldPosition::from_tile_center(at(99, 100)).unwrap();
+    let builder = world
+        .spawn_villager(PlayerId(0), WorldPosition::new(goal.x + 279, goal.y + 319))
+        .unwrap();
+    for (dx, dy) in [(0, 0), (-18, 614), (0, 1024)] {
+        world
+            .spawn_villager(PlayerId(0), WorldPosition::new(goal.x + dx, goal.y + dy))
+            .unwrap();
+    }
+    fixture::survey(&mut world, PlayerId(0), at(100, 100), 4);
+    let house = world
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
+        .unwrap();
+    for tick in 1..=700 {
+        world.advance();
+        assert!(
+            world.movement_obstruction_ticks(builder).unwrap_or(0) <= 128,
+            "tick {tick}"
+        );
+        let unit = world.unit(builder).unwrap();
+        assert!(world.body_position_clear(unit.kind, unit.position));
+        if world.building(house).unwrap().is_complete() {
+            return;
+        }
+    }
+    panic!("the builder must retry another work tile and complete the house");
+}

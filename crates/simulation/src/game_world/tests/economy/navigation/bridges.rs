@@ -13,7 +13,10 @@ mod bridge_queue_tests;
 mod head_on;
 
 fn setup_axis(horizontal: bool) -> (GameWorld, EntityId) {
-    let mut world = river_width(horizontal, 30..34);
+    setup_world(river_width(horizontal, 30..34), horizontal)
+}
+
+fn setup_world(mut world: GameWorld, horizontal: bool) -> (GameWorld, EntityId) {
     world
         .place_town_center(PlayerId(0), TileCoord::new(10, 10))
         .unwrap();

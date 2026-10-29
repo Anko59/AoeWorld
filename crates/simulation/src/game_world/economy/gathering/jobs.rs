@@ -1,10 +1,12 @@
 //! Derived per-target reservations. Returning workers retain their job/slot.
 //! Mutations go through insert/remove so cancellation cannot leak occupancy.
 use super::*;
-use std::collections::{BTreeMap, BTreeSet};
+use crate::game_world::movement_step::CellHasher;
+use std::collections::{BTreeMap, HashMap};
+use std::hash::BuildHasherDefault;
 use std::ops::Deref;
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub(crate) enum WorkTarget {
     Node(u64),
     Farm(EntityId),
@@ -40,6 +42,7 @@ impl GatherTask {
             work_position: None,
             phase: GatherPhase::Approaching,
             approach_failures: 0,
+            crowded: false,
             credits: 0,
             dropoff: None,
             return_target: None,
@@ -52,10 +55,31 @@ impl GatherTask {
 #[derive(Debug, Default)]
 pub(crate) struct Gatherers {
     tasks: BTreeMap<EntityId, GatherTask>,
-    targets: BTreeMap<WorkTarget, BTreeSet<EntityId>>,
+    members: HashMap<u64, u64, BuildHasherDefault<CellHasher>>,
+    targets: HashMap<WorkTarget, usize, BuildHasherDefault<CellHasher>>,
 }
 
 impl Gatherers {
+    /// Sparse words bound memory by live jobs, even for ever-increasing ids.
+    pub(crate) fn contains_key(&self, id: &EntityId) -> bool {
+        self.members
+            .get(&(u64::from(id.0) >> 6))
+            .is_some_and(|word| word & (1_u64 << (id.0 % 64)) != 0)
+    }
+
+    pub(super) fn observe_crowd(&mut self, id: EntityId) {
+        let mark = self.tasks.get(&id).is_some_and(|task| {
+            !task.crowded
+                && task.farm.is_none()
+                && task.animal.is_none()
+                && task.fish.is_none()
+                && self.count_target(task.target()) > 10
+        });
+        if mark && let Some(task) = self.tasks.get_mut(&id) {
+            task.crowded = true;
+        }
+    }
+
     pub(crate) fn set_work_position(&mut self, id: EntityId, at: aoe_core::WorldPosition) {
         if let Some(task) = self.tasks.get_mut(&id) {
             task.work_position = Some(at);
@@ -63,37 +87,60 @@ impl Gatherers {
     }
 
     pub(crate) fn count_target(&self, target: WorkTarget) -> usize {
-        self.targets.get(&target).map_or(0, BTreeSet::len)
+        self.targets.get(&target).copied().unwrap_or(0)
+    }
+
+    pub(super) fn reserved_target(&self, id: &EntityId) -> Option<WorkTarget> {
+        self.tasks.get(id).map(GatherTask::target)
     }
 
     pub(crate) fn occupied(&self, target: WorkTarget, except: EntityId) -> usize {
-        self.targets
-            .get(&target)
-            .map_or(0, |ids| ids.len() - usize::from(ids.contains(&except)))
+        self.count_target(target) - usize::from(self.reserved_target(&except) == Some(target))
     }
 
     pub(crate) fn insert(&mut self, id: EntityId, task: GatherTask) -> Option<GatherTask> {
-        let old = self.remove(&id);
-        self.targets.entry(task.target()).or_default().insert(id);
-        self.tasks.insert(id, task);
+        let target = task.target();
+        let old = self.tasks.insert(id, task);
+        let previous = old.as_ref().map(GatherTask::target);
+        // Progress and phase writes keep the same reservation and membership.
+        if previous == Some(target) {
+            return old;
+        }
+        if let Some(previous) = previous {
+            self.release_target(previous);
+        } else {
+            *self.members.entry(u64::from(id.0) >> 6).or_default() |= 1_u64 << (id.0 % 64);
+        }
+        *self.targets.entry(target).or_default() += 1;
         old
+    }
+
+    fn release_target(&mut self, target: WorkTarget) {
+        if let Some(count) = self.targets.get_mut(&target) {
+            *count -= 1;
+            if *count == 0 {
+                self.targets.remove(&target);
+            }
+        }
     }
 
     pub(crate) fn remove(&mut self, id: &EntityId) -> Option<GatherTask> {
         let task = self.tasks.remove(id)?;
-        let key = task.target();
-        if let Some(ids) = self.targets.get_mut(&key) {
-            ids.remove(id);
-            if ids.is_empty() {
-                self.targets.remove(&key);
+        let word = u64::from(id.0) >> 6;
+        if let Some(bits) = self.members.get_mut(&word) {
+            *bits &= !(1_u64 << (id.0 % 64));
+            if *bits == 0 {
+                self.members.remove(&word);
             }
         }
+        self.release_target(task.target());
         Some(task)
     }
 
     #[cfg(test)]
     pub(crate) fn clear(&mut self) {
         self.tasks.clear();
+        self.members.clear();
         self.targets.clear();
     }
 }
@@ -105,9 +152,7 @@ impl GameWorld {
         };
         // Broad admission uses the number of radius-spaced perimeter samples.
         // Exact terrain, occupancy and reservation checks belong to approach.
-        let radius = unit.kind.collision_radius();
-        let side = 1024 + 2 * (radius + 8);
-        let slots = (4 * (side / (2 * radius + 16))) as usize;
+        let slots = slot_capacity(unit.kind);
         self.economy.gatherers.occupied(WorkTarget::Node(node), id) < slots
     }
 
@@ -143,3 +188,12 @@ impl<'a> IntoIterator for &'a Gatherers {
         self.tasks.iter()
     }
 }
+
+pub(super) fn slot_capacity(kind: UnitKind) -> usize {
+    let radius = kind.collision_radius();
+    let side = 1024 + 2 * (radius + 8);
+    (4 * (side / (2 * radius + 16))) as usize
+}
+
+#[cfg(test)]
+mod tests;

@@ -167,33 +167,6 @@ fn proposed_wait_records_the_tick_it_started() {
 }
 
 #[test]
-fn proposal_rechecks_following_after_an_earlier_mover_changes_spacing() {
-    let (mut world, follower) = waiting_fixture();
-    world.economy.blocked_tiles.clear();
-    let position = world.unit(follower).unwrap().position;
-    let leader = world
-        .spawn_unit(
-            PlayerId(0),
-            WorldPosition::new(position.x + 500, position.y),
-        )
-        .unwrap();
-    for id in [follower, leader] {
-        world
-            .issue_task_move(id, WorldPosition::new(position.x + 20_000, position.y))
-            .unwrap();
-    }
-    let index = world.lookup[&follower];
-    assert!(world.following_unit(index));
-    let proposal = world.propose_steps(&[follower], 0).pop().unwrap().unwrap();
-    // Applying the leader first moves it beyond the follower spacing radius.
-    let leader_step = world.propose_steps(&[leader], 0).pop().unwrap().unwrap();
-    assert!(world.apply_step(leader_step, &mut Vec::new(), &mut Vec::new()));
-    assert!(!world.following_unit(index));
-    assert!(!world.apply_step(proposal, &mut Vec::new(), &mut Vec::new()));
-    assert_eq!(world.unit(follower).unwrap().position, position);
-}
-
-#[test]
 fn a_walking_unit_with_pending_lookahead_still_gets_a_pure_proposal() {
     let (mut world, id) = waiting_fixture();
     let origin = TileCoord::new(10, 10);

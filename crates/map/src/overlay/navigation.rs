@@ -8,14 +8,19 @@ use std::{
     sync::Arc,
 };
 
+mod occupied;
+mod recent;
+use occupied::Occupied;
+
 type Key = (i32, i32);
 const SHARDS: usize = 64;
-type Shard = Arc<BTreeMap<Key, Arc<CollisionChunk>>>;
+type ChunkTable = BTreeMap<Key, Arc<CollisionChunk>>;
+type Shard = Arc<ChunkTable>;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 struct CollisionChunk {
     stamp: [u8; 32],
-    occupied: BTreeMap<TileCoord, u8>,
+    occupied: Occupied,
     depleted: BTreeSet<u64>,
     bridges: BTreeMap<TileCoord, u16>,
 }
@@ -60,19 +65,26 @@ impl CollisionSnapshot {
         Arc::make_mut(shard.entry(key).or_default())
     }
 
+    #[inline(always)]
     fn blocks_tile(&self, tile: TileCoord) -> bool {
-        self.chunk(key(tile))
-            .is_some_and(|chunk| chunk.occupied.contains_key(&tile))
+        let at = key(tile);
+        recent::read(&self.shards[Self::shard(at)], at, |chunk| {
+            chunk.is_some_and(|chunk| chunk.occupied.contains_key(&tile))
+        })
     }
 
+    #[inline(always)]
     fn blocks_node(&self, node: ResourceNode) -> bool {
         // Fish lie below a completed deck; water itself controls land access.
         !matches!(
             node.object,
             crate::ObjectKind::ShoreFish | crate::ObjectKind::DeepFish
-        ) && !self
-            .chunk(key(node.tile))
-            .is_some_and(|chunk| chunk.depleted.contains(&node.id))
+        ) && {
+            let at = key(node.tile);
+            !recent::read(&self.shards[Self::shard(at)], at, |chunk| {
+                chunk.is_some_and(|chunk| chunk.depleted.contains(&node.id))
+            })
+        }
     }
 }
 
@@ -160,12 +172,7 @@ impl ResourceOverlay {
             chunk.depleted.insert(identity);
         } else {
             let flag = if domain == 1 { 1 } else { 2 };
-            let occupied = chunk.occupied.entry(tile).or_default();
-            *occupied ^= flag;
-            let present = *occupied & flag != 0;
-            if *occupied == 0 {
-                chunk.occupied.remove(&tile);
-            }
+            let present = chunk.occupied.toggle(tile, flag);
             if domain == 3 {
                 if present {
                     chunk.depleted.remove(&identity);

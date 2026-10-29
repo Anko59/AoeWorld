@@ -360,6 +360,8 @@ pub(crate) struct GatherTask {
     kind: ResourceKind,
     phase: GatherPhase,
     approach_failures: u8,
+    /// Retain crowded-work clearance when other workers re-pick nearby nodes.
+    crowded: bool,
     credits: u64,
     dropoff: Option<EntityId>,
     return_target: Option<TileCoord>,

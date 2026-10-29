@@ -121,10 +121,9 @@ fn measure(installed: bool) {
     assert_eq!(
         world.canonical_hash(),
         [
-            // Stance and autonomous targeting state extend the canonical hash, as do the
-            // attack-move resume slots and the per-member stall counter of group movement.
-            65, 144, 167, 243, 121, 169, 58, 25, 0, 255, 59, 135, 146, 88, 127, 58, 86, 36, 85, 66,
-            65, 91, 52, 56, 30, 41, 95, 67, 164, 216, 240, 55,
+            // PR 7 removes follower waits/index hashing; both navigation modes reproduce this pin.
+            137, 242, 73, 125, 23, 111, 44, 191, 216, 158, 22, 49, 30, 111, 140, 218, 148, 153, 179,
+            7, 37, 62, 53, 106, 202, 74, 10, 198, 226, 8, 175, 60,
         ]
     );
     if installed {

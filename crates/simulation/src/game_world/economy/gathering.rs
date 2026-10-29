@@ -9,7 +9,10 @@ use aoe_map::ResourceKind;
 mod approach;
 mod chunks;
 mod jobs;
+mod positions;
+mod steps;
 pub(crate) use jobs::{Gatherers, WorkTarget};
+pub(crate) use positions::WorkPositions;
 mod replacement;
 mod returning;
 
@@ -153,10 +156,7 @@ impl GameWorld {
     ) -> Result<(), EconomyError> {
         let farm = task.farm;
         if task.farm.is_none() && task.animal.is_none() && task.fish.is_none() {
-            if (!self.node_has_work_slot(task.node, id)
-                || self.approach_resource(id, task.tile).is_err())
-                && !self.replacement_resource(id, &mut task)
-            {
+            if !self.admit_resource_approach(id, &mut task) {
                 return Err(EconomyError::InvalidResource);
             }
         } else {
@@ -210,6 +210,8 @@ impl GameWorld {
     ) {
         let ids = self.economy.gatherers.keys().copied().collect::<Vec<_>>();
         for id in ids {
+            self.economy.gatherers.observe_crowd(id);
+            self.refine_gather_approach(id);
             // A gatherer that is walking under a movement order, with no
             // failed route, changes nothing in `gather_step`: skip the
             // remove/insert round trip through the task map.
@@ -217,6 +219,7 @@ impl GameWorld {
                 (self.lookup.get(&id), self.economy.gatherers.get(&id))
                 && task.phase != GatherPhase::WaitingDropoff
                 && self.units[index].order.is_some()
+                && !self.gather_contact(index, task)
                 && !(task.phase == GatherPhase::Returning
                     && self.at_dropoff(self.units[index].state, task))
                 && !(task.phase == GatherPhase::Approaching
@@ -275,6 +278,17 @@ impl GameWorld {
         if task.phase == GatherPhase::WaitingDropoff {
             return self.tick.0 < task.retry_tick || self.begin_return(id, task);
         }
+        if self.gather_contact(index, task) {
+            self.clear_planner(index);
+            let stored = &mut self.units[index];
+            stored.order = None;
+            stored.route.clear();
+            stored.obstruction = None;
+            stored.last_movement_error = None;
+            stored.state.moving = false;
+            stored.state.planning = false;
+            self.refresh_spacing_order(id);
+        }
         if self.units[index].order.is_some()
             && !(task.phase == GatherPhase::Returning
                 && self.at_dropoff(self.units[index].state, task))
@@ -283,6 +297,12 @@ impl GameWorld {
         }
         if task.phase == GatherPhase::Approaching && self.units[index].last_movement_error.is_some()
         {
+            if task.fish.is_some()
+                && self.units[index].state.kind == UnitKind::FishingShip
+                && self.units[index].last_movement_error == Some(GameWorldError::Unreachable)
+            {
+                return self.retry_fishing_approach(id, task);
+            }
             if task.farm.is_some() || task.fish.is_some() || task.approach_failures >= 8 {
                 return false;
             }
@@ -290,7 +310,10 @@ impl GameWorld {
             if task.animal.is_some() {
                 return self.replacement_animal(id, task);
             }
-            return self.replacement_resource(id, task);
+            if self.replacement_resource(id, task) {
+                return true;
+            }
+            return self.gather_traffic_blocked(id) && self.queue_resource_approach(id, task.tile);
         }
         if task.phase == GatherPhase::Returning {
             let unit = self.units[index].state;
@@ -327,6 +350,7 @@ impl GameWorld {
         }
         if task.phase == GatherPhase::Approaching {
             task.approach_failures = 0;
+            task.retry_tick = 0;
             task.work_tile = Some(tile);
             task.work_position = Some(self.units[index].state.position);
         }

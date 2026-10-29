@@ -36,6 +36,7 @@ impl GameWorld {
     /// Moves every active mover once and returns the ids it touched, in
     /// arbitrary order; the tick collation sorts and fetches final states.
     pub(crate) fn advance_movement(&mut self) -> Vec<EntityId> {
+        self.economy.gather_repick_budget = 4;
         // Waiting units search first, fairly per player, so a route found now
         // is walked this tick; walking units plan ahead from what is left.
         let mut changed = Vec::new();
@@ -65,6 +66,8 @@ impl GameWorld {
         self.begin_vision_batch();
         self.propose_steps_into(&movers, start, &mut scratch);
         for turn in 0..mover_count {
+            self.work_approach_clearance = None;
+            self.melee_traffic_clearance = None;
             let id = movers[(start + turn) % mover_count];
             if let Some(&index) = self.lookup.get(&id)
                 && self.settle_obstructed_unit(index)
@@ -86,23 +89,13 @@ impl GameWorld {
                 continue;
             }
             self.replace_occupied_arrival(index);
+            self.cache_work_approach(index);
             let Some(mut order) = self.units[index].order else {
                 continue;
             };
             let unit = self.units[index].state;
             self.units[index].state.previous_position = unit.position;
             let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
-            // Brief yielding must not freeze a cycle of followers forever;
-            // retry with swept clearance on a deterministic eight-tick cadence.
-            let following = self.following_unit(index);
-            if following {
-                self.record_unit_obstruction(index);
-            }
-            let speed = if following && !self.local_retry(id) {
-                0
-            } else {
-                speed
-            };
             let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
             order.speed_carry = 0;
             let mut current_position = self.units[index].state.position;
@@ -292,6 +285,8 @@ impl GameWorld {
             }
             self.observe_unit_progress(index);
         }
+        self.work_approach_clearance = None;
+        self.melee_traffic_clearance = None;
         still_moving.sort_unstable();
         self.active_movers = still_moving;
         self.advance_formations(&mut changed, &mut scratch);

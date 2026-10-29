@@ -445,11 +445,21 @@ fn resource_id(tile: TileCoord, slot: u8) -> u64 {
 }
 
 fn unsigned_noise(key: [u8; 32], domain: &[u8], x: i32, y: i32) -> u64 {
-    let mut hash = blake3::Hasher::new_keyed(&key);
-    hash.update(domain);
-    hash.update(&x.to_le_bytes());
-    hash.update(&y.to_le_bytes());
-    u64::from_le_bytes(hash.finalize().as_bytes()[..8].try_into().unwrap_or([0; 8]))
+    coordinate_hash(&key, domain, x, y, &[])
+}
+
+// All callers use bounded internal domain labels. Hash the same concatenated
+// bytes once instead of constructing and updating a streaming hasher per cell.
+fn coordinate_hash(key: &[u8; 32], domain: &[u8], x: i32, y: i32, suffix: &[u8]) -> u64 {
+    let mut bytes = [0; 128];
+    let n = domain.len();
+    let input = &mut bytes[..n + 8 + suffix.len()];
+    input[..n].copy_from_slice(domain);
+    input[n..n + 4].copy_from_slice(&x.to_le_bytes());
+    input[n + 4..n + 8].copy_from_slice(&y.to_le_bytes());
+    input[n + 8..].copy_from_slice(suffix);
+    let hash = blake3::keyed_hash(key, input);
+    u64::from_le_bytes(hash.as_bytes()[..8].try_into().unwrap_or([0; 8]))
 }
 
 fn signed_noise(key: [u8; 32], domain: &[u8], x: i32, y: i32) -> i32 {

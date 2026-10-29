@@ -172,3 +172,63 @@ fn bridge_completion_requires_the_reserved_span_and_keeps_failed_attempts_atomic
         );
     }
 }
+
+#[test]
+fn collision_domains_and_pinned_snapshots_cross_chunk_edges() {
+    let mut overlay = ResourceOverlay::default();
+    let mut id = 0;
+    for x in [-33, -1, 0, 31, 32, 64] {
+        for y in [-1, 0, 31, 32] {
+            let tile = TileCoord::new(x, y);
+            overlay.navigation_toggle(tile, 1, 0);
+            overlay.navigation_toggle(tile, 3, id);
+            let pinned = overlay.navigation_snapshot();
+            overlay.navigation_toggle(tile, 1, 0);
+            assert!(
+                overlay.blocks_tile(tile),
+                "resource domain remains at {tile:?}"
+            );
+            overlay.navigation_toggle(tile, 3, id);
+            assert!(!overlay.blocks_tile(tile));
+            assert!(
+                pinned.blocks_tile(tile),
+                "pinned collision remains at {tile:?}"
+            );
+            id += 1;
+        }
+    }
+}
+
+#[test]
+fn cached_collision_reads_follow_unique_and_shared_shard_writes() {
+    let mut overlay = ResourceOverlay::default();
+    let tile = TileCoord::new(17, 19);
+    overlay.navigation_toggle(tile, 1, 0);
+    assert!(overlay.blocks_tile(tile));
+    overlay.navigation_toggle(tile, 1, 0);
+    assert!(
+        !overlay.blocks_tile(tile),
+        "a uniquely owned shard changed after a cached read"
+    );
+    overlay.navigation_toggle(tile, 1, 0);
+    let pinned = overlay.navigation_snapshot();
+    assert!(pinned.blocks_tile(tile));
+    overlay.navigation_toggle(tile, 1, 0);
+    for _ in 0..8 {
+        assert!(!overlay.blocks_tile(tile));
+        assert!(pinned.blocks_tile(tile));
+    }
+    let mut depleted = ResourceOverlay::default();
+    let node = tree(tile);
+    depleted.navigation_toggle(tile, 3, node.id);
+    depleted.navigation_toggle(tile, 3, node.id);
+    let fresh = ResourceOverlay::default();
+    assert_eq!(depleted.navigation_stamp(), fresh.navigation_stamp());
+    for _ in 0..8 {
+        assert!(!depleted.blocks_node(node));
+        assert!(
+            fresh.blocks_node(node),
+            "equal stamps are not cache-owner identity"
+        );
+    }
+}

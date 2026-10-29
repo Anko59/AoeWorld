@@ -45,6 +45,9 @@ pub(crate) struct Economy {
     pub(crate) scout_searches: BTreeSet<EntityId>,
     pub(crate) scout_cursor: Option<EntityId>,
     pub(crate) gatherers: gathering::Gatherers,
+    pub(crate) work_positions: gathering::WorkPositions,
+    /// Tick-local search allowance, reset before movement; not persistent state.
+    pub(crate) gather_repick_budget: u8,
     pub(crate) builders: BTreeMap<EntityId, BuildTask>,
     pub(crate) depletions: Vec<aoe_map::Depletion>,
     pub(crate) limits: WorldLimits,

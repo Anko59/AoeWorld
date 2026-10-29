@@ -1,5 +1,5 @@
 //! Chunk-level walk data: passability, walkable surface, height level, mud and
-//! resource-node bitmaps of a whole 32 x 32 chunk, prepared explicitly by
+//! resource indices of a whole 32 x 32 chunk, prepared explicitly by
 //! navigation or background workers and shared by movement, route planning,
 //! gathering and placement. Cold point reads stay local. The cache evicts
 //! the least recently used chunks. Every value is a pure function of the
@@ -37,6 +37,7 @@ pub(super) struct WalkChunk {
     passable: [u64; WORDS],
     walkable: [u64; WORDS],
     mud: [u64; WORDS],
+    node_indices: Option<Box<[u16; CELLS]>>,
     levels: Box<[i16; CELLS]>,
     tiles: Box<[Option<super::Tile>; CELLS]>,
     /// `(local index, node)` ordered by local index.
@@ -60,6 +61,7 @@ impl WalkChunk {
         std::mem::size_of::<Self>()
             + CELLS * 2
             + CELLS * std::mem::size_of::<Option<super::Tile>>()
+            + self.node_indices.as_ref().map_or(0, |_| CELLS * 2)
             + self.nodes.capacity() * std::mem::size_of::<(u16, ResourceNode)>()
             + 64
     }
@@ -72,10 +74,10 @@ impl WalkChunk {
             game_height_level: self.levels[index],
             mud: get(&self.mud, index),
             node: self
-                .nodes
-                .binary_search_by_key(&(index as u16), |(at, _)| *at)
-                .ok()
-                .map(|found| self.nodes[found].1),
+                .node_indices
+                .as_ref()
+                .and_then(|indices| self.nodes.get(usize::from(indices[index])))
+                .map(|(_, node)| *node),
         })
     }
 }
@@ -261,6 +263,7 @@ impl MapChunkGenerator {
             passable: [0; WORDS],
             walkable: [0; WORDS],
             mud: [0; WORDS],
+            node_indices: None,
             levels: Box::new([0; CELLS]),
             tiles: Box::new([None; CELLS]),
             nodes: Vec::with_capacity(scene.resources.len()),
@@ -287,9 +290,17 @@ impl MapChunkGenerator {
                 .push((local(resource.node.tile) as u16, resource.node));
         }
         chunk.nodes.sort_unstable_by_key(|(at, _)| *at);
+        if !chunk.nodes.is_empty() {
+            let mut indices = Box::new([u16::MAX; CELLS]);
+            for (index, &(at, _)) in chunk.nodes.iter().enumerate() {
+                indices[usize::from(at)] = index as u16;
+            }
+            chunk.node_indices = Some(indices);
+        }
         Ok(chunk)
     }
 
+    #[inline(always)]
     pub(super) fn walk_lookup(
         &self,
         tile: TileCoord,
@@ -310,15 +321,19 @@ impl MapChunkGenerator {
         );
         let id = self.derived.id;
         let recent = RECENT.with(|recent| {
-            recent
-                .borrow()
-                .0
-                .iter()
-                .flatten()
-                .find_map(|(owner, at, chunk)| {
-                    (*owner == id && *at == key)
-                        .then(|| chunk.cell(tile).map_or(Lookup::OutOfMap, Lookup::Cell))
-                })
+            let recent = recent.borrow();
+            // Consecutive terrain reads usually stay in the last inserted chunk.
+            let latest = recent.1.wrapping_sub(1) % RECENT_CHUNKS;
+            if let Some((owner, at, chunk)) = &recent.0[latest]
+                && *owner == id
+                && *at == key
+            {
+                return Some(chunk.cell(tile).map_or(Lookup::OutOfMap, Lookup::Cell));
+            }
+            recent.0.iter().flatten().find_map(|(owner, at, chunk)| {
+                (*owner == id && *at == key)
+                    .then(|| chunk.cell(tile).map_or(Lookup::OutOfMap, Lookup::Cell))
+            })
         });
         if let Some(found) = recent {
             return Ok(found);

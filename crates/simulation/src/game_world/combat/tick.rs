@@ -1,7 +1,7 @@
 //! Per-tick attack resolution for units that hold an attack order.
 use super::{Attacker, MELEE_RANGE_SUBUNITS, unit_combat};
 use crate::{GameWorld, UnitTask};
-use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, TileRect, WorldPosition};
+use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, TileRect, WorldPosition};
 
 /// What an attacker is walking to and hitting.
 #[derive(Clone, Copy, Debug)]
@@ -37,22 +37,6 @@ impl Goal {
 }
 
 impl GameWorld {
-    /// A live unit or building of another player, else `None`.
-    pub(crate) fn attack_goal(&self, target: EntityId, attacker: PlayerId) -> Option<Goal> {
-        if let Some(unit) = self.unit(target) {
-            return (unit.hp > 0 && unit.player != attacker && !self.embarked(target))
-                .then_some(Goal::Unit(unit.position, unit.kind.collision_radius()));
-        }
-        if let Some(animal) = self.animal(target) {
-            return (animal.hp > 0).then_some(Goal::Unit(animal.position, 205));
-        }
-        self.economy
-            .buildings
-            .get(&target)
-            .filter(|building| building.hp > 0 && building.player != attacker)
-            .map(|building| Goal::Building(building.footprint))
-    }
-
     pub(crate) fn advance_combat(&mut self, changed: &mut Vec<EntityId>) {
         self.combat.stats = Default::default();
         self.advance_projectiles(changed);
@@ -91,9 +75,19 @@ impl GameWorld {
             self.combat.attackers.remove(&id);
             return;
         };
+        let source = self.units[index].state;
+        let original_goal = self.attack_goal(attacker.target, source.player);
+        let stats = self.unit_state_stats(&source);
+        let original_target = attacker.target;
+        let attacker = self.refresh_contact_target(index, attacker, original_goal, &stats, changed);
         let before = self.units[index].state;
         self.combat.stats.attackers += 1;
-        let Some(goal) = self.attack_goal(attacker.target, before.player) else {
+        let goal = if attacker.target == original_target {
+            original_goal
+        } else {
+            self.attack_goal(attacker.target, before.player)
+        };
+        let Some(goal) = goal else {
             self.end_attack(id, changed);
             return;
         };
@@ -107,25 +101,26 @@ impl GameWorld {
             self.end_attack(id, changed);
             return;
         }
-        let stats = self.unit_stats(id).unwrap_or(*unit_combat(before.kind));
         let range = super::super::navy::attack_range(&stats);
         let distance = goal.distance_squared(before.position);
-        let approaching_slot = Self::uses_melee_position(before.kind)
-            && (!self.arrival_position_free(index)
-                || self.units[index].order.is_some_and(|o| {
-                    super::super::movement_step::slots::squared(before.position, o.destination)
-                        > 64 * 64
-                }));
+        // Outside reach this branch must approach regardless of endpoint space.
+        let approaching_slot = distance <= range * range && self.approaching_melee_slot(index);
         if distance > range * range || approaching_slot {
             self.approach(id, index, attacker, goal, now, changed);
-            return;
+            if !self.can_strike_on_approach(id, &goal, distance, range) {
+                return;
+            }
         }
         let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
         if distance < min * min {
             self.stop_movement(index);
             return;
         }
-        if self.units[index].order.is_some() || before.moving || before.planning {
+        // A legal blow does not wait for a preferred point. Keep approaching
+        // it while striking, so the front does not stop and wall off the rear.
+        if !approaching_slot
+            && (self.units[index].order.is_some() || before.moving || before.planning)
+        {
             self.stop_movement(index);
         }
         let state = &mut self.units[index].state;
@@ -179,8 +174,6 @@ impl GameWorld {
                     && i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
                         > super::approach::FAR_REUSE_TILES
             });
-            // A search for a target beyond the local search's reach ends in the
-            // far fallback, first search or repeat; both spend the budget.
             let counts_as_far = attacker.far.is_some()
                 || i64::from((from.x - centre.x).abs().max((from.y - centre.y).abs()))
                     > super::approach::FAR_REUSE_TILES;

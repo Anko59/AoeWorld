@@ -55,16 +55,43 @@ impl PreparedElevation {
         let (y0, y1, y_remainder, _) =
             source_axis_position(y, self.samples_per_axis, width_tiles, position)?;
         Some(bilinear_height(
-            [
-                self.source_sample(x0, y0)?,
-                self.source_sample(x1, y0)?,
-                self.source_sample(x1, y1)?,
-                self.source_sample(x0, y1)?,
-            ],
+            self.source_quad(x0, x1, y0, y1)?,
             x_remainder,
             y_remainder,
             denominator,
         ))
+    }
+
+    /// Adjacent interpolation samples usually share one immutable source page.
+    fn source_quad(&self, x0: u16, x1: u16, y0: u16, y1: u16) -> Option<[i32; 4]> {
+        let side = u16::from(ENVIRONMENT_PAGE_SAMPLES);
+        let page = (x0 / side, y0 / side);
+        if page == (x1 / side, y1 / side) {
+            let page = self.pages.get(&page)?;
+            let (x0, x1, y0, y1) = (
+                usize::from(x0 % side),
+                usize::from(x1 % side),
+                usize::from(y0 % side),
+                usize::from(y1 % side),
+            );
+            let width = usize::from(page.width);
+            if x1 >= width || y1 >= usize::from(page.height) {
+                return None;
+            }
+            let samples = &page.geographic_height_centimeters;
+            return Some([
+                samples[y0 * width + x0],
+                samples[y0 * width + x1],
+                samples[y1 * width + x1],
+                samples[y1 * width + x0],
+            ]);
+        }
+        Some([
+            self.source_sample(x0, y0)?,
+            self.source_sample(x1, y0)?,
+            self.source_sample(x1, y1)?,
+            self.source_sample(x0, y1)?,
+        ])
     }
 
     fn source_sample(&self, source_x: u16, source_y: u16) -> Option<i32> {
@@ -89,7 +116,7 @@ pub(super) fn source_axis_position(
     width_tiles: i32,
     position: AxisPosition,
 ) -> Option<(u16, u16, u64, u64)> {
-    let tile_axis = i128::from(width_tiles);
+    let tile_axis = i64::from(width_tiles);
     if tile_axis <= 0 || samples_per_axis == 0 {
         return None;
     }
@@ -97,8 +124,8 @@ pub(super) fn source_axis_position(
         AxisPosition::TileCenter => width_tiles.checked_sub(1)?,
         AxisPosition::Corner => width_tiles,
     };
-    let coordinate = i128::from(coordinate.clamp(0, maximum_coordinate));
-    let sample_axis = i128::from(samples_per_axis);
+    let coordinate = i64::from(coordinate.clamp(0, maximum_coordinate));
+    let sample_axis = i64::from(samples_per_axis);
     let denominator = tile_axis.checked_mul(2)?;
     let doubled_coordinate = match position {
         AxisPosition::TileCenter => coordinate.checked_mul(2)?.checked_add(1)?,
@@ -107,7 +134,7 @@ pub(super) fn source_axis_position(
     let numerator = doubled_coordinate
         .checked_mul(sample_axis)?
         .checked_sub(tile_axis)?;
-    let maximum_sample = i128::from(samples_per_axis.checked_sub(1)?);
+    let maximum_sample = i64::from(samples_per_axis.checked_sub(1)?);
     let maximum_numerator = maximum_sample.checked_mul(denominator)?;
     let denominator_u64 = u64::try_from(denominator).ok()?;
     if numerator <= 0 {
@@ -129,6 +156,10 @@ pub(super) fn bilinear_height(
     y_remainder: u64,
     denominator: u64,
 ) -> i32 {
+    // Constant cells interpolate exactly, including negative/extreme heights.
+    if values[1..].iter().all(|&value| value == values[0]) {
+        return values[0];
+    }
     let denominator = i128::from(denominator.max(1));
     let x1 = i128::from(x_remainder);
     let y1 = i128::from(y_remainder);

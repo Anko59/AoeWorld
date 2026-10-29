@@ -19,6 +19,10 @@ pub fn researched_stats(kind: UnitKind, feudal: bool, researched: u64) -> UnitCo
 
 /// Apply effects to supplied base data, including the browser's runtime asset.
 pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u64) -> UnitCombat {
+    // Only scouts have an age effect without research.
+    if researched == 0 && (!feudal || s.kind != UnitKind::Scout) {
+        return s;
+    }
     let kind = s.kind;
     s.speed_hundredths = apply_movement_speed(kind, s.speed_hundredths, feudal);
     let has = |t: Tech| researched & t.bit() != 0;
@@ -82,13 +86,17 @@ pub fn class_bonus(attacker: UnitKind, victim: UnitKind) -> u16 {
 
 impl GameWorld {
     pub fn unit_stats(&self, id: EntityId) -> Option<UnitCombat> {
-        let u = self.unit(id)?;
-        Some(researched_stats(
-            u.kind,
-            self.is_feudal(u.player),
-            self.player_economy(u.player).map_or(0, |p| p.researched),
-        ))
+        self.unit(id).map(|unit| self.unit_state_stats(&unit))
     }
+    pub(super) fn unit_state_stats(&self, unit: &crate::GameUnit) -> UnitCombat {
+        let economy = self.economy.players.get(&unit.player);
+        researched_stats(
+            unit.kind,
+            economy.is_some_and(|p| p.age >= crate::Age::Feudal),
+            economy.map_or(0, |p| p.researched),
+        )
+    }
+
     pub fn building_attack(&self, player: PlayerId, kind: BuildingKind) -> Option<BuildingAttack> {
         let mut s = if kind == BuildingKind::TownCenter {
             // The firepower calculation supplies zero arrows without a garrison.

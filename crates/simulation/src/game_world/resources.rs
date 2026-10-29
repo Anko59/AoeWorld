@@ -77,6 +77,7 @@ impl GameWorld {
             cache.clear();
         }
         self.navigation_cache.clear();
+        self.economy.work_positions.clear();
         self.clearance
             .get_mut()
             .unwrap_or_else(|error| error.into_inner())
@@ -103,6 +104,7 @@ impl GameWorld {
 
     pub(super) fn resource_collision_changed(&mut self) {
         self.navigation_cache.clear();
+        self.economy.work_positions.clear();
         self.clearance
             .get_mut()
             .unwrap_or_else(|error| error.into_inner())
@@ -124,6 +126,7 @@ impl GameWorld {
             .as_ref()
             .and_then(|probe| probe.cache_span());
         self.navigation_cache.invalidate(area);
+        self.economy.work_positions.invalidate(area);
         self.clearance
             .get_mut()
             .unwrap_or_else(|error| error.into_inner())
@@ -150,6 +153,7 @@ impl GameWorld {
             .as_ref()
             .and_then(|probe| probe.cache_span());
         self.navigation_cache.invalidate(area);
+        self.economy.work_positions.invalidate(area);
         self.clearance
             .get_mut()
             .unwrap_or_else(|error| error.into_inner())

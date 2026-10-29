@@ -81,7 +81,7 @@ impl GameWorld {
         if from.x == to.x || from.y == to.y {
             return true;
         }
-        let r = kind.collision_radius();
+        let r = kind.terrain_radius();
         let min = WorldPosition::new(from.x.min(to.x) - r, from.y.min(to.y) - r).tile_floor();
         let max = WorldPosition::new(from.x.max(to.x) + r, from.y.max(to.y) + r).tile_floor();
         let mut bridge = None;

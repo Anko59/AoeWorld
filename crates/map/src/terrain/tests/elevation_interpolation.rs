@@ -430,3 +430,39 @@ fn provider_reports_missing_corrupt_and_cancelled_neighbor_pages() {
         Err(EnvironmentPageError::Cancelled)
     );
 }
+
+#[test]
+fn source_axis_handles_the_full_coordinate_and_sample_range_exactly() {
+    for width in [1, 2, 65_535, i32::MAX] {
+        for samples in [1, 2, u16::MAX] {
+            for coordinate in [i32::MIN, 0, 1, width / 2, width - 1, width, i32::MAX] {
+                for position in [AxisPosition::TileCenter, AxisPosition::Corner] {
+                    let offset = i128::from(position == AxisPosition::TileCenter);
+                    let max = width - i32::from(position == AxisPosition::TileCenter);
+                    let denominator = 2 * i128::from(width);
+                    let numerator = ((2 * i128::from(coordinate.clamp(0, max)) + offset)
+                        * i128::from(samples)
+                        - i128::from(width))
+                    .clamp(0, i128::from(samples - 1) * denominator);
+                    let lower = (numerator / denominator) as u16;
+                    let expected = (
+                        lower,
+                        (lower + 1).min(samples - 1),
+                        (numerator % denominator) as u64,
+                        denominator as u64,
+                    );
+                    // A clamped low endpoint uses the same sample on both axes.
+                    let expected = if numerator == 0 {
+                        (0, 0, 0, denominator as u64)
+                    } else {
+                        expected
+                    };
+                    assert_eq!(
+                        source_axis_position(coordinate, samples, width, position),
+                        Some(expected)
+                    );
+                }
+            }
+        }
+    }
+}

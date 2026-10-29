@@ -144,3 +144,43 @@ fn ground_sheet_plumbing_coexists_with_generated_variety() {
     assert!(observed.contains(&(GroundMaterial::GrassDirt as u8)));
     assert!(observed.contains(&(GroundMaterial::WornGrass as u8)));
 }
+
+fn streamed(key: &[u8; 32], domain: &[u8], x: i32, y: i32, suffix: &[u8]) -> u64 {
+    let mut hash = blake3::Hasher::new_keyed(key);
+    hash.update(domain);
+    hash.update(&x.to_le_bytes());
+    hash.update(&y.to_le_bytes());
+    hash.update(suffix);
+    u64::from_le_bytes(hash.finalize().as_bytes()[..8].try_into().unwrap())
+}
+
+#[test]
+fn coordinate_hashes_keep_the_exact_keyed_byte_stream() {
+    let generator = generator(7);
+    for domain in [
+        b"".as_slice(),
+        b"gold-patch-v2",
+        b"forest-corner",
+        &[7; 119],
+    ] {
+        for (x, y) in [(0, 0), (-33, 17), (i32::MIN, i32::MAX)] {
+            assert_eq!(
+                unsigned_noise(generator.geography_key, domain, x, y),
+                streamed(&generator.geography_key, domain, x, y, &[])
+            );
+            for vertex in [0, 7, 15, 255] {
+                assert_eq!(
+                    geometry::cell_value(&generator, domain, (x, y), vertex),
+                    streamed(&generator.geography_key, domain, x, y, &[vertex])
+                );
+            }
+        }
+    }
+    let mut hash = blake3::Hasher::new_keyed(&generator.geography_key);
+    hash.update(b"resource-detail");
+    hash.update(&generator.procedural_seed.to_le_bytes());
+    assert_eq!(
+        resources::detail_key(&generator),
+        *hash.finalize().as_bytes()
+    );
+}

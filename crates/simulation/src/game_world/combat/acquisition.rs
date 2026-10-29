@@ -10,6 +10,62 @@ pub(crate) fn autonomous_kind(kind: UnitKind) -> bool {
 }
 
 impl GameWorld {
+    /// Autonomous melee fights the enemy already in reach before pursuing a
+    /// stale choice through the front. Explicit attack orders keep their target.
+    pub(super) fn refresh_contact_target(
+        &mut self,
+        index: usize,
+        mut attacker: super::Attacker,
+        goal: Option<super::tick::Goal>,
+        stats: &super::UnitCombat,
+        changed: &mut Vec<EntityId>,
+    ) -> super::Attacker {
+        let u = self.units[index].state;
+        let id = u.id;
+        let ready = self.tick.0 >= self.units[index].next_hit_tick;
+        if (attacker.origin.is_none() && attacker.resume.is_none())
+            || !ready
+            // First contact reacts immediately; repeat probes keep the bounded
+            // four-tick acquisition cadence after a fighter has struck.
+            || (self.units[index].next_hit_tick != 0
+                && !(self.tick.0 + u64::from(id.0)).is_multiple_of(4))
+            || self.combat.stats.targeting_scanned >= super::targeting::MAX_TARGET_INSPECTIONS / 2
+            || u.kind.is_naval()
+            || !Self::uses_melee_position(u.kind)
+        {
+            return attacker;
+        }
+        let range = super::super::navy::attack_range(stats);
+        let min = i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS;
+        if goal.is_some_and(|g| {
+            let distance = g.distance_squared(u.position);
+            distance >= min * min && distance <= range * range
+        }) {
+            return attacker;
+        }
+        if self.unit_observer(&u).is_none() {
+            return attacker;
+        }
+        let area = TargetArea {
+            player: u.player,
+            source: super::tick::Goal::Unit(u.position, u.kind.collision_radius()),
+            min,
+            max: range,
+            actor: id,
+            ram: u.kind == UnitKind::BatteringRam,
+        };
+        if let Some(target) = self.acquire_contact_target(&area) {
+            attacker.target = target;
+            attacker.repath_tick = self.tick.0;
+            attacker.far = None;
+            attacker.goal_tile = None;
+            self.combat.attackers.insert(id, attacker);
+            self.units[index].state.attack_target = Some(target);
+            changed.push(id);
+        }
+        attacker
+    }
+
     pub fn issue_stance(
         &mut self,
         player: PlayerId,
@@ -109,7 +165,7 @@ impl GameWorld {
     /// The sight and range window within which an idle unit looks for enemies.
     pub(super) fn acquisition_area(&self, u: &crate::GameUnit) -> Option<TargetArea> {
         let (_, _, los) = self.unit_observer(u)?;
-        let stats = self.unit_stats(u.id)?;
+        let stats = self.unit_state_stats(u);
         let range = super::super::navy::attack_range(&stats);
         let max = if u.stance == CombatStance::StandGround {
             range.min(i64::from(los) * MELEE_RANGE_SUBUNITS)

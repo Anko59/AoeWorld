@@ -3,10 +3,6 @@ use super::{GameWorld, GameWorldError};
 use aoe_core::{ChunkCoord, EntityId, TileCoord, WorldPosition};
 
 mod cells;
-mod followers;
-pub(crate) use followers::Followers;
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) use followers::Snapshot;
 mod destinations;
 pub(crate) use destinations::Destinations;
 mod idle;
@@ -20,89 +16,11 @@ impl GameWorld {
             return;
         };
         let tile = self.units[index].state.position.tile_floor();
-        if self.units[index].formation.is_some() {
+        if self.units[index].formation.is_some() || self.units[index].order.is_some() {
             self.idle_spacing.remove(id, tile);
-            self.followers.remove(id, tile);
-        } else if self.units[index].order.is_some() {
-            self.idle_spacing.remove(id, tile);
-            self.followers.insert(id, tile);
-        } else {
-            self.followers.remove(id, tile);
-            if self.units[index].state.hp > 0 && !self.embarked(id) {
-                self.idle_spacing.insert(id, tile);
-            }
+        } else if self.units[index].state.hp > 0 && !self.embarked(id) {
+            self.idle_spacing.insert(id, tile);
         }
-    }
-
-    /// Pause only a follower in the same heading octant. Other traffic uses
-    /// swept local avoidance. The id breaks a tie, so one leader proceeds.
-    /// Waiting discards this tick's whole speed credit instead of banking a dash.
-    pub(crate) fn following_unit(&self, index: usize) -> bool {
-        let Some(test) = self.following_probe(index) else {
-            return false;
-        };
-        let unit = &self.units[index].state;
-        let salt = self.tick.0.wrapping_add(u64::from(unit.id.0));
-        self.followers
-            .any_neighbour(unit.position.tile_floor(), salt, unit.id, test)
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn following_unit_in(&self, index: usize, neighbours: &Snapshot) -> bool {
-        let Some(test) = self.following_probe(index) else {
-            return false;
-        };
-        let unit = &self.units[index].state;
-        let salt = self.tick.0.wrapping_add(u64::from(unit.id.0));
-        neighbours.any_neighbour(unit.position.tile_floor(), salt, unit.id, test)
-    }
-
-    fn following_probe(&self, index: usize) -> Option<impl FnMut(EntityId) -> bool + '_> {
-        let unit = &self.units[index].state;
-        // Work approaches already have distinct reserved spots. Let their
-        // swept local refinement fan out instead of queuing every worker
-        // behind the first shared route edge from a stacked spawn/drop-off.
-        // Keep the same predicate for live and dense follower snapshots.
-        if self.has_work_task(unit.id) {
-            return None;
-        }
-        let order = self.units[index].order.as_ref()?;
-        if order.origin == order.waypoint {
-            return None;
-        }
-        let mut direction = None;
-        let is_leader = move |id| {
-            if id == unit.id {
-                return false;
-            }
-            let Some(&other_index) = self.lookup.get(&id) else {
-                return false;
-            };
-            let other = &self.units[other_index];
-            if other.state.hp == 0
-                || !other.state.moving
-                || unit.kind.is_naval() != other.state.kind.is_naval()
-            {
-                return false;
-            }
-            let (dx, dy) = delta(other.state.position, unit.position);
-            let clearance =
-                i64::from(unit.kind.collision_radius() + other.state.kind.collision_radius());
-            if dx * dx + dy * dy >= clearance * clearance {
-                return false;
-            }
-            let direction = *direction.get_or_insert_with(|| heading(order.origin, order.waypoint));
-            if other
-                .order
-                .as_ref()
-                .is_none_or(|o| heading(o.origin, o.waypoint) != direction)
-            {
-                return false;
-            }
-            let ahead = dx * direction.0 + dy * direction.1;
-            ahead > 0 || (ahead == 0 && id < unit.id)
-        };
-        Some(is_leader)
     }
 
     pub(crate) fn advance_spacing(&mut self, changed: &mut Vec<EntityId>) {
@@ -153,15 +71,20 @@ impl GameWorld {
                     continue;
                 };
                 let other = &self.units[other_index];
-                // A passer-by does not dislodge an idle villager from its work.
-                if other.state.hp == 0 || other.order.is_some() {
+                let yield_to_mover = other.order.is_some()
+                    && other.state.moving
+                    && other.state.player == unit.player
+                    && !unit.kind.is_naval()
+                    && unit.task == crate::UnitTask::Gathering;
+                if other.state.hp == 0 || (other.order.is_some() && !yield_to_mover) {
                     continue;
                 }
                 let (mut dx, mut dy) = delta(unit.position, other.state.position);
                 let clearance =
                     i64::from(unit.kind.collision_radius() + other.state.kind.collision_radius());
+                let preferred = clearance + if yield_to_mover { 96 } else { 0 };
                 if unit.kind.is_naval() != other.state.kind.is_naval()
-                    || dx * dx + dy * dy >= clearance * clearance
+                    || dx * dx + dy * dy >= preferred * preferred
                 {
                     continue;
                 }
@@ -220,6 +143,14 @@ impl GameWorld {
     fn separation_clear(&self, index: usize, at: WorldPosition) -> bool {
         let unit = self.units[index].state;
         let tile = at.tile_floor();
+        if self.economy.gatherers.get(&unit.id).is_some_and(|task| {
+            unit.task == crate::UnitTask::Gathering
+                && task
+                    .work_position
+                    .is_some_and(|spot| super::movement_step::slots::squared(at, spot) > 153 * 153)
+        }) {
+            return false;
+        }
         if !self.vassal_position_allowed(unit.id, at)
             || !self.body_position_clear(unit.kind, at)
             || !self.collision_sweep(index, unit.position, at, false, true)
@@ -240,8 +171,4 @@ fn delta(a: WorldPosition, b: WorldPosition) -> (i64, i64) {
         i64::from(a.x) - i64::from(b.x),
         i64::from(a.y) - i64::from(b.y),
     )
-}
-fn heading(a: WorldPosition, b: WorldPosition) -> (i64, i64) {
-    let (x, y) = delta(b, a);
-    (x.signum(), y.signum())
 }

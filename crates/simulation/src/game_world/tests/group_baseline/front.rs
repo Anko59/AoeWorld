@@ -106,19 +106,19 @@ fn run(w: &mut GameWorld, ids: &[EntityId], foes: &[EntityId], ticks: u32) -> Fr
             .iter()
             .map(|&id| w.unit(id).map(|u| u.position))
             .collect::<Vec<_>>();
-        // A blow lands during the tick, before that tick's steps.
-        let reach = ids
-            .iter()
-            .map(|&id| w.unit(id).and_then(|u| to_target(w, &u)))
-            .collect::<Vec<_>>();
+        // Movement/spacing precede combat. In this flat scene positions stay
+        // fixed afterwards: measure the actual victim and attacker at the blow,
+        // rather than the old target and positions before this tick's steps.
         w.advance();
         for (n, &f) in foes.iter().enumerate() {
             let Some(u) = w.unit(f) else { continue };
             if u.hp < hp[n] {
                 out.hits += 1;
                 let striker = u.last_hit.unwrap().attacker;
-                if let Some(at) = ids.iter().position(|&id| id == striker) {
-                    let d = reach[at].unwrap_or(0) * 100 / 1024;
+                if ids.contains(&striker)
+                    && let Some(attacker) = w.unit(striker)
+                {
+                    let d = subunits(attacker.position, u.position) * 100 / 1024;
                     out.max_hit_distance = out.max_hit_distance.max(d);
                 }
             }
@@ -186,14 +186,17 @@ fn attack_move_front_engages_alone_while_the_rest_march_on() {
     // Blows only ever landed within reach (0.96 tiles at most).
     assert_eq!(front.first_engage, Some(81));
     assert!(front.max_engage_distance <= 400, "{front:?}");
-    assert_eq!((front.at_2s, front.at_5s), ((10, 14, 14, 0), (17, 7, 7, 0)));
+    // PR 10 legal contact engages 19 members by five seconds.
+    assert_eq!((front.at_2s, front.at_5s), ((10, 14, 14, 0), (19, 5, 5, 0)));
+    // PR 10 approach strikes use the full one-tile reach without false poses.
     assert_eq!(
         (front.pose_out_of_reach_ticks, front.max_pose_distance),
-        (0, 99)
+        (0, 100)
     );
     assert!(front.max_hit_distance <= 100, "{front:?}");
     assert!(front.group_pace * 100 >= front.speed * 90, "{front:?}");
-    assert_eq!((front.cleared, front.engaged_total), (Some(372), 24));
+    // PR 10 reachable contact clears the front at tick 341.
+    assert_eq!((front.cleared, front.engaged_total), (Some(341), 24));
     // Every one of the 24 survives and stands at its slot.
     assert!(ids.iter().all(|&id| {
         w.unit(id).is_some_and(|u| u.hp > 0 && !u.moving)
@@ -218,12 +221,25 @@ fn a_stop_cancels_an_attack_move_members_way_back_to_its_slot() {
     let id = waiting.expect("a member waits to march on after its fight");
     w.issue_stop(PlayerId(0), id).unwrap();
     assert!(!w.combat.resuming.contains_key(&id));
+    assert_eq!(w.formation(id), None);
+    assert!(w.movement_order(id).is_none());
     let at = w.unit(id).unwrap().position;
+    // The faster fight can leave other combatants nearby at the first resume.
+    // Isolate cancellation from fresh acquisition and friendly idle pushes.
+    w.issue_stance(PlayerId(0), &[id], CombatStance::NoAttack)
+        .unwrap();
+    let others = w
+        .units()
+        .filter(|u| u.id != id)
+        .map(|u| u.id)
+        .collect::<Vec<_>>();
+    for other in others {
+        w.remove_unit(other);
+    }
     for _ in 0..200 {
         w.advance();
     }
-    // It stays where it was stopped, unless an enemy walks into its sight:
-    // here none is left near enough, so it stands still.
+    // The cancelled member has no way back to its slot.
     let u = w.unit(id).unwrap();
     assert_eq!(w.formation(id), None);
     assert!(!u.moving && u.position == at, "{u:?}");

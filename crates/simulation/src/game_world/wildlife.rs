@@ -264,9 +264,7 @@ impl GameWorld {
         if previous_tile != tile {
             self.collisions
                 .relocate(id, previous_tile, tile, unit.kind.is_naval());
-            if self.followers.contains(id) {
-                self.followers.relocate(id, previous_tile, tile);
-            } else if self.units[self.lookup[&id]].formation.is_none() {
+            if self.idle_spacing.contains(id) {
                 self.idle_spacing.relocate(id, previous_tile, tile);
             }
         }
@@ -313,7 +311,6 @@ impl GameWorld {
             self.units[self.lookup[&id]].state.kind.is_naval(),
         );
         self.idle_spacing.remove(id, at.tile_floor());
-        self.followers.remove(id, at.tile_floor());
         self.untrack_unit_cell(id, cell(at));
     }
 
@@ -324,7 +321,6 @@ impl GameWorld {
             self.units[self.lookup[&id]].state.kind.is_naval(),
         );
         self.idle_spacing.remove(id, at.tile_floor());
-        self.followers.remove(id, at.tile_floor());
         let slot = self.units[self.lookup[&id]].wildlife_slot;
         if let Some(units) = self.wildlife.unit_cells.get_mut(&unit_key(cell(at)))
             && let Some(entry) = units.get_mut(slot).filter(|u| u.id == id)

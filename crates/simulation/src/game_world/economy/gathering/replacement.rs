@@ -2,14 +2,58 @@
 use super::super::VILLAGE_RULES;
 use super::*;
 use aoe_map::ResourceNode;
-use std::collections::{BTreeSet, VecDeque};
 
 impl GameWorld {
+    /// Re-pick before an obstructed approach gives up. Four searches per tick
+    /// and one attempt per worker/second bound the local flood and route work.
+    pub(crate) fn repick_obstructed_gatherer(&mut self, id: EntityId) -> bool {
+        if self.economy.gather_repick_budget == 0 {
+            return false;
+        }
+        let Some(task) = self.economy.gatherers.get(&id) else {
+            return false;
+        };
+        if task.phase != GatherPhase::Approaching
+            || !task.crowded
+            || task.farm.is_some()
+            || task.animal.is_some()
+            || task.fish.is_some()
+            || self.tick.0 < task.retry_tick
+            || !self
+                .unit(id)
+                .is_some_and(|u| self.constrained_worksite(u.kind, task.tile))
+        {
+            return false;
+        }
+        self.economy.gather_repick_budget -= 1;
+        let Some(mut task) = self.economy.gatherers.remove(&id) else {
+            return false;
+        };
+        task.retry_tick = self.tick.0 + u64::from(self.config.tick_hz);
+        let changed = self.replacement_resource_in(id, &mut task, true);
+        self.economy.gatherers.insert(id, task);
+        if changed {
+            self.index_destination(id);
+        }
+        changed
+    }
+
     pub(super) fn replacement_resource(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
+        self.replacement_resource_in(id, task, false)
+    }
+
+    fn replacement_resource_in(
+        &mut self,
+        id: EntityId,
+        task: &mut GatherTask,
+        direct: bool,
+    ) -> bool {
         let Some(unit) = self.unit(id) else {
             return false;
         };
         let from = unit.position.tile_floor();
+        let reserved = self.economy.gatherers.reserved_target(&id);
+        let slots = jobs::slot_capacity(unit.kind);
         let dropoff = task
             .dropoff
             .or_else(|| self.nearest_dropoff(unit.player, from, task.kind))
@@ -33,16 +77,19 @@ impl GameWorld {
                             .iter()
                             .copied()
                             .filter(|n| {
-                                self.managed_target_allowed(
-                                    id,
-                                    position(n.tile).unwrap_or(unit.position),
-                                ) && n.id != task.node
+                                n.id != task.node
                                     && n.kind == task.kind
                                     && (n.kind != ResourceKind::Food
                                         || n.object == aoe_map::ObjectKind::ForageBush)
-                                    && overlay.resource_available(*n)
-                                    && self.node_has_work_slot(n.id, id)
                                     && distance_squared(n.tile, task.tile) <= (radius as u64).pow(2)
+                                    && overlay.resource_available(*n)
+                                    && (self.economy.gatherers.count_target(WorkTarget::Node(n.id))
+                                        - usize::from(reserved == Some(WorkTarget::Node(n.id))))
+                                        < slots
+                                    && self.managed_target_allowed(
+                                        id,
+                                        position(n.tile).unwrap_or(unit.position),
+                                    )
                             }),
                     );
                 }
@@ -82,45 +129,44 @@ impl GameWorld {
                 .min_by_key(|tile| (distance_squared(from, *tile), tile.y, tile.x))
             })
             .unwrap_or(from);
-        let mut seen = BTreeSet::from([work]);
-        let mut queue = VecDeque::from([work]);
-        while let Some(tile) = queue.pop_front() {
-            for (dx, dy) in [
-                (0, -1),
-                (-1, 0),
-                (1, 0),
-                (0, 1),
-                (-1, -1),
-                (1, -1),
-                (-1, 1),
-                (1, 1),
-            ] {
-                let next = TileCoord::new(tile.x + dx, tile.y + dy);
-                if seen.contains(&next) || seen.len() >= 1024 {
-                    continue;
-                }
-                if self.building_step_clear(tile, next)
-                    && self.unit_step_clear(unit.kind, tile, next).unwrap_or(false)
-                {
-                    seen.insert(next);
-                    queue.push_back(next);
-                }
-            }
-        }
-        let mut attempts = 0;
-        for node in candidates {
-            let rect = aoe_core::TileRect::new(
-                node.tile,
-                TileCoord::new(node.tile.x + 1, node.tile.y + 1),
-            );
-            if !perimeter(rect).iter().any(|t| seen.contains(t)) {
+        let reachable = self.replacement_reach(unit.kind, work);
+        let seen = &reachable.tiles;
+        let mut choices = candidates
+            .into_iter()
+            .filter(|node| {
+                let rect = aoe_core::TileRect::from_xywh(node.tile.x, node.tile.y, 1, 1);
+                perimeter(rect)
+                    .iter()
+                    .any(|tile| seen.binary_search(tile).is_ok())
+            })
+            .take(8)
+            .filter_map(|node| {
+                self.resource_work_spot(id, node.tile).map(|at| {
+                    let key = (
+                        dropoff.map_or(0, |rect| {
+                            super::super::dropoff::ring_distance(rect, node.tile)
+                        }),
+                        !self.interaction_line_clear(unit.kind, unit.position, at),
+                        crate::game_world::movement_step::slots::squared(unit.position, at),
+                        node.id,
+                    );
+                    (key, node)
+                })
+            })
+            .collect::<Vec<_>>();
+        choices.sort_unstable_by_key(|(key, _)| *key);
+        for (key, node) in choices {
+            if direct
+                && (key.1
+                    || task.work_position.is_some_and(|at| {
+                        key.2
+                            > crate::game_world::movement_step::slots::squared(unit.position, at)
+                                + 1024 * 1024
+                    }))
+            {
                 continue;
             }
-            attempts += 1;
-            if self
-                .approach_resource_in(id, node.tile, Some(&seen))
-                .is_ok()
-            {
+            if self.approach_resource_in(id, node.tile, Some(seen)).is_ok() {
                 task.work_position = self
                     .movement_order(id)
                     .map(|o| o.destination)
@@ -136,9 +182,6 @@ impl GameWorld {
                     self.units[index].state.task = UnitTask::Moving;
                 }
                 return true;
-            }
-            if attempts == 8 {
-                break;
             }
         }
         false

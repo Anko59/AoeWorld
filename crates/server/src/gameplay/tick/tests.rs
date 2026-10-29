@@ -64,10 +64,12 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// and every workload, replay and visibility assertion stay unchanged.
 const PINNED: [(usize, u64); SEATS + 1] = [
     (407, 11844932792564418408),
-    (186, 11468349613711209831),
+    // PR 10 legal work contact changes gathering and fog updates.
+    (187, 11019558540894674702),
     (60, 2503450107005547018),
     (176, 11250701468056754810),
-    (420, 9409705769901466855),
+    // PR 10 legal contacts and unavailable land-work queues change this stream.
+    (420, 3637138109988008355),
     (407, 9729438505887249003),
 ];
 

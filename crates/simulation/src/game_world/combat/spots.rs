@@ -3,23 +3,82 @@
 use super::tick::Goal;
 use crate::game_world::movement_step::slots::{perimeter_positions, squared};
 use crate::{GameWorld, UnitKind};
-use aoe_core::{EntityId, TileCoord, WorldPosition};
+use aoe_core::{EntityId, WorldPosition};
 
 impl GameWorld {
-    pub(super) fn melee_positions(&self, id: EntityId, goal: &Goal) -> Vec<WorldPosition> {
-        let Some(unit) = self.unit(id) else {
-            return Vec::new();
+    pub(super) fn can_strike_on_approach(
+        &self,
+        id: EntityId,
+        goal: &Goal,
+        distance: i64,
+        range: i64,
+    ) -> bool {
+        distance <= range * range
+            && matches!(goal, Goal::Unit(..))
+            && self.combat.attackers.get(&id).is_some_and(|a| {
+                a.origin.is_some() || a.resume.is_some() || self.crowded_melee_contact(id, goal)
+            })
+    }
+
+    /// Reuse contact pressure only while this mover owns the sequential turn.
+    pub(crate) fn melee_contact_traffic(&self, id: EntityId, goal: &Goal) -> bool {
+        if let Some((cached, at, clear)) = self.melee_traffic_clearance
+            && cached == id
+            && self
+                .lookup
+                .get(&id)
+                .is_some_and(|&index| self.units[index].state.position == at)
+        {
+            return clear;
+        }
+        self.crowded_melee_contact(id, goal)
+    }
+
+    pub(crate) fn crowded_melee_contact(&self, id: EntityId, goal: &Goal) -> bool {
+        let Goal::Unit(_, target_radius) = *goal else {
+            return false;
         };
-        let Some(stats) = self.unit_stats(id) else {
-            return Vec::new();
+        let Some(&index) = self.lookup.get(&id) else {
+            return false;
         };
-        let range = super::super::navy::attack_range(&stats);
+        let kind = self.units[index].state.kind;
+        if kind.is_naval() || !Self::uses_melee_position(kind) {
+            return false;
+        }
+        // Integer circumference (~6r) divided by one full body diameter.
+        let radius = kind.collision_radius();
+        let capacity = ((radius + target_radius) * 6 / (2 * radius)).max(2) as usize;
+        self.friendly_contact_pressure(index, capacity)
+    }
+
+    pub(super) fn approaching_melee_slot(&self, index: usize) -> bool {
+        let unit = self.units[index].state;
+        Self::uses_melee_position(unit.kind)
+            && (self.units[index]
+                .order
+                .is_some_and(|o| squared(unit.position, o.destination) > 64 * 64)
+                || !self.arrival_position_free(index))
+    }
+
+    pub(super) fn melee_positions(
+        &self,
+        unit: &crate::GameUnit,
+        range: i64,
+        goal: &Goal,
+    ) -> Vec<WorldPosition> {
+        let id = unit.id;
         let mut points = match goal {
             Goal::Building(rect) => perimeter_positions(*rect, unit.kind),
-            Goal::Unit(at, target_radius) => circle_positions(
-                *at,
-                (unit.kind.collision_radius() + target_radius + 8).min(range as i32),
-            ),
+            Goal::Unit(at, target_radius) => {
+                let contact = (unit.kind.collision_radius() + target_radius + 8).min(range as i32);
+                let mut points = circle_positions(*at, contact);
+                // Contact points guide the final approach, but a free point
+                // anywhere in actual reach also admits a crowded fighter.
+                if contact < range as i32 && self.crowded_melee_contact(id, goal) {
+                    points.extend(circle_positions(*at, range as i32));
+                }
+                points
+            }
         };
         let valid = |at: &WorldPosition| {
             let at = *at;
@@ -57,16 +116,13 @@ impl GameWorld {
         let range = super::super::navy::attack_range(&stats);
         !Self::uses_melee_position(unit.kind)
             || goal.distance_squared(unit.position) <= range * range
-            || self.melee_position_free(id, &goal)
+            || self.melee_position_free(&unit, range, &goal)
     }
 
-    /// `melee_positions(id, goal).any(interaction_point_free)` without
+    /// `melee_positions(unit, range, goal).any(interaction_point_free)` without
     /// building or sorting the list: the first free legal spot ends the scan.
-    fn melee_position_free(&self, id: EntityId, goal: &Goal) -> bool {
-        let (Some(unit), Some(stats)) = (self.unit(id), self.unit_stats(id)) else {
-            return false;
-        };
-        let range = super::super::navy::attack_range(&stats);
+    fn melee_position_free(&self, unit: &crate::GameUnit, range: i64, goal: &Goal) -> bool {
+        let id = unit.id;
         let valid = |at: WorldPosition| {
             goal.distance_squared(at) <= range * range
                 && self.config.valid_ground_position(at)
@@ -100,8 +156,10 @@ impl GameWorld {
             ),
         };
         match (scan(ring), goal) {
-            (Some(free), _) => free,
-            (None, Goal::Unit(at, _)) => scan(circle_positions(*at, range as i32)) == Some(true),
+            (Some(true), _) => true,
+            (Some(false), _) => self.crowded_melee_contact(id, goal),
+            (None, Goal::Unit(at, _)) => scan(circle_positions(*at, range as i32))
+                .is_some_and(|free| free || self.crowded_melee_contact(id, goal)),
             (None, _) => false,
         }
     }
@@ -128,35 +186,6 @@ impl GameWorld {
                     let range = super::super::navy::attack_range(&stats);
                     goal.distance_squared(u.position) > range * range
                 })
-    }
-
-    /// A bounded static ray proves a cheap nearby endpoint. Other endpoints
-    /// use the shared full-search budget instead of unbounded rays.
-    pub(super) fn attack_line_clear(
-        &self,
-        kind: UnitKind,
-        from: WorldPosition,
-        to: WorldPosition,
-    ) -> bool {
-        let a = from.tile_floor();
-        let b = to.tile_floor();
-        let dx = b.x - a.x;
-        let dy = b.y - a.y;
-        let count = dx.abs().max(dy.abs());
-        if count > 64 {
-            return false;
-        }
-        let mut previous = a;
-        for n in 1..=count.max(1) {
-            let tile = TileCoord::new(a.x + dx * n / count.max(1), a.y + dy * n / count.max(1));
-            if !self.building_step_clear(previous, tile)
-                || !self.unit_step_clear(kind, previous, tile).unwrap_or(false)
-            {
-                return false;
-            }
-            previous = tile;
-        }
-        true
     }
 
     pub(super) fn uses_melee_position(kind: UnitKind) -> bool {

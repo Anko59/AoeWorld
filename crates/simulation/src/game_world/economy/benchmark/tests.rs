@@ -90,9 +90,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Rear-only open-ground cohesion changes formation progress at tick 384.
-        // The workload includes formation marches; the 1/4-worker comparison stays.
-        "4967b8870d345656515fd7ce78d9b62d5e11a4bc38da7d75d5816c063a92c5e1"
+        // PR 10 ends unavailable land-work queues and hashes legal crowded contact.
+        "888ae8bff22a12708cca00c7c45be5ed7086ffcb5c51aedeb8e3ce2157428c42"
     );
 }
 

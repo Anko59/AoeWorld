@@ -394,3 +394,58 @@ fn deferred_unreachable_resource_ends_the_gather_job() {
     }
     panic!("an unreachable resource must stop instead of restarting its search");
 }
+
+#[test]
+fn work_positions_follow_new_obstacles_and_current_bodies() {
+    let mut w = GameWorld::new(WorldConfig::new(128, 128, Seed(1)).unwrap()).unwrap();
+    let at = position(TileCoord::new(40, 40)).unwrap();
+    let id = w.spawn_villager(PlayerId(0), at).unwrap();
+    let target = TileCoord::new(50, 50);
+    let first = w.resource_work_spot(id, target).unwrap();
+    let blocker = w.spawn_villager(PlayerId(0), first).unwrap();
+    let occupied = w.resource_work_spot(id, target).unwrap();
+    assert_ne!(occupied, first, "live bodies are never cached as free");
+    w.remove_unit(blocker);
+    assert_eq!(w.resource_work_spot(id, target), Some(first));
+    let rect = TileRect::from_xywh(first.tile_floor().x, first.tile_floor().y, 2, 2);
+    w.insert_building(PlayerId(0), super::super::BuildingKind::House, rect, true)
+        .unwrap();
+    let changed = w.resource_work_spot(id, target);
+    assert_ne!(
+        changed,
+        Some(first),
+        "new ground obstruction invalidates the perimeter"
+    );
+    assert!(changed.is_none_or(|at| w.interaction_static_clear(UnitKind::Villager, at)));
+}
+
+#[test]
+fn replacement_reach_follows_closed_and_reopened_ground() {
+    let mut w = GameWorld::new(WorldConfig::new(128, 128, Seed(1)).unwrap()).unwrap();
+    let work = TileCoord::new(40, 40);
+    let near = TileCoord::new(41, 40);
+    assert!(
+        w.replacement_reach(UnitKind::Villager, work)
+            .tiles
+            .contains(&near)
+    );
+    let house = w
+        .insert_building(
+            PlayerId(0),
+            super::super::BuildingKind::House,
+            TileRect::from_xywh(41, 40, 2, 2),
+            true,
+        )
+        .unwrap();
+    assert!(
+        !w.replacement_reach(UnitKind::Villager, work)
+            .tiles
+            .contains(&near)
+    );
+    w.remove_building(house);
+    assert!(
+        w.replacement_reach(UnitKind::Villager, work)
+            .tiles
+            .contains(&near)
+    );
+}
