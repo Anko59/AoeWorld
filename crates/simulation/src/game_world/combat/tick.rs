@@ -328,10 +328,7 @@ impl GameWorld {
         let stats = self
             .unit_stats(attacker_id)
             .unwrap_or(*unit_combat(self.units[attacker_index].state.kind));
-        let bonus = self
-            .unit(target)
-            .map_or(0, |u| super::military::class_bonus(stats.kind, u.kind))
-            + self.naval_damage_bonus(stats.kind, target);
+        let bonus = self.unit_damage_bonus(stats.kind, target);
         if stats.kind == crate::UnitKind::DemolitionShip {
             self.detonate(attacker_id, target, changed);
             return;
@@ -424,35 +421,13 @@ impl GameWorld {
             }
         } else if let Some(building) = self.building(target) {
             let armour = super::table::age_armour(building.kind, building.age);
-            let masonry = self.has_researched(building.player, crate::Tech::Masonry)
-                && !matches!(
-                    building.kind,
-                    crate::BuildingKind::Farm
-                        | crate::BuildingKind::PalisadeWall
-                        | crate::BuildingKind::PalisadeGate
-                );
-            let class_armour = if building.kind == crate::BuildingKind::Castle {
-                8
-            } else {
-                0
-            } + if masonry { 3 } else { 0 };
-            let building_bonus =
-                self.unit(attacker_id)
-                    .map_or(bonus.saturating_sub(class_armour), |u| match u.kind {
-                        crate::UnitKind::BatteringRam => 150_u16.saturating_sub(class_armour),
-                        crate::UnitKind::Mangonel => bonus.saturating_sub(class_armour),
-                        // Standard-building class 21 is distinct from the siege
-                        // building class 11 armour improved by Masonry.
-                        crate::UnitKind::LongSwordsman => 3,
-                        crate::UnitKind::Pikeman => 1,
-                        _ => bonus,
-                    });
+            let masonry = self.building_has_masonry(building);
             let damage = super::table::damage_with_bonus(
                 attack,
                 kind,
                 armour.melee_armour + i16::from(masonry),
                 armour.pierce_armour + u16::from(masonry),
-                building_bonus,
+                bonus,
             );
             let Some(building) = self.economy.buildings.get_mut(&target) else {
                 return;

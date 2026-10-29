@@ -134,6 +134,7 @@ impl GameWorld {
             let Some(area) = self.building_target_area(id, arrow) else {
                 continue;
             };
+            let tower_kind = tower.kind;
             let manual = self
                 .combat
                 .tower_targets
@@ -155,13 +156,7 @@ impl GameWorld {
                         + (u64::from(arrow.period_centiseconds) * u64::from(self.config.tick_hz))
                             .div_ceil(100),
                 );
-                let bonus = self.unit(target).map_or(0, |u| {
-                    if matches!(u.kind, crate::UnitKind::Spearman | crate::UnitKind::Pikeman) {
-                        2
-                    } else {
-                        0
-                    }
-                });
+                let bonus = self.building_damage_bonus(tower_kind, target);
                 for _ in 0..arrows {
                     self.launch_projectile(
                         id,

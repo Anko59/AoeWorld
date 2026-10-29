@@ -33,9 +33,7 @@ impl GameWorld {
         for (id, d) in hits {
             let unit = i64::from(FIXED_SUBUNITS_PER_TILE);
             let divisor = if d <= unit * unit / 4 { 1 } else { 2 };
-            let bonus = self.unit(id).map_or(0, |u| {
-                super::military::class_bonus(UnitKind::Mangonel, u.kind)
-            });
+            let bonus = self.unit_damage_bonus(UnitKind::Mangonel, id);
             self.resolve_hit(
                 (p.attacker, p.player),
                 id,
@@ -63,7 +61,7 @@ impl GameWorld {
                     (p.attacker, p.player),
                     id,
                     p.attack,
-                    35,
+                    self.unit_damage_bonus(UnitKind::Mangonel, id),
                     crate::DamageKind::Melee,
                     changed,
                 );

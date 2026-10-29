@@ -86,39 +86,22 @@ pub(super) struct NavalDamage {
     pub(super) range_hundredths: u16,
     pub(super) contact_hundredths: u16,
     pub(super) blast_hundredths: u16,
-    pub(super) ship_attack: u16,
-    pub(super) ship_armour: u16,
-    pub(super) building_attack: u16,
-    pub(super) melee_attack: u16,
 }
 
-// Class 16 is ships, 11 buildings, 4 melee, 3 pierce. Demo's zero
-// weapon range meets the two half-tile collision hulls at one tile.
+// Combat classes belong to combat/classes; these are weapon geometry only.
 pub(super) const DAMAGE: [NavalDamage; 5] = [
-    damage(500, 0, 0, 8, 0, 6, 0),
-    damage(249, 0, 0, 3, 4, 2, 1),
-    damage(0, 100, 250, 0, 3, 220, 0),
-    damage(0, 0, 0, 0, 0, 0, 0),
-    damage(600, 0, 0, 9, 0, 7, 0),
+    damage(500, 0, 0),
+    damage(249, 0, 0),
+    damage(0, 100, 250),
+    damage(0, 0, 0),
+    damage(600, 0, 0),
 ];
 
-const fn damage(
-    range: u16,
-    contact: u16,
-    blast: u16,
-    ship: u16,
-    armour: u16,
-    building: u16,
-    melee: u16,
-) -> NavalDamage {
+const fn damage(range: u16, contact: u16, blast: u16) -> NavalDamage {
     NavalDamage {
         range_hundredths: range,
         contact_hundredths: contact,
         blast_hundredths: blast,
-        ship_attack: ship,
-        ship_armour: armour,
-        building_attack: building,
-        melee_attack: melee,
     }
 }
 

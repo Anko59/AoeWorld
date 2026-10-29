@@ -49,11 +49,10 @@ generic civilization. Population-only diagnostics keep configured movement.
 
 ## Damage and ranged hits
 
-The DE class subset is melee (4), pierce (3), cavalry (8), archer (15) and
-spear-line (27). Spearmen add 15 against cavalry; Skirmishers add three against
-archers (including Skirmishers) and Spearmen; Archers add three against Spearmen.
-Class components are reduced independently, then total damage is at least one.
-Other DE attack/armour classes and civilization bonuses remain unimplemented.
+The [hidden bonus tables](gameplay/hidden-bonuses.md) document the complete
+current roster's attack and armour classes. Components are reduced
+independently, then total damage is at least one. Civilization bonuses remain
+outside the generic civilization rules.
 
 Ranged combat uses **delayed hits with visible native projectiles**. DE
 projectiles **363** (Archer), **365** (Skirmisher) and **504** (tower) all move
