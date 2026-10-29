@@ -1,6 +1,33 @@
 use super::*;
 
 #[test]
+fn hidden_naval_class_damage_includes_ship_armour_and_separate_fire_melee() {
+    for (victim, galley, war_galley, fire) in [
+        (UnitKind::FishingShip, 8, 9, 3),
+        (UnitKind::Galley, 8, 9, 4),
+        (UnitKind::WarGalley, 8, 9, 4),
+        (UnitKind::FireShip, 2, 3, 1),
+        (UnitKind::DemolitionShip, 5, 6, 1),
+        (UnitKind::TransportShip, 8, 9, 3),
+    ] {
+        let mut w = coast();
+        let (_, water) = bank(&w);
+        let target = ship(&mut w, victim, water, 1);
+        for (attacker, expected) in [
+            (UnitKind::Galley, galley),
+            (UnitKind::WarGalley, war_galley),
+            (UnitKind::FireShip, fire),
+        ] {
+            assert_eq!(
+                w.unit_damage_bonus(attacker, target),
+                expected,
+                "{attacker:?} -> {victim:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn galleys_and_fire_ships_damage_enemy_ships_on_water() {
     for kind in [UnitKind::Galley, UnitKind::WarGalley, UnitKind::FireShip] {
         let mut world = coast();

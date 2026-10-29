@@ -11,6 +11,8 @@ pub(crate) mod acquisition;
 mod approach;
 #[path = "combat/castle/mod.rs"]
 mod castle;
+#[path = "combat/classes/mod.rs"]
+mod classes;
 mod cost;
 mod hash;
 mod lifecycle;

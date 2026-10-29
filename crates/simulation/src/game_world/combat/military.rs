@@ -77,28 +77,7 @@ pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u64) ->
 }
 
 pub fn class_bonus(attacker: UnitKind, victim: UnitKind) -> u16 {
-    let cavalry = matches!(
-        victim,
-        UnitKind::Scout | UnitKind::Knight | UnitKind::LightCavalry
-    );
-    let archer = matches!(
-        victim,
-        UnitKind::Archer | UnitKind::Crossbowman | UnitKind::Skirmisher | UnitKind::EliteSkirmisher
-    );
-    let spear = matches!(victim, UnitKind::Spearman | UnitKind::Pikeman);
-    match attacker {
-        UnitKind::Spearman if cavalry => 15,
-        UnitKind::Pikeman if cavalry => 22,
-        UnitKind::Skirmisher if archer || spear => 3,
-        UnitKind::EliteSkirmisher if archer || spear => 4,
-        UnitKind::Archer | UnitKind::Crossbowman if spear => 3,
-        UnitKind::LightCavalry if victim == UnitKind::Monk => 10,
-        UnitKind::BatteringRam if matches!(victim, UnitKind::Mangonel | UnitKind::BatteringRam) => {
-            40
-        }
-        UnitKind::Mangonel if matches!(victim, UnitKind::Mangonel | UnitKind::BatteringRam) => 12,
-        _ => 0,
-    }
+    super::classes::unit_bonus(attacker, victim)
 }
 
 impl GameWorld {

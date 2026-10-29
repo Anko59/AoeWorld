@@ -8,6 +8,7 @@ mod approach;
 mod benchmark;
 mod buildings;
 mod garrison;
+mod hidden_bonuses;
 mod military;
 mod research_tests;
 mod scale;
