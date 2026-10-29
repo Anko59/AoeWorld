@@ -13,6 +13,21 @@ pub const FARM_TEXTURES: &[&str] = &["g_fm1", "g_fm2"];
 
 pub const SELECTION: &[Item] = &[
     Item {
+        building: "general",
+        role: "idle",
+        stem: "u_cav_hero_joan_idleA",
+    },
+    Item {
+        building: "general",
+        role: "walk",
+        stem: "u_cav_hero_joan_walkA",
+    },
+    Item {
+        building: "general",
+        role: "death",
+        stem: "u_cav_hero_joan_deathA",
+    },
+    Item {
         building: "vassal",
         role: "idle",
         stem: "u_king_west_idleA",

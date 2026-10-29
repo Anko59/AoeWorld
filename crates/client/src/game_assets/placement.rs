@@ -8,7 +8,11 @@ pub(super) fn plan(
     domains: &[AtlasDomain],
 ) -> Result<Vec<Placement>, JsValue> {
     if selected.len() > MAX_SELECTED_FRAMES || selected.len() != domains.len() {
-        return Err(JsValue::from_str("Invalid selected frame count"));
+        return Err(JsValue::from_str(&format!(
+            "Invalid selected frame count: {} frames, {} domains, limit {MAX_SELECTED_FRAMES}",
+            selected.len(),
+            domains.len()
+        )));
     }
     // Fixed scratch bounds metadata allocation even for malformed source input.
     let mut extents = [FrameExtent {

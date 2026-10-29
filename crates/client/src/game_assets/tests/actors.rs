@@ -3,6 +3,64 @@ use aoe_assets::catalog::units::{Pose, SPRITES};
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn base_cavalry_cells_are_reused_without_changing_light_cavalry_sampling() {
+    let mut value = manifest::fixture();
+    let template = value["frames"][0].clone();
+    value["frames"] = [3004, 3008]
+        .into_iter()
+        .flat_map(|id| {
+            let template = template.clone();
+            (0..50).map(move |frame| {
+                let mut f = template.clone();
+                f["source"] = format!("graphics.drs:[32, 112, 108, 115]:{id}").into();
+                f["frame"] = frame.into();
+                f["x"] = (frame * 3).into();
+                f
+            })
+        })
+        .collect::<Vec<_>>()
+        .into();
+    let manifest: Manifest = serde_json::from_value(value).unwrap();
+    let mut selected = vec![0, 10, 20, 30, 40];
+    selected.extend(50..100);
+    let mut domains = vec![AtlasDomain::Objects; selected.len()];
+    let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
+    assert_eq!(
+        selected.len(),
+        55,
+        "both base groups already reside in the atlas"
+    );
+    let places = placement::plan(&manifest, &selected, &domains).unwrap();
+    let records: Vec<_> = selected
+        .iter()
+        .zip(places)
+        .map(|(&i, p)| placement::record(&manifest.frames[i], p))
+        .collect();
+    let groups = actors::resolve(&manifest, &selected, &records, &ranges);
+    for pose in [Pose::LightCavalryStand, Pose::LightCavalryWalk] {
+        let source = SPRITES[pose as usize];
+        let expected: Vec<_> = (0..5)
+            .flat_map(|row| {
+                (0..usize::from(source.stride))
+                    .step_by(usize::from(source.sample_step()))
+                    .map(move |phase| source.source_frame(row, phase))
+            })
+            .collect();
+        assert_eq!(groups[pose as usize].len(), expected.len());
+        for (actual, frame) in groups[pose as usize].iter().zip(expected) {
+            let index = manifest
+                .frames
+                .iter()
+                .position(|f| f.source == source.manifest_source() && f.frame == frame as u32)
+                .unwrap();
+            let slot = selected.iter().position(|&i| i == index).unwrap();
+            assert_eq!(actual.atlas.uv, records[slot].atlas.uv);
+            assert_eq!(actual.anchor, records[slot].anchor);
+        }
+    }
+}
+
+#[wasm_bindgen_test]
 fn sheep_neutral_and_owned_frames_share_sources_but_have_distinct_player_colours() {
     let source = SPRITES[Pose::SheepStand as usize];
     let mut value = manifest::fixture();
@@ -198,4 +256,63 @@ fn projectile_atlas_uses_level_flight_frames_in_each_native_direction() {
             .collect::<Vec<_>>();
         assert_eq!(actual, expected);
     }
+}
+
+#[wasm_bindgen_test]
+fn general_hero_groups_select_bounded_native_facings_and_refuse_partial_art() {
+    let poses = [
+        Pose::GeneralStand,
+        Pose::GeneralWalk,
+        Pose::GeneralAttack,
+        Pose::GeneralDie,
+        Pose::GeneralDecay,
+    ];
+    let mut value = manifest::fixture();
+    let template = value["frames"][0].clone();
+    value["frames"] = poses
+        .into_iter()
+        .map(|pose| SPRITES[pose as usize])
+        .map(|source| (source.id, source))
+        .collect::<std::collections::BTreeMap<_, _>>()
+        .into_values()
+        .flat_map(|source| {
+            let template = template.clone();
+            (0..source.frames()).map(move |frame| {
+                let mut cell = template.clone();
+                cell["source"] = source.manifest_source().into();
+                cell["frame"] = frame.into();
+                cell
+            })
+        })
+        .collect::<Vec<_>>()
+        .into();
+    let manifest: Manifest = serde_json::from_value(value.clone()).unwrap();
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
+    let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
+    assert_eq!(selected.len(), 15);
+    for pose in poses {
+        let source = SPRITES[pose as usize];
+        let range = ranges[pose as usize].clone().unwrap();
+        let actual: Vec<_> = selected[range]
+            .iter()
+            .map(|&i| manifest.frames[i].frame)
+            .collect();
+        let expected: Vec<_> = (0..5)
+            .flat_map(|row| {
+                (0..usize::from(source.stride))
+                    .step_by(usize::from(source.sample_step()))
+                    .map(move |phase| source.source_frame(row, phase) as u32)
+            })
+            .collect();
+        assert_eq!(actual, expected);
+    }
+    let mut extra = value["frames"][0].clone();
+    extra["frame"] = 5.into();
+    value["frames"].as_array_mut().unwrap().push(extra);
+    let unsupported: Manifest = serde_json::from_value(value.clone()).unwrap();
+    assert!(actors::select(&unsupported, &mut Vec::new(), &mut Vec::new()).is_err());
+    value["frames"].as_array_mut().unwrap().pop();
+    value["frames"].as_array_mut().unwrap().pop();
+    let partial: Manifest = serde_json::from_value(value).unwrap();
+    assert!(actors::select(&partial, &mut Vec::new(), &mut Vec::new()).is_err());
 }

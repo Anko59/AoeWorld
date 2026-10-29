@@ -190,3 +190,26 @@ fn every_shooting_attack_releases_inside_its_animation() {
     assert_eq!(release_frame(Pose::KnightAttack), None);
     assert_eq!(release_frame(Pose::MangonelAttack), None);
 }
+
+#[test]
+fn general_uses_mounted_joan_poses_with_bounded_direction_sampling() {
+    for (pose, name) in [
+        (Pose::GeneralStand, "idle"),
+        (Pose::GeneralWalk, "walk"),
+        (Pose::GeneralAttack, "idle"),
+        (Pose::GeneralDie, "death"),
+        (Pose::GeneralDecay, "death"),
+    ] {
+        let s = SPRITES[pose as usize];
+        assert_eq!(
+            s.manifest_source(),
+            format!("de/u_cav_hero_joan_{name}A_x1.sld")
+        );
+        assert_eq!(s.selected_frames(), 5);
+        for row in 0..5 {
+            for phase in (0..usize::from(s.stride)).step_by(usize::from(s.sample_step())) {
+                assert!(s.source_frame(row, phase) < s.frames() as usize);
+            }
+        }
+    }
+}

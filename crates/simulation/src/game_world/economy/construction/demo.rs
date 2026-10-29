@@ -4,6 +4,72 @@ use crate::{BuildingKind, EconomyError, GameWorld, Stockpile};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 
 impl GameWorld {
+    /// Four-times-clock General showcase: a Castle, unclaimed role-balanced
+    /// soldiers and a distant enemy group. Training and all orders stay real.
+    pub fn general_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+        use crate::UnitKind;
+        let mut config =
+            WorldConfig::new(256, 256, seed).map_err(|_| EconomyError::InvalidFootprint)?;
+        config.tick_hz = 5;
+        let mut world = Self::new(config)?;
+        let primary = world.initialize_village(PlayerId(0), TileCoord::new(80, 128))?;
+        world.issue_move(
+            primary,
+            aoe_core::WorldPosition::from_tile_center(TileCoord::new(118, 138))
+                .map_err(|_| EconomyError::InvalidFootprint)?,
+        )?;
+        world.complete_research(PlayerId(0), crate::Tech::FeudalAge, &mut Vec::new());
+        world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
+        if let Some(player) = world.economy.players.get_mut(&PlayerId(0)) {
+            player.stockpile = Stockpile {
+                food: 10_000,
+                wood: 10_000,
+                gold: 10_000,
+                stone: 10_000,
+            };
+        }
+        world.insert_building(
+            PlayerId(0),
+            BuildingKind::Castle,
+            TileRect::from_xywh(98, 124, 4, 4),
+            true,
+        )?;
+        for n in 0..4 {
+            for (kind, x) in [(UnitKind::Militia, 112), (UnitKind::Archer, 106)] {
+                world.spawn_kind(
+                    PlayerId(0),
+                    kind,
+                    aoe_core::WorldPosition::from_tile_center(TileCoord::new(x, 130 + n * 2))
+                        .map_err(|_| EconomyError::InvalidFootprint)?,
+                )?;
+            }
+        }
+        for (kind, x, y) in [
+            (UnitKind::BatteringRam, 102, 132),
+            (UnitKind::Knight, 110, 125),
+            (UnitKind::Knight, 110, 141),
+            (UnitKind::Scout, 118, 130),
+            (UnitKind::Scout, 118, 134),
+        ] {
+            world.spawn_kind(
+                PlayerId(0),
+                kind,
+                aoe_core::WorldPosition::from_tile_center(TileCoord::new(x, y))
+                    .map_err(|_| EconomyError::InvalidFootprint)?,
+            )?;
+        }
+        for n in 0..5 {
+            let id = world.spawn_kind(
+                PlayerId(1),
+                UnitKind::Militia,
+                aoe_core::WorldPosition::from_tile_center(TileCoord::new(166, 128 + n * 2))
+                    .map_err(|_| EconomyError::InvalidFootprint)?,
+            )?;
+            world.issue_stance(PlayerId(1), &[id], aoe_core::CombatStance::StandGround)?;
+        }
+        Ok((world, primary))
+    }
+
     /// Local Castle economy fixture; production, garrison and management use
     /// exactly the same orders as a match. The existing demo clock runs 4x.
     pub fn vassal_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {

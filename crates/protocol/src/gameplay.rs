@@ -27,7 +27,7 @@ pub use projectiles::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 2;
+pub const VERSION: u16 = 3;
 /// One gameplay frame: room for the largest combined tick (16,384 units and
 /// 16,384 buildings with full fifteen-unit training queues).
 pub const MAX_MESSAGE: usize = 4 * 1_048_576;
@@ -72,12 +72,16 @@ pub struct UnitState {
     /// Authoritative cavalry exploration toggle.
     pub auto_scout: bool,
     pub cargo_count: u8,
-    /// Owner-only home of a living Vassal.
+    /// Owner-only home of a living Vassal or General.
     pub home_castle: Option<EntityId>,
     /// Owner-only ID of the Vassal currently managing this villager.
     pub managed_by: Option<EntityId>,
     /// Owner-only posture; foreign records use the default.
     pub stance: CombatStance,
+    /// Owner-only General controlling this soldier.
+    pub commanded_by: Option<EntityId>,
+    /// Owner-only army summary for a living General.
+    pub general: Option<GeneralStatus>,
 }
 
 impl UnitState {
@@ -85,10 +89,24 @@ impl UnitState {
         if self.player != viewer {
             self.home_castle = None;
             self.managed_by = None;
+            self.commanded_by = None;
+            self.general = None;
             self.stance = CombatStance::Aggressive;
         }
         self
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum GeneralState {
+    Marching,
+    Fighting,
+    Retreating,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct GeneralStatus {
+    pub army_size: u16,
+    pub state: GeneralState,
 }
 
 mod commands;

@@ -357,20 +357,14 @@ pub(super) async fn reset(
 ) -> StatusCode {
     let service = match options.scenario.as_deref() {
         None => GameplayService::new(state.diagnostic_scenario.seed),
-        Some("feudal-economy") => {
-            match GameplayService::feudal_demo(state.diagnostic_scenario.seed) {
-                Ok(service) => service,
-                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
-            }
-        }
-        Some("vassal-economy") => {
-            match GameplayService::vassal_demo(state.diagnostic_scenario.seed) {
-                Ok(service) => service,
-                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
-            }
-        }
-        Some("feudal-military") => {
-            match GameplayService::military_demo(state.diagnostic_scenario.seed) {
+        Some(name @ ("feudal-economy" | "vassal-economy" | "feudal-military" | "general-army")) => {
+            let constructor = match name {
+                "feudal-economy" => GameplayService::feudal_demo,
+                "vassal-economy" => GameplayService::vassal_demo,
+                "general-army" => GameplayService::general_demo,
+                _ => GameplayService::military_demo,
+            };
+            match constructor(state.diagnostic_scenario.seed) {
                 Ok(service) => service,
                 Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
             }

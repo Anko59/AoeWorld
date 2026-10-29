@@ -18,6 +18,11 @@ class Formation:
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 
+class GeneralState:
+    MARCHING: GeneralState
+    FIGHTING: GeneralState
+    RETREATING: GeneralState
+
 class UnitKind:
     VILLAGER: UnitKind
     SCOUT: UnitKind
@@ -42,6 +47,7 @@ class UnitKind:
     TRANSPORT_SHIP: UnitKind
     WAR_GALLEY: UnitKind
     VASSAL: UnitKind
+    GENERAL: UnitKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 
@@ -233,6 +239,9 @@ class Unit:
     cargo_count: int
     home_castle: Optional[int]
     managed_by: Optional[int]
+    commanded_by: Optional[int]
+    army_size: Optional[int]
+    general_state: Optional[GeneralState]
     idle: bool
     alive: bool
     military: bool

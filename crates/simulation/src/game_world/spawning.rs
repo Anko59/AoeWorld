@@ -86,6 +86,9 @@ impl GameWorld {
             player.population_used = player.population_used.saturating_add(1);
         }
         self.insert_map_unit(state, 0);
+        if kind == UnitKind::General {
+            self.register_general(id);
+        }
         Ok(id)
     }
 

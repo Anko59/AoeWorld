@@ -321,7 +321,7 @@ fn military(client: &Client) -> Vec<aoe_core::EntityId> {
             client.units.get(id).is_some_and(|u| {
                 u.hp > 0
                     && u.player == owner(client)
-                    && u.kind != UnitKind::Villager
+                    && !matches!(u.kind, UnitKind::Villager | UnitKind::General)
                     && !u.kind.is_naval()
             })
         })
@@ -381,6 +381,7 @@ pub(super) fn stance(client: &mut Client, index: u32) {
                             | UnitKind::TransportShip
                             | UnitKind::Monk
                             | UnitKind::Vassal
+                            | UnitKind::General
                     )
             })
         })

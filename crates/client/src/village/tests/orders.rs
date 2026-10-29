@@ -113,6 +113,8 @@ fn vassal_poses_use_the_king_for_standing_walking_and_death() {
         cargo_count: 0,
         home_castle: Some(EntityId(8)),
         managed_by: None,
+        commanded_by: None,
+        general: None,
         stance: Default::default(),
     };
     assert_eq!(unit_pose(&u, None), Pose::KingStand);
@@ -126,5 +128,53 @@ fn vassal_poses_use_the_king_for_standing_walking_and_death() {
     assert_eq!(
         lifecycle_pose(Pose::KingDie, u.death_tick, 30, 20),
         Pose::KingDecay
+    );
+}
+
+#[wasm_bindgen_test]
+fn general_poses_use_mounted_hero_for_standing_walking_and_death() {
+    use crate::unit_visuals::{Pose, lifecycle_pose, unit_pose};
+    use aoe_protocol::{GameplayUnitState, UnitTask};
+    let mut u = GameplayUnitState {
+        id: EntityId(9),
+        player: aoe_core::PlayerId(0),
+        position: aoe_core::WorldPosition::new(1024, 1024),
+        moving: false,
+        planning: false,
+        facing: 0,
+        kind: UnitKind::General,
+        task: UnitTask::Idle,
+        carried: None,
+        gathering: None,
+        hp: 75,
+        max_hp: 75,
+        attack_target: None,
+        last_hit: None,
+        death_tick: None,
+        hunt_target: None,
+        death_hunt: None,
+        auto_scout: false,
+        cargo_count: 0,
+        home_castle: Some(EntityId(8)),
+        managed_by: None,
+        commanded_by: None,
+        general: None,
+        stance: Default::default(),
+    };
+    assert_eq!(unit_pose(&u, None), Pose::GeneralStand);
+    u.moving = true;
+    assert_eq!(unit_pose(&u, None), Pose::GeneralWalk);
+    u.moving = false;
+    u.hp = 0;
+    u.task = UnitTask::Dying;
+    u.death_tick = Some(aoe_core::Tick(10));
+    assert_eq!(unit_pose(&u, None), Pose::GeneralDie);
+    assert_eq!(
+        lifecycle_pose(Pose::GeneralDie, u.death_tick, 39, 20),
+        Pose::GeneralDie
+    );
+    assert_eq!(
+        lifecycle_pose(Pose::GeneralDie, u.death_tick, 40, 20),
+        Pose::GeneralDecay
     );
 }

@@ -139,6 +139,11 @@ pub enum Pose {
     KingWalk,
     KingDie,
     KingDecay,
+    GeneralStand,
+    GeneralWalk,
+    GeneralAttack,
+    GeneralDie,
+    GeneralDecay,
 }
 
 // The owner's licensed DE pack supplies sixteen directions starting east;
@@ -162,6 +167,16 @@ pub struct ActorSource {
     pub phases: u8,
 }
 impl ActorSource {
+    /// These owned cavalry poses already have resident base-role art. Walking
+    /// keeps the full base group resident and samples it when resolving poses.
+    pub fn base_role(self) -> Option<super::AssetRole> {
+        match (self.id, self.stride, self.phases) {
+            (3004, 10, 1) => Some(super::AssetRole::CavalryStanding),
+            (3008, 10, 2) => Some(super::AssetRole::CavalryWalking),
+            _ => None,
+        }
+    }
+
     /// Bound the fisherman atlas rows while retaining their native loop duration.
     pub const fn sample_step(self) -> u8 {
         if self.phases > 0 {
@@ -175,6 +190,7 @@ impl ActorSource {
     }
     pub const fn frames(self) -> u32 {
         match self.id {
+            3789 | 3786 | 3793 => return 5,
             1767 => return 961,
             1771 | 1764 | 1768 => return 481,
             _ => {}
@@ -197,6 +213,8 @@ impl ActorSource {
         // Its licensed DE West European King supplies the same four poses,
         // with 16 direction blocks and 60/30 cells per direction.
         match self.id {
+            // The current DE converter retains these five logical cells only.
+            3789 | 3786 | 3793 => return row,
             1767 => return (4 + row * 2) * 60 + phase * 10,
             1771 | 1764 => return (4 + row * 2) * 30 + phase * 3,
             1768 => return (4 + row * 2) * 30 + phase * 6,
@@ -213,6 +231,15 @@ impl ActorSource {
         }
     }
     pub fn manifest_source(self) -> String {
+        let general = match self.id {
+            3789 => Some("idle"),
+            3793 => Some("walk"),
+            3786 => Some("death"),
+            _ => None,
+        };
+        if let Some(pose) = general {
+            return format!("de/u_cav_hero_joan_{pose}A_x1.sld");
+        }
         let king = match self.id {
             1767 => Some("idle"),
             1771 => Some("walk"),
@@ -247,7 +274,7 @@ const fn flight(id: u32) -> ActorSource {
     }
 }
 
-pub const SPRITES: [ActorSource; 130] = [
+pub const SPRITES: [ActorSource; 135] = [
     sprite(993, 6, 1000),
     sprite(997, 12, 70),
     sprite(987, 10, 100),
@@ -401,6 +428,38 @@ pub const SPRITES: [ActorSource; 130] = [
         id: 1768,
         stride: 5,
         millis: 6000,
+        phases: 1,
+    },
+    // Bounded hero keyframes: attacks share idle; decay retains the fallen
+    // hero. Identical actor groups reuse metadata, preserving the atlas cap.
+    ActorSource {
+        id: 3789,
+        stride: 15,
+        millis: 200,
+        phases: 1,
+    },
+    ActorSource {
+        id: 3793,
+        stride: 15,
+        millis: 70,
+        phases: 1,
+    },
+    ActorSource {
+        id: 3789,
+        stride: 15,
+        millis: 100,
+        phases: 1,
+    },
+    ActorSource {
+        id: 3786,
+        stride: 15,
+        millis: 100,
+        phases: 1,
+    },
+    ActorSource {
+        id: 3786,
+        stride: 15,
+        millis: 2000,
         phases: 1,
     },
 ];

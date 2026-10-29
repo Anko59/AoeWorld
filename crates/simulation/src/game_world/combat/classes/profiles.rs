@@ -26,7 +26,10 @@ type Classes = &'static [(Class, i16)];
 pub(super) const fn unit_armour(kind: UnitKind) -> Classes {
     match kind {
         UnitKind::Villager | UnitKind::Vassal => &[],
-        UnitKind::Scout | UnitKind::Knight | UnitKind::LightCavalry => &[(Cavalry, 0)],
+        // The mounted General takes cavalry bonuses, so spears and pikes counter it.
+        UnitKind::Scout | UnitKind::Knight | UnitKind::LightCavalry | UnitKind::General => {
+            &[(Cavalry, 0)]
+        }
         UnitKind::Militia | UnitKind::ManAtArms | UnitKind::LongSwordsman => &[(Infantry, 0)],
         UnitKind::FishingShip => &[(FishingShip, 0)],
         UnitKind::Archer | UnitKind::Crossbowman => &[(Archer, 0)],
@@ -74,7 +77,8 @@ pub(super) const fn unit_attacks(kind: UnitKind) -> Classes {
         | UnitKind::Knight
         | UnitKind::Monk
         | UnitKind::TransportShip
-        | UnitKind::Vassal => &[],
+        | UnitKind::Vassal
+        | UnitKind::General => &[],
     }
 }
 

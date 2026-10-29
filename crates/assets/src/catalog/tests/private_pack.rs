@@ -8,6 +8,7 @@ use super::{
     },
 };
 use crate::pack::Manifest;
+use selection::actor_frames;
 use std::io::Read;
 
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
@@ -53,7 +54,9 @@ fn reviewed_sources() -> impl Iterator<
             super::units::SPRITES
                 .iter()
                 .enumerate()
-                .filter(|(index, _)| !selection::duplicate_actor(*index))
+                .filter(|(index, source)| {
+                    !selection::duplicate_actor(*index) && source.base_role().is_none()
+                })
                 .map(|(index, s)| {
                     (
                         s.manifest_source(),
@@ -81,6 +84,16 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     // compact idle facings and the sampled native actor/projectile cells.
     // Neutral/owned palette copies still occupy separate semantic entries.
     for (identity, count, domain, step, actor) in reviewed_sources() {
+        if actor.is_some_and(|s| matches!(s.id, 3789 | 3786 | 3793))
+            && manifest
+                .frames
+                .iter()
+                .filter(|f| f.source == identity)
+                .count()
+                != 5
+        {
+            return Err("unsupported General keyframe topology".into());
+        }
         let mut frames = manifest
             .frames
             .iter()
@@ -310,7 +323,8 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     assert_eq!(
         actor_frames(),
         2620,
-        // Castle adds 365 sampled cells; navy adds 25 and King poses add 35.
+        // Castle adds 365 sampled cells; navy 25, King 35, General 15;
+        // the base cavalry roles already hold 15 Light Cavalry samples.
         // This current-content count changes deliberately; fixed atlas caps do not.
         "military, Castle, projectile and farmer cells included"
     );
@@ -483,13 +497,4 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
         bad.frames[index].x = PAGE_SIDE;
         assert!(prove(&bad).is_err(), "invalid rectangle {index}");
     }
-}
-
-fn actor_frames() -> usize {
-    super::units::SPRITES
-        .iter()
-        .enumerate()
-        .filter(|(index, _)| !selection::duplicate_actor(*index))
-        .map(|(_, s)| s.selected_frames())
-        .sum()
 }

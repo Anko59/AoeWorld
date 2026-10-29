@@ -267,7 +267,7 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                 && building.training_queue.iter().all(|entry| {
                     matches!(
                         (building.kind, entry.kind),
-                        (BuildingKind::Castle, UnitKind::Vassal)
+                        (BuildingKind::Castle, UnitKind::Vassal | UnitKind::General)
                             | (BuildingKind::TownCenter, UnitKind::Villager)
                             | (BuildingKind::Barracks, UnitKind::Militia)
                             | (
@@ -310,11 +310,25 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
 }
 pub(super) fn valid_units(units: &[super::UnitState]) -> bool {
     units.iter().all(|unit| {
-        unit.home_castle
-            .is_none_or(|id| unit.kind == UnitKind::Vassal && unit.hp > 0 && id != unit.id)
+        unit.home_castle.is_none_or(|id| {
+            matches!(unit.kind, UnitKind::Vassal | UnitKind::General)
+                && unit.hp > 0
+                && id != unit.id
+        }) && unit
+            .managed_by
+            .is_none_or(|id| unit.kind == UnitKind::Villager && unit.hp > 0 && id != unit.id)
+            && unit.commanded_by.is_none_or(|id| {
+                id != unit.id
+                    && unit.hp > 0
+                    && !matches!(
+                        unit.kind,
+                        UnitKind::Villager | UnitKind::Vassal | UnitKind::General | UnitKind::Monk
+                    )
+                    && !unit.kind.is_naval()
+            })
             && unit
-                .managed_by
-                .is_none_or(|id| unit.kind == UnitKind::Villager && unit.hp > 0 && id != unit.id)
+                .general
+                .is_none_or(|g| unit.kind == UnitKind::General && unit.hp > 0 && g.army_size <= 100)
             && unit.cargo_count <= 5
             && (unit.cargo_count == 0 || (unit.kind == UnitKind::TransportShip && unit.hp > 0))
             && unit.facing < 8

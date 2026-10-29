@@ -143,7 +143,7 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
     fishing::select(&manifest, &mut selected, &mut domains).unwrap();
     // Combined Castle poses add 365 cells to the naval/DAT/rally selection;
     // the Castle camp fallback slots reuse two available DE camp cells.
-    // King poses add 35 selected cells to the current catalog. Regenerate this
+    // King and General poses add 35 and 15 selected cells. Regenerate this
     // content-count pin; the 5120-frame and five-page atlas gates stay fixed.
     // The stationary and working fishing ship share one identical five-frame group.
     assert_eq!(selected.len(), 5092);
@@ -155,15 +155,18 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
         selected.len()
     );
     building_sprites::rally(&manifest, &mut selected, &mut domains).unwrap();
-    let parts = (424..=432)
-        .map(|id| {
+    // Reusing base cavalry releases 15 entries. Fill all 18 remaining slots
+    // with two damage cells from nine sources; keep the full-cap assertion.
+    let parts = (0..27)
+        .map(|n| {
+            let id = 424 + n % 9;
             let source = format!("graphics.drs:[32, 112, 108, 115]:{id}");
             manifest::BuildingPart {
                 record: source_frames(&manifest, &source, 20).map(|frames| frames[0]),
-                frames: 20,
+                frames: 2,
                 angles: 1,
                 primary: false,
-                frame_rate: 0.05,
+                frame_rate: 0.0,
                 offset: [0; 2],
                 misplacement: [0.0; 2],
             }

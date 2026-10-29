@@ -32,14 +32,14 @@ pub use game_world::{
     Age, BUILDING_COMBAT, BUILDING_RULES, BUILDINGS_PER_PLAYER, BuildingAttack, BuildingCombat,
     BuildingKind, BuildingRules, CORPSE_SECONDS, CarriedResource, CombatStats, CombatTelemetry,
     ConstructionState, DYING_SECONDS, DamageKind, EconomyError, FEUDAL_BUILDINGS, Facing,
-    GameBuilding, GameUnit, GameWorld, GameWorldError, GarrisonedUnit, HitRecord, MARKET_RULES,
-    MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, MarketPrices, MovementOrder, PlanningProbe,
-    PlayerEconomy, PreparedResourceDepletion, Projectile, ProjectileKind, RallyPoint, RallyTarget,
-    ResearchEntry, RouteSchedulerStats, Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement,
-    TechRules, TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask,
-    UnitTraining, VASSAL_RULES, VILLAGE_RULES, VassalRules, VassalWork, VillageRules, WorldLimits,
-    building_combat, damage_dealt, researched_stats, trainable_units, unit_combat,
-    villager_capacity,
+    GameBuilding, GameUnit, GameWorld, GameWorldError, GarrisonedUnit, GeneralState, GeneralStatus,
+    GeneralWork, HitRecord, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS,
+    MarketPrices, MovementOrder, PlanningProbe, PlayerEconomy, PreparedResourceDepletion,
+    Projectile, ProjectileKind, RallyPoint, RallyTarget, ResearchEntry, RouteSchedulerStats,
+    Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules, TickPhase, TrainingEntry,
+    UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VASSAL_RULES,
+    VILLAGE_RULES, VassalRules, VassalWork, VillageRules, WorldLimits, building_combat,
+    damage_dealt, researched_stats, trainable_units, unit_combat, villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::BTreeMap;

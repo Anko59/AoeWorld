@@ -9,9 +9,9 @@ use aoe_core::{EntityId, PlayerId, Position, Region, Tick};
 pub use gameplay::{
     Age, BuildingKind, CarriedResource, ClientMessage as GameplayClientMessage, CommandResult,
     ConstructionState, Error as GameplayError, GameplayBuildingState, GameplayPlayerState,
-    GarrisonUnitState, HitState, MARKET_MAX_PRICE, MARKET_MIN_PRICE, MAX_ACK_HISTORY,
-    MAX_BUILD_GROUP, MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS, MAX_MATCH_POPULATION,
-    MAX_MESSAGE as GAMEPLAY_MAX_MESSAGE, MAX_PENDING_COMMANDS_GLOBAL,
+    GarrisonUnitState, GeneralState, GeneralStatus, HitState, MARKET_MAX_PRICE, MARKET_MIN_PRICE,
+    MAX_ACK_HISTORY, MAX_BUILD_GROUP, MAX_ECONOMY_BUILDINGS, MAX_ECONOMY_PLAYERS,
+    MAX_MATCH_POPULATION, MAX_MESSAGE as GAMEPLAY_MAX_MESSAGE, MAX_PENDING_COMMANDS_GLOBAL,
     MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_POPULATION, MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES,
     MAX_RETAINED_BUILDINGS, MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MAX_TRAINING_QUEUE,
     MapMetadata, MarketPrices, RallyPoint, RallyTarget, ResearchState, ResourceAmount,

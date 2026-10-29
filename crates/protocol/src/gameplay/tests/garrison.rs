@@ -155,10 +155,16 @@ fn vassal_home_and_worker_management_are_current_owner_only_state() {
         cargo_count: 0,
         home_castle: Some(EntityId(9)),
         managed_by: None,
+        commanded_by: None,
+        general: None,
         stance: Default::default(),
     };
     // The current unit tail appends the two optional owner-visible identifiers.
-    assert!(postcard::to_allocvec(&u).unwrap().ends_with(&[1, 9, 0, 0]));
+    assert!(
+        postcard::to_allocvec(&u)
+            .unwrap()
+            .ends_with(&[1, 9, 0, 0, 0, 0])
+    );
     u.stance = CombatStance::Defensive;
     assert_eq!(u.for_viewer(PlayerId(0)), u);
     assert_eq!(u.for_viewer(PlayerId(1)).home_castle, None);
@@ -191,4 +197,76 @@ fn vassal_home_and_worker_management_are_current_owner_only_state() {
         encode_server(&message(u)).is_err(),
         "military cannot be managed by a Vassal"
     );
+}
+
+#[test]
+fn general_training_pins_current_wire_identity() {
+    let m = ClientMessage::TrainOrder {
+        sequence: 7,
+        building_id: EntityId(9),
+        kind: UnitKind::General,
+    };
+    let encoded = encode_client(&m).unwrap();
+    assert_eq!(encoded, vec![5, 7, 9, 23]);
+    assert_eq!(decode_client(&encoded).unwrap(), m);
+}
+
+#[test]
+fn general_summary_and_command_tags_are_bounded_owner_only_state() {
+    let mut u = UnitState {
+        id: EntityId(2),
+        player: PlayerId(0),
+        position: WorldPosition::new(1024, 2048),
+        moving: false,
+        planning: false,
+        facing: 0,
+        kind: UnitKind::General,
+        task: UnitTask::Idle,
+        carried: None,
+        gathering: None,
+        hp: 75,
+        max_hp: 75,
+        attack_target: None,
+        last_hit: None,
+        death_tick: None,
+        hunt_target: None,
+        death_hunt: None,
+        auto_scout: false,
+        cargo_count: 0,
+        home_castle: Some(EntityId(9)),
+        managed_by: None,
+        commanded_by: None,
+        general: None,
+        stance: Default::default(),
+    };
+
+    u.general = Some(crate::GeneralStatus {
+        army_size: 100,
+        state: crate::GeneralState::Retreating,
+    });
+    assert_eq!(u.for_viewer(PlayerId(0)), u);
+    let foreign = u.for_viewer(PlayerId(1));
+    assert_eq!(foreign.general, None);
+    assert_eq!(foreign.commanded_by, None);
+    assert_eq!(foreign.home_castle, None);
+    let message = |u| ServerMessage::Snapshot {
+        revision: 1,
+        tick: Tick(1),
+        units: vec![u],
+        players: vec![],
+        buildings: vec![],
+    };
+    let bytes = encode_server(&message(u)).unwrap();
+    assert!(bytes.ends_with(&[0, 0, 1, 100, 2, 0, 0]));
+    assert_eq!(decode_server(&bytes).unwrap(), message(u));
+    u.general.as_mut().unwrap().army_size = 101;
+    assert!(encode_server(&message(u)).is_err());
+    u.general = None;
+    u.home_castle = None;
+    u.kind = UnitKind::Knight;
+    u.commanded_by = Some(EntityId(88));
+    assert!(encode_server(&message(u)).is_ok());
+    assert_eq!(u.for_viewer(PlayerId(1)).commanded_by, None);
+    u.commanded_by = Some(u.id);
+    assert!(encode_server(&message(u)).is_err());
 }
