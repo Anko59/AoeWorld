@@ -9,13 +9,14 @@ use crate::{
         self,
         atlas::{SpriteRef, write_pack},
     },
-    sld::{self, Frame},
+    sld,
 };
 use std::{
     fs,
     path::{Path, PathBuf},
 };
 
+mod cache;
 mod compose;
 mod farm;
 mod general;
@@ -66,7 +67,8 @@ struct Loaded {
     item: &'static Item,
     source: String,
     hash: String,
-    frames: Vec<Frame>,
+    path: PathBuf,
+    frames: Vec<FrameInfo>,
 }
 
 fn read_bounded(path: &Path) -> Result<Vec<u8>, Error> {
@@ -134,7 +136,8 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
             item,
             source: format!("de/{file}"),
             hash: hash.to_hex().to_string(),
-            frames,
+            path,
+            frames: frames.iter().map(compose::info).collect(),
         });
     }
     let farm = farm::load(&install.join(TEXTURES), &mut hasher)?;
@@ -154,9 +157,22 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
             building: sprite.item.building,
             role: sprite.item.role,
             source: sprite.source.clone(),
-            frames: sprite.frames.iter().map(compose::info).collect(),
+            frames: sprite.frames.clone(),
         });
     }
+    let mut cache = cache::Cache::new(|index: usize| {
+        let sprite = &loaded[index];
+        let bytes = read_bounded(&sprite.path)?;
+        if blake3::hash(&bytes).to_hex().as_str() != sprite.hash {
+            return Err(crate::invalid("DE", 0, "source changed during import"));
+        }
+        let frames = sld::parse(&bytes)?;
+        if sprite.item.building == "general" {
+            general::sample(sprite.item.role, frames)
+        } else {
+            Ok(frames)
+        }
+    });
     let pack = write_pack(
         &output_root,
         hasher.finalize().to_hex().to_string(),
@@ -164,7 +180,7 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         Vec::new(),
         |sprite, frame| {
             if sprite < split {
-                Ok(compose::planes(&loaded[sprite].frames[frame]))
+                Ok(compose::planes(&cache.get(sprite)?[frame]))
             } else {
                 farm[sprite - split].planes(frame)
             }
@@ -175,14 +191,14 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         entries,
         absent,
     };
-    preview::write(&local.join("de-preview"), &loaded_frames(&loaded), &farm)?;
+    for (index, sprite) in loaded.iter().enumerate() {
+        preview::write(
+            &local.join("de-preview"),
+            &[(sprite.item.stem, cache.get(index)?)],
+            &[],
+        )?;
+    }
+    preview::write(&local.join("de-preview"), &[], &farm)?;
     table::write(&local.join("de-table.md"), &report, &farm)?;
     Ok(report)
-}
-
-fn loaded_frames(loaded: &[Loaded]) -> Vec<(&str, &[Frame])> {
-    loaded
-        .iter()
-        .map(|sprite| (sprite.item.stem, sprite.frames.as_slice()))
-        .collect()
 }

@@ -170,7 +170,11 @@ decoder (`crates/assets/src/sld.rs`: BC1 colour, BC4 shadow and player-mask
 layers, skip-previous-frame reuse) and writes a separate pack below
 `local-assets/packs/`, previews to `local-assets/de-preview/` and the building to
 pack-source mapping to `local-assets/de-table.md`. Nothing derived from the
-install is committed. Sources are listed in `crates/assets/src/de/select.rs`
+install is committed. The importer scans sources for metadata, then retains at
+most one decoded SLD at a time while writing and previewing; each reread is
+checked against the scanned source digest. Individual SLD decoded layers are
+bounded to 48 Mi pixels (192 MiB), in addition to one 64 MiB atlas page and
+other import buffers. This bounds source retention, not the gameplay GPU atlas. Sources are listed in `crates/assets/src/de/select.rs`
 (West European camps, since no Dark Age camp exists). Frames are cropped to the
 drawn layers and anchors move with the crop; the player plane stores a 0-7 ramp
 from the colour layer's luma for every nonzero mask, with the mask value as alpha
