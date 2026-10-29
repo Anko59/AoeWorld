@@ -58,6 +58,7 @@ Only attack classes with targets in our roster are listed. A dash means none.
 | Elite Skirmisher (6) | Archers; Skirmishers | Archers +4; Spearmen +4 |
 | Knight (38) | Cavalry | — |
 | Light Cavalry (546) | Cavalry | Monks +10 |
+| General (original; mounted Joan of Arc sprite) | Cavalry | — |
 | Monk (125) | Monks | — |
 | Mangonel (280) | Siege Weapons | All Buildings +35; Siege Weapons +12 |
 | Battering Ram (1258) | Siege Weapons; Rams | All Buildings +150; Siege Weapons +40 |
