@@ -5,42 +5,29 @@ import { gameAssets } from "../../game-assets.js";
 import { centerVillage, freshHud } from "../fixtures/resources.js";
 import { forceCanvas, forceWebGl } from "../../rendering/backends.js";
 
-type Actor = { id: number; kind: string; x: number; y: number };
+type Actor = {
+  id: number;
+  kind: string;
+  x: number;
+  y: number;
+  selected: boolean;
+};
 const actors = async (page: Page): Promise<Actor[]> =>
   JSON.parse(
     (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
   );
-async function select(page: Page, kind: string, status?: string) {
+async function select(page: Page, kind: string) {
   let attempt = 0;
   await expect(async () => {
-    const previous = await actors(page);
     await freshHud(page);
-    // Reservation-aware farmers can overlap a Farm at their ground point.
-    // Cycle stationary workers and click their body above that point; retain
-    // the real pointer selection and every managed-domain assertion.
-    const candidates = (await actors(page)).filter(
-      (a) =>
-        a.kind === kind &&
-        (kind !== "Villager" ||
-          previous.some(
-            // Slow software rendering lets a working villager drift a few
-            // pixels between reads; that is still clickable.
-            (p) => p.id === a.id && Math.hypot(p.x - a.x, p.y - a.y) < 4,
-          )),
-    );
+    const candidates = (await actors(page)).filter((a) => a.kind === kind);
     const actor = candidates[attempt++ % candidates.length];
-    if (!actor) throw new Error(`${kind} has no stationary target`);
+    if (!actor) throw new Error(`${kind} has no target`);
     await page.mouse.click(actor.x, actor.y - (kind === "Villager" ? 8 : 0));
     await expect(page.locator("#selection-name")).toHaveText(kind, {
       timeout: 500,
     });
-    // The Vassal manages only the idle workers inside its domain; cycle
-    // villagers until one it manages is under the pointer.
-    if (status)
-      await expect(page.locator("#vassal-status")).toHaveText(status, {
-        timeout: 1_000,
-      });
-  }).toPass({ timeout: status ? 30_000 : 20_000, intervals: [500] });
+  }).toPass({ timeout: 20_000, intervals: [500] });
 }
 
 async function centerCastle(page: Page) {
@@ -83,6 +70,16 @@ test("train one Vassal per Castle and activate its visible economic domain", asy
     timeout: 60_000,
   });
   await centerVillage(page, true);
+  // Retain one idle worker before automation starts. Once managed, farmers
+  // move between HUD reads and pointer events; a click at an old position
+  // selects the Farm instead. Recall its identity through the normal UI.
+  await select(page, "Villager");
+  await expect(page.locator("#selection-task")).toHaveText("Idle");
+  const workerIds = (await actors(page))
+    .filter((a) => a.selected)
+    .map((a) => a.id);
+  expect(workerIds).toHaveLength(1);
+  await page.keyboard.press("Control+1");
   await centerCastle(page);
   await select(page, "Castle");
   const train = page.locator("#train-vassal");
@@ -137,7 +134,14 @@ test("train one Vassal per Castle and activate its visible economic domain", asy
   );
   await expect(page.locator("#vassal-status")).toContainText("domain active");
   await centerVillage(page);
-  await select(page, "Villager", "Managed by Vassal");
+  await page.keyboard.press("1");
+  await expect(page.locator("#selection-name")).toHaveText("Villager");
+  await expect
+    .poll(async () =>
+      (await actors(page)).filter((a) => a.selected).map((a) => a.id),
+    )
+    .toEqual(workerIds);
+  await expect(page.locator("#vassal-status")).toHaveText("Managed by Vassal");
   if (capture)
     await page.screenshot({ path: "../.cache/vassal/managed-firefox.png" });
   await centerCastle(page);
