@@ -35,8 +35,12 @@ pub struct RouteMetrics {
     pub orders: u64,
     /// Fresh route planners that performed work; excludes continuations and cache hits.
     pub searches_started: u64,
-    /// Slot-visibility tile probes, globally bounded by the formation tick allowance.
-    pub formation_steering_work: u64,
+    /// Actual member visits, path operations and collision cell/body/tile probes.
+    /// Diagnostic only; include parallel proposals and ordered fallback work.
+    pub group_member_work: u64,
+    pub group_path_work: u64,
+    pub group_path_writes: u64,
+    pub group_collision_work: u64,
     /// Orders answered when issued (path, cache or fast local search).
     pub solved_at_issue: u64,
     pub cache_hits: u64,
@@ -107,12 +111,15 @@ impl fmt::Display for RouteMetrics {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "orders={} starts={} steering={} at_issue={} cache_hits={} fast={} deferred={:?} no_slot={} \
+            "orders={} starts={} group_members={} group_path={} group_path_writes={} group_collision={} at_issue={} cache_hits={} fast={} deferred={:?} no_slot={} \
              work issue={} fair={} ahead={} refusals={} found={:?} failed={:?} stuck={} yielded={} approached={} \
              samples={:?}",
             self.orders,
             self.searches_started,
-            self.formation_steering_work,
+            self.group_member_work,
+            self.group_path_work,
+            self.group_path_writes,
+            self.group_collision_work,
             self.solved_at_issue,
             self.cache_hits,
             self.fast_path,
@@ -149,5 +156,41 @@ pub(crate) struct PlanningMeasurement<'a>(pub(crate) &'a dyn PlanningProbe);
 impl Drop for PlanningMeasurement<'_> {
     fn drop(&mut self) {
         self.0.end();
+    }
+}
+
+/// Shared by parallel movement readers and their polylines. Never hashed or
+/// consulted by movement decisions. Relaxed addition is independent of order.
+#[derive(Debug, Default)]
+pub(crate) struct GroupWork {
+    members: std::sync::atomic::AtomicU64,
+    path: std::sync::atomic::AtomicU64,
+    path_writes: std::sync::atomic::AtomicU64,
+    collision: std::sync::atomic::AtomicU64,
+}
+
+impl GroupWork {
+    pub(crate) fn members(&self, count: u64) {
+        self.members
+            .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
+    }
+    pub(crate) fn path(&self, count: u64) {
+        self.path
+            .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
+    }
+    pub(crate) fn path_write(&self) {
+        self.path_writes
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    pub(crate) fn collision(&self, count: u64) {
+        self.collision
+            .fetch_add(count, std::sync::atomic::Ordering::Relaxed);
+    }
+    pub(crate) fn snapshot(&self, metrics: &mut RouteMetrics) {
+        use std::sync::atomic::Ordering::Relaxed;
+        metrics.group_member_work = self.members.load(Relaxed);
+        metrics.group_path_work = self.path.load(Relaxed);
+        metrics.group_path_writes = self.path_writes.load(Relaxed);
+        metrics.group_collision_work = self.collision.load(Relaxed);
     }
 }

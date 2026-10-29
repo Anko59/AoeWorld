@@ -192,7 +192,7 @@ fn final_destination_inside_forest_pass_settles_at_every_valid_slot() {
     for &id in &ids {
         assert_eq!(w.unit(id).unwrap().position, w.formation_slot(id).unwrap());
     }
-    let work = w.route_scheduler_stats().metrics.formation_steering_work;
+    let work = w.route_scheduler_stats().metrics.group_path_work;
     for _ in 0..128 {
         w.advance();
         for (&id, &position) in ids.iter().zip(&positions) {
@@ -200,10 +200,7 @@ fn final_destination_inside_forest_pass_settles_at_every_valid_slot() {
             assert!(!w.unit(id).unwrap().moving);
         }
     }
-    assert_eq!(
-        w.route_scheduler_stats().metrics.formation_steering_work,
-        work
-    );
+    assert_eq!(w.route_scheduler_stats().metrics.group_path_work, work);
     assert_eq!(w.route_scheduler_stats().metrics.orders, 1);
     assert_eq!(w.route_accounting_error(), None);
 }

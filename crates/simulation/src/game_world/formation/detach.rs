@@ -38,7 +38,9 @@ impl GameWorld {
         let ids = self
             .formations
             .values()
+            .filter(|group| !group.settled)
             .flat_map(|group| group.members.iter())
+            .inspect(|_| self.group_work.members(1))
             .filter(|member| !member.detached && !member.arrived && member.blocked >= DETACH_AFTER)
             .map(|member| member.id)
             .take(4)
@@ -110,8 +112,17 @@ impl GameWorld {
     pub(super) fn rejoin_detached_members(&mut self) {
         let mut ready = Vec::new();
         for (&leader, group) in &self.formations {
+            if group.settled {
+                continue;
+            }
             let navigating = self.units[self.lookup[&leader]].order.is_some();
-            for member in group.members.iter().filter(|member| member.detached) {
+            for member in group
+                .members
+                .iter()
+                .inspect(|_| self.group_work.members(1))
+                .filter(|member| member.detached)
+            {
+                self.group_work.members(1);
                 let index = self.lookup[&member.id];
                 let unit = self.units[index].state;
                 let timed_out = !navigating

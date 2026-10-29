@@ -172,6 +172,7 @@ pub struct GameWorld {
     /// (player, far) classes whose units waited for a slot in the last fair
     /// pass: an order issued or planned ahead later does not jump that queue.
     pub(crate) route_queued: BTreeSet<(PlayerId, bool)>,
+    pub(crate) group_work: std::sync::Arc<route_scheduler::GroupWork>,
     pub(crate) route_metrics: route_scheduler::RouteMetrics,
     pub(crate) planning_probe: Option<std::sync::Arc<dyn PlanningProbe>>,
     pub(crate) idle_spacing: spacing::IdleSpacing,
@@ -215,6 +216,7 @@ impl GameWorld {
             active_route_searches: 0,
             partial_kits: 0,
             route_slots: BTreeMap::new(),
+            group_work: Default::default(),
             route_metrics: Default::default(),
             planning_probe: None,
             route_queued: BTreeSet::new(),

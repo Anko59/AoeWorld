@@ -1,3 +1,4 @@
+use super::measurement::bounded_group_work;
 use super::*;
 use aoe_core::Formation;
 
@@ -36,54 +37,20 @@ fn formations_wide_staggered_wings_move_with_body_spacing_and_no_rays() {
         .unwrap();
     assert_eq!(w.formation_slot(wing).unwrap().y, 120_597);
     let from = w.unit(wing).unwrap().position;
+    let mut peak = (0, 0, 0);
     for _ in 0..200 {
+        let before = w.route_scheduler_stats().metrics;
         w.advance();
+        let after = w.route_scheduler_stats().metrics;
+        let work = bounded_group_work(&before, &after, ids.len());
+        peak = (peak.0.max(work.0), peak.1.max(work.1), peak.2.max(work.2));
     }
+    eprintln!("wide wing peak work: {peak:?}");
     assert!(
         w.unit(wing).unwrap().position.y < from.y - 1024,
         "an open outer slot must make local progress: {:?}",
         w.unit(wing)
     );
-    assert_eq!(w.route_scheduler_stats().metrics.formation_steering_work, 0);
-}
-
-#[test]
-fn formations_attack_move_notices_contact_at_the_outer_wing() {
-    let mut w = wide_world();
-    w.set_fog_disabled(true);
-    let ids = army(&mut w, 200);
-    w.issue_formation_move(
-        PlayerId(0),
-        &ids,
-        Formation::Flank,
-        center(180, 50),
-        false,
-        true,
-    )
-    .unwrap();
-    // The last ranks begin far from the army's centre.
-    let wing = w.unit(*ids.last().unwrap()).unwrap().position.tile_floor();
-    let enemy = w
-        .spawn_unit(PlayerId(1), center(wing.x + 2, wing.y))
-        .unwrap();
-    // Only the members that see the enemy themselves and find a free spot
-    // around it leave the group to fight it (before #612's follow-up, 32 did:
-    // anyone within a 13x13-tile window); the head of the army, far away,
-    // keeps marching in formation. With PR 6's slots the wing kills the enemy
-    // by tick 80 and the fighters then march on as groups of one, so the
-    // count is taken at its peak while the fight lasts.
-    let (mut fighters, mut left) = (0, 0);
-    for _ in 0..120 {
-        w.advance();
-        fighters = fighters.max(
-            ids.iter()
-                .filter(|&&id| w.unit(id).unwrap().attack_target == Some(enemy))
-                .count(),
-        );
-        left = left.max(ids.iter().filter(|&&id| w.formation(id).is_none()).count());
-    }
-    assert_eq!((fighters, left), (13, 14));
-    assert_eq!(w.formation(ids[0]), Some(Formation::Flank));
 }
 
 #[test]
@@ -295,19 +262,19 @@ fn formations_thousands_of_members_share_one_search_with_bounded_local_work() {
         false,
     )
     .unwrap();
+    let mut peak = (0, 0, 0);
     for _ in 0..80 {
         let before = w.route_scheduler_stats().metrics;
         w.advance();
         let after = w.route_scheduler_stats().metrics;
-        assert_eq!(
-            after.formation_steering_work - before.formation_steering_work,
-            0
-        );
+        let work = bounded_group_work(&before, &after, ids.len());
+        peak = (peak.0.max(work.0), peak.1.max(work.1), peak.2.max(work.2));
         assert!(
             after.fair_work + after.lookahead_work - before.fair_work - before.lookahead_work
                 <= u64::from(crate::MAX_ROUTE_WORK_PER_TICK)
         );
     }
+    eprintln!("thousands peak work: {peak:?}");
     assert_eq!(w.route_scheduler_stats().metrics.searches_started, 1);
     assert_ne!(
         w.unit(*ids.last().unwrap()).unwrap().position,

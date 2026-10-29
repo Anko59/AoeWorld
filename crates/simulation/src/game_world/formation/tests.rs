@@ -77,8 +77,10 @@ fn rotation_preserves_cardinal_and_diagonal_integer_rounding() {
 #[test]
 fn axis_paths_and_adjusted_distance_spans_keep_exact_projection() {
     for end in [(1024, 0), (-1024, 0), (0, 1024), (0, -1024)] {
-        let mut path =
-            path::Path::new([WorldPosition::new(0, 0), WorldPosition::new(end.0, end.1)]);
+        let mut path = path::Path::new(
+            [WorldPosition::new(0, 0), WorldPosition::new(end.0, end.1)],
+            Default::default(),
+        );
         let mut cursor = 0;
         assert_eq!(
             path.point(512, &mut cursor).0,

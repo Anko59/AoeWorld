@@ -4,13 +4,20 @@ use aoe_core::WorldPosition;
 
 #[derive(Debug, Default)]
 pub(super) struct Path {
+    work: std::sync::Arc<super::super::route_scheduler::GroupWork>,
     pub(super) points: Vec<WorldPosition>,
     pub(super) lengths: Vec<i64>,
 }
 
 impl Path {
-    pub(super) fn new(points: impl IntoIterator<Item = WorldPosition>) -> Self {
-        let mut path = Self::default();
+    pub(super) fn new(
+        points: impl IntoIterator<Item = WorldPosition>,
+        work: std::sync::Arc<super::super::route_scheduler::GroupWork>,
+    ) -> Self {
+        let mut path = Self {
+            work,
+            ..Self::default()
+        };
         for point in points {
             path.push(point);
         }
@@ -18,6 +25,8 @@ impl Path {
     }
 
     pub(super) fn push(&mut self, point: WorldPosition) {
+        self.work.path(1);
+        self.work.path_write();
         let length = self.points.last().map_or(0, |&previous| {
             i64::from(crate::game_path::segment_length(
                 i64::from(point.x - previous.x),
@@ -36,7 +45,10 @@ impl Path {
 
     pub(super) fn cursor_at(&self, progress: i64) -> usize {
         self.lengths
-            .partition_point(|&length| length < progress)
+            .partition_point(|&length| {
+                self.work.path(1);
+                length < progress
+            })
             .saturating_sub(1)
             .min(self.points.len().saturating_sub(2))
     }
@@ -46,6 +58,7 @@ impl Path {
         progress: i64,
         cursor: &mut usize,
     ) -> (WorldPosition, WorldPosition) {
+        self.work.path(1);
         if self.points.len() < 2 {
             return (
                 self.points
@@ -57,9 +70,11 @@ impl Path {
         }
         *cursor = (*cursor).min(self.points.len() - 2);
         while *cursor + 2 < self.points.len() && self.lengths[*cursor + 1] < progress {
+            self.work.path(1);
             *cursor += 1;
         }
         while *cursor > 0 && self.lengths[*cursor] > progress {
+            self.work.path(1);
             *cursor -= 1;
         }
         let from = self.points[*cursor];
@@ -74,12 +89,14 @@ impl Path {
     /// Projection onto a fixed local window. A member cannot jump to a distant
     /// leg at a crossing or cut a bend by selecting a remote route point.
     pub(super) fn project(&self, position: WorldPosition, cursor: &mut usize) -> i64 {
+        self.work.path(1);
         if self.points.len() < 2 {
             return 0;
         }
         *cursor = (*cursor).min(self.points.len() - 2);
         let mut best = (i64::MAX, *cursor, 0);
         for at in cursor.saturating_sub(2)..=(*cursor + 2).min(self.points.len() - 2) {
+            self.work.path(1);
             let a = self.points[at];
             let b = self.points[at + 1];
             let (dx, dy) = (i64::from(b.x - a.x), i64::from(b.y - a.y));
@@ -118,9 +135,10 @@ impl Path {
         anchor: WorldPosition,
         points: impl IntoIterator<Item = WorldPosition>,
     ) {
-        let keep = self
-            .lengths
-            .partition_point(|&distance| distance < progress);
+        let keep = self.lengths.partition_point(|&distance| {
+            self.work.path(1);
+            distance < progress
+        });
         self.points.truncate(keep);
         self.lengths.truncate(keep);
         self.push(anchor);

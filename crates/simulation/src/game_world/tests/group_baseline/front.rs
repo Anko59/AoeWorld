@@ -4,14 +4,9 @@
 //! pace; a melee unit walks until in reach and swings only while in reach.
 use super::*;
 
-/// The server state the client drew as a swing before the reach check
-/// (`client/src/unit_visuals/mod.rs`): an attack order and not moving. A unit
-/// still waiting for its route (`planning`) is not stuck: the scheduler
-/// answers within a few ticks (2 to 5 member-ticks were seen, up to 2.5 tiles
-/// from the target). The invariant applies to units that neither move nor
-/// wait for a route, which is what a crowded wait left behind.
+/// Every stationary attacker must be in reach, including route waiters.
 fn attack_pose(u: &crate::GameUnit) -> bool {
-    !u.moving && !u.planning && u.task == UnitTask::Attacking
+    !u.moving && u.task == UnitTask::Attacking
 }
 
 fn subunits(a: WorldPosition, b: WorldPosition) -> i64 {

@@ -115,7 +115,7 @@ fn thirty_two_militia_showcase_keeps_block_and_normal_march_speed() {
         );
     }
     assert_eq!(out.first_motion, 1, "no stationary assembly: {out:?}");
-    assert!(out.last > 0 && out.last <= 696, "{out:?}");
+    assert!(out.last > 0 && out.last <= 634, "{out:?}");
     assert!(out.last - out.first <= 100, "{out:?}");
     assert_eq!(
         (

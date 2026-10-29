@@ -84,6 +84,7 @@ impl GameWorld {
             .iter()
             .filter(|m| !m.detached && !m.arrived)
             .all(|m| {
+                self.group_work.members(1);
                 let unit = self.units[self.lookup[&m.id]].state;
                 self.body_step_clear(
                     unit.kind,
@@ -208,6 +209,7 @@ impl GameWorld {
         }
         let mut reserved = BTreeMap::<TileCoord, Vec<(WorldPosition, i32)>>::new();
         for (at, offset) in assignments {
+            self.group_work.members(1);
             let member = &mut group.members[at];
             let kind = self.units[self.lookup[&member.id]].state.kind;
             let desired = layout::oriented(group.destination, offset, group.heading);

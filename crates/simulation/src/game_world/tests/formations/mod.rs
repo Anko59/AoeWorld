@@ -44,6 +44,7 @@ fn formations_measure_individual_army_baseline() {
 mod behavior;
 mod block;
 mod chokepoint;
+mod contact;
 
 #[test]
 fn formations_measure_shared_army_route() {

@@ -134,10 +134,10 @@ impl CollisionIndex {
     /// determines a decision: cells and each cell's cyclic window are canonical.
     fn blocked(
         &self,
-        at: WorldPosition,
-        reach: i32,
+        (at, reach): (WorldPosition, i32),
         naval: bool,
         salt: u64,
+        work: &super::super::route_scheduler::GroupWork,
         mut test: impl FnMut(EntityId) -> bool,
         mut overflow: impl FnMut(TileCoord) -> bool,
     ) -> bool {
@@ -147,6 +147,7 @@ impl CollisionIndex {
             WorldPosition::new(at.x.saturating_add(reach), at.y.saturating_add(reach)).tile_floor();
         for y in min.y..=max.y {
             for x in min.x..=max.x {
+                work.collision(1);
                 let tile = TileCoord::new(x, y);
                 let Some(cell) = self.cells[usize::from(naval)].get(&key(tile)) else {
                     continue;
@@ -156,6 +157,7 @@ impl CollisionIndex {
                 }
                 let start = (salt % cell.len() as u64) as usize;
                 for n in 0..cell.len().min(CELL_LIMIT) {
+                    work.collision(1);
                     if test(cell[(start + n) % cell.len()]) {
                         return true;
                     }
@@ -170,7 +172,9 @@ impl crate::GameUnit {
     /// A body working in place: friendly traffic never squeezes through it.
     fn settled_worker(&self) -> bool {
         !self.moving
-            && matches!(
+            // A pursuit waiting for a route still occupies a combat position.
+            // Its truthful Moving task must not grant friendly passing rights.
+            && (self.attack_target.is_some() || matches!(
                 self.task,
                 UnitTask::Gathering
                     | UnitTask::Building
@@ -179,7 +183,7 @@ impl crate::GameUnit {
                     | UnitTask::Hunting
                     | UnitTask::Shepherding
                     | UnitTask::Attacking
-            )
+            ))
     }
 }
 
@@ -212,10 +216,10 @@ impl GameWorld {
     ) -> bool {
         let unit = self.units[index].state;
         self.collisions.blocked(
-            at,
-            unit.kind.collision_radius() + 512,
+            (at, unit.kind.collision_radius() + 512),
             unit.kind.is_naval(),
             self.tick.0.wrapping_add(u64::from(unit.id.0)),
+            &self.group_work,
             |id| {
                 if id == unit.id {
                     return false;
@@ -286,10 +290,10 @@ impl GameWorld {
             i64::from(from.y.max(to.y)) + broad_radius,
         );
         !self.collisions.blocked(
-            midpoint,
-            reach,
+            (midpoint, reach),
             unit.kind.is_naval(),
             self.tick.0.wrapping_add(u64::from(unit.id.0)),
+            &self.group_work,
             |id| {
                 if id == unit.id {
                     return false;
@@ -377,6 +381,7 @@ impl GameWorld {
         let max = WorldPosition::new(at.x + r, at.y + r).tile_floor();
         for y in min.y..=max.y {
             for x in min.x..=max.x {
+                self.group_work.collision(1);
                 let tile = TileCoord::new(x, y);
                 if tile == here {
                     continue;

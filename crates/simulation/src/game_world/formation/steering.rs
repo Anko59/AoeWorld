@@ -75,7 +75,14 @@ impl GameWorld {
             }
             self.formations = groups;
             for group in self.formations.values().filter(|group| !group.settled) {
-                movers.extend(group.members.iter().filter(|m| !m.detached).map(|m| m.id));
+                movers.extend(
+                    group
+                        .members
+                        .iter()
+                        .inspect(|_| self.group_work.members(1))
+                        .filter(|m| !m.detached)
+                        .map(|m| m.id),
+                );
             }
         }
         // The BTreeMap and canonical member storage give group-then-unit order.
@@ -102,7 +109,13 @@ impl GameWorld {
             let Some(mut group) = self.formations.remove(&leader) else {
                 continue;
             };
-            if group.queue.is_empty() && group.members.iter().all(|member| member.arrived) {
+            if group.queue.is_empty()
+                && group
+                    .members
+                    .iter()
+                    .inspect(|_| self.group_work.members(1))
+                    .all(|member| member.arrived)
+            {
                 let index = self.lookup[&leader];
                 self.clear_planner(index);
                 self.units[index].order = None;
@@ -157,6 +170,7 @@ impl GameWorld {
         let rotation = layout::Rotation::new(heading);
         let forming = (group.progress - group.form_start).clamp(0, group.form_distance);
         for member in &mut group.members {
+            self.group_work.members(1);
             let unit = self.units[self.lookup[&member.id]].state;
             let offset = if files < count {
                 slots::packed(member.rank, count, files, group.narrow_gap)
@@ -238,6 +252,7 @@ impl GameWorld {
                     let unit = self.units[self.lookup[&first.id]].state;
                     if group.members.iter().all(|member| {
                         let other = self.units[self.lookup[&member.id]].state;
+                        self.group_work.members(1);
                         other.kind == unit.kind && other.player == unit.player
                     }) {
                         // Every member has this current physical cap, including
@@ -255,6 +270,7 @@ impl GameWorld {
 
     pub(crate) fn formation_motion(&self, index: usize) -> Option<Motion> {
         let unit = &self.units[index];
+        self.group_work.members(1);
         let leader = unit.formation?;
         let group = self.formations.get(&leader)?;
         let member = &group.members[group.member_index(unit.state.id)?];
@@ -297,6 +313,7 @@ impl GameWorld {
         to: WorldPosition,
     ) {
         let index = self.lookup[&id];
+        self.group_work.members(1);
         let Some(group) = self.units[index]
             .formation
             .and_then(|leader| self.formations.get_mut(&leader))

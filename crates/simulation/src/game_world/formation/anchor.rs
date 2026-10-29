@@ -163,6 +163,7 @@ impl GameWorld {
         let constrained = group.tight_destination()
             || (near_terrain && !self.formation_layout_clear(group, group.travel_heading));
         group.members.iter().all(|member| {
+            self.group_work.members(1);
             if member.arrived || member.detached || member.blocked >= 240 {
                 return true;
             }

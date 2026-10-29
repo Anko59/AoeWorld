@@ -150,6 +150,7 @@ impl GameWorld {
                             .iter()
                             .filter_map(|&tile| WorldPosition::from_tile_center(tile).ok()),
                     ),
+                self.group_work.clone(),
             ),
             progress: 0,
             path_cursor: 0,
@@ -212,6 +213,7 @@ impl GameWorld {
         group
             .members
             .iter()
+            .inspect(|_| self.group_work.members(1))
             .filter_map(|m| self.unit(m.id))
             .map(|u| self.movement_speed(u.kind, u.player))
             .min_by(|a, b| {
@@ -260,6 +262,7 @@ impl GameWorld {
                                 .iter()
                                 .filter_map(|&tile| WorldPosition::from_tile_center(tile).ok()),
                         ),
+                    self.group_work.clone(),
                 );
                 group.progress = 0;
                 group.path_cursor = 0;

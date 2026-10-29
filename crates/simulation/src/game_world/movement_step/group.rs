@@ -5,6 +5,21 @@ use crate::UnitKind;
 use crate::game_world::formation::{Motion, group_step};
 
 impl GameWorld {
+    fn group_tile_sealed(&self, kind: UnitKind, from: WorldPosition) -> bool {
+        let tile = from.tile_floor();
+        (-1..=1).all(|dy| {
+            (-1..=1).all(|dx| {
+                if dx == 0 && dy == 0 {
+                    return true;
+                }
+                self.group_work.collision(1);
+                let to = aoe_core::TileCoord::new(tile.x + dx, tile.y + dy);
+                !self.unit_step_clear(kind, tile, to).unwrap_or(false)
+                    || !self.building_step_clear(tile, to)
+            })
+        })
+    }
+
     fn group_static_step_clear(
         &self,
         kind: UnitKind,
@@ -50,9 +65,16 @@ impl GameWorld {
 
     pub(super) fn propose_group_step(&self, index: usize, tables: &Tables) -> Option<FastStep> {
         let mut motion = self.formation_motion(index)?;
+        self.group_work.members(1);
         let stored = &self.units[index];
         let mut state = stored.state;
         let from = state.position;
+        // An isolated tile has no exit, so do not creep toward its edge or
+        // spend a detached route search. Keep the independent arrival wait.
+        if !motion.static_clear && self.group_tile_sealed(state.kind, from) {
+            motion.target = from;
+            motion.center = from;
+        }
         motion.neighbor_radius = tables.neighbor_radius[usize::from(state.kind.is_naval())];
         let mut position = if motion.done {
             from
@@ -107,6 +129,7 @@ impl GameWorld {
 
     pub(super) fn adjust_group_step(&mut self, step: &mut FastStep, motion: Motion) {
         let index = step.index;
+        self.group_work.members(1);
         let from = self.units[index].state.position;
         if !motion.done
             && ((step.state.position == from && from != motion.target)

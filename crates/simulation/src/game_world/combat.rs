@@ -295,7 +295,20 @@ impl GameWorld {
         );
         let state = &mut self.units[index].state;
         state.attack_target = Some(target);
-        state.task = UnitTask::Attacking;
+        state.task = if state.planning {
+            UnitTask::Moving
+        } else {
+            UnitTask::Attacking
+        };
+    }
+
+    pub(super) fn mark_attack_approach(&mut self, index: usize) {
+        let state = &mut self.units[index].state;
+        state.task = if state.moving {
+            UnitTask::Attacking
+        } else {
+            UnitTask::Moving
+        };
     }
 
     /// A move, gather or stop order replaces any attack order, and with it an

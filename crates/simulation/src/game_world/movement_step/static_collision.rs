@@ -87,6 +87,7 @@ impl GameWorld {
         let mut bridge = None;
         for y in min.y..=max.y {
             for x in min.x..=max.x {
+                self.group_work.collision(1);
                 let tile = TileCoord::new(x, y);
                 if tile == from.tile_floor()
                     || tile == to.tile_floor()

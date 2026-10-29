@@ -65,3 +65,35 @@ fn formations_measure_warm_army_movement_and_route_searches() {
         }
     }
 }
+
+/// Count executed operations, not a retired steering allowance. Open blocks
+/// need a handful of member passes, local path windows of at most five legs,
+/// and bounded cell/body probes. These linear ceilings leave room for normal
+/// fallback but reject whole-route/per-member rescans and quadratic work.
+pub(super) fn bounded_group_work(
+    before: &crate::game_world::route_scheduler::RouteMetrics,
+    after: &crate::game_world::route_scheduler::RouteMetrics,
+    members: usize,
+) -> (u64, u64, u64) {
+    assert!(
+        before.group_path_writes > 0,
+        "the issued route must be measured"
+    );
+    assert_eq!(
+        after.group_path_writes, before.group_path_writes,
+        "an unchanged route must not be rebuilt each tick"
+    );
+    let work = (
+        after.group_member_work - before.group_member_work,
+        after.group_path_work - before.group_path_work,
+        after.group_collision_work - before.group_collision_work,
+    );
+    let n = members as u64;
+    assert!((n..=12 * n).contains(&work.0), "member visits: {work:?}");
+    assert!((n..=24 * n).contains(&work.1), "path work: {work:?}");
+    assert!(
+        (n..=128 * n).contains(&work.2),
+        "collision probes: {work:?}"
+    );
+    work
+}
