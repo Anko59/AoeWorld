@@ -155,11 +155,22 @@ impl CollisionIndex {
                 if cell.len() > CELL_LIMIT && overflow(tile) {
                     return true;
                 }
-                let start = (salt % cell.len() as u64) as usize;
-                for n in 0..cell.len().min(CELL_LIMIT) {
+                let len = cell.len();
+                // The cyclic window starts at `salt % len`; a single body needs
+                // no division and the walk wraps without a modulo per body.
+                let mut at = if len == 1 {
+                    0
+                } else {
+                    (salt % len as u64) as usize
+                };
+                for _ in 0..len.min(CELL_LIMIT) {
                     work.collision(1);
-                    if test(cell[(start + n) % cell.len()]) {
+                    if test(cell[at]) {
                         return true;
+                    }
+                    at += 1;
+                    if at == len {
+                        at = 0;
                     }
                 }
             }
@@ -191,19 +202,24 @@ impl UnitKind {
     /// Equal collision axes in the complete classic DAT table, rounded up to
     /// fixed subunits. See docs/movement/aoe2-model.md for source and confidence.
     pub const fn collision_radius(self) -> i32 {
-        match self {
-            Self::Scout | Self::Knight | Self::LightCavalry => 256,
-            Self::Vassal => 308,
-            Self::BatteringRam => 461,
-            Self::FishingShip
-            | Self::Galley
-            | Self::FireShip
-            | Self::DemolitionShip
-            | Self::TransportShip
-            | Self::WarGalley
-            | Self::Mangonel => 512,
-            _ => 205,
-        }
+        const RADIUS: [i16; 256] = {
+            let mut table = [205; 256];
+            table[UnitKind::Scout as usize] = 256;
+            table[UnitKind::Knight as usize] = 256;
+            table[UnitKind::LightCavalry as usize] = 256;
+            table[UnitKind::Vassal as usize] = 308;
+            table[UnitKind::BatteringRam as usize] = 461;
+            table[UnitKind::FishingShip as usize] = 512;
+            table[UnitKind::Galley as usize] = 512;
+            table[UnitKind::FireShip as usize] = 512;
+            table[UnitKind::DemolitionShip as usize] = 512;
+            table[UnitKind::TransportShip as usize] = 512;
+            table[UnitKind::WarGalley as usize] = 512;
+            table[UnitKind::Mangonel as usize] = 512;
+            table
+        };
+        // One load: this runs for every body tested in a collision scan.
+        RADIUS[self as usize] as i32
     }
 }
 
@@ -214,7 +230,7 @@ impl GameWorld {
         at: WorldPosition,
         stationary: bool,
     ) -> bool {
-        let unit = self.units[index].state;
+        let unit = &self.units[index].state;
         self.collisions.blocked(
             (at, unit.kind.collision_radius() + 512),
             unit.kind.is_naval(),
@@ -224,7 +240,7 @@ impl GameWorld {
                 if id == unit.id {
                     return false;
                 }
-                let other = self.units[self.collisions.unit_index(id)].state;
+                let other = &self.units[self.collisions.unit_index(id)].state;
                 let r = i64::from(unit.kind.collision_radius() + other.kind.collision_radius());
                 let x = i64::from(at.x) - i64::from(other.position.x);
                 let y = i64::from(at.y) - i64::from(other.position.y);
@@ -256,7 +272,7 @@ impl GameWorld {
         repairing_spawn: bool,
         bounds: Option<(i32, i32)>,
     ) -> bool {
-        let unit = self.units[index].state;
+        let unit = &self.units[index].state;
         let dx = i64::from(to.x) - i64::from(from.x);
         let dy = i64::from(to.y) - i64::from(from.y);
         let length = dx * dx + dy * dy;
@@ -267,10 +283,11 @@ impl GameWorld {
             ((i64::from(from.x) + i64::from(to.x)) / 2) as i32,
             ((i64::from(from.y) + i64::from(to.y)) / 2) as i32,
         );
+        let own_radius = unit.kind.collision_radius();
         let (maximum_radius, padding) = bounds.unwrap_or((512, 0));
         // Preserve the legacy whole-tile overflow policy exactly. Otherwise
         // only bodies within the actual half-step swept AABB can intersect.
-        let reach = unit.kind.collision_radius()
+        let reach = own_radius
             + if bounds.is_some() && !self.collisions.has_overfull_cells() {
                 maximum_radius + padding + ((dx.abs().max(dy.abs()) + 1) / 2) as i32
             } else {
@@ -280,15 +297,16 @@ impl GameWorld {
             && self.units[index]
                 .obstruction
                 .is_some_and(|o| o.pass_until > self.tick.0);
-        let broad_radius = i64::from(unit.kind.collision_radius() + maximum_radius + padding);
-        let (min_x, max_x) = (
-            i64::from(from.x.min(to.x)) - broad_radius,
-            i64::from(from.x.max(to.x)) + broad_radius,
-        );
-        let (min_y, max_y) = (
-            i64::from(from.y.min(to.y)) - broad_radius,
-            i64::from(from.y.max(to.y)) + broad_radius,
-        );
+        // The swept box widened by the largest possible touching neighbor.
+        let culling = bounds.map(|_| {
+            let broad_radius = i64::from(own_radius + maximum_radius + padding);
+            (
+                i64::from(from.x.min(to.x)) - broad_radius,
+                i64::from(from.x.max(to.x)) + broad_radius,
+                i64::from(from.y.min(to.y)) - broad_radius,
+                i64::from(from.y.max(to.y)) + broad_radius,
+            )
+        });
         !self.collisions.blocked(
             (midpoint, reach),
             unit.kind.is_naval(),
@@ -298,8 +316,8 @@ impl GameWorld {
                 if id == unit.id {
                     return false;
                 }
-                let other = self.units[self.collisions.unit_index(id)].state;
-                if bounds.is_some()
+                let other = &self.units[self.collisions.unit_index(id)].state;
+                if let Some((min_x, max_x, min_y, max_y)) = culling
                     && (i64::from(other.position.x) < min_x
                         || i64::from(other.position.x) > max_x
                         || i64::from(other.position.y) < min_y
@@ -314,9 +332,7 @@ impl GameWorld {
                 {
                     return false;
                 }
-                let r = i64::from(
-                    unit.kind.collision_radius() + other.kind.collision_radius() + padding,
-                );
+                let r = i64::from(own_radius + other.kind.collision_radius() + padding);
                 let x = i64::from(other.position.x) - i64::from(from.x);
                 let y = i64::from(other.position.y) - i64::from(from.y);
                 let start = x * x + y * y;
