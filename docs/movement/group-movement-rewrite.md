@@ -244,28 +244,30 @@ group then unit id; the parallel phase reads only the snapshot.
 - **Melee and work spots.** 39284 hotfix improved melee pathing; 61321 stops melee on attack-move
   going idle; 81058 retargets a same-type unit when the bumped target is unreachable; 177723
   improves large lumberjack groups; 104954 stops villagers looping at a resource. No source gives
-  fixed work spots or a melee cap; geometry (radius around the footprint) is the likely limit [G].### 4.2 Current code (cause of S7)
+  fixed work spots or a melee cap; geometry (radius around the footprint) is the likely limit [G].
+
+### 4.2 Current code (cause of S7)
 
 Unit bodies are hard circles: `collision_sweep` rejects any overlap
 (`movement_step/collision.rs:214-299`). The only relief is a same-player
 squeeze after **64** blocked ticks, 3.2 s (`movement_step/settling.rs:20`), for
 40 ticks (`:23`, `collision.rs:233-235`). Enemies and "settled workers"
-(`Gathering`, `Fishing`, `Attacking`, ...) never pass (`collision.rs:152-164`,
-`:248`).
+(`Gathering`, `Fishing`, `Attacking`, ...) never pass (`collision.rs:152-164`, `:248`).
 
 - **Bridge:** a centre may sit at most `512 - r` off the deck axis (`collision.rs:356-398`);
   sidesteps are six fixed-angle tries (`movement_step/avoidance.rs:179-237`); different players
   never squeeze, so a head-on meeting can deadlock (plausible, not yet reproduced).
 - **Narrow rivers:** ships use 512 for bodies *and* terrain (`collision.rs:175-181`);
   `body_position_clear` rejects a circle touching any non-water tile (`collision.rs:303-334`), so a
-  1-tile channel admits only the exact centreline, two ships never pass, and a fishing ship at work
-  is a wall.
+  1-tile channel admits only the exact centreline, two ships never pass, and a fishing ship at work is a wall.
 - **Villagers at resources:** spots are a diameter plus 16 apart on the footprint perimeter
   (`movement_step/slots.rs:14-36`); working villagers are walls; arrivals with over 32 reservations
   count as full (`spacing/destinations.rs`); cells with over 32 bodies refuse traffic
   (`collision.rs:8`, `:135`, `:277-297`); redirects only within 3 tiles.
 - **Melee:** standing attackers are walls to friends; a melee unit needs a free perimeter point;
-  enemy bodies are hard.### 4.3 Avoidance design
+  enemy bodies are hard.
+
+### 4.3 Avoidance design
 
 Unit-unit contact becomes **separation with priority**, not a veto. Terrain
 and buildings stay hard (existing exact sweeps, `static_collision.rs`).
@@ -412,11 +414,9 @@ for client changes), and ships a before/after scene of its own change
   - Test: two crossing groups of 40 arrive with no unit frozen for more than
     1 s, and no pair ever breaks `h`.
 - **PR 8: head-on and bridges (step 5).**
-  - Test: two players' units meeting on a 1-tile bridge both cross within
-    3 s.
+  - Test: two players' units meeting on a 1-tile bridge both cross within 3 s.
 - **PR 9: narrow water (step 6).**
-  - Test: 4 fishing ships work in a 1-tile river, and 2 galleys pass in a
-    2-tile river.
+  - Test: 4 fishing ships work in a 1-tile river, and 2 galleys pass in a 2-tile river.
 - **PR 10: villagers and melee crowds (steps 7–8).**
   - Test: 12 villagers all gather at one mine within 10 s.
   - Test: in 40 vs 40, at least 90 % of melee units strike within 5 s.

@@ -174,7 +174,8 @@ impl GameWorld {
     }
 
     /// Traffic is temporary. Retry a valid fishing job at most once a second,
-    /// retaining its reservation instead of dropping the profession to Idle.
+    /// retaining its reservation. Like land gathering, give the job up after
+    /// `MAX_APPROACH_FAILURES` failed approaches so it cannot wait forever.
     pub(super) fn retry_fishing_approach(&mut self, id: EntityId, task: &mut GatherTask) -> bool {
         let Some(left) = self.resource_remaining(task.node) else {
             return false;
@@ -185,6 +186,9 @@ impl GameWorld {
         if self.tick.0 < task.retry_tick {
             return true;
         }
+        if task.approach_failures >= MAX_APPROACH_FAILURES {
+            return false;
+        }
         task.retry_tick = self.tick.0 + u64::from(self.config.tick_hz);
         if self.approach_resource(id, task.tile).is_ok() {
             task.work_position = self.movement_order(id).map(|o| o.destination);
@@ -193,6 +197,8 @@ impl GameWorld {
             if let Some(&index) = self.lookup.get(&id) {
                 self.units[index].state.task = UnitTask::Moving;
             }
+        } else {
+            task.approach_failures += 1;
         }
         true
     }

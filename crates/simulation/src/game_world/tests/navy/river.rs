@@ -195,3 +195,52 @@ fn boats_in_narrow_rivers() {
         "{r:?}"
     );
 }
+
+/// A fishing ship sits at the west end of a one-tile river with its approach
+/// to the fish refused as unreachable: a static wall closes the river between
+/// them, and the refused order is replayed by hand because the wall is built
+/// after the ship has been given the job.
+fn walled_fishing() -> (GameWorld, EntityId, aoe_map::ResourceNode, Vec<TileCoord>) {
+    let (mut w, fish, river) = fish_river_fixture(1);
+    let id = ship(
+        &mut w,
+        UnitKind::FishingShip,
+        TileCoord::new(fish.tile.x - 8, river),
+        0,
+    );
+    w.issue_gather(PlayerId(0), id, fish.id).unwrap();
+    let wall: Vec<_> = (fish.tile.x - 6..=fish.tile.x + 2)
+        .map(|x| TileCoord::new(x, river))
+        .collect();
+    w.economy.blocked_tiles.extend(wall.iter().copied());
+    let index = w.lookup[&id];
+    w.units[index].order = None;
+    w.units[index].route.clear();
+    w.units[index].last_movement_error = Some(crate::GameWorldError::Unreachable);
+    (w, id, fish, wall)
+}
+
+#[test]
+fn a_permanently_unreachable_fishing_spot_ends_the_job_and_frees_the_fish() {
+    let (mut w, id, fish, _wall) = walled_fishing();
+    advance(&mut w, 20 * 4);
+    assert_eq!(w.gather_target(id), Some(fish.id), "still within the bound");
+    advance(&mut w, 20 * 30);
+    assert_eq!(w.gather_target(id), None);
+    assert_eq!(w.unit(id).unwrap().task, UnitTask::Idle);
+    let node = crate::game_world::economy::WorkTarget::Node(fish.id);
+    assert_eq!(w.economy.gatherers.count_target(node), 0);
+}
+
+#[test]
+fn a_fishing_spot_blocked_briefly_resumes_when_it_clears_within_the_bound() {
+    let (mut w, id, fish, wall) = walled_fishing();
+    advance(&mut w, 20 * 4);
+    assert_eq!(w.gather_target(id), Some(fish.id));
+    for tile in &wall {
+        w.economy.blocked_tiles.remove(tile);
+    }
+    advance(&mut w, 20 * 40);
+    assert_eq!(w.gather_target(id), Some(fish.id));
+    assert!(w.unit(id).unwrap().carried.is_some());
+}
