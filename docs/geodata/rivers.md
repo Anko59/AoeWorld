@@ -41,11 +41,19 @@ limits also apply. Geometry, width, distance stations and original segment metad
 content root. The required geometry field changes the single current format
 in place: regenerate packages and clear chunk caches; there is no old reader.
 
-Reaches keep a fixed real-world floor of 0.1 m³/s, the smallest discharge
-HydroRIVERS lists, at every map size: the same area keeps the same rivers on
-Tiny, Small, Large and Giant maps (on the Paris basin Large keeps the 204.7 km
-of river in the central 30 km that Tiny keeps; the former size-scaled cutoff
-kept 103.2 km). A page holds at most 1024 segments and 48 KiB of serialized
+Small rivers disappear as compression rises. A reach is kept only when its
+real channel width (`10 * sqrt(discharge)` m) is at least the same fraction of
+a tile as the smallest HydroRIVERS reach (0.1 m³/s, 3.2 m) is of the 60 m tile of
+the default 30x compression (about 5%). The discharge floor is therefore
+`0.1 * max(1, metres_per_tile / 60)²` m³/s (`minimum_discharge` in
+`crates/geodata/src/hydrology/sampler/channels.rs`): 0.1 at compression up to
+30, 0.4 at 60, 1.6 at 120, 6.4 at 240, where only streams at least four tiles
+wide remain. It is a pure function of the compression, applied to the reaches of
+every page before evidence cells, topology and segments are built, so it is
+deterministic and the same area on maps of the same compression keeps the same
+rivers whatever the tile count. Compression 30 and finer maps are unchanged. Regenerate packages
+after changing it (`make map-generate`, then `make map-verify`); there is no
+migration. A page holds at most 1024 segments and 48 KiB of serialized
 segments, which keeps a dense page inside the 128 KiB directory page limit.
 When its reaches would exceed either bound, whole reaches are kept by falling
 discharge (lower reach id first on a tie) and the rest are dropped: a

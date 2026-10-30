@@ -1,5 +1,6 @@
 //! A river is drawn by importance: the width follows discharge, from a narrow
-//! stream at the smallest kept discharge to a wide river, on every map size.
+//! stream at the smallest kept discharge to a wide river, on every map size
+//! (the cutoff itself scales with compression, the width mapping does not).
 use super::super::channels::segments;
 use super::cutoff::river_features;
 use super::*;
@@ -50,6 +51,7 @@ fn width_rises_with_every_discharge_decade_until_the_playability_ceiling() {
 
 #[test]
 fn width_follows_discharge_not_the_metres_per_tile_of_the_map() {
-    let discharges = [0.1, 100.0, 3_000.0];
+    // All above the 10 m3/s floor of the 600 m tiles of the 50-tile map.
+    let discharges = [100.0, 3_000.0, 10_000.0];
     assert_eq!(widths(500, &discharges), widths(50, &discharges));
 }

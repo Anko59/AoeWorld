@@ -4,13 +4,29 @@ use super::super::GeodataError;
 use super::super::hydrology_sampling::{RiverReachGeometry, VectorFeature, line_position};
 use aoe_map::RiverSegment;
 
-/// Real-world discharge floor in m³/s: a reach below it is not a river on any
-/// map. It is independent of the map size and the sampling spacing, so the same
-/// area keeps the same rivers on Tiny, Small, Large and Giant maps.
-const MINIMUM_DISCHARGE_CMS: f64 = 0.1;
+/// Smallest discharge HydroRIVERS lists, in m³/s: no reach below it exists.
+const BASE_DISCHARGE_CMS: f64 = 0.1;
 
-pub(super) fn minimum_discharge() -> f64 {
-    MINIMUM_DISCHARGE_CMS
+/// Tile size in metres at which the base floor applies unchanged (the default
+/// 30x compression of 2 m game tiles). Finer maps keep every listed reach.
+const REFERENCE_METERS_PER_TILE: f64 = 60.0;
+
+pub(super) fn base_discharge() -> f64 {
+    BASE_DISCHARGE_CMS
+}
+
+/// Discharge floor in m³/s for a map whose tile spans `meters_per_tile` metres.
+///
+/// A river is kept only if its real channel width (`10 * sqrt(discharge)` m)
+/// is at least the same fraction of a tile as the smallest listed river was on
+/// the reference 60 m tile (5%). Equivalently the floor grows with the square
+/// of the tile size beyond the reference: 0.1 m³/s up to compression 30, about
+/// 0.4 at 60, 1.6 at 120 and 6.4 at 240, where only streams that would be
+/// about 4 tiles wide survive. A pure function of the compression, so the
+/// output is deterministic and independent of page, order or file.
+pub(super) fn minimum_discharge(meters_per_tile: f64) -> f64 {
+    let scale = (meters_per_tile / REFERENCE_METERS_PER_TILE).max(1.0);
+    BASE_DISCHARGE_CMS * scale * scale
 }
 
 /// Tiles of channel width gained per decade of discharge above the floor.
@@ -22,7 +38,7 @@ const TILES_PER_DISCHARGE_DECADE: f64 = 1.5;
 
 /// Gameplay channel width in 1/256 tile units for a mean discharge in m³/s.
 pub(super) fn width_units(discharge: f64) -> u16 {
-    let decades = (discharge / MINIMUM_DISCHARGE_CMS).max(1.0).log10();
+    let decades = (discharge / BASE_DISCHARGE_CMS).max(1.0).log10();
     let tiles = 1.0 + TILES_PER_DISCHARGE_DECADE * decades;
     (tiles * 256.0).round().clamp(
         f64::from(aoe_map::MIN_RIVER_WIDTH_UNITS),
@@ -59,7 +75,7 @@ pub(super) fn segments(
         let Some(reach) = &feature.river_reach else {
             continue;
         };
-        if reach.discharge < minimum_discharge() {
+        if reach.discharge < minimum_discharge(meters_per_tile) {
             continue;
         }
         let lines = reach_segments(reach, side, meters_per_tile, bounds)?;

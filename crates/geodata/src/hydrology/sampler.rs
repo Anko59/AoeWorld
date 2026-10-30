@@ -211,8 +211,21 @@ impl Sampler {
             .map_err(|_| GeodataError::Coordinate)?;
         let page_bounds = page_bounds(&query_x, &query_y)?;
         let lake_features = vector_features(&mut self.lakes, page_bounds, &definition, false)?;
+        let tiles_per_side = self
+            .request
+            .estimate()
+            .map_err(|_| GeodataError::Preparation("invalid river scale"))?
+            .tiles_per_side;
+        let river_floor = channels::minimum_discharge(side / tiles_per_side as f64);
         let river_features = if let Some(rivers) = &mut self.rivers {
-            vector_features(rivers, page_bounds, &definition, true)?
+            let mut features = vector_features(rivers, page_bounds, &definition, true)?;
+            // Compression-scaled importance cutoff: small streams vanish on coarse maps.
+            features.retain(|f| {
+                f.river_reach
+                    .as_ref()
+                    .is_none_or(|r| r.discharge >= river_floor)
+            });
+            features
         } else {
             Vec::new()
         };
@@ -272,10 +285,7 @@ impl Sampler {
                 river_segments: channels::segments(
                     &river_features,
                     side,
-                    self.request
-                        .estimate()
-                        .map_err(|_| GeodataError::Preparation("invalid river scale"))?
-                        .tiles_per_side,
+                    tiles_per_side,
                     [
                         east[0] - spacing / 2.0,
                         *north.last().ok_or(GeodataError::Projection)? - spacing / 2.0,
