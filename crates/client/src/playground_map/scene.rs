@@ -457,12 +457,10 @@ fn building_kind(building: &aoe_protocol::GameplayBuildingState) -> aoe_renderin
     };
     if building.construction == ConstructionState::Complete {
         kind
-    } else if matches!(building.kind, Kind::StoneWall | Kind::StoneGate) {
-        Art::building(crate::building_ui::sprite_slot(
-            building.kind,
-            building.progress_permille,
-            false,
-        ) as u8)
+    } else if let Some(art) =
+        crate::building_ui::stone_foundation(building.kind, building.progress_permille)
+    {
+        art
     } else {
         kind.building_id()
             .map_or(kind, |id| Art::foundation(id as i16))

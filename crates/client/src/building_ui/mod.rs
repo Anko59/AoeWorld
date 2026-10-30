@@ -23,6 +23,11 @@ pub fn gate_kind(
     )
 }
 
+/// A stone wall or gate under construction draws its foundation art.
+pub fn stone_foundation(kind: BuildingKind, progress: u16) -> Option<aoe_rendering::SceneUnitKind> {
+    stone_slot(kind, progress, false).map(|slot| aoe_rendering::SceneUnitKind::building(slot as u8))
+}
+
 pub fn gate_sprite_slot(open: bool, progress: u16) -> Option<u8> {
     (open && progress == 1000).then_some(42)
 }
