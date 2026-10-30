@@ -319,3 +319,53 @@ fn a_returning_hunter_replaces_a_carcass_whose_work_tiles_became_blocked() {
     assert!(world.resume_resource(hunter, &mut task));
     assert_eq!(task.animal, Some(animals[1]));
 }
+
+#[test]
+fn exhausted_cutters_spread_over_free_trees_but_manual_orders_stack() {
+    let (mut world, old) = replacement::cleared_work_area(ResourceKind::Wood);
+    let mut trees = Vec::new();
+    if let Terrain::Map { generator, overlay } = &mut world.terrain {
+        for dx in [-2, -4, -6, 2] {
+            for dy in [-2, 0, 2] {
+                let tile = TileCoord::new(old.tile.x + dx, old.tile.y + dy);
+                let node = ResourceNode::starting(tile, old.kind).unwrap();
+                overlay.insert_starting_resource(generator, node).unwrap();
+                trees.push(node.id);
+            }
+        }
+    }
+    let ids = workers(&mut world, old.tile, 6);
+    for id in &ids {
+        world.issue_gather(PlayerId(0), *id, old.id).unwrap();
+    }
+    if let Terrain::Map { generator, overlay } = &mut world.terrain {
+        overlay
+            .deplete(generator, old.id, old.initial_amount)
+            .unwrap();
+    }
+    let mut busiest = 0;
+    for _ in 0..900 {
+        world.advance();
+        let mut counts = BTreeMap::<u64, usize>::new();
+        for id in &ids {
+            // The depleted tree is left by manual workers; only picks count.
+            if let Some(node) = world.gather_target(*id).filter(|n| *n != old.id) {
+                *counts.entry(node).or_default() += 1;
+            }
+        }
+        busiest = busiest.max(counts.values().copied().max().unwrap_or(0));
+    }
+    assert!(
+        busiest <= 2,
+        "auto-assigned cutters stacked {busiest} on a tree"
+    );
+    // A deliberate order may still put many cutters on one tree.
+    for id in &ids[..5] {
+        world.issue_gather(PlayerId(0), *id, trees[0]).unwrap();
+    }
+    assert!(
+        ids[..5]
+            .iter()
+            .all(|id| world.gather_target(*id) == Some(trees[0]))
+    );
+}

@@ -290,7 +290,7 @@ fn embarked_units_vacate_bank_building_footprints_without_releasing_population()
     let origin = TileCoord::new(land.x - 1, land.y);
     assert!(
         world
-            .validate_building_placement(BuildingKind::House, origin)
+            .validate_building_placement(BuildingKind::Dock, origin)
             .is_err()
     );
     world

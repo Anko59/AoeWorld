@@ -3,6 +3,7 @@ use super::{buildings::*, *};
 
 mod approach;
 mod continuation;
+mod eject;
 
 #[test]
 fn six_builders_reserve_distinct_perimeter_tiles_before_and_after_arrival() {

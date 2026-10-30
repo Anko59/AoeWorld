@@ -210,13 +210,15 @@ impl GameWorld {
         ) {
             self.nearest_fish(id, old.tile, old.id)
         } else {
-            self.nearest_resource_matching(
-                old.tile,
-                old.kind,
-                super::super::VILLAGE_RULES.replacement_radius_tiles,
-                Some(old.id),
-                |node| node.object == old.object,
-            )
+            let radius = super::super::VILLAGE_RULES.replacement_radius_tiles;
+            self.nearest_resource_matching(old.tile, old.kind, radius, Some(old.id), |node| {
+                node.object == old.object && !self.tree_is_crowded(node, None)
+            })
+            .or_else(|| {
+                self.nearest_resource_matching(old.tile, old.kind, radius, Some(old.id), |node| {
+                    node.object == old.object
+                })
+            })
         };
         next.is_some_and(|next| self.issue_gather(unit.player, id, next.id).is_ok())
     }
