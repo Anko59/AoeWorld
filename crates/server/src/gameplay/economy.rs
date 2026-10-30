@@ -96,11 +96,18 @@ pub(super) fn wire_unit(
         id: unit.id,
         player: unit.player,
         position: unit.position,
-        moving: unit.moving,
-        planning: unit.planning,
+        moving: unit.moving && unit.hp > 0,
+        planning: unit.planning && unit.hp > 0,
         facing: unit.facing as u8,
         kind: wire_kind(unit.kind),
-        task: match unit.task {
+        // A body at 0 HP is Dying whatever a late movement or job pass wrote to
+        // its task: the wire requires it, and a mismatch used to fail every
+        // Snapshot and Tick that carried the corpse.
+        task: match if unit.hp == 0 {
+            aoe_simulation::UnitTask::Dying
+        } else {
+            unit.task
+        } {
             aoe_simulation::UnitTask::Idle => UnitTask::Idle,
             aoe_simulation::UnitTask::Moving => UnitTask::Moving,
             aoe_simulation::UnitTask::Gathering => UnitTask::Gathering,
@@ -117,7 +124,7 @@ pub(super) fn wire_unit(
         gathering: gathering.map(wire_resource),
         hp: unit.hp,
         max_hp: unit.max_hp,
-        attack_target: unit.attack_target,
+        attack_target: unit.attack_target.filter(|_| unit.hp > 0),
         last_hit: unit.last_hit.map(wire_hit),
         death_tick: unit.death_tick,
         hunt_target,

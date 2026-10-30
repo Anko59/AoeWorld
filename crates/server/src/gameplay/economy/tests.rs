@@ -42,3 +42,20 @@ fn dying_commanded_soldiers_and_generals_carry_no_command_fields() {
         assert!(aoe_protocol::gameplay_server_violations(&message).is_empty());
     }
 }
+
+/// A corpse whose task was rewritten after death still reaches the wire as Dying.
+#[test]
+fn a_body_at_zero_hp_is_always_dying_on_the_wire() {
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(7)).unwrap()).unwrap();
+    let id = world
+        .spawn_kind(PlayerId(0), aoe_simulation::UnitKind::Militia, at(30, 30))
+        .unwrap();
+    let mut body = world.unit(id).unwrap();
+    body.hp = 0;
+    body.task = aoe_simulation::UnitTask::Idle;
+    body.moving = true;
+    body.attack_target = Some(id);
+    let state = unit_state(&world, &body);
+    assert_eq!(state.task, UnitTask::Dying);
+    assert!(!state.moving && state.attack_target.is_none());
+}
