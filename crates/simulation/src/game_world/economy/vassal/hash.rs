@@ -22,6 +22,22 @@ impl Economy {
             for id in &home.workers {
                 h.update(&id.0.to_le_bytes());
             }
+            for (id, stall) in &home.stalls {
+                h.update(&id.0.to_le_bytes());
+                h.update(&stall.at.x.to_le_bytes());
+                h.update(&stall.at.y.to_le_bytes());
+                h.update(&stall.since.to_le_bytes());
+                h.update(&[stall.strikes]);
+                h.update(
+                    &stall
+                        .avoid_tile
+                        .map_or(i64::MIN, |t| {
+                            i64::from(t.x) << 32 | i64::from(t.y) & 0xffff_ffff
+                        })
+                        .to_le_bytes(),
+                );
+                h.update(&[stall.avoid_kind.map_or(u8::MAX, |k| k as u8)]);
+            }
         }
         // `automatic` is a transient advance guard. Work counters are read-only
         // telemetry; neither affects admission or decisions on subsequent ticks.

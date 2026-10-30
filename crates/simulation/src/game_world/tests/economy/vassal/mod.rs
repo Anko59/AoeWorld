@@ -1,5 +1,7 @@
+mod adoption;
 mod manager;
 mod resources;
+mod territory;
 use super::*;
 use crate::{Age, Stockpile};
 

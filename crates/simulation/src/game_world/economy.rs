@@ -44,7 +44,11 @@ mod bridge;
 mod general;
 mod vassal;
 pub use general::{GeneralState, GeneralStatus, GeneralWork};
-pub use vassal::{VASSAL_RULES, VassalRules, VassalWork};
+#[cfg(test)]
+pub(crate) use vassal::vassal_stall;
+pub use vassal::{
+    VASSAL_RULES, VASSAL_STALL_SECONDS, VassalRules, VassalStatus, VassalWait, VassalWork,
+};
 mod wall;
 
 pub use buildings::{

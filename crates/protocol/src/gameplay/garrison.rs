@@ -9,6 +9,25 @@ pub struct GarrisonUnitState {
     pub kind: UnitKind,
     pub hp: u16,
     pub max_hp: u16,
+    /// Owner-only economy report of a garrisoned, active Vassal.
+    pub vassal: Option<VassalReport>,
+}
+
+/// What the Vassal's domain is doing and, if it is not growing, why not.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct VassalReport {
+    pub managed: u16,
+    pub residents: u16,
+    pub wait: VassalWait,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum VassalWait {
+    Growing,
+    Census,
+    Full,
+    NoTownCenter,
+    Population,
+    Food,
 }
 
 impl BuildingKind {
@@ -53,4 +72,9 @@ pub(super) fn valid(b: &GameplayBuildingState) -> bool {
         && b.garrison
             .iter()
             .all(|u| u.id != b.id && b.kind.admits(u.kind) && u.hp > 0 && u.hp <= u.max_hp)
+        && b.garrison.iter().all(|u| {
+            u.vassal.is_none_or(|r| {
+                u.kind == UnitKind::Vassal && r.managed <= 100 && r.managed <= r.residents
+            })
+        })
 }

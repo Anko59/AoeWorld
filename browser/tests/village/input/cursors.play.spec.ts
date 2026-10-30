@@ -39,6 +39,7 @@ test("a nonzero player keeps ownership after its primary scout enters a Castle",
             1,
             45,
             45,
+            0, // No Vassal report.
             0, // No bridge endpoints.
             0,
           ]),
@@ -89,7 +90,7 @@ test("a full shelter shows its capacity and receives a garrison order", async ({
   const full = [
     ...building(20, 0, 8197, 8188, 4).slice(0, -2),
     15,
-    ...Array.from({ length: 15 }, (_, i) => [40 + i, 0, 25, 25]).flat(),
+    ...Array.from({ length: 15 }, (_, i) => [40 + i, 0, 25, 25, 0]).flat(),
     0, // No bridge endpoints.
   ];
   const commands = await inputFixture(
