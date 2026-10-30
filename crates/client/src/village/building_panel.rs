@@ -125,7 +125,7 @@ pub(super) fn update(client: &Client) {
     buildings_update(&v);
 }
 
-pub(super) const KINDS: [aoe_protocol::BuildingKind; 21] = aoe_protocol::BuildingKind::ALL;
+pub(super) const KINDS: [aoe_protocol::BuildingKind; 23] = aoe_protocol::BuildingKind::ALL;
 
 #[inline(never)]
 pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::SceneUnit>) {
@@ -202,7 +202,7 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
                         false,
                     )
                     .with_ghost(available && construction::tile_valid(client, kind, &tiles, index)),
-                facing: if kind == aoe_protocol::BuildingKind::PalisadeWall {
+                facing: if kind.is_wall() {
                     building_ui::wall_frame(*t, |p| tiles.contains(&p))
                 } else {
                     0

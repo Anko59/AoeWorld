@@ -272,7 +272,7 @@ tiles_per_side=500, seed=1, terrain="flat", map_hash=None) -> MatchInfo`. Except
 until_tick=None, max_decisions=None) -> RunSummary`, `world`, `closed`,
 `close_reason`, `orders_sent`, `close()`, and the orders `move(unit, x, y)`, `stop(unit)`,
 `gather(unit, resource_id)`, `build(builders, kind, x, y)`, `build_wall(builders,
-x1, y1, x2, y2)`, `construct(builders, building)`, `cancel_construction(b)`,
+x1, y1, x2, y2, kind=PALISADE_WALL)`, `construct(builders, building)`, `cancel_construction(b)`,
 `farm(unit, farm)`, `train(building, kind)`, `cancel_training(b)`,
 `research(building, tech)`, `cancel_research(b)`, `attack(unit, target)`,
 `hunt(units, animal)`, `market_buy(building, resource)`, `market_sell(...)`.

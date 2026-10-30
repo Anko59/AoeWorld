@@ -229,10 +229,9 @@ impl GameWorld {
                 else {
                     continue;
                 };
-                if matches!(
-                    b.kind,
-                    BuildingKind::PalisadeWall | BuildingKind::PalisadeGate | BuildingKind::Bridge
-                ) || !area.accepts(Goal::Building(b.footprint))
+                if b.kind.is_barrier()
+                    || b.kind == BuildingKind::Bridge
+                    || !area.accepts(Goal::Building(b.footprint))
                     || !self.building_visible_to(area.player, b.footprint)
                 {
                     continue;

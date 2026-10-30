@@ -21,13 +21,14 @@ fn building_orders_pin_the_current_queue_flag() {
         let wall = ClientMessage::BuildWallOrder {
             sequence: 3,
             builder_ids: vec![EntityId(7)],
+            kind: BuildingKind::StoneWall,
             from: TileCoord::new(10, 12),
             to: TileCoord::new(11, 12),
             queued,
         };
         for (order, expected) in [
             (building, vec![8, 3, 1, 7, 1, 20, 24, u8::from(queued)]),
-            (wall, vec![9, 3, 1, 7, 20, 24, 22, 24, u8::from(queued)]),
+            (wall, vec![9, 3, 1, 7, 21, 20, 24, 22, 24, u8::from(queued)]),
         ] {
             let bytes = encode_client(&order).unwrap();
             assert_eq!(bytes, expected);

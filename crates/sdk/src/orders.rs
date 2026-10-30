@@ -90,9 +90,10 @@ pub enum Order {
         from: TileCoord,
         to: TileCoord,
     },
-    /// Lay palisade segments along the line from `from` to `to`.
+    /// Lay wall segments (`kind` palisade or stone) along the line `from`..`to`.
     BuildWall {
         builders: Vec<EntityId>,
+        kind: BuildingKind,
         from: TileCoord,
         to: TileCoord,
     },
@@ -255,9 +256,15 @@ impl Order {
                 to,
                 queued: false,
             },
-            Order::BuildWall { builders, from, to } => M::BuildWallOrder {
+            Order::BuildWall {
+                builders,
+                kind,
+                from,
+                to,
+            } => M::BuildWallOrder {
                 sequence,
                 builder_ids: builders,
+                kind,
                 from,
                 to,
                 queued: false,

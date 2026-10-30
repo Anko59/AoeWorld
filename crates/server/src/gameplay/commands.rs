@@ -269,12 +269,13 @@ impl GameplayService {
         session_id: u64,
         sequence: u64,
         builder_ids: Vec<EntityId>,
-        from: aoe_core::TileCoord,
-        to: aoe_core::TileCoord,
+        kind: aoe_protocol::BuildingKind,
+        (from, to): (aoe_core::TileCoord, aoe_core::TileCoord),
         queued: bool,
     ) {
         let action = PendingAction::BuildWall {
             builder_ids,
+            kind,
             from,
             to,
             queued,

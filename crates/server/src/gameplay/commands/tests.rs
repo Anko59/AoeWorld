@@ -1,5 +1,6 @@
 use super::*;
 use aoe_core::Seed;
+use aoe_protocol::BuildingKind;
 use tokio::sync::mpsc;
 
 #[test]
@@ -201,12 +202,13 @@ fn build_orders_report_unexplored_placement_without_mutating_the_world() {
     for action in [
         PendingAction::Build {
             builder_ids: vec![builder],
-            kind: aoe_protocol::BuildingKind::House,
+            kind: BuildingKind::House,
             origin: TileCoord::new(100, 100),
             queued: false,
         },
         PendingAction::BuildWall {
             builder_ids: vec![builder],
+            kind: BuildingKind::PalisadeWall,
             from: TileCoord::new(100, 100),
             to: TileCoord::new(101, 100),
             queued: false,
@@ -225,7 +227,6 @@ async fn queue_move_rejects_unknown_and_non_controller_sessions_then_deduplicate
     let service = GameplayService::new(Seed(1));
     let (controller_tx, mut controller_rx) = mpsc::channel(MAX_ACK_HISTORY + 16);
     let (controller_id, _) = service.register(None, controller_tx).await;
-
     service
         .queue_move(
             controller_id + 1_000,
@@ -235,7 +236,6 @@ async fn queue_move_rejects_unknown_and_non_controller_sessions_then_deduplicate
         )
         .await;
     assert!(controller_rx.try_recv().is_err());
-
     let (spectator_tx, mut spectator_rx) = mpsc::channel(8);
     let (spectator_id, _) = service.register(None, spectator_tx).await;
     service
@@ -248,7 +248,6 @@ async fn queue_move_rejects_unknown_and_non_controller_sessions_then_deduplicate
             ..
         }
     ));
-
     service
         .queue_move(controller_id, 1, EntityId(0), WorldPosition::default())
         .await;
@@ -402,6 +401,7 @@ fn a_wall_order_at_the_coordinate_limit_is_rejected_as_invalid_placement() {
         aoe_core::PlayerId(0),
         PendingAction::BuildWall {
             builder_ids: vec![villager],
+            kind: BuildingKind::PalisadeWall,
             from: aoe_core::TileCoord::new(i32::MAX, 3),
             to: aoe_core::TileCoord::new(i32::MAX, 5),
             queued: false,
@@ -485,7 +485,7 @@ fn a_full_world_reports_a_world_limit_and_an_empty_group_a_too_large_order() {
     });
     let build = |builder_ids| PendingAction::Build {
         builder_ids,
-        kind: aoe_protocol::BuildingKind::House,
+        kind: BuildingKind::House,
         origin,
         queued: false,
     };

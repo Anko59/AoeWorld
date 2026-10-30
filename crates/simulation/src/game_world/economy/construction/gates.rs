@@ -1,13 +1,13 @@
-//! A completed gate opens when an owned unit approaches, and cannot close
+//! A completed (palisade or stone) gate opens when an owned unit approaches, and cannot close
 //! through a living unit. Its one supported orientation is four by one tiles.
-use crate::{BuildingKind, GameWorld, Terrain};
+use crate::{GameWorld, Terrain};
 use aoe_core::{TileCoord, TileRect};
 
 impl GameWorld {
     pub(super) fn advance_gates(&mut self) {
         let gates: Vec<_> = self
             .buildings()
-            .filter(|b| b.kind == BuildingKind::PalisadeGate && b.is_complete())
+            .filter(|b| b.kind.is_gate() && b.is_complete())
             .map(|b| (b.id, b.player, b.footprint))
             .collect();
         for (id, owner, rect) in gates {

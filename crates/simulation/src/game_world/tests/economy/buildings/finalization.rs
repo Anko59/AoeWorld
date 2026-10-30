@@ -85,7 +85,14 @@ fn identical_build_orders_replay_to_the_same_hash() {
             .unwrap();
         fixture::survey(&mut world, PlayerId(0), at(112, 100), 2);
         world
-            .issue_build_wall(PlayerId(0), &[b], at(110, 100), at(114, 100), false)
+            .issue_build_wall(
+                PlayerId(0),
+                &[b],
+                BuildingKind::PalisadeWall,
+                at(110, 100),
+                at(114, 100),
+                false,
+            )
             .unwrap();
         advance(&mut world, 900);
         world.canonical_hash()

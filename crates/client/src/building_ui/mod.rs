@@ -6,6 +6,28 @@ use aoe_core::TileCoord;
 use aoe_protocol::BuildingKind;
 use aoe_protocol::Stockpile;
 
+/// The art kind of a standing building of `kind`, which is open when it is a
+/// gate whose authoritative state says so.
+pub fn gate_kind(
+    kind: BuildingKind,
+    open: bool,
+    progress: u16,
+) -> Option<aoe_rendering::SceneUnitKind> {
+    use aoe_rendering::SceneUnitKind as Art;
+    (kind.is_gate() && gate_sprite_slot(open, progress).is_some()).then_some(
+        if kind == BuildingKind::StoneGate {
+            Art::OpenStoneGate
+        } else {
+            Art::OpenPalisadeGate
+        },
+    )
+}
+
+/// A stone wall or gate under construction draws its foundation art.
+pub fn stone_foundation(kind: BuildingKind, progress: u16) -> Option<aoe_rendering::SceneUnitKind> {
+    stone_slot(kind, progress, false).map(|slot| aoe_rendering::SceneUnitKind::building(slot as u8))
+}
+
 pub fn gate_sprite_slot(open: bool, progress: u16) -> Option<u8> {
     (open && progress == 1000).then_some(42)
 }
@@ -138,9 +160,30 @@ pub fn footprint_valid(
         .all(|y| (origin.x..origin.x + side).all(|x| free(TileCoord::new(x, y))))
 }
 
+/// DE stone wall (71) and gate (72 closed, 73 open). Rubble and foundations
+/// reuse the palisade art: the wall's generic 1x1 foundation (9) and rubble
+/// (20), the gate's construction (43) and rubble (37).
+fn stone_slot(kind: BuildingKind, progress: u16, rubble: bool) -> Option<usize> {
+    let (standing, rubble_slot, building) = match kind {
+        BuildingKind::StoneWall => (71, 20, 9),
+        BuildingKind::StoneGate => (72, 37, 43),
+        _ => return None,
+    };
+    Some(if rubble {
+        rubble_slot
+    } else if progress < 1000 {
+        building
+    } else {
+        standing
+    })
+}
+
 /// Standing kinds, four foundation sizes, then rubble kinds.
 #[inline(never)]
 pub fn sprite_slot(kind: BuildingKind, progress: u16, rubble: bool) -> usize {
+    if let Some(slot) = stone_slot(kind, progress, rubble) {
+        return slot;
+    }
     if kind == BuildingKind::Bridge {
         return if rubble {
             20
@@ -256,6 +299,9 @@ pub fn age_sprite_slot(
     ];
     if kind == BuildingKind::Bridge {
         return sprite_slot(kind, progress, rubble);
+    }
+    if let Some(slot) = stone_slot(kind, progress, rubble) {
+        return slot;
     }
     if progress == 1000 && !rubble && age == aoe_protocol::Age::Castle {
         return CASTLE[kind as usize] as usize;

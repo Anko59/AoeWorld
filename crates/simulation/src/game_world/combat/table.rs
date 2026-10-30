@@ -83,7 +83,7 @@ const fn armour(kind: BuildingKind, melee_armour: i16, pierce_armour: u16) -> Bu
 /// House -2 melee: official AoE II DE update 56005:
 /// https://www.ageofempires.com/news/aoeii_de_update_56005/
 /// Farm and Outpost really have 0/0; these are not placeholders.
-pub const BUILDING_COMBAT: [BuildingCombat; 21] = [
+pub const BUILDING_COMBAT: [BuildingCombat; 23] = [
     armour(BuildingKind::TownCenter, 3, 5),
     armour(BuildingKind::House, -2, 7),
     armour(BuildingKind::LumberCamp, 0, 7),
@@ -123,6 +123,8 @@ pub const BUILDING_COMBAT: [BuildingCombat; 21] = [
     armour(BuildingKind::University, 2, 9),
     armour(BuildingKind::SiegeWorkshop, 1, 8),
     armour(BuildingKind::Bridge, 2, 5),
+    armour(BuildingKind::StoneWall, 8, 10),
+    armour(BuildingKind::StoneGate, 6, 6),
 ];
 
 pub(crate) fn age_armour(kind: BuildingKind, age: crate::Age) -> BuildingCombat {

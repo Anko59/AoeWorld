@@ -98,10 +98,10 @@ a continuous constant-pixel stroke across all renderers and zoom levels.
 Select villagers and press B for economic buildings or V for military buildings.
 The DE grid keys are House Q, Mill W, Mining Camp E, Lumber Camp R, Farm A,
 Blacksmith S and Market D; military keys are Barracks Q, Range W, Stable E,
-Outpost A, Palisade S, Tower F and Palisade Gate X. Costs and availability are
+Outpost A, Palisade S, Tower F, Palisade Gate X, Stone Wall Z and Stone Gate G. Costs and availability are
 visible; Feudal entries are grey with a "requires Feudal Age" tooltip in Dark
 Age. Farms require a completed Mill.
-Choose a building and click a green footprint to place it. Drag a palisade
+Choose a building and click a green footprint to place it. Drag a palisade or stone wall
 line from its first to last tile (or click its two endpoints); red previews
 are refused locally. Escape or
 right-click cancels placement. Right-click a foundation to resume construction,

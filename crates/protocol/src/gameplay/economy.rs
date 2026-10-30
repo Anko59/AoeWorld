@@ -223,6 +223,8 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                             | BuildingKind::Bridge
                             | BuildingKind::PalisadeWall
                             | BuildingKind::PalisadeGate
+                            | BuildingKind::StoneWall
+                            | BuildingKind::StoneGate
                             | BuildingKind::Outpost
                             | BuildingKind::Blacksmith
                             | BuildingKind::Market
@@ -237,8 +239,10 @@ pub(super) fn valid_buildings(buildings: &[GameplayBuildingState]) -> bool {
                 && building.footprint.min.y >= 0
                 && building.hp > 0
                 && (!building.gate_open
-                    || (building.kind == BuildingKind::PalisadeGate
-                        && building.construction == ConstructionState::Complete))
+                    || (matches!(
+                        building.kind,
+                        BuildingKind::PalisadeGate | BuildingKind::StoneGate
+                    ) && building.construction == ConstructionState::Complete))
                 && if building.kind == BuildingKind::Bridge {
                     building
                         .bridge_span

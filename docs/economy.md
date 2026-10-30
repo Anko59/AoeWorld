@@ -131,6 +131,8 @@ tests and wire follow. Values are Age of Empires II: Definitive Edition's.
 | Barracks | 175 wood | 50 s | 1200 | 3x3 | infantry training queue |
 | Palisade Wall | 2 wood a tile | 6 s a tile | 250 | 1x1 | blocks movement |
 | Outpost | 25 wood, 5 stone | 15 s | 500 | 1x1 | line of sight 10 |
+| Stone Wall (Feudal) | 5 stone a tile | 5 s a tile | 1800 | 1x1 | blocks movement, armour 8/10 |
+| Stone Gate (Feudal) | 30 stone | 70 s | 2750 | 4x1 | opens for its owner, armour 6/6 |
 
 Build and BuildWall orders name villagers and a tile. The server validates the
 footprint (every tile explored by the owner, inside the map, passable, free of resources, units and buildings),
@@ -160,7 +162,8 @@ A Move order
 abandons construction; `ConstructOrder` sends villagers back to an unfinished
 foundation the player owns, at no charge. Cancelling a
 foundation refunds the cost in proportion to the work not yet done (all of it
-before any progress). One palisade order lays at most 64 segments, all or none.
+before any progress). One wall order (`BuildWallOrder` names a palisade or stone `kind`) lays at most 64
+segments, all or none.
 
 Population support is the sum over a player's completed housing buildings
 (Town Center 5, House 5), capped at 200. Training needs a completed building

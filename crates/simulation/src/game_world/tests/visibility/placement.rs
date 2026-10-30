@@ -11,8 +11,15 @@ fn unexplored_footprints_are_refused_atomically_for_buildings_and_walls() {
         let before = w.canonical_hash();
         let origin = TileCoord::new(100, 100);
         let result = if wall {
-            w.issue_build_wall(PlayerId(0), &[builder], origin, origin, false)
-                .map(|_| ())
+            w.issue_build_wall(
+                PlayerId(0),
+                &[builder],
+                BuildingKind::PalisadeWall,
+                origin,
+                origin,
+                false,
+            )
+            .map(|_| ())
         } else {
             w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin, false)
                 .map(|_| ())
@@ -26,8 +33,15 @@ fn unexplored_footprints_are_refused_atomically_for_buildings_and_walls() {
         w.update_observer(EntityId(9000), None);
         assert_eq!(w.visibility(PlayerId(0), origin), TileVisibility::Explored);
         if wall {
-            w.issue_build_wall(PlayerId(0), &[builder], origin, origin, false)
-                .unwrap();
+            w.issue_build_wall(
+                PlayerId(0),
+                &[builder],
+                BuildingKind::PalisadeWall,
+                origin,
+                origin,
+                false,
+            )
+            .unwrap();
         } else {
             w.issue_build(PlayerId(0), &[builder], BuildingKind::House, origin, false)
                 .unwrap();
@@ -58,6 +72,7 @@ fn every_footprint_tile_must_be_explored_by_the_ordering_player() {
         w.issue_build_wall(
             PlayerId(0),
             &[builder],
+            BuildingKind::PalisadeWall,
             origin,
             TileCoord::new(101, 100),
             false

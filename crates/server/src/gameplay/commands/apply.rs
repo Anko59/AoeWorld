@@ -154,11 +154,19 @@ pub(in crate::gameplay) fn apply(
             .map(|_| ()),
         PendingAction::BuildWall {
             builder_ids,
+            kind,
             from,
             to,
             queued,
         } => world
-            .issue_build_wall(player, &builder_ids, from, to, queued)
+            .issue_build_wall(
+                player,
+                &builder_ids,
+                crate::gameplay::economy::native_building(kind),
+                from,
+                to,
+                queued,
+            )
             .map(|_| ()),
         PendingAction::Construct {
             builder_ids,

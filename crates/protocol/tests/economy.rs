@@ -113,11 +113,12 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
             GameplayClientMessage::BuildWallOrder {
                 sequence: 8,
                 builder_ids: vec![EntityId(3)],
+                kind: BuildingKind::PalisadeWall,
                 from: TileCoord::new(5, 6),
                 to: TileCoord::new(5, 9),
                 queued: false,
             },
-            vec![9, 8, 1, 3, 10, 12, 10, 18, 0],
+            vec![9, 8, 1, 3, 7, 10, 12, 10, 18, 0],
         ),
         (
             GameplayClientMessage::CancelConstructionOrder {

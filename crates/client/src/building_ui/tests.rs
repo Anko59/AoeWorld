@@ -129,6 +129,9 @@ fn preview_checks_every_footprint_tile_and_map_bounds() {
 fn art_selection_distinguishes_every_kind_and_construction_stage() {
     for rule in aoe_simulation::BUILDING_RULES {
         let kind = B::ALL[rule.kind as usize];
+        if matches!(kind, B::StoneWall | B::StoneGate) {
+            continue; // covered by the stone art slot test
+        }
         if kind == B::Bridge {
             assert_eq!(sprite_slot(kind, 1000, false), 66);
             assert_eq!(sprite_slot(kind, 0, false), 9);
@@ -313,4 +316,34 @@ fn bridge_caps_follow_the_native_axis_even_when_the_raster_slopes_backwards() {
             assert_eq!(bridge_piece(&tiles, tiles.len() - 1), last);
         }
     }
+}
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn stone_walls_and_gates_use_their_own_de_art_slots() {
+    use aoe_rendering::SceneUnitKind as Art;
+    for (kind, standing, rubble, building) in
+        [(B::StoneWall, 71, 20, 9), (B::StoneGate, 72, 37, 43)]
+    {
+        assert_eq!(sprite_slot(kind, 1000, false), standing);
+        assert_eq!(sprite_slot(kind, 1000, true), rubble);
+        assert_eq!(sprite_slot(kind, 400, false), building);
+        for age in [
+            aoe_protocol::Age::Dark,
+            aoe_protocol::Age::Feudal,
+            aoe_protocol::Age::Castle,
+        ] {
+            assert_eq!(age_sprite_slot(kind, 1000, false, age), standing);
+        }
+    }
+    assert_eq!(
+        gate_kind(B::StoneGate, true, 1000),
+        Some(Art::OpenStoneGate)
+    );
+    assert_eq!(
+        gate_kind(B::PalisadeGate, true, 1000),
+        Some(Art::OpenPalisadeGate)
+    );
+    assert_eq!(gate_kind(B::StoneGate, false, 1000), None);
+    assert_eq!(gate_kind(B::StoneWall, true, 1000), None);
+    assert!(B::StoneWall.is_wall() && B::StoneGate.is_gate() && !B::Bridge.is_wall());
 }

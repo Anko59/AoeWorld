@@ -70,7 +70,7 @@ pub const OPTIONAL_TERRAIN: [RuntimeSpriteSource; OPTIONAL_TERRAIN_SOURCES.len()
 
 /// slot, source ID, complete prefix, selected-cell stride for ambient fish art.
 pub const FISHING: [(usize, u32, u32, usize); 7] = [
-    (0, 3549, 34, 2),
+    (0, 3549, 34, 4),
     (1, 1910, 49, 7),
     (2, 1911, 49, 7),
     (3, 1912, 49, 7),

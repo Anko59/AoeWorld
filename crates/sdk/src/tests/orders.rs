@@ -77,6 +77,7 @@ fn all_orders() -> Vec<Order> {
         },
         Order::BuildWall {
             builders: vec![id(3)],
+            kind: BuildingKind::StoneWall,
             from: tile,
             to: TileCoord::new(14, 20),
         },

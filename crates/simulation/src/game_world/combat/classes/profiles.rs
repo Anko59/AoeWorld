@@ -86,9 +86,11 @@ pub(super) const fn building_armour(kind: BuildingKind) -> Classes {
     match kind {
         BuildingKind::Castle => &[(Building, 8), (StandardBuilding, 0), (Castle, 0)],
         BuildingKind::WatchTower => &[(Building, 0), (StandardBuilding, 0), (StoneDefense, 0)],
-        BuildingKind::PalisadeWall | BuildingKind::PalisadeGate | BuildingKind::Bridge => {
-            &[(Building, 0), (StandardBuilding, 0), (Wall, 0)]
-        }
+        BuildingKind::PalisadeWall
+        | BuildingKind::PalisadeGate
+        | BuildingKind::StoneWall
+        | BuildingKind::StoneGate
+        | BuildingKind::Bridge => &[(Building, 0), (StandardBuilding, 0), (Wall, 0)],
         BuildingKind::TownCenter
         | BuildingKind::House
         | BuildingKind::LumberCamp

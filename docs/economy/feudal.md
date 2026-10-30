@@ -175,6 +175,25 @@ The Palisade Gate is absent from the trial DAT and retains its DE overlay;
 additional gate orientations remain separate work. Foundations and one-tile
 aprons cover land only, including all Feudal buildings.
 
+## Stone Wall and Stone Gate
+
+Feudal Age, built by villagers for stone. Values are the DE tech-tree numbers
+(SiegeEngineers data.json): Stone Wall 5 stone a tile, 1800 HP, armour 8/10,
+Stone Gate 30 stone, 2750 HP, armour 6/6. Build times are 5 s a tile and 70 s.
+The wall reuses the palisade line order (`BuildWallOrder` carries the
+`BuildingKind`); the gate is a 4x1 building like the Palisade Gate and shares
+its rule (`BuildingKind::is_gate`): it opens when a unit of its owner is within
+two tiles, stays shut for every other player and blocks their routes. Routing
+is shared, so a closed gate blocks the owner's routes too: walk up to it, it
+opens, then order the units through. Walls and
+gates are outside Masonry and are not arrow targets. There are no alliances yet,
+so allied passage and a lock command remain future work. Art comes from the DE
+install: `b_west_wall_stone_x1.sld` (five joint silhouettes, atlas slot 71),
+and `b_west_gate_stone_se_{closed,open}_x1.sld`
+(slots 72 and 73); rubble and foundations reuse the palisade slots, and the
+ambient fish of slot 0 are sampled every fourth cell to keep the 5120-frame
+atlas. Re-run `make assets-import-de` to add the art to an existing overlay.
+
 ## Local demo
 
 `POST /maps/reset?scenario=feudal-economy` is an explicit development setup:
