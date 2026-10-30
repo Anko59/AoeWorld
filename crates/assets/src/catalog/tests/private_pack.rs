@@ -12,6 +12,8 @@ const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 
 #[path = "private_castle.rs"]
 mod castle;
+#[path = "private_occupancy.rs"]
+mod occupancy;
 #[path = "private_selection.rs"]
 mod selection;
 
@@ -51,9 +53,7 @@ fn reviewed_sources() -> impl Iterator<
             super::units::SPRITES
                 .iter()
                 .enumerate()
-                .filter(|(index, source)| {
-                    !selection::duplicate_actor(*index) && source.base_role().is_none()
-                })
+                .filter(|(index, _)| !selection::duplicate_actor(*index))
                 .map(|(index, s)| {
                     (
                         s.manifest_source(),
@@ -71,7 +71,10 @@ fn reviewed_sources() -> impl Iterator<
 }
 
 fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
-    if manifest.version != 1 || manifest.frames.len() > 50_000 || manifest.pages.len() > 512 {
+    if manifest.version != 1
+        || manifest.frames.len() > 2 * crate::pack::MAX_FRAMES
+        || manifest.pages.len() > 512
+    {
         return Err("unsupported or oversized manifest".into());
     }
     let mut extents = Vec::new();
@@ -81,7 +84,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     // compact idle facings and the sampled native actor/projectile cells.
     // Neutral/owned palette copies still occupy separate semantic entries.
     for (identity, count, domain, step, actor) in reviewed_sources() {
-        if actor.is_some_and(|s| s.rows() == 16)
+        if actor.is_some_and(|s| s.is_native())
             && manifest
                 .frames
                 .iter()
@@ -105,9 +108,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         {
             return Err(format!("missing or duplicate reviewed prefix: {identity}"));
         }
-        // Castle Light Cavalry shares SLP 3008 with the base cavalry role.
-        // Sampling belongs to this semantic entry, never to its first matching
-        // source identity: the base walking role still selects all 50 cells.
+        // Each semantic actor keeps its own complete native direction blocks.
         let drawn = actor.map(|source| {
             (0..source.rows())
                 .flat_map(|row| {
@@ -253,7 +254,8 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     if placements.len() != extents.len() {
         return Err("truncated placements".into());
     }
-    for (index, (frame, placed)) in extents.iter().zip(&placements).enumerate() {
+    let mut occupied = occupancy::Occupied::default();
+    for (frame, placed) in extents.iter().zip(&placements) {
         let correct_domain = match frame.domain {
             AtlasDomain::Terrain => placed.page < 2,
             AtlasDomain::Objects => {
@@ -271,16 +273,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         {
             return Err("invalid runtime placement".into());
         }
-        for other in &placements[..index] {
-            if placed.page == other.page
-                && u32::from(placed.x) < u32::from(other.x) + u32::from(other.width)
-                && u32::from(other.x) < u32::from(placed.x) + u32::from(placed.width)
-                && u32::from(placed.y) < u32::from(other.y) + u32::from(other.height)
-                && u32::from(other.y) < u32::from(placed.y) + u32::from(placed.height)
-            {
-                return Err("overlapping runtime rectangles".into());
-            }
-        }
+        occupied.insert(*placed)?;
     }
     if extents.len() > MAX_LOGICAL_FRAMES || placements.iter().any(|p| p.page >= 64) {
         return Err("physical budget changed".into());
@@ -321,9 +314,8 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        5750,
-        // Castle adds 365 sampled cells; navy 25, King 35, General 3120;
-        // the base cavalry roles already hold 15 Light Cavalry samples.
+        92473,
+        // Complete current DAT unit cells, including neutral colour semantics.
         // Pin the complete current selection independently of runtime residency.
         "military, Castle, projectile and farmer cells included"
     );
@@ -364,6 +356,7 @@ fn synthetic_manifest() -> Manifest {
         height: PAGE_SIDE,
     };
     let mut manifest = Manifest {
+        chunks: Vec::new(),
         version: 1,
         converter: "synthetic".into(),
         input_hash: "synthetic-not-original-proof".into(),
@@ -380,6 +373,7 @@ fn synthetic_manifest() -> Manifest {
         }
         for frame in 0..count {
             manifest.frames.push(crate::pack::FrameRecord {
+                native: None,
                 source: identity.clone(),
                 source_hash: String::new(),
                 frame,

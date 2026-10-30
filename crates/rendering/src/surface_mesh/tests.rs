@@ -30,7 +30,9 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 fn test_art(frame: GameFrame) -> GameArt {
     GameArt {
+        resident: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
@@ -52,6 +54,7 @@ fn test_art(frame: GameFrame) -> GameArt {
 #[wasm_bindgen_test]
 fn textured_terrain_uses_shared_corner_uvs_and_material_atlas_groups() {
     let frame = |uv| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress { page: 0, uv },
         size: [96.0, 48.0],
         anchor: [48.0, 24.0],
@@ -134,6 +137,7 @@ fn flat_zero_height_ground_is_textured_contiguous_and_pickable() {
     apply_terrain_textures(
         &mut triangles,
         &test_art(GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 0,
                 uv: [0.0, 0.0, 0.1, 0.1],
@@ -182,6 +186,7 @@ fn both_ramp_orientations_keep_matching_uvs_on_the_shared_diagonal() {
         apply_terrain_textures(
             &mut triangles,
             &test_art(GameFrame {
+                stream: 0,
                 atlas: crate::AtlasAddress {
                     page: 0,
                     uv: [0.2, 0.3, 0.05, 0.06],
@@ -307,6 +312,7 @@ fn cliff_adjacency_creates_a_textured_nonpickable_height_transition() {
     apply_terrain_textures(
         &mut triangles,
         &test_art(GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 0,
                 uv: [0.4, 0.5, 0.03, 0.02],
@@ -363,6 +369,7 @@ fn adjacent_chunks_share_boundary_geometry_and_deterministic_texture_placement()
     let mut left = projected_surface_triangles(&[tile(0.5)], camera);
     let mut right = projected_surface_triangles(&[tile(1.5)], camera);
     let art = test_art(GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.1, 0.2, 0.07, 0.08],
@@ -412,6 +419,7 @@ fn water_beside_raised_land_shares_a_shore_edge_without_a_cliff_skirt() {
     apply_terrain_textures(
         &mut triangles,
         &test_art(GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 0,
                 uv: [0.7, 0.1, 0.04, 0.04],

@@ -77,6 +77,10 @@ impl Health {
         state.waiting_since.get_or_insert_with(now);
         Ok(state.frames < MAX_FRAMES)
     }
+    pub(super) fn uploads_ready(&self) -> Result<bool, String> {
+        self.check()?;
+        Ok(self.state().frames < MAX_FRAMES)
+    }
 
     pub(crate) fn allow_upload(&self) -> Result<(), String> {
         self.check()?;

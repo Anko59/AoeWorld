@@ -2,8 +2,9 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
-fn siege_partial_rows_draw_the_native_body_delta() {
+fn complete_de_siege_rows_do_not_overlay_a_second_standing_body() {
     let frame = |number| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 2,
             uv: [number as f32 / 4096.0, 0.0, 0.01, 0.01],
@@ -12,7 +13,7 @@ fn siege_partial_rows_draw_the_native_body_delta() {
         anchor: [12.0, 40.0],
     };
     let mut art = art();
-    art.actors = vec![Vec::new(); 133];
+    art.actors = vec![Vec::new(); 135];
     for (kind, body_kind, base, body) in [
         (
             SceneUnitKind::MangonelWalk,
@@ -33,16 +34,16 @@ fn siege_partial_rows_draw_the_native_body_delta() {
             1600.0,
         ),
     ] {
-        art.actors[kind.actor_slot().unwrap()] = vec![frame(base); 50];
-        art.actors[body_kind.actor_slot().unwrap()] = vec![frame(body); 5];
+        art.actors[kind.actor_slot().unwrap()] = vec![frame(base); 16 * 60];
+        art.actors[body_kind.actor_slot().unwrap()] = vec![frame(body); 16];
         let frames = super::super::world_sprite_frames(&art, &[], &[], &[unit(kind)], camera(), 0);
         assert_eq!(
             frames.len(),
-            3,
-            "{kind:?} draws shadow, wheel/log and body: {:?}",
+            2,
+            "{kind:?} draws shadow and complete animated body: {:?}",
             frames.iter().map(|f| f.1.atlas.uv[0]).collect::<Vec<_>>()
         );
         assert_eq!(frames[1].1.atlas.uv[0], base / 4096.0);
-        assert_eq!(frames[2].1.atlas.uv[0], body / 4096.0);
+        assert!(!frames.iter().any(|f| f.1.atlas.uv[0] == body / 4096.0));
     }
 }

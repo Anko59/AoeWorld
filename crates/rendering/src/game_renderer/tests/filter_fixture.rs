@@ -45,6 +45,7 @@ pub(crate) fn sprite() -> (crate::web::Sprite, crate::GameFrame) {
             pages: [0; 4],
         },
         crate::GameFrame {
+            stream: 0,
             atlas: address,
             size: [8.0; 2],
             anchor: [0.0; 2],

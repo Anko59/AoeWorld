@@ -96,6 +96,7 @@ async fn ship_on_water() -> Rc<RefCell<Client>> {
     client.selected = Default::default();
     // Native graphics.drs 444, facing row 2: metadata only, no game pixels.
     let hull = GameFrame {
+        stream: 0,
         atlas: AtlasAddress {
             page: 0,
             uv: [0.0, 0.0, 1.0, 1.0],
@@ -105,7 +106,14 @@ async fn ship_on_water() -> Rc<RefCell<Client>> {
     };
     client.art.fishing[7] = vec![hull; 5];
     // All actor rows share this fixture's geometry, including packed phases.
-    client.art.actors = vec![vec![hull; 5]; aoe_assets::catalog::units::SPRITES.len()];
+    client.art.actors = aoe_assets::catalog::units::SPRITES
+        .iter()
+        .map(|s| vec![hull; s.rows()])
+        .collect();
+    client.art.actor_rows = aoe_assets::catalog::units::SPRITES
+        .iter()
+        .map(|s| s.rows())
+        .collect();
     client.canvas.set_width(512);
     client.canvas.set_height(512);
     client
@@ -289,13 +297,14 @@ async fn fishing_tasks_share_native_actor_poses_phases_and_gather_orders() {
         aoe_rendering::SceneUnitKind::actor(Pose::FisherWork as u8)
     );
     for facing in 0..8 {
+        let heading = (20 - u16::from(facing) * 2) % 16;
         assert_eq!(
-            packed_frame(Pose::FisherWork, facing, 399.0, None, 0.0, 20),
-            u16::from(facing)
+            packed_frame(Pose::FisherWork, facing, 0.0, None, 0.0, 20),
+            heading
         );
         assert_eq!(
-            packed_frame(Pose::FisherWork, facing, 400.0, None, 0.0, 20),
-            u16::from(facing) | (1 << 3)
+            packed_frame(Pose::FisherWork, facing, 100.0, None, 0.0, 20),
+            heading | (1 << 4)
         );
     }
     assert_eq!(
@@ -359,46 +368,57 @@ fn gather_cursor_names_fishing_never_building() {
 }
 
 #[wasm_bindgen_test]
-async fn dead_naval_units_never_render_an_intact_living_hull() {
+async fn dead_naval_units_render_native_death_and_terminal_decay_graphics() {
+    use crate::unit_visuals::Pose;
     use aoe_protocol::{UnitKind, UnitTask};
     let scene = super::contact_scene();
     let mut client = super::client_with_backend(&scene, Some("canvas")).await;
-    for kind in [
-        UnitKind::FishingShip,
-        UnitKind::Galley,
-        UnitKind::FireShip,
-        UnitKind::DemolitionShip,
-        UnitKind::TransportShip,
-        UnitKind::WarGalley,
+    let died = client.village.tick;
+    for (kind, death, decay) in [
+        (
+            UnitKind::FishingShip,
+            Pose::FishingShipDie,
+            Pose::FishingShipDecay,
+        ),
+        (UnitKind::Galley, Pose::GalleyDie, Pose::GalleyDecay),
+        (
+            UnitKind::WarGalley,
+            Pose::WarGalleyDie,
+            Pose::WarGalleyDecay,
+        ),
+        (UnitKind::FireShip, Pose::FireShipDie, Pose::FireShipDecay),
+        (
+            UnitKind::DemolitionShip,
+            Pose::DemolitionShipDie,
+            Pose::DemolitionShipDecay,
+        ),
+        (
+            UnitKind::TransportShip,
+            Pose::TransportShipDie,
+            Pose::TransportShipDecay,
+        ),
     ] {
+        client.village.tick = died;
         let ship = client.units.get_mut(&EntityId(1)).unwrap();
         ship.kind = kind;
-        ship.hp = 50;
-        ship.task = UnitTask::Idle;
-        ship.death_tick = None;
-        assert!(
-            units(&client, &scene)
-                .iter()
-                .any(|unit| unit.id == EntityId(1)),
-            "living {kind:?} remains visible"
-        );
-        let ship = client.units.get_mut(&EntityId(1)).unwrap();
         ship.hp = 0;
         ship.task = UnitTask::Dying;
-        ship.death_tick = Some(aoe_core::Tick(0));
-        assert!(
-            !units(&client, &scene)
-                .iter()
-                .any(|unit| unit.id == EntityId(1)),
-            "dead {kind:?} must not retain its intact hull"
+        ship.death_tick = Some(aoe_core::Tick(died));
+        let drawn = units(&client, &scene);
+        let ship = drawn.iter().find(|u| u.id == EntityId(1)).unwrap();
+        assert_eq!(
+            ship.kind,
+            aoe_rendering::SceneUnitKind::actor(death as u8),
+            "{kind:?} death"
+        );
+        client.village.tick = died + 1000;
+        let drawn = units(&client, &scene);
+        let ship = drawn.iter().find(|u| u.id == EntityId(1)).unwrap();
+        assert_eq!(
+            ship.kind,
+            aoe_rendering::SceneUnitKind::actor(decay as u8),
+            "{kind:?} decay"
         );
     }
-    client.units.get_mut(&EntityId(1)).unwrap().kind = UnitKind::Militia;
-    assert!(
-        units(&client, &scene)
-            .iter()
-            .any(|unit| unit.id == EntityId(1)),
-        "land units retain their native corpse presentation"
-    );
     client.canvas.remove();
 }

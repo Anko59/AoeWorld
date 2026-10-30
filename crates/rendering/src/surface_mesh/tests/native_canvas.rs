@@ -40,6 +40,7 @@ fn canvas_keeps_an_alpha_bearing_native_terrain_diamond_aligned_to_the_tile() {
         .dyn_into()
         .unwrap();
     let art = test_art(GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [

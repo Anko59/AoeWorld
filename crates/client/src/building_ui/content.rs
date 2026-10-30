@@ -14,7 +14,7 @@ static CONTENT: OnceLock<Content> = OnceLock::new();
 #[wasm_bindgen(module = "/src/game_assets/manifest.js")]
 extern "C" {
     #[wasm_bindgen(catch)]
-    fn parse_content(bytes: &[u8]) -> Result<Array, JsValue>;
+    fn parse_content(bytes: &[u8], actor_count: usize) -> Result<Array, JsValue>;
 }
 
 fn get() -> &'static Content {
@@ -45,11 +45,11 @@ pub(crate) async fn load() -> Result<(), JsValue> {
 }
 
 fn decode(bytes: &[u8]) -> Result<Content, JsValue> {
-    let fields = parse_content(&bytes)?;
+    let fields = parse_content(bytes, aoe_assets::catalog::units::SPRITES.len())?;
     let rules = BrowserContent::decode(&Int32Array::new(&fields.get(0)).to_vec())
         .map_err(JsValue::from_str)?;
     let words = Uint32Array::new(&fields.get(1)).to_vec();
-    let actors = words
+    let actors: Vec<ActorSource> = words
         .as_chunks::<4>()
         .0
         .iter()
@@ -60,6 +60,18 @@ fn decode(bytes: &[u8]) -> Result<Content, JsValue> {
             phases: r[3] as u8,
         })
         .collect();
+    for (source, expected) in actors.iter().zip(aoe_assets::catalog::units::SPRITES) {
+        if (source.id, source.stride, source.millis, source.phases)
+            != (
+                expected.id,
+                expected.stride,
+                expected.millis,
+                expected.phases,
+            )
+        {
+            return Err(JsValue::from_str("Unsupported native actor content"));
+        }
+    }
     Ok(Content { rules, actors })
 }
 

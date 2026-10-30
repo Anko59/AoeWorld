@@ -72,6 +72,7 @@ pub(crate) fn forest_faces(
     gradient: bool,
 ) -> [ProjectedSurfaceTriangle; 2] {
     let frame = |page| crate::GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page,
             uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
@@ -80,7 +81,9 @@ pub(crate) fn forest_faces(
         anchor: [0.0; 2],
     };
     let art = crate::GameArt {
+        resident: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),

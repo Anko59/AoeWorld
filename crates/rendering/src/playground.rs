@@ -27,6 +27,8 @@ pub fn resource_frame_index(kind: u8, variant: u8, frame_count: usize) -> Option
 
 #[derive(Clone, Copy)]
 pub struct GameFrame {
+    /// Zero for static PNG art; otherwise one plus its native residency index.
+    pub stream: u32,
     pub atlas: AtlasAddress,
     pub size: [f32; 2],
     pub anchor: [f32; 2],
@@ -50,7 +52,11 @@ pub struct SceneryArt {
 }
 
 pub struct GameArt {
+    /// Native geometry remains immutable while these physical addresses change.
+    pub resident: Vec<Option<AtlasAddress>>,
     pub actors: Vec<Vec<GameFrame>>,
+    /// Native DAT direction count for each semantic actor pose.
+    pub actor_rows: Vec<usize>,
     /// Nine standing kinds, four foundation sizes, nine rubble kinds, builder.
     pub buildings: [Vec<GameFrame>; 74],
     /// Shore fish and naval working art.
@@ -84,6 +90,19 @@ pub struct GameArt {
     /// Optional raw conifer and palm prefixes; empty alone means unavailable.
     pub tree_families: [Vec<GameFrame>; 2],
     pub scenery: SceneryArt,
+}
+
+impl GameArt {
+    pub fn resident_frame(&self, mut frame: GameFrame) -> Option<GameFrame> {
+        if frame.stream != 0 {
+            frame.atlas = self
+                .resident
+                .get(frame.stream as usize - 1)
+                .copied()
+                .flatten()?;
+        }
+        Some(frame)
+    }
 }
 
 /// A DAT recipe resolved into the shared runtime atlas. Offsets are native

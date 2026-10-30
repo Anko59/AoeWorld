@@ -35,9 +35,9 @@ pub use game_renderer::{
     AtlasSourceCopy, AtlasUpload, GameRenderer, SceneCamera, SceneDecoration, SceneResource,
     SceneTerrain, SceneTerrainAppearance, SceneTerrainSurface, SceneUnit, SceneUnitKind,
     actor_frame_index, apply_building_foundations, resource_sprite_bounds, scene_building_hit,
-    scene_building_visible, scene_resource_animation_frame, scene_resource_frame,
-    scene_resource_presentation, scene_unit_animates, scene_unit_bounds, scene_unit_depth,
-    scene_unit_render_key,
+    scene_building_visible, scene_native_frames, scene_native_prefetch,
+    scene_resource_animation_frame, scene_resource_frame, scene_resource_presentation,
+    scene_unit_animates, scene_unit_bounds, scene_unit_depth, scene_unit_render_key,
 };
 #[cfg(target_arch = "wasm32")]
 pub use surface_mesh::{

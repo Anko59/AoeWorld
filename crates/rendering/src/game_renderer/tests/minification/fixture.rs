@@ -107,6 +107,7 @@ pub(crate) fn placed(
         pages: [PAGE, 0, 0, 0],
     };
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: PAGE,
             uv: sprite.uv,

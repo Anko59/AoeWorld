@@ -1,164 +1,21 @@
-//! Native actor tags shared by scene selection and rendering.
+//! Compact native actor tags shared by scene selection and all renderers.
 use super::SceneUnitKind;
-
+#[path = "scene_types/actor_map.rs"]
+mod mapping;
 impl SceneUnitKind {
-    /// Flat tags keep the scene DTO at 32 bytes, including actor animations.
     pub fn actor(index: u8) -> Self {
-        const ACTORS: [SceneUnitKind; 135] = [
-            SceneUnitKind::MilitiaStand,
-            SceneUnitKind::MilitiaWalk,
-            SceneUnitKind::MilitiaAttack,
-            SceneUnitKind::MilitiaDie,
-            SceneUnitKind::VillagerAttack,
-            SceneUnitKind::VillagerDie,
-            SceneUnitKind::HunterStand,
-            SceneUnitKind::HunterWalk,
-            SceneUnitKind::HunterAttack,
-            SceneUnitKind::Butcher,
-            SceneUnitKind::HunterCarry,
-            SceneUnitKind::ShepherdStand,
-            SceneUnitKind::ShepherdWalk,
-            SceneUnitKind::ShepherdWork,
-            SceneUnitKind::SheepStand,
-            SceneUnitKind::SheepWalk,
-            SceneUnitKind::SheepDie,
-            SceneUnitKind::DeerStand,
-            SceneUnitKind::DeerWalk,
-            SceneUnitKind::DeerDie,
-            SceneUnitKind::BoarStand,
-            SceneUnitKind::BoarWalk,
-            SceneUnitKind::BoarAttack,
-            SceneUnitKind::BoarDie,
-            SceneUnitKind::WolfStand,
-            SceneUnitKind::WolfWalk,
-            SceneUnitKind::WolfRun,
-            SceneUnitKind::WolfAttack,
-            SceneUnitKind::WolfDie,
-            SceneUnitKind::ScoutAttack,
-            SceneUnitKind::ScoutDie,
-            SceneUnitKind::MilitiaDecay,
-            SceneUnitKind::VillagerDecay,
-            SceneUnitKind::SheepDecay,
-            SceneUnitKind::DeerDecay,
-            SceneUnitKind::BoarDecay,
-            SceneUnitKind::WolfDecay,
-            SceneUnitKind::ScoutDecay,
-            SceneUnitKind::HunterDie,
-            SceneUnitKind::HunterDecay,
-            SceneUnitKind::ShepherdDie,
-            SceneUnitKind::ShepherdDecay,
-            SceneUnitKind::NeutralSheepStand,
-            SceneUnitKind::NeutralSheepWalk,
-            SceneUnitKind::NeutralSheepDie,
-            SceneUnitKind::NeutralSheepDecay,
-            SceneUnitKind::FishingShip,
-            SceneUnitKind::FishingShipMoving,
-            SceneUnitKind::FishingShipWorking,
-            SceneUnitKind::VillagerFishing,
-            SceneUnitKind::ArcherStand,
-            SceneUnitKind::ArcherWalk,
-            SceneUnitKind::ArcherAttack,
-            SceneUnitKind::ArcherDie,
-            SceneUnitKind::ArcherDecay,
-            SceneUnitKind::SkirmisherStand,
-            SceneUnitKind::SkirmisherWalk,
-            SceneUnitKind::SkirmisherAttack,
-            SceneUnitKind::SkirmisherDie,
-            SceneUnitKind::SkirmisherDecay,
-            SceneUnitKind::SpearmanStand,
-            SceneUnitKind::SpearmanWalk,
-            SceneUnitKind::SpearmanAttack,
-            SceneUnitKind::SpearmanDie,
-            SceneUnitKind::SpearmanDecay,
-            SceneUnitKind::ManAtArmsStand,
-            SceneUnitKind::ManAtArmsWalk,
-            SceneUnitKind::ManAtArmsAttack,
-            SceneUnitKind::ManAtArmsDie,
-            SceneUnitKind::ManAtArmsDecay,
-            SceneUnitKind::ScoutStand,
-            SceneUnitKind::ScoutWalk,
-            SceneUnitKind::Arrow,
-            SceneUnitKind::Javelin,
-            SceneUnitKind::FarmerWork,
-            SceneUnitKind::LongSwordsmanStand,
-            SceneUnitKind::LongSwordsmanWalk,
-            SceneUnitKind::LongSwordsmanAttack,
-            SceneUnitKind::LongSwordsmanDie,
-            SceneUnitKind::LongSwordsmanDecay,
-            SceneUnitKind::PikemanStand,
-            SceneUnitKind::PikemanWalk,
-            SceneUnitKind::PikemanAttack,
-            SceneUnitKind::PikemanDie,
-            SceneUnitKind::PikemanDecay,
-            SceneUnitKind::CrossbowmanStand,
-            SceneUnitKind::CrossbowmanWalk,
-            SceneUnitKind::CrossbowmanAttack,
-            SceneUnitKind::CrossbowmanDie,
-            SceneUnitKind::CrossbowmanDecay,
-            SceneUnitKind::EliteSkirmisherStand,
-            SceneUnitKind::EliteSkirmisherWalk,
-            SceneUnitKind::EliteSkirmisherAttack,
-            SceneUnitKind::EliteSkirmisherDie,
-            SceneUnitKind::EliteSkirmisherDecay,
-            SceneUnitKind::KnightStand,
-            SceneUnitKind::KnightWalk,
-            SceneUnitKind::KnightAttack,
-            SceneUnitKind::KnightDie,
-            SceneUnitKind::KnightDecay,
-            SceneUnitKind::LightCavalryStand,
-            SceneUnitKind::LightCavalryWalk,
-            SceneUnitKind::LightCavalryAttack,
-            SceneUnitKind::LightCavalryDie,
-            SceneUnitKind::LightCavalryDecay,
-            SceneUnitKind::MonkStand,
-            SceneUnitKind::MonkWalk,
-            SceneUnitKind::MonkAttack,
-            SceneUnitKind::MonkDie,
-            SceneUnitKind::MonkDecay,
-            SceneUnitKind::MangonelStand,
-            SceneUnitKind::MangonelWalk,
-            SceneUnitKind::MangonelAttack,
-            SceneUnitKind::MangonelDie,
-            SceneUnitKind::MangonelDecay,
-            SceneUnitKind::BatteringRamStand,
-            SceneUnitKind::BatteringRamWalk,
-            SceneUnitKind::BatteringRamAttack,
-            SceneUnitKind::BatteringRamDie,
-            SceneUnitKind::BatteringRamDecay,
-            SceneUnitKind::Stone,
-            SceneUnitKind::Galley,
-            SceneUnitKind::WarGalley,
-            SceneUnitKind::FireShip,
-            SceneUnitKind::DemolitionShip,
-            SceneUnitKind::TransportShip,
-            SceneUnitKind::KingStand,
-            SceneUnitKind::KingWalk,
-            SceneUnitKind::KingDie,
-            SceneUnitKind::KingDecay,
-            SceneUnitKind::GeneralStand,
-            SceneUnitKind::GeneralWalk,
-            SceneUnitKind::GeneralAttack,
-            SceneUnitKind::GeneralDie,
-            SceneUnitKind::GeneralDecay,
-        ];
-        ACTORS
+        mapping::ACTORS
             .get(usize::from(index))
             .copied()
             .unwrap_or(Self::Scout)
     }
     pub(in crate::game_renderer) fn native_directions(self) -> bool {
-        (Self::GeneralStand as u8..=Self::GeneralDecay as u8).contains(&(self as u8))
+        self.actor_slot()
+            .is_some_and(|slot| !matches!(slot, 72 | 73 | 120))
     }
     pub(in crate::game_renderer) fn actor_slot(self) -> Option<usize> {
-        if (Self::KingStand as u8..=Self::GeneralDecay as u8).contains(&(self as u8)) {
-            return Some(126 + (self as usize - Self::KingStand as usize));
-        }
-        if (Self::ArcherStand as u8..=Self::TransportShip as u8).contains(&(self as u8)) {
-            return Some(50 + (self as usize - Self::ArcherStand as usize));
-        }
-        (self as u8)
-            .checked_sub(Self::MilitiaStand as u8)
-            .filter(|index| *index < 50)
-            .map(usize::from)
+        (self as usize)
+            .checked_sub(mapping::BASE)
+            .and_then(|i| mapping::SLOTS.get(i).copied())
     }
 }

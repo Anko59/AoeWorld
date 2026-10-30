@@ -8,7 +8,9 @@ fn resource_and_unit_identity_collision_cannot_change_their_fog_shading() {
     let mut unit_frame = resource_frame;
     unit_frame.atlas.uv[0] = 0.5;
     let mut art = GameArt {
+        resident: Vec::new(),
         actors: Default::default(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),

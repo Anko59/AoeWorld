@@ -54,7 +54,7 @@ pub fn scene_unit_bounds(
     } else {
         0
     };
-    let (index, mirrored) = unit_frame_index(unit, stride, phase);
+    let (index, mirrored) = unit_frame_index(unit, stride, phase, frames.len() / stride);
     let mut frame = world_frame(*frames.get(index)?);
     if mirrored {
         frame.anchor[0] = frame.size[0] - frame.anchor[0];
@@ -81,7 +81,7 @@ pub(super) fn frames_visible(
     unit: SceneUnit,
     camera: SceneCamera,
 ) -> bool {
-    let (direction, flipped) = unit_direction(unit);
+    let (direction, flipped) = unit_direction(unit, frames.len() / stride);
     frames[direction * stride..(direction + 1) * stride]
         .iter()
         .any(|frame| {

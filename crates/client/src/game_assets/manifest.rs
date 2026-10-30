@@ -35,6 +35,7 @@ pub(super) struct Manifest {
     #[cfg_attr(test, serde(rename = "input_hash"))]
     _input_hash: DiscardString,
     pub pages: Vec<AtlasPage>,
+    pub chunks: Vec<aoe_assets::pack::frame_chunks::FrameChunk>,
     pub frames: Vec<FrameRecord>,
     pub building_data: String,
     #[cfg_attr(test, serde(skip))]
@@ -101,6 +102,7 @@ pub(super) struct FrameRecord {
     #[cfg_attr(test, serde(rename = "source_hash"))]
     _source_hash: DiscardString,
     pub frame: u32,
+    pub native: Option<aoe_assets::pack::frame_chunks::FrameLocation>,
     pub page: u16,
     pub x: u16,
     pub y: u16,
@@ -176,6 +178,16 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Manifest, JsValue> {
             Ok(FrameRecord {
                 source: text(&fields, 0)?,
                 frame: number(&fields, 1)? as u32,
+                native: if fields.get(9).is_null() {
+                    None
+                } else {
+                    let native = Array::from(&fields.get(9));
+                    Some(aoe_assets::pack::frame_chunks::FrameLocation {
+                        chunk: number(&native, 0)? as u16,
+                        offset: number(&native, 1)? as u32,
+                        length: number(&native, 2)? as u32,
+                    })
+                },
                 page: number(&fields, 2)? as u16,
                 x: number(&fields, 3)? as u16,
                 y: number(&fields, 4)? as u16,
@@ -192,6 +204,17 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Manifest, JsValue> {
         version: number(&root, 0)? as u16,
         building_data: text(&root, 1)?,
         pages,
+        chunks: Array::from(&root.get(4))
+            .iter()
+            .map(|value| {
+                let fields = Array::from(&value);
+                Ok(aoe_assets::pack::frame_chunks::FrameChunk {
+                    file: text(&fields, 0)?,
+                    hash: text(&fields, 1)?,
+                    bytes: number(&fields, 2)? as u32,
+                })
+            })
+            .collect::<Result<Vec<_>, JsValue>>()?,
         frames,
         buildings: Vec::new(),
         #[cfg(test)]

@@ -2,6 +2,16 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn idle_native_demand_never_starts_an_unsubmitted_work_deadline() {
+    let health = Health::default();
+    assert!(health.uploads_ready().unwrap());
+    assert!(health.state().waiting_since.is_none());
+    health.state().frames = MAX_FRAMES;
+    assert!(!health.uploads_ready().unwrap());
+    assert!(health.state().waiting_since.is_none());
+}
+
+#[wasm_bindgen_test]
 fn continuous_queue_progress_refreshes_the_unchanged_five_second_deadline() {
     let health = Health::default();
     {

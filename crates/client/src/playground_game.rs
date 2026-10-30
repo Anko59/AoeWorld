@@ -42,6 +42,7 @@ pub(super) struct Client {
     pub canvas: HtmlCanvasElement,
     pub renderer: GameRenderer,
     pub art: GameArt,
+    pub native: Option<crate::game_assets::NativeFrames>,
     pub team_colour: [u8; 3],
     pub socket: Option<WebSocket>,
     connection_callbacks: Option<network::ConnectionCallbacks>,
@@ -218,6 +219,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.presentation.advance(time, canvas);
         // Keep input, networking and the HUD live while the overview covers the scene.
         let draw = perf::Scope::new(2);
+        let mut native_requests = Vec::new();
         if !controls::navigation::overview_active() && !strategic::render(&mut client) {
             let scene = map::scene::prepare(&client);
             let units = map::scene::units(&client, &scene);
@@ -228,6 +230,26 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 focus_elevation_meters: client.camera.focus_elevation_meters,
             };
             let resources = map::scene_resources(&client);
+            let required = aoe_rendering::scene_native_frames(&client.art, &units, camera);
+            let prefetch = aoe_rendering::scene_native_prefetch(&client.art, &units, camera);
+            let Client {
+                native,
+                art,
+                renderer,
+                rendered_frame,
+                ..
+            } = &mut *client;
+            if let Some(native) = native {
+                match native.update(&required, &prefetch, art, renderer) {
+                    Ok((changed, requests)) => {
+                        native_requests = requests;
+                        if changed {
+                            rendered_frame.clear();
+                        }
+                    }
+                    Err(error) => client.status = format!("Native art unavailable: {error:?}"),
+                }
+            }
             let grid = client.grid;
             let animation = (time / 100.0) as usize;
             match map::render_cache::render_if_changed(
@@ -271,6 +293,9 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         drop(ui);
         let surface_fixture = client.surface_fixture;
         drop(client);
+        for request in native_requests {
+            request.spawn();
+        }
         if !surface_fixture {
             map::request_visible(shared.clone());
         }

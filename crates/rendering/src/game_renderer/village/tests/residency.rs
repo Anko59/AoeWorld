@@ -1,0 +1,186 @@
+use super::*;
+use wasm_bindgen::JsCast;
+
+#[wasm_bindgen_test]
+fn native_lookahead_wraps_inside_the_current_facing_without_changing_the_display_cell() {
+    let mut art = art();
+    let frame = art.village[1][0];
+    art.actors = vec![Vec::new(); 135];
+    art.actors[0] = (1..=480)
+        .map(|id| GameFrame {
+            stream: id,
+            ..frame
+        })
+        .collect();
+    let unit = unit(SceneUnitKind::actor(0)).with_actor_frame((29 << 4) | 15);
+    assert_eq!(
+        crate::scene_native_frames(&art, &[unit], camera()),
+        vec![480]
+    );
+    assert_eq!(
+        crate::scene_native_prefetch(&art, &[unit], camera()),
+        vec![451, 452]
+    );
+}
+
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "
+export function native_patch_gl_pixel(canvas) {
+ const gl=canvas.getContext('webgl2'); gl.finish();
+ const pixel=new Uint8Array(4); gl.readPixels(64,63,1,1,gl.RGBA,gl.UNSIGNED_BYTE,pixel);
+ if(gl.getError()!==gl.NO_ERROR)throw Error('native patch read failed'); return pixel;
+}
+")]
+extern "C" {
+    fn native_patch_gl_pixel(canvas: &web_sys::HtmlCanvasElement) -> Vec<u8>;
+}
+
+#[wasm_bindgen_test]
+async fn native_patch_pixels_reach_every_backend_without_replacing_the_atlas() {
+    for backend in ["canvas", "webgl2", "webgpu"] {
+        let canvas: web_sys::HtmlCanvasElement = web_sys::window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .create_element("canvas")
+            .unwrap()
+            .dyn_into()
+            .unwrap();
+        canvas.set_width(128);
+        canvas.set_height(128);
+        web_sys::window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .body()
+            .unwrap()
+            .append_child(&canvas)
+            .unwrap();
+        let (mut renderer, canvas) = crate::GameRenderer::new_with_backend(canvas, Some(backend))
+            .await
+            .unwrap();
+        assert_eq!(
+            renderer.backend(),
+            if backend == "canvas" {
+                "canvas2d"
+            } else {
+                backend
+            }
+        );
+        let mut upload = renderer.begin_game_atlas(10).unwrap();
+        for layer in 0..10 {
+            upload.page_buffer(layer).unwrap();
+            renderer.write_game_atlas_page(&mut upload, layer).unwrap();
+        }
+        renderer.finish_game_atlas(upload).unwrap();
+        let mut art = art();
+        let mut frame = art.village[1][0];
+        frame.size = [32.0; 2];
+        frame.anchor = [16.0; 2];
+        frame.stream = 1;
+        art.actors = vec![Vec::new(); 135];
+        art.actors[0] = vec![frame; 16];
+        art.resident = vec![Some(crate::AtlasAddress {
+            page: 8,
+            uv: [2.0 / 2048.0, 2.0 / 2048.0, 1.0 / 2048.0, 1.0 / 2048.0],
+        })];
+        let camera = SceneCamera {
+            viewport: [128.0; 2],
+            ..camera()
+        };
+        let before = renderer.memory_usage();
+        for colour in [[255, 0, 0, 255], [0, 255, 0, 255]] {
+            renderer
+                .update_game_atlas(8, [2, 2], [1, 1], &colour)
+                .unwrap();
+            assert!(
+                renderer
+                    .render_world(
+                        &art,
+                        &[],
+                        &[],
+                        &[unit(SceneUnitKind::actor(0))],
+                        camera,
+                        0,
+                        false
+                    )
+                    .unwrap()
+            );
+            let pixel = match &renderer {
+                crate::GameRenderer::Canvas { context, .. } => {
+                    context
+                        .get_image_data(64.0, 64.0, 1.0, 1.0)
+                        .unwrap()
+                        .data()
+                        .0
+                }
+                crate::GameRenderer::WebGl(_) => native_patch_gl_pixel(&canvas),
+                crate::GameRenderer::WebGpu(gpu) => {
+                    crate::web::tests::terrain_blend::read_pixel(gpu, 2, [64, 64])
+                        .await
+                        .to_vec()
+                }
+            };
+            assert_eq!(pixel, colour, "{backend}");
+        }
+        assert_eq!(before[0], renderer.memory_usage()[0]);
+        for (page, origin, size, bytes) in [
+            (10, [0, 0], [1, 1], 4),
+            (8, [2048, 0], [1, 1], 4),
+            (8, [0, 0], [0, 1], 0),
+            (8, [0, 0], [2, 1], 4),
+            (8, [u32::MAX, 0], [1, 1], 4),
+        ] {
+            assert!(
+                renderer
+                    .update_game_atlas(page, origin, size, &vec![0; bytes])
+                    .is_err()
+            );
+        }
+        if let crate::GameRenderer::WebGpu(gpu) = &renderer {
+            gpu.device.destroy();
+        }
+        canvas.remove();
+    }
+}
+
+#[wasm_bindgen_test]
+fn native_residency_changes_only_the_address_and_preserves_facing_geometry() {
+    let mut art = art();
+    let mut native = art.village[1][0];
+    native.stream = 1;
+    native.size = [91.0, 149.0];
+    native.anchor = [-3.0, 160.0];
+    art.actors = vec![Vec::new(); 135];
+    art.actors[0] = vec![native; 16 * 30];
+    art.resident = vec![None];
+    let unit = unit(SceneUnitKind::actor(0));
+    let demands = crate::scene_native_frames(&art, &[unit], camera());
+    assert_eq!(demands, vec![1]);
+    assert!(world_sprite_frames(&art, &[], &[], &[unit], camera(), 0).is_empty());
+    let address = crate::AtlasAddress {
+        page: 8,
+        uv: [0.25, 0.5, 91.0 / 2048.0, 149.0 / 2048.0],
+    };
+    art.resident[0] = Some(address);
+    let emitted = world_sprite_frames(&art, &[], &[], &[unit], camera(), 0);
+    let body = emitted.last().unwrap();
+    assert_eq!(body.1.atlas, address);
+    assert_eq!(body.1.stream, 1);
+    assert_eq!(body.0.pages[0], 8);
+    let before = body.0.position;
+    art.resident[0] = Some(crate::AtlasAddress {
+        page: 10,
+        ..address
+    });
+    let emitted = world_sprite_frames(&art, &[], &[], &[unit], camera(), 0);
+    assert_eq!(emitted.last().unwrap().0.position, before);
+    assert_eq!(emitted.last().unwrap().0.pages[0], 10);
+    assert_eq!(art.actors[0][0].size, [91.0, 149.0]);
+    let offscreen = SceneUnit {
+        position: [1_000_000.0; 2],
+        ..unit
+    };
+    assert!(crate::scene_native_frames(&art, &[offscreen], camera()).is_empty());
+    art.resident[0] = None;
+    assert!(world_sprite_frames(&art, &[], &[], &[unit], camera(), 0).is_empty());
+}

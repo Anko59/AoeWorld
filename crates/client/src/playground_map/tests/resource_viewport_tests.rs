@@ -6,6 +6,7 @@ fn partly_depleted_trees_select_species_chopped_art_until_exhaustion() {
     use aoe_protocol::{ResourceAmount, ResourceState};
     let mut art = resource_art(frame());
     let chopped = GameFrame {
+        stream: 0,
         atlas: aoe_rendering::AtlasAddress::new(2, [0.5, 0.0, 0.01, 0.01]),
         ..frame()
     };
@@ -64,6 +65,7 @@ fn native_species_resource_state_depletion_precedes_actual_viewport_selection() 
     let mut art = resource_art(frame());
     let conifer = frame();
     let palm = GameFrame {
+        stream: 0,
         anchor: [20.0, 175.0],
         size: [88.0, 168.0],
         atlas: aoe_rendering::AtlasAddress {
@@ -144,7 +146,9 @@ fn native_species_resource_state_depletion_precedes_actual_viewport_selection() 
 
 fn resource_art(frame: GameFrame) -> GameArt {
     GameArt {
+        resident: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
@@ -165,6 +169,7 @@ fn resource_art(frame: GameFrame) -> GameArt {
 
 fn frame() -> GameFrame {
     GameFrame {
+        stream: 0,
         atlas: aoe_rendering::AtlasAddress {
             page: 2,
             uv: [0.0, 0.0, 1.0, 1.0],

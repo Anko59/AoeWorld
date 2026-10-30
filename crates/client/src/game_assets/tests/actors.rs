@@ -3,6 +3,36 @@ use aoe_assets::catalog::units::{Pose, SPRITES};
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn native_chunk_references_keep_different_cells_with_identical_placeholder_coordinates() {
+    let mut value = manifest::fixture();
+    let template = value["frames"][0].clone();
+    let source = SPRITES[Pose::MilitiaStand as usize];
+    value["frames"] = (0..source.frames())
+        .map(|frame| {
+            let mut cell = template.clone();
+            cell["source"] = source.manifest_source().into();
+            cell["frame"] = frame.into();
+            cell["native"] = serde_json::json!({"chunk":0,"offset":frame * 64,"length":64});
+            cell
+        })
+        .collect::<Vec<_>>()
+        .into();
+    let manifest: Manifest = serde_json::from_value(value).unwrap();
+    let mut selected = Vec::new();
+    let mut domains = Vec::new();
+    let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
+    let records: Vec<_> = selected
+        .iter()
+        .map(|&i| placement::record(&manifest.frames[i], Placement::default()))
+        .collect();
+    let groups = actors::resolve(&manifest, &selected, &records, &ranges);
+    assert_eq!(
+        groups[Pose::MilitiaStand as usize].len(),
+        source.selected_frames()
+    );
+}
+
+#[wasm_bindgen_test]
 fn siege_stone_atlas_keeps_every_native_cell_and_rejects_changed_topology() {
     let mut value = manifest::fixture();
     let template = value["frames"][0].clone();
@@ -40,7 +70,7 @@ fn siege_stone_atlas_keeps_every_native_cell_and_rejects_changed_topology() {
 }
 
 #[wasm_bindgen_test]
-fn base_cavalry_cells_are_reused_without_changing_light_cavalry_sampling() {
+fn native_light_cavalry_keeps_every_cell_instead_of_reusing_trial_base_rows() {
     let mut value = manifest::fixture();
     let template = value["frames"][0].clone();
     value["frames"] = [3004, 3008]
@@ -57,6 +87,18 @@ fn base_cavalry_cells_are_reused_without_changing_light_cavalry_sampling() {
         })
         .collect::<Vec<_>>()
         .into();
+    let template = value["frames"][0].clone();
+    let cells = value["frames"].as_array_mut().unwrap();
+    for pose in [Pose::LightCavalryStand, Pose::LightCavalryWalk] {
+        let source = SPRITES[pose as usize];
+        for number in 0..source.frames() {
+            let mut cell = template.clone();
+            cell["source"] = source.manifest_source().into();
+            cell["frame"] = number.into();
+            cell["x"] = ((number % 500) * 3).into();
+            cells.push(cell);
+        }
+    }
     let manifest: Manifest = serde_json::from_value(value).unwrap();
     let mut selected = vec![0, 10, 20, 30, 40];
     selected.extend(50..100);
@@ -64,8 +106,8 @@ fn base_cavalry_cells_are_reused_without_changing_light_cavalry_sampling() {
     let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
     assert_eq!(
         selected.len(),
-        55,
-        "both base groups already reside in the atlas"
+        1255,
+        "native cavalry retains all 1200 cells beside the existing base rows"
     );
     let places = placement::plan(&manifest, &selected, &domains).unwrap();
     let records: Vec<_> = selected
@@ -76,7 +118,7 @@ fn base_cavalry_cells_are_reused_without_changing_light_cavalry_sampling() {
     let groups = actors::resolve(&manifest, &selected, &records, &ranges);
     for pose in [Pose::LightCavalryStand, Pose::LightCavalryWalk] {
         let source = SPRITES[pose as usize];
-        let expected: Vec<_> = (0..5)
+        let expected: Vec<_> = (0..16)
             .flat_map(|row| {
                 (0..usize::from(source.stride))
                     .step_by(usize::from(source.sample_step()))
@@ -166,7 +208,7 @@ fn repeated_scout_cells_are_static_but_changed_pixels_and_hotspots_keep_the_loop
     let scout = &frames[Pose::ScoutStand as usize];
     assert_eq!(
         scout.len(),
-        5,
+        16,
         "identical phases must not animate the world"
     );
     for pair in scout.windows(2) {
@@ -189,7 +231,7 @@ fn repeated_scout_cells_are_static_but_changed_pixels_and_hotspots_keep_the_loop
 }
 
 #[wasm_bindgen_test]
-fn vassal_king_groups_select_bounded_native_facings_and_refuse_partial_art() {
+fn vassal_king_groups_select_every_native_cell_and_refuse_partial_art() {
     let poses = [
         Pose::KingStand,
         Pose::KingWalk,
@@ -215,7 +257,7 @@ fn vassal_king_groups_select_bounded_native_facings_and_refuse_partial_art() {
     let manifest: Manifest = serde_json::from_value(value.clone()).unwrap();
     let (mut selected, mut domains) = (Vec::new(), Vec::new());
     let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(selected.len(), 35);
+    assert_eq!(selected.len(), 2400);
     for pose in poses {
         let source = SPRITES[pose as usize];
         let range = ranges[pose as usize].clone().unwrap();
@@ -223,7 +265,7 @@ fn vassal_king_groups_select_bounded_native_facings_and_refuse_partial_art() {
             .iter()
             .map(|&i| manifest.frames[i].frame)
             .collect();
-        let expected: Vec<_> = (0..5)
+        let expected: Vec<_> = (0..16)
             .flat_map(|row| {
                 (0..usize::from(source.stride))
                     .step_by(usize::from(source.sample_step()))
@@ -239,7 +281,7 @@ fn vassal_king_groups_select_bounded_native_facings_and_refuse_partial_art() {
 
 #[wasm_bindgen_test]
 fn identical_owned_actor_groups_share_their_selected_frames() {
-    let source = SPRITES[Pose::FishingShipStand as usize];
+    let source = SPRITES[Pose::WarGalleyDie as usize];
     let mut value = manifest::fixture();
     let template = value["frames"][0].clone();
     value["frames"] = (0..source.frames())
@@ -255,10 +297,14 @@ fn identical_owned_actor_groups_share_their_selected_frames() {
     let (mut selected, mut domains) = (Vec::new(), Vec::new());
     let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
     assert_eq!(
-        ranges[Pose::FishingShipStand as usize],
-        ranges[Pose::FishingShipWork as usize]
+        ranges[Pose::WarGalleyDie as usize],
+        ranges[Pose::FireShipDie as usize]
     );
-    assert_eq!(selected.len(), 5);
+    assert_eq!(selected.len(), 11);
+    assert_eq!(
+        selected[10], selected[9],
+        "terminal decay reuses the final native sinking cell"
+    );
 }
 
 #[wasm_bindgen_test]

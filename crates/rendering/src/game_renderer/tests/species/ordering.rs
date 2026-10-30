@@ -13,6 +13,7 @@ fn lazy_objects_preserve_materialized_order_and_every_packet_bit() {
     let mut art = fixture::art();
     art.walking = (0..80).map(|i| fixture::frame(1200 + i)).collect();
     art.standing = art.walking.clone();
+    fixture::unit_rows(&mut art);
     let resources = [
         SceneResource {
             id: 12,

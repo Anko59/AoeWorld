@@ -107,6 +107,7 @@ fn shares(faces: &[ProjectedSurfaceTriangle]) -> BTreeMap<[i32; 2], u8> {
 #[wasm_bindgen_test]
 fn every_pair_of_land_materials_mixes_across_its_border() {
     let frame = |material: u8| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [f32::from(material) / 16.0, 0.0, 0.01, 0.01],
@@ -203,6 +204,7 @@ fn mixing_is_independent_of_input_order_mesh_lod_and_unmixed_scenes() {
 #[wasm_bindgen_test]
 fn forest_bed_and_a_third_material_share_three_layers() {
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0, 0.0, 0.01, 0.01],
@@ -326,6 +328,7 @@ fn four_material_quad_uses_identical_layers_and_shares_on_its_diagonal() {
 #[wasm_bindgen_test]
 fn variety_sheets_draw_their_own_art_or_fall_back_to_the_base_sheet() {
     let frame = |group: usize| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [group as f32 / 16.0, 0.0, 0.01, 0.01],
@@ -405,6 +408,7 @@ fn native_snow_ramps_match_their_mixed_border() {
 #[wasm_bindgen_test]
 fn natural_rock_uses_native_ground_at_both_zooms_with_a_dirt_fallback() {
     let frame = |group: usize| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [group as f32 / 16.0, 0.0, 0.01, 0.01],
@@ -439,6 +443,7 @@ fn natural_rock_uses_native_ground_at_both_zooms_with_a_dirt_fallback() {
 #[wasm_bindgen_test]
 fn absent_mountain_sheets_keep_base_texture_fallback_at_both_zooms() {
     let frame = |slot: usize| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [slot as f32 / 16.0, 0.0, 0.01, 0.01],

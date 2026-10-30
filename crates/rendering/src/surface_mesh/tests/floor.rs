@@ -110,6 +110,7 @@ fn floor_numeric_packet_is_exact_bounded_and_survives_depth_normalization() {
         super::appearance_tests::camera([0.5; 2], 1.0, [128.0; 2]),
     );
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0, 0.0, 0.01, 0.01],
@@ -120,6 +121,7 @@ fn floor_numeric_packet_is_exact_bounded_and_survives_depth_normalization() {
     let mut art = test_art(frame);
     // A real two-address bed is required to exercise interpolated blend packets.
     art.terrain[6] = vec![GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 1,
             ..frame.atlas

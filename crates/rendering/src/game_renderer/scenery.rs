@@ -73,6 +73,7 @@ fn dressing(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
 // whose archives omit FLAGM. Keep the fallback in the shared sprite path.
 fn flag_frame(size: [f32; 2], anchor: [f32; 2]) -> GameFrame {
     GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 2,
             uv: [

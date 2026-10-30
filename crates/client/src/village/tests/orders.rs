@@ -128,7 +128,7 @@ fn vassal_poses_use_the_king_for_standing_walking_and_death() {
     u.death_tick = Some(aoe_core::Tick(10));
     assert_eq!(unit_pose(&u, None), Pose::KingDie);
     assert_eq!(
-        lifecycle_pose(Pose::KingDie, u.death_tick, 30, 20),
+        lifecycle_pose(Pose::KingDie, u.death_tick, 31, 20),
         Pose::KingDecay
     );
 }

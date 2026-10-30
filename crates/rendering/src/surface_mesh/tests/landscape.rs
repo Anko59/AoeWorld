@@ -73,6 +73,7 @@ fn landscape_metadata_has_neutral_legacy_packets_and_bounded_order_stable_lod() 
 #[wasm_bindgen_test]
 fn landscape_dirt_primary_survives_every_palette_and_floor_strength() {
     let frame = |page, x| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page,
             uv: [x, 0.0, 0.01, 0.01],
@@ -152,6 +153,7 @@ fn landscape_dirt_primary_survives_every_palette_and_floor_strength() {
 #[wasm_bindgen_test]
 fn landscape_floor_restores_native_soil_and_preserves_metadata_free_and_absent_art() {
     let frame = |page| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page,
             uv: [0.0, 0.0, 0.01, 0.01],

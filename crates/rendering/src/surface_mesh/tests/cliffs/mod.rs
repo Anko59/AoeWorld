@@ -150,6 +150,7 @@ fn joined_cliff_walls_use_original_rock_and_share_the_ledge_vertices() {
         }
     }
     let mut art = test_art(GameFrame {
+        stream: 0,
         atlas: AtlasAddress {
             page: 0,
             uv: [0.0, 0.0, 0.05, 0.025],
@@ -159,6 +160,7 @@ fn joined_cliff_walls_use_original_rock_and_share_the_ledge_vertices() {
     });
     art.scenery.cliff_faces = (0..25)
         .map(|slot| GameFrame {
+            stream: 0,
             atlas: AtlasAddress {
                 page: 2,
                 uv: [slot as f32 / 32.0, 0.0, 0.03, 0.07],
@@ -299,6 +301,7 @@ fn cliff_rim_is_irregular_and_shared_with_both_ground_sheets_at_both_zooms() {
 fn adjacent_wall_segments_use_varied_original_rock_regions_deterministically() {
     let (terrain, camera) = rocky_ridge();
     let base = GameFrame {
+        stream: 0,
         atlas: AtlasAddress {
             page: 2,
             uv: [0.01, 0.02, 294.0 / 2048.0, 156.0 / 2048.0],
@@ -309,6 +312,7 @@ fn adjacent_wall_segments_use_varied_original_rock_regions_deterministically() {
     let mut art = test_art(base);
     art.scenery.cliff_faces = (0..25)
         .map(|n| GameFrame {
+            stream: 0,
             atlas: AtlasAddress {
                 uv: [n as f32 / 32.0, 0.02, base.atlas.uv[2], base.atlas.uv[3]],
                 ..base.atlas
@@ -377,6 +381,7 @@ fn rocky_presentation_keeps_ground_orders_in_the_source_cell_at_both_lods() {
         sample.surface.kind = SceneTerrainSurface::PLATEAU;
     }
     let art = test_art(GameFrame {
+        stream: 0,
         atlas: AtlasAddress {
             page: 0,
             uv: [0.0, 0.0, 97.0 / 2048.0, 49.0 / 2048.0],

@@ -184,10 +184,10 @@ fn layer(
     };
     if rect.width % 4 != 0
         || rect.height % 4 != 0
-        || rect.x + rect.width > canvas.0
-        || rect.y + rect.height > canvas.1
+        || rect.x + rect.width > canvas.0.next_multiple_of(4)
+        || rect.y + rect.height > canvas.1.next_multiple_of(4)
     {
-        return Err(invalid(FORMAT, start, "layer size is not block aligned"));
+        return Err(invalid(FORMAT, start, "layer outside block-padded canvas"));
     }
     let pixel_count = rect.width * rect.height;
     *pixel_budget = pixel_budget
@@ -240,8 +240,10 @@ fn layer(
             ordinal += 1;
         }
     }
-    if ordinal != blocks {
-        return Err(invalid(FORMAT, start, "commands leave blocks uncovered"));
+    // A sparse command list may stop early. Unmentioned tail blocks remain
+    // transparent; only explicit skip commands can reuse previous pixels.
+    if data != end {
+        return Err(invalid(FORMAT, start, "unused compressed layer payload"));
     }
     let to_u16 = |value: usize| value as u16; // every value is at most 65535
     Ok((

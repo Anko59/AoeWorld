@@ -1,52 +1,31 @@
-# Dark Age unit and wildlife art
+# Native DE unit graphics
 
-The private VER 5.7 dat table is authoritative. `make assets-dat-table` follows
-each unit's dead-unit reference to its decay graphic; this is not an adjacent
-SLP-id inference. The catalogue contains identifiers and timing, never pixels
-or a copy of the decoded game data.
+The VER 8.9 DE DAT is authoritative for every unit kind spawned by the game,
+including workers, wildlife, naval units, promotion tiers, the General and
+Vassal. `make assets-unit-table-de` regenerates the one current numeric catalog
+from the owner's installed DAT. The semantic binding table names DAT unit IDs
+and actions; it contains no image names, frame counts or timing constants.
 
-| Actor | Stand | Walk | Attack | Die | Decay |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Militia | 993 | 997 | 987 | 990 | 994 |
-| Male villager | 1479 | 1484 | 1473 | 1476 | 1481 |
-| Male hunter | 1525 | 1531 | 1518 | 1522 | 1527 |
-| Male shepherd | 3684 | 3686 | 3682 | 3683 | 4649 |
-| Sheep | 3629 | 3634 | — | 3626 | 3631 |
-| Deer | 342 | 348 | — | 339 | 344 |
-| Boar | 2557 | 2559 | 2555 | 2556 | 2558 |
-| Wolf | 1635 | 1640; run 1636 | 1629 | 1632 | 1637 |
+The common reader follows standing, movement, combat, shared work/carry tasks,
+death and dead-unit references. Drawable graphic deltas supply parts such as
+ship sails, with DAT draw order and hotspot offsets. The importer resolves the
+highest installed resolution by sprite identity and retains native cells and
+direction rows. Particle-only references are handled by the later effects pass.
+No original pixels or source digests enter Git or Docker images.
 
-Hunters and shepherds butcher with 1528 and carry food with 1519. The wire
-retains their profession at death. Scout combat uses 2079/2082/2086;
-its existing standing/walking catalogue remains separate.
+All unit poses use the same streamed importer and atlas residency path. Native
+animation cells are independently compressed in checked local pack chunks.
+Only visible cells and bounded lookahead become resident; offscreen cells are
+eligible for LRU eviction. Colour and player-mask pages remain paired, preserving
+team colour, shadows, native anchors and backend parity. Neutral sheep retain
+separate grey colour semantics. See [DE conversion](de-full.md) for budgets.
 
-Five native rows supply eight facings: rows 0,1,2,3,4,3,2,1, mirroring facings
-1–3. Anchors remain signed, including out-of-frame hotspots. The selected frame
-is packed above the low three facing bits in the scene DTO. Source-specific
-frame durations drive living animation; death is a clamped one-shot using the
-wire death tick, followed by five six-second decay frames. Unit removal remains
-authoritative. Animal food depletion controls final carcass removal.
+Playback uses fractional DAT frame durations. Death is a clamped one-shot,
+followed by the dead-unit graphic when supplied by the DAT. Server death ticks,
+corpse removal and animal food depletion remain authoritative. Ship deaths use
+the same lifecycle. The scene packs a native heading and animation phase into
+its existing 32-byte DTO; equivalent DAT graphics share compact render tags.
 
-Each source is optional only when absent. A present incomplete or duplicate
-prefix is a pack error. Missing sources use the existing semantic marker;
-there is no unrelated sprite substitution. Every listed source is present in
-the local trial, so no DE unit import is needed. Sheep do not attack in this
-simulation; the absent trial sheep attack 3623 is not selected.
-
-The actor selection has 2,625 frames, alongside the base catalogue's 2,371
-full-prefix frames and the bounded building subset. The runtime validates at
-most 5,120 selected frames before pixel allocation. Terrain keeps pages 0–1;
-objects use pages 2–4 of five 2048-square RGBA pages (80 MiB). All backends
-account for the fifth page. Source PNGs are decoded one at a time.
-Sheep have player-mask pixels: owned sheep use the selected player ramp;
-neutral sheep get separate grey-ramp copies of their four animation groups.
-
-The existing cursor importer has no native game cursor export. Attack and hunt
-therefore use the browser crosshair fallback, with distinct semantic cursor
-states. HP and combat statistics come from authoritative HP and the current
-simulation combat table; selected living actors receive health bars.
-
-The original Vassal uses the King (DAT unit 434) and four explicitly selected
-licensed DE King poses because the trial archives omit its original SLPs.
-The 35 selected cells retain DAT timing within the existing atlas budget;
-see [the Vassal](../economy/vassal.md) for source identities and gameplay rules.
+The remaining trial dependencies belong to buildings, terrain, resources,
+projectiles, effects and icons. Arrow and javelin conversion is in the subsequent
+projectile pass; Mangonel stones already retain their complete native timeline.

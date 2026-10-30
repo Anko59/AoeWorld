@@ -135,7 +135,7 @@ pub(super) fn actor_frames() -> usize {
     super::super::units::SPRITES
         .iter()
         .enumerate()
-        .filter(|(index, source)| !duplicate_actor(*index) && source.base_role().is_none())
+        .filter(|(index, _)| !duplicate_actor(*index))
         .map(|(_, s)| s.selected_frames())
         .sum()
 }
@@ -146,7 +146,11 @@ fn unsupported_general_source_topology_is_rejected() {
     let mut extra = manifest
         .frames
         .iter()
-        .find(|f| f.source == "de/u_cav_hero_frankish_paladin_idleA_x1.sld")
+        .find(|f| {
+            f.source
+                == super::super::units::SPRITES[super::super::units::Pose::GeneralStand as usize]
+                    .manifest_source()
+        })
         .expect("hero source")
         .clone();
     extra.frame = 721;
@@ -162,7 +166,9 @@ fn unsupported_general_source_topology_is_rejected() {
 fn combined_pack_metadata_bounds_cover_two_individually_bounded_inputs() {
     let mut manifest = super::synthetic_manifest();
     let frame = manifest.frames[0].clone();
-    manifest.frames.resize(50_001, frame);
+    manifest
+        .frames
+        .resize(2 * crate::pack::MAX_FRAMES + 1, frame);
     assert_eq!(
         super::prove(&manifest).unwrap_err(),
         "unsupported or oversized manifest"

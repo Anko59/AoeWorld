@@ -218,3 +218,36 @@ fn native_bridge_pieces_borrow_unowned_space_without_team_mask_pages() {
     assert_eq!(domains, [AtlasDomain::Shared; 6]);
     assert!(ranges[65..71].iter().all(Option::is_some));
 }
+#[wasm_bindgen_test::wasm_bindgen_test]
+async fn native_army_overlay_accepts_the_bounded_complete_source_inventory() {
+    let value =
+        super::selection_tests::pack_fixture([("de/synthetic-army.sld".into(), 65_536, false)]);
+    let _fetch = super::selection_tests::FetchFixture::install(&value);
+    let install =
+        js_sys::Function::new_with_args("data", "window.fetch = async () => new Response(data);");
+    install
+        .call1(&JsValue::NULL, &JsValue::from_str(&value.to_string()))
+        .unwrap();
+    let mut manifest: Manifest = serde_json::from_value(super::manifest::fixture()).unwrap();
+    let before = manifest.frames.len();
+    let pages = manifest.pages.len();
+    building_sprites::overlay(&mut manifest).await.unwrap();
+    assert_eq!(manifest.frames.len(), before + 65_536);
+    assert_eq!(manifest.frames[before].page as usize, pages);
+}
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+async fn native_army_overlay_refuses_inventory_beyond_the_source_bound() {
+    let value =
+        super::selection_tests::pack_fixture([("de/synthetic-army.sld".into(), 131_073, false)]);
+    let _fetch = super::selection_tests::FetchFixture::install(&value);
+    let install =
+        js_sys::Function::new_with_args("data", "window.fetch = async () => new Response(data);");
+    install
+        .call1(&JsValue::NULL, &JsValue::from_str(&value.to_string()))
+        .unwrap();
+    let mut manifest: Manifest = serde_json::from_value(super::manifest::fixture()).unwrap();
+    let before = manifest.frames.len();
+    assert!(building_sprites::overlay(&mut manifest).await.is_err());
+    assert_eq!(manifest.frames.len(), before);
+}

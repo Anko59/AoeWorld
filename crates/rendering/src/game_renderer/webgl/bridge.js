@@ -261,6 +261,23 @@ export class AoeWebGl {
         this.atlasOffset = pixels.byteOffset;
     }
 
+    patch(page, x, y, width, height, pixels) {
+        this.check();
+        if (!this.atlasReady || ![page,x,y,width,height].every(Number.isInteger) ||
+            page < 0 || page >= this.atlasPages || x < 0 || y < 0 || width <= 0 || height <= 0 ||
+            x + width > SIDE || y + height > SIDE || pixels.length !== width * height * 4)
+            throw new Error('Invalid WebGL2 atlas patch');
+        const gl = this.gl;
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
+        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, x, y, page, width, height, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        this.check();
+    }
+
     render(instances, black, effects) {
         if (this.restoreError) throw this.restoreError;
         if (!this.disposed && this.gl.isContextLost()) return false;

@@ -3,6 +3,38 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn army_native_poses_draw_the_last_cell_in_all_sixteen_directions() {
+    let mut art = art();
+    art.actors = vec![Vec::new(); 135];
+    for (kind, stride) in [
+        (SceneUnitKind::MilitiaAttack, 30),
+        (SceneUnitKind::ArcherStand, 60),
+        (SceneUnitKind::BatteringRamWalk, 60),
+        (SceneUnitKind::KingStand, 60),
+    ] {
+        let slot = kind.actor_slot().unwrap();
+        art.actors[slot] = (0..16 * stride)
+            .map(|i| GameFrame {
+                stream: 0,
+                atlas: crate::AtlasAddress::new(8, [i as f32 / 2048.0, 0.0, 0.01, 0.02]),
+                size: [20.0, 40.0],
+                anchor: [10.0, 40.0],
+            })
+            .collect();
+        for row in 0..16 {
+            let u = unit(kind).with_actor_frame(row as u16 | ((stride - 1) as u16) << 4);
+            assert_eq!(frames(&art, u).unwrap().1, stride);
+            let draw = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 0);
+            let expected = row * stride + stride - 1;
+            assert_eq!(
+                draw.last().unwrap().1.atlas,
+                art.actors[slot][expected].atlas
+            );
+        }
+    }
+}
+
+#[wasm_bindgen_test]
 fn siege_stone_draws_its_last_native_cell_from_one_animated_row() {
     let mut art = art();
     art.actors = vec![Vec::new(); 135];
@@ -10,6 +42,7 @@ fn siege_stone_draws_its_last_native_cell_from_one_animated_row() {
     let slot = kind.actor_slot().unwrap();
     art.actors[slot] = (0..30)
         .map(|i| GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress::new(8, [i as f32 / 2048.0, 0.0, 0.01, 0.02]),
             size: [20.0, 20.0],
             anchor: [10.0, 20.0],
@@ -30,6 +63,7 @@ fn general_tags_draw_native_hero_cells_including_phases_above_31() {
         let stride = if matches!(slot, 131 | 134) { 30 } else { 45 };
         art.actors[slot] = (0..16 * stride)
             .map(|i| GameFrame {
+                stream: 0,
                 atlas: crate::AtlasAddress::new(8, [i as f32 / 2048.0, 0.0, 0.01, 0.02]),
                 size: [20.0, 40.0],
                 anchor: [10.0, 40.0],
@@ -44,7 +78,7 @@ fn general_tags_draw_native_hero_cells_including_phases_above_31() {
             u = u.with_actor_frame(facing | (phase as u16) << 4);
             let (_, actual_stride, _) = frames(&art, u).unwrap();
             assert_eq!(actual_stride, stride);
-            let (index, mirrored) = super::super::unit_frame_index(u, stride, phase);
+            let (index, mirrored) = super::super::unit_frame_index(u, stride, phase, 16);
             assert_eq!((index, mirrored), (row * stride + phase, false));
             let draw = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 0);
             assert_eq!(draw.last().unwrap().1.atlas, art.actors[slot][index].atlas);

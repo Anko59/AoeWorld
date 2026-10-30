@@ -56,6 +56,7 @@ pub(crate) const PROBES: [[u32; 2]; 10] = [
 
 fn frame(group: usize) -> GameFrame {
     GameFrame {
+        stream: 0,
         atlas: AtlasAddress {
             page: 0,
             uv: [2 + 8 * group as u32, 4, 5, 3].map(|value| value as f32 / 2048.0),
@@ -71,7 +72,9 @@ pub(crate) fn art() -> GameArt {
         terrain[group] = vec![frame(group)];
     }
     GameArt {
+        resident: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),

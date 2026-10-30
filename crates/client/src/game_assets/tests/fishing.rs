@@ -8,7 +8,14 @@ fn fixture(id: u32, count: u32) -> Manifest {
         (0..count)
             .map(|frame| {
                 let mut value = base.clone();
-                value["source"] = format!("graphics.drs:[32, 112, 108, 115]:{id}").into();
+                value["source"] = aoe_assets::catalog::units::SPRITES
+                    .iter()
+                    .find(|s| s.id == id)
+                    .map_or_else(
+                        || format!("graphics.drs:[32, 112, 108, 115]:{id}"),
+                        |s| s.manifest_source(),
+                    )
+                    .into();
                 value["frame"] = frame.into();
                 value
             })
@@ -26,16 +33,30 @@ fn fishing_sources_preserve_native_rows_and_reject_present_truncation() {
             .all(Option::is_none),
         "unused slot is not sprite source zero"
     );
-    let manifest = fixture(3575, 140);
+    let source =
+        aoe_assets::catalog::units::SPRITES[aoe_assets::catalog::units::Pose::FisherWork as usize];
+    let manifest = fixture(source.id, source.frames());
     let mut selected = Vec::new();
     let ranges = actors::select(&manifest, &mut selected, &mut Vec::new()).unwrap();
     let range = ranges[aoe_assets::catalog::units::Pose::FisherWork as usize]
         .clone()
         .unwrap();
-    assert_eq!(range, 0..70);
-    assert_eq!(&selected[..4], &[0, 2, 4, 6]);
-    assert_eq!(selected[14], 28, "next native facing row");
-    assert!(actors::select(&fixture(444, 4), &mut Vec::new(), &mut Vec::new()).is_err());
+    assert_eq!(range, 0..960);
+    assert_eq!(&selected[..4], &[0, 1, 2, 3]);
+    assert_eq!(selected[60], 60, "next native facing row");
+    assert!(
+        actors::select(
+            &fixture(
+                aoe_assets::catalog::units::SPRITES
+                    [aoe_assets::catalog::units::Pose::FishingShipStand as usize]
+                    .id,
+                15
+            ),
+            &mut Vec::new(),
+            &mut Vec::new()
+        )
+        .is_err()
+    );
     let mut selected = Vec::new();
     let ranges = fishing::select(&fixture(1911, 49), &mut selected, &mut Vec::new()).unwrap();
     assert_eq!(ranges[2], Some(0..7));
@@ -141,12 +162,11 @@ fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
     buildings::select(&manifest, &mut selected, &mut domains).unwrap();
     building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
     fishing::select(&manifest, &mut selected, &mut domains).unwrap();
-    // Combined Castle poses add 365 cells to the naval/DAT/rally selection;
-    // the Castle camp fallback slots reuse two available DE camp cells.
-    // King retains 35 selected cells; the General retains all 3120 native cells.
-    // The stone retains all 30 native cells rather than five static row aliases.
+    // Every army pose keeps all sixteen native direction blocks. The King
+    // contributes 2400 cells and the General 3120. Stones retain all 30 cells.
+    // The Castle camp fallback slots reuse two available DE camp cells.
     // The stationary and working fishing ship share one identical five-frame group.
-    assert_eq!(selected.len(), 8214);
+    assert_eq!(selected.len(), 94945);
     assert!(selected.len() <= MAX_SELECTED_FRAMES);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)
@@ -185,7 +205,7 @@ fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
         }],
     });
     buildings::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(selected.len(), 8242);
+    assert_eq!(selected.len(), 94973);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)
             .unwrap()

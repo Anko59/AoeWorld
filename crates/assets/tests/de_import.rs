@@ -8,6 +8,86 @@ use std::{
 mod fixture;
 
 #[test]
+fn real_all_unit_timelines_match_de_dat_and_complete_native_sld_cells() {
+    let Some(root) = std::env::var_os("AOE_DE_DIR") else {
+        return;
+    };
+    let root = Path::new(&root);
+    let dat = aoe_assets::dat::de_survey::inflate(
+        &fs::read(root.join("resources/_common/dat/empires2_x2_p1.dat")).unwrap(),
+    )
+    .unwrap();
+    let units = aoe_assets::dat::de_units::find(&dat, &[4, 24, 7, 6]).unwrap();
+    use aoe_assets::catalog::units::{Pose, release_frame};
+    for (id, pose) in [
+        (4, Pose::ArcherAttack),
+        (24, Pose::CrossbowmanAttack),
+        (7, Pose::SkirmisherAttack),
+        (6, Pose::EliteSkirmisherAttack),
+    ] {
+        assert_eq!(
+            u8::try_from(units[&id].release).ok(),
+            release_frame(pose),
+            "DAT release frame for {id}"
+        );
+    }
+    let selected = de::unit_catalog::resolve(root).unwrap();
+    assert_eq!(selected.len(), 164);
+    let mut seen = std::collections::BTreeSet::new();
+    for g in selected {
+        let source = aoe_assets::catalog::units::SPRITES[g.pose];
+        assert_eq!(source.id, g.sprite);
+        assert_eq!(source.rows(), usize::from(g.angles));
+        assert_eq!(
+            u16::from(source.stride),
+            if g.terminal { 1 } else { g.frames }
+        );
+        assert_eq!(
+            source.frame_millis(),
+            if g.terminal {
+                0.0
+            } else {
+                f64::from(g.seconds) * 1000.0
+            }
+        );
+        for part in g.parts {
+            let a = part.animation;
+            if !seen.insert(a.file.clone()) {
+                continue;
+            }
+            let frames = aoe_assets::sld::parse(
+                &fs::read(
+                    root.join("resources/_common/drs/graphics")
+                        .join(format!("{}.sld", a.file)),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            assert!(
+                frames.len() >= usize::from(a.frames) * usize::from(a.angles),
+                "{}",
+                a.file
+            );
+            assert!(frames.iter().any(|f| f.main.is_some()), "{}", a.file);
+            if (130..135).contains(&g.pose) {
+                assert!(frames.iter().any(|f| f.player.is_some()));
+                for row in 0..usize::from(a.angles) {
+                    let start = row * usize::from(a.frames);
+                    assert!(
+                        frames[start..start + usize::from(a.frames)]
+                            .windows(2)
+                            .any(|w| w[0] != w[1]),
+                        "{} row {row}",
+                        a.file
+                    );
+                }
+            }
+        }
+    }
+    assert!(seen.len() > 140);
+}
+
+#[test]
 fn real_siege_stone_has_thirty_native_rotation_cells() {
     let Some(root) = std::env::var_os("AOE_DE_DIR") else {
         return;
@@ -85,6 +165,26 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
 
     let report = de::import(Path::new("install"), Path::new("local-assets/packs")).expect("import");
     let manifest = pack::verify(&report.pack).expect("verify");
+    let native: Vec<_> = manifest
+        .frames
+        .iter()
+        .filter(|f| f.native.is_some())
+        .collect();
+    assert_eq!(
+        native.len(),
+        90_132,
+        "every native unit/stone source cell is chunked"
+    );
+    assert_eq!(
+        manifest.chunks.len(),
+        1,
+        "synthetic identical cells deduplicate"
+    );
+    assert_eq!(
+        manifest.pages.len(),
+        1,
+        "native timelines consume no PNG area"
+    );
     let house = manifest
         .frames
         .iter()
@@ -113,7 +213,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .find(|f| f.source == "de/g_fm1.dds")
         .expect("farm");
     assert_eq!((farm.width, farm.height), (4, 4));
-    assert_eq!(report.entries.len(), 7);
+    assert_eq!(report.entries.len(), 155);
     assert_eq!(
         manifest
             .frames
@@ -122,21 +222,33 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
             .count(),
         30
     );
-    for (role, count) in [
-        ("idle", 721),
-        ("walk", 481),
-        ("attack", 721),
-        ("death", 721),
-        ("decay", 481),
+    assert_eq!(
+        manifest
+            .frames
+            .iter()
+            .filter(|f| f.source
+                == aoe_assets::catalog::units::SPRITES
+                    [aoe_assets::catalog::units::Pose::MilitiaAttack as usize]
+                    .manifest_source())
+            .count(),
+        481
+    );
+    use aoe_assets::catalog::units::{Pose, SPRITES};
+    for pose in [
+        Pose::GeneralStand,
+        Pose::GeneralWalk,
+        Pose::GeneralAttack,
+        Pose::GeneralDie,
+        Pose::GeneralDecay,
     ] {
-        let source = format!("de/u_cav_hero_frankish_paladin_{role}A_x1.sld");
+        let source = SPRITES[pose as usize];
         assert_eq!(
             manifest
                 .frames
                 .iter()
-                .filter(|f| f.source == source)
+                .filter(|f| f.source == source.manifest_source())
                 .count(),
-            count
+            source.frames() as usize
         );
     }
     assert!(
@@ -208,11 +320,18 @@ fn missing_native_hero_pose_is_rejected_before_pack_creation() {
     std::env::set_current_dir(temporary.path()).expect("enter tempdir");
     let _restore = CurrentDirectory(original);
     fixture::actors(Path::new("install"));
-    let file = "u_cav_hero_frankish_paladin_attackA_x1.sld";
-    fs::remove_file(Path::new("install/resources/_common/drs/graphics").join(file)).unwrap();
+    let graphic = aoe_assets::catalog::units::SPRITES
+        [aoe_assets::catalog::units::Pose::GeneralAttack as usize]
+        .id
+        - 200_000;
+    let file = format!("synthetic_{graphic}_x1.sld");
+    fs::remove_file(Path::new("install/resources/_common/drs/graphics").join(&file)).unwrap();
     let error = de::import(Path::new("install"), Path::new("local-assets/packs"))
         .expect_err("hero attack is required");
-    assert!(error.to_string().contains(file), "{error}");
+    assert!(
+        error.to_string().contains(file.trim_end_matches(".sld")),
+        "{error}"
+    );
     assert!(!Path::new("local-assets/packs").exists());
 }
 

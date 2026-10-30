@@ -12,54 +12,11 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
         } else {
             5
         };
-        let stride = frames.len() / rows;
+        let rows = art.actor_rows.get(index).copied().unwrap_or(rows);
+        let stride = frames.len() / rows.max(1);
         return (stride > 0 && frames.len() == stride * rows).then_some((frames, stride, false));
     }
-    let scout = unit.kind == SceneUnitKind::Scout;
-    let (frames, stride): (&[GameFrame], usize) = if scout {
-        (
-            if unit.visual.moving() {
-                &art.walking
-            } else {
-                &art.standing
-            },
-            if unit.visual.moving() { 10 } else { 1 },
-        )
-    } else {
-        let group = match unit.kind {
-            SceneUnitKind::VillagerChopping => 2,
-            SceneUnitKind::VillagerCarryingWood => 3,
-            SceneUnitKind::VillagerForaging => 4,
-            SceneUnitKind::VillagerCarryingFood => 5,
-            // DAT gold miners (unit 579) swing the stone miner's pick row.
-            SceneUnitKind::VillagerCarryingGold => 6,
-            SceneUnitKind::VillagerCarryingStone => 7,
-            SceneUnitKind::VillagerMiningGold | SceneUnitKind::VillagerMiningStone => 8,
-            _ => usize::from(unit.visual.moving()),
-        };
-        (
-            if unit.kind == SceneUnitKind::VillagerBuilding {
-                &art.buildings[22]
-            } else {
-                &art.village[group]
-            },
-            if group == 0 && unit.kind != SceneUnitKind::VillagerBuilding {
-                1
-            } else {
-                15
-            },
-        )
-    };
-    let animated = unit.visual.moving()
-        || matches!(
-            unit.kind,
-            SceneUnitKind::VillagerBuilding
-                | SceneUnitKind::VillagerChopping
-                | SceneUnitKind::VillagerForaging
-                | SceneUnitKind::VillagerMiningGold
-                | SceneUnitKind::VillagerMiningStone
-        );
-    (frames.len() >= stride * 5).then_some((frames, stride, animated))
+    None
 }
 
 #[inline(never)]
@@ -71,6 +28,7 @@ pub(super) fn marker(
     let side = unit.kind.building_side();
     let building = side.is_some();
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 2,
             uv: [
@@ -274,21 +232,6 @@ pub(super) fn building(
 
 #[cfg(test)]
 mod tests;
-
-/// The DAT delta that completes a siege unit's partial animation row.
-/// Its pixels are the standing body already selected for that unit.
-pub(super) fn siege_body_frame(art: &GameArt, unit: SceneUnit) -> Option<GameFrame> {
-    use SceneUnitKind::*;
-    let kind = match unit.kind {
-        MangonelWalk => MangonelStand,
-        BatteringRamWalk | BatteringRamAttack => BatteringRamStand,
-        _ => return None,
-    };
-    let frames = art.actors.get(kind.actor_slot()?)?;
-    let direction = super::sprite_direction(unit.facing).0;
-    let frame = *frames.get(direction.min(frames.len().saturating_sub(1)))?;
-    (frames.len() == 5).then(|| super::world_frame(frame))
-}
 
 /// Native anchors and player/shadow planes are shared by all backends.
 #[inline(never)]

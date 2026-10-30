@@ -7,6 +7,9 @@ fn string(out: &mut Vec<u8>, value: &str) {
     out.extend_from_slice(value.as_bytes());
 }
 fn unit(id: i16, language: i32, name: &str) -> Vec<u8> {
+    unit_with_delay(id, language, name, 0)
+}
+fn unit_with_delay(id: i16, language: i32, name: &str, frame_delay: i16) -> Vec<u8> {
     let mut out = vec![0; 136 + 21 + 1 + 22];
     out[0] = 80;
     out[1..3].copy_from_slice(&id.to_le_bytes());
@@ -31,7 +34,9 @@ fn unit(id: i16, language: i32, name: &str) -> Vec<u8> {
     out.extend_from_slice(&[0; 4]);
     out.extend_from_slice(&2_f32.to_le_bytes());
     out.extend_from_slice(&(-1_i16).to_le_bytes());
-    out.extend_from_slice(&[0; 18]);
+    out.extend_from_slice(&[0; 3]);
+    out.extend_from_slice(&frame_delay.to_le_bytes());
+    out.extend_from_slice(&[0; 13]);
     out.extend_from_slice(&1_f32.to_le_bytes());
     out.extend_from_slice(&[0; 38]);
     for (kind, amount, enabled) in [(1_i16, 42_i16, 1_i16), (-1, 0, 0), (-1, 0, 0)] {
@@ -43,6 +48,24 @@ fn unit(id: i16, language: i32, name: &str) -> Vec<u8> {
     out.extend_from_slice(&17_i16.to_le_bytes());
     out.extend_from_slice(&[0; 7]);
     out
+}
+
+#[test]
+fn native_shot_release_frame_is_read_between_accuracy_and_displacement() {
+    for delay in [0, 5, 19, i16::MAX] {
+        let bytes = unit_with_delay(4, 5004, "ARCHR", delay);
+        let row = serde_json::to_value(unit_record(&bytes, 0, 4, "ARCHR").unwrap()).unwrap();
+        assert_eq!(row.get("frame_delay"), Some(&serde_json::json!(delay)));
+    }
+}
+
+#[test]
+fn native_shooter_lookup_preserves_release_frames_without_surveying_unrelated_rules() {
+    let mut bytes = unit_with_delay(4, 5083, "ARCHR", 15);
+    bytes[0] = 70;
+    assert_eq!(soldier(&bytes, 4).unwrap().frame_delay, 15);
+    assert!(soldier(&bytes, 24).is_err());
+    assert!(soldier(&bytes, i16::MAX).is_err());
 }
 fn tech(language: i32, effect: i16) -> Vec<u8> {
     let mut out = vec![0; 55];

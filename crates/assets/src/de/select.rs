@@ -18,51 +18,6 @@ pub const SELECTION: &[Item] = &[
         stem: "p_mangonel",
     },
     Item {
-        building: "general",
-        role: "idle",
-        stem: "u_cav_hero_frankish_paladin_idleA",
-    },
-    Item {
-        building: "general",
-        role: "walk",
-        stem: "u_cav_hero_frankish_paladin_walkA",
-    },
-    Item {
-        building: "general",
-        role: "death",
-        stem: "u_cav_hero_frankish_paladin_deathA",
-    },
-    Item {
-        building: "general",
-        role: "attack",
-        stem: "u_cav_hero_frankish_paladin_attackA",
-    },
-    Item {
-        building: "general",
-        role: "decay",
-        stem: "u_cav_hero_frankish_paladin_decayA",
-    },
-    Item {
-        building: "vassal",
-        role: "idle",
-        stem: "u_king_west_idleA",
-    },
-    Item {
-        building: "vassal",
-        role: "walk",
-        stem: "u_king_west_walkA",
-    },
-    Item {
-        building: "vassal",
-        role: "death",
-        stem: "u_king_west_deathA",
-    },
-    Item {
-        building: "vassal",
-        role: "decay",
-        stem: "u_king_west_decayA",
-    },
-    Item {
         building: "castle_dock",
         role: "standing",
         stem: "b_west_dock_age3",
@@ -96,31 +51,6 @@ pub const SELECTION: &[Item] = &[
         building: "bridge_b",
         role: "bottom",
         stem: "s_bridge_b_bottom",
-    },
-    Item {
-        building: "galley",
-        role: "standing",
-        stem: "u_shp_galley",
-    },
-    Item {
-        building: "war_galley",
-        role: "standing",
-        stem: "u_shp_war_galley",
-    },
-    Item {
-        building: "fire_ship",
-        role: "standing",
-        stem: "u_shp_fire_ship",
-    },
-    Item {
-        building: "demolition_ship",
-        role: "standing",
-        stem: "u_shp_demo_ship",
-    },
-    Item {
-        building: "transport_ship",
-        role: "standing",
-        stem: "u_shp_transport_ship",
     },
     Item {
         building: "rally_point",

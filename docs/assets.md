@@ -58,12 +58,12 @@ pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
 The periodic groups retain all 100 frames. The base selects 2,371 frames (including ten gather-point flag cells):
 1,474 terrain and 897 objects including village art and cliff faces 226. The
 [unit and wildlife selection](assets/units.md) includes complete native DE
-General animations alongside the remaining sampled poses. DAT building recipes
+unit animations, workers, wildlife and naval graphics through one DAT-driven path. DAT building recipes
 add selected native frames, including animated Mill layers, static House variants
 and construction/wall angles. Runtime packing starts with five colour pages and
-three aligned owner-mask layers (128 MiB total). It grows object colour/mask
-pairs to fit the selected inventory, bounded to 64 physical 2048-square RGBA
-layers and 65,536 semantic frame entries. See [DE conversion](assets/de-full.md)
+three aligned owner-mask layers (128 MiB total). Unit cells enter four on-demand colour/mask page pairs with LRU eviction,
+for a normal 256 MiB atlas payload. The absolute renderer limit remains
+64 physical 2048-square RGBA layers. See [DE conversion](assets/de-full.md)
 for addressing, source resolution, timing and measurements.
 Repeated masked or terrain source cells share storage while keeping every
 semantic entry. Unmasked cells can bake different colors and retain separate

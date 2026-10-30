@@ -1,9 +1,11 @@
 # Definitive Edition conversion
 
-The General is the first full native animation conversion. Its mounted Frankish
-Paladin hero has separate idle/walk/attack/death/decay sources. No trial or Joan
-source supplies these poses. The old renderer stopped its pose lookup before
-the General and fell back to Scout; all five General tags now resolve directly.
+Every spawned unit kind, worker role and wildlife pose uses one DAT-driven
+importer. The 164 unit poses resolve to 153 graphics and retain 90,102 native
+source cells. `make assets-unit-table-de` regenerates their numeric metadata,
+while `make assets-import-de` writes the private pixel pack. Semantic bindings
+name unit IDs and actions; image sources, drawable deltas and timings come
+from the DAT. See [the unit contract](units.md) for lifecycle selection.
 
 ## Source resolution and timing
 
@@ -23,31 +25,29 @@ milliseconds remain descriptive; playback uses fractional DE durations.
 
 ## Bounded residency
 
-Runtime placement uses the logical packing implementation with a 65,536-frame
-metadata limit. Two terrain pages precede object pages. The first five colour
-pages and their three owner masks keep their base addresses. Additional object
-colour/mask pairs occupy 8/9, 10/11 through 62/63. Select the smallest page budget
-that packs the current content. Reject content beyond 64 physical layers rather
-than allocating without a bound. Alias identical masked/terrain source cells
-with ordered-map lookups; shared recoloured cells remain distinct.
+Unit cells use on-demand residency rather than startup placement of every
+animation. Each independently compressed cell retains colour, owner weight and
+shadow planes in bounded, hashed pack chunks. The browser requests current
+visible cells first and two phases of lookahead in the current direction.
 
-Only the required layer count is allocated in the GPU texture array. WebGPU
-fetches each source page's three PNG planes once, then composes bounded batches
-and blits their rectangles into resident layers. CPU pixel scratch is at most
-80 MiB (three input planes and two output planes); one reusable two-plane GPU
-texture adds 32 MiB during initialization. Each submission completes before
-the next batch, bounding pending driver transfers. The temporary texture is
-released when initialization finishes. WebGL2
-uploads sequentially, retains its WASM restoration source and restores the same
-layer count after context loss. Canvas uses that same physical addressing and
-retains its raster source. The base atlas is 128 MiB; the absolute 64-layer
-payload bound is 1 GiB, excluding staging, driver overhead and framebuffers.
-Owner masks avoid an artwork copy for every player.
+A tile allocator admits these cells to paired colour/mask pages. Each render
+turn protects current visible cells, evicts least recently used unprotected
+cells when necessary, and clears every evicted address before reusing space.
+Four page pairs add 128 MiB to the base eight layers (128 MiB), for a normal
+256 MiB atlas payload independent of the number of imported animations. The
+existing absolute renderer cap remains 64 layers / 1 GiB. Driver allocations,
+framebuffers and upload scratch are additional allocations, not included in
+these texture payload figures.
 
-This is startup residency for selected content. It does not yet evict offscreen
-animations or establish a finished 1,000-player memory/performance result.
-The remaining full-unit/building/terrain conversion must measure its working set
-and add visibility-driven eviction if it exceeds the bound.
+Encoded cache data plus request reservations are capped at 96 MiB, with at most
+four concurrent requests and 64 MiB in flight. A render turn decodes/uploads
+at most sixteen cells / 8 MiB, allowing one individually bounded larger cell.
+Requests are hashed and bounded before decompression; stale completions belong
+to their original asset state. WebGPU and WebGL2 receive subrectangle uploads;
+Canvas and context restoration retain the same current physical pixels.
+
+This design bounds the asset working set. Synthetic tests do not establish
+finished RTS performance or dedicated hardware qualification.
 
 ## Validation and measurements
 

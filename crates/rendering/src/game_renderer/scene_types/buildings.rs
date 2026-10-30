@@ -30,7 +30,7 @@ impl SceneUnitKind {
             RubbleBarracks,
             RubblePalisadeWall,
             RubbleOutpost,
-            BuilderAtlas,
+            Self::BuilderWork,
             Dock,
             FoundationDock,
             RubbleDock,
@@ -119,7 +119,6 @@ impl SceneUnitKind {
             Self::Dock => return Some(23),
             Self::FoundationDock => return Some(24),
             Self::RubbleDock => return Some(25),
-            Self::BuilderAtlas => return Some(22),
             Self::FeudalLumberCamp => return Some(2),
             Self::FeudalMiningCamp => return Some(3),
             _ => {}

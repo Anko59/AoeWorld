@@ -22,7 +22,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         super::recovery::restart(&renderer, None, &error)?;
         return Ok(());
     }
-    let (art, colour) = assets?;
+    let (art, colour, native) = assets?;
     if let Some(element) = document.get_element_by_id("playground") {
         let _ = element.set_attribute("data-renderer", renderer.backend());
         let _ = element.set_attribute("data-assets", "aoe2-local");
@@ -48,6 +48,7 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         canvas,
         renderer,
         art,
+        native,
         team_colour: colour,
         socket: None,
         connection_callbacks: None,
@@ -201,13 +202,14 @@ fn install_colour(shared: Rc<RefCell<Client>>, colour: [u8; 3]) -> Result<(), Js
                 // The client is borrowed only while a page is handed over, never
                 // across a decode await, so rendering continues on the old atlas.
                 match load(&mut SharedSink::new(&shared)).await {
-                    Ok((art, colour)) => {
+                    Ok((art, colour, native)) => {
                         let mut client = shared.borrow_mut();
                         if let Some(element) = client.document.get_element_by_id("playground") {
                             let _ =
                                 element.set_attribute("data-art-colour", &format!("{colour:?}"));
                         }
                         client.art = art;
+                        client.native = native;
                         client.team_colour = colour;
                         client.rendered_frame.clear();
                         loaded.set(colour);

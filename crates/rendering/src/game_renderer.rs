@@ -39,6 +39,7 @@ pub fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) 
     world_sprites::scene_unit_animates(art, unit, camera)
 }
 pub use world_sprites::actor_frame_index;
+pub use world_sprites::{scene_native_frames, scene_native_prefetch};
 
 pub fn resource_sprite_bounds(
     resource: SceneResource,

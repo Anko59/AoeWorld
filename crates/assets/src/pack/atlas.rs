@@ -77,6 +77,7 @@ impl PageData {
 
 /// One frame as four RGBA planes (colour, player ramp, shadow, outline), the
 /// form every importer hands to the atlas writer.
+#[derive(Clone)]
 pub(crate) struct Planes {
     pub width: u16,
     pub height: u16,
@@ -182,6 +183,18 @@ pub(crate) fn write_pack(
     hash: String,
     sprites: &[SpriteRef],
     buildings: Vec<crate::dat::BuildingComposition>,
+    render: impl FnMut(usize, usize) -> Result<Planes, Error>,
+) -> Result<PathBuf, Error> {
+    write_pack_streamed(output_root, hash, sprites, buildings, |_, _| false, render)
+}
+
+/// Static cells use PNG pages; native timelines use independently decoded chunks.
+pub(crate) fn write_pack_streamed(
+    output_root: &Path,
+    hash: String,
+    sprites: &[SpriteRef],
+    buildings: Vec<crate::dat::BuildingComposition>,
+    stream: impl Fn(usize, usize) -> bool,
     mut render: impl FnMut(usize, usize) -> Result<Planes, Error>,
 ) -> Result<PathBuf, Error> {
     let total = sprites.iter().try_fold(0_usize, |sum, sprite| {
@@ -202,9 +215,33 @@ pub(crate) fn write_pack(
         let mut page = PageData::new();
         let mut pages = Vec::new();
         let mut frames = Vec::new();
+        let mut chunks = super::frame_chunks::Writer::new(&temporary);
         for (sprite_index, sprite) in sprites.iter().enumerate() {
             for frame_index in 0..sprite.frames {
                 let frame = render(sprite_index, frame_index)?;
+                if stream(sprite_index, frame_index) {
+                    if frame.outline.iter().any(|byte| *byte != 0) {
+                        return Err(invalid("atlas", 0, "native outline plane unsupported"));
+                    }
+                    let native = chunks.push(
+                        [frame.width, frame.height],
+                        [&frame.color, &frame.player, &frame.shadow],
+                    )?;
+                    frames.push(FrameRecord {
+                        source: sprite.id.clone(),
+                        source_hash: sprite.hash.clone(),
+                        frame: frame_index as u32,
+                        native: Some(native),
+                        page: 0,
+                        x: 0,
+                        y: 0,
+                        width: frame.width,
+                        height: frame.height,
+                        anchor_x: frame.hotspot_x,
+                        anchor_y: frame.hotspot_y,
+                    });
+                    continue;
+                }
                 let mut location = page.place_planes(&frame)?;
                 if location.is_none() {
                     if pages.len() + 1 == MAX_PAGES {
@@ -220,6 +257,7 @@ pub(crate) fn write_pack(
                     source: sprite.id.clone(),
                     source_hash: sprite.hash.clone(),
                     frame: frame_index as u32,
+                    native: None,
                     page: pages.len() as u16,
                     x: x as u16,
                     y: y as u16,
@@ -237,12 +275,13 @@ pub(crate) fn write_pack(
             converter: env!("CARGO_PKG_VERSION").to_owned(),
             input_hash: hash,
             pages,
+            chunks: chunks.finish()?,
             frames,
             buildings,
         };
         fs::write(
             temporary.join("manifest.json"),
-            serde_json::to_vec_pretty(&manifest)?,
+            serde_json::to_vec(&manifest)?,
         )?;
         verify(&temporary)?;
         fs::rename(&temporary, &destination)?;

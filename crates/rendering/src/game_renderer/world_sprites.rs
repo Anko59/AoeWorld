@@ -16,7 +16,7 @@ use bounds::object_depth;
 #[path = "village/actors.rs"]
 mod actor_frames;
 pub use actor_frames::actor_frame_index;
-use actor_frames::{sprite_direction, unit_direction, unit_frame_index};
+use actor_frames::{unit_direction, unit_frame_index};
 pub use bounds::{
     scene_building_hit, scene_building_visible, scene_unit_bounds, scene_unit_depth,
     scene_unit_render_key,
@@ -91,6 +91,10 @@ pub(super) fn resource_presentation_at(
 pub fn scene_resource_frame(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
     scene_resource_presentation(art, resource).map(|(frame, _)| frame)
 }
+
+#[path = "village/residency.rs"]
+mod residency;
+pub use residency::{scene_native_frames, scene_native_prefetch};
 
 #[cfg(test)]
 pub(super) fn world_sprite_frames(
@@ -219,7 +223,7 @@ pub(super) fn emit_world_sprite_frames(
             village::marker(unit, camera, &mut emit);
             continue;
         };
-        let (direction, flipped) = unit_direction(unit);
+        let (_, flipped) = unit_direction(unit, frames.len() / stride);
         let phase = if unit.kind.actor_slot().is_some() {
             usize::from(unit.actor_frame() >> if unit.kind.native_directions() { 4 } else { 3 })
                 .min(stride - 1)
@@ -233,70 +237,58 @@ pub(super) fn emit_world_sprite_frames(
         } else {
             0
         };
-        let (index, _) = unit_frame_index(unit, stride, phase);
-        let frame = world_frame(frames[index]);
-        // The DAT's fishing task is the net delta over the standing hull.
-        let net = (unit.kind == crate::SceneUnitKind::FishingShipWorking)
-            .then(|| art.fishing[9].get(direction).copied())
-            .flatten()
-            .map(world_frame);
-        // Siege bodies are DAT deltas over the wheels, rails or log base row.
-        let mut shadow_emitted = false;
-        for frame in std::iter::once(frame)
-            .chain(net)
-            .chain(village::siege_body_frame(art, unit))
+        let (index, _) = unit_frame_index(unit, stride, phase, frames.len() / stride);
+        let Some(frame) = art.resident_frame(frames[index]).map(world_frame) else {
+            continue;
+        };
+        let scale = camera.zoom as f32;
+        let width = f64::from(frame.size[0]) * camera.zoom;
+        let height = f64::from(frame.size[1]) * camera.zoom;
+        if screen.x + width < 0.0
+            || screen.y + height < 0.0
+            || screen.x - width > camera.viewport[0]
+            || screen.y - height > camera.viewport[1]
         {
-            let scale = camera.zoom as f32;
-            let width = f64::from(frame.size[0]) * camera.zoom;
-            let height = f64::from(frame.size[1]) * camera.zoom;
-            if screen.x + width < 0.0
-                || screen.y + height < 0.0
-                || screen.x - width > camera.viewport[0]
-                || screen.y - height > camera.viewport[1]
-            {
-                continue;
-            }
-            let mut uv = frame.atlas.uv;
-            if flipped {
-                uv[0] += uv[2];
-                uv[2] = -uv[2];
-            }
-            let x = screen.x
-                - if flipped {
-                    width - f64::from(frame.anchor[0]) * camera.zoom
-                } else {
-                    f64::from(frame.anchor[0]) * camera.zoom
-                };
-            let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
-            let sprite = Sprite {
-                position: [
-                    ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
-                    (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
-                ],
-                radius: [
-                    (width / camera.viewport[0]) as f32,
-                    (height / camera.viewport[1]) as f32,
-                ],
-                color: [1.0; 4],
-                uv,
-                depths: [0.0; 4],
-                terrain_blend: [[0.0; 4]; 2],
-                pages: [frame.atlas.page, 0, 0, 0],
-            }
-            .with_owner(unit.visual);
-            let mut scaled_frame = frame;
-            scaled_frame.size = scaled_frame.size.map(|value| value * scale);
-            scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
-            let depth = object_depth(object);
-            if !shadow_emitted
-                && let Some((shadow, shadow_frame)) =
-                    alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
-            {
-                shadow_emitted = true;
-                emit((shadow, shadow_frame, depth, object.stable_id()));
-            }
-            emit((sprite, scaled_frame, depth, object.stable_id()));
+            continue;
         }
+        let mut uv = frame.atlas.uv;
+        if flipped {
+            uv[0] += uv[2];
+            uv[2] = -uv[2];
+        }
+        let x = screen.x
+            - if flipped {
+                width - f64::from(frame.anchor[0]) * camera.zoom
+            } else {
+                f64::from(frame.anchor[0]) * camera.zoom
+            };
+        let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
+        let sprite = Sprite {
+            position: [
+                ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
+                (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
+            ],
+            radius: [
+                (width / camera.viewport[0]) as f32,
+                (height / camera.viewport[1]) as f32,
+            ],
+            color: [1.0; 4],
+            uv,
+            depths: [0.0; 4],
+            terrain_blend: [[0.0; 4]; 2],
+            pages: [frame.atlas.page, 0, 0, 0],
+        }
+        .with_owner(unit.visual);
+        let mut scaled_frame = frame;
+        scaled_frame.size = scaled_frame.size.map(|value| value * scale);
+        scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
+        let depth = object_depth(object);
+        if let Some((shadow, shadow_frame)) =
+            alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
+        {
+            emit((shadow, shadow_frame, depth, object.stable_id()));
+        }
+        emit((sprite, scaled_frame, depth, object.stable_id()));
     }
 }
 

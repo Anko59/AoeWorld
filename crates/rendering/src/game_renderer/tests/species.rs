@@ -80,6 +80,7 @@ fn native_signed_and_outside_anchors_preserve_body_overhang_and_removal() {
     };
     for (family, slot, index, anchor) in [(2, 0, 1, [-8.0, 32.0]), (4, 1, 0, [20.0, 175.0])] {
         let native = GameFrame {
+            stream: 0,
             size: [88.0, 168.0],
             anchor,
             ..art.tree_families[slot][index]
@@ -136,6 +137,7 @@ fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() 
         let (kind, count) = (20, 5);
         let frames = (0..count)
             .map(|i| GameFrame {
+                stream: 0,
                 anchor: [-3.0, 25.0],
                 size: [29.0, 20.0],
                 ..fixture::frame(i * 16)
@@ -178,6 +180,7 @@ fn dressing_variants_keep_native_anchors_scale_and_order_with_trees_and_units() 
     }
     art.walking = vec![fixture::frame(640); 50];
     art.standing = art.walking.clone();
+    fixture::unit_rows(&mut art);
     let resources = [
         fixture::dressing(20),
         SceneResource {
@@ -248,6 +251,7 @@ fn broadleaf_tree_variants_keep_paired_shadows_and_limit_bare_trees() {
         focus_elevation_meters: 0.0,
     };
     let make_frame = |index: usize| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [index as f32 / 1000.0, 0.0, 0.01, 0.01],

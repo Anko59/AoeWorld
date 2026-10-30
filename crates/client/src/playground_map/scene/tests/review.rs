@@ -135,13 +135,16 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
         .unwrap();
     let id = EntityId(1);
     Client {
+        native: None,
         hover_mode: 1,
         team_colour: [65, 145, 245],
         document,
         canvas,
         renderer,
         art: GameArt {
+            resident: Vec::new(),
             actors: Vec::new(),
+            actor_rows: Vec::new(),
             buildings: std::array::from_fn(|_| Vec::new()),
             village: Default::default(),
             fishing: Default::default(),

@@ -26,10 +26,9 @@ pub(super) fn select(
     domains: &mut Vec<AtlasDomain>,
 ) -> Result<Vec<Option<std::ops::Range<usize>>>, JsValue> {
     let mut ranges: Vec<Option<std::ops::Range<usize>>> = Vec::new();
-    let base_end = selected.len();
     for (semantic, &source) in sprites().iter().enumerate() {
         let identity = source.manifest_source();
-        if (source.rows() == 16 || source.id == 4500)
+        if source.is_native()
             && source_present(manifest, &identity)
             && manifest
                 .frames
@@ -49,29 +48,6 @@ pub(super) fn select(
             ranges.push(None);
             continue;
         };
-        if let Some(role) = source.base_role() {
-            let resident = if role == AssetRole::CavalryStanding {
-                (0..5)
-                    .map(|row| frames[source.source_frame(row, 0)])
-                    .collect()
-            } else {
-                frames.clone()
-            };
-            if let Some(start) = selected[..base_end]
-                .windows(resident.len())
-                .enumerate()
-                .find_map(|(start, window)| {
-                    (window == resident
-                        && domains[start..start + resident.len()]
-                            .iter()
-                            .all(|d| *d == AtlasDomain::Objects))
-                    .then_some(start)
-                })
-            {
-                ranges.push(Some(start..start + resident.len()));
-                continue;
-            }
-        }
         if let Some(prior) = sprites()[..semantic]
             .iter()
             .enumerate()
@@ -121,19 +97,7 @@ pub(super) fn resolve(
                 return Vec::new();
             };
             let source = sprites()[semantic];
-            let indices: Vec<_> = if source.base_role() == Some(AssetRole::CavalryWalking)
-                && range.len() == source.frames() as usize
-            {
-                (0..5)
-                    .flat_map(|row| {
-                        (0..usize::from(source.stride))
-                            .step_by(usize::from(source.sample_step()))
-                            .map(move |phase| range.start + source.source_frame(row, phase))
-                    })
-                    .collect()
-            } else {
-                range.clone().collect()
-            };
+            let indices: Vec<_> = range.clone().collect();
             let rows = source.rows();
             let stride = indices.len() / rows;
             let cell = |index: usize| {
@@ -143,6 +107,9 @@ pub(super) fn resolve(
                 )
             };
             if stride > 1
+                && indices
+                    .iter()
+                    .all(|&index| manifest.frames[selected[index]].native.is_none())
                 && (0..rows).all(|row| {
                     let start = row * stride;
                     (1..stride).all(|phase| cell(start) == cell(start + phase))

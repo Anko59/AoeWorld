@@ -7,6 +7,9 @@ assets-import:
 # The owner's licensed install is mounted read-only; the pack, previews and table go to local-assets/.
 DE_DIR ?= $(HOME)/.steam/steam/steamapps/common/AoE2DE
 export DE_DIR
+.PHONY: assets-unit-table-de
+assets-unit-table-de:
+	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets unit-table /de-install
 assets-import-de:
 	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets import-de /de-install $(if $(AOE_ASSET_PACK),$(call MOUNT_QUOTE,$(AOE_ASSET_PACK)))
 

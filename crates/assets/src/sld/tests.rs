@@ -3,6 +3,84 @@ use super::*;
 const RED_BLUE: [u8; 8] = [0x00, 0xF8, 0x1F, 0x00, 0x01, 0, 0, 0]; // pixel 0 uses colour 1
 const SHADOW: [u8; 8] = [200, 0, 0x01, 0, 0, 0, 0, 0]; // pixel 0 is 0, the rest 200
 
+#[test]
+fn short_command_arrays_leave_the_unmentioned_tail_transparent() {
+    let mut file = header(2);
+    frame_header(&mut file, 8, 3, 0);
+    file.extend(layer_bytes(
+        Some([0, 0, 8, 4]),
+        0,
+        &[(0, 2)],
+        &[RED_BLUE; 2],
+    ));
+    pad(&mut file);
+    file.extend(layer_bytes(Some([0, 0, 8, 4]), 1, &[(0, 0)], &[]));
+    pad(&mut file);
+    frame_header(&mut file, 8, 1, 1);
+    file.extend(layer_bytes(Some([0, 0, 8, 4]), REUSE_FLAG, &[(1, 0)], &[]));
+    pad(&mut file);
+    let frames = parse(&file).expect("sparse native command arrays");
+    assert!(
+        frames[0]
+            .shadow
+            .as_ref()
+            .unwrap()
+            .pixels
+            .iter()
+            .all(|p| *p == [0; 4])
+    );
+    let main = frames[1].main.as_ref().unwrap();
+    assert_eq!(main.pixels[0], [0, 0, 255, 255]);
+    for y in 0..4 {
+        assert!(
+            main.pixels[y * 8 + 4..y * 8 + 8]
+                .iter()
+                .all(|p| *p == [0; 4])
+        );
+    }
+    let mut unused = header(1);
+    frame_header(&mut unused, 8, 1, 0);
+    unused.extend(layer_bytes(Some([0, 0, 4, 4]), 0, &[(1, 0)], &[RED_BLUE]));
+    pad(&mut unused);
+    assert!(parse(&unused).is_err(), "unreferenced compressed payload");
+}
+
+#[test]
+fn block_padded_layers_can_reach_the_rounded_canvas_boundary() {
+    let mut file = header(2);
+    frame_header(&mut file, 10, 3, 0);
+    for block in [RED_BLUE, SHADOW] {
+        file.extend(layer_bytes(Some([8, 8, 12, 12]), 0, &[(0, 1)], &[block]));
+        pad(&mut file);
+    }
+    frame_header(&mut file, 10, 3, 1);
+    for _ in 0..2 {
+        file.extend(layer_bytes(
+            Some([8, 8, 12, 12]),
+            REUSE_FLAG,
+            &[(1, 0)],
+            &[],
+        ));
+        pad(&mut file);
+    }
+    let frames = parse(&file).expect("BC block padding beyond a nonaligned canvas");
+    let main = frames[0].main.as_ref().unwrap();
+    assert_eq!((frames[0].width, main.x, main.width), (10, 8, 4));
+    assert_eq!(main.pixels[0], [0, 0, 255, 255]);
+    assert_eq!(frames[0].main, frames[1].main);
+    assert_eq!(frames[0].shadow, frames[1].shadow);
+    let mut outside = header(1);
+    frame_header(&mut outside, 10, 1, 0);
+    outside.extend(layer_bytes(
+        Some([12, 8, 16, 12]),
+        0,
+        &[(0, 1)],
+        &[RED_BLUE],
+    ));
+    pad(&mut outside);
+    assert!(parse(&outside).is_err(), "beyond the padded block boundary");
+}
+
 fn pad(file: &mut Vec<u8>) {
     while !(file.len() - HEADER).is_multiple_of(4) {
         file.push(0);

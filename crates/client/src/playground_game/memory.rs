@@ -16,7 +16,8 @@ const count_names = [
   'fog_bytes', 'units', 'unit_bytes', 'interpolation_bytes', 'buildings_and_ghosts',
   'animals', 'projectiles', 'resource_entries', 'resource_bytes', 'stump_effects',
   'outgoing_message_bytes', 'control_group_members', 'move_queue_bytes',
-  'selected_building_bytes', 'pending_training_bytes'
+  'selected_building_bytes', 'pending_training_bytes', 'native_chunk_bytes',
+  'native_request_bytes', 'native_metadata_bytes', 'native_resident_frames'
 ];
 export function snapshot_json(backend, counts, names, renderer) {
   const value = {backend};
@@ -36,7 +37,7 @@ extern "C" {
 
 struct Snapshot {
     backend: &'static str,
-    counts: [usize; 23],
+    counts: [usize; 27],
     renderer: [(&'static str, usize); 5],
 }
 
@@ -75,6 +76,10 @@ pub fn client_memory_snapshot() -> Result<String, JsValue> {
         let (resource_entries, resource_bytes, effects) = client.resources.memory_usage();
         let scene = client.terrain_scene.borrow();
         let scene_bytes = scene.as_ref().map_or(0, |s| s.resident_bytes());
+        let native = client
+            .native
+            .as_ref()
+            .map_or([0; 4], |native| native.memory_usage(&client.art));
         let value = Snapshot {
             backend: client.renderer.backend(),
             counts: [
@@ -114,6 +119,10 @@ pub fn client_memory_snapshot() -> Result<String, JsValue> {
                         .sum::<usize>(),
                 client.selected.buildings.capacity() * std::mem::size_of::<aoe_core::EntityId>(),
                 client.village.pending_training.resident_bytes(),
+                native[0],
+                native[1],
+                native[2],
+                native[3],
             ],
             renderer: client.renderer.memory_usage(),
         };

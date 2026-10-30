@@ -18,6 +18,7 @@ mod landscape;
 mod species;
 fn synthetic_art() -> GameArt {
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0, 0.0, 0.1, 0.1],
@@ -26,7 +27,14 @@ fn synthetic_art() -> GameArt {
         anchor: [16.0, 48.0],
     };
     GameArt {
-        actors: Vec::new(),
+        resident: Vec::new(),
+        actors: {
+            let mut groups = vec![Vec::new(); 167];
+            groups[70] = vec![frame; 16];
+            groups[71] = vec![frame; 16];
+            groups
+        },
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),

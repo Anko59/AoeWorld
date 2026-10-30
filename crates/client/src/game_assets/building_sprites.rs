@@ -21,12 +21,26 @@ pub(super) async fn overlay(manifest: &mut Manifest) -> Result<(), JsValue> {
     let mut extra = decode_manifest(&bytes)?;
     if extra.version != 1
         || extra.pages.len() > 256
-        || extra.frames.len() > 25000
+        || extra.frames.len() > aoe_assets::pack::MAX_FRAMES
         || manifest.pages.len() + extra.pages.len() > u16::MAX as usize
     {
         return Err(JsValue::from_str("Invalid building pack"));
     }
     let offset = manifest.pages.len() as u16;
+    let chunk_offset = u16::try_from(manifest.chunks.len()).map_err(error)?;
+    if manifest.chunks.len() + extra.chunks.len() > aoe_assets::pack::frame_chunks::MAX_CHUNKS {
+        return Err(error("Too many native chunks"));
+    }
+    for chunk in &mut extra.chunks {
+        if chunk.file.contains('/')
+            || chunk.file.contains('\\')
+            || chunk.file == ".."
+            || chunk.file == "."
+        {
+            return Err(error("Invalid native chunk name"));
+        }
+        chunk.file = format!("buildings/{}", chunk.file);
+    }
     for page in &mut extra.pages {
         for name in [&mut page.color, &mut page.player, &mut page.shadow] {
             if name.contains('/') || name.contains('\\') {
@@ -36,12 +50,20 @@ pub(super) async fn overlay(manifest: &mut Manifest) -> Result<(), JsValue> {
         }
     }
     for frame in &mut extra.frames {
+        if let Some(location) = &mut frame.native {
+            if usize::from(location.chunk) >= extra.chunks.len() {
+                return Err(error("Invalid native chunk index"));
+            }
+            location.chunk += chunk_offset;
+            continue;
+        }
         if usize::from(frame.page) >= extra.pages.len() {
             return Err(JsValue::from_str("Invalid building page index"));
         }
         frame.page += offset;
     }
     manifest.pages.extend(extra.pages);
+    manifest.chunks.extend(extra.chunks);
     manifest.frames.extend(extra.frames);
     Ok(())
 }

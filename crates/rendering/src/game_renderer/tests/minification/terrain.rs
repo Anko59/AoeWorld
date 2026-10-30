@@ -7,6 +7,7 @@ pub(crate) type Quad = (Sprite, GameFrame, f64, u64);
 
 pub(crate) fn scene(zoom: f64) -> (SceneCamera, Vec<Quad>, Vec<u8>) {
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0, 64.0 / 2048.0, 96.0 / 2048.0, 48.0 / 2048.0],
@@ -15,7 +16,9 @@ pub(crate) fn scene(zoom: f64) -> (SceneCamera, Vec<Quad>, Vec<u8>) {
         anchor: [48.0, 24.0],
     };
     let art = GameArt {
+        resident: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),

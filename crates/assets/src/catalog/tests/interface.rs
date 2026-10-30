@@ -5,6 +5,7 @@ use crate::pack::{AtlasPage, FrameRecord};
 fn interface_catalog_uses_exact_frames_and_rejects_incomplete_sheets() {
     let hash = "a".repeat(64);
     let mut manifest = Manifest {
+        chunks: Vec::new(),
         version: 1,
         converter: "synthetic".into(),
         input_hash: hash.clone(),
@@ -26,6 +27,7 @@ fn interface_catalog_uses_exact_frames_and_rejects_incomplete_sheets() {
     };
     assert!(art(&manifest, 50730, 11).unwrap().is_none());
     manifest.frames.push(FrameRecord {
+        native: None,
         source: "interfac.drs:[32, 112, 108, 115]:50730".into(),
         source_hash: hash,
         frame: 11,

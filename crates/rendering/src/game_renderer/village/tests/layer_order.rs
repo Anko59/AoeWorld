@@ -3,6 +3,7 @@ use super::*;
 fn composed_layer_sort_matches_two_stable_sorts_on_exact_depth_and_id_ties() {
     use bytemuck::Zeroable;
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0; 4],

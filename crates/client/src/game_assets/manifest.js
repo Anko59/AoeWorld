@@ -59,22 +59,26 @@ export function parse_manifest(bytes) {
   });
   const frames = array(data.frames).map(frame => {
     string(frame.source_hash);
+    const native = frame.native == null ? null :
+      [u16(frame.native.chunk),u32(frame.native.offset),u32(frame.native.length)];
     return [string(frame.source),u32(frame.frame),u16(frame.page),u16(frame.x),u16(frame.y),
-      u16(frame.width),u16(frame.height),i32(frame.anchor_x),i32(frame.anchor_y)];
+      u16(frame.width),u16(frame.height),i32(frame.anchor_x),i32(frame.anchor_y),native];
   });
-  return [u16(data.version),string(data.building_data),pages,frames];
+  const chunks = array(data.chunks).map(chunk => [string(chunk.file),string(chunk.hash),u32(chunk.bytes)]);
+  return [u16(data.version),string(data.building_data),pages,frames,chunks];
 }
 
-export function parse_content(bytes) {
+export function parse_content(bytes, actorCount) {
   if (bytes.length > 32768) throw Error('game content exceeds startup budget');
   const data = document(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   const rules = array(data.rules).map(i32);
   const actors = array(data.actors);
-  if (actors.length !== 135) throw Error('invalid actor content count');
+  if (actors.length !== actorCount) throw Error('invalid actor content count');
   const words = actors.flatMap(actor => {
     const row = array(actor);
     if (row.length !== 4) throw Error('invalid actor content record');
-    return [u32(row[0]), integer(row[1],1,255), integer(row[2],1,65535), integer(row[3],0,255)];
+    const stride = integer(row[1],1,255);
+    return [u32(row[0]), stride, integer(row[2],stride === 1 ? 0 : 1,65535), integer(row[3],0,255)];
   });
   return [new Int32Array(rules), new Uint32Array(words)];
 }

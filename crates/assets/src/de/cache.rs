@@ -1,12 +1,12 @@
 //! Retain decoded frames for at most one source while writing a pack.
-use crate::{Error, sld::Frame};
+use crate::Error;
 
-pub(super) struct Cache<F> {
+pub(super) struct Cache<T, F> {
     load: F,
-    current: Option<(usize, Vec<Frame>)>,
+    current: Option<(usize, Vec<T>)>,
 }
 
-impl<F: FnMut(usize) -> Result<Vec<Frame>, Error>> Cache<F> {
+impl<T, F: FnMut(usize) -> Result<Vec<T>, Error>> Cache<T, F> {
     pub fn new(load: F) -> Self {
         Self {
             load,
@@ -14,7 +14,7 @@ impl<F: FnMut(usize) -> Result<Vec<Frame>, Error>> Cache<F> {
         }
     }
 
-    pub fn get(&mut self, index: usize) -> Result<&[Frame], Error> {
+    pub fn get(&mut self, index: usize) -> Result<&[T], Error> {
         if self
             .current
             .as_ref()

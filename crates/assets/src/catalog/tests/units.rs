@@ -14,117 +14,95 @@ fn siege_stone_keeps_all_thirty_native_de_rotation_cells_at_sixty_fps() {
 
 #[test]
 fn actor_animation_metadata_uses_dat_rows_and_individual_frame_durations() {
-    for (pose, id, stride, millis) in [
-        (Pose::MilitiaStand, 993, 6, 1000),
-        (Pose::MilitiaWalk, 997, 12, 70),
-        (Pose::MilitiaAttack, 987, 10, 100),
-        (Pose::MilitiaDie, 990, 10, 100),
-        (Pose::VillagerAttack, 1473, 15, 70),
-        (Pose::VillagerDie, 1476, 15, 100),
-        (Pose::HunterAttack, 1518, 15, 100),
-        (Pose::Butcher, 1528, 15, 100),
-        (Pose::HunterCarry, 1519, 15, 70),
-        (Pose::ShepherdWork, 3682, 15, 100),
-        (Pose::ShepherdDie, 3683, 15, 100),
-        (Pose::HunterDie, 1522, 15, 100),
-        (Pose::SheepStand, 3629, 9, 275),
-        (Pose::DeerWalk, 348, 15, 50),
-        (Pose::BoarAttack, 2555, 17, 95),
-        (Pose::WolfAttack, 1629, 20, 85),
-        (Pose::FishingShipStand, 444, 1, 200),
-        (Pose::FishingShipWalk, 449, 1, 200),
-        (Pose::FishingShipWork, 444, 1, 200),
-        (Pose::FisherWork, 3575, 28, 200),
-        (Pose::ArcherStand, 8, 10, 200),
-        (Pose::ArcherWalk, 12, 10, 70),
-        (Pose::ArcherAttack, 2, 10, 70),
-        (Pose::ArcherDie, 5, 10, 100),
-        (Pose::ArcherDecay, 9, 5, 6000),
-        (Pose::SkirmisherStand, 1650, 8, 1000),
-        (Pose::SkirmisherWalk, 1654, 10, 70),
-        (Pose::SkirmisherAttack, 1644, 12, 100),
-        (Pose::SkirmisherDie, 1647, 10, 100),
-        (Pose::SkirmisherDecay, 1651, 5, 6000),
-        (Pose::SpearmanStand, 873, 9, 120),
-        (Pose::SpearmanWalk, 877, 10, 70),
-        (Pose::SpearmanAttack, 867, 10, 100),
-        (Pose::SpearmanDie, 870, 10, 100),
-        (Pose::SpearmanDecay, 874, 5, 6000),
-        (Pose::ManAtArmsStand, 1044, 11, 250),
-        (Pose::ManAtArmsWalk, 1048, 11, 85),
-        (Pose::ManAtArmsAttack, 1038, 11, 160),
-        (Pose::ManAtArmsDie, 1041, 11, 100),
-        (Pose::ManAtArmsDecay, 1045, 5, 6000),
-        (Pose::ScoutStand, 2085, 10, 200),
-        (Pose::ScoutWalk, 2089, 10, 110),
-        // The farmer's own tilling row (VMFAR_TN), not the forager's.
-        (Pose::FarmerWork, 1512, 15, 133),
+    for (pose, id, stride, millis, cells) in [
+        (Pose::VillagerAttack, 201278, 60, 25, 961),
+        (Pose::VillagerDie, 201281, 30, 50, 481),
+        (Pose::HunterAttack, 201317, 30, 50, 481),
+        (Pose::Butcher, 201602, 30, 50, 481),
+        (Pose::HunterCarry, 201601, 60, 15, 961),
+        (Pose::ShepherdWork, 203873, 30, 50, 481),
+        (Pose::ShepherdDie, 203190, 60, 25, 961),
+        (Pose::HunterDie, 201320, 60, 25, 961),
+        (Pose::SheepStand, 203178, 60, 50, 960),
+        (Pose::DeerWalk, 200768, 30, 25, 480),
+        (Pose::BoarAttack, 202453, 45, 36, 721),
+        (Pose::WolfAttack, 201382, 60, 28, 961),
+        (Pose::FishingShipStand, 200803, 1, 200, 16),
+        (Pose::FishingShipWalk, 200807, 1, 100, 16),
+        (Pose::FishingShipWork, 201594, 1, 200, 16),
+        (Pose::FisherWork, 203154, 60, 93, 961),
+        (Pose::FarmerWork, 201600, 60, 50, 961),
     ] {
         let source = SPRITES[pose as usize];
         assert_eq!(
-            (source.id, source.stride, source.millis),
-            (id, stride, millis)
+            (source.id, source.stride, source.millis, source.frames()),
+            (id, stride, millis, cells)
         );
-        assert_eq!(source.frames(), u32::from(stride) * 5);
+        assert_eq!(source.rows(), 16);
     }
 }
 
 #[test]
-fn castle_actor_selection_keeps_native_sources_inside_the_existing_budget() {
+fn castle_actor_selection_keeps_all_native_direction_blocks() {
     for (pose, id) in [
-        (Pose::KnightStand, 669),
-        (Pose::MonkWalk, 779),
-        (Pose::MangonelAttack, 716),
-        (Pose::BatteringRamDie, 176),
+        (Pose::KnightStand, 200933),
+        (Pose::MonkWalk, 201002),
+        (Pose::MangonelAttack, 200979),
+        (Pose::BatteringRamDie, 200683),
     ] {
         let s = SPRITES[pose as usize];
         assert_eq!(s.id, id);
-        assert!(s.selected_frames() <= 10);
+        assert_eq!(s.sample_step(), 1);
+        assert_eq!(s.selected_frames(), usize::from(s.stride) * 16);
     }
-    assert_eq!(SPRITES[Pose::KnightWalk as usize].millis, 110);
+    assert!(
+        (SPRITES[Pose::KnightWalk as usize].frame_millis() - 36.666665226221085).abs() < 0.00001
+    );
 }
 
 #[test]
-fn navy_actor_sources_sample_eight_facings_from_original_sixteen_direction_art() {
-    for (pose, name) in [
-        (Pose::Galley, "galley"),
-        (Pose::WarGalley, "war_galley"),
-        (Pose::FireShip, "fire_ship"),
-        (Pose::DemolitionShip, "demo_ship"),
-        (Pose::TransportShip, "transport_ship"),
+fn navy_actor_sources_keep_every_native_direction_and_sail_phase() {
+    for (pose, id, stride, cells) in [
+        (Pose::Galley, 204052, 30, 480),
+        (Pose::WarGalley, 204013, 30, 480),
+        (Pose::FireShip, 204182, 30, 480),
+        (Pose::DemolitionShip, 204039, 30, 480),
+        (Pose::TransportShip, 204093, 30, 480),
     ] {
         let source = SPRITES[pose as usize];
-        assert_eq!(source.frames(), 16);
-        assert_eq!(source.selected_frames(), 5);
-        assert_eq!(source.manifest_source(), format!("de/u_shp_{name}_x1.sld"));
-        for row in 0..5 {
-            // Native DE frame zero faces screen east; the existing mirrored
-            // actor rows begin south, then SW, west, NW and north.
-            assert_eq!(source.source_frame(row, 0), 4 + row * 2);
+        assert_eq!(
+            (source.id, source.stride, source.frames()),
+            (id, stride, cells)
+        );
+        assert_eq!(source.rows(), 16);
+        assert_eq!(source.sample_step(), 1);
+        for row in 0..16 {
+            for phase in 0..stride as usize {
+                assert_eq!(
+                    source.source_frame(row, phase),
+                    row * stride as usize + phase
+                );
+            }
         }
     }
 }
 
 #[test]
 fn vassal_uses_king_poses_with_native_timing() {
-    // Trial DAT confirms these King identities/timings but its DRS omits all
-    // four bodies; the owner's licensed DE King is the explicit pixel source.
+    // The DE King contributes all four complete sixteen-direction timelines.
     for (pose, name, id, stride, millis, frames) in [
-        (Pose::KingStand, "idle", 1767, 6, 200, 961),
-        (Pose::KingWalk, "walk", 1771, 10, 70, 481),
-        (Pose::KingDie, "death", 1764, 10, 100, 481),
-        (Pose::KingDecay, "decay", 1768, 5, 6000, 481),
+        (Pose::KingStand, "dat_1851", 201851, 60, 50, 961),
+        (Pose::KingWalk, "dat_1855", 201855, 30, 23, 481),
+        (Pose::KingDie, "dat_1848", 201848, 30, 33, 481),
+        (Pose::KingDecay, "dat_1852", 201852, 30, 1000, 481),
     ] {
         let source = SPRITES[pose as usize];
         assert_eq!(
             (source.id, source.stride, source.millis, source.frames()),
             (id, stride, millis, frames)
         );
-        assert_eq!(
-            source.manifest_source(),
-            format!("de/u_king_west_{name}A_x1.sld")
-        );
-        for row in 0..5 {
+        assert_eq!(source.manifest_source(), format!("de/{name}.sld"));
+        for row in 0..16 {
             for phase in (0..source.stride as usize).step_by(source.sample_step() as usize) {
                 assert!(source.source_frame(row, phase) < frames as usize);
             }
@@ -189,13 +167,14 @@ fn projectile_facing_follows_the_cardinal_screen_directions() {
 #[test]
 fn every_shooting_attack_releases_inside_its_animation() {
     use crate::catalog::units::release_frame;
-    for pose in [
-        Pose::ArcherAttack,
-        Pose::SkirmisherAttack,
-        Pose::CrossbowmanAttack,
-        Pose::EliteSkirmisherAttack,
+    for (pose, expected) in [
+        (Pose::ArcherAttack, 15),
+        (Pose::SkirmisherAttack, 19),
+        (Pose::CrossbowmanAttack, 15),
+        (Pose::EliteSkirmisherAttack, 19),
     ] {
         let release = release_frame(pose).unwrap();
+        assert_eq!(release, expected, "native DE frame delay");
         assert!(release > 0 && release < SPRITES[pose as usize].stride);
     }
     // Melee and siege poses release nothing mid-animation.
@@ -206,17 +185,14 @@ fn every_shooting_attack_releases_inside_its_animation() {
 #[test]
 fn general_uses_distinct_full_paladin_animations() {
     for (pose, name, stride) in [
-        (Pose::GeneralStand, "idle", 45),
-        (Pose::GeneralWalk, "walk", 30),
-        (Pose::GeneralAttack, "attack", 45),
-        (Pose::GeneralDie, "death", 45),
-        (Pose::GeneralDecay, "decay", 30),
+        (Pose::GeneralStand, "dat_3449", 45),
+        (Pose::GeneralWalk, "dat_3453", 30),
+        (Pose::GeneralAttack, "dat_3443", 45),
+        (Pose::GeneralDie, "dat_3446", 45),
+        (Pose::GeneralDecay, "dat_3450", 30),
     ] {
         let s = SPRITES[pose as usize];
-        assert_eq!(
-            s.manifest_source(),
-            format!("de/u_cav_hero_frankish_paladin_{name}A_x1.sld")
-        );
+        assert_eq!(s.manifest_source(), format!("de/{name}.sld"));
         assert_eq!(s.selected_frames(), stride * 16);
         assert_eq!(s.rows(), 16);
         for row in 0..16 {

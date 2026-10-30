@@ -19,6 +19,16 @@ extern "C" {
     #[wasm_bindgen(method, catch)]
     fn upload(this: &GlBridge, pixels: &[u8], memory: &JsValue) -> Result<(), JsValue>;
     #[wasm_bindgen(method, catch)]
+    fn patch(
+        this: &GlBridge,
+        page: u32,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        pixels: &[u8],
+    ) -> Result<(), JsValue>;
+    #[wasm_bindgen(method, catch)]
     fn resize(this: &GlBridge, width: u32, height: u32) -> Result<(), JsValue>;
     #[wasm_bindgen(method, catch)]
     fn render(
@@ -53,6 +63,18 @@ pub struct WebGlRenderer {
 }
 
 impl WebGlRenderer {
+    pub(super) fn update(
+        &mut self,
+        page: u32,
+        origin: [u32; 2],
+        size: [u32; 2],
+        pixels: &[u8],
+    ) -> Result<(), String> {
+        super::atlas_upload::patch::copy(&mut self.source_atlas, page, origin, size, pixels)?;
+        self.bridge
+            .patch(page, origin[0], origin[1], size[0], size[1], pixels)
+            .map_err(error)
+    }
     pub(super) fn buffer_bytes(&self) -> usize {
         self.bridge.buffer_bytes()
     }

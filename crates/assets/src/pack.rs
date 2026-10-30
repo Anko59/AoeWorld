@@ -13,9 +13,13 @@ use std::{
 };
 use walkdir::WalkDir;
 
+pub mod compressed;
+pub mod frame_chunks;
+
 const PAGE: usize = 2_048;
 const MAX_INPUT: u64 = 512 * 1024 * 1024;
-const MAX_FRAMES: usize = 25_000;
+/// Source metadata is independent of the bounded runtime GPU working set.
+pub const MAX_FRAMES: usize = 131_072;
 const MAX_PAGES: usize = 256;
 
 #[derive(Clone, Debug, Serialize)]
@@ -32,6 +36,7 @@ pub struct Manifest {
     pub converter: String,
     pub input_hash: String,
     pub pages: Vec<AtlasPage>,
+    pub chunks: Vec<frame_chunks::FrameChunk>,
     pub frames: Vec<FrameRecord>,
     pub buildings: Vec<crate::dat::BuildingComposition>,
     pub building_data: String,
@@ -56,6 +61,7 @@ pub struct FrameRecord {
     pub source: String,
     pub source_hash: String,
     pub frame: u32,
+    pub native: Option<frame_chunks::FrameLocation>,
     pub page: u16,
     pub x: u16,
     pub y: u16,
@@ -281,6 +287,7 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
     }
     let mut identity = blake3::Hasher::new();
     identity.update(b"AoK interface catalog: DAT icons, research table and reviewed HUD crops\0");
+    identity.update(b"PNG pages and independent native frame chunks\0");
     identity.update(&[crate::catalog::interface::VERSION]);
     identity.update(hash.as_bytes());
     identity.update(&serde_json::to_vec(&buildings)?);

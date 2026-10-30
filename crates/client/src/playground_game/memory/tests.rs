@@ -29,6 +29,10 @@ fn snapshot_preserves_counts_and_renderer_pair_schema() {
             21,
             22,
             23,
+            24,
+            25,
+            26,
+            27,
         ],
         renderer: [
             ("cpu_atlas", 0),
@@ -66,6 +70,10 @@ fn snapshot_preserves_counts_and_renderer_pair_schema() {
             "move_queue_bytes": 21,
             "selected_building_bytes": 22,
             "pending_training_bytes": 23,
+            "native_chunk_bytes":24,
+            "native_request_bytes":25,
+            "native_metadata_bytes":26,
+            "native_resident_frames":27,
             "renderer": [
                 ["cpu_atlas", 0],
                 ["gpu_atlas", 83_886_080],

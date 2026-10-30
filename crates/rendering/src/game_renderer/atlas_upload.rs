@@ -6,6 +6,7 @@ pub(super) enum Staging {
     Cpu(Vec<u8>),
 }
 
+pub(super) mod patch;
 /// An atlas being streamed page by page; see `GameRenderer::begin_game_atlas`.
 mod source;
 pub use source::AtlasSourceCopy;
