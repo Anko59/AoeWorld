@@ -321,7 +321,7 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        5725,
+        5750,
         // Castle adds 365 sampled cells; navy 25, King 35, General 3120;
         // the base cavalry roles already hold 15 Light Cavalry samples.
         // Pin the complete current selection independently of runtime residency.

@@ -1,5 +1,6 @@
-//! Direction rows and frame durations decoded from the owner's VER 5.7 dat.
-//! Five stored rows supply eight facings. Pixels remain in the private pack.
+//! Native actor layouts and durations; pixels remain in the private pack.
+//! DE heroes and stones preserve complete native timelines. Remaining trial
+//! poses use five stored rows for eight mirrored facings.
 #[path = "units/castle.rs"]
 mod castle;
 #[path = "units/projectile.rs"]
@@ -175,6 +176,7 @@ impl ActorSource {
             3770 => 1.6 / 45.0,
             3773 => 1.85 / 45.0,
             3777 => 1.0,
+            4500 => 1.0 / 60.0,
             _ => return f64::from(self.millis),
         };
         f64::from(seconds) * 1000.0
@@ -215,14 +217,16 @@ impl ActorSource {
             return 16;
         }
         match self.id {
-            4500 => 1,
+            4500 => 30,
             3799 => 176,
             3820 => 170,
             _ => self.stride as u32 * 5,
         }
     }
     pub const fn rows(self) -> usize {
-        if matches!(self.id, 3770 | 3773 | 3776 | 3777 | 3780) {
+        if self.id == 4500 {
+            1
+        } else if matches!(self.id, 3770 | 3773 | 3776 | 3777 | 3780) {
             16
         } else {
             5
@@ -249,13 +253,16 @@ impl ActorSource {
             return 4 + row * 2;
         }
         match self.id {
-            4500 => 0,
+            4500 => phase,
             // Flight cells by direction and pitch; see `projectile`.
             3799 | 3820 => projectile::source_cell(self.id, row),
             _ => row * self.stride as usize + phase,
         }
     }
     pub fn manifest_source(self) -> String {
+        if self.id == 4500 {
+            return "de/p_mangonel_x1.sld".to_owned();
+        }
         let general = match self.id {
             3776 => Some("idle"),
             3780 => Some("walk"),
@@ -424,9 +431,9 @@ pub const SPRITES: [ActorSource; 135] = [
     castle::SPRITES[44],
     ActorSource {
         id: 4500,
-        stride: 1,
-        millis: 100,
-        phases: 1,
+        stride: 30,
+        millis: 17,
+        phases: 30,
     },
     sprite(100_539, 1, 200),
     sprite(100_021, 1, 200),

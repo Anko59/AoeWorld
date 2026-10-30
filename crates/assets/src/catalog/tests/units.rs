@@ -1,6 +1,18 @@
 use crate::catalog::units::{Pose, SPRITES};
 
 #[test]
+fn siege_stone_keeps_all_thirty_native_de_rotation_cells_at_sixty_fps() {
+    let source = SPRITES[Pose::Stone as usize];
+    assert_eq!(source.manifest_source(), "de/p_mangonel_x1.sld");
+    assert_eq!((source.frames(), source.rows(), source.stride), (30, 1, 30));
+    assert_eq!((source.sample_step(), source.selected_frames()), (1, 30));
+    assert!((source.frame_millis() - 16.66666753590107).abs() < 0.000001);
+    for phase in 0..30 {
+        assert_eq!(source.source_frame(0, phase), phase);
+    }
+}
+
+#[test]
 fn actor_animation_metadata_uses_dat_rows_and_individual_frame_durations() {
     for (pose, id, stride, millis) in [
         (Pose::MilitiaStand, 993, 6, 1000),

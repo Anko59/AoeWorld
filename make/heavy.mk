@@ -221,7 +221,7 @@ test-assets-de: slot-bootstrap
 	@$(SLOT_RUN) test-assets-de -- make --no-print-directory test-assets-de-steps
 
 test-assets-de-steps:
-	@$(subst $(TOOL_IMAGE),-e AOE_DE_DIR=/de-install $(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo nextest run --locked -p aoe-assets --no-tests fail --success-output immediate -E 'test(real_house)|test(real_general)'
+	@$(subst $(TOOL_IMAGE),-e AOE_DE_DIR=/de-install $(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo nextest run --locked -p aoe-assets --no-tests fail --success-output immediate -E 'test(real_house)|test(real_general)|test(real_siege_stone)'
 
 .PHONY: test-assets-dat test-assets-dat-steps
 test-assets-dat: slot-bootstrap

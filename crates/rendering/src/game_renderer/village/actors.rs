@@ -7,6 +7,9 @@ pub(super) fn sprite_direction(facing: u8) -> (usize, bool) {
 }
 
 pub(super) fn unit_direction(unit: SceneUnit) -> (usize, bool) {
+    if unit.kind == SceneUnitKind::Stone {
+        return (0, false);
+    }
     if unit.kind.native_directions() {
         // DE starts east, clockwise; scene headings start south through east.
         return (usize::from(unit.facing & 15), false);

@@ -29,7 +29,7 @@ pub(super) fn select(
     let base_end = selected.len();
     for (semantic, &source) in sprites().iter().enumerate() {
         let identity = source.manifest_source();
-        if source.rows() == 16
+        if (source.rows() == 16 || source.id == 4500)
             && source_present(manifest, &identity)
             && manifest
                 .frames
@@ -38,7 +38,7 @@ pub(super) fn select(
                 .count()
                 != source.frames() as usize
         {
-            return Err(JsValue::from_str("Unsupported native hero topology"));
+            return Err(JsValue::from_str("Unsupported native actor topology"));
         }
         let Some(frames) = source_frames(manifest, &identity, source.frames()) else {
             if source_present(manifest, &identity) {

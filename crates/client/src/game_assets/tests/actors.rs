@@ -3,6 +3,43 @@ use aoe_assets::catalog::units::{Pose, SPRITES};
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn siege_stone_atlas_keeps_every_native_cell_and_rejects_changed_topology() {
+    let mut value = manifest::fixture();
+    let template = value["frames"][0].clone();
+    let cells = |count: u32| {
+        (0..count)
+            .map(|frame| {
+                let mut cell = template.clone();
+                cell["source"] = "de/p_mangonel_x1.sld".into();
+                cell["frame"] = frame.into();
+                cell["x"] = (frame * 3).into();
+                cell
+            })
+            .collect::<Vec<_>>()
+    };
+    value["frames"] = cells(30).into();
+    let manifest: Manifest = serde_json::from_value(value.clone()).unwrap();
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
+    let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
+    assert_eq!(selected, (0..30).collect::<Vec<_>>());
+    let places = placement::plan(&manifest, &selected, &domains).unwrap();
+    let records = selected
+        .iter()
+        .zip(places)
+        .map(|(&index, place)| placement::record(&manifest.frames[index], place))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        actors::resolve(&manifest, &selected, &records, &ranges)[Pose::Stone as usize].len(),
+        30
+    );
+    for count in [29, 31] {
+        value["frames"] = cells(count).into();
+        let unsupported: Manifest = serde_json::from_value(value.clone()).unwrap();
+        assert!(actors::select(&unsupported, &mut Vec::new(), &mut Vec::new()).is_err());
+    }
+}
+
+#[wasm_bindgen_test]
 fn base_cavalry_cells_are_reused_without_changing_light_cavalry_sampling() {
     let mut value = manifest::fixture();
     let template = value["frames"][0].clone();

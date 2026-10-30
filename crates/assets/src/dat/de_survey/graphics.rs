@@ -56,6 +56,15 @@ fn record(bytes: &[u8], at: usize) -> Result<Animation, Error> {
 }
 
 pub fn find(bytes: &[u8], file: &str) -> Result<Animation, Error> {
+    find_record(bytes, file, None)
+}
+
+/// Several native graphics share a debug filename but have distinct sprite ids.
+pub fn find_sprite(bytes: &[u8], file: &str, sprite: i32) -> Result<Animation, Error> {
+    find_record(bytes, file, Some(sprite))
+}
+
+fn find_record(bytes: &[u8], file: &str, sprite: Option<i32>) -> Result<Animation, Error> {
     if bytes.get(..8) != Some(b"VER 8.9\0") || file.len() > 256 {
         return Err(crate::invalid(
             "DE graphic",
@@ -66,21 +75,26 @@ pub fn find(bytes: &[u8], file: &str) -> Result<Animation, Error> {
     let mut signature = vec![0x60, 0x0a];
     signature.extend_from_slice(&(file.len() as u16).to_le_bytes());
     signature.extend_from_slice(file.as_bytes());
-    let mut matches = bytes
+    let matches = bytes
         .windows(signature.len())
         .enumerate()
         .filter_map(|(at, b)| (b == signature).then_some(at));
-    let at = matches
-        .next()
-        .ok_or_else(|| crate::invalid("DE graphic", 0, format!("missing {file}")))?;
-    if matches.next().is_some() {
-        return Err(crate::invalid(
-            "DE graphic",
-            at,
-            "ambiguous graphic filename",
-        ));
+    let mut found = None;
+    for at in matches {
+        let graphic = record(bytes, at)?;
+        if sprite.is_some_and(|id| graphic.sprite != id) {
+            continue;
+        }
+        if found.is_some() {
+            return Err(crate::invalid(
+                "DE graphic",
+                at,
+                "ambiguous graphic identity",
+            ));
+        }
+        found = Some(graphic);
     }
-    record(bytes, at)
+    found.ok_or_else(|| crate::invalid("DE graphic", 0, format!("missing {file}")))
 }
 
 /// Available selected hero graphics for the local DAT table. Synthetic numeric

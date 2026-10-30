@@ -6,6 +6,7 @@ import { bundleProof } from "./bundle.js";
 import { castleProof } from "./castle.js";
 import { generalProof } from "./general.js";
 import { generalAppearanceProof } from "./general-appearance.js";
+import { siegeProof } from "./siege.js";
 import { centerVillage } from "../village/fixtures/resources.js";
 
 test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
@@ -39,6 +40,10 @@ test("local original panel proof with real selection and training", async ({
   }
   if (config.phase === "general-appearance") {
     await generalAppearanceProof(page, config.url);
+    return;
+  }
+  if (config.phase === "siege") {
+    await siegeProof(page, config.url);
     return;
   }
   if (config.phase.startsWith("bundle")) {

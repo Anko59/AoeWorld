@@ -82,7 +82,7 @@ fn real_general_matches_dat_and_has_distinct_native_frames_in_every_pose() {
         return;
     };
     let root = std::path::Path::new(&root);
-    super::validate_dat(root).unwrap();
+    crate::de::native::validate_dat(root).unwrap();
     for item in crate::de::SELECTION
         .iter()
         .filter(|s| s.building == "general")

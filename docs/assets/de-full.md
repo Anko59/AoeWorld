@@ -73,5 +73,19 @@ binary's exact source revision is unverified; the local report records that limi
 
 General footage uses ordinary training and game orders. Performance gates use
 their existing synthetic workloads and do not qualify dedicated RTS hardware.
-The rest of the conversion, siege projectiles and removal of trial dependencies
-remain active work.
+## Siege stones
+
+Mangonel stones now use `p_mangonel_x1.sld`, retaining all 30 native rotation
+cells in one direction row. Playback uses elapsed authoritative flight time
+and the DAT's fractional 1/60-second cell duration. The scene stops drawing a
+shot at its authoritative impact tick. Native source resolution is retained;
+the installed higher-resolution variants are small trees, not projectiles.
+
+The DAT has two graphics with this debug filename. Select sprite 4500 explicitly
+and reject ambiguous identities, changed timing or topology. The importer
+requires the source and all 30 cells; the client also rejects partial or extra
+cells. Renderer tests draw the final cell from the single row, while scene tests
+visit every phase over two loops before checking impact removal.
+`make test-assets-de` includes the real stone source alongside hero and house
+checks. The current simulation has a Mangonel, with no Onager or Scorpion unit
+kind to qualify. Other unit, projectile and trial dependencies remain active work.

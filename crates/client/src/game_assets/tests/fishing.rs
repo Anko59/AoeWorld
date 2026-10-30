@@ -144,8 +144,9 @@ fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
     // Combined Castle poses add 365 cells to the naval/DAT/rally selection;
     // the Castle camp fallback slots reuse two available DE camp cells.
     // King retains 35 selected cells; the General retains all 3120 native cells.
+    // The stone retains all 30 native cells rather than five static row aliases.
     // The stationary and working fishing ship share one identical five-frame group.
-    assert_eq!(selected.len(), 8197);
+    assert_eq!(selected.len(), 8222);
     assert!(selected.len() <= MAX_SELECTED_FRAMES);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)
@@ -184,7 +185,7 @@ fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
         }],
     });
     buildings::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(selected.len(), 8225);
+    assert_eq!(selected.len(), 8250);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)
             .unwrap()

@@ -53,7 +53,7 @@ help:
 	@echo '  make assets-inspect  Inspect ignored local-assets/trial'
 	@echo '  make assets-import   Import ignored local-assets/trial'
 	@echo '  make assets-import-de  Import village buildings from a Definitive Edition install (DE_DIR)'
-	@echo '  make test-assets-de  Test real DE house decoding and player masks (DE_DIR, read-only)'
+	@echo '  make test-assets-de  Test real DE houses, native actors and masks (DE_DIR, read-only)'
 	@echo '  make assets-verify   Verify all ignored local packs'
 	@echo '  make assets-dat-table  Decode empires2.dat into local-assets/dat-table (unit to sprite ids)'
 	@echo '  make assets-dat-table-de  Survey the licensed DE Feudal numeric rules'

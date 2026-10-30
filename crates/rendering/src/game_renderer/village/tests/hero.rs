@@ -3,6 +3,26 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn siege_stone_draws_its_last_native_cell_from_one_animated_row() {
+    let mut art = art();
+    art.actors = vec![Vec::new(); 135];
+    let kind = SceneUnitKind::Stone;
+    let slot = kind.actor_slot().unwrap();
+    art.actors[slot] = (0..30)
+        .map(|i| GameFrame {
+            atlas: crate::AtlasAddress::new(8, [i as f32 / 2048.0, 0.0, 0.01, 0.02]),
+            size: [20.0, 20.0],
+            anchor: [10.0, 20.0],
+        })
+        .collect();
+    let u = unit(kind).with_actor_frame(29 << 3);
+    let (_, stride, _) = frames(&art, u).unwrap();
+    assert_eq!(stride, 30);
+    let draw = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 0);
+    assert_eq!(draw.last().unwrap().1.atlas, art.actors[slot][29].atlas);
+}
+
+#[wasm_bindgen_test]
 fn general_tags_draw_native_hero_cells_including_phases_above_31() {
     let mut art = art();
     art.actors = vec![Vec::new(); 135];

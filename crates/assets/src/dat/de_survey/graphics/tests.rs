@@ -1,4 +1,22 @@
 use super::*;
+
+#[test]
+fn shared_projectile_filename_selects_the_requested_native_sprite() {
+    let mut data = fixture();
+    let sprite_at = 8 + 4 + "synthetic_x1".len() + 4;
+    data[sprite_at..sprite_at + 4].copy_from_slice(&3986_i32.to_le_bytes());
+    let mut second = fixture();
+    second[sprite_at..sprite_at + 4].copy_from_slice(&4500_i32.to_le_bytes());
+    data.extend_from_slice(&second[8..]);
+    assert!(find(&data, "synthetic_x1").is_err());
+    assert_eq!(
+        find_sprite(&data, "synthetic_x1", 4500).unwrap().sprite,
+        4500
+    );
+    assert!(find_sprite(&data, "synthetic_x1", 999).is_err());
+    data.extend_from_slice(&second[8..]);
+    assert!(find_sprite(&data, "synthetic_x1", 4500).is_err());
+}
 fn fixture() -> Vec<u8> {
     let mut b = b"VER 8.9\0".to_vec();
     for name in ["synthetic_x1", ""] {

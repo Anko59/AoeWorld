@@ -5,7 +5,13 @@ use crate::SceneUnitKind;
 pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], usize, bool)> {
     if let Some(index) = unit.kind.actor_slot() {
         let frames = art.actors.get(index)?.as_slice();
-        let rows = if unit.kind.native_directions() { 16 } else { 5 };
+        let rows = if unit.kind == SceneUnitKind::Stone {
+            1
+        } else if unit.kind.native_directions() {
+            16
+        } else {
+            5
+        };
         let stride = frames.len() / rows;
         return (stride > 0 && frames.len() == stride * rows).then_some((frames, stride, false));
     }
