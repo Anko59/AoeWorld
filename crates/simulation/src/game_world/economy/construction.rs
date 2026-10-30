@@ -156,6 +156,7 @@ impl GameWorld {
         self.validate_building_placement(kind, origin)?;
         let id = self.insert_building(player, kind, footprint, false)?;
         self.charge(player, cost);
+        self.step_builders_aside(&builders, id);
         if !self.assign_build_orders(&builders, &[id], queued) {
             let _ = self.issue_cancel_construction(player, id);
             return Err(crate::GameWorldError::Unreachable.into());
@@ -358,6 +359,9 @@ impl GameWorld {
                 }
                 continue;
             }
+            if self.builder_leaves_foundation(id, target) {
+                continue;
+            }
             // The route chooses an approach, not a mandatory work spot. Start
             // on first free contact that no other worker has reserved. Settled
             // builders retain their work spot when traffic or combat enters it.
@@ -401,6 +405,8 @@ impl GameWorld {
         for (building, count) in working {
             if self.building(building).is_some_and(|b| b.is_complete()) {
                 self.repair_building(building, count);
+            } else if self.foundation_occupied(building) {
+                // Units on the footprint are stepping aside; builders wait.
             } else if let Some(state) = self.add_work(building, count) {
                 completed.insert(building, state);
             }

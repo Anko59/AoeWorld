@@ -173,14 +173,7 @@ fn invalid_placements_and_orders_are_refused_atomically() {
             at(101, 101),
             EconomyError::InvalidFootprint,
         ),
-        // Over a unit.
-        (
-            PlayerId(0),
-            vec![villager],
-            BuildingKind::Outpost,
-            at(99, 100),
-            EconomyError::InvalidFootprint,
-        ),
+        // Units on the footprint never refuse it; see construction/eject.rs.
         (
             PlayerId(0),
             vec![villager],

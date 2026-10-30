@@ -48,8 +48,6 @@ fn gathering_exhausted_natural_resources_release_placement_and_cached_navigation
             target,
             "opened {kind:?}"
         );
-        // Vacate the site: occupied ground must still reject construction.
-        assert_eq!(build(&mut world), Err(EconomyError::InvalidFootprint));
         let free = perimeter(TileRect::from_xywh(node.tile.x, node.tile.y, 1, 1))
             .into_iter()
             .find(|tile| world.tile_free(*tile))

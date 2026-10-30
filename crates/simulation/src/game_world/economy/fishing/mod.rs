@@ -56,7 +56,7 @@ impl GameWorld {
             return Err(EconomyError::InvalidFootprint);
         }
         if kind != BuildingKind::Dock {
-            return self.validate_footprint(footprint);
+            return self.validate_footprint_ground(footprint);
         }
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return Err(EconomyError::InvalidFootprint);

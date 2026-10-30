@@ -321,9 +321,11 @@ fn local_placement_keeps_farms_arches_and_live_units_reserved() {
     let worker = w
         .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(at).unwrap())
         .unwrap();
-    assert_eq!(
-        w.validate_building_placement(BuildingKind::House, at),
-        Err(EconomyError::InvalidFootprint)
+    // Units step aside for ordered foundations; only the AI's own site
+    // search (`vassal_build_near`) keeps its people's ground reserved.
+    assert!(
+        w.validate_building_placement(BuildingKind::House, at)
+            .is_ok()
     );
     w.remove_unit(worker);
     assert!(

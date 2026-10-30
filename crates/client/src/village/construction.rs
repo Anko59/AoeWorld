@@ -112,10 +112,13 @@ pub(super) fn valid(client: &Client, kind: BuildingKind, origin: TileCoord) -> b
                 && map::feedback::blocker_at(client, tile).is_none_or(|object| {
                     matches!(object, aoe_map::ObjectKind::ShoreFish | aoe_map::ObjectKind::DeepFish)
                 })
-                && !client
-                    .units
-                    .values()
-                    .any(|u| u.hp > 0 && u.position.tile_floor() == tile)
+                // Units never invalidate a foundation (they step aside), except
+                // under a Dock, which the server still refuses over units.
+                && (kind != BuildingKind::Dock
+                    || !client
+                        .units
+                        .values()
+                        .any(|u| u.hp > 0 && u.position.tile_floor() == tile))
                 && !client.village.buildings.iter().any(|b| b.contains_tile(tile))
         },
     );

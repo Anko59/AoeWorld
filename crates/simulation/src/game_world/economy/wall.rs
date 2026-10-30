@@ -60,7 +60,7 @@ impl GameWorld {
         // Validate every segment before placing any, so a refusal changes nothing.
         for rect in &rects {
             self.validate_explored_footprint(player, *rect)?;
-            self.validate_footprint(*rect)?;
+            self.validate_footprint_ground(*rect)?;
         }
         let mut ids = Vec::new();
         for rect in rects {
@@ -75,6 +75,9 @@ impl GameWorld {
             }
         }
         self.charge(player, cost);
+        for id in &ids {
+            self.step_builders_aside(&builders, *id);
+        }
         let segments = ids.clone();
         let nearest = |tile: TileCoord| {
             segments
