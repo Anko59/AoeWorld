@@ -78,3 +78,18 @@ pub(super) fn valid(b: &GameplayBuildingState) -> bool {
             })
         })
 }
+
+/// Keeps the occupants `valid` accepts, in order and within capacity, so one
+/// bad occupant costs only itself.
+pub(super) fn repair(b: &mut GameplayBuildingState) {
+    if b.construction != ConstructionState::Complete {
+        b.garrison.clear();
+        return;
+    }
+    let (id, kind) = (b.id, b.kind);
+    b.garrison
+        .retain(|u| u.id != id && kind.admits(u.kind) && u.hp > 0 && u.hp <= u.max_hp);
+    b.garrison.sort_by_key(|u| u.id);
+    b.garrison.dedup_by_key(|u| u.id);
+    b.garrison.truncate(usize::from(kind.garrison_capacity()));
+}

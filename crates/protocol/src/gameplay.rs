@@ -7,11 +7,14 @@ use std::{fmt, marker::PhantomData};
 
 mod automation;
 mod garrison;
+mod sanitize;
 mod validation;
 pub use aoe_core::CombatStance;
 pub use aoe_core::Formation;
 pub use garrison::{GarrisonUnitState, VassalReport, VassalWait};
+pub use sanitize::sanitize_server;
 use validation::validate_server;
+pub use validation::{Violation, server_violations};
 pub(crate) mod economy;
 mod fog;
 mod projectiles;

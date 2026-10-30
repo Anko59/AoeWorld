@@ -1,5 +1,5 @@
 //! Bounded wildlife frames; a frame replaces the region's entire animal set.
-use super::{ClientMessage, Error, ServerMessage, economy};
+use super::{ClientMessage, Error, economy};
 use aoe_core::{EntityId, PlayerId, WorldPosition};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeSet;
@@ -36,7 +36,7 @@ pub struct AnimalState {
     pub death_tick: Option<aoe_core::Tick>,
 }
 
-fn valid_animal(a: &AnimalState) -> bool {
+pub(super) fn valid_animal(a: &AnimalState) -> bool {
     let (hp, food) = match a.kind {
         AnimalKind::Sheep => (7, 100),
         AnimalKind::Deer => (5, 140),
@@ -65,16 +65,6 @@ fn valid_animal(a: &AnimalState) -> bool {
                     AnimalTask::Dead | AnimalTask::Carcass => false,
                 }
         }
-}
-pub(super) fn validate_server(message: &ServerMessage) -> Result<(), Error> {
-    if let ServerMessage::WildlifeState { animals, .. } = message
-        && (animals.len() > MAX_ANIMALS
-            || !animals.iter().all(valid_animal)
-            || !animals.windows(2).all(|p| p[0].id < p[1].id))
-    {
-        return Err(Error::InvalidEconomyState);
-    }
-    Ok(())
 }
 pub(super) fn validate_client(message: &ClientMessage) -> Result<(), Error> {
     if let ClientMessage::SetRallyOrder {
