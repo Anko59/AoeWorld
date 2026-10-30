@@ -31,12 +31,12 @@ impl GameWorld {
             // Clearance proves tile bodies/buildings, but not elevation edges.
             return from.tile_floor() == to.tile_floor()
                 || self
-                    .unit_step_clear(kind, from.tile_floor(), to.tile_floor())
+                    .unit_position_step_clear(kind, from, to)
                     .unwrap_or(false);
         }
         self.body_step_clear(kind, from, to)
             && self
-                .unit_step_clear(kind, from.tile_floor(), to.tile_floor())
+                .unit_position_step_clear(kind, from, to)
                 .unwrap_or(false)
             && self.building_step_clear(from.tile_floor(), to.tile_floor())
     }

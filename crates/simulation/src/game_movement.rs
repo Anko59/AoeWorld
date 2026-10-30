@@ -128,20 +128,23 @@ impl GameWorld {
                 }
                 let previous_tile = current_position.tile_floor();
                 let tile = position.tile_floor();
-                let terrain_ok =
-                    match self.unit_step_clear(self.units[index].state.kind, previous_tile, tile) {
-                        Ok(terrain_ok) => terrain_ok,
-                        Err(error) => {
-                            self.clear_planner(index);
-                            self.units[index].state.moving = false;
-                            self.units[index].state.planning = false;
-                            self.units[index].order = None;
-                            self.units[index].last_movement_error =
-                                Some(GameWorldError::Environment(error));
-                            finished = true;
-                            break;
-                        }
-                    };
+                let terrain_ok = match self.unit_position_step_clear(
+                    self.units[index].state.kind,
+                    current_position,
+                    position,
+                ) {
+                    Ok(terrain_ok) => terrain_ok,
+                    Err(error) => {
+                        self.clear_planner(index);
+                        self.units[index].state.moving = false;
+                        self.units[index].state.planning = false;
+                        self.units[index].order = None;
+                        self.units[index].last_movement_error =
+                            Some(GameWorldError::Environment(error));
+                        finished = true;
+                        break;
+                    }
+                };
                 if !terrain_ok || !self.building_step_clear(previous_tile, tile) {
                     // Collision can change after a segment was refined. Keep
                     // the order and replan from the last valid fixed position.

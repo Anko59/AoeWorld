@@ -249,7 +249,7 @@ impl GameWorld {
             return None;
         }
         if !matches!(
-            self.unit_step_clear(state.kind, previous_tile, tile),
+            self.unit_position_step_clear(state.kind, state.position, position),
             Ok(true)
         ) || !self.building_step_clear(previous_tile, tile)
         {
