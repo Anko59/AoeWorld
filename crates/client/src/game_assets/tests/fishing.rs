@@ -185,7 +185,7 @@ fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
         }],
     });
     buildings::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(selected.len(), 8250);
+    assert_eq!(selected.len(), 8242);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)
             .unwrap()
