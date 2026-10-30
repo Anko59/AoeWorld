@@ -401,7 +401,7 @@ fn a_wall_order_at_the_coordinate_limit_is_rejected_as_invalid_placement() {
         aoe_core::PlayerId(0),
         PendingAction::BuildWall {
             builder_ids: vec![villager],
-            kind: BuildingKind::StoneWall,
+            kind: BuildingKind::PalisadeWall,
             from: aoe_core::TileCoord::new(i32::MAX, 3),
             to: aoe_core::TileCoord::new(i32::MAX, 5),
             queued: false,

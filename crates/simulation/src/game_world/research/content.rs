@@ -77,7 +77,7 @@ fn optional(value: i32) -> Option<u8> {
 
 impl BrowserContent {
     pub fn decode(data: &[i32]) -> Result<Self, &'static str> {
-        let buildings = crate::BuildingKind::Bridge as usize + 1;
+        let buildings = crate::BuildingKind::StoneGate as usize + 1;
         let techs = crate::Tech::WarGalley as usize + 1;
         let units = UnitKind::ALL.len();
         let length = 5 + buildings * BUILDING_WORDS + techs * TECH_WORDS + units * UNIT_WORDS;

@@ -314,3 +314,33 @@ fn bridge_caps_follow_the_native_axis_even_when_the_raster_slopes_backwards() {
         }
     }
 }
+
+#[wasm_bindgen_test::wasm_bindgen_test]
+fn stone_walls_and_gates_use_their_own_de_art_slots() {
+    use aoe_rendering::SceneUnitKind as Art;
+    for (kind, standing, rubble, building) in
+        [(B::StoneWall, 71, 72, 9), (B::StoneGate, 73, 75, 76)]
+    {
+        assert_eq!(sprite_slot(kind, 1000, false), standing);
+        assert_eq!(sprite_slot(kind, 1000, true), rubble);
+        assert_eq!(sprite_slot(kind, 400, false), building);
+        for age in [
+            aoe_protocol::Age::Dark,
+            aoe_protocol::Age::Feudal,
+            aoe_protocol::Age::Castle,
+        ] {
+            assert_eq!(age_sprite_slot(kind, 1000, false, age), standing);
+        }
+    }
+    assert_eq!(
+        gate_kind(B::StoneGate, true, 1000),
+        Some(Art::OpenStoneGate)
+    );
+    assert_eq!(
+        gate_kind(B::PalisadeGate, true, 1000),
+        Some(Art::OpenPalisadeGate)
+    );
+    assert_eq!(gate_kind(B::StoneGate, false, 1000), None);
+    assert_eq!(gate_kind(B::StoneWall, true, 1000), None);
+    assert!(B::StoneWall.is_wall() && B::StoneGate.is_gate() && !B::Bridge.is_wall());
+}
