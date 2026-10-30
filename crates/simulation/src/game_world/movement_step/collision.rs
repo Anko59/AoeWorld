@@ -135,7 +135,7 @@ impl GameWorld {
         let crowded = attack
             .and_then(|target| self.attack_goal(target, unit.player))
             .is_some_and(|goal| self.melee_contact_traffic(unit.id, &goal));
-        let soft = self.units[index].formation.is_none()
+        let soft = (self.units[index].formation.is_none() || self.is_detached_member(index))
             && (crowded
                 || (attack.is_none()
                     && self.units[index].obstruction.is_some_and(|o| {

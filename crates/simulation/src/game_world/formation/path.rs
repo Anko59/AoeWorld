@@ -86,6 +86,56 @@ impl Path {
         (WorldPosition::new(from.x + x, from.y + y), heading)
     }
 
+    /// A stable frame for traffic offsets on a grid staircase. Adjacent
+    /// tangents blend continuously at their shared vertex; the route's actual
+    /// positions and arc lengths stay unchanged.
+    pub(super) fn corridor_point(
+        &self,
+        progress: i64,
+        cursor: &mut usize,
+    ) -> (WorldPosition, WorldPosition) {
+        let (point, heading) = self.point(progress, cursor);
+        if self.points.len() < 2 {
+            return (point, heading);
+        }
+        let at = *cursor;
+        let difference =
+            |a: WorldPosition, b: WorldPosition| WorldPosition::new(b.x - a.x, b.y - a.y);
+        let previous = if at > 0 {
+            difference(self.points[at - 1], self.points[at])
+        } else {
+            heading
+        };
+        let next = if at + 2 < self.points.len() {
+            difference(self.points[at + 1], self.points[at + 2])
+        } else {
+            heading
+        };
+        if previous == heading && next == heading {
+            return (point, heading);
+        }
+        let normal = |h: WorldPosition| {
+            let (x, y) = (i64::from(h.x), i64::from(h.y));
+            let length = (x * x + y * y).isqrt().max(1);
+            (x * 1024 / length, y * 1024 / length)
+        };
+        let (a, b, c) = (normal(previous), normal(heading), normal(next));
+        let span = (self.lengths[at + 1] - self.lengths[at]).max(1);
+        let t = (progress - self.lengths[at]).clamp(0, span);
+        let smooth = WorldPosition::new(
+            (((a.0 + b.0) * (span - t) + (b.0 + c.0) * t) / span) as i32,
+            (((a.1 + b.1) * (span - t) + (b.1 + c.1) * t) / span) as i32,
+        );
+        (
+            point,
+            if smooth == WorldPosition::new(0, 0) {
+                heading
+            } else {
+                smooth
+            },
+        )
+    }
+
     /// Projection onto a fixed local window. A member cannot jump to a distant
     /// leg at a crossing or cut a bend by selecting a remote route point.
     pub(super) fn project(&self, position: WorldPosition, cursor: &mut usize) -> i64 {
@@ -125,6 +175,21 @@ impl Path {
         }
         *cursor = best.1;
         best.2
+    }
+
+    /// A packing transition changes the coordinate frame, so relocate from
+    /// the physical body. Walk a bounded local window rather than retaining
+    /// virtual progress projected with the old lateral offset.
+    pub(super) fn relocate(&self, position: WorldPosition, cursor: &mut usize) -> i64 {
+        let mut progress = 0;
+        for _ in 0..16 {
+            let before = *cursor;
+            progress = self.project(position, cursor);
+            if *cursor == before {
+                break;
+            }
+        }
+        progress
     }
 
     /// Replace future planning after the anchor's current point, retaining the

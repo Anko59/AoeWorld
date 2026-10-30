@@ -195,8 +195,9 @@ fn attack_move_front_engages_alone_while_the_rest_march_on() {
     );
     assert!(front.max_hit_distance <= 100, "{front:?}");
     assert!(front.group_pace * 100 >= front.speed * 90, "{front:?}");
-    // PR 10 reachable contact clears the front at tick 341.
-    assert_eq!((front.cleared, front.engaged_total), (Some(341), 24));
+    // The 7/8 cohesion pace clears three ticks earlier; sight, reach,
+    // participation, moving pace and all-survivor assertions above stay fixed.
+    assert_eq!((front.cleared, front.engaged_total), (Some(338), 24));
     // Every one of the 24 survives and stands at its slot.
     assert!(ids.iter().all(|&id| {
         w.unit(id).is_some_and(|u| u.hp > 0 && !u.moving)

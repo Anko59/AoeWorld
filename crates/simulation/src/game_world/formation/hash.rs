@@ -34,6 +34,7 @@ impl GameWorld {
                 group.pace.0,
                 group.pace.1,
                 group.path_cursor as u64,
+                group.packing_files as u64,
             ] {
                 hash.update(&value.to_le_bytes());
             }
@@ -68,7 +69,11 @@ impl GameWorld {
                 hash.update(&member.remaining.to_le_bytes());
                 hash.update(&member.blocked.to_le_bytes());
                 hash.update(&member.detour_progress.to_le_bytes());
-                hash.update(&[u8::from(member.arrived), u8::from(member.detached)]);
+                hash.update(&[
+                    u8::from(member.arrived),
+                    u8::from(member.detached),
+                    u8::from(member.following_corridor),
+                ]);
             }
         }
     }
