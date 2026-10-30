@@ -14,6 +14,11 @@
    "center_latitude_e7": 488500000,
    "center_longitude_e7": 23500000,
    "requested_side_meters": 480000
+  },
+  "france-240": {
+   "center_latitude_e7": 466000000,
+   "center_longitude_e7": 25000000,
+   "requested_side_meters": 960000
   }
  },
  "bookmarks": [
@@ -270,6 +275,26 @@
    "zoom": 0.25,
    "note": "Morvan massif (up to 885 m) on Paris Large (issue #428).",
    "verified": false
+  },
+  {
+   "name": "france-240-rivers-a",
+   "map": "france-240",
+   "x": 1000,
+   "y": 1240,
+   "zoom": 1,
+   "renderer": "webgl2",
+   "note": "Compression 240 river network: small rivers dropped",
+   "verified": true
+  },
+  {
+   "name": "france-240-rivers-b",
+   "map": "france-240",
+   "x": 360,
+   "y": 1720,
+   "zoom": 1,
+   "renderer": "webgl2",
+   "note": "Compression 240 river network, second area",
+   "verified": true
   }
  ]
 }

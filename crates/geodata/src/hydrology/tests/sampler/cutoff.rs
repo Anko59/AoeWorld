@@ -1,7 +1,7 @@
-//! The river discharge cutoff is a real-world constant: a map keeps the same
-//! rivers over the same area at every map size.
+//! The river discharge cutoff rises with the tile size (compression): coarse
+//! maps keep only major rivers, fine maps keep every HydroRIVERS reach.
 use super::super::super::hydrology_sampling::VectorFeature;
-use super::super::channels::{MAX_PAGE_SEGMENT_BYTES, minimum_discharge, segments};
+use super::super::channels::{MAX_PAGE_SEGMENT_BYTES, base_discharge, minimum_discharge, segments};
 use super::*;
 
 pub(super) fn river_features(
@@ -41,13 +41,25 @@ pub(super) fn river_features(
 }
 
 #[test]
-fn discharge_cutoff_is_the_hydrorivers_floor_whatever_the_map_size() {
-    // HydroRIVERS lists reaches from 0.1 m³/s; no map size raises the floor.
-    assert_eq!(minimum_discharge(), 0.1);
+fn discharge_floor_scales_with_the_square_of_the_tile_size() {
+    // Compression c means 2 m * c per tile. Up to the 60 m reference tile every
+    // listed reach is kept; beyond it the floor grows with the tile size squared.
+    let floor = |compression: f64| minimum_discharge(2.0 * compression);
+    assert_eq!(base_discharge(), 0.1);
+    assert_eq!(floor(1.0), 0.1);
+    assert_eq!(floor(30.0), 0.1);
+    assert!((floor(60.0) - 0.4).abs() < 1e-9);
+    assert!((floor(120.0) - 1.6).abs() < 1e-9);
+    assert!((floor(240.0) - 6.4).abs() < 1e-9);
+    let mut previous = 0.0;
+    for compression in [1.0, 30.0, 45.0, 90.0, 180.0, 240.0, 480.0] {
+        assert!(floor(compression) >= previous, "monotonic in compression");
+        previous = floor(compression);
+    }
 }
 
 #[test]
-fn every_map_size_keeps_the_same_small_rivers_over_the_same_area() {
+fn coarse_maps_drop_small_rivers_and_fine_maps_keep_them() {
     let directory = TestDirectory::new();
     let discharges = [0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 20.0, 100.0];
     let reaches = discharges
@@ -55,22 +67,28 @@ fn every_map_size_keeps_the_same_small_rivers_over_the_same_area() {
         .enumerate()
         .map(|(i, d)| (i as i64 + 1, *d, -2_000.0 + 400.0 * i as f64))
         .collect::<Vec<_>>();
-    let features = river_features(&directory, &reaches);
     let bounds = [-15_000.0, -15_000.0, 15_000.0, 15_000.0];
-    // The same real area: 30 km of landscape in 500 tiles of 60 m.
-    let kept = segments(&features, 30_000.0, 500, bounds).expect("segments");
-    let kept_northings = kept
-        .iter()
-        .map(|s| s.start[1])
-        .collect::<std::collections::BTreeSet<_>>();
-    assert_eq!(
-        kept_northings.len(),
-        discharges.iter().filter(|d| **d >= 0.1).count()
-    );
-    assert!(
-        kept.iter().any(|s| s.width_units == 256),
-        "0.1 m³/s is kept"
-    );
+    let kept_at = |compression: f64, tiles: u64| {
+        let side = tiles as f64 * 2.0 * compression;
+        let floor = minimum_discharge(side / tiles as f64);
+        let surviving = reaches
+            .iter()
+            .copied()
+            .filter(|&(_, discharge, _)| discharge >= floor)
+            .collect::<Vec<_>>();
+        let kept = river_features(&directory, &surviving);
+        segments(&kept, side, tiles, bounds)
+            .expect("segments")
+            .iter()
+            .map(|s| s.width_units)
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+    };
+    // Distinct widths track distinct kept discharges: fewer rivers at 240.
+    assert!(kept_at(30.0, 500) > kept_at(120.0, 125));
+    assert!(kept_at(120.0, 125) > kept_at(240.0, 62));
+    assert!(kept_at(240.0, 62) >= 1, "major rivers remain at 240");
+    assert_eq!(kept_at(30.0, 500), kept_at(10.0, 1500));
 }
 
 #[test]
