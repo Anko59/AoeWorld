@@ -189,6 +189,8 @@ impl GameWorld {
                     && b.is_complete()
                     && b.food_remaining.is_some_and(|n| n > 0)
                     && !worked.contains(&b.id)
+                    && s.avoid
+                        .is_none_or(|a| !a.avoid_tile.is_some_and(|t| b.footprint.contains(t)))
             })
             .map(|b| {
                 (

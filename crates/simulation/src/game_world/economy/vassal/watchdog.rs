@@ -30,8 +30,17 @@ impl GameWorld {
             .iter()
             .copied()
             .collect();
+        // A stalled worker may be momentarily unmanaged (released, then
+        // re-adopted); keep its record until it expires or the unit is gone.
+        let alive: Vec<_> = self.economy.vassal_homes[&s.vassal]
+            .stalls
+            .keys()
+            .copied()
+            .filter(|id| self.unit(*id).is_some_and(|u| u.hp > 0))
+            .collect();
         if let Some(home) = self.economy.vassal_homes.get_mut(&s.vassal) {
-            home.stalls.retain(|id, _| workers.contains(id));
+            home.stalls
+                .retain(|id, st| alive.contains(id) && now.saturating_sub(st.since) < limit * 16);
         }
         for worker in workers {
             let Some(unit) = self.unit(worker) else {
@@ -40,8 +49,10 @@ impl GameWorld {
             let stalls = &self.economy.vassal_homes[&s.vassal].stalls;
             let previous = stalls.get(&worker).copied();
             if unit.task != UnitTask::Moving {
-                // Only a worker that kept stalling carries its avoidance on.
-                if previous.is_some()
+                // A stalled worker keeps its record (so strikes accumulate and the
+                // job pass can avoid the failed node) until it has worked on
+                // elsewhere for a while.
+                if previous.is_some_and(|p| now.saturating_sub(p.since) >= limit * 16)
                     && let Some(home) = self.economy.vassal_homes.get_mut(&s.vassal)
                 {
                     home.stalls.remove(&worker);
@@ -87,5 +98,30 @@ impl GameWorld {
                 home.stalls.insert(worker, entry);
             }
         }
+    }
+}
+
+/// Test hook: a stall record with the given avoidance.
+#[cfg(test)]
+pub(crate) fn vassal_stall(
+    at: WorldPosition,
+    since: u64,
+    strikes: u8,
+    avoid_tile: Option<TileCoord>,
+    avoid_kind: Option<ResourceKind>,
+) -> Stall {
+    Stall {
+        at,
+        since,
+        strikes,
+        avoid_tile,
+        avoid_kind,
+    }
+}
+
+#[cfg(test)]
+impl GameWorld {
+    pub(crate) fn gather_tile(&self, id: EntityId) -> Option<TileCoord> {
+        self.economy.gatherers.get(&id).map(|t| t.tile)
     }
 }

@@ -212,7 +212,10 @@ impl GameWorld {
             if let Some(home) = self.economy.vassal_homes.get_mut(&id) {
                 home.worker_after = Some(worker);
             }
-            if let Some(kind) = self.vassal_job(worker, s, budget, work) {
+            s.avoid = self.economy.vassal_homes[&id].stalls.get(&worker).copied();
+            let job = self.vassal_job(worker, s, budget, work);
+            s.avoid = None;
+            if let Some(kind) = job {
                 self.claim_vassal_worker(id, worker, kind);
                 s.allocated[kind as usize] += 1;
                 changed.push(worker);
