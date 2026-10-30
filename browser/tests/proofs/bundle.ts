@@ -95,8 +95,8 @@ export async function bundleProof(page: Page, url: string, film = false) {
   ];
   const buildings = [
     building(30, 0, 8187, 8190, 4, 4, 2400, [
-      [100, 0, 40, 40],
-      [101, 0, 40, 40],
+      [100, 0, 40, 40, 0],
+      [101, 0, 40, 40, 0],
     ]),
     building(31, 1, 8186, 8187, 2, 2, 900),
     building(32, 4, 8186, 8196, 2, 2, 1000),
