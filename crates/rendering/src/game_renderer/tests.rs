@@ -29,6 +29,7 @@ fn synthetic_art() -> GameArt {
     GameArt {
         resident: Vec::new(),
         building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: {
             let mut groups = vec![Vec::new(); 167];
             groups[70] = vec![frame; 16];

@@ -227,9 +227,19 @@ uint wrap(int value, uint period) {
 }
 Layer tiledLayer(vec4 header, ivec2 tile, vec2 local, vec2 gx, vec2 gy) {
     uint columns = uint(header.z), rows = uint(header.w);
+    vec2 at_local=local,at_gx=gx,at_gy=gy;
     uint hash = uint(tile.x) * 7u + uint(tile.y) * 13u;
     uint index = (hash > 2147483648u ? ~hash + 1u : hash) % uint(max(header.y, 1.0));
-    if (columns > 0u && rows > 0u) {
+    if ((columns & 32768u) != 0u) {
+        uvec2 grid=uvec2(columns & 31u,rows & 31u);
+        uvec2 period=uvec2((columns >> 5u) & 511u,(rows >> 5u) & 511u);
+        vec2 scale=vec2(grid)/vec2(period);
+        vec2 inside=vec2(local.x+local.y-0.5,local.y-local.x+0.5);
+        vec2 p=(vec2(wrap(tile.x,period.x),wrap(tile.y,period.y))+inside)*scale;
+        uvec2 cell=uvec2(floor(p)) % grid;
+        index=cell.y*grid.x+cell.x;at_local=fract(p);
+        at_gx=vec2(gx.x+gx.y,gx.y-gx.x)*scale;at_gy=vec2(gy.x+gy.y,gy.y-gy.x)*scale;
+    } else if (columns > 0u && rows > 0u) {
         index = wrap(tile.x, columns) * rows + (rows - wrap(tile.y, rows)) % rows;
     }
     uint entry = uint(header.x) + 2u * index;
@@ -238,7 +248,7 @@ Layer tiledLayer(vec4 header, ivec2 tile, vec2 local, vec2 gx, vec2 gy) {
     vec2 size = vec2(textureSize(atlas, 0).xy);
     vec4 rect = vec4(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + float(high & 15u) * 256.0, b.y + float(high >> 4u) * 256.0) / size.xyxy;
     vec2 span = max(rect.zw - 1.0 / size, vec2(0));
-    return Layer(rect.xy + .5 / size + local * span, uint(b.w), rect, gx * span, gy * span);
+    return Layer(rect.xy + .5 / size + at_local * span, uint(b.w), rect, at_gx * span, at_gy * span);
 }
 // Mixed ground, as sprites.wgsl: procedural layer kernel and world-anchored noise.
 vec3 ground(vec3 rgb, uint kind) {

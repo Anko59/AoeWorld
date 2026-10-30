@@ -143,6 +143,40 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
             return Err(invalid("manifest", 0, "frame outside atlas"));
         }
     }
+    if manifest.terrains.len() > 200 {
+        return Err(invalid("manifest", 0, "too many terrain recipes"));
+    }
+    let mut terrain_ids = BTreeSet::new();
+    for t in &manifest.terrains {
+        if !terrain_ids.insert(t.id)
+            || t.id >= 200
+            || t.period.iter().any(|&n| n == 0 || n > 256)
+            || t.size
+                .iter()
+                .any(|&n| !(16..=4096).contains(&n) || !n.is_power_of_two())
+        {
+            return Err(invalid("manifest", 0, "invalid terrain recipe"));
+        }
+        let mut size = t.size;
+        let mut count = 0_u32;
+        loop {
+            count += u32::from(size[0].div_ceil(256)) * u32::from(size[1].div_ceil(256));
+            if size[0].max(size[1]) <= 16 {
+                break;
+            }
+            size = size.map(|n| (n / 2).max(1));
+        }
+        let frames: Vec<_> = manifest
+            .frames
+            .iter()
+            .filter(|f| f.source == t.source)
+            .collect();
+        if frames.len() != count as usize
+            || (0..count).any(|n| !frames.iter().any(|f| f.frame == n && f.native.is_some()))
+        {
+            return Err(invalid("manifest", 0, "incomplete native terrain"));
+        }
+    }
     let mut unit_ids = BTreeSet::new();
     for building in &manifest.buildings {
         if building.foundation_slp.is_some()
@@ -152,7 +186,7 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
         {
             return Err(invalid("manifest", 0, "invalid DAT foundation topology"));
         }
-        if manifest.buildings.len() > crate::catalog::GAMEPLAY_BUILDING_IDS.len()
+        if manifest.buildings.len() > crate::catalog::MAX_COMPOSITIONS
             || !unit_ids.insert(building.unit_id)
             || building
                 .footprint

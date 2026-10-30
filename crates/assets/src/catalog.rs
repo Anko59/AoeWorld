@@ -28,6 +28,12 @@ pub const GAMEPLAY_BUILDING_IDS: [i32; 45] = [
     607, 608, 609, 610,
 ];
 
+/// Resource, tree and scenery identities used by the gameplay scene.
+pub const ENVIRONMENT_UNIT_IDS: [i32; 15] = [
+    59, 66, 102, 349, 350, 351, 415, 623, 264, 69, 455, 456, 457, 458, 459,
+];
+pub const MAX_COMPOSITIONS: usize = GAMEPLAY_BUILDING_IDS.len() + ENVIRONMENT_UNIT_IDS.len();
+
 /// Paving and gravel are not mountain ground.
 pub const NATURAL_ROCK_FALLBACK: &str =
     "native rock ground 15033; never substitute paved terrain 15018";

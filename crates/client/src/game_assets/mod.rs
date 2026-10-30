@@ -14,7 +14,6 @@ mod actors;
 mod batches;
 mod building_sprites;
 mod buildings;
-mod fishing;
 mod loading;
 #[path = "manifest.rs"]
 mod manifest;

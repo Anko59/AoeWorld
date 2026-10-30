@@ -8,6 +8,7 @@ use crate::{
 const WATER_TINT: [u8; 3] = [38, 113, 190];
 #[path = "canvas_raster/filter.rs"]
 mod filter;
+use filter::transform_sample;
 #[path = "canvas_raster/junction.rs"]
 mod junction;
 #[path = "canvas_raster/mixing.rs"]
@@ -168,6 +169,7 @@ pub(super) fn raster_surface_region(
                     })
                 };
                 let mut local = interpolate(local_uv);
+                let mut blend_locals = [local; 2];
                 let (mut sampler, mut blend) = (sampler, blend);
                 let (mut primary_filter, mut secondary_filter) = (primary_filter, secondary_filter);
                 if let Some((locals, sheets)) = tiled {
@@ -176,23 +178,28 @@ pub(super) fn raster_surface_region(
                     let tile = [0, 1]
                         .map(|axis| triangle.texture_tile[axis].wrapping_add(cell[axis] as i32));
                     local = directory::diamond([position[0] - cell[0], position[1] - cell[1]]);
-                    sampler = sheets[0].frame(atlas, tile);
-                    blend =
-                        blend.map(|_| [sheets[1].frame(atlas, tile), sheets[2].frame(atlas, tile)]);
+                    let (address, uv, grad) = sheets[0].sample(atlas, tile, local, gradient);
+                    sampler = address;
+                    let secondary = [sheets[1], sheets[2]]
+                        .map(|sheet| sheet.sample(atlas, tile, local, gradient));
+                    local = uv;
+                    blend = blend.map(|_| [secondary[0].0, secondary[1].0]);
+                    blend_locals = [secondary[0].1, secondary[1].1];
                     if landscape {
-                        primary_filter = filter::offsets(sampler, gradient);
-                        secondary_filter = blend.and_then(|b| filter::offsets(b[0], gradient));
+                        primary_filter = filter::offsets(sampler, grad);
+                        secondary_filter =
+                            blend.and_then(|b| filter::offsets(b[0], secondary[0].2));
                     }
                 }
                 let mut sample = filter::sample(atlas, sampler, local, primary_filter);
                 if let Some([second, third]) = blend {
                     let samples = [
                         sample,
-                        filter::sample(atlas, second, local, secondary_filter),
+                        filter::sample(atlas, second, blend_locals[0], secondary_filter),
                         if landscape {
                             sample
                         } else {
-                            sample_terrain_atlas(atlas, third, local)
+                            sample_terrain_atlas(atlas, third, blend_locals[1])
                         },
                     ];
                     let floor = crate::surface_mesh::landscape::interpolated_floor_weights(
@@ -437,18 +444,6 @@ fn tint_sample(texel: [u8; 4], tint: u8) -> [u8; 4] {
         5..=10 | 12 | 21..=26 => crate::surface_mesh::procedural_tint(texel, tint),
         _ => texel,
     }
-}
-
-// Share the channel kernel across sprite multiplication and terrain tinting.
-// Keep separate f32 multiply/add operations; do not fuse them or change rounding.
-#[inline(never)]
-fn transform_sample(mut source: [u8; 4], multiply: [f32; 4], offset: [f32; 4]) -> [u8; 4] {
-    for channel in 0..4 {
-        // Saturating casts clamp out-of-range values and map NaN to zero.
-        source[channel] =
-            (f32::from(source[channel]) * multiply[channel] + offset[channel]).round() as u8;
-    }
-    source
 }
 
 fn write_fragment(

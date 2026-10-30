@@ -116,6 +116,21 @@ impl NativeFrames {
                 uploaded_bytes += bytes;
             }
         }
+        if renderer.atlas_updates_ready().map_err(error)?
+            && art
+                .terrain_topology
+                .iter()
+                .any(|t| matches!(t, Some(aoe_rendering::TerrainTopology::Dds { .. })))
+        {
+            let rows = aoe_rendering::terrain_directory_rows(art).map_err(error)?;
+            if rows != self.directory {
+                renderer
+                    .update_game_atlas(0, [0, 0], [2048, 2], &rows)
+                    .map_err(error)?;
+                self.directory = rows;
+                changed = true;
+            }
+        }
         let missing: Vec<_> = required
             .iter()
             .chain(prefetch)

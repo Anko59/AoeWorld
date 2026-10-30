@@ -59,7 +59,7 @@ pub(super) fn sample(
         if weights[index] <= 0.0 {
             continue;
         }
-        let frame = sheets[index].frame(atlas, tile);
+        let (frame, local, gradient) = sheets[index].sample(atlas, tile, local, gradient);
         samples[index] = mix::art_layer(
             filter::sample(atlas, frame, local, filter::offsets(frame, gradient)),
             materials[index],

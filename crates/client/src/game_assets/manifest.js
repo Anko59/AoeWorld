@@ -65,7 +65,14 @@ export function parse_manifest(bytes) {
       u16(frame.width),u16(frame.height),i32(frame.anchor_x),i32(frame.anchor_y),native];
   });
   const chunks = array(data.chunks).map(chunk => [string(chunk.file),string(chunk.hash),u32(chunk.bytes)]);
-  return [u16(data.version),string(data.building_data),pages,frames,chunks];
+  const seen = new Set();
+  const terrains = array(data.terrains).map(t => {
+    const id=integer(t.id,0,199),size=array(t.size),period=array(t.period);
+    if(seen.has(id)||size.length!==2||period.length!==2)throw Error('invalid terrain recipe');seen.add(id);
+    return [id,string(t.source),...size.map(n=>integer(n,16,4096)),...period.map(n=>integer(n,1,256))];
+  });
+  if(terrains.length>200)throw Error('too many terrain recipes');
+  return [u16(data.version),string(data.building_data),pages,frames,chunks,terrains];
 }
 
 export function parse_content(bytes, actorCount) {

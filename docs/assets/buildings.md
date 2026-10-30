@@ -4,7 +4,7 @@
 all 39 gameplay building records and the six spawned bridge segments in one
 pass. The owner-licensed DE installation is mounted read-only; original pixels,
 source digests and generated packs stay in ignored local storage. The current
-base still supplies terrain, resources and interface assets until their category
+base still supplies interface and remaining effect assets until their category
 passes replace the trial import.
 
 ## One importer and one runtime recipe
@@ -33,6 +33,10 @@ The renderer orders layers and annex depth without mirroring building art.
 Bridge presentation retains its existing half-size world geometry; its native
 pixel cells are unchanged.
 
+Runtime building selection uses these DAT recipes alone. Missing recipe sections
+stay absent. The completed-category startup path has retired its supplemental
+building filename lists, sampled fish sheets and special farm crop window.
+
 ## Residency and lifecycle
 
 Building timelines share the unit cache's four on-demand colour/mask page
@@ -51,8 +55,8 @@ seconds of its DAT corpse/rubble. Exhausted Farms leave no rubble. The scene
 record stays 32 bytes; a bounded companion list carries fractional destruction
 time from the authoritative presentation clock.
 
-Farm crops remain terrain triangles. The current DE crop sheet supplies a bounded
-runtime texture window. Footprint preparation, dirt aprons, ordinary terrain
+Farm crops remain terrain triangles. The complete DE crop sheet now uses the
+generic native-cell terrain importer and view-dependent residency. Footprint preparation, dirt aprons, ordinary terrain
 blending and server-owned construction rules are unchanged by the animation pass.
 
 ## Validation

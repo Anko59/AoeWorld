@@ -25,7 +25,7 @@ milliseconds remain descriptive; playback uses fractional DE durations.
 
 ## Bounded residency
 
-Unit and building cells use on-demand residency rather than startup placement of every
+Unit, building, resource and terrain cells use on-demand residency rather than startup placement of every
 animation. Each independently compressed cell retains colour, owner weight and
 shadow planes in bounded, hashed pack chunks. The browser requests current
 visible cells first and two phases of lookahead in the current direction.
@@ -97,3 +97,49 @@ from numeric DAT IDs. Every drawable native cell is chunked; building layers
 keep their independent DAT timelines instead of sampling large ambient loops.
 Recipes include nested annexes, damage, construction and destruction/corpse
 states. See [the building contract](buildings.md) for residency and lifecycle.
+
+
+## Terrain, resources and trees in one pass
+
+The current DAT terrain directory is a validated chain of 200 records. Its 134
+nonempty terrain records reference exactly the 85 installed DDS textures. One
+importer decodes BC1, BC3, BC7 or masked 32-bit RGBA, splits the full native level
+into 256-square cells and generates separate box-filtered view levels down to
+16 pixels. Native texels are retained unchanged. No farm-specific downsampling
+or hand-maintained terrain filename list remains. Numeric semantic bindings
+select DAT terrain IDs, including natural rock 40 and soft snow 124.
+
+The manifest declares each terrain's source, native dimensions and DAT repeat
+period. This is a planar texture, not a classic diamond montage. Canvas, GLSL
+and WGSL invert the diamond coordinates into the same planar cell and local
+coordinates, including cells crossed within a world tile and negative positions.
+The existing two reserved atlas rows hold the active level's frame directory;
+residency changes update those rows without replacing the texture array.
+
+Visible terrain cells use the same four-pair cache as every other native sprite.
+The client selects a level from projected texel density, then coarsens until the
+terrain demand occupies at most 16 MiB of colour tiles, including allocation
+padding (32 MiB including their paired masks). The total normal atlas payload
+stays 256 MiB. This is a residency bound, not a claim that every native texture
+can be displayed simultaneously at full resolution. Every source level remains
+in the private pack and can be requested when the view permits it.
+
+Resource identities, three tree families, fallen wood, stumps, loose rocks,
+cliffs and six fish resource identities use the shared DAT composition resolver.
+All native cells, drawable layers, offsets and DAT timing are retained. The DAT
+reserves 25 cliff variants while the installed current SLD has 24 drawable
+cells; the runtime uses those 24 cells and retains the DAT metadata. Extra
+terminal fish cells remain in the pack; they do not lengthen the DAT loop. Resource
+bodies and depletion states share visible demand, eviction, fog and geometry
+with the other native art. Empty DAT states stay empty. Farm terrain 7 uses the
+same planar directory and ordinary foundation blending as other ground.
+Completed building and fish categories select their sources exclusively through
+DAT recipes; their old supplemental startup selectors and sampled-output
+fixtures have been replaced by complete native geometry and inventory tests.
+
+`make test-assets-de` checks all 85 licensed DDS sources and resource graphic
+inventories. Synthetic tests cover BC7 channel order, BC3 four-colour endpoint
+ordering, pitched RGBA, native texel retention, view budgets, eviction, and
+planar pixel selection through Canvas, WebGL2 and WebGPU. Per-commit validation
+uses focused tests, `test-wasm`, `lint`, `structure-check` and `perf-ci`; shipping
+owns E2E and preflight. These checks do not qualify dedicated hardware.

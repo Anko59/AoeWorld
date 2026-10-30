@@ -4,6 +4,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[path = "de_import/environment.rs"]
+mod environment;
 #[path = "de_import/fixture.rs"]
 mod fixture;
 
@@ -140,10 +142,10 @@ fn dds() -> Vec<u8> {
     let mut bytes = vec![0u8; 128];
     bytes[..4].copy_from_slice(b"DDS ");
     bytes[4..8].copy_from_slice(&124u32.to_le_bytes());
-    bytes[12..16].copy_from_slice(&8u32.to_le_bytes());
-    bytes[16..20].copy_from_slice(&8u32.to_le_bytes());
+    bytes[12..16].copy_from_slice(&32u32.to_le_bytes());
+    bytes[16..20].copy_from_slice(&32u32.to_le_bytes());
     bytes[84..88].copy_from_slice(b"DXT1");
-    for _ in 0..4 {
+    for _ in 0..64 {
         bytes.extend_from_slice(&[0x00, 0xF8, 0x1F, 0x00, 0, 0, 0, 0]);
     }
     bytes
@@ -172,7 +174,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .collect();
     assert_eq!(
         native.len(),
-        90_133,
+        90_135,
         "every native unit/stone source cell is chunked"
     );
     assert_eq!(
@@ -210,13 +212,16 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         &[1, 0, 0, 119],
         "low player mask survives lossless native serialization"
     );
-    assert_eq!(manifest.buildings.len(), 45);
+    assert_eq!(
+        manifest.buildings.len(),
+        aoe_assets::catalog::MAX_COMPOSITIONS
+    );
     let farm = manifest
         .frames
         .iter()
-        .find(|f| f.source == "de/g_fm1.dds")
+        .find(|f| f.source == "de/terrain/g_fm1.dds")
         .expect("farm");
-    assert_eq!((farm.width, farm.height), (4, 4));
+    assert_eq!((farm.width, farm.height), (32, 32));
     assert_eq!(report.entries.len(), 155);
     assert_eq!(
         manifest
@@ -399,7 +404,7 @@ fn real_de_building_catalog_retains_every_spawned_recipe() {
         assert!(units[&id].building.is_some(), "building {id}");
     }
     let catalog = de::buildings::resolve(&root).unwrap();
-    assert_eq!(catalog.recipes.len(), 45);
+    assert_eq!(catalog.recipes.len(), aoe_assets::catalog::MAX_COMPOSITIONS);
     let mut counts = std::collections::BTreeMap::new();
     for source in &catalog.sources {
         let path = root
@@ -412,7 +417,11 @@ fn real_de_building_catalog_retains_every_spawned_recipe() {
         }
         counts.insert(source, stream.len());
     }
-    for b in &catalog.recipes {
+    for b in catalog
+        .recipes
+        .iter()
+        .filter(|b| aoe_assets::catalog::GAMEPLAY_BUILDING_IDS.contains(&b.unit_id))
+    {
         for p in b
             .parts
             .iter()

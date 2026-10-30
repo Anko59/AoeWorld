@@ -7,6 +7,7 @@ use web_sys::CanvasRenderingContext2d;
 
 mod appearance;
 mod cliff_art;
+pub use cliff_art::scene_cliff_native_frames;
 pub(crate) mod directory;
 pub(crate) mod floor;
 pub(crate) mod landscape;
@@ -21,8 +22,12 @@ mod skirts;
 use skirts::{Edge, SkirtSurface, append_edge_skirt};
 pub(crate) mod mix;
 pub(crate) mod relief;
-pub use directory::{write_terrain_directory, write_terrain_directory_page};
+mod streaming;
+pub use directory::{
+    terrain_directory_rows, write_terrain_directory, write_terrain_directory_page,
+};
 pub use lod::projected_surface_triangles;
+pub use streaming::scene_terrain_frames;
 
 #[cfg(test)]
 mod tests;

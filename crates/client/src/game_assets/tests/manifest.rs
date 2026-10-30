@@ -1,6 +1,6 @@
 pub(crate) fn fixture() -> serde_json::Value {
     serde_json::json!({
-        "version": 1, "converter": "test\nconverter", "input_hash": "hash", "buildings": [], "building_data":"00",
+        "version": 1, "converter": "test\nconverter", "input_hash": "hash", "buildings": [], "building_data":"00","terrains":[],
         "chunks": [], "pages": [{
             "color": "color.png", "color_hash": "hash",
             "player": "player.png", "player_hash": "hash",

@@ -8,9 +8,6 @@ pub struct Item {
     pub stem: &'static str,
 }
 
-/// Farm ground textures under `terrain/textures/2x` (no farm SLD exists).
-pub const FARM_TEXTURES: &[&str] = &["g_fm1", "g_fm2"];
-
 pub const SELECTION: &[Item] = &[
     Item {
         building: "projectile",

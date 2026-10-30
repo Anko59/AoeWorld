@@ -2,12 +2,13 @@
 use super::manifest::{BuildingComposition, BuildingPart};
 use super::*;
 
+#[inline(never)]
 pub(super) fn select(
     manifest: &Manifest,
     selected: &mut Vec<usize>,
     domains: &mut Vec<AtlasDomain>,
 ) -> Result<(), JsValue> {
-    if manifest.buildings.len() > aoe_assets::catalog::GAMEPLAY_BUILDING_IDS.len() {
+    if manifest.buildings.len() > aoe_assets::catalog::MAX_COMPOSITIONS {
         return Err(error("too many building recipes"));
     }
     for (slot, building) in manifest.buildings.iter().enumerate() {
@@ -47,58 +48,75 @@ pub(super) fn select(
                 }
             }
         }
-        for (part, _) in building
-            .parts
-            .iter()
-            .chain(&building.construction)
-            .chain(building.states.iter().flat_map(|(_, parts)| parts))
-            .map(|part| (part, false))
-            .chain(
-                building
-                    .damage
-                    .iter()
-                    .flat_map(|d| &d.parts)
-                    .map(|part| (part, true)),
-            )
+        // Resolve each recipe slice through one loop, including state and damage
+        // layers. Keeping the part loop outside iterator adapters avoids cloning
+        // its validation and source-selection body for each recipe section.
+        for group in [&building.parts, &building.construction]
+            .into_iter()
+            .chain(building.states.iter().map(|(_, parts)| parts))
+            .chain(building.damage.iter().map(|d| &d.parts))
         {
-            if part.frames == 0
-                || part.angles == 0
-                || u32::from(part.frames) * u32::from(part.angles) > 16384
-                || !part.frame_rate.is_finite()
-                || part.frame_rate < 0.0
-                || !part.replay_delay.is_finite()
-                || part.replay_delay < 0.0
-            {
-                return Err(error("invalid building animation"));
-            }
-            if part
-                .misplacement
-                .iter()
-                .any(|v| !v.is_finite() || v.abs() > 128.0)
-                || part.offset.iter().any(|v| v.unsigned_abs() > 32768)
-            {
-                return Err(error("invalid building part offset"));
-            }
-            let Some(record) = part.record else {
-                continue;
-            };
-            let source = &manifest.frames[record].source;
-            let count = u32::from(part.frames) * u32::from(part.angles);
-            let Some(frames) = source_frames(manifest, source, count) else {
-                return Err(error(format!("corrupt building art ({source})")));
-            };
-            let step = 1;
-            for index in frames.into_iter().step_by(step) {
-                if !selected.contains(&index) {
-                    if selected.len() == MAX_SELECTED_FRAMES {
-                        return Err(error("too many selected building frames"));
+            for part in group {
+                if part.frames == 0
+                    || part.angles == 0
+                    || u32::from(part.frames) * u32::from(part.angles) > 16384
+                    || !part.frame_rate.is_finite()
+                    || part.frame_rate < 0.0
+                    || !part.replay_delay.is_finite()
+                    || part.replay_delay < 0.0
+                {
+                    return Err(error("invalid building animation"));
+                }
+                if part
+                    .misplacement
+                    .iter()
+                    .any(|v| !v.is_finite() || v.abs() > 128.0)
+                    || part.offset.iter().any(|v| v.unsigned_abs() > 32768)
+                {
+                    return Err(error("invalid building part offset"));
+                }
+                let Some(record) = part.record else {
+                    continue;
+                };
+                let source = &manifest.frames[record].source;
+                let declared = u32::from(part.frames) * u32::from(part.angles);
+                let native = manifest.frames[record].native.is_some();
+                let count = if native {
+                    manifest
+                        .frames
+                        .iter()
+                        .filter(|f| f.source == *source)
+                        .count() as u32
+                } else {
+                    declared
+                };
+                if count == 0
+                    || count > 16384
+                    || (count < declared && !(part.frame_rate == 0.0 && part.frames == 1))
+                {
+                    return Err(error("Incomplete native animation rows"));
+                }
+                let Some(frames) = source_frames(manifest, source, count) else {
+                    return Err(error(format!("corrupt building art ({source})")));
+                };
+                let step = 1;
+                for index in frames.into_iter().step_by(step) {
+                    if !selected.contains(&index) {
+                        if selected.len() == MAX_SELECTED_FRAMES {
+                            return Err(error("too many selected building frames"));
+                        }
+                        selected.push(index);
+                        domains.push(
+                            if (605..=610).contains(&building.unit_id)
+                                || aoe_assets::catalog::ENVIRONMENT_UNIT_IDS
+                                    .contains(&building.unit_id)
+                            {
+                                AtlasDomain::Shared
+                            } else {
+                                AtlasDomain::Objects
+                            },
+                        );
                     }
-                    selected.push(index);
-                    domains.push(if (605..=610).contains(&building.unit_id) {
-                        AtlasDomain::Shared
-                    } else {
-                        AtlasDomain::Objects
-                    });
                 }
             }
         }
@@ -106,6 +124,7 @@ pub(super) fn select(
     Ok(())
 }
 
+#[inline(never)]
 fn parts(
     unit_id: i32,
     parts: &[BuildingPart],
@@ -138,11 +157,21 @@ fn parts(
         // world axes differ, so project these native coordinates directly.
         let [ne, se] = part.misplacement;
         let step = 1;
+        let available = manifest
+            .frames
+            .iter()
+            .filter(|f| f.source == *source)
+            .count();
+        // DAT static variant slots can include an absent placeholder. Animated
+        // direction rows were validated above; terminal source cells stay selected.
+        let angles = part
+            .angles
+            .min((available / usize::from(part.frames)) as u16);
         out.push(aoe_rendering::BuildingPart {
             frame: scaled(records[slot]),
-            angles: part.angles,
-            animation: if u32::from(part.frames) * u32::from(part.angles) > 1 {
-                (0..u32::from(part.frames) * u32::from(part.angles))
+            angles,
+            animation: if u32::from(part.frames) * u32::from(angles) > 1 {
+                (0..u32::from(part.frames) * u32::from(angles))
                     .step_by(step)
                     .filter_map(|number| {
                         selected
@@ -228,7 +257,11 @@ pub(super) fn resolve(
         .map(|b| aoe_rendering::BuildingArt {
             unit_id: b.unit_id,
             footprint: b.footprint,
-            foundation_material: material(b),
+            foundation_material: if b.unit_id == 50 && !manifest.terrains.is_empty() {
+                Some(17)
+            } else {
+                material(b)
+            },
             parts: parts(b.unit_id, &b.parts, manifest, selected, records),
             construction: parts(b.unit_id, &b.construction, manifest, selected, records),
             states: b

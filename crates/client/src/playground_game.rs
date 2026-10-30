@@ -248,8 +248,23 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 focus_elevation_meters: client.camera.focus_elevation_meters,
             };
             let resources = map::scene_resources(&client);
-            let required =
+            let mut required =
                 aoe_rendering::scene_native_frames(&client.art, &units, camera, time as usize);
+            required.extend(aoe_rendering::scene_terrain_frames(
+                &mut client.art,
+                &scene.terrain,
+                camera,
+            ));
+            required.extend(aoe_rendering::scene_resource_native_frames(
+                &client.art,
+                &resources,
+                camera,
+                time as usize,
+            ));
+            required.extend(aoe_rendering::scene_cliff_native_frames(
+                &client.art,
+                &scene.triangles,
+            ));
             let prefetch =
                 aoe_rendering::scene_native_prefetch(&client.art, &units, camera, time as usize);
             let Client {

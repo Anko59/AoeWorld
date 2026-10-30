@@ -18,54 +18,6 @@ fn manifest_with(source: &str, count: u32) -> Manifest {
 }
 
 #[wasm_bindgen_test]
-fn building_selection_preserves_trial_fallback_and_rejects_incomplete_builder_rows() {
-    let manifest = manifest_with("graphics.drs:[32, 112, 108, 115]:2223", 3);
-    let (mut selected, mut domains) = (Vec::new(), Vec::new());
-    let groups = building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(groups[1], Some(0..3));
-    assert_eq!(selected, vec![0, 1, 2]);
-    assert!(domains.iter().all(|d| *d == AtlasDomain::Objects));
-    let bad = manifest_with("graphics.drs:[32, 112, 108, 115]:1496", 74);
-    assert!(building_sprites::select(&bad, &mut Vec::new(), &mut Vec::new()).is_err());
-}
-
-#[wasm_bindgen_test]
-fn layered_trial_mill_keeps_its_body_and_all_native_sail_frames() {
-    let mut manifest = manifest_with("graphics.drs:[32, 112, 108, 115]:3483", 1);
-    manifest
-        .frames
-        .extend(manifest_with("graphics.drs:[32, 112, 108, 115]:3482", 43).frames);
-    manifest
-        .frames
-        .extend(manifest_with("de/b_dark_mill_age1_x1.sld", 181).frames);
-    let (mut selected, mut domains) = (Vec::new(), Vec::new());
-    let groups = building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(groups[4], Some(0..44));
-    assert_eq!(selected, (0..44).collect::<Vec<_>>());
-    assert!(domains.iter().all(|d| *d == AtlasDomain::Objects));
-    manifest.frames.remove(43);
-    assert!(building_sprites::select(&manifest, &mut Vec::new(), &mut Vec::new()).is_err());
-}
-
-#[wasm_bindgen_test]
-fn farm_uses_a_bounded_texture_window_without_hiding_invalid_source_bounds() {
-    let mut manifest = manifest_with("de/g_fm1.dds", 1);
-    manifest.frames[0].width = 1024;
-    manifest.frames[0].height = 1024;
-    let (mut selected, mut domains) = (Vec::new(), Vec::new());
-    let groups = building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(domains, vec![AtlasDomain::Terrain]);
-    building_sprites::crop_farm(&mut manifest, &selected, &groups).unwrap();
-    assert_eq!(
-        (manifest.frames[0].width, manifest.frames[0].height),
-        (256, 256)
-    );
-    manifest.frames[0].x = 1900;
-    manifest.frames[0].width = 1024;
-    assert!(building_sprites::crop_farm(&mut manifest, &selected, &groups).is_err());
-}
-
-#[wasm_bindgen_test]
 fn standing_compaction_keeps_exactly_the_native_frame_already_drawn_per_facing() {
     let manifest = manifest_with("graphics.drs:[32, 112, 108, 115]:3004", 50);
     let frames = source_frames(&manifest, "graphics.drs:[32, 112, 108, 115]:3004", 50).unwrap();
@@ -81,29 +33,6 @@ fn standing_compaction_keeps_exactly_the_native_frame_already_drawn_per_facing()
         compact_standing((0..50).collect(), AssetRole::CavalryWalking),
         (0..50).collect::<Vec<_>>()
     );
-}
-
-#[wasm_bindgen_test]
-fn layered_feudal_mill_avoids_repeating_the_body_in_the_fixed_object_atlas() {
-    let mut manifest = manifest_with("de/b_west_mill_age2_x1.sld", 91);
-    for frame in &mut manifest.frames {
-        frame.width = 320;
-        frame.height = 280;
-    }
-    manifest
-        .frames
-        .extend(manifest_with("graphics.drs:[32, 112, 108, 115]:741", 1).frames);
-    manifest
-        .frames
-        .extend(manifest_with("graphics.drs:[32, 112, 108, 115]:737", 8).frames);
-    let (mut selected, mut domains) = (Vec::new(), Vec::new());
-    let groups = building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(groups[40], Some(0..9));
-    assert_eq!(selected, (91..100).collect::<Vec<_>>());
-    placement::plan(&manifest, &selected, &domains).unwrap();
-    // A present DE source remains validated even when the trial parts win.
-    manifest.frames.remove(90);
-    assert!(building_sprites::select(&manifest, &mut Vec::new(), &mut Vec::new()).is_err());
 }
 
 #[wasm_bindgen_test]
@@ -195,29 +124,6 @@ fn rally_flag_samples_the_licensed_loop_and_rejects_a_partial_group() {
     );
 }
 
-#[wasm_bindgen_test]
-fn native_bridge_pieces_borrow_unowned_space_without_team_mask_pages() {
-    let mut value = manifest::fixture();
-    let template = value["frames"][0].clone();
-    value["frames"] = [
-        "a_top", "a_middle", "a_bottom", "b_top", "b_middle", "b_bottom",
-    ]
-    .into_iter()
-    .map(|piece| {
-        let mut frame = template.clone();
-        frame["source"] = format!("de/s_bridge_{piece}_x1.sld").into();
-        frame["frame"] = 0.into();
-        frame
-    })
-    .collect::<Vec<_>>()
-    .into();
-    let manifest: Manifest = serde_json::from_value(value).unwrap();
-    let (mut selected, mut domains) = (Vec::new(), Vec::new());
-    let ranges = building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(selected.len(), 6);
-    assert_eq!(domains, [AtlasDomain::Shared; 6]);
-    assert!(ranges[65..71].iter().all(Option::is_some));
-}
 #[wasm_bindgen_test::wasm_bindgen_test]
 async fn native_army_overlay_accepts_the_bounded_complete_source_inventory() {
     let value =

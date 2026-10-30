@@ -32,12 +32,26 @@ impl AtlasAddress {
 /// Explicit scene metadata, supplied by the catalog adapter, never frame count.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TerrainTopology {
-    PeriodicXMajorReversedY { columns: u16, rows: u16 },
+    Dds {
+        size: [u16; 2],
+        period: [u16; 2],
+        level: u8,
+    },
+    PeriodicXMajorReversedY {
+        columns: u16,
+        rows: u16,
+    },
     CoordinateStableAccents,
 }
 
+#[path = "atlas/dds.rs"]
+mod dds;
+
 impl TerrainTopology {
     pub fn periodic_frame(self, x: i32, y: i32, frames: usize) -> Option<usize> {
+        if let Some((index, _, _)) = self.planar([f64::from(x), f64::from(y)]) {
+            return (index < frames).then_some(index);
+        }
         let Self::PeriodicXMajorReversedY { columns, rows } = self else {
             return None;
         };

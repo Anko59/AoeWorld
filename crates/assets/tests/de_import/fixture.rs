@@ -61,6 +61,27 @@ pub(super) fn actors(install: &Path) {
     fs::write(graphics.join("p_mangonel_x1.sld"), stone).unwrap();
     units::append(&mut records);
     buildings::append(&mut records);
+    for id in aoe_assets::catalog::ENVIRONMENT_UNIT_IDS {
+        let mut r = units::record(id as i16, &[28000, -1, -1, -1, -1, -1, -1, -1], -1);
+        r[0] = 10;
+        r[29..33].copy_from_slice(&1_f32.to_le_bytes());
+        r[33..37].copy_from_slice(&1_f32.to_le_bytes());
+        records.extend(r);
+    }
+    for id in 0..200 {
+        records.extend([1, 0, 0, 0, 0, 0, 0, 0]);
+        for text in ["Ground", "g_fm1"] {
+            records.extend(0xa60_u16.to_le_bytes());
+            records.extend((text.len() as u16).to_le_bytes());
+            records.extend(text.as_bytes());
+        }
+        records.extend([0; 28]);
+        records.extend([0x60, 0xa, 0, 0]);
+        records.extend([0; 8 + 22 + 19 * 6]);
+        records.extend((-1_i16).to_le_bytes());
+        records.extend(if id < 134 { [10, 0, 10, 0] } else { [0; 4] });
+        records.extend([0; 30 * 7 + 4]);
+    }
     fs::write(graphics.join("b_dark_house_age1_x1.sld"), super::sld()).unwrap();
     let mut encoder = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::fast());
     encoder.write_all(&records).unwrap();

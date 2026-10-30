@@ -377,6 +377,7 @@ fn synthetic_manifest() -> Manifest {
         height: PAGE_SIDE,
     };
     let mut manifest = Manifest {
+        terrains: Vec::new(),
         chunks: Vec::new(),
         version: 1,
         converter: "synthetic".into(),

@@ -12,6 +12,7 @@ pub use military::ProjectileSource;
 mod economy;
 pub mod graphics;
 mod soldiers;
+pub mod terrains;
 pub use soldiers::soldier;
 
 const BUILDINGS: &[(i16, i32, &str)] = &[

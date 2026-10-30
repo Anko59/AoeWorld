@@ -64,6 +64,7 @@ fn empty_art() -> GameArt {
     GameArt {
         resident: vec![None],
         building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
         actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),

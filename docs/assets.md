@@ -189,8 +189,10 @@ drawn layers and anchors move with the crop; the player plane stores a 0-7 ramp
 from the colour layer's luma for every nonzero mask, with the mask value as alpha
 to weight the blend. The trial's player plane uses the same ramp with alpha 255;
 the client and DE previews share the blend calculation.
-DE draws farms with terrain textures (`g_fm1`, `g_fm2`), imported at x1 scale as
-opaque 1024x1024 frames.
+DE terrain, resources and trees now use the generic DAT environment pass. All 85
+DDS textures retain their native levels and separate view levels in streamed
+cells. Farms use the same terrain directory and bounded residency; the old
+1024-square downsample and runtime crop window have been removed.
 
 Without `AOE_ASSET_PACK`, the import also attaches the new overlay to the
 only existing pack that has no `buildings` link, so the next game uses the

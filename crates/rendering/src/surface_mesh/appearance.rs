@@ -102,9 +102,16 @@ pub(super) fn texture_subdivisions(size: i32, cells: usize) -> i32 {
 }
 
 pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle], art: &GameArt) {
+    let planar = art
+        .terrain_topology
+        .iter()
+        .any(|t| matches!(t, Some(crate::TerrainTopology::Dds { .. })));
     for triangle in triangles {
         if super::cliff_art::apply(triangle, art) {
             continue;
+        }
+        if planar {
+            triangle.texture_mode = (triangle.texture_mode & !7) | directory::TILED;
         }
         // If the bank sheet is only the pack's generic grass placeholder,
         // use neutral rock detail rather than a green vertical beach face.
@@ -120,7 +127,7 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         }
         // Physical cliff ledges keep surrounding ground. A pack with
         // absent/incomplete face art still needs visible impassable rock.
-        if !triangle.pickable && !triangle.skirt && art.scenery.cliff_faces.len() != 25 {
+        if !triangle.pickable && !triangle.skirt && !super::cliff_art::available(art) {
             triangle.material = 4;
             triangle.tint = 2;
             triangle.appearance = 0;
@@ -131,8 +138,7 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         }
         // Native mountain art already carries its relief. A coarse cell's
         // ramp/cliff marker must not paint a flat polygon over that art.
-        let native_top =
-            !triangle.skirt && (triangle.pickable || art.scenery.cliff_faces.len() == 25);
+        let native_top = !triangle.skirt && (triangle.pickable || super::cliff_art::available(art));
         if native_top
             && matches!(triangle.material, 4 | 7)
             && triangle.mix == [0; 6]
@@ -149,7 +155,7 @@ pub(crate) fn apply_terrain_textures(triangles: &mut [ProjectedSurfaceTriangle],
         }
         // Rock and snow draw native ground colours on pure and mixed faces.
         // Vertical closures and missing cliff art retain their stone kernel.
-        let cliff = triangle.skirt || (!triangle.pickable && art.scenery.cliff_faces.len() != 25);
+        let cliff = triangle.skirt || (!triangle.pickable && !super::cliff_art::available(art));
         let procedural = |material: u8| {
             (material == 4 && cliff)
                 || material == 9
@@ -271,7 +277,17 @@ pub(crate) fn procedural_tint(texel: [u8; 4], tint: u8) -> [u8; 4] {
 
 /// Frames and topology: terrain groups 0–11, grass fallback 12,
 /// optional water/ice sheets 13–15, DAT foundation 16, and marsh shallows 17.
+#[inline(never)]
 pub(crate) fn terrain_group(
+    art: &GameArt,
+    material: u8,
+) -> Option<(usize, &[GameFrame], Option<crate::TerrainTopology>)> {
+    let (group, frames, topology) = terrain_group_all(art, material)?;
+    let range = topology.map_or(Some(0..frames.len()), |t| t.active(frames.len()))?;
+    Some((group, &frames[range], topology))
+}
+
+fn terrain_group_all(
     art: &GameArt,
     material: u8,
 ) -> Option<(usize, &[GameFrame], Option<crate::TerrainTopology>)> {

@@ -77,6 +77,7 @@ fn atlas_masks_and_verifier_reject_tampering() {
     assert_eq!(&page.outline[pixel + 8..pixel + 12], &[1, 0, 0, 255]);
     let pages = vec![save_page(temp.path(), 0, page).unwrap()];
     let manifest = Manifest {
+        terrains: Vec::new(),
         chunks: Vec::new(),
         version: 1,
         converter: "test".to_owned(),

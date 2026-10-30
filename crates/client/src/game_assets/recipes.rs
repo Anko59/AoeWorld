@@ -87,7 +87,7 @@ pub(super) fn decode(
         .collect::<Result<Vec<_>, &'static str>>()?;
     let mut r = Reader { bytes, pos: 0 };
     let count = r.array::<1>()?[0];
-    if usize::from(count) > aoe_assets::catalog::GAMEPLAY_BUILDING_IDS.len() {
+    if usize::from(count) > aoe_assets::catalog::MAX_COMPOSITIONS {
         return Err("too many building recipes");
     }
     let mut buildings = Vec::with_capacity(usize::from(count));

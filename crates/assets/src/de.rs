@@ -16,22 +16,22 @@ use std::{
 pub mod buildings;
 mod cache;
 mod compose;
-mod farm;
 mod native;
 mod preview;
 mod select;
 mod table;
+pub mod terrain;
 pub mod unit_catalog;
 mod unit_frames;
 
 pub use preview::reference;
-pub use select::{FARM_TEXTURES, Item, SELECTION};
+pub use select::{Item, SELECTION};
 
 const MAX_SLD: u64 = 64 * 1024 * 1024;
 const GRAPHICS: &str = "resources/_common/drs/graphics";
 const TEXTURES: &str = "resources/_common/terrain/textures/2x";
 /// Folded into the pack hash so a change of the conversion rules makes a new pack.
-const CONVERSION: &str = "de-sld-rgb565-weighted-player-chunked-dat-buildings";
+const CONVERSION: &str = "de-sld-rgb565-weighted-player-chunked-dat-environment";
 
 /// What one selected source contributed to the pack.
 #[derive(Clone, Debug)]
@@ -211,7 +211,32 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
             unit: Some(unit),
         });
     }
-    let farm = farm::load(&install.join(TEXTURES), &mut hasher)?;
+    for b in &buildings.recipes {
+        for p in b
+            .parts
+            .iter()
+            .chain(&b.construction)
+            .chain(b.states.iter().flat_map(|s| &s.parts))
+            .chain(b.damage.iter().flat_map(|d| &d.parts))
+            .filter(|p| p.available)
+        {
+            let count = loaded
+                .iter()
+                .find(|s| s.source == p.source)
+                .map_or(0, |s| s.frames.len());
+            if count == 0
+                || (count < usize::from(p.frames) * usize::from(p.angles)
+                    && !(p.frames == 1 && p.frame_rate == 0.0))
+            {
+                return Err(crate::invalid(
+                    "DE composition",
+                    0,
+                    "incomplete native animation rows",
+                ));
+            }
+        }
+    }
+    let terrain = terrain::resolve(&install, &mut hasher)?;
     let mut refs: Vec<SpriteRef> = loaded
         .iter()
         .map(|sprite| SpriteRef {
@@ -220,7 +245,11 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
             frames: sprite.frames.len(),
         })
         .collect();
-    refs.extend(farm.iter().map(farm::Sheet::sprite));
+    refs.extend(terrain.sheets.iter().map(|s| SpriteRef {
+        id: s.source.clone(),
+        hash: s.hash.clone(),
+        frames: s.frames,
+    }));
     let split = loaded.len();
     let mut entries = Vec::new();
     for sprite in &loaded {
@@ -246,19 +275,34 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
             Ok(vec![unit_frames::Decoder::streamed(bytes)?])
         }
     });
+    let mut terrain_cache = cache::Cache::new(|index: usize| {
+        let s = &terrain.sheets[index];
+        let bytes = read_bounded(&s.path)?;
+        if blake3::hash(&bytes).to_hex().as_str() != s.hash {
+            return Err(crate::invalid(
+                "DE terrain",
+                0,
+                "source changed during import",
+            ));
+        }
+        Ok(vec![terrain::Decoder::new(crate::dds::parse(&bytes)?)])
+    });
     let pack = write_pack_streamed(
         &output_root,
         hasher.finalize().to_hex().to_string(),
         &refs,
         buildings.recipes,
+        terrain.terrains,
         |sprite, _| {
-            sprite < split && matches!(loaded[sprite].building, "unit" | "projectile" | "building")
+            sprite >= split
+                || (sprite < split
+                    && matches!(loaded[sprite].building, "unit" | "projectile" | "building"))
         },
         |sprite, frame| {
             if sprite < split {
                 cache.get(sprite)?[0].frame(frame)
             } else {
-                farm[sprite - split].planes(frame)
+                terrain_cache.get(sprite - split)?[0].frame(frame)
             }
         },
     )?;
@@ -277,10 +321,8 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
                 sprite.stem.strip_suffix("_x1").unwrap_or(&sprite.stem),
                 sld::parse(&read_bounded(&sprite.path)?)?.as_slice(),
             )],
-            &[],
         )?;
     }
-    preview::write(&local.join("de-preview"), &[], &farm)?;
-    table::write(&local.join("de-table.md"), &report, &farm)?;
+    table::write(&local.join("de-table.md"), &report)?;
     Ok(report)
 }

@@ -2,6 +2,8 @@ use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
+#[path = "village/environment.rs"]
+pub(super) mod environment;
 #[path = "village/fish.rs"]
 mod fish;
 #[path = "scenery.rs"]
@@ -44,6 +46,9 @@ pub(super) fn resource_presentation_at(
     resource: SceneResource,
     animation: usize,
 ) -> Option<(GameFrame, Option<GameFrame>)> {
+    if environment::present(art, resource) {
+        return environment::primary(art, resource, animation).map(|f| (f, None));
+    }
     if resource.kind == 0 && matches!(resource.visual_family, 5 | 6) {
         return fish::frame(art, resource, animation).map(|f| (f, None));
     }
@@ -94,7 +99,7 @@ pub fn scene_resource_frame(art: &GameArt, resource: SceneResource) -> Option<Ga
 
 #[path = "village/residency.rs"]
 mod residency;
-pub use residency::{scene_native_frames, scene_native_prefetch};
+pub use residency::{scene_native_frames, scene_native_prefetch, scene_resource_native_frames};
 
 #[cfg(test)]
 pub(super) fn world_sprite_frames(
@@ -138,8 +143,12 @@ pub(super) fn emit_world_sprite_frames(
     };
     // Preserve resource-before-unit submission without allocating/copying an
     // unsorted intermediate object vector on every frame.
+    for &r in resources.iter().filter(|&&r| environment::present(art, r)) {
+        environment::emit(art, r, camera, animation, &mut emit);
+    }
     let objects = resources
         .iter()
+        .filter(|&&r| !environment::present(art, r))
         .filter_map(|resource| {
             resource_presentation_at(art, *resource, animation).map(|(frame, shadow)| {
                 WorldObject::Resource(*resource, world_frame(frame), shadow.map(world_frame))

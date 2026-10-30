@@ -2,9 +2,51 @@
 //! One formation spans three tiles, rather than repeating its middle per tile.
 use super::*;
 
+pub(super) fn available(art: &GameArt) -> bool {
+    art.scenery.cliff_faces.len() == 25
+        || art
+            .environment
+            .iter()
+            .any(|c| c.unit_id == 264 && !c.parts.is_empty())
+}
+
+pub(super) fn native_index(face: &ProjectedSurfaceTriangle, count: usize) -> usize {
+    let east = face.order < 4;
+    let cell = face.tile.map(|n| n.div_euclid(3) as u32);
+    let key = hash(cell[0] ^ cell[1].rotate_left(16));
+    let group = if east {
+        [4, 5, 16, 17, 24]
+    } else {
+        [1, 2, 18, 15, 19]
+    };
+    group[key as usize % group.len()] % count.max(1)
+}
+
 pub(super) fn apply(face: &mut ProjectedSurfaceTriangle, art: &GameArt) -> bool {
-    if !face.skirt || face.tint != 13 || art.scenery.cliff_faces.len() != 25 {
+    if !face.skirt || face.tint != 13 || !available(art) {
         return false;
+    }
+    if art.environment.iter().any(|c| c.unit_id == 264) {
+        let frames = &art.scenery.cliff_faces;
+        let Some(frame) = frames
+            .get(native_index(face, frames.len()))
+            .and_then(|f| art.resident_frame(*f))
+        else {
+            return false;
+        };
+        // Rectangular face modes sample 0.3..0.7; expand the rectangle so that
+        // this interval addresses exactly the full native cell, never its neighbours.
+        let mut address = frame.atlas;
+        for axis in 0..2 {
+            address.uv[axis] -= 0.75 * address.uv[axis + 2];
+            address.uv[axis + 2] *= 2.5;
+        }
+        face.texture_uv = Some(address);
+        face.texture_blend = None;
+        face.texture_materials = None;
+        face.appearance = 0;
+        face.tint = 0;
+        return true;
     }
     let east = face.order < 4;
     let parallel = usize::from(east);
@@ -65,4 +107,21 @@ pub(super) fn hash(mut value: u32) -> u32 {
     value ^= value >> 15;
     value = value.wrapping_mul(0x846c_a68b);
     value ^ (value >> 16)
+}
+
+/// The prepared mesh is already view-culled; request only its native cliff cells.
+pub fn scene_cliff_native_frames(art: &GameArt, faces: &[ProjectedSurfaceTriangle]) -> Vec<u32> {
+    if !art.environment.iter().any(|c| c.unit_id == 264) {
+        return Vec::new();
+    }
+    let frames = &art.scenery.cliff_faces;
+    let mut out = std::collections::BTreeSet::new();
+    for face in faces.iter().filter(|f| f.skirt && f.tint == 13) {
+        if let Some(frame) = frames.get(native_index(face, frames.len()))
+            && frame.stream != 0
+        {
+            out.insert(frame.stream);
+        }
+    }
+    out.into_iter().collect()
 }

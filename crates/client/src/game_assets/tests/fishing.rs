@@ -25,14 +25,7 @@ fn fixture(id: u32, count: u32) -> Manifest {
 }
 
 #[wasm_bindgen_test]
-fn fishing_sources_preserve_native_rows_and_reject_present_truncation() {
-    assert!(
-        fishing::select(&fixture(0, 1), &mut Vec::new(), &mut Vec::new())
-            .unwrap()
-            .iter()
-            .all(Option::is_none),
-        "unused slot is not sprite source zero"
-    );
+fn fishing_worker_preserves_native_rows_and_rejects_present_truncation() {
     let source =
         aoe_assets::catalog::units::SPRITES[aoe_assets::catalog::units::Pose::FisherWork as usize];
     let manifest = fixture(source.id, source.frames());
@@ -57,14 +50,10 @@ fn fishing_sources_preserve_native_rows_and_reject_present_truncation() {
         )
         .is_err()
     );
-    let mut selected = Vec::new();
-    let ranges = fishing::select(&fixture(1911, 49), &mut selected, &mut Vec::new()).unwrap();
-    assert_eq!(ranges[2], Some(0..7));
-    assert_eq!(selected, [0, 7, 14, 21, 28, 35, 42]);
 }
 
 #[wasm_bindgen_test]
-fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
+fn complete_actor_inventory_and_dat_damage_cells_fit_without_startup_animation_pages() {
     use aoe_assets::catalog::units::SPRITES;
     let catalog = REQUIRED_RENDER_SOURCES
         .iter()
@@ -77,70 +66,46 @@ fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
     for source in SPRITES {
         sources.insert(source.manifest_source(), source.frames());
     }
-    for (id, count) in [
-        (1496, 75),
-        (3483, 1),
-        (3482, 43),
-        (3549, 34),
-        (1910, 49),
-        (1911, 49),
-        (1912, 49),
-        (1913, 49),
-        (420, 30),
-        (446, 5),
-    ] {
-        sources.insert(format!("graphics.drs:[32, 112, 108, 115]:{id}"), count);
+    let damage_sources: Vec<_> = (0..9)
+        .map(|i| format!("de/synthetic_damage_{i}.sld"))
+        .collect();
+    for source in &damage_sources {
+        sources.insert(source.clone(), 20);
     }
-    for id in 424..=432 {
-        sources.insert(format!("graphics.drs:[32, 112, 108, 115]:{id}"), 20);
-    }
-    sources.insert("de/b_misc_waypoint_flag_x1.sld".into(), 90);
-    for stem in [
-        "b_dark_house_age1",
-        "b_west_lumber_camp_age2",
-        "b_west_mining_camp_age2",
-        "b_dark_barracks_age1",
-        "b_dark_wall_palisade",
-        "b_dark_outpost_age1",
-        "b_dark_dock_age1",
-        "b_dark_town_center_age1",
-    ] {
-        sources.insert(
-            format!("de/{stem}_x1.sld"),
-            if stem.contains("house") {
-                3
-            } else if stem.contains("palisade") {
-                5
-            } else {
-                1
-            },
-        );
-        sources.insert(format!("de/{stem}_rubble_x1.sld"), 1);
-    }
-    sources.insert("de/b_dark_mill_age1_rubble_x1.sld".into(), 1);
-    for side in 1..=4 {
-        sources.insert(format!("de/b_misc_foundation_{side}x{side}_x1.sld"), 3);
-    }
-    sources.insert("de/b_misc_foundation_dock_x1.sld".into(), 3);
-    sources.insert("de/b_misc_rubble_x1.sld".into(), 1);
-    sources.insert("de/g_fm1.dds".into(), 1);
+    let native: std::collections::BTreeSet<_> = SPRITES
+        .iter()
+        .filter(|s| s.is_native())
+        .map(|s| s.manifest_source())
+        .chain(damage_sources.iter().cloned())
+        .collect();
     let mut value = manifest::fixture();
     let base = value["frames"][0].clone();
-    value["frames"] = sources
+    let frames: Vec<_> = sources
         .into_iter()
         .flat_map(|(source, count)| {
             let base = base.clone();
             (0..count).map(move |index| {
-                let mut frame = base.clone();
-                frame["source"] = source.clone().into();
-                frame["frame"] = index.into();
-                frame["width"] = 2.into();
-                frame["height"] = 2.into();
-                frame
+                let mut f = base.clone();
+                f["source"] = source.clone().into();
+                f["frame"] = index.into();
+                f["width"] = 2.into();
+                f["height"] = 2.into();
+                f["page"] = 0.into();
+                f["x"] = 0.into();
+                f["y"] = 0.into();
+                f
             })
         })
-        .collect::<Vec<_>>()
-        .into();
+        .enumerate()
+        .map(|(index, mut f)| {
+            if native.contains(f["source"].as_str().unwrap()) {
+                f["native"] = serde_json::json!({"chunk":0,"offset":index*64,"length":64});
+            }
+            f
+        })
+        .collect();
+    value["chunks"] = serde_json::json!([{"file":"frames-0000.bin","hash":"0".repeat(64),"bytes":frames.len()*64}]);
+    value["frames"] = frames.into();
     let mut manifest: Manifest = serde_json::from_value(value).unwrap();
     let (mut selected, mut domains) = (Vec::new(), Vec::new());
     for source in catalog {
@@ -158,43 +123,32 @@ fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
         ));
         selected.extend(frames);
     }
-    actors::select(&manifest, &mut selected, &mut domains).unwrap();
-    buildings::select(&manifest, &mut selected, &mut domains).unwrap();
-    building_sprites::select(&manifest, &mut selected, &mut domains).unwrap();
-    fishing::select(&manifest, &mut selected, &mut domains).unwrap();
-    // Every army pose keeps all sixteen native direction blocks. The King
-    // contributes 2400 cells and the General 3120. Stones retain all 30 cells.
-    // The Castle camp fallback slots reuse two available DE camp cells.
-    // The stationary and working fishing ship share one identical five-frame group.
-    assert_eq!(selected.len(), 94945);
-    assert!(selected.len() <= MAX_SELECTED_FRAMES);
+    let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
+    assert!(ranges.iter().all(Option::is_some));
+    for (range, source) in ranges.iter().zip(SPRITES) {
+        assert_eq!(range.as_ref().unwrap().len(), source.selected_frames());
+    }
     assert_eq!(
-        placement::plan(&manifest, &selected, &domains)
-            .unwrap()
-            .len(),
-        selected.len()
+        selected.len(),
+        94_729,
+        "current complete catalog, sharing identical pose ranges"
     );
-    building_sprites::rally(&manifest, &mut selected, &mut domains).unwrap();
-    // Damage cells remain selected alongside the complete hero animations.
+    let before = selected.len();
     let parts = (0..27)
-        .map(|n| {
-            let id = 424 + n % 9;
-            let source = format!("graphics.drs:[32, 112, 108, 115]:{id}");
-            manifest::BuildingPart {
-                record: source_frames(&manifest, &source, 20).map(|frames| frames[0]),
-                frames: 2,
-                angles: 1,
-                primary: false,
-                replay_delay: 0.0,
-                frame_rate: 0.0,
-                offset: [0; 2],
-                misplacement: [0.0; 2],
-            }
+        .map(|i| manifest::BuildingPart {
+            record: Some(source_frames(&manifest, &damage_sources[i % 9], 20).unwrap()[0]),
+            frames: 2,
+            angles: 1,
+            primary: false,
+            replay_delay: 0.0,
+            frame_rate: 0.1,
+            offset: [i as i32, 0],
+            misplacement: [0.0; 2],
         })
         .collect();
     manifest.buildings.push(manifest::BuildingComposition {
-        unit_id: 70,
-        footprint: [2.0; 2],
+        unit_id: 72,
+        footprint: [1.0; 2],
         foundation_slp: None,
         foundation_size: [0; 2],
         parts: Vec::new(),
@@ -207,11 +161,16 @@ fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
         }],
     });
     buildings::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(selected.len(), 94973);
     assert_eq!(
-        placement::plan(&manifest, &selected, &domains)
-            .unwrap()
-            .len(),
-        selected.len()
+        selected.len(),
+        before + 180,
+        "every native source cell, including cells outside the declared loop"
+    );
+    let placements = placement::plan(&manifest, &selected, &domains).unwrap();
+    assert_eq!(placements.len(), selected.len());
+    assert_eq!(
+        placement::pages(&placements),
+        GAME_ATLAS_PAGES,
+        "native animations allocate through residency only"
     );
 }

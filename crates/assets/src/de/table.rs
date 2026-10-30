@@ -1,9 +1,9 @@
 //! The building to pack-sprite mapping table for the client track.
-use super::{Report, farm::Sheet};
+use super::Report;
 use crate::Error;
 use std::{fmt::Write, fs, path::Path};
 
-pub(super) fn write(path: &Path, report: &Report, farm: &[Sheet]) -> Result<(), Error> {
+pub(super) fn write(path: &Path, report: &Report) -> Result<(), Error> {
     let mut text = String::new();
     let _ = writeln!(text, "# Definitive Edition DAT sprite table\n");
     let _ = writeln!(
@@ -47,24 +47,6 @@ pub(super) fn write(path: &Path, report: &Report, farm: &[Sheet]) -> Result<(), 
         let _ = writeln!(text, "\n## Not present in the install\n");
         for (building, role, file) in &report.absent {
             let _ = writeln!(text, "- {building} {role}: `{file}`");
-        }
-    }
-    if !farm.is_empty() {
-        let _ = writeln!(
-            text,
-            "\n## Farm\n\nDE has no farm sprite (no `farm`/`field` SLD exists in the install). The farm is drawn with\n\
-             the terrain textures below, which are seamless ground sheets sampled by world position. The\n\
-             pack holds each at x1 scale (2x2 box-averaged from the 2x DDS) as one opaque 1024x1024 frame 0,\n\
-             anchor 0,0. `g_fm1` is the crop field, `g_fm2` the bare, depleted ground.\n"
-        );
-        for sheet in farm {
-            let _ = writeln!(
-                text,
-                "- `de/{}.dds`: frame 0, {}x{}",
-                sheet.name,
-                sheet.texture.width / 2,
-                sheet.texture.height / 2
-            );
         }
     }
     fs::write(path, text)?;

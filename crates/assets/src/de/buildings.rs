@@ -144,6 +144,7 @@ pub fn resolve(install: &Path) -> Result<Catalog, Error> {
     let dat = de_survey::inflate(&bytes)?;
     let ids: Vec<_> = crate::catalog::GAMEPLAY_BUILDING_IDS
         .iter()
+        .chain(&crate::catalog::ENVIRONMENT_UNIT_IDS)
         .map(|&id| id as i16)
         .collect();
     let units = de_units::find(&dat, &ids)?;
@@ -159,15 +160,34 @@ pub fn resolve(install: &Path) -> Result<Catalog, Error> {
     for id in ids {
         let u = &units[&id];
         if u.building.is_none() {
+            let parts = r.parts(u.standing, [0.0; 2])?;
+            if crate::catalog::ENVIRONMENT_UNIT_IDS.contains(&i32::from(id))
+                && (parts.is_empty() || parts.iter().any(|p| !p.available))
+            {
+                return Err(invalid(
+                    "DE environment",
+                    0,
+                    "missing native resource graphic",
+                ));
+            }
             recipes.push(dat::BuildingComposition {
                 unit_id: i32::from(id),
                 footprint: u.footprint.map(|v| v.max(1.0)),
                 foundation_terrain: -1,
                 foundation_slp: None,
                 foundation_size: [0; 2],
-                parts: r.parts(u.standing, [0.0; 2])?,
+                parts,
                 construction: Vec::new(),
-                states: Vec::new(),
+                states: vec![
+                    dat::BuildingState {
+                        role: 0,
+                        parts: r.parts(u.dying, [0.0; 2])?,
+                    },
+                    dat::BuildingState {
+                        role: 1,
+                        parts: r.parts(units.get(&u.dead).map_or(-1, |u| u.standing), [0.0; 2])?,
+                    },
+                ],
                 damage: Vec::new(),
             });
             continue;

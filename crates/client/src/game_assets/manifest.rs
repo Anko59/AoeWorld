@@ -38,6 +38,7 @@ pub(super) struct Manifest {
     pub chunks: Vec<aoe_assets::pack::frame_chunks::FrameChunk>,
     pub frames: Vec<FrameRecord>,
     pub building_data: String,
+    pub terrains: Vec<aoe_assets::pack::TerrainSheet>,
     #[cfg_attr(test, serde(skip))]
     pub buildings: Vec<BuildingComposition>,
 }
@@ -135,12 +136,14 @@ extern "C" {
     fn bounds_json(text: &str, hash: &str) -> Result<Array, JsValue>;
 }
 
+#[inline(never)]
 fn text(fields: &Array, index: u32) -> Result<String, JsValue> {
     fields
         .get(index)
         .as_string()
         .ok_or_else(|| JsValue::from_str("invalid manifest string projection"))
 }
+#[inline(never)]
 fn number(fields: &Array, index: u32) -> Result<f64, JsValue> {
     fields
         .get(index)
@@ -205,6 +208,18 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Manifest, JsValue> {
     Ok(Manifest {
         version: number(&root, 0)? as u16,
         building_data: text(&root, 1)?,
+        terrains: Array::from(&root.get(5))
+            .iter()
+            .map(|value| {
+                let f = Array::from(&value);
+                Ok(aoe_assets::pack::TerrainSheet {
+                    id: number(&f, 0)? as u16,
+                    source: text(&f, 1)?,
+                    size: [number(&f, 2)? as u16, number(&f, 3)? as u16],
+                    period: [number(&f, 4)? as u16, number(&f, 5)? as u16],
+                })
+            })
+            .collect::<Result<Vec<_>, JsValue>>()?,
         pages,
         chunks: Array::from(&root.get(4))
             .iter()

@@ -75,3 +75,24 @@ fn demand(
     }
     required.into_iter().collect()
 }
+
+/// Native resource cells share the same visible LRU as units and buildings.
+pub fn scene_resource_native_frames(
+    art: &GameArt,
+    resources: &[SceneResource],
+    camera: SceneCamera,
+    animation: usize,
+) -> Vec<u32> {
+    if art.environment.is_empty() {
+        return Vec::new();
+    }
+    let mut required = std::collections::BTreeSet::new();
+    for &r in resources {
+        environment::frames(art, r, animation, &mut |f| {
+            if f.stream != 0 && resource_sprite_bounds(r, f, camera).is_some() {
+                required.insert(f.stream);
+            }
+        });
+    }
+    required.into_iter().collect()
+}

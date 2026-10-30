@@ -188,28 +188,6 @@ fn wrap(value: i32, period: u32) -> u32 {
     return ((bitcast<u32>(value) ^ 2147483648u) % period + period - 2147483648u % period) % period;
 }
 
-fn tiled_layer(header: vec4<f32>, tile: vec2<i32>, local: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>) -> Layer {
-    let columns = u32(header.z);
-    let rows = u32(header.w);
-    let hash = bitcast<u32>(tile.x) * 7u + bitcast<u32>(tile.y) * 13u;
-    var index = select(hash, ~hash + 1u, hash > 2147483648u) % u32(max(header.y, 1.0));
-    if columns > 0u && rows > 0u {
-        index = wrap(tile.x, columns) * rows + (rows - wrap(tile.y, rows)) % rows;
-    }
-    let entry = u32(header.x) + 2u * index;
-    let a = directory(entry);
-    let b = directory(entry + 1u);
-    let high = u32(b.z);
-    let size = vec2<f32>(textureDimensions(sprite_atlas));
-    var layer: Layer;
-    layer.rect = vec4<f32>(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + f32(high & 15u) * 256.0, b.y + f32(high >> 4u) * 256.0) / size.xyxy;
-    layer.page = u32(b.w);
-    let span = max(layer.rect.zw - 1.0 / size, vec2<f32>(0.0));
-    layer.uv = layer.rect.xy + 0.5 / size + local * span;
-    layer.dx = gx * span;
-    layer.dy = gy * span;
-    return layer;
-}
 
 fn ground(rgb: vec3<f32>, kind: u32) -> vec3<f32> {
     var base = vec3<f32>(0.18);

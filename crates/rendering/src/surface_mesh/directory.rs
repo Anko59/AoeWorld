@@ -25,6 +25,7 @@ const SIDE: usize = GAME_ATLAS_SIDE as usize;
 const ENTRIES: usize = 2 * SIDE;
 const MATERIALS: usize = 18;
 const FIRST_FRAME: usize = 1 + 2 * MATERIALS;
+pub(super) const MAX_CELLS: usize = (ENTRIES - FIRST_FRAME) / 2;
 
 /// Writes the directory for `art` into the reserved rows of its atlas. Art
 /// without terrain frames writes nothing; occupied rows are refused, not overwritten.
@@ -44,7 +45,7 @@ pub fn write_terrain_directory_page(art: &crate::GameArt, page: &mut [u8]) -> Re
     write_rows(art, page)
 }
 
-fn write_rows(art: &crate::GameArt, atlas: &mut [u8]) -> Result<(), String> {
+fn table(art: &crate::GameArt) -> Result<Vec<u8>, String> {
     let mut table = vec![0_u8; (FIRST_FRAME - 1) * 4];
     let mut starts = [0_usize; 18];
     for material in 0..MATERIALS {
@@ -57,7 +58,10 @@ fn write_rows(art: &crate::GameArt, atlas: &mut [u8]) -> Result<(), String> {
                 return Err("Terrain frame directory overflow".into());
             }
             for frame in frames {
-                let [x, y, w, h] = texels(frame.atlas)?;
+                let address = art
+                    .resident_frame(*frame)
+                    .map_or(AtlasAddress::WHITE, |f| f.atlas);
+                let [x, y, w, h] = texels(address)?;
                 table.extend_from_slice(&[
                     x as u8,
                     (x >> 8) as u8,
@@ -66,12 +70,16 @@ fn write_rows(art: &crate::GameArt, atlas: &mut [u8]) -> Result<(), String> {
                     w as u8,
                     h as u8,
                     ((w >> 8) | (h >> 8 << 4)) as u8,
-                    frame.atlas.page as u8,
+                    address.page as u8,
                 ]);
             }
         }
         // Only a sheet the CPU selection accepts is periodic; never frame count alone.
         let (columns, rows) = match topology {
+            Some(t @ TerrainTopology::Dds { .. }) => {
+                let (grid, period) = t.grid().ok_or("Invalid DDS topology")?;
+                (0x8000 | grid[0] | period[0] << 5, grid[1] | period[1] << 5)
+            }
             Some(TerrainTopology::PeriodicXMajorReversedY { columns, rows })
                 if topology
                     .and_then(|sheet| sheet.periodic_frame(0, 0, frames.len()))
@@ -90,6 +98,19 @@ fn write_rows(art: &crate::GameArt, atlas: &mut [u8]) -> Result<(), String> {
             table[material * 8 + slot * 2 + 1] = (value >> 8) as u8;
         }
     }
+    Ok(table)
+}
+
+/// Complete reserved rows for a bounded subrectangle upload after residency changes.
+pub fn terrain_directory_rows(art: &crate::GameArt) -> Result<Vec<u8>, String> {
+    let table = table(art)?;
+    let mut rows = vec![0; ENTRIES * 4];
+    rows[..4].fill(255);
+    rows[4..4 + table.len()].copy_from_slice(&table);
+    Ok(rows)
+}
+fn write_rows(art: &crate::GameArt, atlas: &mut [u8]) -> Result<(), String> {
+    let table = table(art)?;
     if table.len() == (FIRST_FRAME - 1) * 4 {
         return Ok(());
     }
@@ -154,14 +175,48 @@ pub(crate) fn sheet(atlas: &[u8], material: u8) -> Option<Sheet> {
     Some(Sheet {
         start,
         count,
-        topology: (columns != 0 && rows != 0)
-            .then_some(TerrainTopology::PeriodicXMajorReversedY { columns, rows }),
+        topology: if columns & 0x8000 != 0 {
+            Some(TerrainTopology::Dds {
+                size: [(columns & 31) * 256, (rows & 31) * 256],
+                period: [(columns >> 5) & 511, (rows >> 5) & 511],
+                level: 0,
+            })
+        } else {
+            (columns != 0 && rows != 0)
+                .then_some(TerrainTopology::PeriodicXMajorReversedY { columns, rows })
+        },
     })
 }
 
 impl Sheet {
+    #[inline(never)]
+    pub(crate) fn sample(
+        self,
+        atlas: &[u8],
+        tile: [i32; 2],
+        local: [f64; 2],
+        gradient: [[f64; 2]; 2],
+    ) -> (AtlasAddress, [f64; 2], [[f64; 2]; 2]) {
+        let inside = [local[0] + local[1] - 0.5, local[1] - local[0] + 0.5];
+        if let Some((index, local, scale)) = self.topology.and_then(|t| {
+            t.planar([
+                f64::from(tile[0]) + inside[0],
+                f64::from(tile[1]) + inside[1],
+            ])
+        }) {
+            return (
+                self.address(atlas, index),
+                local,
+                gradient.map(|g| [(g[0] + g[1]) * scale[0], (g[1] - g[0]) * scale[1]]),
+            );
+        }
+        (self.frame(atlas, tile), local, gradient)
+    }
     pub(crate) fn frame(self, atlas: &[u8], tile: [i32; 2]) -> AtlasAddress {
-        let at = self.start + 2 * frame_index(self.topology, tile, self.count);
+        self.address(atlas, frame_index(self.topology, tile, self.count))
+    }
+    fn address(self, atlas: &[u8], index: usize) -> AtlasAddress {
+        let at = self.start + 2 * index;
         let (a, b) = (entry(atlas, at), entry(atlas, at + 1));
         AtlasAddress {
             page: b[3] as u32,

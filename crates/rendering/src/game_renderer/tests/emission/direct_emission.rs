@@ -99,6 +99,7 @@ fn direct_scene_is_deterministic_with_expected_order_and_ties_in_72_bounded_case
         let mut art = GameArt {
             resident: Vec::new(),
             building_clocks: Vec::new(),
+            environment: Vec::new(),
             actors: Vec::new(),
             actor_rows: Vec::new(),
             buildings: std::array::from_fn(|_| Vec::new()),

@@ -152,3 +152,19 @@ pub(super) fn owner_sample(atlas: &[u8], sprite: Sprite, x: f64, y: f64) -> [u8;
     let colour = std::array::from_fn(|i| (sprite.terrain_blend[1][i] * 255.0).round() as u8);
     crate::player::player_texel(base, mask, colour)
 }
+
+// Share the channel kernel across sprite multiplication and terrain tinting.
+// Keep separate f32 multiply/add operations; do not fuse them or change rounding.
+#[inline(never)]
+pub(super) fn transform_sample(
+    mut source: [u8; 4],
+    multiply: [f32; 4],
+    offset: [f32; 4],
+) -> [u8; 4] {
+    for channel in 0..4 {
+        // Saturating casts clamp out-of-range values and map NaN to zero.
+        source[channel] =
+            (f32::from(source[channel]) * multiply[channel] + offset[channel]).round() as u8;
+    }
+    source
+}

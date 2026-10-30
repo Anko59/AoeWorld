@@ -70,3 +70,38 @@ fn terrain_sample(uv: vec2<f32>, page: u32, rect: vec4<f32>, dx: vec2<f32>, dy: 
     return vec4<f32>(floor(sum.rgb / sum.a + 0.5) / 255.0, center.a);
 }
 
+
+fn tiled_layer(header: vec4<f32>, tile: vec2<i32>, local: vec2<f32>, gx: vec2<f32>, gy: vec2<f32>) -> Layer {
+    let columns = u32(header.z);
+    let rows = u32(header.w);
+    var at_local=local;var at_gx=gx;var at_gy=gy;
+    let hash = bitcast<u32>(tile.x) * 7u + bitcast<u32>(tile.y) * 13u;
+    var index = select(hash, ~hash + 1u, hash > 2147483648u) % u32(max(header.y, 1.0));
+    if (columns & 32768u) != 0u {
+        let grid=vec2<u32>(columns & 31u,rows & 31u);
+        let period=vec2<u32>((columns >> 5u) & 511u,(rows >> 5u) & 511u);
+        let scale=vec2<f32>(grid)/vec2<f32>(period);
+        let inside=vec2<f32>(local.x+local.y-0.5,local.y-local.x+0.5);
+        let p=(vec2<f32>(vec2<u32>(wrap(tile.x,period.x),wrap(tile.y,period.y)))+inside)*scale;
+        let cell=vec2<u32>(floor(p)) % grid;
+        index=cell.y*grid.x+cell.x;at_local=fract(p);
+        at_gx=vec2<f32>(gx.x+gx.y,gx.y-gx.x)*scale;
+        at_gy=vec2<f32>(gy.x+gy.y,gy.y-gy.x)*scale;
+    } else if columns > 0u && rows > 0u {
+        index = wrap(tile.x, columns) * rows + (rows - wrap(tile.y, rows)) % rows;
+    }
+    let entry = u32(header.x) + 2u * index;
+    let a = directory(entry);
+    let b = directory(entry + 1u);
+    let high = u32(b.z);
+    let size = vec2<f32>(textureDimensions(sprite_atlas));
+    var layer: Layer;
+    layer.rect = vec4<f32>(a.x + a.y * 256.0, a.z + a.w * 256.0, b.x + f32(high & 15u) * 256.0, b.y + f32(high >> 4u) * 256.0) / size.xyxy;
+    layer.page = u32(b.w);
+    let span = max(layer.rect.zw - 1.0 / size, vec2<f32>(0.0));
+    layer.uv = layer.rect.xy + 0.5 / size + at_local * span;
+    layer.dx = at_gx * span;
+    layer.dy = at_gy * span;
+    return layer;
+}
+

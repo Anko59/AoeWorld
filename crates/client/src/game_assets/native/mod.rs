@@ -39,6 +39,7 @@ pub(crate) struct NativeFrames {
     clock: u64,
     completed: Rc<RefCell<Vec<(u16, Result<Vec<u8>, JsValue>)>>>,
     failed: bool,
+    directory: Vec<u8>,
 }
 
 fn valid_name(name: &str) -> bool {
@@ -110,6 +111,7 @@ impl NativeFrames {
             clock: 0,
             completed: Rc::default(),
             failed: false,
+            directory: Vec::new(),
         })
     }
     pub(crate) fn layer_count(&self) -> u16 {
@@ -134,6 +136,7 @@ impl NativeFrames {
                 .map(Vec::capacity)
                 .sum::<usize>();
         let metadata = size_of::<Self>()
+            + self.directory.capacity()
             + self.cache.metadata_bytes()
             + self.cells.capacity() * size_of::<Cell>()
             + self.chunks.capacity() * size_of::<FrameChunk>()

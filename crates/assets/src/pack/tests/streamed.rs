@@ -10,6 +10,7 @@ fn mixed_pack(root: &Path) -> PathBuf {
             frames: 3,
         }],
         Vec::new(),
+        Vec::new(),
         |_, frame| frame != 0,
         |_, frame| {
             let mut planes = atlas::Planes::blank(2, 1, -8, 30 + frame as i32);
@@ -96,6 +97,7 @@ fn native_building_composite_reads_chunk_pixels_instead_of_the_empty_png_page() 
             hash: "a".repeat(64),
             frames: 1,
         }],
+        Vec::new(),
         Vec::new(),
         |_, _| true,
         |_, _| {

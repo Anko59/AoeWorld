@@ -185,7 +185,15 @@ pub(crate) fn write_pack(
     buildings: Vec<crate::dat::BuildingComposition>,
     render: impl FnMut(usize, usize) -> Result<Planes, Error>,
 ) -> Result<PathBuf, Error> {
-    write_pack_streamed(output_root, hash, sprites, buildings, |_, _| false, render)
+    write_pack_streamed(
+        output_root,
+        hash,
+        sprites,
+        buildings,
+        Vec::new(),
+        |_, _| false,
+        render,
+    )
 }
 
 /// Static cells use PNG pages; native timelines use independently decoded chunks.
@@ -194,6 +202,7 @@ pub(crate) fn write_pack_streamed(
     hash: String,
     sprites: &[SpriteRef],
     buildings: Vec<crate::dat::BuildingComposition>,
+    terrains: Vec<super::TerrainSheet>,
     stream: impl Fn(usize, usize) -> bool,
     mut render: impl FnMut(usize, usize) -> Result<Planes, Error>,
 ) -> Result<PathBuf, Error> {
@@ -278,6 +287,7 @@ pub(crate) fn write_pack_streamed(
             chunks: chunks.finish()?,
             frames,
             buildings,
+            terrains,
         };
         fs::write(
             temporary.join("manifest.json"),

@@ -10,6 +10,7 @@ fn resource_and_unit_identity_collision_cannot_change_their_fog_shading() {
     let mut art = GameArt {
         resident: Vec::new(),
         building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Default::default(),
         actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),

@@ -283,3 +283,74 @@ fn bridge_and_rubble_recipes_keep_flat_occlusion_and_empty_corpses_disappear() {
         "an explicit empty DAT corpse does not become a missing-art marker"
     );
 }
+
+#[wasm_bindgen_test]
+fn all_environment_parts_use_dat_variants_timing_offsets_and_visible_residency() {
+    let mut art = art();
+    let base = art.village[1][0];
+    let make = |stream| GameFrame { stream, ..base };
+    art.environment.push(crate::BuildingArt {
+        unit_id: 350,
+        footprint: [1.0; 2],
+        foundation_material: None,
+        construction: Vec::new(),
+        damage: Vec::new(),
+        states: vec![(0, Vec::new())],
+        parts: vec![
+            crate::BuildingPart {
+                frame: make(1),
+                animation: vec![make(1), make(2), make(3)],
+                angles: 1,
+                frame_rate: 0.0,
+                replay_delay: 0.0,
+                offset: [-7.0, 11.0],
+                depth: 0.0,
+            },
+            crate::BuildingPart {
+                frame: make(4),
+                animation: vec![make(4), make(5)],
+                angles: 1,
+                frame_rate: 0.03125,
+                replay_delay: 0.0,
+                offset: [0.0; 2],
+                depth: 0.0,
+            },
+        ],
+    });
+    let r = SceneResource {
+        highlight: 0,
+        id: 9,
+        position: [0.0; 2],
+        kind: 1,
+        visual_variant: 2,
+        visual_family: 2,
+        elevation_meters: 0.0,
+    };
+    assert_eq!(
+        crate::scene_resource_native_frames(&art, &[r], camera(), 31),
+        vec![3, 4]
+    );
+    assert_eq!(
+        crate::scene_resource_native_frames(&art, &[r], camera(), 32),
+        vec![3, 5]
+    );
+    let mut frames = Vec::new();
+    environment::frames(&art, r, 32, &mut |f| frames.push(f));
+    assert_eq!(
+        frames[0].anchor,
+        [base.anchor[0] + 7.0, base.anchor[1] - 11.0]
+    );
+    let chopped = SceneResource {
+        kind: SceneResource::CHOPPED_TREE,
+        ..r
+    };
+    assert!(
+        crate::scene_resource_native_frames(&art, &[chopped], camera(), 32).is_empty(),
+        "an empty DAT state stays empty"
+    );
+    let offscreen = SceneResource {
+        position: [10000.0; 2],
+        ..r
+    };
+    assert!(crate::scene_resource_native_frames(&art, &[offscreen], camera(), 32).is_empty());
+}

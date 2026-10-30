@@ -5,6 +5,7 @@ use crate::pack::{AtlasPage, FrameRecord};
 fn interface_catalog_uses_exact_frames_and_rejects_incomplete_sheets() {
     let hash = "a".repeat(64);
     let mut manifest = Manifest {
+        terrains: Vec::new(),
         chunks: Vec::new(),
         version: 1,
         converter: "synthetic".into(),

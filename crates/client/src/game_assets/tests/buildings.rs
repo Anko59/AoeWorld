@@ -13,51 +13,6 @@ fn compile(value: &mut serde_json::Value) {
 }
 
 #[wasm_bindgen_test]
-async fn castle_fallbacks_and_rubble_keep_native_geometry_only_bridges_are_halved() {
-    let extras = [
-        ("de/b_west_castle_age3_x1.sld", 1),
-        ("de/b_west_castle_age3_rubble_x1.sld", 1),
-        ("graphics.drs:[32, 112, 108, 115]:3620", 1),
-        ("de/b_west_lumber_camp_age2_x1.sld", 1),
-        ("de/b_west_mining_camp_age2_x1.sld", 1),
-        ("de/b_west_dock_age3_x1.sld", 1),
-        ("graphics.drs:[32, 112, 108, 115]:281", 1),
-        ("graphics.drs:[32, 112, 108, 115]:3688", 1),
-        ("graphics.drs:[32, 112, 108, 115]:3690", 1),
-        ("graphics.drs:[32, 112, 108, 115]:3692", 1),
-        ("graphics.drs:[32, 112, 108, 115]:3694", 1),
-        ("graphics.drs:[32, 112, 108, 115]:3696", 1),
-        ("graphics.drs:[32, 112, 108, 115]:3698", 1),
-    ];
-    let mut value = pack_fixture(
-        REQUIRED_RENDER_SOURCES
-            .iter()
-            .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
-            .chain(extras.map(|(source, count)| (source.to_owned(), count, false))),
-    );
-    for record in value["frames"].as_array_mut().unwrap() {
-        // A signed, noncentral hotspot detects anchor scaling as well as size.
-        record["anchor_x"] = (-3).into();
-        record["anchor_y"] = 7.into();
-    }
-    let fetch = FetchFixture::install(&value);
-    let (art, _, _) = load_collected().await.unwrap();
-    drop(fetch);
-    for slot in [45, 46, 49, 53, 55, 56, 59, 64] {
-        let frame = art.buildings[slot]
-            .first()
-            .expect("Castle fallback/rubble is loaded");
-        assert_eq!(frame.size, [1.0, 1.0], "slot {slot}");
-        assert_eq!(frame.anchor, [-3.0, 7.0], "slot {slot}");
-    }
-    for slot in 65..=70 {
-        let frame = art.buildings[slot].first().expect("bridge is loaded");
-        assert_eq!(frame.size, [0.5, 0.5], "slot {slot}");
-        assert_eq!(frame.anchor, [-1.5, 3.5], "slot {slot}");
-    }
-}
-
-#[wasm_bindgen_test]
 async fn non_gameplay_buildings_do_not_allocate_the_gameplay_atlas() {
     let mut value = pack_fixture(
         REQUIRED_RENDER_SOURCES
@@ -321,7 +276,7 @@ async fn absent_feudal_ambient_parent_keeps_available_dat_body_and_deltas() {
 }
 
 #[wasm_bindgen_test]
-async fn native_dock_without_construction_keeps_the_optional_foundation() {
+async fn native_dock_without_dat_construction_does_not_guess_a_foundation() {
     let source = "graphics.drs:[32, 112, 108, 115]:90000".to_owned();
     let mut value = pack_fixture(
         REQUIRED_RENDER_SOURCES
@@ -339,12 +294,13 @@ async fn native_dock_without_construction_keeps_the_optional_foundation() {
             "offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"damage":[],"states":[],"construction":[]}]);
     compile(&mut value);
     let fetch = FetchFixture::install(&value);
-    let (art, _, _) = load_collected()
-        .await
-        .expect("missing DAT construction retains optional art");
+    let (art, _, _) = load_collected().await.expect("the DAT body is sufficient");
     drop(fetch);
     assert!(art.buildings[23].is_empty());
-    assert_eq!(art.buildings[24].len(), 3);
+    assert!(
+        art.buildings[24].is_empty(),
+        "absent DAT construction stays absent"
+    );
 }
 
 #[wasm_bindgen_test]
@@ -441,3 +397,6 @@ async fn building_overlay_replaces_recipes_and_offsets_every_native_state_record
     assert_eq!(art[0].parts[0].replay_delay, 0.125);
     assert_eq!(art[0].states[0].1[0].animation.len(), 512);
 }
+
+#[path = "buildings/current.rs"]
+mod current;

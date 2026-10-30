@@ -31,6 +31,14 @@ pub struct Inventory {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TerrainSheet {
+    pub id: u16,
+    pub source: String,
+    pub period: [u16; 2],
+    pub size: [u16; 2],
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Manifest {
     pub version: u16,
     pub converter: String,
@@ -40,6 +48,7 @@ pub struct Manifest {
     pub frames: Vec<FrameRecord>,
     pub buildings: Vec<crate::dat::BuildingComposition>,
     pub building_data: String,
+    pub terrains: Vec<TerrainSheet>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -156,7 +165,7 @@ pub fn inspect(root: &Path) -> Result<Inventory, Error> {
 
 fn collect(inputs: &[Input]) -> Result<(Palette, Vec<SpriteSource>, String), Error> {
     let mut hasher = blake3::Hasher::new();
-    hasher.update(b"DAT building states, replay timing, indexed recipes and foundation topology\0");
+    hasher.update(b"DAT composition and native terrain metadata\0");
     let mut palette_data = None;
     let mut sprites = Vec::new();
     let mut ids = BTreeSet::new();

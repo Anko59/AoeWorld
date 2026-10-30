@@ -225,6 +225,9 @@ mod tests;
 
 /// Replace the ground inside completed farms with the DE ploughed texture.
 fn farm(face: &mut ProjectedSurfaceTriangle, farms: &[[f64; 2]], art: &GameArt) {
+    if matches!(art.foundation.1, Some(crate::TerrainTopology::Dds { .. })) {
+        return;
+    }
     if face.skirt || farms.is_empty() {
         return;
     }

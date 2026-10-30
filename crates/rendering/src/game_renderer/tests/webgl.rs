@@ -48,6 +48,7 @@ fn canvas_zero_backing_size_does_not_advance_presentation() {
     let art = GameArt {
         resident: Vec::new(),
         building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
         actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),

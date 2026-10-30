@@ -65,6 +65,8 @@ pub struct GameArt {
     pub fishing: [Vec<GameFrame>; 12],
     pub village: [Vec<GameFrame>; 9],
     pub compositions: Vec<BuildingArt>,
+    /// DAT resource and scenery recipes use the same part and lifecycle format.
+    pub environment: Vec<BuildingArt>,
     /// Additional DAT foundation sheet, resolved from its terrain directory.
     pub foundation: (Vec<GameFrame>, Option<TerrainTopology>),
     pub walking: Vec<GameFrame>,

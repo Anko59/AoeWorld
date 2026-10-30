@@ -83,132 +83,13 @@ pub(super) async fn overlay(manifest: &mut Manifest) -> Result<(), JsValue> {
             .retain(|old| !recipes.iter().any(|new| new.unit_id == old.unit_id));
         manifest.buildings.extend(recipes);
     }
+    if !extra.terrains.is_empty() {
+        manifest.terrains = extra.terrains;
+    }
     manifest.pages.extend(extra.pages);
     manifest.chunks.extend(extra.chunks);
     manifest.frames.extend(extra.frames);
     Ok(())
-}
-
-#[inline(never)]
-pub(super) fn select(
-    manifest: &Manifest,
-    selected: &mut Vec<usize>,
-    domains: &mut Vec<AtlasDomain>,
-) -> Result<[Option<std::ops::Range<usize>>; 74], JsValue> {
-    let mut ranges: [Option<std::ops::Range<usize>>; 74] = std::array::from_fn(|_| None);
-    let plan = aoe_assets::catalog::buildings::supplemental(
-        |source| source_present(manifest, source),
-        |id| native(manifest, id),
-        |side| native_stages(manifest, side),
-        |id| {
-            manifest
-                .buildings
-                .iter()
-                .any(|b| b.unit_id == id && b.construction.iter().any(|p| p.record.is_some()))
-        },
-    );
-    for item in plan {
-        let state = if (13..=21).contains(&item.slot)
-            || item.slot == 25
-            || (32..=37).contains(&item.slot)
-            || (49..=52).contains(&item.slot)
-        {
-            Some(1)
-        } else if item.slot == 42 {
-            Some(5)
-        } else {
-            None
-        };
-        if aoe_rendering::SceneUnitKind::building(item.slot as u8)
-            .building_id()
-            .is_some_and(|id| {
-                manifest.buildings.iter().any(|b| {
-                    b.unit_id == id
-                        && if let Some(role) = state {
-                            b.states
-                                .iter()
-                                .any(|(r, p)| *r == role && p.iter().any(|p| p.record.is_some()))
-                        } else {
-                            (65..=70).contains(&item.slot)
-                                && b.parts.iter().any(|p| p.record.is_some())
-                        }
-                })
-            })
-        {
-            continue;
-        }
-        let Some(frames) = source_frames(manifest, &item.source, item.frames) else {
-            if item.required || source_present(manifest, &item.source) {
-                return Err(error(format!("Corrupt building art ({})", item.source)));
-            }
-            continue;
-        };
-        if !item.resident {
-            continue;
-        }
-        let start = selected.len();
-        for index in frames.into_iter().step_by(item.step).take(item.take) {
-            selected.push(index);
-            domains.push(aoe_assets::catalog::buildings::domain(item.slot));
-        }
-        if let Some(range) = &mut ranges[item.slot] {
-            range.end = selected.len();
-        } else {
-            ranges[item.slot] = Some(start..selected.len());
-        }
-    }
-    Ok(ranges)
-}
-
-/// A farm needs a local patch of the ploughed sheet, not its entire 1024² area.
-/// Validate the original rectangle before selecting the 256² runtime window.
-#[inline(never)]
-pub(super) fn crop_farm(
-    manifest: &mut Manifest,
-    selected: &[usize],
-    ranges: &[Option<std::ops::Range<usize>>; 74],
-) -> Result<(), JsValue> {
-    if let Some(range) = &ranges[5] {
-        for semantic in range.clone() {
-            let frame = &mut manifest.frames[selected[semantic]];
-            let page = manifest
-                .pages
-                .get(usize::from(frame.page))
-                .ok_or("Invalid farm page")?;
-            if u32::from(frame.x) + u32::from(frame.width) > u32::from(page.width)
-                || u32::from(frame.y) + u32::from(frame.height) > u32::from(page.height)
-            {
-                return Err(JsValue::from_str("Invalid farm source bounds"));
-            }
-            frame.width = frame.width.min(256);
-            frame.height = frame.height.min(256);
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn native(manifest: &Manifest, id: i32) -> bool {
-    manifest
-        .buildings
-        .iter()
-        .any(|b| b.unit_id == id && b.parts.iter().any(|p| p.record.is_some()))
-}
-
-fn native_stages(manifest: &Manifest, side: f32) -> bool {
-    let mut found = false;
-    for building in &manifest.buildings {
-        if building.footprint == [side; 2] {
-            found = true;
-            if !building
-                .construction
-                .iter()
-                .any(|part| part.record.is_some())
-            {
-                return false;
-            }
-        }
-    }
-    found
 }
 
 /// The licensed DE install supplies the waypoint flag absent from the trial.
