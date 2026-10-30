@@ -123,6 +123,11 @@ fn vassal_queue_and_garrison_roundtrip_and_other_buildings_reject_training() {
         kind: UnitKind::Vassal,
         hp: 75,
         max_hp: 75,
+        vassal: Some(crate::VassalReport {
+            managed: 20,
+            residents: 31,
+            wait: crate::VassalWait::Population,
+        }),
     });
     let snapshot = message(occupied);
     assert_eq!(

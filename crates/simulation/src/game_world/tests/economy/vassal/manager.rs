@@ -1,7 +1,7 @@
 use super::*;
 use crate::VASSAL_RULES;
 
-fn active() -> (GameWorld, EntityId, EntityId) {
+pub(super) fn active() -> (GameWorld, EntityId, EntityId) {
     let (mut w, castle) = setup();
     let id = trained(&mut w, castle);
     w.issue_garrison(PlayerId(0), id, castle).unwrap();
@@ -20,7 +20,7 @@ fn active() -> (GameWorld, EntityId, EntityId) {
     (w, castle, id)
 }
 
-fn pass(w: &mut GameWorld) {
+pub(super) fn pass(w: &mut GameWorld) {
     advance(w, VASSAL_RULES.period_ticks as u32);
 }
 

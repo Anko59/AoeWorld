@@ -12,6 +12,8 @@ pub struct GarrisonedUnit {
     pub unit: GameUnit,
     pub(crate) next_hit_tick: u64,
     pub(crate) heal_at: u64,
+    /// Telemetry of an active Vassal's economy; outside the canonical hash.
+    pub vassal: Option<crate::VassalStatus>,
 }
 
 impl BuildingKind {
@@ -215,6 +217,7 @@ impl GameWorld {
                     unit,
                     next_hit_tick,
                     heal_at,
+                    vassal: None,
                 },
             );
             self.set_vassal_active(id, unit.kind == UnitKind::Vassal);

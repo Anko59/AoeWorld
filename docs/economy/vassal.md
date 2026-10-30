@@ -29,6 +29,49 @@ placement checks. Site searches resume across passes. The world maxima per pass
 are therefore 8,192 unit visits, 16,384 building visits, 16 orders, 64 resource
 searches and 256 site checks. Ordinary pathfinding retains its shared budgets.
 
+### Exact rules (what is adopted, when TCs train, why it stops)
+
+**Territory.** A Vassal's territory is the 100-tile circle around its Castle,
+cut by its sibling Vassals: every point belongs to the nearest *active* Castle
+of the same player (integer squared distance, ties to the lower Vassal ID), so
+no villager, resource node or building ever has two Vassals. A Castle is active
+while its Vassal is garrisoned in it; an inactive Castle claims nothing and its
+neighbour takes its area at the next pass. A building belongs to the Vassal
+whose territory holds its centre, and must also lie wholly in the circle.
+
+**Adoption.** Each pass a Vassal scans its territory and adopts, in entity
+order, up to 100 of the owner's villagers: busy ones (gathering, farming,
+building) are taken over in place and keep working; idle ones are given work
+by the job pass. Villagers under a manual order (plain move, garrison order)
+are left alone until idle again, and an accepted manual order releases a worker
+at once. Soldiers, foreign units and units outside the territory are never
+adopted. The old rule adopted only idle villagers, so a Castle built among
+busy workers showed a small "managed" count whatever the crowd; that was the
+reported "20 managed" confusion.
+
+**Training.** Each complete Town Center in the territory with an empty queue
+trains one villager per pass (two orders per pass per Vassal) when the player
+has 50 food and the population cap allows, until residents (every living
+villager in the territory, sheltered ones included) plus queued villagers reach
+100. It stops, and the HUD says why, when: the census is incomplete (more than
+1,024 units in the circle), residents+queued is 100, no Town Center lies in the
+territory, population (cap) is reached, or food is short. Population is the
+usual reason in a large crowd: only an idle worker used to build the needed
+House, so a fully busy Vassal never built one. Now, when the cap is within two
+slots, the first unloaded managed worker builds a House.
+
+**Stalls.** Every pass the Vassal checks its managed workers. One whose task is
+Moving but whose position has not changed for 8 seconds is stopped and
+re-tasked, avoiding the node it was heading to (after a second consecutive
+stall, avoiding that resource kind). The client treats a villager reported as
+Moving that is neither moving nor planning as idle for the idle-villager count.
+
+The HUD line for a selected Castle reads "n/100 villagers managed · r in
+territory · reason", with the counts coming from the server (the old text
+counted only units inside the camera subscription).
+
+Budgets and limits:
+
 The 100-villager limit counts living residents, including manual workers and
 sheltered villagers, plus queued villagers in every domain Town Center. Training
 uses complete TCs with their spawn perimeter and rally inside the domain; it
@@ -44,7 +87,7 @@ when two or fewer housing slots remain. Every cost, exploration check, placement
 rule and build/train time is the ordinary simulation rule.
 
 An accepted manual order releases the worker immediately; busy manual workers
-are left alone until idle again. Military, foreign workers and workers outside
+are not retasked until idle again. Military, foreign workers and workers outside
 the circle are never adopted. Ejection/death/destruction deactivates management
 and releases its tags; current ordinary jobs can finish. Autonomous resource
 replacement and return targets stay within an active domain.
@@ -55,9 +98,10 @@ not demonstrate finished RTS performance or qualify the owner's hardware.
 
 ## Presentation and licensed graphics
 
-Selecting a completed owned Castle shows its 100-tile domain circle; the solid
-circle and status indicate an active garrisoned Vassal, and a dashed circle
-indicates an inactive domain. Selected managed villagers show “Managed by
+Selecting a completed owned Castle shows the yellow territory of every owned
+Castle; a solid outline is an active garrisoned Vassal, a dashed circle an
+inactive domain. Where two active territories meet, each outline stops 0.4 tiles
+short of the equal-distance border, drawn as a double line. Selected managed villagers show “Managed by
 Vassal”. Training is disabled while that Castle has a queued or living Vassal.
 
 The original DAT's King (unit 434) supplies the pose IDs and timing. Its SLPs

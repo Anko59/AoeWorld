@@ -269,6 +269,22 @@ pub(super) fn wire_building_state(
                 kind: wire_kind(g.unit.kind),
                 hp: g.unit.hp,
                 max_hp: g.unit.max_hp,
+                vassal: g.vassal.map(|v| aoe_protocol::VassalReport {
+                    managed: v.managed,
+                    residents: v.residents,
+                    wait: match v.wait {
+                        aoe_simulation::VassalWait::Growing => aoe_protocol::VassalWait::Growing,
+                        aoe_simulation::VassalWait::Census => aoe_protocol::VassalWait::Census,
+                        aoe_simulation::VassalWait::Full => aoe_protocol::VassalWait::Full,
+                        aoe_simulation::VassalWait::NoTownCenter => {
+                            aoe_protocol::VassalWait::NoTownCenter
+                        }
+                        aoe_simulation::VassalWait::Population => {
+                            aoe_protocol::VassalWait::Population
+                        }
+                        aoe_simulation::VassalWait::Food => aoe_protocol::VassalWait::Food,
+                    },
+                }),
             })
             .collect(),
         last_hit: state.last_hit.map(wire_hit),
