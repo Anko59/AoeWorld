@@ -90,8 +90,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Automatic wood re-picks now prefer trees with fewer than two cutters.
-        "58e6585e6b0b249a818875eb88fbac59fd3b0d52b26eaaea8746b3a92e8bfc0f"
+        // Automatic wood re-picks now prefer trees with fewer than two cutters,
+        // and deferred occupied waypoints reset unpaid travel to the physical body.
+        "2655e719965ddb46cbe6efa1fb3cabb3f98f7f45dd3a3d26eb60900f542fba88"
     );
 }
 

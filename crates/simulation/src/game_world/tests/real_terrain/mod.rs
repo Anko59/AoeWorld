@@ -3,6 +3,7 @@ use super::far_orders::center;
 use super::group_baseline::forest;
 use super::*;
 
+mod budget;
 mod metrics;
 mod terrain;
 use metrics::{measure, reference_ticks};

@@ -130,3 +130,8 @@ integer intervals; their union must cover the whole step in water. This closes
 the inside-corner chord hole that endpoint-only support admits. The integer
 square-root inset is conservative. The existing tile connectivity remains the
 global search graph; fractional physical steps use the continuous support test.
+
+Deferred occupied waypoints must not bank travel. When a physical proposal is
+skipped and route continuation waits for search work, reset the unpaid segment
+to the actual body. Retain the search if its source tile is unchanged; otherwise
+discard it and replan. The nearby food-worker bound remains 179 ticks.

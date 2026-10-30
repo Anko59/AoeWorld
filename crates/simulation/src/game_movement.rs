@@ -207,6 +207,20 @@ impl GameWorld {
                     .unwrap_or_else(|| self.next_map_segment(index, order));
                 match next {
                     SegmentAdvance::Planning => {
+                        if skipped {
+                            // An occupied waypoint was skipped without moving
+                            // the body. Do not spend that unpaid segment when
+                            // the deferred route becomes available next tick.
+                            // A retained search remains valid in the same tile.
+                            if order.waypoint.tile_floor() != current_position.tile_floor() {
+                                self.clear_planner(index);
+                                self.units[index].fast_route_tried = false;
+                            }
+                            order.origin = current_position;
+                            order.waypoint = current_position;
+                            order.segment_length = 0;
+                            order.travelled = 0;
+                        }
                         // A deferred planner has no available path distance this
                         // tick. Keep only the fractional remainder, never a
                         // whole movement credit that could cause a later dash.
