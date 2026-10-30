@@ -1,14 +1,88 @@
 //! Owner-visible domain presentation; economic decisions stay on the server.
 use super::{Client, building_center, owner};
 use crate::playground::game::map;
+use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{BuildingKind, ConstructionState, UnitKind};
 use wasm_bindgen::prelude::wasm_bindgen;
+
+mod territory;
 
 #[wasm_bindgen(
     inline_js = "export function vassal_update(v, label) { window.aoeVassal?.update(v, label); }"
 )]
 extern "C" {
     fn vassal_update(v: &[f64], label: &str);
+}
+
+/// Polygons (screen space) for every owned Castle's territory, laid out as
+/// `[count, (active, selected, points, x0, y0, x1, y1, ...) * count]`.
+fn domains(client: &Client, player: PlayerId, selected: EntityId) -> Vec<f64> {
+    let castles: Vec<_> = client
+        .village
+        .buildings
+        .iter()
+        .filter(|b| {
+            b.player == player
+                && b.kind == BuildingKind::Castle
+                && b.construction == ConstructionState::Complete
+        })
+        .map(|b| {
+            (
+                b.id,
+                territory::Castle {
+                    id: b.id,
+                    center: building_center(b),
+                    active: b
+                        .garrison
+                        .iter()
+                        .any(|g| g.kind == UnitKind::Vassal && g.hp > 0),
+                },
+            )
+        })
+        .collect();
+    let all: Vec<_> = castles.iter().map(|c| c.1).collect();
+    let radius = f64::from(aoe_simulation::VASSAL_RULES.radius_tiles);
+    let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
+    let scene = map::scene::prepare(client);
+    let mut values = vec![castles.len() as f64];
+    for (id, castle) in &castles {
+        let ring = territory::outline(castle, &all, radius, 64);
+        values.extend([
+            f64::from(u8::from(castle.active)),
+            f64::from(u8::from(*id == selected)),
+            ring.len() as f64,
+        ]);
+        for world in ring {
+            let height = scene
+                .height(world)
+                .unwrap_or_else(|| map::elevation_at_world(client, world));
+            let p = client.camera.world_to_screen_at_height(world, height);
+            values.extend([p.x * scale, p.y * scale]);
+        }
+    }
+    values
+}
+
+/// One line saying how many villagers the Vassal manages and, when it is not
+/// growing, why. Counts come from the server, not from the units in view.
+fn describe(report: Option<aoe_protocol::VassalReport>) -> String {
+    use aoe_protocol::VassalWait::*;
+    let Some(r) = report else {
+        return "Vassal domain active · evaluating".into();
+    };
+    let limit = aoe_simulation::VASSAL_RULES.max_villagers;
+    let why = match r.wait {
+        Growing => "training villagers",
+        Full => "waiting: 100-villager limit reached",
+        Census => "waiting: too many units nearby to count",
+        NoTownCenter => "waiting: no Town Center in its territory",
+        Population => "waiting: population cap (building Houses)",
+        Food => "waiting: not enough food",
+    };
+    format!(
+        "Vassal domain active · {}/{limit} villagers managed · {} in territory · {why}",
+        r.managed, r.residents
+    )
 }
 
 pub(super) fn present(client: &Client) {
@@ -25,30 +99,9 @@ pub(super) fn present(client: &Client) {
             .garrison
             .iter()
             .find(|g| g.kind == UnitKind::Vassal && g.hp > 0);
-        let radius = f64::from(aoe_simulation::VASSAL_RULES.radius_tiles);
-        let center = building_center(b);
-        points.extend([f64::from(u8::from(vassal.is_some())), radius]);
-        let scale = f64::from(client.canvas.client_width()) / f64::from(client.canvas.width());
-        let scene = map::scene::prepare(client);
-        for index in 0..64 {
-            let angle = std::f64::consts::TAU * f64::from(index) / 64.0;
-            let world = [
-                center[0] + radius * angle.cos(),
-                center[1] + radius * angle.sin(),
-            ];
-            let height = scene
-                .height(world)
-                .unwrap_or_else(|| map::elevation_at_world(client, world));
-            let p = client.camera.world_to_screen_at_height(world, height);
-            points.extend([p.x * scale, p.y * scale]);
-        }
+        points = domains(client, player, b.id);
         label = if let Some(v) = vassal {
-            let managed = client
-                .units
-                .values()
-                .filter(|u| u.managed_by == Some(v.id))
-                .count();
-            format!("Vassal domain active · 100-tile radius · {managed} managed villagers")
+            describe(v.vassal)
         } else {
             "Garrison a Vassal here to activate its 100-tile domain".into()
         };

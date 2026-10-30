@@ -19,7 +19,10 @@ impl IdleFinder {
     pub fn update(&mut self, unit: &GameplayUnitState, eligible: bool) {
         if eligible
             && unit.hp > 0
-            && matches!(unit.task, UnitTask::Idle | UnitTask::Carrying)
+            && matches!(
+                unit.task,
+                UnitTask::Idle | UnitTask::Carrying | UnitTask::Moving
+            )
             && !unit.moving
             && !unit.planning
             && !unit.auto_scout
