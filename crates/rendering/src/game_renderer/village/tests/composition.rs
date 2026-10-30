@@ -106,6 +106,7 @@ fn building_parts_use_pack_order_signed_pixels_and_annex_depth_without_mirroring
             frame,
             animation: Vec::new(),
             angles: 1,
+            replay_delay: 0.0,
             frame_rate: 0.0,
             offset: [-31.0, 17.0],
             depth: -1.0,
@@ -114,6 +115,7 @@ fn building_parts_use_pack_order_signed_pixels_and_annex_depth_without_mirroring
             frame,
             animation: Vec::new(),
             angles: 1,
+            replay_delay: 0.0,
             frame_rate: 0.0,
             offset: [11.0, -9.0],
             depth: 0.0,
@@ -164,7 +166,7 @@ fn mill_animation_uses_dat_frame_duration_without_changing_delta_order() {
     art.compositions[0].parts[0].frame_rate = 0.2;
     let u = unit(SceneUnitKind::Mill);
     assert!(super::super::scene_unit_animates(&art, u, camera()));
-    for (animation, expected) in [(0, first), (1, first), (2, second), (4, first)] {
+    for (animation, expected) in [(0, first), (199, first), (200, second), (400, first)] {
         let frames = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), animation);
         assert_eq!(frames[0].1.atlas, expected.atlas);
         assert_eq!(
@@ -216,7 +218,7 @@ fn actor_and_building_tags_keep_their_selections_disjoint() {
         assert!(foundation.is_foundation());
     }
     assert_eq!(SceneUnitKind::Dock.building_id(), Some(45));
-    assert_eq!(SceneUnitKind::RubbleDock.building_id(), None);
+    assert_eq!(SceneUnitKind::RubbleDock.building_id(), Some(45));
 }
 
 #[wasm_bindgen_test]
@@ -408,7 +410,7 @@ fn damage_overlay_uses_selected_stage_and_animates() {
     let healthy = super::super::world_sprite_frames(&art, &[], &[], &[building], camera(), 0);
     building.visual = building.visual.with_damage_stage(1);
     let burning = super::super::world_sprite_frames(&art, &[], &[], &[building], camera(), 0);
-    let next = super::super::world_sprite_frames(&art, &[], &[], &[building], camera(), 1);
+    let next = super::super::world_sprite_frames(&art, &[], &[], &[building], camera(), 100);
     assert_eq!(burning.len(), healthy.len() + 1);
     assert_eq!(burning.last().unwrap().1.atlas, flame.animation[0].atlas);
     assert_eq!(next.last().unwrap().1.atlas, flame.animation[1].atlas);

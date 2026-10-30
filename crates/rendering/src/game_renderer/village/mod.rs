@@ -161,14 +161,50 @@ pub(super) fn building(
         sprite_building(art, unit, camera, animation, emit);
         return;
     };
-    let damage = if unit.kind.is_foundation() || unit.visual.ghost() {
+    let destroyed = unit.visual.moving() || unit.kind.rubble();
+    let elapsed = if unit.visual.moving() {
+        art.building_clocks
+            .iter()
+            .find(|(id, _)| *id == unit.id.0)
+            .map_or(0.0, |(_, millis)| *millis)
+    } else {
+        f64::INFINITY
+    };
+    let destruction = building
+        .states
+        .iter()
+        .find(|(role, _)| *role == 0)
+        .map(|(_, p)| p);
+    let destruction_ms = destruction
+        .into_iter()
+        .flatten()
+        .map(|p| {
+            p.frame_rate as f64
+                * 1000.0
+                * (p.animation.len().max(1) / usize::from(p.angles).max(1)) as f64
+        })
+        .fold(0.0, f64::max);
+    let state = if destroyed {
+        Some(if elapsed < destruction_ms { 0 } else { 1 })
+    } else if unit.kind == SceneUnitKind::OpenPalisadeGate {
+        Some(5)
+    } else {
+        None
+    };
+    let damage = if destroyed || unit.kind.is_foundation() || unit.visual.ghost() {
         None
     } else {
         usize::from(unit.visual.damage_stage())
             .checked_sub(1)
             .and_then(|i| building.damage.get(i))
     };
-    let parts = if unit.kind.is_foundation() {
+    let parts = if let Some(role) = state {
+        building
+            .states
+            .iter()
+            .find(|(r, _)| *r == role)
+            .map_or(&building.parts, |(_, p)| p)
+    } else if unit.kind.is_foundation() {
         &building.construction
     } else if let Some(replacement) = damage.filter(|d| d.apply_mode == 2) {
         &replacement.parts
@@ -176,6 +212,9 @@ pub(super) fn building(
         &building.parts
     };
     if parts.is_empty() && damage.is_none_or(|d| d.parts.is_empty()) {
+        if destroyed {
+            return;
+        }
         if unit.kind == SceneUnitKind::Farm
             && building.foundation_material == Some(17)
             && !art.foundation.0.is_empty()
@@ -203,14 +242,26 @@ pub(super) fn building(
             let angle = if unit.kind.is_foundation() || unit.kind == SceneUnitKind::PalisadeWall {
                 usize::from(unit.facing).min(angles - 1)
             } else {
-                0
+                unit.id.0 as usize % angles
             };
             let index = if unit.kind.is_foundation()
                 || (unit.kind == SceneUnitKind::PalisadeWall && !is_overlay)
             {
                 0
             } else if part.frame_rate > 0.0 {
-                (animation as f64 * 0.1 / f64::from(part.frame_rate) + 1e-5) as usize % count
+                {
+                    let clock = if destroyed { elapsed } else { animation as f64 };
+                    let step = f64::from(part.frame_rate) * 1000.0;
+                    let phase = (clock + step * 1e-5)
+                        % (step * count as f64 + f64::from(part.replay_delay) * 1000.0);
+                    let index = (phase / step + 1e-5) as usize;
+                    if destroyed {
+                        (clock / step) as usize
+                    } else {
+                        index
+                    }
+                    .min(count - 1)
+                }
             } else {
                 unit.id.0 as usize % count
             };
@@ -242,6 +293,7 @@ pub(super) fn sprite_building(
     animation: usize,
     emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
 ) {
+    let animation = animation / 100;
     let Some(art_slot) = unit.kind.building_slot() else {
         marker(unit, camera, emit);
         return;

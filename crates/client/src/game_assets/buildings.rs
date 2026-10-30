@@ -47,10 +47,11 @@ pub(super) fn select(
                 }
             }
         }
-        for (part, damage) in building
+        for (part, _) in building
             .parts
             .iter()
             .chain(&building.construction)
+            .chain(building.states.iter().flat_map(|(_, parts)| parts))
             .map(|part| (part, false))
             .chain(
                 building
@@ -62,9 +63,11 @@ pub(super) fn select(
         {
             if part.frames == 0
                 || part.angles == 0
-                || u32::from(part.frames) * u32::from(part.angles) > 256
+                || u32::from(part.frames) * u32::from(part.angles) > 16384
                 || !part.frame_rate.is_finite()
                 || part.frame_rate < 0.0
+                || !part.replay_delay.is_finite()
+                || part.replay_delay < 0.0
             {
                 return Err(error("invalid building animation"));
             }
@@ -84,21 +87,18 @@ pub(super) fn select(
             let Some(frames) = source_frames(manifest, source, count) else {
                 return Err(error(format!("corrupt building art ({source})")));
             };
-            // A standing palisade displays one damage frame per native angle.
-            // Its connectivity selects the angle; these frames do not animate.
-            let step = aoe_assets::catalog::runtime::building_frame_step(
-                if damage { -1 } else { building.unit_id },
-                part.frames,
-                part.angles,
-                part.frame_rate,
-            );
+            let step = 1;
             for index in frames.into_iter().step_by(step) {
                 if !selected.contains(&index) {
                     if selected.len() == MAX_SELECTED_FRAMES {
                         return Err(error("too many selected building frames"));
                     }
                     selected.push(index);
-                    domains.push(AtlasDomain::Objects);
+                    domains.push(if (605..=610).contains(&building.unit_id) {
+                        AtlasDomain::Shared
+                    } else {
+                        AtlasDomain::Objects
+                    });
                 }
             }
         }
@@ -113,6 +113,16 @@ fn parts(
     selected: &[usize],
     records: &[GameFrame],
 ) -> Vec<aoe_rendering::BuildingPart> {
+    let scale = if (605..=610).contains(&unit_id) {
+        0.5
+    } else {
+        1.0
+    };
+    let scaled = |mut f: GameFrame| {
+        f.size = f.size.map(|v| v * scale);
+        f.anchor = f.anchor.map(|v| v * scale);
+        f
+    };
     let mut out = Vec::new();
     for part in parts {
         let Some(record) = part.record else {
@@ -127,14 +137,9 @@ fn parts(
         // Genie uses NE/SE tile axes; screen Y points down. The client's
         // world axes differ, so project these native coordinates directly.
         let [ne, se] = part.misplacement;
-        let step = aoe_assets::catalog::runtime::building_frame_step(
-            unit_id,
-            part.frames,
-            part.angles,
-            part.frame_rate,
-        );
+        let step = 1;
         out.push(aoe_rendering::BuildingPart {
-            frame: records[slot],
+            frame: scaled(records[slot]),
             angles: part.angles,
             animation: if u32::from(part.frames) * u32::from(part.angles) > 1 {
                 (0..u32::from(part.frames) * u32::from(part.angles))
@@ -146,16 +151,17 @@ fn parts(
                                 manifest.frames[i].source == *source
                                     && manifest.frames[i].frame == number
                             })
-                            .map(|slot| records[slot])
+                            .map(|slot| scaled(records[slot]))
                     })
                     .collect()
             } else {
                 Vec::new()
             },
-            frame_rate: part.frame_rate * if unit_id == 72 { 1.0 } else { step as f32 },
+            frame_rate: part.frame_rate,
+            replay_delay: part.replay_delay,
             offset: [
-                part.offset[0] as f32 + (ne + se) * 48.0,
-                part.offset[1] as f32 + (se - ne) * 24.0,
+                (part.offset[0] as f32 + (ne + se) * 48.0) * scale,
+                (part.offset[1] as f32 + (se - ne) * 24.0) * scale,
             ],
             depth: se - ne,
         });
@@ -225,6 +231,11 @@ pub(super) fn resolve(
             foundation_material: material(b),
             parts: parts(b.unit_id, &b.parts, manifest, selected, records),
             construction: parts(b.unit_id, &b.construction, manifest, selected, records),
+            states: b
+                .states
+                .iter()
+                .map(|(role, p)| (*role, parts(b.unit_id, p, manifest, selected, records)))
+                .collect(),
             damage: b
                 .damage
                 .iter()

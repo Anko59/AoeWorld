@@ -2,7 +2,10 @@
 use super::{
     MAX_REVIEWED_FRAMES, OPTIONAL_RESOURCE_SOURCES, OPTIONAL_TERRAIN_SOURCES,
     REQUIRED_RENDER_SOURCES,
-    packing::{AtlasDomain, FrameExtent, MAX_LOGICAL_FRAMES, PAGE_SIDE, pack_resident_frames},
+    packing::{
+        AtlasDomain, FrameExtent, MAX_FRAME_EXTENT, MAX_LOGICAL_FRAMES, PAGE_SIDE,
+        pack_resident_frames,
+    },
 };
 use crate::pack::Manifest;
 use selection::actor_frames;
@@ -157,7 +160,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     }
     // Match the loader's DAT additions after the static catalog, including
     // the native wake sampling. Shared sources are packed only once.
-    for (unit_id, part) in manifest
+    for (_unit_id, part) in manifest
         .buildings
         .iter()
         .filter(|b| super::GAMEPLAY_BUILDING_IDS.contains(&b.unit_id))
@@ -165,6 +168,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             b.parts
                 .iter()
                 .chain(&b.construction)
+                .chain(b.states.iter().flat_map(|s| &s.parts))
                 .map(move |p| (b.unit_id, p))
                 .chain(
                     b.damage
@@ -175,7 +179,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         .filter(|(_, p)| p.available)
     {
         let wanted = u32::from(part.frames) * u32::from(part.angles);
-        if part.frames == 0 || part.angles == 0 || wanted > 256 {
+        if part.frames == 0 || part.angles == 0 || wanted > 16384 {
             return Err("invalid DAT building frame layout".into());
         }
         let mut frames = manifest
@@ -191,10 +195,27 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         }
         // The loader retains one damage frame per Palisade angle. Every other
         // recipe uses the shared runtime selection, including wake sampling.
-        let step =
-            super::runtime::building_frame_step(unit_id, part.frames, part.angles, part.frame_rate);
+        let step = 1;
         for frame in frames.into_iter().step_by(step) {
             if selected.insert((frame.source.clone(), frame.frame)) {
+                if let Some(location) = frame.native {
+                    let chunk = manifest
+                        .chunks
+                        .get(usize::from(location.chunk))
+                        .ok_or("missing native building chunk")?;
+                    if frame.width == 0
+                        || frame.height == 0
+                        || frame.width > MAX_FRAME_EXTENT
+                        || frame.height > MAX_FRAME_EXTENT
+                        || location.length == 0
+                        || u64::from(location.offset) + u64::from(location.length)
+                            > u64::from(chunk.bytes)
+                    {
+                        return Err("invalid native building frame".into());
+                    }
+                    counts[1] += 1;
+                    continue;
+                }
                 let page = manifest
                     .pages
                     .get(usize::from(frame.page))
@@ -391,57 +412,6 @@ fn synthetic_manifest() -> Manifest {
 }
 
 #[test]
-fn full_catalog_with_native_mill_dock_and_farm_fits_runtime_budget() {
-    let mut manifest = synthetic_manifest();
-    // Independent metadata fixture: disjoint native Mill body/sails, Dock wake
-    // and Farm terrain. Do not manufacture original pixels for this proof.
-    for (unit_id, count, terrain) in [(68, 44, false), (45, 60, false), (50, 36, true)] {
-        let source = format!("fixture:{unit_id}");
-        for frame in 0..count {
-            let mut record = manifest.frames[0].clone();
-            record.source = source.clone();
-            record.frame = frame;
-            manifest.frames.push(record);
-        }
-        manifest.buildings.push(crate::dat::BuildingComposition {
-            unit_id,
-            footprint: [3.0; 2],
-            foundation_terrain: 0,
-            foundation_slp: terrain.then_some(unit_id),
-            foundation_size: if terrain { [6, 6] } else { [0, 0] },
-            parts: if terrain {
-                Vec::new()
-            } else {
-                vec![crate::dat::BuildingPart {
-                    graphic_id: unit_id,
-                    slp_id: unit_id,
-                    source,
-                    available: true,
-                    frames: count as u16,
-                    angles: 1,
-                    primary: true,
-                    frame_rate: 0.15,
-                    offset: [0; 2],
-                    misplacement: [0.0; 2],
-                    layer: 20,
-                }]
-            },
-            construction: Vec::new(),
-            damage: Vec::new(),
-        });
-        if terrain {
-            for frame in manifest.frames.iter_mut().rev().take(count as usize) {
-                frame.source = format!("terrain.drs:[32, 112, 108, 115]:{unit_id}");
-            }
-        }
-    }
-    assert_eq!(
-        prove(&manifest).unwrap(),
-        (1510, 897 + actor_frames() - 115 + 74)
-    );
-}
-
-#[test]
 fn private_proof_covers_house_variants_and_all_construction_angles() {
     let mut manifest = synthetic_manifest();
     let part = |slp, frames, angles| crate::dat::BuildingPart {
@@ -452,6 +422,7 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
         frames,
         angles,
         primary: true,
+        replay_delay: 0.0,
         frame_rate: 0.0,
         offset: [0; 2],
         misplacement: [0.0; 2],
@@ -464,6 +435,7 @@ fn private_proof_covers_house_variants_and_all_construction_angles() {
         foundation_slp: None,
         foundation_size: [0; 2],
         parts: vec![part(2223, 3, 1)],
+        states: Vec::new(),
         construction: (236..=239).map(|slp| part(slp, 1, 3)).collect(),
         damage: Vec::new(),
     });

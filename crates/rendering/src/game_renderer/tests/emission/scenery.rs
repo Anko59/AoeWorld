@@ -18,6 +18,7 @@ fn art() -> GameArt {
         .collect();
     GameArt {
         resident: Vec::new(),
+        building_clocks: Vec::new(),
         actors: Vec::new(),
         actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),

@@ -8,14 +8,14 @@ pub(crate) async fn load(
     let team = team_colour();
     let bytes = fetch("/asset-pack/manifest.json").await?;
     let mut manifest = decode_manifest(&bytes)?;
+    manifest.buildings =
+        recipes::decode(&manifest.building_data, &manifest.frames).map_err(error)?;
     building_sprites::overlay(&mut manifest).await?;
     // The DTO owns its used strings; release raw JSON before PNG decode awaits.
     drop(bytes);
     if manifest.version != 1 {
         return Err(JsValue::from_str("Unsupported asset pack version"));
     }
-    manifest.buildings =
-        recipes::decode(&manifest.building_data, &manifest.frames).map_err(error)?;
     manifest
         .buildings
         .retain(|b| aoe_assets::catalog::GAMEPLAY_BUILDING_IDS.contains(&b.unit_id));
@@ -147,6 +147,7 @@ pub(crate) async fn load(
     atlas_budget(selected.len());
     let art = GameArt {
         resident: vec![None; native.as_ref().map_or(0, NativeFrames::len)],
+        building_clocks: Vec::new(),
         actor_rows: crate::building_ui::content::sprites()
             .iter()
             .map(|s| s.rows())

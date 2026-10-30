@@ -65,7 +65,7 @@ async fn non_gameplay_buildings_do_not_allocate_the_gameplay_atlas() {
             .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some())),
     );
     // An unused DAT building must not reserve live atlas space.
-    value["buildings"] = serde_json::json!([{"unit_id":999,"footprint":[3.0,3.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"parts":[{"graphic_id":1,"slp_id":99999,"source":"absent.slp","available":false,"frames":0,"angles":1,"primary":true,"frame_rate":0.0,"offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"damage":[],"construction":[]}]);
+    value["buildings"] = serde_json::json!([{"unit_id":999,"footprint":[3.0,3.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"parts":[{"graphic_id":1,"slp_id":99999,"source":"absent.slp","available":false,"frames":0,"angles":1,"primary":true,"replay_delay":0.0,"frame_rate":0.0,"offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"damage":[],"states":[],"construction":[]}]);
     compile(&mut value);
     let fetch = FetchFixture::install(&value);
     let (art, _, _) = load_collected()
@@ -85,11 +85,11 @@ async fn dock_keeps_dat_composition_construction_and_foundation_metadata() {
             .chain([(source.clone(), 3, false)]),
     );
     let part = serde_json::json!({"graphic_id":1,"slp_id":90000,"source":source,
-        "available":true,"frames":1,"angles":3,"primary":true,"frame_rate":0.0,
+        "available":true,"frames":1,"angles":3,"primary":true,"replay_delay":0.0,"frame_rate":0.0,
         "offset":[-9,11],"misplacement":[0.0,0.0],"layer":20});
     value["buildings"] = serde_json::json!([{"unit_id":45,"footprint":[3.0,3.0],
         "foundation_terrain":27,"foundation_slp":15006,"foundation_size":[10,10],
-        "parts":[part.clone()],"damage":[],"construction":[part]}]);
+        "parts":[part.clone()],"damage":[],"states":[],"construction":[part]}]);
     compile(&mut value);
     let fetch = FetchFixture::install(&value);
     let (art, _, _) = load_collected().await.expect("Dock is a live DAT building");
@@ -104,7 +104,7 @@ async fn dock_keeps_dat_composition_construction_and_foundation_metadata() {
 }
 
 #[wasm_bindgen_test]
-async fn dock_wake_sampling_preserves_nine_second_loop_and_validates_omitted_cells() {
+async fn dock_wake_preserves_every_native_cell_and_exact_dat_timing() {
     let source = "graphics.drs:[32, 112, 108, 115]:4518".to_owned();
     let mut value = pack_fixture(
         REQUIRED_RENDER_SOURCES
@@ -120,22 +120,22 @@ async fn dock_wake_sampling_preserves_nine_second_loop_and_validates_omitted_cel
     value["buildings"] = serde_json::json!([{"unit_id":45,"footprint":[3.0,3.0],
         "foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],
         "parts":[{"graphic_id":4411,"slp_id":4518,"source":source,"available":true,
-            "frames":60,"angles":1,"primary":true,"frame_rate":0.15,
-            "offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"damage":[],"construction":[]}]);
+            "frames":60,"angles":1,"primary":true,"replay_delay":0.0,"frame_rate":0.15,
+            "offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"damage":[],"states":[],"construction":[]}]);
     compile(&mut value);
     let fetch = FetchFixture::install(&value);
     let (art, _, _) = load_collected().await.unwrap();
     drop(fetch);
     let wake = &art.compositions[0].parts[0];
-    assert_eq!(wake.animation.len(), 30);
-    assert_eq!(wake.frame_rate, 0.30);
+    assert_eq!(wake.animation.len(), 60);
+    assert_eq!(wake.frame_rate, 0.15);
     assert_eq!(wake.frame_rate * wake.animation.len() as f32, 9.0);
     assert_eq!(
         wake.animation
             .iter()
             .map(|f| f.anchor[0] as u32)
             .collect::<Vec<_>>(),
-        (0..60).step_by(2).collect::<Vec<_>>()
+        (0..60).collect::<Vec<_>>()
     );
     // Odd cells are omitted from the atlas, but the imported prefix stays whole.
     value["frames"]
@@ -159,8 +159,8 @@ async fn building_metadata_selects_new_frames_and_keeps_offsets_foundation_and_o
         "unit_id":109, "footprint":[4.0,4.0], "foundation_terrain":27,
         "foundation_slp":15000, "foundation_size":[10,10], "parts":[{
             "graphic_id":10,"slp_id":90000,"source":source,
-            "available":true,"frames":1,"angles":1,"primary":true,"frame_rate":0.0,"offset":[-17,29],"misplacement":[1.0,-0.5],"layer":20
-        }], "damage":[],"construction":[]
+            "available":true,"frames":1,"angles":1,"primary":true,"replay_delay":0.0,"frame_rate":0.0,"offset":[-17,29],"misplacement":[1.0,-0.5],"layer":20
+        }], "damage":[],"states":[],"construction":[]
     }]);
     for (slp, material) in [(15000, 2), (15006, 13)] {
         value["buildings"][0]["foundation_slp"] = slp.into();
@@ -197,7 +197,7 @@ async fn farm_foundation_loads_the_dat_sheet_in_the_terrain_domain() {
         .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
         .chain([(source.clone(), 100, true)]);
     let mut value = pack_fixture(sources);
-    value["buildings"] = serde_json::json!([{"unit_id":50,"footprint":[3.0,3.0],"foundation_terrain":7,"foundation_slp":15004,"foundation_size":[10,10],"parts":[],"damage":[],"construction":[]}]);
+    value["buildings"] = serde_json::json!([{"unit_id":50,"footprint":[3.0,3.0],"foundation_terrain":7,"foundation_slp":15004,"foundation_size":[10,10],"parts":[],"damage":[],"states":[],"construction":[]}]);
     compile(&mut value);
     let fetch = FetchFixture::install(&value);
     let (art, _, _) = load_collected().await.expect("DAT foundation sheet");
@@ -217,8 +217,8 @@ async fn dat_variants_and_construction_angles_survive_runtime_selection() {
             .map(|s| (s.manifest_source(), s.frames, s.terrain_topology.is_some()))
             .chain([(source.clone(), 3, false), (extra, 3, false)]),
     );
-    let part = serde_json::json!({"graphic_id":1,"slp_id":90000,"source":source,"available":true,"frames":1,"angles":3,"primary":true,"frame_rate":2.0,"offset":[-9,11],"misplacement":[0.0,0.0],"layer":20});
-    value["buildings"] = serde_json::json!([{"unit_id":70,"footprint":[2.0,2.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"parts":[part.clone()],"damage":[],"construction":[part]}]);
+    let part = serde_json::json!({"graphic_id":1,"slp_id":90000,"source":source,"available":true,"frames":1,"angles":3,"primary":true,"replay_delay":0.0,"frame_rate":2.0,"offset":[-9,11],"misplacement":[0.0,0.0],"layer":20});
+    value["buildings"] = serde_json::json!([{"unit_id":70,"footprint":[2.0,2.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"parts":[part.clone()],"damage":[],"states":[],"construction":[part]}]);
     value["buildings"][0]["parts"][0]["frames"] = 3.into();
     value["buildings"][0]["parts"][0]["angles"] = 1.into();
     value["buildings"][0]["parts"][0]["frame_rate"] = 0.into();
@@ -239,7 +239,7 @@ async fn dat_variants_and_construction_angles_survive_runtime_selection() {
 }
 
 #[wasm_bindgen_test]
-async fn native_wall_keeps_one_displayed_frame_per_connectivity_angle() {
+async fn native_wall_keeps_all_damage_cells_in_every_connectivity_angle() {
     let source = "graphics.drs:[32, 112, 108, 115]:90000".to_owned();
     let mut value = pack_fixture(
         REQUIRED_RENDER_SOURCES
@@ -249,9 +249,9 @@ async fn native_wall_keeps_one_displayed_frame_per_connectivity_angle() {
     );
     value["buildings"] = serde_json::json!([{
         "unit_id":72,"footprint":[1.0,1.0],"foundation_terrain":-1,
-        "foundation_slp":null,"foundation_size":[0,0],"damage":[],"construction":[],
+        "foundation_slp":null,"foundation_size":[0,0],"damage":[],"states":[],"construction":[],
         "parts":[{"graphic_id":1,"slp_id":90000,"source":source,"available":true,
-            "frames":9,"angles":5,"primary":true,"frame_rate":0.2,
+            "frames":9,"angles":5,"primary":true,"replay_delay":0.0,"frame_rate":0.2,
             "offset":[-3,7],"misplacement":[0.0,0.0],"layer":20}]
     }]);
     for frame in value["frames"].as_array_mut().unwrap() {
@@ -269,15 +269,15 @@ async fn native_wall_keeps_one_displayed_frame_per_connectivity_angle() {
     assert_eq!(part.angles, 5);
     assert_eq!(
         part.animation.len(),
-        5,
-        "unused damage frames are not resident"
+        45,
+        "all native cells remain addressable"
     );
     assert_eq!(
         part.animation
             .iter()
             .map(|frame| frame.size[0])
             .collect::<Vec<_>>(),
-        [1.0, 10.0, 19.0, 28.0, 37.0]
+        (1..=45).map(|v| v as f32).collect::<Vec<_>>()
     );
     assert_eq!(part.offset, [-3.0, 7.0]);
     assert!(
@@ -296,7 +296,7 @@ async fn absent_feudal_ambient_parent_keeps_available_dat_body_and_deltas() {
             .chain([(source.clone(), 1, false)]),
     );
     let part = serde_json::json!({"graphic_id":228,"slp_id":90000,"source":source,
-        "available":true,"frames":1,"angles":1,"primary":false,"frame_rate":0.0,
+        "available":true,"frames":1,"angles":1,"primary":false,"replay_delay":0.0,"frame_rate":0.0,
         "offset":[-13,9],"misplacement":[0.0,0.0],"layer":20});
     let mut missing = part.clone();
     missing["source"] = "absent-parent".into();
@@ -304,7 +304,7 @@ async fn absent_feudal_ambient_parent_keeps_available_dat_body_and_deltas() {
     missing["primary"] = true.into();
     value["buildings"] = serde_json::json!([{"unit_id":133,"footprint":[3.0,3.0],
         "foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],
-        "parts":[missing,part],"damage":[],"construction":[]}]);
+        "parts":[missing,part],"damage":[],"states":[],"construction":[]}]);
     compile(&mut value);
     let fetch = FetchFixture::install(&value);
     let (art, _, _) = load_collected()
@@ -335,8 +335,8 @@ async fn native_dock_without_construction_keeps_the_optional_foundation() {
     value["buildings"] = serde_json::json!([{"unit_id":45,"footprint":[3.0,3.0],
         "foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],
         "parts":[{"graphic_id":1,"slp_id":90000,"source":source,"available":true,
-            "frames":1,"angles":1,"primary":true,"frame_rate":0.0,
-            "offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"damage":[],"construction":[]}]);
+            "frames":1,"angles":1,"primary":true,"replay_delay":0.0,"frame_rate":0.0,
+            "offset":[0,0],"misplacement":[0.0,0.0],"layer":20}],"damage":[],"states":[],"construction":[]}]);
     compile(&mut value);
     let fetch = FetchFixture::install(&value);
     let (art, _, _) = load_collected()
@@ -357,13 +357,13 @@ async fn damage_graphic_instances_keep_native_offsets_and_shared_animation() {
             .chain([(source.clone(), 20, false)]),
     );
     let flame = serde_json::json!({"graphic_id":1,"slp_id":90000,"source":source,
-        "available":true,"frames":20,"angles":1,"primary":false,"frame_rate":0.05,
+        "available":true,"frames":20,"angles":1,"primary":false,"replay_delay":0.0,"frame_rate":0.05,
         "offset":[-9,11],"misplacement":[0.0,0.0],"layer":20});
     let mut second = flame.clone();
     second["offset"] = serde_json::json!([17, -3]);
     value["buildings"] = serde_json::json!([{"unit_id":70,"footprint":[2.0,2.0],
         "foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],
-        "parts":[],"construction":[],"damage":[{"damage_percent":25,"apply_mode":0,"parts":[flame,second]}]}]);
+        "parts":[],"states":[],"construction":[],"damage":[{"damage_percent":25,"apply_mode":0,"parts":[flame,second]}]}]);
     compile(&mut value);
     let fetch = FetchFixture::install(&value);
     let (art, _, _) = load_collected().await.unwrap();
@@ -374,10 +374,70 @@ async fn damage_graphic_instances_keep_native_offsets_and_shared_animation() {
         damage.parts.iter().map(|p| p.offset).collect::<Vec<_>>(),
         [[-9.0, 11.0], [17.0, -3.0]]
     );
-    assert_eq!(damage.parts[0].animation.len(), 2);
-    assert_eq!(damage.parts[0].frame_rate, 0.5);
+    assert_eq!(damage.parts[0].animation.len(), 20);
+    assert_eq!(damage.parts[0].frame_rate, 0.05);
     assert_eq!(
         damage.parts[0].animation[1].atlas,
         damage.parts[1].animation[1].atlas
     );
+}
+
+#[wasm_bindgen_test]
+async fn building_overlay_replaces_recipes_and_offsets_every_native_state_record() {
+    let source = "de/synthetic-building.sld";
+    let mut extra = pack_fixture([(source.into(), 512, false)]);
+    extra["chunks"] = serde_json::json!([{"file":"native.bin","hash":"a".repeat(64),"bytes":512}]);
+    for f in extra["frames"].as_array_mut().unwrap() {
+        f["native"] = serde_json::json!({"chunk":0,"offset":f["frame"],"length":1});
+        f["x"] = 0.into();
+        f["y"] = 0.into();
+        f["page"] = 0.into();
+    }
+    let part = serde_json::json!({"graphic_id":7,"slp_id":-1,"source":source,"available":true,
+        "frames":32,"angles":16,"primary":true,"frame_rate":0.03125,"replay_delay":0.125,
+        "offset":[-4,9],"misplacement":[0.0,0.0],"layer":20});
+    extra["buildings"] = serde_json::json!([{"unit_id":70,"footprint":[2.0,2.0],"foundation_terrain":-1,
+        "foundation_slp":null,"foundation_size":[0,0],"parts":[part.clone()],"construction":[],"damage":[],
+        "states":[{"role":0,"parts":[part.clone()]},{"role":1,"parts":[part]}]}]);
+    compile(&mut extra);
+    let _fetch = FetchFixture::install(&extra);
+    js_sys::Function::new_with_args("data", "window.fetch=async()=>new Response(data)")
+        .call1(&JsValue::NULL, &JsValue::from_str(&extra.to_string()))
+        .unwrap();
+    let mut manifest: Manifest = serde_json::from_value(manifest::fixture()).unwrap();
+    let before = manifest.frames.len();
+    building_sprites::overlay(&mut manifest).await.unwrap();
+    assert_eq!(manifest.buildings[0].parts[0].record, Some(before));
+    assert_eq!(manifest.buildings[0].states[1].1[0].record, Some(before));
+    assert_eq!(manifest.chunks[0].file, "buildings/native.bin");
+    let (mut selected, mut domains) = (Vec::new(), Vec::new());
+    buildings::select(&manifest, &mut selected, &mut domains).unwrap();
+    assert_eq!(
+        selected.len(),
+        512,
+        "every native cell is selected once, even when shared by lifecycle states"
+    );
+    let placements = placement::plan(&manifest, &selected, &domains).unwrap();
+    assert_eq!(
+        placement::pages(&placements),
+        8,
+        "native cells reserve no additional startup PNG pages"
+    );
+    let records = vec![
+        GameFrame {
+            stream: 0,
+            atlas: aoe_rendering::AtlasAddress {
+                page: 0,
+                uv: [0.0; 4]
+            },
+            size: [1.0; 2],
+            anchor: [0.0; 2]
+        };
+        selected.len()
+    ];
+    let art = buildings::resolve(&manifest, &selected, &records);
+    assert_eq!(art[0].parts[0].animation.len(), 512);
+    assert_eq!(art[0].parts[0].frame_rate, 0.03125);
+    assert_eq!(art[0].parts[0].replay_delay, 0.125);
+    assert_eq!(art[0].states[0].1[0].animation.len(), 512);
 }

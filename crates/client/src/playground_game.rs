@@ -221,6 +221,24 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         let draw = perf::Scope::new(2);
         let mut native_requests = Vec::new();
         if !controls::navigation::overview_active() && !strategic::render(&mut client) {
+            let live = client
+                .presentation
+                .live_tick(time)
+                .unwrap_or(client.village.tick as f64);
+            let clocks = client
+                .village
+                .rubble
+                .iter()
+                .map(|(b, expiry)| {
+                    let born = expiry.saturating_sub(map::scene::rubble_ticks(&client, b));
+                    (
+                        b.id.0,
+                        (live - born as f64).max(0.0) * 1000.0
+                            / f64::from(client.config.tick_hz.max(1)),
+                    )
+                })
+                .collect();
+            client.art.building_clocks = clocks;
             let scene = map::scene::prepare(&client);
             let units = map::scene::units(&client, &scene);
             let camera = SceneCamera {
@@ -230,8 +248,10 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 focus_elevation_meters: client.camera.focus_elevation_meters,
             };
             let resources = map::scene_resources(&client);
-            let required = aoe_rendering::scene_native_frames(&client.art, &units, camera);
-            let prefetch = aoe_rendering::scene_native_prefetch(&client.art, &units, camera);
+            let required =
+                aoe_rendering::scene_native_frames(&client.art, &units, camera, time as usize);
+            let prefetch =
+                aoe_rendering::scene_native_prefetch(&client.art, &units, camera, time as usize);
             let Client {
                 native,
                 art,
@@ -251,7 +271,7 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 }
             }
             let grid = client.grid;
-            let animation = (time / 100.0) as usize;
+            let animation = time as usize;
             match map::render_cache::render_if_changed(
                 &mut client,
                 &scene,

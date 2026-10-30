@@ -18,7 +18,7 @@ fn fish_sprites_animate_at_their_sampled_native_period() {
     };
     art.fishing[0] = art.village[1][..17].to_vec();
     art.fishing[1] = art.village[1][..7].to_vec();
-    for (family, period) in [(5, 3), (6, 9)] {
+    for (family, period) in [(5, 300), (6, 900)] {
         let resource = SceneResource {
             visual_family: family,
             ..fish
@@ -47,6 +47,7 @@ pub(super) fn art() -> GameArt {
     };
     GameArt {
         resident: Vec::new(),
+        building_clocks: Vec::new(),
         actors: Vec::new(),
         actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
@@ -66,11 +67,13 @@ pub(super) fn art() -> GameArt {
                     frame: frame(500 + group),
                     animation: Vec::new(),
                     angles: 1,
+                    replay_delay: 0.0,
                     frame_rate: 0.0,
                     offset: [group as f32 * 3.0, group as f32 * -5.0],
                     depth: 0.0,
                 })
                 .collect(),
+            states: Vec::new(),
             construction: Vec::new(),
             damage: Vec::new(),
         }],
@@ -321,7 +324,9 @@ fn layered_mill_composes_static_body_and_every_sail_frame_and_culls_animation() 
     let mill = unit(SceneUnitKind::Mill);
     for tick in 0..86 {
         let mut emitted = Vec::new();
-        building(&art, mill, camera(), tick, &mut |entry| emitted.push(entry));
+        building(&art, mill, camera(), tick * 100, &mut |entry| {
+            emitted.push(entry)
+        });
         assert_eq!(emitted.len(), 2);
         assert_eq!(emitted[0].1.atlas.uv[0], 0.0);
         assert_eq!(emitted[1].1.atlas.uv[0], (1 + tick % 43) as f32 / 4096.0);

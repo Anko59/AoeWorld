@@ -85,3 +85,26 @@ pub(super) fn find(bytes: &[u8], minimum: usize) -> Result<Tasks, Error> {
     }
     Ok(BTreeMap::new())
 }
+
+/// Explicitly empty slots in the same structurally validated first civilization.
+pub(super) fn disabled(bytes: &[u8]) -> Result<BTreeSet<i16>, Error> {
+    for (at, head) in bytes.windows(2).enumerate() {
+        if head != [0x60, 0x0a] || anchor(bytes, at).is_none() {
+            continue;
+        }
+        let mut r = Reader::new(bytes, at + 2);
+        let n = usize::from(r.u16()?);
+        r.skip(n)?;
+        let resources = usize::from(r.u16()?);
+        r.skip(4 + resources * 4 + 1)?;
+        let count = r.u16()?;
+        let mut out = BTreeSet::new();
+        for id in 0..count {
+            if r.i32()? == 0 {
+                out.insert(id as i16);
+            }
+        }
+        return Ok(out);
+    }
+    Ok(BTreeSet::new())
+}

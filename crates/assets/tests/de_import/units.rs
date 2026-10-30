@@ -32,7 +32,7 @@ pub(super) fn append(bytes: &mut Vec<u8>) {
         }
     }
 }
-fn record(id: i16, g: &[i16; 8], dead: i16) -> Vec<u8> {
+pub(super) fn record(id: i16, g: &[i16; 8], dead: i16) -> Vec<u8> {
     let mut row = vec![0; 180];
     row[0] = 70;
     row[1..3].copy_from_slice(&id.to_le_bytes());

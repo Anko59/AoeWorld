@@ -45,7 +45,11 @@ fn the_generic_decoder_preserves_every_native_cell_anchor_and_plane() {
             })
             .collect();
         let expected: Vec<_> = frames.iter().map(compose::planes).collect();
-        let decoder = Decoder::static_frames(frames);
+        let mut decoder = Decoder {
+            source: None,
+            parts: vec![frames],
+            stream: None,
+        };
         assert_eq!(decoder.len(), usize::from(count));
         for (i, expected) in expected.iter().enumerate() {
             let p = decoder.frame(i).unwrap();

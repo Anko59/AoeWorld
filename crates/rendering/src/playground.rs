@@ -54,6 +54,8 @@ pub struct SceneryArt {
 pub struct GameArt {
     /// Native geometry remains immutable while these physical addresses change.
     pub resident: Vec<Option<AtlasAddress>>,
+    /// Current authoritative presentation time since destruction, per visible cosmetic building.
+    pub building_clocks: Vec<(u32, f64)>,
     pub actors: Vec<Vec<GameFrame>>,
     /// Native DAT direction count for each semantic actor pose.
     pub actor_rows: Vec<usize>,
@@ -113,6 +115,7 @@ pub struct BuildingPart {
     pub animation: Vec<GameFrame>,
     pub angles: u16,
     pub frame_rate: f32,
+    pub replay_delay: f32,
     pub offset: [f32; 2],
     pub depth: f32,
 }
@@ -129,10 +132,26 @@ pub struct BuildingArt {
     pub foundation_material: Option<u8>,
     pub parts: Vec<BuildingPart>,
     pub construction: Vec<BuildingPart>,
+    pub states: Vec<(u8, Vec<BuildingPart>)>,
     pub damage: Vec<BuildingDamage>,
 }
 
 impl BuildingArt {
+    pub fn destruction_millis(&self) -> u32 {
+        self.states
+            .iter()
+            .filter(|(role, _)| *role == 0)
+            .flat_map(|(_, p)| p)
+            .map(|p| {
+                ((p.animation.len().max(1) / usize::from(p.angles).max(1)) as f64
+                    * f64::from(p.frame_rate)
+                    * 1000.0)
+                    .ceil() as u32
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
     pub fn damage_stage(&self, hp: u16, max_hp: u16) -> u8 {
         if max_hp == 0 {
             return 0;

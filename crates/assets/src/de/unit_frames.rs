@@ -18,13 +18,15 @@ pub(super) fn hash(install: &Path, source: &Selected) -> Result<String, Error> {
 pub(super) struct Decoder {
     source: Option<Selected>,
     parts: Vec<Vec<sld::Frame>>,
+    stream: Option<sld::Stream>,
 }
 impl Decoder {
-    pub fn static_frames(frames: Vec<sld::Frame>) -> Self {
-        Self {
+    pub fn streamed(bytes: Vec<u8>) -> Result<Self, Error> {
+        Ok(Self {
             source: None,
-            parts: vec![frames],
-        }
+            parts: Vec::new(),
+            stream: Some(sld::Stream::new(bytes)?),
+        })
     }
     pub fn new(install: &Path, source: &Selected) -> Result<Self, Error> {
         let mut parts = Vec::new();
@@ -52,15 +54,22 @@ impl Decoder {
         }
         Ok(Self {
             source: Some(source.clone()),
+            stream: None,
             parts,
         })
     }
     pub fn len(&self) -> usize {
+        if let Some(stream) = &self.stream {
+            return stream.len();
+        }
         self.source
             .as_ref()
             .map_or(self.parts[0].len(), |s| usize::from(s.cells))
     }
-    pub fn frame(&self, index: usize) -> Result<Planes, Error> {
+    pub fn frame(&mut self, index: usize) -> Result<Planes, Error> {
+        if let Some(stream) = &mut self.stream {
+            return stream.frame(index).map(compose::planes);
+        }
         if self.parts.len() == 1 {
             return self.parts[0]
                 .get(index)

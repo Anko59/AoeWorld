@@ -83,7 +83,7 @@ fn stationary_fish_keep_the_animation_clock_live() {
         ..resource(9)
     };
     let mut art = art();
-    for (family, period, count) in [(5, 3, 17), (6, 9, 7)] {
+    for (family, period, count) in [(5, 300, 17), (6, 900, 7)] {
         let fish = SceneResource {
             visual_family: family,
             ..fish
@@ -210,6 +210,7 @@ fn art() -> aoe_rendering::GameArt {
     };
     aoe_rendering::GameArt {
         resident: Vec::new(),
+        building_clocks: Vec::new(),
         actors: Vec::new(),
         actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),

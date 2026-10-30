@@ -10,6 +10,7 @@ fn frames(art: &GameArt, resource: SceneResource) -> (&[GameFrame], usize) {
 }
 
 fn index(resource: SceneResource, animation: usize, period: usize, count: usize) -> usize {
+    let animation = animation / 100;
     (animation / period + resource.id as usize) % count.max(1)
 }
 

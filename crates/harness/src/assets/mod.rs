@@ -35,7 +35,7 @@ pub(crate) enum AssetCommand {
         #[arg(long)]
         de: Option<PathBuf>,
     },
-    /// Imports the Dark Age buildings from a Definitive Edition install.
+    /// Imports DAT units and buildings from a Definitive Edition install.
     ImportDe {
         install: PathBuf,
         base: Option<PathBuf>,

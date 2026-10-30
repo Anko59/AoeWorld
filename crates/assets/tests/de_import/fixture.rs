@@ -1,5 +1,7 @@
 //! Synthetic current DE actors: numeric topology, never original pixels.
 use std::{fs, io::Write, path::Path};
+#[path = "buildings.rs"]
+mod buildings;
 #[path = "units.rs"]
 mod units;
 
@@ -58,6 +60,8 @@ pub(super) fn actors(install: &Path) {
     }
     fs::write(graphics.join("p_mangonel_x1.sld"), stone).unwrap();
     units::append(&mut records);
+    buildings::append(&mut records);
+    fs::write(graphics.join("b_dark_house_age1_x1.sld"), super::sld()).unwrap();
     let mut encoder = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::fast());
     encoder.write_all(&records).unwrap();
     fs::write(dat.join("empires2_x2_p1.dat"), encoder.finish().unwrap()).unwrap();

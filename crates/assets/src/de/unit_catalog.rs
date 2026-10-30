@@ -100,6 +100,9 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
             )
         })?;
         let mut parts = g.parts.clone();
+        if parts.is_empty() {
+            return Err(invalid("DE unit", 0, "empty unit graphic"));
+        }
         let mut raw_cells = 0;
         for part in &mut parts {
             let g = &mut part.animation;
@@ -160,6 +163,9 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
         );
         for part in &parts {
             let a = &part.animation;
+            if a.frames > 1 && a.seconds <= 0.0 {
+                return Err(invalid("DE unit", 0, "zero animation duration"));
+            }
             if a.frames > 1
                 && (a.frames != frames
                     || (a.seconds - seconds).abs() > 0.000001

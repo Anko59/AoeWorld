@@ -14,11 +14,11 @@ fn native_lookahead_wraps_inside_the_current_facing_without_changing_the_display
         .collect();
     let unit = unit(SceneUnitKind::actor(0)).with_actor_frame((29 << 4) | 15);
     assert_eq!(
-        crate::scene_native_frames(&art, &[unit], camera()),
+        crate::scene_native_frames(&art, &[unit], camera(), 0),
         vec![480]
     );
     assert_eq!(
-        crate::scene_native_prefetch(&art, &[unit], camera()),
+        crate::scene_native_prefetch(&art, &[unit], camera(), 0),
         vec![451, 452]
     );
 }
@@ -154,7 +154,7 @@ fn native_residency_changes_only_the_address_and_preserves_facing_geometry() {
     art.actors[0] = vec![native; 16 * 30];
     art.resident = vec![None];
     let unit = unit(SceneUnitKind::actor(0));
-    let demands = crate::scene_native_frames(&art, &[unit], camera());
+    let demands = crate::scene_native_frames(&art, &[unit], camera(), 0);
     assert_eq!(demands, vec![1]);
     assert!(world_sprite_frames(&art, &[], &[], &[unit], camera(), 0).is_empty());
     let address = crate::AtlasAddress {
@@ -180,7 +180,106 @@ fn native_residency_changes_only_the_address_and_preserves_facing_geometry() {
         position: [1_000_000.0; 2],
         ..unit
     };
-    assert!(crate::scene_native_frames(&art, &[offscreen], camera()).is_empty());
+    assert!(crate::scene_native_frames(&art, &[offscreen], camera(), 0).is_empty());
     art.resident[0] = None;
     assert!(world_sprite_frames(&art, &[], &[], &[unit], camera(), 0).is_empty());
+}
+
+#[wasm_bindgen_test]
+fn native_building_demand_timing_and_destruction_share_immutable_geometry() {
+    let mut art = art();
+    let mut part = art.compositions[0].parts[0].clone();
+    let base = part.frame;
+    part.animation = (1..=4).map(|stream| GameFrame { stream, ..base }).collect();
+    part.frame = part.animation[0];
+    part.frame_rate = 0.025;
+    part.replay_delay = 0.05;
+    art.compositions[0].parts = vec![part.clone()];
+    let building = unit(SceneUnitKind::TownCenter);
+    assert_eq!(
+        crate::scene_native_frames(&art, &[building], camera(), 50),
+        vec![3]
+    );
+    assert!(
+        world_sprite_frames(&art, &[], &[], &[building], camera(), 50).is_empty(),
+        "missing resident art draws no stale atlas rectangle"
+    );
+    assert!(
+        crate::scene_building_visible(&art, building, camera(), 50),
+        "native geometry is visible before residency"
+    );
+    let mut offscreen = building;
+    offscreen.position = [10000.0; 2];
+    assert!(crate::scene_native_frames(&art, &[offscreen], camera(), 50).is_empty());
+    art.resident = (0..5)
+        .map(|index| {
+            Some(crate::AtlasAddress {
+                page: 8,
+                uv: [index as f32 / 32.0, 0.0, 0.01, 0.01],
+            })
+        })
+        .collect();
+    let shown = world_sprite_frames(&art, &[], &[], &[building], camera(), 50);
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].1.atlas, art.resident[2].unwrap());
+    // DAT replay delay holds the last cell; the loop restarts at 150ms.
+    assert_eq!(
+        crate::scene_native_frames(&art, &[building], camera(), 125),
+        vec![4]
+    );
+    assert_eq!(
+        crate::scene_native_frames(&art, &[building], camera(), 150),
+        vec![1]
+    );
+    let mut rubble = part.clone();
+    rubble.animation.clear();
+    rubble.frame = GameFrame { stream: 5, ..base };
+    art.compositions[0].states = vec![(0, vec![part]), (1, vec![rubble])];
+    art.building_clocks = vec![(building.id.0, 30.0)];
+    let dying = SceneUnit {
+        visual: crate::SceneUnitVisual::new(true),
+        ..building
+    }
+    .with_actor_frame(3);
+    assert_eq!(
+        crate::scene_native_frames(&art, &[dying], camera(), 999),
+        vec![2]
+    );
+    art.building_clocks[0].1 = 110.0;
+    let dead = dying;
+    assert_eq!(
+        crate::scene_native_frames(&art, &[dead], camera(), 0),
+        vec![5]
+    );
+    assert_eq!(art.compositions[0].destruction_millis(), 101); // Stored f32 duration is slightly above 25ms.
+    art.resident[4] = None;
+    assert!(world_sprite_frames(&art, &[], &[], &[dead], camera(), 0).is_empty());
+    assert_eq!(
+        crate::scene_native_frames(&art, &[dead], camera(), 0),
+        vec![5],
+        "eviction cannot erase demand"
+    );
+}
+
+#[wasm_bindgen_test]
+fn bridge_and_rubble_recipes_keep_flat_occlusion_and_empty_corpses_disappear() {
+    let mut art = art();
+    for kind in [SceneUnitKind::BridgeATop, SceneUnitKind::RubbleHouse] {
+        art.compositions[0].unit_id = kind.building_id().unwrap();
+        let frames = world_sprite_frames(&art, &[], &[], &[unit(kind)], camera(), 0);
+        assert!(!frames.is_empty());
+        assert!(
+            frames
+                .iter()
+                .all(|(sprite, _, _, _)| sprite.pages[3] & Sprite::OCCLUDER == 0)
+        );
+    }
+    art.compositions[0].unit_id = 45;
+    art.compositions[0].states = vec![(0, Vec::new()), (1, Vec::new())];
+    let mut dock = unit(SceneUnitKind::Dock);
+    dock.visual = crate::SceneUnitVisual::new(true);
+    assert!(
+        world_sprite_frames(&art, &[], &[], &[dock], camera(), 0).is_empty(),
+        "an explicit empty DAT corpse does not become a missing-art marker"
+    );
 }

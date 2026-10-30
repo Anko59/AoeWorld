@@ -181,3 +181,14 @@ fn missing_delta_references_are_rejected_instead_of_dropping_drawable_parts() {
     b.extend(indexed_record(21, "None", 0, &[]));
     assert_eq!(indexed(&b).unwrap()[&20].parts.len(), 1);
 }
+
+#[test]
+fn de_buildings_use_named_sld_layers_even_without_classic_sprite_ids() {
+    let mut b = b"VER 8.9\0".to_vec();
+    let mut record = indexed_record(22, "building_back_x1", 10, &[]);
+    let at = 4 + "building_back_x1".len() + 4;
+    record[at..at + 4].copy_from_slice(&(-1_i32).to_le_bytes());
+    b.extend(record);
+    let all = indexed(&b).unwrap();
+    assert_eq!(all[&22].parts[0].animation.file, "building_back_x1");
+}

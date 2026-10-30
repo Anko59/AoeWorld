@@ -195,6 +195,7 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
     };
     let art = GameArt {
         resident: Vec::new(),
+        building_clocks: Vec::new(),
         actors: Vec::new(),
         actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
@@ -320,6 +321,7 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
     };
     let art = GameArt {
         resident: Vec::new(),
+        building_clocks: Vec::new(),
         actors: Vec::new(),
         actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),

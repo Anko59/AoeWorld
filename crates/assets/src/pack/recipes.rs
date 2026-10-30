@@ -24,6 +24,14 @@ pub fn encode(buildings: &[BuildingComposition], frames: &[FrameRecord]) -> Resu
         }
         parts(&mut bytes, &building.parts, frames)?;
         parts(&mut bytes, &building.construction, frames)?;
+        if building.states.len() > 8 {
+            return Err(invalid("recipes", 0, "too many building states"));
+        }
+        bytes.push(building.states.len() as u8);
+        for state in &building.states {
+            bytes.push(state.role);
+            parts(&mut bytes, &state.parts, frames)?;
+        }
         if building.damage.len() > 7 {
             return Err(invalid("recipes", 0, "too many damage states"));
         }
@@ -95,6 +103,7 @@ fn parts(bytes: &mut Vec<u8>, parts: &[BuildingPart], frames: &[FrameRecord]) ->
         bytes.extend(part.angles.to_le_bytes());
         bytes.push(u8::from(part.primary));
         bytes.extend(part.frame_rate.to_le_bytes());
+        bytes.extend(part.replay_delay.to_le_bytes());
         for v in part.offset {
             bytes.extend(v.to_le_bytes());
         }

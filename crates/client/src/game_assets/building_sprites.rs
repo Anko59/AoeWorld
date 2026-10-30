@@ -62,6 +62,27 @@ pub(super) async fn overlay(manifest: &mut Manifest) -> Result<(), JsValue> {
         }
         frame.page += offset;
     }
+    if extra.building_data != "00" {
+        let mut recipes =
+            super::recipes::decode(&extra.building_data, &extra.frames).map_err(error)?;
+        for b in &mut recipes {
+            for p in b
+                .parts
+                .iter_mut()
+                .chain(&mut b.construction)
+                .chain(b.states.iter_mut().flat_map(|(_, p)| p))
+                .chain(b.damage.iter_mut().flat_map(|d| &mut d.parts))
+            {
+                if let Some(record) = &mut p.record {
+                    *record += manifest.frames.len();
+                }
+            }
+        }
+        manifest
+            .buildings
+            .retain(|old| !recipes.iter().any(|new| new.unit_id == old.unit_id));
+        manifest.buildings.extend(recipes);
+    }
     manifest.pages.extend(extra.pages);
     manifest.chunks.extend(extra.chunks);
     manifest.frames.extend(extra.frames);
@@ -87,6 +108,35 @@ pub(super) fn select(
         },
     );
     for item in plan {
+        let state = if (13..=21).contains(&item.slot)
+            || item.slot == 25
+            || (32..=37).contains(&item.slot)
+            || (49..=52).contains(&item.slot)
+        {
+            Some(1)
+        } else if item.slot == 42 {
+            Some(5)
+        } else {
+            None
+        };
+        if aoe_rendering::SceneUnitKind::building(item.slot as u8)
+            .building_id()
+            .is_some_and(|id| {
+                manifest.buildings.iter().any(|b| {
+                    b.unit_id == id
+                        && if let Some(role) = state {
+                            b.states
+                                .iter()
+                                .any(|(r, p)| *r == role && p.iter().any(|p| p.record.is_some()))
+                        } else {
+                            (65..=70).contains(&item.slot)
+                                && b.parts.iter().any(|p| p.record.is_some())
+                        }
+                })
+            })
+        {
+            continue;
+        }
         let Some(frames) = source_frames(manifest, &item.source, item.frames) else {
             if item.required || source_present(manifest, &item.source) {
                 return Err(error(format!("Corrupt building art ({})", item.source)));

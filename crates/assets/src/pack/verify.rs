@@ -160,6 +160,12 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
                 .any(|v| !v.is_finite() || *v <= 0.0 || *v > 128.0)
             || building.parts.len() > 256
             || building.construction.len() > 256
+            || building.states.len() > 8
+            || building.states.iter().enumerate().any(|(i, s)| {
+                s.role > 7
+                    || s.parts.len() > 256
+                    || building.states[..i].iter().any(|p| p.role == s.role)
+            })
             || building.damage.len() > 7
             || building.damage.iter().any(|d| {
                 !(0..=100).contains(&d.damage_percent) || d.apply_mode > 2 || d.parts.len() > 256
@@ -171,13 +177,16 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
             .parts
             .iter()
             .chain(&building.construction)
+            .chain(building.states.iter().flat_map(|s| &s.parts))
             .chain(building.damage.iter().flat_map(|d| &d.parts))
         {
             if part.frames == 0
                 || part.angles == 0
-                || u32::from(part.frames) * u32::from(part.angles) > 256
+                || u32::from(part.frames) * u32::from(part.angles) > 16384
                 || !part.frame_rate.is_finite()
                 || part.frame_rate < 0.0
+                || !part.replay_delay.is_finite()
+                || part.replay_delay < 0.0
             {
                 return Err(invalid("manifest", 0, "invalid building animation"));
             }

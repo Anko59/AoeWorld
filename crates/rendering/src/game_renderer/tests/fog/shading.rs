@@ -9,6 +9,7 @@ fn resource_and_unit_identity_collision_cannot_change_their_fog_shading() {
     unit_frame.atlas.uv[0] = 0.5;
     let mut art = GameArt {
         resident: Vec::new(),
+        building_clocks: Vec::new(),
         actors: Default::default(),
         actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
@@ -68,7 +69,7 @@ fn resource_and_unit_identity_collision_cannot_change_their_fog_shading() {
         ..resource
     };
     let mut layers = [WorldLayer::Sprite(sprite, unit_frame, 0.0, fish.id)];
-    shade_objects(&mut layers, &art, &[fish], &[], 3, &|_| 0.45);
+    shade_objects(&mut layers, &art, &[fish], &[], 300, &|_| 0.45);
     let WorldLayer::Sprite(fish, _, _, _) = layers[0] else {
         panic!("fish")
     };

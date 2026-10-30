@@ -51,6 +51,7 @@ pub(super) struct BuildingComposition {
     pub foundation_size: [u16; 2],
     pub parts: Vec<BuildingPart>,
     pub construction: Vec<BuildingPart>,
+    pub states: Vec<(u8, Vec<BuildingPart>)>,
     pub damage: Vec<BuildingDamage>,
 }
 
@@ -67,6 +68,7 @@ pub(super) struct BuildingPart {
     pub angles: u16,
     pub primary: bool,
     pub frame_rate: f32,
+    pub replay_delay: f32,
     pub offset: [i32; 2],
     pub misplacement: [f32; 2],
 }

@@ -15,7 +15,7 @@ mod reader;
 mod sections;
 mod terrain;
 pub use building::{Annex, Building};
-pub use composition::{BuildingComposition, BuildingDamage, BuildingPart};
+pub use composition::{BuildingComposition, BuildingDamage, BuildingPart, BuildingState};
 pub use terrain::Terrain;
 pub mod table;
 mod table_details;

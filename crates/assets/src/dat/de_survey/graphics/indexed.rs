@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Debug)]
 pub struct Part {
     pub animation: Animation,
+    pub graphic: i16,
     pub x: i32,
     pub y: i32,
     pub layer: u8,
@@ -19,7 +20,7 @@ struct Raw {
 fn raw(bytes: &[u8], at: usize) -> Result<(i16, Raw), Error> {
     let mut r = Reader::new(bytes, at);
     let file = debug(&mut r)?;
-    debug(&mut r)?;
+    let particle = debug(&mut r)?;
     let sprite = r.i32()?;
     r.skip(2)?;
     let layer = r.u8()?;
@@ -40,7 +41,6 @@ fn raw(bytes: &[u8], at: usize) -> Result<(i16, Raw), Error> {
         || sounds > 1
         || frames > 255
         || angles > 64
-        || (seconds == 0.0 && frames > 1)
         || !seconds.is_finite()
         || !(0.0..=60.0).contains(&seconds)
         || !replay_delay.is_finite()
@@ -63,12 +63,15 @@ fn raw(bytes: &[u8], at: usize) -> Result<(i16, Raw), Error> {
             deltas.push((target, x, y));
         }
     }
-    let no_pixels = file == "None";
-    let own = ((file.ends_with("_x1") || file.ends_with("_x2"))
-        && sprite >= 0
-        && frames > 0
-        && angles > 0)
+    let no_pixels = file == "None"
+        || !particle.is_empty()
+        || (!file.is_empty()
+            && file
+                .bytes()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_'));
+    let own = ((file.ends_with("_x1") || file.ends_with("_x2")) && frames > 0 && angles > 0)
         .then_some(Part {
+            graphic: id,
             animation: Animation {
                 file,
                 sprite,
@@ -150,7 +153,7 @@ pub fn indexed(bytes: &[u8]) -> Result<BTreeMap<i16, Graphic>, Error> {
     let mut result = BTreeMap::new();
     for &id in all.keys() {
         let mut parts = Vec::new();
-        if resolve(id, &all, &mut BTreeSet::new(), 0, 0, &mut parts).is_ok() && !parts.is_empty() {
+        if resolve(id, &all, &mut BTreeSet::new(), 0, 0, &mut parts).is_ok() {
             parts.sort_by_key(|p| p.layer);
             result.insert(id, Graphic { parts });
         }

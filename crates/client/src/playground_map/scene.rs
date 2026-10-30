@@ -405,14 +405,17 @@ pub(in super::super) fn units(
         }
         let position = super::super::village::building_center(building);
         let unit = aoe_rendering::SceneUnit {
-            kind: aoe_rendering::SceneUnitKind::building(crate::building_ui::sprite_slot(
+            kind: aoe_rendering::SceneUnitKind::building(crate::building_ui::age_sprite_slot(
                 building.kind,
                 1000,
-                true,
+                false,
+                building.age,
             ) as u8),
             id: building.id,
             position,
-            visual: aoe_rendering::SceneUnitVisual::new(false).with_selected(false),
+            visual: aoe_rendering::SceneUnitVisual::new(true)
+                .with_player(Some(building.player), player, client.team_colour, false)
+                .with_selected(false),
             facing: 0,
             elevation_meters: scene
                 .height(position)
@@ -452,4 +455,26 @@ fn building_kind(building: &aoe_protocol::GameplayBuildingState) -> aoe_renderin
         kind.building_id()
             .map_or(kind, |id| Art::foundation(id as i16))
     }
+}
+
+/// Full native destruction followed by three seconds of its DAT corpse art.
+pub(in super::super) fn rubble_ticks(
+    client: &Client,
+    building: &aoe_protocol::GameplayBuildingState,
+) -> u64 {
+    let kind = aoe_rendering::SceneUnitKind::building(crate::building_ui::age_sprite_slot(
+        building.kind,
+        1000,
+        false,
+        building.age,
+    ) as u8);
+    let millis = client
+        .art
+        .compositions
+        .iter()
+        .find(|b| Some(b.unit_id) == kind.building_id())
+        .map_or(0, |b| b.destruction_millis());
+    (u64::from(millis) + 3000)
+        .saturating_mul(u64::from(client.config.tick_hz))
+        .div_ceil(1000)
 }

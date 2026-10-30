@@ -59,3 +59,6 @@ fn common_unit_fields_and_shared_task_indirection_are_preserved() {
     b.truncate(b.len() - 1);
     assert_eq!(tasks::find(&b, 2).unwrap().len(), 0);
 }
+
+#[path = "tests/buildings.rs"]
+mod buildings;

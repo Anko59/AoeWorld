@@ -3,7 +3,12 @@ use super::reader::Reader;
 use crate::{Error, invalid};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
+mod building;
 mod tasks;
+pub use building::{Building, Damage};
+pub fn disabled(bytes: &[u8]) -> Result<BTreeSet<i16>, Error> {
+    tasks::disabled(bytes)
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Unit {
@@ -18,6 +23,9 @@ pub struct Unit {
     pub work: i16,
     pub carrying: i16,
     pub release: i16,
+    pub footprint: [f32; 2],
+    pub damage: Vec<Damage>,
+    pub building: Option<Building>,
 }
 fn parse(bytes: &[u8], at: usize, id: i16) -> Result<Unit, Error> {
     let mut r = Reader::new(bytes, at);
@@ -29,12 +37,28 @@ fn parse(bytes: &[u8], at: usize, id: i16) -> Result<Unit, Error> {
     let standing = r.i16()?;
     r.skip(2)?;
     let dying = r.i16()?;
+    r.pos = at + 29;
+    let footprint = [r.f32()? * 2.0, r.f32()? * 2.0];
+    if footprint
+        .iter()
+        .any(|n| !n.is_finite() || *n < 0.0 || *n > 128.0)
+    {
+        return Err(r.fail("unit footprint"));
+    }
     r.pos = at + 45;
     let dead = r.i16()?;
     r.pos = at + 157;
-    let damage = usize::from(r.u8()?);
-    r.bounded(damage, 32, "damage graphics")?;
-    r.skip(damage * 5 + 22)?;
+    let count = usize::from(r.u8()?);
+    r.bounded(count, 32, "damage graphics")?;
+    let mut damage = Vec::new();
+    for _ in 0..count {
+        damage.push(Damage {
+            graphic: r.i16()?,
+            percent: r.i16()?,
+            mode: r.u8()?,
+        });
+    }
+    r.skip(22)?;
     if r.u16()? != 0x0a60 {
         return Err(r.fail("unit name marker"));
     }
@@ -58,6 +82,9 @@ fn parse(bytes: &[u8], at: usize, id: i16) -> Result<Unit, Error> {
         work: -1,
         carrying: -1,
         release: 0,
+        footprint,
+        damage,
+        building: None,
     };
     if kind < 30 {
         return Ok(unit);
@@ -102,6 +129,9 @@ fn parse(bytes: &[u8], at: usize, id: i16) -> Result<Unit, Error> {
     unit.release = r.i16()?;
     r.skip(13 + 4 + 4)?;
     unit.attack = r.i16()?;
+    if kind == 80 {
+        unit.building = Some(building::parse(&mut r)?);
+    }
     Ok(unit)
 }
 /// First validated civilization record, plus every referenced corpse record.
@@ -111,11 +141,12 @@ pub fn find(bytes: &[u8], ids: &[i16]) -> Result<BTreeMap<i16, Unit>, Error> {
     }
     let mut wanted: BTreeSet<_> = ids.iter().copied().collect();
     let mut found = BTreeMap::new();
-    for _ in 0..2 {
+    for _ in 0..16 {
         let mut remaining = wanted.iter().filter(|id| !found.contains_key(*id)).count();
         if remaining == 0 {
             break;
         }
+        let previous = found.len();
         for (at, head) in bytes.windows(3).enumerate() {
             if !matches!(head[0], 10 | 20 | 25 | 30 | 40 | 50 | 60 | 70 | 80) {
                 continue;
@@ -133,9 +164,15 @@ pub fn find(bytes: &[u8], ids: &[i16]) -> Result<BTreeMap<i16, Unit>, Error> {
             }
         }
         for unit in found.values() {
+            if let Some(b) = &unit.building {
+                wanted.extend(b.annexes.iter().map(|a| a.unit));
+            }
             if unit.dead >= 0 {
                 wanted.insert(unit.dead);
             }
+        }
+        if found.len() == previous {
+            break;
         }
         if wanted.len() > 512 {
             return Err(invalid("DE unit", 0, "corpse references exceed bound"));

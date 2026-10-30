@@ -169,7 +169,7 @@ icon sheets, DAT icon mapping and browser fallback.
 
 The trial's `graphics.drs` lacks the Farm (SLP 417-419), the Lumber Camp
 (3500-3503) and the Mining Camp (3488-3491). `make assets-import-de` fills them,
-and the other Dark Age buildings, from an owner-licensed Age of Empires II:
+and every gameplay building age and bridge segment, from an owner-licensed Age of Empires II:
 Definitive Edition install (`DE_DIR`, default
 `~/.steam/steam/steamapps/common/AoE2DE`, mounted read-only into the container).
 It decodes `resources/_common/drs/graphics/<stem>_x1.sld` with the bounded SLD
@@ -177,12 +177,14 @@ decoder (`crates/assets/src/sld.rs`: BC1 colour, BC4 shadow and player-mask
 layers, skip-previous-frame reuse) and writes a separate pack below
 `local-assets/packs/`, previews to `local-assets/de-preview/` and the building to
 pack-source mapping to `local-assets/de-table.md`. Nothing derived from the
-install is committed. The importer scans sources for metadata, then retains at
-most one decoded SLD at a time while writing and previewing; each reread is
-checked against the scanned source digest. Individual SLD decoded layers are
-bounded to 48 Mi pixels (192 MiB), in addition to one 64 MiB atlas page and
-other import buffers. This bounds source retention, not the gameplay GPU atlas. Sources are listed in `crates/assets/src/de/select.rs`
-(West European camps, since no Dark Age camp exists). Frames are cropped to the
+install is committed. The importer scans sources for metadata, then streams building cells while
+retaining the previous and current decoded frames; each reread is checked
+against the scanned source digest. The 2048-pixel side and three-layer bounds
+limit those decoded frames to 96 MiB together. The retained unit compositor
+keeps its existing 48 Mi-pixel per-file and 256 MiB aggregate source limits,
+beside one 64 MiB atlas page and other import buffers. This bounds source retention, not the gameplay GPU atlas. Building sources are resolved together by `crates/assets/src/de/buildings.rs`
+from all gameplay DAT IDs, delta trees and annexes. No per-building image list
+is used; see [building art](assets/buildings.md). Frames are cropped to the
 drawn layers and anchors move with the crop; the player plane stores a 0-7 ramp
 from the colour layer's luma for every nonzero mask, with the mask value as alpha
 to weight the blend. The trial's player plane uses the same ramp with alpha 255;

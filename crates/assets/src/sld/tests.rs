@@ -237,6 +237,13 @@ fn every_truncation_is_an_error_not_a_panic() {
     let file = fixture();
     for length in 0..file.len() {
         assert!(parse(&file[..length]).is_err(), "prefix {length}");
+        let streamed = Stream::new(file[..length].to_vec()).and_then(|mut s| {
+            for i in 0..s.len() {
+                s.frame(i)?;
+            }
+            Ok(())
+        });
+        assert!(streamed.is_err(), "stream prefix {length}");
     }
     let mut trailing = file;
     trailing.push(0);
@@ -300,4 +307,29 @@ fn total_decoded_pixels_are_budgeted() {
     }
     let error = parse(&file).expect_err("budget rejects");
     assert!(error.to_string().contains("budget"), "{error}");
+}
+
+#[test]
+fn streamed_large_timeline_keeps_only_previous_and_current_cells() {
+    let mut file = header(49);
+    for index in 0..49 {
+        frame_header(&mut file, 1024, 1, index);
+        // Empty sparse cells exercise decoded memory, without a large source fixture.
+        file.extend(layer_bytes(Some([0, 0, 1024, 1024]), 0, &[], &[]));
+        pad(&mut file);
+    }
+    let mut stream = Stream::new(file.clone()).unwrap();
+    assert_eq!(stream.len(), 49);
+    for i in 0..49 {
+        assert_eq!(stream.frame(i).unwrap().index, i as u16);
+    }
+    assert!(
+        stream.frame(0).is_err(),
+        "a stream cannot rewind into retained history"
+    );
+    assert!(stream.frame(49).is_err());
+    assert!(
+        parse(&file).is_err(),
+        "retained parsing keeps its original total memory bound"
+    );
 }

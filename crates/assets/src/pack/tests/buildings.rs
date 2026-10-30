@@ -7,7 +7,7 @@ fn manifest_checks_building_bounds_inventory_and_unique_units() {
         "version":1,"converter":"synthetic","input_hash":hash,
         "chunks":[],"pages":[{"color":"c.png","player":"p.png","shadow":"s.png","outline":"o.png", "color_hash":hash,"player_hash":hash,"shadow_hash":hash,"outline_hash":hash,"width":1024,"height":1024}],
         "frames":[{"source":"synthetic","source_hash":hash,"frame":0,"page":0,"x":1,"y":1,"width":1,"height":1,"anchor_x":-5,"anchor_y":10}],
-        "buildings":[{"unit_id":7,"footprint":[2.0,3.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"damage":[],"construction":[],"parts":[{"graphic_id":9,"slp_id":11,"source":"synthetic","available":true,"frames":1,"angles":1,"primary":true,"frame_rate":0.0,"offset":[-32768,32768],"misplacement":[128.0,-128.0],"layer":20}]}]
+        "buildings":[{"unit_id":7,"footprint":[2.0,3.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"damage":[],"states":[],"construction":[],"parts":[{"graphic_id":9,"slp_id":11,"source":"synthetic","available":true,"frames":1,"angles":1,"primary":true,"replay_delay":0.0,"frame_rate":0.0,"offset":[-32768,32768],"misplacement":[128.0,-128.0],"layer":20}]}]
     });
     let parse = |value: &serde_json::Value| {
         let mut value = value.clone();

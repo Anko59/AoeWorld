@@ -84,3 +84,38 @@ fn streamed_manifest_rejects_unsafe_chunks_and_unbounded_or_ambiguous_references
         "payload dimensions must match metadata"
     );
 }
+
+#[test]
+fn native_building_composite_reads_chunk_pixels_instead_of_the_empty_png_page() {
+    let root = tempfile::tempdir().unwrap();
+    let path = atlas::write_pack_streamed(
+        root.path(),
+        "b".repeat(64),
+        &[SpriteRef {
+            id: "native".into(),
+            hash: "a".repeat(64),
+            frames: 1,
+        }],
+        Vec::new(),
+        |_, _| true,
+        |_, _| {
+            let mut p = atlas::Planes::blank(1, 1, 0, 0);
+            p.color = vec![12, 34, 56, 255];
+            Ok(p)
+        },
+    )
+    .unwrap();
+    let manifest = verify(&path).unwrap();
+    let recipe:crate::dat::BuildingComposition=serde_json::from_value(serde_json::json!({"unit_id":70,"footprint":[2.0,2.0],"foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"construction":[],"states":[],"damage":[],"parts":[{"graphic_id":1,"slp_id":1,"source":"native","available":true,"frames":1,"angles":1,"primary":true,"frame_rate":0.0,"replay_delay":0.0,"offset":[0,0],"misplacement":[0.0,0.0],"layer":20}]})).unwrap();
+    let output = root.path().join("composite.png");
+    composite::render(&path, &manifest, &recipe, &output).unwrap();
+    let mut image = png::Decoder::new(std::io::Cursor::new(fs::read(output).unwrap()))
+        .read_info()
+        .unwrap();
+    let mut pixels = vec![0; image.output_buffer_size()];
+    image.next_frame(&mut pixels).unwrap();
+    assert_eq!(
+        &pixels[(256 * 512 + 256) * 4..(256 * 512 + 256) * 4 + 4],
+        &[12, 34, 56, 255]
+    );
+}

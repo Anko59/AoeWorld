@@ -204,6 +204,11 @@ impl SceneUnitKind {
             || (Self::ConstructionTownCenter as u8..=Self::ConstructionFeudalDock as u8)
                 .contains(&(self as u8))
     }
+    pub(in crate::game_renderer) fn rubble(self) -> bool {
+        self.building_slot().is_some_and(|s| {
+            (13..=21).contains(&s) || s == 25 || (32..=37).contains(&s) || (49..=52).contains(&s)
+        })
+    }
     pub fn building_id(self) -> Option<i32> {
         use SceneUnitKind::*;
         match self {
@@ -262,6 +267,32 @@ impl SceneUnitKind {
             Monastery => 104,
             University => 209,
             SiegeWorkshop => 49,
+            BridgeATop => 605,
+            BridgeAMiddle => 606,
+            BridgeABottom => 607,
+            BridgeBTop => 608,
+            BridgeBMiddle => 609,
+            BridgeBBottom => 610,
+            RubbleTownCenter => 109,
+            RubbleHouse => 70,
+            RubbleLumberCamp => 562,
+            RubbleMiningCamp => 584,
+            RubbleMill => 68,
+            RubbleFarm => 50,
+            RubbleBarracks => 12,
+            RubblePalisadeWall => 72,
+            RubbleOutpost => 598,
+            RubbleDock => 45,
+            RubbleArcheryRange => 87,
+            RubbleStable => 101,
+            RubbleBlacksmith => 103,
+            RubbleMarket => 84,
+            RubbleWatchTower => 79,
+            RubblePalisadeGate => 792,
+            RubbleCastle => 82,
+            RubbleMonastery => 104,
+            RubbleUniversity => 209,
+            RubbleSiegeWorkshop => 49,
             _ => return None,
         })
     }

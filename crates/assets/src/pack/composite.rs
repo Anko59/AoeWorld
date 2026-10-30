@@ -41,10 +41,33 @@ pub fn render(
             .iter()
             .find(|f| f.source == part.source && f.frame == 0)
             .ok_or_else(|| invalid("composite", 0, format!("missing {}", part.source)))?;
-        let page = &manifest.pages[usize::from(frame.page)];
-        let color = plane(pack, &page.color)?;
-        let player = plane(pack, &page.player)?;
-        let shadow = plane(pack, &page.shadow)?;
+        let ([color, player, shadow], stride, origin) = if let Some(location) = frame.native {
+            let chunk = manifest
+                .chunks
+                .get(usize::from(location.chunk))
+                .ok_or_else(|| invalid("composite", 0, "missing native chunk"))?;
+            let bytes = fs::read(pack.join(&chunk.file))?;
+            chunk.verify_payload(&bytes)?;
+            (
+                super::compressed::decode_frame(
+                    location.slice(&bytes)?,
+                    [frame.width, frame.height],
+                )?,
+                usize::from(frame.width),
+                [0, 0],
+            )
+        } else {
+            let page = &manifest.pages[usize::from(frame.page)];
+            (
+                [
+                    plane(pack, &page.color)?,
+                    plane(pack, &page.player)?,
+                    plane(pack, &page.shadow)?,
+                ],
+                usize::from(page.width),
+                [usize::from(frame.x), usize::from(frame.y)],
+            )
+        };
         let [ne, se] = part.misplacement;
         let offset = [(ne + se) * 48.0, (se - ne) * 24.0];
         let left = 256 - frame.anchor_x + part.offset[0] + offset[0].round() as i32;
@@ -55,10 +78,7 @@ pub fn render(
                 if dx < 0 || dy < 0 || dx >= width as i32 || dy >= height as i32 {
                     continue;
                 }
-                let at = ((usize::from(frame.y) + y as usize) * usize::from(page.width)
-                    + usize::from(frame.x)
-                    + x as usize)
-                    * 4;
+                let at = ((origin[1] + y as usize) * stride + origin[0] + x as usize) * 4;
                 let mut sample = [color[at], color[at + 1], color[at + 2], color[at + 3]];
                 if shadow[at + 3] != 0 {
                     sample = [0, 0, 0, shadow[at + 3]];

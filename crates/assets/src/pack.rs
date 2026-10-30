@@ -156,7 +156,7 @@ pub fn inspect(root: &Path) -> Result<Inventory, Error> {
 
 fn collect(inputs: &[Input]) -> Result<(Palette, Vec<SpriteSource>, String), Error> {
     let mut hasher = blake3::Hasher::new();
-    hasher.update(b"AoK DAT building graphics, angles, indexed recipes and foundation topology\0");
+    hasher.update(b"DAT building states, replay timing, indexed recipes and foundation topology\0");
     let mut palette_data = None;
     let mut sprites = Vec::new();
     let mut ids = BTreeSet::new();

@@ -14,7 +14,7 @@ impl<T, F: FnMut(usize) -> Result<Vec<T>, Error>> Cache<T, F> {
         }
     }
 
-    pub fn get(&mut self, index: usize) -> Result<&[T], Error> {
+    pub fn get(&mut self, index: usize) -> Result<&mut [T], Error> {
         if self
             .current
             .as_ref()
@@ -25,8 +25,8 @@ impl<T, F: FnMut(usize) -> Result<Vec<T>, Error>> Cache<T, F> {
             self.current = Some((index, (self.load)(index)?));
         }
         self.current
-            .as_ref()
-            .map(|(_, frames)| frames.as_slice())
+            .as_mut()
+            .map(|(_, frames)| frames.as_mut_slice())
             .ok_or_else(|| crate::invalid("DE", 0, "source cache is empty"))
     }
 }

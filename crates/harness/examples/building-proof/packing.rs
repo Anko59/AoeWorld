@@ -202,12 +202,7 @@ pub fn check(path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
                 },
                 part.source.clone(),
                 u32::from(part.frames) * u32::from(part.angles),
-                runtime::building_frame_step(
-                    building.unit_id,
-                    part.frames,
-                    part.angles,
-                    part.frame_rate,
-                ),
+                1,
                 AtlasDomain::Objects,
                 false,
                 usize::MAX,

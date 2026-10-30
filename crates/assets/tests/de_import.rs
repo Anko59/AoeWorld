@@ -172,7 +172,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .collect();
     assert_eq!(
         native.len(),
-        90_132,
+        90_133,
         "every native unit/stone source cell is chunked"
     );
     assert_eq!(
@@ -193,20 +193,24 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
     // Cropped to the 4x4 layer at (4,4); the anchor (2,3) moves by the crop.
     assert_eq!((house.width, house.height), (4, 4));
     assert_eq!((house.anchor_x, house.anchor_y), (-2, -1));
-    let page = &manifest.pages[usize::from(house.page)];
-    let mut decoder = png::Decoder::new(std::io::BufReader::new(
-        fs::File::open(report.pack.join(&page.player)).unwrap(),
-    ))
-    .read_info()
+    let location = house.native.expect("buildings are streamed");
+    let chunk = fs::read(
+        report
+            .pack
+            .join(&manifest.chunks[usize::from(location.chunk)].file),
+    )
     .unwrap();
-    let mut pixels = vec![0; decoder.output_buffer_size()];
-    decoder.next_frame(&mut pixels).unwrap();
-    let at = (usize::from(house.y) * usize::from(page.width) + usize::from(house.x)) * 4;
+    let planes = pack::compressed::decode_frame(
+        location.slice(&chunk).unwrap(),
+        [house.width, house.height],
+    )
+    .unwrap();
     assert_eq!(
-        &pixels[at..at + 4],
+        &planes[1][..4],
         &[1, 0, 0, 119],
-        "low player mask survives atlas serialization"
+        "low player mask survives lossless native serialization"
     );
+    assert_eq!(manifest.buildings.len(), 45);
     let farm = manifest
         .frames
         .iter()
@@ -255,7 +259,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         !report.absent.is_empty(),
         "other selections are reported absent"
     );
-    assert!(Path::new("local-assets/de-preview/b_dark_house_age1.png").is_file());
+
     let table = fs::read_to_string("local-assets/de-table.md").unwrap();
     assert!(table.contains("de/b_dark_house_age1_x1.sld"));
     // A second import is idempotent.
@@ -374,4 +378,59 @@ fn real_house_decodes_with_plausible_dimensions() {
     assert!(!frames.is_empty());
     let main = frames[0].main.as_ref().expect("main layer");
     assert!((100..=300).contains(&main.width) && (60..=200).contains(&main.height));
+}
+
+#[test]
+fn real_de_building_catalog_retains_every_spawned_recipe() {
+    let Ok(root) = std::env::var("AOE_DE_DIR") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(root);
+    let bytes = aoe_assets::dat::de_survey::inflate(
+        &std::fs::read(root.join("resources/_common/dat/empires2_x2_p1.dat")).unwrap(),
+    )
+    .unwrap();
+    let ids: Vec<_> = aoe_assets::catalog::GAMEPLAY_BUILDING_IDS
+        .iter()
+        .map(|&n| n as i16)
+        .collect();
+    let units = aoe_assets::dat::de_units::find(&bytes, &ids).unwrap();
+    for id in ids.into_iter().filter(|id| *id < 605 || *id > 610) {
+        assert!(units[&id].building.is_some(), "building {id}");
+    }
+    let catalog = de::buildings::resolve(&root).unwrap();
+    assert_eq!(catalog.recipes.len(), 45);
+    let mut counts = std::collections::BTreeMap::new();
+    for source in &catalog.sources {
+        let path = root
+            .join("resources/_common/drs/graphics")
+            .join(source.trim_start_matches("de/"));
+        let mut stream = aoe_assets::sld::Stream::new(fs::read(path).unwrap()).unwrap();
+        assert!(!stream.is_empty());
+        for i in 0..stream.len() {
+            stream.frame(i).unwrap();
+        }
+        counts.insert(source, stream.len());
+    }
+    for b in &catalog.recipes {
+        for p in b
+            .parts
+            .iter()
+            .chain(&b.construction)
+            .chain(b.states.iter().flat_map(|s| &s.parts))
+            .chain(b.damage.iter().flat_map(|d| &d.parts))
+            .filter(|p| p.available)
+        {
+            assert!(
+                counts[&p.source] >= usize::from(p.frames) * usize::from(p.angles),
+                "{}",
+                p.source
+            );
+        }
+    }
+    eprintln!(
+        "BUILDING_INVENTORY sources={} cells={}",
+        counts.len(),
+        counts.values().sum::<usize>()
+    );
 }

@@ -185,6 +185,7 @@ fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
                 frames: 2,
                 angles: 1,
                 primary: false,
+                replay_delay: 0.0,
                 frame_rate: 0.0,
                 offset: [0; 2],
                 misplacement: [0.0; 2],
@@ -197,6 +198,7 @@ fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
         foundation_slp: None,
         foundation_size: [0; 2],
         parts: Vec::new(),
+        states: Vec::new(),
         construction: Vec::new(),
         damage: vec![manifest::BuildingDamage {
             damage_percent: 25,

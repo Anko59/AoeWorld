@@ -16,6 +16,7 @@ fn compiled_recipe_layout_and_all_truncation_boundaries_are_checked() {
     for value in [10u16, 10, 0, 0] {
         bytes.extend(value.to_le_bytes());
     }
+    bytes.push(0); // No other building states.
     bytes.extend(0u16.to_le_bytes()); // No shared damage graphics.
     bytes.push(0); // No damage states.
     let buildings = decode(&hex(&bytes), &[]).unwrap();
@@ -50,14 +51,17 @@ fn damage_instances_share_animation_and_keep_each_offset() {
         bytes.extend(value.to_le_bytes());
     }
     bytes.extend((-1i32).to_le_bytes());
-    for value in [0u16, 0, 0, 0, 1] {
+    for value in [0u16, 0, 0, 0] {
         bytes.extend(value.to_le_bytes());
     }
+    bytes.push(0); // No other building states.
+    bytes.extend(1u16.to_le_bytes()); // One shared damage graphic.
     bytes.extend(u32::MAX.to_le_bytes());
     bytes.extend(20u16.to_le_bytes());
     bytes.extend(1u16.to_le_bytes());
     bytes.push(0);
     bytes.extend(0.05f32.to_le_bytes());
+    bytes.extend(0.0f32.to_le_bytes());
     for value in [0i32, 0] {
         bytes.extend(value.to_le_bytes());
     }

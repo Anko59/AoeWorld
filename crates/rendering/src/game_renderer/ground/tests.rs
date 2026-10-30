@@ -14,6 +14,7 @@ fn dock_foundations_and_aprons_paint_land_without_changing_water() {
         footprint: [3.0; 2],
         foundation_material: None,
         parts: Vec::new(),
+        states: Vec::new(),
         construction: Vec::new(),
         damage: Vec::new(),
     });
@@ -81,6 +82,7 @@ fn native_farm_without_de_art_keeps_its_imported_crop_sheet() {
         footprint: [3.0; 2],
         foundation_material: Some(17),
         parts: Vec::new(),
+        states: Vec::new(),
         construction: Vec::new(),
         damage: Vec::new(),
     });
@@ -168,6 +170,7 @@ fn farm_crop_uvs_keep_both_triangle_halves_when_the_apron_blends() {
         footprint: [3.0; 2],
         foundation_material: Some(17),
         parts: Vec::new(),
+        states: Vec::new(),
         construction: Vec::new(),
         damage: Vec::new(),
     });
@@ -316,6 +319,7 @@ fn feudal_buildings_paint_native_foundations_and_aprons_only_on_land() {
             footprint: if id == 792 { [4.0, 1.0] } else { [3.0; 2] },
             foundation_material: None,
             parts: Vec::new(),
+            states: Vec::new(),
             construction: Vec::new(),
             damage: Vec::new(),
         });
@@ -376,5 +380,27 @@ fn feudal_buildings_paint_native_foundations_and_aprons_only_on_land() {
                 }
             }
         }
+    }
+}
+
+#[wasm_bindgen_test]
+fn bridge_rubble_and_destroyed_recipe_ids_do_not_paint_building_foundations() {
+    let art = crate::surface_mesh::mix::fixture::art();
+    for (kind, dying) in [
+        (SceneUnitKind::BridgeATop, false),
+        (SceneUnitKind::RubbleHouse, false),
+        (SceneUnitKind::House, true),
+    ] {
+        let mut unit = test_unit(kind);
+        unit.visual = crate::SceneUnitVisual::new(dying);
+        let mut terrain = [SceneTerrain {
+            position: [0.5; 2],
+            material: 0,
+            elevation_meters: 0.0,
+            surface: SceneTerrainSurface::flat(0.0),
+            appearance: None,
+        }];
+        apply_building_foundations(&mut terrain, &art, &[unit]);
+        assert_eq!(terrain[0].material, 0, "{kind:?} is not a live foundation");
     }
 }

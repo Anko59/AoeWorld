@@ -282,8 +282,7 @@ fn copy_block(
     }
 }
 
-/// Decodes every frame of an SLD file.
-pub fn parse(bytes: &[u8]) -> Result<Vec<Frame>, Error> {
+fn header(bytes: &[u8]) -> Result<(usize, usize), Error> {
     if bytes.len() > MAX_FILE {
         return Err(invalid(FORMAT, 0, "file exceeds size limit"));
     }
@@ -304,84 +303,97 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<Frame>, Error> {
     if ![14, HEADER].contains(&header) {
         return Err(invalid(FORMAT, 10, "unexpected header size"));
     }
+    Ok((count, header))
+}
+
+fn decode_frame(
+    bytes: &[u8],
+    mut pos: usize,
+    header: usize,
+    previous: Option<&Frame>,
+    budget: &mut usize,
+) -> Result<(Frame, usize), Error> {
+    let width = usize::from(u16_at(bytes, pos, FORMAT)?);
+    let height = usize::from(u16_at(bytes, pos + 2, FORMAT)?);
+    if width > MAX_SIDE || height > MAX_SIDE {
+        return Err(invalid(FORMAT, pos, "frame dimensions exceed limit"));
+    }
+    let anchor_x = u16_at(bytes, pos + 4, FORMAT)?;
+    let anchor_y = u16_at(bytes, pos + 6, FORMAT)?;
+    let flags = slice(bytes, pos + 8, 1, FORMAT)?[0];
+    let index = u16_at(bytes, pos + 10, FORMAT)?;
+    pos += FRAME_HEADER;
+    let mut main = Rect {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+    };
+    let mut decoded: [Option<Layer>; 5] = Default::default();
+    for (bit, kind) in LAYERS.into_iter().enumerate() {
+        if flags & (1 << bit) == 0 {
+            continue;
+        }
+        if bit > 0 && decoded[0].is_none() && kind == Kind::Player {
+            return Err(invalid(FORMAT, pos, "player layer without main layer"));
+        }
+        let previous = (index > 0)
+            .then_some(previous)
+            .flatten()
+            .and_then(|frame| match kind {
+                Kind::Main => frame.main.as_ref(),
+                Kind::Shadow => frame.shadow.as_ref(),
+                Kind::Player => frame.player.as_ref(),
+                Kind::Skipped => None,
+            });
+        let (found, next) = layer(bytes, pos, kind, (width, height), &main, previous, budget)?;
+        if let Some(found) = &found
+            && kind == Kind::Main
+        {
+            main = Rect {
+                x: usize::from(found.x),
+                y: usize::from(found.y),
+                width: usize::from(found.width),
+                height: usize::from(found.height),
+            };
+        }
+        decoded[bit] = found;
+        pos = next;
+        pos += (4 - (pos - header) % 4) % 4;
+    }
+    let [main, shadow, _, _, player] = decoded;
+    let frame = Frame {
+        width: width as u16,
+        height: height as u16,
+        anchor_x,
+        anchor_y,
+        index,
+        main,
+        shadow,
+        player,
+    };
+    Ok((frame, pos))
+}
+
+/// Decodes every frame while retaining the original whole-file memory bound.
+pub fn parse(bytes: &[u8]) -> Result<Vec<Frame>, Error> {
+    let (count, header) = header(bytes)?;
     let mut pos = header;
     let mut budget = MAX_TOTAL_PIXELS;
-    let mut frames: Vec<Frame> = Vec::with_capacity(count.min(256));
+    let mut frames = Vec::with_capacity(count.min(256));
     for _ in 0..count {
-        let width = usize::from(u16_at(bytes, pos, FORMAT)?);
-        let height = usize::from(u16_at(bytes, pos + 2, FORMAT)?);
-        if width > MAX_SIDE || height > MAX_SIDE {
-            return Err(invalid(FORMAT, pos, "frame dimensions exceed limit"));
-        }
-        let anchor_x = u16_at(bytes, pos + 4, FORMAT)?;
-        let anchor_y = u16_at(bytes, pos + 6, FORMAT)?;
-        let flags = slice(bytes, pos + 8, 1, FORMAT)?[0];
-        let index = u16_at(bytes, pos + 10, FORMAT)?;
-        pos += FRAME_HEADER;
-        let mut main = Rect {
-            x: 0,
-            y: 0,
-            width: 0,
-            height: 0,
-        };
-        let mut decoded: [Option<Layer>; 5] = Default::default();
-        for (bit, kind) in LAYERS.into_iter().enumerate() {
-            if flags & (1 << bit) == 0 {
-                continue;
-            }
-            if bit > 0 && decoded[0].is_none() && kind == Kind::Player {
-                return Err(invalid(FORMAT, pos, "player layer without main layer"));
-            }
-            let previous =
-                (index > 0)
-                    .then(|| frames.last())
-                    .flatten()
-                    .and_then(|frame| match kind {
-                        Kind::Main => frame.main.as_ref(),
-                        Kind::Shadow => frame.shadow.as_ref(),
-                        Kind::Player => frame.player.as_ref(),
-                        Kind::Skipped => None,
-                    });
-            let (found, next) = layer(
-                bytes,
-                pos,
-                kind,
-                (width, height),
-                &main,
-                previous,
-                &mut budget,
-            )?;
-            if let Some(found) = &found
-                && kind == Kind::Main
-            {
-                main = Rect {
-                    x: usize::from(found.x),
-                    y: usize::from(found.y),
-                    width: usize::from(found.width),
-                    height: usize::from(found.height),
-                };
-            }
-            decoded[bit] = found;
-            pos = next;
-            pos += (4 - (pos - header) % 4) % 4;
-        }
-        let [main, shadow, _, _, player] = decoded;
-        frames.push(Frame {
-            width: width as u16,
-            height: height as u16,
-            anchor_x,
-            anchor_y,
-            index,
-            main,
-            shadow,
-            player,
-        });
+        let (frame, next) = decode_frame(bytes, pos, header, frames.last(), &mut budget)?;
+        frames.push(frame);
+        pos = next;
     }
     if pos != bytes.len() {
         return Err(invalid(FORMAT, pos, "unparsed trailing bytes"));
     }
     Ok(frames)
 }
+#[path = "sld/stream.rs"]
+mod stream;
+pub use stream::Stream;
 
 #[path = "sld/tests.rs"]
 #[cfg(test)]

@@ -29,7 +29,11 @@ pub fn apply_building_foundations(
     let foundations = units
         .iter()
         .filter_map(|unit| {
-            if unit.visual.ghost() {
+            if unit.visual.ghost()
+                || unit.visual.moving()
+                || unit.kind.rubble()
+                || unit.kind.building_slot().is_some_and(|slot| slot >= 65)
+            {
                 return None;
             }
             let id = unit.kind.building_id()?;

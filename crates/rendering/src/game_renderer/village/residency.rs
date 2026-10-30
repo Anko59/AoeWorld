@@ -2,23 +2,50 @@
 use super::*;
 
 /// Visible native cells, deduplicated independently of their current residency.
-pub fn scene_native_frames(art: &GameArt, units: &[SceneUnit], camera: SceneCamera) -> Vec<u32> {
-    demand(art, units, camera, 0..=0)
+pub fn scene_native_frames(
+    art: &GameArt,
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    animation: usize,
+) -> Vec<u32> {
+    demand(art, units, camera, animation, 0..=0)
 }
 
 /// Two source phases of lookahead, always inside the current facing row.
-pub fn scene_native_prefetch(art: &GameArt, units: &[SceneUnit], camera: SceneCamera) -> Vec<u32> {
-    demand(art, units, camera, 1..=2)
+pub fn scene_native_prefetch(
+    art: &GameArt,
+    units: &[SceneUnit],
+    camera: SceneCamera,
+    animation: usize,
+) -> Vec<u32> {
+    demand(art, units, camera, animation, 1..=2)
 }
 
 fn demand(
     art: &GameArt,
     units: &[SceneUnit],
     camera: SceneCamera,
+    animation: usize,
     ahead: std::ops::RangeInclusive<usize>,
 ) -> Vec<u32> {
     let mut required = std::collections::BTreeSet::new();
     for &unit in units {
+        if unit.kind.building_side().is_some() {
+            for offset in ahead.clone() {
+                village::building(
+                    art,
+                    unit,
+                    camera,
+                    animation + offset * 100,
+                    &mut |(_, frame, _, _)| {
+                        if frame.stream != 0 {
+                            required.insert(frame.stream);
+                        }
+                    },
+                );
+            }
+            continue;
+        }
         if unit.kind.actor_slot().is_none() {
             continue;
         }

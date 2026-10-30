@@ -1,8 +1,5 @@
-//! Dark Age buildings imported from the owner's Age of Empires II: Definitive
-//! Edition install into a separate local pack. The install stays outside Git;
-//! the pack, the preview PNGs and the mapping table all go below the ignored
-//! `local-assets/`. The SLD layers become the same colour, player-ramp and
-//! shadow planes the trial packs use, so the client reads both alike.
+//! Generic DAT units and buildings from the owner-licensed DE installation.
+//! Native pixels remain private; the runtime streams bounded visible cells.
 use crate::{
     Error,
     pack::{
@@ -16,6 +13,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub mod buildings;
 mod cache;
 mod compose;
 mod farm;
@@ -33,7 +31,7 @@ const MAX_SLD: u64 = 64 * 1024 * 1024;
 const GRAPHICS: &str = "resources/_common/drs/graphics";
 const TEXTURES: &str = "resources/_common/terrain/textures/2x";
 /// Folded into the pack hash so a change of the conversion rules makes a new pack.
-const CONVERSION: &str = "de-sld-rgb565-weighted-player-chunked-dat-units";
+const CONVERSION: &str = "de-sld-rgb565-weighted-player-chunked-dat-buildings";
 
 /// What one selected source contributed to the pack.
 #[derive(Clone, Debug)]
@@ -101,6 +99,7 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         return Err(crate::invalid("DE", 0, "install and output paths overlap"));
     }
     let units = unit_catalog::resolve(&install)?;
+    let buildings = buildings::resolve(&install)?;
     native::validate_catalog(&units)?;
     let graphics = install.join(GRAPHICS);
     if !graphics.is_dir() {
@@ -113,12 +112,22 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
     let mut hasher = blake3::Hasher::new();
     hasher.update(b"pack indexed building startup data\0");
     hasher.update(CONVERSION.as_bytes());
+    hasher.update(&serde_json::to_vec(&buildings.recipes)?);
     let mut loaded = Vec::new();
     let mut absent = Vec::new();
-    let plans: Vec<_> = SELECTION
+    let mut plans: Vec<_> = SELECTION
         .iter()
         .map(|i| (format!("{}_x1", i.stem), i.building, i.role))
         .collect();
+    plans.extend(buildings.sources.iter().map(|s| {
+        (
+            s.trim_start_matches("de/")
+                .trim_end_matches(".sld")
+                .to_owned(),
+            "building",
+            "native",
+        )
+    }));
     for (stem, building, role) in plans {
         let file = format!("{stem}.sld");
         let path = graphics.join(&file);
@@ -133,7 +142,10 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         let hash = blake3::hash(&bytes);
         hasher.update(file.as_bytes());
         hasher.update(hash.as_bytes());
-        let frames = sld::parse(&bytes)?;
+        let mut decoder = sld::Stream::new(bytes)?;
+        let frames = (0..decoder.len())
+            .map(|i| decoder.frame(i).map(compose::info))
+            .collect::<Result<Vec<_>, Error>>()?;
         if let Some(source) = crate::catalog::units::SPRITES
             .iter()
             .find(|source| source.is_native() && source.manifest_source() == format!("de/{file}"))
@@ -166,7 +178,7 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
             source: format!("de/{file}"),
             hash: hash.to_hex().to_string(),
             path,
-            frames: frames.iter().map(compose::info).collect(),
+            frames,
             unit: None,
         });
     }
@@ -175,7 +187,7 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
     for (_, unit) in unique {
         let hash = unit_frames::hash(&install, &unit)?;
         hasher.update(hash.as_bytes());
-        let decoder = unit_frames::Decoder::new(&install, &unit)?;
+        let mut decoder = unit_frames::Decoder::new(&install, &unit)?;
         let frames = (0..decoder.len())
             .map(|i| decoder.frame(i))
             .map(|p| {
@@ -231,17 +243,17 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
             if blake3::hash(&bytes).to_hex().as_str() != sprite.hash {
                 return Err(crate::invalid("DE", 0, "source changed during import"));
             }
-            Ok(vec![unit_frames::Decoder::static_frames(sld::parse(
-                &bytes,
-            )?)])
+            Ok(vec![unit_frames::Decoder::streamed(bytes)?])
         }
     });
     let pack = write_pack_streamed(
         &output_root,
         hasher.finalize().to_hex().to_string(),
         &refs,
-        Vec::new(),
-        |sprite, _| sprite < split && matches!(loaded[sprite].building, "unit" | "projectile"),
+        buildings.recipes,
+        |sprite, _| {
+            sprite < split && matches!(loaded[sprite].building, "unit" | "projectile" | "building")
+        },
         |sprite, frame| {
             if sprite < split {
                 cache.get(sprite)?[0].frame(frame)
@@ -255,7 +267,10 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         entries,
         absent,
     };
-    for sprite in loaded.iter().filter(|s| s.unit.is_none()) {
+    for sprite in loaded
+        .iter()
+        .filter(|s| s.unit.is_none() && s.building != "building")
+    {
         preview::write(
             &local.join("de-preview"),
             &[(

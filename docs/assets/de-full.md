@@ -25,7 +25,7 @@ milliseconds remain descriptive; playback uses fractional DE durations.
 
 ## Bounded residency
 
-Unit cells use on-demand residency rather than startup placement of every
+Unit and building cells use on-demand residency rather than startup placement of every
 animation. Each independently compressed cell retains colour, owner weight and
 shadow planes in bounded, hashed pack chunks. The browser requests current
 visible cells first and two phases of lookahead in the current direction.
@@ -89,3 +89,11 @@ visit every phase over two loops before checking impact removal.
 `make test-assets-de` includes the real stone source alongside hero and house
 checks. The current simulation has a Mangonel, with no Onager or Scorpion unit
 kind to qualify. Other unit, projectile and trial dependencies remain active work.
+
+## Buildings in one pass
+
+The same private import resolves all gameplay building ages and bridge pieces
+from numeric DAT IDs. Every drawable native cell is chunked; building layers
+keep their independent DAT timelines instead of sampling large ambient loops.
+Recipes include nested annexes, damage, construction and destruction/corpse
+states. See [the building contract](buildings.md) for residency and lifecycle.

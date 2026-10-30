@@ -212,10 +212,18 @@ pub(super) fn emit_world_sprite_frames(
                     } else {
                         [1.0, 1.0, 1.0, 0.5]
                     };
-                } else if unit.kind.building_id().is_some_and(|id| id != 50) {
+                } else if !unit.visual.moving()
+                    && !unit.kind.rubble()
+                    && unit.kind.building_slot().is_none_or(|slot| slot < 65)
+                    && unit.kind.building_id().is_some_and(|id| id != 50)
+                {
                     sprite.pages[3] |= Sprite::OCCLUDER;
                 }
-                emit((sprite, frame, depth, id));
+                if let Some(frame) = art.resident_frame(frame) {
+                    sprite.uv = frame.atlas.uv;
+                    sprite.pages[0] = frame.atlas.page;
+                    emit((sprite, frame, depth, id));
+                }
             });
             continue;
         }
@@ -429,56 +437,5 @@ fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
 mod layer_order_tests;
 
 pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
-    if let Some(slot @ (4 | 40)) = unit.kind.building_slot()
-        && !art
-            .compositions
-            .iter()
-            .any(|b| Some(b.unit_id) == unit.kind.building_id() && !b.parts.is_empty())
-    {
-        let frames = &art.buildings[usize::from(slot)];
-        return (slot == 40 || frames.len() == 44)
-            && frames.iter().any(|f| {
-                sprite_screen_bounds(
-                    world_frame(*f),
-                    unit.position,
-                    unit.elevation_meters,
-                    camera,
-                )
-                .is_some()
-            });
-    }
-    if unit.kind.is_foundation() {
-        return false;
-    }
-    if unit.kind.building_id().is_some() {
-        return art
-            .compositions
-            .iter()
-            .find(|b| Some(b.unit_id) == unit.kind.building_id())
-            .is_some_and(|b| {
-                // A healthy wall draws frame 0 of each part; only damage animates.
-                let wall = unit.kind == crate::SceneUnitKind::PalisadeWall;
-                let parts: &[_] = if wall { &[] } else { &b.parts };
-                let damage = usize::from(unit.visual.damage_stage())
-                    .checked_sub(1)
-                    .and_then(|i| b.damage.get(i))
-                    .into_iter()
-                    .flat_map(|d| &d.parts);
-                parts.iter().chain(damage).any(|p| {
-                    p.frame_rate > 0.0
-                        && p.animation.len() > 1
-                        && scene_sprite(
-                            world_frame(p.frame),
-                            unit.position,
-                            unit.elevation_meters,
-                            camera,
-                        )
-                        .is_some()
-                })
-            });
-    }
-    let Some((frames, stride, true)) = village::frames(art, unit) else {
-        return false;
-    };
-    bounds::frames_visible(frames, stride, unit, camera)
+    bounds::animates(art, unit, camera)
 }

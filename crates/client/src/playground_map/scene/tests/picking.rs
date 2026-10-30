@@ -49,6 +49,7 @@ async fn fixture(zoom: f64) -> Client {
         frame,
         animation: Vec::new(),
         angles: 1,
+        replay_delay: 0.0,
         frame_rate: 0.0,
         offset: [0.0; 2],
         depth: 0.0,
@@ -70,6 +71,7 @@ async fn fixture(zoom: f64) -> Client {
                 ..part
             },
         ],
+        states: Vec::new(),
         construction: Vec::new(),
         damage: Vec::new(),
     });
