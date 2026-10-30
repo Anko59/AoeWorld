@@ -132,13 +132,13 @@ impl GameWorld {
     }
 
     /// Territory showcase on the four-times clock: two overlapping Castles, 40
-    /// busy farmers between them, Vassal A already sheltered and Vassal B
-    /// waiting outside. Garrisoning B splits the area; all orders stay real.
+    /// busy farmers between them and both Vassals waiting outside. Garrisoning
+    /// the first adopts every farmer; garrisoning the second splits the area.
+    /// All orders stay real.
     pub fn vassal_territory_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         use crate::UnitKind;
         let (mut world, primary) = Self::military_demo(seed)?;
         world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
-        let mut vassals = Vec::new();
         for (x, y) in [(100, 100), (150, 100)] {
             let footprint = TileRect::from_xywh(x, y, 4, 4);
             let castle =
@@ -147,7 +147,6 @@ impl GameWorld {
                 .map_err(|_| EconomyError::InvalidFootprint)?;
             let vassal = world.spawn_kind(PlayerId(0), UnitKind::Vassal, at)?;
             world.bind_vassal(vassal, castle, footprint);
-            vassals.push((vassal, castle));
         }
         for i in 0..40 {
             let at = TileCoord::new(87 + 4 * (i % 20), 146 + 4 * (i / 20));
@@ -164,8 +163,6 @@ impl GameWorld {
             )?;
             world.issue_farm(PlayerId(0), worker, farm)?;
         }
-        let (vassal, castle) = vassals[0];
-        world.issue_garrison(PlayerId(0), vassal, castle)?;
         Ok((world, primary))
     }
 

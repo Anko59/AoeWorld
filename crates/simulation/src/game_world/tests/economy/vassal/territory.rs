@@ -139,9 +139,11 @@ fn a_managed_worker_that_never_moves_is_retasked_and_counts_as_idle() {
 #[test]
 fn the_territory_demo_shows_adoption_then_a_split_when_the_second_vassal_shelters() {
     let (mut w, _) = GameWorld::vassal_territory_demo(aoe_core::Seed(7)).unwrap();
-    advance(&mut w, 80);
     let vassals: Vec<_> = w.economy.vassal_homes.keys().copied().collect();
     let (first, second) = (vassals[0], vassals[1]);
+    let home = w.vassal_castle(first).unwrap();
+    w.issue_garrison(PlayerId(0), first, home).unwrap();
+    advance(&mut w, 80);
     let farmers = |w: &GameWorld, v| {
         w.units()
             .filter(|u| w.gathering_kind(u.id).is_some() && w.vassal_controller(u.id) == Some(v))
