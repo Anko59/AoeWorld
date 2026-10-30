@@ -94,7 +94,9 @@ impl GameWorld {
             )
         });
         for kind in kinds {
-            if unit.carried.is_some_and(|c| c.kind != kind) {
+            if unit.carried.is_some_and(|c| c.kind != kind)
+                || s.avoid.is_some_and(|a| a.avoid_kind == Some(kind))
+            {
                 continue;
             }
             if !budget.search(work) {
@@ -103,7 +105,8 @@ impl GameWorld {
             let from = unit.position.tile_floor();
             let eligible = |n: &aoe_map::ResourceNode| {
                 n.object != ObjectKind::DeepFish
-                    && s.home.contains(node_position(n.tile))
+                    && s.home.owns(node_position(n.tile))
+                    && s.avoid.is_none_or(|a| a.avoid_tile != Some(n.tile))
                     && self.visibility(s.player, n.tile) != TileVisibility::Unexplored
             };
             let node = self

@@ -41,8 +41,8 @@ pub use economy::{
     ConstructionState, EconomyError, GameBuilding, GarrisonedUnit, GeneralState, GeneralStatus,
     GeneralWork, MARKET_RULES, MAX_BUILD_GROUP, MAX_POPULATION, MAX_WALL_SEGMENTS, MarketPrices,
     PlayerEconomy, RallyPoint, RallyTarget, Stockpile, TickPhase, TrainingEntry, UnitKind,
-    UnitTask, VASSAL_RULES, VILLAGE_RULES, VassalRules, VassalWork, VillageRules, WorldLimits,
-    trainable_units,
+    UnitTask, VASSAL_RULES, VASSAL_STALL_SECONDS, VILLAGE_RULES, VassalRules, VassalStatus,
+    VassalWait, VassalWork, VillageRules, WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;

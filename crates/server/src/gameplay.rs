@@ -250,6 +250,10 @@ impl GameplayService {
         let (world, primary) = GameWorld::vassal_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
+    pub fn vassal_territory_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::vassal_territory_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
     pub fn military_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::military_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))

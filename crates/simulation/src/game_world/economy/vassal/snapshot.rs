@@ -13,6 +13,8 @@ pub(super) struct Snapshot {
     pub queued: usize,
     pub global_queued: usize,
     pub allocated: [usize; 4],
+    /// The stalled node/kind the worker now being tasked must not choose again.
+    pub avoid: Option<super::watchdog::Stall>,
 }
 impl GameWorld {
     /// Spatial buckets only, with a retained position when crowds exceed the
@@ -56,7 +58,7 @@ impl GameWorld {
                     && u.hp > 0
                     && u.kind == UnitKind::Villager
                     && !self.embarked(u.id)
-                    && home.contains(u.position)
+                    && home.owns(u.position)
                 {
                     units.push(u);
                 }
@@ -128,6 +130,7 @@ impl GameWorld {
             queued,
             global_queued,
             allocated,
+            avoid: None,
         })
     }
 }

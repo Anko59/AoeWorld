@@ -1,4 +1,6 @@
-use super::{VASSAL_RULES, VassalWork, rules::Budget, snapshot::Snapshot};
+use super::{
+    VASSAL_RULES, VassalStatus, VassalWait, VassalWork, rules::Budget, snapshot::Snapshot,
+};
 use crate::{BuildingKind, GameWorld, UnitKind, UnitTask, VILLAGE_RULES};
 use aoe_core::EntityId;
 use std::ops::Bound::{Excluded, Unbounded};
@@ -46,36 +48,73 @@ impl GameWorld {
             };
             work.domains += 1;
             let mut budget = Budget::default();
-            self.vassal_train(&mut snapshot, &mut budget, &mut work);
+            self.vassal_adopt(&snapshot);
+            self.vassal_watchdog(&snapshot, changed);
+            let wait = self.vassal_train(&mut snapshot, &mut budget, &mut work);
+            self.vassal_house_for_busy(&mut snapshot, &mut budget, &mut work, changed);
             self.vassal_reseeds(&snapshot, &mut budget, &mut work);
             self.vassal_refresh_wood(&mut snapshot, &mut budget, &mut work);
             self.vassal_idle(id, &mut snapshot, &mut budget, &mut work, changed);
+            self.vassal_publish_status(id, snapshot.villagers, wait);
         }
         self.economy.vassals.work = work;
     }
-    fn vassal_train(&mut self, s: &mut Snapshot, budget: &mut Budget, work: &mut VassalWork) {
-        if !s.complete {
+    /// Mirror the status into the Castle's occupant record, so a changed status
+    /// reaches the owner like any other building change.
+    fn vassal_publish_status(&mut self, id: EntityId, residents: usize, wait: VassalWait) {
+        let Some(home) = self.economy.vassal_homes.get_mut(&id) else {
             return;
+        };
+        home.status = VassalStatus {
+            managed: home.workers.len() as u16,
+            residents: residents.min(usize::from(u16::MAX)) as u16,
+            wait,
+        };
+        let (castle, status) = (home.castle, home.status);
+        if let Some(entry) = self
+            .economy
+            .buildings
+            .get_mut(&castle)
+            .and_then(|b| b.garrison.iter_mut().find(|g| g.unit.id == id))
+            && entry.vassal != Some(status)
+        {
+            entry.vassal = Some(status);
         }
+    }
+    fn vassal_train(
+        &mut self,
+        s: &mut Snapshot,
+        budget: &mut Budget,
+        work: &mut VassalWork,
+    ) -> VassalWait {
+        if !s.complete {
+            return VassalWait::Census;
+        }
+        let mut wait = VassalWait::NoTownCenter;
         for b in &s.buildings {
             if s.villagers + s.queued >= VASSAL_RULES.max_villagers {
-                break;
+                return VassalWait::Full;
             }
             if b.kind != BuildingKind::TownCenter
                 || !b.is_complete()
-                || b.research.is_some()
-                || !b.training_queue.is_empty()
                 || !s.home.covers(b.footprint, 1)
                 || b.rally_point.is_some_and(|r| !s.home.contains(r.position))
             {
                 continue;
             }
+            wait = VassalWait::Growing;
+            if b.research.is_some() || !b.training_queue.is_empty() {
+                continue;
+            }
             let Some(p) = self.player_economy(s.player) else {
                 break;
             };
-            if p.stockpile.food < VILLAGE_RULES.villager_food_cost
-                || usize::from(p.population_used) + s.global_queued >= usize::from(p.population_cap)
-            {
+            if p.stockpile.food < VILLAGE_RULES.villager_food_cost {
+                wait = VassalWait::Food;
+                break;
+            }
+            if usize::from(p.population_used) + s.global_queued >= usize::from(p.population_cap) {
+                wait = VassalWait::Population;
                 break;
             }
             if !budget.order(work) {
@@ -86,6 +125,10 @@ impl GameWorld {
                 s.global_queued += 1;
             }
         }
+        if s.villagers + s.queued >= VASSAL_RULES.max_villagers {
+            return VassalWait::Full;
+        }
+        wait
     }
     fn vassal_reseeds(&mut self, s: &Snapshot, budget: &mut Budget, work: &mut VassalWork) {
         if !s.units.iter().any(|u| {
