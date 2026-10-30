@@ -52,13 +52,13 @@ fn wire_resource(kind: aoe_map::ResourceKind) -> ResourceKind {
         aoe_map::ResourceKind::Stone => ResourceKind::Stone,
     }
 }
-pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitState {
-    let mut state = wire_unit(
-        unit,
-        world.gathering_kind(unit.id),
-        world.hunting_target(unit.id),
-    );
-    state.cargo_count = world.transport_cargo(unit.id).len() as u8;
+/// Home Castle, managers and General status. The wire carries them for living
+/// units only: a Dying body keeps its simulation records until it is removed,
+/// and one such unit used to make every Snapshot and Tick fail validation.
+pub(super) fn command_state(world: &GameWorld, unit: &GameUnit, state: &mut GameplayUnitState) {
+    if unit.hp == 0 {
+        return;
+    }
     state.home_castle = world
         .vassal_castle(unit.id)
         .or_else(|| world.general_castle(unit.id));
@@ -75,6 +75,15 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
                 aoe_simulation::GeneralState::Retreating => aoe_protocol::GeneralState::Retreating,
             },
         });
+}
+pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitState {
+    let mut state = wire_unit(
+        unit,
+        world.gathering_kind(unit.id),
+        world.hunting_target(unit.id),
+    );
+    state.cargo_count = world.transport_cargo(unit.id).len() as u8;
+    command_state(world, unit, &mut state);
     state
 }
 /// A unit as the wire sees it, given the two facts only the economy knows.
@@ -391,3 +400,7 @@ fn wire_rally(target: aoe_simulation::RallyTarget) -> aoe_protocol::RallyTarget 
         N::Animal(id) => W::Animal(id),
     }
 }
+
+#[path = "economy/tests.rs"]
+#[cfg(test)]
+mod tests;
