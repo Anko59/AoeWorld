@@ -24,6 +24,7 @@ mod training;
 mod vassal;
 #[path = "economy/navigation/village_routes.rs"]
 mod village_routes;
+mod wire_audit;
 
 fn village() -> (GameWorld, EntityId, EntityId) {
     let mut world = world();
