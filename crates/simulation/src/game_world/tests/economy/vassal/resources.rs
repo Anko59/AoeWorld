@@ -125,3 +125,74 @@ fn managed_lumberjacks_share_the_normal_reservation_path() {
         "multiple managed trees must be exercised"
     );
 }
+
+/// A wood worker is stopped and the Vassal pass retasks it; returns the first
+/// job it takes. `avoid` seeds a stall record: (strikes, tile, kind).
+fn first_retask(
+    avoid: impl Fn(
+        (aoe_core::TileCoord, Option<ResourceKind>),
+    ) -> Option<(u8, aoe_core::TileCoord, Option<ResourceKind>)>,
+    baseline: Option<(aoe_core::TileCoord, Option<ResourceKind>)>,
+) -> Option<(aoe_core::TileCoord, Option<ResourceKind>)> {
+    let (mut w, _, worker, id) = wood_domain(1);
+    for _ in 0..200 {
+        advance(&mut w, VASSAL_RULES.period_ticks as u32);
+        if w.gather_tile(worker).is_some() {
+            break;
+        }
+    }
+    // As the watchdog does: a Vassal's own stop keeps the worker managed.
+    w.economy.vassals.automatic = true;
+    w.issue_stop(PlayerId(0), worker).unwrap();
+    w.economy.vassals.automatic = false;
+    if let Some((strikes, tile, kind)) = baseline.and_then(&avoid) {
+        let at = w.unit(worker).unwrap().position;
+        let stall =
+            crate::game_world::economy::vassal_stall(at, w.tick.0, strikes, Some(tile), kind);
+        w.economy
+            .vassal_homes
+            .get_mut(&id)
+            .unwrap()
+            .stalls
+            .insert(worker, stall);
+    }
+    // The stall record outlives this window.
+    for _ in 0..60 {
+        advance(&mut w, VASSAL_RULES.period_ticks as u32);
+        if let Some(t) = w.gather_tile(worker) {
+            return Some((t, w.gathering_kind(worker)));
+        }
+    }
+    None
+}
+
+#[test]
+fn a_stall_record_survives_the_retask_so_strikes_can_accumulate() {
+    let (mut w, _, worker, id) = wood_domain(1);
+    advance(&mut w, VASSAL_RULES.period_ticks as u32 * 2);
+    let tile = aoe_core::TileCoord::new(1, 1);
+    let at = w.unit(worker).unwrap().position;
+    let stall = crate::game_world::economy::vassal_stall(at, w.tick.0, 1, Some(tile), None);
+    w.economy
+        .vassal_homes
+        .get_mut(&id)
+        .unwrap()
+        .stalls
+        .insert(worker, stall);
+    advance(&mut w, VASSAL_RULES.period_ticks as u32 * 6);
+    let kept = w.economy.vassal_homes[&id].stalls.get(&worker).copied();
+    assert!(
+        kept.is_some_and(|s| s.strikes == 1 && s.avoid_tile == Some(tile)),
+        "{kept:?}"
+    );
+}
+
+#[test]
+fn two_stalls_in_a_row_give_up_the_resource_kind() {
+    let first = first_retask(|_| None, None).expect("retasked");
+    let kind = first_retask(|(t, k)| Some((2, t, k)), Some(first)).and_then(|a| a.1);
+    assert_ne!(
+        kind, first.1,
+        "the resource kind that stalled twice is skipped"
+    );
+}

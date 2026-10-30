@@ -16,6 +16,8 @@ mod watchdog;
 pub use rules::{VASSAL_RULES, VassalRules, VassalWork};
 pub use status::{VassalStatus, VassalWait};
 pub use watchdog::VASSAL_STALL_SECONDS;
+#[cfg(test)]
+pub(crate) use watchdog::vassal_stall;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Home {
