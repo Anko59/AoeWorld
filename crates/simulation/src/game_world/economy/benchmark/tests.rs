@@ -90,8 +90,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // PR 10 ends unavailable land-work queues and hashes legal crowded contact.
-        "888ae8bff22a12708cca00c7c45be5ed7086ffcb5c51aedeb8e3ce2157428c42"
+        // Automatic wood re-picks now prefer trees with fewer than two cutters.
+        "58e6585e6b0b249a818875eb88fbac59fd3b0d52b26eaaea8746b3a92e8bfc0f"
     );
 }
 

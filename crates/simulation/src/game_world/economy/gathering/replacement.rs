@@ -3,7 +3,18 @@ use super::super::VILLAGE_RULES;
 use super::*;
 use aoe_map::ResourceNode;
 
+/// Gatherers on one tree beyond which automatic retargeting avoids it.
+pub(crate) const AUTO_TREE_CUTTERS: usize = 2;
+
 impl GameWorld {
+    /// Whether an automatic pick should skip this tree for a freer one.
+    pub(crate) fn tree_is_crowded(&self, n: &ResourceNode, own: Option<WorkTarget>) -> bool {
+        n.kind == ResourceKind::Wood
+            && self.economy.gatherers.count_target(WorkTarget::Node(n.id))
+                - usize::from(own == Some(WorkTarget::Node(n.id)))
+                >= AUTO_TREE_CUTTERS
+    }
+
     /// Re-pick before an obstructed approach gives up. Four searches per tick
     /// and one attempt per worker/second bound the local flood and route work.
     pub(crate) fn repick_obstructed_gatherer(&mut self, id: EntityId) -> bool {
@@ -95,8 +106,13 @@ impl GameWorld {
                 }
             }
         }
+        // Automatic retargeting spreads cutters: trees that already carry
+        // `AUTO_TREE_CUTTERS` gatherers rank after every freer tree in the
+        // radius. Manual orders are not routed through here and may stack.
+        let crowded = |n: &ResourceNode| self.tree_is_crowded(n, reserved);
         candidates.sort_unstable_by_key(|n| {
             (
+                crowded(n),
                 dropoff.map_or_else(
                     || distance_squared(n.tile, from),
                     |rect| super::super::dropoff::ring_distance(rect, n.tile),
@@ -143,6 +159,7 @@ impl GameWorld {
             .filter_map(|node| {
                 self.resource_work_spot(id, node.tile).map(|at| {
                     let key = (
+                        crowded(&node),
                         dropoff.map_or(0, |rect| {
                             super::super::dropoff::ring_distance(rect, node.tile)
                         }),
@@ -157,9 +174,9 @@ impl GameWorld {
         choices.sort_unstable_by_key(|(key, _)| *key);
         for (key, node) in choices {
             if direct
-                && (key.1
+                && (key.2
                     || task.work_position.is_some_and(|at| {
-                        key.2
+                        key.3
                             > crate::game_world::movement_step::slots::squared(unit.position, at)
                                 + 1024 * 1024
                     }))

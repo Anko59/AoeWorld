@@ -108,7 +108,14 @@ impl GameWorld {
             };
             let node = self
                 .nearest_resource_matching(from, kind, 10, None, |n| {
-                    eligible(n) && !self.vassal_crosses_water(from, n.tile)
+                    eligible(n)
+                        && !self.tree_is_crowded(n, None)
+                        && !self.vassal_crosses_water(from, n.tile)
+                })
+                .or_else(|| {
+                    self.nearest_resource_matching(from, kind, 10, None, |n| {
+                        eligible(n) && !self.vassal_crosses_water(from, n.tile)
+                    })
                 })
                 .or_else(|| {
                     if budget.search(work) {
