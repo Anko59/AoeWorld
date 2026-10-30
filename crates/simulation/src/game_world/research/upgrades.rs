@@ -112,13 +112,11 @@ impl GameWorld {
         }
     }
     pub(super) fn apply_masonry(&mut self, player: PlayerId) {
-        for b in self.economy.buildings.values_mut().filter(|b| {
-            b.player == player
-                && !matches!(
-                    b.kind,
-                    BuildingKind::Farm | BuildingKind::PalisadeWall | BuildingKind::PalisadeGate
-                )
-        }) {
+        for b in
+            self.economy.buildings.values_mut().filter(|b| {
+                b.player == player && b.kind != BuildingKind::Farm && !b.kind.is_barrier()
+            })
+        {
             let bonus = b.kind.age_stats(b.age).0 / 10;
             b.max_hp += bonus;
             b.hp += if b.is_complete() {

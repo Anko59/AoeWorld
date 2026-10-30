@@ -48,10 +48,9 @@ impl GameWorld {
             .player_economy(player)
             .map_or(crate::Age::Dark, |p| p.age);
         let (mut max_hp, los) = kind.age_stats(age);
-        if !matches!(
-            kind,
-            BuildingKind::Farm | BuildingKind::PalisadeWall | BuildingKind::PalisadeGate
-        ) && self.has_researched(player, crate::Tech::Masonry)
+        if kind != BuildingKind::Farm
+            && !kind.is_barrier()
+            && self.has_researched(player, crate::Tech::Masonry)
         {
             max_hp += max_hp / 10;
         }

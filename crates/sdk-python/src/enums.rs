@@ -87,6 +87,8 @@ mirror!(
         University,
         SiegeWorkshop,
         Bridge,
+        StoneWall,
+        StoneGate,
     ]
 );
 mirror!(

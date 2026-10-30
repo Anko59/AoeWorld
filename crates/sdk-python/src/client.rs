@@ -314,9 +314,19 @@ impl Client {
         self.order(Order::BuildBridge { builders: many(builders),
             from: TileCoord::new(x1, y1), to: TileCoord::new(x2, y2) })
     }
-    fn build_wall(&self, builders: Vec<u32>, x1: i32, y1: i32, x2: i32, y2: i32) -> u64 {
+    #[pyo3(signature = (builders, x1, y1, x2, y2, kind=BuildingKind::PalisadeWall))]
+    fn build_wall(
+        &self,
+        builders: Vec<u32>,
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        kind: BuildingKind,
+    ) -> u64 {
         self.order(Order::BuildWall {
             builders: many(builders),
+            kind: kind.into(),
             from: TileCoord::new(x1, y1),
             to: TileCoord::new(x2, y2),
         })

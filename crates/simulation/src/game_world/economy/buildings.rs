@@ -2,6 +2,8 @@
 //! Values and data provenance: docs/economy.md. Times are seconds for one builder.
 #[path = "buildings/age.rs"]
 mod age;
+#[path = "buildings/barriers.rs"]
+mod barriers;
 use super::{BuildingKind, Stockpile, UnitKind};
 use crate::Age;
 use aoe_map::ResourceKind;
@@ -9,7 +11,7 @@ use aoe_map::ResourceKind;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BuildingRules {
     pub kind: BuildingKind,
-    /// Charged when the foundation is placed (per segment for palisades).
+    /// Charged when the foundation is placed (per segment for walls).
     pub cost: Stockpile,
     pub build_seconds: u32,
     pub max_hp: u16,
@@ -58,7 +60,7 @@ const MILITIA: &[UnitKind] = &[
 ];
 
 /// Canonical order of `BuildingKind`.
-pub const BUILDING_RULES: [BuildingRules; 21] = [
+pub const BUILDING_RULES: [BuildingRules; 23] = [
     BuildingRules {
         kind: BuildingKind::TownCenter,
         cost: cost(0, 275, 0, 100),
@@ -396,6 +398,8 @@ pub const BUILDING_RULES: [BuildingRules; 21] = [
         food: 0,
         age: Age::Feudal,
     },
+    barriers::STONE_WALL,
+    barriers::STONE_GATE,
 ];
 
 const fn castle(
@@ -435,10 +439,22 @@ const fn castle(
 pub const MAX_POPULATION: u16 = 1_000;
 /// The AoE II rule: n builders take `base * 3 / (n + 2)`.
 pub const BUILD_WORK_PER_BASE_TICK: u64 = 3;
-/// Longest palisade a single order may lay down.
+/// Longest wall a single order may lay down.
 pub const MAX_WALL_SEGMENTS: usize = 64;
 
 impl BuildingKind {
+    /// A one-tile wall segment laid along a dragged line.
+    pub const fn is_wall(self) -> bool {
+        matches!(self, Self::PalisadeWall | Self::StoneWall)
+    }
+    /// A gate: opens for its owner's units, stays shut for everyone else.
+    pub const fn is_gate(self) -> bool {
+        matches!(self, Self::PalisadeGate | Self::StoneGate)
+    }
+    /// Walls and gates: not targeted by arrows, outside the Masonry bonus.
+    pub const fn is_barrier(self) -> bool {
+        self.is_wall() || self.is_gate()
+    }
     /// Movement collision is separate from the placement/selection footprint.
     /// AoK DAT 109 is non-obstructing; its annex 618 has half extents (1,1)
     /// at native NE/SE (1,-1), the NW 2x2 in our world axes. Annexes 619/620

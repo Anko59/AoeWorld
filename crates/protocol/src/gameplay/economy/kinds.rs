@@ -78,9 +78,11 @@ pub enum BuildingKind {
     University,
     SiegeWorkshop,
     Bridge,
+    StoneWall,
+    StoneGate,
 }
 impl BuildingKind {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 23] = [
         Self::TownCenter,
         Self::House,
         Self::LumberCamp,
@@ -102,6 +104,8 @@ impl BuildingKind {
         Self::University,
         Self::SiegeWorkshop,
         Self::Bridge,
+        Self::StoneWall,
+        Self::StoneGate,
     ];
     /// Footprint side in tiles; the single wire-level size table.
     pub const fn side(self) -> i32 {
@@ -109,6 +113,7 @@ impl BuildingKind {
             Self::TownCenter
             | Self::Market
             | Self::PalisadeGate
+            | Self::StoneGate
             | Self::Castle
             | Self::University
             | Self::SiegeWorkshop => 4,
@@ -120,11 +125,22 @@ impl BuildingKind {
             | Self::Stable
             | Self::Blacksmith
             | Self::Monastery => 3,
-            Self::PalisadeWall | Self::Outpost | Self::WatchTower | Self::Bridge => 1,
+            Self::PalisadeWall
+            | Self::StoneWall
+            | Self::Outpost
+            | Self::WatchTower
+            | Self::Bridge => 1,
         }
     }
+    /// A one-tile wall segment, laid by dragging a line.
+    pub const fn is_wall(self) -> bool {
+        matches!(self, Self::PalisadeWall | Self::StoneWall)
+    }
+    pub const fn is_gate(self) -> bool {
+        matches!(self, Self::PalisadeGate | Self::StoneGate)
+    }
     pub const fn depth(self) -> i32 {
-        if matches!(self, Self::PalisadeGate) {
+        if matches!(self, Self::PalisadeGate | Self::StoneGate) {
             1
         } else {
             self.side()

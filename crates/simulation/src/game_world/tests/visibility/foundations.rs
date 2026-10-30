@@ -13,8 +13,15 @@ fn untouched_foundations_have_no_observer_even_after_fog_is_reenabled() {
         w.update_observer(EntityId(9000), None);
         let before = w.vision_storage(PlayerId(0));
         let id = if wall {
-            w.issue_build_wall(PlayerId(0), &[builder], origin, origin, false)
-                .unwrap()[0]
+            w.issue_build_wall(
+                PlayerId(0),
+                &[builder],
+                BuildingKind::PalisadeWall,
+                origin,
+                origin,
+                false,
+            )
+            .unwrap()[0]
         } else {
             w.issue_build(
                 PlayerId(0),

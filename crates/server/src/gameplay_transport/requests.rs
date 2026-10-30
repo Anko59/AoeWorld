@@ -168,12 +168,13 @@ pub(super) async fn read_requests(
             Ok(GameplayClientMessage::BuildWallOrder {
                 sequence,
                 builder_ids,
+                kind,
                 from,
                 to,
                 queued,
             }) => {
                 service
-                    .queue_build_wall(session_id, sequence, builder_ids, from, to, queued)
+                    .queue_build_wall(session_id, sequence, builder_ids, kind, (from, to), queued)
                     .await
             }
             Ok(GameplayClientMessage::BuildBridgeOrder {

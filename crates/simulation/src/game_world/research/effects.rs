@@ -165,12 +165,9 @@ impl GameWorld {
                     building.age = age;
                     let (hp, los) = building.kind.age_stats(age);
                     let hp = if state.researched & Tech::Masonry.bit() != 0
-                        && !matches!(
-                            building.kind,
-                            crate::BuildingKind::Farm
-                                | crate::BuildingKind::PalisadeWall
-                                | crate::BuildingKind::PalisadeGate
-                        ) {
+                        && building.kind != crate::BuildingKind::Farm
+                        && !building.kind.is_barrier()
+                    {
                         hp * 11 / 10
                     } else {
                         hp

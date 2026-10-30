@@ -120,6 +120,8 @@ pub enum BuildingKind {
     University,
     SiegeWorkshop,
     Bridge,
+    StoneWall,
+    StoneGate,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]

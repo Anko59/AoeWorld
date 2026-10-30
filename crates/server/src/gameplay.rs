@@ -209,6 +209,7 @@ enum PendingAction {
     },
     BuildWall {
         builder_ids: Vec<EntityId>,
+        kind: aoe_protocol::BuildingKind,
         from: aoe_core::TileCoord,
         to: aoe_core::TileCoord,
         queued: bool,

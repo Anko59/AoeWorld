@@ -130,7 +130,7 @@ pub(super) fn tiles(client: &Client, at: TileCoord) -> Option<Vec<TileCoord>> {
     if client.village.placement == Some(BuildingKind::Bridge) {
         let from = client.village.wall_start.unwrap_or(at);
         aoe_core::raster_bridge_line(from, at)
-    } else if client.village.placement == Some(BuildingKind::PalisadeWall) {
+    } else if client.village.placement.is_some_and(BuildingKind::is_wall) {
         building_ui::wall_tiles(client.village.wall_start.unwrap_or(at), at)
     } else {
         Some(vec![at])
@@ -180,7 +180,7 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
     };
     client.village.repeat_placement |= shift;
     if release
-        && (!matches!(kind, BuildingKind::PalisadeWall | BuildingKind::Bridge)
+        && (!(kind.is_wall() || kind == BuildingKind::Bridge)
             || client.village.wall_start.is_none())
     {
         return;
@@ -188,7 +188,7 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
     let Some(at) = origin(client, point) else {
         return;
     };
-    if matches!(kind, BuildingKind::PalisadeWall | BuildingKind::Bridge) {
+    if kind.is_wall() || kind == BuildingKind::Bridge {
         if !release && client.village.wall_start.is_none() {
             client.village.wall_start = Some(at);
             return;
@@ -215,10 +215,11 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
             to: at,
             queued: shift,
         }
-    } else if kind == BuildingKind::PalisadeWall {
+    } else if kind.is_wall() {
         Message::BuildWallOrder {
             sequence,
             builder_ids,
+            kind,
             from: client.village.wall_start.unwrap_or(at),
             to: at,
             queued: shift,

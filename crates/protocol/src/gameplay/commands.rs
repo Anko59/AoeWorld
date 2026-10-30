@@ -40,7 +40,7 @@ pub enum ClientMessage {
     },
     /// Place a foundation of `kind` with its top-left tile at `origin` and send
     /// the named villagers to build it. The cost is paid on acceptance. Use
-    /// `BuildWallOrder` for palisades.
+    /// `BuildWallOrder` for walls.
     BuildOrder {
         sequence: u64,
         #[serde(deserialize_with = "economy::bounded_builders")]
@@ -49,11 +49,13 @@ pub enum ClientMessage {
         origin: TileCoord,
         queued: bool,
     },
-    /// Lay palisade segments on the line from `from` to `to`, both included.
+    /// Lay wall segments (`kind` is a palisade or stone wall) on the line from
+    /// `from` to `to`, both included.
     BuildWallOrder {
         sequence: u64,
         #[serde(deserialize_with = "economy::bounded_builders")]
         builder_ids: Vec<EntityId>,
+        kind: BuildingKind,
         from: TileCoord,
         to: TileCoord,
         queued: bool,

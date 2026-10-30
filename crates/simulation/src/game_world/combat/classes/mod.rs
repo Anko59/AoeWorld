@@ -72,10 +72,7 @@ pub(super) const fn unit_bonus(attacker: UnitKind, victim: UnitKind) -> u16 {
 }
 
 pub(super) const fn masonry_kind(kind: BuildingKind) -> bool {
-    !matches!(
-        kind,
-        BuildingKind::Farm | BuildingKind::PalisadeWall | BuildingKind::PalisadeGate
-    )
+    !matches!(kind, BuildingKind::Farm) && !kind.is_barrier()
 }
 
 impl GameWorld {

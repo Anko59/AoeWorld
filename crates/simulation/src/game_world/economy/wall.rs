@@ -1,4 +1,4 @@
-//! Palisade walls: a line of 1x1 segments laid by one order.
+//! Palisade and stone walls: a line of 1x1 segments laid by one order.
 use super::{BuildingKind, EconomyError, MAX_WALL_SEGMENTS, placement::distance_squared};
 use crate::GameWorld;
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
@@ -29,24 +29,27 @@ pub(super) fn line_tiles(from: TileCoord, to: TileCoord) -> Vec<TileCoord> {
 }
 
 impl GameWorld {
-    /// Lay a palisade of 1x1 segments along the line `from..=to` and send the
+    /// Lay a wall of `kind` (palisade or stone) of 1x1 segments along the line `from..=to` and send the
     /// builders to the nearest segments. Returns the segment ids in line order.
     /// With `queued`, builders follow the segments in line order after existing work.
     pub fn issue_build_wall(
         &mut self,
         player: PlayerId,
         builders: &[EntityId],
+        kind: BuildingKind,
         from: TileCoord,
         to: TileCoord,
         queued: bool,
     ) -> Result<Vec<EntityId>, EconomyError> {
+        if !kind.is_wall() {
+            return Err(EconomyError::NotBuildable);
+        }
         let builders = self.validate_builders(player, builders)?;
         let tiles = line_tiles(from, to);
         if tiles.len() > MAX_WALL_SEGMENTS {
             return Err(EconomyError::OrderTooLarge);
         }
         self.validate_build_queue(&builders, tiles.len(), queued)?;
-        let kind = BuildingKind::PalisadeWall;
         let cost = self.check_buildable(player, kind, tiles.len() as u32)?;
         let rects = tiles
             .iter()
