@@ -109,3 +109,8 @@ The original DAT's King (unit 434) supplies the pose IDs and timing. Its SLPs
 uses the licensed DE `u_king_west_{idle,walk,death,decay}A_x1.sld` animations.
 Only bounded selected frames enter the existing actor atlas. Source and derived
 images remain outside Git and container images.
+
+For a repeatable local capture, `POST /maps/reset?scenario=vassal-territory`
+prepares two overlapping Castles, 40 busy farmers and two Vassals waiting
+outside (four-times clock). Garrison the first to watch it adopt every farmer,
+then the second to see the territory split with a double line.
