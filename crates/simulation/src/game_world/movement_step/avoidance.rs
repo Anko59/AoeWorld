@@ -176,7 +176,11 @@ impl GameWorld {
     /// Fixed-angle right-hand sidesteps, then the other side, then a wait.
     /// No whole movement credit is retained while blocked. Terrain is checked
     /// for every candidate, so avoidance cannot cut a tree/building corner.
-    pub(crate) fn avoid_unit_step(&self, index: usize, proposed: WorldPosition) -> WorldPosition {
+    pub(crate) fn avoid_unit_step(
+        &mut self,
+        index: usize,
+        proposed: WorldPosition,
+    ) -> WorldPosition {
         let _span = self
             .planning_probe
             .as_ref()
@@ -233,6 +237,16 @@ impl GameWorld {
                     .unwrap_or(false)
                 && self.building_step_clear(from.tile_floor(), next.tile_floor())
             {
+                if self.units[index].formation.is_some() {
+                    let cross = dx * i64::from(next.y - from.y) - dy * i64::from(next.x - from.x);
+                    if cross != 0
+                        && let Some(obstruction) = &mut self.units[index].obstruction
+                    {
+                        // Remember the side actually taken, including fallback
+                        // to the other side; do not try to undo it next tick.
+                        obstruction.side = cross.signum() as i8;
+                    }
+                }
                 return next;
             }
         }
@@ -303,7 +317,10 @@ impl GameWorld {
             .planning_probe
             .as_ref()
             .and_then(|p| p.movement_span("arrival_search"));
-        if !self.arrival_slot_occupied(index) {
+        // A detached recovery still belongs to its group. Reissuing an
+        // ordinary move here would leave that group and discard its final slot.
+        // The corridor's rejoin/recovery logic owns its temporary endpoint.
+        if self.units[index].formation.is_some() || !self.arrival_slot_occupied(index) {
             return;
         }
         let id = self.units[index].state.id;

@@ -36,6 +36,9 @@ impl GameWorld {
     /// Moves every active mover once and returns the ids it touched, in
     /// arbitrary order; the tick collation sorts and fetches final states.
     pub(crate) fn advance_movement(&mut self) -> Vec<EntityId> {
+        // Rejoin before either movement batch snapshots its actors. A detached
+        // body must spend this tick in exactly one of the two phases.
+        self.rejoin_detached_members();
         self.economy.gather_repick_budget = 4;
         // Waiting units search first, fairly per player, so a route found now
         // is walked this tick; walking units plan ahead from what is left.

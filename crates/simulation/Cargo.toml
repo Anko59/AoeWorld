@@ -9,6 +9,8 @@ rust-version.workspace = true
 # Native canonical data is also available to browser-test fixtures, never the
 # production client bundle. Runtime consumers use BrowserContent::decode.
 content-source = []
+# Data factories for profiling only; movement has one implementation.
+bench-fixtures = []
 
 [dependencies]
 aoe-core.workspace = true

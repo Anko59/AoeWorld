@@ -41,7 +41,11 @@ impl GameWorld {
             .filter(|group| !group.settled)
             .flat_map(|group| group.members.iter())
             .inspect(|_| self.group_work.members(1))
-            .filter(|member| !member.detached && !member.arrived && member.blocked >= DETACH_AFTER)
+            .filter(|member| {
+                !member.detached
+                    && !member.arrived
+                    && (member.blocked >= DETACH_AFTER || member.stalled >= 60)
+            })
             .map(|member| member.id)
             .take(4)
             .collect::<Vec<_>>();
@@ -59,7 +63,19 @@ impl GameWorld {
         let Some(at) = group.member_index(id) else {
             return;
         };
-        let goal = group.members[at].goal;
+        let member = &group.members[at];
+        let mut cursor = member.cursor;
+        let goal = if self.units[self.lookup[&leader]].order.is_some() {
+            group
+                .path
+                .point(
+                    (member.progress + 8 * 1024).min(group.path.end()),
+                    &mut cursor,
+                )
+                .0
+        } else {
+            member.goal
+        };
         let replacement = group
             .members
             .iter()
@@ -107,9 +123,10 @@ impl GameWorld {
             return;
         };
         group.members[at].detached = true;
+        group.members[at].following_corridor = true;
     }
 
-    pub(super) fn rejoin_detached_members(&mut self) {
+    pub(crate) fn rejoin_detached_members(&mut self) {
         let mut ready = Vec::new();
         for (&leader, group) in &self.formations {
             if group.settled {
@@ -130,13 +147,13 @@ impl GameWorld {
                         .obstruction
                         .is_some_and(|o| o.blocked >= GIVE_UP_AFTER_TICKS)
                         || (self.units[index].order.is_none() && !unit.planning));
-                let near = path::squared(unit.position, member.ideal) <= (2 * 1024_i64).pow(2)
-                    && self.body_step_clear(
-                        unit.kind,
-                        unit.position,
-                        path::step(unit.position, member.ideal, 64),
-                    );
-                if unit.position == member.goal || near || timed_out {
+                let near = self.units[index].order.is_some_and(|order| {
+                    navigating && path::squared(unit.position, order.destination) <= 512_i64.pow(2)
+                }) || (!navigating
+                    && path::squared(unit.position, member.goal) <= 512_i64.pow(2)
+                    && self.clear_edge(index, unit.position, member.goal, false));
+                let ended = self.units[index].order.is_none() && !unit.planning;
+                if unit.position == member.goal || near || ended || timed_out {
                     ready.push((member.id, timed_out));
                 }
             }
