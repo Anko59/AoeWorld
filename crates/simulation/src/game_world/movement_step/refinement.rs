@@ -289,7 +289,7 @@ impl GameWorld {
             })
         };
         let clear = |from: WorldPosition, to: WorldPosition| {
-            self.unit_step_clear(unit.kind, from.tile_floor(), to.tile_floor())
+            self.unit_position_step_clear(unit.kind, from, to)
                 .unwrap_or(false)
                 && self.building_step_clear(from.tile_floor(), to.tile_floor())
                 && self.clear_edge(index, from, to, stationary_only)

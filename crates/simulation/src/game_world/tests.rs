@@ -464,3 +464,6 @@ mod navy;
 
 #[path = "tests/movement/aoe2_model.rs"]
 mod aoe2_model;
+
+#[path = "tests/real_terrain/mod.rs"]
+mod real_terrain_formations;

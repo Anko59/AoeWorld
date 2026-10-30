@@ -128,20 +128,23 @@ impl GameWorld {
                 }
                 let previous_tile = current_position.tile_floor();
                 let tile = position.tile_floor();
-                let terrain_ok =
-                    match self.unit_step_clear(self.units[index].state.kind, previous_tile, tile) {
-                        Ok(terrain_ok) => terrain_ok,
-                        Err(error) => {
-                            self.clear_planner(index);
-                            self.units[index].state.moving = false;
-                            self.units[index].state.planning = false;
-                            self.units[index].order = None;
-                            self.units[index].last_movement_error =
-                                Some(GameWorldError::Environment(error));
-                            finished = true;
-                            break;
-                        }
-                    };
+                let terrain_ok = match self.unit_position_step_clear(
+                    self.units[index].state.kind,
+                    current_position,
+                    position,
+                ) {
+                    Ok(terrain_ok) => terrain_ok,
+                    Err(error) => {
+                        self.clear_planner(index);
+                        self.units[index].state.moving = false;
+                        self.units[index].state.planning = false;
+                        self.units[index].order = None;
+                        self.units[index].last_movement_error =
+                            Some(GameWorldError::Environment(error));
+                        finished = true;
+                        break;
+                    }
+                };
                 if !terrain_ok || !self.building_step_clear(previous_tile, tile) {
                     // Collision can change after a segment was refined. Keep
                     // the order and replan from the last valid fixed position.
@@ -204,6 +207,20 @@ impl GameWorld {
                     .unwrap_or_else(|| self.next_map_segment(index, order));
                 match next {
                     SegmentAdvance::Planning => {
+                        if skipped {
+                            // An occupied waypoint was skipped without moving
+                            // the body. Do not spend that unpaid segment when
+                            // the deferred route becomes available next tick.
+                            // A retained search remains valid in the same tile.
+                            if order.waypoint.tile_floor() != current_position.tile_floor() {
+                                self.clear_planner(index);
+                                self.units[index].fast_route_tried = false;
+                            }
+                            order.origin = current_position;
+                            order.waypoint = current_position;
+                            order.segment_length = 0;
+                            order.travelled = 0;
+                        }
                         // A deferred planner has no available path distance this
                         // tick. Keep only the fractional remainder, never a
                         // whole movement credit that could cause a later dash.

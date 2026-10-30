@@ -186,7 +186,7 @@ impl GameWorld {
         if self.config.valid_ground_position(proposed)
             && self.local_unit_step_clear(index, from, proposed)
             && self
-                .unit_step_clear(unit.kind, from.tile_floor(), proposed.tile_floor())
+                .unit_position_step_clear(unit.kind, from, proposed)
                 .unwrap_or(false)
             && self.building_step_clear(from.tile_floor(), proposed.tile_floor())
         {
@@ -229,7 +229,7 @@ impl GameWorld {
                 && self.config.valid_ground_position(next)
                 && self.local_unit_step_clear(index, from, next)
                 && self
-                    .unit_step_clear(unit.kind, from.tile_floor(), next.tile_floor())
+                    .unit_position_step_clear(unit.kind, from, next)
                     .unwrap_or(false)
                 && self.building_step_clear(from.tile_floor(), next.tile_floor())
             {

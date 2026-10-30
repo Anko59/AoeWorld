@@ -73,7 +73,7 @@ impl GameWorld {
         from: WorldPosition,
         to: WorldPosition,
     ) -> bool {
-        if !self.body_position_clear(kind, to) {
+        if !self.body_position_clear(kind, to) || !self.bridge_body_sweep_clear(kind, from, to) {
             return false;
         }
         // A half-tile axis step cannot pass a whole solid tile between two
