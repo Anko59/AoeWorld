@@ -288,7 +288,10 @@ fn bridge_catalog_selects_only_the_six_native_scenario_pieces() {
         |_| false,
         |_| false,
     );
-    let bridges: Vec<_> = plan.iter().filter(|item| item.slot >= 65).collect();
+    let bridges: Vec<_> = plan
+        .iter()
+        .filter(|item| (65..71).contains(&item.slot))
+        .collect();
     assert_eq!(bridges.len(), 6);
     for (item, stem) in bridges.iter().zip([
         "s_bridge_a_top",
@@ -313,7 +316,7 @@ fn bridge_catalog_prefers_original_slps_when_available() {
     let plan = crate::catalog::buildings::supplemental(|_| true, |_| false, |_| false, |_| false);
     for (item, slp) in plan
         .iter()
-        .filter(|item| item.slot >= 65)
+        .filter(|item| (65..71).contains(&item.slot))
         .zip([3688, 3690, 3692, 3694, 3696, 3698])
     {
         assert_eq!(

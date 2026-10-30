@@ -51,8 +51,8 @@ pub(super) fn select(
     manifest: &Manifest,
     selected: &mut Vec<usize>,
     domains: &mut Vec<AtlasDomain>,
-) -> Result<[Option<std::ops::Range<usize>>; 71], JsValue> {
-    let mut ranges: [Option<std::ops::Range<usize>>; 71] = std::array::from_fn(|_| None);
+) -> Result<[Option<std::ops::Range<usize>>; 77], JsValue> {
+    let mut ranges: [Option<std::ops::Range<usize>>; 77] = std::array::from_fn(|_| None);
     let plan = aoe_assets::catalog::buildings::supplemental(
         |source| source_present(manifest, source),
         |id| native(manifest, id),
@@ -94,7 +94,7 @@ pub(super) fn select(
 pub(super) fn crop_farm(
     manifest: &mut Manifest,
     selected: &[usize],
-    ranges: &[Option<std::ops::Range<usize>>; 71],
+    ranges: &[Option<std::ops::Range<usize>>; 77],
 ) -> Result<(), JsValue> {
     if let Some(range) = &ranges[5] {
         for semantic in range.clone() {

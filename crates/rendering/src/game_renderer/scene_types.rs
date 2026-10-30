@@ -260,6 +260,13 @@ pub enum SceneUnitKind {
     GeneralAttack,
     GeneralDie,
     GeneralDecay,
+    /// Stone wall and gate (DE art, atlas slots 71..=76).
+    StoneWall,
+    RubbleStoneWall,
+    StoneGate,
+    OpenStoneGate,
+    RubbleStoneGate,
+    StoneGateFoundation,
 }
 
 #[path = "scene_actors.rs"]

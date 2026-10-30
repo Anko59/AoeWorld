@@ -345,8 +345,8 @@ pub(in super::super) fn units(
         .village
         .buildings
         .iter()
-        .filter(|b| b.kind == aoe_protocol::BuildingKind::PalisadeWall)
-        .map(|b| (b.footprint.min.x, b.footprint.min.y))
+        .filter(|b| b.kind.is_wall())
+        .map(|b| (b.footprint.min.x, b.footprint.min.y, b.kind))
         .collect();
     for building in &client.village.buildings {
         if building.kind == aoe_protocol::BuildingKind::Bridge {
@@ -354,14 +354,12 @@ pub(in super::super) fn units(
             continue;
         }
         let position = super::super::village::building_center(building);
-        let gate_open = building.kind == aoe_protocol::BuildingKind::PalisadeGate
-            && crate::building_ui::gate_sprite_slot(building.gate_open, building.progress_permille)
-                .is_some();
-        let kind = if gate_open {
-            aoe_rendering::SceneUnitKind::OpenPalisadeGate
-        } else {
-            building_kind(building)
-        };
+        let kind = crate::building_ui::gate_kind(
+            building.kind,
+            building.gate_open,
+            building.progress_permille,
+        )
+        .unwrap_or_else(|| building_kind(building));
         let stage = client
             .art
             .compositions
@@ -379,9 +377,9 @@ pub(in super::super) fn units(
                 .with_damage_stage(stage),
             facing: if building.progress_permille < 1000 {
                 (u32::from(building.progress_permille) * 3 / 1000) as u8
-            } else if building.kind == aoe_protocol::BuildingKind::PalisadeWall {
+            } else if building.kind.is_wall() {
                 crate::building_ui::wall_frame(building.footprint.min, |t| {
-                    walls.contains(&(t.x, t.y))
+                    walls.contains(&(t.x, t.y, building.kind))
                 })
             } else {
                 0
@@ -390,7 +388,7 @@ pub(in super::super) fn units(
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position)),
         };
-        if building.kind == aoe_protocol::BuildingKind::PalisadeGate {
+        if building.kind.is_gate() {
             if !aoe_rendering::scene_building_visible(
                 &client.art,
                 unit,
@@ -459,6 +457,12 @@ fn building_kind(building: &aoe_protocol::GameplayBuildingState) -> aoe_renderin
     };
     if building.construction == ConstructionState::Complete {
         kind
+    } else if matches!(building.kind, Kind::StoneWall | Kind::StoneGate) {
+        Art::building(crate::building_ui::sprite_slot(
+            building.kind,
+            building.progress_permille,
+            false,
+        ) as u8)
     } else {
         kind.building_id()
             .map_or(kind, |id| Art::foundation(id as i16))

@@ -79,7 +79,13 @@ impl SceneUnitKind {
             BridgeBTop,
             BridgeBMiddle,
             BridgeBBottom,
-        ][usize::from(slot.min(70))]
+            StoneWall,
+            RubbleStoneWall,
+            StoneGate,
+            OpenStoneGate,
+            RubbleStoneGate,
+            StoneGateFoundation,
+        ][usize::from(slot.min(76))]
     }
     pub(in crate::game_renderer) fn building_slot(self) -> Option<u8> {
         match self {
@@ -89,6 +95,12 @@ impl SceneUnitKind {
             Self::BridgeBTop => return Some(68),
             Self::BridgeBMiddle => return Some(69),
             Self::BridgeBBottom => return Some(70),
+            Self::StoneWall => return Some(71),
+            Self::RubbleStoneWall => return Some(72),
+            Self::StoneGate => return Some(73),
+            Self::OpenStoneGate => return Some(74),
+            Self::RubbleStoneGate => return Some(75),
+            Self::StoneGateFoundation => return Some(76),
             Self::CastleTownCenter => return Some(53),
             Self::CastleHouse => return Some(54),
             Self::CastleLumberCamp => return Some(55),
@@ -266,8 +278,25 @@ impl SceneUnitKind {
         }
         let slot = self.building_slot()?;
         Some(match slot {
-            0 | 12 | 13 | 29 | 31 | 35 | 37 | 38 | 42 | 43 | 45 | 47 | 48 | 49 | 51 | 52 | 53
-            | 63 => 4.0,
+            0
+            | 12
+            | 13
+            | 29
+            | 31
+            | 35
+            | 37
+            | 38
+            | 42
+            | 43
+            | 45
+            | 47
+            | 48
+            | 49
+            | 51
+            | 52
+            | 53
+            | 63
+            | 73..=76 => 4.0,
             1..=4 | 10 | 14..=17 | 39 | 40 | 54..=57 => 2.0,
             5 | 6 | 11 | 18 | 19 | 23..=28 | 32..=34 | 41 | 44 | 46 | 50 | 58..=62 | 64 => 3.0,
             _ => 1.0,

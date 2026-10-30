@@ -472,4 +472,29 @@ pub const SELECTION: &[Item] = &[
         role: "foundation",
         stem: "b_dark_gate_palisade_se_constr",
     },
+    Item {
+        building: "stone_wall",
+        role: "standing",
+        stem: "b_west_wall_stone",
+    },
+    Item {
+        building: "stone_gate",
+        role: "standing",
+        stem: "b_west_gate_stone_se_closed",
+    },
+    Item {
+        building: "stone_gate",
+        role: "open",
+        stem: "b_west_gate_stone_se_open",
+    },
+    Item {
+        building: "stone_gate",
+        role: "rubble",
+        stem: "b_west_gate_stone_se_rubble",
+    },
+    Item {
+        building: "stone_gate",
+        role: "foundation",
+        stem: "b_west_gate_stone_se_constr",
+    },
 ];

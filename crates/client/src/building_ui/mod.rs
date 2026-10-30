@@ -6,6 +6,23 @@ use aoe_core::TileCoord;
 use aoe_protocol::BuildingKind;
 use aoe_protocol::Stockpile;
 
+/// The art kind of a standing building of `kind`, which is open when it is a
+/// gate whose authoritative state says so.
+pub fn gate_kind(
+    kind: BuildingKind,
+    open: bool,
+    progress: u16,
+) -> Option<aoe_rendering::SceneUnitKind> {
+    use aoe_rendering::SceneUnitKind as Art;
+    (kind.is_gate() && gate_sprite_slot(open, progress).is_some()).then_some(
+        if kind == BuildingKind::StoneGate {
+            Art::OpenStoneGate
+        } else {
+            Art::OpenPalisadeGate
+        },
+    )
+}
+
 pub fn gate_sprite_slot(open: bool, progress: u16) -> Option<u8> {
     (open && progress == 1000).then_some(42)
 }
@@ -138,9 +155,29 @@ pub fn footprint_valid(
         .all(|y| (origin.x..origin.x + side).all(|x| free(TileCoord::new(x, y))))
 }
 
+/// DE stone wall (71 standing, 72 rubble; a foundation is the generic 1x1
+/// one) and gate (73 closed, 74 open, 75 rubble, 76 construction) atlas slots.
+fn stone_slot(kind: BuildingKind, progress: u16, rubble: bool) -> Option<usize> {
+    let (standing, rubble_slot, building) = match kind {
+        BuildingKind::StoneWall => (71, 72, 9),
+        BuildingKind::StoneGate => (73, 75, 76),
+        _ => return None,
+    };
+    Some(if rubble {
+        rubble_slot
+    } else if progress < 1000 {
+        building
+    } else {
+        standing
+    })
+}
+
 /// Standing kinds, four foundation sizes, then rubble kinds.
 #[inline(never)]
 pub fn sprite_slot(kind: BuildingKind, progress: u16, rubble: bool) -> usize {
+    if let Some(slot) = stone_slot(kind, progress, rubble) {
+        return slot;
+    }
     if kind == BuildingKind::Bridge {
         return if rubble {
             20
@@ -256,6 +293,9 @@ pub fn age_sprite_slot(
     ];
     if kind == BuildingKind::Bridge {
         return sprite_slot(kind, progress, rubble);
+    }
+    if let Some(slot) = stone_slot(kind, progress, rubble) {
+        return slot;
     }
     if progress == 1000 && !rubble && age == aoe_protocol::Age::Castle {
         return CASTLE[kind as usize] as usize;

@@ -4,8 +4,8 @@ import { castleKinds, castleNames, castleCommands, castleTechs, castleTraining, 
 import { icon, entityIcon, setEntityIcon, techIds, trainingKinds } from '/interface/ui-art.js';
 // DOM presentation for authoritative Rust building state and footprint previews.
 const byId = id => document.getElementById(id);
-export const buildingKinds = ['TownCenter','House','LumberCamp','MiningCamp','Mill','Farm','Barracks','PalisadeWall','Outpost','Dock','ArcheryRange','Stable','Blacksmith','Market','WatchTower','PalisadeGate',...castleKinds,'Bridge'];
-export const buildingNames = ['Town Center','House','Lumber Camp','Mining Camp','Mill','Farm','Barracks','Palisade Wall','Outpost','Dock','Archery Range','Stable','Blacksmith','Market','Watch Tower','Palisade Gate',...castleNames,'Bridge'];
+export const buildingKinds = ['TownCenter','House','LumberCamp','MiningCamp','Mill','Farm','Barracks','PalisadeWall','Outpost','Dock','ArcheryRange','Stable','Blacksmith','Market','WatchTower','PalisadeGate',...castleKinds,'Bridge','StoneWall','StoneGate'];
+export const buildingNames = ['Town Center','House','Lumber Camp','Mining Camp','Mill','Farm','Barracks','Palisade Wall','Outpost','Dock','Archery Range','Stable','Blacksmith','Market','Watch Tower','Palisade Gate',...castleNames,'Bridge','Stone Wall','Stone Gate'];
 // Codes are emitted by Rust building_ui::availability, where the rules live.
 const disabledReasons=['Unavailable','','requires Feudal Age','Already researched','Research in progress','Wait for the training queue to finish','Not enough food','Not enough wood','Not enough gold','Not enough stone','Training queue is full','Building is under construction','Requires prerequisite buildings or technology','Select your own building','requires Castle Age','A Vassal already belongs to this Castle'];
 const action=(button,label,code,observer)=>{const reason=observer?'Observer mode':disabledReasons[code]??disabledReasons[0];button.disabled=code!==1||observer;button.title=label+(reason?` · ${reason}`:'');button.setAttribute('aria-label',button.title);};
@@ -19,6 +19,7 @@ const commands = [
   ['blacksmith','Blacksmith','S','150 wood'], ['market','Market','D','175 wood · needs Mill'],
   ['watch-tower','Watch Tower','F','35 wood · 125 stone'], ['palisade-gate','Palisade Gate','X','30 wood'], ...castleCommands,
   ['bridge','Bridge','G','25 wood · 5 stone / water tile'],
+  ['stone-wall','Stone Wall','Z','5 stone / tile'], ['stone-gate','Stone Gate','H','30 stone'],
   ['town-center','Town Center','C','275 wood · 100 stone'],
 ];
 export function initBuildings() {
@@ -41,7 +42,7 @@ export function initBuildings() {
   const build = document.createElement('button');
   build.id='build-menu'; build.hidden=true; build.innerHTML=icon('commands','build','towncenter')+'<kbd>B</kbd><small>Economic</small>'; build.title='Economic buildings (B)'; grid.append(build);
   const military=document.createElement('button');military.id='build-military-menu';military.hidden=true;military.innerHTML=icon('commands','military','soldier')+'<kbd>V</kbd><small>Military</small>';military.title='Military buildings (V)';grid.append(military);
-  const militaryKinds=new Set([5,6,7,9,10,13,14,15,18]);
+  const militaryKinds=new Set([5,6,7,9,10,13,14,15,18,20,21]);
   const category=i=>militaryKinds.has(i)?'military':'economy';
   const buttons=commands.map(([id,name,key,cost],i)=>{
     const button=document.createElement('button'); button.id=`build-${id}`; button.className="build-command"; button.hidden=true;
@@ -95,7 +96,7 @@ export function initBuildings() {
   const menu=()=>{
     const villager=byId('selection').dataset.villagers==='true';
     build.hidden=!villager;military.hidden=!villager;if(!villager)open=false;
-    buttons.forEach((b,i)=>{b.hidden=!villager||open!==category(i);b.disabled=state[buildStart+i]!==1;const [id,name,key,cost]=commands[i];b.title=`${name} · ${cost} · ${category(i)==='military'?'V':'B'} ${key}${(i>=15&&i<=18||id==='town-center')&&state[0]<2?' · requires Castle Age':state[0]===0&&(i>=9&&i<=13||i===19)?' · requires Feudal Age':''}`;b.setAttribute('aria-label',b.title);});
+    buttons.forEach((b,i)=>{b.hidden=!villager||open!==category(i);b.disabled=state[buildStart+i]!==1;const [id,name,key,cost]=commands[i];b.title=`${name} · ${cost} · ${category(i)==='military'?'V':'B'} ${key}${(i>=15&&i<=18||id==='town-center')&&state[0]<2?' · requires Castle Age':state[0]===0&&(i>=9&&i<=13||i>=19&&i<=21)?' · requires Feudal Age':''}`;b.setAttribute('aria-label',b.title);});
     if(open){for(const id of ['move-units','stop-units'])byId(id).hidden=true;byId('command-context').textContent=open==='military'?'Military buildings':'Economic buildings';byId('command-hint').textContent=byId('scene').dataset.orderMode==='build'?(byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels'):'Choose a building · Esc closes the menu';}
     grid.classList.toggle('building-menu-open',Boolean(open));
     build.setAttribute('aria-expanded',String(open==='economy'));military.setAttribute('aria-expanded',String(open==='military'));
