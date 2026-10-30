@@ -13,6 +13,7 @@ const MAX_APPROACH_ATTEMPTS: u8 = 6;
 /// Perimeter tiles one approach tries before reporting failure.
 const APPROACH_TILE_TRIES: usize = 6;
 
+mod clearance;
 mod continuation;
 mod repair;
 
@@ -449,6 +450,7 @@ impl GameWorld {
             return None;
         }
         self.economy.buildings.get_mut(&id)?.state = ConstructionState::Complete;
+        self.eject_from_footprint(kind, footprint);
         if kind == BuildingKind::Farm {
             self.reset_farm_production(id);
         }
