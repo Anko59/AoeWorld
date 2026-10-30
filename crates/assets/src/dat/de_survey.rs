@@ -10,6 +10,7 @@ mod military;
 pub use military::ProjectileSource;
 #[path = "de_survey/economy.rs"]
 mod economy;
+pub mod graphics;
 
 const BUILDINGS: &[(i16, i32, &str)] = &[
     (82, 5142, "CSTL"),
@@ -141,6 +142,7 @@ pub struct Survey {
     pub soldiers: Vec<Building>,
     pub workers: Vec<Building>,
     pub projectiles: Vec<ProjectileSource>,
+    pub animations: Vec<graphics::Animation>,
     pub technologies: Vec<Technology>,
     pub effects: Vec<(i16, Effect)>,
 }
@@ -444,12 +446,13 @@ pub fn survey(bytes: &[u8]) -> Result<Survey, Error> {
         soldiers,
         workers: economy::workers(bytes)?,
         projectiles,
+        animations: graphics::heroes(bytes)?,
         technologies,
         effects,
     })
 }
 
-pub fn decode(compressed: &[u8]) -> Result<Survey, Error> {
+pub fn inflate(compressed: &[u8]) -> Result<Vec<u8>, Error> {
     use std::io::Read;
     const LIMIT: u64 = 128 * 1024 * 1024;
     let mut bytes = Vec::new();
@@ -463,6 +466,11 @@ pub fn decode(compressed: &[u8]) -> Result<Survey, Error> {
             "inflated data exceeds 128 MiB",
         ));
     }
+    Ok(bytes)
+}
+
+pub fn decode(compressed: &[u8]) -> Result<Survey, Error> {
+    let bytes = inflate(compressed)?;
     let mut report = survey(&bytes)?;
     report.source_hash = blake3::hash(compressed).to_hex().to_string();
     Ok(report)

@@ -17,6 +17,80 @@ fn object(width: u16, height: u16) -> FrameExtent {
     }
 }
 
+#[test]
+fn logical_page_budget_can_exceed_the_current_runtime_atlas() {
+    let frames = [object(2044, 2044); 6];
+    let placed = pack_frames_with_pages(&frames, 2, 6).unwrap();
+    assert_eq!(
+        placed.iter().map(|p| p.page).collect::<Vec<_>>(),
+        [2, 3, 4, 5, 6, 7]
+    );
+    assert!(pack_frames_with_pages(&frames, 2, 5).is_err());
+    assert!(pack_frames_with_pages(&frames, 2, MAX_LOGICAL_PAGES).is_err());
+    let mut dense_placements = vec![Placement::default(); frames.len()];
+    dense::pack(&frames, &[0, 1, 2, 3, 4, 5], &mut dense_placements, 2, 8).unwrap();
+    assert_eq!(dense_placements, placed);
+    for (terrain, objects) in [(0, 1), (1, 0), (usize::MAX, 1), (1, MAX_LOGICAL_PAGES)] {
+        assert_eq!(
+            pack_with_allocator_and_pages(
+                &frames,
+                terrain,
+                objects,
+                MAX_LOGICAL_FRAMES,
+                |_| panic!("allocated")
+            ),
+            Err(PackingError::InvalidPageBudget)
+        );
+    }
+}
+
+#[test]
+fn logical_atlas_accepts_more_frames_than_the_resident_atlas() {
+    let frames = vec![object(1, 1); 10_000];
+    let placed = pack_frames_with_pages(&frames, 2, 6).unwrap();
+    assert_eq!(placed.len(), frames.len());
+    assert!(placed.iter().all(|p| p.page >= 2 && p.page < 8));
+    assert!(matches!(
+        pack_frames(&frames),
+        Err(PackingError::TooManyFrames { .. })
+    ));
+}
+
+#[test]
+fn logical_frame_indices_cover_the_full_u16_range_and_reject_excess() {
+    let frames = vec![object(1, 1); MAX_LOGICAL_FRAMES];
+    let placed = pack_frames_with_pages(&frames, 1, 1).unwrap();
+    assert_eq!(placed.len(), MAX_LOGICAL_FRAMES);
+    assert_ne!(placed[0], placed[MAX_LOGICAL_FRAMES - 1]);
+    let excess = vec![object(1, 1); MAX_LOGICAL_FRAMES + 1];
+    assert_eq!(
+        pack_with_allocator_and_pages(&excess, 1, 1, MAX_LOGICAL_FRAMES, |_| panic!("allocated")),
+        Err(PackingError::TooManyFrames {
+            count: MAX_LOGICAL_FRAMES + 1,
+            limit: MAX_LOGICAL_FRAMES
+        })
+    );
+}
+
+#[test]
+fn ordering_large_reverse_catalog_has_bounded_comparisons() {
+    let frames: Vec<_> = (0..MAX_SELECTED_FRAMES)
+        .map(|i| object(1, (i % 2044 + 1) as u16))
+        .collect();
+    let mut indices: Vec<u16> = (0..frames.len() as u16).collect();
+    let mut comparisons = 0;
+    order_indices(&frames, &mut indices, || comparisons += 1);
+    assert!(
+        comparisons <= frames.len() * 32,
+        "{comparisons} comparisons"
+    );
+    assert!(indices.windows(2).all(|pair| precedes(
+        &frames,
+        usize::from(pair[0]),
+        usize::from(pair[1])
+    )));
+}
+
 fn reject_before_allocation(frames: &[FrameExtent], error: PackingError) {
     assert_eq!(
         pack_with_allocator(frames, |_| panic!("allocated before validation")),
@@ -370,9 +444,9 @@ fn dense_retry_keeps_mixed_rectangles_disjoint_and_deterministic() {
         .collect();
     let indices: Vec<_> = (0..frames.len() as u16).collect();
     let mut placed = vec![Placement::default(); frames.len()];
-    dense::pack(&frames, &indices, &mut placed).unwrap();
+    dense::pack(&frames, &indices, &mut placed, 2, PAGE_COUNT).unwrap();
     let mut repeat = placed.clone();
-    dense::pack(&frames, &indices, &mut repeat).unwrap();
+    dense::pack(&frames, &indices, &mut repeat, 2, PAGE_COUNT).unwrap();
     assert_eq!(placed, repeat);
     for (i, p) in placed.iter().enumerate() {
         assert_eq!((p.width, p.height), (frames[i].width, frames[i].height));

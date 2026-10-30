@@ -223,3 +223,20 @@ fn webgl_atlas_upload_bounds_driver_transfer_staging_to_one_page() {
     render(&mut renderer, &mut [body]);
     assert_pixel(&canvas, 64, 64, [0, 0, 255, 255]);
 }
+
+#[wasm_bindgen_test]
+fn grown_atlas_pages_preserve_owner_masks_and_report_actual_residency() {
+    let mut pixels = vec![0; 10 * crate::GAME_ATLAS_PAGE_BYTES];
+    pixels[8 * crate::GAME_ATLAS_PAGE_BYTES..][..4].copy_from_slice(&[150, 80, 30, 255]);
+    pixels[9 * crate::GAME_ATLAS_PAGE_BYTES..][..4].copy_from_slice(&[7, 255, 255, 0]);
+    let (canvas, mut renderer) = target(&pixels);
+    let mut body = sprite(0.0, 1.0).with_owner(crate::SceneUnitVisual::new(false).with_owner(
+        Some([65, 145, 245]),
+        true,
+        false,
+    ));
+    body.pages[0] = 8;
+    render(&mut renderer, &mut [body]);
+    assert_pixel(&canvas, 64, 64, [65, 145, 245, 255]);
+    assert_eq!(renderer.texture_bytes(), pixels.len());
+}

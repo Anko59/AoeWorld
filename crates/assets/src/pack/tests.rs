@@ -6,6 +6,27 @@ use crate::slp::Pixel;
 mod buildings;
 
 #[test]
+fn oversized_pack_is_rejected_before_rendering_or_creating_output() {
+    let temp = tempfile::tempdir().unwrap();
+    for counts in [vec![MAX_FRAMES, 1], vec![usize::MAX, 1]] {
+        let sprites: Vec<_> = counts
+            .into_iter()
+            .map(|frames| SpriteRef {
+                id: "synthetic".into(),
+                hash: "a".repeat(64),
+                frames,
+            })
+            .collect();
+        let output = temp.path().join("packs");
+        let result = write_pack(&output, "b".repeat(64), &sprites, Vec::new(), |_, _| {
+            panic!("oversized inventory must not decode frames")
+        });
+        assert!(result.is_err());
+        assert!(!output.exists());
+    }
+}
+
+#[test]
 fn atlas_masks_and_verifier_reject_tampering() {
     let temp = tempfile::tempdir().unwrap();
     let frame = Frame {

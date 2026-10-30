@@ -15,11 +15,14 @@ pub(super) fn plan(
         )));
     }
     // Fixed scratch bounds metadata allocation even for malformed source input.
-    let mut extents = [FrameExtent {
-        domain: AtlasDomain::Objects,
-        width: 0,
-        height: 0,
-    }; MAX_SELECTED_FRAMES];
+    let mut extents = vec![
+        FrameExtent {
+            domain: AtlasDomain::Objects,
+            width: 0,
+            height: 0,
+        };
+        MAX_SELECTED_FRAMES
+    ];
     for (semantic, (&index, &domain)) in selected.iter().zip(domains).enumerate() {
         let frame = manifest.frames.get(index).ok_or("Invalid selected frame")?;
         let source = manifest
@@ -47,39 +50,37 @@ pub(super) fn plan(
     // once. Shared art remains separate because it may bake different colours.
     let mut aliases = Vec::with_capacity(selected.len());
     let mut unique = 0;
+    let mut seen = std::collections::BTreeMap::new();
     for (semantic, (&source, &domain)) in selected.iter().zip(domains).enumerate() {
-        let prior = (domain != AtlasDomain::Shared)
-            .then(|| {
-                selected[..semantic]
-                    .iter()
-                    .zip(&domains[..semantic])
-                    .position(|(&other, &kind)| source == other && domain == kind)
-            })
-            .flatten();
-        if let Some(prior) = prior {
-            aliases.push(aliases[prior]);
+        let key = (source, domain as u8);
+        if let Some(&prior) = seen.get(&key).filter(|_| domain != AtlasDomain::Shared) {
+            aliases.push(prior);
         } else {
             aliases.push(unique);
+            if domain != AtlasDomain::Shared {
+                seen.insert(key, unique);
+            }
             extents[unique] = extents[semantic];
             unique += 1;
         }
     }
-    let placements = pack_frames(&extents[..unique]).map_err(|failure| {
-        let mut totals = [[0_u64; 2]; 3];
-        for f in &extents[..unique] {
-            let entry = &mut totals[f.domain as usize];
-            entry[0] += 1;
-            entry[1] += u64::from(f.width) * u64::from(f.height);
-        }
-        web_sys::console::error_1(
-            &format!(
-                "Atlas count/pixels: terrain={:?}, masked={:?}, unowned={:?}; {failure}",
-                totals[0], totals[1], totals[2]
-            )
-            .into(),
-        );
-        error(failure)
-    })?;
+    let placements = aoe_assets::catalog::packing::pack_resident_frames(&extents[..unique])
+        .map_err(|failure| {
+            let mut totals = [[0_u64; 2]; 3];
+            for f in &extents[..unique] {
+                let entry = &mut totals[f.domain as usize];
+                entry[0] += 1;
+                entry[1] += u64::from(f.width) * u64::from(f.height);
+            }
+            web_sys::console::error_1(
+                &format!(
+                    "Atlas count/pixels: terrain={:?}, masked={:?}, unowned={:?}; {failure}",
+                    totals[0], totals[1], totals[2]
+                )
+                .into(),
+            );
+            error(failure)
+        })?;
     Ok(aliases.into_iter().map(|index| placements[index]).collect())
 }
 
@@ -130,11 +131,14 @@ pub(super) fn copy_plane(
 ) -> Result<(), JsValue> {
     let side = GAME_ATLAS_SIDE as usize;
     let mask = matches!(plane, Plane::MaskBase | Plane::MaskPlayer);
-    if (mask && !(5..8).contains(&placed.page))
-        || (!mask && placed.page >= 5)
+    let mask_page = (5..8).contains(&placed.page) || (placed.page >= 9 && placed.page % 2 == 1);
+    if mask != mask_page
         || source.len() != GAME_ATLAS_PAGE_BYTES
-        || (pixels.len() != GAME_ATLAS_BYTES && pixels.len() != GAME_ATLAS_PAGE_BYTES)
-        || usize::from(placed.page) >= GAME_ATLAS_BYTES / GAME_ATLAS_PAGE_BYTES
+        || (aoe_rendering::atlas_pages(pixels.len()).is_none()
+            && pixels.len() != GAME_ATLAS_PAGE_BYTES)
+        || u32::from(placed.page) >= aoe_rendering::MAX_GAME_ATLAS_PAGES
+        || (pixels.len() != GAME_ATLAS_PAGE_BYTES
+            && usize::from(placed.page) >= pixels.len() / GAME_ATLAS_PAGE_BYTES)
         || placed.width != frame.width
         || placed.height != frame.height
         || usize::from(frame.x) + usize::from(frame.width) > side

@@ -121,9 +121,36 @@ impl<'a> SharedSink<'a> {
 }
 
 impl AtlasSink for SharedSink<'_> {
+    fn source_batches(&self) -> bool {
+        self.shared.borrow().renderer.backend() == "webgpu"
+    }
+    fn write_source(
+        &mut self,
+        colour: &[u8],
+        mask: Option<&[u8]>,
+        copies: &[aoe_rendering::AtlasSourceCopy],
+    ) -> Result<js_sys::Promise, String> {
+        let upload = self.upload.as_mut().ok_or("No atlas upload")?;
+        self.shared
+            .borrow_mut()
+            .renderer
+            .write_game_atlas_source(upload, colour, mask, copies)
+    }
+    fn configure(&mut self, pages: u32) -> Result<(), String> {
+        if self.upload.is_some() {
+            return Err("Atlas already started".into());
+        }
+        self.upload = Some(self.shared.borrow_mut().renderer.begin_game_atlas(pages)?);
+        Ok(())
+    }
     fn resident_buffer(&mut self) -> Result<Option<&mut [u8]>, String> {
         if self.upload.is_none() {
-            self.upload = Some(self.shared.borrow_mut().renderer.begin_game_atlas()?);
+            self.upload = Some(
+                self.shared
+                    .borrow_mut()
+                    .renderer
+                    .begin_game_atlas(aoe_rendering::GAME_ATLAS_PAGES)?,
+            );
         }
         Ok(self
             .upload
@@ -133,7 +160,12 @@ impl AtlasSink for SharedSink<'_> {
     }
     fn page_buffer(&mut self, index: u32) -> Result<&mut [u8], String> {
         if self.upload.is_none() {
-            self.upload = Some(self.shared.borrow_mut().renderer.begin_game_atlas()?);
+            self.upload = Some(
+                self.shared
+                    .borrow_mut()
+                    .renderer
+                    .begin_game_atlas(aoe_rendering::GAME_ATLAS_PAGES)?,
+            );
         }
         self.upload
             .as_mut()

@@ -15,8 +15,9 @@ mod playground;
 #[cfg(target_arch = "wasm32")]
 pub use playground::{
     AtlasAddress, BuildingArt, BuildingDamage, BuildingPart, GAME_ATLAS_BYTES,
-    GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE, GameArt, GameFrame, SceneryArt,
-    TerrainTopology, resource_frame_index,
+    GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE, GameArt, GameFrame,
+    MAX_GAME_ATLAS_PAGES, SceneryArt, TerrainTopology, atlas_mask_page, atlas_pages,
+    resource_frame_index,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -31,11 +32,12 @@ mod terrain;
 mod world_key_index;
 #[cfg(target_arch = "wasm32")]
 pub use game_renderer::{
-    AtlasUpload, GameRenderer, SceneCamera, SceneDecoration, SceneResource, SceneTerrain,
-    SceneTerrainAppearance, SceneTerrainSurface, SceneUnit, SceneUnitKind, actor_frame_index,
-    apply_building_foundations, resource_sprite_bounds, scene_building_hit, scene_building_visible,
-    scene_resource_animation_frame, scene_resource_frame, scene_resource_presentation,
-    scene_unit_animates, scene_unit_bounds, scene_unit_depth, scene_unit_render_key,
+    AtlasSourceCopy, AtlasUpload, GameRenderer, SceneCamera, SceneDecoration, SceneResource,
+    SceneTerrain, SceneTerrainAppearance, SceneTerrainSurface, SceneUnit, SceneUnitKind,
+    actor_frame_index, apply_building_foundations, resource_sprite_bounds, scene_building_hit,
+    scene_building_visible, scene_resource_animation_frame, scene_resource_frame,
+    scene_resource_presentation, scene_unit_animates, scene_unit_bounds, scene_unit_depth,
+    scene_unit_render_key,
 };
 #[cfg(target_arch = "wasm32")]
 pub use surface_mesh::{

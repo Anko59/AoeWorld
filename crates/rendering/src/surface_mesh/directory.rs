@@ -11,7 +11,7 @@
 //! (origin; extent and page). No extra texture, binding or upload exists.
 use super::ProjectedSurfaceTriangle;
 use super::appearance::{frame_index, terrain_group};
-use crate::{AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE, TerrainTopology};
+use crate::{AtlasAddress, GAME_ATLAS_SIDE, TerrainTopology};
 
 #[path = "directory/tests/fixture.rs"]
 #[cfg(test)]
@@ -29,7 +29,7 @@ const FIRST_FRAME: usize = 1 + 2 * MATERIALS;
 /// Writes the directory for `art` into the reserved rows of its atlas. Art
 /// without terrain frames writes nothing; occupied rows are refused, not overwritten.
 pub fn write_terrain_directory(art: &crate::GameArt, atlas: &mut [u8]) -> Result<(), String> {
-    if atlas.len() != GAME_ATLAS_BYTES {
+    if crate::atlas_pages(atlas.len()).is_none() {
         return Err("Invalid game atlas size".into());
     }
     write_rows(art, atlas)
@@ -104,7 +104,7 @@ fn write_rows(art: &crate::GameArt, atlas: &mut [u8]) -> Result<(), String> {
 fn texels(address: AtlasAddress) -> Result<[u32; 4], String> {
     let side = GAME_ATLAS_SIDE as f32;
     let rect = address.uv.map(|value| value * side);
-    if address.page >= GAME_ATLAS_PAGES
+    if address.page >= crate::MAX_GAME_ATLAS_PAGES
         || rect
             .iter()
             .any(|value| !(0.0..=side).contains(value) || value.fract() != 0.0)
@@ -139,7 +139,7 @@ pub(crate) struct Sheet {
 
 pub(crate) fn sheet(atlas: &[u8], material: u8) -> Option<Sheet> {
     let material = usize::from(material);
-    if atlas.len() != GAME_ATLAS_BYTES || material >= MATERIALS {
+    if crate::atlas_pages(atlas.len()).is_none() || material >= MATERIALS {
         return None;
     }
     let (a, b) = (

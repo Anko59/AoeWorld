@@ -374,7 +374,7 @@ pub(super) fn raster_sprite(
 }
 
 fn valid_atlas(atlas: &[u8]) -> bool {
-    atlas.len() == crate::GAME_ATLAS_BYTES
+    crate::atlas_pages(atlas.len()).is_some()
 }
 
 fn sample_atlas(atlas: &[u8], page: u32, x: f64, y: f64) -> [u8; 4] {

@@ -22,6 +22,27 @@ pub(crate) struct Presentation {
 }
 
 impl Presentation {
+    /// DE's sixteen clockwise headings from east, using the latest actual
+    /// movement segment rather than reducing it to eight mirrored directions.
+    pub(crate) fn native_heading(&self, unit: GameplayUnitState) -> Option<u8> {
+        if !unit.moving || unit.hp == 0 {
+            return None;
+        }
+        let history = self.history.get(&unit.id)?;
+        let end = history.back()?;
+        let start = history.iter().rev().find(|s| s.position != end.position)?;
+        let dx = f64::from(end.position.x) - f64::from(start.position.x);
+        let dy = f64::from(end.position.y) - f64::from(start.position.y);
+        // DE headings use the same unsquished axes as authoritative facings;
+        // applying the screen's vertical scale again turns when a unit stops.
+        let angle = (dx + dy).atan2(dx - dy);
+        Some(
+            (angle * 8.0 / std::f64::consts::PI)
+                .round()
+                .rem_euclid(16.0) as u8,
+        )
+    }
+
     pub(crate) fn resident_bytes(&self) -> usize {
         self.history
             .values()

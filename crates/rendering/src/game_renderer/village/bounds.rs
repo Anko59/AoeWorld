@@ -47,13 +47,14 @@ pub fn scene_unit_bounds(
     }
     let (frames, stride, animated) = village::frames(art, unit)?;
     let phase = if unit.kind.actor_slot().is_some() {
-        usize::from(unit.facing >> 3).min(stride - 1)
+        usize::from(unit.actor_frame() >> if unit.kind.native_directions() { 4 } else { 3 })
+            .min(stride - 1)
     } else if animated {
         animation % stride
     } else {
         0
     };
-    let (index, mirrored) = actor_frame_index(unit.facing, stride, phase);
+    let (index, mirrored) = unit_frame_index(unit, stride, phase);
     let mut frame = world_frame(*frames.get(index)?);
     if mirrored {
         frame.anchor[0] = frame.size[0] - frame.anchor[0];
@@ -68,7 +69,8 @@ pub fn scene_unit_render_key(art: &GameArt, mut unit: SceneUnit, camera: SceneCa
             stride > 1 && frames_visible(frames, stride, unit, camera)
         })
     {
-        unit.facing &= 7;
+        unit.facing &= if unit.kind.native_directions() { 15 } else { 7 };
+        unit.visual = unit.visual.with_damage_stage(0);
     }
     unit
 }
@@ -79,7 +81,7 @@ pub(super) fn frames_visible(
     unit: SceneUnit,
     camera: SceneCamera,
 ) -> bool {
-    let (direction, flipped) = sprite_direction(unit.facing);
+    let (direction, flipped) = unit_direction(unit);
     frames[direction * stride..(direction + 1) * stride]
         .iter()
         .any(|frame| {

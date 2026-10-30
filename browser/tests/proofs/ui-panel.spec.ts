@@ -5,6 +5,8 @@ import { forceWebGl } from "../rendering/backends.js";
 import { bundleProof } from "./bundle.js";
 import { castleProof } from "./castle.js";
 import { generalProof } from "./general.js";
+import { generalAppearanceProof } from "./general-appearance.js";
+import { siegeProof } from "./siege.js";
 import { centerVillage } from "../village/fixtures/resources.js";
 
 test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
@@ -33,7 +35,15 @@ test("local original panel proof with real selection and training", async ({
   await page.setViewportSize({ width: 1280, height: 720 });
   if (config.renderer !== "webgpu") await forceWebGl(page);
   if (config.phase === "general") {
-    await generalProof(page, config.url);
+    await generalProof(page, config.url, config.renderer ?? "canvas");
+    return;
+  }
+  if (config.phase === "general-appearance") {
+    await generalAppearanceProof(page, config.url);
+    return;
+  }
+  if (config.phase === "siege") {
+    await siegeProof(page, config.url);
     return;
   }
   if (config.phase.startsWith("bundle")) {

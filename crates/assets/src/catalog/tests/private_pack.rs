@@ -2,10 +2,7 @@
 use super::{
     MAX_REVIEWED_FRAMES, OPTIONAL_RESOURCE_SOURCES, OPTIONAL_TERRAIN_SOURCES,
     REQUIRED_RENDER_SOURCES,
-    packing::{
-        ATLAS_BYTES, AtlasDomain, FrameExtent, MAX_SELECTED_FRAMES, PAGE_COUNT, PAGE_SIDE,
-        pack_frames,
-    },
+    packing::{AtlasDomain, FrameExtent, MAX_LOGICAL_FRAMES, PAGE_SIDE, pack_resident_frames},
 };
 use crate::pack::Manifest;
 use selection::actor_frames;
@@ -74,7 +71,7 @@ fn reviewed_sources() -> impl Iterator<
 }
 
 fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
-    if manifest.version != 1 || manifest.frames.len() > 25_000 || manifest.pages.len() > 256 {
+    if manifest.version != 1 || manifest.frames.len() > 50_000 || manifest.pages.len() > 512 {
         return Err("unsupported or oversized manifest".into());
     }
     let mut extents = Vec::new();
@@ -84,15 +81,15 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
     // compact idle facings and the sampled native actor/projectile cells.
     // Neutral/owned palette copies still occupy separate semantic entries.
     for (identity, count, domain, step, actor) in reviewed_sources() {
-        if actor.is_some_and(|s| matches!(s.id, 3789 | 3786 | 3793))
+        if actor.is_some_and(|s| s.rows() == 16)
             && manifest
                 .frames
                 .iter()
                 .filter(|f| f.source == identity)
                 .count()
-                != 5
+                != count as usize
         {
-            return Err("unsupported General keyframe topology".into());
+            return Err("unsupported native hero topology".into());
         }
         let mut frames = manifest
             .frames
@@ -112,7 +109,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         // Sampling belongs to this semantic entry, never to its first matching
         // source identity: the base walking role still selects all 50 cells.
         let drawn = actor.map(|source| {
-            (0..5)
+            (0..source.rows())
                 .flat_map(|row| {
                     (0..usize::from(source.stride))
                         .step_by(usize::from(source.sample_step()))
@@ -252,15 +249,17 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
         }
     }
     selection::append(manifest, &mut extents, &mut counts)?;
-    let placements = pack_frames(&extents).map_err(|error| error.to_string())?;
+    let placements = pack_resident_frames(&extents).map_err(|error| error.to_string())?;
     if placements.len() != extents.len() {
         return Err("truncated placements".into());
     }
     for (index, (frame, placed)) in extents.iter().zip(&placements).enumerate() {
         let correct_domain = match frame.domain {
             AtlasDomain::Terrain => placed.page < 2,
-            AtlasDomain::Objects => (2..5).contains(&placed.page),
-            AtlasDomain::Shared => placed.page < PAGE_COUNT as u16,
+            AtlasDomain::Objects => {
+                (2..5).contains(&placed.page) || (placed.page >= 8 && placed.page % 2 == 0)
+            }
+            AtlasDomain::Shared => placed.page < 5 || (placed.page >= 8 && placed.page % 2 == 0),
         };
         if !correct_domain
             || placed.width != frame.width
@@ -283,7 +282,7 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
             }
         }
     }
-    if MAX_SELECTED_FRAMES != 5120 || PAGE_COUNT != 5 || ATLAS_BYTES != 83_886_080 {
+    if extents.len() > MAX_LOGICAL_FRAMES || placements.iter().any(|p| p.page >= 64) {
         return Err("physical budget changed".into());
     }
     Ok((counts[0], counts[1]))
@@ -291,8 +290,8 @@ fn prove(manifest: &Manifest) -> Result<(usize, usize), String> {
 
 #[test]
 #[ignore = "explicit private manifest required; run with --ignored and AOE_REVIEWED_PACK_MANIFEST"]
-fn original_manifest_all_reviewed_frames_fit_fixed_atlas() -> Result<(), Box<dyn std::error::Error>>
-{
+fn original_manifest_all_reviewed_frames_fit_bounded_atlas()
+-> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::var_os("AOE_REVIEWED_PACK_MANIFEST")
         .ok_or("AOE_REVIEWED_PACK_MANIFEST is required")?;
     let path = std::path::PathBuf::from(path);
@@ -306,13 +305,13 @@ fn original_manifest_all_reviewed_frames_fit_fixed_atlas() -> Result<(), Box<dyn
     selection::overlay(&path, &mut manifest)?;
     let (terrain, objects) = prove(&manifest)?;
     eprintln!(
-        "private metadata proof input={} selected={} terrain={} objects={} pages={} bytes={}",
+        "private metadata proof input={} selected={} terrain={} objects={} max_layers={} max_bytes={}",
         manifest.input_hash,
         terrain + objects,
         terrain,
         objects,
-        PAGE_COUNT,
-        ATLAS_BYTES
+        64,
+        64 * 2048 * 2048 * 4_u64
     );
     Ok(())
 }
@@ -322,10 +321,10 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        2620,
-        // Castle adds 365 sampled cells; navy 25, King 35, General 15;
+        5750,
+        // Castle adds 365 sampled cells; navy 25, King 35, General 3120;
         // the base cavalry roles already hold 15 Light Cavalry samples.
-        // This current-content count changes deliberately; fixed atlas caps do not.
+        // Pin the complete current selection independently of runtime residency.
         "military, Castle, projectile and farmer cells included"
     );
     assert_eq!(

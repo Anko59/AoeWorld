@@ -29,18 +29,16 @@ pub(super) fn select(
     let base_end = selected.len();
     for (semantic, &source) in sprites().iter().enumerate() {
         let identity = source.manifest_source();
-        if matches!(source.id, 3789 | 3786 | 3793)
+        if (source.rows() == 16 || source.id == 4500)
             && source_present(manifest, &identity)
             && manifest
                 .frames
                 .iter()
                 .filter(|f| f.source == identity)
                 .count()
-                != 5
+                != source.frames() as usize
         {
-            return Err(JsValue::from_str(
-                "Unsupported General keyframe topology; regenerate the DE pack",
-            ));
+            return Err(JsValue::from_str("Unsupported native actor topology"));
         }
         let Some(frames) = source_frames(manifest, &identity, source.frames()) else {
             if source_present(manifest, &identity) {
@@ -94,7 +92,7 @@ pub(super) fn select(
             return Err(JsValue::from_str("Too many actor animation frames"));
         }
         let start = selected.len();
-        for row in 0..5 {
+        for row in 0..source.rows() {
             for phase in (0..usize::from(source.stride)).step_by(usize::from(source.sample_step()))
             {
                 selected.push(frames[source.source_frame(row, phase)]);
@@ -136,7 +134,8 @@ pub(super) fn resolve(
             } else {
                 range.clone().collect()
             };
-            let stride = indices.len() / 5;
+            let rows = source.rows();
+            let stride = indices.len() / rows;
             let cell = |index: usize| {
                 let f = &manifest.frames[selected[indices[index]]];
                 (
@@ -144,12 +143,14 @@ pub(super) fn resolve(
                 )
             };
             if stride > 1
-                && (0..5).all(|row| {
+                && (0..rows).all(|row| {
                     let start = row * stride;
                     (1..stride).all(|phase| cell(start) == cell(start + phase))
                 })
             {
-                (0..5).map(|row| records[indices[row * stride]]).collect()
+                (0..rows)
+                    .map(|row| records[indices[row * stride]])
+                    .collect()
             } else {
                 indices.into_iter().map(|index| records[index]).collect()
             }

@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
+import { memorySnapshot } from "../memory/exploration-fixture.js";
 
 type Actor = {
   id: number;
@@ -11,13 +12,34 @@ type Actor = {
 };
 
 /** Local original-art proof, using real training, selection and march input. */
-export async function generalProof(page: Page, url: string) {
+export async function generalProof(
+  page: Page,
+  url: string,
+  renderer: "canvas" | "webgpu" | "webgl2" = "canvas",
+) {
+  await page.addInitScript(() => {
+    const request = window.requestAnimationFrame.bind(window);
+    const samples: number[] = [];
+    (window as Window & { generalFrameCpuMs?: number[] }).generalFrameCpuMs =
+      samples;
+    window.requestAnimationFrame = (callback) =>
+      request((time) => {
+        const start = performance.now();
+        try {
+          callback(time);
+        } finally {
+          if (samples.length === 128) samples.shift();
+          samples.push(performance.now() - start);
+        }
+      });
+  });
   expect(
     (
       await page.request.post(`${url}maps/reset?scenario=general-army`)
     ).status(),
   ).toBe(204);
-  await page.goto(`${url}?play=1#x=106&y=128&zoom=0.5&renderer=canvas`);
+  const loadingStarted = Date.now();
+  await page.goto(`${url}?play=1#x=106&y=128&zoom=0.5&renderer=${renderer}`);
   await expect
     .poll(
       async () => {
@@ -35,8 +57,9 @@ export async function generalProof(page: Page, url: string) {
   );
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-renderer",
-    "canvas2d",
+    renderer === "canvas" ? "canvas2d" : renderer,
   );
+  const loadReadyMs = Date.now() - loadingStarted;
   const actors = async (): Promise<Actor[]> =>
     JSON.parse(
       (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
@@ -50,6 +73,14 @@ export async function generalProof(page: Page, url: string) {
       JSON.stringify(
         {
           actors: await actors(),
+          loadReadyMs,
+          memory: await memorySnapshot(page),
+          // Callback CPU time, including scene preparation/submission; excludes GPU completion.
+          frameCpuMs: await page.evaluate(
+            () =>
+              (window as Window & { generalFrameCpuMs?: number[] })
+                .generalFrameCpuMs ?? [],
+          ),
           selection: await page.locator("#selection").innerText(),
           status: await page.locator("#vassal-status").textContent(),
           jumps,

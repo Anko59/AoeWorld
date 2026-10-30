@@ -88,20 +88,32 @@ and stop orders control it. The wire has one current format, with no migration.
 
 ## Licensed appearance and validation
 
-The DAT mapping records mounted Joan of Arc (unit 629). The private DE import
-selects `u_cav_hero_joan_{idle,walk,death}A_x1.sld` through the same
-actor catalog mechanism as the Vassal's King. The current bounded atlas samples
-one native keyframe in each of five mirrored facing rows for three physical
-poses: 15 entries, preserving the 5,120-frame/five-page caps. The converter
-validates the full native 721/480/721-cell topology, then stores only those
-fifteen cells, so unused hero metadata cannot exhaust the 25,000-entry pack
-bound. Logical cells 0–4 retain the native south-through-north facing order. Attack shares the
-idle keyframe and corpse decay shares the final death cell. Source and derived
-images stay outside Git and container images. Denser animation sampling requires a
-separate atlas-content optimisation; limits must not be increased to fit it.
-Light Cavalry reuses its 15 samples from the resident base cavalry groups,
-preserving every selected cell and its timing while freeing metadata for the
-General within the same 5,120-entry limit.
+The General uses the DE Frankish Paladin hero's separate idle, walk, attack,
+death and decay graphics (`u_cav_hero_frankish_paladin_*A_x1.sld`). The importer
+preserves all 3,125 source cells and their colour, player and shadow planes.
+The runtime selects the sixteen direction blocks: 45 cells per idle/attack/death
+and 30 per walk/decay (3,120 cells). Movement selects native headings from the
+actual interpolated movement segment, without mirroring the hero's equipment.
+All five poses have distinct renderer tags; an unknown tag cannot turn the
+General into the Scout.
+
+The DE DAT supplies per-cell durations: idle 77.7778 ms, walk 36.6667 ms,
+attack 35.5556 ms, death 41.1111 ms and decay 1,000 ms. Import validates sprite
+identities, frame/angle counts and fractional durations against that data;
+unsupported changes fail explicitly. Playback retains fractional milliseconds,
+and one-shot death playback uses the interpolated tick between snapshots.
+The x1 files are the highest available resolution for this hero in the owner's
+install; no x2 hero files exist. Conversion crops transparent margins and moves
+the hotspot without resampling the image. Source and derived images remain
+outside Git and container images.
+
+The shared atlas grows in colour/mask pairs when selected native art needs more
+space. It retains the base eight layers and allocates up to 64 layers, with
+65,536 semantic frame entries; owner colours share one copy of the artwork.
+WebGPU uploads one 16 MiB page at a time. WebGL2 and Canvas retain their bounded
+source atlas for restoration/rasterization. These are startup selection bounds,
+not visibility-based eviction. See [DE conversion](../assets/de-full.md) for
+measurement and remaining conversion work.
 
 Simulation tests cover takeover, production balance and reservations, role
 slots, siege building preference, wounded withdrawal, retreat, stop, death and

@@ -1,6 +1,8 @@
 //! One projected terrain snapshot shared by rendering, contacts and picking.
 use super::*;
 use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
+#[path = "scene/actors.rs"]
+mod actors;
 #[path = "scene/bridges.rs"]
 mod bridges;
 #[path = "scene/projectiles.rs"]
@@ -260,7 +262,7 @@ pub(in super::super) fn units(
         .map(|unit| {
             let position = client.presentation.position(*unit);
             let mut kind = worker_kind(unit);
-            let mut facing = unit.facing;
+            let mut facing = u16::from(unit.facing);
             let animal = unit
                 .hunt_target
                 .and_then(|id| client.village.animals.iter().find(|a| a.id == id));
@@ -284,14 +286,7 @@ pub(in super::super) fn units(
                     client.config.tick_hz,
                 );
                 kind = aoe_rendering::SceneUnitKind::actor(pose as u8);
-                facing = crate::unit_visuals::packed_frame(
-                    pose,
-                    facing,
-                    projectiles::pose_clock(client, unit, pose),
-                    unit.death_tick,
-                    client.village.tick,
-                    client.config.tick_hz,
-                );
+                facing = actors::animation_frame(client, unit, pose);
             }
             aoe_rendering::SceneUnit {
                 kind,
@@ -302,11 +297,12 @@ pub(in super::super) fn units(
                 )
                 .with_player(Some(unit.player), player, client.team_colour, unit.hp > 0)
                 .with_selected(unit.hp > 0 && client.selected.units.contains(&unit.id)),
-                facing,
+                facing: 0,
                 elevation_meters: scene
                     .height(position)
                     .unwrap_or_else(|| elevation_at_world(client, position)),
             }
+            .with_actor_frame(facing)
         })
         .collect::<Vec<_>>();
     for animal in &client.village.animals {
@@ -317,6 +313,18 @@ pub(in super::super) fn units(
             client.village.tick.max(client.village.wildlife_tick),
             client.config.tick_hz,
         );
+        let frame = crate::unit_visuals::packed_frame(
+            pose,
+            animal.facing,
+            client.last_frame,
+            animal.death_tick,
+            client
+                .presentation
+                .live_tick(client.last_frame)
+                .unwrap_or(client.village.tick as f64)
+                .max(client.village.wildlife_tick as f64),
+            client.config.tick_hz,
+        );
         let unit = aoe_rendering::SceneUnit {
             kind: aoe_rendering::SceneUnitKind::actor(pose as u8),
             id: animal.id,
@@ -324,18 +332,12 @@ pub(in super::super) fn units(
             visual: aoe_rendering::SceneUnitVisual::new(animal.moving)
                 .with_player(animal.owner, player, client.team_colour, animal.hp > 0)
                 .with_selected(client.selected.units.contains(&animal.id) && animal.hp > 0),
-            facing: crate::unit_visuals::packed_frame(
-                pose,
-                animal.facing,
-                client.last_frame,
-                animal.death_tick,
-                client.village.tick.max(client.village.wildlife_tick),
-                client.config.tick_hz,
-            ),
+            facing: 0,
             elevation_meters: scene
                 .height(position)
                 .unwrap_or_else(|| elevation_at_world(client, position)),
-        };
+        }
+        .with_actor_frame(frame);
         let slot = units.partition_point(|u| u.id < animal.id);
         units.insert(slot, unit);
     }

@@ -1,6 +1,18 @@
 use crate::catalog::units::{Pose, SPRITES};
 
 #[test]
+fn siege_stone_keeps_all_thirty_native_de_rotation_cells_at_sixty_fps() {
+    let source = SPRITES[Pose::Stone as usize];
+    assert_eq!(source.manifest_source(), "de/p_mangonel_x1.sld");
+    assert_eq!((source.frames(), source.rows(), source.stride), (30, 1, 30));
+    assert_eq!((source.sample_step(), source.selected_frames()), (1, 30));
+    assert!((source.frame_millis() - 16.66666753590107).abs() < 0.000001);
+    for phase in 0..30 {
+        assert_eq!(source.source_frame(0, phase), phase);
+    }
+}
+
+#[test]
 fn actor_animation_metadata_uses_dat_rows_and_individual_frame_durations() {
     for (pose, id, stride, millis) in [
         (Pose::MilitiaStand, 993, 6, 1000),
@@ -192,22 +204,24 @@ fn every_shooting_attack_releases_inside_its_animation() {
 }
 
 #[test]
-fn general_uses_mounted_joan_poses_with_bounded_direction_sampling() {
-    for (pose, name) in [
-        (Pose::GeneralStand, "idle"),
-        (Pose::GeneralWalk, "walk"),
-        (Pose::GeneralAttack, "idle"),
-        (Pose::GeneralDie, "death"),
-        (Pose::GeneralDecay, "death"),
+fn general_uses_distinct_full_paladin_animations() {
+    for (pose, name, stride) in [
+        (Pose::GeneralStand, "idle", 45),
+        (Pose::GeneralWalk, "walk", 30),
+        (Pose::GeneralAttack, "attack", 45),
+        (Pose::GeneralDie, "death", 45),
+        (Pose::GeneralDecay, "decay", 30),
     ] {
         let s = SPRITES[pose as usize];
         assert_eq!(
             s.manifest_source(),
-            format!("de/u_cav_hero_joan_{name}A_x1.sld")
+            format!("de/u_cav_hero_frankish_paladin_{name}A_x1.sld")
         );
-        assert_eq!(s.selected_frames(), 5);
-        for row in 0..5 {
-            for phase in (0..usize::from(s.stride)).step_by(usize::from(s.sample_step())) {
+        assert_eq!(s.selected_frames(), stride * 16);
+        assert_eq!(s.rows(), 16);
+        for row in 0..16 {
+            for phase in 0..stride {
+                assert_eq!(s.source_frame(row, phase), row * stride + phase);
                 assert!(s.source_frame(row, phase) < s.frames() as usize);
             }
         }

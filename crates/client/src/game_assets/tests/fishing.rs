@@ -43,7 +43,7 @@ fn fishing_sources_preserve_native_rows_and_reject_present_truncation() {
 }
 
 #[wasm_bindgen_test]
-fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
+fn complete_native_and_de_selection_fits_the_bounded_growing_atlas() {
     use aoe_assets::catalog::units::SPRITES;
     let catalog = REQUIRED_RENDER_SOURCES
         .iter()
@@ -143,10 +143,10 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
     fishing::select(&manifest, &mut selected, &mut domains).unwrap();
     // Combined Castle poses add 365 cells to the naval/DAT/rally selection;
     // the Castle camp fallback slots reuse two available DE camp cells.
-    // King and General poses add 35 and 15 selected cells. Regenerate this
-    // content-count pin; the 5120-frame and five-page atlas gates stay fixed.
+    // King retains 35 selected cells; the General retains all 3120 native cells.
+    // The stone retains all 30 native cells rather than five static row aliases.
     // The stationary and working fishing ship share one identical five-frame group.
-    assert_eq!(selected.len(), 5092);
+    assert_eq!(selected.len(), 8222);
     assert!(selected.len() <= MAX_SELECTED_FRAMES);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)
@@ -155,8 +155,7 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
         selected.len()
     );
     building_sprites::rally(&manifest, &mut selected, &mut domains).unwrap();
-    // Reusing base cavalry releases 15 entries. Fill all 18 remaining slots
-    // with two damage cells from nine sources; keep the full-cap assertion.
+    // Damage cells remain selected alongside the complete hero animations.
     let parts = (0..27)
         .map(|n| {
             let id = 424 + n % 9;
@@ -186,7 +185,7 @@ fn complete_native_and_de_selection_fits_the_unchanged_atlas_budget() {
         }],
     });
     buildings::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(selected.len(), MAX_SELECTED_FRAMES);
+    assert_eq!(selected.len(), 8250);
     assert_eq!(
         placement::plan(&manifest, &selected, &domains)
             .unwrap()

@@ -255,6 +255,11 @@ pub enum SceneUnitKind {
     KingWalk,
     KingDie,
     KingDecay,
+    GeneralStand,
+    GeneralWalk,
+    GeneralAttack,
+    GeneralDie,
+    GeneralDecay,
 }
 
 #[path = "scene_actors.rs"]
@@ -367,3 +372,18 @@ pub struct SceneDecoration {
 }
 
 pub use crate::player::SceneUnitVisual;
+
+impl SceneUnit {
+    /// Actors use the building-only damage-stage bits for the high animation
+    /// bits. The scene stays 32 bytes; colour, selection and ghost bits remain
+    /// independent. Apply after owner/selection flags have been constructed.
+    pub fn with_actor_frame(mut self, frame: u16) -> Self {
+        assert!(frame < 2048, "actor frame exceeds packed scene bound");
+        self.facing = frame as u8;
+        self.visual = self.visual.with_damage_stage((frame >> 8) as u8);
+        self
+    }
+    pub(crate) fn actor_frame(self) -> u16 {
+        u16::from(self.facing) | (u16::from(self.visual.damage_stage()) << 8)
+    }
+}

@@ -121,6 +121,8 @@ fn vassal_poses_use_the_king_for_standing_walking_and_death() {
     u.moving = true;
     assert_eq!(unit_pose(&u, None), Pose::KingWalk);
     u.moving = false;
+    u.task = UnitTask::Attacking;
+    assert_eq!(unit_pose(&u, None), Pose::KingStand);
     u.hp = 0;
     u.task = UnitTask::Dying;
     u.death_tick = Some(aoe_core::Tick(10));
@@ -165,16 +167,18 @@ fn general_poses_use_mounted_hero_for_standing_walking_and_death() {
     u.moving = true;
     assert_eq!(unit_pose(&u, None), Pose::GeneralWalk);
     u.moving = false;
+    u.task = UnitTask::Attacking;
+    assert_eq!(unit_pose(&u, None), Pose::GeneralAttack);
     u.hp = 0;
     u.task = UnitTask::Dying;
     u.death_tick = Some(aoe_core::Tick(10));
     assert_eq!(unit_pose(&u, None), Pose::GeneralDie);
     assert_eq!(
-        lifecycle_pose(Pose::GeneralDie, u.death_tick, 39, 20),
+        lifecycle_pose(Pose::GeneralDie, u.death_tick, 47, 20),
         Pose::GeneralDie
     );
     assert_eq!(
-        lifecycle_pose(Pose::GeneralDie, u.death_tick, 40, 20),
+        lifecycle_pose(Pose::GeneralDie, u.death_tick, 48, 20),
         Pose::GeneralDecay
     );
 }

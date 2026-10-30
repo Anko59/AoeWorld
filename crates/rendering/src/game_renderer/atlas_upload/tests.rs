@@ -24,7 +24,11 @@ fn streamed_pages_reach_canvas_in_order_and_replace_the_atlas_only_on_finish() {
         source_atlas: vec![9],
         presentation: CanvasPresentation::new(128, 128),
     };
-    let mut upload = renderer.begin_game_atlas().unwrap();
+    assert!(
+        renderer.begin_game_atlas(264).is_err(),
+        "reject layer counts before 32-bit byte-size multiplication"
+    );
+    let mut upload = renderer.begin_game_atlas(crate::GAME_ATLAS_PAGES).unwrap();
     upload.page_buffer(0).unwrap()[0] = 1;
     renderer.write_game_atlas_page(&mut upload, 0).unwrap();
     // Out-of-order and unfinished uploads never disturb the old atlas.
@@ -35,8 +39,9 @@ fn streamed_pages_reach_canvas_in_order_and_replace_the_atlas_only_on_finish() {
         unreachable!()
     };
     assert_eq!(source_atlas, &[9]);
-    let mut upload = renderer.begin_game_atlas().unwrap();
-    for layer in 0..crate::GAME_ATLAS_PAGES {
+    let mut upload = renderer.begin_game_atlas(10).unwrap();
+    assert!(upload.page_buffer(10).is_err());
+    for layer in 0..10 {
         upload.page_buffer(layer).unwrap()[0] = layer as u8 + 1;
         renderer.write_game_atlas_page(&mut upload, layer).unwrap();
     }
@@ -44,8 +49,8 @@ fn streamed_pages_reach_canvas_in_order_and_replace_the_atlas_only_on_finish() {
     let GameRenderer::Canvas { source_atlas, .. } = &renderer else {
         unreachable!()
     };
-    assert_eq!(source_atlas.len(), crate::GAME_ATLAS_BYTES);
-    for layer in 0..crate::GAME_ATLAS_PAGES as usize {
+    assert_eq!(source_atlas.len(), 10 * crate::GAME_ATLAS_PAGE_BYTES);
+    for layer in 0..10 {
         assert_eq!(
             source_atlas[layer * crate::GAME_ATLAS_PAGE_BYTES],
             layer as u8 + 1

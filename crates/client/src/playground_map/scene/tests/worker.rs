@@ -97,11 +97,11 @@ fn militia_combat_and_hunting_never_use_the_generic_worker_pose() {
     // A death never loops, including a reconnect halfway through decay.
     let died = Some(aoe_core::Tick(100));
     assert_eq!(
-        packed_frame(Pose::MilitiaDie, 2, 0.0, died, 100, 20) >> 3,
+        packed_frame(Pose::MilitiaDie, 2, 0.0, died, 100.0, 20) >> 3,
         0
     );
     assert_eq!(
-        packed_frame(Pose::MilitiaDie, 2, 0.0, died, 110, 20) >> 3,
+        packed_frame(Pose::MilitiaDie, 2, 0.0, died, 110.0, 20) >> 3,
         5
     );
     assert_eq!(
@@ -113,11 +113,11 @@ fn militia_combat_and_hunting_never_use_the_generic_worker_pose() {
         Pose::MilitiaDecay
     );
     assert_eq!(
-        packed_frame(Pose::MilitiaDecay, 2, 0.0, died, 120, 20) >> 3,
+        packed_frame(Pose::MilitiaDecay, 2, 0.0, died, 120.0, 20) >> 3,
         0
     );
     assert_eq!(
-        packed_frame(Pose::MilitiaDecay, 2, 0.0, died, 600, 20) >> 3,
+        packed_frame(Pose::MilitiaDecay, 2, 0.0, died, 600.0, 20) >> 3,
         4
     );
 }
@@ -262,4 +262,29 @@ fn soldiers_swing_only_with_their_target_in_reach() {
     u.kind = UnitKind::Archer;
     assert_eq!(scene_pose(&u, None, Some(4 * TILE)), Pose::ArcherAttack);
     assert_eq!(scene_pose(&u, None, Some(9 * TILE)), Pose::ArcherStand);
+}
+
+#[wasm_bindgen_test]
+fn general_native_clock_visits_every_attack_and_death_cell_between_server_ticks() {
+    use crate::unit_visuals::{Pose, packed_frame};
+    // DE attack: 45 cells in 1.6 s; death: 45 cells in 1.85 s.
+    for phase in 0..45 {
+        let attack = (f64::from(phase) + 0.5) * 1600.0 / 45.0;
+        assert_eq!(
+            packed_frame(Pose::GeneralAttack, 2, attack, None, 0.0, 20) >> 4,
+            phase
+        );
+        let tick = 100.0 + (f64::from(phase) + 0.5) * 1.85 / 45.0 * 20.0;
+        assert_eq!(
+            packed_frame(
+                Pose::GeneralDie,
+                2,
+                0.0,
+                Some(aoe_core::Tick(100)),
+                tick,
+                20
+            ) >> 4,
+            phase
+        );
+    }
 }

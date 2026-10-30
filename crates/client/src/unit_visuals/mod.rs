@@ -318,8 +318,8 @@ pub(crate) fn lifecycle_pose(pose: Pose, died: Option<aoe_core::Tick>, tick: u64
         return pose;
     };
     let source = sprites()[die as usize];
-    if tick.saturating_sub(died.0).saturating_mul(1000)
-        >= u64::from(hz.max(1)) * u64::from(source.millis) * u64::from(source.stride)
+    if tick.saturating_sub(died.0) as f64 * 1000.0
+        >= f64::from(hz.max(1)) * source.frame_millis() * f64::from(source.stride)
     {
         decay
     } else {
@@ -331,27 +331,32 @@ pub(crate) fn packed_frame(
     facing: u8,
     time: f64,
     death: Option<aoe_core::Tick>,
-    tick: u64,
+    tick: f64,
     hz: u32,
-) -> u8 {
+) -> u16 {
     let source = sprites()[pose as usize];
-    let millis = u64::from(source.millis) * u64::from(source.sample_step());
+    let millis = source.frame_millis() * f64::from(source.sample_step());
     let stride = u64::from(source.stride.div_ceil(source.sample_step()));
     let phase = if let Some(died) = death {
         // The same native frame duration governs looping and one-shot playback.
-        let elapsed = tick.saturating_sub(died.0).saturating_mul(1000) / u64::from(hz.max(1));
+        let elapsed = (tick - died.0 as f64).max(0.0) * 1000.0 / f64::from(hz.max(1));
         let delay = decay_pair(pose)
             .filter(|(_, decay)| *decay == pose)
-            .map_or(0, |(die, _)| {
+            .map_or(0.0, |(die, _)| {
                 let s = sprites()[die as usize];
-                u64::from(s.millis) * u64::from(s.stride)
+                s.frame_millis() * f64::from(s.stride)
             });
-        (elapsed.saturating_sub(delay) / millis).min(stride - 1) as u8
+        ((elapsed - delay).max(0.0) / millis).min((stride - 1) as f64) as u8
     } else {
-        ((time.max(0.0) as u64 % (u64::from(source.stride) * u64::from(source.millis))) / millis)
-            .min(stride - 1) as u8
+        ((time.max(0.0) % (f64::from(source.stride) * source.frame_millis())) / millis)
+            .min((stride - 1) as f64) as u8
     };
-    (facing % 8) | (phase << 3)
+    if source.rows() == 16 {
+        let direction = (20 - u16::from(facing % 8) * 2) % 16;
+        direction | (u16::from(phase) << 4)
+    } else {
+        u16::from(facing % 8) | (u16::from(phase) << 3)
+    }
 }
 
 /// The animation clock, in milliseconds, of a `kind` of unit drawn in
@@ -380,8 +385,8 @@ pub(crate) fn pose_clock(
         hz,
         period,
         (
-            f64::from(source.stride) * f64::from(source.millis),
-            f64::from(source.millis),
+            f64::from(source.stride) * source.frame_millis(),
+            source.frame_millis(),
         ),
         release,
     )

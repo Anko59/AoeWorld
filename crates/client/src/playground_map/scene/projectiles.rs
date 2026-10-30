@@ -83,22 +83,33 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
         } else {
             Pose::Javelin
         };
-        units.push(SceneUnit {
-            id: aoe_core::EntityId(u32::MAX.saturating_sub(shot.id as u32)),
-            kind: SceneUnitKind::actor(pose as u8),
-            position,
-            visual: aoe_rendering::SceneUnitVisual::new(true).with_selected(false),
-            facing: if pose == Pose::Stone {
-                0
-            } else {
-                flight_facing(from, to)
-            },
-            elevation_meters: scene
-                .height(position)
-                .unwrap_or_else(|| elevation_at_world(client, position))
-                + 1.0
-                + arc(fraction, distance),
-        });
+        let frame = if pose == Pose::Stone {
+            crate::unit_visuals::packed_frame(
+                pose,
+                0,
+                elapsed * 1000.0 / f64::from(client.config.tick_hz.max(1)),
+                None,
+                now,
+                client.config.tick_hz,
+            )
+        } else {
+            u16::from(flight_facing(from, to))
+        };
+        units.push(
+            SceneUnit {
+                id: aoe_core::EntityId(u32::MAX.saturating_sub(shot.id as u32)),
+                kind: SceneUnitKind::actor(pose as u8),
+                position,
+                visual: aoe_rendering::SceneUnitVisual::new(true).with_selected(false),
+                facing: 0,
+                elevation_meters: scene
+                    .height(position)
+                    .unwrap_or_else(|| elevation_at_world(client, position))
+                    + 1.0
+                    + arc(fraction, distance),
+            }
+            .with_actor_frame(frame),
+        );
     }
 }
 

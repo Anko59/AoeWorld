@@ -200,9 +200,10 @@ impl FetchFixture {
         let install = js_sys::Function::new_with_args(
             "manifest, color, mask",
             "const original = window.fetch;
-             window.fetch = async path => path.includes('/buildings/') ? new Response(null, {status:404}) : new Response(
+             window.__aoeAssetRequests = [];
+             window.fetch = async path => { window.__aoeAssetRequests.push(path); return path.includes('/buildings/') ? new Response(null, {status:404}) : new Response(
                  path.endsWith('manifest.json') ? manifest :
-                 path.endsWith('color.png') ? color : mask);
+                 path.endsWith('color.png') ? color : mask); };
              return original;",
         );
         Self(

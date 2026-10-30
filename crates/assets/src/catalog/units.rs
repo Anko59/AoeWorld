@@ -1,5 +1,6 @@
-//! Direction rows and frame durations decoded from the owner's VER 5.7 dat.
-//! Five stored rows supply eight facings. Pixels remain in the private pack.
+//! Native actor layouts and durations; pixels remain in the private pack.
+//! DE heroes and stones preserve complete native timelines. Remaining trial
+//! poses use five stored rows for eight mirrored facings.
 #[path = "units/castle.rs"]
 mod castle;
 #[path = "units/projectile.rs"]
@@ -167,6 +168,19 @@ pub struct ActorSource {
     pub phases: u8,
 }
 impl ActorSource {
+    /// Native DE durations retain fractional milliseconds (DAT f32 seconds).
+    pub fn frame_millis(self) -> f64 {
+        let seconds: f32 = match self.id {
+            3776 => 3.5 / 45.0,
+            3780 => 1.1 / 30.0,
+            3770 => 1.6 / 45.0,
+            3773 => 1.85 / 45.0,
+            3777 => 1.0,
+            4500 => 1.0 / 60.0,
+            _ => return f64::from(self.millis),
+        };
+        f64::from(seconds) * 1000.0
+    }
     /// These owned cavalry poses already have resident base-role art. Walking
     /// keeps the full base group resident and samples it when resolving poses.
     pub fn base_role(self) -> Option<super::AssetRole> {
@@ -179,6 +193,9 @@ impl ActorSource {
 
     /// Bound the fisherman atlas rows while retaining their native loop duration.
     pub const fn sample_step(self) -> u8 {
+        if matches!(self.id, 3770 | 3773 | 3776 | 3777 | 3780) {
+            return 1;
+        }
         if self.phases > 0 {
             return self.stride.div_ceil(self.phases);
         }
@@ -190,7 +207,8 @@ impl ActorSource {
     }
     pub const fn frames(self) -> u32 {
         match self.id {
-            3789 | 3786 | 3793 => return 5,
+            3770 | 3773 | 3776 => return 721,
+            3777 | 3780 => return 481,
             1767 => return 961,
             1771 | 1764 | 1768 => return 481,
             _ => {}
@@ -199,22 +217,33 @@ impl ActorSource {
             return 16;
         }
         match self.id {
-            4500 => 1,
+            4500 => 30,
             3799 => 176,
             3820 => 170,
             _ => self.stride as u32 * 5,
         }
     }
+    pub const fn rows(self) -> usize {
+        if self.id == 4500 {
+            1
+        } else if matches!(self.id, 3770 | 3773 | 3776 | 3777 | 3780) {
+            16
+        } else {
+            5
+        }
+    }
     pub const fn selected_frames(self) -> usize {
-        self.stride.div_ceil(self.sample_step()) as usize * 5
+        self.stride.div_ceil(self.sample_step()) as usize * self.rows()
     }
     pub const fn source_frame(self, row: usize, phase: usize) -> usize {
         // The original DAT supplies timing; the trial omits the King pixels.
         // Its licensed DE West European King supplies the same four poses,
         // with 16 direction blocks and 60/30 cells per direction.
         match self.id {
-            // The current DE converter retains these five logical cells only.
-            3789 | 3786 | 3793 => return row,
+            // The hero retains every cell in all sixteen native blocks.
+            3770 | 3773 | 3776 | 3777 | 3780 => {
+                return row * self.stride as usize + phase;
+            }
             1767 => return (4 + row * 2) * 60 + phase * 10,
             1771 | 1764 => return (4 + row * 2) * 30 + phase * 3,
             1768 => return (4 + row * 2) * 30 + phase * 6,
@@ -224,21 +253,26 @@ impl ActorSource {
             return 4 + row * 2;
         }
         match self.id {
-            4500 => 0,
+            4500 => phase,
             // Flight cells by direction and pitch; see `projectile`.
             3799 | 3820 => projectile::source_cell(self.id, row),
             _ => row * self.stride as usize + phase,
         }
     }
     pub fn manifest_source(self) -> String {
+        if self.id == 4500 {
+            return "de/p_mangonel_x1.sld".to_owned();
+        }
         let general = match self.id {
-            3789 => Some("idle"),
-            3793 => Some("walk"),
-            3786 => Some("death"),
+            3776 => Some("idle"),
+            3780 => Some("walk"),
+            3770 => Some("attack"),
+            3773 => Some("death"),
+            3777 => Some("decay"),
             _ => None,
         };
         if let Some(pose) = general {
-            return format!("de/u_cav_hero_joan_{pose}A_x1.sld");
+            return format!("de/u_cav_hero_frankish_paladin_{pose}A_x1.sld");
         }
         let king = match self.id {
             1767 => Some("idle"),
@@ -397,9 +431,9 @@ pub const SPRITES: [ActorSource; 135] = [
     castle::SPRITES[44],
     ActorSource {
         id: 4500,
-        stride: 1,
-        millis: 100,
-        phases: 1,
+        stride: 30,
+        millis: 17,
+        phases: 30,
     },
     sprite(100_539, 1, 200),
     sprite(100_021, 1, 200),
@@ -430,38 +464,12 @@ pub const SPRITES: [ActorSource; 135] = [
         millis: 6000,
         phases: 1,
     },
-    // Bounded hero keyframes: attacks share idle; decay retains the fallen
-    // hero. Identical actor groups reuse metadata, preserving the atlas cap.
-    ActorSource {
-        id: 3789,
-        stride: 15,
-        millis: 200,
-        phases: 1,
-    },
-    ActorSource {
-        id: 3793,
-        stride: 15,
-        millis: 70,
-        phases: 1,
-    },
-    ActorSource {
-        id: 3789,
-        stride: 15,
-        millis: 100,
-        phases: 1,
-    },
-    ActorSource {
-        id: 3786,
-        stride: 15,
-        millis: 100,
-        phases: 1,
-    },
-    ActorSource {
-        id: 3786,
-        stride: 15,
-        millis: 2000,
-        phases: 1,
-    },
+    // Frankish Paladin hero: DE DAT frame counts and rounded native milliseconds.
+    sprite(3776, 45, 78),
+    sprite(3780, 30, 37),
+    sprite(3770, 45, 36),
+    sprite(3773, 45, 41),
+    sprite(3777, 30, 1000),
 ];
 
 #[cfg(test)]

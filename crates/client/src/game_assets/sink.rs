@@ -4,6 +4,7 @@ use super::*;
 pub struct RendererSink<'a> {
     renderer: &'a mut aoe_rendering::GameRenderer,
     upload: Option<aoe_rendering::AtlasUpload>,
+    pages: u32,
 }
 
 impl<'a> RendererSink<'a> {
@@ -11,18 +12,39 @@ impl<'a> RendererSink<'a> {
         Self {
             renderer,
             upload: None,
+            pages: GAME_ATLAS_PAGES,
         }
     }
 
     fn upload(&mut self) -> Result<&mut aoe_rendering::AtlasUpload, String> {
         if self.upload.is_none() {
-            self.upload = Some(self.renderer.begin_game_atlas()?);
+            self.upload = Some(self.renderer.begin_game_atlas(self.pages)?);
         }
         self.upload.as_mut().ok_or("No atlas upload".into())
     }
 }
 
 impl AtlasSink for RendererSink<'_> {
+    fn source_batches(&self) -> bool {
+        self.renderer.backend() == "webgpu"
+    }
+    fn write_source(
+        &mut self,
+        colour: &[u8],
+        mask: Option<&[u8]>,
+        copies: &[aoe_rendering::AtlasSourceCopy],
+    ) -> Result<js_sys::Promise, String> {
+        let upload = self.upload.as_mut().ok_or("No atlas upload")?;
+        self.renderer
+            .write_game_atlas_source(upload, colour, mask, copies)
+    }
+    fn configure(&mut self, pages: u32) -> Result<(), String> {
+        if self.upload.is_some() {
+            return Err("Atlas upload already started".into());
+        }
+        self.pages = pages;
+        Ok(())
+    }
     fn resident_buffer(&mut self) -> Result<Option<&mut [u8]>, String> {
         Ok(self.upload()?.resident_buffer())
     }

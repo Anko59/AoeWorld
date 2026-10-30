@@ -4,7 +4,7 @@ use super::SceneUnitKind;
 impl SceneUnitKind {
     /// Flat tags keep the scene DTO at 32 bytes, including actor animations.
     pub fn actor(index: u8) -> Self {
-        const ACTORS: [SceneUnitKind; 130] = [
+        const ACTORS: [SceneUnitKind; 135] = [
             SceneUnitKind::MilitiaStand,
             SceneUnitKind::MilitiaWalk,
             SceneUnitKind::MilitiaAttack,
@@ -135,14 +135,22 @@ impl SceneUnitKind {
             SceneUnitKind::KingWalk,
             SceneUnitKind::KingDie,
             SceneUnitKind::KingDecay,
+            SceneUnitKind::GeneralStand,
+            SceneUnitKind::GeneralWalk,
+            SceneUnitKind::GeneralAttack,
+            SceneUnitKind::GeneralDie,
+            SceneUnitKind::GeneralDecay,
         ];
         ACTORS
             .get(usize::from(index))
             .copied()
             .unwrap_or(Self::Scout)
     }
+    pub(in crate::game_renderer) fn native_directions(self) -> bool {
+        (Self::GeneralStand as u8..=Self::GeneralDecay as u8).contains(&(self as u8))
+    }
     pub(in crate::game_renderer) fn actor_slot(self) -> Option<usize> {
-        if (Self::KingStand as u8..=Self::KingDecay as u8).contains(&(self as u8)) {
+        if (Self::KingStand as u8..=Self::GeneralDecay as u8).contains(&(self as u8)) {
             return Some(126 + (self as usize - Self::KingStand as usize));
         }
         if (Self::ArcherStand as u8..=Self::TransportShip as u8).contains(&(self as u8)) {

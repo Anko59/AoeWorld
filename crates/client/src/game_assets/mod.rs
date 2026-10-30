@@ -1,7 +1,7 @@
 //! Loads only the local pack pages needed by the first map and compacts them.
 use aoe_assets::catalog::{
     AssetRole, TerrainFrameTopology,
-    packing::{AtlasDomain, FrameExtent, MAX_SELECTED_FRAMES, Placement, pack_frames},
+    packing::{AtlasDomain, FrameExtent, MAX_LOGICAL_FRAMES as MAX_SELECTED_FRAMES, Placement},
     runtime::{
         OPTIONAL_RESOURCES as OPTIONAL_RESOURCE_SOURCES,
         OPTIONAL_TERRAIN as OPTIONAL_TERRAIN_SOURCES, REQUIRED as REQUIRED_RENDER_SOURCES,
@@ -11,6 +11,7 @@ use aoe_assets::catalog::{
 #[path = "tests/actors.rs"]
 mod actor_tests;
 mod actors;
+mod batches;
 mod building_sprites;
 mod buildings;
 mod fishing;
@@ -29,11 +30,16 @@ mod collected;
 #[cfg(test)]
 pub(crate) use collected::CollectedAtlas;
 #[cfg(test)]
+#[path = "tests/growth.rs"]
+mod growth_tests;
+#[cfg(test)]
 #[path = "tests/resident.rs"]
 mod resident_tests;
+#[cfg(test)]
+use aoe_rendering::GAME_ATLAS_BYTES;
 use aoe_rendering::{
-    AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
-    GameArt, GameFrame, TerrainTopology,
+    AtlasAddress, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE, GameArt, GameFrame,
+    TerrainTopology,
 };
 pub(crate) use manifest::{decode_bounds, decode_chunk, decode_chunks};
 #[cfg(test)]
@@ -211,8 +217,13 @@ fn source_order(manifest: &Manifest, selected: &[usize]) -> Vec<usize> {
 // Aliased masked cells must be uploaded once: repeated coverage composition
 // would change their alpha. Shared cells deliberately retain distinct places.
 fn copy_order(manifest: &Manifest, selected: &[usize], placements: &[Placement]) -> Vec<usize> {
+    let mut first = std::collections::BTreeMap::new();
+    let key = |p: &Placement| (p.page, p.x, p.y, p.width, p.height);
+    for (semantic, p) in placements.iter().enumerate() {
+        first.entry(key(p)).or_insert(semantic);
+    }
     let mut order = source_order(manifest, selected);
-    order.retain(|&semantic| !placements[..semantic].contains(&placements[semantic]));
+    order.retain(|&semantic| first.get(&key(&placements[semantic])) == Some(&semantic));
     order
 }
 
@@ -241,6 +252,24 @@ pub(crate) fn team_colour() -> [u8; 3] {
 /// GPU sinks receive one finished page at a time. CPU sinks can expose the
 /// atlas they already retain, filled in source order before `finish`.
 pub trait AtlasSink {
+    fn source_batches(&self) -> bool {
+        false
+    }
+    fn write_source(
+        &mut self,
+        _colour: &[u8],
+        _mask: Option<&[u8]>,
+        _copies: &[aoe_rendering::AtlasSourceCopy],
+    ) -> Result<js_sys::Promise, String> {
+        Err("Sink does not support source blits".into())
+    }
+    fn configure(&mut self, pages: u32) -> Result<(), String> {
+        if pages == GAME_ATLAS_PAGES {
+            Ok(())
+        } else {
+            Err("Sink does not support atlas growth".into())
+        }
+    }
     /// Existing CPU destination storage; page-only sinks allocate no full atlas.
     fn resident_buffer(&mut self) -> Result<Option<&mut [u8]>, String> {
         Ok(None)

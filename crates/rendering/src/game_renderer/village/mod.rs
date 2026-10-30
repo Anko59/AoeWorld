@@ -5,8 +5,15 @@ use crate::SceneUnitKind;
 pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], usize, bool)> {
     if let Some(index) = unit.kind.actor_slot() {
         let frames = art.actors.get(index)?.as_slice();
-        let stride = frames.len() / 5;
-        return (stride > 0 && frames.len() == stride * 5).then_some((frames, stride, false));
+        let rows = if unit.kind == SceneUnitKind::Stone {
+            1
+        } else if unit.kind.native_directions() {
+            16
+        } else {
+            5
+        };
+        let stride = frames.len() / rows;
+        return (stride > 0 && frames.len() == stride * rows).then_some((frames, stride, false));
     }
     let scout = unit.kind == SceneUnitKind::Scout;
     let (frames, stride): (&[GameFrame], usize) = if scout {
@@ -343,3 +350,7 @@ mod composition_tests;
 #[cfg(test)]
 #[path = "tests/foundations.rs"]
 mod foundation_tests;
+
+#[cfg(test)]
+#[path = "tests/hero.rs"]
+mod hero_tests;

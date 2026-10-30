@@ -14,6 +14,10 @@ pub const PAGE_COUNT: usize = 5;
 pub const PAGE_BYTES: usize = PAGE_SIDE as usize * PAGE_SIDE as usize * 4;
 pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 83,886,080 bytes.
 pub const MAX_SELECTED_FRAMES: usize = 5120;
+/// Logical indices are u16, allowing indices 0 through 65535.
+pub const MAX_LOGICAL_FRAMES: usize = u16::MAX as usize + 1;
+/// Bound logical placement metadata independently of resident GPU storage.
+pub const MAX_LOGICAL_PAGES: usize = 256;
 pub const MAX_FRAME_EXTENT: u16 = PAGE_SIDE - 4;
 // Rows and columns 0–1 stay unallocated on every page. The renderer stores its
 // terrain frame directory in rows 0–1 of page 0; never place frames there.
@@ -58,6 +62,7 @@ pub const WHITE_TEXEL: Placement = Placement {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PackingError {
+    InvalidPageBudget,
     TooManyFrames {
         count: usize,
         limit: usize,
@@ -79,6 +84,7 @@ pub enum PackingError {
 impl fmt::Display for PackingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidPageBudget => write!(f, "invalid logical atlas page budget"),
             Self::TooManyFrames { count, limit } => {
                 write!(f, "selected frame count {count} exceeds {limit}")
             }
@@ -105,36 +111,88 @@ impl std::error::Error for PackingError {}
 /// Returns exactly one placement per input, at its original semantic index.
 /// Packing failure is atomic: no partial placements escape the helper.
 pub fn pack_frames(frames: &[FrameExtent]) -> Result<Vec<Placement>, PackingError> {
-    pack_with_allocator(frames, |count| vec![Placement::default(); count])
+    pack_with_allocator_and_pages(frames, 2, PAGE_COUNT - 2, MAX_SELECTED_FRAMES, |count| {
+        vec![Placement::default(); count]
+    })
+}
+
+/// Pack metadata into a bounded logical atlas; this does not allocate pixels or
+/// imply that any of these pages are resident. Terrain and objects reserve
+/// distinct page ranges, and shared frames can borrow either range.
+pub fn pack_frames_with_pages(
+    frames: &[FrameExtent],
+    terrain_pages: usize,
+    object_pages: usize,
+) -> Result<Vec<Placement>, PackingError> {
+    pack_with_allocator_and_pages(
+        frames,
+        terrain_pages,
+        object_pages,
+        MAX_LOGICAL_FRAMES,
+        |count| vec![Placement::default(); count],
+    )
+}
+
+/// Runtime addresses: base colour pages 0–4 and masks 5–7; additional
+/// object colour/mask pairs follow at 8/9, 10/11, up to 62/63. Allocation
+/// grows to the selected inventory, independent of the logical 256-page tool.
+pub fn pack_resident_frames(frames: &[FrameExtent]) -> Result<Vec<Placement>, PackingError> {
+    validate(frames, MAX_LOGICAL_FRAMES)?;
+    let mut failure = PackingError::InvalidPageBudget;
+    for pages in 3..=31 {
+        match pack_frames_with_pages(frames, 2, pages) {
+            Ok(mut placements) => {
+                for placed in &mut placements {
+                    if placed.page >= 5 {
+                        placed.page = 8 + (placed.page - 5) * 2;
+                    }
+                }
+                return Ok(placements);
+            }
+            Err(error) => failure = error,
+        }
+    }
+    Err(failure)
 }
 
 // Private allocation seam lets native tests prove validation precedes metadata
 // allocation, without a global allocator or unsafe instrumentation.
+#[cfg(test)]
 fn pack_with_allocator(
     frames: &[FrameExtent],
     allocate: impl FnOnce(usize) -> Vec<Placement>,
 ) -> Result<Vec<Placement>, PackingError> {
-    validate(frames)?;
+    pack_with_allocator_and_pages(frames, 2, PAGE_COUNT - 2, MAX_SELECTED_FRAMES, allocate)
+}
+
+fn pack_with_allocator_and_pages(
+    frames: &[FrameExtent],
+    terrain_pages: usize,
+    object_pages: usize,
+    frame_limit: usize,
+    allocate: impl FnOnce(usize) -> Vec<Placement>,
+) -> Result<Vec<Placement>, PackingError> {
+    let page_count = terrain_pages
+        .checked_add(object_pages)
+        .filter(|&count| terrain_pages > 0 && object_pages > 0 && count <= MAX_LOGICAL_PAGES)
+        .ok_or(PackingError::InvalidPageBudget)?;
+    validate(frames, frame_limit)?;
     let mut placements = allocate(frames.len());
-    // Fixed 10 KiB index scratch: bounded startup-only insertion sort, avoiding
-    // generic quicksort's WASM code size and a second heap allocation.
-    let mut indices = [0_u16; MAX_SELECTED_FRAMES];
-    for index in 0..frames.len() {
-        let mut slot = index;
-        while slot > 0 && precedes(frames, index, usize::from(indices[slot - 1])) {
-            indices[slot] = indices[slot - 1];
-            slot -= 1;
-        }
-        indices[slot] = index as u16;
+    // At most 128 KiB of indices, allocated on the heap for WASM stack safety.
+    // In-place sorting avoids quadratic startup comparisons.
+    let mut indices = vec![0_u16; frames.len()];
+    for (index, slot) in indices[..frames.len()].iter_mut().enumerate() {
+        *slot = index as u16;
     }
-    let mut cursors: [Page; PAGE_COUNT] = std::array::from_fn(|_| Page::new());
+    order_indices(frames, &mut indices[..frames.len()], || {});
+    let mut cursors: Vec<Page> = (0..page_count).map(|_| Page::new()).collect();
     for &index in &indices[..frames.len()] {
         let index = usize::from(index);
         let frame = frames[index];
         let (pages, spare) = match frame.domain {
-            AtlasDomain::Terrain => (0..2, 0..0),
-            AtlasDomain::Objects => (2..PAGE_COUNT, 0..0),
-            AtlasDomain::Shared => (2..PAGE_COUNT, 0..2),
+            AtlasDomain::Terrain => (0..terrain_pages, 0..0),
+            AtlasDomain::Objects => (terrain_pages..page_count, 0..0),
+            AtlasDomain::Shared => (terrain_pages..page_count, 0..terrain_pages),
         };
         let mut placed = false;
         for page in pages.chain(spare) {
@@ -153,18 +211,38 @@ fn pack_with_allocator(
         if !placed {
             // Shelf holes can contain enough area but no sufficiently tall
             // rectangle. Retry the same bounded pages with maximal free regions.
-            dense::pack(frames, &indices[..frames.len()], &mut placements)?;
+            dense::pack(
+                frames,
+                &indices[..frames.len()],
+                &mut placements,
+                terrain_pages,
+                page_count,
+            )?;
             break;
         }
     }
     Ok(placements)
 }
 
-fn validate(frames: &[FrameExtent]) -> Result<(), PackingError> {
-    if frames.len() > MAX_SELECTED_FRAMES {
+fn order_indices(frames: &[FrameExtent], indices: &mut [u16], mut compared: impl FnMut()) {
+    indices.sort_unstable_by(|&a, &b| {
+        compared();
+        let (a, b) = (usize::from(a), usize::from(b));
+        if a == b {
+            std::cmp::Ordering::Equal
+        } else if precedes(frames, a, b) {
+            std::cmp::Ordering::Less
+        } else {
+            std::cmp::Ordering::Greater
+        }
+    });
+}
+
+fn validate(frames: &[FrameExtent], limit: usize) -> Result<(), PackingError> {
+    if frames.len() > limit {
         return Err(PackingError::TooManyFrames {
             count: frames.len(),
-            limit: MAX_SELECTED_FRAMES,
+            limit,
         });
     }
     for (index, frame) in frames.iter().enumerate() {

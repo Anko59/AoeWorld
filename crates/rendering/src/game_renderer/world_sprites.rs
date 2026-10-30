@@ -13,6 +13,10 @@ pub use fish::scene_resource_animation_frame;
 #[path = "village/bounds.rs"]
 mod bounds;
 use bounds::object_depth;
+#[path = "village/actors.rs"]
+mod actor_frames;
+pub use actor_frames::actor_frame_index;
+use actor_frames::{sprite_direction, unit_direction, unit_frame_index};
 pub use bounds::{
     scene_building_hit, scene_building_visible, scene_unit_bounds, scene_unit_depth,
     scene_unit_render_key,
@@ -215,9 +219,10 @@ pub(super) fn emit_world_sprite_frames(
             village::marker(unit, camera, &mut emit);
             continue;
         };
-        let (direction, flipped) = sprite_direction(unit.facing);
+        let (direction, flipped) = unit_direction(unit);
         let phase = if unit.kind.actor_slot().is_some() {
-            usize::from(unit.facing >> 3).min(stride - 1)
+            usize::from(unit.actor_frame() >> if unit.kind.native_directions() { 4 } else { 3 })
+                .min(stride - 1)
         } else if animated {
             let clock = if unit.kind == crate::SceneUnitKind::VillagerFishing {
                 animation / 8
@@ -228,7 +233,7 @@ pub(super) fn emit_world_sprite_frames(
         } else {
             0
         };
-        let (index, _) = actor_frame_index(unit.facing, stride, phase);
+        let (index, _) = unit_frame_index(unit, stride, phase);
         let frame = world_frame(frames[index]);
         // The DAT's fishing task is the net delta over the standing hull.
         let net = (unit.kind == crate::SceneUnitKind::FishingShipWorking)
@@ -430,17 +435,6 @@ fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
 #[cfg(test)]
 #[path = "village/tests/layer_order.rs"]
 mod layer_order_tests;
-
-fn sprite_direction(facing: u8) -> (usize, bool) {
-    let facing = facing % 8;
-    let row = [0_usize, 1, 2, 3, 4, 3, 2, 1][usize::from(facing)];
-    (row, matches!(facing, 1..=3))
-}
-
-pub fn actor_frame_index(facing: u8, stride: usize, phase: usize) -> (usize, bool) {
-    let (direction, mirrored) = sprite_direction(facing);
-    (direction * stride + phase % stride.max(1), mirrored)
-}
 
 pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
     if let Some(slot @ (4 | 40)) = unit.kind.building_slot()

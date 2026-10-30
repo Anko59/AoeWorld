@@ -148,7 +148,7 @@ pub(super) fn owner_sample(atlas: &[u8], sprite: Sprite, x: f64, y: f64) -> [u8;
     if sprite.pages[3] & Sprite::PLAYER_MASK == 0 {
         return base;
     }
-    let mask = sample_atlas(atlas, sprite.pages[0] + 3, x, y);
+    let mask = sample_atlas(atlas, crate::atlas_mask_page(sprite.pages[0]), x, y);
     let colour = std::array::from_fn(|i| (sprite.terrain_blend[1][i] * 255.0).round() as u8);
     crate::player::player_texel(base, mask, colour)
 }

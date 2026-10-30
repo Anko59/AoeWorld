@@ -161,7 +161,7 @@ out vec4 result;
 vec4 ownerSample(vec2 uv, uint page) {
     vec4 base = textureLod(atlas, vec3(uv, float(page)), 0.0);
     if ((vPages.w & 64u) == 0u) return base;
-    vec4 mask = floor(textureLod(atlas, vec3(uv, float(page + 3u)), 0.0) * 255.0 + .5);
+    vec4 mask = floor(textureLod(atlas, vec3(uv, float(page < 5u ? page + 3u : page + 1u)), 0.0) * 255.0 + .5);
     if (mask.g == 0.0) return base;
     float foreground = mask.g * 255.0, background = mask.b * (255.0 - mask.g);
     vec3 ramp = floor(floor(vRect3.rgb * 255.0 + .5) * (.65 + min(mask.r, 7.0) / 7.0 * .35));

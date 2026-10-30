@@ -13,7 +13,7 @@ mod tests;
 
 const DEADLINE_MS: f64 = 5_000.0;
 const MAX_FRAMES: usize = 2;
-const MAX_UPLOADS: usize = crate::GAME_ATLAS_PAGES as usize;
+const MAX_UPLOADS: usize = crate::MAX_GAME_ATLAS_PAGES as usize;
 
 #[derive(Default)]
 struct State {
