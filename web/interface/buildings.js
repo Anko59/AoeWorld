@@ -19,7 +19,7 @@ const commands = [
   ['blacksmith','Blacksmith','S','150 wood'], ['market','Market','D','175 wood · needs Mill'],
   ['watch-tower','Watch Tower','F','35 wood · 125 stone'], ['palisade-gate','Palisade Gate','X','30 wood'], ...castleCommands,
   ['bridge','Bridge','G','25 wood · 5 stone / water tile'],
-  ['stone-wall','Stone Wall','Z','5 stone / tile'], ['stone-gate','Stone Gate','H','30 stone'],
+  ['stone-wall','Stone Wall','Z','5 stone / tile'], ['stone-gate','Stone Gate','G','30 stone'],
   ['town-center','Town Center','C','275 wood · 100 stone'],
 ];
 export function initBuildings() {
