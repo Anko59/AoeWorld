@@ -183,13 +183,16 @@ Stone Gate 30 stone, 2750 HP, armour 6/6. Build times are 5 s a tile and 70 s.
 The wall reuses the palisade line order (`BuildWallOrder` carries the
 `BuildingKind`); the gate is a 4x1 building like the Palisade Gate and shares
 its rule (`BuildingKind::is_gate`): it opens when a unit of its owner is within
-two tiles, stays shut for every other player and blocks their routes. Walls and
+two tiles, stays shut for every other player and blocks their routes. Routing
+is shared, so a closed gate blocks the owner's routes too: walk up to it, it
+opens, then order the units through. Walls and
 gates are outside Masonry and are not arrow targets. There are no alliances yet,
 so allied passage and a lock command remain future work. Art comes from the DE
 install: `b_west_wall_stone_x1.sld` (five joint silhouettes, atlas slot 71),
-`b_misc_rubble_x1.sld` and `b_west_gate_stone_se_{closed,open,rubble,constr}_x1.sld`
-(slots 72 to 76); a wall foundation is the generic 1x1 one. Re-run
-`make assets-import-de` to add them to an existing overlay.
+and `b_west_gate_stone_se_{closed,open}_x1.sld`
+(slots 72 and 73); rubble and foundations reuse the palisade slots, and the
+ambient fish of slot 0 are sampled every fourth cell to keep the 5120-frame
+atlas. Re-run `make assets-import-de` to add the art to an existing overlay.
 
 ## Local demo
 

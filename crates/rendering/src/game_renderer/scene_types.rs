@@ -260,13 +260,11 @@ pub enum SceneUnitKind {
     GeneralAttack,
     GeneralDie,
     GeneralDecay,
-    /// Stone wall and gate (DE art, atlas slots 71..=76).
+    /// Stone wall and gate (DE art, atlas slots 71..=73). Their rubble and
+    /// foundations reuse the palisade slots.
     StoneWall,
-    RubbleStoneWall,
     StoneGate,
     OpenStoneGate,
-    RubbleStoneGate,
-    StoneGateFoundation,
 }
 
 #[path = "scene_actors.rs"]

@@ -155,12 +155,13 @@ pub fn footprint_valid(
         .all(|y| (origin.x..origin.x + side).all(|x| free(TileCoord::new(x, y))))
 }
 
-/// DE stone wall (71 standing, 72 rubble; a foundation is the generic 1x1
-/// one) and gate (73 closed, 74 open, 75 rubble, 76 construction) atlas slots.
+/// DE stone wall (71) and gate (72 closed, 73 open). Rubble and foundations
+/// reuse the palisade art: the wall's generic 1x1 foundation (9) and rubble
+/// (20), the gate's construction (43) and rubble (37).
 fn stone_slot(kind: BuildingKind, progress: u16, rubble: bool) -> Option<usize> {
     let (standing, rubble_slot, building) = match kind {
-        BuildingKind::StoneWall => (71, 72, 9),
-        BuildingKind::StoneGate => (73, 75, 76),
+        BuildingKind::StoneWall => (71, 20, 9),
+        BuildingKind::StoneGate => (72, 37, 43),
         _ => return None,
     };
     Some(if rubble {

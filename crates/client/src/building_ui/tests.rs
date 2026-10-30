@@ -319,7 +319,7 @@ fn bridge_caps_follow_the_native_axis_even_when_the_raster_slopes_backwards() {
 fn stone_walls_and_gates_use_their_own_de_art_slots() {
     use aoe_rendering::SceneUnitKind as Art;
     for (kind, standing, rubble, building) in
-        [(B::StoneWall, 71, 72, 9), (B::StoneGate, 73, 75, 76)]
+        [(B::StoneWall, 71, 20, 9), (B::StoneGate, 72, 37, 43)]
     {
         assert_eq!(sprite_slot(kind, 1000, false), standing);
         assert_eq!(sprite_slot(kind, 1000, true), rubble);

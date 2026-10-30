@@ -314,7 +314,7 @@ pub(super) fn sprite_building(
         marker(unit, camera, emit);
         return;
     }
-    let index = if (9..=12).contains(&art_slot) || matches!(art_slot, 24 | 43 | 76) {
+    let index = if (9..=12).contains(&art_slot) || matches!(art_slot, 24 | 43) {
         usize::from(unit.facing).min(frames.len() - 1)
     } else if art_slot == 40 {
         animation % frames.len()

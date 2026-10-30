@@ -437,14 +437,14 @@ fn layered_mill_composes_static_body_and_every_sail_frame_and_culls_animation() 
 
 #[wasm_bindgen_test]
 fn stone_wall_and_gate_slots_round_trip_with_gate_footprints() {
-    for slot in 71..=76 {
+    for slot in 71..=73 {
         let kind = SceneUnitKind::building(slot);
         assert_eq!(kind.building_slot(), Some(slot));
         assert_eq!(kind.building_id(), None);
         assert!(!kind.is_foundation());
         assert_eq!(
             kind.building_side(),
-            Some(if slot < 73 { 1.0 } else { 4.0 })
+            Some(if slot < 72 { 1.0 } else { 4.0 })
         );
     }
 }

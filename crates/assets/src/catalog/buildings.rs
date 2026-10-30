@@ -155,11 +155,8 @@ pub fn supplemental(
         (69, -1, "s_bridge_b_middle", 1, Some((3696, 1))),
         (70, -1, "s_bridge_b_bottom", 1, Some((3698, 1))),
         (71, -1, "b_west_wall_stone", 5, None),
-        (72, -1, "b_misc_rubble", 1, None),
-        (73, -1, "b_west_gate_stone_se_closed", 1, None),
-        (74, -1, "b_west_gate_stone_se_open", 1, None),
-        (75, -1, "b_west_gate_stone_se_rubble", 1, None),
-        (76, -1, "b_west_gate_stone_se_constr", 3, None),
+        (72, -1, "b_west_gate_stone_se_closed", 1, None),
+        (73, -1, "b_west_gate_stone_se_open", 1, None),
     ] {
         let mut source = format!("de/{stem}_x1.sld");
         let mut frames = count;
@@ -174,7 +171,7 @@ pub fn supplemental(
             source,
             frames,
             step: 1,
-            take: if matches!(slot, 39 | 40 | 43 | 71 | 76) {
+            take: if matches!(slot, 39 | 40 | 43 | 71) {
                 usize::MAX
             } else {
                 1
