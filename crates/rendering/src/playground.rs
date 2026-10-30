@@ -5,7 +5,7 @@ use crate::{Counters, Renderer, web::Sprite};
 mod atlas;
 pub use atlas::{
     AtlasAddress, GAME_ATLAS_BYTES, GAME_ATLAS_PAGE_BYTES, GAME_ATLAS_PAGES, GAME_ATLAS_SIDE,
-    TerrainTopology,
+    MAX_GAME_ATLAS_PAGES, TerrainTopology, atlas_mask_page, atlas_pages,
 };
 
 const TREE_VISUAL_VARIANTS: [u8; 40] = [
@@ -132,10 +132,10 @@ impl BuildingArt {
 
 impl Renderer {
     pub fn upload_game_atlas(&mut self, pixels: &[u8]) -> Result<(), String> {
-        if pixels.len() != GAME_ATLAS_BYTES {
+        let Some(pages) = atlas_pages(pixels.len()) else {
             return Err("Invalid game atlas size".into());
-        }
-        let texture = self.create_game_atlas()?;
+        };
+        let texture = self.create_game_atlas(pages)?;
         for (layer, page) in (0..).zip(pixels.chunks_exact(GAME_ATLAS_PAGE_BYTES)) {
             self.write_game_atlas_page(&texture, layer, page);
         }
@@ -144,10 +144,10 @@ impl Renderer {
     }
 
     /// Allocates the zeroed five-page atlas texture without installing it.
-    pub(crate) fn create_game_atlas(&self) -> Result<wgpu::Texture, String> {
+    pub(crate) fn create_game_atlas(&self, pages: u32) -> Result<wgpu::Texture, String> {
         let limits = self.device.limits();
         if limits.max_texture_dimension_2d < GAME_ATLAS_SIDE
-            || limits.max_texture_array_layers < GAME_ATLAS_PAGES
+            || limits.max_texture_array_layers < pages
         {
             return Err("WebGPU cannot support the bounded five-page atlas".into());
         }
@@ -156,7 +156,7 @@ impl Renderer {
             size: wgpu::Extent3d {
                 width: GAME_ATLAS_SIDE,
                 height: GAME_ATLAS_SIDE,
-                depth_or_array_layers: GAME_ATLAS_PAGES,
+                depth_or_array_layers: pages,
             },
             mip_level_count: 1,
             sample_count: 1,

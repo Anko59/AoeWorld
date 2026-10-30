@@ -200,12 +200,13 @@ for (const failure of [
       ).toBe("true");
     }
     if (failure === "queue") {
-      // The verified startup clear, then at most two unfinished game frames.
+      // The verified startup clear, then one source batch. Its completion is
+      // required before another batch or the first game frame can be queued.
       expect(
         await page.evaluate(() =>
           Number(sessionStorage.getItem("gpu-submissions")),
         ),
-      ).toBe(3);
+      ).toBe(2);
     }
     const before = await page.locator("#minimap").getAttribute("data-camera-x");
     expect(before).not.toBeNull();

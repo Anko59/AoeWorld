@@ -92,7 +92,7 @@ pub(crate) mod minification_tests;
 mod webgl_tests;
 
 mod atlas_upload;
-pub use atlas_upload::AtlasUpload;
+pub use atlas_upload::{AtlasSourceCopy, AtlasUpload};
 
 pub enum GameRenderer {
     WebGpu(Box<Renderer>),
@@ -216,7 +216,7 @@ impl GameRenderer {
                 presentation,
                 ..
             } => {
-                if pixels.len() != crate::GAME_ATLAS_BYTES {
+                if crate::atlas_pages(pixels.len()).is_none() {
                     return Err("Invalid game atlas size".into());
                 }
                 *atlas = [None, None, None, None];

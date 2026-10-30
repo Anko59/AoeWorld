@@ -79,7 +79,7 @@ impl WebGlRenderer {
     }
 
     pub(super) fn upload_owned(&mut self, pixels: Vec<u8>) -> Result<(), String> {
-        if pixels.len() != crate::GAME_ATLAS_BYTES {
+        if crate::atlas_pages(pixels.len()).is_none() {
             return Err("Invalid WebGL2 game atlas size".to_owned());
         }
         // The synchronous import borrows a WASM view. Keep its allocation alive

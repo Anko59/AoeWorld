@@ -57,23 +57,26 @@ grass and dirt mix 15006, grass with brown patches 15009, darker grass 15001 and
 pebbly beach 15017; a pack without one draws dry grass, grass, grass or sand.
 The periodic groups retain all 100 frames. The base selects 2,371 frames (including ten gather-point flag cells):
 1,474 terrain and 897 objects including village art and cliff faces 226. The
-[unit and wildlife selection](assets/units.md) adds 2,625 semantic frames. DAT building
-recipes add their selected native frames, including animated Mill layers,
-static House variants and construction/wall angles. Runtime packing uses five
-2048² RGBA pages/80 MiB, terrain on pages 0–1 and objects on pages 2–4,
-with a 5,120-entry frame metadata cap. Repeated masked or terrain source cells
-share storage while keeping every semantic entry; uploads copy each shared
-rectangle once to preserve alpha. Unmasked cells can bake different colors and
-retain separate rectangles. Owner-independent bridges can borrow spare terrain
-space through the shared domain. A bounded MaxRects retry recovers fragmented
-space when the initial shelf layout fails, with the same page and gutter limits. PNG validation caches only bounded
-metadata keyed by native SHA-256 digests of complete source bytes; repeated
-WebGPU passes still decode one source plane at a time, without a pixel cache.
-The placement algorithm can also describe up to 256 logical pages with separate
-terrain and object budgets and up to 65,536 frames. Sorting uses at most 128 KiB
-of heap index scratch; the dense retry retains its existing per-page free-region
-bound and can still reject fragmented layouts. This allocates placement metadata
-only; it does not stream pages or change the five-page, 5,120-frame client.
+[unit and wildlife selection](assets/units.md) includes complete native DE
+General animations alongside the remaining sampled poses. DAT building recipes
+add selected native frames, including animated Mill layers, static House variants
+and construction/wall angles. Runtime packing starts with five colour pages and
+three aligned owner-mask layers (128 MiB total). It grows object colour/mask
+pairs to fit the selected inventory, bounded to 64 physical 2048-square RGBA
+layers and 65,536 semantic frame entries. See [DE conversion](assets/de-full.md)
+for addressing, source resolution, timing and measurements.
+Repeated masked or terrain source cells share storage while keeping every
+semantic entry. Unmasked cells can bake different colors and retain separate
+rectangles. Owner-independent bridges can borrow spare terrain space through
+the shared domain. A bounded MaxRects retry recovers fragmented space when the
+initial shelf layout fails, with the same page and gutter limits. PNG validation
+caches bounded metadata keyed by native SHA-256 digests of complete source
+bytes; WebGPU fetches each source page's three planes once, composes bounded
+scratch and blits cells into the GPU atlas without retaining an entire CPU
+atlas. The logical placement tool also supports up to 256 pages
+with separate terrain and object budgets; only runtime-selected pages become
+resident. Sorting uses at most 128 KiB of heap index scratch. The dense retry
+retains its per-page free-region bound and can reject fragmented layouts.
 Regenerate local packs after catalog changes:
 stale DAT recipes can exhaust the atlas through fallback art selection.
 The gather-point flag uses DAT unit 720 / SLP 4480 when present. The trial
@@ -89,8 +92,7 @@ derived from their selected sprite alpha. The renderer culls terrain to the
 viewport and subsamples it to a bounded sprite budget.
 
 The [landscape inventory](assets/landscape.md) records reviewed subsets and
-unpromoted candidates separately. Species promotion does not expand the existing
-runtime atlas allocation.
+unpromoted candidates separately. Species promotion must remain within the bounded runtime atlas.
 
 The Age of Kings trial lacks the new mountain sheets. Snow 15026 is present
 in the Conquerors trial; the HD rock sheet is available as `DLC_ROCK.slp` in
@@ -138,13 +140,13 @@ See [game data](assets/game-data.md) for measured layouts and local proof tools.
 These are metadata, not committed pixels. Missing village groups draw simple semantic markers;
 a present incomplete group remains a pack error. The native metadata packing
 proof covers the full base and actor prefixes plus DAT building and foundation
-frames in the same five-page atlas.
+frames through the same bounded runtime packer.
 The startup packer reuses unused row widths beside taller frames before opening
-another row. Castle content must fit the existing colour and aligned mask pages;
-the 5,120-frame ceiling and pixel allocations stay fixed. Retired-row metadata
+another row. Castle content and complete hero timelines share the selected colour and
+aligned mask pages, within the documented frame and residency bounds. Retired-row metadata
 is bounded by the 2,048-pixel page height (at most 6 KiB capacity per page).
 Unowned resource/neutral art may borrow spare terrain space after terrain and
-masked objects have reserved their domains; team-masked art stays on pages 2–4.
+masked objects have reserved their domains; team-masked art uses object colour pages with their aligned mask layers.
 Yellow wildflower 2561 and tan reed 4584 dressing are omitted because their
 silhouettes read as gold and deadwood. Footprint wear modulates existing terrain
 colors without additional faces. [Unit and wildlife art](assets/units.md) records

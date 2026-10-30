@@ -290,12 +290,12 @@ async fn fishing_tasks_share_native_actor_poses_phases_and_gather_orders() {
     );
     for facing in 0..8 {
         assert_eq!(
-            packed_frame(Pose::FisherWork, facing, 399.0, None, 0, 20),
-            facing
+            packed_frame(Pose::FisherWork, facing, 399.0, None, 0.0, 20),
+            u16::from(facing)
         );
         assert_eq!(
-            packed_frame(Pose::FisherWork, facing, 400.0, None, 0, 20),
-            facing | (1 << 3)
+            packed_frame(Pose::FisherWork, facing, 400.0, None, 0.0, 20),
+            u16::from(facing) | (1 << 3)
         );
     }
     assert_eq!(

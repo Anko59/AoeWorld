@@ -34,3 +34,21 @@ fn declared_sheet_preserves_authored_signed_coordinate_phase() {
         None
     );
 }
+
+#[wasm_bindgen_test]
+fn atlas_growth_is_even_bounded_and_preserves_aligned_masks() {
+    for pages in [8, 10, 12, 64] {
+        assert_eq!(
+            atlas_pages(pages * GAME_ATLAS_PAGE_BYTES),
+            Some(pages as u32)
+        );
+    }
+    for pages in [0, 1, 6, 9, 63, 66] {
+        assert_eq!(atlas_pages(pages * GAME_ATLAS_PAGE_BYTES), None);
+    }
+    assert_eq!(atlas_pages(GAME_ATLAS_BYTES + 1), None);
+    assert_eq!(atlas_mask_page(2), 5);
+    assert_eq!(atlas_mask_page(4), 7);
+    assert_eq!(atlas_mask_page(8), 9);
+    assert_eq!(atlas_mask_page(62), 63);
+}

@@ -4,6 +4,53 @@ use crate::{BuildingKind, EconomyError, GameWorld, Stockpile};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 
 impl GameWorld {
+    /// Real-time art inspection encounter. Normal orders, weapon damage and
+    /// death retention expose all hero poses without changing match rules.
+    pub fn general_appearance_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+        use crate::UnitKind;
+        use aoe_core::{CombatStance, WorldPosition};
+        let config =
+            WorldConfig::new(256, 256, seed).map_err(|_| EconomyError::InvalidFootprint)?;
+        let mut world = Self::new(config)?;
+        world.initialize_village(PlayerId(0), TileCoord::new(80, 128))?;
+        let position = |x, y| {
+            WorldPosition::from_tile_center(TileCoord::new(x, y))
+                .map_err(|_| EconomyError::InvalidFootprint)
+        };
+        // A penned reserve keeps the leader confident but cannot rescue him
+        // before the siege volley. These are ordinary closed wall footprints.
+        for y in 112..=116 {
+            for x in 132..=138 {
+                if x == 132 || x == 138 || y == 112 || y == 116 {
+                    world.insert_building(
+                        PlayerId(0),
+                        BuildingKind::PalisadeWall,
+                        TileRect::from_xywh(x, y, 1, 1),
+                        true,
+                    )?;
+                }
+            }
+        }
+        for n in 0..14 {
+            world.spawn_kind(
+                PlayerId(0),
+                UnitKind::Knight,
+                position(133 + n % 5, 113 + n / 5)?,
+            )?;
+        }
+        let general = world.spawn_kind(PlayerId(0), UnitKind::General, position(128, 128)?)?;
+        for (kind, x, y) in std::iter::once((UnitKind::BatteringRam, 142, 128))
+            .chain((0..20).map(|n| (UnitKind::Mangonel, 145 + n / 5, 126 + n % 5)))
+            .chain((0..5).map(|n| (UnitKind::LightCavalry, 148, 132 + n)))
+        {
+            let id = world.spawn_kind(PlayerId(1), kind, position(x, y)?)?;
+            if kind != UnitKind::LightCavalry {
+                world.issue_stance(PlayerId(1), &[id], CombatStance::StandGround)?;
+            }
+        }
+        Ok((world, general))
+    }
+
     /// Four-times-clock General showcase: a Castle, unclaimed role-balanced
     /// soldiers and a distant enemy group. Training and all orders stay real.
     pub fn general_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {

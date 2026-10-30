@@ -192,22 +192,24 @@ fn every_shooting_attack_releases_inside_its_animation() {
 }
 
 #[test]
-fn general_uses_mounted_joan_poses_with_bounded_direction_sampling() {
-    for (pose, name) in [
-        (Pose::GeneralStand, "idle"),
-        (Pose::GeneralWalk, "walk"),
-        (Pose::GeneralAttack, "idle"),
-        (Pose::GeneralDie, "death"),
-        (Pose::GeneralDecay, "death"),
+fn general_uses_distinct_full_paladin_animations() {
+    for (pose, name, stride) in [
+        (Pose::GeneralStand, "idle", 45),
+        (Pose::GeneralWalk, "walk", 30),
+        (Pose::GeneralAttack, "attack", 45),
+        (Pose::GeneralDie, "death", 45),
+        (Pose::GeneralDecay, "decay", 30),
     ] {
         let s = SPRITES[pose as usize];
         assert_eq!(
             s.manifest_source(),
-            format!("de/u_cav_hero_joan_{name}A_x1.sld")
+            format!("de/u_cav_hero_frankish_paladin_{name}A_x1.sld")
         );
-        assert_eq!(s.selected_frames(), 5);
-        for row in 0..5 {
-            for phase in (0..usize::from(s.stride)).step_by(usize::from(s.sample_step())) {
+        assert_eq!(s.selected_frames(), stride * 16);
+        assert_eq!(s.rows(), 16);
+        for row in 0..16 {
+            for phase in 0..stride {
+                assert_eq!(s.source_frame(row, phase), row * stride + phase);
                 assert!(s.source_frame(row, phase) < s.frames() as usize);
             }
         }

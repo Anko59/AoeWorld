@@ -4,10 +4,13 @@ use super::{placement::Plane, streaming::Input, *};
 
 impl Input<'_> {
     pub(super) async fn upload_resident(&self, pixels: &mut [u8]) -> Result<(), JsValue> {
-        if pixels.len() != GAME_ATLAS_BYTES {
+        if aoe_rendering::atlas_pages(pixels.len()).is_none() {
             return Err(error("Invalid resident atlas size"));
         }
-        for page in 0..5 {
+        for page in 0..pixels.len() / GAME_ATLAS_PAGE_BYTES {
+            if (5..8).contains(&page) || (page >= 9 && page % 2 == 1) {
+                continue;
+            }
             let start = page * GAME_ATLAS_PAGE_BYTES;
             pixels[start..start + 4].copy_from_slice(&[255; 4]);
         }
@@ -54,7 +57,7 @@ impl Input<'_> {
                         placement::copy_plane(
                             frame,
                             Placement {
-                                page: placed.page + 3,
+                                page: aoe_rendering::atlas_mask_page(u32::from(placed.page)) as u16,
                                 ..placed
                             },
                             mask_plane,

@@ -1,6 +1,7 @@
 use super::*;
 use crate::{Age, GeneralState, Stockpile};
 
+mod appearance;
 mod movement;
 mod stances;
 mod targets;

@@ -69,3 +69,17 @@ pub fn occupied_rows(page: &[u8]) -> u32 {
 #[cfg(test)]
 #[path = "atlas/occupied_rows_tests.rs"]
 mod occupied_rows_tests;
+
+/// Bounded texture-array growth. Pages 0–7 are the base; further object
+/// colour/mask pairs are allocated only when the selected art needs them.
+pub const MAX_GAME_ATLAS_PAGES: u32 = 64;
+pub fn atlas_pages(bytes: usize) -> Option<u32> {
+    let pages = bytes / GAME_ATLAS_PAGE_BYTES;
+    (bytes.is_multiple_of(GAME_ATLAS_PAGE_BYTES)
+        && (GAME_ATLAS_PAGES as usize..=MAX_GAME_ATLAS_PAGES as usize).contains(&pages)
+        && pages.is_multiple_of(2))
+    .then_some(pages as u32)
+}
+pub const fn atlas_mask_page(colour: u32) -> u32 {
+    if colour < 5 { colour + 3 } else { colour + 1 }
+}

@@ -2,7 +2,7 @@
 fn owner_texel(original: vec4<f32>, uv: vec2<f32>, page: i32, owner: vec4<f32>) -> vec4<f32> {
     var base = original;
     if owner.a == 0.0 { return base; }
-    let mask = floor(textureSampleLevel(sprite_atlas, sprite_sampler, uv, page + 3, 0.0) * 255.0 + 0.5);
+    let mask = floor(textureSampleLevel(sprite_atlas, sprite_sampler, uv, select(page + 1, page + 3, page < 5), 0.0) * 255.0 + 0.5);
     if mask.g == 0.0 { return base; }
     let foreground = mask.g * 255.0;
     let background = mask.b * (255.0 - mask.g);

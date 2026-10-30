@@ -289,7 +289,7 @@ fn general_hero_groups_select_bounded_native_facings_and_refuse_partial_art() {
     let manifest: Manifest = serde_json::from_value(value.clone()).unwrap();
     let (mut selected, mut domains) = (Vec::new(), Vec::new());
     let ranges = actors::select(&manifest, &mut selected, &mut domains).unwrap();
-    assert_eq!(selected.len(), 15);
+    assert_eq!(selected.len(), 3120);
     for pose in poses {
         let source = SPRITES[pose as usize];
         let range = ranges[pose as usize].clone().unwrap();
@@ -297,7 +297,7 @@ fn general_hero_groups_select_bounded_native_facings_and_refuse_partial_art() {
             .iter()
             .map(|&i| manifest.frames[i].frame)
             .collect();
-        let expected: Vec<_> = (0..5)
+        let expected: Vec<_> = (0..source.rows())
             .flat_map(|row| {
                 (0..usize::from(source.stride))
                     .step_by(usize::from(source.sample_step()))
@@ -307,7 +307,7 @@ fn general_hero_groups_select_bounded_native_facings_and_refuse_partial_art() {
         assert_eq!(actual, expected);
     }
     let mut extra = value["frames"][0].clone();
-    extra["frame"] = 5.into();
+    extra["frame"] = SPRITES[Pose::GeneralStand as usize].frames().into();
     value["frames"].as_array_mut().unwrap().push(extra);
     let unsupported: Manifest = serde_json::from_value(value.clone()).unwrap();
     assert!(actors::select(&unsupported, &mut Vec::new(), &mut Vec::new()).is_err());

@@ -1,12 +1,49 @@
-//! Normalize the mounted hero into the five facing cells the client draws.
-//! Full native topology is validated before discarding unused source frames.
+//! Preserve the hero's complete native topology, including every direction.
 use crate::{Error, sld::Frame};
 
+pub(super) fn validate_dat(install: &std::path::Path) -> Result<(), Error> {
+    use crate::{
+        catalog::units::{Pose, SPRITES},
+        dat::de_survey,
+    };
+    let dat = super::read_bounded(&install.join("resources/_common/dat/empires2_x2_p1.dat"))?;
+    let bytes = de_survey::inflate(&dat)?;
+    for pose in [
+        Pose::GeneralStand,
+        Pose::GeneralWalk,
+        Pose::GeneralAttack,
+        Pose::GeneralDie,
+        Pose::GeneralDecay,
+    ] {
+        let s = SPRITES[pose as usize];
+        let file = s.manifest_source();
+        let name = file
+            .strip_prefix("de/")
+            .unwrap_or(&file)
+            .strip_suffix(".sld")
+            .unwrap_or(&file);
+        let g = de_survey::graphics::find(&bytes, name)?;
+        if g.sprite != s.id as i32
+            || g.frames != u16::from(s.stride)
+            || g.angles != 16
+            || (g.seconds * 1000.0).round() != f32::from(s.millis)
+            || (f64::from(g.seconds) * 1000.0 - s.frame_millis()).abs() > 0.00001
+            || g.replay_delay != 0.0
+        {
+            return Err(crate::invalid(
+                "DE General",
+                0,
+                "DAT animation differs from runtime catalog",
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn sample(role: &str, frames: Vec<Frame>) -> Result<Vec<Frame>, Error> {
-    let (count, period, last) = match role {
-        "idle" => (721, 45, 0),
-        "walk" => (480, 30, 0),
-        "death" => (721, 45, 44),
+    let count = match role {
+        "idle" | "attack" | "death" => 721,
+        "walk" | "decay" => 481,
         _ => return Err(crate::invalid("DE General", 0, "unsupported hero pose")),
     };
     if frames.len() != count {
@@ -16,12 +53,7 @@ pub(super) fn sample(role: &str, frames: Vec<Frame>) -> Result<Vec<Frame>, Error
             "unsupported native hero topology",
         ));
     }
-    let cells = [4, 6, 8, 10, 12].map(|direction| direction * period + last);
-    Ok(frames
-        .into_iter()
-        .enumerate()
-        .filter_map(|(index, frame)| cells.contains(&index).then_some(frame))
-        .collect())
+    Ok(frames)
 }
 
 #[cfg(test)]

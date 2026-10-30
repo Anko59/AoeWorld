@@ -31,7 +31,7 @@ const MAX_SLD: u64 = 64 * 1024 * 1024;
 const GRAPHICS: &str = "resources/_common/drs/graphics";
 const TEXTURES: &str = "resources/_common/terrain/textures/2x";
 /// Folded into the pack hash so a change of the conversion rules makes a new pack.
-const CONVERSION: &str = "de-sld-rgb565-weighted-player-general-keyframes";
+const CONVERSION: &str = "de-sld-rgb565-weighted-player-full-paladin";
 
 /// What one selected source contributed to the pack.
 #[derive(Clone, Debug)]
@@ -95,6 +95,7 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
     if install.starts_with(&local) || local.starts_with(&install) {
         return Err(crate::invalid("DE", 0, "install and output paths overlap"));
     }
+    general::validate_dat(&install)?;
     let graphics = install.join(GRAPHICS);
     if !graphics.is_dir() {
         return Err(crate::invalid(
@@ -112,6 +113,9 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         let file = format!("{}_x1.sld", item.stem);
         let path = graphics.join(&file);
         if !path.is_file() {
+            if item.building == "general" {
+                return Err(crate::invalid("DE General", 0, format!("missing {file}")));
+            }
             absent.push((item.building, item.role, file));
             continue;
         }

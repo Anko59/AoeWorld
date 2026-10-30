@@ -12,14 +12,35 @@ pub(super) struct Input<'a> {
 }
 impl Input<'_> {
     pub async fn upload(self, sink: &mut dyn AtlasSink) -> Result<(), JsValue> {
+        let pages = self
+            .placements
+            .iter()
+            .map(|p| {
+                if p.page >= 8 {
+                    u32::from(p.page) + 2
+                } else {
+                    GAME_ATLAS_PAGES
+                }
+            })
+            .max()
+            .unwrap_or(GAME_ATLAS_PAGES);
+        sink.configure(pages).map_err(error)?;
         if let Some(pixels) = sink.resident_buffer().map_err(error)? {
             self.upload_resident(pixels).await?;
             return sink.finish().map_err(error);
         }
+        if sink.source_batches() {
+            self.upload_sources(sink, pages).await?;
+            return sink.finish().map_err(error);
+        }
         let source_order = copy_order(self.manifest, self.selected, self.placements);
-        for page_index in 0..GAME_ATLAS_PAGES {
-            let mask = page_index >= 5;
-            let colour_page = if mask { page_index - 3 } else { page_index };
+        for page_index in 0..pages {
+            let mask = (5..8).contains(&page_index) || (page_index >= 9 && page_index % 2 == 1);
+            let colour_page = if mask {
+                page_index - if page_index < 8 { 3 } else { 1 }
+            } else {
+                page_index
+            };
             let page_pixels = sink.page_buffer(page_index).map_err(error)?;
             if !mask {
                 page_pixels[..4].copy_from_slice(&[255; 4]);
@@ -60,7 +81,8 @@ impl Input<'_> {
                         }
                         let owned = self.maskable[semantic];
                         let plane = if mask {
-                            placed.page += 3;
+                            placed.page =
+                                aoe_rendering::atlas_mask_page(u32::from(placed.page)) as u16;
                             if matches!(plane, placement::Plane::Color) {
                                 placement::Plane::MaskBase
                             } else {

@@ -7,7 +7,10 @@ pub(super) enum Staging {
 }
 
 /// An atlas being streamed page by page; see `GameRenderer::begin_game_atlas`.
-pub struct AtlasUpload(Staging);
+mod source;
+pub use source::AtlasSourceCopy;
+
+pub struct AtlasUpload(Staging, u32, Option<wgpu::Texture>);
 
 impl AtlasUpload {
     /// CPU backends already retain every page. Expose that same allocation so
@@ -16,7 +19,7 @@ impl AtlasUpload {
     pub fn resident_buffer(&mut self) -> Option<&mut [u8]> {
         match &mut self.0 {
             Staging::Cpu(pixels) => {
-                pixels.resize(crate::GAME_ATLAS_BYTES, 0);
+                pixels.resize(self.1 as usize * crate::GAME_ATLAS_PAGE_BYTES, 0);
                 Some(pixels)
             }
             Staging::Gpu(_, _) => None,
@@ -28,7 +31,7 @@ impl AtlasUpload {
     /// one page; CPU tiers write straight into the atlas they must retain.
     pub fn page_buffer(&mut self, layer: u32) -> Result<&mut [u8], String> {
         let page = crate::GAME_ATLAS_PAGE_BYTES;
-        if layer >= crate::GAME_ATLAS_PAGES {
+        if layer >= self.1 {
             return Err("Invalid game atlas page".into());
         }
         match &mut self.0 {
@@ -95,16 +98,25 @@ impl GameRenderer {
     /// `finish_game_atlas`. WebGPU receives each page straight into a fresh
     /// texture, so no CPU copy of the atlas exists; WebGL2 and Canvas gather
     /// the pages they must retain anyway (JS restoration copy, raster source).
-    pub fn begin_game_atlas(&mut self) -> Result<AtlasUpload, String> {
-        Ok(AtlasUpload(match self {
-            Self::WebGpu(renderer) => {
-                renderer.check_health()?;
-                Staging::Gpu(renderer.create_game_atlas()?, Vec::new())
-            }
-            Self::WebGl(_) | Self::Canvas { .. } => {
-                Staging::Cpu(Vec::with_capacity(crate::GAME_ATLAS_BYTES))
-            }
-        }))
+    pub fn begin_game_atlas(&mut self, pages: u32) -> Result<AtlasUpload, String> {
+        if !(crate::GAME_ATLAS_PAGES..=crate::MAX_GAME_ATLAS_PAGES).contains(&pages)
+            || !pages.is_multiple_of(2)
+        {
+            return Err("Invalid atlas layer budget".into());
+        }
+        Ok(AtlasUpload(
+            match self {
+                Self::WebGpu(renderer) => {
+                    renderer.check_health()?;
+                    Staging::Gpu(renderer.create_game_atlas(pages)?, Vec::new())
+                }
+                Self::WebGl(_) | Self::Canvas { .. } => Staging::Cpu(Vec::with_capacity(
+                    pages as usize * crate::GAME_ATLAS_PAGE_BYTES,
+                )),
+            },
+            pages,
+            None,
+        ))
     }
 
     /// Commits the page filled through `AtlasUpload::page_buffer`.
@@ -113,7 +125,7 @@ impl GameRenderer {
         upload: &mut AtlasUpload,
         layer: u32,
     ) -> Result<(), String> {
-        if layer >= crate::GAME_ATLAS_PAGES {
+        if layer >= upload.1 {
             return Err("Invalid game atlas page".into());
         }
         match (&mut upload.0, &*self) {
@@ -152,7 +164,7 @@ impl GameRenderer {
                     ..
                 },
             ) => {
-                if pixels.len() != crate::GAME_ATLAS_BYTES {
+                if pixels.len() != upload.1 as usize * crate::GAME_ATLAS_PAGE_BYTES {
                     return Err("Invalid game atlas size".into());
                 }
                 *atlas = [None, None, None, None];

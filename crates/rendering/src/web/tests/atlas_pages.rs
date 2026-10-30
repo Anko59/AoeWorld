@@ -114,3 +114,69 @@ fn selection_uses_an_analytic_ellipse_and_grid_lines_are_solid_packets() {
         assert!(sprite.uv[3] > 0.0 && sprite.uv[3] < 1.0);
     }
 }
+
+#[wasm_bindgen_test]
+async fn webgpu_source_batch_copies_rectangles_and_aligned_owner_masks() {
+    let mut game = crate::GameRenderer::WebGpu(Box::new(surface_renderer().await));
+    let mut upload = game.begin_game_atlas(10).unwrap();
+    assert!(
+        upload.resident_buffer().is_none(),
+        "GPU blits never allocate a CPU destination atlas"
+    );
+    let mut colour = vec![0; crate::GAME_ATLAS_PAGE_BYTES];
+    let mut mask = vec![0; crate::GAME_ATLAS_PAGE_BYTES];
+    colour[..4].copy_from_slice(&[255, 0, 0, 255]);
+    let at = (4 * 2048 + 3) * 4;
+    colour[at..at + 4].copy_from_slice(&[120, 90, 60, 255]);
+    mask[at..at + 4].copy_from_slice(&[7, 255, 255, 0]);
+    let copy = crate::AtlasSourceCopy {
+        source: [3, 4],
+        destination: [2, 2],
+        size: [1, 1],
+        colour: 8,
+        mask: Some(9),
+    };
+    assert!(
+        game.write_game_atlas_source(
+            &mut upload,
+            &colour,
+            Some(&mask),
+            &[crate::AtlasSourceCopy {
+                source: [65535, 0],
+                ..copy
+            }]
+        )
+        .is_err()
+    );
+    assert!(
+        game.write_game_atlas_source(&mut upload, &colour, None, &[copy])
+            .is_err()
+    );
+    let completion = game
+        .write_game_atlas_source(&mut upload, &colour, Some(&mask), &[copy])
+        .unwrap();
+    crate::GameRenderer::atlas_source_ready(completion)
+        .await
+        .unwrap();
+    game.finish_game_atlas(upload).unwrap();
+    let crate::GameRenderer::WebGpu(renderer) = &mut game else {
+        unreachable!();
+    };
+    let body = Sprite {
+        radius: [0.75; 2],
+        uv: [2.0 / 2048.0, 2.0 / 2048.0, 1.0 / 2048.0, 1.0 / 2048.0],
+        pages: [8, 0, 0, 0],
+        ..solid_sprite()
+    }
+    .with_owner(crate::SceneUnitVisual::new(false).with_owner(
+        Some([65, 145, 245]),
+        false,
+        false,
+    ));
+    renderer
+        .render_world_layers(&[], &[body], [0.0, 0.0, 0.0, 1.0])
+        .unwrap();
+    assert_pixel(read_pixel(renderer, 1, [48, 48]).await, [65, 145, 245, 255]);
+    assert_eq!(renderer.render_sprites(&[]).unwrap().atlas_pages, 10);
+    renderer.device.destroy();
+}

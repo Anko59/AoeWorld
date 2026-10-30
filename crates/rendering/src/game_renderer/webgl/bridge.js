@@ -2,7 +2,7 @@
 // module directly: no unregistered transitive shader/JS asset imports.
 const SIDE = 2048;
 const STRIDE = 112;
-const PAGES = 8;
+const MAX_PAGES = 64;
 const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_PIXELS = 4194304;
 const COVERAGE_IDLE_FRAMES = 60;
@@ -21,6 +21,7 @@ export class AoeWebGl {
         this.canvas = canvas;
         this.bufferBytes = 0;
         this.atlasReady = false;
+        this.atlasPages = 8;
         this.disposed = false;
         this.shaders = [];
         this.programs = [];
@@ -35,7 +36,7 @@ export class AoeWebGl {
                 if (this.atlasPixels) {
                     const pixels = this.atlasPixels.buffer === this.atlasMemory.buffer
                         ? this.atlasPixels
-                        : new Uint8Array(this.atlasMemory.buffer, this.atlasOffset, SIDE * SIDE * PAGES * 4);
+                        : new Uint8Array(this.atlasMemory.buffer, this.atlasOffset, SIDE * SIDE * this.atlasPages * 4);
                     this.upload(pixels, this.atlasMemory);
                 }
                 canvas.dispatchEvent(new Event('aoe-renderer-restored'));
@@ -61,7 +62,7 @@ export class AoeWebGl {
             if (gl.getParameter(gl.MAX_TEXTURE_SIZE) < SIDE ||
                 gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS) < 1 ||
                 gl.getParameter(gl.MAX_VERTEX_ATTRIBS) < 7 ||
-                gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) < PAGES ||
+                gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) < this.atlasPages ||
                 gl.getParameter(gl.DEPTH_BITS) < 24) {
                 throw new Error('WebGL2 sprite/depth limits unavailable');
             }
@@ -118,7 +119,7 @@ export class AoeWebGl {
             gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
             gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, SIDE, SIDE, PAGES);
+            gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, SIDE, SIDE, this.atlasPages);
             this.coverage = null;
             this.mask = null;
             this.depth = null;
@@ -185,7 +186,7 @@ export class AoeWebGl {
     get textureBytes() {
         // R8UI + DEPTH_COMPONENT24 (four-byte storage), shared by both effects.
         // Excludes the browser framebuffer and driver overhead.
-        return this.disposed ? 0 : SIDE * SIDE * PAGES * 4 +
+        return this.disposed ? 0 : SIDE * SIDE * this.atlasPages * 4 +
             this.coverageSize[0] * this.coverageSize[1] * 5;
     }
 
@@ -216,7 +217,25 @@ export class AoeWebGl {
 
     upload(pixels, memory) {
         this.check();
-        if (pixels.byteLength !== SIDE * SIDE * 4 * PAGES) throw new Error('Invalid WebGL2 atlas size');
+        const pages = pixels.byteLength / (SIDE * SIDE * 4);
+        if (!Number.isInteger(pages) || pages < 8 || pages > MAX_PAGES || pages % 2)
+            throw new Error('Invalid WebGL2 atlas size');
+        if (pages !== this.atlasPages) {
+            const gl = this.gl;
+            if (gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) < pages)
+                throw new Error('WebGL2 atlas layer budget unavailable');
+            gl.deleteTexture(this.texture);
+            this.texture = gl.createTexture();
+            if (!this.texture) throw new Error('WebGL2 atlas allocation failed');
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, SIDE, SIDE, pages);
+            this.atlasPages = pages;
+        }
         const gl = this.gl;
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
@@ -229,7 +248,7 @@ export class AoeWebGl {
         // A page-sized call alone does not bound driver staging: all eight
         // transfers can remain queued together. Complete each startup/restore
         // page before lending the next, so at most one 16 MiB transfer is live.
-        for (let layer = 0; layer < PAGES; layer++) {
+        for (let layer = 0; layer < this.atlasPages; layer++) {
             gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, SIDE, SIDE, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels, layer * SIDE * SIDE * 4);
             gl.finish();
         }

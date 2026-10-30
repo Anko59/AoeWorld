@@ -15,17 +15,27 @@ pub const SELECTION: &[Item] = &[
     Item {
         building: "general",
         role: "idle",
-        stem: "u_cav_hero_joan_idleA",
+        stem: "u_cav_hero_frankish_paladin_idleA",
     },
     Item {
         building: "general",
         role: "walk",
-        stem: "u_cav_hero_joan_walkA",
+        stem: "u_cav_hero_frankish_paladin_walkA",
     },
     Item {
         building: "general",
         role: "death",
-        stem: "u_cav_hero_joan_deathA",
+        stem: "u_cav_hero_frankish_paladin_deathA",
+    },
+    Item {
+        building: "general",
+        role: "attack",
+        stem: "u_cav_hero_frankish_paladin_attackA",
+    },
+    Item {
+        building: "general",
+        role: "decay",
+        stem: "u_cav_hero_frankish_paladin_decayA",
     },
     Item {
         building: "vassal",

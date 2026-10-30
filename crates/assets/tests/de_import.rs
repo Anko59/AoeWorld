@@ -4,6 +4,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[path = "de_import/fixture.rs"]
+mod fixture;
+
 struct CurrentDirectory(PathBuf);
 
 impl Drop for CurrentDirectory {
@@ -64,6 +67,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
     let textures = Path::new("install/resources/_common/terrain/textures/2x");
     fs::create_dir_all(graphics).unwrap();
     fs::create_dir_all(textures).unwrap();
+    fixture::hero(Path::new("install"));
     fs::write(graphics.join("b_dark_house_age1_x1.sld"), sld()).unwrap();
     fs::write(textures.join("g_fm1.dds"), dds()).unwrap();
 
@@ -97,7 +101,24 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .find(|f| f.source == "de/g_fm1.dds")
         .expect("farm");
     assert_eq!((farm.width, farm.height), (4, 4));
-    assert_eq!(report.entries.len(), 1);
+    assert_eq!(report.entries.len(), 6);
+    for (role, count) in [
+        ("idle", 721),
+        ("walk", 481),
+        ("attack", 721),
+        ("death", 721),
+        ("decay", 481),
+    ] {
+        let source = format!("de/u_cav_hero_frankish_paladin_{role}A_x1.sld");
+        assert_eq!(
+            manifest
+                .frames
+                .iter()
+                .filter(|f| f.source == source)
+                .count(),
+            count
+        );
+    }
     assert!(
         !report.absent.is_empty(),
         "other selections are reported absent"
@@ -125,6 +146,21 @@ fn a_directory_that_is_not_an_install_is_rejected() {
 }
 
 #[test]
+fn missing_native_hero_pose_is_rejected_before_pack_creation() {
+    let temporary = tempfile::tempdir().expect("tempdir");
+    let original = std::env::current_dir().expect("cwd");
+    std::env::set_current_dir(temporary.path()).expect("enter tempdir");
+    let _restore = CurrentDirectory(original);
+    fixture::hero(Path::new("install"));
+    let file = "u_cav_hero_frankish_paladin_attackA_x1.sld";
+    fs::remove_file(Path::new("install/resources/_common/drs/graphics").join(file)).unwrap();
+    let error = de::import(Path::new("install"), Path::new("local-assets/packs"))
+        .expect_err("hero attack is required");
+    assert!(error.to_string().contains(file), "{error}");
+    assert!(!Path::new("local-assets/packs").exists());
+}
+
+#[test]
 fn zero_frame_sprite_is_rejected_before_pack_or_table_creation() {
     let temporary = tempfile::tempdir().expect("tempdir");
     let original = std::env::current_dir().expect("cwd");
@@ -132,6 +168,7 @@ fn zero_frame_sprite_is_rejected_before_pack_or_table_creation() {
     let _restore = CurrentDirectory(original);
     let graphics = Path::new("install/resources/_common/drs/graphics");
     fs::create_dir_all(graphics).unwrap();
+    fixture::hero(Path::new("install"));
     fs::write(
         graphics.join("b_dark_house_age1_x1.sld"),
         [

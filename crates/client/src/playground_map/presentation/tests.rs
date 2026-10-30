@@ -253,3 +253,29 @@ fn deque_history_bytes_and_entity_count_stay_bounded() {
     assert_eq!(p.history.len(), aoe_protocol::MAX_SUBSCRIBED_UNITS);
     assert!(p.history.contains_key(&unit.id));
 }
+
+#[wasm_bindgen_test]
+fn native_heading_matches_native_pose_rows_and_keeps_intermediate_directions() {
+    for (x, y, expected) in [
+        (100, 0, 2),
+        (100, 100, 4),
+        (100, -100, 0),
+        (-100, 0, 10),
+        (0, 100, 6),
+        (300, -100, 1),
+    ] {
+        let mut p = Presentation::default();
+        p.reset(20);
+        let start = state(0, true);
+        let mut end = state(x, true);
+        end.position.y = y;
+        p.remember(None, &start, 10);
+        p.remember(Some(&start), &end, 11);
+        assert_eq!(p.native_heading(end), Some(expected));
+        end.moving = false;
+        assert_eq!(p.native_heading(end), None);
+        end.moving = true;
+        end.hp = 0;
+        assert_eq!(p.native_heading(end), None);
+    }
+}

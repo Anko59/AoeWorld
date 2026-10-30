@@ -133,6 +133,28 @@ pub fn pack_frames_with_pages(
     )
 }
 
+/// Runtime addresses: base colour pages 0–4 and masks 5–7; additional
+/// object colour/mask pairs follow at 8/9, 10/11, up to 62/63. Allocation
+/// grows to the selected inventory, independent of the logical 256-page tool.
+pub fn pack_resident_frames(frames: &[FrameExtent]) -> Result<Vec<Placement>, PackingError> {
+    validate(frames, MAX_LOGICAL_FRAMES)?;
+    let mut failure = PackingError::InvalidPageBudget;
+    for pages in 3..=31 {
+        match pack_frames_with_pages(frames, 2, pages) {
+            Ok(mut placements) => {
+                for placed in &mut placements {
+                    if placed.page >= 5 {
+                        placed.page = 8 + (placed.page - 5) * 2;
+                    }
+                }
+                return Ok(placements);
+            }
+            Err(error) => failure = error,
+        }
+    }
+    Err(failure)
+}
+
 // Private allocation seam lets native tests prove validation precedes metadata
 // allocation, without a global allocator or unsafe instrumentation.
 #[cfg(test)]
