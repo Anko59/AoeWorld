@@ -257,7 +257,10 @@ combined with `AOE_E2E_SHARD`.
 **One server per worker (#388).** `make test-e2e` starts `AOE_E2E_WORKERS`
 disposable game servers (`1..=8`, default 3), each on its own free port and
 with its own copy of the map store, and gives the browser container their URLs
-in `AOE_BASE_URLS`. Playwright runs that many workers; the fixture in
+in `AOE_BASE_URLS`. Set `AOE_E2E_PORT_RANGE=8200-8209` to restrict those host
+listeners to an inclusive range; occupied ports are skipped, and exhaustion
+fails without falling back to another port. Unset, the OS chooses free ports.
+Playwright runs that many workers; the fixture in
 `browser/server.ts` points a test at the server of its `parallelIndex`, so no
 two workers share a controller lease or server-wide state. Every spec imports
 `test` from that file, not from `@playwright/test`. `--shard` and workers

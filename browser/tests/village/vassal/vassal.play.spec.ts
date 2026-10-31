@@ -5,6 +5,8 @@ import { gameAssets } from "../../game-assets.js";
 import { centerVillage, freshHud } from "../fixtures/resources.js";
 import { forceCanvas, forceWebGl } from "../../rendering/backends.js";
 
+test.use({ video: "on" });
+
 type Actor = {
   id: number;
   kind: string;
@@ -16,17 +18,25 @@ const actors = async (page: Page): Promise<Actor[]> =>
   JSON.parse(
     (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
   );
-async function select(page: Page, kind: string) {
+async function select(page: Page, kind: string, excludedId?: number) {
   let attempt = 0;
   await expect(async () => {
     await freshHud(page);
-    const candidates = (await actors(page)).filter((a) => a.kind === kind);
+    const candidates = (await actors(page)).filter(
+      (a) => a.kind === kind && a.id !== excludedId,
+    );
     const actor = candidates[attempt++ % candidates.length];
     if (!actor) throw new Error(`${kind} has no target`);
     await page.mouse.click(actor.x, actor.y - (kind === "Villager" ? 8 : 0));
+    // Same-kind selections leave the label unchanged. Wait for the actor
+    // snapshot produced after this click before saving a control group.
+    await freshHud(page);
     await expect(page.locator("#selection-name")).toHaveText(kind, {
       timeout: 500,
     });
+    expect(
+      (await actors(page)).filter((a) => a.selected).map((a) => a.id),
+    ).toEqual([actor.id]);
   }).toPass({ timeout: 20_000, intervals: [500] });
 }
 
@@ -74,12 +84,27 @@ test("train one Vassal per Castle and activate its visible economic domain", asy
   // move between HUD reads and pointer events; a click at an old position
   // selects the Farm instead. Recall its identity through the normal UI.
   await select(page, "Villager");
+  await freshHud(page);
+  const previous = (await actors(page)).find((a) => a.selected);
+  if (!previous) throw new Error("Initial villager selection missing");
+  // A retry can switch between villagers while the HUD still says Villager.
+  // Exercise that same-kind transition before recording the group's identity.
+  await select(page, "Villager", previous.id);
   await expect(page.locator("#selection-task")).toHaveText("Idle");
   const workerIds = (await actors(page))
     .filter((a) => a.selected)
     .map((a) => a.id);
   expect(workerIds).toHaveLength(1);
   await page.keyboard.press("Control+1");
+  // Check the saved identity before automation or footprint movement can act.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("1");
+  await freshHud(page);
+  await expect
+    .poll(async () =>
+      (await actors(page)).filter((a) => a.selected).map((a) => a.id),
+    )
+    .toEqual(workerIds);
   await centerCastle(page);
   await select(page, "Castle");
   const train = page.locator("#train-vassal");

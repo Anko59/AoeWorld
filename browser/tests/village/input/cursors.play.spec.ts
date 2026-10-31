@@ -2,6 +2,8 @@ import { expect } from "@playwright/test";
 import { test } from "../../../server.js";
 import { building, inputFixture, screen, selectWorker } from "./fixture.js";
 
+test.use({ video: "on" });
+
 test("a nonzero player keeps ownership after its primary scout enters a Castle", async ({
   page,
 }, info) => {
