@@ -85,7 +85,8 @@ impl GameWorld {
             .query(self.clamp_around(footprint))
             .0
             .into_iter()
-            .filter(|u| overlaps(footprint, u))
+            // Corpses neither block a foundation nor get walked off it.
+            .filter(|u| u.hp > 0 && overlaps(footprint, u))
             .collect::<Vec<_>>();
         let mut taken = BTreeSet::new();
         for unit in &inside {
@@ -146,7 +147,7 @@ impl GameWorld {
             .query(around)
             .0
             .into_iter()
-            .filter(|u| overlaps(footprint, u))
+            .filter(|u| u.hp > 0 && overlaps(footprint, u))
             .map(|u| u.id)
             .collect::<Vec<_>>();
         let mut taken = BTreeSet::new();
