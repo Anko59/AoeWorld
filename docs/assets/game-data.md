@@ -35,6 +35,11 @@ name, then blocks by genie type (speed, dead-fish, bird, combat, creatable
 Types 20 and 25 carry the speed block only; 40 and 50 are unverified because
 the Gaia set has none.
 
+Damage sprite entries contain a graphic i16, a percentage byte, an obsolete
+apply-mode byte and the active apply-mode byte. The percentage and obsolete
+slot are separate fields ([format reference](https://github.com/SFTtech/openage/blob/master/openage/convert/value_object/read/media/datfile/unit.py#L178));
+combining them turns the Stone Wall's 25/50/75 thresholds into 537/562/587.
+
 Each 16-byte graphic delta is `graphic_id i16`, padding i16, runtime sprite
 pointer i32, `offset_x i16`, `offset_y i16`, `display_angle i16`, padding i16.
 Signed offsets, angle and list order are retained; padding and runtime pointers

@@ -351,8 +351,11 @@ fn castle_supplemental_slots_keep_distinct_families_and_de_fallback() {
 
 #[test]
 fn castle_dock_uses_licensed_de_art_when_the_trial_lacks_its_slp() {
+    // The DAT binding owns the Dock; completed building categories must not
+    // reintroduce a separately maintained importer filename list.
+    assert!(crate::catalog::GAMEPLAY_BUILDING_IDS.contains(&47));
     assert!(
-        crate::de::SELECTION
+        !crate::de::SELECTION
             .iter()
             .any(|item| item.stem == "b_west_dock_age3")
     );

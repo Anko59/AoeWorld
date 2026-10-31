@@ -124,3 +124,55 @@ fn single_direction_ship_deaths_use_their_dat_row_for_every_native_heading() {
         assert!(super::super::scene_unit_bounds(&art, u, camera(), 0).is_some());
     }
 }
+
+#[wasm_bindgen_test]
+fn rebased_stone_barriers_keep_dat_identity_and_do_not_alias_native_actors() {
+    assert_eq!(std::mem::size_of::<SceneUnitKind>(), 1);
+    assert_eq!(std::mem::size_of::<SceneUnit>(), 32);
+    for (slot, id) in [(71, 117), (72, 64), (73, 64)] {
+        let kind = SceneUnitKind::building(slot);
+        assert_eq!(kind.building_id(), Some(id));
+        assert_eq!(kind.building_slot(), Some(slot));
+        assert_eq!(kind.actor_slot(), None);
+    }
+    for slot in 0..167 {
+        assert!(SceneUnitKind::actor(slot).actor_slot().is_some());
+        assert_eq!(SceneUnitKind::actor(slot).building_slot(), None);
+    }
+}
+
+#[wasm_bindgen_test]
+fn rebased_stone_gate_uses_the_dat_open_state() {
+    let mut art = art();
+    let building = &mut art.compositions[0];
+    building.unit_id = 64;
+    let closed = building.parts[0].clone();
+    let mut open = closed.clone();
+    open.frame.atlas.uv[0] += 0.25;
+    let expected = open.frame.atlas;
+    building.parts = vec![closed];
+    building.states = vec![(5, vec![open])];
+    let draw = world_sprite_frames(
+        &art,
+        &[],
+        &[],
+        &[unit(SceneUnitKind::OpenStoneGate)],
+        camera(),
+        0,
+    );
+    assert_eq!(draw.last().unwrap().1.atlas, expected);
+}
+
+#[wasm_bindgen_test]
+fn current_building_slots_round_trip_without_claiming_actor_tags() {
+    for slot in 0..=73 {
+        let kind = SceneUnitKind::building(slot);
+        if slot == 22 {
+            assert!(kind.actor_slot().is_some());
+            assert_eq!(kind.building_slot(), None);
+        } else {
+            assert_eq!(kind.building_slot(), Some(slot));
+            assert_eq!(kind.actor_slot(), None);
+        }
+    }
+}

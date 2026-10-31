@@ -5,7 +5,7 @@ use aoe_assets::{catalog::runtime, pack::Manifest};
 fn fixture() -> Manifest {
     let mut value = serde_json::json!({
         "version":1, "converter":"synthetic", "input_hash":"synthetic",
-        "building_data":"00", "frames":[], "buildings":[],
+        "building_data":"00", "frames":[], "buildings":[], "chunks":[], "terrains":[],
         "pages":[{"color":"fixture.png","color_hash":"","player":"fixture.png",
             "player_hash":"","shadow":"fixture.png","shadow_hash":"",
             "outline":"fixture.png","outline_hash":"","width":2048,"height":2048}]

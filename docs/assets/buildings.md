@@ -1,7 +1,7 @@
 # DAT building art
 
 `make assets-import-de AOE_ASSET_PACK=local-assets/packs/<base-hash>` imports
-all 39 gameplay building records and the six spawned bridge segments in one
+all 41 gameplay building records and the six spawned bridge segments in one
 pass. The owner-licensed DE installation is mounted read-only; original pixels,
 source digests and generated packs stay in ignored local storage. The current
 base still supplies interface and remaining effect assets until their category

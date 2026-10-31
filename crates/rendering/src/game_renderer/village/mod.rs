@@ -186,7 +186,10 @@ pub(super) fn building(
         .fold(0.0, f64::max);
     let state = if destroyed {
         Some(if elapsed < destruction_ms { 0 } else { 1 })
-    } else if unit.kind == SceneUnitKind::OpenPalisadeGate {
+    } else if matches!(
+        unit.kind,
+        SceneUnitKind::OpenPalisadeGate | SceneUnitKind::OpenStoneGate
+    ) {
         Some(5)
     } else {
         None

@@ -71,3 +71,11 @@ fn current_de_building_tail_preserves_every_graphic_role_annex_and_damage_state(
         assert!(parse(&b[..end], 0, 109).is_err(), "tail prefix {end}");
     }
 }
+
+#[test]
+fn de_damage_threshold_ignores_the_overwritten_old_apply_mode_byte() {
+    let mut bytes = building();
+    bytes[161] = 2;
+    let unit = parse(&bytes, 0, 109).unwrap();
+    assert_eq!((unit.damage[0].percent, unit.damage[0].mode), (50, 1));
+}

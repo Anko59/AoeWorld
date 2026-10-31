@@ -230,9 +230,14 @@ fn unit(r: &mut Reader) -> Result<Unit, Error> {
     r.bounded(sprites, MAX_DAMAGE_SPRITES, "damage sprites")?;
     let damage_graphics = (0..sprites)
         .map(|_| {
+            let graphic_id = r.i16()?;
+            let damage_percent = i16::from(r.u8()?);
+            // The adjacent byte is the obsolete in-memory apply-mode slot,
+            // not the high byte of the damage threshold (stone walls use 2).
+            r.skip(1)?;
             Ok(super::DamageGraphic {
-                graphic_id: r.i16()?,
-                damage_percent: r.i16()?,
+                graphic_id,
+                damage_percent,
                 apply_mode: r.u8()?,
             })
         })

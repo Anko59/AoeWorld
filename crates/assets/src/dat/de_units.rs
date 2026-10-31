@@ -52,9 +52,12 @@ fn parse(bytes: &[u8], at: usize, id: i16) -> Result<Unit, Error> {
     r.bounded(count, 32, "damage graphics")?;
     let mut damage = Vec::new();
     for _ in 0..count {
+        let graphic = r.i16()?;
+        let percent = i16::from(r.u8()?);
+        r.skip(1)?; // Obsolete apply-mode slot, separate from the threshold.
         damage.push(Damage {
-            graphic: r.i16()?,
-            percent: r.i16()?,
+            graphic,
+            percent,
             mode: r.u8()?,
         });
     }

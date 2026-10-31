@@ -71,3 +71,10 @@ fn every_spawned_unit_pose_uses_all_native_cells_and_dat_timing() {
         }
     }
 }
+
+#[test]
+fn gameplay_building_inventory_includes_current_stone_barriers() {
+    for id in [117, 64] {
+        assert!(crate::catalog::GAMEPLAY_BUILDING_IDS.contains(&id));
+    }
+}

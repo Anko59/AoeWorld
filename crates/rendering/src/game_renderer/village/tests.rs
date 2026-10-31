@@ -343,7 +343,7 @@ fn stone_wall_and_gate_slots_round_trip_with_gate_footprints() {
     for slot in 71..=73 {
         let kind = SceneUnitKind::building(slot);
         assert_eq!(kind.building_slot(), Some(slot));
-        assert_eq!(kind.building_id(), None);
+        assert_eq!(kind.building_id(), Some(if slot == 71 { 117 } else { 64 }));
         assert!(!kind.is_foundation());
         assert_eq!(
             kind.building_side(),
