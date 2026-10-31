@@ -51,3 +51,20 @@ fn dead_planning_attacking_and_auto_scouting_soldiers_are_not_idle() {
         assert_eq!(village.idle_military.len(), 0, "scenario {scenario}");
     }
 }
+
+#[wasm_bindgen_test]
+fn a_villager_reported_moving_that_is_neither_moving_nor_planning_is_idle() {
+    let mut village = Village::default();
+    let mut unit = super::workers::villager(UnitTask::Moving);
+    unit.moving = false;
+    unit.planning = false;
+    village.remember_idle(PlayerId(0), &unit);
+    assert_eq!(village.idle_villagers.len(), 1);
+    unit.moving = true;
+    village.remember_idle(PlayerId(0), &unit);
+    assert_eq!(
+        village.idle_villagers.len(),
+        0,
+        "a walking villager is busy"
+    );
+}

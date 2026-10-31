@@ -131,6 +131,41 @@ impl GameWorld {
         Ok((world, primary))
     }
 
+    /// Territory showcase on the four-times clock: two overlapping Castles, 40
+    /// busy farmers between them and both Vassals waiting outside. Garrisoning
+    /// the first adopts every farmer; garrisoning the second splits the area.
+    /// All orders stay real.
+    pub fn vassal_territory_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+        use crate::UnitKind;
+        let (mut world, primary) = Self::military_demo(seed)?;
+        world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
+        for (x, y) in [(100, 100), (150, 100)] {
+            let footprint = TileRect::from_xywh(x, y, 4, 4);
+            let castle =
+                world.insert_building(PlayerId(0), BuildingKind::Castle, footprint, true)?;
+            let at = aoe_core::WorldPosition::from_tile_center(TileCoord::new(x + 2, y + 5))
+                .map_err(|_| EconomyError::InvalidFootprint)?;
+            let vassal = world.spawn_kind(PlayerId(0), UnitKind::Vassal, at)?;
+            world.bind_vassal(vassal, castle, footprint);
+        }
+        for i in 0..40 {
+            let at = TileCoord::new(87 + 4 * (i % 20), 146 + 4 * (i / 20));
+            let farm = world.insert_building(
+                PlayerId(0),
+                BuildingKind::Farm,
+                TileRect::from_xywh(at.x, at.y, 3, 3),
+                true,
+            )?;
+            let worker = world.spawn_villager(
+                PlayerId(0),
+                aoe_core::WorldPosition::from_tile_center(TileCoord::new(at.x + 3, at.y))
+                    .map_err(|_| EconomyError::InvalidFootprint)?,
+            )?;
+            world.issue_farm(PlayerId(0), worker, farm)?;
+        }
+        Ok((world, primary))
+    }
+
     /// Four-times-clock military playground; commands remain authoritative.
     pub fn military_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         let mut config =

@@ -32,6 +32,7 @@ SLOT_ENV := \
   -e AOE_ASSET_PACK \
   -e AOE_E2E_SHARD \
   -e AOE_E2E_WORKERS \
+  -e AOE_E2E_PORT_RANGE \
   -e AOE_E2E_SPECS \
   -e AOE_GEODATA_CACHE \
   -e AOE_MAP_REQUEST \
@@ -180,7 +181,7 @@ test-e2e: disk-precheck slot-bootstrap
 
 test-e2e-steps:
 	@$(DOCKER_RUN) cargo build --locked --release -p aoe-server
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_SPECS -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_ASSET_PACK -e AOE_E2E_SHARD -e AOE_E2E_WORKERS -e AOE_E2E_PORT_RANGE -e AOE_E2E_SPECS -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-e2e
 
 # Keep the memory investigation serial, including its nested builds. Existing
 # guards validate the inherited slot; every gate keeps its normal checks.

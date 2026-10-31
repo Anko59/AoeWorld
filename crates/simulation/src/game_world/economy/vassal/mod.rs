@@ -1,26 +1,40 @@
 //! The original Vassal's immutable home, control state and budgeted economy.
 use crate::{GameWorld, UnitKind};
-use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, TileRect, WorldPosition};
+use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId, TileRect, WorldPosition};
 use aoe_map::ResourceKind;
 use std::collections::{BTreeMap, BTreeSet};
+mod adopt;
 mod construction;
 mod hash;
 mod jobs;
 mod manager;
 mod rules;
 mod snapshot;
+mod status;
+mod territory;
+mod watchdog;
 pub use rules::{VASSAL_RULES, VassalRules, VassalWork};
+pub use status::{VassalStatus, VassalWait};
+pub use watchdog::VASSAL_STALL_SECONDS;
+#[cfg(test)]
+pub(crate) use watchdog::vassal_stall;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Home {
+    pub(super) id: EntityId,
+    pub(super) player: PlayerId,
+    /// Other active castles of the same player whose circles can overlap.
+    pub(super) rivals: Vec<(EntityId, WorldPosition)>,
     pub(crate) castle: EntityId,
     // Retained after destruction: a survivor never becomes unbound.
     pub(crate) center: WorldPosition,
-    pub(super) workers: BTreeSet<EntityId>,
+    pub(crate) workers: BTreeSet<EntityId>,
     pub(super) worker_after: Option<EntityId>,
     pub(super) scan_chunk: usize,
     pub(super) scan_offset: usize,
     pub(super) site_after: usize,
+    pub(crate) stalls: BTreeMap<EntityId, watchdog::Stall>,
+    pub(super) status: VassalStatus,
 }
 impl Home {
     pub(super) fn contains(&self, at: WorldPosition) -> bool {
@@ -29,8 +43,13 @@ impl Home {
         let r = i64::from(VASSAL_RULES.radius_tiles * FIXED_SUBUNITS_PER_TILE);
         dx * dx + dy * dy <= r * r
     }
+    /// Every margin-expanded corner lies in the circle and the building's
+    /// centre lies in this Vassal's own territory.
     pub(super) fn covers(&self, rect: TileRect, margin: i32) -> bool {
-        [rect.min.x - margin, rect.max.x + margin]
+        self.owns(WorldPosition::new(
+            (rect.min.x + rect.max.x) * FIXED_SUBUNITS_PER_TILE / 2,
+            (rect.min.y + rect.max.y) * FIXED_SUBUNITS_PER_TILE / 2,
+        )) && [rect.min.x - margin, rect.max.x + margin]
             .into_iter()
             .all(|x| {
                 [rect.min.y - margin, rect.max.y + margin]
@@ -47,6 +66,8 @@ impl Home {
 #[derive(Debug, Default)]
 pub(crate) struct Manager {
     pub(super) active: BTreeSet<EntityId>,
+    /// Active domains per player with their centres; derived from `active`.
+    pub(super) by_player: BTreeMap<PlayerId, BTreeMap<EntityId, WorldPosition>>,
     pub(super) controlled: BTreeMap<EntityId, (EntityId, ResourceKind)>,
     pub(super) cursor: Option<EntityId>,
     /// Only set during an authoritative advance; never across an API boundary.
@@ -55,9 +76,17 @@ pub(crate) struct Manager {
 }
 impl GameWorld {
     pub(crate) fn bind_vassal(&mut self, id: EntityId, castle: EntityId, footprint: TileRect) {
+        let player = self
+            .building(castle)
+            .map(|b| b.player)
+            .or_else(|| self.unit(id).map(|u| u.player))
+            .unwrap_or(PlayerId(0));
         self.economy.vassal_homes.insert(
             id,
             Home {
+                id,
+                player,
+                rivals: Vec::new(),
                 castle,
                 center: WorldPosition::new(
                     (footprint.min.x + footprint.max.x) * FIXED_SUBUNITS_PER_TILE / 2,
@@ -68,6 +97,8 @@ impl GameWorld {
                 scan_chunk: 0,
                 scan_offset: 0,
                 site_after: 0,
+                stalls: BTreeMap::new(),
+                status: VassalStatus::default(),
             },
         );
     }
@@ -85,19 +116,44 @@ impl GameWorld {
             .is_none_or(|home| home.contains(at))
     }
     pub(crate) fn set_vassal_active(&mut self, id: EntityId, active: bool) {
-        if active && self.economy.vassal_homes.contains_key(&id) {
+        let known = self
+            .economy
+            .vassal_homes
+            .get(&id)
+            .map(|h| (h.player, h.center));
+        if let Some((player, center)) = known.filter(|_| active) {
             self.economy.vassals.active.insert(id);
+            self.economy
+                .vassals
+                .by_player
+                .entry(player)
+                .or_default()
+                .insert(id, center);
         } else {
             self.economy.vassals.active.remove(&id);
+            if let Some((player, _)) = known {
+                let members = self.economy.vassals.by_player.entry(player).or_default();
+                members.remove(&id);
+                if members.is_empty() {
+                    self.economy.vassals.by_player.remove(&player);
+                }
+            }
             let workers = self
                 .economy
                 .vassal_homes
                 .get_mut(&id)
-                .map(|h| std::mem::take(&mut h.workers))
+                .map(|h| {
+                    h.stalls.clear();
+                    h.status = VassalStatus::default();
+                    std::mem::take(&mut h.workers)
+                })
                 .unwrap_or_default();
             for worker in workers {
                 self.economy.vassals.controlled.remove(&worker);
             }
+        }
+        if let Some((player, _)) = known {
+            self.refresh_vassal_territory(player);
         }
     }
     pub(crate) fn forget_vassal(&mut self, id: EntityId) {
@@ -125,7 +181,7 @@ impl GameWorld {
             .unit(id)
             .filter(|u| u.kind == UnitKind::Villager && u.hp > 0 && !self.embarked(id))?;
         let home = self.economy.vassal_homes.get(&vassal)?;
-        (home.contains(unit.position)
+        (home.owns(unit.position)
             && self.active_vassal(vassal)
             && self
                 .building(home.castle)
@@ -147,7 +203,12 @@ impl GameWorld {
             home.workers.remove(&id);
         }
     }
-    fn claim_vassal_worker(&mut self, vassal: EntityId, worker: EntityId, kind: ResourceKind) {
+    pub(super) fn claim_vassal_worker(
+        &mut self,
+        vassal: EntityId,
+        worker: EntityId,
+        kind: ResourceKind,
+    ) {
         self.release_vassal_worker(worker);
         if let Some(home) = self.economy.vassal_homes.get_mut(&vassal)
             && home.workers.len() < VASSAL_RULES.max_villagers
@@ -163,6 +224,14 @@ impl GameWorld {
     pub(crate) fn managed_target_allowed(&self, worker: EntityId, at: WorldPosition) -> bool {
         self.vassal_controller(worker)
             .and_then(|v| self.economy.vassal_homes.get(&v))
-            .is_none_or(|h| h.contains(at))
+            .is_none_or(|h| h.owns(at))
+    }
+    /// Latest explanation of what this Vassal's domain is doing.
+    pub fn vassal_status(&self, id: EntityId) -> Option<VassalStatus> {
+        self.economy
+            .vassal_homes
+            .get(&id)
+            .filter(|_| self.economy.vassals.active.contains(&id))
+            .map(|h| h.status)
     }
 }

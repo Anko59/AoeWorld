@@ -10,7 +10,7 @@ mod garrison;
 mod validation;
 pub use aoe_core::CombatStance;
 pub use aoe_core::Formation;
-pub use garrison::GarrisonUnitState;
+pub use garrison::{GarrisonUnitState, VassalReport, VassalWait};
 use validation::validate_server;
 pub(crate) mod economy;
 mod fog;

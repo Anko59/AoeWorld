@@ -23,6 +23,48 @@ const MAX_WORKERS: u32 = 8;
 
 type Failure = Box<dyn std::error::Error>;
 
+fn port_range(text: &str) -> Result<Option<(u16, u16)>, String> {
+    if text.is_empty() {
+        return Ok(None);
+    }
+    let invalid =
+        || "AOE_E2E_PORT_RANGE must be START-END with 1 <= START <= END <= 65535".to_owned();
+    let (first, last) = text.split_once('-').ok_or_else(invalid)?;
+    if [first, last]
+        .iter()
+        .any(|part| part.is_empty() || !part.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return Err(invalid());
+    }
+    let first = first.parse::<u16>().map_err(|_| invalid())?;
+    let last = last.parse::<u16>().map_err(|_| invalid())?;
+    if first == 0 || first > last {
+        return Err(invalid());
+    }
+    Ok(Some((first, last)))
+}
+
+fn reserve_port(range: Option<(u16, u16)>) -> std::io::Result<TcpListener> {
+    let Some((first, last)) = range else {
+        return TcpListener::bind("127.0.0.1:0");
+    };
+    for port in first..=last {
+        match TcpListener::bind(("127.0.0.1", port)) {
+            Ok(listener) => return Ok(listener),
+            Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AddrInUse,
+        format!("no free E2E port in {first}-{last}"),
+    ))
+}
+
+fn reserve_ports(range: Option<(u16, u16)>, count: u32) -> std::io::Result<Vec<TcpListener>> {
+    (0..count).map(|_| reserve_port(range)).collect()
+}
+
 /// The worker count named by `AOE_E2E_WORKERS`, absent or empty meaning three.
 /// The coverage run keeps one instrumented server and one worker, and the
 /// duel's focused specs run on one.
@@ -79,18 +121,20 @@ impl Fleet {
         existing_maps: &Path,
         count: u32,
     ) -> Result<Self, Failure> {
+        let ports = port_range(&std::env::var("AOE_E2E_PORT_RANGE").unwrap_or_default())?;
         let mut fleet = Self {
             addresses: Vec::new(),
             hash: String::new(),
             servers: Vec::new(),
             _fixtures: Vec::new(),
         };
-        for _ in 0..count {
-            let listener = TcpListener::bind("127.0.0.1:0")?;
+        // Hold every reservation before starting children: a newly spawned
+        // server may not have bound yet when the next worker is allocated.
+        for listener in reserve_ports(ports, count)? {
             let address = listener.local_addr()?;
-            drop(listener);
             let fixture = landscape::prepare(root, Some(existing_maps))
                 .map_err(|error| stale::annotate(error, existing_maps))?;
+            drop(listener);
             let child = Command::new(binary)
                 .current_dir(root)
                 .env("AOE_BIND", address.to_string())
