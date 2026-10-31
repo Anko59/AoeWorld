@@ -124,7 +124,7 @@ fn thirty_two_militia_showcase_keeps_block_and_normal_march_speed() {
             out.slow_ticks,
             out.full_ticks
         ),
-        (311, 588, 158, 430),
+        (283, 586, 294, 292),
         "pin the measured moving phases: {out:?}"
     );
     let slots = ids
@@ -147,7 +147,7 @@ fn thirty_two_militia_showcase_keeps_block_and_normal_march_speed() {
     }
     assert_eq!(
         (out.first, out.last),
-        (588, 633),
+        (586, 630),
         "pin current arrival timing: {out:?}"
     );
 }

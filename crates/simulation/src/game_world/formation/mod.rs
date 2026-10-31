@@ -9,6 +9,7 @@ mod detach;
 mod hash;
 pub(super) mod layout;
 mod orders;
+mod packing;
 mod path;
 mod resume;
 mod selection;
@@ -38,6 +39,7 @@ pub(crate) struct Member {
     detour_progress: i64,
     arrived: bool,
     detached: bool,
+    following_corridor: bool,
     /// Ticks since the anchor arrived that this member neither reached its
     /// slot nor reduced its distance by half a tile. At `GIVE_UP_AFTER_TICKS` it stops where it stands, so
     /// one boxed-in unit cannot keep the whole group unsettled.
@@ -63,6 +65,7 @@ pub(crate) struct Group {
     narrow_gap: i32,
     /// Derived from the hashed offsets/gap whenever ranks or membership change.
     slots_tight: bool,
+    packing_files: usize,
     form_start: i64,
     form_distance: i64,
     half_width: i32,

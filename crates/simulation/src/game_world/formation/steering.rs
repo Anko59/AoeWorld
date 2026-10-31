@@ -50,7 +50,6 @@ impl GameWorld {
         if self.formations.is_empty() {
             return;
         }
-        self.rejoin_detached_members();
         let leaders = self.formations.keys().copied().collect::<Vec<_>>();
         let mut movers = Vec::new();
         // Groups read the same unit snapshot and own disjoint member state.
@@ -145,8 +144,9 @@ impl GameWorld {
         // Look ahead and behind the anchor before the front reaches a wall.
         // A capped value proves at least 7.5 tiles; it is not a wall at 7.5.
         let mut clearance = 15;
-        for delta in [-8, -4, 0, 4, 8] {
-            let progress = (group.progress + delta * 1024).clamp(0, group.path.end());
+        let look = i64::from(group.half_width) + 8 * 1024;
+        for delta in [-look, -look / 2, 0, look / 2, look] {
+            let progress = (group.progress + delta).clamp(0, group.path.end());
             let (point, _) = group.path.point(progress, &mut cursor);
             let value = self.static_clearance(UnitKind::Militia, point.tile_floor());
             if delta == 0 {
@@ -167,8 +167,14 @@ impl GameWorld {
             group.members.len()
         };
         let count = group.members.len();
+        self.assign_packing_ranks(group, files.min(count), heading);
         let rotation = layout::Rotation::new(heading);
         let forming = (group.progress - group.form_start).clamp(0, group.form_distance);
+        let last = group.path.points.len().saturating_sub(1);
+        let end = group.path.points[last];
+        let before = group.path.points[last.saturating_sub(1)];
+        let final_heading = WorldPosition::new(end.x - before.x, end.y - before.y);
+        let final_length = path::distance(before, end).max(1);
         for member in &mut group.members {
             self.group_work.members(1);
             let unit = self.units[self.lookup[&member.id]].state;
@@ -191,13 +197,23 @@ impl GameWorld {
             // Project the slot's centre rather than its displaced body. On an
             // inside bend, projecting the body alone can keep selecting the
             // preceding leg forever even after the anchor has passed the turn.
-            let (_, local_heading) = group.path.point(member.progress, &mut member.cursor);
+            let (_, local_heading) = if files < count || member.following_corridor {
+                group
+                    .path
+                    .corridor_point(member.progress, &mut member.cursor)
+            } else {
+                group.path.point(member.progress, &mut member.cursor)
+            };
             let local_rotation = if local_heading == heading {
                 rotation
             } else {
                 layout::Rotation::new(local_heading)
             };
-            let center = local_rotation.oriented(unit.position, WorldPosition::new(-offset.x, 0));
+            let center = if member.following_corridor {
+                unit.position
+            } else {
+                local_rotation.oriented(unit.position, WorldPosition::new(-offset.x, 0))
+            };
             let mut projected_cursor = member.cursor;
             let projected = group.path.project(center, &mut projected_cursor);
             if projected > member.progress {
@@ -205,10 +221,14 @@ impl GameWorld {
                 member.cursor = projected_cursor;
             }
             member.target_progress = (group.progress + i64::from(offset.y))
-                .max(member.progress)
+                .max(member.progress + if member.following_corridor { 1024 } else { 0 })
                 .min(member.progress + 1024);
             let mut at = member.cursor;
-            let (point, next_heading) = group.path.point(member.target_progress, &mut at);
+            let (point, next_heading) = if files < count || member.following_corridor {
+                group.path.corridor_point(member.target_progress, &mut at)
+            } else {
+                group.path.point(member.target_progress, &mut at)
+            };
             let next_rotation = if next_heading == local_heading {
                 local_rotation
             } else if next_heading == heading {
@@ -216,23 +236,79 @@ impl GameWorld {
             } else {
                 layout::Rotation::new(next_heading)
             };
-            member.center = next_rotation.oriented(point, WorldPosition::new(offset.x, 0));
-            member.ideal = if !navigating || group.direct {
+            // Every tile-centre edge admits this fixed inset lane. Keeping
+            // its width fixed avoids steering across the bank on every change
+            // of the circular clearance sample along a staircase route.
+            member.center = if member.following_corridor {
+                let lateral = (512 - unit.kind.terrain_radius() - 2).max(0);
+                next_rotation.oriented(
+                    point,
+                    WorldPosition::new(offset.x.clamp(-lateral, lateral), 0),
+                )
+            } else {
+                next_rotation.oriented(point, WorldPosition::new(offset.x, 0))
+            };
+            // A rear slot ends before the centroid. Begin its final approach
+            // at that slot's projection, rather than marching past it first.
+            let goal_along = (i64::from(member.goal.x - end.x) * i64::from(final_heading.x)
+                + i64::from(member.goal.y - end.y) * i64::from(final_heading.y))
+                / final_length;
+            let final_approach = member.following_corridor
+                && end == group.destination
+                && member.progress >= group.path.end() + goal_along.min(0) - 1024;
+            let ideal = rotation.oriented(group.anchor, offset);
+            let forward_to_slot = i64::from(ideal.x - unit.position.x) * i64::from(heading.x)
+                + i64::from(ideal.y - unit.position.y) * i64::from(heading.y);
+            if member.following_corridor
+                && !final_approach
+                && files == count
+                && forward_to_slot >= 0
+                && self.static_clearance(unit.kind, unit.position.tile_floor()) == 15
+            {
+                member.following_corridor = false;
+            }
+            member.ideal = if !navigating || group.direct || final_approach {
                 member.goal
             } else {
                 rotation.oriented(group.anchor, offset)
             };
-            member.target = member.ideal;
-            if navigating && !group.direct && !member.arrived {
+            if final_approach {
+                member.center = member.goal;
+            }
+            member.target =
+                if !group.direct && (member.following_corridor || (navigating && files < count)) {
+                    member.center
+                } else {
+                    member.ideal
+                };
+            if navigating
+                && !group.direct
+                && !member.arrived
+                && !member.following_corridor
+                && !final_approach
+            {
                 // Keep advancing while forming; an ahead member may move
                 // laterally but never walks back just to assemble its row.
                 let (x, y) = (i64::from(heading.x), i64::from(heading.y));
                 let length = (x * x + y * y).max(1);
                 let dot = i64::from(member.target.x - unit.position.x) * x
                     + i64::from(member.target.y - unit.position.y) * y;
-                if dot < 0 {
+                if dot < 0 && files == count {
                     member.target.x -= (x * dot / length) as i32;
                     member.target.y -= (y * dot / length) as i32;
+                }
+                if path::distance(member.target, unit.position) <= 1 && !group.attack_move {
+                    // An advanced row keeps walking at 3/4 of anchor pace,
+                    // retaining its lateral file while the rear catches up.
+                    let advance = (u128::from(group.pace.0) * 3 / (u128::from(group.pace.1) * 4))
+                        .clamp(1, 512) as i64;
+                    member.target_progress = member.progress + advance;
+                    let (point, tangent) = group
+                        .path
+                        .corridor_point(member.target_progress, &mut member.cursor);
+                    member.center =
+                        layout::oriented(point, WorldPosition::new(offset.x, 0), tangent);
+                    member.target = member.center;
                 }
             }
         }
@@ -339,10 +415,16 @@ impl GameWorld {
             member.stalled.saturating_add(1)
         };
         let forward = member.progress >= member.detour_progress + 512;
+        if forward {
+            member.detour_progress = member.progress;
+            if let Some(obstruction) = &mut self.units[index].obstruction {
+                obstruction.blocked = 0;
+            }
+        }
+        member.following_corridor |= motion.obstructed;
         member.blocked = if motion.obstructed && !forward && from != motion.target {
             member.blocked.saturating_add(1)
         } else {
-            member.detour_progress = member.progress;
             0
         };
         if arrived {

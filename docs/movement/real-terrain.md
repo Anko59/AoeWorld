@@ -135,3 +135,43 @@ Deferred occupied waypoints must not bank travel. When a physical proposal is
 skipped and route continuation waits for search work, reset the unpaid segment
 to the actual body. Retain the search if its source tile is unchanged; otherwise
 discard it and replan. The nearby food-worker bound remains 179 ticks.
+
+## River corridor iteration
+
+Members that meet static terrain retain forward corridor following instead of
+returning to an anchor-relative chord on the next tick. A member parked at a
+temporary assembly target also advances along that corridor; it does not wait
+for a virtual row to catch up. Destination slots stay fixed. Final approach
+starts at each slot's projection on the last route leg, so rear ranks do not
+first pass their own destinations.
+
+The anchor emits already proven continuations into a FIFO bounded by three
+normal route segments. Prefetch spends zero search work; fair lookahead still
+owns searches. Refresh the shared future polyline when that FIFO changes.
+Persistent outliers request an eight-tile corridor connection, retaining their
+membership and final slot. Rejoin before either movement snapshot, preventing
+an ordinary step and a group step in the same tick. Detached recovery uses the
+ordinary bounded friendly squeeze rule after sustained obstruction, with the
+same hard distances and terrain vetoes.
+
+Ordinary occupied-arrival replacement must skip grouped recovery movers: its
+new move order would release the member and discard the original final slot.
+A reserved recovery endpoint stays under corridor rejoin/recovery ownership.
+The full late-game replay now checks the instruction kernel's unchanged 1,200
+formation-member population, alongside the one-/four-worker equality check.
+
+This milestone pins river arrival at 6,035 ticks (4,742 ideal), maximum stall
+26 and five oscillations; General arrival at 40,838 ticks (34,440 ideal), maximum
+stall 149 and 37 oscillations. Every unit reaches its exact slot without a speed
+or membership violation. The next milestone retains the three-second/zero-
+oscillation target; these two deficits are explicit regression pins, not a
+claim of complete movement acceptance. Forest, town and the other terrain
+cases retain the full strict assertions. Synthetic cases do not qualify RTS
+performance on dedicated hardware.
+
+The cohesion floor is 7/8 of the slowest member's pace. The former 3/4 floor
+alone could exceed the 1.3x arrival target. Current output pins are refreshed
+with `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation
+AOE_NATIVE_TEST_FILTER='test(group_baseline::)'`: earlier arrivals and contact
+change the timestamps and battle census. Sight, hit reach, participation,
+spacing, no-overlap and work ceilings are unchanged.
