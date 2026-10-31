@@ -78,7 +78,6 @@ test("reloading a running skirmish resumes it as the controller", async ({
   );
   await expect(page.locator("#minimap")).toHaveAttribute("data-map-hash", hash);
   await expect(page.locator("#connection")).toHaveText("connected");
-  await expect(page.locator("#observer-label")).toBeHidden();
   expect(
     await page.evaluate(() => localStorage.getItem("aoeworld.resume-token")),
   ).toBe(token);
@@ -142,13 +141,11 @@ test("a new tab resumes the same human seat after the original tab closes", asyn
   );
   expect(token).toMatch(/^[0-9a-f]{48}$/i);
   await page.close();
-  // Exercise both a fresh tab (no sessionStorage) and the expired seat hold.
-  await new Promise((resolve) => setTimeout(resolve, 31_000));
+  // A fresh tab (no sessionStorage) resumes the seat at once: nothing is held.
   const replacement = await context.newPage();
   await gameAssets(replacement);
   await replacement.goto("/");
   await expect(replacement.locator("#connection")).toHaveText("connected");
-  await expect(replacement.locator("#observer-label")).toBeHidden();
   await expect(replacement.locator("#start-sequence")).toBeHidden({
     timeout: 60_000,
   });
@@ -163,26 +160,32 @@ test("a new tab resumes the same human seat after the original tab closes", asyn
   ).toBe(token);
 });
 
-test("a closed tab's credential cannot claim an unrelated later world", async ({
+test("a closed tab's credential is replaced, not reused, by an unrelated later world", async ({
   page,
   context,
   request,
 }) => {
   await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
-  expect(
-    await page.evaluate(() => localStorage.getItem("aoeworld.resume-token")),
-  ).toMatch(/^[0-9a-f]{48}$/i);
+  const stale = await page.evaluate(() =>
+    localStorage.getItem("aoeworld.resume-token"),
+  );
+  expect(stale).toMatch(/^[0-9a-f]{48}$/i);
   await page.close();
   expect((await request.post("/maps/reset")).status()).toBe(204);
   const replacement = await context.newPage();
   await gameAssets(replacement);
   await replacement.goto("/?play=1");
   await expect(replacement.locator("#connection")).toHaveText("connected");
-  await expect(replacement.locator("#observer-label")).toBeVisible();
+  // The replacement world seats the page under its own credential.
+  await expect
+    .poll(() =>
+      replacement.evaluate(() => localStorage.getItem("aoeworld.resume-token")),
+    )
+    .not.toBe(stale);
   expect(
     await replacement.evaluate(() =>
       localStorage.getItem("aoeworld.resume-token"),
     ),
-  ).toBeNull();
+  ).toMatch(/^[0-9a-f]{48}$/i);
 });

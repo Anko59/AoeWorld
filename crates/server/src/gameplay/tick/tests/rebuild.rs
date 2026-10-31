@@ -232,27 +232,6 @@ async fn a_tick_skipped_for_an_over_limit_region_does_not_lose_buildings() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_changed_viewer_gets_the_full_building_view() {
-    let mut fixture = start().await;
-    let mut clients = vec![Buildings::new(); fixture.ids.len()];
-    settle(&mut fixture, &mut clients, 3).await;
-    // Session 2 now looks through player 0: its baselines are dropped.
-    fixture.viewers[2] = PlayerId(0);
-    fixture
-        .service
-        .sessions
-        .lock()
-        .await
-        .get_mut(&fixture.ids[2])
-        .unwrap()
-        .change_viewer(PlayerId(0));
-    clients[2].clear();
-    settle(&mut fixture, &mut clients, 3).await;
-    assert!(!clients[2].is_empty());
-    assert_converged(&fixture, &clients).await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn toggling_fog_rebuilds_every_buildings_baseline() {
     let mut fixture = start().await;
     let mut clients = vec![Buildings::new(); fixture.ids.len()];

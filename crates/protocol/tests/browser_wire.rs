@@ -284,7 +284,7 @@ fn browser_wildlife_fixture_matches_the_current_codec() {
             death_tick: None,
         }],
     };
-    let mut expected = vec![8, 172, 2, 0, 1];
+    let mut expected = vec![7, 172, 2, 0, 1];
     expected.extend(hex(include_str!("../../../browser/tests/wire/sheep.hex")));
     assert_wire(message, expected);
 }

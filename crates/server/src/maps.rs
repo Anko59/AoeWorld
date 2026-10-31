@@ -53,18 +53,18 @@ pub(crate) fn controller_token(headers: &HeaderMap) -> Option<ResumeToken> {
     Some(ResumeToken(bytes))
 }
 
-async fn require_controller(
+async fn require_human_token(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<(), (StatusCode, String)> {
     let token = controller_token(headers).ok_or((
         StatusCode::FORBIDDEN,
-        "current gameplay controller authorization is required".to_owned(),
+        "a human player resume token is required".to_owned(),
     ))?;
     let gameplay = state.gameplay.read().await.clone();
-    gameplay.is_controller(token).await.then_some(()).ok_or((
+    gameplay.is_human_token(token).then_some(()).ok_or((
         StatusCode::FORBIDDEN,
-        "current gameplay controller authorization is required".to_owned(),
+        "a human player resume token is required".to_owned(),
     ))
 }
 
@@ -147,7 +147,7 @@ pub(super) async fn activate(
     headers: HeaderMap,
     Json(request): Json<MapRequest>,
 ) -> Result<Json<Activation>, (StatusCode, String)> {
-    require_controller(&state, &headers).await?;
+    require_human_token(&state, &headers).await?;
     let map_package_directory = state.map_package_directory.clone();
     let package = tokio::task::spawn_blocking(move || {
         let package = MapPackage::new(MAP_SCHEMA_VERSION, request, Vec::new())
@@ -172,7 +172,7 @@ pub(super) async fn activate_package(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Activation>, (StatusCode, String)> {
-    require_controller(&state, &headers).await?;
+    require_human_token(&state, &headers).await?;
     let package = state
         .map_packages
         .read()
@@ -413,7 +413,7 @@ pub(super) async fn chunk(
         return Ok(Json(chunk));
     }
     let human = match controller_token(&headers) {
-        Some(token) => gameplay.is_controller(token).await,
+        Some(token) => gameplay.is_human_token(token),
         None => false,
     };
     let package = state

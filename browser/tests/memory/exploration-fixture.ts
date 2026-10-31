@@ -31,7 +31,7 @@ export async function explorationFixture(
         socket.send(
           Buffer.from([
             0,
-            2,
+            4,
             1,
             1,
             ...Array<number>(32).fill(2),
@@ -40,9 +40,8 @@ export async function explorationFixture(
             ...uint(4096),
             ...uint(1024),
             20,
-            0,
             1,
-            0,
+            ...Array<number>(24).fill(1),
           ]),
         );
         return;
@@ -57,7 +56,7 @@ export async function explorationFixture(
       socket.send(Buffer.from([1, ...revision, 0, 0, 0, 0]));
       socket.send(disabledFog(revision));
       // Empty authoritative depletion reset: all fixture trees start intact.
-      socket.send(Buffer.from([8, ...revision, 0, 0, 0]));
+      socket.send(Buffer.from([7, ...revision, 0, 0, 0]));
     });
   });
   await page.route(`**/maps/${hash}/height-bounds`, (route) =>

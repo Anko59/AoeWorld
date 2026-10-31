@@ -96,7 +96,7 @@ fn rejection_sentences_only_explain_a_resource_for_invalid_destinations() {
         "Cannot move there: a tree is in the way."
     );
     for reason in [
-        RejectedNotController,
+        RejectedDisconnected,
         RejectedUnknownEntity,
         RejectedSequence,
         RejectedRateLimited,

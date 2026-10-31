@@ -1,7 +1,7 @@
 // Setup owns map preparation. Uncertain acceptance keeps the ORIGINAL key.
 // The stated recovery bound (web/start/README.md): a stalled probe releases setup.
 const RECOVERY_TIMEOUT_MS = 10_000;
-export function initMapJobs({ readJson, controllerHeaders, activate, onStart, onProgress, onActivated, onError, onSettled, onCancelable, onCancelled, onRecovering }) {
+export function initMapJobs({ readJson, tokenHeaders, activate, onStart, onProgress, onActivated, onError, onSettled, onCancelable, onCancelled, onRecovering }) {
   const storageKey = 'aoeworld.map-creation-job';
   let acceptedId = null, submission = null, busy = false, cancelable = false, recovered = false;
   try {
@@ -24,7 +24,7 @@ export function initMapJobs({ readJson, controllerHeaders, activate, onStart, on
     submission ??= { key: Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join(''), request };
     persist();
     const response = await fetch('/maps/jobs', { method: 'POST', headers: {
-      'Content-Type': 'application/json', 'Idempotency-Key': submission.key, ...controllerHeaders(),
+      'Content-Type': 'application/json', 'Idempotency-Key': submission.key, ...tokenHeaders(),
     }, body: JSON.stringify(submission.request), signal });
     // A lost acknowledgement or a 5xx is ambiguous. Only a definitive refusal
     // permits a fresh key; reloading must never manufacture a second job.
@@ -58,7 +58,7 @@ export function initMapJobs({ readJson, controllerHeaders, activate, onStart, on
     }
   };
   const activatePackage = async hash => {
-    const response = await fetch(`/maps/${encodeURIComponent(hash)}`, { method: 'POST', headers: controllerHeaders() });
+    const response = await fetch(`/maps/${encodeURIComponent(hash)}`, { method: 'POST', headers: tokenHeaders() });
     if (response.status >= 400 && response.status < 500) remember(null);
     return readJson(response);
   };
@@ -111,7 +111,7 @@ export function initMapJobs({ readJson, controllerHeaders, activate, onStart, on
     if (acceptedId === null || !cancelable) return;
     cancelable = false; controls();
     try {
-      await readJson(await fetch(`/maps/jobs/${acceptedId}/cancel`, { method: 'POST', headers: controllerHeaders() }));
+      await readJson(await fetch(`/maps/jobs/${acceptedId}/cancel`, { method: 'POST', headers: tokenHeaders() }));
       if (!busy) run(null);
     } catch (error) { cancelable = true; controls(); throw error; }
   };

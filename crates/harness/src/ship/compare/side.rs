@@ -1,5 +1,5 @@
 //! One side of a comparison: its build (or running app), one server per map it
-//! shows, and one spectator browser run per renderer of each map. A server
+//! shows, and one view-only browser run per renderer of each map. A server
 //! opens its map at start (AOE_OPEN_MAP_PACKAGE), so no session needs a lease.
 use super::{
     Run, Side,
@@ -156,7 +156,7 @@ pub(super) fn capture_side(
         url: urls.join(", "),
         packages: side.packages.display().to_string(),
         map_hashes: side.hashes.clone(),
-        controller_lease: "none: spectator sessions, no controller on either side".to_owned(),
+        orders: "none: view-only pages issue no orders on either side".to_owned(),
     };
     Ok((info, shots))
 }

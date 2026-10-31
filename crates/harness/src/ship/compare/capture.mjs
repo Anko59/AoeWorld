@@ -1,7 +1,7 @@
 // Captures the views of one side, one map and one renderer (plan.json, written
-// by `aoe-harness compare`). One browser page is a spectator of the one app at
+// by `aoe-harness compare`). One browser page is a view-only client of the one app at
 // plan.url, which has plan.map_hash open from its start (AOE_OPEN_MAP_PACKAGE):
-// no controller, no lease, no minimap clicks, no wheel. Each view is a camera
+// no orders, no minimap clicks, no wheel. Each view is a camera
 // fragment (`#x=…&y=…&zoom=…&renderer=…`, web/navigation.js). The page is polled
 // until the settle rule holds (same rule as settle.rs: nothing pending and the
 // frame unchanged for the window, 1.5 s to 4 s by frame time), or a chunk has

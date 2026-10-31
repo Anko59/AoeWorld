@@ -182,7 +182,7 @@ class Visibility:
 
 class CommandResult:
     ACCEPTED: CommandResult
-    REJECTED_NOT_CONTROLLER: CommandResult
+    REJECTED_DISCONNECTED: CommandResult
     REJECTED_UNKNOWN_ENTITY: CommandResult
     REJECTED_SEQUENCE: CommandResult
     REJECTED_RATE_LIMITED: CommandResult

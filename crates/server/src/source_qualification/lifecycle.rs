@@ -4,8 +4,7 @@ use crate::{GameplayService, PageResidency};
 use aoe_core::TileRect;
 use aoe_map::{EnvironmentPageProvider, MapPackage, ResourceNode, ResourceOverlaySnapshot};
 use aoe_protocol::{
-    GameplayClientMessage, GameplayRole, GameplayServerMessage, ResourceAmount, ResourceState,
-    ResumeToken,
+    GameplayClientMessage, GameplayServerMessage, ResourceAmount, ResourceState, ResumeToken,
 };
 use std::{path::Path, sync::Arc};
 
@@ -265,16 +264,10 @@ fn controller_resume_token(
     welcome: &GameplayServerMessage,
     stage: &'static str,
 ) -> Result<ResumeToken, SourceQualificationError> {
-    let GameplayServerMessage::Welcome {
-        role, resume_token, ..
-    } = welcome
-    else {
+    let GameplayServerMessage::Welcome { resume_token, .. } = welcome else {
         return Err(lifecycle_mismatch(stage));
     };
-    if *role != GameplayRole::Controller {
-        return Err(lifecycle_mismatch(stage));
-    }
-    resume_token.ok_or_else(|| lifecycle_mismatch(stage))
+    Ok(*resume_token)
 }
 
 fn welcome_world_id(welcome: &GameplayServerMessage) -> Result<u64, SourceQualificationError> {

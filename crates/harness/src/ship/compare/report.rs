@@ -108,8 +108,8 @@ pub(crate) struct SideInfo {
     pub(crate) url: String,
     pub(crate) packages: String,
     pub(crate) map_hashes: BTreeMap<String, String>,
-    /// The session that captured the views: a spectator, never a controller.
-    pub(crate) controller_lease: String,
+    /// What the capturing page did: it only opened camera fragments.
+    pub(crate) orders: String,
 }
 
 #[derive(Debug, Serialize)]

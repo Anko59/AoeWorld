@@ -143,7 +143,7 @@ fn orders(world: &mut GameWorld, tick: u32, homes: &[TileCoord]) {
     }
 }
 
-/// A service with one session per seat plus a spectator, not yet ticked.
+/// A service with one session per seat plus a second page of the first seat, not yet ticked.
 pub(super) struct Fixture {
     pub service: GameplayService,
     pub ids: Vec<u64>,
@@ -198,7 +198,7 @@ pub(super) async fn start() -> Fixture {
     }
 }
 
-/// Runs `ticks` ticks of the match with one session per seat plus a spectator.
+/// Runs `ticks` ticks of the match with one session per seat plus a second page of the first seat.
 /// `observe` sees each session's new messages together with the world they
 /// were built from, before the next tick can change it.
 pub(super) async fn run(

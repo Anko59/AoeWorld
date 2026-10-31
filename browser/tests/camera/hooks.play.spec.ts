@@ -77,7 +77,7 @@ test("camera fragment parser preserves decimals, invalid parts, and zoom limits"
   expect(parsed.hostile.elapsed).toBeLessThan(250);
 });
 
-test("spectator camera fragments settle on controller-opened terrain and pan without history writes", async ({
+test("a second page's camera fragments settle on terrain the first page opened and pan without history writes", async ({
   page,
   browser,
   request,
@@ -124,34 +124,32 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
     .toBeTruthy();
   const context = await browser.newContext();
   try {
-    const spectator = await context.newPage();
-    await gameAssets(spectator, true);
+    const second = await context.newPage();
+    await gameAssets(second, true);
     const url = new URL(
       "/#x=256.25&y=256.5&zoom=1.75&renderer=canvas",
       page.url(),
     ).href;
-    await spectator.goto(url);
-    await expect(spectator.locator("#connection")).toHaveText("connected");
-    await expect(spectator.locator("#minimap")).toHaveAttribute(
+    await second.goto(url);
+    await expect(second.locator("#connection")).toHaveText("connected");
+    await expect(second.locator("#minimap")).toHaveAttribute(
       "data-map-hash",
       activation.content_hash,
     );
-    await expect(spectator.locator("#playground")).toHaveAttribute(
+    await expect(second.locator("#playground")).toHaveAttribute(
       "data-renderer",
       "canvas2d",
     );
-    await camera(spectator, "256.25", "256.5", "1.75");
-    await expect(spectator.locator("#scene")).toHaveAttribute(
+    await camera(second, "256.25", "256.5", "1.75");
+    await expect(second.locator("#scene")).toHaveAttribute(
       "data-chunks-pending",
       "0",
     );
-    await expect(spectator.locator("#scene")).toHaveAttribute(
+    await expect(second.locator("#scene")).toHaveAttribute(
       "data-chunks-failed",
       "0",
     );
-    const before = PNG.sync.read(
-      await spectator.locator("#scene").screenshot(),
-    );
+    const before = PNG.sync.read(await second.locator("#scene").screenshot());
     // Sample clear terrain to the right of the starting kit. Its current opaque
     // tree fixtures cover the old central patch; keep the same area and floor
     // so neither blank background nor those sprites can satisfy this check.
@@ -170,61 +168,60 @@ test("spectator camera fragments settle on controller-opened terrain and pan wit
       }
     expect(colors).toEqual(new Set(["457835", "2a5225"]));
     expect(terrainPixels).toBeGreaterThan(1000);
-    await expect(spectator.locator("#terrain-cache")).toHaveText(
+    await expect(second.locator("#terrain-cache")).toHaveText(
       /\([1-9]\d* \/ 512 chunks\)/,
     );
     const frame = Number(
-      await spectator.locator("#scene").getAttribute("data-frame"),
+      await second.locator("#scene").getAttribute("data-frame"),
     );
-    await spectator.evaluate(() => {
+    await second.evaluate(() => {
       location.hash = "x=300.5&y=280.25&zoom=2&renderer=webgpu";
     });
-    await camera(spectator, "300.5", "280.25", "2");
-    await expect(spectator.locator("#playground")).toHaveAttribute(
+    await camera(second, "300.5", "280.25", "2");
+    await expect(second.locator("#playground")).toHaveAttribute(
       "data-renderer",
       "canvas2d",
     );
-    await expect(spectator.locator("#scene")).toHaveAttribute(
+    await expect(second.locator("#scene")).toHaveAttribute(
       "data-chunks-pending",
       "0",
     );
     await expect
       .poll(async () =>
-        Number(await spectator.locator("#scene").getAttribute("data-frame")),
+        Number(await second.locator("#scene").getAttribute("data-frame")),
       )
       .toBeGreaterThan(frame);
-    await spectator.evaluate(() => {
+    await second.evaluate(() => {
       location.hash = "x=bad&y=290.5&zoom=NaN";
     });
-    await camera(spectator, "300.5", "290.5", "2");
-    await spectator.mouse.move(600, 300);
-    await spectator.keyboard.press("ArrowRight");
+    await camera(second, "300.5", "290.5", "2");
+    await second.mouse.move(600, 300);
+    await second.keyboard.press("ArrowRight");
     await expect
       .poll(async () =>
-        Number(
-          await spectator.locator("#minimap").getAttribute("data-camera-x"),
-        ),
+        Number(await second.locator("#minimap").getAttribute("data-camera-x")),
       )
       .toBeGreaterThan(300.5);
-    expect(new URL(spectator.url()).hash).toBe("#x=bad&y=290.5&zoom=NaN");
-    await expect(spectator.locator("#scene")).toHaveAttribute(
+    expect(new URL(second.url()).hash).toBe("#x=bad&y=290.5&zoom=NaN");
+    await expect(second.locator("#scene")).toHaveAttribute(
       "data-chunks-pending",
       "0",
     );
-    // The spectator gets no lease token, yet its map raster comes from the opened package.
+    // The second page is seated too and holds its own token; a request without
+    // any token is still refused, and its map raster comes from the opened package.
     expect(
-      await spectator.evaluate(() =>
+      await second.evaluate(() =>
         localStorage.getItem("aoeworld.resume-token"),
       ),
-    ).toBeNull();
+    ).toMatch(/^[0-9a-f]{48}$/i);
     expect(
-      await spectator.evaluate(
+      await second.evaluate(
         async (hash) =>
           (await fetch(`/maps/${hash}`, { method: "POST" })).status,
         hash,
       ),
     ).toBe(403);
-    await expect(spectator.locator("#minimap-terrain")).toHaveAttribute(
+    await expect(second.locator("#minimap-terrain")).toHaveAttribute(
       "href",
       /^data:image/,
     );

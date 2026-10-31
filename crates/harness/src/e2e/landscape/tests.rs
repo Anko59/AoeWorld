@@ -196,7 +196,7 @@ fn production_runtime_activates_the_same_persisted_provider_twice() {
             version: GAMEPLAY_VERSION, resume_token: None,
         }).unwrap().into())).await.unwrap();
         let Message::Binary(bytes) = socket.next().await.unwrap().unwrap() else { panic!("welcome not binary") };
-        let GameplayServerMessage::Welcome { resume_token: Some(token), .. } = decode_gameplay_server(&bytes).unwrap() else { panic!("controller token absent") };
+        let GameplayServerMessage::Welcome { resume_token: token, .. } = decode_gameplay_server(&bytes).unwrap() else { panic!("welcome absent") };
         let token: String = token.0.iter().map(|byte| format!("{byte:02x}")).collect();
             let request = format!("POST /maps/{} HTTP/1.1\r\nHost: localhost\r\nX-AoeWorld-Controller-Token: {token}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", fixture.hash);
             let reply = tokio::task::spawn_blocking(move || http(address, request)).await.unwrap();

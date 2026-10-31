@@ -399,6 +399,15 @@ fn the_e2e_variables_the_harness_reads_reach_both_containers() {
     }
 }
 
+#[test]
+fn the_browser_port_range_reaches_wasm_runner_containers() {
+    let files = make_files(&repository());
+    for target in ["test-wasm-steps", "test-wasm-focused-steps"] {
+        let steps = recipe(&files, target).expect("WASM recipe").join("\n");
+        assert!(steps.contains("-e AOE_E2E_PORT_RANGE"), "{target}: {steps}");
+    }
+}
+
 /// `make help` echoes each line inside single quotes, so an apostrophe in the text ends the
 /// string and the shell fails with "Unterminated quoted string". Every echo must close its quote.
 #[test]

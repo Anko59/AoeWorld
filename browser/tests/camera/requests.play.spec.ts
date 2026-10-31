@@ -51,7 +51,7 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
   const center = unsigned((8192 * 1024 + 512) * 2);
   const welcome = Buffer.from([
     0,
-    2,
+    4,
     1,
     1,
     ...Array<number>(32).fill(2),
@@ -60,9 +60,8 @@ test("camera demand aborts a full old window without backoff or exceeding 64", a
     ...unsigned(32768),
     ...unsigned(1024),
     20,
-    0,
     1,
-    0,
+    ...Array<number>(24).fill(1),
   ]);
   await page.routeWebSocket("**/game/ws", (socket) => {
     socket.onMessage((message) => {

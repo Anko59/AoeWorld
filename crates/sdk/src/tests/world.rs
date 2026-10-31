@@ -54,9 +54,8 @@ fn welcome() -> M {
         height_tiles: 200,
         coordinate_precision: 1024,
         tick_hz: 20,
-        role: aoe_protocol::GameplayRole::Controller,
         primary_unit_id: EntityId(1),
-        resume_token: None,
+        resume_token: aoe_protocol::ResumeToken([1; 24]),
     }
 }
 

@@ -3,6 +3,7 @@
     "binary": "/ms-playwright/chromium-1248/chrome-linux64/chrome",
     "args": [
       "--no-sandbox",
+      "--remote-debugging-pipe",
       "--disable-dev-shm-usage",
       "--use-angle=swiftshader",
       "--enable-unsafe-swiftshader",

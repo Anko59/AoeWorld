@@ -244,14 +244,14 @@ test-exhaustive-steps:
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- test-exhaustive
 
 test-wasm-steps:
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_E2E_PORT_RANGE -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm
 
 .PHONY: test-wasm-focused test-wasm-focused-steps
 test-wasm-focused: disk-precheck browser-tools orchestrator-tools slot-bootstrap
 	@$(SLOT_RUN) test-wasm-focused -- make --no-print-directory test-wasm-focused-steps
 
 test-wasm-focused-steps:
-	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_WASM_TEST_PACKAGE -e AOE_WASM_TEST_FILTER $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm-focused
+	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --network host --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_WASM_TEST_PACKAGE -e AOE_WASM_TEST_FILTER $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -e AOE_E2E_PORT_RANGE -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- test-wasm-focused
 
 # Heavy work outside the registry: each target takes a slot under its own name, so `aoe-harness slot`
 # queues it like a gate. The steps run inside the slot; nested calls inherit it.

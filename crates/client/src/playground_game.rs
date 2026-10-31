@@ -1,7 +1,6 @@
 use aoe_core::{Camera, EntityId, ScreenPoint, TileRect, WorldConfig};
 use aoe_protocol::{
-    GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayUnitState, ResumeToken,
-    encode_gameplay_client,
+    GAMEPLAY_VERSION, GameplayClientMessage, GameplayUnitState, ResumeToken, encode_gameplay_client,
 };
 use aoe_rendering::{GameArt, GameRenderer, SceneCamera};
 use map::CachedChunk;
@@ -51,7 +50,6 @@ pub(super) struct Client {
     pub capture: capture::Capture,
     pub config: WorldConfig,
     pub primary: Option<EntityId>,
-    pub role: Option<GameplayRole>,
     pub map_content_hash: Option<[u8; 32]>,
     pub surface_fixture: bool,
     pub focus_map_hash: Option<[u8; 32]>,
@@ -126,7 +124,7 @@ fn requested_region(client: &Client) -> TileRect {
 }
 
 pub(super) fn subscribe(client: &mut Client) {
-    if client.role.is_none()
+    if client.primary.is_none()
         || client
             .socket
             .as_ref()

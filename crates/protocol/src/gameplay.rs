@@ -27,7 +27,7 @@ pub use projectiles::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 3;
+pub const VERSION: u16 = 4;
 /// One gameplay frame: room for the largest combined tick (16,384 units and
 /// 16,384 buildings with full fifteen-unit training queues).
 pub const MAX_MESSAGE: usize = 4 * 1_048_576;
@@ -39,12 +39,6 @@ pub const MAX_ACK_HISTORY: usize = 64;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ResumeToken(pub [u8; 24]);
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Role {
-    Controller,
-    Spectator,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct UnitState {
@@ -116,7 +110,8 @@ pub use commands::ClientMessage;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CommandResult {
     Accepted,
-    RejectedNotController,
+    /// The client could not send this order because its transport disconnected.
+    RejectedDisconnected,
     RejectedUnknownEntity,
     RejectedSequence,
     RejectedRateLimited,
@@ -184,9 +179,8 @@ pub enum ServerMessage {
         height_tiles: i32,
         coordinate_precision: u16,
         tick_hz: u32,
-        role: Role,
         primary_unit_id: EntityId,
-        resume_token: Option<ResumeToken>,
+        resume_token: ResumeToken,
     },
     Snapshot {
         revision: u64,
@@ -216,11 +210,6 @@ pub enum ServerMessage {
         sequence: u64,
         result: CommandResult,
         applied_tick: Tick,
-    },
-    RoleChange {
-        role: Role,
-        primary_unit_id: EntityId,
-        resume_token: Option<ResumeToken>,
     },
     WorldReset {
         world_id: u64,

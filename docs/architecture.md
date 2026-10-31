@@ -6,11 +6,11 @@ occupied 32×32 chunks, and sends bounded snapshots and tick deltas for each
 client's tile subscription. The gameplay protocol is independently versioned
 from the diagnostic protocol. A match hosts several seats ([AI SDK](ai-sdk.md)):
 each slot owns one player and is reached through its own opaque token (a plain
-`Hello` resumes with a token or claims the first free human slot, `JoinSlot`
-authenticates for exactly one slot), and each controller receives only its
-player's fog-filtered view. Other connections spectate the first slot, and a
-disconnected human controller has a 30-second lease before the oldest spectator
-is promoted. Move orders are
+`Hello` resumes with a token or takes a human slot, `JoinSlot`
+authenticates for exactly one slot), and each connection receives only its
+slot player's fog-filtered view. Any number of pages may play one human slot at
+once: each has its own order sequence and rate limit, and there is no lease,
+reservation or spectator role. Move orders are
 canonicalized to the center of a valid tile; fixed-point interpolation carries
 units continuously between those lattice waypoints.
 

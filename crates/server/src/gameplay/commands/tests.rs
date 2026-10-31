@@ -3,6 +3,9 @@ use aoe_core::Seed;
 use aoe_protocol::BuildingKind;
 use tokio::sync::mpsc;
 
+#[path = "tests/admission.rs"]
+mod admission;
+
 #[test]
 fn garrison_orders_and_occupant_views_share_ownership_and_fog_rules() {
     use aoe_core::PlayerId;
@@ -223,7 +226,7 @@ fn build_orders_report_unexplored_placement_without_mutating_the_world() {
 }
 
 #[tokio::test]
-async fn queue_move_rejects_unknown_and_non_controller_sessions_then_deduplicates_sequences() {
+async fn queue_move_rejects_unknown_sessions_then_deduplicates_sequences() {
     let service = GameplayService::new(Seed(1));
     let (controller_tx, mut controller_rx) = mpsc::channel(MAX_ACK_HISTORY + 16);
     let (controller_id, _) = service.register(None, controller_tx).await;
@@ -236,18 +239,16 @@ async fn queue_move_rejects_unknown_and_non_controller_sessions_then_deduplicate
         )
         .await;
     assert!(controller_rx.try_recv().is_err());
-    let (spectator_tx, mut spectator_rx) = mpsc::channel(8);
-    let (spectator_id, _) = service.register(None, spectator_tx).await;
+
+    // A second page of the same seat has its own sequence space and is
+    // never refused for sharing the seat.
+    let (second_tx, mut second_rx) = mpsc::channel(8);
+    let (second_id, _) = service.register(None, second_tx).await;
     service
-        .queue_move(spectator_id, 1, EntityId(0), WorldPosition::default())
+        .queue_move(second_id, 1, EntityId(0), WorldPosition::default())
         .await;
-    assert!(matches!(
-        spectator_rx.try_recv().expect("spectator rejection"),
-        GameplayServerMessage::CommandAck {
-            result: CommandResult::RejectedNotController,
-            ..
-        }
-    ));
+    assert!(second_rx.try_recv().is_err());
+
     service
         .queue_move(controller_id, 1, EntityId(0), WorldPosition::default())
         .await;

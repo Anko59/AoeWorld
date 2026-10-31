@@ -289,7 +289,7 @@ test("capture the native Feudal economy and prepare the live showcase", async ({
     ),
   );
   await page.close();
-  // A fresh service has no controller lease: the recorder gets the first one.
+  // Reset to a fresh service for the recorder.
   expect(
     (
       await request.post(`${config.url}maps/reset?scenario=feudal-economy`)

@@ -1,4 +1,5 @@
-use super::{base_urls, port_range, reserve_port, reserve_ports, select};
+use super::{base_urls, select};
+use crate::browser_ports::{port_range, reserve_port, reserve_ports};
 
 #[test]
 fn a_fleet_reserves_distinct_ports_before_starting_any_server() {

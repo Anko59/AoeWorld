@@ -60,17 +60,19 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// Rebased onto #573: avoidance, arrival slots and contact drop-off combine
 /// with gatherer reservations; sessions 1, 4 and 5 change (409/407/407 to
 /// 138/421/407 messages). Regenerated with the focused command above.
+/// Removing the unused RoleChange message shifts every later server message tag
+/// by one, so all six digests changed; counts and assertions are unchanged.
 /// General commander/army fields extend the current unit wire. Message counts
 /// and every workload, replay and visibility assertion stay unchanged.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 11844932792564418408),
+    (407, 6205794337568153004),
     // PR 10 legal work contact changes gathering and fog updates.
-    (187, 11019558540894674702),
-    (60, 2503450107005547018),
-    (176, 11250701468056754810),
+    (187, 16495370670290857238),
+    (60, 1780256642041405484),
+    (176, 13848062883790336040),
     // PR 10 legal contacts and unavailable land-work queues change this stream.
-    (420, 3637138109988008355),
-    (407, 9729438505887249003),
+    (420, 16572561531079986710),
+    (407, 2183301173389447027),
 ];
 
 #[tokio::test(flavor = "multi_thread")]

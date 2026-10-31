@@ -123,9 +123,8 @@ fn gameplay_messages_round_trip_independently_of_diagnostic_protocol() {
         height_tiles: 16_384,
         coordinate_precision: 1_024,
         tick_hz: 20,
-        role: Role::Spectator,
         primary_unit_id: EntityId(0),
-        resume_token: None,
+        resume_token: ResumeToken([7; 24]),
     };
     assert_eq!(
         decode_server(&encode_server(&welcome).unwrap()).unwrap(),

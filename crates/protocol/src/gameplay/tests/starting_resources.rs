@@ -20,7 +20,7 @@ fn starting_resource_identity_roundtrips_on_the_current_resource_wire() {
     // Current wire appends the snapshot-page option after resource changes.
     assert_eq!(
         encoded,
-        [6, 1, 0, 0, 1, 152, 128, 160, 131, 128, 20, 160, 6, 0]
+        [5, 1, 0, 0, 1, 152, 128, 160, 131, 128, 20, 160, 6, 0]
     );
     let mut invalid = message;
     let GameplayServerMessage::ResourceState(ref mut state) = invalid else {

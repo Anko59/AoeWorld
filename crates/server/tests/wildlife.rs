@@ -139,17 +139,11 @@ async fn wildlife_hunting_scenario_over_the_wire() {
         accepted && owned && dead && gathered && delivered,
         "accepted={accepted} owned={owned} dead={dead} gathered={gathered} delivered={delivered}; {log:?}"
     );
-    // Spectator and sequencing checks share the existing bounded command path.
+    // A second page orders through the same bounded command path.
     let (tx, mut observer) = mpsc::channel(16);
-    let (spectator, _) = service.register(None, tx).await;
-    service.queue_hunt(spectator, 1, vec![worker], sheep).await;
-    assert!(matches!(
-        drain(&mut observer)[0],
-        GameplayServerMessage::CommandAck {
-            result: CommandResult::RejectedNotController,
-            ..
-        }
-    ));
+    let (second, _) = service.register(None, tx).await;
+    service.queue_hunt(second, 1, vec![worker], sheep).await;
+    assert!(drain(&mut observer).is_empty());
     service.queue_hunt(id, 1, vec![EntityId(0)], sheep).await;
     assert!(matches!(
         drain(&mut rx)[0],
@@ -197,7 +191,7 @@ async fn wildlife_subscription_replaces_the_region_and_a_full_queue_keeps_the_co
     assert!(drain(&mut rx).iter().any(|m| matches!(m, GameplayServerMessage::WildlifeState { revision: 3, animals, .. } if animals.is_empty())));
 
     // One slot holds the snapshot, but not the animal replacement: the
-    // controller keeps its lease and the replacement waits for room.
+    // page keeps its seat and the replacement waits for room.
     let service = GameplayService::new(Seed(1));
     let (tx, _blocked) = mpsc::channel(1);
     let (id, welcome) = service.register(None, tx).await;
@@ -209,13 +203,13 @@ async fn wildlife_subscription_replaces_the_region_and_a_full_queue_keeps_the_co
         )
         .await;
     let GameplayServerMessage::Welcome {
-        resume_token: Some(token),
+        resume_token: token,
         ..
     } = welcome
     else {
-        panic!("controller token");
+        panic!("welcome");
     };
-    assert!(service.is_controller(token).await);
+    assert!(service.is_human_token(token));
     service
         .queue_hunt(id, 1, vec![EntityId(2)], EntityId(5))
         .await;

@@ -1,6 +1,6 @@
 use super::*;
 use aoe_core::{EntityId, PlayerId, Tick};
-use aoe_protocol::{GameplayRole, GameplayServerMessage, GameplayUnitState, UnitTask};
+use aoe_protocol::{GameplayServerMessage, GameplayUnitState, UnitTask};
 
 fn unit(id: u32, kind: UnitKind, tile: TileCoord) -> GameplayUnitState {
     GameplayUnitState {
@@ -41,9 +41,8 @@ fn world() -> World {
         height_tiles: 900,
         coordinate_precision: 1024,
         tick_hz: 20,
-        role: GameplayRole::Controller,
         primary_unit_id: EntityId(1),
-        resume_token: None,
+        resume_token: aoe_protocol::ResumeToken([1; 24]),
     };
     let mut world = World::from_welcome(&welcome).unwrap();
     world.me = Some(PlayerId(0));

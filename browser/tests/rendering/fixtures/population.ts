@@ -44,7 +44,7 @@ export async function populationFixture(page: Page) {
         socket.send(
           Buffer.from([
             0,
-            2,
+            4,
             1,
             0,
             0,
@@ -53,8 +53,7 @@ export async function populationFixture(page: Page) {
             ...uint(1024),
             20,
             0,
-            0,
-            0,
+            ...Array<number>(24).fill(1),
           ]),
         );
       if (bytes[0] !== 1) return;

@@ -1,5 +1,5 @@
 //! The wasm-bindgen-test suites: one table for `make test-wasm` and the duel's focused check.
-use super::{CARGO_DEADLINE, Result, runner_environment, start_driver, unused_port};
+use super::{CARGO_DEADLINE, Result, browser_addresses, runner_environment, start_driver};
 use crate::process::{Cancellation, CaptureExit, capture_in};
 use std::path::Path;
 
@@ -71,7 +71,7 @@ pub(crate) fn run_selected() -> Result<()> {
     let filter = std::env::var("AOE_WASM_TEST_FILTER")?;
     let arguments = focused_arguments(&package, &filter)?;
     let root = std::env::current_dir()?.canonicalize()?;
-    let port = unused_port()?;
+    let (port, address) = browser_addresses()?;
     let _driver = start_driver(port)?;
     let remote = format!("http://127.0.0.1:{port}/");
     let capabilities = root.join("browser/webdriver.json");
@@ -82,7 +82,7 @@ pub(crate) fn run_selected() -> Result<()> {
     crate::process::run_with_env(
         "cargo",
         &arguments,
-        &runner_environment(&remote, capabilities),
+        &runner_environment(&remote, capabilities, &address),
         CARGO_DEADLINE,
     )?;
     Ok(())
@@ -102,14 +102,14 @@ pub(crate) fn run_focused(
     packages: &[String],
     target_dir: Option<&Path>,
 ) -> Result<Vec<SuiteRun>> {
-    let port = unused_port()?;
+    let (port, address) = browser_addresses()?;
     let _driver = start_driver(port)?;
     let remote = format!("http://127.0.0.1:{port}/");
     let capabilities = root.join("browser/webdriver.json");
     let capabilities = capabilities
         .to_str()
         .ok_or("non-UTF-8 WebDriver configuration path")?;
-    let mut environment = runner_environment(&remote, capabilities).to_vec();
+    let mut environment = runner_environment(&remote, capabilities, &address).to_vec();
     let target_dir = target_dir.map(|p| p.to_string_lossy().into_owned());
     if let Some(dir) = &target_dir {
         environment.push(("CARGO_TARGET_DIR", dir));

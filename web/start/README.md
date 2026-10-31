@@ -58,18 +58,16 @@ placed n/N, AI players seated n/M. Only then does the usual terrain wait
 start. Cancel and Quit to Main Menu call `POST /skirmish/stop`, which ends
 the AI processes; a new game or any other map replaces them too.
 
-**Returning resumes the match.** A tab holding a controller resume token (local
+**Returning resumes the match.** A tab holding a resume token (local
 storage, shared by tabs on this origin) first asks `GET /skirmish` before choosing
 the cinematic or the menu. When the server reports phase `ready`, the page skips
 both and opens the loading screen ("Returning to your game") on the usual
 terrain wait for that `content_hash`, then centres the Town Center. The game's
-socket sends the same token, so the server gives the tab its human seat back
-(the seat is reserved for 30 s after a disconnect). A closed tab can be replaced
-after that hold too, if nobody else took the seat. An unrelated world's token
-cannot claim a human seat or gain one through spectator promotion. The AI players keep playing
+socket sends the same token, so the server gives the tab its human seat back,
+whether or not another page sits in it. An unrelated world's token is replaced
+by a fresh one for this world. The AI players keep playing
 throughout: the server stops them only after 5 minutes with nobody in the human
-seat. If this tab reconnects as an observer, or no match is running, the page
-falls back to the cinematic or menu as usual.
+seat. If no match is running, the page falls back to the cinematic or menu as usual.
 
 The terrain wait has no wall-clock failure deadline: a ready, connected match
 keeps loading under CPU pressure. The scene's pending chunk count is shown as

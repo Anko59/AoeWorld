@@ -260,9 +260,11 @@ with its own copy of the map store, and gives the browser container their URLs
 in `AOE_BASE_URLS`. Set `AOE_E2E_PORT_RANGE=8200-8209` to restrict those host
 listeners to an inclusive range; occupied ports are skipped, and exhaustion
 fails without falling back to another port. Unset, the OS chooses free ports.
+The same setting bounds the WASM test HTTP server and WebDriver; browser
+debugging uses a pipe.
 Playwright runs that many workers; the fixture in
 `browser/server.ts` points a test at the server of its `parallelIndex`, so no
-two workers share a controller lease or server-wide state. Every spec imports
+two workers share server-wide state. Every spec imports
 `test` from that file, not from `@playwright/test`. `--shard` and workers
 combine: each shard runs its tests on all workers. The coverage run keeps one
 instrumented server and one worker (`AOE_E2E_WORKERS` above 1 is refused with

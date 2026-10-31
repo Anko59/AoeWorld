@@ -77,7 +77,7 @@ async fn fixture() -> (
         .unwrap();
     let service = GameplayService::from_world(world, scout, None, None);
     let (tx, _) = tokio::sync::mpsc::channel(64);
-    service.register(None, tx).await; // Keep a controller so the tested session spectates.
+    service.register(None, tx).await; // Keep another page connected to the same human seat.
     let (tx, rx) = tokio::sync::mpsc::channel(64);
     let (id, _) = service.register(None, tx).await;
     (service, id, rx)

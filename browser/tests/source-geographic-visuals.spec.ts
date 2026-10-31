@@ -74,30 +74,11 @@ test("source-backed water and high-relief maps render and remain navigable", asy
     });
   }
 
-  // A second anonymous context is a spectator while the controller lease is
-  // held. Hand this test's controller session to the Canvas context, using
-  // the same resume mechanism as an ordinary reconnect.
-  const origin = new URL(page.url()).origin;
-  const resumeToken = await page.evaluate(() =>
-    localStorage.getItem("aoeworld.resume-token"),
-  );
-  if (!resumeToken)
-    throw new Error("visual controller has no resumable session");
+  // The Canvas page is a full player of its own: no session hand-off.
   await page.goto("about:blank");
   const canvasPage = await browser.newPage();
   try {
     await forceCanvas(canvasPage);
-    await canvasPage.addInitScript(
-      ({ origin, resumeToken }) => {
-        if (
-          location.origin === origin &&
-          !localStorage.getItem("aoeworld.resume-token")
-        ) {
-          localStorage.setItem("aoeworld.resume-token", resumeToken);
-        }
-      },
-      { origin, resumeToken },
-    );
     for (const item of [...playableCases, inputs.eviction_case]) {
       await test.step(`${item.location} Canvas`, async () => {
         await captureCase(canvasPage, item, "canvas2d");

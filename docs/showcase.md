@@ -200,9 +200,7 @@ requests. While a step waits, the recorder reads that state every second and
 prints each change as `showcase-phase page_state`, and a wait slower than a
 second as `showcase-phase op_ms`. A page that can no longer succeed fails the
 step at once instead of at its limit: the client did not start (no asset
-pack, `#unsupported`), the loading screen shows its error, or the page has only
-observed for 45 s because another tab or session holds the controller lease
-(the server frees a lost one after 30 s). `gather` frames the node in the
+pack, `#unsupported`) or the loading screen shows its error. `gather` frames the node in the
 middle of the canvas and clicks where the client reports it, once it is on
 screen, clear of the HUD and still; it never expects a computed pixel.
 Without a prepared map (`make dev`, no `AOE_PRESET_MAPS`) `start_skirmish`
@@ -233,7 +231,7 @@ which `steps.mjs` runs; its settle rule is the shared `compare/capture/readiness
 ## Play capture hooks
 
 Play camera links use `/#x=320.5&y=350.25&zoom=1.75`, on load and
-`hashchange`, for controllers and spectators. Each finite value applies
+`hashchange`. Each finite value applies
 independently, with the normal world and zoom clamps; panning never rewrites
 the fragment. Optional `renderer=webgpu|webgl2|canvas` chooses the initial
 backend, retaining capability fallbacks; later renderer changes are ignored.
@@ -251,7 +249,7 @@ successful presentation. While height metadata loads, pending stays nonzero.
 `local-assets/map-packages` before listening, using the controller's open-map
 operation. Unset preserves the default world; an invalid or unknown hash
 refuses startup with one plain error naming the hash and package directory.
-Terrain reads and camera navigation need no controller lease.
+Terrain reads and camera navigation need no token.
 
 ### Bookmarked browser scenes
 
@@ -287,8 +285,8 @@ successfully presented frame, then a quiet window clamped to 1.5–4 seconds
 from four times the median frame interval. Persistent chunk failures retain
 the 12 second retry allowance, and the view retains a 90 second timeout.
 The captured bookmark's map, camera and renderer are checked again in Rust
-before publication. Camera placement is a spectator operation; it needs no
-controller lease, minimap click or wheel. Explicit storyboard steps still run.
+before publication. Camera placement needs no
+minimap click or wheel. Explicit storyboard steps still run.
 Ordinary UI paths keep their existing interaction sequence, without a static
 camera settle requirement.
 
@@ -398,8 +396,8 @@ make compare COMPARE_BEFORE=http://127.0.0.1:8086/ COMPARE_AFTER=build
 Each side that is `build` (the default) gets its own server on a free port,
 started and stopped by the run, one per map that the selected views show. The
 server opens the map's stored package at start (`AOE_OPEN_MAP_PACKAGE`), and
-each view is captured by a spectator page opening the camera fragment of the
-bookmark. No session is a controller: there is no lease, no creator panel, no
+each view is captured by a page that only opens the camera fragment of the
+bookmark: it issues no order, no creator panel, no
 minimap click and no wheel event. `before` is `git archive` of the merge base
 with `origin/dev` (`COMPARE_BASE=<rev>` picks another commit) built in the tool
 image under `.cache/compare/` (cached per commit, cold build several minutes);

@@ -200,9 +200,6 @@ impl World {
             M::CommandAck {
                 sequence, result, ..
             } => events.push(Event::OrderResult { sequence, result }),
-            M::RoleChange {
-                primary_unit_id, ..
-            } => self.primary = primary_unit_id,
             M::WorldReset { .. } => events.push(Event::WorldReset),
             M::Error { code, message } => events.push(Event::ServerError { code, message }),
             _ => {}

@@ -76,7 +76,7 @@ limit (it is not a bad site) and stops placing buildings for
 | Animals in one message | 4,096 | same | message | cannot pass the world's 3,200 at 100 seats |
 | Resource changes in one message | 65,536 | same | message: under fog the viewer's known changes | larger snapshots use explicit offset/total pages |
 | Session order queue | 64 human, 256 AI | same | session | `RejectedQueueFull` (a real queue) |
-| Server order queue | max(1,024, sessions x 64) | same | server | `RejectedQueueFull` (a real queue) |
+| Server order queue | max(1,024, hosted seats x 64) | same | server | `RejectedQueueFull` (a real queue) |
 | Pending acks | 4,096 | same | session | session disconnected |
 | SDK buffered events / dying memory | 4,096 / 8,192 | same | client | oldest dropped / set cleared |
 | Stored-map resource snapshot | 4 MiB JSON | overlay entry bound x 64 + 1,024 bytes | stored maps only; matches never persist | oversized files rejected before replacement |

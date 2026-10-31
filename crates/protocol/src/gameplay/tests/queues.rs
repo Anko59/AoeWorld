@@ -50,7 +50,7 @@ fn queued_move_and_authoritative_markers_have_current_golden_wire() {
             destinations: vec![WorldPosition::new(512, 1536)],
         }],
     };
-    let wire = [11, 1, 3, 1, 2, 1, 128, 8, 128, 24];
+    let wire = [10, 1, 3, 1, 2, 1, 128, 8, 128, 24];
     assert_eq!(encode_server(&state).unwrap(), wire);
     assert_eq!(decode_server(&wire).unwrap(), state);
 }

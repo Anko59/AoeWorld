@@ -51,14 +51,12 @@ for (const resumed of [false, true]) {
       scene.dataset["chunksPending"] = "7";
       scene.dataset["chunksFailed"] = "0";
       const connection = document.getElementById("connection");
-      const observer = document.getElementById("observer-label");
-      if (!connection || !observer) throw new Error("connection UI missing");
+      if (!connection) throw new Error("connection UI missing");
       connection.textContent = "connected";
       const minimap = document.getElementById("minimap");
       if (!minimap) throw new Error("minimap missing");
       minimap.dataset["mapHash"] = "b".repeat(64);
       minimap.dataset["raster"] = "ready";
-      observer.hidden = true;
       if (resumed)
         start.resume({ phase: "ready", content_hash: "b".repeat(64) });
       else {

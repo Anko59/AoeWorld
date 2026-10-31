@@ -101,18 +101,6 @@ test("failures include console errors", async ({ page }) => {
   expect(error.message).toContain("boom from the client");
 });
 
-test("observing past the lease wait fails", async () => {
-  expect(state.lostLease(null, 1_000_000)).toBeNull();
-  const before = state.lostLease(
-    1_000_000,
-    1_000_000 + state.LEASE_WAIT_MS - 1,
-  );
-  expect(before).toBeNull();
-  expect(state.lostLease(1_000_000, 1_000_000 + state.LEASE_WAIT_MS)).toContain(
-    "controller lease",
-  );
-});
-
 test("loading server errors request a reconnect", async () => {
   const loading = {
     start_state: "loading",

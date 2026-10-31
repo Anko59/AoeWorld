@@ -17,10 +17,10 @@ fn resource_wire_fixture_and_full_limit_fit_the_frame_bound() {
     // The current wire appends the explicit snapshot-page option.
     assert_eq!(
         encode_gameplay_server(&message).unwrap(),
-        [6, 1, 0, 1, 1, 0, 0, 0]
+        [5, 1, 0, 1, 1, 0, 0, 0]
     );
     assert_eq!(
-        decode_gameplay_server(&[6, 1, 0, 1, 1, 0, 0, 0]).unwrap(),
+        decode_gameplay_server(&[5, 1, 0, 1, 1, 0, 0, 0]).unwrap(),
         message
     );
     let changes = (0..MAX_RESOURCE_CHANGES)

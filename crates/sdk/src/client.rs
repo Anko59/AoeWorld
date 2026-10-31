@@ -11,7 +11,7 @@ use crate::{
 use aoe_core::{TileCoord, TileRect};
 use aoe_map::CompactChunk;
 use aoe_protocol::{
-    GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage, ResumeToken,
+    GAMEPLAY_VERSION, GameplayClientMessage, GameplayServerMessage, ResumeToken,
     decode_gameplay_server, encode_gameplay_client,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -307,7 +307,7 @@ impl Drop for Client {
     }
 }
 
-/// Opens a socket and presents the slot token; returns the controller's Welcome.
+/// Opens a socket and presents the slot token; returns the Welcome.
 async fn join(
     endpoint: &Endpoint,
     token: ResumeToken,
@@ -334,16 +334,10 @@ async fn join(
             message: message.clone(),
         });
     }
-    if !matches!(
-        welcome,
-        GameplayServerMessage::Welcome {
-            role: GameplayRole::Controller,
-            ..
-        }
-    ) {
+    if !matches!(welcome, GameplayServerMessage::Welcome { .. }) {
         return Err(SdkError::Refused {
             code: 403,
-            message: "the server did not seat this token as a controller".to_owned(),
+            message: "the server did not seat this token".to_owned(),
         });
     }
     Ok((socket, welcome))

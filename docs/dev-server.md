@@ -84,7 +84,7 @@ skirmish can start.
 
 ## Limits
 
-One play server holds one controller lease, as any server does: two filmings
+One play server runs one world: two filmings
 at once need the explicit `SHOWCASE_BEFORE_URL` of another server. The revision
 a branch compares against is its merge base, so a branch that is behind
 `origin/dev` falls back to a private build. The footprint is the cargo target

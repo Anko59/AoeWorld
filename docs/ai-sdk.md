@@ -83,13 +83,14 @@ else. Every slot has a 192-bit token (48 hex digits) created with the match.
 * `JoinSlot { version, token }` (client message variant 19, appended after the
   browser's variants and pinned by a golden in `crates/protocol`) authenticates
   for exactly that slot. An unknown token is answered with `Error 403` and the
-  socket closes: it is never demoted to a spectator and never takes a free
-  human seat. Presenting the token again replaces the old connection (reconnect).
+  socket closes: it never takes a human seat. Presenting the token again
+  reconnects; the old connection ends on its own when its socket closes.
 * `Hello { version, resume_token }` is unchanged, so the browser keeps working:
-  with a slot token it resumes that slot, otherwise it claims the first **human**
-  slot nobody holds, otherwise it spectates (watching slot 0's view). AI slots
-  are never reachable without their token. A human slot whose controller stays
-  away 30 seconds goes to the oldest spectator under a fresh token.
+  with a slot token it resumes that slot, otherwise (including a token of another
+  world) it takes a **human** slot, preferring one nobody sits in. Several pages
+  may play the same human slot at once and all of them share its token. AI slots
+  are never reachable without their token. There is no controller lease and no
+  spectator role.
 * A controller's commands apply to its player only: an order naming another
   player's unit is answered `RejectedNotOwner`. Snapshots, tick deltas, the
   fog state, wildlife, projectiles and resource amounts are computed per

@@ -169,9 +169,6 @@ pub(super) fn availability(client: &Client, kind: UnitKind) -> Availability {
 }
 
 pub(super) fn train(client: &mut Client, kind: UnitKind) {
-    if client.role != Some(aoe_protocol::GameplayRole::Controller) {
-        return;
-    }
     let Some(building_id) = target(client, kind).map(|b| b.id) else {
         return;
     };

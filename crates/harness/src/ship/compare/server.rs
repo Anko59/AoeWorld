@@ -132,7 +132,7 @@ fn healthy(address: SocketAddr) -> bool {
 }
 
 /// The environment a side's server runs with: its asset pack, its package
-/// directory and the one package it opens at start (the spectator's map).
+/// directory and the one package it opens at start (the capturing page's map).
 pub(crate) fn side_env(pack: &str, packages: &Path, open: &str) -> Vec<(&'static str, String)> {
     vec![
         (

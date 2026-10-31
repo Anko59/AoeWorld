@@ -1,7 +1,7 @@
 //! Runs `capture.mjs` for one side, one map and one renderer in the pinned
 //! browser image: host network (the app is on this machine's loopback), a
 //! private work directory, the container removed on every return path. The
-//! page is a spectator opening the camera fragment of each view; no controller.
+//! page opens the camera fragment of each view and issues no order.
 use super::{
     bookmarks::{Bookmark, Renderer},
     report::{Camera, Capture},

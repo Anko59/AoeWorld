@@ -132,7 +132,6 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 width_tiles,
                 height_tiles,
                 map_content_hash,
-                role,
                 primary_unit_id,
                 resume_token,
                 tick_hz,
@@ -142,7 +141,6 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.config.width_tiles = width_tiles;
                 client.config.height_tiles = height_tiles;
                 client.config.tick_hz = tick_hz;
-                client.role = Some(role);
                 if !client.surface_fixture {
                     client.map_content_hash = map_content_hash;
                 }
@@ -157,8 +155,8 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 clear_world(&mut client);
                 client.village.focused = focused;
                 client.primary = Some(primary_unit_id);
-                client.token = resume_token;
-                storage::save_token(resume_token);
+                client.token = Some(resume_token);
+                storage::save_token(Some(resume_token));
                 client.status = "connected".to_owned();
                 // A new connection clears connection errors; an order rejection
                 // stays until the next order rather than the next snapshot.
@@ -363,18 +361,10 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     });
                 }
             }
-            Ok(GameplayServerMessage::RoleChange {
-                role, resume_token, ..
-            }) => {
-                client.role = Some(role);
-                client.token = resume_token;
-                storage::save_token(resume_token);
-            }
             Ok(GameplayServerMessage::WorldReset { .. }) => {
                 client.order_feedback.clear();
                 client.village.pending_training.clear();
                 clear_world(&mut client);
-                client.role = None;
                 client.primary = None;
                 if !client.surface_fixture {
                     client.map_content_hash = None;

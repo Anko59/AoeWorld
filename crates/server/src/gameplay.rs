@@ -1,8 +1,7 @@
 use aoe_core::{EntityId, PlayerId, Seed, TileRect, WorldConfig, WorldPosition};
 use aoe_protocol::{
-    GameplayRole, GameplayServerMessage, GameplayUnitState, MAX_ACK_HISTORY,
-    MAX_PENDING_COMMANDS_GLOBAL, MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_SUBSCRIBED_UNITS,
-    MAX_SUBSCRIPTION_TILES, MapMetadata, ResumeToken,
+    GameplayServerMessage, GameplayUnitState, MAX_ACK_HISTORY, MAX_PENDING_COMMANDS_GLOBAL,
+    MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MapMetadata,
 };
 use aoe_simulation::{GameWorld, GameWorldError, NavigationCacheUsage};
 use std::{
@@ -36,7 +35,7 @@ mod scenarios;
 mod slots;
 #[path = "gameplay/tick.rs"]
 mod tick;
-pub(crate) use slots::{Access, ControllerLease, Ownership};
+pub(crate) use slots::{Access, Slot};
 pub use slots::{SlotInfo, SlotSetup};
 #[path = "gameplay/wildlife.rs"]
 mod wildlife;
@@ -49,13 +48,12 @@ pub use resources::{PersistedDepletion, ResourceLifecycleError};
 pub struct GameplayService {
     pub(super) world: Arc<RwLock<GameWorld>>,
     pub(super) sessions: Arc<Mutex<BTreeMap<u64, Session>>>,
-    pub(super) ownership: Arc<Mutex<Ownership>>,
+    pub(super) slots: Arc<[Slot]>,
     next_session: Arc<AtomicU64>,
     command_cursor: Arc<AtomicU64>,
     pub(super) world_id: u64,
     map_content_hash: Option<[u8; 32]>,
     map_metadata: Option<MapMetadata>,
-    primary_unit_id: EntityId,
     resource_journal: Arc<std::sync::Mutex<resources::Journal>>,
     resource_directory: Option<std::path::PathBuf>,
     fanout_probe: Arc<probe::FanoutProbe>,
@@ -65,20 +63,15 @@ pub struct GameplayService {
 }
 
 pub(super) struct Session {
-    pub(super) role: GameplayRole,
-    /// Unknown tokens from another world never gain control by waiting.
-    pub(super) may_claim_human_seat: bool,
-    pub(super) token: Option<ResumeToken>,
-    /// Index of the match slot this session controls; spectators have none.
-    pub(super) slot: Option<usize>,
-    /// Whose fog-filtered view this session receives: its slot's player, or
-    /// the first slot's player for a spectator.
+    /// Index of the match slot this session plays. Several sessions may share
+    /// one slot; each has its own order sequence and rate limit.
+    pub(super) slot: usize,
+    /// Whose fog-filtered view this session receives: its slot's player.
     pub(super) viewer: PlayerId,
     /// The slot's primary unit (the Welcome identity), kept for view queries.
     pub(super) primary_unit_id: EntityId,
     /// AI slots get a higher order budget and quiet idle ticks.
     pub(super) ai: bool,
-    pub(super) connected_at: Instant,
     pub(super) sender: mpsc::Sender<GameplayServerMessage>,
     subscription_delivery: Option<fanout::subscription::Delivery>,
     subscription: Option<Subscription>,

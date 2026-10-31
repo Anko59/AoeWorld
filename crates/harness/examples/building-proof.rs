@@ -148,12 +148,8 @@ async fn village(url: &str, build: bool, full: bool) -> Result<(), Box<dyn std::
             Server::Welcome {
                 width_tiles,
                 height_tiles,
-                role,
                 ..
             } => {
-                if build && role != aoe_protocol::GameplayRole::Controller {
-                    return Err("recording prep needs the free controller lease".into());
-                }
                 socket
                     .send(Message::Binary(
                         aoe_protocol::encode_gameplay_client(&Client::Subscribe {

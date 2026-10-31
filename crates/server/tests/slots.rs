@@ -3,7 +3,7 @@
 use aoe_core::{PlayerId, TileCoord, TileRect, WorldPosition};
 use aoe_map::{MAP_SCHEMA_VERSION, MapPackage, MapRequest, Ratio};
 use aoe_protocol::{
-    CommandResult, GameplayRole, GameplayServerMessage, GameplayUnitState, ResumeToken, UnitKind,
+    CommandResult, GameplayServerMessage, GameplayUnitState, ResumeToken, UnitKind,
 };
 use aoe_server::GameplayService;
 use tokio::sync::mpsc;
@@ -38,13 +38,7 @@ struct Seat {
 async fn seat(service: &GameplayService, token: ResumeToken) -> Seat {
     let (tx, mut rx) = mpsc::channel(256);
     let (id, welcome) = service.join_slot(token, tx).await.unwrap();
-    assert!(matches!(
-        welcome,
-        GameplayServerMessage::Welcome {
-            role: GameplayRole::Controller,
-            ..
-        }
-    ));
+    assert!(matches!(welcome, GameplayServerMessage::Welcome { .. }));
     service
         .subscribe(
             id,
@@ -195,38 +189,36 @@ async fn join_requires_the_exact_token_and_never_lobby_joins() {
     let mut wrong = infos[1].token;
     wrong.0[0] ^= 1;
     assert!(service.join_slot(wrong, tx).await.is_err());
-    // The human seat is still free for a plain Hello, the AI seat is not.
+    // A plain Hello takes the human seat, however many pages ask; the AI seat
+    // is reachable only through its own token.
     let (tx, _rx) = mpsc::channel(8);
     let (_, welcome) = service.register(None, tx).await;
     assert!(matches!(
         welcome,
-        GameplayServerMessage::Welcome { role: GameplayRole::Controller, primary_unit_id, .. }
+        GameplayServerMessage::Welcome { primary_unit_id, .. }
             if primary_unit_id == infos[0].primary_unit_id
     ));
     let (tx, _rx) = mpsc::channel(8);
     let (_, welcome) = service.register(None, tx).await;
     assert!(matches!(
         welcome,
-        GameplayServerMessage::Welcome {
-            role: GameplayRole::Spectator,
-            resume_token: None,
-            ..
-        }
+        GameplayServerMessage::Welcome { primary_unit_id, resume_token, .. }
+            if primary_unit_id == infos[0].primary_unit_id && resume_token == infos[0].token
     ));
 }
 
 #[tokio::test]
-async fn rejoining_with_the_token_replaces_the_old_connection() {
+async fn rejoining_with_the_token_leaves_the_old_connection_to_end_on_its_own() {
     let service = match_service(&[false, false]);
     let infos = service.slot_infos().await;
     let mut first = seat(&service, infos[0].token).await;
     let second = seat(&service, infos[0].token).await;
     assert_eq!(second.units.len(), 4);
     drop(second);
-    // The first connection's channel was closed by the takeover.
-    assert!(matches!(
+    // Both connections hold the seat: the old one is not cut off.
+    assert!(!matches!(
         first.rx.try_recv(),
-        Err(mpsc::error::TryRecvError::Disconnected | mpsc::error::TryRecvError::Empty)
+        Err(mpsc::error::TryRecvError::Disconnected)
     ));
     service.disconnect(first.id).await;
 }
@@ -239,8 +231,8 @@ async fn ai_slots_do_not_authorize_server_administration() {
     service.register(Some(infos[0].token), tx).await;
     let (tx, _rx) = mpsc::channel(8);
     service.join_slot(infos[1].token, tx).await.unwrap();
-    assert!(service.is_controller(infos[0].token).await);
-    assert!(!service.is_controller(infos[1].token).await);
+    assert!(service.is_human_token(infos[0].token));
+    assert!(!service.is_human_token(infos[1].token));
 }
 
 #[tokio::test]

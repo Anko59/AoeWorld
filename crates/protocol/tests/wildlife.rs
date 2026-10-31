@@ -36,7 +36,7 @@ fn wildlife_wire_golden_and_roundtrip() {
     assert_eq!(
         bytes,
         vec![
-            8, 1, 2, 1, 7, 0, 1, 0, 7, 128, 16, 128, 32, 0, 100, 0, 0, 0, 0
+            7, 1, 2, 1, 7, 0, 1, 0, 7, 128, 16, 128, 32, 0, 100, 0, 0, 0, 0
         ],
         "WildlifeState bytes: {bytes:?}"
     );
@@ -56,7 +56,7 @@ fn wildlife_wire_golden_and_roundtrip() {
     assert_eq!(
         bytes,
         vec![
-            8, 1, 2, 1, 7, 0, 1, 0, 0, 128, 16, 128, 32, 4, 100, 0, 3, 0, 1, 1
+            7, 1, 2, 1, 7, 0, 1, 0, 0, 128, 16, 128, 32, 4, 100, 0, 3, 0, 1, 1
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), carcass);
