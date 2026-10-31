@@ -198,3 +198,39 @@ fn a_builder_pushed_onto_its_foundation_walks_off_and_finishes_the_job() {
     finish(&mut world, id);
     assert_eq!(inside(&world, footprint), vec![]);
 }
+
+#[test]
+fn a_corpse_on_a_foundation_stays_dying_and_does_not_stall_the_house() {
+    // Owner playtest 2026-10-30: a House placed over a fallen villager slid the
+    // corpse off as an Idle unit with no hp, breaking the wire's dying rule.
+    let (mut world, _, _) = village();
+    fixture::survey(&mut world, PlayerId(0), at(100, 100), 8);
+    let builder = villager_at(&mut world, 98, 100);
+    let fallen = villager_at(&mut world, 100, 100);
+    world.kill_unit(world.lookup[&fallen]);
+    let corpse_at = world.unit(fallen).unwrap().position;
+    let id = world
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
+        .unwrap();
+    for _ in 0..1500 {
+        world.advance();
+        if let Some(u) = world.unit(fallen) {
+            assert_eq!(
+                u.task,
+                crate::UnitTask::Dying,
+                "a corpse is never re-tasked"
+            );
+            assert_eq!(u.position, corpse_at, "a corpse is never moved");
+        }
+    }
+    assert!(
+        world.building(id).unwrap().is_complete(),
+        "a corpse does not occupy the foundation"
+    );
+}
