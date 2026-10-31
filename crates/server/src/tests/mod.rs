@@ -3,6 +3,7 @@ use aoe_scenario::SMOKE;
 use std::{net::SocketAddr, time::Duration};
 
 mod admin;
+mod cache;
 
 #[tokio::test]
 async fn records_tick_delayed_by_world_lock_contention() {
