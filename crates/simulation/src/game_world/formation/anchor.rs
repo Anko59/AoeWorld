@@ -15,7 +15,8 @@ impl GameWorld {
             return false;
         };
         let previous_denominator = group.speed.1;
-        group.speed = self.group_speed(&group);
+        let (speed, front_near_end) = self.group_speed(&group);
+        group.speed = speed;
         if let Some(mut order) = self.units[index].order {
             let (speed, denominator) = group.speed;
             if denominator != previous_denominator {
@@ -24,16 +25,18 @@ impl GameWorld {
                 order.speed_carry = (u128::from(order.speed_carry) * u128::from(denominator)
                     / u128::from(previous_denominator)) as u64;
             }
-            let denom = denominator * 4;
-            // Only a rear straggler slows the anchor; lateral assembly and
-            // members already ahead must not throttle the whole march.
+            let denom = denominator * 8;
+            // Reserve at most 1/8 pace for cohesion. A prolonged 3/4-pace
+            // squeeze alone exceeds the 1.3x arrival budget; persistent
+            // outliers recover independently instead of holding the march.
             let pace = speed
                 * if self.formation_cohesive(&group) {
-                    4
+                    8
                 } else {
-                    3
+                    7
                 };
             group.pace = (pace, denom);
+            self.prefetch_group_route(index, order, front_near_end);
             self.refresh_group_path(index, &mut group, order);
             let mut credit = u128::from(order.speed_carry) + u128::from(pace);
             order.speed_carry = 0;
@@ -189,10 +192,46 @@ impl GameWorld {
         })
     }
 
+    /// Emit only already proven continuations. Keep a bounded FIFO ahead of
+    /// the front ranks; the anchor must not make them extrapolate a partial leg.
+    fn prefetch_group_route(&mut self, index: usize, order: MovementOrder, front_near_end: bool) {
+        if !front_near_end
+            || path::distance(order.origin, order.destination) < 30 * 1024
+            || self.units[index].route.len() >= 64
+            || !self.units[index]
+                .planner
+                .as_ref()
+                .is_some_and(RoutePlanner::has_route_continuation)
+        {
+            return;
+        }
+        let end = self.units[index]
+            .route
+            .back()
+            .copied()
+            .unwrap_or(order.waypoint);
+        let mut prefix = std::mem::take(&mut self.units[index].route);
+        if let SegmentAdvance::Next(next) = self.next_map_segment(
+            index,
+            MovementOrder {
+                waypoint: end,
+                ..order
+            },
+        ) {
+            prefix.push_back(next);
+            prefix.append(&mut self.units[index].route);
+        }
+        self.units[index].route = prefix;
+    }
+
     fn refresh_group_path(&self, index: usize, group: &mut Group, order: MovementOrder) {
         let end = group.progress + i64::from(order.segment_length.saturating_sub(order.travelled));
         let mut cursor = group.path_cursor;
-        if group.path.end() < end || group.path.point(end, &mut cursor).0 != order.waypoint {
+        if group.path.end() < end
+            || group.path.point(end, &mut cursor).0 != order.waypoint
+            || group.path.points.last()
+                != Some(self.units[index].route.back().unwrap_or(&order.waypoint))
+        {
             group.path.continue_from(
                 group.progress,
                 group.anchor,

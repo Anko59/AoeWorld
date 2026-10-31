@@ -88,7 +88,7 @@ fn a_sealed_member_does_not_hold_back_the_others_who_fight_on_arrival() {
         TileCoord::new(sealed_at.0, sealed_at.1)
     );
     assert!(w.body_position_clear(sealed_unit.kind, sealed_unit.position));
-    assert_eq!(stuck_arrival, Some(1910));
+    assert_eq!(stuck_arrival, Some(1674));
     assert_eq!(
         stuck_arrival,
         anchor_arrival.map(|tick| tick
@@ -101,12 +101,12 @@ fn a_sealed_member_does_not_hold_back_the_others_who_fight_on_arrival() {
             .iter()
             .all(|&id| tiles_between(w.unit(id).unwrap().position, to) <= 8)
     );
-    // PR 10 crowded contacts settle the restored 30-member tail by tick 1739.
-    assert_eq!((first, last), (Some(1670), Some(1739)));
+    // The faster cohesion floor settles the healthy tail by tick 1503.
+    assert_eq!((first, last), (Some(1434), Some(1503)));
     // PR 10 permits legal blows on approach before the healthy tail settles.
     assert_eq!(
         (first_hit, healthy_arrivals.len(), foe_hp),
-        (Some(1698), 30, 0)
+        (Some(1462), 30, 0)
     );
     assert!(first_hit < last && first_hit < stuck_arrival);
 }

@@ -117,6 +117,7 @@ impl GameWorld {
                 detour_progress: 0,
                 arrived: false,
                 detached: false,
+                following_corridor: false,
                 stalled: 0,
                 remaining: i64::MAX,
             })
@@ -135,6 +136,7 @@ impl GameWorld {
             gap,
             narrow_gap: diameter + step + 16,
             slots_tight: false,
+            packing_files: ids.len(),
             form_start: 0,
             form_distance: 0,
             half_width: 0,
@@ -155,7 +157,7 @@ impl GameWorld {
             progress: 0,
             path_cursor: 0,
         };
-        group.speed = self.group_speed(&group);
+        group.speed = self.group_speed(&group).0;
         group.pace = group.speed;
         self.assign_group_slots(&mut group);
         self.formations.insert(leader, group);
@@ -209,17 +211,24 @@ impl GameWorld {
         }
     }
 
-    pub(super) fn group_speed(&self, group: &Group) -> (u64, u64) {
-        group
+    pub(super) fn group_speed(&self, group: &Group) -> ((u64, u64), bool) {
+        let end = group.path.points.last().copied().unwrap_or(group.anchor);
+        let mut front_near_end = path::squared(group.anchor, end) <= (4 * 1024_i64).pow(2);
+        let speed = group
             .members
             .iter()
             .inspect(|_| self.group_work.members(1))
-            .filter_map(|m| self.unit(m.id))
-            .map(|u| self.movement_speed(u.kind, u.player))
+            .filter_map(|m| self.unit(m.id).map(|u| (m, u)))
+            .map(|(member, u)| {
+                front_near_end |= member.following_corridor
+                    && path::squared(u.position, end) <= (4 * 1024_i64).pow(2);
+                self.movement_speed(u.kind, u.player)
+            })
             .min_by(|a, b| {
                 (u128::from(a.0) * u128::from(b.1)).cmp(&(u128::from(b.0) * u128::from(a.1)))
             })
-            .unwrap_or((0, 1))
+            .unwrap_or((0, 1));
+        (speed, front_near_end)
     }
 
     pub(super) fn next_formation_order(&mut self, leader: EntityId, group: &mut Group) {

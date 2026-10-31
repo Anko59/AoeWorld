@@ -32,6 +32,7 @@ impl Group {
     }
 
     pub(super) fn forget_departures(&mut self) {
+        self.packing_files = self.members.len();
         let mut order = (0..self.members.len()).collect::<Vec<_>>();
         order.sort_unstable_by_key(|&at| {
             let member = &self.members[at];
@@ -301,6 +302,7 @@ impl GameWorld {
             member.carry = 0;
             member.arrived = false;
             member.detached = false;
+            member.following_corridor = false;
             reserved
                 .entry(goal.tile_floor())
                 .or_default()

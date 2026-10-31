@@ -122,3 +122,102 @@ fn movement_speed_projection_preserves_custom_base_and_age_effects() {
     );
     assert_eq!(apply_movement_speed(UnitKind::Monk, None, true), None);
 }
+
+#[test]
+fn a_detached_member_rejoins_with_only_one_physical_step_per_tick() {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
+    let at = WorldPosition::new(100 * 1024, 100 * 1024);
+    let leader = w.spawn_kind(PlayerId(0), UnitKind::Militia, at).unwrap();
+    let from = WorldPosition::new(at.x - 1024, at.y);
+    let follower = w.spawn_kind(PlayerId(0), UnitKind::Militia, from).unwrap();
+    let goal = WorldPosition::new(150 * 1024, at.y);
+    w.issue_formation_move(
+        PlayerId(0),
+        &[leader, follower],
+        Formation::Line,
+        goal,
+        false,
+        false,
+    )
+    .unwrap();
+    let index = w.lookup[&follower];
+    let member = &mut w.formations.get_mut(&leader).unwrap().members[1];
+    member.detached = true;
+    member.ideal = at;
+    let recovery = WorldPosition::new(from.x + 256, from.y);
+    w.install_formation_route(
+        index,
+        from,
+        recovery,
+        recovery,
+        VecDeque::new(),
+        None,
+        false,
+        true,
+    );
+    w.advance_movement();
+    assert!(
+        !w.is_detached_member(index),
+        "the member must actually rejoin"
+    );
+    let moved = path::distance(from, w.unit(follower).unwrap().position);
+    let (speed, denominator) = w.movement_speed(UnitKind::Militia, PlayerId(0));
+    assert!(moved > 0, "the recovery must keep walking");
+    assert!(
+        moved <= speed.div_ceil(denominator) as i64 + 2,
+        "double movement: {moved}"
+    );
+}
+
+#[test]
+fn a_reserved_recovery_endpoint_cannot_release_a_formation_member() {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
+    let at = WorldPosition::new(100 * 1024, 100 * 1024);
+    let leader = w.spawn_kind(PlayerId(0), UnitKind::Militia, at).unwrap();
+    let follower = w
+        .spawn_kind(
+            PlayerId(0),
+            UnitKind::Militia,
+            WorldPosition::new(at.x - 1024, at.y),
+        )
+        .unwrap();
+    w.issue_formation_move(
+        PlayerId(0),
+        &[leader, follower],
+        Formation::Line,
+        WorldPosition::new(150 * 1024, at.y),
+        false,
+        false,
+    )
+    .unwrap();
+    let index = w.lookup[&follower];
+    let recovery = WorldPosition::new(at.x + 3 * 1024, at.y);
+    let blocker = w
+        .spawn_kind(
+            PlayerId(0),
+            UnitKind::Villager,
+            WorldPosition::new(at.x + 10 * 1024, at.y),
+        )
+        .unwrap();
+    w.issue_move(blocker, recovery).unwrap();
+    let recovery = w.movement_order(blocker).unwrap().destination;
+    w.formations.get_mut(&leader).unwrap().members[1].detached = true;
+    let from = w.unit(follower).unwrap().position;
+    w.install_formation_route(
+        index,
+        from,
+        recovery,
+        recovery,
+        VecDeque::new(),
+        None,
+        false,
+        true,
+    );
+    w.tick.0 = (8 - u64::from(follower.0) % 8) % 8;
+    assert!(w.destination_point_reserved(recovery, follower));
+    let slot = w.formation_destination_slot(follower);
+    w.replace_occupied_arrival(index);
+    assert_eq!(w.units[index].formation, Some(leader));
+    assert_eq!(w.formation_destination_slot(follower), slot);
+    assert_eq!(w.units[index].order.unwrap().destination, recovery);
+}

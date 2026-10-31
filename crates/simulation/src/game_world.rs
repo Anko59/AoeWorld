@@ -455,3 +455,7 @@ fn next_random(state: &mut u64) -> u64 {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(any(test, feature = "bench-fixtures"))]
+#[path = "game_world/tests/real_terrain/fixtures/mod.rs"]
+pub mod terrain_fixtures;

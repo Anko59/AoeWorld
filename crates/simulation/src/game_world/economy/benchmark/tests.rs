@@ -69,6 +69,15 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
                 world.advance();
             }
             assert!(world.economy.gatherers.len() >= 6_000);
+            // Match the instruction kernel's population contract: internal
+            // corridor recovery cannot issue an order that releases a member.
+            assert_eq!(
+                world
+                    .units()
+                    .filter(|u| world.formation(u.id).is_some())
+                    .count(),
+                1_200
+            );
             assert!(
                 world
                     .units()
@@ -90,9 +99,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Automatic wood re-picks now prefer trees with fewer than two cutters,
-        // and deferred occupied waypoints reset unpaid travel to the physical body.
-        "2655e719965ddb46cbe6efa1fb3cabb3f98f7f45dd3a3d26eb60900f542fba88"
+        // Wood re-picks, occupied-waypoint travel and formation detours all change the replay.
+        "3ffad85e0135de8faa8806c18bc9e34eec7ab44f0eecbe11851455238a2eb4b5"
     );
 }
 
