@@ -17,6 +17,19 @@ impl Economy {
             h.update(&(home.scan_chunk as u64).to_le_bytes());
             h.update(&(home.scan_offset as u64).to_le_bytes());
             h.update(&(home.site_after as u64).to_le_bytes());
+            h.update(&[u8::from(home.farm_after.is_some())]);
+            if let Some(site) = home.farm_after {
+                h.update(&(site as u64).to_le_bytes());
+            }
+            h.update(&[u8::from(home.repair_after.is_some())]);
+            if let Some(farm) = home.repair_after {
+                h.update(&farm.0.to_le_bytes());
+            }
+            h.update(&(home.repair_sites.len() as u64).to_le_bytes());
+            for (farm, cursor) in &home.repair_sites {
+                h.update(&farm.0.to_le_bytes());
+                h.update(&(*cursor as u64).to_le_bytes());
+            }
             h.update(&home.worker_after.map_or(u32::MAX, |id| id.0).to_le_bytes());
             h.update(&(home.workers.len() as u64).to_le_bytes());
             for id in &home.workers {

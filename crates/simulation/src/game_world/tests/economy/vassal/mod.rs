@@ -1,4 +1,5 @@
 mod adoption;
+mod farming;
 mod manager;
 mod resources;
 mod territory;

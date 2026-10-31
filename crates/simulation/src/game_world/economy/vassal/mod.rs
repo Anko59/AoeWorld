@@ -5,6 +5,7 @@ use aoe_map::ResourceKind;
 use std::collections::{BTreeMap, BTreeSet};
 mod adopt;
 mod construction;
+mod farming;
 mod hash;
 mod jobs;
 mod manager;
@@ -33,6 +34,9 @@ pub(crate) struct Home {
     pub(super) scan_chunk: usize,
     pub(super) scan_offset: usize,
     pub(super) site_after: usize,
+    pub(super) farm_after: Option<usize>,
+    pub(super) repair_after: Option<EntityId>,
+    pub(super) repair_sites: BTreeMap<EntityId, usize>,
     pub(crate) stalls: BTreeMap<EntityId, watchdog::Stall>,
     pub(super) status: VassalStatus,
 }
@@ -97,6 +101,9 @@ impl GameWorld {
                 scan_chunk: 0,
                 scan_offset: 0,
                 site_after: 0,
+                farm_after: None,
+                repair_after: None,
+                repair_sites: BTreeMap::new(),
                 stalls: BTreeMap::new(),
                 status: VassalStatus::default(),
             },
@@ -144,6 +151,8 @@ impl GameWorld {
                 .get_mut(&id)
                 .map(|h| {
                     h.stalls.clear();
+                    h.repair_after = None;
+                    h.repair_sites.clear();
                     h.status = VassalStatus::default();
                     std::mem::take(&mut h.workers)
                 })

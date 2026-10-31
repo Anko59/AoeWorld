@@ -53,6 +53,7 @@ impl GameWorld {
             let wait = self.vassal_train(&mut snapshot, &mut budget, &mut work);
             self.vassal_house_for_busy(&mut snapshot, &mut budget, &mut work, changed);
             self.vassal_reseeds(&snapshot, &mut budget, &mut work);
+            self.vassal_refresh_farms(&mut snapshot, &mut budget, &mut work, changed);
             self.vassal_refresh_wood(&mut snapshot, &mut budget, &mut work);
             self.vassal_idle(id, &mut snapshot, &mut budget, &mut work, changed);
             self.vassal_publish_status(id, snapshot.villagers, wait);
@@ -201,7 +202,6 @@ impl GameWorld {
             .collect();
         for worker in ids {
             if budget.orders >= VASSAL_RULES.orders_per_domain
-                || budget.searches >= VASSAL_RULES.resource_searches_per_domain
                 || budget.sites >= VASSAL_RULES.site_checks_per_domain
             {
                 break;
@@ -219,10 +219,14 @@ impl GameWorld {
                 self.claim_vassal_worker(id, worker, kind);
                 s.allocated[kind as usize] += 1;
                 changed.push(worker);
+            } else if budget.searches >= VASSAL_RULES.resource_searches_per_domain {
+                // Successful farmland work may use the remaining orders after
+                // searches run out. A failed fallback yields to the next pass.
+                break;
             }
         }
     }
-    fn vassal_worker_idle(&self, worker: EntityId, id: EntityId) -> bool {
+    pub(super) fn vassal_worker_idle(&self, worker: EntityId, id: EntityId) -> bool {
         let waiting = self
             .economy
             .gatherers

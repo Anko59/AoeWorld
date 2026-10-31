@@ -1,6 +1,7 @@
 //! Work positions reserve circles around the resource footprint, not whole tiles.
 use super::*;
 use crate::game_world::movement_step::slots::{squared, within_work_reach};
+use aoe_core::FIXED_SUBUNITS_PER_TILE;
 
 impl GameWorld {
     pub(crate) fn crowded_resource_approach(&self, id: EntityId) -> bool {
@@ -65,11 +66,27 @@ impl GameWorld {
     /// clearance, rather than another worker's future point, decide arrival.
     pub(super) fn gather_contact(&self, index: usize, task: &GatherTask) -> bool {
         let unit = self.units[index].state;
-        task.phase == GatherPhase::Approaching
-            && unit.kind == UnitKind::Villager
-            && task.farm.is_none()
-            && task.animal.is_none()
-            && within_work_reach(unit.kind, unit.position, task.tile)
+        if task.phase != GatherPhase::Approaching
+            || unit.kind != UnitKind::Villager
+            || task.animal.is_some()
+        {
+            return false;
+        }
+        let contact = if task.farm.is_some() {
+            // Keep the whole body on this walkable 3-by-3 crop, so stopping
+            // early cannot obstruct a neighboring plot's entrance.
+            let scale = i64::from(FIXED_SUBUNITS_PER_TILE);
+            let radius = i64::from(unit.kind.collision_radius());
+            let (x, y) = (i64::from(unit.position.x), i64::from(unit.position.y));
+            let (cx, cy) = (i64::from(task.tile.x), i64::from(task.tile.y));
+            x - radius >= (cx - 1) * scale
+                && x + radius <= (cx + 2) * scale
+                && y - radius >= (cy - 1) * scale
+                && y + radius <= (cy + 2) * scale
+        } else {
+            within_work_reach(unit.kind, unit.position, task.tile)
+        };
+        contact
             && self.body_position_clear(unit.kind, unit.position)
             && self.work_contact_clear(index)
     }

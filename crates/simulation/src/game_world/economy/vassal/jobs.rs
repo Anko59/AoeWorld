@@ -13,11 +13,25 @@ impl GameWorld {
         work: &mut VassalWork,
     ) -> Option<ResourceKind> {
         let unit = self.unit(worker)?;
+        // Reuse paid-for plots before sending another farmer to a foundation.
+        if unit.carried.is_none_or(|c| c.kind == ResourceKind::Food)
+            && s.avoid
+                .is_none_or(|a| a.avoid_kind != Some(ResourceKind::Food))
+            && self.vassal_reclaim_farm(worker, s, budget, work)
+        {
+            return Some(ResourceKind::Food);
+        }
+        let attended: BTreeSet<_> = s
+            .units
+            .iter()
+            .filter_map(|u| self.economy.builders.get(&u.id).map(|t| t.building))
+            .collect();
         let mut unfinished: Vec<_> = s
             .buildings
             .iter()
             .filter(|b| {
                 !b.is_complete()
+                    && (b.kind != BuildingKind::Farm || !attended.contains(&b.id))
                     && matches!(
                         b.kind,
                         BuildingKind::House
@@ -93,6 +107,7 @@ impl GameWorld {
                 at,
             )
         });
+        let mut tried_farms = false;
         for kind in kinds {
             if unit.carried.is_some_and(|c| c.kind != kind)
                 || s.avoid.is_some_and(|a| a.avoid_kind == Some(kind))
@@ -100,7 +115,7 @@ impl GameWorld {
                 continue;
             }
             if !budget.search(work) {
-                return None;
+                break;
             }
             let from = unit.position.tile_floor();
             let eligible = |n: &aoe_map::ResourceNode| {
@@ -116,9 +131,13 @@ impl GameWorld {
                         && !self.vassal_crosses_water(from, n.tile)
                 })
                 .or_else(|| {
-                    self.nearest_resource_matching(from, kind, 10, None, |n| {
-                        eligible(n) && !self.vassal_crosses_water(from, n.tile)
-                    })
+                    if budget.search(work) {
+                        self.nearest_resource_matching(from, kind, 10, None, |n| {
+                            eligible(n) && !self.vassal_crosses_water(from, n.tile)
+                        })
+                    } else {
+                        None
+                    }
                 })
                 .or_else(|| {
                     if budget.search(work) {
@@ -143,15 +162,28 @@ impl GameWorld {
                 if budget.order(work) && self.issue_gather(s.player, worker, node.id).is_ok() {
                     return Some(kind);
                 }
-            } else if kind == ResourceKind::Food && self.vassal_food(worker, s, budget, work) {
-                return Some(kind);
+            } else if kind == ResourceKind::Food {
+                tried_farms = true;
+                if self.vassal_food(worker, s, budget, work) {
+                    return Some(kind);
+                }
             }
+        }
+        // Empty natural-resource searches must not prevent the remaining
+        // placement/order budget from putting a worker on farmland.
+        if !tried_farms
+            && unit.carried.is_none_or(|c| c.kind == ResourceKind::Food)
+            && s.avoid
+                .is_none_or(|a| a.avoid_kind != Some(ResourceKind::Food))
+            && self.vassal_food(worker, s, budget, work)
+        {
+            return Some(ResourceKind::Food);
         }
         None
     }
     // A straight water crossing is a conservative preference, not a route
     // certificate: normal order admission remains responsible for reachability.
-    fn vassal_crosses_water(&self, from: TileCoord, to: TileCoord) -> bool {
+    pub(super) fn vassal_crosses_water(&self, from: TileCoord, to: TileCoord) -> bool {
         let crate::Terrain::Map { generator, .. } = &self.terrain else {
             return false;
         };
@@ -164,75 +196,6 @@ impl GameWorld {
                 .tile_at(tile)
                 .is_some_and(|t| t.water != aoe_map::WaterKind::None)
         })
-    }
-    fn vassal_food(
-        &mut self,
-        worker: EntityId,
-        s: &mut Snapshot,
-        budget: &mut Budget,
-        work: &mut VassalWork,
-    ) -> bool {
-        let Some(unit) = self.unit(worker) else {
-            return false;
-        };
-        let from = unit.position.tile_floor();
-        let worked: BTreeSet<_> = s
-            .units
-            .iter()
-            .filter_map(|u| self.economy.gatherers.get(&u.id).and_then(|t| t.farm))
-            .collect();
-        let mut farms: Vec<_> = s
-            .buildings
-            .iter()
-            .filter(|b| {
-                b.kind == BuildingKind::Farm
-                    && b.is_complete()
-                    && b.food_remaining.is_some_and(|n| n > 0)
-                    && !worked.contains(&b.id)
-                    && s.avoid
-                        .is_none_or(|a| !a.avoid_tile.is_some_and(|t| b.footprint.contains(t)))
-            })
-            .map(|b| {
-                (
-                    super::super::dropoff::ring_distance(b.footprint, from),
-                    b.id,
-                    b.footprint.min,
-                )
-            })
-            .collect();
-        farms.sort_unstable_by_key(|b| (b.0, b.1));
-        farms.truncate(8);
-        farms.sort_by_key(|b| (self.vassal_crosses_water(from, b.2), b.0, b.1));
-        for (_, farm, _) in farms {
-            if budget.order(work) && self.issue_farm(s.player, worker, farm).is_ok() {
-                return true;
-            }
-        }
-        if !s.buildings.iter().any(|b| b.kind == BuildingKind::Mill) {
-            return self.vassal_build_near(
-                worker,
-                BuildingKind::Mill,
-                unit.position.tile_floor(),
-                s,
-                budget,
-                work,
-            );
-        }
-        let anchor = s
-            .buildings
-            .iter()
-            .filter(|b| {
-                b.is_complete() && matches!(b.kind, BuildingKind::Mill | BuildingKind::TownCenter)
-            })
-            .min_by_key(|b| {
-                (
-                    super::super::dropoff::ring_distance(b.footprint, unit.position.tile_floor()),
-                    b.id,
-                )
-            })
-            .map(|b| b.footprint.min)
-            .unwrap_or(unit.position.tile_floor());
-        self.vassal_build_near(worker, BuildingKind::Farm, anchor, s, budget, work)
     }
 }
 fn node_position(tile: TileCoord) -> WorldPosition {

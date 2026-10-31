@@ -82,9 +82,23 @@ Idle workers use food:wood:gold:stone shares of 45:30:15:10, adjusted toward low
 stockpiles, preserving carried loads. Local known resources within ten tiles
 are preferred. Distant drop-offs prompt normal Lumber/Mining Camp or Mill
 construction; food also uses free Farms, builds new ones, and prepays two normal
-Mill reseeds. The manager helps unfinished economic foundations and adds Houses
+Mill reseeds. Idle farmers reclaim the nearest free paid-for Farm before
+opening another plot. Each unfinished Farm keeps one future farmer, while
+other economic foundations may take helpers. New Farms tile in three-tile
+cells around Mills and Town Centers; full clusters expand with another Mill.
+Farm placement resumes across passes within the same 32-site budget, and
+exhausting natural-resource searches does not prevent farming with the
+remaining order and placement budget. The manager helps unfinished economic
+foundations and adds Houses
 when two or fewer housing slots remain. Every cost, exploration check, placement
 rule and build/train time is the ordinary simulation rule.
+
+Adopted farmers also build a nearby Mill for an old distant plot when a legal
+site exists within six tiles of its centre. Repairs rotate between plots and
+retain their searches, using at most half the remaining placement budget so
+idle villagers can still reclaim or build Farms. Approaching farmers start
+working once their whole body is on the crop, without waiting for an exact
+reserved work point.
 
 An accepted manual order releases the worker immediately; busy manual workers
 are not retasked until idle again. Military, foreign workers and workers outside
@@ -114,3 +128,8 @@ For a repeatable local capture, `POST /maps/reset?scenario=vassal-territory`
 prepares two overlapping Castles, 40 busy farmers and two Vassals waiting
 outside (four-times clock). Garrison the first to watch it adopt every farmer,
 then the second to see the territory split with a double line.
+
+`POST /maps/reset?scenario=vassal-farming` prepares a resource-free plot with
+24 idle villagers, one Mill, a Vassal entering its Castle, and enough wood and
+housing. The 20-times clock makes normal farm construction and reseeding
+visible in a short capture; it does not change the manager's work budgets.
