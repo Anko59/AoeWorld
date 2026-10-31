@@ -115,6 +115,41 @@ fn native_requests_share_chunks_and_bound_concurrent_bytes_before_fetching() {
 }
 
 #[wasm_bindgen_test]
+fn wanted_chunks_larger_than_the_encoded_budget_still_make_forward_progress() {
+    let bytes = 20 * 1024 * 1024;
+    let chunks = (0..8)
+        .map(|i| FrameChunk {
+            file: format!("frames-{i:04}.bin"),
+            hash: "a".repeat(64),
+            bytes: bytes as u32,
+        })
+        .collect();
+    let cells = (0..8).map(|i| cell(i, 64)).collect();
+    let mut native = NativeFrames::new(chunks, cells, 8).unwrap();
+    // Request policy only: payload validation/decode is tested separately.
+    for i in 0..4 {
+        native.encoded[i] = Some(Encoded {
+            bytes: vec![0; bytes],
+            touched: i as u64 + 1,
+        });
+    }
+    native.clock = 4;
+    let requests = native.requests(&(1..=8).collect::<Vec<_>>()).unwrap();
+    assert_eq!(
+        requests,
+        [4, 5, 6],
+        "wanted data must not pin the encoded budget forever"
+    );
+    assert!(native.cached_bytes() + native.inflight_bytes() <= ENCODED_BYTES);
+    assert!(native.inflight_bytes() <= INFLIGHT_BYTES);
+    assert!(native.inflight.len() <= MAX_REQUESTS);
+    assert!(
+        native.encoded[3].is_some(),
+        "retain the most recently used chunk"
+    );
+}
+
+#[wasm_bindgen_test]
 fn native_chunks_verify_payload_and_dimensions_before_the_frame_can_be_uploaded() {
     let planes = [
         vec![117, 120, 115, 128],

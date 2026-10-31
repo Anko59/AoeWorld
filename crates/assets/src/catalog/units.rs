@@ -186,14 +186,24 @@ pub struct ActorSource {
     pub millis: u16,
     /// Upper bound on selected native cells per facing; zero uses the base policy.
     pub phases: u8,
+    native: Option<native::Graphic>,
 }
 impl ActorSource {
+    pub const fn new(id: u32, stride: u8, millis: u16, phases: u8) -> Self {
+        Self {
+            id,
+            stride,
+            millis,
+            phases,
+            native: native::get(id),
+        }
+    }
     pub const fn is_native(self) -> bool {
-        native::get(self.id).is_some() || self.id == 4500
+        self.native.is_some() || self.id == 4500
     }
     /// Native DE durations retain fractional milliseconds (DAT f32 seconds).
     pub fn frame_millis(self) -> f64 {
-        if let Some(graphic) = native::get(self.id) {
+        if let Some(graphic) = self.native {
             return if self.stride == 1 && graphic.stride > 1 {
                 0.0
             } else {
@@ -206,13 +216,13 @@ impl ActorSource {
         f64::from(self.millis)
     }
     pub const fn replay_delay_seconds(self) -> f32 {
-        match native::get(self.id) {
+        match self.native {
             Some(g) => g.replay_delay,
             None => 0.0,
         }
     }
     pub const fn sample_step(self) -> u8 {
-        if native::get(self.id).is_some() {
+        if self.native.is_some() {
             return 1;
         }
         if self.phases > 0 {
@@ -225,7 +235,7 @@ impl ActorSource {
         }
     }
     pub const fn frames(self) -> u32 {
-        if let Some(g) = native::get(self.id) {
+        if let Some(g) = self.native {
             return g.cells as u32;
         }
         match self.id {
@@ -236,7 +246,7 @@ impl ActorSource {
         }
     }
     pub const fn rows(self) -> usize {
-        if let Some(g) = native::get(self.id) {
+        if let Some(g) = self.native {
             g.angles as usize
         } else if self.id == 4500 {
             1
@@ -248,7 +258,7 @@ impl ActorSource {
         self.stride.div_ceil(self.sample_step()) as usize * self.rows()
     }
     pub const fn source_frame(self, row: usize, phase: usize) -> usize {
-        if let Some(g) = native::get(self.id) {
+        if let Some(g) = self.native {
             return row * g.stride as usize
                 + if self.stride == 1 && g.stride > 1 {
                     g.stride as usize - 1
@@ -263,7 +273,7 @@ impl ActorSource {
         }
     }
     pub fn manifest_source(self) -> String {
-        if let Some(g) = native::get(self.id) {
+        if let Some(g) = self.native {
             return format!("de/{}.sld", g.stem);
         }
         if self.id == 4500 {
@@ -273,12 +283,7 @@ impl ActorSource {
     }
 }
 const fn sprite(id: u32, stride: u8, millis: u16) -> ActorSource {
-    ActorSource {
-        id,
-        stride,
-        millis,
-        phases: 0,
-    }
+    ActorSource::new(id, stride, millis, 0)
 }
 
 #[path = "units/generated.rs"]

@@ -1,6 +1,5 @@
 //! Bounded native-frame residency in paired colour and owner-mask pages.
 use super::{MAX_FRAME_EXTENT, MAX_LOGICAL_PAGES, PAGE_SIDE, Placement};
-use std::collections::BTreeMap;
 
 /// Whole tiles have 256-byte RGBA rows for aligned GPU subrectangle uploads.
 pub const TILE_SIDE: u16 = 64;
@@ -20,8 +19,9 @@ struct Entry {
 pub struct FrameCache {
     base: u16,
     layers: u16,
+    limit: u16,
     occupied: Vec<[u32; GRID]>,
-    entries: BTreeMap<u64, Entry>,
+    entries: Vec<(u64, Entry)>,
     frame: u64,
 }
 
@@ -55,8 +55,9 @@ impl FrameCache {
         Ok(Self {
             base,
             layers,
+            limit,
             occupied: vec![[0; GRID]; usize::from(pairs)],
-            entries: BTreeMap::new(),
+            entries: Vec::new(),
             frame: 1,
         })
     }
@@ -69,27 +70,40 @@ impl FrameCache {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
-    /// Owned payload; allocator and BTreeMap node bookkeeping are excluded.
+    /// Owned allocations; allocator bookkeeping is excluded.
     pub fn metadata_bytes(&self) -> usize {
         self.occupied.capacity() * std::mem::size_of::<[u32; GRID]>()
-            + self.entries.len() * std::mem::size_of::<(u64, Entry)>()
+            + self.entries.capacity() * std::mem::size_of::<(u64, Entry)>()
     }
     pub fn lookup(&self, key: u64) -> Option<Placement> {
-        self.entries.get(&key).map(|entry| entry.placement)
+        self.index(key)
+            .ok()
+            .map(|index| self.entries[index].1.placement)
     }
-    /// Protect all already resident cells needed by this frame before admitting
-    /// misses. Newly admitted current cells must also pass `required = true`.
+    // Residency is physically bounded by atlas tiles. A sorted contiguous
+    // inventory keeps lookups logarithmic without per-node allocations.
+    fn index(&self, key: u64) -> Result<usize, usize> {
+        self.entries.binary_search_by_key(&key, |(key, _)| *key)
+    }
+    /// Protect current demand before admission. A cell remains pinned through
+    /// three frames, including the last frame in which it was required.
     pub fn begin_frame(&mut self, required: &[u64]) {
         self.frame = self.frame.wrapping_add(1);
         if self.frame == 0 {
             self.frame = 1;
-            for entry in self.entries.values_mut() {
+            for (_, entry) in &mut self.entries {
                 entry.touched = 0;
                 entry.protected = 0;
             }
         }
-        for key in required {
-            if let Some(entry) = self.entries.get_mut(key) {
+        self.protect(required);
+    }
+    /// Mark the cells used by a successfully presented frame without advancing
+    /// the turn. This includes animation fallbacks admitted during that turn.
+    pub fn protect(&mut self, used: &[u64]) {
+        for key in used {
+            if let Ok(index) = self.index(*key) {
+                let entry = &mut self.entries[index].1;
                 entry.protected = self.frame;
                 entry.touched = self.frame;
             }
@@ -133,6 +147,7 @@ impl FrameCache {
         key: u64,
         size: [u16; 2],
         required: bool,
+        allow_growth: bool,
     ) -> Result<Reservation, &'static str> {
         if size
             .into_iter()
@@ -140,7 +155,8 @@ impl FrameCache {
         {
             return Err("invalid native frame dimensions");
         }
-        if let Some(entry) = self.entries.get_mut(&key) {
+        if let Ok(index) = self.index(key) {
+            let entry = &mut self.entries[index].1;
             if [entry.placement.width, entry.placement.height] != size {
                 return Err("native frame dimensions changed");
             }
@@ -157,13 +173,17 @@ impl FrameCache {
         loop {
             if let Some(placement) = self.space(size) {
                 self.mark(placement, true);
+                let index = self.index(key).expect_err("new native key");
                 self.entries.insert(
-                    key,
-                    Entry {
-                        placement,
-                        touched: self.frame,
-                        protected: if required { self.frame } else { 0 },
-                    },
+                    index,
+                    (
+                        key,
+                        Entry {
+                            placement,
+                            touched: self.frame,
+                            protected: if required { self.frame } else { 0 },
+                        },
+                    ),
                 );
                 return Ok(Reservation {
                     placement: Some(placement),
@@ -173,19 +193,29 @@ impl FrameCache {
             let victim = self
                 .entries
                 .iter()
-                .filter(|(_, entry)| entry.protected != self.frame)
-                .min_by_key(|(key, entry)| (entry.touched, **key))
-                .map(|(key, _)| *key);
+                .enumerate()
+                .filter(|(_, (_, entry))| {
+                    entry.protected == 0 || self.frame.saturating_sub(entry.protected) >= 3
+                })
+                .min_by_key(|(_, (key, entry))| (entry.touched, *key))
+                .map(|(index, _)| index);
             let Some(victim) = victim else {
+                let pairs = self.occupied.len();
+                let maximum = usize::from((self.limit - self.base) / 2);
+                if required && allow_growth && pairs < maximum {
+                    let next = (pairs * 2).min(maximum);
+                    self.occupied.resize(next, [0; GRID]);
+                    self.layers = self.base + next as u16 * 2;
+                    continue;
+                }
                 return Ok(Reservation {
                     placement: None,
                     evicted,
                 });
             };
-            if let Some(entry) = self.entries.remove(&victim) {
-                self.mark(entry.placement, false);
-                evicted.push(victim);
-            }
+            let (key, entry) = self.entries.remove(victim);
+            self.mark(entry.placement, false);
+            evicted.push(key);
         }
     }
 }

@@ -102,14 +102,55 @@ pub(super) fn marker(
     }
 }
 
-// Drawing and visibility share one emitter body rather than cloning the
-// multipart renderer for each callback in the browser WASM.
-#[inline(never)]
 pub(super) fn building(
     art: &GameArt,
     unit: SceneUnit,
     camera: SceneCamera,
     animation: usize,
+    emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
+) {
+    building_select(
+        art,
+        unit,
+        camera,
+        animation,
+        &mut |frame, _, _, _| frame,
+        emit,
+    );
+}
+
+pub(super) fn resident_building(
+    art: &GameArt,
+    unit: SceneUnit,
+    camera: SceneCamera,
+    animation: usize,
+    emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
+) {
+    building_select(
+        art,
+        unit,
+        camera,
+        animation,
+        &mut |frame, frames, index, stride| {
+            let resolved = if frames.is_empty() {
+                art.resident_frame(frame)
+            } else {
+                art.resident_animation(frames, index, stride)
+            };
+            resolved.unwrap_or(frame)
+        },
+        emit,
+    );
+}
+
+// Visibility and presentation share DAT selection, offsets and culling.
+#[inline(never)]
+pub(super) fn building_select(
+    art: &GameArt,
+    unit: SceneUnit,
+    camera: SceneCamera,
+    animation: usize,
+    select: &mut dyn FnMut(GameFrame, &[GameFrame], usize, usize) -> GameFrame,
     emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
 ) {
     if unit.visual.ghost() && unit.kind == SceneUnitKind::Farm {
@@ -239,6 +280,7 @@ pub(super) fn building(
         .chain(overlay.map(|part| (part, true)))
     {
         let mut native = part.frame;
+        let (mut selected, mut stride) = (0, 1);
         if !part.animation.is_empty() {
             let angles = usize::from(part.angles).max(1);
             let count = part.animation.len() / angles;
@@ -268,8 +310,20 @@ pub(super) fn building(
             } else {
                 unit.id.0 as usize % count
             };
-            native = part.animation[angle * count + index];
+            selected = angle * count + index;
+            stride = count;
+            native = part.animation[selected];
         }
+        native = select(
+            native,
+            if part.frame_rate > 0.0 {
+                &part.animation
+            } else {
+                &[]
+            },
+            selected,
+            stride,
+        );
         native.anchor[0] -= part.offset[0];
         native.anchor[1] -= part.offset[1];
         let frame = world_frame(native);

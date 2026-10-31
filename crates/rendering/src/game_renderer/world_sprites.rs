@@ -99,7 +99,10 @@ pub fn scene_resource_frame(art: &GameArt, resource: SceneResource) -> Option<Ga
 
 #[path = "village/residency.rs"]
 mod residency;
-pub use residency::{scene_native_frames, scene_native_prefetch, scene_resource_native_frames};
+pub use residency::{
+    scene_native_frames, scene_native_prefetch, scene_native_substitutes,
+    scene_resource_native_frames,
+};
 
 #[cfg(test)]
 pub(super) fn world_sprite_frames(
@@ -150,9 +153,13 @@ pub(super) fn emit_world_sprite_frames(
         .iter()
         .filter(|&&r| !environment::present(art, r))
         .filter_map(|resource| {
-            resource_presentation_at(art, *resource, animation).map(|(frame, shadow)| {
-                WorldObject::Resource(*resource, world_frame(frame), shadow.map(world_frame))
-            })
+            let (frame, shadow) = resource_presentation_at(art, *resource, animation)?;
+            let frame = scenery::resident(art, *resource, frame)?;
+            let shadow = match shadow {
+                Some(frame) => Some(world_frame(art.resident_frame(frame)?)),
+                None => None,
+            };
+            Some(WorldObject::Resource(*resource, world_frame(frame), shadow))
         })
         .chain(units.iter().copied().map(WorldObject::Unit));
 
@@ -209,7 +216,7 @@ pub(super) fn emit_world_sprite_frames(
         };
         let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
         if unit.kind.building_side().is_some() {
-            village::building(art, unit, camera, animation, &mut |(
+            village::resident_building(art, unit, camera, animation, &mut |(
                 mut sprite,
                 frame,
                 depth,
@@ -255,7 +262,10 @@ pub(super) fn emit_world_sprite_frames(
             0
         };
         let (index, _) = unit_frame_index(unit, stride, phase, frames.len() / stride);
-        let Some(frame) = art.resident_frame(frames[index]).map(world_frame) else {
+        let Some(frame) = art
+            .resident_animation(frames, index, stride)
+            .map(world_frame)
+        else {
             continue;
         };
         let scale = camera.zoom as f32;

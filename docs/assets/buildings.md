@@ -39,13 +39,15 @@ building filename lists, sampled fish sheets and special farm crop window.
 
 ## Residency and lifecycle
 
-Building timelines share the unit cache's four on-demand colour/mask page
-pairs. Off-screen animations reserve no GPU rectangles. Current visible cells
-are protected; unprotected cells are evicted by least recent use. The normal
-atlas payload remains 256 MiB including the static base; the absolute renderer
-cap remains 64 layers / 1 GiB. Geometry and visibility stay available before a
-cell becomes resident, so eviction cannot erase future demand or picking bounds.
-WebGPU, WebGL2 and Canvas consume the same frame selection and physical mapping.
+Building timelines share the unit cache, starting at four colour/mask page
+pairs and growing for visible demand within 512 MiB including startup layers.
+Current and recently presented cells stay pinned for three turns. Missing phases
+use resident pixels from the same DAT part and angle; otherwise the previous
+complete frame remains displayed until its required layers are available.
+Off-screen animations cannot trigger growth. Geometry and visibility remain
+available before residency, preserving future demand and picking bounds.
+WebGPU, WebGL2 and Canvas share selection and physical mapping. See
+[DE conversion](de-full.md) for upload, encoded-cache and transient growth bounds.
 
 Playback uses a millisecond clock and the DAT's fractional durations. Construction
 progress selects the native construction angle; wall connectivity selects its

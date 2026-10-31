@@ -37,6 +37,17 @@ pub(in crate::game_renderer) fn frames(
     animation: usize,
     emit: &mut dyn FnMut(GameFrame),
 ) {
+    frames_select(art, r, animation, &mut |frame, _, _, _| frame, emit);
+}
+
+#[inline(never)]
+pub(in crate::game_renderer) fn frames_select(
+    art: &GameArt,
+    r: SceneResource,
+    animation: usize,
+    select: &mut dyn FnMut(GameFrame, &[GameFrame], usize, usize) -> GameFrame,
+    emit: &mut dyn FnMut(GameFrame),
+) {
     let Some((id, state)) = identity(r) else {
         return;
     };
@@ -53,6 +64,7 @@ pub(in crate::game_renderer) fn frames(
     };
     for p in parts {
         let mut f = p.frame;
+        let (mut selected, mut stride) = (0, 1);
         if !p.animation.is_empty() {
             let angles = usize::from(p.angles).max(1);
             let count = p.animation.len() / angles;
@@ -65,8 +77,20 @@ pub(in crate::game_renderer) fn frames(
             } else {
                 usize::from(r.visual_variant) % count
             };
-            f = p.animation[row * count + phase];
+            selected = row * count + phase;
+            stride = count;
+            f = p.animation[selected];
         }
+        f = select(
+            f,
+            if p.frame_rate > 0.0 {
+                &p.animation
+            } else {
+                &[]
+            },
+            selected,
+            stride,
+        );
         f.anchor = [0, 1].map(|i| f.anchor[i] - p.offset[i]);
         emit(f);
     }
@@ -87,30 +111,43 @@ pub(super) fn emit(
     animation: usize,
     out: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
 ) {
-    frames(art, r, animation, &mut |native| {
-        let logical = world_frame(native);
-        if resource_sprite_bounds(r, native, camera).is_none() {
-            return;
-        }
-        let Some(mut frame) = art.resident_frame(native) else {
-            return;
-        };
-        frame = world_frame(frame);
-        if let Some(mut sprite) = scene_sprite(frame, r.position, r.elevation_meters, camera) {
-            if r.kind <= SceneResource::CHOPPED_TREE
-                && !(r.kind == 0 && matches!(r.visual_family, 5 | 6))
-            {
-                sprite.pages[3] |= Sprite::OCCLUDER;
+    frames_select(
+        art,
+        r,
+        animation,
+        &mut |frame, frames, index, stride| {
+            let resolved = if frames.is_empty() {
+                art.resident_frame(frame)
+            } else {
+                art.resident_animation(frames, index, stride)
+            };
+            resolved.unwrap_or(frame)
+        },
+        &mut |native| {
+            let logical = world_frame(native);
+            if resource_sprite_bounds(r, native, camera).is_none() {
+                return;
             }
-            sprite.pages[3] |= u32::from(r.highlight & 3) << 4;
-            out((
-                sprite,
-                scaled(frame, camera.zoom as f32),
-                object_depth(WorldObject::Resource(r, logical, None)),
-                r.id,
-            ));
-        }
-    });
+            let Some(mut frame) = art.resident_frame(native) else {
+                return;
+            };
+            frame = world_frame(frame);
+            if let Some(mut sprite) = scene_sprite(frame, r.position, r.elevation_meters, camera) {
+                if r.kind <= SceneResource::CHOPPED_TREE
+                    && !(r.kind == 0 && matches!(r.visual_family, 5 | 6))
+                {
+                    sprite.pages[3] |= Sprite::OCCLUDER;
+                }
+                sprite.pages[3] |= u32::from(r.highlight & 3) << 4;
+                out((
+                    sprite,
+                    scaled(frame, camera.zoom as f32),
+                    object_depth(WorldObject::Resource(r, logical, None)),
+                    r.id,
+                ));
+            }
+        },
+    );
 }
 
 pub(super) fn animation_frame(

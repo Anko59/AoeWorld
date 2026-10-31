@@ -53,6 +53,76 @@ impl AtlasUpload {
 }
 
 impl GameRenderer {
+    /// Growth waits for submitted WebGPU work to retire. This keeps old/new
+    /// texture overlap to one resize; the next resize cannot queue behind it.
+    pub fn atlas_growth_ready(&self) -> Result<bool, String> {
+        match self {
+            Self::WebGpu(renderer) => renderer.health.idle(),
+            _ => Ok(true),
+        }
+    }
+
+    /// Preserve every installed layer while extending the paired atlas.
+    /// Callers publish new placements only after this succeeds.
+    pub fn grow_game_atlas(&mut self, pages: u32) -> Result<(), String> {
+        if !(crate::GAME_ATLAS_PAGES..=crate::MAX_GAME_ATLAS_PAGES).contains(&pages)
+            || !pages.is_multiple_of(2)
+        {
+            return Err("Invalid atlas growth budget".into());
+        }
+        let current = match self {
+            Self::WebGpu(renderer) => renderer._atlas.depth_or_array_layers(),
+            Self::WebGl(renderer) => renderer.atlas_pages(),
+            Self::Canvas { source_atlas, .. } => {
+                (source_atlas.len() / crate::GAME_ATLAS_PAGE_BYTES) as u32
+            }
+        };
+        if pages == current {
+            return Ok(());
+        }
+        if pages < current || !self.atlas_growth_ready()? {
+            return Err("Atlas growth requires an idle queue and an increased budget".into());
+        }
+        match self {
+            Self::WebGpu(renderer) => {
+                let texture = renderer.create_game_atlas(pages)?;
+                let mut encoder =
+                    renderer
+                        .device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("preserve native atlas layers"),
+                        });
+                encoder.copy_texture_to_texture(
+                    renderer._atlas.as_image_copy(),
+                    texture.as_image_copy(),
+                    wgpu::Extent3d {
+                        width: crate::GAME_ATLAS_SIDE,
+                        height: crate::GAME_ATLAS_SIDE,
+                        depth_or_array_layers: current,
+                    },
+                );
+                renderer.queue.submit([encoder.finish()]);
+                renderer.health.submitted(&renderer.queue, true);
+                renderer.install_game_atlas(texture);
+                Ok(())
+            }
+            Self::WebGl(renderer) => renderer.grow(pages),
+            Self::Canvas {
+                source_atlas,
+                atlas,
+                presentation,
+                ..
+            } => {
+                let bytes = pages as usize * crate::GAME_ATLAS_PAGE_BYTES;
+                source_atlas.reserve_exact(bytes - source_atlas.len());
+                source_atlas.resize(bytes, 0);
+                *atlas = [None, None, None, None];
+                presentation.invalidate();
+                Ok(())
+            }
+        }
+    }
+
     /// Reused frame packets and draw ranges, separate from atlas/GPU payload.
     pub fn frame_staging_bytes(&self) -> usize {
         match self {

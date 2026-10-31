@@ -34,22 +34,25 @@ impl NativeFrames {
         &mut self,
         required: &[u32],
         prefetch: &[u32],
+        keep: &[u32],
         art: &mut GameArt,
         renderer: &mut aoe_rendering::GameRenderer,
     ) -> Result<(bool, Vec<Request>), JsValue> {
         if self.failed {
             return Ok((false, Vec::new()));
         }
-        let result = self.update_ready(required, prefetch, art, renderer);
+        let result = self.update_ready(required, prefetch, keep, art, renderer);
         if result.is_err() {
             self.failed = true;
         }
         result
     }
+    #[inline(never)]
     fn update_ready(
         &mut self,
         required: &[u32],
         prefetch: &[u32],
+        keep: &[u32],
         art: &mut GameArt,
         renderer: &mut aoe_rendering::GameRenderer,
     ) -> Result<(bool, Vec<Request>), JsValue> {
@@ -60,10 +63,14 @@ impl NativeFrames {
         if art.resident.len() != self.cells.len() {
             return Err(error("Native residency inventory changed"));
         }
-        for &id in required.iter().chain(prefetch) {
+        for &id in required.iter().chain(prefetch).chain(keep) {
             self.cell(id)?;
         }
-        let keys: Vec<_> = required.iter().map(|&id| u64::from(id)).collect();
+        let keys: Vec<_> = required
+            .iter()
+            .chain(keep)
+            .map(|&id| u64::from(id))
+            .collect();
         self.cache.begin_frame(&keys);
         let mut changed = false;
         let mut uploads = 0;
@@ -74,6 +81,9 @@ impl NativeFrames {
                 .map(|&id| (id, true))
                 .chain(prefetch.iter().map(|&id| (id, false)))
             {
+                if !renderer.atlas_updates_ready().map_err(error)? {
+                    break;
+                }
                 if let Some(p) = self.cache.lookup(u64::from(id)) {
                     art.resident[id as usize - 1] = Some(address(p));
                     continue;
@@ -85,12 +95,18 @@ impl NativeFrames {
                 if uploads >= 16 || (uploads > 0 && uploaded_bytes + bytes > 8 * 1024 * 1024) {
                     break;
                 }
-                let Some(planes) = self.decode(id)? else {
+                if self.encoded[cell.location.chunk as usize].is_none() {
                     continue;
-                };
+                }
+                let previous_layers = self.cache.layer_count();
                 let reserved = self
                     .cache
-                    .reserve(u64::from(id), cell.size, current)
+                    .reserve(
+                        u64::from(id),
+                        cell.size,
+                        current,
+                        renderer.atlas_growth_ready().map_err(error)?,
+                    )
                     .map_err(error)?;
                 for evicted in reserved.evicted {
                     art.resident[evicted as usize - 1] = None;
@@ -99,6 +115,16 @@ impl NativeFrames {
                 let Some(p) = reserved.placement else {
                     continue;
                 };
+                if self.cache.layer_count() != previous_layers {
+                    renderer
+                        .grow_game_atlas(u32::from(self.cache.layer_count()))
+                        .map_err(error)?;
+                }
+                // Admission precedes allocation/decompression, so pressure
+                // cannot repeatedly decode cells that cannot be uploaded.
+                let planes = self
+                    .decode(id)?
+                    .ok_or_else(|| error("Admitted native chunk disappeared"))?;
                 let pixels = pixels::compose(&planes, p, cell.owned, cell.team)?;
                 for (layer, pixels) in [p.page, p.page + 1].into_iter().zip(&pixels) {
                     renderer
@@ -116,19 +142,23 @@ impl NativeFrames {
                 uploaded_bytes += bytes;
             }
         }
-        if renderer.atlas_updates_ready().map_err(error)?
-            && art
-                .terrain_topology
-                .iter()
-                .any(|t| matches!(t, Some(aoe_rendering::TerrainTopology::Dds { .. })))
+        self.directory_pending = false;
+        if art
+            .terrain_topology
+            .iter()
+            .any(|t| matches!(t, Some(aoe_rendering::TerrainTopology::Dds { .. })))
         {
             let rows = aoe_rendering::terrain_directory_rows(art).map_err(error)?;
             if rows != self.directory {
-                renderer
-                    .update_game_atlas(0, [0, 0], [2048, 2], &rows)
-                    .map_err(error)?;
-                self.directory = rows;
-                changed = true;
+                self.directory_pending = true;
+                if renderer.atlas_updates_ready().map_err(error)? {
+                    renderer
+                        .update_game_atlas(0, [0, 0], [2048, 2], &rows)
+                        .map_err(error)?;
+                    self.directory = rows;
+                    self.directory_pending = false;
+                    changed = true;
+                }
             }
         }
         let missing: Vec<_> = required
@@ -147,5 +177,10 @@ impl NativeFrames {
             })
             .collect();
         Ok((changed, requests))
+    }
+
+    pub(crate) fn pin_presented(&mut self, frames: &[u32]) {
+        self.cache
+            .protect(&frames.iter().map(|&id| u64::from(id)).collect::<Vec<_>>());
     }
 }

@@ -1,6 +1,9 @@
 use super::*;
 use wasm_bindgen::JsCast;
 
+mod fallbacks;
+mod growth;
+
 #[wasm_bindgen_test]
 fn native_lookahead_wraps_inside_the_current_facing_without_changing_the_display_cell() {
     let mut art = art();
@@ -353,4 +356,107 @@ fn all_environment_parts_use_dat_variants_timing_offsets_and_visible_residency()
         ..r
     };
     assert!(crate::scene_resource_native_frames(&art, &[offscreen], camera(), 32).is_empty());
+}
+
+#[wasm_bindgen_test]
+fn many_kind_pressure_keeps_two_thousand_actors_when_the_next_phase_is_cold() {
+    let mut art = art();
+    let mut slots = std::collections::BTreeSet::new();
+    let kinds: Vec<_> = (0..167)
+        .map(SceneUnitKind::actor)
+        .filter(|kind| kind.native_directions() && slots.insert(kind.actor_slot().unwrap()))
+        .take(64)
+        .collect();
+    assert_eq!(kinds.len(), 64);
+    art.actors = vec![Vec::new(); 167];
+    art.actor_rows = vec![16; 167];
+    art.resident = vec![None; 64 * 16 * 2];
+    let mut resident = 0;
+    for (group, kind) in kinds.iter().enumerate() {
+        let slot = kind.actor_slot().unwrap();
+        art.actors[slot] = (0..32)
+            .map(|index| {
+                let stream = (group * 32 + index + 1) as u32;
+                if index % 2 == 0 {
+                    let x = 2 + resident % 10 * 192;
+                    let y = 2 + resident / 10 % 10 * 192;
+                    art.resident[stream as usize - 1] = Some(crate::AtlasAddress {
+                        page: 8 + (resident / 100) as u32 * 2,
+                        uv: [
+                            x as f32 / 2048.0,
+                            y as f32 / 2048.0,
+                            188.0 / 2048.0,
+                            188.0 / 2048.0,
+                        ],
+                    });
+                    resident += 1;
+                }
+                GameFrame {
+                    stream,
+                    atlas: crate::AtlasAddress::new(0, [0.0; 4]),
+                    size: if index % 2 == 0 {
+                        [188.0; 2]
+                    } else {
+                        [180.0, 170.0]
+                    },
+                    anchor: if index % 2 == 0 {
+                        [94.0, 188.0]
+                    } else {
+                        [92.0, 175.0]
+                    },
+                }
+            })
+            .collect();
+    }
+    // Current cells alone exceed the retired four-pair budget; every phase
+    // keeps native geometry, even though an alternate phase may be unavailable.
+    assert_eq!(resident, 1024);
+    assert!(resident * 192 * 192 * 8 > 4 * 2 * 2048 * 2048 * 4);
+    let camera = SceneCamera {
+        zoom: 0.25,
+        viewport: [1280.0, 720.0],
+        ..camera()
+    };
+    let units: Vec<_> = (0..2000)
+        .map(|i| {
+            let mut actor = unit(kinds[i % kinds.len()]);
+            actor.id = aoe_core::EntityId(i as u32 + 1);
+            actor.position = [0.5 + (i % 45) as f64 * 0.05, 0.5 + (i / 45) as f64 * 0.05];
+            actor.with_actor_frame((i / kinds.len() % 16) as u16)
+        })
+        .collect();
+    let bodies = |units: &[SceneUnit]| {
+        super::super::world_sprite_frames(&art, &[], &[], units, camera, 0)
+            .into_iter()
+            .filter(|(sprite, _, _, _)| sprite.color[3] == 1.0)
+            .map(|(sprite, frame, _, id)| {
+                (id, (sprite.uv, sprite.pages[0], frame.size, frame.anchor))
+            })
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+    let before = bodies(&units);
+    assert_eq!(before.len(), 2000);
+    let next: Vec<_> = units
+        .iter()
+        .map(|u| u.with_actor_frame(u.actor_frame() | 1 << 4))
+        .collect();
+    let desired = crate::scene_native_frames(&art, &next, camera, 0);
+    assert_eq!(desired.len(), 1024);
+    assert!(
+        desired.iter().all(|id| id % 2 == 0),
+        "demand must retain the requested phase"
+    );
+    let after = bodies(&next);
+    assert_eq!(
+        after.len(),
+        before.len(),
+        "a cold phase must retain every visible actor"
+    );
+    for (id, expected) in before {
+        assert_eq!(
+            after.get(&id),
+            Some(&expected),
+            "previous geometry for actor {id}"
+        );
+    }
 }

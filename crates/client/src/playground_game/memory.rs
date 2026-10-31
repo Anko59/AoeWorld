@@ -17,7 +17,7 @@ const count_names = [
   'animals', 'projectiles', 'resource_entries', 'resource_bytes', 'stump_effects',
   'outgoing_message_bytes', 'control_group_members', 'move_queue_bytes',
   'selected_building_bytes', 'pending_training_bytes', 'native_chunk_bytes',
-  'native_request_bytes', 'native_metadata_bytes', 'native_resident_frames'
+  'native_request_bytes', 'native_metadata_bytes', 'native_resident_frames', 'native_failed'
 ];
 export function snapshot_json(backend, counts, names, renderer) {
   const value = {backend};
@@ -37,7 +37,7 @@ extern "C" {
 
 struct Snapshot {
     backend: &'static str,
-    counts: [usize; 27],
+    counts: [usize; 28],
     renderer: [(&'static str, usize); 5],
 }
 
@@ -123,6 +123,7 @@ pub fn client_memory_snapshot() -> Result<String, JsValue> {
                 native[1],
                 native[2],
                 native[3],
+                usize::from(client.native.as_ref().is_some_and(|n| n.failed())),
             ],
             renderer: client.renderer.memory_usage(),
         };

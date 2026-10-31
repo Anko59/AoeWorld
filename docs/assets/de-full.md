@@ -30,24 +30,60 @@ animation. Each independently compressed cell retains colour, owner weight and
 shadow planes in bounded, hashed pack chunks. The browser requests current
 visible cells first and two phases of lookahead in the current direction.
 
-A tile allocator admits these cells to paired colour/mask pages. Each render
-turn protects current visible cells, evicts least recently used unprotected
-cells when necessary, and clears every evicted address before reusing space.
-Four page pairs add 128 MiB to the base eight layers (128 MiB), for a normal
-256 MiB atlas payload independent of the number of imported animations. The
-existing absolute renderer cap remains 64 layers / 1 GiB. Driver allocations,
-framebuffers and upload scratch are additional allocations, not included in
-these texture payload figures.
+A tile allocator admits cells to paired colour/mask pages. Current demand and
+actual animation substitutes stay pinned for three render turns. The cache
+starts with four pairs and grows for visible demand, up to 512 MiB including
+startup layers; lookahead cannot trigger growth. Growth preserves installed
+pixels and waits for outstanding WebGPU work to retire. At most one old texture
+can overlap the new allocation (below 1 GiB of atlas payload, or 896 MiB with
+the current eight startup layers). Driver allocations, framebuffers and upload scratch are additional.
+The renderer's independent absolute cap remains 64 layers / 1 GiB.
+
+Missing animation phases use a resident cell from the same pose, facing and
+DAT part, retaining that cell's geometry. If any visible layer has neither its
+current cell nor a valid substitute, presentation keeps the previous complete
+frame while input, networking and uploads continue. Residency changes invalidate
+the render identity without discarding its displayed positions. Terrain cell
+addresses and their shader directory must both be queued before presentation.
 
 Encoded cache data plus request reservations are capped at 96 MiB, with at most
 four concurrent requests and 64 MiB in flight. A render turn decodes/uploads
 at most sixteen cells / 8 MiB, allowing one individually bounded larger cell.
+Paired uploads reserve two queue slots before either plane is written. Encoded
+chunks turn over by LRU even when their remaining cells are still wanted, so a
+working set larger than the encoded budget cannot prevent new requests.
 Requests are hashed and bounded before decompression; stale completions belong
 to their original asset state. WebGPU and WebGL2 receive subrectangle uploads;
 Canvas and context restoration retain the same current physical pixels.
 
 This design bounds the asset working set. Synthetic tests do not establish
 finished RTS performance or dedicated hardware qualification.
+
+## Local pressure evidence
+
+The local original-art proof uses 2,000 synthetic unit snapshots of 24 kinds,
+66 building records, a 1280×720 viewport and software WebGPU. At zoom 0.35 / 0.25,
+reported renderer textures peaked at 260.4 / 260.4 MiB, WASM memory at
+120.25 / 127.75 MiB, and summed Chromium RSS at 1547.7 / 1614.4 MiB. RSS counts
+shared pages more than once; reported textures exclude driver overhead and
+retiring allocations. This particular scene did not require atlas growth.
+The over-budget cache regression and backend pixel tests exercise growth.
+
+Median frame intervals were 1277.8 / 989.8 ms, versus 644.3 / 694.3 ms before
+repair, when sprites could be missing. These are observations on a contended
+software renderer, not a speedup or finished RTS performance claim. Units are
+on screen but densely overlap and are occluded by buildings. The proof checks
+that frames keep advancing, native streaming stays healthy, WASM stays within
+512 MiB, reported textures within 520 MiB, and summed RSS below 4 GiB.
+Dedicated hardware and a complete late-game match remain separate qualification.
+
+The camera's actual minimum is 1/4096, where the client intentionally uses
+strategic clusters. An additional proof runs the 0.1 sprite cutoff, minimum map
+view and a return to 0.25 sprites. Median frame intervals were 401.9 / 16.8 /
+922.4 ms; peak summed RSS was 1649.2 MiB. All 2,000 units and 66 buildings
+remained in four strategic clusters, native residency stayed fixed in map view,
+and native failures remained zero throughout. This four-chunk fixture supplies
+no country-wide terrain raster, so it does not qualify geographic map rendering.
 
 ## Validation and measurements
 
@@ -116,11 +152,11 @@ coordinates, including cells crossed within a world tile and negative positions.
 The existing two reserved atlas rows hold the active level's frame directory;
 residency changes update those rows without replacing the texture array.
 
-Visible terrain cells use the same four-pair cache as every other native sprite.
+Visible terrain cells share the growing native cache with every other sprite.
 The client selects a level from projected texel density, then coarsens until the
 terrain demand occupies at most 16 MiB of colour tiles, including allocation
-padding (32 MiB including their paired masks). The total normal atlas payload
-stays 256 MiB. This is a residency bound, not a claim that every native texture
+padding (32 MiB including their paired masks). The total atlas payload stays
+within the 512 MiB native residency cap. This is a residency bound, not a claim that every native texture
 can be displayed simultaneously at full resolution. Every source level remains
 in the private pack and can be requested when the view permits it.
 

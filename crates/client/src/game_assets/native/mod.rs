@@ -34,12 +34,13 @@ pub(crate) struct NativeFrames {
     chunks: Vec<FrameChunk>,
     cells: Vec<Cell>,
     cache: FrameCache,
-    encoded: BTreeMap<u16, Encoded>,
+    encoded: Vec<Option<Encoded>>,
     inflight: BTreeSet<u16>,
     clock: u64,
     completed: Rc<RefCell<Vec<(u16, Result<Vec<u8>, JsValue>)>>>,
     failed: bool,
     directory: Vec<u8>,
+    directory_pending: bool,
 }
 
 fn valid_name(name: &str) -> bool {
@@ -95,23 +96,25 @@ impl NativeFrames {
                 return Err(error("Invalid native cell metadata"));
             }
         }
-        let pairs = (aoe_rendering::MAX_GAME_ATLAS_PAGES as u16).saturating_sub(base) / 2;
-        let cache = FrameCache::new(
-            base,
-            pairs.min(4),
-            aoe_rendering::MAX_GAME_ATLAS_PAGES as u16,
-        )
-        .map_err(error)?;
+        // Total colour/mask storage, including startup layers, stays within
+        // 512 MiB; growth temporarily retains at most one previous texture.
+        let limit = (512 * 1024 * 1024 / GAME_ATLAS_PAGE_BYTES)
+            .min(aoe_rendering::MAX_GAME_ATLAS_PAGES as usize) as u16;
+        let pairs = limit.saturating_sub(base) / 2;
+        let cache = FrameCache::new(base, pairs.min(4), limit).map_err(error)?;
+        let mut encoded = Vec::new();
+        encoded.resize_with(chunks.len(), || None);
         Ok(Self {
             chunks,
             cells,
             cache,
-            encoded: BTreeMap::new(),
+            encoded,
             inflight: BTreeSet::new(),
             clock: 0,
             completed: Rc::default(),
             failed: false,
             directory: Vec::new(),
+            directory_pending: false,
         })
     }
     pub(crate) fn layer_count(&self) -> u16 {
@@ -120,6 +123,12 @@ impl NativeFrames {
     pub(crate) fn len(&self) -> usize {
         self.cells.len()
     }
+    pub(crate) fn failed(&self) -> bool {
+        self.failed
+    }
+    pub(crate) fn ready(&self) -> bool {
+        !self.failed && !self.directory_pending
+    }
     /// Encoded payload, reserved network bytes, metadata payload and resident
     /// frame count. Reservations are a budget, not additional owned memory.
     pub(crate) fn memory_usage(&self, art: &GameArt) -> [usize; 4] {
@@ -127,7 +136,8 @@ impl NativeFrames {
         let completed = self.completed.borrow();
         let bytes = self
             .encoded
-            .values()
+            .iter()
+            .flatten()
             .map(|e| e.bytes.capacity())
             .sum::<usize>()
             + completed
@@ -145,7 +155,7 @@ impl NativeFrames {
                 .iter()
                 .map(|c| c.file.capacity() + c.hash.capacity())
                 .sum::<usize>()
-            + self.encoded.len() * size_of::<(u16, Encoded)>()
+            + self.encoded.capacity() * size_of::<Option<Encoded>>()
             + self.inflight.len() * size_of::<u16>()
             + completed.capacity() * size_of::<(u16, Result<Vec<u8>, JsValue>)>()
             + art.resident.capacity() * size_of::<Option<AtlasAddress>>()
@@ -164,7 +174,7 @@ impl NativeFrames {
             .ok_or_else(|| error("Invalid native frame id"))
     }
     fn cached_bytes(&self) -> usize {
-        self.encoded.values().map(|e| e.bytes.len()).sum()
+        self.encoded.iter().flatten().map(|e| e.bytes.len()).sum()
     }
     fn inflight_bytes(&self) -> usize {
         self.inflight
@@ -183,7 +193,7 @@ impl NativeFrames {
         }
         let mut requests = Vec::new();
         for &id in &order {
-            if self.encoded.contains_key(&id) || self.inflight.contains(&id) {
+            if self.encoded[id as usize].is_some() || self.inflight.contains(&id) {
                 continue;
             }
             let bytes = self.chunks[id as usize].bytes as usize;
@@ -195,13 +205,14 @@ impl NativeFrames {
                 let victim = self
                     .encoded
                     .iter()
-                    .filter(|(id, _)| !wanted.contains(id))
-                    .min_by_key(|(id, e)| (e.touched, **id))
-                    .map(|(id, _)| *id);
+                    .enumerate()
+                    .filter_map(|(id, e)| e.as_ref().map(|e| (id, e.touched)))
+                    .min_by_key(|&(id, touched)| (touched, id))
+                    .map(|(id, _)| id);
                 let Some(victim) = victim else {
                     break;
                 };
-                self.encoded.remove(&victim);
+                self.encoded[victim] = None;
             }
             if self.cached_bytes() + self.inflight_bytes() + bytes > ENCODED_BYTES {
                 continue;
@@ -220,19 +231,16 @@ impl NativeFrames {
             .map_err(error)?;
         self.inflight.remove(&id);
         self.clock += 1;
-        self.encoded.insert(
-            id,
-            Encoded {
-                bytes,
-                touched: self.clock,
-            },
-        );
+        self.encoded[id as usize] = Some(Encoded {
+            bytes,
+            touched: self.clock,
+        });
         Ok(())
     }
     fn decode(&mut self, id: u32) -> Result<Option<[Vec<u8>; 3]>, JsValue> {
         let cell = *self.cell(id)?;
         self.clock += 1;
-        let Some(chunk) = self.encoded.get_mut(&cell.location.chunk) else {
+        let Some(chunk) = self.encoded[cell.location.chunk as usize].as_mut() else {
             return Ok(None);
         };
         chunk.touched = self.clock;

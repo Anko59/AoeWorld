@@ -79,7 +79,14 @@ impl Health {
     }
     pub(super) fn uploads_ready(&self) -> Result<bool, String> {
         self.check()?;
-        Ok(self.state().frames < MAX_FRAMES)
+        let state = self.state();
+        Ok(state.frames < MAX_FRAMES && state.uploads + 2 <= MAX_UPLOADS)
+    }
+
+    pub(crate) fn idle(&self) -> Result<bool, String> {
+        self.check()?;
+        let state = self.state();
+        Ok(state.frames == 0 && state.uploads == 0)
     }
 
     pub(crate) fn allow_upload(&self) -> Result<(), String> {

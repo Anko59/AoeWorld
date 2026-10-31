@@ -276,7 +276,7 @@ pub fn generate(install: &Path) -> Result<(), Error> {
         } else {
             let old = crate::catalog::units::SPRITES[pose];
             poses.push_str(&format!(
-                "ActorSource {{id:{},stride:{},millis:{},phases:{}}},\n",
+                "ActorSource::new({}, {}, {}, {}),\n",
                 old.id, old.stride, old.millis, old.phases
             ));
         }

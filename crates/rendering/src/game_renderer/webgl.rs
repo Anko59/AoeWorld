@@ -63,6 +63,18 @@ pub struct WebGlRenderer {
 }
 
 impl WebGlRenderer {
+    pub(super) fn atlas_pages(&self) -> u32 {
+        (self.source_atlas.len() / crate::GAME_ATLAS_PAGE_BYTES) as u32
+    }
+    pub(super) fn grow(&mut self, pages: u32) -> Result<(), String> {
+        let bytes = pages as usize * crate::GAME_ATLAS_PAGE_BYTES;
+        self.source_atlas
+            .reserve_exact(bytes - self.source_atlas.len());
+        self.source_atlas.resize(bytes, 0);
+        self.bridge
+            .upload(&self.source_atlas, &wasm_bindgen::memory())
+            .map_err(error)
+    }
     pub(super) fn update(
         &mut self,
         page: u32,

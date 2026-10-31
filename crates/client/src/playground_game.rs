@@ -265,6 +265,15 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 &client.art,
                 &scene.triangles,
             ));
+            let substitutes = aoe_rendering::scene_native_substitutes(
+                &client.art,
+                &units,
+                &resources,
+                camera,
+                time as usize,
+            );
+            let coverage = map::render_cache::NativeCoverage::new(&client.art, &substitutes);
+            coverage.prioritize(&mut required);
             let prefetch =
                 aoe_rendering::scene_native_prefetch(&client.art, &units, camera, time as usize);
             let Client {
@@ -275,11 +284,11 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 ..
             } = &mut *client;
             if let Some(native) = native {
-                match native.update(&required, &prefetch, art, renderer) {
+                match native.update(&required, &prefetch, &coverage.keep, art, renderer) {
                     Ok((changed, requests)) => {
                         native_requests = requests;
                         if changed {
-                            rendered_frame.clear();
+                            rendered_frame.invalidate();
                         }
                     }
                     Err(error) => client.status = format!("Native art unavailable: {error:?}"),
@@ -287,16 +296,44 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             let grid = client.grid;
             let animation = time as usize;
-            match map::render_cache::render_if_changed(
-                &mut client,
-                &scene,
-                &units,
-                &resources,
-                camera,
-                animation,
-                grid,
-            ) {
-                Ok(true) => strategic::present(),
+            let result = if coverage.ready(&client.art, &required)
+                && client.native.as_ref().is_none_or(|native| native.ready())
+            {
+                map::render_cache::render_if_changed(
+                    &mut client,
+                    &scene,
+                    &units,
+                    &resources,
+                    camera,
+                    animation,
+                    grid,
+                )
+            } else {
+                Ok(false)
+            };
+            match result {
+                Ok(true) => {
+                    let substitutes = aoe_rendering::scene_native_substitutes(
+                        &client.art,
+                        &units,
+                        &resources,
+                        camera,
+                        animation,
+                    );
+                    let mut used =
+                        map::render_cache::NativeCoverage::new(&client.art, &substitutes).keep;
+                    used.extend(required.iter().copied().filter(|&id| {
+                        client
+                            .art
+                            .resident
+                            .get(id as usize - 1)
+                            .is_some_and(Option::is_some)
+                    }));
+                    if let Some(native) = &mut client.native {
+                        native.pin_presented(&used);
+                    }
+                    strategic::present();
+                }
                 Ok(false) => {}
                 Err(error) => {
                     if matches!(

@@ -97,6 +97,28 @@ pub struct GameArt {
 }
 
 impl GameArt {
+    /// A cold animation cell retains a resident phase in the same facing row.
+    /// Return that phase's complete geometry as well as its physical address.
+    pub fn resident_animation(
+        &self,
+        frames: &[GameFrame],
+        index: usize,
+        stride: usize,
+    ) -> Option<GameFrame> {
+        let current = *frames.get(index)?;
+        self.resident_frame(current).or_else(|| {
+            if current.stream == 0 || stride == 0 {
+                return None;
+            }
+            let row = index / stride * stride;
+            (1..stride).find_map(|ago| {
+                let frame = *frames.get(row + (index % stride + stride - ago) % stride)?;
+                (frame.stream != 0)
+                    .then(|| self.resident_frame(frame))
+                    .flatten()
+            })
+        })
+    }
     pub fn resident_frame(&self, mut frame: GameFrame) -> Option<GameFrame> {
         if frame.stream != 0 {
             frame.atlas = self
@@ -202,7 +224,9 @@ impl Renderer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         }))
     }
