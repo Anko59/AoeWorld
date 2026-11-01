@@ -30,6 +30,12 @@ static building variants consistently by entity ID. Delta layers keep independen
 fractional frame durations and replay delays. Native anchors, owner weights,
 shadows, signed pixel offsets and annex tile displacements are preserved.
 The renderer orders layers and annex depth without mirroring building art.
+Multi-piece buildings are assembled by one rule. A Town Center's main, back,
+centre and front pieces belong to the head's age family and are sliced from one
+sprite, so each hotspot is already the building origin: their annex offsets
+only order depth, and applying them as pixel displacement splits the wings from
+their poles. An annex outside that family (a stone gate's corner towers) is its
+own sprite, and its offset places it.
 Bridge presentation retains its existing half-size world geometry; its native
 pixel cells are unchanged.
 

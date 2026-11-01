@@ -5,7 +5,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 mod building;
 mod tasks;
-pub use building::{Building, Damage};
+pub use building::{Annex, Building, Damage};
 pub fn disabled(bytes: &[u8]) -> Result<BTreeSet<i16>, Error> {
     tasks::disabled(bytes)
 }
