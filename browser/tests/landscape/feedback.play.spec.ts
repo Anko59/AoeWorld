@@ -73,7 +73,7 @@ async function feedbackWorld(
         socket.send(
           Buffer.from([
             0,
-            2,
+            4,
             1,
             1,
             ...Array<number>(32).fill(2),
@@ -82,9 +82,8 @@ async function feedbackWorld(
             ...unsigned(size * 2),
             ...unsigned(1024),
             20,
-            0,
             1,
-            0,
+            ...Array<number>(24).fill(1),
           ]),
         );
       }
@@ -113,7 +112,7 @@ async function feedbackWorld(
             0, // Buildings
           ]),
         );
-        socket.send(Buffer.from([6, ...unsigned(revision), 0, 0, 0, 0]));
+        socket.send(Buffer.from([5, ...unsigned(revision), 0, 0, 0, 0]));
       }
       if (bytes[0] === 2) {
         const sequence = readUnsigned(bytes).value;
@@ -150,7 +149,7 @@ async function feedbackWorld(
         throw new Error("No subscribed controller");
       active.send(
         Buffer.from([
-          6,
+          5,
           ...unsigned(revision),
           1,
           0,

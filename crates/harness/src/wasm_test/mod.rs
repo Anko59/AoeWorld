@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::{
     error::Error,
     fs,
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpStream},
     path::Path,
     process::Command,
     thread,
@@ -40,8 +40,13 @@ fn docker(args: &[&str]) -> Result<String> {
     Ok(String::from_utf8(output.stdout)?.trim().to_owned())
 }
 
-fn unused_port() -> Result<u16> {
-    Ok(TcpListener::bind("127.0.0.1:0")?.local_addr()?.port())
+/// Reserve both listeners together before starting the driver or the runner.
+fn browser_addresses() -> Result<(u16, String)> {
+    let listeners = crate::browser_ports::configured(2)?;
+    Ok((
+        listeners[0].local_addr()?.port(),
+        listeners[1].local_addr()?.to_string(),
+    ))
 }
 
 fn start_driver(port: u16) -> Result<Driver> {
@@ -114,9 +119,14 @@ const CARGO_DEADLINE: Duration = Duration::from_secs(600);
 /// the 145-test rendering suite no longer fits on a CI runner.
 const SUITE_TIMEOUT_SECONDS: &str = "300";
 
-fn runner_environment<'a>(remote: &'a str, capabilities: &'a str) -> [(&'static str, &'a str); 5] {
+fn runner_environment<'a>(
+    remote: &'a str,
+    capabilities: &'a str,
+    address: &'a str,
+) -> [(&'static str, &'a str); 6] {
     [
         ("WASM_BINDGEN_USE_BROWSER", "1"),
+        ("WASM_BINDGEN_TEST_ADDRESS", address),
         ("CHROMEDRIVER_REMOTE", remote),
         (
             "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER",
@@ -133,14 +143,14 @@ pub fn run() -> Result<()> {
     let mut journal =
         crate::gates::flaky::Journal::create(Path::new("reports/wasm/quarantine.jsonl"))?;
     let _ = fs::remove_file("reports/wasm/browser.json");
-    let port = unused_port()?;
+    let (port, address) = browser_addresses()?;
     let _driver = start_driver(port)?;
     let remote = format!("http://127.0.0.1:{port}/");
     let capabilities = root.join("browser/webdriver.json");
     let capabilities = capabilities
         .to_str()
         .ok_or("non-UTF-8 WebDriver configuration path")?;
-    let environment = runner_environment(&remote, capabilities);
+    let environment = runner_environment(&remote, capabilities, &address);
     let mut retries = std::collections::BTreeMap::new();
     if let Err(failure) = retry::run_suites(&environment, &policy, &mut journal, &mut retries) {
         let Some(names) = failure.context_failures else {

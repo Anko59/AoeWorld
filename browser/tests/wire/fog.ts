@@ -9,7 +9,7 @@ export function fogState(
   disabled = false,
 ): Buffer {
   return Buffer.from([
-    9,
+    8,
     ...uint(revision),
     ...uint(tick),
     ...region.flatMap((value) => uint(value * 2)),
@@ -23,5 +23,5 @@ export function fogState(
 
 /** Current protocol's explicit full-view setting for presentation fixtures. */
 export function disabledFog(revision: number[]): Buffer {
-  return Buffer.from([9, ...revision, 0, 0, 0, 2, 2, 1, 0, 0]);
+  return Buffer.from([8, ...revision, 0, 0, 0, 2, 2, 1, 0, 0]);
 }

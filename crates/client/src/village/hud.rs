@@ -1,6 +1,6 @@
 use super::{Client, building_center, owner};
 use crate::playground::game::{map, position_at};
-use aoe_protocol::{GameplayRole, ResourceKind, UnitKind, UnitTask};
+use aoe_protocol::{ResourceKind, UnitKind, UnitTask};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
 
@@ -41,7 +41,7 @@ pub(in super::super) fn update(client: &Client) {
     let _ = client.canvas.set_attribute("data-selected-stance", stance);
     let owner = owner(client);
     let overview = crate::playground::game::strategic::active(client);
-    // Header: four stockpiles, used/cap, four worker counts, clock, observing,
+    // Header: four stockpiles, used/cap, four worker counts, clock,
     // native-art flag, actor/queue/resource counts, and the two idle counts.
     // Actor records contain eighteen numbers; queue records contain progress,
     // total and unit kind.
@@ -82,12 +82,11 @@ pub(in super::super) fn update(client: &Client) {
             .find(|(key, _)| *key == id)
             .map_or(y - 42.0 * client.camera.zoom, |(_, top)| *top)
     };
-    let mut values = vec![0.0; 18];
-    values[16] = client.village.idle_villagers.len() as f64;
-    values[17] = client.village.idle_military.len() as f64;
+    let mut values = vec![0.0; 17];
+    values[15] = client.village.idle_villagers.len() as f64;
+    values[16] = client.village.idle_military.len() as f64;
     values[10] = (client.village.tick / u64::from(client.config.tick_hz.max(1))) as f64;
-    values[11] = flag(client.role != Some(GameplayRole::Controller));
-    values[12] = flag(!client.art.village[0].is_empty());
+    values[11] = flag(!client.art.village[0].is_empty());
     if let Some(player) = client.village.players.iter().find(|p| p.player == owner) {
         let s = player.stockpile;
         values[..6].copy_from_slice(&[
@@ -117,7 +116,7 @@ pub(in super::super) fn update(client: &Client) {
         if overview && !selected {
             continue;
         }
-        values[13] += 1.0;
+        values[12] += 1.0;
         let position = position_at(client, unit.id);
         let [x, y] = screen(client, position);
         let resource = unit.carried.map(|load| load.kind).or(unit.gathering);
@@ -183,7 +182,7 @@ pub(in super::super) fn update(client: &Client) {
         if overview && !client.selected.has_building(building.id) {
             continue;
         }
-        values[13] += 1.0;
+        values[12] += 1.0;
         let [x, y] = screen(client, building_center(building));
         values.extend_from_slice(&[
             f64::from(building.id.0),
@@ -215,7 +214,7 @@ pub(in super::super) fn update(client: &Client) {
         if overview && !client.selected.units.contains(&animal.id) {
             continue;
         }
-        values[13] += 1.0;
+        values[12] += 1.0;
         let [x, y] = screen(client, animal.position.as_tiles());
         let (kind, hp, attack) = match animal.kind {
             aoe_protocol::AnimalKind::Sheep => {
@@ -258,7 +257,7 @@ pub(in super::super) fn update(client: &Client) {
         .iter()
         .find(|b| Some(b.id) == client.selected.building_id && b.player == owner)
     {
-        values[14] = building.training_queue.len() as f64;
+        values[13] = building.training_queue.len() as f64;
         for entry in &building.training_queue {
             values.extend_from_slice(&[
                 entry.progress_ticks as f64,

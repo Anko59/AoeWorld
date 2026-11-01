@@ -1,15 +1,10 @@
 use super::{Client, owner};
 use crate::playground::game::map;
 use aoe_core::{FIXED_SUBUNITS_PER_TILE, ScreenPoint, WorldPosition};
-use aoe_protocol::{
-    GameplayClientMessage as Message, GameplayRole, UnitKind, encode_gameplay_client,
-};
+use aoe_protocol::{GameplayClientMessage as Message, UnitKind, encode_gameplay_client};
 
 pub(super) fn send(client: &mut Client, message: Message) {
     client.last_error = None;
-    if client.role != Some(GameplayRole::Controller) {
-        return;
-    }
     let sequence = client.next_sequence;
     client.next_sequence = sequence.saturating_add(1);
     if let Ok(bytes) = encode_gameplay_client(&message)
@@ -95,9 +90,6 @@ pub(in super::super) fn stop(client: &mut Client) {
 }
 
 pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queued: bool) {
-    if client.role != Some(GameplayRole::Controller) {
-        return;
-    }
     if !queued && building_attack_at_pointer(client, point) {
         return;
     }

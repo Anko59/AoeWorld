@@ -16,7 +16,7 @@ struct Ended {
 fn not_sent(shared: &Shared, sequence: u64) {
     shared.lock().events.push(Event::OrderResult {
         sequence,
-        result: crate::model::CommandResult::RejectedNotController,
+        result: crate::model::CommandResult::RejectedDisconnected,
     });
 }
 

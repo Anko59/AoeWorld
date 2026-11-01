@@ -1,6 +1,6 @@
 //! Starting a match over HTTP and joining its slots over WebSocket.
 use aoe_protocol::{
-    GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage, ResumeToken,
+    GAMEPLAY_VERSION, GameplayClientMessage, GameplayServerMessage, ResumeToken,
     decode_gameplay_server, encode_gameplay_client,
 };
 use aoe_scenario::SMOKE;
@@ -112,7 +112,6 @@ async fn a_match_starts_with_the_secret_and_slots_join_by_token() {
             token: token(slot["token"].as_str().unwrap()),
         };
         let GameplayServerMessage::Welcome {
-            role,
             primary_unit_id,
             width_tiles,
             ..
@@ -120,14 +119,13 @@ async fn a_match_starts_with_the_secret_and_slots_join_by_token() {
         else {
             panic!("welcome")
         };
-        assert_eq!(role, GameplayRole::Controller);
         assert_eq!(
             u64::from(primary_unit_id.0),
             slot["primary_unit_id"].as_u64().unwrap()
         );
         assert_eq!(width_tiles, 500);
     }
-    // A wrong token is refused outright, not demoted to a spectator.
+    // A wrong token is refused outright, never seated elsewhere.
     let wrong = GameplayClientMessage::JoinSlot {
         version: GAMEPLAY_VERSION,
         token: ResumeToken([9; 24]),
@@ -143,10 +141,7 @@ async fn a_match_starts_with_the_secret_and_slots_join_by_token() {
     };
     assert!(matches!(
         welcome_for(address, hello).await,
-        GameplayServerMessage::Welcome {
-            role: GameplayRole::Controller,
-            ..
-        }
+        GameplayServerMessage::Welcome { .. }
     ));
 }
 

@@ -1,6 +1,6 @@
 // What the filmed page says about itself, for a take that is stuck: which
 // start state it is in, what the loading screen shows, whether the game
-// connection or the controller role is missing. Read by steps.mjs when a wait
+// connection is missing. Read by steps.mjs when a wait
 // times out (the message names the state) and while it waits (a page that
 // has already failed for good fails the step at once instead of at the limit).
 
@@ -20,7 +20,6 @@ export async function snapshot(page) {
     return {
       start_state: document.body?.dataset.startState ?? null,
       connection: text("connection"),
-      observing: shown("observer-label"),
       controller_token: token,
       unsupported: text("unsupported"),
       loading_title: shown("loading-screen") ? text("loading-title") : null,
@@ -44,19 +43,6 @@ export function fatal(state) {
   if (state.loading_error) return `the loading screen shows an error: ${state.loading_error}`;
   if (state.connection === "Unavailable") return "the game connection reads Unavailable";
   return null;
-}
-
-// The server keeps a lost controller's lease for 30 s before it promotes a
-// waiting observer (LEASE_RESERVATION, crates/server/src/gameplay_transport.rs).
-// A page still observing after that has another live controller (a tab left
-// from an earlier take) that this take cannot displace.
-export const LEASE_WAIT_MS = 45_000;
-
-// The reason to give up, or null: the page has watched instead of played
-// since `since` (a timestamp, or null when it is not observing).
-export function lostLease(since, now) {
-  if (since === null || now - since < LEASE_WAIT_MS) return null;
-  return `the page has only observed for ${Math.round((now - since) / 1000)} s: another tab or session holds the game's controller lease (the server frees a lost one after 30 s)`;
 }
 
 // While the start sequence opens a map the client may meet a subscription the
@@ -89,8 +75,8 @@ export function describe(state) {
 // the frame counter, which changes every frame), as a line that changes only
 // when the page moves on.
 export function transition(state) {
-  const { start_state, connection, loading_title, loading_phase, chunks_pending, raster, observing, controller_token } = state;
-  return describe({ start_state, connection, loading_title, loading_phase, chunks_pending, raster, observing, controller_token });
+  const { start_state, connection, loading_title, loading_phase, chunks_pending, raster, controller_token } = state;
+  return describe({ start_state, connection, loading_title, loading_phase, chunks_pending, raster, controller_token });
 }
 
 // The last console errors and failed requests of the page, newest last.

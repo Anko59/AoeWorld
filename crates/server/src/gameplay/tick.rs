@@ -1,23 +1,14 @@
 use super::deliver::deliver;
 use super::fanout::{self, View};
 use super::{GameplayService, Session};
-use crate::gameplay_transport;
-use aoe_protocol::{CommandResult, GameplayRole, GameplayServerMessage};
+use aoe_protocol::GameplayServerMessage;
 use std::collections::BTreeMap;
 
 impl GameplayService {
     pub async fn tick(&self) {
         let started = std::time::Instant::now();
-        let (pending, controllers, views) = {
-            let mut ownership = self.ownership.lock().await;
+        let (pending, views) = {
             let mut sessions = self.sessions.lock().await;
-            gameplay_transport::promote_expired(&mut ownership, &mut sessions, self.world_id);
-            let controllers = sessions
-                .iter()
-                .filter_map(|(id, session)| {
-                    (session.role == GameplayRole::Controller).then_some((*id, session.viewer))
-                })
-                .collect::<BTreeMap<_, _>>();
             let start = self.command_cursor.fetch_add(
                 MAX_COMMANDS_PER_TICK as u64,
                 std::sync::atomic::Ordering::Relaxed,
@@ -28,7 +19,13 @@ impl GameplayService {
                 .iter()
                 .filter_map(|(id, session)| view(*id, session))
                 .collect::<Vec<_>>();
-            (commands, controllers, views)
+            (
+                commands
+                    .into_iter()
+                    .map(|(id, command)| (id, sessions[&id].viewer, command))
+                    .collect::<Vec<_>>(),
+                views,
+            )
         };
         self.probe.phase("sessions", started.elapsed());
         let started = std::time::Instant::now();
@@ -40,11 +37,8 @@ impl GameplayService {
         // it off the async runtime so one order cannot starve socket I/O.
         let applied = tokio::task::spawn_blocking(move || {
             let mut acknowledgements = BTreeMap::<u64, Vec<GameplayServerMessage>>::new();
-            for (session_id, command) in pending {
-                let result = match controllers.get(&session_id) {
-                    None => CommandResult::RejectedNotController,
-                    Some(player) => super::commands::apply(&mut world, *player, command.action),
-                };
+            for (session_id, player, command) in pending {
+                let result = super::commands::apply(&mut world, player, command.action);
                 let tick = world.tick();
                 acknowledgements.entry(session_id).or_default().push(
                     GameplayServerMessage::CommandAck {

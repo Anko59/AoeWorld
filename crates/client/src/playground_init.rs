@@ -64,7 +64,6 @@ pub(super) async fn initialize(document: Document) -> Result<(), JsValue> {
         config,
         capture: Default::default(),
         primary: None,
-        role: None,
         map_content_hash: None,
         surface_fixture: false,
         focus_map_hash: None,

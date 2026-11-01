@@ -41,13 +41,10 @@ for (const resumed of [false, true]) {
       const nav = Reflect.get(window, "aoeNavigation");
       const scene = document.getElementById("scene");
       const connection = document.getElementById("connection");
-      const observer = document.getElementById("observer-label");
-      if (!scene || !connection || !observer)
-        throw new Error("scene UI missing");
+      if (!scene || !connection) throw new Error("scene UI missing");
       scene.dataset["frame"] = "1";
       scene.dataset["chunksPending"] = scene.dataset["chunksFailed"] = "0";
       connection.textContent = "connected";
-      observer.hidden = true;
       if (resumed)
         start.resume({ phase: "ready", content_hash: "b".repeat(64) });
       else {

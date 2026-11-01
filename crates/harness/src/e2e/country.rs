@@ -2,8 +2,8 @@
 use super::{BrowserContainer, Server, process, ready};
 use aoe_core::{EntityId, TileCoord, WorldPosition};
 use aoe_protocol::{
-    GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
-    decode_gameplay_client, decode_gameplay_server,
+    GAMEPLAY_VERSION, GameplayClientMessage, GameplayServerMessage, decode_gameplay_client,
+    decode_gameplay_server,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -106,14 +106,12 @@ fn validate_live_wire(evidence: &Path, expected_hash: &str) -> Result<serde_json
                 GameplayServerMessage::Welcome {
                     version,
                     map_content_hash,
-                    role,
                     primary_unit_id,
                     tick_hz,
                     ..
                 } => {
                     welcome_matches = version == GAMEPLAY_VERSION
                         && map_content_hash == Some(expected_hash_bytes)
-                        && role == GameplayRole::Controller
                         && tick_hz == 20;
                     primary = Some(primary_unit_id);
                 }

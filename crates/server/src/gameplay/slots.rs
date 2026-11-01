@@ -3,9 +3,7 @@
 use super::{GameplayService, Session, fog, resources};
 use crate::gameplay_transport;
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE, PlayerId};
-use aoe_protocol::{
-    GAMEPLAY_VERSION, GameplayRole, GameplayServerMessage, MapMetadata, ResumeToken,
-};
+use aoe_protocol::{GAMEPLAY_VERSION, GameplayServerMessage, MapMetadata, ResumeToken};
 use aoe_simulation::GameWorld;
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -17,25 +15,18 @@ use std::{
 };
 use tokio::sync::{Mutex, RwLock, mpsc};
 
-#[derive(Clone, Copy)]
-pub(crate) struct ControllerLease {
-    pub(crate) session_id: u64,
-    pub(crate) disconnected_at: Option<Instant>,
-}
+#[path = "slots/tests.rs"]
+#[cfg(test)]
+mod tests;
 
 /// One seat of a match. Every slot owns exactly one player and is reachable
-/// only through its token; a human slot may also be claimed by a plain Hello.
+/// through its token; a human slot may also be taken by a plain Hello. Any
+/// number of connections may sit in one slot and all of them play it.
 pub(crate) struct Slot {
     pub(crate) player: PlayerId,
     pub(crate) primary_unit_id: EntityId,
     pub(crate) human: bool,
     pub(crate) token: ResumeToken,
-    pub(crate) lease: Option<ControllerLease>,
-}
-
-pub(crate) struct Ownership {
-    pub(crate) slots: Vec<Slot>,
-    pub(crate) next_token: u64,
 }
 
 /// A `JoinSlot` named a token no slot of this match owns.
@@ -44,7 +35,8 @@ pub struct UnknownSlotToken;
 
 /// What a connection asked for in its first message.
 pub(crate) enum Access {
-    /// Legacy `Hello`: resume with a token, or take the first free human slot.
+    /// `Hello`: resume with a token, or take a human slot (an unknown token
+    /// counts as none: a page from before a restart simply plays again).
     Hello(Option<ResumeToken>),
     /// `JoinSlot`: exactly this slot or nothing.
     Join(ResumeToken),
@@ -68,25 +60,6 @@ pub struct SlotInfo {
     pub token: ResumeToken,
 }
 
-impl Session {
-    /// A different point of view: rebuild every delta baseline.
-    pub(crate) fn change_viewer(&mut self, viewer: PlayerId) {
-        self.viewer = viewer;
-        self.resident.clear();
-        self.resident_fog = None;
-        self.rebuild_buildings = true;
-        self.resident_players.clear();
-        self.resident_buildings.clear();
-        self.resident_animals.clear();
-        self.resident_projectiles.clear();
-        self.resident_move_queues.clear();
-        self.resident_resources.clear();
-        self.vision_revision = None;
-        self.resource_revision = None;
-        self.resource_vision_revision = None;
-    }
-}
-
 impl GameplayService {
     pub(crate) fn from_world(
         world: GameWorld,
@@ -107,8 +80,7 @@ impl GameplayService {
         )
     }
 
-    /// Hosts one match seat per entry; the first slot is also the spectators'
-    /// point of view. Tokens are issued here and never derived from a counter
+    /// Hosts one match seat per entry; Tokens are issued here and never derived from a counter
     /// a client could guess.
     pub(crate) fn from_world_slots(
         mut world: GameWorld,
@@ -127,19 +99,14 @@ impl GameplayService {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos() as u64;
-        let mut next_token = 1;
         let slots = setups
             .into_iter()
-            .map(|setup| {
-                let token = gameplay_transport::make_token(world_id, next_token);
-                next_token += 1;
-                Slot {
-                    player: setup.player,
-                    primary_unit_id: setup.primary_unit_id,
-                    human: setup.human,
-                    token,
-                    lease: None,
-                }
+            .zip(1..)
+            .map(|(setup, counter)| Slot {
+                player: setup.player,
+                primary_unit_id: setup.primary_unit_id,
+                human: setup.human,
+                token: gameplay_transport::make_token(world_id, counter),
             })
             .collect();
         let probe = Arc::new(crate::gameplay_match::TickProbe::default());
@@ -152,13 +119,12 @@ impl GameplayService {
         Self {
             world,
             sessions: Arc::new(Mutex::new(BTreeMap::new())),
-            ownership: Arc::new(Mutex::new(Ownership { slots, next_token })),
+            slots,
             next_session: Arc::new(AtomicU64::new(1)),
             command_cursor: Arc::default(),
             world_id,
             map_content_hash,
             map_metadata,
-            primary_unit_id,
             resource_directory: None,
             probe,
             resource_journal: Arc::new(std::sync::Mutex::new(resources::Journal::default())),
@@ -169,10 +135,7 @@ impl GameplayService {
 
     /// The seats of this service with their tokens, for the match creator.
     pub async fn slot_infos(&self) -> Vec<SlotInfo> {
-        self.ownership
-            .lock()
-            .await
-            .slots
+        self.slots
             .iter()
             .map(|slot| SlotInfo {
                 player: slot.player,
@@ -209,7 +172,7 @@ impl GameplayService {
     ) -> (u64, GameplayServerMessage) {
         self.register_access(Access::Hello(requested_token), sender)
             .await
-            .unwrap_or_else(|_| unreachable!("a hello never fails"))
+            .expect("registration requires a human seat or a valid slot token")
     }
 
     /// Authenticates for exactly one slot; an unknown token is refused.
@@ -227,59 +190,35 @@ impl GameplayService {
         sender: mpsc::Sender<GameplayServerMessage>,
     ) -> Result<(u64, GameplayServerMessage), UnknownSlotToken> {
         let config = self.world.read().await.config();
-        let mut ownership = self.ownership.lock().await;
         let mut sessions = self.sessions.lock().await;
-        gameplay_transport::promote_expired(&mut ownership, &mut sessions, self.world_id);
-        let by_token = |token: ResumeToken| ownership.slots.iter().position(|s| s.token == token);
+        let by_token = |token: ResumeToken| self.slots.iter().position(|s| s.token == token);
         let slot_index = match access {
-            Access::Join(token) => Some(by_token(token).ok_or(UnknownSlotToken)?),
-            Access::Hello(Some(token)) => by_token(token),
-            Access::Hello(None) => None,
-        }
-        .or_else(|| match access {
-            Access::Hello(None) => ownership
-                .slots
-                .iter()
-                .position(|slot| slot.human && slot.lease.is_none()),
-            Access::Hello(Some(_)) | Access::Join(_) => None,
-        });
-        let session_id = self.next_session.fetch_add(1, Ordering::Relaxed);
-        let (role, token, viewer, primary, ai) = if let Some(index) = slot_index {
-            let slot = &mut ownership.slots[index];
-            if let Some(lease) = slot.lease.replace(ControllerLease {
-                session_id,
-                disconnected_at: None,
-            }) {
-                sessions.remove(&lease.session_id);
-            }
-            (
-                GameplayRole::Controller,
-                Some(slot.token),
-                slot.player,
-                slot.primary_unit_id,
-                !slot.human,
-            )
-        } else {
-            let first = ownership.slots.first();
-            (
-                GameplayRole::Spectator,
-                None,
-                first.map_or(PlayerId(0), |slot| slot.player),
-                first.map_or(self.primary_unit_id, |slot| slot.primary_unit_id),
-                false,
-            )
+            Access::Join(token) => by_token(token).ok_or(UnknownSlotToken)?,
+            Access::Hello(token) => token
+                .and_then(by_token)
+                .or_else(|| {
+                    // Prefer a human seat nobody sits in, then any human seat.
+                    let human = |slot: &&Slot| slot.human;
+                    let free = |index: usize| sessions.values().all(|s| s.slot != index);
+                    let humans = || self.slots.iter().enumerate().filter(|(_, s)| human(s));
+                    humans()
+                        .find(|(index, _)| free(*index))
+                        .or_else(|| humans().next())
+                        .map(|(index, _)| index)
+                })
+                .ok_or(UnknownSlotToken)?,
         };
+        let session_id = self.next_session.fetch_add(1, Ordering::Relaxed);
+        let slot = &self.slots[slot_index];
+        let (token, viewer, primary, ai) =
+            (slot.token, slot.player, slot.primary_unit_id, !slot.human);
         sessions.insert(
             session_id,
             Session {
-                role,
-                may_claim_human_seat: slot_index.is_some() || matches!(access, Access::Hello(None)),
-                token,
                 slot: slot_index,
                 viewer,
                 primary_unit_id: primary,
                 ai,
-                connected_at: Instant::now(),
                 sender,
                 subscription_delivery: None,
                 subscription: None,
@@ -313,7 +252,6 @@ impl GameplayService {
             height_tiles: config.height_tiles,
             coordinate_precision: FIXED_SUBUNITS_PER_TILE as u16,
             tick_hz: config.tick_hz,
-            role,
             primary_unit_id: primary,
             resume_token: token,
         };

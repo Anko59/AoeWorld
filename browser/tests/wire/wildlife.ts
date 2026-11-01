@@ -8,5 +8,5 @@ const sheep = readFileSync(new URL("sheep.hex", import.meta.url), "utf8")
 
 export function wildlifeState(revision: number[]): Buffer {
   // WildlifeState, subscription revision, tick, count, animal state.
-  return Buffer.from([8, ...revision, 0, 1, ...sheep]);
+  return Buffer.from([7, ...revision, 0, 1, ...sheep]);
 }

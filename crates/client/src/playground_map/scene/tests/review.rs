@@ -165,7 +165,6 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
         capture: Default::default(),
         config: WorldConfig::default(),
         primary: Some(id),
-        role: None,
         map_content_hash: None,
         surface_fixture: false,
         focus_map_hash: None,

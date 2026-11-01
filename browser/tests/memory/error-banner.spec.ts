@@ -22,7 +22,7 @@ test("server validation and disconnect reasons stay visible with a reload link",
     "The server could not encode a game update. Reload to reconnect.";
   const bytes = Buffer.from(message);
   // Current Postcard Error { code: 500, message }.
-  socket.send(Buffer.from([7, 244, 3, bytes.length, ...bytes]));
+  socket.send(Buffer.from([6, 244, 3, bytes.length, ...bytes]));
   await expect(
     page.getByRole("alert").filter({ hasText: message }),
   ).toBeVisible();

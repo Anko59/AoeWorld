@@ -1,16 +1,15 @@
-use crate::gameplay::{Access, ControllerLease, GameplayService, Ownership, Session};
+use crate::gameplay::{Access, GameplayService};
 use aoe_protocol::{
-    GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage, ResumeToken,
+    GAMEPLAY_VERSION, GameplayClientMessage, GameplayServerMessage, ResumeToken,
     decode_gameplay_client, encode_gameplay_server,
 };
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{Sink, SinkExt, StreamExt};
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 use tokio::{sync::mpsc, time::timeout};
 
 mod requests;
 
-const LEASE_RESERVATION: Duration = Duration::from_secs(30);
 /// How long one socket write may take before the peer counts as gone: long
 /// enough for a bot busy deciding, short enough to free a dead connection.
 const SEND_TIMEOUT: Duration = Duration::from_secs(20);
@@ -125,65 +124,6 @@ where
         }
     }
     Ok(())
-}
-
-/// Gives every human slot whose controller stayed away past the lease to the
-/// oldest eligible spectator, under a fresh token. Without a successor, the
-/// same-world credential remains valid for a new tab returning to its seat.
-/// AI slots are never reassigned: only their token reaches them.
-pub(super) fn promote_expired(
-    ownership: &mut Ownership,
-    sessions: &mut BTreeMap<u64, Session>,
-    world_id: u64,
-) {
-    for index in 0..ownership.slots.len() {
-        let slot = &ownership.slots[index];
-        let expired = slot.human
-            && slot.lease.is_some_and(|lease| {
-                lease
-                    .disconnected_at
-                    .is_some_and(|at| at.elapsed() >= LEASE_RESERVATION)
-            });
-        if !expired {
-            continue;
-        }
-        let next = sessions
-            .iter()
-            .filter(|(_, session)| {
-                session.role == GameplayRole::Spectator && session.may_claim_human_seat
-            })
-            .min_by_key(|(_, session)| session.connected_at)
-            .map(|(id, _)| *id);
-        let Some(session_id) = next else {
-            // No successor took the seat. A returning tab may resume this
-            // exact world/slot; tokens never match an unrelated world's slots.
-            ownership.slots[index].lease = None;
-            continue;
-        };
-        let token = make_token(world_id, ownership.next_token);
-        ownership.next_token = ownership.next_token.wrapping_add(1);
-        let slot = &mut ownership.slots[index];
-        slot.token = token;
-        slot.lease = Some(ControllerLease {
-            session_id,
-            disconnected_at: None,
-        });
-        if let Some(session) = sessions.get_mut(&session_id) {
-            session.role = GameplayRole::Controller;
-            session.token = Some(token);
-            session.slot = Some(index);
-            session.ai = false;
-            if session.viewer != slot.player {
-                session.change_viewer(slot.player);
-            }
-            session.primary_unit_id = slot.primary_unit_id;
-            let _ = session.sender.try_send(GameplayServerMessage::RoleChange {
-                role: GameplayRole::Controller,
-                primary_unit_id: slot.primary_unit_id,
-                resume_token: Some(token),
-            });
-        }
-    }
 }
 
 /// An unpredictable 192-bit token. `world_id` and `counter` only diversify the

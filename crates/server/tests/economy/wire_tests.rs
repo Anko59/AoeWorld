@@ -1,6 +1,6 @@
 use super::*;
 use aoe_core::{EntityId, WorldPosition};
-use aoe_protocol::{GameplayRole, UnitTask};
+use aoe_protocol::UnitTask;
 
 async fn controller() -> (
     GameplayService,
@@ -12,9 +12,7 @@ async fn controller() -> (
     let (tx, mut rx) = mpsc::channel(64);
     let (id, welcome) = service.register(None, tx).await;
     let GameplayServerMessage::Welcome {
-        primary_unit_id,
-        role: GameplayRole::Controller,
-        ..
+        primary_unit_id, ..
     } = welcome
     else {
         panic!("controller")
@@ -64,7 +62,7 @@ async fn panning_keeps_owned_villagers_authoritative_for_selection_and_worker_co
 }
 
 #[tokio::test]
-async fn move_gather_and_train_share_sequence_and_spectator_limits() {
+async fn move_gather_and_train_share_sequence_and_a_second_page_has_its_own() {
     let (service, id, mut rx, scout) = controller().await;
     service
         .queue_move(id, 1, scout, WorldPosition::new(8_389_632, 8_388_608))
@@ -88,35 +86,24 @@ async fn move_gather_and_train_share_sequence_and_spectator_limits() {
         2
     );
     let (tx, mut observer) = mpsc::channel(64);
-    let (spectator, _) = service.register(None, tx).await;
-    service.queue_gather(spectator, 2, scout, 2).await;
+    let (second, _) = service.register(None, tx).await;
+    service.queue_gather(second, 2, scout, 2).await;
     service
-        .queue_train(spectator, 3, EntityId(1), UnitKind::Villager)
+        .queue_train(second, 3, EntityId(1), UnitKind::Villager)
         .await;
-    assert_eq!(
-        drain(&mut observer)
-            .iter()
-            .filter(|message| matches!(
-                message,
-                GameplayServerMessage::CommandAck {
-                    result: CommandResult::RejectedNotController,
-                    ..
-                }
-            ))
-            .count(),
-        2
-    );
+    // Sequences are per page: the second page's orders are not rejected.
+    assert!(drain(&mut observer).is_empty());
     service.tick().await;
     assert!(drain(&mut rx).iter().any(|message| matches!(message, GameplayServerMessage::Tick { changed_units, .. } if changed_units.iter().any(|unit| unit.id == scout && unit.task == UnitTask::Moving))));
 }
 
 #[tokio::test]
-async fn economy_updates_reach_controller_and_spectator_and_resync_is_complete() {
+async fn economy_updates_reach_both_pages_and_resync_is_complete() {
     let (service, id, mut controller, _) = controller().await;
     let (tx, mut observer) = mpsc::channel(64);
-    let (spectator, _) = service.register(None, tx).await;
+    let (other, _) = service.register(None, tx).await;
     let region = TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384));
-    service.subscribe(spectator, 1, region).await;
+    service.subscribe(other, 1, region).await;
     let GameplayServerMessage::Snapshot { buildings, .. } = observer.try_recv().unwrap() else {
         panic!("snapshot")
     };
@@ -144,7 +131,7 @@ async fn economy_updates_reach_controller_and_spectator_and_resync_is_complete()
         }
     )));
     drain(&mut observer);
-    service.resync(spectator, 2).await;
+    service.resync(other, 2).await;
     assert!(drain(&mut observer).iter().any(|message| matches!(message, GameplayServerMessage::Snapshot { revision:2, units, players, buildings, .. } if units.len() == 4 && players[0].stockpile.food == 100 && buildings[0].training_queue.len() == 2 && buildings[0].training_queue[0].progress_ticks == 2 && buildings[0].training_queue[1].progress_ticks == 0)));
 }
 
@@ -293,18 +280,14 @@ async fn stalled_camera_subscriptions_keep_only_the_in_flight_and_latest_views()
 }
 
 #[tokio::test]
-async fn replacing_a_session_cancels_its_waiting_subscription_worker() {
+async fn a_disconnected_session_cancels_its_waiting_subscription_worker() {
     let service = GameplayService::new(Seed(1));
     let (tx, mut old_rx) = mpsc::channel(1);
-    let (old, welcome) = service.register(None, tx).await;
-    let GameplayServerMessage::Welcome { resume_token, .. } = welcome else {
-        panic!("welcome");
-    };
+    let (old, _) = service.register(None, tx).await;
     service
         .subscribe(old, 1, TileRect::from_xywh(8000, 8000, 64, 64))
         .await;
-    let (tx, _new_rx) = mpsc::channel(8);
-    service.register(resume_token, tx).await;
+    service.disconnect(old).await;
     tokio::task::yield_now().await;
     assert!(matches!(
         old_rx.try_recv(),

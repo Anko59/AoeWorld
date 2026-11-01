@@ -1,7 +1,7 @@
 use aoe_core::{EntityId, TileCoord, TileRect, WorldPosition};
 use aoe_protocol::{
-    CommandResult, GAMEPLAY_VERSION, GameplayClientMessage, GameplayRole, GameplayServerMessage,
-    ResumeToken, decode_gameplay_server, encode_gameplay_client,
+    CommandResult, GAMEPLAY_VERSION, GameplayClientMessage, GameplayServerMessage, ResumeToken,
+    decode_gameplay_server, encode_gameplay_client,
 };
 use aoe_scenario::SMOKE;
 use aoe_server::{AppState, Config, app};
@@ -187,13 +187,12 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
     let (address, server, ticker) = setup().await;
     let (mut controller, welcome) = open(address, None).await;
     let GameplayServerMessage::Welcome {
-        role: GameplayRole::Controller,
         primary_unit_id,
-        resume_token: Some(token),
+        resume_token: token,
         ..
     } = welcome
     else {
-        panic!("first client must control")
+        panic!("first client must be welcomed")
     };
     let center = TileRect::new(TileCoord::new(8_000, 8_000), TileCoord::new(8_384, 8_384));
     send(
@@ -220,16 +219,16 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
     assert!(matches!(receive(&mut controller).await,
         GameplayServerMessage::Projectiles { revision: 1, projectiles, .. } if projectiles.is_empty()));
 
-    let (mut spectator, welcome) = open(address, None).await;
+    // A second page is a full player of the same seat: its own order stream
+    // is accepted, never demoted to an observer.
+    let (mut second, welcome) = open(address, None).await;
     assert!(matches!(
         welcome,
-        GameplayServerMessage::Welcome {
-            role: GameplayRole::Spectator,
-            ..
-        }
+        GameplayServerMessage::Welcome { resume_token, primary_unit_id: unit, .. }
+            if resume_token == token && unit == primary_unit_id
     ));
     send(
-        &mut spectator,
+        &mut second,
         GameplayClientMessage::MoveOrder {
             sequence: 1,
             entity_id: primary_unit_id,
@@ -237,13 +236,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
         },
     )
     .await;
-    assert!(matches!(
-        receive(&mut spectator).await,
-        GameplayServerMessage::CommandAck {
-            result: CommandResult::RejectedNotController,
-            ..
-        }
-    ));
+    assert_command_ack(&mut second, 1, CommandResult::Accepted).await;
 
     send(
         &mut controller,
@@ -256,7 +249,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
     .await;
     assert_command_ack(&mut controller, 1, CommandResult::Accepted).await;
     send(
-        &mut spectator,
+        &mut second,
         GameplayClientMessage::MoveOrder {
             sequence: 2,
             entity_id: primary_unit_id,
@@ -264,13 +257,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
         },
     )
     .await;
-    assert!(matches!(
-        receive(&mut spectator).await,
-        GameplayServerMessage::CommandAck {
-            result: CommandResult::RejectedNotController,
-            ..
-        }
-    ));
+    assert_command_ack(&mut second, 2, CommandResult::RejectedInvalidDestination).await;
     send(
         &mut controller,
         GameplayClientMessage::MoveOrder {
@@ -300,10 +287,7 @@ async fn controller_owns_orders_and_reconnects_with_a_resume_token() {
     let (_replacement, welcome) = open(address, Some(token)).await;
     assert!(matches!(
         welcome,
-        GameplayServerMessage::Welcome {
-            role: GameplayRole::Controller,
-            ..
-        }
+        GameplayServerMessage::Welcome { resume_token, .. } if resume_token == token
     ));
     server.abort();
     ticker.abort();
@@ -363,7 +347,7 @@ async fn map_activation_keeps_existing_gameplay_when_no_land_start_exists() {
     let (mut controller, welcome) = open(address, None).await;
     let GameplayServerMessage::Welcome {
         world_id: previous_world_id,
-        resume_token: Some(token),
+        resume_token: token,
         ..
     } = welcome
     else {
@@ -400,9 +384,12 @@ async fn map_activation_keeps_existing_gameplay_when_no_land_start_exists() {
     let activation = serde_json::from_str::<serde_json::Value>(body).expect("activation JSON");
     assert_eq!(activation["start_available"], false);
     assert_eq!(activation["message"], "no suitable land start.");
-    let (_observer, welcome) = open(address, None).await;
+    // A second page is a full player too: it may create maps while the first
+    // page stays connected.
+    let (_second, welcome) = open(address, None).await;
     let GameplayServerMessage::Welcome {
         world_id,
+        resume_token: second_token,
         map_content_hash: None,
         map_metadata: None,
         ..
@@ -411,6 +398,13 @@ async fn map_activation_keeps_existing_gameplay_when_no_land_start_exists() {
         panic!("existing gameplay must remain active");
     };
     assert_eq!(world_id, previous_world_id);
+    let second_path = format!("/maps/{hash}");
+    let response = tokio::task::spawn_blocking(move || {
+        http_json_as_controller(address, &second_path, "{}", second_token)
+    })
+    .await
+    .expect("response");
+    assert!(response.starts_with("HTTP/1.1 200"));
     server.abort();
     ticker.abort();
 }

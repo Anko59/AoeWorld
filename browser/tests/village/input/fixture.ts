@@ -111,7 +111,7 @@ export async function inputFixture(
         socket.send(
           Buffer.from([
             0,
-            2,
+            4,
             1,
             0,
             0,
@@ -120,8 +120,7 @@ export async function inputFixture(
             ...uint(1024),
             20,
             0,
-            0,
-            0,
+            ...Array<number>(24).fill(1),
           ]),
         );
       if (bytes[0] !== 1) {
@@ -207,7 +206,7 @@ export async function inputFixture(
       ) => [id, kind, 0, hp, ...position(x, y), 0, ...uint(food), 0, 0, 0, 0];
       socket.send(
         Buffer.from([
-          8,
+          7,
           ...revision,
           0,
           3,

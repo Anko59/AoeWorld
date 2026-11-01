@@ -193,7 +193,7 @@ async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<u64, (Status
     let refused = || {
         (
             StatusCode::FORBIDDEN,
-            "current gameplay controller authorization is required".to_owned(),
+            "a human player resume token is required".to_owned(),
         )
     };
     let token = maps::controller_token(headers).ok_or_else(refused)?;
@@ -205,8 +205,7 @@ async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<u64, (Status
         }
     }
     gameplay
-        .is_controller(token)
-        .await
+        .is_human_token(token)
         .then_some(gameplay.world_id())
         .ok_or_else(refused)
 }

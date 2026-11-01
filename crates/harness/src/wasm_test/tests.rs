@@ -209,7 +209,7 @@ fn graphics_errors_are_recognized_at_upload_render_and_unwrap_sites() {
 
 #[test]
 fn browser_suites_get_more_than_the_runner_default_of_twenty_seconds() {
-    let environment = runner_environment("http://127.0.0.1:1/", "caps.json");
+    let environment = runner_environment("http://127.0.0.1:1/", "caps.json", "127.0.0.1:8201");
     let timeout = environment
         .iter()
         .find(|(name, _)| *name == "WASM_BINDGEN_TEST_TIMEOUT")
@@ -221,7 +221,8 @@ fn browser_suites_get_more_than_the_runner_default_of_twenty_seconds() {
 #[test]
 fn current_checkout_has_report_identity_and_a_free_local_port() {
     assert_eq!(git("rev-parse", "HEAD").expect("revision").len(), 40);
-    assert!(unused_port().expect("port") > 0);
+    let (driver, http) = browser_addresses().expect("ports");
+    assert_ne!(driver, http.parse::<SocketAddr>().unwrap().port());
 }
 
 #[test]
@@ -283,3 +284,18 @@ fn completion_metadata_must_prove_a_normal_exit_one_and_untruncated_capture() {
 
 #[path = "tests/quarantine_tests.rs"]
 mod quarantine_tests;
+
+#[test]
+fn browser_runner_has_an_explicit_http_address_and_no_debugging_listener() {
+    let environment = runner_environment("http://127.0.0.1:8200/", "caps.json", "127.0.0.1:8201");
+    assert!(environment.contains(&("WASM_BINDGEN_TEST_ADDRESS", "127.0.0.1:8201")));
+    let capabilities: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../browser/webdriver.json")).unwrap();
+    assert!(
+        capabilities["goog:chromeOptions"]["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|arg| arg == "--remote-debugging-pipe")
+    );
+}

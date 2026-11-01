@@ -60,7 +60,7 @@ test("exhaustion frees a resource tile for the build preview and order immediate
   const id = 8187 * 2 ** 19 + 8192 * 2;
   const resource = (revision: number, remaining: number) =>
     Buffer.from([
-      6,
+      5,
       ...uint(subscription),
       0,
       ...uint(revision),
@@ -79,7 +79,7 @@ test("exhaustion frees a resource tile for the build preview and order immediate
   await page.mouse.click(960, 232);
   expect(orders).toHaveLength(0);
   socket.send(
-    Buffer.from([6, ...uint(subscription), 1, 2, 3, 1, ...uint(id), 0, 0]),
+    Buffer.from([5, ...uint(subscription), 1, 2, 3, 1, ...uint(id), 0, 0]),
   );
   await expect(scene).toHaveAttribute("data-placement-valid", "true");
   await page.mouse.click(960, 232);

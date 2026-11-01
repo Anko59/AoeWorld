@@ -36,8 +36,7 @@ delivery revisions and instrumentation counters do not enter the replay hash.
 
 ## Authority and wire
 
-Each slot's controller receives its own player's view; spectators see the first
-slot's. Simulation knowledge is independent per player, and each player has its
+Each connection receives its slot player's view. Simulation knowledge is independent per player, and each player has its
 own vision revision, so a viewer rebuilds its fog view only when its own sight
 changes. A rebuilt view whose region, tiles and overview equal what the client
 already holds is not sent again (the client ignores the tick it was built at).

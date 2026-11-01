@@ -23,7 +23,7 @@ impl GameplayService {
         // One budget scales with the number of hosted seats, so many AI
         // connections do not exhaust a limit sized for a single human.
         let global_limit = MAX_PENDING_COMMANDS_GLOBAL.max(
-            sessions
+            self.slots
                 .len()
                 .saturating_mul(MAX_PENDING_COMMANDS_PER_CONNECTION),
         );
@@ -31,9 +31,7 @@ impl GameplayService {
             return;
         };
         let mut result = None;
-        if session.role != GameplayRole::Controller {
-            result = Some(CommandResult::RejectedNotController);
-        } else if session.last_sequence.is_some_and(|last| sequence <= last)
+        if session.last_sequence.is_some_and(|last| sequence <= last)
             || session.acknowledgements.contains(&sequence)
         {
             result = Some(CommandResult::RejectedSequence);

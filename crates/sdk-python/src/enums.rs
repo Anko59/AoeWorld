@@ -172,7 +172,7 @@ mirror!(
     aoe_sdk::CommandResult,
     [
         Accepted,
-        RejectedNotController,
+        RejectedDisconnected,
         RejectedUnknownEntity,
         RejectedSequence,
         RejectedRateLimited,

@@ -4,13 +4,13 @@
 // AI holds its seat. Cancel and Quit to Main Menu stop the AI players.
 const POLL_MS = 500;
 
-export function initSkirmish({ readJson, controllerHeaders, onStatus }) {
+export function initSkirmish({ readJson, tokenHeaders, onStatus }) {
   let running = false;
   let cancelled = false;
   // The match swap resets the page's token until the game reconnects; the
   // server also accepts the one that started the skirmish.
   let starter = null;
-  const headers = () => { try { return controllerHeaders(); } catch (error) { if (starter) return starter; throw error; } };
+  const headers = () => { try { return tokenHeaders(); } catch (error) { if (starter) return starter; throw error; } };
   const status = async () => readJson(await fetch('/skirmish'));
   const post = async (path, body) => readJson(await fetch(path, {
     method: 'POST',
@@ -21,7 +21,7 @@ export function initSkirmish({ readJson, controllerHeaders, onStatus }) {
   async function run(hash, opponents) {
     running = true;
     cancelled = false;
-    starter = controllerHeaders();
+    starter = tokenHeaders();
     try {
       const started = await post('/skirmish', { map_hash: hash, opponents });
       for (let value = started; ; value = await status()) {

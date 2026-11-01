@@ -35,8 +35,8 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   retries: 0,
   // One worker per game server: the harness starts AOE_E2E_WORKERS servers and
-  // lists them in AOE_BASE_URLS (see server.ts), so no two workers share a
-  // controller lease or the server-wide map and unit state (#388).
+  // lists them in AOE_BASE_URLS (see server.ts), so no two workers share the
+  // server-wide map and unit state (#388).
   workers: serverUrls().length,
   reporter: [["list"]],
   use: {

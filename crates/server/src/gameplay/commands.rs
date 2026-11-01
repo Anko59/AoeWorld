@@ -3,7 +3,7 @@ use super::{
     MAX_PENDING_COMMANDS_PER_CONNECTION, PendingAction, PendingCommand, total_pending,
 };
 use aoe_core::{EntityId, WorldPosition};
-use aoe_protocol::{CommandResult, GameplayRole, GameplayServerMessage};
+use aoe_protocol::{CommandResult, GameplayServerMessage};
 use std::time::Instant;
 
 /// Order budget of an AI slot (humans keep 10 per second, burst 20).

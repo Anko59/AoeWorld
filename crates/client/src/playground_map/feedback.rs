@@ -137,7 +137,7 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
         RejectedVassalLeash => "A Vassal must stay within 100 tiles of its home Castle.",
         RejectedVassalHome => "A Vassal can garrison only in its home Castle.",
         RejectedGarrisonFull => "Cannot garrison: that building is full.",
-        RejectedNotController => "Cannot give orders: this session is observing the game.",
+        RejectedDisconnected => "The order was not sent. Please try again.",
         RejectedUnknownEntity => "Cannot give orders: the unit is no longer available.",
         RejectedSequence => "The order could not be confirmed. Please try again.",
         RejectedRateLimited => "Too many orders at once. Please try again shortly.",

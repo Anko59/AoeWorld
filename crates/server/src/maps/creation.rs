@@ -28,7 +28,7 @@ pub(crate) async fn create_job(
     headers: HeaderMap,
     Json(input): Json<map_jobs::CreationRequest>,
 ) -> Result<(StatusCode, Json<map_jobs::Job>), (StatusCode, String)> {
-    require_controller(&state, &headers).await?;
+    require_human_token(&state, &headers).await?;
     input
         .request
         .estimate()
@@ -69,7 +69,7 @@ pub(crate) async fn cancel_job(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<map_jobs::Job>, (StatusCode, String)> {
-    require_controller(&state, &headers).await?;
+    require_human_token(&state, &headers).await?;
     map_jobs::cancel(&state, job_id)
         .await
         .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error))?

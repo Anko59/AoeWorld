@@ -2,9 +2,7 @@
 use super::{Client, orders::send, owner};
 use crate::{building_ui, playground::game::map};
 use aoe_core::{EntityId, ScreenPoint, TileCoord};
-use aoe_protocol::{
-    BuildingKind, ConstructionState, GameplayClientMessage as Message, GameplayRole, UnitKind,
-};
+use aoe_protocol::{BuildingKind, ConstructionState, GameplayClientMessage as Message, UnitKind};
 
 #[inline(never)]
 pub(super) fn builders(client: &Client) -> Vec<EntityId> {
@@ -45,14 +43,12 @@ pub(super) fn enabled(client: &Client, kind: BuildingKind, count: u32) -> bool {
     let mut cost = building_ui::stock(building_ui::rules(kind).cost);
     cost.wood = cost.wood.saturating_mul(count);
     cost.stone = cost.stone.saturating_mul(count);
-    client.role == Some(GameplayRole::Controller)
-        && client.selected.units.iter().any(|id| {
-            client
-                .units
-                .get(id)
-                .is_some_and(|u| u.player == owner(client) && u.kind == UnitKind::Villager)
-        })
-        && building_ui::build_enabled(kind, p.stockpile, completed(client), p.age)
+    client.selected.units.iter().any(|id| {
+        client
+            .units
+            .get(id)
+            .is_some_and(|u| u.player == owner(client) && u.kind == UnitKind::Villager)
+    }) && building_ui::build_enabled(kind, p.stockpile, completed(client), p.age)
         && building_ui::affordable(p.stockpile, cost)
 }
 

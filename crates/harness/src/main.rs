@@ -1,6 +1,7 @@
 mod agents;
 mod architecture;
 mod assets;
+mod browser_ports;
 mod cli;
 mod coverage;
 mod dev;

@@ -15,11 +15,11 @@ pub use gameplay::{
     MAX_PENDING_COMMANDS_PER_CONNECTION, MAX_POPULATION, MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES,
     MAX_RETAINED_BUILDINGS, MAX_SUBSCRIBED_UNITS, MAX_SUBSCRIPTION_TILES, MAX_TRAINING_QUEUE,
     MapMetadata, MarketPrices, RallyPoint, RallyTarget, ResearchState, ResourceAmount,
-    ResourceKind, ResourceState, ResumeToken, Role as GameplayRole,
-    ServerMessage as GameplayServerMessage, Stockpile, Tech, TradeResource, TrainingState,
-    UnitKind, UnitState as GameplayUnitState, UnitTask, VERSION as GAMEPLAY_VERSION, VassalReport,
-    VassalWait, decode_client as decode_gameplay_client, decode_server as decode_gameplay_server,
-    encode_client as encode_gameplay_client, encode_server as encode_gameplay_server,
+    ResourceKind, ResourceState, ResumeToken, ServerMessage as GameplayServerMessage, Stockpile,
+    Tech, TradeResource, TrainingState, UnitKind, UnitState as GameplayUnitState, UnitTask,
+    VERSION as GAMEPLAY_VERSION, VassalReport, VassalWait, decode_client as decode_gameplay_client,
+    decode_server as decode_gameplay_server, encode_client as encode_gameplay_client,
+    encode_server as encode_gameplay_server,
 };
 use serde::{
     Deserialize, Deserializer, Serialize,

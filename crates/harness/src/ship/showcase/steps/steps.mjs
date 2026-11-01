@@ -3,7 +3,7 @@
 // own timeout. A failure names the step (its number and label) and what it was
 // waiting for, so a take that cannot proceed says where and why.
 import { FAILED_MS, failingFor, landed, quiet, sample } from "./readiness.mjs";
-import { RECONNECTS, describe, fatal, lostLease, serverError, snapshot, transition, wantsReconnect, watch } from "./pagestate.mjs";
+import { RECONNECTS, describe, fatal, serverError, snapshot, transition, wantsReconnect, watch } from "./pagestate.mjs";
 import { centredOn, clickable, nearestOf, sameCamera, steady, worldAt } from "./framing.mjs";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -163,7 +163,6 @@ const logs = new WeakMap();
 
 // Runs `perform`, and stops it as soon as the page can no longer succeed.
 let lastPhase = null;
-let observingSince = null;
 let errorSince = null;
 let reconnects = 0;
 const taken = Date.now();
@@ -177,7 +176,6 @@ async function guarded(page, op) {
       const phase = transition(state);
       if (phase !== lastPhase) console.log("showcase-phase page_state", Date.now() - taken, phase);
       lastPhase = phase;
-      observingSince = state.observing ? (observingSince ?? Date.now()) : null;
       errorSince = serverError(state) ? (errorSince ?? Date.now()) : null;
       if (wantsReconnect(state, errorSince, Date.now()) && reconnects < RECONNECTS) {
         reconnects++;
@@ -187,7 +185,7 @@ async function guarded(page, op) {
       }
       const stuck = reconnects >= RECONNECTS && wantsReconnect(state, errorSince, Date.now())
         ? `the connection still reads "${state.connection}" after ${RECONNECTS} reconnects` : null;
-      const reason = fatal(state) ?? stuck ?? lostLease(observingSince, Date.now());
+      const reason = fatal(state) ?? stuck;
       if (reason) throw Object.assign(new Error(reason), { fatal: true });
     }
   })();

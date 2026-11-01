@@ -146,7 +146,7 @@ fn the_side_environment_opens_the_package_at_server_start() {
 }
 
 #[test]
-fn the_side_environment_is_exactly_the_spectator_setup() {
+fn the_side_environment_is_exactly_the_view_only_setup() {
     // No controller or lease setting: one added to the server's environment has
     // to be named here on purpose, and that review is what this guards.
     let env = server::side_env("pack", std::path::Path::new("/maps"), HASH);
@@ -164,7 +164,7 @@ fn the_side_environment_is_exactly_the_spectator_setup() {
 
 #[test]
 fn the_capture_page_watches_the_app_and_never_acts_on_it() {
-    // The page is a spectator: it loads, evaluates, screenshots and reads its
+    // The page is view-only: it loads, evaluates, screenshots and reads its
     // errors. Any other page method (click, mouse, keyboard, ...) or a dispatched
     // input event would act on the app as a user, so the script may not contain one.
     const WATCHING: [&str; 5] = ["evaluate", "goto", "waitForFunction", "on", "screenshot"];

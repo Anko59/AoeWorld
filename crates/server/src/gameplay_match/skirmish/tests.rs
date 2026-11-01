@@ -43,7 +43,7 @@ async fn controller(state: &AppState) -> HeaderMap {
     std::mem::forget(receiver);
     let (_, welcome) = gameplay.register(None, sender).await;
     let GameplayServerMessage::Welcome {
-        resume_token: Some(token),
+        resume_token: token,
         ..
     } = welcome
     else {
@@ -218,7 +218,7 @@ async fn a_reload_reclaims_the_human_seat_and_keeps_the_ai_running() {
     std::mem::forget(receiver);
     let (session, welcome) = gameplay.register(None, sender).await;
     let GameplayServerMessage::Welcome {
-        resume_token: Some(token),
+        resume_token: token,
         ..
     } = welcome
     else {
@@ -230,17 +230,11 @@ async fn a_reload_reclaims_the_human_seat_and_keeps_the_ai_running() {
     let (sender, receiver) = tokio::sync::mpsc::channel(64);
     std::mem::forget(receiver);
     let (_, welcome) = gameplay.register(Some(token), sender).await;
-    let GameplayServerMessage::Welcome {
-        role, resume_token, ..
-    } = welcome
-    else {
+    let GameplayServerMessage::Welcome { resume_token, .. } = welcome else {
         panic!("a welcome");
     };
-    assert_eq!(
-        (role, resume_token),
-        (aoe_protocol::GameplayRole::Controller, Some(token))
-    );
-    assert!(gameplay.is_controller(token).await);
+    assert_eq!(resume_token, token);
+    assert!(gameplay.is_human_token(token));
     tokio::time::sleep(Duration::from_millis(2_600)).await;
     let resumed = status(&state).await;
     assert_eq!((resumed.phase, resumed.ai_hosts), (Phase::Ready, 1));

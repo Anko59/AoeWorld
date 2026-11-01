@@ -62,7 +62,7 @@ export function initStartSequence({ readJson, start, cancel }) {
   let prepared = false;
   let skirmishJob = false;
   let canCancel = false;
-  // A tab holding a shared controller token first asks the server for
+  // A tab holding a resume token first asks the server for
   // a running match (resume) before choosing the cinematic or the menu.
   let resuming = /^[0-9a-f]{48}$/i.test(getToken() || '');
   let finishResume = () => {};
@@ -165,14 +165,13 @@ export function initStartSequence({ readJson, start, cancel }) {
   el('custom-location').addEventListener('click', () => { el(fields[0]).focus(); el(fields[0]).select(); });
   el('single-player').addEventListener('click', () => { show('setup'); estimateMap(); });
   el('setup-back').addEventListener('click', () => show('menu'));
-  function controllerReady() {
+  function startReady() {
     const connected = el('scene').dataset.connected === 'true' || el('connection').textContent === 'connected';
-    const controller = /^[0-9a-f]{48}$/i.test(getToken() || '') && el('observer-label').hidden;
-    el('start-game').disabled = !connected || !controller || jobRunning;
+    const seated = /^[0-9a-f]{48}$/i.test(getToken() || '');
+    el('start-game').disabled = !connected || !seated || jobRunning;
     el('start-game').firstChild.textContent = recovery ? 'Resume map preparation ' : 'Start Game ';
     el('setup-status').textContent = connected
-      ? !controller ? 'Another tab controls this world. Close it, then reload this page.'
-        : recovery ? 'Your saved request will resume safely.' : 'Your world, your starting place.'
+      ? recovery ? 'Your saved request will resume safely.' : 'Your world, your starting place.'
       : el('connection').textContent.includes('disconnected')
         ? 'Connection lost. Reload this page to reconnect.' : 'Connecting to your world…';
   }
@@ -224,7 +223,7 @@ export function initStartSequence({ readJson, start, cancel }) {
   }
   function error(message, resumable = false) {
     recovery = resumable;
-    if (!skirmishJob) { controllerReady(); return; }
+    if (!skirmishJob) { startReady(); return; }
     waiting = null;
     jobRunning = false;
     clearInterval(tipTimer);
@@ -241,17 +240,11 @@ export function initStartSequence({ readJson, start, cancel }) {
     el('loading-progress').hidden = true;
     el('loading-phase').textContent = 'Return to setup to try again.';
     el('loading-back').focus();
-    controllerReady();
+    startReady();
   }
   function checkTerrain() {
-    controllerReady();
+    startReady();
     if (!waiting) return;
-    if (waiting.resumed && el('connection').textContent === 'connected' && !el('observer-label').hidden) {
-      // Another tab holds the seat: this one is only watching, so offer the menu.
-      returnToSetup();
-      entry();
-      return;
-    }
     const scene = el('scene');
     const minimap = el('minimap');
     const sameMap = minimap.dataset.mapHash === waiting.hash;
@@ -307,7 +300,7 @@ export function initStartSequence({ readJson, start, cancel }) {
     jobRunning = prepared = false;
     clearInterval(tipTimer);
     show('setup');
-    controllerReady();
+    startReady();
   }
   el('loading-back').addEventListener('click', returnToSetup);
   el('loading-cancel').addEventListener('click', async () => {
@@ -358,7 +351,7 @@ export function initStartSequence({ readJson, start, cancel }) {
   if (resuming) loadingScreen('Returning to your game', 'Looking for your running match…');
   else entry();
   locationName();
-  controllerReady();
+  startReady();
   return {
     resumeDecided,
     menu() { show('menu'); },
@@ -393,7 +386,7 @@ export function initStartSequence({ readJson, start, cancel }) {
       progress(completed, total, (matchPhases[status.phase] ?? 'Preparing the match') + counts);
     },
     begin,
-    recover(value, active = false) { recovery = value; jobRunning = active; controllerReady(); },
+    recover(value, active = false) { recovery = value; jobRunning = active; startReady(); },
     progress(job) {
       if (!skirmishJob) return;
       const request = job.request;
@@ -433,6 +426,6 @@ export function initStartSequence({ readJson, start, cancel }) {
       recovery = false;
       returnToSetup();
     },
-    settled() { if (!prepared) jobRunning = false; controllerReady(); },
+    settled() { if (!prepared) jobRunning = false; startReady(); },
   };
 }

@@ -28,14 +28,10 @@ pub async fn prepare(url: &str) -> Result<(), Box<dyn std::error::Error>> {
         let message = aoe_protocol::decode_gameplay_server(&bytes)?;
         match &message {
             Server::Welcome {
-                role,
                 width_tiles,
                 height_tiles,
                 ..
             } => {
-                if *role != aoe_protocol::GameplayRole::Controller {
-                    return Err("fog preparation needs the free controller lease".into());
-                }
                 socket
                     .send(Message::Binary(
                         aoe_protocol::encode_gameplay_client(&Client::Subscribe {
