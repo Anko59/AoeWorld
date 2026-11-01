@@ -10,7 +10,7 @@ fn config_defaults_overrides_and_limits() {
         Config {
             slots: 2,
             cores: 12,
-            wait: Duration::from_secs(90 * 60)
+            wait: Duration::from_secs(10 * 60)
         }
     );
     assert_eq!(

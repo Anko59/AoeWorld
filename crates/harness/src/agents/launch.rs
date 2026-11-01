@@ -39,6 +39,9 @@ pub(crate) fn command(
                 "-s",
                 "workspace-write",
             ]);
+            // In-process sub-agents multiply contexts and poll each other (`wait_agent`),
+            // re-reading every context on each poll; harness agents are single sessions.
+            c.args(["--disable", "multi_agent"]);
             c.arg("-c").arg(format!(
                 "projects.{}.trust_level=\"trusted\"",
                 toml_string(&root.display().to_string())

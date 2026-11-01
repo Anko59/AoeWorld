@@ -60,6 +60,9 @@ pub(crate) fn command(
                 "-s",
                 "read-only",
             ]);
+            // In-process sub-agents multiply contexts and poll each other (`wait_agent`),
+            // re-reading every context on each poll; harness agents are single sessions.
+            c.args(["--disable", "multi_agent"]);
             c.args([
                 "-m",
                 &model.model,

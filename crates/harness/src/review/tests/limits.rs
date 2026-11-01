@@ -202,6 +202,8 @@ fn each_runtime_launches_its_reviewer_read_only_with_the_tier_model() {
     assert!(claude.ends_with("PROMPT"));
     let codex = args(Runtime::Codex, &model("gpt-6-luna", "xhigh")).join(" ");
     assert!(codex.contains("-s read-only"), "{codex}");
+    // Sub-agents re-read every context on each `wait_agent` poll; reviewers run alone.
+    assert!(codex.contains("--disable multi_agent"), "{codex}");
     assert!(
         codex.contains("-m gpt-6-luna -c model_reasoning_effort=\"xhigh\""),
         "{codex}"

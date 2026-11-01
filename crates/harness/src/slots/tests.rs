@@ -163,6 +163,7 @@ fn the_wait_is_bounded_and_the_error_names_every_holder() {
         "`test-e2e` on feature in /work/test-e2e",
         "AOE_HEAVY_WAIT_MINUTES",
         "make load-status",
+        "do not retry in a loop",
     ] {
         assert!(error.contains(needle), "{needle} in {error}");
     }
