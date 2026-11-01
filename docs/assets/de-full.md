@@ -55,6 +55,13 @@ working set larger than the encoded budget cannot prevent new requests.
 Requests are hashed and bounded before decompression; stale completions belong
 to their original asset state. WebGPU and WebGL2 receive subrectangle uploads;
 Canvas and context restoration retain the same current physical pixels.
+Failed or timed-out chunk fetches release their reservations and retry with
+250 ms exponential backoff capped at eight seconds, under the same four-request
+and byte limits. Successful acceptance clears that chunk's retry state. While
+art is unavailable, a valid resident phase or the last complete frame remains.
+WebGL context loss defers GPU patches while retaining both planes in the owned
+CPU atlas; restoration re-uploads all resident cells. Invalid metadata, hashes
+and decoded payloads remain fatal errors rather than publishing corrupt art.
 
 This design bounds the asset working set. Synthetic tests do not establish
 finished RTS performance or dedicated hardware qualification.

@@ -13,8 +13,10 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 mod pixels;
 mod prepare;
+mod retry;
 mod runtime;
 pub(super) use prepare::prepare;
+use retry::Retry;
 const ENCODED_BYTES: usize = 96 * 1024 * 1024;
 const INFLIGHT_BYTES: usize = 64 * 1024 * 1024;
 const MAX_REQUESTS: usize = 4;
@@ -36,6 +38,7 @@ pub(crate) struct NativeFrames {
     cache: FrameCache,
     encoded: Vec<Option<Encoded>>,
     inflight: BTreeSet<u16>,
+    retries: Vec<Retry>,
     clock: u64,
     completed: Rc<RefCell<Vec<(u16, Result<Vec<u8>, JsValue>)>>>,
     failed: bool,
@@ -104,12 +107,14 @@ impl NativeFrames {
         let cache = FrameCache::new(base, pairs.min(4), limit).map_err(error)?;
         let mut encoded = Vec::new();
         encoded.resize_with(chunks.len(), || None);
+        let retries = vec![Retry::default(); chunks.len()];
         Ok(Self {
             chunks,
             cells,
             cache,
             encoded,
             inflight: BTreeSet::new(),
+            retries,
             clock: 0,
             completed: Rc::default(),
             failed: false,
@@ -157,6 +162,7 @@ impl NativeFrames {
                 .sum::<usize>()
             + self.encoded.capacity() * size_of::<Option<Encoded>>()
             + self.inflight.len() * size_of::<u16>()
+            + self.retries.capacity() * size_of::<Retry>()
             + completed.capacity() * size_of::<(u16, Result<Vec<u8>, JsValue>)>()
             + art.resident.capacity() * size_of::<Option<AtlasAddress>>()
             + art.actor_rows.capacity() * size_of::<usize>()
@@ -192,8 +198,12 @@ impl NativeFrames {
             }
         }
         let mut requests = Vec::new();
+        let now = retry::now();
         for &id in &order {
-            if self.encoded[id as usize].is_some() || self.inflight.contains(&id) {
+            if self.encoded[id as usize].is_some()
+                || self.inflight.contains(&id)
+                || now < self.retries[id as usize].until
+            {
                 continue;
             }
             let bytes = self.chunks[id as usize].bytes as usize;
@@ -230,6 +240,7 @@ impl NativeFrames {
             .verify_payload(&bytes)
             .map_err(error)?;
         self.inflight.remove(&id);
+        self.retries[id as usize] = Retry::default();
         self.clock += 1;
         self.encoded[id as usize] = Some(Encoded {
             bytes,

@@ -80,7 +80,7 @@ async fn verified_native_chunks_upload_on_demand_and_resident_cells_do_not_uploa
     canvas.remove();
 }
 
-fn empty_art() -> GameArt {
+pub(super) fn empty_art() -> GameArt {
     GameArt {
         resident: vec![None],
         building_clocks: Vec::new(),

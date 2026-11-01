@@ -58,7 +58,15 @@ impl NativeFrames {
     ) -> Result<(bool, Vec<Request>), JsValue> {
         let completed = std::mem::take(&mut *self.completed.borrow_mut());
         for (index, bytes) in completed {
-            self.accept(index, bytes?)?;
+            match bytes {
+                Ok(bytes) => self.accept(index, bytes)?,
+                Err(_) => {
+                    if !self.inflight.remove(&index) {
+                        return Err(error("Unexpected native chunk response"));
+                    }
+                    self.retries[index as usize].fail(retry::now());
+                }
+            }
         }
         if art.resident.len() != self.cells.len() {
             return Err(error("Native residency inventory changed"));

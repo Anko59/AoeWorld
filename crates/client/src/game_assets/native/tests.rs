@@ -4,6 +4,8 @@ use aoe_assets::pack::{
     frame_chunks::{FrameChunk, FrameLocation},
 };
 use wasm_bindgen_test::wasm_bindgen_test;
+#[path = "tests/recovery.rs"]
+mod recovery;
 #[path = "tests/runtime.rs"]
 mod runtime;
 
