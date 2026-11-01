@@ -29,6 +29,15 @@ Queue reservations route new recruits directly to their General, regardless of
 spawn distance; cancellation, building destruction and General death retire
 reservations. Existing manual queues and rallies remain ordinary gameplay.
 
+## Orders
+
+Right-clicking ground leads the army (above). The **General only** button or
+Alt+right-click walks the General alone (`GeneralOrder::MoveAlone`; Rust SDK
+`Order::GeneralMove`): the army stops where it stands and is not led or retreated
+until the next army march or Stop, and the General is no longer in the shared
+block. His followers yield to him in collision (they never block a General the
+player walks alone), so he can cross a bridge or ford through his own army.
+
 ## March and combat
 
 Right-clicking ground with a General selected sends an ordinary move order.

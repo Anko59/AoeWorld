@@ -69,6 +69,7 @@ export function initInterface() {
     byId('combat-stance').value=scene().dataset.selectedStance??'';
     for(const name of ['line','box','staggered','flank']){show(`formation-${name}`,military);}
     show('attack-move-units',military);
+    show('general-only-move',owned && count===1 && first.kind==='General');
     attribute(byId('selection'),'data-count',String(count));
     attribute(byId('selection'),'data-kind',first?.kind ?? '');
     attribute(byId('selection'),'data-owned',String(owned));
@@ -79,7 +80,7 @@ export function initInterface() {
     const actions=building?2:units?3:0;
     empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
     text('command-context',count>1?`${count} ${building?'buildings':'units'}`:first?.name ?? 'Select a unit');
-    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Ctrl+right-click: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='General'?'Right-click ground: march with your army · retreat and regroup automatically':first.kind==='Vassal'?'Garrison in its home Castle · 100-tile leash':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,...imperialUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
+    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Ctrl+right-click: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='General'?'Right-click ground: march with your army · Alt+right-click: General only':first.kind==='Vassal'?'Garrison in its home Castle · 100-tile leash':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,...imperialUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
     show('selection-health',count===1);
     show('unit-hp',count===1 && !building); show('unit-combat',count===1 && !building);
     if (first) {

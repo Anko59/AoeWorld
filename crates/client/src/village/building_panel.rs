@@ -237,6 +237,17 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 .set_attribute("data-order-mode", "attack-move");
             return;
         }
+        if action == 8 {
+            client.village.garrison_cursor = false;
+            client.village.unload_cursor = false;
+            client.village.attack_move = false;
+            client.village.general_only = true;
+            client.village.move_cursor = true;
+            let _ = client
+                .canvas
+                .set_attribute("data-order-mode", "general-move");
+            return;
+        }
         if action == 4 {
             super::navy::arm_unload(&mut client);
             return;

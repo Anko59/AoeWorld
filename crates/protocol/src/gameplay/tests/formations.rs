@@ -89,3 +89,25 @@ fn formation_posture_wire_has_no_destination_or_movement_flags() {
         assert!(decode_client(&invalid).is_err());
     }
 }
+
+#[test]
+fn general_only_move_has_a_current_golden_wire() {
+    let message = ClientMessage::GeneralOrder {
+        sequence: 1,
+        entity_id: EntityId(2),
+        command: crate::GeneralCommand::MoveAlone {
+            destination: WorldPosition::new(512, 1536),
+        },
+    };
+    let wire = encode_client(&message).unwrap();
+    assert_eq!(wire, [31, 1, 2, 0, 128, 8, 128, 24]);
+    assert_eq!(decode_client(&wire).unwrap(), message);
+    let negative = ClientMessage::GeneralOrder {
+        sequence: 1,
+        entity_id: EntityId(2),
+        command: crate::GeneralCommand::MoveAlone {
+            destination: WorldPosition::new(-1, 0),
+        },
+    };
+    assert!(encode_client(&negative).is_err());
+}

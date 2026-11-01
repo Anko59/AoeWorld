@@ -70,6 +70,15 @@ pub(super) async fn read_requests(
                     .queue_waypoint(session_id, sequence, entity_id, destination)
                     .await
             }
+            Ok(GameplayClientMessage::GeneralOrder {
+                sequence,
+                entity_id,
+                command: aoe_protocol::GeneralCommand::MoveAlone { destination },
+            }) => {
+                service
+                    .queue_general_move_alone(session_id, sequence, entity_id, destination)
+                    .await
+            }
             Ok(GameplayClientMessage::StopOrder {
                 sequence,
                 entity_id,

@@ -3,6 +3,7 @@ use crate::{Age, GeneralState, Stockpile};
 
 mod appearance;
 mod movement;
+mod orders;
 mod stances;
 mod targets;
 

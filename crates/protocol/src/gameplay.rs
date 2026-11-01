@@ -111,7 +111,7 @@ pub struct GeneralStatus {
 }
 
 mod commands;
-pub use commands::ClientMessage;
+pub use commands::{ClientMessage, GeneralCommand};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CommandResult {

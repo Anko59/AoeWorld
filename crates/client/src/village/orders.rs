@@ -64,6 +64,7 @@ pub(in super::super) fn stop(client: &mut Client) {
     client.village.garrison_cursor = false;
     client.village.move_cursor = false;
     client.village.attack_move = false;
+    client.village.general_only = false;
     let _ = client.canvas.set_attribute("data-order-mode", "");
     for id in client.selected.units.clone() {
         let owned = client
@@ -133,6 +134,32 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         return;
     };
     let destination = client.config.snap_ground_position(destination);
+    if std::mem::take(&mut client.village.general_only) && !queued {
+        let generals: Vec<_> = client
+            .selected
+            .units
+            .iter()
+            .copied()
+            .filter(|id| {
+                client.units.get(id).is_some_and(|u| {
+                    u.kind == UnitKind::General && u.player == owner(client) && u.hp > 0
+                })
+            })
+            .collect();
+        for entity_id in generals {
+            let sequence = client.next_sequence;
+            let message = Message::GeneralOrder {
+                sequence,
+                entity_id,
+                command: aoe_protocol::GeneralCommand::MoveAlone { destination },
+            };
+            send(client, message);
+        }
+        client.village.move_cursor = false;
+        client.village.attack_move = false;
+        let _ = client.canvas.set_attribute("data-order-mode", "");
+        return;
+    }
     for id in client.selected.units.clone() {
         if client
             .village

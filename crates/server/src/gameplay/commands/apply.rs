@@ -55,6 +55,15 @@ pub(in crate::gameplay) fn apply(
         ),
         PendingAction::Stop { entity_id } => world.issue_stop(player, entity_id),
         PendingAction::Delete { entity_ids } => world.issue_delete(player, &entity_ids),
+        PendingAction::GeneralMoveAlone {
+            entity_id,
+            destination,
+        } => {
+            if !world.config().valid_map_position(destination) {
+                return CommandResult::RejectedInvalidDestination;
+            }
+            world.issue_general_move(player, entity_id, destination)
+        }
         PendingAction::Hunt {
             unit_ids,
             animal_id,

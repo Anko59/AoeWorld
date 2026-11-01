@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod decisions;
 mod formation;
 mod hash;
+mod orders;
 mod reinforcement;
 mod stances;
 mod survey;
@@ -44,6 +45,8 @@ pub(crate) struct Army {
     pub scan: (usize, usize),
     pub retreat_until: u64,
     pub routed: Option<WorldPosition>,
+    /// The player is moving the General alone; the army holds and is not led.
+    pub solo: bool,
     stances: [Option<StanceOverride>; GENERAL_ARMY_LIMIT + 1],
 }
 #[derive(Debug, Default)]
@@ -112,6 +115,7 @@ impl GameWorld {
                 scan: (0, 0),
                 retreat_until: 0,
                 routed: None,
+                solo: false,
                 stances: [None; GENERAL_ARMY_LIMIT + 1],
             },
         );
@@ -152,6 +156,10 @@ impl GameWorld {
     pub fn general_controller(&self, id: EntityId) -> Option<EntityId> {
         self.economy.generals.controlled.get(&id).copied()
     }
+    #[inline]
+    pub(crate) fn is_general_follower(&self, unit: EntityId, general: EntityId) -> bool {
+        self.economy.generals.controlled.get(&unit) == Some(&general)
+    }
     pub fn general_castle(&self, id: EntityId) -> Option<EntityId> {
         self.economy.generals.armies.get(&id)?.castle
     }
@@ -185,6 +193,7 @@ impl GameWorld {
         };
         a.destination = None;
         a.routed = None;
+        a.solo = false;
         a.state = GeneralState::Idle;
         a.retreat_until = 0;
         let mut members = [None; GENERAL_ARMY_LIMIT];
@@ -201,6 +210,7 @@ impl GameWorld {
         if let Some(a) = self.economy.generals.armies.get_mut(&id) {
             a.destination = Some(destination);
             a.routed = None;
+            a.solo = false;
         }
     }
     pub(super) fn claim_general_unit(&mut self, g: EntityId, u: GameUnit) {

@@ -57,6 +57,11 @@ pub enum Order {
         unit: EntityId,
         to: TileCoord,
     },
+    /// Walk the General alone: his army holds its place and is not led.
+    GeneralMove {
+        unit: EntityId,
+        to: WorldPosition,
+    },
     /// Walk to an exact fixed-point position.
     MoveTo {
         unit: EntityId,
@@ -228,6 +233,11 @@ impl Order {
                 sequence,
                 entity_id: unit,
                 destination: WorldPosition::from_tile_center(to).ok()?,
+            },
+            Order::GeneralMove { unit, to } => M::GeneralOrder {
+                sequence,
+                entity_id: unit,
+                command: aoe_protocol::GeneralCommand::MoveAlone { destination: to },
             },
             Order::Stop { unit } => M::StopOrder {
                 sequence,

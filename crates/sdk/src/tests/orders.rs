@@ -237,6 +237,15 @@ fn a_tile_move_targets_the_tile_centre_and_stop_keeps_its_unit() {
             entity_id: id(2)
         }
     );
+    let to = WorldPosition::new(512, 1536);
+    assert_eq!(
+        Order::GeneralMove { unit: id(3), to }.message(2).unwrap(),
+        M::GeneralOrder {
+            sequence: 2,
+            entity_id: id(3),
+            command: aoe_protocol::GeneralCommand::MoveAlone { destination: to },
+        }
+    );
     assert!(
         Order::Move {
             unit: id(1),
