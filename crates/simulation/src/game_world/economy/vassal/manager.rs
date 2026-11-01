@@ -50,12 +50,23 @@ impl GameWorld {
             let mut budget = Budget::default();
             self.vassal_adopt(&snapshot);
             self.vassal_watchdog(&snapshot, changed);
+            // Retain discovery progress even when all workers are productive.
+            let discover = self.vassal_needs_discovery(&snapshot);
+            if discover {
+                self.vassal_discover(&mut snapshot, &mut budget, &mut work);
+            }
             let wait = self.vassal_train(&mut snapshot, &mut budget, &mut work);
             self.vassal_house_for_busy(&mut snapshot, &mut budget, &mut work, changed);
+            self.vassal_rebalance(&mut snapshot, &mut budget, &mut work, changed);
             self.vassal_reseeds(&snapshot, &mut budget, &mut work);
             self.vassal_refresh_farms(&mut snapshot, &mut budget, &mut work, changed);
             self.vassal_refresh_wood(&mut snapshot, &mut budget, &mut work);
             self.vassal_idle(id, &mut snapshot, &mut budget, &mut work, changed);
+            while discover && budget.searches < VASSAL_RULES.resource_searches_per_domain {
+                if !self.vassal_discover(&mut snapshot, &mut budget, &mut work) {
+                    break;
+                }
+            }
             self.vassal_publish_status(id, snapshot.villagers, wait);
         }
         self.economy.vassals.work = work;
@@ -213,11 +224,10 @@ impl GameWorld {
                 home.worker_after = Some(worker);
             }
             s.avoid = self.economy.vassal_homes[&id].stalls.get(&worker).copied();
-            let job = self.vassal_job(worker, s, budget, work);
+            let job = self.vassal_job(worker, None, s, budget, work);
             s.avoid = None;
             if let Some(kind) = job {
                 self.claim_vassal_worker(id, worker, kind);
-                s.allocated[kind as usize] += 1;
                 changed.push(worker);
             } else if budget.searches >= VASSAL_RULES.resource_searches_per_domain {
                 // Successful farmland work may use the remaining orders after

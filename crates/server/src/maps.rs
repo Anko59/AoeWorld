@@ -359,13 +359,14 @@ pub(super) async fn reset(
         None => GameplayService::new(state.diagnostic_scenario.seed),
         Some(
             name @ ("feudal-economy" | "vassal-economy" | "vassal-territory" | "vassal-farming"
-            | "feudal-military" | "general-army" | "general-appearance"),
+            | "vassal-kingdom" | "feudal-military" | "general-army" | "general-appearance"),
         ) => {
             let constructor = match name {
                 "feudal-economy" => GameplayService::feudal_demo,
                 "vassal-economy" => GameplayService::vassal_demo,
                 "vassal-territory" => GameplayService::vassal_territory_demo,
                 "vassal-farming" => GameplayService::vassal_farming_demo,
+                "vassal-kingdom" => GameplayService::vassal_kingdom_demo,
                 "general-army" => GameplayService::general_demo,
                 "general-appearance" => GameplayService::general_appearance_demo,
                 _ => GameplayService::military_demo,

@@ -181,11 +181,13 @@ fn vassal_refreshes_lumber_camp_after_tree_depletion() {
         .unwrap();
     let p = world.economy.players.get_mut(&PlayerId(0)).unwrap();
     p.age = Age::Castle;
+    // Wood is the kingdom's scarcest reserve here, so the wood gatherer keeps
+    // its job. With zero food, gold or stone the Vassal would rightly move it.
     p.stockpile = Stockpile {
-        food: 0,
+        food: 30_000,
         wood: 1000,
-        gold: 0,
-        stone: 0,
+        gold: 30_000,
+        stone: 30_000,
     };
     let worker = world
         .spawn_villager(

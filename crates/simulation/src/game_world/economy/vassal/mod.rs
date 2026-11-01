@@ -9,7 +9,9 @@ mod farming;
 mod hash;
 mod jobs;
 mod manager;
+mod priority;
 mod rules;
+mod search;
 mod snapshot;
 mod status;
 mod territory;
@@ -37,6 +39,7 @@ pub(crate) struct Home {
     pub(super) farm_after: Option<usize>,
     pub(super) repair_after: Option<EntityId>,
     pub(super) repair_sites: BTreeMap<EntityId, usize>,
+    resources: search::Search,
     pub(crate) stalls: BTreeMap<EntityId, watchdog::Stall>,
     pub(super) status: VassalStatus,
 }
@@ -73,6 +76,11 @@ pub(crate) struct Manager {
     /// Active domains per player with their centres; derived from `active`.
     pub(super) by_player: BTreeMap<PlayerId, BTreeMap<EntityId, WorldPosition>>,
     pub(super) controlled: BTreeMap<EntityId, (EntityId, ResourceKind)>,
+    /// Reverse owner of each bounded resource-refusal context.
+    pub(super) refusal_owners: BTreeMap<EntityId, EntityId>,
+    /// Only accepted owner orders on an already managed worker add membership.
+    /// Live units bound this set; snapshots remove idle entries, deaths remove directly.
+    pub(super) manual: BTreeSet<EntityId>,
     pub(super) cursor: Option<EntityId>,
     /// Only set during an authoritative advance; never across an API boundary.
     pub(crate) automatic: bool,
@@ -104,6 +112,7 @@ impl GameWorld {
                 farm_after: None,
                 repair_after: None,
                 repair_sites: BTreeMap::new(),
+                resources: search::Search::default(),
                 stalls: BTreeMap::new(),
                 status: VassalStatus::default(),
             },
@@ -145,7 +154,7 @@ impl GameWorld {
                     self.economy.vassals.by_player.remove(&player);
                 }
             }
-            let workers = self
+            let (workers, refused) = self
                 .economy
                 .vassal_homes
                 .get_mut(&id)
@@ -153,12 +162,18 @@ impl GameWorld {
                     h.stalls.clear();
                     h.repair_after = None;
                     h.repair_sites.clear();
+                    let refused = h.resources.clear_workers();
                     h.status = VassalStatus::default();
-                    std::mem::take(&mut h.workers)
+                    (std::mem::take(&mut h.workers), refused)
                 })
                 .unwrap_or_default();
             for worker in workers {
                 self.economy.vassals.controlled.remove(&worker);
+            }
+            for worker in refused {
+                if self.economy.vassals.refusal_owners.get(&worker) == Some(&id) {
+                    self.economy.vassals.refusal_owners.remove(&worker);
+                }
             }
         }
         if let Some((player, _)) = known {
@@ -166,9 +181,9 @@ impl GameWorld {
         }
     }
     pub(crate) fn forget_vassal(&mut self, id: EntityId) {
+        self.forget_vassal_worker(id);
         self.set_vassal_active(id, false);
         self.economy.vassal_homes.remove(&id);
-        self.release_vassal_worker(id);
     }
     fn active_vassal(&self, id: EntityId) -> bool {
         self.economy.vassals.active.contains(&id)
@@ -202,14 +217,27 @@ impl GameWorld {
     }
     pub(crate) fn player_override(&mut self, id: EntityId) {
         if !self.economy.vassals.automatic {
+            if self.economy.vassals.controlled.contains_key(&id) {
+                self.economy.vassals.manual.insert(id);
+            }
+            self.forget_vassal_refusals(id);
             self.release_vassal_worker(id);
         }
     }
+    pub(crate) fn forget_vassal_worker(&mut self, id: EntityId) {
+        self.economy.vassals.manual.remove(&id);
+        self.forget_vassal_refusals(id);
+        self.release_vassal_worker(id);
+    }
     fn release_vassal_worker(&mut self, id: EntityId) {
-        if let Some((vassal, _)) = self.economy.vassals.controlled.remove(&id)
-            && let Some(home) = self.economy.vassal_homes.get_mut(&vassal)
-        {
-            home.workers.remove(&id);
+        if let Some((vassal, _)) = self.economy.vassals.controlled.remove(&id) {
+            if self.economy.vassals.refusal_owners.get(&id) == Some(&vassal) {
+                self.forget_vassal_refusals(id);
+            }
+            if let Some(home) = self.economy.vassal_homes.get_mut(&vassal) {
+                home.workers.remove(&id);
+                home.resources.forget_worker(id);
+            }
         }
     }
     pub(super) fn claim_vassal_worker(
@@ -218,9 +246,26 @@ impl GameWorld {
         worker: EntityId,
         kind: ResourceKind,
     ) {
-        self.release_vassal_worker(worker);
+        if self
+            .economy
+            .vassals
+            .controlled
+            .get(&worker)
+            .is_some_and(|(owner, _)| *owner != vassal)
+        {
+            self.release_vassal_worker(worker);
+        }
+        if self
+            .economy
+            .vassals
+            .refusal_owners
+            .get(&worker)
+            .is_some_and(|owner| *owner != vassal)
+        {
+            self.forget_vassal_refusals(worker);
+        }
         if let Some(home) = self.economy.vassal_homes.get_mut(&vassal)
-            && home.workers.len() < VASSAL_RULES.max_villagers
+            && (home.workers.contains(&worker) || home.workers.len() < VASSAL_RULES.max_villagers)
         {
             home.workers.insert(worker);
             self.economy

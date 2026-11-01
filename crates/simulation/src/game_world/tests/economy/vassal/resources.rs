@@ -1,7 +1,7 @@
 use super::*;
 use crate::VASSAL_RULES;
 
-fn wood_domain(workers: usize) -> (GameWorld, ResourceNode, EntityId, EntityId) {
+pub(super) fn wood_domain(workers: usize) -> (GameWorld, ResourceNode, EntityId, EntityId) {
     let (mut w, node, worker) = resource_world(ResourceKind::Wood);
     let near = TileCoord::new(node.tile.x + 14, node.tile.y + 14);
     w.initialize_village(PlayerId(0), near).unwrap();

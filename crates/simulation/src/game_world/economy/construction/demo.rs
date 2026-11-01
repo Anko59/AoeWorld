@@ -3,6 +3,9 @@
 use crate::{BuildingKind, EconomyError, GameWorld, Stockpile};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 
+#[path = "demo/kingdom.rs"]
+mod kingdom;
+
 impl GameWorld {
     /// Real-time art inspection encounter. Normal orders, weapon damage and
     /// death retention expose all hero poses without changing match rules.

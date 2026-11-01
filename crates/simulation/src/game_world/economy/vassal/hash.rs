@@ -13,7 +13,17 @@ impl Economy {
             h.update(&vassal.0.to_le_bytes());
             h.update(&[*resource as u8]);
         }
+        h.update(&(m.refusal_owners.len() as u64).to_le_bytes());
+        for (worker, owner) in &m.refusal_owners {
+            h.update(&worker.0.to_le_bytes());
+            h.update(&owner.0.to_le_bytes());
+        }
+        h.update(&(m.manual.len() as u64).to_le_bytes());
+        for id in &m.manual {
+            h.update(&id.0.to_le_bytes());
+        }
         for home in self.vassal_homes.values() {
+            home.resources.update_hash(h);
             h.update(&(home.scan_chunk as u64).to_le_bytes());
             h.update(&(home.scan_offset as u64).to_le_bytes());
             h.update(&(home.site_after as u64).to_le_bytes());

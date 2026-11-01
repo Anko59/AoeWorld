@@ -118,13 +118,6 @@ impl GameWorld {
                 .iter()
                 .min_by_key(|&&(id, at)| (super::super::placement::distance_squared(at, near), id))
                 .map_or(worker, |&(id, _)| id);
-            let prior = self
-                .economy
-                .vassals
-                .controlled
-                .get(&builder)
-                .filter(|(owner, _)| *owner == s.vassal)
-                .map(|(_, kind)| *kind);
             if self.vassal_mill_for_farm(
                 builder,
                 FarmRepairSite {
@@ -137,12 +130,6 @@ impl GameWorld {
                 work,
             ) {
                 self.claim_vassal_worker(s.vassal, builder, ResourceKind::Food);
-                if prior != Some(ResourceKind::Food) {
-                    if let Some(kind) = prior {
-                        s.allocated[kind as usize] = s.allocated[kind as usize].saturating_sub(1);
-                    }
-                    s.allocated[ResourceKind::Food as usize] += 1;
-                }
                 changed.push(builder);
                 break;
             }
