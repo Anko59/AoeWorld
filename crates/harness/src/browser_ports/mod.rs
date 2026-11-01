@@ -1,9 +1,6 @@
 //! Host listener reservations shared by browser and WebDriver tests.
 use std::net::TcpListener;
 
-#[cfg(test)]
-mod tests;
-
 pub(crate) fn configured(count: u32) -> Result<Vec<TcpListener>, Box<dyn std::error::Error>> {
     let range = port_range(&std::env::var("AOE_E2E_PORT_RANGE").unwrap_or_default())?;
     Ok(reserve_ports(range, count)?)

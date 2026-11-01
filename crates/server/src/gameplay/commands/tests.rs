@@ -248,7 +248,6 @@ async fn queue_move_rejects_unknown_sessions_then_deduplicates_sequences() {
         .queue_move(second_id, 1, EntityId(0), WorldPosition::default())
         .await;
     assert!(second_rx.try_recv().is_err());
-
     service
         .queue_move(controller_id, 1, EntityId(0), WorldPosition::default())
         .await;
