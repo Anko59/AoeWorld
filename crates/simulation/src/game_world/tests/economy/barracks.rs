@@ -17,12 +17,6 @@ fn a_barracks_trains_a_militia_end_to_end() {
             UnitKind::Pikeman
         ]
     );
-    world
-        .economy
-        .players
-        .get_mut(&PlayerId(0))
-        .unwrap()
-        .population_cap = 20;
     let worker = villager_at(&mut world, 99, 100);
     let barracks = world
         .issue_build(
@@ -38,13 +32,6 @@ fn a_barracks_trains_a_militia_end_to_end() {
         Err(EconomyError::UnderConstruction)
     );
     finish(&mut world, barracks, 1200);
-    // Completion recomputes the cap from housing; leave room for the militia.
-    world
-        .economy
-        .players
-        .get_mut(&PlayerId(0))
-        .unwrap()
-        .population_cap = 20;
     assert_eq!(
         world.issue_train(PlayerId(0), barracks, UnitKind::Villager),
         Err(EconomyError::WrongUnitKind)
@@ -100,11 +87,6 @@ fn dark_age_militia_research_in_feudal_and_train_men_at_arms() {
         )
         .unwrap();
     finish(&mut w, barracks, 1200);
-    w.economy
-        .players
-        .get_mut(&PlayerId(0))
-        .unwrap()
-        .population_cap = 30;
     assert_eq!(
         w.issue_research(PlayerId(0), barracks, Tech::ManAtArms),
         Err(EconomyError::RequiresFeudalAge)
@@ -129,11 +111,6 @@ fn dark_age_militia_research_in_feudal_and_train_men_at_arms() {
         .unwrap();
     advance(&mut w, 130 * 20);
     assert_eq!(w.player_economy(PlayerId(0)).unwrap().age, Age::Feudal);
-    w.economy
-        .players
-        .get_mut(&PlayerId(0))
-        .unwrap()
-        .population_cap = 30;
     assert_eq!(
         w.issue_train(PlayerId(0), barracks, UnitKind::ManAtArms),
         Err(EconomyError::TechRequirementMissing)
@@ -163,11 +140,6 @@ fn dark_age_militia_research_in_feudal_and_train_men_at_arms() {
         (upgraded.kind, upgraded.hp, upgraded.max_hp),
         (UnitKind::ManAtArms, 35, 45)
     );
-    w.economy
-        .players
-        .get_mut(&PlayerId(0))
-        .unwrap()
-        .population_cap = 30;
     w.issue_train(PlayerId(0), barracks, UnitKind::Militia)
         .unwrap();
     assert_eq!(

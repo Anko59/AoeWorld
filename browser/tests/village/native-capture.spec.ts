@@ -179,12 +179,11 @@ test("private native-art interface capture: start, wood, training and five-villa
   await expect(page.locator("#training-progress")).toBeVisible();
   await page.waitForTimeout(3500);
   await shots(page, "training-villager");
-  // Five villagers cannot exist under the current five-total-population start.
   // This final capture is explicitly a presentation fixture, with native art.
   expect((await page.request.post("/maps/reset")).status()).toBe(204);
   await fiveVillagerFixture(page);
   await page.goto("/?selection-fixture=1#x=8192.5&y=8192.5");
-  await expect(page.locator("#population")).toHaveText("6/10", {
+  await expect(page.locator("#population")).toHaveText("6", {
     timeout: 30_000,
   });
   await expect(page.locator("#scene")).toHaveAttribute(

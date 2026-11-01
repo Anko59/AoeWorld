@@ -145,7 +145,6 @@ export async function bundleProof(page: Page, url: string, film = false) {
           ...uint(2000),
           ...uint(2000),
           15,
-          ...uint(200),
           2,
           ...uint(4 + 16384),
           ...marketPrices,

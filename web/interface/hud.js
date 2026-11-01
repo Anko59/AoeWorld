@@ -46,7 +46,7 @@ export function initInterface() {
     ['wood','food','gold','stone'].forEach((resource,index) => {
       text(`stockpile-${resource}`,state.stockpile[index]); text(`workers-${resource}`,state.workers[index]);
     });
-    text('population',state.population.join('/'));
+    text('population',state.population);
     text('idle-villager-count',state.idleVillagers);
     byId('idle-villagers').disabled=state.idleVillagers===0;
     byId('idle-villagers').classList.toggle('has-idle',state.idleVillagers>0);
@@ -87,7 +87,7 @@ export function initInterface() {
       const groupName=selected.every(unit=>unit.kind===first.kind)?(building&&first.name.endsWith('s')?first.name:building&&first.name.endsWith('y')?`${first.name.slice(0,-1)}ies`:`${first.name}s`):'units';
       text('selection-name',count>1?`${count} ${groupName} selected`:first.name);
       text('selection-task',count===1?building?(state.queue.length?'Training':'Building'): `${first.task}${first.resource && first.task==='Gathering'?' '+first.resource:''}`:'Right-click to give this group an order');
-      text('selection-load',['Sheep','Deer','Boar','Wolf'].includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/${first.capacity} ${first.resource}`:building?first.kind==='Castle'?'Supports 20 population':castleKinds.includes(first.kind)?'':'Resource drop-off · supports 5 population':'');
+      text('selection-load',['Sheep','Deer','Boar','Wolf'].includes(first.kind)?`${first.amount} food remaining`:count===1 && first.amount?`Carrying ${first.amount}/${first.capacity} ${first.resource}`:building?first.kind==='Castle'?'Trains leaders and military units':castleKinds.includes(first.kind)?'':'Resource drop-off · trains villagers':'');
       const signature=selected.map(unit=>`${unit.id}:${unit.kind}`).join(',');
       if (signature!==previousSelection) {
         setEntityIcon(byId('selection-portrait'),first.kind);
@@ -116,17 +116,17 @@ export function initInterface() {
     const kinds=['Scout','Villager',...buildingKinds,'Militia','FishingShip','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley','Vassal','General'], names=['Scout Cavalry','Villager',...buildingNames,'Militia','Fishing Ship','Sheep','Deer','Boar','Wolf','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal','General'];
     const tasks=['Idle','Moving','Gathering','Carrying','Returning to drop-off','Attacking','Dying','Building','Farming','Hunting','Shepherding','Fishing','Idle','Fleeing','Attacking','Dying','Carcass'];
     const resources=['food','wood','gold','stone',''];
-    const state={stockpile:values.slice(0,4),population:values.slice(4,6),workers:values.slice(6,10),seconds:values[10],art:values[11]===1,status,actors:[],selected:[],queue:[],resources:[]};
-    state.idleVillagers=values[15];
-    state.idleMilitary=values[16];
-    let at=17;
-    for (let index=0;index<values[12];index++,at+=18) {
+    const state={stockpile:values.slice(0,4),population:values[4],workers:values.slice(5,9),seconds:values[9],art:values[10]===1,status,actors:[],selected:[],queue:[],resources:[]};
+    state.idleVillagers=values[14];
+    state.idleMilitary=values[15];
+    let at=16;
+    for (let index=0;index<values[11];index++,at+=18) {
       const [id,kind,x,y,selected,task,resource,amount,hp,maxHp,attack,melee,pierce,head,capacity,range,player,owned]=values.subarray(at,at+18);
       state.actors.push({id,player,owned:!!owned,kind:kinds[kind],x,y,selected:!!selected,hp,maxHp,head,task:tasks[task],load:kind===1 && amount?[resources[resource],amount]:null,garrison:owned&&buildingKinds.includes(kinds[kind])?capacity:0});
       if (selected) state.selected.push({id,player,owned:!!owned,kind:kinds[kind],name:names[kind],task:tasks[task],resource:resources[resource],amount,hp,maxHp,attack,melee,pierce,capacity,range});
     }
-    for (let index=0;index<values[13];index++,at+=3) state.queue.push([values[at],values[at+1],values[at+2]]);
-    for (let index=0;index<values[14];index++,at+=4) state.resources.push({kind:values[at],x:values[at+1],y:values[at+2],distance:values[at+3]});
+    for (let index=0;index<values[12];index++,at+=3) state.queue.push([values[at],values[at+1],values[at+2]]);
+    for (let index=0;index<values[13];index++,at+=4) state.resources.push({kind:values[at],x:values[at+1],y:values[at+2],distance:values[at+3]});
     update(state);
     window.aoeBuildings?.refresh();
   }};

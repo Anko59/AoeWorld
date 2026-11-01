@@ -344,7 +344,6 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         player: PlayerId(2),
         stockpile: Stockpile::default(),
         population_used: 0,
-        population_cap: 5,
         age: Age::Feudal,
         researched: Tech::FeudalAge.bit(),
         market_prices: MarketPrices::default(),

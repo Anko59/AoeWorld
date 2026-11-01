@@ -56,7 +56,7 @@ use tokio::{
     sync::{Mutex, RwLock},
     time::{MissedTickBehavior, timeout},
 };
-use tower_http::services::ServeDir;
+use tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -262,11 +262,17 @@ pub fn app(state: AppState) -> Router {
         .merge(gameplay::arena::routes())
         .fallback_service(ServeDir::new("web").append_index_html_on_directories(true))
         .with_state(state);
-    if let Some(pack) = asset_pack {
+    let router = if let Some(pack) = asset_pack {
         router.nest_service("/asset-pack", ServeDir::new(pack))
     } else {
         router
-    }
+    };
+    // Builds replace the client and pack files in place under fixed URLs.
+    // Revalidate them so a cached manifest cannot outlive its build.
+    router.layer(SetResponseHeaderLayer::overriding(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-cache"),
+    ))
 }
 
 fn states(entities: Vec<Entity>) -> BTreeMap<EntityId, EntityState> {

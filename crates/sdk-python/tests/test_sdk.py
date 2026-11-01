@@ -59,7 +59,7 @@ def test_first_decision_exposes_a_typed_world(server, secret):
         assert center is not None and center.kind == BuildingKind.TOWN_CENTER and center.complete
         economy = world.economy
         assert (economy.food, economy.wood, economy.gold, economy.stone) == (200, 200, 100, 200)
-        assert economy.free_population > 0
+        assert economy.population == 4
         assert economy.can_afford(food=50) and not economy.can_afford(gold=1000)
         assert world.visible_enemies() == []
         assert world.known_enemy_buildings() == []
@@ -210,7 +210,7 @@ def test_two_ai_players_grow_through_the_callback_loop(server, secret):
                 node = world.nearest_resource(ResourceKind.WOOD, *villager.tile)
                 if node is not None:
                     client.gather(villager.id, node.id)
-            if center.queue_length == 0 and economy.food >= 50 and economy.free_population > 0:
+            if center.queue_length == 0 and economy.food >= 50:
                 client.train(center.id, UnitKind.VILLAGER)
 
         with aoeworld.connect(server, slot.token, decision_hz=2) as client:
@@ -315,4 +315,3 @@ def test_town_center_construction_rules_are_exposed():
     assert aoeworld.building_required_age(BuildingKind.TOWN_CENTER) == aoeworld.Age.CASTLE
     assert aoeworld.building_cost(BuildingKind.TOWN_CENTER) == (0, 275, 0, 100)
     assert aoeworld.build_seconds(BuildingKind.TOWN_CENTER) == 150
-    assert aoeworld.building_population(BuildingKind.TOWN_CENTER) == 5

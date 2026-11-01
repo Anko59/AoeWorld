@@ -35,7 +35,6 @@ fn defaults_describe_the_promised_scale() {
     assert_eq!(defaults.players, 100);
     assert_eq!(defaults.humans, 1);
     assert_eq!(defaults.tiles, 16_000);
-    assert_eq!(defaults.population_cap, 1_000);
     assert_eq!(defaults.map, MapSource::Procedural);
     assert!((defaults.minutes - 20.0).abs() < f64::EPSILON);
 }
@@ -44,7 +43,6 @@ fn defaults_describe_the_promised_scale() {
 fn the_match_body_names_slots_rules_and_a_france_map() {
     let body = run::match_body(&options(&["--players", "4", "--start-villagers", "30"])).unwrap();
     assert_eq!(body["slots"], json!(["human", "ai", "ai", "ai"]));
-    assert_eq!(body["population_cap"], 1_000);
     assert_eq!(body["start_units"], json!({"villagers": 30, "militia": 0}));
     let map = &body["map"];
     // 16,000 two-metre tiles at 30:1 is 960 km of France.
@@ -176,7 +174,7 @@ fn finished_report() -> serde_json::Value {
     run["wall_seconds"] = json!(60.0);
     json!({
         "label": "smoke", "revision": "abc", "dirty": false,
-        "config": {"players": 4, "humans": 1, "tiles": 500, "population_cap": 300, "hosts": 1},
+        "config": {"players": 4, "humans": 1, "tiles": 500, "hosts": 1},
         "setup": {"map_kind": "flat", "seeded_units": 60, "partial_starting_kits": 0, "match_create_seconds": 1.5, "bots_connect_seconds": 5.0},
         "run": run,
         "machine": {},

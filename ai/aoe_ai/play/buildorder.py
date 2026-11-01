@@ -1,6 +1,6 @@
 """The build order: which stage the game is in and what it asks for next.
 
-Dark Age: boom (villagers without pause, houses, a Lumber Camp and a Mill),
+Dark Age: boom (villagers without pause, a Lumber Camp and a Mill),
 Loom, then at about twenty villagers save 500 food and click Feudal Age.
 Feudal Age: Barracks, Archery Range, Blacksmith, the economy upgrades and a
 mixed army. The managers only *execute* this plan.

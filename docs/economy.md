@@ -5,7 +5,7 @@
 The authoritative rules live in
 [`VILLAGE_RULES`](../crates/simulation/src/game_world/economy.rs).
 It is the current gameplay table for starting resources, villagers, footprint,
-population support, villager movement/carrying/gathering and training.
+population counts, villager movement/carrying/gathering and training.
 Village Scout Cavalry uses DE age-dependent speed; population-only diagnostics
 retain their configured movement speed.
 
@@ -80,9 +80,8 @@ load.
 
 Train commands require an owned, completed building that trains the unit,
 enough resources and space in its fifteen-unit queue. Acceptance pays the unit
-cost, even when population is at the cap; population used counts living units.
-Only the front entry advances, and housing pauses that progress until there is
-room. A completed entry waits for a free passable perimeter tile without paying
+cost; population counts living units. Housing never blocks training.
+Only the front entry advances. A completed entry waits for a free passable perimeter tile without paying
 again. New villagers use the shared entity allocator. Cancelling the active
 entry refunds its cost; cancelling an empty queue cannot create resources.
 New workers follow the production building's rally point. An exhausted resource
@@ -117,13 +116,13 @@ Synthetic evidence does not qualify finished RTS performance or hardware.
 
 Every building value lives in one table,
 [`BUILDING_RULES`](../crates/simulation/src/game_world/economy/buildings.rs)
-(cost, build seconds, hit points, size, line of sight, housing, accepted
+(cost, build seconds, hit points, size, line of sight, accepted
 resources, trainable units, requirement). Fix a number there and the rules,
 tests and wire follow. Values are Age of Empires II: Definitive Edition's.
 
 | Building | Cost | Time | HP | Size | Role |
 |---|---|---|---|---|---|
-| House | 25 wood | 25 s | 550 | 2x2 | +5 population |
+| House | 25 wood | 25 s | 550 | 2x2 | Residential building |
 | Lumber Camp | 100 wood | 35 s | 600 | 2x2 | wood drop-off |
 | Mining Camp | 100 wood | 35 s | 600 | 2x2 | gold and stone drop-off |
 | Mill | 100 wood | 35 s | 600 | 2x2 | food drop-off |
@@ -165,8 +164,7 @@ foundation refunds the cost in proportion to the work not yet done (all of it
 before any progress). One wall order (`BuildWallOrder` names a palisade or stone `kind`) lays at most 64
 segments, all or none.
 
-Population support is the sum over a player's completed housing buildings
-(Town Center 5, House 5), capped at 200. Training needs a completed building
+Population has no gameplay ceiling. Training needs a completed building
 whose table lists the unit (`trainable_units`); the Barracks trains Militia
 (50 food, 20 gold, 21 s, measured in the licensed DE dat; cancelling refunds both). A returning villager walks to the nearest completed
 owned building that accepts its load (`nearest_dropoff`).
@@ -344,4 +342,4 @@ Monastery, University, Siege Workshop, unit lines, economic and military researc
 local deterministic splash, healing and Ballistics.
 
 The original [Vassal](economy/vassal.md) is trained at a Castle and has a fixed
-100-tile home radius; the default population ceiling is 1,000 per player.
+100-tile home radius. Population is uncapped.

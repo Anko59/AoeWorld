@@ -466,7 +466,6 @@ impl GameWorld {
         if matches!(kind, BuildingKind::WatchTower | BuildingKind::Castle) {
             self.combat.tower_ready.insert(id, 0);
         }
-        self.refresh_population_cap(player);
         Some((player, kind, footprint))
     }
 }

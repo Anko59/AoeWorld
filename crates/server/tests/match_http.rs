@@ -196,49 +196,33 @@ async fn a_flat_match_seats_many_players_apart_on_connected_ground() {
 }
 
 #[tokio::test]
-async fn population_cap_and_start_units_are_match_rules() {
+async fn startup_extras_have_a_memory_bound_without_a_gameplay_population_cap() {
     let address = server().await;
     let rules = |extra: &str| {
-        let extra = if extra.is_empty() {
-            String::new()
-        } else {
-            format!(",{extra}")
-        };
         format!(r#"{{"flat":{{"tiles_per_side":300,"seed":2}},"slots":["human","ai"]{extra}}}"#)
     };
     let (status, body) = post(
         address,
         Some(SECRET),
-        &rules(r#""population_cap":700,"start_units":{"villagers":30,"militia":10}"#),
+        &rules(r#", "start_units":{"villagers":30,"militia":10}"#),
     )
     .await;
     assert_eq!(status, 200, "{body}");
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(json["population_cap"], 700);
-    assert_eq!(
-        json["seeded_units"], 80,
-        "40 extra units for each of 2 seats"
-    );
+    assert_eq!(json["seeded_units"], 80);
     assert_eq!(json["partial_starting_kits"], 0);
-    // The shipped default now allows 1000 population, with nothing seeded.
     let (status, body) = post(address, Some(SECRET), &rules("")).await;
     assert_eq!(status, 200, "{body}");
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(
-        (
-            json["population_cap"].as_u64(),
-            json["seeded_units"].as_u64()
-        ),
-        (Some(1000), Some(0))
-    );
-    for extra in [
-        r#""population_cap":4"#,
-        r#""population_cap":5001"#,
-        r#""population_cap":100,"start_units":{"villagers":90,"militia":20}"#,
-    ] {
-        let (status, body) = post(address, Some(SECRET), &rules(extra)).await;
-        assert_eq!(status, 400, "{extra}: {body}");
-    }
+    assert_eq!(json["seeded_units"], 0);
+    // Setup allocation remains bounded independently of later unit training.
+    let (status, body) = post(
+        address,
+        Some(SECRET),
+        &rules(r#", "start_units":{"villagers":65533}"#),
+    )
+    .await;
+    assert_eq!(status, 400, "{body}");
 }
 
 #[tokio::test]

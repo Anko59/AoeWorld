@@ -25,17 +25,6 @@ fn farmers(w: &mut GameWorld, count: i32) -> Vec<EntityId> {
         })
         .collect()
 }
-fn houses(w: &mut GameWorld, count: i32) {
-    for i in 0..count {
-        w.insert_building(
-            PlayerId(0),
-            BuildingKind::House,
-            aoe_core::TileRect::from_xywh(3 + (i % 70) * 3, 180 + (i / 70) * 3, 2, 2),
-            true,
-        )
-        .unwrap();
-    }
-}
 fn managed(w: &GameWorld, vassal: EntityId) -> usize {
     w.units()
         .filter(|u| w.vassal_controller(u.id) == Some(vassal))
@@ -48,12 +37,11 @@ fn villagers(w: &GameWorld) -> usize {
 }
 
 /// The owner's report: a Castle placed among 60 busy villagers and two Town
-/// Centers with ample food and houses must adopt them all, then keep training
-/// to 100 managed villagers, building the Houses it needs on the way.
+/// Centers with ample food must adopt busy villagers, then keep training to
+/// 100 managed villagers with no population cap in the way.
 #[test]
 fn a_vassal_adopts_busy_villagers_and_trains_to_a_hundred() {
     let (mut w, _, vassal) = active();
-    houses(&mut w, 14);
     w.insert_building(
         PlayerId(0),
         BuildingKind::TownCenter,
@@ -86,12 +74,6 @@ fn a_vassal_adopts_busy_villagers_and_trains_to_a_hundred() {
     }
     assert_eq!(managed(&w, vassal), VASSAL_RULES.max_villagers);
     assert_eq!(villagers(&w), 100);
-    assert!(
-        w.player_buildings_of(PlayerId(0), BuildingKind::House)
-            .count()
-            > 14,
-        "Houses were added for the busy population"
-    );
     advance(&mut w, 1_200);
     assert_eq!(villagers(&w), 100, "never beyond the limit");
     assert_eq!(w.vassal_status(vassal).unwrap().wait, VassalWait::Full);
@@ -133,12 +115,4 @@ fn status_names_what_blocks_growth() {
     w.economy.players.get_mut(&PlayerId(0)).unwrap().stockpile = Stockpile::default();
     pass(&mut w);
     assert_eq!(w.vassal_status(vassal).unwrap().wait, VassalWait::Food);
-    let p = w.economy.players.get_mut(&PlayerId(0)).unwrap();
-    p.stockpile.food = 1_000;
-    p.population_used = p.population_cap;
-    pass(&mut w);
-    assert_eq!(
-        w.vassal_status(vassal).unwrap().wait,
-        VassalWait::Population
-    );
 }

@@ -166,7 +166,6 @@ fn player_state(state: &aoe_simulation::PlayerEconomy) -> GameplayPlayerState {
             stone: state.stockpile.stone,
         },
         population_used: state.population_used,
-        population_cap: state.population_cap,
         age: match state.age {
             aoe_simulation::Age::Dark => Age::Dark,
             aoe_simulation::Age::Feudal => Age::Feudal,
@@ -278,9 +277,6 @@ pub(super) fn wire_building_state(
                         aoe_simulation::VassalWait::Full => aoe_protocol::VassalWait::Full,
                         aoe_simulation::VassalWait::NoTownCenter => {
                             aoe_protocol::VassalWait::NoTownCenter
-                        }
-                        aoe_simulation::VassalWait::Population => {
-                            aoe_protocol::VassalWait::Population
                         }
                         aoe_simulation::VassalWait::Food => aoe_protocol::VassalWait::Food,
                     },

@@ -62,7 +62,7 @@ class EconomyManager:
         self.constructor = constructor
 
     def produce(self, ctx: Context) -> None:
-        """Queue villagers (before houses are placed, so the margin sees them)."""
+        """Queue villagers within the configured economic strategy."""
         if ctx.economy is not None and ctx.home is not None:
             self.train_villagers(ctx)
 
@@ -113,11 +113,9 @@ class EconomyManager:
         cost = unit_cost(UnitKind.VILLAGER)
         while (
             queue < ctx.config.town_center_queue
-            and ctx.free_population() > 0
             and ctx.try_spend(cost)
         ):
             ctx.order("train", center.id, UnitKind.VILLAGER)
-            ctx.queued += 1
             queue += 1
             ctx.board.bump("villagers_queued")
 

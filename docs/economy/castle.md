@@ -33,7 +33,6 @@ browser tests and is absent from the production build.
 
 The Workshop needs a completed Blacksmith. The current DE Workshop has 1500
 HP; the trial graphics DAT has older numeric balance and supplies art only.
-A completed Castle supplies 20 population slots (DAT resource storage 4).
 Castles fire five 11-pierce arrows every two seconds with range 1–8. Murder
 Holes removes the minimum range; Fletching and Bodkin Arrow each add one attack,
 range and LOS. [Garrisons](../garrison.md) add arrows. Castles accept manual
@@ -126,6 +125,5 @@ shader implementation.
 Villagers can construct additional Town Centers from Castle Age for 275 wood
 and 100 stone, with a 4×4 footprint and 150-second base build time. The economic
 build menu offers Town Center (C). Placement uses the ordinary explored-land,
-resource, occupancy and bounds checks; completing it opens the arches and adds
-five housing. AI clients use the existing build order and can query
+resource, occupancy and bounds checks; completing it opens the arches. AI clients use the existing build order and can query
 `building_buildable` and `building_required_age` in both Rust and Python.

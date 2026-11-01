@@ -13,7 +13,6 @@ fn rich_feudal() -> (GameWorld, EntityId) {
         gold: 10000,
         stone: 10000,
     };
-    p.population_cap = 200;
     (w, tc)
 }
 
@@ -300,11 +299,11 @@ fn duplicate_and_unfinished_feudal_sites_do_not_satisfy_castle_requirements() {
 }
 
 #[test]
-fn a_completed_castle_provides_twenty_population_slots_from_the_dat() {
+fn a_completed_castle_does_not_change_the_population_count() {
     let (mut w, _, _) = village();
     w.complete_research(PlayerId(0), Tech::FeudalAge, &mut Vec::new());
     w.complete_research(PlayerId(0), Tech::CastleAge, &mut Vec::new());
-    let before = w.player_economy(PlayerId(0)).unwrap().population_cap;
+    let before = w.player_economy(PlayerId(0)).unwrap().population_used;
     w.insert_building(
         PlayerId(0),
         BuildingKind::Castle,
@@ -313,8 +312,8 @@ fn a_completed_castle_provides_twenty_population_slots_from_the_dat() {
     )
     .unwrap();
     assert_eq!(
-        w.player_economy(PlayerId(0)).unwrap().population_cap,
-        before + 20
+        w.player_economy(PlayerId(0)).unwrap().population_used,
+        before
     );
 }
 

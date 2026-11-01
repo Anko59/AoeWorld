@@ -110,7 +110,7 @@ fn start_has_one_center_three_villagers_scout_and_standard_stockpile() {
         ),
         (200, 200, 100, 200)
     );
-    assert_eq!((player.population_used, player.population_cap), (4, 5));
+    assert_eq!(player.population_used, 4);
     assert_eq!(VILLAGE_RULES.villager_capacity, 10);
     let mut ids = world.units().map(|u| u.id).collect::<Vec<_>>();
     ids.push(center);

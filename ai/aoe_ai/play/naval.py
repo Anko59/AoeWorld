@@ -52,7 +52,7 @@ class NavalManager:
         # Queue summaries omit unit kinds. One producer keeps the fleet cap
         # exact even when an accepted order has left the in-flight tracker.
         for dock in sorted(docks, key=lambda b: b.id)[:1]:
-            if not dock.idle or ctx.free_population() <= 0:
+            if not dock.idle:
                 continue
             if any(order.name == "train" and order.args[0] == dock.id
                    and ctx.tick - order.tick < ctx.config.plan_timeout_seconds * ctx.world.tick_hz
@@ -71,7 +71,6 @@ class NavalManager:
                 if str(kind) in ctx.board.blocked_units or not ctx.try_spend(unit_cost(kind)):
                     break
                 ctx.order("train", dock.id, kind)
-                ctx.queued += 1
                 ctx.board.cool(f"naval-train:{dock.id}", ctx.tick,
                                ctx.config.naval_settle_seconds * ctx.world.tick_hz)
                 break

@@ -114,7 +114,7 @@ fn vassal_leash_refuses_without_losing_orders_and_only_admits_home() {
 }
 
 #[test]
-fn housing_reaches_a_thousand_and_never_exceeds_it() {
+fn many_completed_houses_do_not_limit_training_or_change_the_population_count() {
     let (mut w, _) = setup();
     for i in 0..205 {
         w.insert_building(
@@ -125,16 +125,14 @@ fn housing_reaches_a_thousand_and_never_exceeds_it() {
         )
         .unwrap();
     }
-    assert_eq!(w.player_economy(PlayerId(0)).unwrap().population_cap, 1_000);
-    let p = w.economy.players.get_mut(&PlayerId(0)).unwrap();
-    p.population_used = 999;
+    let before = w.player_economy(PlayerId(0)).unwrap().population_used;
     let tc = w
         .player_buildings_of(PlayerId(0), BuildingKind::TownCenter)
         .next()
         .unwrap()
         .id;
     w.issue_train(PlayerId(0), tc, UnitKind::Villager).unwrap();
-    // Prepaid queues may exceed housing; completion must still stop at 1000.
+    // Both prepaid entries finish independently of housing.
     w.issue_train(PlayerId(0), tc, UnitKind::Villager).unwrap();
     let entry = w
         .economy
@@ -146,14 +144,19 @@ fn housing_reaches_a_thousand_and_never_exceeds_it() {
         .unwrap();
     entry.progress_ticks = entry.total_ticks - 1;
     w.advance();
-    assert_eq!(w.player_economy(PlayerId(0)).unwrap().population_used, 1000);
+    assert_eq!(
+        w.player_economy(PlayerId(0)).unwrap().population_used,
+        before + 1
+    );
     for _ in 0..600 {
         w.advance();
     }
     let queue = &w.building(tc).unwrap().training_queue;
-    assert_eq!(queue.len(), 1);
-    assert_eq!(queue[0].progress_ticks, 0);
-    assert_eq!(w.player_economy(PlayerId(0)).unwrap().population_used, 1000);
+    assert!(queue.is_empty());
+    assert_eq!(
+        w.player_economy(PlayerId(0)).unwrap().population_used,
+        before + 2
+    );
 }
 
 #[test]

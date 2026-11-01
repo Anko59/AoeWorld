@@ -82,39 +82,4 @@ impl GameWorld {
         }
         false
     }
-    /// Houses must not wait for an idle villager: when the population cap
-    /// blocks growth, the first managed worker without a load builds one.
-    pub(super) fn vassal_house_for_busy(
-        &mut self,
-        s: &mut Snapshot,
-        budget: &mut Budget,
-        work: &mut VassalWork,
-        changed: &mut Vec<EntityId>,
-    ) {
-        let Some(p) = self.player_economy(s.player) else {
-            return;
-        };
-        if !s.complete
-            || usize::from(p.population_used) + s.global_queued + 2 < usize::from(p.population_cap)
-            || p.population_cap >= self.limits().population
-            || s.buildings
-                .iter()
-                .any(|b| b.kind == BuildingKind::House && !b.is_complete())
-        {
-            return;
-        }
-        let Some((worker, at)) = self.economy.vassal_homes[&s.vassal]
-            .workers
-            .iter()
-            .filter_map(|w| self.unit(*w))
-            .find(|u| u.carried.is_none() && u.hp > 0 && !self.embarked(u.id))
-            .map(|u| (u.id, u.position.tile_floor()))
-        else {
-            return;
-        };
-        if self.vassal_build_near(worker, BuildingKind::House, at, s, budget, work) {
-            self.claim_vassal_worker(s.vassal, worker, aoe_map::ResourceKind::Wood);
-            changed.push(worker);
-        }
-    }
 }

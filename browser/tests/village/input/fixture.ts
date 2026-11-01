@@ -188,7 +188,6 @@ export async function inputFixture(
             100,
             ...uint(2000),
             3,
-            20,
             ...(navy ? feudalAgeState : darkAgeState),
             ...marketPrices,
           ]),

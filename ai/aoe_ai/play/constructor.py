@@ -1,4 +1,4 @@
-"""Placing buildings: houses, camps, the mill and farms, and production."""
+"""Placing camps, the mill and farms, and production buildings."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from . import buildorder
 from ..geometry import Tile, dist, nearest
 from ..blackboard import Plan
 
-MAX_POPULATION = 200
 #: Seconds a foundation may sit without progress before a villager is sent to it.
 FOUNDATION_STALL_SECONDS = 8
 
@@ -135,24 +134,6 @@ class Constructor:
             mem.bump("foundations_resumed")
         for gone in [i for i in mem.progress if i not in alive]:
             del mem.progress[gone]
-
-    def houses(self, ctx: Context) -> None:
-        """Raise a house before the population cap is reached."""
-        if ctx.economy is None or ctx.home is None:
-            return
-        eco = ctx.economy
-        if eco.population_cap >= MAX_POPULATION:
-            return
-        production = ctx.count(BuildingKind.BARRACKS) + ctx.count(BuildingKind.ARCHERY_RANGE)
-        margin = ctx.config.house_margin + 2 * production
-        incoming = 5 * self.pending(ctx, BuildingKind.HOUSE)
-        if ctx.free_population() + incoming > margin:
-            return
-        if self.pending(ctx, BuildingKind.HOUSE) >= 2:
-            return
-        builder = self.builder_near(ctx, ctx.home)
-        if builder is not None and self.place(ctx, BuildingKind.HOUSE, ctx.home, [builder], gap=1):
-            ctx.board.bump("houses")
 
     def age_requirements(self, ctx: Context) -> None:
         """Mill and Lumber Camp early: drop-offs the economy needs and the

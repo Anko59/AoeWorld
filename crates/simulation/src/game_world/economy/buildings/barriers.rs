@@ -18,7 +18,6 @@ const fn barrier(
         side,
         depth: 1,
         los: if side == 1 { 2 } else { 6 },
-        population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
         requires: None,

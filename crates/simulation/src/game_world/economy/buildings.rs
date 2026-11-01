@@ -21,8 +21,6 @@ pub struct BuildingRules {
     pub depth: i32,
     /// Authoritative circular line of sight in tiles.
     pub los: u8,
-    /// Population housed once complete.
-    pub population_support: u16,
     /// Resources a villager may deposit here, Food/Wood/Gold/Stone order.
     pub accepts: [bool; 4],
     /// Units its training queue accepts; the combat table owns Militia cost and time.
@@ -69,7 +67,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 4,
         depth: 4,
         los: 8,
-        population_support: 5,
         accepts: ALL,
         trainable: VILLAGERS,
         requires: None,
@@ -86,7 +83,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 2,
         depth: 2,
         los: 2,
-        population_support: 5,
         accepts: NONE,
         trainable: NO_UNITS,
         requires: None,
@@ -103,7 +99,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 2,
         depth: 2,
         los: 4,
-        population_support: 0,
         accepts: [false, true, false, false],
         trainable: NO_UNITS,
         requires: None,
@@ -120,7 +115,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 2,
         depth: 2,
         los: 4,
-        population_support: 0,
         accepts: [false, false, true, true],
         trainable: NO_UNITS,
         requires: None,
@@ -137,7 +131,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 2,
         depth: 2,
         los: 4,
-        population_support: 0,
         accepts: [true, false, false, false],
         trainable: NO_UNITS,
         requires: None,
@@ -154,7 +147,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 3,
         depth: 3,
         los: 2,
-        population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
         requires: Some(BuildingKind::Mill),
@@ -171,7 +163,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 3,
         depth: 3,
         los: 5,
-        population_support: 0,
         accepts: NONE,
         trainable: MILITIA,
         requires: None,
@@ -188,7 +179,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 1,
         depth: 1,
         los: 2,
-        population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
         requires: None,
@@ -205,7 +195,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 1,
         depth: 1,
         los: 10,
-        population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
         requires: None,
@@ -222,7 +211,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 3,
         depth: 3,
         los: 8,
-        population_support: 0,
         accepts: [true, false, false, false],
         trainable: &[
             UnitKind::FishingShip,
@@ -246,7 +234,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 3,
         depth: 3,
         los: 6,
-        population_support: 0,
         accepts: NONE,
         trainable: &[
             UnitKind::Archer,
@@ -268,7 +255,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 3,
         depth: 3,
         los: 6,
-        population_support: 0,
         accepts: NONE,
         trainable: &[UnitKind::Scout, UnitKind::Knight, UnitKind::LightCavalry],
         requires: Some(BuildingKind::Barracks),
@@ -285,7 +271,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 3,
         depth: 3,
         los: 6,
-        population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
         requires: None,
@@ -302,7 +287,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 4,
         depth: 4,
         los: 6,
-        population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
         requires: Some(BuildingKind::Mill),
@@ -319,7 +303,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 1,
         depth: 1,
         los: 10,
-        population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
         requires: None,
@@ -336,7 +319,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 4,
         depth: 1,
         los: 6,
-        population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
         requires: None,
@@ -389,7 +371,6 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         side: 1,
         depth: 1,
         los: 4,
-        population_support: 0,
         accepts: NONE,
         trainable: NO_UNITS,
         requires: None,
@@ -420,11 +401,6 @@ const fn castle(
         side,
         depth: side,
         los,
-        population_support: if matches!(kind, BuildingKind::Castle) {
-            20
-        } else {
-            0
-        },
         accepts: NONE,
         trainable,
         requires,
@@ -435,8 +411,6 @@ const fn castle(
     }
 }
 
-/// The population ceiling regardless of houses.
-pub const MAX_POPULATION: u16 = 1_000;
 /// The AoE II rule: n builders take `base * 3 / (n + 2)`.
 pub const BUILD_WORK_PER_BASE_TICK: u64 = 3;
 /// Longest wall a single order may lay down.

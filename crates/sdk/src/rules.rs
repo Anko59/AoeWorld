@@ -119,11 +119,6 @@ pub fn building_build_seconds(kind: BuildingKind) -> u32 {
     native_building(kind).rules().build_seconds
 }
 
-/// Population housed by a completed building of this kind.
-pub fn building_population(kind: BuildingKind) -> u16 {
-    native_building(kind).rules().population_support
-}
-
 /// The building that must already stand for this kind to be buildable.
 pub fn building_requires(kind: BuildingKind) -> Option<BuildingKind> {
     native_building(kind).rules().requires.map(|required| {
@@ -197,9 +192,4 @@ pub fn tech_cost(tech: Tech) -> Stockpile {
 /// Villager carrying capacity before a trip to a drop-off.
 pub fn villager_capacity() -> u16 {
     sim::VILLAGE_RULES.villager_capacity
-}
-
-/// Population each house (or town centre) supports in the base rules.
-pub fn population_per_house() -> u16 {
-    sim::VILLAGE_RULES.population_support
 }

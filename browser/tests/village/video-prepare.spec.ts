@@ -25,7 +25,7 @@ test("prepare a live berry worker for the narrated village recording", async ({
     );
   test.setTimeout(180_000);
   await page.goto(`${config.url}#zoom=.35`);
-  await expect(page.locator("#population")).toHaveText("4/5", {
+  await expect(page.locator("#population")).toHaveText("4", {
     timeout: 30_000,
   });
   const candidates = JSON.parse(

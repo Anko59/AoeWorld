@@ -27,12 +27,6 @@ fn building_size(kind: BuildingKind) -> (i32, i32) {
     (kind.side(), kind.depth())
 }
 
-/// Population a completed building houses.
-#[pyfunction]
-fn building_population(kind: BuildingKind) -> u16 {
-    aoe_sdk::rules::building_population(kind.into())
-}
-
 /// The completed building that must exist before this one can be built.
 #[pyfunction]
 fn building_requires(kind: BuildingKind) -> Option<BuildingKind> {
@@ -87,7 +81,6 @@ pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(building_cost, module)?)?;
     module.add_function(wrap_pyfunction!(build_seconds, module)?)?;
     module.add_function(wrap_pyfunction!(building_size, module)?)?;
-    module.add_function(wrap_pyfunction!(building_population, module)?)?;
     module.add_function(wrap_pyfunction!(building_requires, module)?)?;
     module.add_function(wrap_pyfunction!(building_buildable, module)?)?;
     module.add_function(wrap_pyfunction!(building_required_age, module)?)?;

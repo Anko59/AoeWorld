@@ -100,7 +100,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     assert_eq!(
         checkpoint,
         // Wood re-picks, occupied-waypoint travel and formation detours all change the replay.
-        "3ffad85e0135de8faa8806c18bc9e34eec7ab44f0eecbe11851455238a2eb4b5"
+        // Population is uncapped: no House or cap gates training.
+        "db3813a02e8347e4cc5ea0bab6e5b1ce309a7ee227fe266ab5c59e67b1a18851"
     );
 }
 

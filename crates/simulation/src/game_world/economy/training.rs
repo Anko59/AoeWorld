@@ -137,15 +137,6 @@ impl GameWorld {
             let Some(building) = self.economy.buildings.get_mut(&id) else {
                 continue;
             };
-            // Housing blocks progress, while the prepaid queue remains intact.
-            if self
-                .economy
-                .players
-                .get(&building.player)
-                .is_none_or(|state| state.population_used >= state.population_cap)
-            {
-                continue;
-            }
             let Some(entry) = building.training_queue.front_mut() else {
                 continue;
             };

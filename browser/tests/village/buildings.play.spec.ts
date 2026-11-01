@@ -136,7 +136,7 @@ test("villager build menu places a House and watches authoritative completion", 
   await expect(page.locator("#building-status")).toContainText("Complete", {
     timeout: 60_000,
   });
-  await expect(page.locator("#population")).toHaveText("4/10");
+  await expect(page.locator("#population")).toHaveText("4");
   await expect(page.locator("#building-hp")).toHaveText("550 / 550 HP");
   // The same UI path exercises the Mill prerequisite, farm work and drag walls.
   for (const [id, kind, x, y] of [

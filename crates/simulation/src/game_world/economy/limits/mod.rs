@@ -1,17 +1,13 @@
-//! Population-scaled world storage bounds. These are limits, not allocations.
-use super::MAX_POPULATION;
+//! World storage budgets. None of these is a player's population ceiling.
 
 pub const MAX_ECONOMY_PLAYERS: usize = 128;
-/// Buildings (each wall segment is one) a seat may add to the world at the
-/// baseline 200 population: about 40 houses, 100 farms, the production and
-/// economy buildings, towers and several hundred wall segments.
-pub const BUILDINGS_PER_PLAYER: usize = 1_024;
-/// The most buildings per seat whatever the population ceiling.
-pub const MAX_BUILDINGS_PER_PLAYER: usize = 8_192;
-/// World-wide capacity limits, sized per seat: a world of `players` seats
-/// whose players may each reach `population` never fills them in play.
-/// Workers (gatherers, builders, hunters) are units, so one per unit of
-/// population covers every seat; buildings get `BUILDINGS_PER_PLAYER` per seat.
+/// Building storage per seat, including individual wall segments.
+pub const BUILDINGS_PER_PLAYER: usize = 8_192;
+/// Storage for each worker job and projectile pool per seat. This bounds
+/// auxiliary state, does not reserve memory, and never blocks unit training.
+const JOBS_PER_PLAYER: usize = 65_536;
+/// World-wide storage limits sized by seats, independent of housing and
+/// population. A capacity refusal reports a world-storage limit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WorldLimits {
     pub players: usize,
@@ -22,35 +18,27 @@ pub struct WorldLimits {
     pub animals: usize,
     /// Arrows and javelins in flight; a shot past it is not launched.
     pub projectiles: usize,
-    /// The population ceiling of one player, however many houses stand.
-    pub population: u16,
 }
 
 impl WorldLimits {
-    /// The limits of a match of `players` seats whose players may each reach
-    /// `population`. Buildings per seat grow with a ceiling above the shipped
-    /// baseline 200 (up to `MAX_BUILDINGS_PER_PLAYER`); workers are one per unit of
-    /// population. Never below the limits of a 16-seat world.
-    pub fn for_match(players: usize, population: u16) -> Self {
+    /// Logical storage budgets for `players` seats. Never below the budgets
+    /// of a 16-seat world; entries are allocated only when they are used.
+    pub fn for_match(players: usize) -> Self {
         let seats = players.clamp(16, usize::from(u16::MAX));
-        let units = usize::from(population).max(usize::from(MAX_POPULATION));
-        let per_seat = (BUILDINGS_PER_PLAYER * units / 200).min(MAX_BUILDINGS_PER_PLAYER);
         Self {
             players: MAX_ECONOMY_PLAYERS.max(players),
-            buildings: seats * per_seat,
-            gatherers: seats * units,
-            builders: seats * units,
-            hunters: seats * units,
+            buildings: seats * BUILDINGS_PER_PLAYER,
+            gatherers: seats * JOBS_PER_PLAYER,
+            builders: seats * JOBS_PER_PLAYER,
+            hunters: seats * JOBS_PER_PLAYER,
             animals: seats * crate::ANIMALS_PER_PLAYER,
-            // A shot lands before its shooter's next, so one per unit.
-            projectiles: seats * units,
-            population,
+            projectiles: seats * JOBS_PER_PLAYER,
         }
     }
 }
 
 impl Default for WorldLimits {
     fn default() -> Self {
-        Self::for_match(MAX_ECONOMY_PLAYERS, MAX_POPULATION)
+        Self::for_match(MAX_ECONOMY_PLAYERS)
     }
 }

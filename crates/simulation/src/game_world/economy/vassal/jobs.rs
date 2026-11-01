@@ -55,26 +55,6 @@ impl GameWorld {
             }
         }
         let stock = self.player_economy(s.player)?.stockpile;
-        let pending_house = s
-            .buildings
-            .iter()
-            .any(|b| b.kind == BuildingKind::House && !b.is_complete());
-        let p = self.player_economy(s.player)?;
-        if s.complete
-            && usize::from(p.population_used) + s.global_queued + 2 >= usize::from(p.population_cap)
-            && p.population_cap < self.limits().population
-            && !pending_house
-            && self.vassal_build_near(
-                worker,
-                BuildingKind::House,
-                unit.position.tile_floor(),
-                s,
-                budget,
-                work,
-            )
-        {
-            return Some(ResourceKind::Wood);
-        }
         // Food/wood/gold/stone shares, with a bounded stockpile correction.
         // Prefer the carried type so reassignment never discards a useful load.
         let amounts = [stock.food, stock.wood, stock.gold, stock.stone];

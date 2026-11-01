@@ -15,7 +15,7 @@ test("double click excludes villagers hidden by the top bar on a high-DPI canvas
   await gameAssets(page, true);
   await fiveVillagerFixture(page);
   await page.goto("/#x=8202.8125&y=8202.8125&zoom=1");
-  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(page.locator("#population")).toHaveText("6");
   await freshHud(page);
   const actors = await page.locator("#scene").evaluate((canvas) => {
     const c = canvas as HTMLCanvasElement;

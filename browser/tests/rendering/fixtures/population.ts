@@ -12,7 +12,7 @@ function uint(value: number): number[] {
   return bytes;
 }
 
-// Current protocol, maximum admitted client population, distributed over the
+// Current protocol, 16,384-unit client workload, distributed over the
 // full 16k world. This is a synthetic client workload, not a live RTS claim.
 export async function populationFixture(page: Page) {
   const count = 16384;

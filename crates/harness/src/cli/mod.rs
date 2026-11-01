@@ -102,7 +102,7 @@ enum Command {
     PerfScale(perf_scale::Options),
     /// Hundreds of armies crossing on open ground: the movement span split for group movement.
     PerfGroups(perf_scale::groups::Options),
-    /// The real server at scale: one human, Python AIs, a population cap, a browser frame rate.
+    /// The real server at scale: one human, Python AIs, a browser frame rate.
     ScaleMatch(perf_scale::scale_match::Options),
     #[command(name = "perf-soak-10")]
     PerfSoak10,

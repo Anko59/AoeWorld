@@ -4,13 +4,11 @@ import { playerState, productionFixture } from "./fixture.js";
 
 test.setTimeout(90_000);
 
-test("a population-blocked building accepts fifteen units and explains housing", async ({
-  page,
-}) => {
+test("a high population building accepts fifteen units", async ({ page }) => {
   const center = { id: 40, kind: 0, x: 8187, y: 8190, queue: [0] };
-  // Start with one prepaid unit at the population cap.
+  // A large population never disables the producer.
   const { commands, update } = await productionFixture(page, [center]);
-  update(playerState(0, 0, 5, 5));
+  update(playerState(0, 0, 65537));
   const actor = await page.locator("#scene").evaluate((canvas) =>
     (
       JSON.parse(canvas.getAttribute("data-actors") ?? "[]") as {
@@ -23,9 +21,10 @@ test("a population-blocked building accepts fifteen units and explains housing",
   if (!actor) throw new Error("Town Center missing");
   await page.mouse.click(actor.x, actor.y);
   await expect(page.locator("#selection-name")).toHaveText("Town Center");
+  await expect(page.locator("#population")).toHaveText("65537");
   const train = page.locator("#train-villager");
   await expect(train).toBeEnabled();
-  await expect(page.locator("#training-label")).toContainText(
+  await expect(page.locator("#training-label")).not.toContainText(
     "Waiting for housing",
   );
   for (let count = 2; count <= 15; count++) {
