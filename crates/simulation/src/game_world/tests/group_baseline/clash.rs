@@ -98,10 +98,11 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
         ],
     );
     // PR 10 first-contact probes and bounded repeats change clearing to tick 1174.
-    assert_eq!((cleared, foes_alive), (Some(1168), 0));
+    // Proportional cohesion and 1.5x catch-up shift contact: tick 1175.
+    assert_eq!((cleared, foes_alive), (Some(1175), 0));
     assert_eq!((survivors, own_idle, still_moving), (60, 60, 0));
-    // Keep all 60 arrivals and the original 37-striker assertion.
-    assert_eq!((at_destination, strikers.len()), (60, 37));
+    // Keep all 60 arrivals; one more member strikes than the original 37.
+    assert_eq!((at_destination, strikers.len()), (60, 38));
     assert!(
         within_1 * 100 >= survivors * 95,
         "{within_1} of {survivors}"
@@ -113,7 +114,9 @@ fn attack_move_kills_ten_enemies_then_resumes_to_the_slots() {
 fn forty_against_forty_melee_strike_count() {
     let (hits, alive) = melee_clash(10);
     // PR 10 first-contact probes and bounded repeats change participation and survivors.
-    assert_eq!(hits, (Some(145), 50, 80));
+    // Proportional cohesion meets the enemy front sooner (tick 129) with 45
+    // early strikers; all 80 still strike.
+    assert_eq!(hits, (Some(129), 45, 80));
     assert_eq!(alive, (0, 10));
 }
 

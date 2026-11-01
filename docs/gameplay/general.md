@@ -34,7 +34,10 @@ reservations. Existing manual queues and rallies remain ordinary gameplay.
 Right-clicking ground with a General selected sends an ordinary move order.
 The server retains that destination as the army's march goal. Stop cancels the
 army march. Shared formation routes, obstruction handling, block movement,
-collision, path budgets and combat execution are the existing systems.
+collision, path budgets and combat execution are the existing systems. The
+block follows a straightened corridor that keeps clear of banks and forest
+edges, with a proportional cohesion reserve ([real terrain](../movement/real-terrain.md)):
+100 followers cross a river ford within 1.3 times their slowest member's route.
 Role slots place infantry ahead of archers, siege behind archers, Knights on
 the flanks and scouts/light cavalry ahead of the infantry. Terrain can squeeze
 the block into narrow files. Role destinations use the block's ordinary body

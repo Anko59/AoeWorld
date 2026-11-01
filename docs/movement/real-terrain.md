@@ -160,18 +160,55 @@ A reserved recovery endpoint stays under corridor rejoin/recovery ownership.
 The full late-game replay now checks the instruction kernel's unchanged 1,200
 formation-member population, alongside the one-/four-worker equality check.
 
-This milestone pins river arrival at 6,035 ticks (4,742 ideal), maximum stall
-26 and five oscillations; General arrival at 40,838 ticks (34,440 ideal), maximum
-stall 149 and 37 oscillations. Every unit reaches its exact slot without a speed
-or membership violation. The next milestone retains the three-second/zero-
-oscillation target; these two deficits are explicit regression pins, not a
-claim of complete movement acceptance. Forest, town and the other terrain
-cases retain the full strict assertions. Synthetic cases do not qualify RTS
-performance on dedicated hardware.
+The forty-member river pin is now 5,436 ticks (4,742 ideal), maximum stall 10
+and three oscillations; the thousand-tile General march 37,023 ticks (34,440
+ideal), maximum stall 24 and 21 oscillations (formerly 6,035/26/5 and
+40,838/149/37). Every unit reaches its exact slot without a speed or
+membership violation. The three-second/zero-oscillation target still applies
+to these two; their deficits are explicit regression pins, not a claim of
+complete movement acceptance. Forest, town and the other terrain cases retain
+the full strict assertions. Synthetic cases do not qualify RTS performance on
+dedicated hardware.
 
-The cohesion floor is 7/8 of the slowest member's pace. The former 3/4 floor
-alone could exceed the 1.3x arrival target. Current output pins are refreshed
-with `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation
-AOE_NATIVE_TEST_FILTER='test(group_baseline::)'`: earlier arrivals and contact
-change the timestamps and battle census. Sight, hit reach, participation,
-spacing, no-overlap and work ceilings are unchanged.
+## General march iteration
+
+Measured on the 100-follower river fixture before this change: the planner's
+greedy legs ran east to the bank and then along it (163 tiles, 1.30 times the
+oracle route); every look-ahead sample on that bank-hugging route had one half
+tile of clearance, so the block packed into one file for 3,100 ticks; and the
+all-or-nothing cohesion check held the anchor at 7/8 pace on every tick.
+
+The anchor now shapes its known route whenever its end changes. Each vertex
+moves perpendicular to its neighbours' chord, through crossable tiles, to the
+nearest tile within seven tiles that has 5.5 tiles of clearance (or the most
+available). A greedy any-angle pull then keeps the farthest moved vertex whose
+straight edge never comes closer to static obstacles than the vertices it
+replaces, sampling every half tile with the anchor's own tile-crossing checks.
+The route's last vertex stays exact for the planner continuation; a dead end
+keeps the planner route. Work is at most 4,096 + 128 per member static lookups
+per change, charged as group collision work. Route continuations are fetched
+while the known end is within 64 tiles, so the corridor sees a ford before the
+block reaches the bank.
+
+Pace keeps a cohesion reserve of up to 1/8 in 64ths. On the march it follows
+the corridor lag of the rearmost tenth of pending members: nothing within two
+tiles, the full reserve from ten. Within a block length of the destination the
+rearmost member counts, including its remaining distance to the slot, from
+one tile to five, so the ranks still arrive within three seconds. A destination
+packed inside a passage keeps the strict half-tile rule, because files cannot
+reorder there. Trailing members catch up at up to 1.5 times the pace. Squeeze
+re-ranking assigns files in lateral order and rows by forward order inside each
+file, so a narrowing block closes towards its centre instead of shuffling
+members across files.
+
+The three 100-follower General fixtures now meet the 1.3x target with every
+follower at its exact slot: river 5,906/4,646 ticks (was 7,495), forest
+3,775/3,130 (was 4,216) and far bank 5,047/4,152 (was 6,270), with maximum
+stalls of 31, 13 and 31 ticks (were 63, 27 and 85). They still record five,
+three and three short direction reversals, mostly while the block first forms;
+the General tests assert arrival, slots and stalls, not zero oscillation.
+
+Current output pins are refreshed with `make test-native-focused
+AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`:
+earlier arrivals and contact change the timestamps and battle census. Sight,
+hit reach, participation, spacing, no-overlap and work ceilings are unchanged.

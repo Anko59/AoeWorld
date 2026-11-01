@@ -99,8 +99,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Kingdom-priority Vassal job choice changes the replay.
-        "739759f16b3984515e5d062a9039752c3754e9da2ed724227d498501f1fd8d39"
+        // The straightened anchor corridor and proportional cohesion change the replay.
+        "01b427f3c6dcfe3790d725d2aa28270542c98bb5368422d2e0c1a0be8e2e5946"
     );
 }
 

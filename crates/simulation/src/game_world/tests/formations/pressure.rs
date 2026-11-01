@@ -37,15 +37,20 @@ fn formations_wide_staggered_wings_move_with_body_spacing_and_no_rays() {
         .unwrap();
     assert_eq!(w.formation_slot(wing).unwrap().y, 120_597);
     let from = w.unit(wing).unwrap().position;
-    let mut peak = (0, 0, 0);
+    let (mut peak, mut rebuilds) = ((0, 0, 0), 0);
     for _ in 0..200 {
         let before = w.route_scheduler_stats().metrics;
         w.advance();
         let after = w.route_scheduler_stats().metrics;
-        let work = bounded_group_work(&before, &after, ids.len());
+        let (work, rebuilt) = bounded_group_work(&before, &after, ids.len());
         peak = (peak.0.max(work.0), peak.1.max(work.1), peak.2.max(work.2));
+        rebuilds += u32::from(rebuilt);
     }
-    eprintln!("wide wing peak work: {peak:?}");
+    eprintln!("wide wing peak work: {peak:?} rebuilds={rebuilds}");
+    assert!(
+        rebuilds <= 4,
+        "an unchanged route must not be rebuilt each tick"
+    );
     assert!(
         w.unit(wing).unwrap().position.y < from.y - 1024,
         "an open outer slot must make local progress: {:?}",
@@ -262,19 +267,24 @@ fn formations_thousands_of_members_share_one_search_with_bounded_local_work() {
         false,
     )
     .unwrap();
-    let mut peak = (0, 0, 0);
+    let (mut peak, mut rebuilds) = ((0, 0, 0), 0);
     for _ in 0..80 {
         let before = w.route_scheduler_stats().metrics;
         w.advance();
         let after = w.route_scheduler_stats().metrics;
-        let work = bounded_group_work(&before, &after, ids.len());
+        let (work, rebuilt) = bounded_group_work(&before, &after, ids.len());
         peak = (peak.0.max(work.0), peak.1.max(work.1), peak.2.max(work.2));
+        rebuilds += u32::from(rebuilt);
         assert!(
             after.fair_work + after.lookahead_work - before.fair_work - before.lookahead_work
                 <= u64::from(crate::MAX_ROUTE_WORK_PER_TICK)
         );
     }
-    eprintln!("thousands peak work: {peak:?}");
+    eprintln!("thousands peak work: {peak:?} rebuilds={rebuilds}");
+    assert!(
+        rebuilds <= 4,
+        "an unchanged route must not be rebuilt each tick"
+    );
     assert_eq!(w.route_scheduler_stats().metrics.searches_started, 1);
     assert_ne!(
         w.unit(*ids.last().unwrap()).unwrap().position,
