@@ -16,7 +16,7 @@ fn join_slot_is_an_appended_variant_with_a_pinned_wire_form() {
         version: VERSION,
         token: ResumeToken(token),
     };
-    let mut expected = vec![19, 4];
+    let mut expected = vec![19, 5];
     expected.extend(0..24_u8);
     assert_eq!(encode_client(&join).unwrap(), expected);
     assert_eq!(decode_client(&expected).unwrap(), join);
