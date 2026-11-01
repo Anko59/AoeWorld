@@ -2,7 +2,7 @@ use super::*;
 use crate::game_world::terrain_fixtures::{Command, Fixture, build};
 use metrics::{Tracker, reference_from};
 
-fn offered(f: &Fixture) -> Vec<Option<WorldPosition>> {
+pub(super) fn offered(f: &Fixture) -> Vec<Option<WorldPosition>> {
     f.ids
         .iter()
         .map(|&id| {

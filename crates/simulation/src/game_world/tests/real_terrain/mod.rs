@@ -4,6 +4,7 @@ use super::group_baseline::forest;
 use super::*;
 
 mod budget;
+mod general_followers;
 mod landscapes;
 mod metrics;
 mod terrain;
