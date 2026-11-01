@@ -57,6 +57,8 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// algorithm and independent replay/visibility assertions remain unchanged.
 /// Combat acquisition, stances and retaliation change the observed encounters;
 /// regenerated with the same scenario.
+/// Population cap removal (no housing limit) regenerated the stream; sessions 2
+/// and the others change as reported by the focused command.
 /// Rebased onto #573: avoidance, arrival slots and contact drop-off combine
 /// with gatherer reservations; sessions 1, 4 and 5 change (409/407/407 to
 /// 138/421/407 messages). Regenerated with the focused command above.
@@ -65,14 +67,14 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// General commander/army fields extend the current unit wire. Message counts
 /// and every workload, replay and visibility assertion stay unchanged.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 6205794337568153004),
+    (407, 5904972656309535373),
     // PR 10 legal work contact changes gathering and fog updates.
-    (187, 16495370670290857238),
-    (60, 1780256642041405484),
-    (176, 13848062883790336040),
+    (409, 7391452391951109991),
+    (60, 11176561324540927087),
+    (176, 447773566619623902),
     // PR 10 legal contacts and unavailable land-work queues change this stream.
-    (420, 16572561531079986710),
-    (407, 2183301173389447027),
+    (420, 11630451472446676418),
+    (407, 17807171542109202846),
 ];
 
 #[tokio::test(flavor = "multi_thread")]
