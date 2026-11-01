@@ -1,6 +1,18 @@
 use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
+#[wasm_bindgen_test]
+fn native_static_pose_content_keeps_zero_duration_only_for_one_cell() {
+    let mut value = fixture();
+    let pose = aoe_assets::catalog::units::Pose::MangonelStand as usize;
+    assert_eq!(value["actors"][pose][1], 1);
+    assert_eq!(value["actors"][pose][2], 0);
+    let content = decode(&serde_json::to_vec(&value).unwrap()).expect("native static content");
+    assert_eq!(content.actors[pose].frame_millis(), 0.0);
+    value["actors"][pose][1] = 2.into();
+    assert!(decode(&serde_json::to_vec(&value).unwrap()).is_err());
+}
+
 fn fixture() -> serde_json::Value {
     serde_json::json!({
         "rules": aoe_simulation::browser_content(),
@@ -40,6 +52,10 @@ fn malformed_runtime_content_is_rejected_before_installation() {
         ("actors", 0, serde_json::json!([993, 0, 1000, 0])),
         ("actors", 0, serde_json::json!([993, 6, 0, 0])),
         ("actors", 0, serde_json::json!([993, 6, 1000])),
+        ("actors", 0, serde_json::json!([993, 255, 1000, 0])),
+        ("actors", 0, serde_json::json!([993, 30, 1000, 0])),
+        ("actors", 0, serde_json::json!([993, 30, 67, 1])),
+        ("actors", 0, serde_json::json!([4500, 255, 17, 30])),
     ] {
         let mut data = fixture();
         data[section][index] = value;

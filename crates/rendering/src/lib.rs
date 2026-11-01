@@ -35,15 +35,16 @@ pub use game_renderer::{
     AtlasSourceCopy, AtlasUpload, GameRenderer, SceneCamera, SceneDecoration, SceneResource,
     SceneTerrain, SceneTerrainAppearance, SceneTerrainSurface, SceneUnit, SceneUnitKind,
     actor_frame_index, apply_building_foundations, resource_sprite_bounds, scene_building_hit,
-    scene_building_visible, scene_resource_animation_frame, scene_resource_frame,
+    scene_building_visible, scene_native_frames, scene_native_prefetch, scene_native_substitutes,
+    scene_resource_animation_frame, scene_resource_frame, scene_resource_native_frames,
     scene_resource_presentation, scene_unit_animates, scene_unit_bounds, scene_unit_depth,
     scene_unit_render_key,
 };
 #[cfg(target_arch = "wasm32")]
 pub use surface_mesh::{
     ProjectedSurfaceTriangle, cliff_face_in_front, pick_surface_point, projected_surface_triangles,
-    sample_surface_height, surface_depth_at, surface_hit_at, write_terrain_directory,
-    write_terrain_directory_page,
+    sample_surface_height, scene_cliff_native_frames, scene_terrain_frames, surface_depth_at,
+    surface_hit_at, terrain_directory_rows, write_terrain_directory, write_terrain_directory_page,
 };
 #[cfg(target_arch = "wasm32")]
 pub use world_key_index::WorldKeyIndex;

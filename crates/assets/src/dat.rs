@@ -10,11 +10,12 @@
 mod building;
 mod composition;
 pub mod de_survey;
+pub mod de_units;
 mod reader;
 mod sections;
 mod terrain;
 pub use building::{Annex, Building};
-pub use composition::{BuildingComposition, BuildingDamage, BuildingPart};
+pub use composition::{BuildingComposition, BuildingDamage, BuildingPart, BuildingState};
 pub use terrain::Terrain;
 pub mod table;
 mod table_details;

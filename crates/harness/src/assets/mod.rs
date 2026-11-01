@@ -15,6 +15,10 @@ use std::path::{Path, PathBuf};
 pub(crate) enum AssetCommand {
     /// Generate the current browser rules, art metadata and GPU programs.
     BrowserShaders,
+    /// Regenerate all unit animation metadata from the installed DE DAT.
+    UnitTable {
+        install: PathBuf,
+    },
     Inspect {
         input: Option<PathBuf>,
     },
@@ -31,7 +35,7 @@ pub(crate) enum AssetCommand {
         #[arg(long)]
         de: Option<PathBuf>,
     },
-    /// Imports the Dark Age buildings from a Definitive Edition install.
+    /// Imports DAT units and buildings from a Definitive Edition install.
     ImportDe {
         install: PathBuf,
         base: Option<PathBuf>,
@@ -60,6 +64,7 @@ pub(crate) fn browser_shaders() -> impl Iterator<Item = (&'static str, &'static 
 
 pub(crate) fn run(command: AssetCommand) -> Result<(), Box<dyn std::error::Error>> {
     match command {
+        AssetCommand::UnitTable { install } => aoe_assets::de::unit_catalog::generate(&install)?,
         AssetCommand::BrowserShaders => {
             let actors: Vec<_> = aoe_assets::catalog::units::SPRITES
                 .iter()

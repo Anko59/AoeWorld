@@ -16,6 +16,7 @@ pub struct BuildingPart {
     pub primary: bool,
     /// Seconds per frame (zero selects a static building variant).
     pub frame_rate: f32,
+    pub replay_delay: f32,
     pub offset: [i32; 2],
     pub misplacement: [f32; 2],
     pub layer: u8,
@@ -29,6 +30,14 @@ pub struct BuildingDamage {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct BuildingState {
+    /// 0 death, 1 corpse, 2 snow, 3 research, 4 research complete, 5 open,
+    /// 6 generic destruction, 7 generic rubble.
+    pub role: u8,
+    pub parts: Vec<BuildingPart>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct BuildingComposition {
     pub unit_id: i32,
     pub footprint: [f32; 2],
@@ -37,6 +46,7 @@ pub struct BuildingComposition {
     pub foundation_size: [u16; 2],
     pub parts: Vec<BuildingPart>,
     pub construction: Vec<BuildingPart>,
+    pub states: Vec<BuildingState>,
     pub damage: Vec<BuildingDamage>,
 }
 
@@ -110,6 +120,7 @@ impl DatFile {
                 .map_or([0; 2], |t| t.dimensions),
             parts,
             construction,
+            states: Vec::new(),
             damage,
         })
     }
@@ -184,6 +195,7 @@ impl DatFile {
                 angles: graphic.angle_count.max(1),
                 primary: false,
                 frame_rate: graphic.frame_rate,
+                replay_delay: graphic.replay_delay,
                 offset,
                 misplacement,
                 layer: graphic.layer,

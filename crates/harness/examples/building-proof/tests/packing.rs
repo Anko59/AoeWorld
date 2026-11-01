@@ -2,24 +2,10 @@
 mod packing;
 use aoe_assets::{catalog::runtime, pack::Manifest};
 
-#[test]
-fn building_proof_dock_sampling_preserves_loop_and_static_construction() {
-    assert_eq!(runtime::building_frame_step(45, 60, 1, 0.15), 2);
-    for (unit, frames, angles, rate) in [
-        (68, 43, 1, 0.2),
-        (45, 1, 1, 0.0),
-        (45, 1, 3, 2.0),
-        (45, 60, 1, 0.3),
-        (45, 59, 1, 0.15),
-    ] {
-        assert_eq!(runtime::building_frame_step(unit, frames, angles, rate), 1);
-    }
-}
-
 fn fixture() -> Manifest {
     let mut value = serde_json::json!({
         "version":1, "converter":"synthetic", "input_hash":"synthetic",
-        "building_data":"00", "frames":[], "buildings":[],
+        "building_data":"00", "frames":[], "buildings":[], "chunks":[], "terrains":[],
         "pages":[{"color":"fixture.png","color_hash":"","player":"fixture.png",
             "player_hash":"","shadow":"fixture.png","shadow_hash":"",
             "outline":"fixture.png","outline_hash":"","width":2048,"height":2048}]
@@ -39,13 +25,13 @@ fn fixture() -> Manifest {
         serde_json::json!({
             "graphic_id":slp,"slp_id":slp,"source":format!("fixture:{slp}"),
             "available":true,"frames":frames,"angles":angles,"primary":true,
-            "frame_rate":0.0,"offset":[0,0],"misplacement":[0.0,0.0],"layer":20
+            "replay_delay":0.0,"frame_rate":0.0,"offset":[0,0],"misplacement":[0.0,0.0],"layer":20
         })
     };
     value["buildings"] = serde_json::json!([{
         "unit_id":70,"footprint":[2.0,2.0],"foundation_terrain":2,
         "foundation_slp":null,"foundation_size":[0,0],"damage":[],"parts":[part(2223,3,1)],
-        "construction":(236..=239).map(|slp| part(slp,1,3)).collect::<Vec<_>>()
+        "states":[],"construction":(236..=239).map(|slp| part(slp,1,3)).collect::<Vec<_>>()
     }]);
     for slp in [2223, 236, 237, 238, 239] {
         for frame in 0..3 {

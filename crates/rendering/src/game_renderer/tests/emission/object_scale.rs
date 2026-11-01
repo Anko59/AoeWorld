@@ -10,33 +10,33 @@ const WORLD: f64 = 128.0 / 96.0;
 
 #[wasm_bindgen_test]
 fn missing_wildlife_art_keeps_neutral_animals_distinct_from_player_unit_markers() {
-    use crate::SceneUnitKind::*;
+    use crate::SceneUnitKind as K;
     for kind in [
-        NeutralSheepStand,
-        NeutralSheepWalk,
-        NeutralSheepDie,
-        NeutralSheepDecay,
-        DeerStand,
-        DeerWalk,
-        DeerDie,
-        DeerDecay,
-        BoarStand,
-        BoarWalk,
-        BoarAttack,
-        BoarDie,
-        BoarDecay,
-        WolfStand,
-        WolfWalk,
-        WolfRun,
-        WolfAttack,
-        WolfDie,
-        WolfDecay,
-        SheepStand,
-        SheepWalk,
-        SheepDie,
-        SheepDecay,
-        Villager,
-        MilitiaStand,
+        K::NeutralSheepStand,
+        K::NeutralSheepWalk,
+        K::NeutralSheepDie,
+        K::NeutralSheepDecay,
+        K::DeerStand,
+        K::DeerWalk,
+        K::DeerDie,
+        K::DeerDecay,
+        K::BoarStand,
+        K::BoarWalk,
+        K::BoarAttack,
+        K::BoarDie,
+        K::BoarDecay,
+        K::WolfStand,
+        K::WolfWalk,
+        K::WolfRun,
+        K::WolfAttack,
+        K::WolfDie,
+        K::WolfDecay,
+        K::SheepStand,
+        K::SheepWalk,
+        K::SheepDie,
+        K::SheepDecay,
+        K::Villager,
+        K::MilitiaStand,
     ] {
         let unit = SceneUnit {
             kind,
@@ -50,7 +50,12 @@ fn missing_wildlife_art_keeps_neutral_animals_distinct_from_player_unit_markers(
         assert_eq!(drawn.len(), 1, "{kind:?}");
         let player = matches!(
             kind,
-            SheepStand | SheepWalk | SheepDie | SheepDecay | Villager | MilitiaStand
+            K::SheepStand
+                | K::SheepWalk
+                | K::SheepDie
+                | K::SheepDecay
+                | K::Villager
+                | K::MilitiaStand
         );
         assert_eq!(
             drawn[0].0.color,
@@ -67,6 +72,7 @@ fn missing_wildlife_art_keeps_neutral_animals_distinct_from_player_unit_markers(
 
 fn frame(size: [f32; 2], anchor: [f32; 2]) -> GameFrame {
     GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.25, 0.25, 0.01, 0.01],
@@ -79,7 +85,16 @@ fn frame(size: [f32; 2], anchor: [f32; 2]) -> GameFrame {
 /// Hotspots as in the reviewed pack: a gold pile's is in its middle.
 fn art() -> GameArt {
     GameArt {
-        actors: Vec::new(),
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
+        actors: {
+            let mut groups = vec![Vec::new(); 167];
+            groups[70] = vec![frame([40.0, 77.0], [23.0, 60.0]); 16];
+            groups[71] = groups[70].clone();
+            groups
+        },
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),

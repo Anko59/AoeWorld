@@ -185,6 +185,7 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
     let mut presentation = CanvasPresentation::new(canvas.width(), canvas.height());
     let atlas = blend_atlas();
     let frame = |page| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page,
             uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
@@ -193,7 +194,11 @@ fn canvas_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignme
         anchor: [0.0; 2],
     };
     let art = GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
@@ -316,7 +321,11 @@ fn canvas_upload_keeps_one_flat_owner_and_creates_only_requested_legacy_page() {
         presentation: CanvasPresentation::new(128, 128),
     };
     let art = GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
@@ -411,6 +420,7 @@ fn canvas_multiplies_shadow_sprite_tint_and_alpha_like_webgpu() {
         pages: [2, 0, 0, 0],
     };
     let frame = crate::GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: sprite.pages[0],
             uv: sprite.uv,

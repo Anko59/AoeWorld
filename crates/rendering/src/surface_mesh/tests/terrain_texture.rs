@@ -6,6 +6,7 @@ use wasm_bindgen_test::wasm_bindgen_test;
 fn terrain_atlas_selection_follows_reviewed_ten_by_ten_neighbor_order() {
     let frames = (0..100)
         .map(|index| GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 0,
                 uv: [index as f32, 0.0, 0.01, 0.01],
@@ -41,6 +42,7 @@ fn terrain_atlas_selection_follows_reviewed_ten_by_ten_neighbor_order() {
 #[wasm_bindgen_test]
 fn undeclared_hundred_frames_use_coordinate_stable_fallback_not_sheet_inference() {
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 1,
             uv: [0.0; 4],
@@ -51,6 +53,7 @@ fn undeclared_hundred_frames_use_coordinate_stable_fallback_not_sheet_inference(
     let mut art = test_art(frame);
     art.terrain[0] = (0..100)
         .map(|index| GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 1,
                 uv: [index as f32, 0.0, 0.01, 0.01],
@@ -73,6 +76,7 @@ fn undeclared_hundred_frames_use_coordinate_stable_fallback_not_sheet_inference(
 #[wasm_bindgen_test]
 fn same_uv_different_pages_remain_distinct_terrain_blend_addresses() {
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0, 0.0, 0.01, 0.01],
@@ -114,6 +118,7 @@ fn same_uv_different_pages_remain_distinct_terrain_blend_addresses() {
 fn partial_terrain_variant_sets_vary_on_both_axes() {
     let frames = (0..10)
         .map(|index| GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 0,
                 uv: [index as f32, 0.0, 0.01, 0.01],
@@ -143,6 +148,7 @@ fn missing_cliff_art_keeps_impassable_cells_visibly_rock_at_both_zooms() {
         tile.surface.kind = SceneTerrainSurface::CLIFF;
     }
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.2, 0.0, 0.01, 0.01],

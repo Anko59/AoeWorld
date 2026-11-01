@@ -52,6 +52,7 @@ fn frames(material: u8, count: usize) -> Vec<GameFrame> {
         .map(|index| {
             let (page, [x, y]) = origin(material, index);
             GameFrame {
+                stream: 0,
                 atlas: AtlasAddress {
                     page,
                     uv: [x, y, SIZE[0], SIZE[1]].map(|value| value as f32 / 2048.0),
@@ -77,7 +78,11 @@ pub(crate) fn art() -> GameArt {
     });
     terrain_topology[2] = Some(TerrainTopology::CoordinateStableAccents);
     GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),

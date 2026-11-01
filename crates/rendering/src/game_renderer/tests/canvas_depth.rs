@@ -117,6 +117,7 @@ fn transparent_sprite_texels_do_not_occlude_terrain() {
         pages: [0; 4],
     };
     let frame = crate::GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: sprite.pages[0],
             uv: sprite.uv,
@@ -204,6 +205,7 @@ fn canvas_sprite_flip_samples_atlas_texels_in_mirrored_order() {
         pages: [2, 0, 0, 0],
     };
     let frame = crate::GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: sprite.pages[0],
             uv: sprite.uv,
@@ -251,6 +253,7 @@ fn canvas_flat_background_is_textured_and_stays_behind_world_sprites() {
         pages: [0; 4],
     };
     let frame = crate::GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: background.uv,
@@ -270,6 +273,7 @@ fn canvas_flat_background_is_textured_and_stays_behind_world_sprites() {
         WorldLayer::Sprite(
             unit,
             crate::GameFrame {
+                stream: 0,
                 size: [16.0; 2],
                 ..frame
             },

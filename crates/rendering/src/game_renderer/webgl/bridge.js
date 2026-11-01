@@ -216,49 +216,77 @@ export class AoeWebGl {
     }
 
     upload(pixels, memory) {
-        this.check();
         const pages = pixels.byteLength / (SIDE * SIDE * 4);
         if (!Number.isInteger(pages) || pages < 8 || pages > MAX_PAGES || pages % 2)
             throw new Error('Invalid WebGL2 atlas size');
-        if (pages !== this.atlasPages) {
+        try {
+            this.check();
+            if (pages !== this.atlasPages) {
+                const gl = this.gl;
+                if (gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) < pages)
+                    throw new Error('WebGL2 atlas layer budget unavailable');
+                gl.deleteTexture(this.texture);
+                this.texture = gl.createTexture();
+                if (!this.texture) throw new Error('WebGL2 atlas allocation failed');
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
+                gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, SIDE, SIDE, pages);
+                this.atlasPages = pages;
+            }
             const gl = this.gl;
-            if (gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) < pages)
-                throw new Error('WebGL2 atlas layer budget unavailable');
-            gl.deleteTexture(this.texture);
-            this.texture = gl.createTexture();
-            if (!this.texture) throw new Error('WebGL2 atlas allocation failed');
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
-            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, SIDE, SIDE, pages);
+            // Typed bytes preserve the WebGPU atlas row convention, without browser
+            // image-source flipping, premultiplication, or colour-space conversion.
+            gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+            gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+            // A page-sized call alone does not bound driver staging: all eight
+            // transfers can remain queued together. Complete each startup/restore
+            // page before lending the next, so at most one 16 MiB transfer is live.
+            for (let layer = 0; layer < this.atlasPages; layer++) {
+                gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, SIDE, SIDE, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels, layer * SIDE * SIDE * 4);
+                gl.finish();
+            }
+            this.check();
+            this.atlasReady = true;
+        } catch (error) {
+            if (this.disposed || !this.gl.isContextLost()) throw error;
             this.atlasPages = pages;
         }
-        const gl = this.gl;
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
-        // Typed bytes preserve the WebGPU atlas row convention, without browser
-        // image-source flipping, premultiplication, or colour-space conversion.
-        gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-        // A page-sized call alone does not bound driver staging: all eight
-        // transfers can remain queued together. Complete each startup/restore
-        // page before lending the next, so at most one 16 MiB transfer is live.
-        for (let layer = 0; layer < this.atlasPages; layer++) {
-            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, layer, SIDE, SIDE, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels, layer * SIDE * SIDE * 4);
-            gl.finish();
-        }
-        this.check();
-        this.atlasReady = true;
-        // Borrow the renderer-owned WASM source, avoiding a second 128 MiB
-        // restoration copy. Its offset survives detachment on memory.grow.
+        // Retain the complete Rust-owned source even if a context is lost
+        // during growth or upload. Restoration re-uploads all resident planes.
         this.atlasPixels = pixels;
         this.atlasMemory = memory;
         this.atlasOffset = pixels.byteOffset;
+    }
+
+    patch(page, x, y, width, height, pixels) {
+        if ((!this.atlasReady && !this.gl.isContextLost()) || ![page,x,y,width,height].every(Number.isInteger) ||
+            page < 0 || page >= this.atlasPages || x < 0 || y < 0 || width <= 0 || height <= 0 ||
+            x + width > SIDE || y + height > SIDE || pixels.length !== width * height * 4)
+            throw new Error('Invalid WebGL2 atlas patch');
+        const gl = this.gl;
+        try {
+            this.check();
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.texture);
+            gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+            gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+            gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, x, y, page, width, height, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+            this.check();
+        } catch (error) {
+            // Rust already copied this plane into the restoration source.
+            // Complete the other plane there, then restore the whole atlas.
+            if (this.disposed || !gl.isContextLost()) throw error;
+        }
     }
 
     render(instances, black, effects) {

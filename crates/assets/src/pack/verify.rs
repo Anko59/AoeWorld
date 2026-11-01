@@ -1,11 +1,11 @@
-use super::{MAX_FRAMES, MAX_PAGES, Manifest, PAGE};
+use super::{MAX_FRAMES, MAX_PAGES, Manifest, PAGE, compressed, frame_chunks};
 use crate::{Error, invalid};
 use std::{collections::BTreeSet, fs, io::Cursor, path::Path};
 
 pub fn verify(pack: &Path) -> Result<Manifest, Error> {
     let manifest_path = pack.join("manifest.json");
-    if fs::metadata(&manifest_path)?.len() > 16 * 1024 * 1024 {
-        return Err(invalid("manifest", 0, "manifest exceeds 16 MiB"));
+    if fs::metadata(&manifest_path)?.len() > 32 * 1024 * 1024 {
+        return Err(invalid("manifest", 0, "manifest exceeds 32 MiB"));
     }
     let manifest = parse_manifest(&fs::read(manifest_path)?)?;
     for page in &manifest.pages {
@@ -45,12 +45,42 @@ pub fn verify(pack: &Path) -> Result<Manifest, Error> {
             }
         }
     }
+    verify_chunks(pack, &manifest)?;
     Ok(manifest)
 }
 
+fn verify_chunks(pack: &Path, manifest: &Manifest) -> Result<(), Error> {
+    let mut by_chunk = vec![Vec::new(); manifest.chunks.len()];
+    for frame in &manifest.frames {
+        if let Some(location) = frame.native {
+            by_chunk[usize::from(location.chunk)].push((location, [frame.width, frame.height]));
+        }
+    }
+    for (chunk, references) in manifest.chunks.iter().zip(by_chunk) {
+        let path = pack.join(&chunk.file);
+        let metadata = fs::symlink_metadata(&path)?;
+        if !metadata.is_file() || metadata.len() != u64::from(chunk.bytes) {
+            return Err(invalid(
+                "manifest",
+                0,
+                "invalid native chunk file or length",
+            ));
+        }
+        let bytes = fs::read(path)?;
+        chunk.verify_payload(&bytes)?;
+        let mut seen = BTreeSet::new();
+        for (location, size) in references {
+            if seen.insert((location, size)) {
+                compressed::decode_frame(location.slice(&bytes)?, size)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
-    if bytes.len() > 16 * 1024 * 1024 {
-        return Err(invalid("manifest", 0, "manifest exceeds 16 MiB"));
+    if bytes.len() > 32 * 1024 * 1024 {
+        return Err(invalid("manifest", 0, "manifest exceeds 32 MiB"));
     }
     let manifest: Manifest = serde_json::from_slice(bytes)?;
     if manifest.version != 1
@@ -63,6 +93,7 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
     if !valid_hash(&manifest.input_hash) {
         return Err(invalid("manifest", 0, "invalid input hash"));
     }
+    validate_chunks(&manifest)?;
     for page in &manifest.pages {
         if page.width != page.height || !matches!(page.width as usize, 1_024 | PAGE) {
             return Err(invalid("manifest", 0, "atlas page dimensions"));
@@ -81,6 +112,26 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
         if !ids.insert((&frame.source, frame.frame)) {
             return Err(invalid("manifest", 0, "duplicate frame"));
         }
+        if let Some(location) = frame.native {
+            let chunk = manifest
+                .chunks
+                .get(usize::from(location.chunk))
+                .ok_or_else(|| invalid("manifest", 0, "invalid native chunk reference"))?;
+            if frame.page != 0
+                || frame.x != 0
+                || frame.y != 0
+                || frame.width == 0
+                || frame.height == 0
+                || frame.width > crate::catalog::packing::MAX_FRAME_EXTENT
+                || frame.height > crate::catalog::packing::MAX_FRAME_EXTENT
+                || location.length == 0
+                || location.length as usize > compressed::MAX_ENCODED_FRAME_BYTES
+                || u64::from(location.offset) + u64::from(location.length) > u64::from(chunk.bytes)
+            {
+                return Err(invalid("manifest", 0, "invalid native frame bounds"));
+            }
+            continue;
+        }
         let Some(page) = manifest.pages.get(frame.page as usize) else {
             return Err(invalid("manifest", 0, "invalid page reference"));
         };
@@ -92,6 +143,40 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
             return Err(invalid("manifest", 0, "frame outside atlas"));
         }
     }
+    if manifest.terrains.len() > 200 {
+        return Err(invalid("manifest", 0, "too many terrain recipes"));
+    }
+    let mut terrain_ids = BTreeSet::new();
+    for t in &manifest.terrains {
+        if !terrain_ids.insert(t.id)
+            || t.id >= 200
+            || t.period.iter().any(|&n| n == 0 || n > 256)
+            || t.size
+                .iter()
+                .any(|&n| !(16..=4096).contains(&n) || !n.is_power_of_two())
+        {
+            return Err(invalid("manifest", 0, "invalid terrain recipe"));
+        }
+        let mut size = t.size;
+        let mut count = 0_u32;
+        loop {
+            count += u32::from(size[0].div_ceil(256)) * u32::from(size[1].div_ceil(256));
+            if size[0].max(size[1]) <= 16 {
+                break;
+            }
+            size = size.map(|n| (n / 2).max(1));
+        }
+        let frames: Vec<_> = manifest
+            .frames
+            .iter()
+            .filter(|f| f.source == t.source)
+            .collect();
+        if frames.len() != count as usize
+            || (0..count).any(|n| !frames.iter().any(|f| f.frame == n && f.native.is_some()))
+        {
+            return Err(invalid("manifest", 0, "incomplete native terrain"));
+        }
+    }
     let mut unit_ids = BTreeSet::new();
     for building in &manifest.buildings {
         if building.foundation_slp.is_some()
@@ -101,7 +186,7 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
         {
             return Err(invalid("manifest", 0, "invalid DAT foundation topology"));
         }
-        if manifest.buildings.len() > crate::catalog::GAMEPLAY_BUILDING_IDS.len()
+        if manifest.buildings.len() > crate::catalog::MAX_COMPOSITIONS
             || !unit_ids.insert(building.unit_id)
             || building
                 .footprint
@@ -109,6 +194,12 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
                 .any(|v| !v.is_finite() || *v <= 0.0 || *v > 128.0)
             || building.parts.len() > 256
             || building.construction.len() > 256
+            || building.states.len() > 8
+            || building.states.iter().enumerate().any(|(i, s)| {
+                s.role > 7
+                    || s.parts.len() > 256
+                    || building.states[..i].iter().any(|p| p.role == s.role)
+            })
             || building.damage.len() > 7
             || building.damage.iter().any(|d| {
                 !(0..=100).contains(&d.damage_percent) || d.apply_mode > 2 || d.parts.len() > 256
@@ -120,13 +211,16 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
             .parts
             .iter()
             .chain(&building.construction)
+            .chain(building.states.iter().flat_map(|s| &s.parts))
             .chain(building.damage.iter().flat_map(|d| &d.parts))
         {
             if part.frames == 0
                 || part.angles == 0
-                || u32::from(part.frames) * u32::from(part.angles) > 256
+                || u32::from(part.frames) * u32::from(part.angles) > 16384
                 || !part.frame_rate.is_finite()
                 || part.frame_rate < 0.0
+                || !part.replay_delay.is_finite()
+                || part.replay_delay < 0.0
             {
                 return Err(invalid("manifest", 0, "invalid building animation"));
             }
@@ -149,6 +243,37 @@ pub fn parse_manifest(bytes: &[u8]) -> Result<Manifest, Error> {
         return Err(invalid("manifest", 0, "compiled building recipe mismatch"));
     }
     Ok(manifest)
+}
+
+fn validate_chunks(manifest: &Manifest) -> Result<(), Error> {
+    if manifest.chunks.len() > frame_chunks::MAX_CHUNKS {
+        return Err(invalid("manifest", 0, "too many native chunks"));
+    }
+    let mut names = BTreeSet::new();
+    let mut total = 0_u64;
+    for chunk in &manifest.chunks {
+        if !matches!(
+            Path::new(&chunk.file).components().next(),
+            Some(std::path::Component::Normal(_))
+        ) || Path::new(&chunk.file).components().count() != 1
+            || chunk.file.contains('\\')
+            || !names.insert(&chunk.file)
+            || !valid_hash(&chunk.hash)
+            || chunk.bytes == 0
+            || chunk.bytes as usize > compressed::MAX_ENCODED_FRAME_BYTES
+        {
+            return Err(invalid("manifest", 0, "invalid native chunk metadata"));
+        }
+        total += u64::from(chunk.bytes);
+    }
+    if total > frame_chunks::MAX_TOTAL_BYTES as u64 {
+        return Err(invalid(
+            "manifest",
+            0,
+            "native chunks exceed total byte limit",
+        ));
+    }
+    Ok(())
 }
 
 fn valid_hash(value: &str) -> bool {

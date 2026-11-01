@@ -7,6 +7,7 @@ fn art() -> GameArt {
     // middle of a three-by-three tile footprint.
     let cliff_faces = (0..25)
         .map(|slot| GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 2,
                 uv: [0.25, 0.5, 0.125, 0.0625 + slot as f32 * 1e-4],
@@ -16,7 +17,11 @@ fn art() -> GameArt {
         })
         .collect();
     GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
@@ -90,6 +95,7 @@ fn rally_flags_keep_a_visible_pole_and_banner_without_optional_original_art() {
         );
     }
     let native = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 2,
             uv: [0.2, 0.3, 0.02, 0.03],
@@ -153,6 +159,7 @@ fn decorative_rocks_use_small_native_frames_distinct_from_ore_at_both_zooms() {
     .into_iter()
     .enumerate()
     .map(|(slot, size)| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 2,
             uv: [0.5 + slot as f32 * 0.01, 0.25, 0.03, 0.02],

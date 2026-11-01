@@ -250,6 +250,7 @@ fn canvas_sprite_kernel_preserves_flip_tint_alpha_equal_depth_and_background() {
                         pages: [0; 4],
                     };
                     let frame = crate::GameFrame {
+                        stream: 0,
                         atlas: crate::AtlasAddress {
                             page: sprite.pages[0],
                             uv: sprite.uv,

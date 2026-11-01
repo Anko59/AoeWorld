@@ -11,6 +11,9 @@ pub use military::ProjectileSource;
 #[path = "de_survey/economy.rs"]
 mod economy;
 pub mod graphics;
+mod soldiers;
+pub mod terrains;
+pub use soldiers::soldier;
 
 const BUILDINGS: &[(i16, i32, &str)] = &[
     (82, 5142, "CSTL"),
@@ -104,6 +107,7 @@ pub struct Building {
     pub work_rate: f32,
     pub resource_capacity: i16,
     pub projectile: i16,
+    pub frame_delay: i16,
     pub attacks: Vec<(i16, i16)>,
     pub armours: Vec<(i16, i16)>,
     pub range: f32,
@@ -217,7 +221,9 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
     let blast_width = r.f32()?;
     let reload = r.f32()?;
     let projectile = r.i16()?;
-    r.skip(18)?;
+    r.skip(3)?; // accuracy and break-off-combat flag
+    let frame_delay = r.i16()?;
+    r.skip(13)?; // projectile displacement and blast attack level
     let min_range = r.f32()?;
     r.skip(38)?;
     let cost = (0..3)
@@ -257,6 +263,7 @@ pub(super) fn unit_record(bytes: &[u8], at: usize, id: i16, name: &str) -> Resul
         work_rate,
         resource_capacity,
         projectile,
+        frame_delay,
         attacks,
         armours,
         range,
@@ -362,16 +369,7 @@ pub fn survey(bytes: &[u8]) -> Result<Survey, Error> {
         .collect::<Result<Vec<_>, _>>()?;
     let soldiers = SOLDIERS
         .iter()
-        .map(|&(id, language)| {
-            let mut signature = vec![70];
-            signature.extend_from_slice(&id.to_le_bytes());
-            signature.extend_from_slice(&language.to_le_bytes());
-            let at = bytes
-                .windows(signature.len())
-                .position(|b| b == signature)
-                .ok_or_else(|| crate::invalid("DE survey", 0, format!("soldier {id} not found")))?;
-            unit_record(bytes, at, id, "")
-        })
+        .map(|&(id, _)| soldier(bytes, id))
         .collect::<Result<Vec<_>, Error>>()?;
     // Effects are a contiguous debug-name/count/command table. Locate the
     // longest structurally valid chain before the first unit, then require its

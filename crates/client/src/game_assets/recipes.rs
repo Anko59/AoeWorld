@@ -54,6 +54,7 @@ impl Reader {
                     _ => return Err("invalid primary graphic flag"),
                 },
                 frame_rate: self.float()?,
+                replay_delay: self.float()?,
                 offset: [self.i32()?, self.i32()?],
                 misplacement: [self.float()?, self.float()?],
             });
@@ -86,7 +87,7 @@ pub(super) fn decode(
         .collect::<Result<Vec<_>, &'static str>>()?;
     let mut r = Reader { bytes, pos: 0 };
     let count = r.array::<1>()?[0];
-    if usize::from(count) > aoe_assets::catalog::GAMEPLAY_BUILDING_IDS.len() {
+    if usize::from(count) > aoe_assets::catalog::MAX_COMPOSITIONS {
         return Err("too many building recipes");
     }
     let mut buildings = Vec::with_capacity(usize::from(count));
@@ -97,6 +98,18 @@ pub(super) fn decode(
         let foundation_size = [r.u16()?, r.u16()?];
         let parts = r.parts(frames)?;
         let construction = r.parts(frames)?;
+        let state_count = r.array::<1>()?[0];
+        if state_count > 8 {
+            return Err("too many building states");
+        }
+        let mut states = Vec::new();
+        for _ in 0..state_count {
+            let role = r.array::<1>()?[0];
+            if role > 7 || states.iter().any(|(old, _)| *old == role) {
+                return Err("invalid building state");
+            }
+            states.push((role, r.parts(frames)?));
+        }
         let shared = r.parts(frames)?;
         if shared.iter().any(|part| part.offset != [0; 2]) {
             return Err("invalid shared damage offset");
@@ -139,6 +152,7 @@ pub(super) fn decode(
             foundation_size,
             parts,
             construction,
+            states,
             damage,
         });
     }

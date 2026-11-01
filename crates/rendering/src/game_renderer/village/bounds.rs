@@ -54,7 +54,7 @@ pub fn scene_unit_bounds(
     } else {
         0
     };
-    let (index, mirrored) = unit_frame_index(unit, stride, phase);
+    let (index, mirrored) = unit_frame_index(unit, stride, phase, frames.len() / stride);
     let mut frame = world_frame(*frames.get(index)?);
     if mirrored {
         frame.anchor[0] = frame.size[0] - frame.anchor[0];
@@ -81,7 +81,7 @@ pub(super) fn frames_visible(
     unit: SceneUnit,
     camera: SceneCamera,
 ) -> bool {
-    let (direction, flipped) = unit_direction(unit);
+    let (direction, flipped) = unit_direction(unit, frames.len() / stride);
     frames[direction * stride..(direction + 1) * stride]
         .iter()
         .any(|frame| {
@@ -126,4 +126,80 @@ pub(super) fn object_depth(object: WorldObject) -> f64 {
         _ => GROUND_CLEARANCE,
     };
     surface_depth([position[0], position[1], object.elevation_meters()]) + clearance
+}
+
+pub(super) fn animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
+    if let Some(slot @ (4 | 40)) = unit.kind.building_slot()
+        && !art
+            .compositions
+            .iter()
+            .any(|b| Some(b.unit_id) == unit.kind.building_id() && !b.parts.is_empty())
+    {
+        let frames = &art.buildings[usize::from(slot)];
+        return (slot == 40 || frames.len() == 44)
+            && frames.iter().any(|f| {
+                sprite_screen_bounds(
+                    world_frame(*f),
+                    unit.position,
+                    unit.elevation_meters,
+                    camera,
+                )
+                .is_some()
+            });
+    }
+    if unit.visual.moving() && unit.kind.building_side().is_some() {
+        return art
+            .compositions
+            .iter()
+            .find(|b| Some(b.unit_id) == unit.kind.building_id())
+            .is_some_and(|b| {
+                let elapsed = art
+                    .building_clocks
+                    .iter()
+                    .find(|(id, _)| *id == unit.id.0)
+                    .map_or(0.0, |(_, ms)| *ms);
+                elapsed < f64::from(b.destruction_millis())
+                    && b.states.iter().any(|(role, parts)| {
+                        *role == 0
+                            && parts
+                                .iter()
+                                .any(|p| p.frame_rate > 0.0 && p.animation.len() > 1)
+                    })
+                    && scene_building_visible(art, unit, camera, 0)
+            });
+    }
+    if unit.kind.is_foundation() {
+        return false;
+    }
+    if unit.kind.building_id().is_some() {
+        return art
+            .compositions
+            .iter()
+            .find(|b| Some(b.unit_id) == unit.kind.building_id())
+            .is_some_and(|b| {
+                // A healthy wall draws frame 0 of each part; only damage animates.
+                let wall = unit.kind == crate::SceneUnitKind::PalisadeWall;
+                let parts: &[_] = if wall { &[] } else { &b.parts };
+                let damage = usize::from(unit.visual.damage_stage())
+                    .checked_sub(1)
+                    .and_then(|i| b.damage.get(i))
+                    .into_iter()
+                    .flat_map(|d| &d.parts);
+                parts.iter().chain(damage).any(|p| {
+                    p.frame_rate > 0.0
+                        && p.animation.len() > 1
+                        && scene_sprite(
+                            world_frame(p.frame),
+                            unit.position,
+                            unit.elevation_meters,
+                            camera,
+                        )
+                        .is_some()
+                })
+            });
+    }
+    let Some((frames, stride, true)) = village::frames(art, unit) else {
+        return false;
+    };
+    frames_visible(frames, stride, unit, camera)
 }

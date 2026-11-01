@@ -27,6 +27,8 @@ pub fn resource_frame_index(kind: u8, variant: u8, frame_count: usize) -> Option
 
 #[derive(Clone, Copy)]
 pub struct GameFrame {
+    /// Zero for static PNG art; otherwise one plus its native residency index.
+    pub stream: u32,
     pub atlas: AtlasAddress,
     pub size: [f32; 2],
     pub anchor: [f32; 2],
@@ -50,13 +52,21 @@ pub struct SceneryArt {
 }
 
 pub struct GameArt {
+    /// Native geometry remains immutable while these physical addresses change.
+    pub resident: Vec<Option<AtlasAddress>>,
+    /// Current authoritative presentation time since destruction, per visible cosmetic building.
+    pub building_clocks: Vec<(u32, f64)>,
     pub actors: Vec<Vec<GameFrame>>,
+    /// Native DAT direction count for each semantic actor pose.
+    pub actor_rows: Vec<usize>,
     /// Nine standing kinds, four foundation sizes, nine rubble kinds, builder.
     pub buildings: [Vec<GameFrame>; 74],
     /// Shore fish and naval working art.
     pub fishing: [Vec<GameFrame>; 12],
     pub village: [Vec<GameFrame>; 9],
     pub compositions: Vec<BuildingArt>,
+    /// DAT resource and scenery recipes use the same part and lifecycle format.
+    pub environment: Vec<BuildingArt>,
     /// Additional DAT foundation sheet, resolved from its terrain directory.
     pub foundation: (Vec<GameFrame>, Option<TerrainTopology>),
     pub walking: Vec<GameFrame>,
@@ -86,6 +96,41 @@ pub struct GameArt {
     pub scenery: SceneryArt,
 }
 
+impl GameArt {
+    /// A cold animation cell retains a resident phase in the same facing row.
+    /// Return that phase's complete geometry as well as its physical address.
+    pub fn resident_animation(
+        &self,
+        frames: &[GameFrame],
+        index: usize,
+        stride: usize,
+    ) -> Option<GameFrame> {
+        let current = *frames.get(index)?;
+        self.resident_frame(current).or_else(|| {
+            if current.stream == 0 || stride == 0 {
+                return None;
+            }
+            let row = index / stride * stride;
+            (1..stride).find_map(|ago| {
+                let frame = *frames.get(row + (index % stride + stride - ago) % stride)?;
+                (frame.stream != 0)
+                    .then(|| self.resident_frame(frame))
+                    .flatten()
+            })
+        })
+    }
+    pub fn resident_frame(&self, mut frame: GameFrame) -> Option<GameFrame> {
+        if frame.stream != 0 {
+            frame.atlas = self
+                .resident
+                .get(frame.stream as usize - 1)
+                .copied()
+                .flatten()?;
+        }
+        Some(frame)
+    }
+}
+
 /// A DAT recipe resolved into the shared runtime atlas. Offsets are native
 /// source pixels, with the annex's tile displacement projected once at load.
 #[derive(Clone)]
@@ -94,6 +139,7 @@ pub struct BuildingPart {
     pub animation: Vec<GameFrame>,
     pub angles: u16,
     pub frame_rate: f32,
+    pub replay_delay: f32,
     pub offset: [f32; 2],
     pub depth: f32,
 }
@@ -110,10 +156,26 @@ pub struct BuildingArt {
     pub foundation_material: Option<u8>,
     pub parts: Vec<BuildingPart>,
     pub construction: Vec<BuildingPart>,
+    pub states: Vec<(u8, Vec<BuildingPart>)>,
     pub damage: Vec<BuildingDamage>,
 }
 
 impl BuildingArt {
+    pub fn destruction_millis(&self) -> u32 {
+        self.states
+            .iter()
+            .filter(|(role, _)| *role == 0)
+            .flat_map(|(_, p)| p)
+            .map(|p| {
+                ((p.animation.len().max(1) / usize::from(p.angles).max(1)) as f64
+                    * f64::from(p.frame_rate)
+                    * 1000.0)
+                    .ceil() as u32
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
     pub fn damage_stage(&self, hp: u16, max_hp: u16) -> u8 {
         if max_hp == 0 {
             return 0;
@@ -162,7 +224,9 @@ impl Renderer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         }))
     }

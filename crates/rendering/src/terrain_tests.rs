@@ -8,7 +8,11 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 fn test_art(frame: GameFrame) -> GameArt {
     GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
@@ -57,6 +61,7 @@ fn sprites_cover_viewport(frames: &[(Sprite, GameFrame)], viewport: [f64; 2]) ->
 #[wasm_bindgen_test]
 fn sparse_terrain_aggregation_stays_within_the_sprite_bound() {
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0; 4],
@@ -102,6 +107,7 @@ fn sparse_terrain_aggregation_stays_within_the_sprite_bound() {
 #[wasm_bindgen_test]
 fn terrain_frames_normalize_the_reviewed_native_diamond_and_anchor() {
     let frame = terrain_frame(GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0; 4],
@@ -118,6 +124,7 @@ fn terrain_frames_normalize_the_reviewed_native_diamond_and_anchor() {
 #[wasm_bindgen_test]
 fn nonzero_height_terrain_is_culled_relative_to_camera_focus() {
     let art = test_art(GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0; 4],
@@ -152,6 +159,7 @@ fn nonzero_height_terrain_is_culled_relative_to_camera_focus() {
 #[wasm_bindgen_test]
 fn offscreen_cached_tiles_do_not_change_visible_terrain() {
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0; 4],
@@ -191,6 +199,7 @@ fn offscreen_cached_tiles_do_not_change_visible_terrain() {
 #[wasm_bindgen_test]
 fn diagnostic_terrain_uses_world_coordinates_after_camera_translation() {
     let art = test_art(GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0; 4],
@@ -225,6 +234,7 @@ fn diagnostic_terrain_uses_world_coordinates_after_camera_translation() {
 #[wasm_bindgen_test]
 fn flat_map_terrain_uses_covering_lod_at_translated_camera() {
     let art = test_art(GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0; 4],

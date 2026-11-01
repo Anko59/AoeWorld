@@ -10,6 +10,7 @@ fn fixed_texture_frame_loop_preserves_array_map_option_and_uv_bits() {
     ] {
         for missing in 0..3 {
             let mut art = test_art(GameFrame {
+                stream: 0,
                 atlas: crate::AtlasAddress { page: 0, uv },
                 size: [97.0, 49.0],
                 anchor: [48.0, 24.0],

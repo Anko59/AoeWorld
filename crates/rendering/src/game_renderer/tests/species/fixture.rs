@@ -25,6 +25,7 @@ pub(crate) fn resource(family: u8, variant: u8) -> SceneResource {
 }
 pub(crate) fn frame(x: usize) -> GameFrame {
     GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 2,
             uv: [x as f32 / 2048.0, 0.0, 16.0 / 2048.0, 32.0 / 2048.0],
@@ -35,7 +36,11 @@ pub(crate) fn frame(x: usize) -> GameFrame {
 }
 pub(crate) fn art() -> GameArt {
     GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
@@ -105,6 +110,7 @@ pub(crate) fn expected(family: u8) -> [[u8; 4]; 4] {
 pub(crate) fn dressing_art() -> GameArt {
     let mut art = art();
     let native = GameFrame {
+        stream: 0,
         anchor: [4.0, 24.0],
         ..frame(640)
     };
@@ -119,4 +125,11 @@ pub(crate) fn dressing(kind: u8) -> SceneResource {
         kind,
         ..resource(0, 0)
     }
+}
+
+/// Native sixteen-direction actor rows for fixtures that supply unit pixels.
+pub(crate) fn unit_rows(art: &mut GameArt) {
+    art.actors = vec![Vec::new(); 167];
+    art.actors[70] = vec![art.standing[0]; 16];
+    art.actors[71] = vec![art.walking[0]; 16];
 }

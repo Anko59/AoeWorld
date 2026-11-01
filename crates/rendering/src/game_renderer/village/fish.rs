@@ -10,6 +10,7 @@ fn frames(art: &GameArt, resource: SceneResource) -> (&[GameFrame], usize) {
 }
 
 fn index(resource: SceneResource, animation: usize, period: usize, count: usize) -> usize {
+    let animation = animation / 100;
     (animation / period + resource.id as usize) % count.max(1)
 }
 
@@ -27,6 +28,9 @@ pub fn scene_resource_animation_frame(
     animation: usize,
     camera: SceneCamera,
 ) -> Option<usize> {
+    if environment::present(art, resource) {
+        return environment::animation_frame(art, resource, animation, camera);
+    }
     if resource.kind != 0 || !matches!(resource.visual_family, 5 | 6) {
         return None;
     }

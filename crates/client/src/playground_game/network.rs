@@ -259,7 +259,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     client.village.players.retain(|p| p.player != player.player);
                     client.village.players.push(player);
                 }
-                let expiry = tick.0.saturating_add(u64::from(client.config.tick_hz) * 3);
+
                 let destroyed: Vec<_> = client
                     .village
                     .buildings
@@ -274,7 +274,8 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.village.rubble.retain(|(_, until)| *until > tick.0);
                 for b in destroyed {
                     if client.village.rubble.len() < aoe_protocol::MAX_ECONOMY_BUILDINGS {
-                        client.village.rubble.push((b, expiry));
+                        let life = map::scene::rubble_ticks(&client, &b);
+                        client.village.rubble.push((b, tick.0.saturating_add(life)));
                     }
                 }
                 map::scene::replace_buildings(&mut client, buildings);

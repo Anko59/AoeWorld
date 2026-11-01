@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 #[wasm_bindgen_test]
 fn forest_variants_never_substitute_dirt_by_eight_tile_parity() {
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0, 0.0, 0.01, 0.01],
@@ -14,6 +15,7 @@ fn forest_variants_never_substitute_dirt_by_eight_tile_parity() {
     let mut art = test_art(frame);
     art.terrain[2] = vec![
         GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 0,
                 uv: [0.2, 0.0, 0.01, 0.01]
@@ -24,6 +26,7 @@ fn forest_variants_never_substitute_dirt_by_eight_tile_parity() {
     ];
     art.terrain[6] = (0..10)
         .map(|index| GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 0,
                 uv: [0.5 + index as f32 / 100.0, 0.0, 0.01, 0.01],
@@ -67,6 +70,7 @@ fn forest_variants_never_substitute_dirt_by_eight_tile_parity() {
 #[wasm_bindgen_test]
 fn native_mountain_and_ice_sheets_preserve_scene_geometry() {
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.1, 0.0, 0.01, 0.01],
@@ -78,6 +82,7 @@ fn native_mountain_and_ice_sheets_preserve_scene_geometry() {
     art.terrain[4][0].atlas.uv[0] = 0.9;
     art.terrain[11][0].atlas.uv[0] = 0.7;
     art.water_depth[2].0 = vec![GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.6, 0.0, 0.01, 0.01],
@@ -194,6 +199,7 @@ fn cliff_tops_keep_surrounding_grass_while_vertical_skirts_are_rock_at_every_lod
         }; 4];
     }
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.2, 0.0, 0.01, 0.01],
@@ -279,6 +285,7 @@ fn material_vertices_are_shared_world_keyed_and_input_order_independent() {
         assert_eq!(left.texture_tile, right.texture_tile);
     }
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.0, 0.0, 0.01, 0.01],
@@ -327,6 +334,7 @@ fn water_and_cliffs_keep_their_own_material_instead_of_land_splatting() {
     apply_terrain_textures(
         &mut triangles,
         &test_art(GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 0,
                 uv: [0.0, 0.0, 0.01, 0.01],

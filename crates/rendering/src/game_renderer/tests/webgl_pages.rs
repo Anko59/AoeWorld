@@ -109,6 +109,17 @@ export function restore_shared_atlas_after_memory_growth(bridge, memory) {
     if (bridge.atlasPixels.buffer !== memory.buffer || bridge.atlasPixels.byteOffset !== offset)
         throw new Error('restoration must refresh the retained WASM view without copying');
 }
+export function reject_upload_keeps_restoration_source(bridge, memory) {
+    const source=bridge.atlasPixels, gl=bridge.gl, get=gl.getParameter.bind(gl);
+    const replacement=new Uint8Array(10*2048*2048*4);
+    gl.getParameter=name=>name===gl.MAX_ARRAY_TEXTURE_LAYERS?8:get(name);
+    let rejected=false;
+    try { bridge.upload(replacement,memory); } catch (_) { rejected=true; }
+    finally { gl.getParameter=get; }
+    if(!rejected)throw new Error('upload should fail on the layer budget');
+    if(bridge.atlasPixels!==source)throw new Error('failed upload retained a temporary source');
+    bridge.onRestored();
+}
 ")]
 extern "C" {
     #[wasm_bindgen(catch)]
@@ -120,6 +131,22 @@ extern "C" {
         bridge: &JsValue,
         memory: &JsValue,
     ) -> Result<(), JsValue>;
+    #[wasm_bindgen(catch)]
+    fn reject_upload_keeps_restoration_source(
+        bridge: &JsValue,
+        memory: &JsValue,
+    ) -> Result<(), JsValue>;
+}
+
+#[wasm_bindgen_test]
+fn rejected_webgl_upload_preserves_the_owned_restoration_source() {
+    let (canvas, mut renderer) = target(&page_atlas());
+    reject_upload_keeps_restoration_source(renderer.test_bridge(), &wasm_bindgen::memory())
+        .unwrap();
+    let mut body = sprite(0.0, 1.0);
+    body.pages[0] = 2;
+    render(&mut renderer, &mut [body]);
+    assert_pixel(&canvas, 64, 64, [0, 0, 255, 255]);
 }
 
 #[wasm_bindgen_test]

@@ -42,6 +42,7 @@ pub(super) struct Client {
     pub canvas: HtmlCanvasElement,
     pub renderer: GameRenderer,
     pub art: GameArt,
+    pub native: Option<crate::game_assets::NativeFrames>,
     pub team_colour: [u8; 3],
     pub socket: Option<WebSocket>,
     connection_callbacks: Option<network::ConnectionCallbacks>,
@@ -218,7 +219,26 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.presentation.advance(time, canvas);
         // Keep input, networking and the HUD live while the overview covers the scene.
         let draw = perf::Scope::new(2);
+        let mut native_requests = Vec::new();
         if !controls::navigation::overview_active() && !strategic::render(&mut client) {
+            let live = client
+                .presentation
+                .live_tick(time)
+                .unwrap_or(client.village.tick as f64);
+            let clocks = client
+                .village
+                .rubble
+                .iter()
+                .map(|(b, expiry)| {
+                    let born = expiry.saturating_sub(map::scene::rubble_ticks(&client, b));
+                    (
+                        b.id.0,
+                        (live - born as f64).max(0.0) * 1000.0
+                            / f64::from(client.config.tick_hz.max(1)),
+                    )
+                })
+                .collect();
+            client.art.building_clocks = clocks;
             let scene = map::scene::prepare(&client);
             let units = map::scene::units(&client, &scene);
             let camera = SceneCamera {
@@ -228,18 +248,92 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 focus_elevation_meters: client.camera.focus_elevation_meters,
             };
             let resources = map::scene_resources(&client);
-            let grid = client.grid;
-            let animation = (time / 100.0) as usize;
-            match map::render_cache::render_if_changed(
-                &mut client,
-                &scene,
+            let mut required =
+                aoe_rendering::scene_native_frames(&client.art, &units, camera, time as usize);
+            required.extend(aoe_rendering::scene_terrain_frames(
+                &mut client.art,
+                &scene.terrain,
+                camera,
+            ));
+            required.extend(aoe_rendering::scene_resource_native_frames(
+                &client.art,
+                &resources,
+                camera,
+                time as usize,
+            ));
+            required.extend(aoe_rendering::scene_cliff_native_frames(
+                &client.art,
+                &scene.triangles,
+            ));
+            let substitutes = aoe_rendering::scene_native_substitutes(
+                &client.art,
                 &units,
                 &resources,
                 camera,
-                animation,
-                grid,
-            ) {
-                Ok(true) => strategic::present(),
+                time as usize,
+            );
+            let coverage = map::render_cache::NativeCoverage::new(&client.art, &substitutes);
+            coverage.prioritize(&mut required);
+            let prefetch =
+                aoe_rendering::scene_native_prefetch(&client.art, &units, camera, time as usize);
+            let Client {
+                native,
+                art,
+                renderer,
+                rendered_frame,
+                ..
+            } = &mut *client;
+            if let Some(native) = native {
+                match native.update(&required, &prefetch, &coverage.keep, art, renderer) {
+                    Ok((changed, requests)) => {
+                        native_requests = requests;
+                        if changed {
+                            rendered_frame.invalidate();
+                        }
+                    }
+                    Err(error) => client.status = format!("Native art unavailable: {error:?}"),
+                }
+            }
+            let grid = client.grid;
+            let animation = time as usize;
+            let result = if coverage.ready(&client.art, &required)
+                && client.native.as_ref().is_none_or(|native| native.ready())
+            {
+                map::render_cache::render_if_changed(
+                    &mut client,
+                    &scene,
+                    &units,
+                    &resources,
+                    camera,
+                    animation,
+                    grid,
+                )
+            } else {
+                Ok(false)
+            };
+            match result {
+                Ok(true) => {
+                    let substitutes = aoe_rendering::scene_native_substitutes(
+                        &client.art,
+                        &units,
+                        &resources,
+                        camera,
+                        animation,
+                    );
+                    let mut used =
+                        map::render_cache::NativeCoverage::new(&client.art, &substitutes).keep;
+                    used.extend(required.iter().copied().filter(|&id| {
+                        client
+                            .art
+                            .resident
+                            .get(id as usize - 1)
+                            .is_some_and(Option::is_some)
+                    }));
+                    if let Some(native) = &mut client.native {
+                        native.pin_presented(&used);
+                    }
+                    strategic::present();
+                }
                 Ok(false) => {}
                 Err(error) => {
                     if matches!(
@@ -271,6 +365,9 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         drop(ui);
         let surface_fixture = client.surface_fixture;
         drop(client);
+        for request in native_requests {
+            request.spawn();
+        }
         if !surface_fixture {
             map::request_visible(shared.clone());
         }

@@ -24,6 +24,7 @@ pub(crate) const PROBES: [[u32; 2]; 3] = [[32, 48], [80, 48], [48, 48]];
 /// terrain frame directory, addressed by its inner texel.
 fn frame(index: usize) -> GameFrame {
     GameFrame {
+        stream: 0,
         atlas: AtlasAddress {
             page: 0,
             uv: [
@@ -57,7 +58,11 @@ pub(crate) fn atlas() -> Vec<u8> {
 /// `depth` false models a pack without those optional sheets.
 pub(crate) fn art(depth: bool) -> GameArt {
     GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),

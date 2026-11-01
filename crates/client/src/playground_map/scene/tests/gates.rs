@@ -24,6 +24,7 @@ async fn zoomed_gate_culling_keeps_overlapping_sprite_and_skips_offscreen_sprite
     client.canvas.set_height(720);
     // Native frame at zoom 3 projects to [1148, -168, 1820, 488].
     let frame = GameFrame {
+        stream: 0,
         atlas: AtlasAddress::WHITE,
         size: [168.0, 164.0],
         anchor: [98.0, 132.0],

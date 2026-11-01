@@ -36,14 +36,12 @@ pub fn projectile_facing(east: f64, south: f64) -> u8 {
 }
 
 /// Frame of an attack animation at which the shot or the strike is released,
-/// from the DAT unit's frame delay (5 for the archer, skirmisher and
-/// crossbowman lines). `None` for poses that release nothing mid-animation.
+/// from the DE DAT unit's frame delay. `None` for poses that release nothing
+/// mid-animation; this changes visual alignment, never simulation shot timing.
 pub const fn release_frame(pose: Pose) -> Option<u8> {
     match pose {
-        Pose::ArcherAttack
-        | Pose::SkirmisherAttack
-        | Pose::CrossbowmanAttack
-        | Pose::EliteSkirmisherAttack => Some(5),
+        Pose::ArcherAttack | Pose::CrossbowmanAttack => Some(15),
+        Pose::SkirmisherAttack | Pose::EliteSkirmisherAttack => Some(19),
         _ => None,
     }
 }

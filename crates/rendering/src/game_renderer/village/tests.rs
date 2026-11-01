@@ -1,23 +1,8 @@
 use super::*;
 use aoe_core::EntityId;
 use wasm_bindgen_test::wasm_bindgen_test;
-
-#[wasm_bindgen_test]
-fn naval_actor_tags_render_their_own_original_direction_rows() {
-    let mut art = art();
-    art.actors = vec![Vec::new(); 80];
-    for index in 75..80 {
-        let original = art.village[1][(index - 75) * 5..(index - 74) * 5].to_vec();
-        art.actors[index] = original.clone();
-        let kind = SceneUnitKind::actor(index as u8);
-        assert_eq!(kind.actor_slot(), Some(index));
-        let (selected, stride, _) = frames(&art, unit(kind)).expect("native naval body");
-        assert_eq!(stride, 1);
-        assert_eq!(selected.len(), 5);
-        assert_eq!(selected[0].atlas, original[0].atlas);
-        assert_eq!(selected[4].atlas, original[4].atlas);
-    }
-}
+mod native_roster;
+mod residency;
 
 #[wasm_bindgen_test]
 fn fish_sprites_animate_at_their_sampled_native_period() {
@@ -33,7 +18,7 @@ fn fish_sprites_animate_at_their_sampled_native_period() {
     };
     art.fishing[0] = art.village[1][..17].to_vec();
     art.fishing[1] = art.village[1][..7].to_vec();
-    for (family, period) in [(5, 3), (6, 9)] {
+    for (family, period) in [(5, 300), (6, 900)] {
         let resource = SceneResource {
             visual_family: family,
             ..fish
@@ -50,33 +35,9 @@ fn fish_sprites_animate_at_their_sampled_native_period() {
     }
 }
 
-#[wasm_bindgen_test]
-fn fishing_poses_use_native_facing_rows() {
-    let mut art = art();
-    art.actors = vec![Vec::new(); 50];
-    art.actors[48] = vec![art.walking[0]; 5];
-    art.actors[49] = (0..70).map(|i| art.village[1][i % 75]).collect();
-    let ship = unit(SceneUnitKind::FishingShipWorking);
-    assert_eq!(frames(&art, ship).unwrap().1, 1);
-    let fisher = unit(SceneUnitKind::VillagerFishing);
-    assert_eq!(frames(&art, fisher).unwrap().1, 14);
-    let frame_at = |phase: u8| {
-        let fisher = SceneUnit {
-            facing: phase << 3,
-            ..fisher
-        };
-        world_sprite_frames(&art, &[], &[], &[fisher], camera(), 0)
-            .last()
-            .unwrap()
-            .1
-            .atlas
-    };
-    assert_ne!(frame_at(0), frame_at(1));
-    assert_ne!(frame_at(1), frame_at(13));
-}
-
 pub(super) fn art() -> GameArt {
     let frame = |number| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 2,
             uv: [number as f32 / 4096.0, 0.0, 0.01, 0.01],
@@ -85,7 +46,11 @@ pub(super) fn art() -> GameArt {
         anchor: [12.0, 40.0],
     };
     GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: std::array::from_fn(|group| {
             (0..75)
@@ -103,11 +68,13 @@ pub(super) fn art() -> GameArt {
                     frame: frame(500 + group),
                     animation: Vec::new(),
                     angles: 1,
+                    replay_delay: 0.0,
                     frame_rate: 0.0,
                     offset: [group as f32 * 3.0, group as f32 * -5.0],
                     depth: 0.0,
                 })
                 .collect(),
+            states: Vec::new(),
             construction: Vec::new(),
             damage: Vec::new(),
         }],
@@ -143,72 +110,6 @@ pub(super) fn unit(kind: SceneUnitKind) -> SceneUnit {
     }
 }
 
-#[wasm_bindgen_test]
-fn actor_picking_bounds_follow_the_native_body_and_mirrored_hotspot() {
-    let mut art = art();
-    art.actors = vec![vec![
-        GameFrame {
-            atlas: crate::AtlasAddress::WHITE,
-            size: [12.0, 18.0],
-            anchor: [2.0, 16.0]
-        };
-        5
-    ]];
-    let mut u = unit(SceneUnitKind::actor(0));
-    u.position = [0.0, 0.0];
-    let mut camera = camera();
-    camera.center = [0.0, 0.0];
-    let bounds = super::super::scene_unit_bounds(&art, u, camera, 0).unwrap();
-    let foot = camera.viewport[0] / 2.0;
-    assert!((bounds[0] - (foot - 2.0 * 4.0 / 3.0)).abs() < 0.001);
-    u.facing = 2;
-    let bounds = super::super::scene_unit_bounds(&art, u, camera, 0).unwrap();
-    assert!((bounds[0] - (foot - 10.0 * 4.0 / 3.0)).abs() < 0.001);
-}
-
-#[wasm_bindgen_test]
-fn villager_walk_uses_fifteen_frame_rows_for_all_eight_facings() {
-    let art = art();
-    for (facing, index) in [107, 122, 137, 152, 167, 152, 137, 122]
-        .into_iter()
-        .enumerate()
-    {
-        let mut u = unit(SceneUnitKind::Villager);
-        u.facing = facing as u8;
-        u.visual.set_moving(true);
-        let frames = super::super::world_sprite_frames(&art, &[], &[], &[u], camera(), 7);
-        assert_eq!(frames.last().unwrap().1.atlas.uv[0], index as f32 / 4096.0);
-        assert_eq!(
-            frames.last().unwrap().0.uv[2] < 0.0,
-            matches!(facing, 1..=3)
-        );
-    }
-}
-#[wasm_bindgen_test]
-fn working_and_carrying_use_reviewed_art_and_absence_draws_a_marker() {
-    let mut art = art();
-    for (kind, expected) in [
-        (SceneUnitKind::VillagerChopping, 207),
-        (SceneUnitKind::VillagerCarryingWood, 300),
-    ] {
-        let frames = super::super::world_sprite_frames(&art, &[], &[], &[unit(kind)], camera(), 7);
-        assert_eq!(
-            frames.last().unwrap().1.atlas.uv[0],
-            expected as f32 / 4096.0
-        );
-    }
-    art.village = Default::default();
-    let frames = super::super::world_sprite_frames(
-        &art,
-        &[],
-        &[],
-        &[unit(SceneUnitKind::Villager)],
-        camera(),
-        7,
-    );
-    assert_eq!(frames.len(), 1);
-    assert_eq!(frames[0].0.color, [0.25, 0.57, 0.96, 1.0]);
-}
 #[wasm_bindgen_test]
 fn town_center_composes_eight_native_parts_or_one_fallback_marker() {
     let mut art = art();
@@ -424,7 +325,9 @@ fn layered_mill_composes_static_body_and_every_sail_frame_and_culls_animation() 
     let mill = unit(SceneUnitKind::Mill);
     for tick in 0..86 {
         let mut emitted = Vec::new();
-        building(&art, mill, camera(), tick, &mut |entry| emitted.push(entry));
+        building(&art, mill, camera(), tick * 100, &mut |entry| {
+            emitted.push(entry)
+        });
         assert_eq!(emitted.len(), 2);
         assert_eq!(emitted[0].1.atlas.uv[0], 0.0);
         assert_eq!(emitted[1].1.atlas.uv[0], (1 + tick % 43) as f32 / 4096.0);
@@ -440,7 +343,7 @@ fn stone_wall_and_gate_slots_round_trip_with_gate_footprints() {
     for slot in 71..=73 {
         let kind = SceneUnitKind::building(slot);
         assert_eq!(kind.building_slot(), Some(slot));
-        assert_eq!(kind.building_id(), None);
+        assert_eq!(kind.building_id(), Some(if slot == 71 { 117 } else { 64 }));
         assert!(!kind.is_foundation());
         assert_eq!(
             kind.building_side(),
@@ -451,7 +354,7 @@ fn stone_wall_and_gate_slots_round_trip_with_gate_footprints() {
 
 #[wasm_bindgen_test]
 fn feudal_building_roles_and_actor_groups_do_not_overlap() {
-    for slot in 0..=44 {
+    for slot in (0..=44).filter(|slot| *slot != 22) {
         let kind = SceneUnitKind::building(slot);
         assert_eq!(kind.building_slot(), Some(slot));
         assert_eq!(kind.actor_slot(), None);

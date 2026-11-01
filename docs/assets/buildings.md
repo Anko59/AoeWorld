@@ -1,95 +1,76 @@
-# Dark Age building art
+# DAT building art
 
-`make assets-import-de AOE_ASSET_PACK=local-assets/packs/<trial-hash>` imports
-owner-licensed Definitive Edition art and attaches its pack at the trial pack's
-ignored `buildings` link. `DE_DIR` defaults to the owner's Steam installation.
-Start `make dev DEV_PORT=8092 AOE_ASSET_PACK=local-assets/packs/<trial-hash>`.
-Neither the install, packs, link nor captures belong in Git or container images.
+`make assets-import-de AOE_ASSET_PACK=local-assets/packs/<base-hash>` imports
+all 41 gameplay building records and the six spawned bridge segments in one
+pass. The owner-licensed DE installation is mounted read-only; original pixels,
+source digests and generated packs stay in ignored local storage. The current
+base still supplies interface and remaining effect assets until their category
+passes replace the trial import.
 
-The client loads the trial pack and this optional overlay into the same four
-2048-square runtime pages as units and wildlife. The 5120-frame ceiling and allocation
-remain enforced by the shared packing planner. Only the base scout and villager
-idle rows retain the first native frame per facing (the only frame previously
-drawn); additional actor standing, walking, working and combat rows remain complete. This frees atlas space without
-removing displayed animation frames. An absent overlay permits
-semantic building markers; corrupt present sources fail startup.
+## One importer and one runtime recipe
 
-Standing buildings use the trial DAT composition whenever its primary stand
-is available, with native deltas, annex positions and foundation terrain.
-The optional x1 DE overlay supplies missing main bodies, including the West
-European Lumber and Mining Camps (DE has no Dark Age camp). It also supplies
-rubble and optional Farm ground texturing. The Mill composes its
-trial body (3483) with all 43 native sail frames (3482), preserving animation
-without duplicating the body in the atlas. Native anchors and player
-and shadow planes are preserved; player ramps use the selected banner colour. House variants are stable by entity id.
-Off-screen Mills do not invalidate frames for animation. Generic
-1x1 through 4x4 supplemental foundations retain their three stages; when DAT
-construction art is present, its frame/angle layout and offsets instead select
-the stages with authoritative
-`progress_permille`. Removed foundations and buildings retain the relevant rubble for three game
-seconds; exhausted Farms with no food left leave none.
+The importer selects numeric gameplay unit IDs, reads their standing, dying,
+corpse, construction, damage, snow, researching and research-completed graphics,
+and follows every drawable delta and nested annex. The building tail's generic
+destruction and rubble graphics are retained alongside architecture-specific
+unit lifecycle graphics. Closed/open graphics share the DAT filename family;
+there are no individual building image converters or hand-picked image lists.
 
-Without the DE overlay, completed Farms retain the imported native ploughed
-sheet (SLP 15004) on their footprint's terrain triangles. The optional overlay
-replaces it with a bounded 256-square region of `de/g_fm1.dds`. Neither path
-uses a billboard; Farms remain walked on. Builders
-use trial task sprite 1496 (five facing rows of fifteen frames), from the
-local empires2.dat table's male builder proceeding task. The trial lacks the
-farmer sequence: farmers use the forager art, as the explicit fallback.
+A DE filename can identify a real SLD even when its classic SLP ID is -1.
+Such layers are imported when installed. Explicitly absent negative-ID layers
+remain unavailable metadata. Empty civilization slots are distinguished from
+missing records; for example, one nested Town Center annex has a zero pointer.
+Unknown nonempty references fail import. Legacy terrain-only graphic names
+produce no SLD layer: the Farm's terrain textures belong to the terrain pass.
+Particle references remain the effects pass's responsibility.
 
-Construction and Farm behavior, costs, prerequisites, training and research
-remain server-owned. Dirt covers the footprint plus one tile on each side,
-including construction sites and buildings absent from the trial art. The
-decoded AoK building tail declares the footprint and foundation terrain but no
-margin; one tile is a presentation choice, not a measured original-engine rule.
-DAT footprints and foundation materials take priority. Farm margins use dirt;
-completed crop terrain stays inside its footprint. The renderer computes displayed
-terrain bounds once and rejects distant buildings before painting. One scan gives
-footprints priority over every apron, so neighbours cannot erase crops.
-The prepared scene retains its foundation key; building updates check it once,
-while unchanged per-actor and preview projections reuse the scene directly.
-Completed crops keep their custom
-triangle UV mapping rather than inheriting the terrain mixer's tiled mode.
-Foundation dirt tiles retain landscape
-appearance metadata with canopy and litter cleared. Clearing that metadata
-previously excluded them from the noisy material mixer, producing hard edges.
-The existing world-anchored terrain shares now blend both sides of each edge
-through the same shaders and Canvas kernel as ordinary ground materials.
-Placement previews use resident terrain and resources,
-unit positions and building footprints; unloaded map tiles are invalid.
-Server refusals still decide races and reachability.
+Each drawable SLD retains every native cell and direction, including trailing
+source cells. The runtime addresses the DAT's declared timeline and selects
+static building variants consistently by entity ID. Delta layers keep independent
+fractional frame durations and replay delays. Native anchors, owner weights,
+shadows, signed pixel offsets and annex tile displacements are preserved.
+The renderer orders layers and annex depth without mirroring building art.
+Bridge presentation retains its existing half-size world geometry; its native
+pixel cells are unchanged.
 
-## Town Center orientation evidence
+Runtime building selection uses these DAT recipes alone. Missing recipe sections
+stay absent. The completed-category startup path has retired its supplemental
+building filename lists, sampled fish sheets and special farm crop window.
 
-`make assets-de-reference` decodes the complete
-`b_dark_town_center_age1_x1.sld` from the read-only DE install. It writes
-`.cache/tc-shots/reference-de.png` and `orientation-check.png` (DE left, trial
-right), using the same 96x48 source tile, ground origin and player colour as
-`make assets-building-preview`. Run the latter first; its `tc-composite.png`
-is the comparison input. All proof pixels remain ignored.
+## Residency and lifecycle
 
-The complete DE sprite confirms the trial's right wing roof direction: both
-wing ridges run parallel to the central roof. There is no reversed right-wing
-selection in this comparison. The apparent direction is authored into the
-native sprite, not produced by a rotation. The trial's native anchors also
-carry horizontal placement; annex tile displacements alone are not sprite
-positions. The DAT chain is:
+Building timelines share the unit cache, starting at four colour/mask page
+pairs and growing for visible demand within 512 MiB including startup layers.
+Current and recently presented cells stay pinned for three turns. Missing phases
+use resident pixels from the same DAT part and angle; otherwise the previous
+complete frame remains displayed until its required layers are available.
+Off-screen animations cannot trigger growth. Geometry and visibility remain
+available before residency, preserving future demand and picking bounds.
+WebGPU, WebGL2 and Canvas share selection and physical mapping. See
+[DE conversion](de-full.md) for upload, encoded-cache and transient growth bounds.
 
-| Unit | Stand graphic / body SLP | Delta graphic / attachment SLP | Tile displacement |
-| --- | --- | --- | --- |
-| 109 (head) | 3241 / 3596 | 5470 / 4612 | (0, 0) |
-| 619 | 3240 / 3595 | 5469 / 4611 | (-0.5, 0.5) |
-| 620 | 3239 / 3594 | 5468 / 4610 | (-1, 1) |
-| 618 (main) | 435 / 891 | none | (1, -1) |
+Playback uses a millisecond clock and the DAT's fractional durations. Construction
+progress selects the native construction angle; wall connectivity selects its
+orientation. Damage overlays keep their complete native loops. On removal,
+the completed building's age-specific destruction plays once, followed by three
+seconds of its DAT corpse/rubble. Exhausted Farms leave no rubble. The scene
+record stays 32 bytes; a bounded companion list carries fractional destruction
+time from the authoritative presentation clock.
 
-These six body/attachment SLPs each contain exactly one frame; DAT also declares
-one frame and one angle. Their deltas have display angle -1 and zero pixel
-offsets. The right roof is SLP 4610, 142x115 pixels with native anchor
-(-48,120); that negative X anchor places its pixels to the right of annex 620's
-ground origin. Runtime UV widths stay positive. Swapping graphics, selecting another
-angle or mirroring them would contradict this evidence. SLP 890 is absent from
-the trial archive and referenced on layer 10, below the layer-20 bodies; its
-absence supplies no alternate roof orientation. `make test-assets-dat` pins
-the unit/stand/attachment selections and single-frame source inventory. The
-DE and AoK artwork differs in detail, so this is an orientation check rather
-than pixel equivalence or an original-executable trace.
+Farm crops remain terrain triangles. The complete DE crop sheet now uses the
+generic native-cell terrain importer and view-dependent residency. Footprint preparation, dirt aprons, ordinary terrain
+blending and server-owned construction rules are unchanged by the animation pass.
+
+## Validation
+
+`make test-assets-de` validates all selected building SLDs against the licensed
+DAT in one inventory test. Portable tests cover bounded building tails, nested
+references, native layers without classic IDs, full-cell selection, independent
+replay timing, recipe overlay index offsets, native geometry before residency,
+eviction, and destruction-to-rubble selection. The pressure fixture requires
+large complete loops to fit through residency rather than startup atlas sampling.
+
+Per-commit checks follow the owner's redirect: focused tests, `make test-wasm`,
+`make lint`, `make structure-check` and `make perf-ci`. Shipping owns E2E and
+video qualification. Synthetic tests do not establish finished RTS performance
+or dedicated hardware qualification.

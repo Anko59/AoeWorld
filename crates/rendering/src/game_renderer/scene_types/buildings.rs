@@ -1,4 +1,99 @@
 use super::SceneUnitKind;
+
+// One semantic slot order owns both projections; actor tags have no building slot.
+const BUILDINGS: [SceneUnitKind; 74] = {
+    use SceneUnitKind::*;
+    [
+        BuildingTownCenter,
+        House,
+        LumberCamp,
+        MiningCamp,
+        Mill,
+        Farm,
+        Barracks,
+        PalisadeWall,
+        Outpost,
+        ConstructionPalisadeWall,
+        ConstructionHouse,
+        ConstructionBarracks,
+        ConstructionTownCenter,
+        RubbleTownCenter,
+        RubbleHouse,
+        RubbleLumberCamp,
+        RubbleMiningCamp,
+        RubbleMill,
+        RubbleFarm,
+        RubbleBarracks,
+        RubblePalisadeWall,
+        RubbleOutpost,
+        SceneUnitKind::BuilderWork,
+        Dock,
+        FoundationDock,
+        RubbleDock,
+        ArcheryRange,
+        Stable,
+        Blacksmith,
+        Market,
+        WatchTower,
+        PalisadeGate,
+        RubbleArcheryRange,
+        RubbleStable,
+        RubbleBlacksmith,
+        RubbleMarket,
+        RubbleWatchTower,
+        RubblePalisadeGate,
+        FeudalTownCenter,
+        FeudalHouse,
+        FeudalMill,
+        FeudalBarracks,
+        OpenPalisadeGate,
+        GateFoundation,
+        FeudalDock,
+        Castle,
+        Monastery,
+        University,
+        SiegeWorkshop,
+        RubbleCastle,
+        RubbleMonastery,
+        RubbleUniversity,
+        RubbleSiegeWorkshop,
+        CastleTownCenter,
+        CastleHouse,
+        CastleLumberCamp,
+        CastleMiningCamp,
+        CastleMill,
+        CastleBarracks,
+        CastleDock,
+        CastleArcheryRange,
+        CastleStable,
+        CastleBlacksmith,
+        CastleMarket,
+        CastleMonastery,
+        BridgeATop,
+        BridgeAMiddle,
+        BridgeABottom,
+        BridgeBTop,
+        BridgeBMiddle,
+        BridgeBBottom,
+        StoneWall,
+        StoneGate,
+        OpenStoneGate,
+    ]
+};
+const SLOTS: [u8; SceneUnitKind::Actor0 as usize] = {
+    let mut slots = [u8::MAX; SceneUnitKind::Actor0 as usize];
+    let mut i = 0;
+    while i < BUILDINGS.len() {
+        let tag = BUILDINGS[i] as usize;
+        if tag < slots.len() {
+            slots[tag] = i as u8;
+        }
+        i += 1;
+    }
+    slots[SceneUnitKind::FeudalLumberCamp as usize] = 2;
+    slots[SceneUnitKind::FeudalMiningCamp as usize] = 3;
+    slots
+};
 impl SceneUnitKind {
     pub fn bridge(along_x: bool, piece: u8) -> Self {
         Self::building((if along_x { 68 } else { 65 }) + piece.min(2))
@@ -6,123 +101,13 @@ impl SceneUnitKind {
 
     /// Map building roles to the atlas's semantic order.
     pub fn building(slot: u8) -> Self {
-        use SceneUnitKind::*;
-        [
-            BuildingTownCenter,
-            House,
-            LumberCamp,
-            MiningCamp,
-            Mill,
-            Farm,
-            Barracks,
-            PalisadeWall,
-            Outpost,
-            Foundation1x1,
-            Foundation2x2,
-            Foundation3x3,
-            Foundation4x4,
-            RubbleTownCenter,
-            RubbleHouse,
-            RubbleLumberCamp,
-            RubbleMiningCamp,
-            RubbleMill,
-            RubbleFarm,
-            RubbleBarracks,
-            RubblePalisadeWall,
-            RubbleOutpost,
-            BuilderAtlas,
-            Dock,
-            FoundationDock,
-            RubbleDock,
-            ArcheryRange,
-            Stable,
-            Blacksmith,
-            Market,
-            WatchTower,
-            PalisadeGate,
-            RubbleArcheryRange,
-            RubbleStable,
-            RubbleBlacksmith,
-            RubbleMarket,
-            RubbleWatchTower,
-            RubblePalisadeGate,
-            FeudalTownCenter,
-            FeudalHouse,
-            FeudalMill,
-            FeudalBarracks,
-            OpenPalisadeGate,
-            GateFoundation,
-            FeudalDock,
-            Castle,
-            Monastery,
-            University,
-            SiegeWorkshop,
-            RubbleCastle,
-            RubbleMonastery,
-            RubbleUniversity,
-            RubbleSiegeWorkshop,
-            CastleTownCenter,
-            CastleHouse,
-            CastleLumberCamp,
-            CastleMiningCamp,
-            CastleMill,
-            CastleBarracks,
-            CastleDock,
-            CastleArcheryRange,
-            CastleStable,
-            CastleBlacksmith,
-            CastleMarket,
-            CastleMonastery,
-            BridgeATop,
-            BridgeAMiddle,
-            BridgeABottom,
-            BridgeBTop,
-            BridgeBMiddle,
-            BridgeBBottom,
-            StoneWall,
-            StoneGate,
-            OpenStoneGate,
-        ][usize::from(slot.min(73))]
+        BUILDINGS[usize::from(slot.min(73))]
     }
     pub(in crate::game_renderer) fn building_slot(self) -> Option<u8> {
-        match self {
-            Self::BridgeATop => return Some(65),
-            Self::BridgeAMiddle => return Some(66),
-            Self::BridgeABottom => return Some(67),
-            Self::BridgeBTop => return Some(68),
-            Self::BridgeBMiddle => return Some(69),
-            Self::BridgeBBottom => return Some(70),
-            Self::StoneWall => return Some(71),
-            Self::StoneGate => return Some(72),
-            Self::OpenStoneGate => return Some(73),
-            Self::CastleTownCenter => return Some(53),
-            Self::CastleHouse => return Some(54),
-            Self::CastleLumberCamp => return Some(55),
-            Self::CastleMiningCamp => return Some(56),
-            Self::CastleMill => return Some(57),
-            Self::CastleBarracks => return Some(58),
-            Self::CastleDock => return Some(59),
-            Self::CastleArcheryRange => return Some(60),
-            Self::CastleStable => return Some(61),
-            Self::CastleBlacksmith => return Some(62),
-            Self::CastleMarket => return Some(63),
-            Self::CastleMonastery => return Some(64),
-
-            Self::Castle => return Some(45),
-            Self::Monastery => return Some(46),
-            Self::University => return Some(47),
-            Self::SiegeWorkshop => return Some(48),
-            Self::RubbleCastle => return Some(49),
-            Self::RubbleMonastery => return Some(50),
-            Self::RubbleUniversity => return Some(51),
-            Self::RubbleSiegeWorkshop => return Some(52),
-            Self::Dock => return Some(23),
-            Self::FoundationDock => return Some(24),
-            Self::RubbleDock => return Some(25),
-            Self::BuilderAtlas => return Some(22),
-            Self::FeudalLumberCamp => return Some(2),
-            Self::FeudalMiningCamp => return Some(3),
-            _ => {}
+        if let Some(&slot) = SLOTS.get(self as usize)
+            && slot != u8::MAX
+        {
+            return Some(slot);
         }
         if self.is_foundation() {
             return Some(match self.building_id()? {
@@ -138,15 +123,7 @@ impl SceneUnitKind {
                 _ => 10,
             });
         }
-        (self as u8)
-            .checked_sub(Self::BuildingTownCenter as u8)
-            .filter(|slot| *slot <= 21)
-            .or_else(|| {
-                (self as u8)
-                    .checked_sub(Self::ArcheryRange as u8)
-                    .filter(|slot| *slot <= 18)
-                    .map(|slot| slot + 26)
-            })
+        None
     }
 
     pub fn foundation(id: i16) -> Self {
@@ -205,6 +182,11 @@ impl SceneUnitKind {
             || (Self::ConstructionTownCenter as u8..=Self::ConstructionFeudalDock as u8)
                 .contains(&(self as u8))
     }
+    pub(in crate::game_renderer) fn rubble(self) -> bool {
+        self.building_slot().is_some_and(|s| {
+            (13..=21).contains(&s) || s == 25 || (32..=37).contains(&s) || (49..=52).contains(&s)
+        })
+    }
     pub fn building_id(self) -> Option<i32> {
         use SceneUnitKind::*;
         match self {
@@ -223,6 +205,8 @@ impl SceneUnitKind {
             .copied();
         }
         Some(match self {
+            StoneWall => 117,
+            StoneGate | OpenStoneGate => 64,
             CastleTownCenter => 141,
             CastleHouse => 464,
             CastleLumberCamp => 564,
@@ -263,6 +247,32 @@ impl SceneUnitKind {
             Monastery => 104,
             University => 209,
             SiegeWorkshop => 49,
+            BridgeATop => 605,
+            BridgeAMiddle => 606,
+            BridgeABottom => 607,
+            BridgeBTop => 608,
+            BridgeBMiddle => 609,
+            BridgeBBottom => 610,
+            RubbleTownCenter => 109,
+            RubbleHouse => 70,
+            RubbleLumberCamp => 562,
+            RubbleMiningCamp => 584,
+            RubbleMill => 68,
+            RubbleFarm => 50,
+            RubbleBarracks => 12,
+            RubblePalisadeWall => 72,
+            RubbleOutpost => 598,
+            RubbleDock => 45,
+            RubbleArcheryRange => 87,
+            RubbleStable => 101,
+            RubbleBlacksmith => 103,
+            RubbleMarket => 84,
+            RubbleWatchTower => 79,
+            RubblePalisadeGate => 792,
+            RubbleCastle => 82,
+            RubbleMonastery => 104,
+            RubbleUniversity => 209,
+            RubbleSiegeWorkshop => 49,
             _ => return None,
         })
     }

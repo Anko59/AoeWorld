@@ -79,31 +79,6 @@ pub const FISHING: [(usize, u32, u32, usize); 7] = [
     (9, 446, 5, 1),
 ];
 
-/// Keep standing wall damage cells and sample the ambient Dock wake. The
-/// 60-cell, 150ms native wake keeps its nine-second loop at 30 cells, 300ms.
-/// Castle Mill/Blacksmith ambient layers keep two poses; their large native
-/// rectangles otherwise exhaust the object pages. Construction stays complete.
-/// Damage graphics use unit ID -1 and retain two samples of their native loop.
-pub fn building_frame_step(unit_id: i32, frames: u16, angles: u16, seconds: f32) -> usize {
-    if unit_id == -1 && frames > 0 {
-        usize::from(frames.div_ceil(2))
-    } else if unit_id == 72 && frames > 0 {
-        usize::from(frames)
-    } else if matches!(unit_id, 130 | 18) && angles == 1 && frames > 1 && seconds > 0.0 {
-        usize::from(frames.div_ceil(2))
-    } else if matches!(unit_id, 45 | 133 | 47)
-        && angles == 1
-        && frames > 1
-        && frames.is_multiple_of(2)
-        && seconds > 0.0
-        && seconds < 0.2
-    {
-        2
-    } else {
-        1
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

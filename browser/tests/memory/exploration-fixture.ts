@@ -123,6 +123,7 @@ export interface MemorySnapshot {
     scene_bytes: number;
     render_frame_bytes: number;
     units: number;
+    native_failed?: number;
     unit_bytes: number;
     interpolation_bytes: number;
     buildings_and_ghosts: number;

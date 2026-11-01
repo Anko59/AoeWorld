@@ -28,6 +28,7 @@ fn native_cliff_wall_uses_opaque_rock_above_the_source_silhouette_notch() {
         }
     }
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 2,
             uv: [32.0 / 2048.0, 32.0 / 2048.0, 294.0 / 2048.0, 156.0 / 2048.0],
@@ -36,7 +37,11 @@ fn native_cliff_wall_uses_opaque_rock_above_the_source_silhouette_notch() {
         anchor: [153.0, 80.0],
     };
     let art = GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),

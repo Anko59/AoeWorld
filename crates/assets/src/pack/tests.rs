@@ -4,6 +4,36 @@ use crate::slp::Pixel;
 
 #[path = "tests/buildings.rs"]
 mod buildings;
+#[path = "tests/streamed.rs"]
+mod streamed;
+
+#[test]
+fn all_native_unit_inventory_reaches_decoding_within_the_explicit_source_bound() {
+    let temp = tempfile::tempdir().unwrap();
+    let sprites = [SpriteRef {
+        id: "synthetic-native-army".into(),
+        hash: "a".repeat(64),
+        frames: 90_102,
+    }];
+    let mut decoded = 0;
+    let error = write_pack(
+        &temp.path().join("packs"),
+        "b".repeat(64),
+        &sprites,
+        Vec::new(),
+        |_, _| {
+            decoded += 1;
+            Err(crate::invalid(
+                "synthetic",
+                0,
+                "stop before allocating pixels",
+            ))
+        },
+    )
+    .unwrap_err();
+    assert_eq!(decoded, 1, "{error}");
+    assert!(error.to_string().contains("stop before allocating pixels"));
+}
 
 #[test]
 fn oversized_pack_is_rejected_before_rendering_or_creating_output() {
@@ -47,6 +77,8 @@ fn atlas_masks_and_verifier_reject_tampering() {
     assert_eq!(&page.outline[pixel + 8..pixel + 12], &[1, 0, 0, 255]);
     let pages = vec![save_page(temp.path(), 0, page).unwrap()];
     let manifest = Manifest {
+        terrains: Vec::new(),
+        chunks: Vec::new(),
         version: 1,
         converter: "test".to_owned(),
         input_hash: "a".repeat(64),
@@ -54,6 +86,7 @@ fn atlas_masks_and_verifier_reject_tampering() {
         buildings: Vec::new(),
         building_data: "00".into(),
         frames: vec![FrameRecord {
+            native: None,
             source: "fixture.slp".to_owned(),
             source_hash: "b".repeat(64),
             frame: 0,

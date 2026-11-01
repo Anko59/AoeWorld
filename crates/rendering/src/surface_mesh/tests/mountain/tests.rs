@@ -19,6 +19,7 @@ fn ground(x: i32, y: i32, material: u8) -> SceneTerrain {
 
 fn art() -> GameArt {
     let frame = |group: usize| GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [group as f32 / 16.0, 0.0, 0.01, 0.01],

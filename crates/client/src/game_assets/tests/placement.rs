@@ -5,6 +5,9 @@ fn fixture() -> Manifest {
     serde_json::from_value(manifest::fixture()).unwrap()
 }
 
+#[path = "placement/native.rs"]
+mod native;
+
 #[wasm_bindgen_test]
 fn count_and_source_bounds_are_checked_before_destination_allocation() {
     let manifest = fixture();

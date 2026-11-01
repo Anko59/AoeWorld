@@ -40,6 +40,7 @@ async fn fixture(zoom: f64) -> Client {
     );
     let mut client = client_with_backend(&scene, Some("canvas")).await;
     let frame = GameFrame {
+        stream: 0,
         atlas: AtlasAddress::WHITE,
         size: [200.0, 160.0],
         anchor: [100.0, 140.0],
@@ -48,6 +49,7 @@ async fn fixture(zoom: f64) -> Client {
         frame,
         animation: Vec::new(),
         angles: 1,
+        replay_delay: 0.0,
         frame_rate: 0.0,
         offset: [0.0; 2],
         depth: 0.0,
@@ -60,6 +62,7 @@ async fn fixture(zoom: f64) -> Client {
             part.clone(),
             BuildingPart {
                 frame: GameFrame {
+                    stream: 0,
                     size: [40.0, 50.0],
                     anchor: [20.0, 40.0],
                     ..frame
@@ -68,10 +71,12 @@ async fn fixture(zoom: f64) -> Client {
                 ..part
             },
         ],
+        states: Vec::new(),
         construction: Vec::new(),
         damage: Vec::new(),
     });
     let actor = GameFrame {
+        stream: 0,
         size: [40.0, 80.0],
         anchor: [20.0, 70.0],
         ..frame
@@ -79,7 +84,7 @@ async fn fixture(zoom: f64) -> Client {
     client.art.standing = vec![actor; 5];
     let scout_pose = crate::unit_visuals::Pose::ScoutStand as usize;
     client.art.actors.resize(scout_pose + 1, Vec::new());
-    client.art.actors[scout_pose] = vec![actor; 5];
+    client.art.actors[scout_pose] = vec![actor; 16];
     client.art.resources[0] = vec![actor];
     let scout = client.units.get_mut(&EntityId(1)).unwrap();
     scout.position = WorldPosition::from_tile_center(TileCoord::new(98, 98)).unwrap();
@@ -105,7 +110,9 @@ async fn house_picking_keeps_the_displayed_workers_bounds_and_depth_until_the_ne
         let mut client = fixture(1.0).await;
         client.art.compositions[0].unit_id = 70;
         client.art.compositions[0].footprint = [2.0; 2];
-        client.art.village[0] = client.art.standing.clone();
+        client.art.actors.resize(167, Vec::new());
+        client.art.actors[crate::unit_visuals::Pose::VillagerStand as usize] =
+            vec![client.art.standing[0]; 16];
         client.village.buildings[0].kind = BuildingKind::House;
         client.village.buildings[0].footprint = TileRect::from_xywh(99, 99, 2, 2);
         let worker = client.units.get_mut(&EntityId(1)).unwrap();
@@ -312,6 +319,7 @@ async fn gold_behind_a_tree_remains_a_resource_target() {
     client.village.buildings.clear();
     let frame = client.art.resources[0][0];
     client.art.resources[1] = vec![GameFrame {
+        stream: 0,
         size: [40.0, 160.0],
         anchor: [20.0, 150.0],
         ..frame

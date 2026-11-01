@@ -2,6 +2,22 @@
 use crate::game_renderer::SceneResource;
 use crate::{GameArt, GameFrame};
 
+pub(super) fn resident(
+    art: &GameArt,
+    resource: SceneResource,
+    frame: GameFrame,
+) -> Option<GameFrame> {
+    if resource.kind == SceneResource::RALLY_FLAG && frame.stream != 0 {
+        let frames = &art.scenery.rally_flags;
+        return art.resident_animation(
+            frames,
+            usize::from(resource.visual_variant) % 10,
+            frames.len(),
+        );
+    }
+    art.resident_frame(frame)
+}
+
 /// A scenery piece selected from its approved source group.
 pub(super) fn frame(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
     match resource.kind {
@@ -73,6 +89,7 @@ fn dressing(art: &GameArt, resource: SceneResource) -> Option<GameFrame> {
 // whose archives omit FLAGM. Keep the fallback in the shared sprite path.
 fn flag_frame(size: [f32; 2], anchor: [f32; 2]) -> GameFrame {
     GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 2,
             uv: [

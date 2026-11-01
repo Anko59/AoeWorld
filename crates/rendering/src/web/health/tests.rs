@@ -2,6 +2,36 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn native_patch_backpressure_reserves_both_planes_and_growth_requires_idle() {
+    let health = Health::default();
+    assert!(health.idle().unwrap());
+    health.state().uploads = MAX_UPLOADS - 1;
+    assert!(
+        !health.uploads_ready().unwrap(),
+        "one free slot cannot admit a paired cell"
+    );
+    assert!(!health.idle().unwrap());
+    health.state().uploads = MAX_UPLOADS - 2;
+    assert!(health.uploads_ready().unwrap());
+    health.state().uploads = 0;
+    health.state().frames = 1;
+    assert!(!health.idle().unwrap());
+    health.state().frames = 0;
+    assert!(health.idle().unwrap());
+    assert!(health.state().waiting_since.is_none());
+}
+
+#[wasm_bindgen_test]
+fn idle_native_demand_never_starts_an_unsubmitted_work_deadline() {
+    let health = Health::default();
+    assert!(health.uploads_ready().unwrap());
+    assert!(health.state().waiting_since.is_none());
+    health.state().frames = MAX_FRAMES;
+    assert!(!health.uploads_ready().unwrap());
+    assert!(health.state().waiting_since.is_none());
+}
+
+#[wasm_bindgen_test]
 fn continuous_queue_progress_refreshes_the_unchanged_five_second_deadline() {
     let health = Health::default();
     {

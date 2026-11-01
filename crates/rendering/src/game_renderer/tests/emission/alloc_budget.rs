@@ -73,6 +73,7 @@ fn dense_scene_build_heap_traffic_old_vs_direct() {
     };
     art.walking = (0..80).map(frame).collect();
     art.standing = (80..160).map(frame).collect();
+    species_fixture::unit_rows(&mut art);
     art.grass = vec![frame(160)];
     art.terrain = std::array::from_fn(|i| vec![frame(161 + i)]);
     art.resources[1] = (170..184).map(frame).collect();

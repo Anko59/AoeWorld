@@ -28,7 +28,7 @@ use draw::draw_ranges;
 
 #[cfg(test)]
 #[path = "web_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub(crate) struct Sprite {
@@ -309,6 +309,9 @@ impl Renderer {
 
     pub fn check_health(&self) -> Result<(), String> {
         self.health.check()
+    }
+    pub(crate) fn atlas_updates_ready(&self) -> Result<bool, String> {
+        self.health.uploads_ready()
     }
 
     pub fn page_retired(&self) -> bool {

@@ -79,12 +79,17 @@ fn webgl_v2_floor_pixels_match_canvas_kernel_and_preserve_three_page_abi() {
     face.texture_blend = Some([address(1), address(2)]);
     assert_eq!(instance(&face).pages[3], 0);
     let frame = |page| GameFrame {
+        stream: 0,
         atlas: address(page),
         size: [1.0; 2],
         anchor: [0.0; 2],
     };
     let mut art = GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),

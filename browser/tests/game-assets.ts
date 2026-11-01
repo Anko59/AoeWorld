@@ -237,6 +237,10 @@ export async function gameAssets(
     input_hash: "fixture",
     buildings: [],
     building_data: "00",
+    // Every converted pack carries these arrays, empty when it has no DE
+    // native chunks or terrain recipes (the manifest parser requires them).
+    chunks: [],
+    terrains: [],
     frames,
     pages: [
       {

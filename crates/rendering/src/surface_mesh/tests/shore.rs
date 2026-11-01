@@ -50,6 +50,7 @@ pub(super) fn camera() -> SceneCamera {
 #[wasm_bindgen_test]
 fn shoreline_skirts_close_unequal_east_and_south_edges_with_water_on_either_side() {
     let art = test_art(GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [0.4, 0.5, 0.03, 0.02],
@@ -205,6 +206,7 @@ fn modeled_water_steps_use_the_shared_water_material_and_are_not_pickable() {
     apply_terrain_textures(
         &mut triangles,
         &test_art(GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 0,
                 uv: [0.4, 0.5, 0.03, 0.02],
@@ -252,6 +254,7 @@ fn alpha_bearing_diamond_fills_shore_skirts_without_transparent_uv_corners() {
     atlas_context.fill();
 
     let art = test_art(GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 0,
             uv: [

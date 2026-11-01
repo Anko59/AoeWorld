@@ -39,6 +39,21 @@ pub(super) fn shade_objects(
 ) {
     let mut levels = FogFactors::default();
     for r in resources {
+        if !art.environment.is_empty() && world_sprites::environment::present(art, *r) {
+            world_sprites::environment::frames(art, *r, animation, &mut |f| {
+                if let Some(f) = art.resident_frame(f) {
+                    let slot = levels.index(r.id);
+                    levels.resources.push(ResourceFactor {
+                        body: frame_key(f),
+                        shadow: None,
+                        light: light(r.position),
+                        next: levels.entries[slot].resource,
+                    });
+                    levels.entries[slot].resource = levels.resources.len();
+                }
+            });
+            continue;
+        }
         if let Some((body, shadow)) = world_sprites::resource_presentation_at(art, *r, animation) {
             let slot = levels.index(r.id);
             levels.resources.push(ResourceFactor {

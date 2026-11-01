@@ -157,6 +157,7 @@ async fn webgpu_landscape_parity_fixture_matches_shared_expected_texels() {
 async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_assignment() {
     let mut renderer = surface_renderer().await;
     let frame = |page| crate::GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page,
             uv: [0.0, 0.0, 1.0 / 2048.0, 1.0 / 2048.0],
@@ -165,7 +166,11 @@ async fn webgpu_landscape_dirt_pixels_use_authoritative_primary_after_texture_as
         anchor: [0.0; 2],
     };
     let mut art = crate::GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
@@ -283,7 +288,7 @@ pub(super) fn assert_pixel(pixel: [u8; 4], expected: [u8; 4]) {
     }
 }
 
-pub(super) async fn read_pixel(renderer: &Renderer, count: u32, point: [u32; 2]) -> [u8; 4] {
+pub(crate) async fn read_pixel(renderer: &Renderer, count: u32, point: [u32; 2]) -> [u8; 4] {
     read_pixel_with_clear(renderer, count, point, wgpu::Color::BLACK).await
 }
 

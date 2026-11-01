@@ -1,7 +1,7 @@
 pub(crate) fn fixture() -> serde_json::Value {
     serde_json::json!({
-        "version": 1, "converter": "test\nconverter", "input_hash": "hash", "buildings": [], "building_data":"00",
-        "pages": [{
+        "version": 1, "converter": "test\nconverter", "input_hash": "hash", "buildings": [], "building_data":"00","terrains":[],
+        "chunks": [], "pages": [{
             "color": "color.png", "color_hash": "hash",
             "player": "player.png", "player_hash": "hash",
             "shadow": "shadow.png", "shadow_hash": "hash",
@@ -20,6 +20,33 @@ use super::*;
 use aoe_assets::pack::Manifest as OriginalManifest;
 use serde_json::{Map, Value};
 use wasm_bindgen_test::wasm_bindgen_test;
+
+#[wasm_bindgen_test]
+fn native_manifest_projection_preserves_chunk_ranges_and_rejects_invalid_shapes() {
+    let mut value = fixture();
+    value["chunks"] =
+        serde_json::json!([{"file":"frames-0000.bin","hash":"a".repeat(64),"bytes":88}]);
+    value["frames"][0]["native"] = serde_json::json!({"chunk":0,"offset":3,"length":85});
+    let projected = super::super::decode_manifest(&serde_json::to_vec(&value).unwrap()).unwrap();
+    assert_eq!(projected.chunks[0].bytes, 88);
+    assert_eq!(projected.chunks[0].file, "frames-0000.bin");
+    assert_eq!(projected.frames[0].native.unwrap().offset, 3);
+    for (pointer, replacement) in [
+        ("/chunks/0/bytes", serde_json::json!(-1)),
+        ("/chunks/0/hash", serde_json::json!(3)),
+        ("/chunks/0/file", serde_json::Value::Null),
+        ("/frames/0/native/chunk", serde_json::json!(65536)),
+        ("/frames/0/native/offset", serde_json::json!(4294967296_u64)),
+        ("/frames/0/native/length", serde_json::json!(0.5)),
+    ] {
+        let mut invalid = value.clone();
+        *invalid.pointer_mut(pointer).unwrap() = replacement;
+        assert!(
+            super::super::decode_manifest(&serde_json::to_vec(&invalid).unwrap()).is_err(),
+            "{pointer}"
+        );
+    }
+}
 
 fn object<'a>(value: &'a mut Value, section: &str) -> &'a mut Map<String, Value> {
     match section {

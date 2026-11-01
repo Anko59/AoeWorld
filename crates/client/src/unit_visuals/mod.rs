@@ -1,23 +1,15 @@
 //! Pure choices from authoritative state; no client damage or lifetime timers.
 use crate::building_ui::content::sprites;
+mod roster;
 pub(crate) use aoe_assets::catalog::units::Pose;
 use aoe_core::FIXED_SUBUNITS_PER_TILE;
-use aoe_protocol::{AnimalKind, AnimalState, AnimalTask, GameplayUnitState, UnitKind, UnitTask};
+use aoe_protocol::{
+    AnimalKind, AnimalState, AnimalTask, GameplayUnitState, ResourceKind, UnitKind, UnitTask,
+};
+use roster::military_poses;
 
 pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> Pose {
     use Pose::*;
-    if let Some((_, pose)) = [
-        (UnitKind::Galley, Galley),
-        (UnitKind::WarGalley, WarGalley),
-        (UnitKind::FireShip, FireShip),
-        (UnitKind::DemolitionShip, DemolitionShip),
-        (UnitKind::TransportShip, TransportShip),
-    ]
-    .into_iter()
-    .find(|(kind, _)| *kind == u.kind)
-    {
-        return pose;
-    }
     if let Some(poses) = military_poses(u.kind) {
         return if u.hp == 0 {
             poses[3]
@@ -30,7 +22,9 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
         };
     }
     if u.kind == UnitKind::FishingShip {
-        return if u.moving {
+        return if u.hp == 0 {
+            FishingShipDie
+        } else if u.moving {
             FishingShipWalk
         } else if u.task == UnitTask::Fishing {
             FishingShipWork
@@ -38,7 +32,7 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
             FishingShipStand
         };
     }
-    if u.task == UnitTask::Fishing && !u.moving {
+    if u.task == UnitTask::Fishing && !u.moving && u.hp > 0 {
         return FisherWork;
     }
     if u.task == UnitTask::Farming && !u.moving && u.hp > 0 {
@@ -107,12 +101,36 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
             HunterAttack
         };
     }
-    if u.task == UnitTask::Attacking || u.hunt_target.is_none() {
-        VillagerAttack
-    } else if sheep {
-        ShepherdStand
-    } else {
-        HunterStand
+    if u.task == UnitTask::Attacking {
+        return if u.moving {
+            VillagerWalk
+        } else {
+            VillagerAttack
+        };
+    }
+    if u.hunt_target.is_some() {
+        return if sheep { ShepherdStand } else { HunterStand };
+    }
+    if matches!(u.task, UnitTask::Returning | UnitTask::Carrying)
+        && let Some(load) = u.carried
+        && load.amount > 0
+    {
+        return match load.kind {
+            ResourceKind::Wood => CarryWood,
+            ResourceKind::Food => CarryFood,
+            ResourceKind::Gold => CarryGold,
+            ResourceKind::Stone => CarryStone,
+        };
+    }
+    if u.moving {
+        return VillagerWalk;
+    }
+    match (u.task, u.gathering) {
+        (UnitTask::Gathering, Some(ResourceKind::Wood)) => ChopperWork,
+        (UnitTask::Gathering, Some(ResourceKind::Food)) => ForagerWork,
+        (UnitTask::Gathering, Some(ResourceKind::Gold | ResourceKind::Stone)) => MinerWork,
+        (UnitTask::Building, _) => BuilderWork,
+        _ => VillagerStand,
     }
 }
 
@@ -162,60 +180,6 @@ fn in_reach(u: &GameplayUnitState, animal: Option<&AnimalState>) -> bool {
         let dx = i64::from(u.position.x) - i64::from(a.position.x);
         let dy = i64::from(u.position.y) - i64::from(a.position.y);
         dx * dx + dy * dy <= reach * reach
-    })
-}
-
-fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
-    use Pose::*;
-    Some(match kind {
-        UnitKind::General => [GeneralStand, GeneralWalk, GeneralAttack, GeneralDie],
-        UnitKind::Vassal => [KingStand, KingWalk, KingStand, KingDie],
-        UnitKind::Archer => [ArcherStand, ArcherWalk, ArcherAttack, ArcherDie],
-        UnitKind::Skirmisher => [
-            SkirmisherStand,
-            SkirmisherWalk,
-            SkirmisherAttack,
-            SkirmisherDie,
-        ],
-        UnitKind::Spearman => [SpearmanStand, SpearmanWalk, SpearmanAttack, SpearmanDie],
-        UnitKind::ManAtArms => [ManAtArmsStand, ManAtArmsWalk, ManAtArmsAttack, ManAtArmsDie],
-        UnitKind::Scout => [ScoutStand, ScoutWalk, ScoutAttack, ScoutDie],
-        UnitKind::LongSwordsman => [
-            LongSwordsmanStand,
-            LongSwordsmanWalk,
-            LongSwordsmanAttack,
-            LongSwordsmanDie,
-        ],
-        UnitKind::Pikeman => [PikemanStand, PikemanWalk, PikemanAttack, PikemanDie],
-        UnitKind::Crossbowman => [
-            CrossbowmanStand,
-            CrossbowmanWalk,
-            CrossbowmanAttack,
-            CrossbowmanDie,
-        ],
-        UnitKind::EliteSkirmisher => [
-            EliteSkirmisherStand,
-            EliteSkirmisherWalk,
-            EliteSkirmisherAttack,
-            EliteSkirmisherDie,
-        ],
-        UnitKind::Knight => [KnightStand, KnightWalk, KnightAttack, KnightDie],
-        UnitKind::LightCavalry => [
-            LightCavalryStand,
-            LightCavalryWalk,
-            LightCavalryAttack,
-            LightCavalryDie,
-        ],
-        UnitKind::Monk => [MonkStand, MonkWalk, MonkAttack, MonkDie],
-        UnitKind::Mangonel => [MangonelStand, MangonelWalk, MangonelAttack, MangonelDie],
-        UnitKind::BatteringRam => [
-            BatteringRamStand,
-            BatteringRamWalk,
-            BatteringRamAttack,
-            BatteringRamDie,
-        ],
-
-        _ => return None,
     })
 }
 
@@ -281,6 +245,12 @@ pub(crate) fn animal_pose(a: &AnimalState) -> Pose {
 fn decay_pair(pose: Pose) -> Option<(Pose, Pose)> {
     use Pose::*;
     [
+        (FishingShipDie, FishingShipDecay),
+        (GalleyDie, GalleyDecay),
+        (WarGalleyDie, WarGalleyDecay),
+        (FireShipDie, FireShipDecay),
+        (DemolitionShipDie, DemolitionShipDecay),
+        (TransportShipDie, TransportShipDecay),
         (KingDie, KingDecay),
         (GeneralDie, GeneralDecay),
         (MilitiaDie, MilitiaDecay),
@@ -335,9 +305,11 @@ pub(crate) fn packed_frame(
     hz: u32,
 ) -> u16 {
     let source = sprites()[pose as usize];
-    let millis = source.frame_millis() * f64::from(source.sample_step());
+    let millis = (source.frame_millis() * f64::from(source.sample_step())).max(0.001);
     let stride = u64::from(source.stride.div_ceil(source.sample_step()));
-    let phase = if let Some(died) = death {
+    let phase = if stride <= 1 {
+        0
+    } else if let Some(died) = death {
         // The same native frame duration governs looping and one-shot playback.
         let elapsed = (tick - died.0 as f64).max(0.0) * 1000.0 / f64::from(hz.max(1));
         let delay = decay_pair(pose)
@@ -348,10 +320,13 @@ pub(crate) fn packed_frame(
             });
         ((elapsed - delay).max(0.0) / millis).min((stride - 1) as f64) as u8
     } else {
-        ((time.max(0.0) % (f64::from(source.stride) * source.frame_millis())) / millis)
+        ((time.max(0.0)
+            % (f64::from(source.stride) * source.frame_millis()
+                + f64::from(source.replay_delay_seconds()) * 1000.0))
+            / millis)
             .min((stride - 1) as f64) as u8
     };
-    if source.rows() == 16 {
+    if !matches!(pose, Pose::Arrow | Pose::Javelin | Pose::Stone) {
         let direction = (20 - u16::from(facing % 8) * 2) % 16;
         direction | (u16::from(phase) << 4)
     } else {
@@ -454,39 +429,4 @@ pub(crate) fn actor_hit(bounds: [f64; 4], foot: [f64; 2], point: [f64; 2], zoom:
 }
 
 #[cfg(test)]
-mod release_tests {
-    use super::shot_clock;
-    use wasm_bindgen_test::wasm_bindgen_test;
-
-    // An archer's attack: ten 70 ms frames released at frame 5, reloading
-    // every 2 s, at 20 ticks a second.
-    const ANIMATION: (f64, f64) = (700.0, 70.0);
-    fn clock(shot: Option<u64>, now: f64) -> f64 {
-        shot_clock(shot, now, 20.0, 2000.0, ANIMATION, 5)
-    }
-
-    #[wasm_bindgen_test]
-    fn the_release_frame_plays_on_the_tick_of_every_shot() {
-        for k in 0..3 {
-            assert_eq!(clock(Some(100), 100.0 + 40.0 * f64::from(k)), 350.0);
-        }
-    }
-
-    #[wasm_bindgen_test]
-    fn the_windup_plays_before_the_next_shot_and_the_rest_after_it() {
-        // 350 ms before the second shot the animation starts at its first frame.
-        assert_eq!(clock(Some(100), 140.0 - 7.0), 0.0);
-        assert_eq!(clock(Some(100), 140.0 - 3.5), 175.0);
-        // 345 ms after a shot the animation is at its last frame (frame 9).
-        assert!((clock(Some(100), 106.9) - 695.0).abs() < 1e-6);
-    }
-
-    #[wasm_bindgen_test]
-    fn the_first_frame_is_held_between_swings_before_a_shot_and_after_a_pause() {
-        assert_eq!(clock(Some(100), 112.0), 0.0);
-        assert_eq!(clock(None, 112.0), 0.0);
-        assert_eq!(clock(Some(100), 100.0 + 20.0 * 7.0), 0.0);
-        // A shot newer than the clock (clock skew) holds the release frame.
-        assert_eq!(clock(Some(100), 99.0), 350.0);
-    }
-}
+mod tests;

@@ -1,5 +1,5 @@
 //! PNG previews of the imported sprites for visual review (local only).
-use super::{compose, farm::Sheet};
+use super::compose;
 use crate::{
     Error,
     pack::{atlas::Planes, blend_player},
@@ -176,21 +176,12 @@ fn sheet(frames: &[Planes]) -> (u32, u32, Vec<u8>) {
     (width as u32, height as u32, image)
 }
 
-pub(super) fn write(dir: &Path, sprites: &[(&str, &[Frame])], farm: &[Sheet]) -> Result<(), Error> {
+pub(super) fn write(dir: &Path, sprites: &[(&str, &[Frame])]) -> Result<(), Error> {
     fs::create_dir_all(dir)?;
     for (stem, frames) in sprites {
         let shown: Vec<Planes> = frames.iter().take(MAX_CELLS).map(compose::planes).collect();
         let (width, height, image) = sheet(&shown);
         save(&dir.join(format!("{stem}.png")), width, height, &image)?;
-    }
-    for sheet in farm {
-        let (width, height, image) = sheet.preview();
-        save(
-            &dir.join(format!("{}.png", sheet.name)),
-            width,
-            height,
-            &image,
-        )?;
     }
     Ok(())
 }

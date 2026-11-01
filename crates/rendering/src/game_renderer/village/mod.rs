@@ -12,54 +12,11 @@ pub(super) fn frames(art: &GameArt, unit: SceneUnit) -> Option<(&[GameFrame], us
         } else {
             5
         };
-        let stride = frames.len() / rows;
+        let rows = art.actor_rows.get(index).copied().unwrap_or(rows);
+        let stride = frames.len() / rows.max(1);
         return (stride > 0 && frames.len() == stride * rows).then_some((frames, stride, false));
     }
-    let scout = unit.kind == SceneUnitKind::Scout;
-    let (frames, stride): (&[GameFrame], usize) = if scout {
-        (
-            if unit.visual.moving() {
-                &art.walking
-            } else {
-                &art.standing
-            },
-            if unit.visual.moving() { 10 } else { 1 },
-        )
-    } else {
-        let group = match unit.kind {
-            SceneUnitKind::VillagerChopping => 2,
-            SceneUnitKind::VillagerCarryingWood => 3,
-            SceneUnitKind::VillagerForaging => 4,
-            SceneUnitKind::VillagerCarryingFood => 5,
-            // DAT gold miners (unit 579) swing the stone miner's pick row.
-            SceneUnitKind::VillagerCarryingGold => 6,
-            SceneUnitKind::VillagerCarryingStone => 7,
-            SceneUnitKind::VillagerMiningGold | SceneUnitKind::VillagerMiningStone => 8,
-            _ => usize::from(unit.visual.moving()),
-        };
-        (
-            if unit.kind == SceneUnitKind::VillagerBuilding {
-                &art.buildings[22]
-            } else {
-                &art.village[group]
-            },
-            if group == 0 && unit.kind != SceneUnitKind::VillagerBuilding {
-                1
-            } else {
-                15
-            },
-        )
-    };
-    let animated = unit.visual.moving()
-        || matches!(
-            unit.kind,
-            SceneUnitKind::VillagerBuilding
-                | SceneUnitKind::VillagerChopping
-                | SceneUnitKind::VillagerForaging
-                | SceneUnitKind::VillagerMiningGold
-                | SceneUnitKind::VillagerMiningStone
-        );
-    (frames.len() >= stride * 5).then_some((frames, stride, animated))
+    None
 }
 
 #[inline(never)]
@@ -71,6 +28,7 @@ pub(super) fn marker(
     let side = unit.kind.building_side();
     let building = side.is_some();
     let frame = GameFrame {
+        stream: 0,
         atlas: crate::AtlasAddress {
             page: 2,
             uv: [
@@ -144,14 +102,55 @@ pub(super) fn marker(
     }
 }
 
-// Drawing and visibility share one emitter body rather than cloning the
-// multipart renderer for each callback in the browser WASM.
-#[inline(never)]
 pub(super) fn building(
     art: &GameArt,
     unit: SceneUnit,
     camera: SceneCamera,
     animation: usize,
+    emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
+) {
+    building_select(
+        art,
+        unit,
+        camera,
+        animation,
+        &mut |frame, _, _, _| frame,
+        emit,
+    );
+}
+
+pub(super) fn resident_building(
+    art: &GameArt,
+    unit: SceneUnit,
+    camera: SceneCamera,
+    animation: usize,
+    emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
+) {
+    building_select(
+        art,
+        unit,
+        camera,
+        animation,
+        &mut |frame, frames, index, stride| {
+            let resolved = if frames.is_empty() {
+                art.resident_frame(frame)
+            } else {
+                art.resident_animation(frames, index, stride)
+            };
+            resolved.unwrap_or(frame)
+        },
+        emit,
+    );
+}
+
+// Visibility and presentation share DAT selection, offsets and culling.
+#[inline(never)]
+pub(super) fn building_select(
+    art: &GameArt,
+    unit: SceneUnit,
+    camera: SceneCamera,
+    animation: usize,
+    select: &mut dyn FnMut(GameFrame, &[GameFrame], usize, usize) -> GameFrame,
     emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
 ) {
     if unit.visual.ghost() && unit.kind == SceneUnitKind::Farm {
@@ -203,14 +202,53 @@ pub(super) fn building(
         sprite_building(art, unit, camera, animation, emit);
         return;
     };
-    let damage = if unit.kind.is_foundation() || unit.visual.ghost() {
+    let destroyed = unit.visual.moving() || unit.kind.rubble();
+    let elapsed = if unit.visual.moving() {
+        art.building_clocks
+            .iter()
+            .find(|(id, _)| *id == unit.id.0)
+            .map_or(0.0, |(_, millis)| *millis)
+    } else {
+        f64::INFINITY
+    };
+    let destruction = building
+        .states
+        .iter()
+        .find(|(role, _)| *role == 0)
+        .map(|(_, p)| p);
+    let destruction_ms = destruction
+        .into_iter()
+        .flatten()
+        .map(|p| {
+            p.frame_rate as f64
+                * 1000.0
+                * (p.animation.len().max(1) / usize::from(p.angles).max(1)) as f64
+        })
+        .fold(0.0, f64::max);
+    let state = if destroyed {
+        Some(if elapsed < destruction_ms { 0 } else { 1 })
+    } else if matches!(
+        unit.kind,
+        SceneUnitKind::OpenPalisadeGate | SceneUnitKind::OpenStoneGate
+    ) {
+        Some(5)
+    } else {
+        None
+    };
+    let damage = if destroyed || unit.kind.is_foundation() || unit.visual.ghost() {
         None
     } else {
         usize::from(unit.visual.damage_stage())
             .checked_sub(1)
             .and_then(|i| building.damage.get(i))
     };
-    let parts = if unit.kind.is_foundation() {
+    let parts = if let Some(role) = state {
+        building
+            .states
+            .iter()
+            .find(|(r, _)| *r == role)
+            .map_or(&building.parts, |(_, p)| p)
+    } else if unit.kind.is_foundation() {
         &building.construction
     } else if let Some(replacement) = damage.filter(|d| d.apply_mode == 2) {
         &replacement.parts
@@ -218,6 +256,9 @@ pub(super) fn building(
         &building.parts
     };
     if parts.is_empty() && damage.is_none_or(|d| d.parts.is_empty()) {
+        if destroyed {
+            return;
+        }
         if unit.kind == SceneUnitKind::Farm
             && building.foundation_material == Some(17)
             && !art.foundation.0.is_empty()
@@ -239,25 +280,50 @@ pub(super) fn building(
         .chain(overlay.map(|part| (part, true)))
     {
         let mut native = part.frame;
+        let (mut selected, mut stride) = (0, 1);
         if !part.animation.is_empty() {
             let angles = usize::from(part.angles).max(1);
             let count = part.animation.len() / angles;
             let angle = if unit.kind.is_foundation() || unit.kind == SceneUnitKind::PalisadeWall {
                 usize::from(unit.facing).min(angles - 1)
             } else {
-                0
+                unit.id.0 as usize % angles
             };
             let index = if unit.kind.is_foundation()
                 || (unit.kind == SceneUnitKind::PalisadeWall && !is_overlay)
             {
                 0
             } else if part.frame_rate > 0.0 {
-                (animation as f64 * 0.1 / f64::from(part.frame_rate) + 1e-5) as usize % count
+                {
+                    let clock = if destroyed { elapsed } else { animation as f64 };
+                    let step = f64::from(part.frame_rate) * 1000.0;
+                    let phase = (clock + step * 1e-5)
+                        % (step * count as f64 + f64::from(part.replay_delay) * 1000.0);
+                    let index = (phase / step + 1e-5) as usize;
+                    if destroyed {
+                        (clock / step) as usize
+                    } else {
+                        index
+                    }
+                    .min(count - 1)
+                }
             } else {
                 unit.id.0 as usize % count
             };
-            native = part.animation[angle * count + index];
+            selected = angle * count + index;
+            stride = count;
+            native = part.animation[selected];
         }
+        native = select(
+            native,
+            if part.frame_rate > 0.0 {
+                &part.animation
+            } else {
+                &[]
+            },
+            selected,
+            stride,
+        );
         native.anchor[0] -= part.offset[0];
         native.anchor[1] -= part.offset[1];
         let frame = world_frame(native);
@@ -275,21 +341,6 @@ pub(super) fn building(
 #[cfg(test)]
 mod tests;
 
-/// The DAT delta that completes a siege unit's partial animation row.
-/// Its pixels are the standing body already selected for that unit.
-pub(super) fn siege_body_frame(art: &GameArt, unit: SceneUnit) -> Option<GameFrame> {
-    use SceneUnitKind::*;
-    let kind = match unit.kind {
-        MangonelWalk => MangonelStand,
-        BatteringRamWalk | BatteringRamAttack => BatteringRamStand,
-        _ => return None,
-    };
-    let frames = art.actors.get(kind.actor_slot()?)?;
-    let direction = super::sprite_direction(unit.facing).0;
-    let frame = *frames.get(direction.min(frames.len().saturating_sub(1)))?;
-    (frames.len() == 5).then(|| super::world_frame(frame))
-}
-
 /// Native anchors and player/shadow planes are shared by all backends.
 #[inline(never)]
 pub(super) fn sprite_building(
@@ -299,6 +350,7 @@ pub(super) fn sprite_building(
     animation: usize,
     emit: &mut dyn FnMut((Sprite, GameFrame, f64, u64)),
 ) {
+    let animation = animation / 100;
     let Some(art_slot) = unit.kind.building_slot() else {
         marker(unit, camera, emit);
         return;

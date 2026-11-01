@@ -57,7 +57,7 @@ fn logical_atlas_accepts_more_frames_than_the_resident_atlas() {
 }
 
 #[test]
-fn logical_frame_indices_cover_the_full_u16_range_and_reject_excess() {
+fn logical_frame_indices_cover_the_all_unit_inventory_and_reject_excess() {
     let frames = vec![object(1, 1); MAX_LOGICAL_FRAMES];
     let placed = pack_frames_with_pages(&frames, 1, 1).unwrap();
     assert_eq!(placed.len(), MAX_LOGICAL_FRAMES);
@@ -77,18 +77,18 @@ fn ordering_large_reverse_catalog_has_bounded_comparisons() {
     let frames: Vec<_> = (0..MAX_SELECTED_FRAMES)
         .map(|i| object(1, (i % 2044 + 1) as u16))
         .collect();
-    let mut indices: Vec<u16> = (0..frames.len() as u16).collect();
+    let mut indices: Vec<u32> = (0..frames.len() as u32).collect();
     let mut comparisons = 0;
     order_indices(&frames, &mut indices, || comparisons += 1);
     assert!(
         comparisons <= frames.len() * 32,
         "{comparisons} comparisons"
     );
-    assert!(indices.windows(2).all(|pair| precedes(
-        &frames,
-        usize::from(pair[0]),
-        usize::from(pair[1])
-    )));
+    assert!(
+        indices
+            .windows(2)
+            .all(|pair| precedes(&frames, pair[0] as usize, pair[1] as usize))
+    );
 }
 
 fn reject_before_allocation(frames: &[FrameExtent], error: PackingError) {
@@ -442,7 +442,7 @@ fn dense_retry_keeps_mixed_rectangles_disjoint_and_deterministic() {
             height: 20 + (i * 53 % 120) as u16,
         })
         .collect();
-    let indices: Vec<_> = (0..frames.len() as u16).collect();
+    let indices: Vec<_> = (0..frames.len() as u32).collect();
     let mut placed = vec![Placement::default(); frames.len()];
     dense::pack(&frames, &indices, &mut placed, 2, PAGE_COUNT).unwrap();
     let mut repeat = placed.clone();

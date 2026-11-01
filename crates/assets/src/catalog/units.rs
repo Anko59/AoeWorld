@@ -1,8 +1,7 @@
 //! Native actor layouts and durations; pixels remain in the private pack.
-//! DE heroes and stones preserve complete native timelines. Remaining trial
-//! poses use five stored rows for eight mirrored facings.
-#[path = "units/castle.rs"]
-mod castle;
+//! Every unit uses DAT-native directions and timelines.
+#[path = "units/native.rs"]
+mod native;
 #[path = "units/projectile.rs"]
 mod projectile;
 pub use projectile::{PROJECTILE_PHASES, projectile_facing, release_frame};
@@ -145,18 +144,39 @@ pub enum Pose {
     GeneralAttack,
     GeneralDie,
     GeneralDecay,
+    VillagerStand,
+    VillagerWalk,
+    ChopperWork,
+    CarryWood,
+    ForagerWork,
+    CarryFood,
+    CarryGold,
+    CarryStone,
+    MinerWork,
+    BuilderWork,
+    FishingShipDie,
+    FishingShipDecay,
+    GalleyWalk,
+    GalleyAttack,
+    GalleyDie,
+    GalleyDecay,
+    WarGalleyWalk,
+    WarGalleyAttack,
+    WarGalleyDie,
+    WarGalleyDecay,
+    FireShipWalk,
+    FireShipAttack,
+    FireShipDie,
+    FireShipDecay,
+    DemolitionShipWalk,
+    DemolitionShipAttack,
+    DemolitionShipDie,
+    DemolitionShipDecay,
+    TransportShipWalk,
+    TransportShipAttack,
+    TransportShipDie,
+    TransportShipDecay,
 }
-
-// The owner's licensed DE pack supplies sixteen directions starting east;
-// frames 4,6,8,10,12 supply south through
-// north for our existing five-row mirror convention.
-const NAVY: [(u32, &str); 5] = [
-    (100_539, "galley"),
-    (100_021, "war_galley"),
-    (100_529, "fire_ship"),
-    (100_527, "demo_ship"),
-    (100_545, "transport_ship"),
-];
 
 #[derive(Clone, Copy)]
 pub struct ActorSource {
@@ -166,34 +186,43 @@ pub struct ActorSource {
     pub millis: u16,
     /// Upper bound on selected native cells per facing; zero uses the base policy.
     pub phases: u8,
+    native: Option<native::Graphic>,
 }
 impl ActorSource {
-    /// Native DE durations retain fractional milliseconds (DAT f32 seconds).
-    pub fn frame_millis(self) -> f64 {
-        let seconds: f32 = match self.id {
-            3776 => 3.5 / 45.0,
-            3780 => 1.1 / 30.0,
-            3770 => 1.6 / 45.0,
-            3773 => 1.85 / 45.0,
-            3777 => 1.0,
-            4500 => 1.0 / 60.0,
-            _ => return f64::from(self.millis),
-        };
-        f64::from(seconds) * 1000.0
-    }
-    /// These owned cavalry poses already have resident base-role art. Walking
-    /// keeps the full base group resident and samples it when resolving poses.
-    pub fn base_role(self) -> Option<super::AssetRole> {
-        match (self.id, self.stride, self.phases) {
-            (3004, 10, 1) => Some(super::AssetRole::CavalryStanding),
-            (3008, 10, 2) => Some(super::AssetRole::CavalryWalking),
-            _ => None,
+    pub const fn new(id: u32, stride: u8, millis: u16, phases: u8) -> Self {
+        Self {
+            id,
+            stride,
+            millis,
+            phases,
+            native: native::get(id),
         }
     }
-
-    /// Bound the fisherman atlas rows while retaining their native loop duration.
+    pub const fn is_native(self) -> bool {
+        self.native.is_some() || self.id == 4500
+    }
+    /// Native DE durations retain fractional milliseconds (DAT f32 seconds).
+    pub fn frame_millis(self) -> f64 {
+        if let Some(graphic) = self.native {
+            return if self.stride == 1 && graphic.stride > 1 {
+                0.0
+            } else {
+                f64::from(graphic.seconds) * 1000.0
+            };
+        }
+        if self.id == 4500 {
+            return f64::from(1.0_f32 / 60.0) * 1000.0;
+        }
+        f64::from(self.millis)
+    }
+    pub const fn replay_delay_seconds(self) -> f32 {
+        match self.native {
+            Some(g) => g.replay_delay,
+            None => 0.0,
+        }
+    }
     pub const fn sample_step(self) -> u8 {
-        if matches!(self.id, 3770 | 3773 | 3776 | 3777 | 3780) {
+        if self.native.is_some() {
             return 1;
         }
         if self.phases > 0 {
@@ -206,15 +235,8 @@ impl ActorSource {
         }
     }
     pub const fn frames(self) -> u32 {
-        match self.id {
-            3770 | 3773 | 3776 => return 721,
-            3777 | 3780 => return 481,
-            1767 => return 961,
-            1771 | 1764 | 1768 => return 481,
-            _ => {}
-        }
-        if self.id >= 100_000 {
-            return 16;
+        if let Some(g) = self.native {
+            return g.cells as u32;
         }
         match self.id {
             4500 => 30,
@@ -224,10 +246,10 @@ impl ActorSource {
         }
     }
     pub const fn rows(self) -> usize {
-        if self.id == 4500 {
+        if let Some(g) = self.native {
+            g.angles as usize
+        } else if self.id == 4500 {
             1
-        } else if matches!(self.id, 3770 | 3773 | 3776 | 3777 | 3780) {
-            16
         } else {
             5
         }
@@ -236,242 +258,42 @@ impl ActorSource {
         self.stride.div_ceil(self.sample_step()) as usize * self.rows()
     }
     pub const fn source_frame(self, row: usize, phase: usize) -> usize {
-        // The original DAT supplies timing; the trial omits the King pixels.
-        // Its licensed DE West European King supplies the same four poses,
-        // with 16 direction blocks and 60/30 cells per direction.
-        match self.id {
-            // The hero retains every cell in all sixteen native blocks.
-            3770 | 3773 | 3776 | 3777 | 3780 => {
-                return row * self.stride as usize + phase;
-            }
-            1767 => return (4 + row * 2) * 60 + phase * 10,
-            1771 | 1764 => return (4 + row * 2) * 30 + phase * 3,
-            1768 => return (4 + row * 2) * 30 + phase * 6,
-            _ => {}
-        }
-        if self.id >= 100_000 {
-            return 4 + row * 2;
+        if let Some(g) = self.native {
+            return row * g.stride as usize
+                + if self.stride == 1 && g.stride > 1 {
+                    g.stride as usize - 1
+                } else {
+                    phase
+                };
         }
         match self.id {
             4500 => phase,
-            // Flight cells by direction and pitch; see `projectile`.
             3799 | 3820 => projectile::source_cell(self.id, row),
             _ => row * self.stride as usize + phase,
         }
     }
     pub fn manifest_source(self) -> String {
+        if let Some(g) = self.native {
+            return format!("de/{}.sld", g.stem);
+        }
         if self.id == 4500 {
             return "de/p_mangonel_x1.sld".to_owned();
-        }
-        let general = match self.id {
-            3776 => Some("idle"),
-            3780 => Some("walk"),
-            3770 => Some("attack"),
-            3773 => Some("death"),
-            3777 => Some("decay"),
-            _ => None,
-        };
-        if let Some(pose) = general {
-            return format!("de/u_cav_hero_frankish_paladin_{pose}A_x1.sld");
-        }
-        let king = match self.id {
-            1767 => Some("idle"),
-            1771 => Some("walk"),
-            1764 => Some("death"),
-            1768 => Some("decay"),
-            _ => None,
-        };
-        if let Some(pose) = king {
-            return format!("de/u_king_west_{pose}A_x1.sld");
-        }
-        if let Some((_, name)) = NAVY.iter().find(|(id, _)| *id == self.id) {
-            return format!("de/u_shp_{name}_x1.sld");
         }
         format!("graphics.drs:[32, 112, 108, 115]:{}", self.id)
     }
 }
 const fn sprite(id: u32, stride: u8, millis: u16) -> ActorSource {
-    ActorSource {
-        id,
-        stride,
-        millis,
-        phases: 0,
-    }
+    ActorSource::new(id, stride, millis, 0)
 }
 
-const fn flight(id: u32) -> ActorSource {
-    ActorSource {
-        id,
-        stride: PROJECTILE_PHASES,
-        millis: 100,
-        phases: PROJECTILE_PHASES,
-    }
-}
-
-pub const SPRITES: [ActorSource; 135] = [
-    sprite(993, 6, 1000),
-    sprite(997, 12, 70),
-    sprite(987, 10, 100),
-    sprite(990, 10, 100),
-    sprite(1473, 15, 70),
-    sprite(1476, 15, 100),
-    sprite(1525, 15, 200),
-    sprite(1531, 15, 70),
-    sprite(1518, 15, 100),
-    sprite(1528, 15, 100),
-    sprite(1519, 15, 70),
-    sprite(3684, 15, 200),
-    sprite(3686, 15, 70),
-    sprite(3682, 15, 100),
-    sprite(3629, 9, 275),
-    sprite(3634, 16, 50),
-    sprite(3626, 13, 100),
-    sprite(342, 5, 275),
-    sprite(348, 15, 50),
-    sprite(339, 14, 100),
-    sprite(2557, 10, 120),
-    sprite(2559, 10, 100),
-    sprite(2555, 17, 95),
-    sprite(2556, 11, 100),
-    sprite(1635, 10, 100),
-    sprite(1640, 10, 90),
-    sprite(1636, 12, 75),
-    sprite(1629, 20, 85),
-    sprite(1632, 10, 100),
-    sprite(2079, 10, 135),
-    sprite(2082, 10, 190),
-    sprite(994, 5, 6000),
-    sprite(1481, 5, 6000),
-    sprite(3631, 5, 6000),
-    sprite(344, 5, 6000),
-    sprite(2558, 5, 6000),
-    sprite(1637, 5, 6000),
-    sprite(2086, 5, 6000),
-    sprite(1522, 15, 100),
-    sprite(1527, 5, 6000),
-    sprite(3683, 15, 100),
-    sprite(4649, 5, 6000),
-    sprite(3629, 9, 275),
-    sprite(3634, 16, 50),
-    sprite(3626, 13, 100),
-    sprite(3631, 5, 6000),
-    sprite(444, 1, 200),
-    sprite(449, 1, 200),
-    sprite(444, 1, 200),
-    sprite(3575, 28, 200),
-    sprite(8, 10, 200),
-    sprite(12, 10, 70),
-    sprite(2, 10, 70),
-    sprite(5, 10, 100),
-    sprite(9, 5, 6000),
-    sprite(1650, 8, 1000),
-    sprite(1654, 10, 70),
-    sprite(1644, 12, 100),
-    sprite(1647, 10, 100),
-    sprite(1651, 5, 6000),
-    sprite(873, 9, 120),
-    sprite(877, 10, 70),
-    sprite(867, 10, 100),
-    sprite(870, 10, 100),
-    sprite(874, 5, 6000),
-    sprite(1044, 11, 250),
-    sprite(1048, 11, 85),
-    sprite(1038, 11, 160),
-    sprite(1041, 11, 100),
-    sprite(1045, 5, 6000),
-    sprite(2085, 10, 200),
-    sprite(2089, 10, 110),
-    flight(3799),
-    flight(3820),
-    sprite(1512, 15, 133),
-    castle::SPRITES[0],
-    castle::SPRITES[1],
-    castle::SPRITES[2],
-    castle::SPRITES[3],
-    castle::SPRITES[4],
-    castle::SPRITES[5],
-    castle::SPRITES[6],
-    castle::SPRITES[7],
-    castle::SPRITES[8],
-    castle::SPRITES[9],
-    castle::SPRITES[10],
-    castle::SPRITES[11],
-    castle::SPRITES[12],
-    castle::SPRITES[13],
-    castle::SPRITES[14],
-    castle::SPRITES[15],
-    castle::SPRITES[16],
-    castle::SPRITES[17],
-    castle::SPRITES[18],
-    castle::SPRITES[19],
-    castle::SPRITES[20],
-    castle::SPRITES[21],
-    castle::SPRITES[22],
-    castle::SPRITES[23],
-    castle::SPRITES[24],
-    castle::SPRITES[25],
-    castle::SPRITES[26],
-    castle::SPRITES[27],
-    castle::SPRITES[28],
-    castle::SPRITES[29],
-    castle::SPRITES[30],
-    castle::SPRITES[31],
-    castle::SPRITES[32],
-    castle::SPRITES[33],
-    castle::SPRITES[34],
-    castle::SPRITES[35],
-    castle::SPRITES[36],
-    castle::SPRITES[37],
-    castle::SPRITES[38],
-    castle::SPRITES[39],
-    castle::SPRITES[40],
-    castle::SPRITES[41],
-    castle::SPRITES[42],
-    castle::SPRITES[43],
-    castle::SPRITES[44],
-    ActorSource {
-        id: 4500,
-        stride: 30,
-        millis: 17,
-        phases: 30,
-    },
-    sprite(100_539, 1, 200),
-    sprite(100_021, 1, 200),
-    sprite(100_529, 1, 200),
-    sprite(100_527, 1, 200),
-    sprite(100_545, 1, 200),
-    ActorSource {
-        id: 1767,
-        stride: 6,
-        millis: 200,
-        phases: 2,
-    },
-    ActorSource {
-        id: 1771,
-        stride: 10,
-        millis: 70,
-        phases: 2,
-    },
-    ActorSource {
-        id: 1764,
-        stride: 10,
-        millis: 100,
-        phases: 2,
-    },
-    ActorSource {
-        id: 1768,
-        stride: 5,
-        millis: 6000,
-        phases: 1,
-    },
-    // Frankish Paladin hero: DE DAT frame counts and rounded native milliseconds.
-    sprite(3776, 45, 78),
-    sprite(3780, 30, 37),
-    sprite(3770, 45, 36),
-    sprite(3773, 45, 41),
-    sprite(3777, 30, 1000),
-];
+#[path = "units/generated.rs"]
+mod generated;
+pub use generated::SPRITES;
 
 #[cfg(test)]
 #[path = "tests/units.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/native_units.rs"]
+mod native_tests;

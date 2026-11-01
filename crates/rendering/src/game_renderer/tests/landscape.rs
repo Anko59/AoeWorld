@@ -88,6 +88,7 @@ fn semantic_tree_families_share_healthy_broadleaf_draw_cull_and_shadow_fallback(
     let base = art.resources[1][0];
     art.resources[1] = (0..14)
         .map(|index| GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 2,
                 uv: [index as f32 / 100.0, 0.0, 0.001, 0.001],

@@ -8,6 +8,7 @@
 
 use std::fmt;
 mod dense;
+pub mod residency;
 
 pub const PAGE_SIDE: u16 = 2048;
 pub const PAGE_COUNT: usize = 5;
@@ -15,7 +16,7 @@ pub const PAGE_BYTES: usize = PAGE_SIDE as usize * PAGE_SIDE as usize * 4;
 pub const ATLAS_BYTES: usize = PAGE_COUNT * PAGE_BYTES; // 83,886,080 bytes.
 pub const MAX_SELECTED_FRAMES: usize = 5120;
 /// Logical indices are u16, allowing indices 0 through 65535.
-pub const MAX_LOGICAL_FRAMES: usize = u16::MAX as usize + 1;
+pub const MAX_LOGICAL_FRAMES: usize = 131_072;
 /// Bound logical placement metadata independently of resident GPU storage.
 pub const MAX_LOGICAL_PAGES: usize = 256;
 pub const MAX_FRAME_EXTENT: u16 = PAGE_SIDE - 4;
@@ -178,16 +179,16 @@ fn pack_with_allocator_and_pages(
         .ok_or(PackingError::InvalidPageBudget)?;
     validate(frames, frame_limit)?;
     let mut placements = allocate(frames.len());
-    // At most 128 KiB of indices, allocated on the heap for WASM stack safety.
+    // At most 512 KiB of indices, allocated on the heap for WASM stack safety.
     // In-place sorting avoids quadratic startup comparisons.
-    let mut indices = vec![0_u16; frames.len()];
+    let mut indices = vec![0_u32; frames.len()];
     for (index, slot) in indices[..frames.len()].iter_mut().enumerate() {
-        *slot = index as u16;
+        *slot = index as u32;
     }
     order_indices(frames, &mut indices[..frames.len()], || {});
     let mut cursors: Vec<Page> = (0..page_count).map(|_| Page::new()).collect();
     for &index in &indices[..frames.len()] {
-        let index = usize::from(index);
+        let index = index as usize;
         let frame = frames[index];
         let (pages, spare) = match frame.domain {
             AtlasDomain::Terrain => (0..terrain_pages, 0..0),
@@ -224,10 +225,10 @@ fn pack_with_allocator_and_pages(
     Ok(placements)
 }
 
-fn order_indices(frames: &[FrameExtent], indices: &mut [u16], mut compared: impl FnMut()) {
+fn order_indices(frames: &[FrameExtent], indices: &mut [u32], mut compared: impl FnMut()) {
     indices.sort_unstable_by(|&a, &b| {
         compared();
-        let (a, b) = (usize::from(a), usize::from(b));
+        let (a, b) = (a as usize, b as usize);
         if a == b {
             std::cmp::Ordering::Equal
         } else if precedes(frames, a, b) {

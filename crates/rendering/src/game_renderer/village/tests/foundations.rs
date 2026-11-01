@@ -10,6 +10,7 @@ fn explored_foundations_keep_dirt_and_crop_materials_before_fog_shading() {
         footprint: [3.0; 2],
         foundation_material: Some(17),
         parts: Vec::new(),
+        states: Vec::new(),
         construction: Vec::new(),
         damage: Vec::new(),
     });
@@ -127,6 +128,7 @@ fn farm_crops_stay_in_the_footprint_and_neighbouring_margins_do_not_erase_them()
         footprint: [3.0; 2],
         foundation_material: Some(17),
         parts: Vec::new(),
+        states: Vec::new(),
         construction: Vec::new(),
         damage: Vec::new(),
     });

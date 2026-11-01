@@ -137,14 +137,14 @@ impl DensePage {
 
 pub(super) fn pack(
     frames: &[FrameExtent],
-    indices: &[u16],
+    indices: &[u32],
     placements: &mut [Placement],
     terrain_pages: usize,
     page_count: usize,
 ) -> Result<(), PackingError> {
     let mut pages: Vec<DensePage> = (0..page_count).map(|_| DensePage::new()).collect();
     for &index in indices {
-        let index = usize::from(index);
+        let index = index as usize;
         let frame = frames[index];
         let (primary, spare) = match frame.domain {
             AtlasDomain::Terrain => (0..terrain_pages, 0..0),

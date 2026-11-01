@@ -26,11 +26,14 @@ fn bounds(frame: &Frame) -> Option<(u16, u16, u16, u16)> {
 }
 
 pub(super) fn info(frame: &Frame) -> FrameInfo {
-    let planes = planes(frame);
+    let (x, y, right, bottom) = bounds(frame).unwrap_or((0, 0, 1, 1));
     FrameInfo {
-        width: planes.width,
-        height: planes.height,
-        anchor: (planes.hotspot_x, planes.hotspot_y),
+        width: right - x,
+        height: bottom - y,
+        anchor: (
+            i32::from(frame.anchor_x) - i32::from(x),
+            i32::from(frame.anchor_y) - i32::from(y),
+        ),
         canvas: (frame.width, frame.height),
         body: frame
             .main

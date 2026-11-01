@@ -3,6 +3,69 @@ use aoe_core::EntityId;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn cold_native_admission_preserves_source_order_within_both_priority_groups() {
+    let mut art = art();
+    art.resident = vec![Some(aoe_rendering::AtlasAddress::WHITE); 256];
+    let substitutes: Vec<_> = (1..=256)
+        .map(|id| (id, if id % 3 == 0 { 0 } else { id }))
+        .collect();
+    let coverage = NativeCoverage::new(&art, &substitutes);
+    let input: Vec<_> = (1..=300).rev().collect();
+    let expected: Vec<_> = input
+        .iter()
+        .copied()
+        .filter(|id| *id > 256 || id % 3 == 0)
+        .chain(input.iter().copied().filter(|id| *id <= 256 && id % 3 != 0))
+        .collect();
+    let mut required = input;
+    coverage.prioritize(&mut required);
+    assert_eq!(required, expected);
+}
+
+#[wasm_bindgen_test]
+fn native_coverage_holds_the_frame_until_every_visible_layer_has_pixels() {
+    let mut art = art();
+    let address = aoe_rendering::AtlasAddress::WHITE;
+    art.resident = vec![None, None, Some(address), Some(address)];
+    let partial = NativeCoverage::new(&art, &[(1, 3), (2, 0)]);
+    assert!(!partial.ready(&art, &[1, 2]));
+    let covered = NativeCoverage::new(&art, &[(1, 3), (2, 4)]);
+    assert!(covered.ready(&art, &[1, 2]));
+    assert_eq!(covered.keep, [3, 4]);
+    art.resident[3] = None;
+    assert!(
+        !covered.ready(&art, &[1, 2]),
+        "stale addresses cannot qualify a frame"
+    );
+    art.resident[1] = Some(address);
+    assert!(
+        partial.ready(&art, &[1, 2]),
+        "newly uploaded current cells supersede a cold substitute"
+    );
+    let shared = NativeCoverage::new(&art, &[(1, 3), (1, 0)]);
+    assert!(
+        !shared.ready(&art, &[1]),
+        "all semantic users of a shared cell need a representation"
+    );
+}
+
+#[wasm_bindgen_test]
+fn art_invalidation_preserves_picking_until_a_complete_replacement_is_presented() {
+    let scene = Rc::new(());
+    let old = unit([1.0, 2.0], false, false);
+    let mut cache = RenderFrameCache::default();
+    cache.record_success(&scene, &art(), &[old], &[], false, 0, camera());
+    cache.invalidate();
+    assert_eq!(cache.position(old.id), Some(old.position));
+    assert!(cache.needs_render(&scene, &art(), &[old], &[], false, 0, camera()));
+    let next = unit([1.5, 2.0], false, false);
+    assert_eq!(cache.position(next.id), Some(old.position));
+    cache.record_success(&scene, &art(), &[next], &[], false, 0, camera());
+    assert_eq!(cache.position(next.id), Some(next.position));
+    assert!(!cache.needs_render(&scene, &art(), &[next], &[], false, 0, camera()));
+}
+
+#[wasm_bindgen_test]
 fn changing_only_a_resources_hover_mode_invalidates_the_presented_frame() {
     let scene = Rc::new(());
     let mut node = resource(7);
@@ -83,7 +146,7 @@ fn stationary_fish_keep_the_animation_clock_live() {
         ..resource(9)
     };
     let mut art = art();
-    for (family, period, count) in [(5, 3, 17), (6, 9, 7)] {
+    for (family, period, count) in [(5, 300, 17), (6, 900, 7)] {
         let fish = SceneResource {
             visual_family: family,
             ..fish
@@ -177,9 +240,15 @@ fn unit_selection_movement_resources_grid_and_moving_animation_invalidate() {
     assert!(cache.needs_render(&scene, &art(), &idle, &[resource(10)], false, 0, camera()));
     assert!(cache.needs_render(&scene, &art(), &idle, &resources, true, 0, camera()));
 
-    let moving = [unit([1.0, 2.0], false, true)];
-    cache.record_success(&scene, &art(), &moving, &resources, false, 5, camera());
-    assert!(cache.needs_render(&scene, &art(), &moving, &resources, false, 6, camera()));
+    let mut art = art();
+    art.actors = vec![Vec::new(); 167];
+    art.actors[71] = vec![art.walking[0]; 32];
+    let mut actor = unit([1.0, 2.0], false, true);
+    actor.kind = aoe_rendering::SceneUnitKind::ScoutWalk;
+    cache.record_success(&scene, &art, &[actor], &resources, false, 5, camera());
+    assert!(!cache.needs_render(&scene, &art, &[actor], &resources, false, 6, camera()));
+    actor = actor.with_actor_frame(1 << 4);
+    assert!(cache.needs_render(&scene, &art, &[actor], &resources, false, 6, camera()));
 }
 
 #[wasm_bindgen_test]
@@ -194,6 +263,7 @@ fn a_working_villager_marker_does_not_invalidate_on_animation_ticks() {
 
 fn art() -> aoe_rendering::GameArt {
     let frame = aoe_rendering::GameFrame {
+        stream: 0,
         atlas: aoe_rendering::AtlasAddress {
             page: 0,
             uv: [0.0; 4],
@@ -202,7 +272,11 @@ fn art() -> aoe_rendering::GameArt {
         anchor: [12.0, 40.0],
     };
     aoe_rendering::GameArt {
+        resident: Vec::new(),
+        building_clocks: Vec::new(),
+        environment: Vec::new(),
         actors: Vec::new(),
+        actor_rows: Vec::new(),
         buildings: std::array::from_fn(|_| Vec::new()),
         village: Default::default(),
         fishing: Default::default(),
@@ -222,39 +296,42 @@ fn art() -> aoe_rendering::GameArt {
 }
 
 #[wasm_bindgen_test]
-fn native_chopping_animates_but_a_stationary_idle_fallback_does_not() {
+fn native_chopping_invalidates_only_when_the_visible_packed_phase_changes() {
     let scene = Rc::new(());
     let mut worker = unit([1.0, 2.0], false, false);
-    worker.kind = aoe_rendering::SceneUnitKind::VillagerChopping;
+    worker.kind = aoe_rendering::SceneUnitKind::ChopperWork;
     let mut art = art();
-    let frame = art.walking[0];
-    art.village[0] = vec![frame; 75];
+    art.actors = vec![Vec::new(); 167];
+    art.actors[137] = vec![art.walking[0]; 32];
     let mut cache = RenderFrameCache::default();
     cache.record_success(&scene, &art, &[worker], &[], false, 0, camera());
     assert!(!cache.needs_render(&scene, &art, &[worker], &[], false, 1, camera()));
-    art.village[2] = vec![frame; 75];
+    worker = worker.with_actor_frame(1 << 4);
     assert!(cache.needs_render(&scene, &art, &[worker], &[], false, 1, camera()));
     cache.record_success(&scene, &art, &[worker], &[], false, 1, camera());
+    worker = worker.with_actor_frame(0);
     assert!(cache.needs_render(&scene, &art, &[worker], &[], false, 2, camera()));
 }
 
 #[wasm_bindgen_test]
 fn offscreen_native_chopping_does_not_request_animation_frames() {
-    let mut worker = unit([10000.0, 10000.0], false, false);
-    worker.kind = aoe_rendering::SceneUnitKind::VillagerChopping;
+    let mut worker = unit([10000.0; 2], false, false);
+    worker.kind = aoe_rendering::SceneUnitKind::ChopperWork;
     let mut art = art();
-    art.village[2] = vec![art.walking[0]; 75];
-    let camera = SceneCamera {
-        center: [1.0, 2.0],
-        zoom: 1.0,
-        viewport: [1280.0, 720.0],
-        focus_elevation_meters: 0.0,
-    };
-    assert_eq!(moving_animation(&art, &[worker], 1, camera), None);
+    art.actors = vec![Vec::new(); 167];
+    art.actors[137] = vec![art.walking[0]; 32];
+    let key = |u| aoe_rendering::scene_unit_render_key(&art, u, camera());
+    assert!(
+        key(worker) == key(worker.with_actor_frame((u16::from(worker.facing) & 15) | (1 << 4)))
+    );
     worker.position = [1.0, 2.0];
-    assert_eq!(moving_animation(&art, &[worker], 1, camera), Some(1));
-    worker.position = [10000.0, 10000.0];
-    assert_eq!(moving_animation(&art, &[worker], 2, camera), None);
+    assert!(
+        key(worker) != key(worker.with_actor_frame((u16::from(worker.facing) & 15) | (1 << 4)))
+    );
+    worker.position = [10000.0; 2];
+    assert!(
+        key(worker) == key(worker.with_actor_frame((u16::from(worker.facing) & 15) | (1 << 4)))
+    );
 }
 
 fn camera() -> SceneCamera {
@@ -272,15 +349,15 @@ fn actor_phase_does_not_invalidate_without_visible_animated_art() {
     let mut actor = unit([1.0, 2.0], false, false);
     actor.kind = aoe_rendering::SceneUnitKind::actor(0);
     let mut art = art();
-    for frames in [vec![], vec![art.walking[0]; 5], vec![art.walking[0]; 10]] {
+    for frames in [vec![], vec![art.walking[0]; 16], vec![art.walking[0]; 32]] {
         art.actors = vec![frames];
         for position in [[1.0, 2.0], [10000.0, 10000.0]] {
             actor.position = position;
             actor.facing = 2;
             let mut cache = RenderFrameCache::default();
             cache.record_success(&scene, &art, &[actor], &[], false, 0, camera());
-            actor.facing = 2 | (1 << 3);
-            let visible_animation = art.actors[0].len() == 10 && position == [1.0, 2.0];
+            actor.facing = 2 | (1 << 4);
+            let visible_animation = art.actors[0].len() == 32 && position == [1.0, 2.0];
             assert_eq!(
                 cache.needs_render(&scene, &art, &[actor], &[], false, 1, camera()),
                 visible_animation,
@@ -297,7 +374,7 @@ fn visible_actor_phase_and_offscreen_actor_state_still_invalidate() {
     let mut actor = unit([10000.0, 10000.0], false, false);
     actor.kind = aoe_rendering::SceneUnitKind::actor(0);
     let mut art = art();
-    art.actors = vec![vec![art.walking[0]; 10]];
+    art.actors = vec![vec![art.walking[0]; 32]];
     let mut cache = RenderFrameCache::default();
     cache.record_success(&scene, &art, &[actor], &[], false, 0, camera());
     actor.facing = 3;
@@ -305,7 +382,7 @@ fn visible_actor_phase_and_offscreen_actor_state_still_invalidate() {
     actor.position = [1.0, 2.0];
     cache.record_success(&scene, &art, &[actor], &[], false, 0, camera());
     assert!(!cache.needs_render(&scene, &art, &[actor], &[], false, 1, camera()));
-    actor.facing |= 1 << 3;
+    actor.facing |= 1 << 4;
     assert!(cache.needs_render(&scene, &art, &[actor], &[], false, 1, camera()));
 }
 
@@ -315,9 +392,9 @@ fn offscreen_actor_phase_does_not_invalidate_even_with_real_frames() {
     let mut actor = unit([10000.0, 10000.0], false, false);
     actor.kind = aoe_rendering::SceneUnitKind::actor(0);
     let mut art = art();
-    art.actors = vec![vec![art.walking[0]; 10]];
+    art.actors = vec![vec![art.walking[0]; 32]];
     let mut cache = RenderFrameCache::default();
     cache.record_success(&scene, &art, &[actor], &[], false, 0, camera());
-    actor.facing |= 1 << 3;
+    actor.facing |= 1 << 4;
     assert!(!cache.needs_render(&scene, &art, &[actor], &[], false, 1, camera()));
 }

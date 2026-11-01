@@ -63,7 +63,7 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
                 &client.art,
                 unit,
                 camera,
-                (client.last_frame / 100.0) as usize,
+                client.last_frame as usize,
             )
             .unwrap_or(fallback);
             let depth = aoe_rendering::scene_unit_depth(unit);
@@ -178,7 +178,7 @@ fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId
                         &client.art,
                         u,
                         camera,
-                        (client.last_frame / 100.0) as usize,
+                        client.last_frame as usize,
                         point,
                     )))
             .then_some((depth, u.id))
@@ -234,7 +234,7 @@ pub(in super::super) fn double_building(client: &mut Client) {
                 &client.art,
                 unit,
                 camera,
-                (client.last_frame / 100.0) as usize,
+                client.last_frame as usize,
             )
             .unwrap_or([p.x, p.y, p.x, p.y]);
             (bounds[2] >= 0.0

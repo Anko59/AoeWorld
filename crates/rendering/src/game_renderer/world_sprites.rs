@@ -2,6 +2,8 @@ use super::*;
 use crate::resource_frame_index;
 use crate::terrain::visible_terrain_frames;
 
+#[path = "village/environment.rs"]
+pub(super) mod environment;
 #[path = "village/fish.rs"]
 mod fish;
 #[path = "scenery.rs"]
@@ -16,7 +18,7 @@ use bounds::object_depth;
 #[path = "village/actors.rs"]
 mod actor_frames;
 pub use actor_frames::actor_frame_index;
-use actor_frames::{sprite_direction, unit_direction, unit_frame_index};
+use actor_frames::{unit_direction, unit_frame_index};
 pub use bounds::{
     scene_building_hit, scene_building_visible, scene_unit_bounds, scene_unit_depth,
     scene_unit_render_key,
@@ -44,6 +46,9 @@ pub(super) fn resource_presentation_at(
     resource: SceneResource,
     animation: usize,
 ) -> Option<(GameFrame, Option<GameFrame>)> {
+    if environment::present(art, resource) {
+        return environment::primary(art, resource, animation).map(|f| (f, None));
+    }
     if resource.kind == 0 && matches!(resource.visual_family, 5 | 6) {
         return fish::frame(art, resource, animation).map(|f| (f, None));
     }
@@ -92,6 +97,13 @@ pub fn scene_resource_frame(art: &GameArt, resource: SceneResource) -> Option<Ga
     scene_resource_presentation(art, resource).map(|(frame, _)| frame)
 }
 
+#[path = "village/residency.rs"]
+mod residency;
+pub use residency::{
+    scene_native_frames, scene_native_prefetch, scene_native_substitutes,
+    scene_resource_native_frames,
+};
+
 #[cfg(test)]
 pub(super) fn world_sprite_frames(
     art: &GameArt,
@@ -134,12 +146,20 @@ pub(super) fn emit_world_sprite_frames(
     };
     // Preserve resource-before-unit submission without allocating/copying an
     // unsorted intermediate object vector on every frame.
+    for &r in resources.iter().filter(|&&r| environment::present(art, r)) {
+        environment::emit(art, r, camera, animation, &mut emit);
+    }
     let objects = resources
         .iter()
+        .filter(|&&r| !environment::present(art, r))
         .filter_map(|resource| {
-            resource_presentation_at(art, *resource, animation).map(|(frame, shadow)| {
-                WorldObject::Resource(*resource, world_frame(frame), shadow.map(world_frame))
-            })
+            let (frame, shadow) = resource_presentation_at(art, *resource, animation)?;
+            let frame = scenery::resident(art, *resource, frame)?;
+            let shadow = match shadow {
+                Some(frame) => Some(world_frame(art.resident_frame(frame)?)),
+                None => None,
+            };
+            Some(WorldObject::Resource(*resource, world_frame(frame), shadow))
         })
         .chain(units.iter().copied().map(WorldObject::Unit));
 
@@ -196,7 +216,7 @@ pub(super) fn emit_world_sprite_frames(
         };
         let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
         if unit.kind.building_side().is_some() {
-            village::building(art, unit, camera, animation, &mut |(
+            village::resident_building(art, unit, camera, animation, &mut |(
                 mut sprite,
                 frame,
                 depth,
@@ -208,10 +228,18 @@ pub(super) fn emit_world_sprite_frames(
                     } else {
                         [1.0, 1.0, 1.0, 0.5]
                     };
-                } else if unit.kind.building_id().is_some_and(|id| id != 50) {
+                } else if !unit.visual.moving()
+                    && !unit.kind.rubble()
+                    && unit.kind.building_slot().is_none_or(|slot| slot < 65)
+                    && unit.kind.building_id().is_some_and(|id| id != 50)
+                {
                     sprite.pages[3] |= Sprite::OCCLUDER;
                 }
-                emit((sprite, frame, depth, id));
+                if let Some(frame) = art.resident_frame(frame) {
+                    sprite.uv = frame.atlas.uv;
+                    sprite.pages[0] = frame.atlas.page;
+                    emit((sprite, frame, depth, id));
+                }
             });
             continue;
         }
@@ -219,7 +247,7 @@ pub(super) fn emit_world_sprite_frames(
             village::marker(unit, camera, &mut emit);
             continue;
         };
-        let (direction, flipped) = unit_direction(unit);
+        let (_, flipped) = unit_direction(unit, frames.len() / stride);
         let phase = if unit.kind.actor_slot().is_some() {
             usize::from(unit.actor_frame() >> if unit.kind.native_directions() { 4 } else { 3 })
                 .min(stride - 1)
@@ -233,70 +261,61 @@ pub(super) fn emit_world_sprite_frames(
         } else {
             0
         };
-        let (index, _) = unit_frame_index(unit, stride, phase);
-        let frame = world_frame(frames[index]);
-        // The DAT's fishing task is the net delta over the standing hull.
-        let net = (unit.kind == crate::SceneUnitKind::FishingShipWorking)
-            .then(|| art.fishing[9].get(direction).copied())
-            .flatten()
-            .map(world_frame);
-        // Siege bodies are DAT deltas over the wheels, rails or log base row.
-        let mut shadow_emitted = false;
-        for frame in std::iter::once(frame)
-            .chain(net)
-            .chain(village::siege_body_frame(art, unit))
+        let (index, _) = unit_frame_index(unit, stride, phase, frames.len() / stride);
+        let Some(frame) = art
+            .resident_animation(frames, index, stride)
+            .map(world_frame)
+        else {
+            continue;
+        };
+        let scale = camera.zoom as f32;
+        let width = f64::from(frame.size[0]) * camera.zoom;
+        let height = f64::from(frame.size[1]) * camera.zoom;
+        if screen.x + width < 0.0
+            || screen.y + height < 0.0
+            || screen.x - width > camera.viewport[0]
+            || screen.y - height > camera.viewport[1]
         {
-            let scale = camera.zoom as f32;
-            let width = f64::from(frame.size[0]) * camera.zoom;
-            let height = f64::from(frame.size[1]) * camera.zoom;
-            if screen.x + width < 0.0
-                || screen.y + height < 0.0
-                || screen.x - width > camera.viewport[0]
-                || screen.y - height > camera.viewport[1]
-            {
-                continue;
-            }
-            let mut uv = frame.atlas.uv;
-            if flipped {
-                uv[0] += uv[2];
-                uv[2] = -uv[2];
-            }
-            let x = screen.x
-                - if flipped {
-                    width - f64::from(frame.anchor[0]) * camera.zoom
-                } else {
-                    f64::from(frame.anchor[0]) * camera.zoom
-                };
-            let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
-            let sprite = Sprite {
-                position: [
-                    ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
-                    (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
-                ],
-                radius: [
-                    (width / camera.viewport[0]) as f32,
-                    (height / camera.viewport[1]) as f32,
-                ],
-                color: [1.0; 4],
-                uv,
-                depths: [0.0; 4],
-                terrain_blend: [[0.0; 4]; 2],
-                pages: [frame.atlas.page, 0, 0, 0],
-            }
-            .with_owner(unit.visual);
-            let mut scaled_frame = frame;
-            scaled_frame.size = scaled_frame.size.map(|value| value * scale);
-            scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
-            let depth = object_depth(object);
-            if !shadow_emitted
-                && let Some((shadow, shadow_frame)) =
-                    alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
-            {
-                shadow_emitted = true;
-                emit((shadow, shadow_frame, depth, object.stable_id()));
-            }
-            emit((sprite, scaled_frame, depth, object.stable_id()));
+            continue;
         }
+        let mut uv = frame.atlas.uv;
+        if flipped {
+            uv[0] += uv[2];
+            uv[2] = -uv[2];
+        }
+        let x = screen.x
+            - if flipped {
+                width - f64::from(frame.anchor[0]) * camera.zoom
+            } else {
+                f64::from(frame.anchor[0]) * camera.zoom
+            };
+        let y = screen.y - f64::from(frame.anchor[1]) * camera.zoom;
+        let sprite = Sprite {
+            position: [
+                ((x + width / 2.0) / camera.viewport[0] * 2.0 - 1.0) as f32,
+                (1.0 - (y + height / 2.0) / camera.viewport[1] * 2.0) as f32,
+            ],
+            radius: [
+                (width / camera.viewport[0]) as f32,
+                (height / camera.viewport[1]) as f32,
+            ],
+            color: [1.0; 4],
+            uv,
+            depths: [0.0; 4],
+            terrain_blend: [[0.0; 4]; 2],
+            pages: [frame.atlas.page, 0, 0, 0],
+        }
+        .with_owner(unit.visual);
+        let mut scaled_frame = frame;
+        scaled_frame.size = scaled_frame.size.map(|value| value * scale);
+        scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
+        let depth = object_depth(object);
+        if let Some((shadow, shadow_frame)) =
+            alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
+        {
+            emit((shadow, shadow_frame, depth, object.stable_id()));
+        }
+        emit((sprite, scaled_frame, depth, object.stable_id()));
     }
 }
 
@@ -437,56 +456,5 @@ fn scaled(mut frame: GameFrame, scale: f32) -> GameFrame {
 mod layer_order_tests;
 
 pub(super) fn scene_unit_animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> bool {
-    if let Some(slot @ (4 | 40)) = unit.kind.building_slot()
-        && !art
-            .compositions
-            .iter()
-            .any(|b| Some(b.unit_id) == unit.kind.building_id() && !b.parts.is_empty())
-    {
-        let frames = &art.buildings[usize::from(slot)];
-        return (slot == 40 || frames.len() == 44)
-            && frames.iter().any(|f| {
-                sprite_screen_bounds(
-                    world_frame(*f),
-                    unit.position,
-                    unit.elevation_meters,
-                    camera,
-                )
-                .is_some()
-            });
-    }
-    if unit.kind.is_foundation() {
-        return false;
-    }
-    if unit.kind.building_id().is_some() {
-        return art
-            .compositions
-            .iter()
-            .find(|b| Some(b.unit_id) == unit.kind.building_id())
-            .is_some_and(|b| {
-                // A healthy wall draws frame 0 of each part; only damage animates.
-                let wall = unit.kind == crate::SceneUnitKind::PalisadeWall;
-                let parts: &[_] = if wall { &[] } else { &b.parts };
-                let damage = usize::from(unit.visual.damage_stage())
-                    .checked_sub(1)
-                    .and_then(|i| b.damage.get(i))
-                    .into_iter()
-                    .flat_map(|d| &d.parts);
-                parts.iter().chain(damage).any(|p| {
-                    p.frame_rate > 0.0
-                        && p.animation.len() > 1
-                        && scene_sprite(
-                            world_frame(p.frame),
-                            unit.position,
-                            unit.elevation_meters,
-                            camera,
-                        )
-                        .is_some()
-                })
-            });
-    }
-    let Some((frames, stride, true)) = village::frames(art, unit) else {
-        return false;
-    };
-    bounds::frames_visible(frames, stride, unit, camera)
+    bounds::animates(art, unit, camera)
 }

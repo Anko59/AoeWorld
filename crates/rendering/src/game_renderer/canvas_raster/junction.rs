@@ -34,7 +34,7 @@ pub(super) fn sample(
         let Some(sheet) = directory::sheet(atlas, material) else {
             return;
         };
-        let frame = sheet.frame(atlas, tile);
+        let (frame, local, gradient) = sheet.sample(atlas, tile, local, gradient);
         let texel = mix::art_layer(
             filter::sample(atlas, frame, local, filter::offsets(frame, gradient)),
             material,

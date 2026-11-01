@@ -2,6 +2,20 @@
 use super::*;
 use manifest::{FrameRecord, Manifest};
 
+pub(super) fn pages(placements: &[Placement]) -> u32 {
+    placements
+        .iter()
+        .map(|p| {
+            if p.page >= 8 {
+                u32::from(p.page) + 2
+            } else {
+                GAME_ATLAS_PAGES
+            }
+        })
+        .max()
+        .unwrap_or(GAME_ATLAS_PAGES)
+}
+
 pub(super) fn plan(
     manifest: &Manifest,
     selected: &[usize],
@@ -25,6 +39,26 @@ pub(super) fn plan(
     ];
     for (semantic, (&index, &domain)) in selected.iter().zip(domains).enumerate() {
         let frame = manifest.frames.get(index).ok_or("Invalid selected frame")?;
+        if let Some(location) = frame.native {
+            let chunk = manifest
+                .chunks
+                .get(usize::from(location.chunk))
+                .ok_or("Invalid native chunk")?;
+            if frame.page != 0
+                || frame.x != 0
+                || frame.y != 0
+                || frame.width == 0
+                || frame.height == 0
+                || frame.width > aoe_assets::catalog::packing::MAX_FRAME_EXTENT
+                || frame.height > aoe_assets::catalog::packing::MAX_FRAME_EXTENT
+                || location.length == 0
+                || location.length as usize > aoe_assets::pack::compressed::MAX_ENCODED_FRAME_BYTES
+                || u64::from(location.offset) + u64::from(location.length) > u64::from(chunk.bytes)
+            {
+                return Err(error("Invalid native frame bounds"));
+            }
+            continue;
+        }
         let source = manifest
             .pages
             .get(usize::from(frame.page))
@@ -52,11 +86,15 @@ pub(super) fn plan(
     let mut unique = 0;
     let mut seen = std::collections::BTreeMap::new();
     for (semantic, (&source, &domain)) in selected.iter().zip(domains).enumerate() {
+        if manifest.frames[source].native.is_some() {
+            aliases.push(None);
+            continue;
+        }
         let key = (source, domain as u8);
         if let Some(&prior) = seen.get(&key).filter(|_| domain != AtlasDomain::Shared) {
-            aliases.push(prior);
+            aliases.push(Some(prior));
         } else {
-            aliases.push(unique);
+            aliases.push(Some(unique));
             if domain != AtlasDomain::Shared {
                 seen.insert(key, unique);
             }
@@ -81,12 +119,16 @@ pub(super) fn plan(
             );
             error(failure)
         })?;
-    Ok(aliases.into_iter().map(|index| placements[index]).collect())
+    Ok(aliases
+        .into_iter()
+        .map(|index| index.map_or_else(Placement::default, |index| placements[index]))
+        .collect())
 }
 
 pub(super) fn record(frame: &FrameRecord, placed: Placement) -> GameFrame {
     let side = GAME_ATLAS_SIDE as f32;
     GameFrame {
+        stream: 0,
         atlas: AtlasAddress {
             page: u32::from(placed.page),
             uv: [

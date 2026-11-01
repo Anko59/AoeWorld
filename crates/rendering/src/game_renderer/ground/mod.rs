@@ -29,7 +29,11 @@ pub fn apply_building_foundations(
     let foundations = units
         .iter()
         .filter_map(|unit| {
-            if unit.visual.ghost() {
+            if unit.visual.ghost()
+                || unit.visual.moving()
+                || unit.kind.rubble()
+                || unit.kind.building_slot().is_some_and(|slot| slot >= 65)
+            {
                 return None;
             }
             let id = unit.kind.building_id()?;
@@ -221,6 +225,9 @@ mod tests;
 
 /// Replace the ground inside completed farms with the DE ploughed texture.
 fn farm(face: &mut ProjectedSurfaceTriangle, farms: &[[f64; 2]], art: &GameArt) {
+    if matches!(art.foundation.1, Some(crate::TerrainTopology::Dds { .. })) {
+        return;
+    }
     if face.skirt || farms.is_empty() {
         return;
     }

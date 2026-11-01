@@ -121,6 +121,7 @@ fn damaged_canvas_frames_match_fresh_rasters_with_alpha_depth_fog_and_removals()
             layers.push(WorldLayer::Sprite(
                 sprite,
                 crate::GameFrame {
+                    stream: 0,
                     atlas: crate::AtlasAddress {
                         page: 0,
                         uv: sprite.uv,

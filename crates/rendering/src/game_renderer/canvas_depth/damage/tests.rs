@@ -91,6 +91,7 @@ fn sprite(x: f32) -> WorldLayer {
             pages: [0; 4],
         },
         GameFrame {
+            stream: 0,
             atlas: crate::AtlasAddress {
                 page: 0,
                 uv: [0.0; 4],

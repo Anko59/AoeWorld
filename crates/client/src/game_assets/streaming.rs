@@ -2,6 +2,7 @@
 use super::*;
 
 pub(super) struct Input<'a> {
+    pub pages: u32,
     pub manifest: &'a Manifest,
     pub selected: &'a [usize],
     pub placements: &'a [Placement],
@@ -12,18 +13,7 @@ pub(super) struct Input<'a> {
 }
 impl Input<'_> {
     pub async fn upload(self, sink: &mut dyn AtlasSink) -> Result<(), JsValue> {
-        let pages = self
-            .placements
-            .iter()
-            .map(|p| {
-                if p.page >= 8 {
-                    u32::from(p.page) + 2
-                } else {
-                    GAME_ATLAS_PAGES
-                }
-            })
-            .max()
-            .unwrap_or(GAME_ATLAS_PAGES);
+        let pages = self.pages;
         sink.configure(pages).map_err(error)?;
         if let Some(pixels) = sink.resident_buffer().map_err(error)? {
             self.upload_resident(pixels).await?;

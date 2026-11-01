@@ -17,8 +17,10 @@ pub(super) fn animation_frame(
             .unwrap_or(client.village.tick as f64),
         client.config.tick_hz,
     );
-    if unit.kind == aoe_protocol::UnitKind::General
-        && let Some(heading) = client.presentation.native_heading(*unit)
+    if !matches!(
+        pose,
+        crate::unit_visuals::Pose::Arrow | crate::unit_visuals::Pose::Javelin
+    ) && let Some(heading) = client.presentation.native_heading(*unit)
     {
         frame = (frame & !15) | u16::from(heading);
     }

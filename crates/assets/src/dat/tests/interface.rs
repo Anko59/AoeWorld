@@ -88,6 +88,8 @@ fn interface_catalog_exports_naval_units_and_castle_research() {
         .collect();
     let hash = "a".repeat(64);
     let manifest = Manifest {
+        terrains: Vec::new(),
+        chunks: Vec::new(),
         version: 1,
         converter: "synthetic".into(),
         input_hash: hash.clone(),
@@ -108,6 +110,7 @@ fn interface_catalog_exports_naval_units_and_castle_research() {
             .flat_map(|(sheet, count)| {
                 let hash = hash.clone();
                 (0..count).map(move |frame| FrameRecord {
+                    native: None,
                     source: format!("interfac.drs:[32, 112, 108, 115]:{sheet}"),
                     source_hash: hash.clone(),
                     frame,

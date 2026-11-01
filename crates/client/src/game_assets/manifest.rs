@@ -35,8 +35,10 @@ pub(super) struct Manifest {
     #[cfg_attr(test, serde(rename = "input_hash"))]
     _input_hash: DiscardString,
     pub pages: Vec<AtlasPage>,
+    pub chunks: Vec<aoe_assets::pack::frame_chunks::FrameChunk>,
     pub frames: Vec<FrameRecord>,
     pub building_data: String,
+    pub terrains: Vec<aoe_assets::pack::TerrainSheet>,
     #[cfg_attr(test, serde(skip))]
     pub buildings: Vec<BuildingComposition>,
 }
@@ -50,6 +52,7 @@ pub(super) struct BuildingComposition {
     pub foundation_size: [u16; 2],
     pub parts: Vec<BuildingPart>,
     pub construction: Vec<BuildingPart>,
+    pub states: Vec<(u8, Vec<BuildingPart>)>,
     pub damage: Vec<BuildingDamage>,
 }
 
@@ -66,6 +69,7 @@ pub(super) struct BuildingPart {
     pub angles: u16,
     pub primary: bool,
     pub frame_rate: f32,
+    pub replay_delay: f32,
     pub offset: [i32; 2],
     pub misplacement: [f32; 2],
 }
@@ -101,6 +105,7 @@ pub(super) struct FrameRecord {
     #[cfg_attr(test, serde(rename = "source_hash"))]
     _source_hash: DiscardString,
     pub frame: u32,
+    pub native: Option<aoe_assets::pack::frame_chunks::FrameLocation>,
     pub page: u16,
     pub x: u16,
     pub y: u16,
@@ -131,12 +136,14 @@ extern "C" {
     fn bounds_json(text: &str, hash: &str) -> Result<Array, JsValue>;
 }
 
+#[inline(never)]
 fn text(fields: &Array, index: u32) -> Result<String, JsValue> {
     fields
         .get(index)
         .as_string()
         .ok_or_else(|| JsValue::from_str("invalid manifest string projection"))
 }
+#[inline(never)]
 fn number(fields: &Array, index: u32) -> Result<f64, JsValue> {
     fields
         .get(index)
@@ -176,6 +183,16 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Manifest, JsValue> {
             Ok(FrameRecord {
                 source: text(&fields, 0)?,
                 frame: number(&fields, 1)? as u32,
+                native: if fields.get(9).is_null() {
+                    None
+                } else {
+                    let native = Array::from(&fields.get(9));
+                    Some(aoe_assets::pack::frame_chunks::FrameLocation {
+                        chunk: number(&native, 0)? as u16,
+                        offset: number(&native, 1)? as u32,
+                        length: number(&native, 2)? as u32,
+                    })
+                },
                 page: number(&fields, 2)? as u16,
                 x: number(&fields, 3)? as u16,
                 y: number(&fields, 4)? as u16,
@@ -191,7 +208,30 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Manifest, JsValue> {
     Ok(Manifest {
         version: number(&root, 0)? as u16,
         building_data: text(&root, 1)?,
+        terrains: Array::from(&root.get(5))
+            .iter()
+            .map(|value| {
+                let f = Array::from(&value);
+                Ok(aoe_assets::pack::TerrainSheet {
+                    id: number(&f, 0)? as u16,
+                    source: text(&f, 1)?,
+                    size: [number(&f, 2)? as u16, number(&f, 3)? as u16],
+                    period: [number(&f, 4)? as u16, number(&f, 5)? as u16],
+                })
+            })
+            .collect::<Result<Vec<_>, JsValue>>()?,
         pages,
+        chunks: Array::from(&root.get(4))
+            .iter()
+            .map(|value| {
+                let fields = Array::from(&value);
+                Ok(aoe_assets::pack::frame_chunks::FrameChunk {
+                    file: text(&fields, 0)?,
+                    hash: text(&fields, 1)?,
+                    bytes: number(&fields, 2)? as u32,
+                })
+            })
+            .collect::<Result<Vec<_>, JsValue>>()?,
         frames,
         buildings: Vec::new(),
         #[cfg(test)]

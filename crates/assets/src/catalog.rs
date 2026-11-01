@@ -22,10 +22,17 @@ pub const MAX_REVIEWED_FRAMES: u32 = 2_371;
 
 /// Buildings represented by the current gameplay protocol. Other DAT recipes
 /// remain available to offline tools without occupying the live match atlas.
-pub const GAMEPLAY_BUILDING_IDS: [i32; 39] = [
+pub const GAMEPLAY_BUILDING_IDS: [i32; 47] = [
     109, 70, 68, 562, 584, 50, 12, 72, 598, 45, 87, 101, 103, 84, 79, 792, 71, 463, 129, 563, 585,
-    498, 133, 82, 104, 209, 49, 141, 464, 564, 586, 130, 132, 47, 10, 86, 18, 116, 31,
+    498, 133, 82, 104, 209, 49, 141, 464, 564, 586, 130, 132, 47, 10, 86, 18, 116, 31, 605, 606,
+    607, 608, 609, 610, 117, 64,
 ];
+
+/// Resource, tree and scenery identities used by the gameplay scene.
+pub const ENVIRONMENT_UNIT_IDS: [i32; 15] = [
+    59, 66, 102, 349, 350, 351, 415, 623, 264, 69, 455, 456, 457, 458, 459,
+];
+pub const MAX_COMPOSITIONS: usize = GAMEPLAY_BUILDING_IDS.len() + ENVIRONMENT_UNIT_IDS.len();
 
 /// Paving and gravel are not mountain ground.
 pub const NATURAL_ROCK_FALLBACK: &str =

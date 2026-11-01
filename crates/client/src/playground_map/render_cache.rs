@@ -2,6 +2,68 @@ use super::{Client, scene::PreparedScene};
 use aoe_rendering::{SceneCamera, SceneResource, SceneUnit};
 use std::rc::Rc;
 
+/// Pixels that can represent each requested native layer during this turn.
+pub(crate) struct NativeCoverage<'a> {
+    covered: Vec<u32>,
+    substitutes: &'a [(u32, u32)],
+    pub(crate) keep: Vec<u32>,
+}
+fn resident(art: &aoe_rendering::GameArt, id: u32) -> bool {
+    id.checked_sub(1)
+        .and_then(|i| art.resident.get(i as usize))
+        .is_some_and(Option::is_some)
+}
+impl<'a> NativeCoverage<'a> {
+    pub(crate) fn new(art: &aoe_rendering::GameArt, substitutes: &'a [(u32, u32)]) -> Self {
+        let mut covered = Vec::new();
+        let mut cold = Vec::new();
+        let mut keep = Vec::new();
+        for &(requested, fallback) in substitutes {
+            if resident(art, fallback) {
+                covered.push(requested);
+                keep.push(fallback);
+            } else {
+                cold.push(requested);
+            }
+        }
+        for ids in [&mut covered, &mut cold, &mut keep] {
+            ids.sort_unstable();
+            ids.dedup();
+        }
+        covered.retain(|id| cold.binary_search(id).is_err());
+        Self {
+            covered,
+            substitutes,
+            keep,
+        }
+    }
+    pub(crate) fn prioritize(&self, required: &mut [u32]) {
+        // Stable two-way partition: no general comparison sort is needed for
+        // the binary cold/covered priority, and each group retains its order.
+        let mut warm = Vec::new();
+        let mut cold = 0;
+        for index in 0..required.len() {
+            let id = required[index];
+            if self.covered.binary_search(&id).is_ok() {
+                warm.push(id);
+            } else {
+                required[cold] = id;
+                cold += 1;
+            }
+        }
+        required[cold..].copy_from_slice(&warm);
+    }
+    pub(crate) fn ready(&self, art: &aoe_rendering::GameArt, required: &[u32]) -> bool {
+        required
+            .iter()
+            .all(|&id| resident(art, id) || self.covered.binary_search(&id).is_ok())
+            && self
+                .substitutes
+                .iter()
+                .all(|&(id, fallback)| resident(art, id) || resident(art, fallback))
+    }
+}
+
 struct RenderedFrame<S> {
     scene: Rc<S>,
     units: Vec<SceneUnit>,
@@ -13,11 +75,15 @@ struct RenderedFrame<S> {
 /// Remembers only the last successfully rendered, currently visible frame.
 pub(crate) struct RenderFrameCache<S> {
     previous: Option<RenderedFrame<S>>,
+    invalidated: bool,
 }
 
 impl<S> Default for RenderFrameCache<S> {
     fn default() -> Self {
-        Self { previous: None }
+        Self {
+            previous: None,
+            invalidated: false,
+        }
     }
 }
 
@@ -43,6 +109,11 @@ impl<S> RenderFrameCache<S> {
 
     pub(crate) fn clear(&mut self) {
         self.previous = None;
+        self.invalidated = false;
+    }
+
+    pub(crate) fn invalidate(&mut self) {
+        self.invalidated = true;
     }
 
     fn needs_render(
@@ -55,6 +126,9 @@ impl<S> RenderFrameCache<S> {
         animation: usize,
         camera: SceneCamera,
     ) -> bool {
+        if self.invalidated {
+            return true;
+        }
         let Some(previous) = &self.previous else {
             return true;
         };
@@ -86,6 +160,7 @@ impl<S> RenderFrameCache<S> {
         animation: usize,
         camera: SceneCamera,
     ) {
+        self.invalidated = false;
         self.previous = Some(RenderedFrame {
             scene: scene.clone(),
             units: units

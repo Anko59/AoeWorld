@@ -6,19 +6,24 @@ pub(super) fn sprite_direction(facing: u8) -> (usize, bool) {
     (row, matches!(facing, 1..=3))
 }
 
-pub(super) fn unit_direction(unit: SceneUnit) -> (usize, bool) {
+pub(super) fn unit_direction(unit: SceneUnit, rows: usize) -> (usize, bool) {
     if unit.kind == SceneUnitKind::Stone {
         return (0, false);
     }
     if unit.kind.native_directions() {
         // DE starts east, clockwise; scene headings start south through east.
-        return (usize::from(unit.facing & 15), false);
+        return (usize::from(unit.facing & 15) * rows / 16, false);
     }
     sprite_direction(unit.facing)
 }
 
-pub(super) fn unit_frame_index(unit: SceneUnit, stride: usize, phase: usize) -> (usize, bool) {
-    let (direction, mirrored) = unit_direction(unit);
+pub(super) fn unit_frame_index(
+    unit: SceneUnit,
+    stride: usize,
+    phase: usize,
+    rows: usize,
+) -> (usize, bool) {
+    let (direction, mirrored) = unit_direction(unit, rows);
     (direction * stride + phase % stride.max(1), mirrored)
 }
 

@@ -4,8 +4,90 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[path = "de_import/environment.rs"]
+mod environment;
 #[path = "de_import/fixture.rs"]
 mod fixture;
+
+#[test]
+fn real_all_unit_timelines_match_de_dat_and_complete_native_sld_cells() {
+    let Some(root) = std::env::var_os("AOE_DE_DIR") else {
+        return;
+    };
+    let root = Path::new(&root);
+    let dat = aoe_assets::dat::de_survey::inflate(
+        &fs::read(root.join("resources/_common/dat/empires2_x2_p1.dat")).unwrap(),
+    )
+    .unwrap();
+    let units = aoe_assets::dat::de_units::find(&dat, &[4, 24, 7, 6]).unwrap();
+    use aoe_assets::catalog::units::{Pose, release_frame};
+    for (id, pose) in [
+        (4, Pose::ArcherAttack),
+        (24, Pose::CrossbowmanAttack),
+        (7, Pose::SkirmisherAttack),
+        (6, Pose::EliteSkirmisherAttack),
+    ] {
+        assert_eq!(
+            u8::try_from(units[&id].release).ok(),
+            release_frame(pose),
+            "DAT release frame for {id}"
+        );
+    }
+    let selected = de::unit_catalog::resolve(root).unwrap();
+    assert_eq!(selected.len(), 164);
+    let mut seen = std::collections::BTreeSet::new();
+    for g in selected {
+        let source = aoe_assets::catalog::units::SPRITES[g.pose];
+        assert_eq!(source.id, g.sprite);
+        assert_eq!(source.rows(), usize::from(g.angles));
+        assert_eq!(
+            u16::from(source.stride),
+            if g.terminal { 1 } else { g.frames }
+        );
+        assert_eq!(
+            source.frame_millis(),
+            if g.terminal {
+                0.0
+            } else {
+                f64::from(g.seconds) * 1000.0
+            }
+        );
+        for part in g.parts {
+            let a = part.animation;
+            if !seen.insert(a.file.clone()) {
+                continue;
+            }
+            let frames = aoe_assets::sld::parse(
+                &fs::read(
+                    root.join("resources/_common/drs/graphics")
+                        .join(format!("{}.sld", a.file)),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            assert!(
+                frames.len() >= usize::from(a.frames) * usize::from(a.angles),
+                "{}",
+                a.file
+            );
+            assert!(frames.iter().any(|f| f.main.is_some()), "{}", a.file);
+            if (130..135).contains(&g.pose) {
+                assert!(frames.iter().any(|f| f.player.is_some()));
+                for row in 0..usize::from(a.angles) {
+                    let start = row * usize::from(a.frames);
+                    assert!(
+                        frames[start..start + usize::from(a.frames)]
+                            .windows(2)
+                            .any(|w| w[0] != w[1]),
+                        "{} row {row}",
+                        a.file
+                    );
+                }
+            }
+        }
+    }
+    assert!(seen.len() > 140);
+}
 
 #[test]
 fn real_siege_stone_has_thirty_native_rotation_cells() {
@@ -60,10 +142,10 @@ fn dds() -> Vec<u8> {
     let mut bytes = vec![0u8; 128];
     bytes[..4].copy_from_slice(b"DDS ");
     bytes[4..8].copy_from_slice(&124u32.to_le_bytes());
-    bytes[12..16].copy_from_slice(&8u32.to_le_bytes());
-    bytes[16..20].copy_from_slice(&8u32.to_le_bytes());
+    bytes[12..16].copy_from_slice(&32u32.to_le_bytes());
+    bytes[16..20].copy_from_slice(&32u32.to_le_bytes());
     bytes[84..88].copy_from_slice(b"DXT1");
-    for _ in 0..4 {
+    for _ in 0..64 {
         bytes.extend_from_slice(&[0x00, 0xF8, 0x1F, 0x00, 0, 0, 0, 0]);
     }
     bytes
@@ -85,6 +167,26 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
 
     let report = de::import(Path::new("install"), Path::new("local-assets/packs")).expect("import");
     let manifest = pack::verify(&report.pack).expect("verify");
+    let native: Vec<_> = manifest
+        .frames
+        .iter()
+        .filter(|f| f.native.is_some())
+        .collect();
+    assert_eq!(
+        native.len(),
+        90_135,
+        "every native unit/stone source cell is chunked"
+    );
+    assert_eq!(
+        manifest.chunks.len(),
+        1,
+        "synthetic identical cells deduplicate"
+    );
+    assert_eq!(
+        manifest.pages.len(),
+        1,
+        "native timelines consume no PNG area"
+    );
     let house = manifest
         .frames
         .iter()
@@ -93,27 +195,34 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
     // Cropped to the 4x4 layer at (4,4); the anchor (2,3) moves by the crop.
     assert_eq!((house.width, house.height), (4, 4));
     assert_eq!((house.anchor_x, house.anchor_y), (-2, -1));
-    let page = &manifest.pages[usize::from(house.page)];
-    let mut decoder = png::Decoder::new(std::io::BufReader::new(
-        fs::File::open(report.pack.join(&page.player)).unwrap(),
-    ))
-    .read_info()
+    let location = house.native.expect("buildings are streamed");
+    let chunk = fs::read(
+        report
+            .pack
+            .join(&manifest.chunks[usize::from(location.chunk)].file),
+    )
     .unwrap();
-    let mut pixels = vec![0; decoder.output_buffer_size()];
-    decoder.next_frame(&mut pixels).unwrap();
-    let at = (usize::from(house.y) * usize::from(page.width) + usize::from(house.x)) * 4;
+    let planes = pack::compressed::decode_frame(
+        location.slice(&chunk).unwrap(),
+        [house.width, house.height],
+    )
+    .unwrap();
     assert_eq!(
-        &pixels[at..at + 4],
+        &planes[1][..4],
         &[1, 0, 0, 119],
-        "low player mask survives atlas serialization"
+        "low player mask survives lossless native serialization"
+    );
+    assert_eq!(
+        manifest.buildings.len(),
+        aoe_assets::catalog::MAX_COMPOSITIONS
     );
     let farm = manifest
         .frames
         .iter()
-        .find(|f| f.source == "de/g_fm1.dds")
+        .find(|f| f.source == "de/terrain/g_fm1.dds")
         .expect("farm");
-    assert_eq!((farm.width, farm.height), (4, 4));
-    assert_eq!(report.entries.len(), 7);
+    assert_eq!((farm.width, farm.height), (32, 32));
+    assert_eq!(report.entries.len(), 155);
     assert_eq!(
         manifest
             .frames
@@ -122,28 +231,40 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
             .count(),
         30
     );
-    for (role, count) in [
-        ("idle", 721),
-        ("walk", 481),
-        ("attack", 721),
-        ("death", 721),
-        ("decay", 481),
+    assert_eq!(
+        manifest
+            .frames
+            .iter()
+            .filter(|f| f.source
+                == aoe_assets::catalog::units::SPRITES
+                    [aoe_assets::catalog::units::Pose::MilitiaAttack as usize]
+                    .manifest_source())
+            .count(),
+        481
+    );
+    use aoe_assets::catalog::units::{Pose, SPRITES};
+    for pose in [
+        Pose::GeneralStand,
+        Pose::GeneralWalk,
+        Pose::GeneralAttack,
+        Pose::GeneralDie,
+        Pose::GeneralDecay,
     ] {
-        let source = format!("de/u_cav_hero_frankish_paladin_{role}A_x1.sld");
+        let source = SPRITES[pose as usize];
         assert_eq!(
             manifest
                 .frames
                 .iter()
-                .filter(|f| f.source == source)
+                .filter(|f| f.source == source.manifest_source())
                 .count(),
-            count
+            source.frames() as usize
         );
     }
     assert!(
         !report.absent.is_empty(),
         "other selections are reported absent"
     );
-    assert!(Path::new("local-assets/de-preview/b_dark_house_age1.png").is_file());
+
     let table = fs::read_to_string("local-assets/de-table.md").unwrap();
     assert!(table.contains("de/b_dark_house_age1_x1.sld"));
     // A second import is idempotent.
@@ -208,11 +329,18 @@ fn missing_native_hero_pose_is_rejected_before_pack_creation() {
     std::env::set_current_dir(temporary.path()).expect("enter tempdir");
     let _restore = CurrentDirectory(original);
     fixture::actors(Path::new("install"));
-    let file = "u_cav_hero_frankish_paladin_attackA_x1.sld";
-    fs::remove_file(Path::new("install/resources/_common/drs/graphics").join(file)).unwrap();
+    let graphic = aoe_assets::catalog::units::SPRITES
+        [aoe_assets::catalog::units::Pose::GeneralAttack as usize]
+        .id
+        - 200_000;
+    let file = format!("synthetic_{graphic}_x1.sld");
+    fs::remove_file(Path::new("install/resources/_common/drs/graphics").join(&file)).unwrap();
     let error = de::import(Path::new("install"), Path::new("local-assets/packs"))
         .expect_err("hero attack is required");
-    assert!(error.to_string().contains(file), "{error}");
+    assert!(
+        error.to_string().contains(file.trim_end_matches(".sld")),
+        "{error}"
+    );
     assert!(!Path::new("local-assets/packs").exists());
 }
 
@@ -255,4 +383,63 @@ fn real_house_decodes_with_plausible_dimensions() {
     assert!(!frames.is_empty());
     let main = frames[0].main.as_ref().expect("main layer");
     assert!((100..=300).contains(&main.width) && (60..=200).contains(&main.height));
+}
+
+#[test]
+fn real_de_building_catalog_retains_every_spawned_recipe() {
+    let Ok(root) = std::env::var("AOE_DE_DIR") else {
+        return;
+    };
+    let root = std::path::PathBuf::from(root);
+    let bytes = aoe_assets::dat::de_survey::inflate(
+        &std::fs::read(root.join("resources/_common/dat/empires2_x2_p1.dat")).unwrap(),
+    )
+    .unwrap();
+    let ids: Vec<_> = aoe_assets::catalog::GAMEPLAY_BUILDING_IDS
+        .iter()
+        .map(|&n| n as i16)
+        .collect();
+    let units = aoe_assets::dat::de_units::find(&bytes, &ids).unwrap();
+    for id in ids.into_iter().filter(|id| *id < 605 || *id > 610) {
+        assert!(units[&id].building.is_some(), "building {id}");
+    }
+    let catalog = de::buildings::resolve(&root).unwrap();
+    assert_eq!(catalog.recipes.len(), aoe_assets::catalog::MAX_COMPOSITIONS);
+    let mut counts = std::collections::BTreeMap::new();
+    for source in &catalog.sources {
+        let path = root
+            .join("resources/_common/drs/graphics")
+            .join(source.trim_start_matches("de/"));
+        let mut stream = aoe_assets::sld::Stream::new(fs::read(path).unwrap()).unwrap();
+        assert!(!stream.is_empty());
+        for i in 0..stream.len() {
+            stream.frame(i).unwrap();
+        }
+        counts.insert(source, stream.len());
+    }
+    for b in catalog
+        .recipes
+        .iter()
+        .filter(|b| aoe_assets::catalog::GAMEPLAY_BUILDING_IDS.contains(&b.unit_id))
+    {
+        for p in b
+            .parts
+            .iter()
+            .chain(&b.construction)
+            .chain(b.states.iter().flat_map(|s| &s.parts))
+            .chain(b.damage.iter().flat_map(|d| &d.parts))
+            .filter(|p| p.available)
+        {
+            assert!(
+                counts[&p.source] >= usize::from(p.frames) * usize::from(p.angles),
+                "{}",
+                p.source
+            );
+        }
+    }
+    eprintln!(
+        "BUILDING_INVENTORY sources={} cells={}",
+        counts.len(),
+        counts.values().sum::<usize>()
+    );
 }

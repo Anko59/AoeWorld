@@ -7,6 +7,7 @@ import { castleProof } from "./castle.js";
 import { generalProof } from "./general.js";
 import { generalAppearanceProof } from "./general-appearance.js";
 import { siegeProof } from "./siege.js";
+import { pressureProof } from "./pressure.js";
 import { centerVillage } from "../village/fixtures/resources.js";
 
 test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
@@ -32,6 +33,10 @@ test("local original panel proof with real selection and training", async ({
   expect(["8080", "8081", "8097"]).not.toContain(url.port);
   const health = await page.request.get(`${config.url}health`);
   expect(health.ok()).toBe(true);
+  if (config.phase.startsWith("pressure-")) {
+    await pressureProof(page, config.url, config.phase);
+    return;
+  }
   await page.setViewportSize({ width: 1280, height: 720 });
   if (config.renderer !== "webgpu") await forceWebGl(page);
   if (config.phase === "general") {

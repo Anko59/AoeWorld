@@ -18,7 +18,7 @@ mod shader_cost;
 #[path = "web/tests/species.rs"]
 mod species;
 #[path = "web/tests/terrain_blend.rs"]
-mod terrain_blend;
+pub(crate) mod terrain_blend;
 #[path = "web/tests/terrain_filter.rs"]
 mod terrain_filter;
 #[path = "web/tests/terrain_tiling.rs"]
