@@ -98,6 +98,24 @@ impl GameplayService {
             .await;
     }
 
+    pub async fn queue_general_move_alone(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        destination: WorldPosition,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::GeneralMoveAlone {
+                entity_id,
+                destination,
+            },
+        )
+        .await;
+    }
+
     pub async fn queue_hunt(
         &self,
         session_id: u64,

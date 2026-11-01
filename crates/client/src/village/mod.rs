@@ -35,6 +35,8 @@ pub(crate) struct Village {
     pub unload_cursor: bool,
     pub formation: aoe_core::Formation,
     pub attack_move: bool,
+    /// The next order walks the selected General alone (his army holds).
+    pub general_only: bool,
     pub hovered_resource: std::cell::Cell<Option<u64>>,
     pub focused: bool,
     pub placement: Option<aoe_protocol::BuildingKind>,

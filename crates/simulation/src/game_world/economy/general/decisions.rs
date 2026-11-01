@@ -24,6 +24,13 @@ impl GameWorld {
             .filter(|v| v.hp > 0 && !self.embarked(v.id))
             .collect();
         army.push(u);
+        // A solo General is the player's to move: orders go to the army alone.
+        let solo = self.economy.generals.armies[&u.id].solo;
+        let ordered: Vec<_> = army
+            .iter()
+            .copied()
+            .filter(|v| !solo || v.id != u.id)
+            .collect();
         let friendly: u64 = army
             .iter()
             .copied()
@@ -79,11 +86,14 @@ impl GameWorld {
             a.routed = None;
         }
         self.reconcile_general_stances(u.id, state, destination);
+        if ordered.is_empty() {
+            return;
+        }
         if state != GeneralState::Fighting {
             if let Some(to) = destination {
                 self.general_formation(
                     u.id,
-                    &army,
+                    &ordered,
                     to,
                     state == GeneralState::Retreating,
                     changed,
@@ -117,10 +127,10 @@ impl GameWorld {
             return;
         };
         a.routed = None;
-        let start = a.micro_after % army.len();
-        a.micro_after = (start + 16).min(start + army.len()) % army.len();
-        for n in 0..army.len().min(16) {
-            let v = army[(start + n) % army.len()];
+        let start = a.micro_after % ordered.len();
+        a.micro_after = (start + 16).min(start + ordered.len()) % ordered.len();
+        for n in 0..ordered.len().min(16) {
+            let v = ordered[(start + n) % ordered.len()];
             work.orders += 1;
             if v.hp * 3 < v.max_hp {
                 let home = self.economy.generals.armies[&u.id].home;

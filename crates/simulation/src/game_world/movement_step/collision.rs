@@ -147,6 +147,7 @@ impl GameWorld {
                             && (x * x + y * y > 2048 * 2048
                                 || self.free_work_approach(index, o.goal))
                     })));
+        let general_alone = unit.kind == UnitKind::General && self.units[index].formation.is_none();
         let work_squeeze = unit.kind == UnitKind::Villager
             && self.units[index].obstruction.is_some()
             && self.crowded_resource_approach(unit.id);
@@ -181,6 +182,11 @@ impl GameWorld {
                 }
 
                 if other.hp == 0 || (stationary && other.moving) {
+                    return false;
+                }
+                // His own army yields to a General the player walks alone;
+                // inside a march, the shared block already spaces everyone.
+                if general_alone && self.is_general_follower(other.id, unit.id) {
                     return false;
                 }
                 let r = if !soft && !work_squeeze && !unit.kind.is_naval() {

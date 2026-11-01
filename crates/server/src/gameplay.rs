@@ -169,6 +169,10 @@ enum PendingAction {
     Delete {
         entity_ids: Vec<EntityId>,
     },
+    GeneralMoveAlone {
+        entity_id: EntityId,
+        destination: WorldPosition,
+    },
     Hunt {
         unit_ids: Vec<EntityId>,
         animal_id: EntityId,

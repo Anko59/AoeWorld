@@ -35,3 +35,38 @@ async fn shared_pages_cannot_expand_the_match_command_storage_budget() {
         .count();
     assert_eq!(rejected, 53 * 20 - MAX_PENDING_COMMANDS_GLOBAL);
 }
+
+#[test]
+fn general_only_move_is_owner_checked_and_leaves_the_army_in_place() {
+    use aoe_core::PlayerId;
+    let (mut world, _) = aoe_simulation::GameWorld::default_with_village(Seed(7));
+    let at = |x: i32| WorldPosition::new(x * 1024 + 512, 100 * 1024 + 512);
+    let soldier = world
+        .spawn_kind(PlayerId(0), aoe_simulation::UnitKind::Militia, at(100))
+        .unwrap();
+    let general = world
+        .spawn_kind(PlayerId(0), aoe_simulation::UnitKind::General, at(102))
+        .unwrap();
+    let action = |entity_id| PendingAction::GeneralMoveAlone {
+        entity_id,
+        destination: at(140),
+    };
+    assert_eq!(
+        apply(&mut world, PlayerId(1), action(general)),
+        CommandResult::RejectedNotOwner
+    );
+    assert!(matches!(
+        apply(&mut world, PlayerId(0), action(soldier)),
+        CommandResult::RejectedWrongUnitKind
+    ));
+    assert_eq!(
+        apply(&mut world, PlayerId(0), action(general)),
+        CommandResult::Accepted
+    );
+    let start = world.unit(soldier).unwrap().position;
+    for _ in 0..300 {
+        world.advance();
+    }
+    assert_eq!(world.unit(soldier).unwrap().position, start);
+    assert!(world.unit(general).unwrap().position.x > 120 * 1024);
+}
