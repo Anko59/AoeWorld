@@ -83,13 +83,12 @@ impl GameWorld {
             self.units()
                 .filter(|unit| unit.player == player)
                 .count()
-                .min(u16::MAX as usize) as u16
+                .min(u32::MAX as usize) as u32
         };
         self.economy.players.entry(player).or_insert(PlayerEconomy {
             player,
             stockpile: Stockpile::default(),
             population_used,
-            population_cap: 0,
             age: crate::Age::Dark,
             researched: 0,
             market_prices: MarketPrices::default(),
@@ -154,7 +153,6 @@ impl GameWorld {
         if complete && matches!(kind, BuildingKind::Castle | BuildingKind::WatchTower) {
             self.combat.tower_ready.insert(id, 0);
         }
-        self.refresh_population_cap(player);
         self.index_new_building(id, player, footprint);
         if complete {
             if matches!(kind, BuildingKind::WatchTower | BuildingKind::Castle) {

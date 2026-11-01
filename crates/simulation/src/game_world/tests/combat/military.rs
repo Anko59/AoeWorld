@@ -14,7 +14,6 @@ pub(super) fn feudal(w: &mut GameWorld) {
                 stone: 10000,
             },
             population_used: 0,
-            population_cap: 200,
             age: Age::Feudal,
             researched: Tech::FeudalAge.bit(),
             market_prices: crate::MarketPrices::default(),
@@ -322,11 +321,6 @@ fn production_queues_pay_refund_train_and_enforce_age_and_roster() {
         let site = w
             .insert_building(PlayerId(0), building, rect, true)
             .unwrap();
-        w.economy
-            .players
-            .get_mut(&PlayerId(0))
-            .unwrap()
-            .population_cap = 200;
         for &kind in kinds {
             let before = w.player_economy(PlayerId(0)).unwrap().stockpile;
             w.issue_train(PlayerId(0), site, kind).unwrap();

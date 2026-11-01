@@ -345,7 +345,6 @@ fn worker_player(world: &mut GameWorld, researched: u64) {
             player: PlayerId(0),
             stockpile: crate::Stockpile::default(),
             population_used: 1,
-            population_cap: 5,
             age: Age::Feudal,
             researched: researched | Tech::FeudalAge.bit(),
             market_prices: crate::MarketPrices::default(),

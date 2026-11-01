@@ -24,7 +24,7 @@ function uint(value: number): number[] {
   return bytes;
 }
 
-/** Presentation fixture only: five villagers exceed the current starting cap. */
+/** Presentation fixture with five villagers and a scout. */
 export async function fiveVillagerFixture(
   page: Page,
   observe?: (bytes: Buffer, socket: WebSocketRoute) => void,
@@ -109,7 +109,6 @@ export async function fiveVillagerFixture(
           100,
           ...uint(200),
           6,
-          10,
           ...(feudal ? feudalAgeState : darkAgeState),
           ...marketPrices,
           1,

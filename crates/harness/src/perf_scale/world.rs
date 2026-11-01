@@ -87,7 +87,6 @@ pub(super) fn build(params: &Params) -> Result<Built, BoxError> {
         hunters: 1 << 20,
         animals: 1 << 20,
         projectiles: 1 << 20,
-        population: 2_000,
     });
     timings.insert("world_new_s", started.elapsed().as_secs_f64());
 

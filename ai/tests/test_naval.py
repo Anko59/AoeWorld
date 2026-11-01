@@ -13,7 +13,7 @@ def river_world(units=None, docks=(), nodes=None, tick=100):
     villagers, buildings = base(4)
     world = FakeWorld(
         villagers if units is None else units, buildings + list(docks),
-        eco=economy(food=500, wood=1000, gold=500, population=5, cap=30, age=Age.FEUDAL),
+        eco=economy(food=500, wood=1000, gold=500, population=5, age=Age.FEUDAL),
         nodes=[node(700, ResourceKind.FOOD, (56, 52)),
                node(701, ResourceKind.FOOD, (59, 52))] if nodes is None else nodes,
         tick=tick,
@@ -76,7 +76,9 @@ def test_dock_starts_with_one_fishing_ship_and_waits_for_its_order():
     manager = naval()
     dock = building(600, BuildingKind.DOCK, tile=(55, 50))
     board = Blackboard()
-    ctx = context(river_world(docks=[dock]), board)
+    world = river_world(docks=[dock])
+    world.economy.population = 6_000
+    ctx = context(world, board)
     manager.step(ctx)
     assert ctx.client.named("train") == [(600, UnitKind.FISHING_SHIP)]
     later = context(river_world(docks=[dock], tick=110), board)
@@ -112,7 +114,7 @@ def test_castle_age_keeps_feudal_capabilities_and_galley_production():
     dock = building(600, BuildingKind.DOCK, tile=(55, 50))
     world = river_world(units=[fishing], docks=[dock])
     world.economy = economy(food=500, wood=1000, gold=500, population=5,
-                            cap=30, age=Age.CASTLE)
+                            age=Age.CASTLE)
     ctx = context(world)
     assert ctx.feudal, "Castle Age retains access to Feudal military and research"
     naval().step(ctx)
@@ -126,7 +128,7 @@ def test_upgraded_war_galleys_still_fill_the_two_ship_fleet_limit():
     dock = building(600, BuildingKind.DOCK, tile=(55, 50))
     world = river_world(units=[fishing] + galleys, docks=[dock])
     world.economy = economy(food=500, wood=1000, gold=500, population=5,
-                            cap=30, age=Age.CASTLE)
+                            age=Age.CASTLE)
     ctx = context(world)
     naval().step(ctx)
     assert ctx.client.named("train") == [], "upgrading retains the small fleet cap"

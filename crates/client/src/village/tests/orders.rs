@@ -65,7 +65,6 @@ fn economy_refusals_explain_food_population_ownership_and_exhaustion() {
     use aoe_protocol::CommandResult::*;
     for (result, words) in [
         (RejectedInsufficientFood, "not enough food"),
-        (RejectedPopulationCap, "population limit"),
         (RejectedVassalLeash, "100 tiles"),
         (RejectedVassalHome, "home Castle"),
         (RejectedVassalExists, "already has a Vassal"),

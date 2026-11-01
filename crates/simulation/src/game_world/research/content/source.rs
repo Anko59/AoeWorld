@@ -24,7 +24,6 @@ pub fn browser_content() -> Vec<i32> {
             r.trainable.iter().fold(0, |m, k| m | (1 << *k as u8)),
             i32::from(r.blocks),
             i32::from(r.max_hp),
-            i32::from(r.population_support),
         ]);
     }
     for r in crate::TECH_RULES {

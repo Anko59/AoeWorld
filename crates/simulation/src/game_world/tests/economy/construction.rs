@@ -80,8 +80,8 @@ fn a_house_takes_twenty_five_seconds_with_one_builder() {
     assert_eq!((house.progress_permille(), house.hp), (1000, 550));
     assert_eq!(world.unit(builder).unwrap().task, UnitTask::Idle);
     assert_eq!(
-        world.player_economy(PlayerId(0)).unwrap().population_cap,
-        10
+        world.player_economy(PlayerId(0)).unwrap().population_used,
+        5
     );
 }
 
@@ -215,8 +215,9 @@ fn a_move_order_abandons_construction_and_the_foundation_stays() {
     assert!(world.building(id).unwrap().progress_permille() > progress);
     finish(&mut world, id, 700);
     assert_eq!(
-        world.player_economy(PlayerId(0)).unwrap().population_cap,
-        10
+        world.player_economy(PlayerId(0)).unwrap().population_used,
+        6,
+        "four starting units and both builders remain alive"
     );
 }
 

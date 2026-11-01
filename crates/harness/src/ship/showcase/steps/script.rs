@@ -14,7 +14,7 @@ const IN_GAME: &str = "body[data-start-state=\"game\"]";
 const CHUNKS: &str = "#scene[data-chunks-pending=\"0\"]";
 const RASTER: &str = "#minimap[data-raster=\"ready\"]";
 const SELECTED: &str = "#selection:not([data-count=\"0\"])";
-const HUD: &str = "#population:text-matches(\"^[0-9]+/[0-9]+$\")";
+const HUD: &str = "#population:text-matches(\"^[0-9]+$\")";
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

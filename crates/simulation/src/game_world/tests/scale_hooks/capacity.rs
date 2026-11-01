@@ -18,7 +18,7 @@ fn match_world() -> GameWorld {
     let config = WorldConfig::new(WIDTH, WIDTH, Seed(0)).expect("config");
     let mut world = GameWorld::new(config).expect("world");
     world.terrain = super::super::far_orders::prepared_terrain(vec![0; 4], vec![BARREN; 4]);
-    world.set_limits(WorldLimits::for_match(usize::from(SEATS), MAX_POPULATION));
+    world.set_limits(WorldLimits::for_match(usize::from(SEATS)));
     world
 }
 
@@ -161,15 +161,14 @@ fn a_full_world_refuses_as_a_world_limit() {
 }
 
 #[test]
-fn match_limits_cover_every_seat_at_its_population() {
-    let limits = WorldLimits::for_match(100, MAX_POPULATION);
-    assert_eq!(MAX_POPULATION, 1_000);
-    assert_eq!(limits.buildings, 100 * 5_120);
-    assert_eq!(limits.gatherers, 100 * 1_000);
-    assert_eq!(limits.builders, 100 * 1_000);
-    assert_eq!(limits.hunters, 100 * 1_000);
+fn match_limits_provide_bounded_storage_for_every_seat() {
+    let limits = WorldLimits::for_match(100);
+    assert_eq!(limits.buildings, 100 * 8_192);
+    assert_eq!(limits.gatherers, 100 * 65_536);
+    assert_eq!(limits.builders, 100 * 65_536);
+    assert_eq!(limits.hunters, 100 * 65_536);
     assert_eq!(limits.animals, 100 * crate::ANIMALS_PER_PLAYER);
     // The overlay's collision ceiling holds every building of the largest world.
-    let largest = WorldLimits::for_match(crate::game_world::economy::MAX_ECONOMY_PLAYERS, 5_000);
+    let largest = WorldLimits::for_match(crate::game_world::economy::MAX_ECONOMY_PLAYERS);
     assert!(largest.buildings as u64 * 16 <= aoe_map::MAX_OBSTACLE_TILES);
 }

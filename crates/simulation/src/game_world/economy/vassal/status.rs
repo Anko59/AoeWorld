@@ -15,8 +15,6 @@ pub enum VassalWait {
     Full,
     /// No complete Town Center lies inside this Vassal's territory.
     NoTownCenter,
-    /// The player's population cap is reached; a House is wanted.
-    Population,
     /// Not enough food for the next villager.
     Food,
 }

@@ -12,7 +12,6 @@ fn player() -> GameplayPlayerState {
             stone: 200,
         },
         population_used: 4,
-        population_cap: 5,
         age: aoe_protocol::Age::Dark,
         researched: 0,
         market_prices: aoe_protocol::MarketPrices::default(),
@@ -281,14 +280,4 @@ fn inconsistent_building_state_is_rejected() {
         assert!(encode_gameplay_server(&message).is_err());
         assert!(decode_gameplay_server(&postcard::to_allocvec(&message).unwrap()).is_err());
     }
-    let mut player = player();
-    player.population_cap = MAX_MATCH_POPULATION + 1;
-    let message = GameplayServerMessage::Snapshot {
-        revision: 1,
-        tick: Tick(0),
-        units: vec![],
-        players: vec![player],
-        buildings: vec![],
-    };
-    assert!(encode_gameplay_server(&message).is_err());
 }

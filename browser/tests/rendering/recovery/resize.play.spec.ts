@@ -12,7 +12,7 @@ test("minimap reports the camera used by a 100 ms pan frame", async ({
   await gameAssets(page, true);
   await fiveVillagerFixture(page);
   await page.goto("/?play=1#x=8192&y=8192&zoom=1");
-  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(page.locator("#population")).toHaveText("6");
   await expect(page.locator("#playground")).toHaveAttribute(
     "data-renderer",
     "webgl2",

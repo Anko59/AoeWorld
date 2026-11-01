@@ -133,7 +133,6 @@ async fn match_summary_reports_each_seat_and_live_economy_without_tokens() {
         assert_eq!(player["status"], "alive");
         assert_eq!(player["age"], "Dark");
         assert_eq!(player["population"], 4);
-        assert_eq!(player["pop_cap"], 5);
         assert_eq!(player["units"]["Villager"], 3);
         assert_eq!(player["units"]["Scout"], 1);
         assert_eq!(player["buildings"]["TownCenter"], 1);

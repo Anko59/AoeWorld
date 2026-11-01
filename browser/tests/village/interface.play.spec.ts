@@ -8,6 +8,8 @@ import {
   scoutVillage,
 } from "./fixtures/resources.js";
 
+test.use({ video: "on" });
+
 type Actor = { id: number; kind: string; x: number; y: number };
 async function actors(page: Page): Promise<Actor[]> {
   return JSON.parse(
@@ -30,7 +32,7 @@ async function start(page: Page) {
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 30_000,
   });
-  await expect(page.locator("#population")).toHaveText("4/5");
+  await expect(page.locator("#population")).toHaveText("4");
   await centerVillage(page);
 }
 
@@ -49,7 +51,7 @@ test("server stockpile and population; Q queues and cancels a villager", async (
       String(amount),
     );
   }
-  await expect(page.locator("#population")).toHaveText("4/5");
+  await expect(page.locator("#population")).toHaveText("4");
   await clickActor(page, "TownCenter");
   await expect(page.locator("#selection-name")).toHaveText("Town Center");
   await expect(
@@ -126,19 +128,16 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
   await centerVillage(page, true);
   await page.keyboard.press("q");
   await expect(page.locator("#stockpile-food")).toHaveText("150");
-  await expect(page.locator("#population")).toHaveText("5/5", {
+  await expect(page.locator("#population")).toHaveText("5", {
     timeout: 32_000,
   });
   await page.keyboard.press("q");
-  // Orders beyond the cap are now prepaid and queued, then wait for housing.
-  // The training panel explains the wait without reporting a connection error.
+  // A second real unit completes without adding a House.
   await expect(page.locator("#stockpile-food")).toHaveText("100");
-  await expect(page.locator("#training-label")).toContainText(
-    "Waiting for housing",
-  );
-  await expect(page.locator("#selection-task")).toHaveText(
-    "Waiting for housing",
-  );
+  await expect(page.locator("#population")).toHaveText("6", {
+    timeout: 32_000,
+  });
+  await expect(page.locator("#training-progress")).toBeHidden();
   await expect(page.locator("#connection")).toHaveText("connected");
 
   await expect

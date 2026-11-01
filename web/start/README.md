@@ -48,7 +48,7 @@ errors, reload resume, capture hooks and both requested desktop sizes. Their scr
 are written to `.cache/start-shots/`.
 
 **Opponents** sets 0 to 99 AI players (default 7, saved in session storage),
-each with the standard start and the default population cap. A server
+each with the standard start and uncapped population. A server
 without an AI host (`AOE_AI_COMMAND`; `make dev` sets it) disables the
 setting, and the game is played alone. With opponents, once the map job has
 completed `web/start/skirmish.js` asks the server for the match

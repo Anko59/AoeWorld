@@ -109,7 +109,6 @@ fn castle_age_enables_war_galley_and_upgrades_existing_queued_and_future_ships()
         gold: 10_000,
         stone: 0,
     };
-    player.population_cap = 200;
     player.age = Age::Feudal;
     player.researched |= Tech::FeudalAge.bit();
     assert_eq!(

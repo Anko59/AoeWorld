@@ -13,6 +13,5 @@ fn town_center_construction_rules_are_exposed_to_bots() {
         (0, 275, 0, 100)
     );
     assert_eq!(rules::building_build_seconds(BuildingKind::TownCenter), 150);
-    assert_eq!(rules::building_population(BuildingKind::TownCenter), 5);
     assert_eq!(rules::building_requires(BuildingKind::TownCenter), None);
 }

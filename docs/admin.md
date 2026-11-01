@@ -40,7 +40,7 @@ rather than downloading the entire map.
 - `tick`, `fog_disabled`, and `players` sorted by player id.
 - Each player's `id`, `kind` (`human` or `ai`, from its seat), `status` (`alive`
   if any living unit or building remains, otherwise `eliminated`), and `age`.
-- `population` (living units), `pop_cap`, counts by kind in `units` and
+- `population` (living units), counts by kind in `units` and
   `buildings` (including foundations, excluding corpses), and `resources`
   (`food`, `wood`, `gold`, `stone`).
 - `town_centers`, and `army` with `size` and `centroid` (`null` for no army).

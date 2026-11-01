@@ -126,7 +126,6 @@ fn player(researched: u64, age: aoe_protocol::Age) -> GameplayPlayerState {
             stone: 200,
         },
         population_used: 4,
-        population_cap: 5,
         age,
         researched,
         market_prices: MarketPrices::default(),
@@ -179,7 +178,7 @@ fn the_slot_learns_who_it_is_from_its_snapshot() {
     assert!(world.ready());
     assert_eq!(world.my_units(None).len(), 2);
     assert_eq!(world.my_units(Some(UnitKind::Villager)).len(), 1);
-    assert_eq!(world.economy().unwrap().free_population(), 1);
+    assert_eq!(world.economy().unwrap().population(), 4);
     assert_eq!(world.map_size(), (200, 200));
     assert_eq!(world.world_id(), 11);
 }

@@ -8,7 +8,7 @@ from test_logic import play
 def frontier_world(tick):
     units, buildings = base(12)
     world = FakeWorld(units + [unit(200, UnitKind.SCOUT, tile=(50, 50))], buildings,
-                      tick=tick, eco=economy(population=14, cap=30))
+                      tick=tick, eco=economy(population=14))
     world.land_route = lambda x, y, tx, ty: None if (tx, ty) == (200, 50) else [(x, y), (tx, ty)]
     world.land_frontier = lambda *args: (70, 50)
     return world
@@ -43,7 +43,7 @@ def test_engaging_soldiers_are_not_recalled_to_exploration_in_the_same_decision(
     army = [unit(300+i, UnitKind.SPEARMAN, tile=(150, 150)) for i in range(14)]
     foe = unit(900, UnitKind.SPEARMAN, tile=(153, 150), mine=False)
     _, client = play(FakeWorld(units + army, buildings, enemies=[foe],
-                               eco=economy(population=27, cap=40)))
+                               eco=economy(population=27)))
     assert [a for a in client.named("attack") if a[0] >= 300]
     assert [a for a in client.named("move") if a[0] >= 300] == []
 
@@ -52,7 +52,7 @@ def test_far_rally_uses_short_land_hops_and_keeps_a_pause():
     units, buildings = base(12)
     army = [unit(300, UnitKind.SPEARMAN, tile=(200, 55))]
     world = lambda tick: FakeWorld(units + army, buildings, tick=tick,
-                                   eco=economy(population=14, cap=30))
+                                   eco=economy(population=14))
     brain, client = play(world(100))
     moves = [a for a in client.named("move") if a[0] == 300]
     assert len(moves) == 1

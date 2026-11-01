@@ -120,7 +120,7 @@ async fn economy_updates_reach_both_pages_and_resync_is_complete() {
         .queue_train(id, 2, buildings[0].id, UnitKind::Villager)
         .await;
     service.tick().await;
-    // The current prepaid queue accepts beyond housing capacity. Resync must
+    // The producer accepts another prepaid unit. Resync must
     // include both paid entries, rather than the former population rejection.
     assert!(drain(&mut controller).iter().any(|message| matches!(
         message,

@@ -261,8 +261,7 @@ pub struct Economy {
     pub wood: u32,
     pub gold: u32,
     pub stone: u32,
-    pub population: u16,
-    pub population_cap: u16,
+    pub population: u32,
     pub age: Age,
     pub researched: Vec<Tech>,
     /// Gold per 100 units at the Market.
@@ -273,10 +272,6 @@ pub struct Economy {
 
 #[pymethods]
 impl Economy {
-    #[getter]
-    fn free_population(&self) -> u16 {
-        self.population_cap.saturating_sub(self.population)
-    }
     fn has_researched(&self, tech: Tech) -> bool {
         self.researched.contains(&tech)
     }
@@ -287,13 +282,12 @@ impl Economy {
     }
     fn __repr__(&self) -> String {
         format!(
-            "Economy(food={}, wood={}, gold={}, stone={}, pop={}/{}, {:?})",
+            "Economy(food={}, wood={}, gold={}, stone={}, pop={}, {:?})",
             self.food,
             self.wood,
             self.gold,
             self.stone,
             self.population,
-            self.population_cap,
             self.age
         )
     }
@@ -309,7 +303,6 @@ impl From<aoe_sdk::Economy> for Economy {
             gold: s.gold,
             stone: s.stone,
             population: economy.population(),
-            population_cap: economy.population_cap(),
             age: economy.age().into(),
             researched: aoe_sdk::Tech::ALL
                 .into_iter()

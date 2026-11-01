@@ -99,7 +99,6 @@ export async function workerFixture(
           100,
           ...uint(200),
           feudal ? 4 : 3,
-          5,
           ...(feudal ? wheelbarrowAgeState : darkAgeState),
           ...marketPrices,
           0,

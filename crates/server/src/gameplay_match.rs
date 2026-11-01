@@ -40,8 +40,8 @@ impl GameplayService {
         .map(|(service, _)| service)
     }
 
-    /// `from_match` under `rules`: the population ceiling (with the world
-    /// capacities that grow with it) and the start units of every seat.
+    /// `from_match` under `rules`: extra start units for every seat and
+    /// independent per-seat world storage budgets.
     /// Also returns how many start units were placed; `placed` counts the
     /// villages settled so far (a loading screen's progress).
     pub fn from_match_rules(
@@ -165,9 +165,6 @@ pub(crate) struct MatchRequest {
     /// A flat synthetic ground (see `flat.rs`), the usual place for AI tests.
     flat: Option<flat::FlatMap>,
     slots: Vec<SlotKind>,
-    /// The most population any player may reach (5 to 5,000, default 1000).
-    /// World capacities for buildings and workers grow in proportion.
-    population_cap: Option<u16>,
     /// Extra villagers and militia every player starts with.
     start_units: Option<StartUnits>,
     /// Seeds the village layout (which slot starts where). Omitted: a fresh
@@ -191,7 +188,6 @@ pub(crate) struct MatchResponse {
     world_id: u64,
     content_hash: String,
     tiles_per_side: u64,
-    population_cap: u16,
     /// Units placed by `start_units`, beyond the standard start kit.
     seeded_units: u64,
     /// Villages whose starting kit could not be placed in full (0 when every
@@ -238,7 +234,7 @@ async fn start_match(
     Json(request): Json<MatchRequest>,
 ) -> Result<Json<MatchResponse>, (StatusCode, String)> {
     authorize(&state, &headers)?;
-    let rules = MatchRules::new(request.population_cap, request.start_units)
+    let rules = MatchRules::new(request.start_units)
         .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
     let seed = request.seed.unwrap_or_else(fresh_seed);
     let rules = rules.with_seed(seed);
@@ -356,7 +352,6 @@ async fn start_match(
         world_id,
         content_hash: summary_hash,
         tiles_per_side: tiles,
-        population_cap: rules.population_cap,
         seeded_units,
         partial_starting_kits,
         seed,

@@ -20,11 +20,6 @@ pub const MAX_ECONOMY_BUILDINGS: usize = 16_384;
 pub const MAX_RETAINED_BUILDINGS: usize = MAX_ECONOMY_PLAYERS * 8_192;
 /// Villagers one build order may name.
 pub const MAX_BUILD_GROUP: usize = 32;
-/// The population ceiling, however many houses stand.
-pub const MAX_POPULATION: u16 = 1_000;
-/// The most a match rule may raise the population ceiling to; a wire state
-/// above it is invalid.
-pub const MAX_MATCH_POPULATION: u16 = 5_000;
 pub const MAX_TRAINING_QUEUE: usize = 15;
 
 /// A Market commodity; wood, food and stone trade for gold.
@@ -115,8 +110,9 @@ pub struct Stockpile {
 pub struct GameplayPlayerState {
     pub player: PlayerId,
     pub stockpile: Stockpile,
-    pub population_used: u16,
-    pub population_cap: u16,
+    /// A count, with no gameplay ceiling. Storage is bounded by frame and
+    /// retained-entity limits, independently of this scalar.
+    pub population_used: u32,
     pub age: Age,
     /// Bit `1 << tech as u8` is set once researched.
     pub researched: u64,

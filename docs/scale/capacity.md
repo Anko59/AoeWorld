@@ -1,11 +1,10 @@
 # World capacities at 100 players
 
 Every fixed bound in the simulation, map, server and protocol that a match of
-100 seats at population cap 1000 (about 100,000 units, France 16,000 x 16,000
-tiles) can reach in play, whether it is per world or per seat, and what happens
-when it is reached. Sizes are set in `WorldLimits::for_match(seats, population)`
+100 seats (France 16,000 x 16,000 tiles) can reach in play, whether it is per world or per seat, and what happens
+when it is reached. Sizes are set in `WorldLimits::for_match(seats)`
 (`crates/simulation/src/game_world/economy/limits/mod.rs`); the match creation passes the
-slot count and the population cap.
+slot count. Training has no gameplay population ceiling.
 
 ## The playtest failure
 
@@ -40,17 +39,17 @@ limit (it is not a bad site) and stops placing buildings for
 
 ## Simulation and map
 
-"Reached?" describes storage headroom for 100 seats, cap 1000; it is not a runtime qualification.
+"Reached?" describes storage headroom for 100 seats; it is not a runtime qualification.
 
 | Capacity | Before | Now | Scope | When reached | Reached? |
 |---|---|---|---|---|---|
-| Buildings (each wall segment is one) | 4,096 | 1,024 x cap/200 per seat (at most 8,192): 512,000 at cap 1000 | world, sized per seat | `Capacity` on build, wall, Town Center | no: a walled Feudal village is ~135 |
+| Buildings (each wall segment is one) | 4,096 | 8,192 per seat: 819,200 at 100 seats | world, sized per seat | `Capacity` on build, wall, Town Center | no: a walled Feudal village is ~135 |
 | Building collision tiles (`MAX_OBSTACLE_TILES`) | 4,096 | 2^24; buildings x 16 bound it | world | `Capacity` on build; a gate stays open | no |
-| Gatherers | 8,192 | seats x population: 100,000 | world | `Capacity` on gather/farm | no: one per unit |
-| Builders | 2,048 | seats x population | world | `Capacity` | no |
-| Hunters | 2,048 | seats x population | world | `Capacity` | no |
+| Gatherers | 8,192 | seats x 65,536: 6,553,600 | world | `Capacity` on gather/farm | no: one per unit |
+| Builders | 2,048 | seats x 65,536 | world | `Capacity` | no |
+| Hunters | 2,048 | seats x 65,536 | world | `Capacity` | no |
 | Animals | 4,096 | 32 per seat: 3,200 | world | `Capacity`; start kit skips | no: 15 per village, no respawn |
-| Projectiles in flight | 4,096 literal | seats x population | world | shot not launched (silent) | no: a shot lands before the next |
+| Projectiles in flight | 4,096 literal | seats x 65,536 | world | shot not launched (silent) | no: a shot lands before the next |
 | Resource overlay changes (every depleted node, kept forever) | 65,536 | 2^20 (~24 MiB) | world | gatherer earns nothing and retries (silent) | after ~50 h (65,536 lasted ~3.5 h at ~5 trees/s) |
 | Players | 128 | max(128, seats) | world | `Capacity` | no |
 | Entity ids | u32, never reused | same | world | `EntityIdExhausted` | no (~10^6 in hours) |
@@ -58,7 +57,7 @@ limit (it is not a bad site) and stops placing buildings for
 | Farms | none beyond buildings; spent farms removed | same | - | - | - |
 | Wall segments per order (`MAX_WALL_SEGMENTS`) | 64 | 64 | order | now `RejectedOrderTooLarge` | per order |
 | Builders per order (`MAX_BUILD_GROUP`) | 32 | 32 | order | now `RejectedOrderTooLarge` | per order |
-| Training queue | 5 | 5 | building | `RejectedTrainingQueueFull` | per building |
+| Training queue | 5 | 15 | building | `RejectedTrainingQueueFull` | per building |
 | Route work per tick (`MAX_ROUTE_WORK_PER_TICK`) | 16,384 | same | world, shared fairly per seat | orders wait (latency) | yes, by design |
 | Active route planners | 4,096 (64 per seat) | same | world | unit waits for a slot (latency) | can bind under heavy orders |
 | Active route searches | 256 (2 per seat) | same | world | waits; a stuck search ends `PathBudgetExceeded` | fits (200) |
@@ -70,8 +69,8 @@ limit (it is not a bad site) and stops placing buildings for
 | Capacity | Before | Now | Scope | When reached |
 |---|---|---|---|---|
 | Buildings in one message (`MAX_ECONOMY_BUILDINGS`) | 4,096 | 16,384 | message: own, seen and remembered buildings | remaining buildings arrive in bounded later deliveries |
-| Gameplay frame (`gameplay::MAX_MESSAGE`) | 1 MiB | 4 MiB (largest combined tick ~1.8 MiB) | message | encode fails |
-| Units in one message (`MAX_SUBSCRIBED_UNITS`) | 16,384 | same | message (subscribed region) | Error 413 instead of a tick |
+| Gameplay frame (`gameplay::MAX_MESSAGE`) | 1 MiB | 16 MiB | message | encode fails |
+| Units in one message (`MAX_SUBSCRIBED_UNITS`) | 16,384 | 65,536 | message (subscribed region) | Error 413 instead of a tick |
 | Projectiles in one message | 4,096 | same; the server sends the first 4,096 | message | trimmed (shown, never simulated, on the client) |
 | Animals in one message | 4,096 | same | message | cannot pass the world's 3,200 at 100 seats |
 | Resource changes in one message | 65,536 | same | message: under fog the viewer's known changes | larger snapshots use explicit offset/total pages |
@@ -89,27 +88,24 @@ the existing 65,536-entry wire bound. The browser assembles a complete snapshot
 atomically, and the server reserves all pages before queue publication. These
 are capacity/correctness bounds, not long-session performance qualification.
 
-## Population 1000
+## Uncapped population
 
-The shipped default is 1,000 per seat. Houses still support five and Castles
-twenty, capped by the match ceiling. Gatherers, builders, hunters and projectiles
-scale to 100,000 at 100 seats; buildings retain the 200-population provisioning
-ratio (5,120 per seat), rather than accidentally dividing by the new default.
-The 2^24 collision-tile bound covers 128 seats at the 8,192-building maximum.
-The 5,000 optional match ceiling and existing bounded wire deliveries remain.
-Own units (at most 1,000 under the default rules) fit the 16,384-unit message
-bound. A camera containing more than that many foreign units still receives
-the explicit 413 refusal; this cap change does not qualify such crowded views.
+Houses, Town Centers and Castles provide no population allowance. Only resource
+costs, producer queue length and free spawn space affect ordinary training.
+The living count is u32 throughout simulation, protocol, SDKs and HUD.
+Regression tests train beyond 6,000 units and count beyond 65,535.
 
-The capacity tests exercise housing through 1,000 and reservation of the last
-slot, plus the 100-seat storage arithmetic. The historical runs below used cap
-200; they do not demonstrate 100,000-unit RTS performance.
+Storage budgets are logical limits, not allocations or population rules.
+Wire deliveries retain a 65,536-unit and 16 MiB memory guard per message; a
+crowded view exceeding it receives an explicit 413. Startup requests allow
+65,532 extra units per seat, leaving room for the standard four-unit kit.
+These bounds do not prevent later training and do not qualify large RTS play.
+The 2^24 collision-tile bound covers 128 seats at 8,192 buildings per seat.
 
 ## Per-tick and per-order cost
 
 The capacities are bounds, not allocations: memory and tick cost follow what is
-actually built. Whole-world scans removed on the order path: housing on every
-placement, the build requirement check, and the builder and hunter capacity
+actually built. Whole-world scans removed on the order path: the build requirement check, and the builder and hunter capacity
 checks now read one player's buildings (the per-player, per-kind index) or the
 order's own group. `advance_training` visits only buildings with a queue.
 Training spawn occupancy and placement occupancy now use spatial buckets and

@@ -57,7 +57,7 @@ fn feudal_build_and_research_orders_and_age_rejection_have_appended_goldens() {
         applied_tick: Tick(2),
     };
     let bytes = encode_gameplay_server(&ack).unwrap();
-    assert_eq!(bytes, vec![3, 1, 28, 2]);
+    assert_eq!(bytes, vec![3, 1, 27, 2]);
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), ack);
 }
 
@@ -68,7 +68,6 @@ fn dark_players_cannot_claim_feudal_techs_and_wheelbarrow_loads_round_trip() {
         player: PlayerId(0),
         stockpile: Stockpile::default(),
         population_used: 1,
-        population_cap: 5,
         age: Age::Dark,
         researched: Tech::DoubleBitAxe.bit(),
         market_prices: aoe_protocol::MarketPrices::default(),

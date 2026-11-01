@@ -25,6 +25,28 @@ pub(super) fn pass(w: &mut GameWorld) {
 }
 
 #[test]
+fn a_vassal_trains_workers_without_waiting_for_more_housing() {
+    let (mut world, _, _) = active();
+    let center = world
+        .player_buildings_of(PlayerId(0), BuildingKind::TownCenter)
+        .next()
+        .unwrap()
+        .id;
+    while !world.building(center).unwrap().training_queue.is_empty() {
+        world.issue_cancel_training(PlayerId(0), center).unwrap();
+    }
+    for index in 0..25 {
+        let tile = TileCoord::new(120 + 2 * (index % 5), 120 + 2 * (index / 5));
+        world
+            .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(tile).unwrap())
+            .unwrap();
+    }
+    assert!(world.player_economy(PlayerId(0)).unwrap().population_used > 25);
+    pass(&mut world);
+    assert_eq!(world.building(center).unwrap().training_queue.len(), 1);
+}
+
+#[test]
 fn economy_waits_for_home_garrison_and_releases_control_on_ejection() {
     let (mut w, castle) = setup();
     let id = trained(&mut w, castle);
@@ -226,7 +248,7 @@ fn deterministic_manager_replays_orders_control_and_budget_counts() {
 fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
     let mut w = GameWorld::new(WorldConfig::new(4096, 4096, Seed(7)).unwrap()).unwrap();
     w.set_fog_disabled(true);
-    w.set_limits(crate::WorldLimits::for_match(100, 1_000));
+    w.set_limits(crate::WorldLimits::for_match(100));
     for seat in 0..100_u16 {
         let p = PlayerId(seat);
         let (x, y) = (

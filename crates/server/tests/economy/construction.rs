@@ -41,8 +41,7 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
     let mill_at = TileCoord::new(tc.max.x + 3, tc.min.y + 3);
     let farm_at = TileCoord::new(tc.max.x + 3, tc.min.y + 5);
 
-    let mut log =
-        vec!["village: town center, three villagers; wood 200, population cap 5".to_owned()];
+    let mut log = vec!["village: town center, three villagers; wood 200, population 4".to_owned()];
     let mut sequence = 0;
     let order = |sequence: &mut u64| {
         *sequence += 1;
@@ -59,7 +58,7 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
         )
         .await;
     let mut seen = std::collections::BTreeMap::<aoe_core::EntityId, GameplayBuildingState>::new();
-    let (mut cap, mut wood, mut food) = (5_u16, 200_u32, 200_u32);
+    let (mut population, mut wood, mut food) = (4_u32, 200_u32, 200_u32);
     let mut accepted = 0;
     let mut stage = 0;
     let mut farmer_seen = false;
@@ -101,12 +100,12 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
                         if p.player != PlayerId(0) {
                             continue;
                         }
-                        if p.population_cap != cap {
+                        if p.population_used != population {
                             log.push(format!(
-                                "tick {tick}: population cap {cap} -> {}",
-                                p.population_cap
+                                "tick {tick}: population {population} -> {}",
+                                p.population_used
                             ));
-                            cap = p.population_cap;
+                            population = p.population_used;
                         }
                         if p.stockpile.wood != wood {
                             log.push(format!("tick {tick}: wood {wood} -> {}", p.stockpile.wood));
@@ -188,7 +187,10 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
             break;
         }
     }
-    assert_eq!(cap, 10, "one completed house adds five housing");
+    assert_eq!(
+        population, 4,
+        "construction does not change the living population"
+    );
     assert!(farmer_seen, "the builder works the finished farm");
     assert!(food >= 210, "the farmer's food reaches the stockpile");
     assert!(insufficient, "a barracks is unaffordable");
@@ -202,7 +204,7 @@ async fn villagers_build_a_house_a_mill_and_a_farm_over_the_wire() {
         .unwrap();
     assert!(farm.food_remaining.unwrap() < 175);
     log.push(format!(
-        "scenario PASS: cap {cap}, wood {wood}, food {food}, farm food left {}",
+        "scenario PASS: population {population}, wood {wood}, food {food}, farm food left {}",
         farm.food_remaining.unwrap()
     ));
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/buildings");

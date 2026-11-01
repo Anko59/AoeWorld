@@ -215,7 +215,7 @@ pub(super) fn markdown(report: &Value) -> String {
     let mut text = format!(
         "## Latest run: {label}\n\n\
          Revision `{revision}`{dirty}, {players} players ({humans} human), {tiles} x {tiles} tiles \
-         ({map}), population cap {cap}, {minutes:.1} min of play, {hosts} Python host process(es).\n\n\
+         ({map}), {minutes:.1} min of play, {hosts} Python host process(es).\n\n\
          | | |\n|---|---|\n\
          | tick total p50 / p95 / p99 / max (ms) | {t50} / {t95} / {t99} / {tmax} |\n\
          | `advance` (simulation) p50 / p95 (ms) | {a50} / {a95} |\n\
@@ -240,7 +240,6 @@ pub(super) fn markdown(report: &Value) -> String {
         humans = config["humans"],
         tiles = config["tiles"],
         map = setup["map_kind"].as_str().unwrap_or("?"),
-        cap = config["population_cap"],
         minutes = run["wall_seconds"].as_f64().unwrap_or(0.0) / 60.0,
         hosts = config["hosts"],
         t50 = ms(tick, "p50_ms"),
