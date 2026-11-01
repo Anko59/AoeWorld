@@ -26,7 +26,6 @@ pub enum VassalWait {
     Census,
     Full,
     NoTownCenter,
-    Population,
     Food,
 }
 

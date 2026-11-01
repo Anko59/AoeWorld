@@ -1,6 +1,5 @@
 //! The scale-measurement hooks: capacity limits, the tick probe and the wildlife skip.
 use super::*;
-use crate::MAX_POPULATION;
 use crate::game_world::economy::MAX_ECONOMY_PLAYERS;
 use crate::{AnimalKind, AnimalTask, EconomyError, TickPhase, WorldLimits};
 
@@ -16,14 +15,12 @@ fn default_limits_equal_the_shipped_caps() {
         world().limits(),
         WorldLimits {
             players: MAX_ECONOMY_PLAYERS,
-            // Retain the 200-population provisioning ratio at the new 1000 cap.
-            buildings: MAX_ECONOMY_PLAYERS * crate::BUILDINGS_PER_PLAYER * 5,
-            gatherers: MAX_ECONOMY_PLAYERS * 1000,
-            builders: MAX_ECONOMY_PLAYERS * 1000,
-            hunters: MAX_ECONOMY_PLAYERS * 1000,
+            buildings: MAX_ECONOMY_PLAYERS * crate::BUILDINGS_PER_PLAYER,
+            gatherers: MAX_ECONOMY_PLAYERS * 65_536,
+            builders: MAX_ECONOMY_PLAYERS * 65_536,
+            hunters: MAX_ECONOMY_PLAYERS * 65_536,
             animals: MAX_ANIMALS,
-            projectiles: MAX_ECONOMY_PLAYERS * 1000,
-            population: MAX_POPULATION,
+            projectiles: MAX_ECONOMY_PLAYERS * 65_536,
         }
     );
     assert_eq!(WorldLimits::default(), world().limits());
@@ -148,36 +145,44 @@ fn wildlife_skip_counts_every_cell_and_pair_like_the_full_scan() {
 }
 
 #[test]
-fn the_population_ceiling_is_a_world_rule() {
+fn auxiliary_job_storage_limits_do_not_block_training() {
     let mut w = world();
     w.set_limits(WorldLimits {
-        population: 3,
+        gatherers: 0,
+        builders: 0,
+        hunters: 0,
         ..w.limits()
     });
-    w.place_town_center(PlayerId(0), TileCoord::new(20, 20))
+    let center = w
+        .place_town_center(PlayerId(0), TileCoord::new(20, 20))
         .unwrap();
-    // A Town Center supports 5, the default; this world's ceiling is 3.
-    assert_eq!(w.player_economy(PlayerId(0)).unwrap().population_cap, 3);
+    w.economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .stockpile
+        .food = 50;
+    w.issue_train(PlayerId(0), center, UnitKind::Villager)
+        .unwrap();
+    for _ in 0..500 {
+        w.advance();
+    }
+    assert_eq!(w.unit_count(), 1);
+    assert_eq!(w.player_economy(PlayerId(0)).unwrap().population_used, 1);
 }
 
 #[test]
-fn match_limits_grow_with_the_seats_and_the_ceiling() {
+fn match_storage_budgets_grow_with_the_seats() {
     let shipped = WorldLimits::default();
-    assert_eq!(
-        WorldLimits::for_match(MAX_ECONOMY_PLAYERS, MAX_POPULATION),
-        shipped
-    );
-    let small = WorldLimits::for_match(2, MAX_POPULATION);
-    assert_eq!(small, WorldLimits::for_match(16, MAX_POPULATION));
-    let low = WorldLimits::for_match(16, 100);
-    assert_eq!((low.population, low.buildings), (100, small.buildings));
-    let big = WorldLimits::for_match(200, 1_000);
+    assert_eq!(WorldLimits::for_match(MAX_ECONOMY_PLAYERS), shipped);
+    let small = WorldLimits::for_match(2);
+    assert_eq!(small, WorldLimits::for_match(16));
+    let big = WorldLimits::for_match(200);
     assert_eq!(big.players, 200);
-    assert_eq!(big.population, 1_000);
-    assert_eq!(big.buildings, 200 * crate::BUILDINGS_PER_PLAYER * 5);
-    assert_eq!(big.gatherers, 200 * 1_000);
-    assert_eq!(big.builders, 200 * 1_000);
-    assert_eq!(big.hunters, 200 * 1_000);
+    assert_eq!(big.buildings, 200 * crate::BUILDINGS_PER_PLAYER);
+    assert_eq!(big.gatherers, 200 * 65_536);
+    assert_eq!(big.builders, 200 * 65_536);
+    assert_eq!(big.hunters, 200 * 65_536);
     assert_eq!(big.animals, 200 * crate::ANIMALS_PER_PLAYER);
 }
 

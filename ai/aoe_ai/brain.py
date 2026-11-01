@@ -73,7 +73,6 @@ class Brain:
         # query budget. Queue spending follows the preparation priority below.
         self.military.rally(ctx)
         self.economy.produce(ctx)
-        self.constructor.houses(ctx)
         if (ctx.feudal and not ctx.castle
                 and buildorder.castle_requirement_kinds(ctx) < 2):
             self.constructor.production(ctx)

@@ -38,7 +38,7 @@ fn garrison_and_selective_or_all_ungarrison_have_current_golden_wire() {
         result: CommandResult::RejectedGarrisonFull,
         applied_tick: Tick(4),
     };
-    assert_eq!(encode_server(&ack).unwrap(), [3, 3, 34, 4]);
+    assert_eq!(encode_server(&ack).unwrap(), [3, 3, 33, 4]);
 }
 
 #[test]
@@ -52,9 +52,9 @@ fn vassal_training_and_specific_refusals_pin_the_current_wire() {
     assert_eq!(bytes, [5, 3, 9, 22]);
     assert_eq!(decode_client(&bytes).unwrap(), order);
     for (result, value) in [
-        (CommandResult::RejectedVassalExists, 35),
-        (CommandResult::RejectedVassalLeash, 36),
-        (CommandResult::RejectedVassalHome, 37),
+        (CommandResult::RejectedVassalExists, 34),
+        (CommandResult::RejectedVassalLeash, 35),
+        (CommandResult::RejectedVassalHome, 36),
     ] {
         let ack = ServerMessage::CommandAck {
             sequence: 3,
@@ -63,7 +63,7 @@ fn vassal_training_and_specific_refusals_pin_the_current_wire() {
         };
         assert_eq!(encode_server(&ack).unwrap(), [3, 3, value, 4]);
     }
-    assert_eq!(MAX_POPULATION, 1_000);
+    assert_eq!(MAX_SUBSCRIBED_UNITS, 65_536);
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn vassal_queue_and_garrison_roundtrip_and_other_buildings_reject_training() {
         vassal: Some(crate::VassalReport {
             managed: 20,
             residents: 31,
-            wait: crate::VassalWait::Population,
+            wait: crate::VassalWait::Food,
         }),
     });
     let snapshot = message(occupied);

@@ -256,7 +256,10 @@ stated.
 Measured in [gathering.md](gathering.md): drop-off index, chunked resource
 search and dirty collation list (hot spots 7 and 8).
 
-## Hard limits found in the code (independent of speed)
+## Hard limits at the measured revision (independent of speed)
+
+These were the limits at that revision. Current training is uncapped;
+[capacities](capacity.md) lists the current storage and wire guards.
 
 - `MAX_ECONOMY_PLAYERS = 16` (`simulation/.../economy.rs:34`, wire cap
   `protocol/src/gameplay/economy.rs:9`): with 100 players the fog-off snapshot

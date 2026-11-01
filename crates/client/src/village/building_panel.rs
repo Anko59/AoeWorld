@@ -118,10 +118,6 @@ pub(super) fn update(client: &Client) {
     v.extend(super::automation::state(client));
     super::garrison::present(client);
     v.extend(super::navy::state(client));
-    v.push(f64::from(u8::from(
-        b.is_some_and(|b| !b.training_queue.is_empty())
-            && player.is_some_and(|p| p.population_used >= p.population_cap),
-    )));
     buildings_update(&v);
 }
 

@@ -46,7 +46,6 @@ fn player(prices: MarketPrices) -> GameplayPlayerState {
             stone: 100,
         },
         population_used: 1,
-        population_cap: 5,
         age: Age::Dark,
         researched: 0,
         market_prices: prices,
@@ -73,7 +72,7 @@ fn prices_have_current_golden_wire_and_round_trip() {
     assert_eq!(
         bytes,
         [
-            1, 1, 0, 0, 1, 0, 100, 100, 100, 100, 1, 5, 0, 0, 103, 97, 20, 0
+            1, 1, 0, 0, 1, 0, 100, 100, 100, 100, 1, 0, 0, 103, 97, 20, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), message);
@@ -125,6 +124,6 @@ fn the_no_market_rejection_has_a_golden_wire_and_round_trips() {
         applied_tick: Tick(4),
     };
     let bytes = encode_gameplay_server(&ack).unwrap();
-    assert_eq!(bytes, [3, 3, 29, 4]);
+    assert_eq!(bytes, [3, 3, 28, 4]);
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), ack);
 }

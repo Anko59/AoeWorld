@@ -136,7 +136,7 @@ def test_live_food_jobs_rebalance_to_wood_without_interrupting_loaded_returns():
     food = node(901, ResourceKind.FOOD, (52, 48))
     world = FakeWorld(units, buildings, nodes=[wood, food],
                       eco=economy(food=273, wood=14, gold=580, population=36,
-                                  cap=50, age=Age.FEUDAL))
+                                  age=Age.FEUDAL))
     ctx = Context(FakeClient(), decision(world), Blackboard(), Config())
     # Seed 1 held 27 live food jobs and one wood job for eight minutes. Idle-only
     # allocation never repaired that shortage, leaving its Feudal army at seven.
@@ -155,7 +155,7 @@ def test_rebalancing_waits_for_excess_food_workers_to_finish_their_loads():
         worker.carrying = (ResourceKind.FOOD, 10)
     world = FakeWorld(units, buildings, nodes=[node(900, ResourceKind.WOOD, (53, 53))],
                       eco=economy(food=273, wood=14, gold=580, population=36,
-                                  cap=50, age=Age.FEUDAL))
+                                  age=Age.FEUDAL))
     ctx = Context(FakeClient(), decision(world), Blackboard(), Config())
     EconomyManager(Constructor()).work(ctx)
     assert ctx.client.calls == [], "loaded returns must complete before reallocation"

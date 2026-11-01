@@ -16,7 +16,7 @@ for (const [edge, y] of [
     await gameAssets(page);
     await fiveVillagerFixture(page);
     await page.goto("/#x=8192&y=8192&zoom=.35");
-    await expect(page.locator("#population")).toHaveText("6/10");
+    await expect(page.locator("#population")).toHaveText("6");
     const camera = () => page.locator("#minimap").getAttribute("data-camera-y");
     await page.mouse.move(640, 360);
     await freshHud(page);
@@ -43,7 +43,7 @@ test("a stopped villager retains its load without counting as a wood worker", as
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 30_000,
   });
-  await expect(page.locator("#population")).toHaveText("3/5");
+  await expect(page.locator("#population")).toHaveText("3");
   await expect(page.locator("#workers-wood")).toHaveText("0");
   const worker = await page.locator("#scene").evaluate((canvas) =>
     (
@@ -68,7 +68,7 @@ test("reconnecting preserves an offscreen zero-load gold worker without terrain 
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 30_000,
   });
-  await expect(page.locator("#population")).toHaveText("3/5");
+  await expect(page.locator("#population")).toHaveText("3");
   await expect(page.locator("#workers-gold")).toHaveText("1");
   await page.reload();
   await expect(page.locator("#workers-gold")).toHaveText("1");
@@ -84,7 +84,7 @@ test("Escape disarms Move before the next selection click", async ({
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 30_000,
   });
-  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(page.locator("#population")).toHaveText("6");
   const worker = await page.locator("#scene").evaluate((canvas) =>
     (
       JSON.parse(canvas.getAttribute("data-actors") ?? "[]") as {
@@ -117,7 +117,7 @@ test("setup-only maps owns quitting and exposes no in-game creator", async ({
   await gameAssets(page);
   await fiveVillagerFixture(page);
   await page.goto("/?play=1#x=8192&y=8192&zoom=.35");
-  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(page.locator("#population")).toHaveText("6");
   await expect(
     page.getByRole("button", { name: "Open map creator" }),
   ).toHaveCount(0);

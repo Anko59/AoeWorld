@@ -1,7 +1,7 @@
 //! `scale-match`: the real game server at its promised scale, end to end.
 //!
 //! Starts a release `aoe-server`, hosts a match (`POST /match`: one human
-//! slot, the rest Python AIs, a population cap, optional start units), runs
+//! slot, the rest Python AIs, optional start units), runs
 //! the bots in sibling `aoeworld/sdk-python` containers, samples the server's
 //! own per-tick records (`GET /match/stats`) with process and container CPU
 //! and memory, and optionally drives the human's browser for a frame-rate
@@ -40,9 +40,6 @@ pub struct Options {
     /// Map side in two-metre tiles (ratio 30:1 for `procedural`).
     #[arg(long, default_value_t = 16_000)]
     pub tiles: u32,
-    /// Population ceiling of every player (the AoE rule is 200).
-    #[arg(long, default_value_t = 1_000)]
-    pub population_cap: u16,
     /// Villagers every player starts with besides the standard kit (seeded, not played).
     #[arg(long, default_value_t = 0)]
     pub start_villagers: u32,

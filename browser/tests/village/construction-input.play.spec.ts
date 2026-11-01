@@ -16,7 +16,7 @@ test("placement requires explored footprint tiles even on resident terrain", asy
     if (bytes[0] !== undefined && bytes[0] > 1) orders.push(bytes[0]);
   });
   await page.goto("/?play=1#x=8192&y=8192&zoom=1");
-  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(page.locator("#population")).toHaveText("6");
   const actors = JSON.parse(
     (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
   ) as { kind: string; x: number; y: number }[];
@@ -65,7 +65,7 @@ for (const button of ["middle", "right"] as const) {
       if (bytes[0] !== undefined && bytes[0] > 1) orders.push(bytes[0]);
     });
     await page.goto("/?play=1#x=8192&y=8192&zoom=1");
-    await expect(page.locator("#population")).toHaveText("6/10");
+    await expect(page.locator("#population")).toHaveText("6");
     const actors = JSON.parse(
       (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
     ) as { kind: string; x: number; y: number }[];

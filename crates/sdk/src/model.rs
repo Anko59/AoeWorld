@@ -123,16 +123,8 @@ impl Economy {
     pub fn age(&self) -> Age {
         self.state.age
     }
-    pub fn population(&self) -> u16 {
+    pub fn population(&self) -> u32 {
         self.state.population_used
-    }
-    pub fn population_cap(&self) -> u16 {
-        self.state.population_cap
-    }
-    pub fn free_population(&self) -> u16 {
-        self.state
-            .population_cap
-            .saturating_sub(self.state.population_used)
     }
     pub fn has_researched(&self, tech: Tech) -> bool {
         self.state.researched & tech.bit() != 0

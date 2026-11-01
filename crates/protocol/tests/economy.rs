@@ -14,7 +14,6 @@ fn player() -> GameplayPlayerState {
             stone: 200,
         },
         population_used: 4,
-        population_cap: 5,
         age: aoe_protocol::Age::Dark,
         researched: 0,
         market_prices: aoe_protocol::MarketPrices::default(),
@@ -196,9 +195,9 @@ fn full_economy_snapshot_and_delta_roundtrip() {
         // Includes combat stance after the two optional owner identifiers.
         vec![
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 25, 25, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 100, 100, 100,
-            1, 1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0,
-            0, 0, 0, 0, 0, 0
+            0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 0, 0, 100, 100, 100, 1,
+            1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0, 0,
+            0, 0, 0, 0, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);
@@ -220,7 +219,6 @@ fn full_economy_snapshot_and_delta_roundtrip() {
         CommandResult::RejectedWrongUnitKind,
         CommandResult::RejectedInvalidResource,
         CommandResult::RejectedInsufficientFood,
-        CommandResult::RejectedPopulationCap,
         CommandResult::RejectedTrainingQueueFull,
     ] {
         let ack = GameplayServerMessage::CommandAck {
@@ -276,7 +274,7 @@ fn oversized_players_buildings_and_training_queues_fail_encode_and_decode() {
 }
 
 #[test]
-fn invalid_load_progress_footprint_and_population_are_rejected() {
+fn invalid_load_progress_and_footprint_are_rejected() {
     let mut load = unit();
     // Hand Cart plus Heavy Plow permits 21; 22 remains invalid.
     load.carried.as_mut().unwrap().amount = 22;
@@ -284,8 +282,6 @@ fn invalid_load_progress_footprint_and_population_are_rejected() {
     progress.training_queue[0].progress_ticks = 501;
     let mut footprint = building();
     footprint.footprint.max.x -= 1;
-    let mut population = player();
-    population.population_cap = MAX_MATCH_POPULATION + 1;
     for message in [
         GameplayServerMessage::Snapshot {
             revision: 1,
@@ -308,17 +304,25 @@ fn invalid_load_progress_footprint_and_population_are_rejected() {
             players: vec![],
             buildings: vec![footprint],
         },
-        GameplayServerMessage::Snapshot {
-            revision: 1,
-            tick: Tick(0),
-            units: vec![],
-            players: vec![population],
-            buildings: vec![],
-        },
     ] {
         assert!(encode_gameplay_server(&message).is_err());
         assert!(decode_gameplay_server(&postcard::to_allocvec(&message).unwrap()).is_err());
     }
+}
+
+#[test]
+fn population_counts_above_u16_roundtrip_without_a_housing_limit() {
+    let mut population = player();
+    population.population_used = 65_537;
+    let message = GameplayServerMessage::Snapshot {
+        revision: 1,
+        tick: Tick(0),
+        units: vec![],
+        players: vec![population],
+        buildings: vec![],
+    };
+    let bytes = encode_gameplay_server(&message).unwrap();
+    assert_eq!(decode_gameplay_server(&bytes).unwrap(), message);
 }
 
 #[test]

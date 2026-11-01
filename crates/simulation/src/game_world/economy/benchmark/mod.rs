@@ -32,7 +32,7 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
         ..MapRequest::default()
     };
     let mut world = map::build(request)?;
-    world.set_limits(WorldLimits::for_match(100, 200));
+    world.set_limits(WorldLimits::for_match(100));
     for seat in 0..players {
         let player = PlayerId(seat);
         let base = TileCoord::new(
@@ -89,7 +89,7 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
                 production.push(id);
             }
         }
-        // Scenario seeding gives the mature economy its housing and stock;
+        // Scenario seeding gives the mature economy its buildings and stock;
         // measured ticks and queued orders use the ordinary production rules.
         for tech in [Tech::FeudalAge, Tech::CastleAge] {
             world.complete_research(player, tech, &mut Vec::new());
@@ -99,7 +99,6 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
             .players
             .get_mut(&player)
             .ok_or(EconomyError::NotOwner)?;
-        state.population_cap = 200;
         state.stockpile = Stockpile {
             food: 100_000,
             wood: 100_000,
@@ -141,14 +140,6 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
         }
         actors::seed(&mut world, player, primary, center, &spots, production[1])
             .map_err(|error| format!("seat {seat}: actor setup: {error}"))?;
-        // Placing the seeded tower refreshes housing from actual buildings.
-        // Restore this mature fixture's housing after all setup construction.
-        world
-            .economy
-            .players
-            .get_mut(&player)
-            .ok_or(EconomyError::NotOwner)?
-            .population_cap = 200;
         // The combined workload respects eco2 reservations: use all resource
         // kinds in the ordinary starting kit, rather than overbooking the few
         // nearby trees. Keep all 80 real gather/return jobs and full queues.

@@ -52,7 +52,7 @@ ai-arena-steps:
 	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python arena --size $(ARENA_SIZE) --bots $(ARENA_BOTS) --minutes $(ARENA_MINUTES) --seeds $(ARENA_SEEDS)
 
 # The real server at its promised scale (docs/scale/match.md): one human, 99 Python AIs, a
-# population cap and a France-sized map, with the server's tick records and, with
+# France-sized map, with the server's tick records and, with
 # `--browser`, the human's frame rate. SCALE_MATCH_ARGS passes harness flags, for example
 # `SCALE_MATCH_ARGS="--players 4 --tiles 500 --map flat --minutes 1 --out reports/scale/x.json --no-summary" make scale-match`.
 # The harness runs in the orchestrator image (it starts sibling bot and browser containers);
@@ -70,4 +70,4 @@ scale-match-smoke: orchestrator-tools sdk-python-tools slot-bootstrap
 	@$(SLOT_RUN) scale-match-smoke -- make --no-print-directory scale-match-smoke-steps
 
 scale-match-smoke-steps: sdk-python-steps
-	@$(DEV_ORCH_RUN) cargo run --release --locked -p aoe-harness -- scale-match --players 4 --humans 1 --tiles 500 --map flat --population-cap 300 --start-villagers 20 --hosts 1 --minutes 1 --label smoke --out reports/scale/match/match-smoke.json --no-summary
+	@$(DEV_ORCH_RUN) cargo run --release --locked -p aoe-harness -- scale-match --players 4 --humans 1 --tiles 500 --map flat --start-villagers 20 --hosts 1 --minutes 1 --label smoke --out reports/scale/match/match-smoke.json --no-summary

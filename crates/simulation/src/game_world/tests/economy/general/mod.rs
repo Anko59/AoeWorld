@@ -10,7 +10,6 @@ fn setup() -> (GameWorld, EntityId) {
     let (mut w, _, _) = village();
     let p = w.economy.players.get_mut(&PlayerId(0)).unwrap();
     p.age = Age::Castle;
-    p.population_cap = 1000;
     p.stockpile = Stockpile {
         food: 10_000,
         wood: 10_000,
@@ -256,17 +255,6 @@ fn stop_cancels_the_army_march_and_death_releases_command() {
 #[test]
 fn cancelled_recruitment_releases_reservations_and_never_overfills() {
     let (mut w, _) = setup();
-    // Real housing must support the army: the tick recomputes the cap from
-    // completed structures rather than retaining the fixture's initial cap.
-    for n in 0..4 {
-        w.insert_building(
-            PlayerId(0),
-            BuildingKind::Castle,
-            aoe_core::TileRect::from_xywh(150 + n * 6, 80, 4, 4),
-            true,
-        )
-        .unwrap();
-    }
     let barracks = w
         .insert_building(
             PlayerId(0),

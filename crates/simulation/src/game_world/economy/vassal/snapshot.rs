@@ -11,7 +11,6 @@ pub(super) struct Snapshot {
     pub complete: bool,
     pub villagers: usize,
     pub queued: usize,
-    pub global_queued: usize,
     pub allocated: [usize; 4],
     /// The stalled node/kind the worker now being tasked must not choose again.
     pub avoid: Option<super::watchdog::Stall>,
@@ -86,14 +85,12 @@ impl GameWorld {
             .sum();
         let mut buildings = Vec::new();
         let mut queued = 0;
-        let mut global_queued = 0;
         let mut villagers = units.len();
         for b in self
             .player_buildings(player)
             .take(VASSAL_RULES.building_visits_per_domain)
         {
             work.building_visits += 1;
-            global_queued += b.training_queue.len();
             if !home.covers(b.footprint, 0) {
                 continue;
             }
@@ -128,7 +125,6 @@ impl GameWorld {
             complete: complete_units && building_count <= VASSAL_RULES.building_visits_per_domain,
             villagers,
             queued,
-            global_queued,
             allocated,
             avoid: None,
         })

@@ -81,12 +81,6 @@ fn completed_training_checks_local_occupants_and_retries_a_freed_exit() {
 #[test]
 fn cancelled_and_destroyed_queues_stop_work_without_losing_serial_progress() {
     let (mut world, _, center) = village();
-    world
-        .economy
-        .players
-        .get_mut(&PlayerId(0))
-        .unwrap()
-        .population_cap = 20;
     for _ in 0..2 {
         world
             .issue_train(PlayerId(0), center, UnitKind::Villager)
@@ -132,7 +126,7 @@ fn cancelled_and_destroyed_queues_stop_work_without_losing_serial_progress() {
 }
 
 #[test]
-fn fifteen_unit_limit_is_per_building_and_cancellation_refunds_a_housed_wait() {
+fn fifteen_unit_limit_is_per_building_and_cancellation_refunds_queued_training() {
     let (mut world, _, first) = village();
     let second = world
         .insert_building(
@@ -143,7 +137,6 @@ fn fifteen_unit_limit_is_per_building_and_cancellation_refunds_a_housed_wait() {
         )
         .unwrap();
     let player = world.economy.players.get_mut(&PlayerId(0)).unwrap();
-    player.population_cap = 4;
     player.stockpile.food = 1500;
     for center in [first, second] {
         for _ in 0..15 {
@@ -158,26 +151,13 @@ fn fifteen_unit_limit_is_per_building_and_cancellation_refunds_a_housed_wait() {
         );
         assert_eq!(world.canonical_hash(), full);
     }
-    advance(&mut world, 600);
-    for center in [first, second] {
-        let queue = &world.building(center).unwrap().training_queue;
-        assert_eq!(queue.len(), 15);
-        assert_eq!(queue[0].progress_ticks, 0);
-    }
     world.issue_cancel_training(PlayerId(0), second).unwrap();
     assert_eq!(
         world.player_economy(PlayerId(0)).unwrap().stockpile.food,
         50
     );
     assert_eq!(world.building(second).unwrap().training_queue.len(), 14);
-    // Bundled behavior: both full queues resume when one house slot opens,
-    // but only one may spawn, at its front. The other retains its partial work.
-    world
-        .economy
-        .players
-        .get_mut(&PlayerId(0))
-        .unwrap()
-        .population_cap = 5;
+    let previous_ids: std::collections::BTreeSet<_> = world.units().map(|u| u.id).collect();
     advance(&mut world, 499);
     for center in [first, second] {
         assert_eq!(
@@ -186,37 +166,48 @@ fn fifteen_unit_limit_is_per_building_and_cancellation_refunds_a_housed_wait() {
         );
     }
     world.advance();
-    let spawned = world.units().max_by_key(|u| u.id).unwrap();
-    let spawned_id = spawned.id;
-    assert_eq!(
-        spawned.position.tile_floor(),
-        world.building(first).unwrap().footprint.max
-    );
+    let spawned: Vec<_> = world
+        .units()
+        .filter(|u| !previous_ids.contains(&u.id))
+        .collect();
+    assert_eq!(spawned.len(), 2, "both producers finish without housing");
+    for center in [first, second] {
+        assert!(
+            spawned
+                .iter()
+                .any(|u| u.position.tile_floor() == world.building(center).unwrap().footprint.max)
+        );
+    }
+    let spawned_id = spawned[0].id;
     assert_eq!(world.building(first).unwrap().training_queue.len(), 14);
+    assert_eq!(world.building(second).unwrap().training_queue.len(), 13);
     assert_eq!(
-        world.building(second).unwrap().training_queue[0].progress_ticks,
-        499
+        world.player_economy(PlayerId(0)).unwrap().population_used,
+        6
     );
-    advance(&mut world, 600);
+    for center in [first, second] {
+        assert_eq!(
+            world.building(center).unwrap().training_queue[0].progress_ticks,
+            0
+        );
+    }
+    // Death changes the count immediately, and removing its corpse cannot
+    // decrement it a second time. Neither event gates the other producer.
+    world.kill_unit(world.lookup[&spawned_id]);
     assert_eq!(
         world.player_economy(PlayerId(0)).unwrap().population_used,
         5
     );
+    world.remove_unit(spawned_id);
     assert_eq!(
-        world.building(first).unwrap().training_queue[0].progress_ticks,
-        0
+        world.player_economy(PlayerId(0)).unwrap().population_used,
+        5
     );
-    // Death frees population immediately; removing an index entry alone does not.
-    world.kill_unit(world.lookup[&spawned_id]);
     world.advance();
-    assert_eq!(world.building(second).unwrap().training_queue.len(), 13);
-    assert_eq!(
-        world
-            .units()
-            .max_by_key(|u| u.id)
-            .unwrap()
-            .position
-            .tile_floor(),
-        world.building(second).unwrap().footprint.max
-    );
+    for center in [first, second] {
+        assert_eq!(
+            world.building(center).unwrap().training_queue[0].progress_ticks,
+            1
+        );
+    }
 }

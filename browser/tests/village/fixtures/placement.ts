@@ -3,7 +3,7 @@ import { freshHud } from "./resources.js";
 
 export async function arm(page: Page) {
   await page.goto("/?play=1#x=8192&y=8192&zoom=1");
-  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(page.locator("#population")).toHaveText("6");
   const actors = JSON.parse(
     (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
   ) as { kind: string; x: number; y: number }[];

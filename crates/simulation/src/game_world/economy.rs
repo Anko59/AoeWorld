@@ -51,9 +51,7 @@ pub use vassal::{
 };
 mod wall;
 
-pub use buildings::{
-    BUILDING_RULES, BuildingRules, MAX_POPULATION, MAX_WALL_SEGMENTS, trainable_units,
-};
+pub use buildings::{BUILDING_RULES, BuildingRules, MAX_WALL_SEGMENTS, trainable_units};
 pub use market::{MARKET_RULES, MarketPrices};
 
 /// Villagers one build order may assign to construction.
@@ -179,8 +177,7 @@ impl Stockpile {
 pub struct PlayerEconomy {
     pub player: PlayerId,
     pub stockpile: Stockpile,
-    pub population_used: u16,
-    pub population_cap: u16,
+    pub population_used: u32,
     pub age: super::Age,
     /// Bit `1 << tech as u8` is set once researched.
     pub researched: u64,
@@ -244,7 +241,6 @@ pub struct VillageRules {
     /// Food, wood, gold, stone (ResourceKind's canonical order).
     pub gather_hundredths_per_second: [u16; 4],
     pub town_center_side: i32,
-    pub population_support: u16,
     pub starting_villagers: u16,
     pub starting_stockpile: Stockpile,
     pub villager_food_cost: u32,
@@ -259,7 +255,6 @@ pub const VILLAGE_RULES: VillageRules = VillageRules {
     villager_capacity: 10,
     gather_hundredths_per_second: [31, 39, 38, 36],
     town_center_side: 4,
-    population_support: 5,
     starting_villagers: 3,
     starting_stockpile: Stockpile {
         food: 200,
@@ -292,8 +287,6 @@ pub enum EconomyError {
     InvalidResource,
     #[error("not enough food to train a villager")]
     InsufficientFood,
-    #[error("population cap is reached or reserved by queued training")]
-    PopulationCap,
     #[error("town center training queue is full")]
     TrainingQueueFull,
     #[error("attack target is unknown, dead or belongs to the same player")]

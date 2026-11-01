@@ -24,8 +24,6 @@ class Config:
     castle_knight_weight: float = 1.0
     #: Villagers the Town Center queue is kept at.
     town_center_queue: int = 2
-    #: Build a house when fewer than this many population slots are free.
-    house_margin: int = 4
     #: Preferred share of villagers per resource before and after Feudal.
     dark_shares: dict[str, float] = field(
         default_factory=lambda: {"FOOD": 0.60, "WOOD": 0.32, "GOLD": 0.08, "STONE": 0.0}
@@ -48,7 +46,7 @@ class Config:
     farm_refusal_wait_seconds: int = 30
 
     # --- construction ------------------------------------------------------
-    #: Wood kept back for houses when spending on anything else.
+    #: Wood kept back for economic construction and farm reseeds.
     wood_reserve: int = 50
     #: Seconds before an unconfirmed planned building is forgotten.
     plan_timeout_seconds: int = 60

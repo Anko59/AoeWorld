@@ -51,7 +51,6 @@ impl GameWorld {
             self.vassal_adopt(&snapshot);
             self.vassal_watchdog(&snapshot, changed);
             let wait = self.vassal_train(&mut snapshot, &mut budget, &mut work);
-            self.vassal_house_for_busy(&mut snapshot, &mut budget, &mut work, changed);
             self.vassal_reseeds(&snapshot, &mut budget, &mut work);
             self.vassal_refresh_wood(&mut snapshot, &mut budget, &mut work);
             self.vassal_idle(id, &mut snapshot, &mut budget, &mut work, changed);
@@ -113,16 +112,11 @@ impl GameWorld {
                 wait = VassalWait::Food;
                 break;
             }
-            if usize::from(p.population_used) + s.global_queued >= usize::from(p.population_cap) {
-                wait = VassalWait::Population;
-                break;
-            }
             if !budget.order(work) {
                 break;
             }
             if self.issue_train(s.player, b.id, UnitKind::Villager).is_ok() {
                 s.queued += 1;
-                s.global_queued += 1;
             }
         }
         if s.villagers + s.queued >= VASSAL_RULES.max_villagers {

@@ -102,7 +102,6 @@ pub(super) fn match_body(options: &Options) -> Result<Value, BoxError> {
     slots.resize(options.players, "ai");
     let mut body = json!({
         "slots": slots,
-        "population_cap": options.population_cap,
     });
     if options.start_villagers + options.start_militia > 0 {
         body["start_units"] =
@@ -374,7 +373,7 @@ pub(super) fn run(options: &Options) -> Result<(), BoxError> {
         "failure": failure,
         "config": {
             "players": options.players, "humans": options.humans, "tiles": options.tiles,
-            "population_cap": options.population_cap, "minutes": options.minutes,
+            "minutes": options.minutes,
             "hosts": options.hosts, "start_villagers": options.start_villagers,
             "start_militia": options.start_militia, "seed": options.seed,
         },

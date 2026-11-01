@@ -35,7 +35,7 @@ pub(crate) struct Economy {
     pub(crate) active_training: BTreeSet<EntityId>,
     pub(crate) active_research: BTreeSet<EntityId>,
     /// Every building per player and kind, ascending by id: drop-off
-    /// candidates, housing and requirements read one player's buildings
+    /// candidates and requirements read one player's buildings
     /// without scanning the world. Maintained as buildings are placed and
     /// removed; completion is checked per query.
     pub(crate) dropoffs: BTreeMap<(PlayerId, BuildingKind), Vec<EntityId>>,

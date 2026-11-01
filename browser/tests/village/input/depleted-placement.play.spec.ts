@@ -35,7 +35,7 @@ test("exhaustion frees a resource tile for the build preview and order immediate
     if (bytes[0] !== undefined && bytes[0] > 1) orders.push(bytes);
   });
   await page.goto("/?play=1#x=8192&y=8192&zoom=1");
-  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(page.locator("#population")).toHaveText("6");
   // This tree belongs to immutable terrain, rather than the starting overlay.
   await page.evaluate(
     async (payload) => {
@@ -101,7 +101,7 @@ for (const [kind, name] of [
       if (bytes[0] === 8) orders.push(bytes);
     });
     await page.goto("/?play=1#x=8192&y=8192&zoom=1");
-    await expect(page.locator("#population")).toHaveText("6/10");
+    await expect(page.locator("#population")).toHaveText("6");
     const terrain = chunks([
       { kind, name, gather: "fish", x: 8193, y: 8187 },
     ]).map((chunk) => {

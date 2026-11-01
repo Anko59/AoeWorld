@@ -27,12 +27,12 @@ pub use projectiles::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 4;
-/// One gameplay frame: room for the largest combined tick (16,384 units and
-/// 16,384 buildings with full fifteen-unit training queues).
-pub const MAX_MESSAGE: usize = 4 * 1_048_576;
+pub const VERSION: u16 = 5;
+/// One gameplay frame: room for 65,536 units alongside bounded buildings,
+/// training queues and other view state. This is a memory guard, not housing.
+pub const MAX_MESSAGE: usize = 16 * 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
-pub const MAX_SUBSCRIBED_UNITS: usize = 16_384;
+pub const MAX_SUBSCRIBED_UNITS: usize = 65_536;
 pub const MAX_PENDING_COMMANDS_PER_CONNECTION: usize = 64;
 pub const MAX_PENDING_COMMANDS_GLOBAL: usize = 1_024;
 pub const MAX_ACK_HISTORY: usize = 64;
@@ -123,7 +123,6 @@ pub enum CommandResult {
     RejectedWrongUnitKind,
     RejectedInvalidResource,
     RejectedInsufficientFood,
-    RejectedPopulationCap,
     RejectedTrainingQueueFull,
     RejectedResourceUnavailable,
     /// The attack target is unknown, already dead, or the sender's own.

@@ -132,7 +132,7 @@ const stepClick = (a: { x: number; y: number }, right = false) => ({
 });
 const opening = [
   { wait_for: { state: "connected" } },
-  { wait_for: { selector: '#population:text-matches("^[0-9]+/[0-9]+$")' } },
+  { wait_for: { selector: '#population:text-matches("^[0-9]+$")' } },
   { key: "h" },
   { key: "Escape" },
   { wheel: { selector: "#scene", x: 640, y: 360, delta_y: 2000 } },

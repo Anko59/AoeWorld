@@ -6,7 +6,7 @@ import { forceCanvas, forceWebGl } from "./backends.js";
 import { overviewTerrain, sampleFrames, zoom } from "./fixtures/bigview.js";
 import { populationFixture } from "./fixtures/population.js";
 
-test("maximum client population stays clustered on the full map and keeps explored fog", async ({
+test("a large client population stays clustered on the full map and keeps explored fog", async ({
   page,
 }, info) => {
   test.setTimeout(120_000);
