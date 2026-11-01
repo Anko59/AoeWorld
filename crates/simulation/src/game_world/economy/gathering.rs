@@ -12,6 +12,7 @@ const MAX_APPROACH_FAILURES: u8 = 8;
 
 mod approach;
 mod chunks;
+pub(crate) use chunks::{BLOCK_TILES, ResourceSearchWork};
 mod jobs;
 mod positions;
 mod steps;
@@ -339,9 +340,10 @@ impl GameWorld {
             self.units[index].state.planning = false;
             self.refresh_spacing_order(id);
             if let Some(load) = unit.carried
-                && let Some(player) = self.economy.players.get_mut(&unit.player)
+                && self
+                    .economy
+                    .credit_delivery(unit.player, load, self.tick.0, self.config.tick_hz)
             {
-                player.stockpile.deposit(load);
                 self.units[index].state.carried = None;
                 task.failed_dropoffs.clear();
             }

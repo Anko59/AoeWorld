@@ -12,7 +12,6 @@ pub(super) struct Snapshot {
     pub villagers: usize,
     pub queued: usize,
     pub global_queued: usize,
-    pub allocated: [usize; 4],
     /// The stalled node/kind the worker now being tasked must not choose again.
     pub avoid: Option<super::watchdog::Stall>,
 }
@@ -110,15 +109,6 @@ impl GameWorld {
             buildings.push(b.clone());
         }
         buildings.sort_unstable_by_key(|b| b.id);
-        let mut allocated = [0; 4];
-        for u in &units {
-            let kind = self
-                .gathering_kind(u.id)
-                .or_else(|| self.economy.vassals.controlled.get(&u.id).map(|(_, k)| *k));
-            if let Some(k) = kind {
-                allocated[k as usize] += 1;
-            }
-        }
         Some(Snapshot {
             vassal: id,
             home,
@@ -129,7 +119,6 @@ impl GameWorld {
             villagers,
             queued,
             global_queued,
-            allocated,
             avoid: None,
         })
     }

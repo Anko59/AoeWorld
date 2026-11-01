@@ -31,6 +31,12 @@ pub struct VassalWork {
     pub building_visits: usize,
     pub orders: usize,
     pub resource_searches: usize,
+    /// Candidate block lists inspected by the Vassal's local queries/discovery.
+    pub resource_blocks: usize,
+    /// Every finder list/cache entry inspected, including rejected/depleted nodes.
+    /// Cold list generation (starting history and 64 terrain probes) and
+    /// ordinary command admission retain their existing separate work bounds.
+    pub resource_nodes: usize,
     pub site_checks: usize,
 }
 #[derive(Default)]

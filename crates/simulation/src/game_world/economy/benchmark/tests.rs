@@ -99,8 +99,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Wood re-picks, occupied-waypoint travel and formation detours all change the replay.
-        "3ffad85e0135de8faa8806c18bc9e34eec7ab44f0eecbe11851455238a2eb4b5"
+        // Kingdom-priority Vassal job choice changes the replay.
+        "739759f16b3984515e5d062a9039752c3754e9da2ed724227d498501f1fd8d39"
     );
 }
 

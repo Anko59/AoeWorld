@@ -21,6 +21,11 @@ impl Economy {
         }
         self.hash_vassal_manager(hash);
         self.hash_generals(hash);
+        hash.update(&(self.income.len() as u64).to_le_bytes());
+        for (player, income) in &self.income {
+            hash.update(&player.0.to_le_bytes());
+            income.update_hash(hash);
+        }
         hash.update(&(self.vassal_homes.len() as u64).to_le_bytes());
         for (id, home) in &self.vassal_homes {
             hash.update(&id.0.to_le_bytes());

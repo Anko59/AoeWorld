@@ -84,7 +84,22 @@ fn a_vassal_adopts_busy_villagers_and_trains_to_a_hundred() {
             break;
         }
     }
-    assert_eq!(managed(&w, vassal), VASSAL_RULES.max_villagers);
+    assert_eq!(
+        managed(&w, vassal),
+        VASSAL_RULES.max_villagers,
+        "unmanaged villagers (id, task, gather kind/tile, movement, controller): {:?}",
+        w.units()
+            .filter(|u| u.kind == UnitKind::Villager && w.vassal_controller(u.id) != Some(vassal))
+            .map(|u| (
+                u.id,
+                u.task,
+                w.gathering_kind(u.id),
+                w.gather_tile(u.id),
+                w.movement_order(u.id),
+                w.vassal_controller(u.id)
+            ))
+            .collect::<Vec<_>>()
+    );
     assert_eq!(villagers(&w), 100);
     assert!(
         w.player_buildings_of(PlayerId(0), BuildingKind::House)

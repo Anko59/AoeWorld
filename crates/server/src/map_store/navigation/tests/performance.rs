@@ -122,8 +122,9 @@ fn measure(installed: bool) {
         world.canonical_hash(),
         [
             // PR 7 removes follower waits/index hashing; both navigation modes reproduce this pin.
-            137, 242, 73, 125, 23, 111, 44, 191, 216, 158, 22, 49, 30, 111, 140, 218, 148, 153, 179,
-            7, 37, 62, 53, 106, 202, 74, 10, 198, 226, 8, 175, 60,
+            // Re-pinned for the kingdom income and Vassal job-priority hash fields.
+            18, 169, 52, 239, 186, 56, 160, 39, 71, 93, 239, 3, 208, 9, 187, 229, 93, 82, 111, 7,
+            81, 59, 186, 39, 223, 138, 57, 1, 153, 215, 114, 206,
         ]
     );
     if installed {

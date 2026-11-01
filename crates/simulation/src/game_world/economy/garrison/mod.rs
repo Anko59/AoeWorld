@@ -189,9 +189,10 @@ impl GameWorld {
             };
             if let Some(load) = unit.carried
                 && dropoff.accepts(load.kind)
-                && let Some(player) = self.economy.players.get_mut(&unit.player)
+                && self
+                    .economy
+                    .credit_delivery(unit.player, load, self.tick.0, self.config.tick_hz)
             {
-                player.stockpile.deposit(load);
                 unit.carried = None;
             }
             let restored = unit;

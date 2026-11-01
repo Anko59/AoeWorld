@@ -5,6 +5,7 @@ use super::{
 };
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
+mod income;
 
 #[cfg(test)]
 #[derive(Debug, Default)]
@@ -29,6 +30,7 @@ pub(crate) struct Economy {
     pub(crate) transport_journeys: BTreeMap<EntityId, super::super::navy::Journey>,
     pub(crate) embarked: BTreeMap<EntityId, EntityId>,
     pub(crate) players: BTreeMap<PlayerId, PlayerEconomy>,
+    pub(crate) income: BTreeMap<PlayerId, income::Income>,
     pub(crate) buildings: BTreeMap<EntityId, GameBuilding>,
     pub(crate) farm_production: BTreeMap<EntityId, farm::FarmProduction>,
     // Derived ordered worksets; building queues remain the canonical state.

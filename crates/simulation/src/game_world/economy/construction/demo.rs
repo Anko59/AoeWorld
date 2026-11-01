@@ -3,6 +3,9 @@
 use crate::{BuildingKind, EconomyError, GameWorld, Stockpile};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 
+#[path = "demo/kingdom.rs"]
+mod kingdom;
+
 impl GameWorld {
     /// Real-time art inspection encounter. Normal orders, weapon damage and
     /// death retention expose all hero poses without changing match rules.
@@ -163,6 +166,56 @@ impl GameWorld {
             )?;
             world.issue_farm(PlayerId(0), worker, farm)?;
         }
+        Ok((world, primary))
+    }
+
+    /// Farmland-only comparison: 24 idle workers, one Mill and prepaid wood.
+    /// The accelerated clock keeps ordinary farm construction filmable.
+    pub fn vassal_farming_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+        use crate::UnitKind;
+        use aoe_core::WorldPosition;
+        let mut config =
+            WorldConfig::new(256, 256, seed).map_err(|_| EconomyError::InvalidFootprint)?;
+        config.tick_hz = 1;
+        let mut world = Self::new(config)?;
+        world.set_fog_disabled(true);
+        let position = |x, y| {
+            WorldPosition::from_tile_center(TileCoord::new(x, y))
+                .map_err(|_| EconomyError::InvalidFootprint)
+        };
+        let primary = world.spawn_kind(PlayerId(0), UnitKind::Scout, position(135, 135)?)?;
+        let footprint = TileRect::from_xywh(100, 100, 4, 4);
+        let castle = world.insert_building(PlayerId(0), BuildingKind::Castle, footprint, true)?;
+        world.insert_building(
+            PlayerId(0),
+            BuildingKind::Mill,
+            TileRect::from_xywh(115, 115, 2, 2),
+            true,
+        )?;
+        for n in 0..10 {
+            world.insert_building(
+                PlayerId(0),
+                BuildingKind::House,
+                TileRect::from_xywh(10 + n * 3, 10, 2, 2),
+                true,
+            )?;
+        }
+        world.complete_research(PlayerId(0), crate::Tech::FeudalAge, &mut Vec::new());
+        world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
+        if let Some(player) = world.economy.players.get_mut(&PlayerId(0)) {
+            player.stockpile = Stockpile {
+                food: 10_000,
+                wood: 50_000,
+                gold: 10_000,
+                stone: 10_000,
+            };
+        }
+        let vassal = world.spawn_kind(PlayerId(0), UnitKind::Vassal, position(99, 100)?)?;
+        world.bind_vassal(vassal, castle, footprint);
+        for n in 0..24 {
+            world.spawn_villager(PlayerId(0), position(122 + (n % 8) * 2, 123 + (n / 8) * 2)?)?;
+        }
+        world.issue_garrison(PlayerId(0), vassal, castle)?;
         Ok((world, primary))
     }
 

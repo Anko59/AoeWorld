@@ -37,6 +37,12 @@ pub(crate) fn starting_history(
 pub(crate) const BLOCK_TILES: i32 = 8;
 const BLOCK_TILES_U64: u64 = BLOCK_TILES as u64;
 
+#[derive(Default)]
+pub(crate) struct ResourceSearchWork {
+    pub(crate) blocks: usize,
+    pub(crate) nodes: usize,
+}
+
 impl GameWorld {
     pub fn nearest_resource(
         &self,
@@ -55,6 +61,25 @@ impl GameWorld {
         radius: i32,
         exclude: Option<u64>,
         accept: impl Fn(&ResourceNode) -> bool,
+    ) -> Option<ResourceNode> {
+        self.nearest_resource_matching_counted(
+            origin,
+            kind,
+            radius,
+            exclude,
+            accept,
+            &mut ResourceSearchWork::default(),
+        )
+    }
+
+    pub(crate) fn nearest_resource_matching_counted(
+        &self,
+        origin: TileCoord,
+        kind: ResourceKind,
+        radius: i32,
+        exclude: Option<u64>,
+        accept: impl Fn(&ResourceNode) -> bool,
+        work: &mut ResourceSearchWork,
     ) -> Option<ResourceNode> {
         let Terrain::Map { generator, overlay } = &self.terrain else {
             return None;
@@ -98,8 +123,10 @@ impl GameWorld {
                     if nearest_tile > squared || nearest_tile > score.0 {
                         continue;
                     }
+                    work.blocks += 1;
                     let nodes = self.block_resource_nodes(generator, overlay, block);
                     for node in nodes.iter() {
+                        work.nodes += 1;
                         let (dx, dy) = (
                             u64::from(node.tile.x.abs_diff(origin.x)),
                             u64::from(node.tile.y.abs_diff(origin.y)),

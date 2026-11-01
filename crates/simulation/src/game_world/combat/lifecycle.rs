@@ -129,6 +129,7 @@ impl GameWorld {
 
     /// Removes a unit from every index. Its slot is filled by the last unit.
     pub(crate) fn remove_unit(&mut self, id: EntityId) {
+        self.forget_vassal_worker(id);
         self.stop_general(id);
         if let Some(g) = self.general_controller(id) {
             self.restore_general_stance(g, id);

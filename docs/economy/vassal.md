@@ -78,19 +78,64 @@ uses complete TCs with their spawn perimeter and rally inside the domain; it
 respects the player's food and all reserved population slots. Deaths permit
 replacements. Each domain can directly manage at most 100 workers.
 
-Idle workers use food:wood:gold:stone shares of 45:30:15:10, adjusted toward low
-stockpiles, preserving carried loads. Local known resources within ten tiles
-are preferred. Distant drop-offs prompt normal Lumber/Mining Camp or Mill
-construction; food also uses free Farms, builds new ones, and prepays two normal
-Mill reseeds. The manager helps unfinished economic foundations and adds Houses
-when two or fewer housing slots remain. Every cost, exploration check, placement
+Jobs use the kingdom's shared stocks and actual deliveries, with default
+food:wood:gold:stone weights of 45:30:15:10. The lowest weighted projected
+reserve gets priority: current stock plus deliveries in the recent minute of
+game time. Comparisons use integer cross-products. Local worker counts do not
+stand in for income. Each player retains twelve five-second delivery buckets;
+ordinary resource returns and carried loads deposited on garrison entry count
+only the amount actually credited. Purchases, spending and refunds do not
+create harvested income. Every bucket's epoch and amounts participate in the
+canonical hash, including income earned before a Vassal becomes active.
+
+Idle workers and unloaded managed gatherers respond to those kingdom needs.
+Carried loads finish their ordinary delivery first, and a refused replacement
+keeps the current productive job. Training and essential housing retain their
+normal admission before productive reassignment; optional maintenance follows.
+Known resources within ten tiles are preferred. A local miss can also probe a
+completed matching drop-off, rotating its building ID between queries. A
+retained search visits eight-tile blocks outward from the domain centre, so
+Gold and Stone beyond the ordinary ten-tile replacement radius remain usable.
+The ordinary replacement search itself keeps its existing radius.
+
+Distant drop-offs prompt normal Lumber/Mining Camp or Mill construction. An
+existing eligible distant camp remains usable when a nearer one is
+unaffordable; a worker is not sent to harvest a load with no usable drop-off or
+admitted camp. When Food work is chosen, farmers reclaim a free paid-for Farm before
+opening another plot. Each unfinished Farm keeps one future farmer, while
+other economic foundations may take helpers. New Farms tile in three-tile
+cells around Mills and Town Centers; full clusters expand with another Mill.
+Farm placement resumes across passes within the same 32-site budget, and
+exhausting natural-resource searches does not prevent farming with the
+remaining order and placement budget. The manager helps unfinished economic
+foundations, prepays two normal Mill reseeds, and adds Houses when two or fewer
+housing slots remain. Every cost, exploration check, placement
 rule and build/train time is the ordinary simulation rule.
 
-An accepted manual order releases the worker immediately; busy manual workers
-are not retasked until idle again. Military, foreign workers and workers outside
+Adopted farmers also build a nearby Mill for an old distant plot when a legal
+site exists within six tiles of its centre. Repairs rotate between plots and
+retain their searches, using at most half the remaining placement budget so
+idle villagers can still reclaim or build Farms. Approaching farmers start
+working once their whole body is on the crop, without waiting for an exact
+reserved work point.
+
+An accepted manual override releases a managed worker immediately and protects
+its busy job until genuine idle. Previously unclaimed busy workers can still be
+adopted in place. Military, foreign workers and workers outside
 the circle are never adopted. Ejection/death/destruction deactivates management
 and releases its tags; current ordinary jobs can finish. Autonomous resource
 replacement and return targets stay within an active domain.
+
+The original eight-search, two-order and 32-site limits still apply per admitted
+domain. Finder telemetry counts returned block lists and candidate/cache checks:
+at most 25 lists and 1,608 checks per query. Cold map-block construction is
+separate: an eight-tile block has at most 32 spatial history-range seeks, 256
+retained starting identities and 64 tile probes before deduplication to 64
+returned candidates. These are fixed spatial bounds, rather than a scan of the
+world's history. Its storage caps are separate too: 4,096 starting identities,
+2^20 depletion entries, and an 8,192-entry/32-MiB resource-block cache. Across
+eight admitted domains, the unchanged search budget admits at most 64 queries
+per pass. Ordinary order admission and pathfinding retain their own budgets.
 
 The server records this phase as `vassal_economy`. The synthetic 100-player,
 100,000-population test checks the manager's admission and work counts. It does
@@ -114,3 +159,13 @@ For a repeatable local capture, `POST /maps/reset?scenario=vassal-territory`
 prepares two overlapping Castles, 40 busy farmers and two Vassals waiting
 outside (four-times clock). Garrison the first to watch it adopt every farmer,
 then the second to see the territory split with a double line.
+
+`POST /maps/reset?scenario=vassal-farming` prepares a resource-free plot with
+24 idle villagers, one Mill, a Vassal entering its Castle, and enough wood and
+housing. The 20-times clock makes normal farm construction and reseeding
+visible in a short capture; it does not change the manager's work budgets.
+
+`POST /maps/reset?scenario=vassal-kingdom` prepares twenty busy farmers, nearby
+forest and a completed Lumber Camp, with 30,000 Food/Gold/Stone and 1,000 Wood.
+Its four-times game clock preserves ordinary orders and manager budgets.
+Recenter on the stationary Scout to frame the farm clusters and forest.
