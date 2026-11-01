@@ -1,17 +1,14 @@
 //! A General's 100 followers use the shared formation corridor and detours,
-//! never straight-line slot seeking. Target: every follower arrives, the last
-//! arrival is within 1.3 times the slowest follower's shortest route, and no
-//! follower stays still for more than 60 ticks (three seconds at 20 Hz).
-//! The fixed 1/8 cohesion reserve, the corridor being longer than the oracle
-//! route and the crowd at the ford mouth still cost the river cases
-//! more than that, so each case asserts the ratio and stall it measures today
-//! (percent of ideal, ticks); lower them as those causes are removed.
+//! never straight-line slot seeking. Every follower arrives at its exact
+//! slot, the last arrival is within 1.3 times the slowest follower's shortest
+//! route, and no follower stays still for more than 60 ticks (three seconds
+//! at 20 Hz).
 use super::landscapes::offered;
 use super::*;
 use crate::game_world::terrain_fixtures::build;
 use metrics::{Tracker, reference_from};
 
-fn march(case: &str, limit: u32, max_percent: u32, max_stuck: u32) {
+fn march(case: &str, limit: u32) {
     let mut fixture = build(case);
     assert_eq!(fixture.ids.len(), 101, "100 followers plus their General");
     assert_eq!(
@@ -42,24 +39,24 @@ fn march(case: &str, limit: u32, max_percent: u32, max_stuck: u32) {
     assert_eq!(result.lost_group_ticks, 0, "{result:?}");
     assert_eq!(result.arrived, 101, "{result:?}");
     assert!(
-        result.last_tick * 100 <= result.ideal_ticks * max_percent,
+        result.last_tick * 10 <= result.ideal_ticks * 13,
         "{result:?}"
     );
     assert_eq!(result.max_slot_error, 0, "{result:?}");
-    assert!(result.max_stuck_ticks <= max_stuck, "{result:?}");
+    assert!(result.max_stuck_ticks <= 60, "{result:?}");
 }
 
 #[test]
 fn hundred_followers_take_a_river_detour_to_the_far_bank() {
-    march("general-river", 16_000, 162, 65);
+    march("general-river", 16_000);
 }
 
 #[test]
 fn hundred_followers_march_through_a_tree_patch() {
-    march("general-forest", 12_000, 135, 30);
+    march("general-forest", 12_000);
 }
 
 #[test]
 fn followers_across_a_river_from_their_general_go_around_to_it() {
-    march("general-far-bank", 16_000, 152, 90);
+    march("general-far-bank", 16_000);
 }

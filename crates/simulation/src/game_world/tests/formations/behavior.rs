@@ -67,11 +67,12 @@ fn formations_share_one_centroid_route_and_use_the_slowest_speed() {
     let carry = w.units[w.lookup[&ids[0]]].order.unwrap().speed_carry;
     run(&mut w, 100);
     let end = w.formation_anchor(ids[0]).unwrap();
-    // Speed matching preserves fractional credit earned while forming.
+    // Speed matching preserves fractional credit earned while forming; pace
+    // is kept in 64ths so the cohesion reserve can be proportional.
     assert_eq!(end.x - start.x, 4915);
     assert_eq!(
         end.x - start.x,
-        ((100 * speed * 4 + carry) / (denom * 4)) as i32
+        ((100 * speed * 64 + carry) / (denom * 64)) as i32
     );
     assert_eq!(end.y, start.y);
     assert_eq!(w.route_scheduler_stats().metrics.orders - before, 1);

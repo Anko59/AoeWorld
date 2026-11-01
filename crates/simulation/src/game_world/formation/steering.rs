@@ -35,8 +35,11 @@ impl Motion {
     }
 }
 
+/// A member trailing its slot catches up at up to 1.5 times the group pace,
+/// capped by its own speed. Faster roles placed far from their start (scouts
+/// ahead, rams behind) re-form within the march instead of after it.
 pub(crate) fn matched_speed(pace: (u64, u64), own: (u64, u64)) -> u64 {
-    let catch_up = u128::from(pace.0) * u128::from(FRACTION) * 5 / (u128::from(pace.1) * 4);
+    let catch_up = u128::from(pace.0) * u128::from(FRACTION) * 3 / (u128::from(pace.1) * 2);
     let cap = u128::from(own.0) * u128::from(FRACTION) / u128::from(own.1);
     catch_up.min(cap) as u64
 }
@@ -314,7 +317,7 @@ impl GameWorld {
         }
     }
 
-    /// Every member's earned distance is at most ceil(1.25 * pace), capped
+    /// Every member's earned distance is at most ceil(1.5 * pace), capped
     /// at 512. Integer direction rounding adds less than one subunit; two
     /// extra subunits make the ordered-batch separation certificate strict.
     pub(crate) fn formation_step_bound(&self) -> i32 {
@@ -323,7 +326,7 @@ impl GameWorld {
             .filter(|group| !group.settled)
             .map(|group| {
                 let mut bound =
-                    (u128::from(group.pace.0) * 5).div_ceil(u128::from(group.pace.1) * 4);
+                    (u128::from(group.pace.0) * 3).div_ceil(u128::from(group.pace.1) * 2);
                 if let Some(first) = group.members.first() {
                     let unit = self.units[self.lookup[&first.id]].state;
                     if group.members.iter().all(|member| {
@@ -333,7 +336,7 @@ impl GameWorld {
                     }) {
                         // Every member has this current physical cap, including
                         // upgrades after anchor arrival. Mixed groups retain
-                        // the conservative 1.25x-pace bound.
+                        // the conservative 1.5x-pace bound.
                         let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
                         bound = bound.min(u128::from(speed.div_ceil(denominator)));
                     }

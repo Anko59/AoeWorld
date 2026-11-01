@@ -154,6 +154,7 @@ impl GameWorld {
                     ),
                 self.group_work.clone(),
             ),
+            taut_end: None,
             progress: 0,
             path_cursor: 0,
         };
@@ -275,6 +276,7 @@ impl GameWorld {
                 );
                 group.progress = 0;
                 group.path_cursor = 0;
+                group.taut_end = None;
                 self.reset_group_detours(group);
                 self.assign_group_slots(group);
                 group.settled = false;

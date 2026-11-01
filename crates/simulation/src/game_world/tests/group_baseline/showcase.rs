@@ -117,6 +117,7 @@ fn thirty_two_militia_showcase_keeps_block_and_normal_march_speed() {
     assert_eq!(out.first_motion, 1, "no stationary assembly: {out:?}");
     assert!(out.last > 0 && out.last <= 634, "{out:?}");
     assert!(out.last - out.first <= 100, "{out:?}");
+    // The proportional reserve forms and arrives earlier (565, was 586).
     assert_eq!(
         (
             out.formed,
@@ -124,7 +125,7 @@ fn thirty_two_militia_showcase_keeps_block_and_normal_march_speed() {
             out.slow_ticks,
             out.full_ticks
         ),
-        (283, 586, 294, 292),
+        (275, 565, 303, 262),
         "pin the measured moving phases: {out:?}"
     );
     let slots = ids
@@ -147,7 +148,7 @@ fn thirty_two_militia_showcase_keeps_block_and_normal_march_speed() {
     }
     assert_eq!(
         (out.first, out.last),
-        (586, 630),
+        (565, 622),
         "pin current arrival timing: {out:?}"
     );
 }

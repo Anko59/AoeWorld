@@ -1,5 +1,4 @@
 //! Temporary traffic rows preserve physical order; final roles stay immutable.
-use super::slots::packed;
 use super::*;
 
 impl GameWorld {
@@ -52,28 +51,19 @@ impl GameWorld {
                 .min(path::distance(group.anchor, group.destination) / 2);
             return;
         }
+        // Files take members in lateral order, so a narrowing block only
+        // closes towards its centre line and no member crosses a neighbour's
+        // file. Each file keeps its own forward order.
         positions.sort_unstable_by_key(|&(_, forward, lateral, id)| {
-            (std::cmp::Reverse(forward), lateral, id)
+            (lateral, std::cmp::Reverse(forward), id)
         });
-        let mut slots = (0..count)
-            .map(|rank| (rank, packed(rank, count, files, group.narrow_gap)))
-            .collect::<Vec<_>>();
-        slots.sort_unstable_by_key(|&(rank, p)| (std::cmp::Reverse(p.y), p.x, rank));
-        let mut start = 0;
-        while start < count {
-            let mut end = start + 1;
-            // File-major packing has unequal row populations when the last
-            // file is short (seven actors / three files gives rows 3, 2, 2).
-            while end < count && slots[end].1.y == slots[start].1.y {
-                end += 1;
-            }
-            positions[start..end].sort_unstable_by_key(|&(_, _, lateral, id)| (lateral, id));
-            for (&(at, _, _, _), &(rank, _)) in positions[start..end].iter().zip(&slots[start..end])
-            {
+        let rows = count.div_ceil(files);
+        for (file, chunk) in positions.chunks_mut(rows).enumerate() {
+            chunk.sort_unstable_by_key(|&(_, forward, _, id)| (std::cmp::Reverse(forward), id));
+            for (row, &(at, _, _, _)) in chunk.iter().enumerate() {
                 self.group_work.members(1);
-                group.members[at].rank = rank;
+                group.members[at].rank = file * rows + row;
             }
-            start = end;
         }
     }
 }

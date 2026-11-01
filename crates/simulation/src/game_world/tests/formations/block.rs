@@ -29,12 +29,13 @@ fn block_front_members_walk_on_the_first_tick_without_assembly() {
 }
 
 #[test]
-fn block_catch_up_is_exactly_one_and_a_quarter_pace_capped_by_own_speed() {
+fn block_catch_up_is_exactly_one_and_a_half_pace_capped_by_own_speed() {
     use crate::game_world::formation::matched_speed;
     let fraction = 1_u64 << 32;
-    assert_eq!(matched_speed((40, 1), (100, 1)), 50 * fraction);
+    assert_eq!(matched_speed((40, 1), (100, 1)), 60 * fraction);
     assert_eq!(matched_speed((40, 1), (45, 1)), 45 * fraction);
-    assert_eq!(matched_speed((3, 4), (1, 1)), 15 * fraction / 16);
+    assert_eq!(matched_speed((3, 8), (1, 1)), 9 * fraction / 16);
+    assert_eq!(matched_speed((3, 4), (1, 1)), fraction);
 }
 
 #[test]
