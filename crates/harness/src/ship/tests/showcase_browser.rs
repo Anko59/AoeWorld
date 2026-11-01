@@ -456,3 +456,31 @@ fn showcase_explicit_default_port_is_canonical_and_still_local() {
         assert!(AppOrigin::parse(&format!("http://{host}/")).is_err());
     }
 }
+
+#[test]
+fn steps_may_hold_modifier_keys_on_a_click_and_drag_a_box() {
+    let steps = r##"{"drag":{"selector":"#scene","from":{"x":600,"y":330},"to":{"x":760,"y":500}}},{"click_with":{"selector":"#selected-icons .unit-token >> nth=1","modifiers":["Shift","Control"]}}"##;
+    let board = Storyboard::parse(&browser_board("/", steps)).unwrap();
+    let json =
+        serde_json::to_value(plan(&board, &[3500, 3000], &origins(&board)).unwrap()).unwrap();
+    let planned = &json["scenes"][1]["steps"];
+    assert_eq!(planned[0]["drag"]["to"]["x"], 760);
+    assert_eq!(
+        planned[1]["click_with"]["modifiers"],
+        serde_json::json!(["Shift", "Control"])
+    );
+
+    for bad in [
+        r##"{"click_with":{"selector":"#a","modifiers":[]}}"##,
+        r##"{"click_with":{"selector":"#a","modifiers":["Shift","Shift"]}}"##,
+        r##"{"click_with":{"selector":"#a","modifiers":["Hyper"]}}"##,
+        r##"{"click_with":{"selector":"","modifiers":["Shift"]}}"##,
+        r##"{"drag":{"selector":"#scene","from":{"x":5000,"y":1},"to":{"x":1,"y":1}}}"##,
+        r##"{"drag":{"selector":"#scene","from":{"x":1,"y":1},"to":{"x":1,"y":1,"z":2}}}"##,
+    ] {
+        assert!(
+            Storyboard::parse(&browser_board("/", bad)).is_err(),
+            "{bad}"
+        );
+    }
+}

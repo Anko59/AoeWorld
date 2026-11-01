@@ -157,6 +157,17 @@ async function steps(page, scene) {
     else if ("click_at" in step) {
       const { selector, x, y, button } = step.click_at;
       await page.click(selector, { position: { x, y }, button, timeout: 10_000 });
+    } else if ("click_with" in step) {
+      const { selector, modifiers } = step.click_with;
+      await page.click(selector, { modifiers, timeout: 10_000 });
+    } else if ("drag" in step) {
+      const { selector, from, to } = step.drag;
+      const box = await page.locator(selector).boundingBox({ timeout: 10_000 });
+      if (!box) throw new Error(`drag: ${selector} has no box`);
+      await page.mouse.move(box.x + from.x, box.y + from.y);
+      await page.mouse.down();
+      await page.mouse.move(box.x + to.x, box.y + to.y, { steps: 8 });
+      await page.mouse.up();
     } else if ("wheel" in step) {
       const { selector, x, y, delta_y } = step.wheel;
       await page.hover(selector, { position: { x, y }, timeout: 10_000 });
