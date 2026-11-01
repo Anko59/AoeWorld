@@ -324,6 +324,11 @@ fn launches_carry_the_role_and_quote_their_paths() {
         "{args:?}"
     );
     assert_eq!(args.last().map(String::as_str), Some("do it"));
+    // Role agents run alone: in-process sub-agents poll each other and re-read contexts.
+    assert!(
+        args.windows(2).any(|w| w == ["--disable", "multi_agent"]),
+        "{args:?}"
+    );
     let role = codex
         .get_envs()
         .find(|(name, _)| *name == "AOE_AGENT_ROLE")

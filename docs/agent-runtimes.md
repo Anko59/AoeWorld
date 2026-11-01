@@ -13,7 +13,7 @@ second quality policy.
 | Runtime | Committed layer | Hook wiring | Roles |
 |---|---|---|---|
 | Claude Code | `.claude/settings.json`, `.claude/agents/`, `.claude/skills/` | Native hooks | `agent_type` of subagents, or `AOE_AGENT_ROLE` |
-| Codex | `.codex/hooks.json`, `.codex/agents/*.toml` | Native hooks; matcher `Bash`/`apply_patch` (the patch text names its files) | `AOE_AGENT_ROLE` only: Codex reports no subagent type |
+| Codex (launched with `--disable multi_agent`) | `.codex/hooks.json`, `.codex/agents/*.toml` | Native hooks; matcher `Bash`/`apply_patch` (the patch text names its files) | `AOE_AGENT_ROLE` only: Codex reports no subagent type |
 | DeepSeek Harness (dsh) | `.dsh/hooks.json` | The `@deepseek-ai/dsh-hooks-claude-code` bridge plugin | `AOE_AGENT_ROLE` only: the bridge reports `general-purpose` |
 | pi | `.pi/extensions/aoe-harness/index.ts` | Extension: `tool_call` blocks, `agent_end` forces a follow-up | `AOE_AGENT_ROLE` only |
 
@@ -274,3 +274,9 @@ of this is a hostile same-user boundary:
   are described in [shipping](shipping.md) and [review](review.md).
 - Read, Grep and Glob are not intercepted: nothing in the repository is secret
   from an agent.
+
+Codex sessions the harness launches run with in-process sub-agents disabled
+(`--disable multi_agent`). A sub-agent tree polls itself with `wait_agent` and each
+poll re-reads a full context: on 2026-10-31 one goal with three sub-agents spent
+about 800M input tokens in 8 hours, most of it queued for a heavy slot. Roles are
+separate harness launches (`AOE_AGENT_ROLE`) instead.

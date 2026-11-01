@@ -48,7 +48,10 @@ pub(crate) const CPUS_VAR: &str = "AOE_SLOT_CPUS";
 /// Environment variables forwarded into Docker by the Makefile.
 pub(crate) const SLOTS_VAR: &str = "AOE_HEAVY_SLOTS";
 pub(crate) const WAIT_VAR: &str = "AOE_HEAVY_WAIT_MINUTES";
-const DEFAULT_WAIT_MINUTES: u64 = 90;
+/// Short on purpose: an agent left queueing re-reads its whole context on every poll, so a
+/// long wait burns model quota while producing nothing (2026-10-31: one Codex session spent
+/// 8 hours and ~10% of a weekly quota queued here). Fail fast and let the caller report.
+const DEFAULT_WAIT_MINUTES: u64 = 10;
 const MAX_SLOTS: usize = 8;
 pub(crate) const POLL: Duration = Duration::from_secs(1);
 pub(crate) const REPORT_EVERY: Duration = Duration::from_secs(300);
@@ -145,7 +148,7 @@ pub(crate) struct Config {
 impl Config {
     /// `gates/heavy.json` sets the default slots; the cores are the machine's CPU affinity list
     /// (`process::load::cores`), the same count the load check uses. `AOE_HEAVY_SLOTS` (1-8) and
-    /// `AOE_HEAVY_WAIT_MINUTES` (default 90; 0 fails at once) override.
+    /// `AOE_HEAVY_WAIT_MINUTES` (default 10; 0 fails at once) override.
     pub(crate) fn load(root: &Path, slots: &SlotEnv) -> Result<Self> {
         let text = std::fs::read_to_string(root.join("gates/heavy.json"))?;
         let committed: Committed = serde_json::from_str(&text)?;
@@ -256,8 +259,9 @@ pub(crate) fn acquire_at(
                 .collect();
             return Err(format!(
                 "heavy slot: no free slot after {} min ({WAIT_VAR}); position {position} of the \
-                 queue behind {}; the slots are held by: {}. Run `make load-status`, then try \
-                 again when one finishes",
+                 queue behind {}; the slots are held by: {}. The machine is saturated (`make load-status` lists the queue): do not \
+                 retry in a loop or wait for it. Stop, commit or keep your work, and report this \
+                 blocker to whoever started you",
                 wait.as_secs() / 60,
                 ahead.len(),
                 holders.join("; ")
