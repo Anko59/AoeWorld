@@ -166,6 +166,9 @@ enum PendingAction {
     Stop {
         entity_id: EntityId,
     },
+    Delete {
+        entity_ids: Vec<EntityId>,
+    },
     Hunt {
         unit_ids: Vec<EntityId>,
         animal_id: EntityId,

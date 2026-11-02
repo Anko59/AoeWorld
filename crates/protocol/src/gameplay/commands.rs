@@ -191,6 +191,14 @@ pub enum ClientMessage {
         unit_ids: Vec<EntityId>,
         stance: CombatStance,
     },
+    /// Delete owned units and buildings: a unit dies, a complete building is
+    /// destroyed (occupants are ejected) and a foundation is cancelled with its
+    /// refund. Any foreign, unknown or repeated id refuses the whole order.
+    DeleteOrder {
+        sequence: u64,
+        #[serde(deserialize_with = "bounded_members")]
+        entity_ids: Vec<EntityId>,
+    },
 }
 
 fn bounded_members<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::Error> {
@@ -198,6 +206,17 @@ fn bounded_members<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::
 }
 
 pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
+    if let ClientMessage::DeleteOrder { entity_ids, .. } = message
+        && (entity_ids.is_empty()
+            || entity_ids.len() > aoe_core::MAX_FORMATION_MEMBERS
+            || entity_ids
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != entity_ids.len())
+    {
+        return Err(Error::InvalidEconomyState);
+    }
     if let ClientMessage::StanceOrder { unit_ids, .. } = message
         && (unit_ids.is_empty()
             || unit_ids.len() > aoe_core::MAX_FORMATION_MEMBERS

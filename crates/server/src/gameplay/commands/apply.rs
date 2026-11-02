@@ -54,6 +54,7 @@ pub(in crate::gameplay) fn apply(
             crate::gameplay::economy::native_rally(target),
         ),
         PendingAction::Stop { entity_id } => world.issue_stop(player, entity_id),
+        PendingAction::Delete { entity_ids } => world.issue_delete(player, &entity_ids),
         PendingAction::Hunt {
             unit_ids,
             animal_id,

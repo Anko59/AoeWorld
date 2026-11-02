@@ -40,7 +40,7 @@ export function gameplay_key(event) {
   }
   if (event.ctrlKey) return 0;
   if (window.aoeBuildings?.key(event)) return 0;
-  const action = event.key === 'Escape' ? 1 : event.key === 'g' || event.key === 'G' ? 2 : event.key === 'Home' ? 3 : event.key.toLowerCase() === 'q' ? 4 : event.key.toLowerCase() === 'h' ? 5 : event.key === '.' ? 7 : event.key === ',' ? 8 : 0;
+  const action = event.key === 'Escape' ? 1 : event.key === 'g' || event.key === 'G' ? 2 : event.key === 'Home' ? 3 : event.key.toLowerCase() === 'q' ? 4 : event.key.toLowerCase() === 'h' ? 5 : event.key === '.' ? 7 : event.key === ',' ? 8 : event.key === 'Delete' ? 9 : 0;
   if (action) event.preventDefault();
   return action;
 }

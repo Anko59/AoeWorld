@@ -33,6 +33,56 @@ impl GameWorld {
         Ok(())
     }
 
+    /// Delete owned units and buildings. A unit dies through `kill_unit`, a
+    /// complete building is destroyed through `destroy_building` (occupants are
+    /// ejected) and a foundation is cancelled with its refund. Any unknown,
+    /// foreign or repeated id refuses the whole order before anything changes.
+    pub fn issue_delete(
+        &mut self,
+        player: aoe_core::PlayerId,
+        ids: &[EntityId],
+    ) -> Result<(), crate::EconomyError> {
+        if ids.is_empty() || ids.len() > aoe_core::MAX_FORMATION_MEMBERS {
+            return Err(crate::EconomyError::OrderTooLarge);
+        }
+        let mut sorted = ids.to_vec();
+        sorted.sort_unstable();
+        if sorted.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(crate::EconomyError::OrderTooLarge);
+        }
+        for &id in &sorted {
+            if let Some(unit) = self.unit(id) {
+                if unit.player != player {
+                    return Err(crate::EconomyError::NotOwner);
+                }
+                if unit.hp == 0 || self.embarked(id) {
+                    return Err(crate::EconomyError::InvalidTarget);
+                }
+            } else if let Some(building) = self.economy.buildings.get(&id) {
+                if building.player != player {
+                    return Err(crate::EconomyError::NotOwner);
+                }
+            } else {
+                return Err(crate::EconomyError::UnknownEntity);
+            }
+        }
+        for id in sorted {
+            if let Some(&index) = self.lookup.get(&id) {
+                self.kill_unit(index);
+            } else if self
+                .economy
+                .buildings
+                .get(&id)
+                .is_some_and(|building| building.is_complete())
+            {
+                self.destroy_building(id);
+            } else {
+                self.issue_cancel_construction(player, id)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Infallible cancellation after the command has validated its actors.
     pub(crate) fn stop_unit_orders(&mut self, index: usize) {
         let unit = self.units[index].state;

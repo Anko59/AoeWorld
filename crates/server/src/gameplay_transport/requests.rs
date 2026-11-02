@@ -74,6 +74,10 @@ pub(super) async fn read_requests(
                 sequence,
                 entity_id,
             }) => service.queue_stop(session_id, sequence, entity_id).await,
+            Ok(GameplayClientMessage::DeleteOrder {
+                sequence,
+                entity_ids,
+            }) => service.queue_delete(session_id, sequence, entity_ids).await,
             Ok(GameplayClientMessage::GatherOrder {
                 sequence,
                 entity_id,
