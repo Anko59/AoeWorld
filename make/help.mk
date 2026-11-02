@@ -13,6 +13,7 @@ help:
 	@echo '  make deny            Audit Cargo advisories, licenses, bans, and sources'
 	@echo '  make cargo-pin       Pin one dependency (CARGO_PIN_PACKAGE/CARGO_PIN_VERSION)'
 	@echo '  make cargo-fetch     Fetch locked dependencies online into the shared cache'
+	@echo '  make compile-cache-start / compile-cache-stats / compile-cache-stop  Shared local sccache'
 	@echo '  make test-unit       Run native tests (except the post-merge tiers)'
 	@echo '  make test-game-focused AOE_GAME_TEST_FILTER=...  Filter asset/simulation tests'
 	@echo '  make test-source-qualification  Run the slow source-qualification tests test-unit excludes'

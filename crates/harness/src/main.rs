@@ -3,6 +3,9 @@ mod architecture;
 mod assets;
 mod browser_ports;
 mod cli;
+#[cfg(test)]
+#[allow(dead_code)]
+mod compile_cache;
 mod coverage;
 mod dev;
 mod devserver;

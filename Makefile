@@ -3,14 +3,14 @@ SHELL := /bin/sh
 ROOT := $(abspath .)
 UID := $(shell id -u)
 GID := $(shell id -g)
-TOOL_IMAGE := aoeworld/rust-tools:1.99.1
+TOOL_IMAGE := aoeworld/rust-tools:1.99.1-sccache0.19.0
 BROWSER_IMAGE := aoeworld/browser-tools:1.64.0
-ORCH_IMAGE := aoeworld/orchestrator:1.99.1
-ANALYSIS_IMAGE := aoeworld/analysis:0.19.4
-POLICY_IMAGE := aoeworld/policy:0.20.2
-COVERAGE_IMAGE := aoeworld/coverage:0.9.1
-FUZZ_IMAGE := aoeworld/fuzz:nightly-2026-09-01-0.13.2
-SDK_IMAGE := aoeworld/sdk-python:1.15.0
+ORCH_IMAGE := aoeworld/orchestrator:1.99.1-sccache0.19.0
+ANALYSIS_IMAGE := aoeworld/analysis:0.19.4-sccache0.19.0
+POLICY_IMAGE := aoeworld/policy:0.20.2-sccache0.19.0
+COVERAGE_IMAGE := aoeworld/coverage:0.9.1-sccache0.19.0
+FUZZ_IMAGE := aoeworld/fuzz:nightly-2026-09-01-0.13.2-sccache0.19.0
+SDK_IMAGE := aoeworld/sdk-python:1.15.0-sccache0.19.0
 # CI sets e.g. type=gha,version=2 to reuse BuildKit layers; empty keeps local builds unchanged.
 DOCKER_BUILD_CACHE ?=
 COMMA := ,
@@ -25,9 +25,14 @@ GIT_MOUNT := $(if $(GIT_EXTERNAL),$(call BIND_MOUNT,$(GIT_EXTERNAL),$(GIT_EXTERN
 GITHUB_OUTPUT_MOUNT := $(if $(GITHUB_OUTPUT),-v $(GITHUB_OUTPUT):$(GITHUB_OUTPUT))
 HARNESS_CARGO_CACHE ?= $(GIT_COMMON)/aoe-cargo
 HARNESS_TARGET_CACHE ?= $(ROOT)/target
+# A single storage daemon serves client-side compilers across local worktrees.
+HARNESS_SCCACHE_DIR ?= $(HOME)/.cache/aoe-sccache
+COMPILE_CACHE_SOCKET := $(wildcard $(HARNESS_SCCACHE_DIR)/server.sock)
+COMPILE_CACHE_ENV := $(if $(COMPILE_CACHE_SOCKET),-e RUSTC_WRAPPER=/usr/local/bin/aoe-compile-cache -e $(call MOUNT_QUOTE,AOE_COMPILE_ROOT=$(ROOT)) -e SCCACHE_CLIENT_SIDE=1 -e SCCACHE_SERVER_UDS=/aoe-sccache/server.sock)
+COMPILE_CACHE_MOUNTS := $(call BIND_MOUNT,$(ROOT),/aoe-source) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),/aoe-source/target)) $(if $(COMPILE_CACHE_SOCKET),$(call BIND_MOUNT,$(HARNESS_SCCACHE_DIR),/aoe-sccache,1) $(call BIND_MOUNT,$(HARNESS_SCCACHE_DIR),$(HARNESS_SCCACHE_DIR),1))
 # Expose the cache at its host path too: harness commands start sibling containers.
 CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo) $(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(HARNESS_CARGO_CACHE))) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
-HEAVY_ENV := -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e CARGO_INCREMENTAL -e CARGO_PROFILE_DEV_DEBUG -e CARGO_PROFILE_TEST_DEBUG -e GITHUB_ACTIONS -e CI -e AOE_DISK_FLOOR_GIB -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
+HEAVY_ENV := $(COMPILE_CACHE_ENV) -e $(call MOUNT_QUOTE,HARNESS_SCCACHE_DIR=$(HARNESS_SCCACHE_DIR)) -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e CARGO_INCREMENTAL -e CARGO_PROFILE_DEV_DEBUG -e CARGO_PROFILE_TEST_DEBUG -e GITHUB_ACTIONS -e CI -e AOE_DISK_FLOOR_GIB -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_HEAVY_SLOT -e AOE_SLOT_CPUS -e AOE_HEAVY_DIR -e AOE_HEAVY_SLOTS -e AOE_HEAVY_WAIT_MINUTES
 # The CPUs each slot gives its containers: gates/heavy.json cores shared among its slots. The
 # harness that holds the slot computes the count and exports it as AOE_SLOT_CPUS beside
 # AOE_HEAVY_SLOT; make only expands that variable, so there is no host binary to find. A container
@@ -39,7 +44,7 @@ HEAVY_DIR_COVERED := $(ROOT) $(ROOT)/% $(if $(GIT_EXTERNAL),$(GIT_EXTERNAL) $(GI
 HEAVY_DIR_EXTERNAL := $(if $(AOE_HEAVY_DIR),$(filter-out $(HEAVY_DIR_COVERED),$(AOE_HEAVY_DIR)))
 HEAVY_DIR_MOUNT := $(if $(HEAVY_DIR_EXTERNAL),-v $(HEAVY_DIR_EXTERNAL):$(HEAVY_DIR_EXTERNAL))
 TMP_MOUNT := $(if $(TMPDIR),-v $(TMPDIR):/aoe-harness-tmp -e TMPDIR=/aoe-harness-tmp)
-ROOT_MOUNTS := $(GIT_MOUNT) $(HEAVY_DIR_MOUNT) $(call BIND_MOUNT,$(ROOT),$(ROOT)) $(CACHE_MOUNTS)
+ROOT_MOUNTS := $(GIT_MOUNT) $(HEAVY_DIR_MOUNT) $(call BIND_MOUNT,$(ROOT),$(ROOT)) $(CACHE_MOUNTS) $(COMPILE_CACHE_MOUNTS)
 DOCKER_RUN := \
   docker run --rm --init \
   --label aoe.harness-boot-gap=$(AOE_HARNESS_BOOT_GAP) \
@@ -170,6 +175,11 @@ fuzz-tools: tools
 
 orchestrator-tools: tools
 	@$(call IMAGE_BUILD,orchestrator,$(ORCH_IMAGE))
+
+.PHONY: compile-cache-start compile-cache-stop compile-cache-stats
+compile-cache-start compile-cache-stop compile-cache-stats: orchestrator-tools
+	@mkdir -p '$(HARNESS_SCCACHE_DIR)'
+	@docker run --rm $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -v /var/run/docker.sock:/var/run/docker.sock $(ORCH_IMAGE) /usr/local/bin/aoe-compile-cache --service $(patsubst compile-cache-%,%,$@) '$(HARNESS_SCCACHE_DIR)' '$(UID):$(GID)'
 
 browser-deps: browser-tools
 	@mkdir -p .cache/browser-home

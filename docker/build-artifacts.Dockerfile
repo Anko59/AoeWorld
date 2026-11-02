@@ -1,4 +1,4 @@
-FROM aoeworld/rust-tools:1.99.1
+FROM aoeworld/rust-tools:1.99.1-sccache0.19.0
 ARG SOURCE_SHA
 WORKDIR /source
 COPY . .
