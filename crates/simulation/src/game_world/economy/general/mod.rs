@@ -56,6 +56,8 @@ pub(crate) struct Army {
     pub state: GeneralState,
     pub micro_after: usize,
     pub scan: (usize, usize),
+    /// Next bounded slice of each production-kind index.
+    pub production_scan: [usize; 5],
     pub retreat_until: u64,
     pub routed: Option<WorldPosition>,
     /// The player is moving the General alone; the army holds and is not led.
@@ -136,6 +138,7 @@ impl GameWorld {
                 state: GeneralState::Idle,
                 micro_after: 0,
                 scan: (0, 0),
+                production_scan: [0; 5],
                 retreat_until: 0,
                 routed: None,
                 solo: false,

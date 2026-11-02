@@ -32,6 +32,66 @@ fn queued(w: &GameWorld, building: EntityId) -> Vec<UnitKind> {
 }
 
 #[test]
+fn distant_barracks_cannot_permanently_hide_nearby_training() {
+    let (mut w, _) = setup();
+    for n in 0..25 {
+        w.insert_building(
+            PlayerId(0),
+            BuildingKind::Barracks,
+            aoe_core::TileRect::from_xywh(10 + n % 8 * 4, 10 + n / 8 * 4, 3, 3),
+            true,
+        )
+        .unwrap();
+    }
+    let (near, _) = production(&mut w);
+    let g = soldier(&mut w, UnitKind::General, 105, 100);
+    w.issue_general_mix(PlayerId(0), g, [100, 0, 0, 0, 0])
+        .unwrap();
+    w.issue_general_training(PlayerId(0), g, true).unwrap();
+    for _ in 0..3 {
+        decide(&mut w);
+        assert!(w.general_work().building_visits <= 625 + 128);
+    }
+    assert!(
+        !queued(&w, near).is_empty(),
+        "nearby Barracks is eventually visited"
+    );
+}
+
+#[test]
+fn production_scan_progress_is_hashed_and_replayed() {
+    let prepare = || {
+        let (mut w, _) = setup();
+        production(&mut w);
+        let g = soldier(&mut w, UnitKind::General, 105, 100);
+        w.issue_general_training(PlayerId(0), g, true).unwrap();
+        (w, g)
+    };
+    let (mut a, g) = prepare();
+    let (mut b, _) = prepare();
+    let initial = a.canonical_hash();
+    a.economy
+        .generals
+        .armies
+        .get_mut(&g)
+        .unwrap()
+        .production_scan[0] = 1;
+    assert_ne!(a.canonical_hash(), initial);
+    a.economy
+        .generals
+        .armies
+        .get_mut(&g)
+        .unwrap()
+        .production_scan[0] = 0;
+    for _ in 0..6 {
+        decide(&mut a);
+        decide(&mut b);
+        assert_eq!(a.canonical_hash(), b.canonical_hash());
+        assert_eq!(a.general_work(), b.general_work());
+    }
+}
+
+#[test]
 fn a_general_buys_nothing_until_train_is_pressed() {
     let (mut w, _) = setup();
     let (barracks, range) = production(&mut w);
