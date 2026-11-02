@@ -97,7 +97,7 @@ export function initBuildings() {
     const villager=byId('selection').dataset.villagers==='true';
     build.hidden=!villager;military.hidden=!villager;if(!villager)open=false;
     buttons.forEach((b,i)=>{b.hidden=!villager||open!==category(i);b.disabled=state[buildStart+i]!==1;const [id,name,key,cost]=commands[i];b.title=`${name} · ${cost} · ${category(i)==='military'?'V':'B'} ${key}${(i>=15&&i<=18||id==='town-center')&&state[0]<2?' · requires Castle Age':state[0]===0&&(i>=9&&i<=13||i>=19&&i<=21)?' · requires Feudal Age':''}`;b.setAttribute('aria-label',b.title);});
-    if(open){for(const id of ['move-units','stop-units'])byId(id).hidden=true;byId('command-context').textContent=open==='military'?'Military buildings':'Economic buildings';byId('command-hint').textContent=byId('scene').dataset.orderMode==='build'?(byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels'):'Choose a building · Esc closes the menu';}
+    if(open){for(const id of ['move-units','stop-units','delete-units'])byId(id).hidden=true;byId('command-context').textContent=open==='military'?'Military buildings':'Economic buildings';byId('command-hint').textContent=byId('scene').dataset.orderMode==='build'?(byId('scene').title||'Left-click a green footprint · drag walls or bridges bank to bank · Esc cancels'):'Choose a building · Esc closes the menu';}
     grid.classList.toggle('building-menu-open',Boolean(open));
     build.setAttribute('aria-expanded',String(open==='economy'));military.setAttribute('aria-expanded',String(open==='military'));
     const active=Array.from(grid.children).filter(n=>n.tagName==='BUTTON'&&!n.hidden).length;
@@ -110,7 +110,7 @@ export function initBuildings() {
       [...buttons,...techs,byId('cancel-construction'),byId('cancel-research'),...reseedButtons,autoScout].forEach((button,i)=>button.addEventListener('click',()=>callback(0,i)));
       militaryTrain.forEach(({button,kind})=>button.addEventListener('click',()=>callback(1,kind)));
       tradeButtons.forEach(({button},i)=>button.addEventListener('click',()=>callback(2,i)));
-      ['train-villager','stop-units','move-units','cancel-training'].forEach((id,i)=>byId(id).addEventListener('click',()=>callback(3,i)));
+      ['train-villager','stop-units','move-units','cancel-training','delete-units'].forEach((id,i)=>byId(id).addEventListener('click',()=>callback(3,i)));
       navalTrain.forEach(({button,kind})=>button.addEventListener('click',()=>callback(1,kind)));
       unload.addEventListener('click',()=>callback(4,0));
       formations.forEach((button,i)=>button.addEventListener('click',()=>callback(5,i)));

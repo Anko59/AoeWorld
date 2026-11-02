@@ -253,6 +253,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                     let _ = client.canvas.set_attribute("data-order-mode", "move");
                 }
                 3 => super::orders::train(&mut client, true),
+                4 => super::orders::delete(&mut client),
                 _ => (),
             }
             return;

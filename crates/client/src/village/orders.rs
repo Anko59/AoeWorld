@@ -348,6 +348,45 @@ pub(super) fn formation(client: &mut Client, index: u32) {
     }
 }
 
+/// Delete the selected units and buildings this player owns (never animals or
+/// foreign entities). The server refuses the whole order if any id is foreign.
+pub(in super::super) fn delete(client: &mut Client) {
+    let owner = owner(client);
+    let mut ids: Vec<aoe_core::EntityId> = client
+        .selected
+        .units
+        .iter()
+        .copied()
+        .filter(|id| {
+            client
+                .units
+                .get(id)
+                .is_some_and(|u| u.player == owner && u.hp > 0)
+        })
+        .collect();
+    let mut buildings = client.selected.buildings.clone();
+    buildings.extend(client.selected.building_id);
+    ids.extend(buildings.into_iter().filter(|id| {
+        client
+            .village
+            .buildings
+            .iter()
+            .any(|b| b.id == *id && b.player == owner)
+    }));
+    ids.sort_unstable();
+    ids.dedup();
+    for chunk in ids.chunks(aoe_core::MAX_FORMATION_MEMBERS) {
+        let sequence = client.next_sequence;
+        send(
+            client,
+            Message::DeleteOrder {
+                sequence,
+                entity_ids: chunk.to_vec(),
+            },
+        );
+    }
+}
+
 pub(super) fn stance(client: &mut Client, index: u32) {
     let Some(&stance) = [
         aoe_protocol::CombatStance::Aggressive,

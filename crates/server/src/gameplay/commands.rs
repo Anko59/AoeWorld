@@ -13,6 +13,9 @@ const AI_PENDING_COMMANDS: usize = 256;
 
 #[path = "commands/apply.rs"]
 mod apply;
+#[path = "commands/tests/delete.rs"]
+#[cfg(test)]
+mod delete_tests;
 #[path = "commands/formations.rs"]
 mod formations;
 #[path = "commands/garrison.rs"]
@@ -83,6 +86,11 @@ impl GameplayService {
             },
         )
         .await;
+    }
+
+    pub async fn queue_delete(&self, session_id: u64, sequence: u64, entity_ids: Vec<EntityId>) {
+        self.queue_command(session_id, sequence, PendingAction::Delete { entity_ids })
+            .await;
     }
 
     pub async fn queue_stop(&self, session_id: u64, sequence: u64, entity_id: EntityId) {

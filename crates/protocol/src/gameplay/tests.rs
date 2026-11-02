@@ -2,6 +2,7 @@ use super::*;
 use aoe_core::{Seed, TileCoord, WorldConfig};
 
 mod bridges;
+mod delete;
 mod fog;
 mod formations;
 mod garrison;

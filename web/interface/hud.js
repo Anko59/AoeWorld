@@ -16,6 +16,7 @@ export function initInterface() {
   initVassal();
   byId('move-units').querySelector('.icon').outerHTML=packIcon('commands','move','move');
   byId('stop-units').querySelector('.icon').outerHTML=packIcon('commands','stop','stop');
+  byId('delete-units').querySelector('.icon').outerHTML=packIcon('commands','delete','delete');
   initArt();
   const scene = () => byId('scene');
   const menu = byId('game-menu');
@@ -73,7 +74,8 @@ export function initInterface() {
     attribute(byId('selection'),'data-villagers',String(owned && selected.some(unit=>unit.kind==='Villager')));
     show('selection-empty',count===0); show('selection-content',count>0);
     show('train-villager',building && owned); show('move-units',units); show('stop-units',units);
-    const actions=building?1:units?2:0;
+    show('delete-units',owned && count>0);
+    const actions=building?2:units?3:0;
     empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
     text('command-context',count>1?`${count} ${building?'buildings':'units'}`:first?.name ?? 'Select a unit');
     text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Ctrl+right-click: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='General'?'Right-click ground: march with your army · retreat and regroup automatically':first.kind==='Vassal'?'Garrison in its home Castle · 100-tile leash':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');

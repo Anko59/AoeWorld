@@ -348,6 +348,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             4 => super::village::orders::train(&mut client, false),
             5 => super::village::orders::focus_town_center(&mut client, true),
             7 | 8 => super::village::selection::idle(&mut client, action == 8),
+            9 => super::village::orders::delete(&mut client),
             10..=39 => groups::key(&mut client, action),
             _ => return,
         }

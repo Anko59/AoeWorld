@@ -7,6 +7,7 @@ mod acquisition;
 mod approach;
 mod benchmark;
 mod buildings;
+mod delete;
 mod garrison;
 mod hidden_bonuses;
 mod hills_tests;
