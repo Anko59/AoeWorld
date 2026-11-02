@@ -62,6 +62,17 @@ pub enum Order {
         unit: EntityId,
         to: WorldPosition,
     },
+    /// Press (or release) the General's Train button.
+    GeneralTrain {
+        unit: EntityId,
+        enabled: bool,
+    },
+    /// Set the General's unit-mix sliders, 0..=100 per role (infantry,
+    /// archers, cavalry, siege, scouts).
+    GeneralMix {
+        unit: EntityId,
+        mix: [u8; 5],
+    },
     /// Walk to an exact fixed-point position.
     MoveTo {
         unit: EntityId,
@@ -238,6 +249,16 @@ impl Order {
                 sequence,
                 entity_id: unit,
                 command: aoe_protocol::GeneralCommand::MoveAlone { destination: to },
+            },
+            Order::GeneralTrain { unit, enabled } => M::GeneralOrder {
+                sequence,
+                entity_id: unit,
+                command: aoe_protocol::GeneralCommand::SetTraining { enabled },
+            },
+            Order::GeneralMix { unit, mix } => M::GeneralOrder {
+                sequence,
+                entity_id: unit,
+                command: aoe_protocol::GeneralCommand::SetMix { mix },
             },
             Order::Stop { unit } => M::StopOrder {
                 sequence,

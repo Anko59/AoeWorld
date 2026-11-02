@@ -14,6 +14,8 @@ use stances::StanceOverride;
 pub const GENERAL_ARMY_LIMIT: usize = 100;
 /// Tiles around a General within which he commands soldiers and picks buildings.
 pub const GENERAL_INFLUENCE_TILES: i64 = 50;
+/// Infantry:archers:heavy cavalry:siege:scouts a new General aims for.
+pub const DEFAULT_MIX: [u8; 5] = [35, 30, 20, 10, 5];
 pub const GENERAL_CADENCE: u64 = 10;
 pub const GENERAL_ADMISSIONS: usize = 8;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -27,6 +29,14 @@ pub enum GeneralState {
 pub struct GeneralStatus {
     pub army_size: u16,
     pub state: GeneralState,
+    /// The Train button is active.
+    pub training: bool,
+    /// Recruits queued in production buildings, not yet in the army.
+    pub queued: u16,
+    /// Unit-mix sliders per role (infantry, archers, cavalry, siege, scouts).
+    pub mix: [u8; 5],
+    /// Living soldiers of each role.
+    pub counts: [u16; 5],
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GeneralWork {
@@ -49,6 +59,10 @@ pub(crate) struct Army {
     pub routed: Option<WorldPosition>,
     /// The player is moving the General alone; the army holds and is not led.
     pub solo: bool,
+    /// The player pressed Train: recruits are bought until the army is full.
+    pub training: bool,
+    /// Unit-mix sliders per role; a role at zero is never bought.
+    pub mix: [u8; 5],
     stances: [Option<StanceOverride>; GENERAL_ARMY_LIMIT + 1],
 }
 #[derive(Debug, Default)]
@@ -122,6 +136,8 @@ impl GameWorld {
                 retreat_until: 0,
                 routed: None,
                 solo: false,
+                training: false,
+                mix: DEFAULT_MIX,
                 stances: [None; GENERAL_ARMY_LIMIT + 1],
             },
         );
@@ -154,9 +170,22 @@ impl GameWorld {
     }
     pub fn general_status(&self, id: EntityId) -> Option<GeneralStatus> {
         let army = self.economy.generals.armies.get(&id)?;
+        let mut counts = [0; 5];
+        for r in army
+            .members
+            .iter()
+            .filter_map(|&m| self.unit(m).filter(|u| u.hp > 0))
+            .filter_map(|u| role(u.kind))
+        {
+            counts[r] += 1;
+        }
         Some(GeneralStatus {
             army_size: army.members.len() as u16,
             state: army.state,
+            training: army.training,
+            queued: army.pending.len() as u16,
+            mix: army.mix,
+            counts,
         })
     }
     pub fn general_controller(&self, id: EntityId) -> Option<EntityId> {

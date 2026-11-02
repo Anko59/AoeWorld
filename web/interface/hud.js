@@ -3,6 +3,7 @@ import { imperialUnits, imperialUnitNames } from '/interface/imperial.js';
 import { initBuildings, buildingKinds, buildingNames } from '/interface/buildings.js';
 import { initArt, icon as packIcon, entityIcon, setEntityIcon } from '/interface/ui-art.js';
 import { initVassal } from '/interface/vassal/panel.js';
+import { initGeneralPanel } from '/interface/general-panel.js';
 import { updateDetails } from '/interface/details.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
@@ -15,6 +16,7 @@ const attribute = (node,name,value) => { if (node.getAttribute(name) !== value) 
 export function initInterface() {
   initBuildings();
   initVassal();
+  initGeneralPanel();
   byId('move-units').querySelector('.icon').outerHTML=packIcon('commands','move','move');
   byId('stop-units').querySelector('.icon').outerHTML=packIcon('commands','stop','stop');
   byId('delete-units').querySelector('.icon').outerHTML=packIcon('commands','delete','delete');

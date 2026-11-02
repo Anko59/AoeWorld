@@ -18,16 +18,32 @@ Adoption alone leaves soldiers in place; a march order, combat or retreat
 decision starts field movement. A newly trained commander does not pull the
 army back into its Castle exit before the player's first order.
 
-When space remains, an admitted decision may buy one ordinary unit from an
-idle completed owned production building. Infantry:archers:heavy cavalry:siege:
-scouts aim for 35:30:20:10:5. Upgrades follow the current research roster.
-Unavailable or unaffordable roles fall through to another available role.
+A new General trains nothing. After the **Train** button (`GeneralCommand::SetTraining`;
+SDK `Order::GeneralTrain`), an admitted decision with space remaining may buy one
+ordinary unit from an idle completed owned production building within the
+influence sphere. When the army and queued recruits reach 100, training switches
+itself off and stays off, even after losses, until Train is pressed again. The
+**unit-mix sliders** (`GeneralCommand::SetMix`, SDK `Order::GeneralMix`, 0 to 100
+per role: infantry, archers, heavy cavalry, siege, scouts; default 35:30:20:10:5)
+set the ratio the manager buys toward; a role at zero is never bought. Upgrades
+follow the current research roster. Unavailable or unaffordable roles fall
+through to another available role.
 Barracks, Ranges, Stables and Workshops supply the current military roster;
 Castles currently train leaders, so they do not supply ordinary reinforcements.
 The manager does not build missing production buildings or research upgrades.
 Queue reservations route new recruits directly to their General, regardless of
 spawn distance; cancellation, building destruction and General death retire
 reservations. Existing manual queues and rallies remain ordinary gameplay.
+
+## The General's panel
+
+Selecting one owned General shows a panel above the command bar with two modes;
+a General starts in **Captain** mode. Captain shows what he manages: soldiers
+by role, and the Marching or Fighting sub-mode he is currently in. **Trainer**
+shows the five unit-mix sliders and the Train button with a note (idle, training
+toward 100, or at capacity). The mode is a client convenience; the sliders, the
+button and the soldier counts are authoritative server state
+(`GeneralStatus.training/mix/counts/queued`).
 
 ## Influence sphere
 

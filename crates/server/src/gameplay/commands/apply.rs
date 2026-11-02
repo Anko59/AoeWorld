@@ -64,6 +64,12 @@ pub(in crate::gameplay) fn apply(
             }
             world.issue_general_move(player, entity_id, destination)
         }
+        PendingAction::GeneralTraining { entity_id, enabled } => {
+            world.issue_general_training(player, entity_id, enabled)
+        }
+        PendingAction::GeneralMix { entity_id, mix } => {
+            world.issue_general_mix(player, entity_id, mix)
+        }
         PendingAction::Hunt {
             unit_ids,
             animal_id,

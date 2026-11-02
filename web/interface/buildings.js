@@ -112,6 +112,7 @@ export function initBuildings() {
   military.addEventListener('click',()=>{open=open==='military'?false:'military';menu();});
   window.aoeBuildings={
     bind(callback) {
+      window.aoeGeneral?.bind(callback);
       [...buttons,...techs,byId('cancel-construction'),byId('cancel-research'),...reseedButtons,autoScout].forEach((button,i)=>button.addEventListener('click',()=>callback(0,i)));
       militaryTrain.forEach(({button,kind})=>button.addEventListener('click',()=>callback(1,kind)));
       tradeButtons.forEach(({button},i)=>button.addEventListener('click',()=>callback(2,i)));

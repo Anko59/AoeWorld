@@ -10,8 +10,17 @@ impl GameWorld {
         let Some(a) = self.economy.generals.armies.get(&id) else {
             return;
         };
+        // Nothing is bought until the player presses Train.
+        if !a.training {
+            return;
+        }
+        let weights = a.mix;
         for &member in &a.members {
-            if let Some(r) = self.unit(member).and_then(|u| role(u.kind)) {
+            if let Some(r) = self
+                .unit(member)
+                .filter(|u| u.hp > 0)
+                .and_then(|u| role(u.kind))
+            {
                 counts[r] += 1;
             }
         }
@@ -21,14 +30,18 @@ impl GameWorld {
             }
         }
         if counts.iter().sum::<usize>() >= GENERAL_ARMY_LIMIT {
+            // Full: stay idle until the player presses Train again.
+            if let Some(a) = self.economy.generals.armies.get_mut(&id) {
+                a.training = false;
+            }
             return;
         }
-        // Ratios 35:30:20:10:5. Cross multiplication avoids floats.
-        let weights = [35, 30, 20, 10, 5];
-        let mut roles = [0, 1, 2, 3, 4];
+        // The sliders' ratios; a role at zero is never bought. Cross
+        // multiplication avoids floats.
+        let mut roles: Vec<usize> = (0..5).filter(|&r| weights[r] > 0).collect();
         roles.sort_by(|&a, &b| {
-            ((counts[a] + 1) * weights[b])
-                .cmp(&((counts[b] + 1) * weights[a]))
+            ((counts[a] + 1) * usize::from(weights[b]))
+                .cmp(&((counts[b] + 1) * usize::from(weights[a])))
                 .then(a.cmp(&b))
         });
         let Some(centre) = self.unit(id).map(|u| u.position) else {

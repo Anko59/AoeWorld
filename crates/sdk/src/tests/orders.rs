@@ -237,6 +237,34 @@ fn a_tile_move_targets_the_tile_centre_and_stop_keeps_its_unit() {
             entity_id: id(2)
         }
     );
+    assert_eq!(
+        Order::GeneralTrain {
+            unit: id(3),
+            enabled: true
+        }
+        .message(4)
+        .unwrap(),
+        M::GeneralOrder {
+            sequence: 4,
+            entity_id: id(3),
+            command: aoe_protocol::GeneralCommand::SetTraining { enabled: true },
+        }
+    );
+    assert_eq!(
+        Order::GeneralMix {
+            unit: id(3),
+            mix: [1, 2, 3, 4, 5]
+        }
+        .message(5)
+        .unwrap(),
+        M::GeneralOrder {
+            sequence: 5,
+            entity_id: id(3),
+            command: aoe_protocol::GeneralCommand::SetMix {
+                mix: [1, 2, 3, 4, 5]
+            },
+        }
+    );
     let to = WorldPosition::new(512, 1536);
     assert_eq!(
         Order::GeneralMove { unit: id(3), to }.message(2).unwrap(),
