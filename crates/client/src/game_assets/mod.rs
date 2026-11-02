@@ -222,7 +222,7 @@ fn source_order(manifest: &Manifest, selected: &[usize]) -> Vec<usize> {
 // Aliased masked cells must be uploaded once: repeated coverage composition
 // would change their alpha. Shared cells deliberately retain distinct places.
 fn copy_order(manifest: &Manifest, selected: &[usize], placements: &[Placement]) -> Vec<usize> {
-    let mut first = std::collections::BTreeMap::new();
+    let mut first = std::collections::HashMap::new();
     let key = |p: &Placement| (p.page, p.x, p.y, p.width, p.height);
     for (semantic, p) in placements.iter().enumerate() {
         if manifest.frames[selected[semantic]].native.is_some() {

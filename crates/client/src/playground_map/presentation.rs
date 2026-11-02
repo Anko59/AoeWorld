@@ -2,7 +2,7 @@
 use super::state::Sample;
 use aoe_core::{EntityId, FIXED_SUBUNITS_PER_TILE};
 use aoe_protocol::GameplayUnitState;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 fn push_sample(history: &mut VecDeque<Sample>, sample: Sample) {
     // Drop first: pushing a ninth entry would grow the allocation to 16 slots.
@@ -14,7 +14,7 @@ fn push_sample(history: &mut VecDeque<Sample>, sample: Sample) {
 
 #[derive(Default)]
 pub(crate) struct Presentation {
-    history: BTreeMap<EntityId, VecDeque<Sample>>,
+    history: HashMap<EntityId, VecDeque<Sample>>,
     anchor: Option<(u64, f64)>,
     tick_hz: f64,
     tick: f64,

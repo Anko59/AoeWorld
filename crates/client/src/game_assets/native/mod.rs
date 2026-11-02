@@ -7,7 +7,7 @@ use aoe_assets::{
         frame_chunks::{FrameChunk, FrameLocation},
     },
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeSet, HashMap};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -21,12 +21,27 @@ const ENCODED_BYTES: usize = 96 * 1024 * 1024;
 const INFLIGHT_BYTES: usize = 64 * 1024 * 1024;
 const MAX_REQUESTS: usize = 4;
 
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub(super) struct Cell {
     pub location: FrameLocation,
     pub size: [u16; 2],
     pub owned: bool,
     pub team: [u8; 3],
+}
+impl std::hash::Hash for Cell {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::hash::Hash::hash(
+            &(
+                self.location.chunk,
+                self.location.offset,
+                self.location.length,
+                self.size,
+                self.owned,
+                self.team,
+            ),
+            state,
+        );
+    }
 }
 struct Encoded {
     bytes: Vec<u8>,

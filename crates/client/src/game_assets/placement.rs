@@ -84,7 +84,7 @@ pub(super) fn plan(
     // once. Shared art remains separate because it may bake different colours.
     let mut aliases = Vec::with_capacity(selected.len());
     let mut unique = 0;
-    let mut seen = std::collections::BTreeMap::new();
+    let mut seen = std::collections::HashMap::new();
     for (semantic, (&source, &domain)) in selected.iter().zip(domains).enumerate() {
         if manifest.frames[source].native.is_some() {
             aliases.push(None);

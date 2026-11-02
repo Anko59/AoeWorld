@@ -1,5 +1,6 @@
 use super::*;
 use aoe_core::{PlayerId, WorldPosition};
+use std::collections::BTreeMap;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 fn state(x: i32, moving: bool) -> GameplayUnitState {
@@ -216,7 +217,7 @@ fn deque_history_bytes_and_entity_count_stay_bounded() {
     assert_eq!(sample_bytes, 16);
     assert_eq!(deque_bytes, 4 * std::mem::size_of::<usize>());
     wasm_bindgen_test::console_log!(
-        "presentation budget: max8sample heap={} bytes, VecDeque metadata={} bytes, max entities={}, max metadata+samples={} bytes (excludes BTree node/key and allocator overhead)",
+        "presentation budget: max8sample heap={} bytes, VecDeque metadata={} bytes, max entities={}, max metadata+samples={} bytes (excludes map bucket/key and allocator overhead)",
         sample_bytes * 8,
         deque_bytes,
         aoe_protocol::MAX_SUBSCRIBED_UNITS,

@@ -11,7 +11,8 @@ pub(in crate::game_assets) fn prepare(
     records: &mut [GameFrame],
 ) -> Result<Option<NativeFrames>, JsValue> {
     let mut cells = Vec::new();
-    let mut identities = BTreeMap::new();
+    // Lookup only: IDs and the cell vector keep first semantic encounter order.
+    let mut identities = HashMap::new();
     for (semantic, &index) in selected.iter().enumerate() {
         let f = &manifest.frames[index];
         let Some(location) = f.native else {

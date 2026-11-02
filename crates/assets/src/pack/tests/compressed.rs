@@ -1,6 +1,26 @@
 use super::*;
 
 #[test]
+fn frame_failures_keep_their_format_and_detail_in_diagnostics() {
+    let plane = [10, 20, 30, 128];
+    let bytes = encode_frame([1, 1], [&plane; 3]).unwrap();
+    for (payload, size, detail) in [
+        (bytes.as_slice(), [0, 1], "invalid frame dimensions"),
+        (
+            bytes.as_slice(),
+            [2, 1],
+            "compressed frame dimensions disagree",
+        ),
+        (&[][..], [1, 1], "incomplete compressed frame"),
+    ] {
+        assert_eq!(
+            decode_frame(payload, size).unwrap_err().to_string(),
+            format!("invalid frame at byte 0: {detail}")
+        );
+    }
+}
+
+#[test]
 fn lossless_frame_codec_preserves_colour_owner_weight_and_shadow_alpha() {
     let planes = [
         vec![120, 100, 80, 128, 30, 40, 50, 255],
