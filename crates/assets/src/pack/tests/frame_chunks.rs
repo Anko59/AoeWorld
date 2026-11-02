@@ -1,6 +1,34 @@
 use super::*;
 
 #[test]
+fn native_chunk_failures_preserve_actionable_diagnostics() {
+    let chunk = FrameChunk::from_bytes("frames-0000.bin".into(), &[1, 2, 3]).unwrap();
+    assert_eq!(
+        chunk.verify_payload(&[1, 2, 4]).unwrap_err().to_string(),
+        "invalid frame chunk at byte 0: native chunk length or hash mismatch"
+    );
+    let location = FrameLocation {
+        chunk: 0,
+        offset: 2,
+        length: 2,
+    };
+    assert_eq!(
+        location.slice(&[1, 2, 3]).unwrap_err().to_string(),
+        "invalid frame chunk at byte 0: frame outside chunk"
+    );
+    assert_eq!(
+        FrameLocation {
+            length: 0,
+            ..location
+        }
+        .slice(&[])
+        .unwrap_err()
+        .to_string(),
+        "invalid frame chunk at byte 0: invalid frame payload length"
+    );
+}
+
+#[test]
 fn frame_chunks_roundtrip_and_share_identical_pixel_payloads() {
     let directory = tempfile::tempdir().unwrap();
     let mut writer = Writer::new(directory.path());

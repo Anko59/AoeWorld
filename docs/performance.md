@@ -229,6 +229,35 @@ Recovery URL serialization and startup diagnostics run in JavaScript: formatting
 the live camera's floats in Rust would retain its full decimal formatter solely
 for a browser navigation. Camera, seat and unknown fragment fields are preserved.
 
+#### Browser size investigation
+
+At `a2f5099d432e`, `make perf-wasm-size` measured 376,727 gameplay gzip bytes
+and 90,268 diagnostics gzip bytes. The unchanged 378,521-byte cap left only
+1,794 bytes for gameplay growth. `make perf-wasm-functions` (Binaryen 108,
+before `-Oz`) identified these uncompressed contributors:
+
+| Contributor | Function bytes |
+| --- | ---: |
+| B-tree node specializations | 109,039 |
+| Serde-related functions | 40,949 |
+| Main animation closure | 19,619 |
+| Projected surface triangles | 19,154 |
+| Prepared-world rendering | 17,528 |
+| Native-frame DEFLATE core | 7,377 |
+
+These are diagnostic function totals, not gzip attribution; inlining and shared
+callees prevent assigning compressed bytes to individual features. Formatting
+the general asset error also retained PNG and JSON error formatters. LLVM's
+`opt-level = "s"` was tested and rejected: gameplay grew to 394,773 gzip bytes
+(diagnostics shrank to 87,701). Keep `"z"`, fat LTO, one codegen unit and
+`wasm-opt -Oz`; neither the baseline nor the cap changes.
+
+Lookup-only native-cell, placement, upload, interpolation and shot-timing maps
+use hash tables. Their output order still comes from semantic vectors and
+authoritative unit maps, which remain ordered. This measured 372,720 gameplay
+gzip bytes (4,007 fewer; 5,801 bytes below the cap); diagnostics stayed at
+90,268. Identity tests cover every native pixel input and first-encounter IDs.
+
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts. A missing baseline or sample cannot pass. WASM size is a
 trend, not a budget: only a jump of more than 25% (`perf::THRESHOLD_PERCENT`; 5%

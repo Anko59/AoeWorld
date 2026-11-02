@@ -10,6 +10,57 @@ mod recovery;
 mod runtime;
 
 #[wasm_bindgen_test]
+fn native_identity_keeps_every_pixel_input_and_first_semantic_number() {
+    let mut value = manifest::fixture();
+    value["frames"] = serde_json::Value::Array(vec![value["frames"][0].clone(); 5]);
+    let mut manifest: Manifest = serde_json::from_value(value).unwrap();
+    manifest.chunks = vec![FrameChunk {
+        file: "frames-0000.bin".into(),
+        hash: "a".repeat(64),
+        bytes: 1024,
+    }];
+    manifest.frames[0].native = Some(FrameLocation {
+        chunk: 0,
+        offset: 0,
+        length: 64,
+    });
+    for index in 1..5 {
+        let location = manifest.frames[0].native;
+        let frame = &mut manifest.frames[index];
+        frame.native = location;
+        match index {
+            1 => frame.native.as_mut().unwrap().offset = 64,
+            2 => frame.native.as_mut().unwrap().length = 65,
+            3 => frame.width += 1,
+            _ => frame.height += 1,
+        }
+    }
+    let selected = [4, 0, 3, 1, 2, 4, 0, 0, 0];
+    let mut ranges = vec![None; aoe_assets::catalog::units::Pose::NeutralSheepStand as usize + 1];
+    *ranges.last_mut().unwrap() = Some(8..9);
+    let mut records = selected
+        .iter()
+        .map(|&i| placement::record(&manifest.frames[i], Placement::default()))
+        .collect::<Vec<_>>();
+    let native = prepare(
+        &manifest,
+        &selected,
+        &[true, true, true, true, true, true, true, false, true],
+        &ranges,
+        [65, 145, 245],
+        &[Placement::default(); 9],
+        &mut records,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(native.len(), 7);
+    assert_eq!(
+        records.iter().map(|r| r.stream).collect::<Vec<_>>(),
+        [1, 2, 3, 4, 5, 1, 2, 6, 7]
+    );
+}
+
+#[wasm_bindgen_test]
 fn native_selection_shares_payloads_without_merging_semantic_geometry_or_mask_modes() {
     let mut value = manifest::fixture();
     value["chunks"] =
