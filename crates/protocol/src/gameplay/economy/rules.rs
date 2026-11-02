@@ -14,9 +14,12 @@ fn valid_research(player: &GameplayPlayerState) -> bool {
     player.researched & !known == 0
         && (player.age >= Age::Feudal || player.researched & !Tech::Loom.bit() == 0)
         && (player.age >= Age::Feudal) == (player.researched & Tech::FeudalAge.bit() != 0)
-        && (player.age == Age::Castle) == (player.researched & Tech::CastleAge.bit() != 0)
-        && (player.age == Age::Castle
+        && (player.age >= Age::Castle) == (player.researched & Tech::CastleAge.bit() != 0)
+        && (player.age == Age::Imperial) == (player.researched & Tech::ImperialAge.bit() != 0)
+        && (player.age >= Age::Castle
             || player.researched & Tech::ALL[15..].iter().fold(0, |bits, t| bits | t.bit()) == 0)
+        && (player.age == Age::Imperial
+            || player.researched & Tech::ALL[34..].iter().fold(0, |bits, t| bits | t.bit()) == 0)
 }
 
 /// The first rule `player` breaks.
@@ -68,6 +71,9 @@ fn trains(building: BuildingKind, unit: UnitKind) -> bool {
                     | UnitKind::ManAtArms
                     | UnitKind::LongSwordsman
                     | UnitKind::Pikeman
+                    | UnitKind::TwoHandedSwordsman
+                    | UnitKind::Champion
+                    | UnitKind::Halberdier
             )
             | (
                 BuildingKind::ArcheryRange,
@@ -75,15 +81,25 @@ fn trains(building: BuildingKind, unit: UnitKind) -> bool {
                     | UnitKind::Skirmisher
                     | UnitKind::Crossbowman
                     | UnitKind::EliteSkirmisher
+                    | UnitKind::Arbalester
             )
             | (
                 BuildingKind::Stable,
-                UnitKind::Scout | UnitKind::Knight | UnitKind::LightCavalry
+                UnitKind::Scout
+                    | UnitKind::Knight
+                    | UnitKind::LightCavalry
+                    | UnitKind::Cavalier
+                    | UnitKind::Paladin
+                    | UnitKind::Hussar
             )
             | (BuildingKind::Monastery, UnitKind::Monk)
             | (
                 BuildingKind::SiegeWorkshop,
-                UnitKind::Mangonel | UnitKind::BatteringRam
+                UnitKind::Mangonel
+                    | UnitKind::BatteringRam
+                    | UnitKind::CappedRam
+                    | UnitKind::SiegeRam
+                    | UnitKind::Onager
             )
             | (
                 BuildingKind::Dock,

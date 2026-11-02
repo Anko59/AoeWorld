@@ -340,6 +340,9 @@ simulation reports local search cell/candidate counts in `WildlifeStats`.
 The [Castle Age](economy/castle.md) adds the next generic age, defensive Castle,
 Monastery, University, Siege Workshop, unit lines, economic and military research,
 local deterministic splash, healing and Ballistics.
+The [Imperial Age](economy/imperial.md) completes the generic tech tree with
+Champion, Halberdier, Arbalester, Paladin, Hussar, Siege Ram and Onager lines,
+the third Blacksmith tier and three economy upgrades.
 
 The original [Vassal](economy/vassal.md) is trained at a Castle and has a fixed
 100-tile home radius. Population is uncapped.

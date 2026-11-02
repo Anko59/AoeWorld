@@ -3,9 +3,11 @@ use super::*;
 
 pub(super) fn class(kind: UnitKind) -> u8 {
     match kind {
-        UnitKind::Monk | UnitKind::Mangonel | UnitKind::BatteringRam => 2,
+        UnitKind::Monk => 2,
+        kind if kind.is_siege() => 2,
         UnitKind::Archer
         | UnitKind::Crossbowman
+        | UnitKind::Arbalester
         | UnitKind::Skirmisher
         | UnitKind::EliteSkirmisher => 1,
         _ => 0,

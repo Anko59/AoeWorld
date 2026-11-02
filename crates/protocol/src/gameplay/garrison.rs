@@ -54,6 +54,10 @@ impl BuildingKind {
                         | UnitKind::Pikeman
                         | UnitKind::Crossbowman
                         | UnitKind::EliteSkirmisher
+                        | UnitKind::TwoHandedSwordsman
+                        | UnitKind::Champion
+                        | UnitKind::Halberdier
+                        | UnitKind::Arbalester
                 ))
     }
 }

@@ -95,7 +95,7 @@ impl GameWorld {
             return;
         }
         if (unit_combat(before.kind).attack_kind == super::DamageKind::Pierce
-            || before.kind == crate::UnitKind::Mangonel)
+            || before.kind.is_artillery())
             && !self.target_visible_to(before.player, attacker.target)
         {
             self.end_attack(id, changed);
@@ -337,7 +337,7 @@ impl GameWorld {
             );
             return;
         }
-        if stats.kind == crate::UnitKind::Mangonel {
+        if stats.kind.is_artillery() {
             self.launch_projectile(
                 attacker_id,
                 target,

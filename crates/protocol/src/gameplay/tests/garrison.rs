@@ -55,6 +55,7 @@ fn vassal_training_and_specific_refusals_pin_the_current_wire() {
         (CommandResult::RejectedVassalExists, 34),
         (CommandResult::RejectedVassalLeash, 35),
         (CommandResult::RejectedVassalHome, 36),
+        (CommandResult::RejectedRequiresImperialAge, 37),
     ] {
         let ack = ServerMessage::CommandAck {
             sequence: 3,

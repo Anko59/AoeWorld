@@ -11,6 +11,7 @@ pub enum Age {
     Dark,
     Feudal,
     Castle,
+    Imperial,
 }
 
 /// Canonical order; a technology's bit in `researched` is `1 << tech as u8`.
@@ -51,6 +52,25 @@ pub enum Tech {
     Ballistics,
     MurderHoles,
     WarGalley,
+    ImperialAge,
+    TwoHandedSwordsman,
+    Champion,
+    Halberdier,
+    Arbalester,
+    Cavalier,
+    Paladin,
+    Hussar,
+    CappedRam,
+    SiegeRam,
+    Onager,
+    BlastFurnace,
+    PlateMailArmor,
+    PlateBardingArmor,
+    Bracer,
+    RingArcherArmor,
+    CropRotation,
+    TwoManSaw,
+    StoneShaftMining,
 }
 
 /// What a finished technology changes.
@@ -128,7 +148,7 @@ pub const FEUDAL_BUILDINGS: &[BuildingKind] = &[
 ];
 
 /// Indexed by `Tech as usize`; a test pins the order.
-pub const TECH_RULES: [TechRules; 34] = [
+pub const TECH_RULES: [TechRules; 53] = [
     TechRules {
         age: Age::Dark,
         tech: Tech::Loom,
@@ -262,6 +282,25 @@ pub const TECH_RULES: [TechRules; 34] = [
         requires: TechRequirement::Age(Age::Castle),
         effect: TechEffect::UpgradeGalley,
     },
+    super::imperial::RULES[0],
+    super::imperial::RULES[1],
+    super::imperial::RULES[2],
+    super::imperial::RULES[3],
+    super::imperial::RULES[4],
+    super::imperial::RULES[5],
+    super::imperial::RULES[6],
+    super::imperial::RULES[7],
+    super::imperial::RULES[8],
+    super::imperial::RULES[9],
+    super::imperial::RULES[10],
+    super::imperial::RULES[11],
+    super::imperial::RULES[12],
+    super::imperial::RULES[13],
+    super::imperial::RULES[14],
+    super::imperial::RULES[15],
+    super::imperial::RULES[16],
+    super::imperial::RULES[17],
+    super::imperial::RULES[18],
 ];
 
 const fn military(tech: Tech, food: u32, gold: u32, seconds: u32) -> TechRules {

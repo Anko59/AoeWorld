@@ -170,8 +170,8 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
             kind: UnitKind::FishingShip
         }
     );
-    // General is current discriminator 23; 24 is the first unknown unit kind.
-    assert!(decode_gameplay_client(&[5, 9, 3, 24]).is_err());
+    // Onager is current discriminator 33; 34 is the first unknown unit kind.
+    assert!(decode_gameplay_client(&[5, 9, 3, 34]).is_err());
     assert!(decode_gameplay_client(&[4, 9, 3]).is_err());
     // A build order may name at most MAX_BUILD_GROUP villagers.
     let crowd = GameplayClientMessage::BuildOrder {

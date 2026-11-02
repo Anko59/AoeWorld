@@ -106,7 +106,7 @@ fn research_orders_have_current_golden_wire_and_round_trip() {
         assert_eq!(decode_gameplay_client(&bytes).unwrap(), message);
     }
     // An unknown technology is not a message.
-    assert!(decode_gameplay_client(&[13, 7, 1, 34]).is_err());
+    assert!(decode_gameplay_client(&[13, 7, 1, 53]).is_err());
 }
 
 #[test]
@@ -219,6 +219,38 @@ fn castle_orders_and_high_research_bit_have_current_golden_wire() {
     refused(tick_with(vec![player(Age::Feudal, researched)], vec![]));
     refused(tick_with(
         vec![player(Age::Castle, Tech::CastleAge.bit())],
+        vec![],
+    ));
+}
+
+#[test]
+fn imperial_orders_and_age_consistency_have_current_golden_wire() {
+    for (tech, byte) in [(Tech::ImperialAge, 34), (Tech::StoneShaftMining, 52)] {
+        let order = GameplayClientMessage::ResearchOrder {
+            sequence: 7,
+            building_id: EntityId(1),
+            tech,
+        };
+        let bytes = vec![13, 7, 1, byte];
+        assert_eq!(encode_gameplay_client(&order).unwrap(), bytes);
+        assert_eq!(decode_gameplay_client(&bytes).unwrap(), order);
+    }
+    let train = GameplayClientMessage::TrainOrder {
+        sequence: 9,
+        building_id: EntityId(3),
+        kind: UnitKind::Onager,
+    };
+    assert_eq!(encode_gameplay_client(&train).unwrap(), vec![5, 9, 3, 33]);
+    let castle = Tech::FeudalAge.bit() | Tech::CastleAge.bit();
+    let imperial = castle | Tech::ImperialAge.bit() | Tech::StoneShaftMining.bit();
+    let state = tick_with(vec![player(Age::Imperial, imperial)], vec![]);
+    let bytes = encode_gameplay_server(&state).unwrap();
+    assert_eq!(decode_gameplay_server(&bytes).unwrap(), state);
+    // Imperial technologies need Imperial Age, and the age needs its technology.
+    refused(tick_with(vec![player(Age::Castle, imperial)], vec![]));
+    refused(tick_with(vec![player(Age::Imperial, castle)], vec![]));
+    refused(tick_with(
+        vec![player(Age::Castle, castle | Tech::ImperialAge.bit())],
         vec![],
     ));
 }

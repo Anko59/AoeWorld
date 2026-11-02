@@ -15,7 +15,10 @@ fn barracks_accepts_only_militia_and_requires_completion() {
             UnitKind::Spearman,
             UnitKind::ManAtArms,
             UnitKind::LongSwordsman,
-            UnitKind::Pikeman
+            UnitKind::Pikeman,
+            UnitKind::TwoHandedSwordsman,
+            UnitKind::Champion,
+            UnitKind::Halberdier
         ]
     );
     let worker = villager_at(&mut world, 99, 100);

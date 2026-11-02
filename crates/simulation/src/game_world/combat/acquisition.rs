@@ -52,7 +52,7 @@ impl GameWorld {
             min,
             max: range,
             actor: id,
-            ram: u.kind == UnitKind::BatteringRam,
+            ram: u.kind.is_ram(),
         };
         if let Some(target) = self.acquire_contact_target(&area) {
             attacker.target = target;
@@ -178,7 +178,7 @@ impl GameWorld {
             min: i64::from(stats.min_range) * MELEE_RANGE_SUBUNITS,
             max,
             actor: u.id,
-            ram: u.kind == UnitKind::BatteringRam,
+            ram: u.kind.is_ram(),
         })
     }
 

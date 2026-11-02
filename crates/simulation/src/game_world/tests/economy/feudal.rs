@@ -78,9 +78,17 @@ fn feudal_buildings_are_age_gated_atomically_then_build_with_de_stats() {
                     UnitKind::Archer,
                     UnitKind::Skirmisher,
                     UnitKind::Crossbowman,
-                    UnitKind::EliteSkirmisher
+                    UnitKind::EliteSkirmisher,
+                    UnitKind::Arbalester
                 ][..],
-                Stable => &[UnitKind::Scout, UnitKind::Knight, UnitKind::LightCavalry][..],
+                Stable => &[
+                    UnitKind::Scout,
+                    UnitKind::Knight,
+                    UnitKind::LightCavalry,
+                    UnitKind::Cavalier,
+                    UnitKind::Paladin,
+                    UnitKind::Hussar
+                ][..],
                 _ => &[][..],
             }
         );

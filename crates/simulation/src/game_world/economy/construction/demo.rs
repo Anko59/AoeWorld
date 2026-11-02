@@ -3,6 +3,8 @@
 use crate::{BuildingKind, EconomyError, GameWorld, Stockpile};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 
+#[path = "demo/imperial.rs"]
+mod imperial;
 #[path = "demo/kingdom.rs"]
 mod kingdom;
 

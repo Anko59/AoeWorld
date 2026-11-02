@@ -2,6 +2,7 @@ mod barracks;
 mod castle;
 mod feudal;
 mod gates;
+mod imperial;
 mod research;
 use super::*;
 use crate::{BuildingKind, CarriedResource, EconomyError, UnitKind, UnitTask, VILLAGE_RULES};

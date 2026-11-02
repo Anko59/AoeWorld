@@ -60,6 +60,16 @@ mirror!(
         WarGalley,
         Vassal,
         General,
+        TwoHandedSwordsman,
+        Champion,
+        Halberdier,
+        Arbalester,
+        Cavalier,
+        Paladin,
+        Hussar,
+        CappedRam,
+        SiegeRam,
+        Onager,
     ]
 );
 mirror!(
@@ -134,10 +144,29 @@ mirror!(
         Masonry,
         Ballistics,
         MurderHoles,
+        ImperialAge,
+        TwoHandedSwordsman,
+        Champion,
+        Halberdier,
+        Arbalester,
+        Cavalier,
+        Paladin,
+        Hussar,
+        CappedRam,
+        SiegeRam,
+        Onager,
+        BlastFurnace,
+        PlateMailArmor,
+        PlateBardingArmor,
+        Bracer,
+        RingArcherArmor,
+        CropRotation,
+        TwoManSaw,
+        StoneShaftMining,
         WarGalley,
     ]
 );
-mirror!(Age, aoe_sdk::Age, [Dark, Feudal, Castle]);
+mirror!(Age, aoe_sdk::Age, [Dark, Feudal, Castle, Imperial]);
 mirror!(
     UnitTask,
     aoe_sdk::UnitTask,
@@ -204,6 +233,7 @@ mirror!(
         RejectedOrderTooLarge,
         RejectedUnexploredPlacement,
         RejectedRequiresCastleAge,
+        RejectedRequiresImperialAge,
         RejectedGarrisonFull,
         RejectedVassalExists,
         RejectedVassalLeash,

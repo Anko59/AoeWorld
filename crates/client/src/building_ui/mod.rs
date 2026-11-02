@@ -303,7 +303,7 @@ pub fn age_sprite_slot(
     if let Some(slot) = stone_slot(kind, progress, rubble) {
         return slot;
     }
-    if progress == 1000 && !rubble && age == aoe_protocol::Age::Castle {
+    if progress == 1000 && !rubble && age >= aoe_protocol::Age::Castle {
         return CASTLE[kind as usize] as usize;
     }
     const FEUDAL: [u8; 16] = [38, 39, 2, 3, 40, 5, 41, 7, 8, 44, 26, 27, 28, 29, 30, 31];

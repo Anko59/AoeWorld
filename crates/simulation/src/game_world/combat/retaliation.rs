@@ -32,13 +32,11 @@ impl GameWorld {
             || self
                 .unit_stats(attacker)
                 .is_some_and(|s| s.attack_kind == DamageKind::Pierce || s.range > 1);
-        let ram_target = self
-            .unit(attacker)
-            .is_some_and(|a| matches!(a.kind, UnitKind::BatteringRam | UnitKind::Mangonel))
+        let ram_target = self.unit(attacker).is_some_and(|a| a.kind.is_siege())
             || self.building(attacker).is_some();
         let flee = stats.attack == 0
             || (unit.kind == UnitKind::Villager && ranged)
-            || (unit.kind == UnitKind::BatteringRam && !ram_target);
+            || (unit.kind.is_ram() && !ram_target);
         if unit.stance == CombatStance::StandGround {
             let range = super::super::navy::attack_range(&stats);
             if flee || goal.distance_squared(unit.position) > range * range {

@@ -12,7 +12,15 @@ impl super::UnitKind {
         )
     }
     pub fn is_cavalry(self) -> bool {
-        matches!(self, Self::Scout | Self::Knight | Self::LightCavalry)
+        matches!(
+            self,
+            Self::Scout
+                | Self::Knight
+                | Self::LightCavalry
+                | Self::Cavalier
+                | Self::Paladin
+                | Self::Hussar
+        )
     }
 }
 pub(super) fn valid_auto_scout(unit: &super::UnitState) -> bool {

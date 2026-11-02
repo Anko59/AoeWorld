@@ -140,11 +140,11 @@ pub(crate) fn age_armour(kind: BuildingKind, age: crate::Age) -> BuildingCombat 
                 | BuildingKind::Barracks
         )
     {
-        let bonus = if age == crate::Age::Castle { 2 } else { 1 };
+        let bonus = if age >= crate::Age::Castle { 2 } else { 1 };
         stats.melee_armour += bonus;
         stats.pierce_armour += bonus as u16;
     }
-    if age == crate::Age::Castle
+    if age >= crate::Age::Castle
         && matches!(
             kind,
             BuildingKind::ArcheryRange

@@ -15,13 +15,15 @@ pub fn browser_content() -> Vec<i32> {
     for r in crate::BUILDING_RULES {
         data.push(r.kind as i32);
         data.extend(price(r.cost));
+        let trainable = r.trainable.iter().fold(0_u64, |m, k| m | (1 << *k as u8));
         data.extend([
             r.side,
             r.depth,
             r.age as i32,
             i32::from(r.buildable),
             r.requires.map_or(0, |k| k as i32 + 1),
-            r.trainable.iter().fold(0, |m, k| m | (1 << *k as u8)),
+            trainable as i32,
+            (trainable >> 32) as i32,
             i32::from(r.blocks),
             i32::from(r.max_hp),
         ]);

@@ -27,17 +27,29 @@ pub(super) const fn unit_armour(kind: UnitKind) -> Classes {
     match kind {
         UnitKind::Villager | UnitKind::Vassal => &[],
         // The mounted General takes cavalry bonuses, so spears and pikes counter it.
-        UnitKind::Scout | UnitKind::Knight | UnitKind::LightCavalry | UnitKind::General => {
-            &[(Cavalry, 0)]
-        }
-        UnitKind::Militia | UnitKind::ManAtArms | UnitKind::LongSwordsman => &[(Infantry, 0)],
+        UnitKind::Scout
+        | UnitKind::Knight
+        | UnitKind::LightCavalry
+        | UnitKind::Cavalier
+        | UnitKind::Paladin
+        | UnitKind::Hussar
+        | UnitKind::General => &[(Cavalry, 0)],
+        UnitKind::Militia
+        | UnitKind::ManAtArms
+        | UnitKind::LongSwordsman
+        | UnitKind::TwoHandedSwordsman
+        | UnitKind::Champion => &[(Infantry, 0)],
         UnitKind::FishingShip => &[(FishingShip, 0)],
-        UnitKind::Archer | UnitKind::Crossbowman => &[(Archer, 0)],
+        UnitKind::Archer | UnitKind::Crossbowman | UnitKind::Arbalester => &[(Archer, 0)],
         UnitKind::Skirmisher | UnitKind::EliteSkirmisher => &[(Archer, 0), (Skirmisher, 0)],
-        UnitKind::Spearman | UnitKind::Pikeman => &[(Infantry, 0), (Spear, 0)],
+        UnitKind::Spearman | UnitKind::Pikeman | UnitKind::Halberdier => {
+            &[(Infantry, 0), (Spear, 0)]
+        }
         UnitKind::Monk => &[(Monk, 0)],
-        UnitKind::Mangonel => &[(Siege, 0)],
-        UnitKind::BatteringRam => &[(Siege, 0), (Ram, 0)],
+        UnitKind::Mangonel | UnitKind::Onager => &[(Siege, 0)],
+        UnitKind::BatteringRam | UnitKind::CappedRam | UnitKind::SiegeRam => {
+            &[(Siege, 0), (Ram, 0)]
+        }
         UnitKind::Galley | UnitKind::WarGalley | UnitKind::TransportShip => &[(Ship, 0)],
         UnitKind::FireShip => &[(Ship, 6)],
         UnitKind::DemolitionShip => &[(Ship, 3)],
@@ -62,12 +74,23 @@ pub(super) const fn unit_attacks(kind: UnitKind) -> Classes {
         ],
         UnitKind::Skirmisher => &[(Archer, 3), (Spear, 3)],
         UnitKind::EliteSkirmisher => &[(Archer, 4), (Spear, 4)],
-        UnitKind::Archer | UnitKind::Crossbowman => &[(Spear, 3)],
+        UnitKind::Archer | UnitKind::Crossbowman | UnitKind::Arbalester => &[(Spear, 3)],
         UnitKind::ManAtArms => &[(StandardBuilding, 2)],
         UnitKind::LongSwordsman => &[(StandardBuilding, 3)],
+        UnitKind::TwoHandedSwordsman | UnitKind::Champion => &[(StandardBuilding, 4)],
         UnitKind::LightCavalry => &[(Monk, 10)],
+        UnitKind::Hussar => &[(Monk, 12)],
+        UnitKind::Halberdier => &[
+            (Cavalry, 32),
+            (Ship, 17),
+            (FishingShip, 26),
+            (StandardBuilding, 1),
+        ],
         UnitKind::BatteringRam => &[(Building, 150), (Siege, 40)],
+        UnitKind::CappedRam => &[(Building, 160), (Siege, 50)],
+        UnitKind::SiegeRam => &[(Building, 200), (Siege, 65)],
         UnitKind::Mangonel => &[(Building, 35), (Siege, 12)],
+        UnitKind::Onager => &[(Building, 45), (Siege, 12)],
         UnitKind::Galley => &[(Building, 6), (Ship, 8), (FishingShip, 8), (Ram, 3)],
         UnitKind::WarGalley => &[(Building, 7), (Ship, 9), (FishingShip, 9), (Ram, 4)],
         UnitKind::FireShip => &[(Building, 2), (Ship, 3), (FishingShip, 3)],
@@ -75,6 +98,8 @@ pub(super) const fn unit_attacks(kind: UnitKind) -> Classes {
         UnitKind::Militia
         | UnitKind::FishingShip
         | UnitKind::Knight
+        | UnitKind::Cavalier
+        | UnitKind::Paladin
         | UnitKind::Monk
         | UnitKind::TransportShip
         | UnitKind::Vassal

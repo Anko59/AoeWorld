@@ -1,6 +1,6 @@
 use super::{DamageKind, UnitCombat, UnitCost, UnitKind, UnitTraining};
 /// Indexed by `UnitKind as usize`; a test pins the order.
-pub const UNIT_COMBAT: [UnitCombat; 24] = [
+pub const UNIT_COMBAT: [UnitCombat; 34] = [
     UnitCombat {
         kind: UnitKind::Villager,
         hp: 25,
@@ -263,6 +263,86 @@ pub const UNIT_COMBAT: [UnitCombat; 24] = [
         (800, 0, 800),
         60,
     ),
+    troop(
+        UnitKind::TwoHandedSwordsman,
+        (65, 12, 1, 1),
+        (200, 96),
+        (1, 0, 5),
+        (50, 0, 20),
+        21,
+    ),
+    troop(
+        UnitKind::Champion,
+        (70, 14, 1, 1),
+        (200, 96),
+        (1, 0, 5),
+        (50, 0, 20),
+        21,
+    ),
+    troop(
+        UnitKind::Halberdier,
+        (60, 6, 0, 0),
+        (300, 100),
+        (1, 0, 4),
+        (35, 25, 0),
+        22,
+    ),
+    troop(
+        UnitKind::Arbalester,
+        (40, 6, 0, 0),
+        (200, 96),
+        (5, 0, 7),
+        (0, 25, 45),
+        27,
+    ),
+    troop(
+        UnitKind::Cavalier,
+        (120, 12, 2, 2),
+        (180, 135),
+        (1, 0, 4),
+        (60, 0, 75),
+        30,
+    ),
+    troop(
+        UnitKind::Paladin,
+        (160, 14, 2, 3),
+        (190, 135),
+        (1, 0, 5),
+        (60, 0, 75),
+        30,
+    ),
+    troop(
+        UnitKind::Hussar,
+        (75, 7, 0, 2),
+        (190, 150),
+        (1, 0, 4),
+        (80, 0, 0),
+        30,
+    ),
+    troop(
+        UnitKind::CappedRam,
+        (200, 3, -2, 190),
+        (500, 60),
+        (1, 0, 5),
+        (0, 160, 75),
+        36,
+    ),
+    troop(
+        UnitKind::SiegeRam,
+        (270, 4, -1, 195),
+        (500, 60),
+        (1, 0, 5),
+        (0, 160, 75),
+        36,
+    ),
+    troop(
+        UnitKind::Onager,
+        (60, 55, 0, 8),
+        (600, 60),
+        (8, 3, 10),
+        (0, 160, 135),
+        46,
+    ),
 ];
 
 const fn troop(
@@ -279,7 +359,10 @@ const fn troop(
         attack: stats.1,
         melee_armour: stats.2,
         pierce_armour: stats.3,
-        attack_kind: if matches!(kind, UnitKind::Crossbowman | UnitKind::EliteSkirmisher) {
+        attack_kind: if matches!(
+            kind,
+            UnitKind::Crossbowman | UnitKind::EliteSkirmisher | UnitKind::Arbalester
+        ) {
             DamageKind::Pierce
         } else {
             DamageKind::Melee

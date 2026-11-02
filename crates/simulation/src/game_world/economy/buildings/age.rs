@@ -3,7 +3,7 @@ use super::{Age, BuildingKind};
 impl BuildingKind {
     /// DE's upgraded unit records, plus the automatic palisade HP effect 293.
     pub fn age_stats(self, age: Age) -> (u16, u8) {
-        if age == Age::Castle {
+        if age >= Age::Castle {
             use BuildingKind::*;
             return match self {
                 TownCenter => (2400, 8),
