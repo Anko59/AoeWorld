@@ -24,6 +24,7 @@ test("local original panel proof with real selection and training", async ({
         renderer?: "webgpu" | "webgl2";
         arenaToken?: string;
         side?: "before" | "after";
+        agesOnly?: boolean;
       },
     () => null,
   );
@@ -51,6 +52,7 @@ test("local original panel proof with real selection and training", async ({
       config.url,
       config.arenaToken,
       config.side ?? "after",
+      config.agesOnly,
     );
     return;
   }

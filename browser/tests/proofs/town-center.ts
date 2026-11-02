@@ -1,5 +1,6 @@
 import { expect, type Page } from "@playwright/test";
-import { mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { centerVillage, freshHud } from "../village/fixtures/resources.js";
 
 type Actor = { id: number; kind: string; x: number; y: number; owned: boolean };
@@ -10,7 +11,12 @@ export async function townCenterProof(
   url: string,
   token: string,
   side: "before" | "after",
+  agesOnly = false,
 ) {
+  expect(
+    token.length,
+    "Arena admin tokens require at least 16 characters",
+  ).toBeGreaterThanOrEqual(16);
   const directory = `../.cache/tc-shots/client/${side}`;
   await mkdir(directory, { recursive: true });
   const readinessPath = new URL(
@@ -36,6 +42,15 @@ export async function townCenterProof(
       construction: { available: boolean; angles: number }[];
     }[];
   };
+  const bundle = await page.request.get(`${url}pkg/aoe_client_bg.wasm`);
+  expect(bundle.ok()).toBe(true);
+  const sha256 = (bytes: Buffer) =>
+    createHash("sha256").update(bytes).digest("hex");
+  const wasmSha256 = sha256(await bundle.body());
+  const overlaySha256 = sha256(await response.body());
+  expect(wasmSha256).toBe(
+    sha256(await readFile("../web/pkg/aoe_client_bg.wasm")),
+  );
   const nativeState = () =>
     page.evaluate(async () => {
       const module = (await import(
@@ -120,6 +135,19 @@ export async function townCenterProof(
     expect(native.native_request_bytes).toBeLessThanOrEqual(64 * 1024 ** 2);
     expect(native.native_resident_frames).toBeGreaterThan(0);
     await page.screenshot({ path: `${directory}/${name}.png` });
+    // Intentional temporal sample, not a readiness delay: inspect the same
+    // building again after animation has had time to choose another cell.
+    await page.waitForTimeout(1000);
+    await camera(x + 0.125, y, zoom);
+    await expect
+      .poll(async () => Number(await scene.getAttribute("data-frame")))
+      .toBeGreaterThan(presentation.frame);
+    const secondDisplaced = await readiness.sample(page);
+    await camera(x, y, zoom);
+    await expect
+      .poll(async () => Number(await scene.getAttribute("data-frame")))
+      .toBeGreaterThan(secondDisplaced.frame);
+    await page.screenshot({ path: `${directory}/${name}-frame-2.png` });
     await writeFile(
       `${directory}/${name}.json`,
       JSON.stringify(
@@ -127,6 +155,9 @@ export async function townCenterProof(
           health: await (await page.request.get(`${url}health`)).json(),
           presentation,
           native,
+          wasmSha256,
+          overlaySha256,
+          secondPresentation: await readiness.sample(page),
           age: await page.locator("#age").textContent(),
           selection: await page.locator("#selection").innerText(),
           progress: await page
@@ -161,7 +192,8 @@ export async function townCenterProof(
       x: Number(map.getAttribute("data-camera-x")),
       y: Number(map.getAttribute("data-camera-y")),
     }));
-    await camera(at.x, at.y, 1.1);
+    // Leave room above the taller Feudal/Castle roof and below the HUD.
+    await camera(at.x - 1, at.y - 1, 0.85);
     return at;
   };
   await open("feudal-economy");
@@ -181,6 +213,7 @@ export async function townCenterProof(
     await step();
   await expect(page.locator("#age")).toContainText("Castle Age");
   await capture("castle-complete");
+  if (agesOnly) return;
 
   const build = async (
     kind: string,
