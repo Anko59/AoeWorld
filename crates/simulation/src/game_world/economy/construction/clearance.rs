@@ -15,6 +15,9 @@ use std::collections::BTreeSet;
 /// static-collision clearance, well inside the body radius), in subunits.
 const EDGE_CLEARANCE: i64 = 128;
 
+/// Rings around a footprint searched for a free tile to stand on.
+const EXIT_RINGS: i32 = 32;
+
 /// Whether a unit stands in `footprint` or closer to its edge than movement
 /// allows.
 fn overlaps(footprint: TileRect, u: &crate::GameUnit) -> bool {
@@ -31,15 +34,23 @@ fn overlaps(footprint: TileRect, u: &crate::GameUnit) -> bool {
 
 impl GameWorld {
     /// Nearest free walkable tile outside `footprint` for `unit`, skipping
-    /// `taken`. The first two rings stay free for builders when possible.
+    /// `taken`, searched ring by ring outward from the footprint edge (up to
+    /// `EXIT_RINGS`). With `spare_edge` the first ring is tried last, so idle
+    /// bystanders leave the builders' work spots free when they can.
     fn exit_tile(
         &self,
         id: EntityId,
         footprint: TileRect,
         taken: &BTreeSet<TileCoord>,
+        spare_edge: bool,
     ) -> Option<TileCoord> {
         let unit = self.unit(id)?;
-        for margin in (1..8).chain(std::iter::once(0)) {
+        let margins: Vec<i32> = if spare_edge {
+            (1..EXIT_RINGS).chain(std::iter::once(0)).collect()
+        } else {
+            (0..EXIT_RINGS).collect()
+        };
+        for margin in margins {
             let ring = perimeter(TileRect::from_xywh(
                 footprint.min.x - margin,
                 footprint.min.y - margin,
@@ -102,7 +113,7 @@ impl GameWorld {
             if unit.player != owner || self.economy.builders.contains_key(&unit.id) {
                 continue;
             }
-            let Some(tile) = self.exit_tile(unit.id, footprint, &taken) else {
+            let Some(tile) = self.exit_tile(unit.id, footprint, &taken, true) else {
                 continue;
             };
             taken.insert(tile);
@@ -136,7 +147,7 @@ impl GameWorld {
         {
             return false;
         }
-        let Some(tile) = self.exit_tile(id, area, &BTreeSet::new()) else {
+        let Some(tile) = self.exit_tile(id, area, &BTreeSet::new(), false) else {
             return false;
         };
         let Ok(at) = position(tile) else {
@@ -163,7 +174,7 @@ impl GameWorld {
             .collect::<Vec<_>>();
         let mut taken = BTreeSet::new();
         for id in overlapping {
-            if let Some(tile) = self.exit_tile(id, footprint, &taken)
+            if let Some(tile) = self.exit_tile(id, footprint, &taken, false)
                 && let Ok(at) = position(tile)
             {
                 taken.insert(tile);
@@ -190,7 +201,7 @@ impl GameWorld {
             if self
                 .unit(*id)
                 .is_some_and(|u| area.contains(u.position.tile_floor()))
-                && let Some(tile) = self.exit_tile(*id, area, &taken)
+                && let Some(tile) = self.exit_tile(*id, area, &taken, false)
                 && let Ok(at) = position(tile)
             {
                 taken.insert(tile);

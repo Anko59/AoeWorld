@@ -114,3 +114,103 @@ fn a_builder_pressed_against_the_edge_does_not_stall_the_house() {
     let after = world.building(id).unwrap().progress_permille();
     assert!(after > before + 10, "{before} -> {after}");
 }
+
+/// Put `id` on the centre of `tile`, as a crowd shove would.
+fn shove(world: &mut GameWorld, id: EntityId, tile: TileCoord) {
+    let index = world.lookup[&id];
+    let from = world.units[index].state.position.tile_floor();
+    world.units[index].state.position = WorldPosition::from_tile_center(tile).unwrap();
+    let state = world.units[index].state;
+    world.track_unit_step(id, from, &state);
+}
+
+/// Advance until `id` is working on the foundation.
+fn settle(world: &mut GameWorld, id: EntityId) {
+    for _ in 0..100 {
+        if world.unit(id).unwrap().task == UnitTask::Building {
+            return;
+        }
+        world.advance();
+    }
+    panic!("builder never started work");
+}
+
+#[test]
+fn a_builder_on_the_footprint_is_set_on_the_nearest_free_tile() {
+    let (mut world, _, _) = village();
+    fixture::survey(&mut world, PlayerId(0), at(100, 100), 8);
+    let builder = villager_at(&mut world, 99, 100);
+    let id = world
+        .issue_build(
+            PlayerId(0),
+            &[builder],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
+        .unwrap();
+    let footprint = world.building(id).unwrap().footprint;
+    settle(&mut world, builder);
+    shove(&mut world, builder, footprint.min);
+    world.advance();
+    let tile = world.unit(builder).unwrap().position.tile_floor();
+    assert!(
+        !footprint.contains(tile)
+            && (footprint.min.x - 1..=footprint.max.x).contains(&tile.x)
+            && (footprint.min.y - 1..=footprint.max.y).contains(&tile.y),
+        "{tile:?} is not on the ring next to {footprint:?}"
+    );
+}
+
+#[test]
+fn a_builder_inside_a_finished_house_is_put_out_even_when_eight_rings_are_taken() {
+    let (mut world, _, _) = village();
+    fixture::survey(&mut world, PlayerId(0), at(100, 100), 8);
+    let stuck = villager_at(&mut world, 99, 101);
+    let worker = villager_at(&mut world, 99, 100);
+    let id = world
+        .issue_build(
+            PlayerId(0),
+            &[stuck, worker],
+            BuildingKind::House,
+            at(100, 100),
+            false,
+        )
+        .unwrap();
+    let footprint = world.building(id).unwrap().footprint;
+    // Everything within eight rings is taken except the worker's own spot.
+    for y in footprint.min.y - 9..footprint.max.y + 9 {
+        for x in footprint.min.x - 9..footprint.max.x + 9 {
+            let dx = (footprint.min.x - x).max(x - footprint.max.x + 1).max(0);
+            let dy = (footprint.min.y - y).max(y - footprint.max.y + 1).max(0);
+            let tile = at(x, y);
+            if (1..=8).contains(&dx.max(dy))
+                && world.tile_free(tile)
+                && tile != world.unit(worker).unwrap().position.tile_floor()
+            {
+                let at = WorldPosition::from_tile_center(tile).unwrap();
+                world.spawn_villager(PlayerId(1), at).unwrap();
+            }
+        }
+    }
+    for _ in 0..600 {
+        world.advance();
+        if world.building(id).unwrap().progress_permille() >= 900 {
+            break;
+        }
+    }
+    assert!(world.building(id).unwrap().progress_permille() >= 900);
+    settle(&mut world, stuck);
+    let old = world.unit(stuck).unwrap().position;
+    shove(&mut world, stuck, footprint.min);
+    world.spawn_villager(PlayerId(1), old).unwrap();
+    for _ in 0..600 {
+        world.advance();
+        if world.building(id).unwrap().is_complete() {
+            break;
+        }
+    }
+    assert!(world.building(id).unwrap().is_complete());
+    let tile = world.unit(stuck).unwrap().position.tile_floor();
+    assert!(!footprint.contains(tile), "builder left inside at {tile:?}");
+}
