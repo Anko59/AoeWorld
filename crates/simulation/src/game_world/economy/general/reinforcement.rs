@@ -15,6 +15,7 @@ impl GameWorld {
             return;
         }
         let weights = a.mix;
+        let mut cursors = a.production_scan;
         for &member in &a.members {
             if let Some(r) = self
                 .unit(member)
@@ -47,10 +48,10 @@ impl GameWorld {
         let Some(centre) = self.unit(id).map(|u| u.position) else {
             return;
         };
-        let mut visited = 0;
-        // Sample each production index separately: economic buildings and a
-        // large Barracks count must not hide Ranges, Stables or Workshops.
-        let buildings: Vec<_> = [
+        let mut buildings = Vec::new();
+        // Rotate bounded slices of each index. Out-of-sphere buildings must
+        // not keep a later, eligible building hidden forever.
+        for (slot, kind) in [
             crate::BuildingKind::Barracks,
             crate::BuildingKind::ArcheryRange,
             crate::BuildingKind::Stable,
@@ -58,18 +59,37 @@ impl GameWorld {
             crate::BuildingKind::Castle,
         ]
         .into_iter()
-        .flat_map(|kind| self.player_buildings_of(player, kind).take(25))
-        .inspect(|_| visited += 1)
-        .filter(|b| {
-            b.is_complete() && b.hp > 0 && b.training_queue.is_empty() && b.research.is_none()
-        })
-        .filter(|b| {
-            super::super::placement::position(b.footprint.min)
-                .is_ok_and(|p| in_influence(centre, p))
-        })
-        .map(|b| (b.id, b.kind))
-        .collect();
-        work.building_visits += visited;
+        .enumerate()
+        {
+            let Some(ids) = self
+                .economy
+                .dropoffs
+                .get(&(player, kind))
+                .filter(|ids| !ids.is_empty())
+            else {
+                cursors[slot] = 0;
+                continue;
+            };
+            let start = cursors[slot] % ids.len();
+            let count = ids.len().min(25);
+            for &building in ids[start..].iter().chain(&ids[..start]).take(count) {
+                work.building_visits += 1;
+                if let Some(b) = self.building(building)
+                    && b.is_complete()
+                    && b.hp > 0
+                    && b.training_queue.is_empty()
+                    && b.research.is_none()
+                    && super::super::placement::position(b.footprint.min)
+                        .is_ok_and(|p| in_influence(centre, p))
+                {
+                    buildings.push((b.id, b.kind));
+                }
+            }
+            cursors[slot] = (start + count) % ids.len();
+        }
+        if let Some(a) = self.economy.generals.armies.get_mut(&id) {
+            a.production_scan = cursors;
+        }
         for r in roles {
             let kinds: &[UnitKind] = match r {
                 0 => &[UnitKind::Militia, UnitKind::Spearman],
