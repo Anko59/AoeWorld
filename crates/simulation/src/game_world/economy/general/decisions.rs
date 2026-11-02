@@ -30,6 +30,7 @@ impl GameWorld {
             .iter()
             .copied()
             .filter(|v| !solo || v.id != u.id)
+            .filter(|v| in_influence(u.position, v.position))
             .collect();
         let friendly: u64 = army
             .iter()
