@@ -2,6 +2,7 @@ use super::*;
 use crate::{Age, GeneralState, Stockpile};
 
 mod appearance;
+mod fighting;
 mod movement;
 mod orders;
 mod sphere;
@@ -361,8 +362,8 @@ fn distant_recruits_do_not_inflate_local_fight_strength() {
 #[test]
 fn army_focuses_wounded_high_value_targets_before_nearby_low_value_units() {
     let (mut w, _) = setup();
-    let archer = soldier(&mut w, UnitKind::Archer, 104, 100);
-    soldier(&mut w, UnitKind::General, 103, 100);
+    soldier(&mut w, UnitKind::Archer, 104, 100);
+    let g = soldier(&mut w, UnitKind::General, 103, 100);
     let militia = w
         .spawn_kind(PlayerId(1), UnitKind::Militia, at(105, 100))
         .unwrap();
@@ -374,7 +375,7 @@ fn army_focuses_wounded_high_value_targets_before_nearby_low_value_units() {
         .unwrap();
     w.units[w.lookup[&weak]].state.hp = 10;
     decide(&mut w);
-    assert_eq!(w.unit(archer).unwrap().attack_target, Some(weak));
+    assert_eq!(w.general_fight_target(g, 0), Some(weak));
 }
 
 #[test]

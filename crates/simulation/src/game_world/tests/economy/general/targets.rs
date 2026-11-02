@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn focus_orders_siege_monks_leaders_archers_then_wounded_by_distance_and_id() {
     let (mut w, _) = setup();
-    let archer = soldier(&mut w, UnitKind::Archer, 104, 100);
+    soldier(&mut w, UnitKind::Archer, 104, 100);
     let g = soldier(&mut w, UnitKind::General, 103, 100);
     // A large friendly army keeps each decision favourable.
     for n in 0..20 {
@@ -35,14 +35,13 @@ fn focus_orders_siege_monks_leaders_archers_then_wounded_by_distance_and_id() {
         .collect();
     w.units[w.lookup[&enemies[9]]].state.hp = 1;
     let order = [1, 0, 2, 4, 3, 8, 6, 7, 5, 9, 10];
-    // The test controls only the decision; no movement or combat tick changes distances.
+    // The test controls only the decision; the first fighting group's target
+    // is the focus. No movement or combat tick changes distances.
     for n in order {
-        // Put the archer in the micro window on each admission.
-        w.economy.generals.armies.get_mut(&g).unwrap().micro_after = 0;
         decide(&mut w);
         assert_eq!(w.general_status(g).unwrap().state, GeneralState::Fighting);
         assert_eq!(
-            w.unit(archer).unwrap().attack_target,
+            w.general_fight_target(g, 0),
             Some(enemies[n]),
             "expected {:?}",
             kinds[n]

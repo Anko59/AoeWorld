@@ -16,12 +16,14 @@ impl GameWorld {
         let player = army[0].player;
         work.orders += 1;
         if self
-            .issue_formation_move(player, &ids, aoe_core::Formation::Line, to, false, false)
+            .issue_formation_move(player, &ids, aoe_core::Formation::Line, to, false, !retreat)
             .is_err()
         {
             return;
         }
-        for &id in &ids {
+        // A regroup after a fight (no destination) is not a march.
+        let marching = self.economy.generals.armies[&g].state != GeneralState::Idle;
+        for &id in ids.iter().filter(|_| marching) {
             let (stance, reason) = if retreat {
                 (aoe_core::CombatStance::NoAttack, stances::Reason::Retreat)
             } else {

@@ -81,13 +81,24 @@ that trained it (nearest completed Castle for scenario-spawned Generals).
 The Castle's outside rendezvous survives destruction. Retreat lasts at least
 five seconds; once safe, the army regroups and resumes its retained destination.
 
-In a favourable fight, soldiers focus visible siege (including Mangonels and
-Battering Rams), then Monks, then leaders (Generals and Vassals), then all
-archer kinds (including Skirmishers), then other wounded targets. Within each
-class, the lowest remaining HP fraction wins, then distance and entity ID
-resolve ties. Siege prefers
-visible buildings. Units below one-third HP withdraw toward home. A rotating
-16-member micro window prevents a large army from monopolising orders.
+A march is an attack-move formation: any soldier that sees an enemy beside the
+route breaks off, fights and returns to its slot. The army counts an enemy as
+in sight when the General sees it (12 tiles) or any soldier does (8 tiles; at
+most 64 far candidates per decision). In sight of an enemy the army fights:
+the healthy non-siege soldiers split, in entity order, into groups of at most
+20 (`FIGHT_GROUP`); each group attack-moves, as one ordinary formation order,
+against its own target. A group's target is the best visible enemy for it:
+siege (including Mangonels and Battering Rams), then Monks, then leaders
+(Generals and Vassals), then all archer kinds (including Skirmishers), then
+others; within a class the lowest remaining HP fraction wins, then the
+distance from that group, then entity ID. A group keeps its target while it
+stays visible and nothing of a higher class appears, and is re-ordered only
+when its target changes or half its soldiers stand idle, so it does not
+re-form every decision. When no enemy remains in sight, the army regroups:
+with a march order it resumes the march, without one it forms up around the
+General's position. Siege prefers visible buildings. Units below one-third HP
+withdraw toward home. A rotating 16-member micro window (wounded, siege, and a
+fight against buildings only) prevents a large army from monopolising orders.
 The General records each soldier's original stance before a march, retreat or
 wounded withdrawal overrides it. The original stance returns when that reason
 ends, including healing, arrival, fighting, regrouping without a destination,

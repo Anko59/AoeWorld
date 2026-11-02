@@ -1,5 +1,6 @@
 use super::*;
 use aoe_core::{ChunkCoord, SPATIAL_CHUNK_TILES, TileCoord};
+const SOLDIER_SIGHT_CANDIDATES: usize = 64;
 pub(super) struct Survey {
     pub enemies: Vec<GameUnit>,
     pub buildings: Vec<EntityId>,
@@ -61,12 +62,34 @@ impl GameWorld {
         for v in units.iter().copied().filter(|v| v.player == u.player) {
             self.claim_general_unit(id, v);
         }
+        // The army sees what its General sees (12 tiles) and what any soldier
+        // sees (8 tiles); a camp wider than the General's sight is still found.
+        let soldiers: Vec<WorldPosition> = self
+            .economy
+            .generals
+            .armies
+            .get(&id)?
+            .members
+            .iter()
+            .filter_map(|&m| self.unit(m))
+            .filter(|m| m.hp > 0 && !self.embarked(m.id))
+            .map(|m| m.position)
+            .collect();
+        let mut wide = 0;
         let enemies = units
             .into_iter()
+            .filter(|v| v.player != u.player && self.unit_visible_to(u.player, v.id))
             .filter(|v| {
-                v.player != u.player
-                    && distance(u.position, v.position) <= (12 * 1024_i64).pow(2)
-                    && self.unit_visible_to(u.player, v.id)
+                if distance(u.position, v.position) <= (12 * 1024_i64).pow(2) {
+                    return true;
+                }
+                // At most `SOLDIER_SIGHT_CANDIDATES` far enemies are compared
+                // with every soldier, so the work stays bounded.
+                wide += 1;
+                wide <= SOLDIER_SIGHT_CANDIDATES
+                    && soldiers
+                        .iter()
+                        .any(|&p| distance(p, v.position) <= (8 * 1024_i64).pow(2))
             })
             .collect();
         // Fixed 25x25 tile census through the building occupancy index. Never
