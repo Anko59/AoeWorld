@@ -31,6 +31,21 @@ proc macros and cdylibs that invoke the linker are not cacheable. This pinned
 release also caches metadata-only library checks; final WASM linking still
 does real work. Cache hit rate is not an RTS performance claim.
 
+Measured on 2026-11-02, from `623de101` to implementation `27be001e`, using
+fresh targets in separate worktrees after filling the cache in another:
+
+| Command | Before (seconds) | After (seconds) | Warm cache hits / misses |
+|---|---:|---:|---:|
+| `make lint` | 268.35 | 171.98 | 485 / 0 |
+| `make build-wasm` | 265.37 | 63.92 | 78 / 0 |
+
+These are noisy shared-machine wall times, including admission and setup:
+the WASM baseline queued for 68 seconds; the warm run waited 30 seconds for
+load admission. Cargo's production WASM compilation fell from 79 to 26.69
+seconds. Both production and diagnostics WASM outputs stayed byte-for-byte
+identical (2,339,944 and 639,853 bytes). Cacheable lookups all hit; uncached
+binaries, proc macros and nested clippy calls still account for substantial work.
+
 ## Focused checks
 
 For bounded core/asset/simulation iteration, use `make test-game-focused
