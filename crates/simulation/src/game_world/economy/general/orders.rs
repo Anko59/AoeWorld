@@ -69,6 +69,9 @@ impl GameWorld {
     }
 
     fn hold_general_army(&mut self, id: EntityId) {
+        let Some(centre) = self.unit(id).map(|u| u.position) else {
+            return;
+        };
         self.restore_general_stances(id);
         let Some(a) = self.economy.generals.armies.get_mut(&id) else {
             return;
@@ -83,7 +86,9 @@ impl GameWorld {
             *slot = Some(m);
         }
         for member in members.into_iter().flatten() {
-            if let Some(&index) = self.lookup.get(&member) {
+            if let Some(&index) = self.lookup.get(&member)
+                && in_influence(centre, self.units[index].state.position)
+            {
                 self.stop_unit_orders(index);
             }
         }
