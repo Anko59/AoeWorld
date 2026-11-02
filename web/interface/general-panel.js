@@ -8,7 +8,8 @@ const states = ['idle', 'marching', 'fighting', 'retreating'];
 const modes = new Map(); // General id -> 'captain' | 'trainer'; a new General starts as captain.
 
 export function initGeneralPanel() {
-  let send = () => {};
+  // The Rust callback is stored by buildings.js when the client binds; read it at click time.
+  const send = (action, code) => window.aoeBuildings?.command?.(action, code);
   const panel = document.createElement('div');
   panel.id = 'general-panel'; panel.hidden = true;
   panel.innerHTML = `<div id="general-modes" role="tablist">
@@ -44,7 +45,6 @@ export function initGeneralPanel() {
   byId('general-trainer').addEventListener('click', () => setMode('trainer'));
   byId('general-train').addEventListener('click', () => send(9, training ? 0 : 1));
   window.aoeGeneral = {
-    bind(callback) { send = callback; },
     update(values) {
       if (!values || values.length === 0) { panel.hidden = true; current = null; return; }
       const [id, army, state, isTraining, pending] = values;
