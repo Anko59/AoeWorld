@@ -16,8 +16,12 @@ Performance-sensitive changes require scenario-specific counts and benchmarks.
 
 ## Workflow
 
-Select focused validation from [testing](testing.md); `make preflight` is the
-minimum handoff gate. A change in shared types, dependencies, toolchain, CI, or
+Before each commit run `make fmt-check`, `make lint`, `make structure-check`,
+and focused tests for each touched crate (for example `make test-native-focused
+AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='test(navy::)'`
+or `make test-harness-focused HARNESS_TEST_FILTER=agents::`). Client changes
+also require `make perf-wasm-cap`. See [testing](testing.md). Full suites,
+e2e and performance benchmarks run in CI. A change in shared types, dependencies, toolchain, CI, or
 unknown paths requires all relevant suites. Never accept a baseline merely
 because a new result regressed. If nearby maintenance is discovered, make only
 small behavior-preserving fixes in the owning module under the same gate;

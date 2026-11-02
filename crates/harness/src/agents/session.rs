@@ -13,7 +13,9 @@ Rules this harness enforces in every Bash/Edit/Write call (see CLAUDE.md and doc
 - Ship by committing on a feature branch (pre-commit runs `make pre-commit`) and running `make ship` (gates, adversarial review, push, PR against `dev`); `git push` and `gh pr create` are refused. GitHub auto-merges once the review passes (8/10) and CI is green; no session merges, approves or pushes `dev`/`main`.
 - Subagents keep to their role: tester writes tests only, implementer writes code only, reviewer only reads.
 - Stopping runs check-fast (static stop gates from gates/registry.json); fix red results before handing off.
-- Report the exact revision, commands, results and limits.";
+- Report the exact revision, commands, results and limits.
+
+Before each commit: `make fmt-check`, `make lint`, `make structure-check`, and focused tests (e.g. `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='test(navy::)'` or `make test-harness-focused HARNESS_TEST_FILTER=agents::`). For client changes also run `make perf-wasm-cap`. Full suites, e2e and benchmarks run in CI.";
 
 fn git(root: &Path, args: &[&str]) -> Option<String> {
     let output = Command::new("git")

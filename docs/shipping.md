@@ -350,8 +350,9 @@ name the runtime/model in a `Co-Authored-By` trailer, with `noreply@anthropic.co
 for Claude, `noreply@openai.com` for Codex and neutral `noreply@example.com` for pi. Before staging a commit,
 the driver runs `make hooks-check`; failure stops with `run make hooks-install`.
 Each duel commit runs the
-Git pre-commit hook (`make pre-commit`); preflight and the wider shipping gates
-run in `make ship`, while both role prompts require only the focused check.
+Git pre-commit hook (`make pre-commit`); `make ship` runs its short registry
+preflight cadence. Standalone `make preflight` also runs native tests and a
+smoke benchmark and is not required per commit; both roles use focused checks.
 
 A package compile error reported by Cargo is red because a test may name
 production APIs not written yet. A missing nextest command, invalid arguments,
@@ -473,7 +474,6 @@ A pre-commit that stages only test files runs clippy without test targets, so
 red tests that name code not written yet can be committed first; the next
 commit and every preflight check all targets.
 
-## Delivery time
 See [delivery timeline](timeline.md) for `make timeline`, stage journals and historical limits.
 
 ## Limits

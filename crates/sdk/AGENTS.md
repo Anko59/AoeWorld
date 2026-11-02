@@ -5,4 +5,4 @@ what fog of war lets its slot see, and it sends ordinary orders. Never add a
 back door that reads simulation state. Keep it async-runtime agnostic apart
 from tokio tasks, keep per-bot work proportional to what that bot sees, and
 cover changes with tests against a local server. Read
-[the AI SDK guide](../../docs/ai-sdk.md) and run `make test-unit`.
+[the AI SDK guide](../../docs/ai-sdk.md) and run focused tests with `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-sdk AOE_NATIVE_TEST_FILTER='test(two_bots_join_their_slots_and_grow)'`.
