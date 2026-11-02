@@ -35,7 +35,10 @@ test("the Delete key kills a selected villager through the death path", async ({
   await page.keyboard.press("Delete");
   // A dead body may leave the authoritative list; either way it is not alive.
   await expect
-    .poll(async () => (await actors(page)).find((a) => a.id === villager.id)?.hp ?? 0)
+    .poll(
+      async () =>
+        (await actors(page)).find((a) => a.id === villager.id)?.hp ?? 0,
+    )
     .toBe(0);
 });
 
