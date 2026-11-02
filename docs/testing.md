@@ -1,5 +1,53 @@
 # Testing
 
+## Shared local compiler cache
+
+Run `make compile-cache-start` once after updating the tool images. It starts
+one local sccache 0.19.0 storage daemon per user, shared by all worktrees, with
+a 5 GiB disk limit under `~/.cache/aoe-sccache` (`HARNESS_SCCACHE_DIR` overrides
+the host directory; use an absolute path outside worktrees).
+`make compile-cache-stats` prints its cumulative hit/miss
+and non-cacheable counts. CI keeps its existing Cargo/target caching.
+
+Build containers use client-side compilation and a shared Unix socket: the
+daemon never compiles another container's source. Clients mount storage read-only.
+One daemon owns the disk
+cache; independent daemons must not share it. Compiler invocations alone use
+the `/aoe-source` alias, including Cargo environment paths, arguments and cwd.
+Make and the harness retain their absolute host paths for sibling containers.
+The source alias remains mounted without the service, so existing binaries can
+still resolve embedded source paths. Rust tool images carry a sccache-specific
+tag so another worktree rebuilding older tooling cannot replace the adapter.
+This is necessary because sccache's Rust keys still include cwd and Cargo
+paths; `SCCACHE_BASEDIRS` does not normalize these Rust inputs. No rustc
+`--remap-path-prefix` flags are added. Incremental compilation stays disabled.
+
+Missing cache/socket means ordinary compilation, with no cache admission queue.
+A stopped daemon also falls back to the compiler; run `make compile-cache-start`
+to restart it. To clear it, run `make compile-cache-stop`, delete
+`~/.cache/aoe-sccache/cache`, then run `make compile-cache-start`.
+The cache is disposable and contains compiler artifacts only. Rust binaries,
+proc macros and cdylibs that invoke the linker are not cacheable. This pinned
+release also caches metadata-only library checks; final WASM linking still
+does real work. Cache hit rate is not an RTS performance claim.
+
+Measured on 2026-11-02, from `623de101` to implementation `27be001e`, using
+fresh targets in separate worktrees after filling the cache in another:
+
+| Command | Before (seconds) | After (seconds) | Warm cache hits / misses |
+|---|---:|---:|---:|
+| `make lint` | 268.35 | 171.98 | 485 / 0 |
+| `make build-wasm` | 265.37 | 63.92 | 78 / 0 |
+
+These are noisy shared-machine wall times, including admission and setup:
+the WASM baseline queued for 68 seconds; the warm run waited 30 seconds for
+load admission. Cargo's production WASM compilation fell from 79 to 26.69
+seconds. Both production and diagnostics WASM outputs stayed byte-for-byte
+identical (2,339,944 and 639,853 bytes). Cacheable lookups all hit; uncached
+binaries, proc macros and nested clippy calls still account for substantial work.
+
+## Focused checks
+
 For bounded core/asset/simulation iteration, use `make test-game-focused
 AOE_GAME_TEST_FILTER='test(catalog::packing)|test(browser_content)'` (on one
 line). It takes the shared heavy slot and fails if the filter selects no tests;
