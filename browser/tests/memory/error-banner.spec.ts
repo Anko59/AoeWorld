@@ -13,8 +13,10 @@ test("server validation and disconnect reasons stay visible with a reload link",
   await expect(page.locator("#connection")).toHaveText("connected");
   const socket = active;
   if (!socket) throw new Error("Gameplay socket was not intercepted");
-  // CommandAck { sequence: 1, RejectedInvalidTarget, applied_tick: 1 }.
-  socket.send(Buffer.from([3, 1, 16, 1]));
+  // CommandAck { sequence: 1, RejectedInvalidTarget, applied_tick: 1 }. The
+  // discriminant is 15 at gameplay VERSION 5, after RejectedPopulationCap left
+  // the enum; 16 is now RejectedResourceUnavailable.
+  socket.send(Buffer.from([3, 1, 15, 1]));
   await expect(
     page.getByRole("alert").filter({ hasText: "Cannot attack:" }),
   ).toContainText("that target is unavailable, friendly or out of range.");
