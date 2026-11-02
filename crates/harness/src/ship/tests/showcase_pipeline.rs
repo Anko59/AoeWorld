@@ -5,6 +5,7 @@ use super::{
 use std::{os::unix::fs::PermissionsExt, path::Path};
 
 mod cache;
+mod narrate;
 
 const BOARD: &str = r#"{"title":"Pipeline","scenes":[
   {"kind":"card","heading":"Opening","narration":"A narrated opening."},
@@ -23,6 +24,9 @@ const ENV: &[&str] = &[
     "AOE_SHOWCASE_NODE_MODULES",
     "OPENROUTER_API_KEY",
     "SHOWCASE_LOG",
+    "NARRATE_VIDEO",
+    "NARRATE_LINES",
+    "NARRATE_VOICE",
     "SHOWCASE_CURL_MODE",
     "SHOWCASE_DOCKER_MODE",
     "SHOWCASE_MAKE_MODE",
@@ -96,6 +100,10 @@ case "$SHOWCASE_DOCKER_MODE" in fail) echo 'stub docker failed' >&2; exit 9;; es
 is_recorder=0
 is_ffmpeg=0
 for arg do
+  if [ "$arg" = '-hide_banner' ]; then
+    printf "Input #0, matroska,webm, from 'x':\n  Duration: 00:00:10.00, start: 0.0\n  Stream #0:0: Video: vp8\n" >&2
+    exit 1
+  fi
   [ "$arg" = 'record.mjs' ] && is_recorder=1
   [ "$arg" = 'ffmpeg' ] && is_ffmpeg=1
 done

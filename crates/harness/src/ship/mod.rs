@@ -75,6 +75,8 @@ pub(crate) enum Commands {
     Showcase,
     /// Validate a showcase storyboard without starting Docker or speech requests.
     ShowcaseCheck,
+    /// Voice NARRATE_LINES onto the video NARRATE_VIDEO, written to SHOWCASE_OUT (docs/showcase.md).
+    ShowcaseNarrate,
     /// Print the `agent-session` steps of a headless agent log (SESSION=<jsonl>).
     ShowcaseSession,
     /// Record nightly failures in the configured workstream (NIGHTLY_RESULTS).
@@ -199,6 +201,7 @@ pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Resul
         Commands::DevServerStop => crate::devserver::stop(&root),
         Commands::Showcase => showcase::make(&root).map(|_| ()),
         Commands::ShowcaseCheck => showcase::check(&root),
+        Commands::ShowcaseNarrate => showcase::narrate_video(&root).map(|_| ()),
         Commands::ShowcaseSession => {
             let log = std::env::var("SESSION")
                 .ok()

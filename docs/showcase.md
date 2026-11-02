@@ -361,6 +361,11 @@ and aggregate PCM budgets. Cache files and directories cannot be symlinks.
 Delete a cache entry to regenerate it (or the cache directory to clear all
 speech); a malformed cached file fails with a regeneration hint.
 
+## Voice-over for a video recorded another way
+
+`make showcase-narrate` voices a video made outside `make showcase` (own
+Playwright script, ffmpeg cut): see [showcase-narrate.md](showcase-narrate.md).
+
 ## How it is made
 
 `crates/harness/src/ship/showcase/`: the storyboard must be a regular file no

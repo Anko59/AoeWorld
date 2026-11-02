@@ -24,14 +24,14 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub(crate) const DEFAULT_OUT: &str = ".cache/showcase/showcase.webm";
 const STORYBOARD_LIMIT: u64 = 256 * 1024;
 
-fn env(name: &str) -> Result<String> {
+pub(super) fn env(name: &str) -> Result<String> {
     std::env::var(name)
         .ok()
         .filter(|v| !v.is_empty())
         .ok_or_else(|| format!("{name} is unset: run through `make showcase`").into())
 }
 
-fn image_env(name: &str) -> Result<String> {
+pub(super) fn image_env(name: &str) -> Result<String> {
     let image = env(name)?;
     super::check::validate_image_value(&image).map_err(|error| format!("{name} {error}"))?;
     Ok(image)
@@ -42,7 +42,7 @@ fn user() -> String {
 }
 
 /// Run Docker as the caller with unambiguous bind mounts.
-fn docker(mounts: &[&Path], image: &str, args: &[&str]) -> Result<std::process::Output> {
+pub(super) fn docker(mounts: &[&Path], image: &str, args: &[&str]) -> Result<std::process::Output> {
     let mut command = Command::new("docker");
     command.args(["run", "--rm", "--user", &user()]);
     for dir in mounts {
@@ -60,7 +60,7 @@ fn docker(mounts: &[&Path], image: &str, args: &[&str]) -> Result<std::process::
     Ok(output)
 }
 
-fn path(p: &Path) -> &str {
+pub(super) fn path(p: &Path) -> &str {
     p.to_str().unwrap_or_default()
 }
 
@@ -245,18 +245,23 @@ fn inputs(root: &Path) -> Result<(Storyboard, ShowcaseOutput, Level)> {
 }
 
 pub(crate) fn read_storyboard(path: &Path) -> Result<String> {
+    read_bounded(path, "storyboard", STORYBOARD_LIMIT)
+}
+
+/// A UTF-8 regular file of at most `limit` bytes, named `what` in errors.
+pub(super) fn read_bounded(path: &Path, what: &str, limit: u64) -> Result<String> {
     let metadata = fs::symlink_metadata(path)?;
     if !metadata.is_file() {
-        return Err(format!("storyboard {} must be a regular file", path.display()).into());
+        return Err(format!("{what} {} must be a regular file", path.display()).into());
     }
-    let mut bytes = Vec::with_capacity(metadata.len().min(STORYBOARD_LIMIT) as usize);
+    let mut bytes = Vec::with_capacity(metadata.len().min(limit) as usize);
     fs::File::open(path)?
-        .take(STORYBOARD_LIMIT + 1)
+        .take(limit + 1)
         .read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > STORYBOARD_LIMIT {
-        return Err(format!("storyboard exceeds the {STORYBOARD_LIMIT}-byte limit").into());
+    if bytes.len() as u64 > limit {
+        return Err(format!("{what} exceeds the {limit}-byte limit").into());
     }
-    String::from_utf8(bytes).map_err(|error| format!("storyboard is not UTF-8: {error}").into())
+    String::from_utf8(bytes).map_err(|error| format!("{what} is not UTF-8: {error}").into())
 }
 
 /// Validate the storyboard, output path and unvoiced duration without starting

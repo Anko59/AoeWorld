@@ -85,6 +85,52 @@ fn save_tts_response_limited(
     Ok(total)
 }
 
+/// Voice `text` into `<work>/<file>.pcm` (cache first, credentials only on a
+/// miss); returns the PCM byte count. `name` labels messages ("scene 1").
+pub(crate) fn speech(
+    root: &Path,
+    work: &Path,
+    file: &str,
+    name: &str,
+    voice: &str,
+    text: &str,
+    remaining: u64,
+) -> Result<u64> {
+    let audio = work.join(format!("{file}.pcm"));
+    let entry = cache::entry(root, TTS_MODEL, voice, text)?;
+    if let Some(bytes) = cache::load(&entry, &audio, remaining)? {
+        println!("showcase-tts: {name} cache hit");
+        return Ok(bytes);
+    }
+    println!("showcase-tts: {name} cache miss");
+    let key = credential("OPENROUTER_API_KEY").ok_or(
+        "the storyboard has narration, but OPENROUTER_API_KEY is neither set nor in the keyring (docs/credentials.md)",
+    )?;
+    let request = work.join(format!("{file}-tts.json"));
+    let body = serde_json::json!({
+        "model": TTS_MODEL, "input": text, "voice": voice, "response_format": "pcm",
+    });
+    create_new(&request)?.write_all(body.to_string().as_bytes())?;
+    let mut child = tts_command(&request).spawn()?;
+    child
+        .stdin
+        .take()
+        .ok_or("curl stdin was not piped")?
+        .write_all(
+            format!("Authorization: Bearer {key}\nContent-Type: application/json\n").as_bytes(),
+        )?;
+    let bytes = save_tts_response_limited(&mut child, &audio, remaining)
+        .map_err(|error| format!("speech for {name} failed: {error}"))?;
+    if bytes == 0 {
+        return Err(format!("speech for {name}: no audio").into());
+    }
+    if bytes % 2 != 0 {
+        return Err(format!("speech for {name}: invalid PCM (odd byte count)").into());
+    }
+    super::media::publish_temp_output(&audio, &entry, work)?;
+    Ok(bytes)
+}
+
 /// Voice each narrated scene; returns each voice-over's length.
 pub(crate) fn narrate(
     root: &Path,
@@ -102,7 +148,6 @@ pub(crate) fn narrate(
             lengths.push(None);
             continue;
         };
-        let audio = work.join(format!("voice-{index}.pcm"));
         let remaining = TTS_PCM_BUDGET.saturating_sub(total_bytes);
         if remaining == 0 {
             return Err(format!(
@@ -110,44 +155,16 @@ pub(crate) fn narrate(
             )
             .into());
         }
-        let entry = cache::entry(root, TTS_MODEL, &board.voice, text)?;
-        let bytes = if let Some(bytes) = cache::load(&entry, &audio, remaining)? {
-            println!("showcase-tts: scene {} cache hit", index + 1);
-            bytes
-        } else {
-            println!("showcase-tts: scene {} cache miss", index + 1);
-            let key = credential("OPENROUTER_API_KEY").ok_or(
-                "the storyboard has narration, but OPENROUTER_API_KEY is neither set nor in the keyring (docs/credentials.md)",
-            )?;
-            let request = work.join(format!("tts-{index}.json"));
-            let body = serde_json::json!({
-                "model": TTS_MODEL, "input": text, "voice": board.voice, "response_format": "pcm",
-            });
-            create_new(&request)?.write_all(body.to_string().as_bytes())?;
-            let mut child = tts_command(&request).spawn()?;
-            child
-                .stdin
-                .take()
-                .ok_or("curl stdin was not piped")?
-                .write_all(
-                    format!("Authorization: Bearer {key}\nContent-Type: application/json\n")
-                        .as_bytes(),
-                )?;
-            let bytes = save_tts_response_limited(&mut child, &audio, remaining)
-                .map_err(|error| format!("speech for scene {} failed: {error}", index + 1))?;
-            if bytes == 0 {
-                return Err(format!("speech for scene {}: no audio", index + 1).into());
-            }
-            if bytes % 2 != 0 {
-                return Err(format!(
-                    "speech for scene {}: invalid PCM (odd byte count)",
-                    index + 1
-                )
-                .into());
-            }
-            super::media::publish_temp_output(&audio, &entry, work)?;
-            bytes
-        };
+        let name = format!("scene {}", index + 1);
+        let bytes = speech(
+            root,
+            work,
+            &format!("voice-{index}"),
+            &name,
+            &board.voice,
+            text,
+            remaining,
+        )?;
         total_bytes = total_bytes.saturating_add(bytes);
         let seconds = super::pcm_seconds(bytes);
         lengths.push(Some((seconds * 1000.0).ceil() as u64));
