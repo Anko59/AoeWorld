@@ -39,7 +39,6 @@ impl GameWorld {
             world.complete_research(PlayerId(0), tech, &mut Vec::new());
         }
         if let Some(player) = world.economy.players.get_mut(&PlayerId(0)) {
-            player.population_cap = 200;
             player.stockpile = Stockpile {
                 food: 12_000,
                 wood: 12_000,

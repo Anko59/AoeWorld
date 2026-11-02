@@ -14,7 +14,6 @@ fn rich_castle() -> (GameWorld, EntityId) {
         gold: 20000,
         stone: 20000,
     };
-    p.population_cap = 200;
     (w, tc)
 }
 
