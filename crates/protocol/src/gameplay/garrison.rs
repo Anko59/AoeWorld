@@ -83,6 +83,7 @@ fn vassal_valid(u: &GarrisonUnitState) -> bool {
 
 /// Keeps the occupants `valid` accepts, in order and within capacity, so one
 /// bad occupant costs only itself.
+#[cfg(feature = "server-repair")]
 pub(super) fn repair(b: &mut GameplayBuildingState) {
     if b.construction != ConstructionState::Complete {
         b.garrison.clear();

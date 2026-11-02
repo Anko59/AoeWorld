@@ -6,7 +6,6 @@ pub use gameplay::{CombatStance, FogState, Formation};
 pub use gameplay::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 
 use aoe_core::{EntityId, PlayerId, Position, Region, Tick};
-pub use gameplay::Violation as GameplayViolation;
 pub use gameplay::{
     Age, BuildingKind, CarriedResource, ClientMessage as GameplayClientMessage, CommandResult,
     ConstructionState, Error as GameplayError, GameplayBuildingState, GameplayPlayerState,
@@ -20,7 +19,11 @@ pub use gameplay::{
     Tech, TradeResource, TrainingState, UnitKind, UnitState as GameplayUnitState, UnitTask,
     VERSION as GAMEPLAY_VERSION, VassalReport, VassalWait, decode_client as decode_gameplay_client,
     decode_server as decode_gameplay_server, encode_client as encode_gameplay_client,
-    encode_server as encode_gameplay_server, sanitize_server as sanitize_gameplay_server,
+    encode_server as encode_gameplay_server,
+};
+#[cfg(feature = "server-repair")]
+pub use gameplay::{
+    Violation as GameplayViolation, sanitize_server as sanitize_gameplay_server,
     server_violations as gameplay_server_violations,
 };
 use serde::{

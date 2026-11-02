@@ -10,7 +10,7 @@ aoe-core.workspace = true
 aoe-map.workspace = true
 aoe-scenario.workspace = true
 aoe-simulation.workspace = true
-aoe-protocol.workspace = true
+aoe-protocol = { workspace = true, features = ["server-repair"] }
 axum = { version = "0.8", features = ["ws"] }
 futures-util = "0.3"
 rayon = "1.12"

@@ -179,6 +179,7 @@ name = "aoe-protocol"
 version = "0.1.0"
 dependencies = [
  "aoe-core",
+ "aoe-protocol",
  "gungraun",
  "postcard",
  "serde",
