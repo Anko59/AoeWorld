@@ -184,11 +184,13 @@ def summary(reports: list[BotReport], tick: int, seed: int, size: int, wall: flo
     for r in reports:
         feudal = r.stats.get("feudal_tick")
         castle = r.stats.get("castle_tick")
+        imperial = r.stats.get("imperial_tick")
         per_bot.append(
             {
                 "slot": r.slot,
                 "feudal_minute": round(feudal / (TICK_HZ * 60), 2) if feudal else None,
                 "castle_minute": round(castle / (TICK_HZ * 60), 2) if castle else None,
+                "imperial_minute": round(imperial / (TICK_HZ * 60), 2) if imperial else None,
                 "castle_units_peak": r.stats.get("castle_units_peak", 0),
                 "villagers": r.villagers,
                 "villagers_peak": r.stats.get("villagers_peak", 0),
@@ -214,7 +216,7 @@ def summary(reports: list[BotReport], tick: int, seed: int, size: int, wall: flo
 def proven(reports: list[BotReport], soldiers: int) -> bool:
     """Every bot at least in Feudal Age with `soldiers` at once, and a blow landed."""
     return all(
-        r.age in ("FEUDAL", "CASTLE") and r.stats.get("army_peak", 0) >= soldiers for r in reports
+        r.age in ("FEUDAL", "CASTLE", "IMPERIAL") and r.stats.get("army_peak", 0) >= soldiers for r in reports
     ) and any(r.stats.get("attack_hits", 0) > 0 for r in reports)
 
 

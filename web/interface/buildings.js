@@ -1,13 +1,14 @@
 import { transportLoads } from '/interface/navy/indicators.js';
 import { initGarrison } from '/interface/garrison/panel.js';
 import { castleKinds, castleNames, castleCommands, castleTechs, castleTraining, castleUnitNames } from '/interface/castle.js';
+import { imperialTechs, imperialTraining, imperialLines, imperialUnitNames } from '/interface/imperial.js';
 import { icon, entityIcon, setEntityIcon, techIds, trainingKinds } from '/interface/ui-art.js';
 // DOM presentation for authoritative Rust building state and footprint previews.
 const byId = id => document.getElementById(id);
 export const buildingKinds = ['TownCenter','House','LumberCamp','MiningCamp','Mill','Farm','Barracks','PalisadeWall','Outpost','Dock','ArcheryRange','Stable','Blacksmith','Market','WatchTower','PalisadeGate',...castleKinds,'Bridge','StoneWall','StoneGate'];
 export const buildingNames = ['Town Center','House','Lumber Camp','Mining Camp','Mill','Farm','Barracks','Palisade Wall','Outpost','Dock','Archery Range','Stable','Blacksmith','Market','Watch Tower','Palisade Gate',...castleNames,'Bridge','Stone Wall','Stone Gate'];
 // Codes are emitted by Rust building_ui::availability, where the rules live.
-const disabledReasons=['Unavailable','','requires Feudal Age','Already researched','Research in progress','Wait for the training queue to finish','Not enough food','Not enough wood','Not enough gold','Not enough stone','Training queue is full','Building is under construction','Requires prerequisite buildings or technology','Select your own building','requires Castle Age','A Vassal already belongs to this Castle'];
+const disabledReasons=['Unavailable','','requires Feudal Age','Already researched','Research in progress','Wait for the training queue to finish','Not enough food','Not enough wood','Not enough gold','Not enough stone','Training queue is full','Building is under construction','Requires prerequisite buildings or technology','Select your own building','requires Castle Age','A Vassal already belongs to this Castle','requires Imperial Age'];
 const action=(button,label,code)=>{const reason=disabledReasons[code]??disabledReasons[0];button.disabled=code!==1;button.title=label+(reason?` · ${reason}`:'');button.setAttribute('aria-label',button.title);};
 const commands = [
   ['house','House','Q','25 wood'], ['lumber-camp','Lumber Camp','R','100 wood'],
@@ -49,13 +50,13 @@ export function initBuildings() {
     button.title=`${name} · ${cost} · ${key}`; button.setAttribute('aria-label',button.title);
     button.innerHTML=`${entityIcon(buildingKinds[(i+1)%buildingKinds.length])}<span class="command-label">${name}</span><kbd>${key}</kbd><small>${cost}</small>`; grid.append(button); return button;
   });
-  const research=['Loom · 50 gold','Town Watch · 75 food','Feudal Age · 500 food','Double-Bit Axe · 100 food · 50 wood','Horse Collar · 75 food · 75 wood','Gold Mining · 100 food · 75 wood','Stone Mining · 100 food · 75 wood','Wheelbarrow · 175 food · 50 wood','Man-at-Arms · 100 food · 40 gold','Forging · 150 food','Scale Mail Armor · 100 food','Scale Barding Armor · 150 food','Fletching · 100 food · 50 gold','Padded Archer Armor · 100 food',...castleTechs.map(t=>t[1]),'War Galley · 230 food · 100 gold'];
-  const sites=[0,0,0,2,4,3,3,0,6,12,12,12,12,12,...castleTechs.map(t=>t[2]),9];
+  const research=['Loom · 50 gold','Town Watch · 75 food','Feudal Age · 500 food','Double-Bit Axe · 100 food · 50 wood','Horse Collar · 75 food · 75 wood','Gold Mining · 100 food · 75 wood','Stone Mining · 100 food · 75 wood','Wheelbarrow · 175 food · 50 wood','Man-at-Arms · 100 food · 40 gold','Forging · 150 food','Scale Mail Armor · 100 food','Scale Barding Armor · 150 food','Fletching · 100 food · 50 gold','Padded Archer Armor · 100 food',...castleTechs.map(t=>t[1]),'War Galley · 230 food · 100 gold',...imperialTechs.map(t=>t[1])];
+  const sites=[0,0,0,2,4,3,3,0,6,12,12,12,12,12,...castleTechs.map(t=>t[2]),9,...imperialTechs.map(t=>t[2])];
   const buildStart=8+research.length, trainKind=buildStart+commands.length, trainEnabled=trainKind+1, foundationCount=trainKind+2;
-  const techs=['loom','town-watch','feudal-age','double-bit-axe','horse-collar','gold-mining','stone-mining','wheelbarrow','man-at-arms','forging','scale-mail-armor','scale-barding-armor','fletching','padded-archer-armor',...castleTechs.map(t=>t[0]),'war-galley'].map((id,i)=>{
+  const techs=['loom','town-watch','feudal-age','double-bit-axe','horse-collar','gold-mining','stone-mining','wheelbarrow','man-at-arms','forging','scale-mail-armor','scale-barding-armor','fletching','padded-archer-armor',...castleTechs.map(t=>t[0]),'war-galley',...imperialTechs.map(t=>t[0])].map((id,i)=>{
     const button=document.createElement('button'); button.id=`research-${id}`;button.className="research-command";button.hidden=true;button.innerHTML=icon('technologies',techIds[i],'technology')+`<span class="command-label">${i===8?'Research Man-at-Arms':research[i]}</span>`;grid.append(button);return button;
   });
-  const militaryTrain=[['archer','Archer','25 wood · 45 gold',10,4],['skirmisher','Skirmisher','25 food · 35 wood',10,5],['spearman','Spearman','35 food · 25 wood',6,6],['scout','Scout Cavalry','80 food',11,1],...castleTraining.filter(t=>t[0]!=='long-swordsman')].map(([id,name,cost,site,kind])=>{
+  const militaryTrain=[['archer','Archer','25 wood · 45 gold',10,4],['skirmisher','Skirmisher','25 food · 35 wood',10,5],['spearman','Spearman','35 food · 25 wood',6,6],['scout','Scout Cavalry','80 food',11,1],...castleTraining.filter(t=>t[0]!=='long-swordsman'),...imperialTraining].map(([id,name,cost,site,kind])=>{
     const button=document.createElement('button');button.id=`train-${id}`;button.hidden=true;button.innerHTML=entityIcon(trainingKinds[kind])+`<span class="command-label">${name} · ${cost}</span>`;button.title=`Train ${name} · ${cost}`;button.setAttribute('aria-label',button.title);grid.append(button);return {button,site,kind};
   });
   const navalTrain=[['galley','Galley',17,'90 wood · 30 gold'],['fire-ship','Fire Ship',18,'75 wood · 45 gold'],['demolition-ship','Demolition Ship',19,'70 wood · 50 gold'],['transport-ship','Transport Ship',20,'125 wood'],['war-galley','War Galley',21,'90 wood · 30 gold']].map(([id,name,kind,cost])=>{const button=document.createElement('button');button.id=`train-${id}`;button.hidden=true;button.innerHTML=entityIcon(trainingKinds[kind])+`<span class="command-label">${name}</span><small>${cost}</small>`;grid.append(button);return {button,kind,name,cost};});
@@ -67,11 +68,14 @@ export function initBuildings() {
   for(const [from,to] of [
     ['train-archer','train-crossbowman'],['train-skirmisher','train-elite-skirmisher'],
     ['train-spearman','train-pikeman'],['train-scout','train-light-cavalry'],['train-galley','train-war-galley'],
+    ['train-pikeman','train-halberdier'],['train-crossbowman','train-arbalester'],['train-knight','train-cavalier'],
+    ['train-cavalier','train-paladin'],['train-light-cavalry','train-hussar'],['train-battering-ram','train-capped-ram'],
+    ['train-capped-ram','train-siege-ram'],['train-mangonel','train-onager'],
     ...[['town-watch','town-patrol'],['feudal-age','castle-age'],['double-bit-axe','bow-saw'],
       ['horse-collar','heavy-plow'],['gold-mining','gold-shaft-mining'],['wheelbarrow','hand-cart'],
       ['man-at-arms','long-swordsman'],['forging','iron-casting'],['scale-mail-armor','chain-mail-armor'],
       ['scale-barding-armor','chain-barding-armor'],['fletching','bodkin-arrow'],
-      ['padded-archer-armor','leather-archer-armor']].map(([from,to])=>[`research-${from}`,`research-${to}`]),
+      ['padded-archer-armor','leather-archer-armor'],...imperialLines].map(([from,to])=>[`research-${from}`,`research-${to}`]),
   ])roots.set(to,roots.get(from)??from);
   const slots=(entries,row,reserved=new Map())=>{
     const groups=new Map();
@@ -130,7 +134,7 @@ export function initBuildings() {
     refresh:menu,
     update(v) {
       state=Array.from(v);menu();
-      byId('age').textContent=['I  Dark Age','II  Feudal Age','III  Castle Age'][v[0]]??'I  Dark Age';
+      byId('age').textContent=['I  Dark Age','II  Feudal Age','III  Castle Age','IV  Imperial Age'][v[0]]??'I  Dark Age';
       const kind=v[1],selected=kind>=0,owned=byId('selection').dataset.owned==='true';
       const availability=foundationCount+1+(v[foundationCount]??0)*3;
       militaryTrain.forEach(({button,site,kind:unit})=>{button.hidden=!owned||kind!==site||v[4]<1000||v[availability+unit]===0;action(button,`Train ${button.textContent}`,v[availability+unit]);});
@@ -146,7 +150,7 @@ export function initBuildings() {
       byId('market-prices')&&(byId('market-prices').textContent=kind===13&&v[4]>=1000?`Prices per 100: wood ${v[market]} · food ${v[market+1]} · stone ${v[market+2]} gold`:'');
       techs.forEach((b,i)=>{b.hidden=!owned||kind!==sites[i]||v[8+i]===0||v[8+i]===3;action(b,`Research ${research[i]}${i===8?' · Upgrades existing and future Militia':''}`,v[8+i]);});
       const train=byId('train-villager');
-      const unitNames=['Villager','Scout Cavalry','Militia','Fishing Ship','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal','General'];
+      const unitNames=['Villager','Scout Cavalry','Militia','Fishing Ship','Archer','Skirmisher','Spearman','Man-at-Arms',...castleUnitNames,'Galley','Fire Ship','Demolition Ship','Transport Ship','War Galley','Vassal','General',...imperialUnitNames];
       const infantry=unitNames[v[availability+trainingKinds.length]]??'Militia';
       if(selected){train.hidden=!owned||![0,6,9].includes(kind)||v[4]<1000;action(train,kind===9?'Train Fishing Ship, 75 wood, Q':kind===6?`Train ${infantry}, 50 food, 20 gold, Q`:'Train Villager, 50 food, Q',v[trainEnabled]);trainingName.hidden=kind!==6;trainingName.textContent=infantry;setEntityIcon(trainIcon,kind===9?'FishingShip':kind===6?trainingKinds[v[availability+trainingKinds.length]]:'Villager');train.querySelector('.cost').textContent=kind===9?'75 W':kind===6?'50 F · 20 G':'50';}
       const labels=Array.from({length:v[foundationCount]??0},(_,i)=>{const at=foundationCount+1+i*3;return `<span style="left:${v[at]}px;top:${v[at+1]}px">${Math.floor(v[at+2]/10)}%<progress max="1000" value="${v[at+2]}"></progress></span>`;}).join('');

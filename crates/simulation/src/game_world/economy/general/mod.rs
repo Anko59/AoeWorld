@@ -61,14 +61,18 @@ pub(super) fn role(kind: UnitKind) -> Option<usize> {
         | UnitKind::ManAtArms
         | UnitKind::LongSwordsman
         | UnitKind::Spearman
-        | UnitKind::Pikeman => 0,
+        | UnitKind::Pikeman
+        | UnitKind::TwoHandedSwordsman
+        | UnitKind::Champion
+        | UnitKind::Halberdier => 0,
         UnitKind::Archer
         | UnitKind::Crossbowman
+        | UnitKind::Arbalester
         | UnitKind::Skirmisher
         | UnitKind::EliteSkirmisher => 1,
-        UnitKind::Knight => 2,
-        UnitKind::BatteringRam | UnitKind::Mangonel => 3,
-        UnitKind::Scout | UnitKind::LightCavalry => 4,
+        UnitKind::Knight | UnitKind::Cavalier | UnitKind::Paladin => 2,
+        kind if kind.is_siege() => 3,
+        UnitKind::Scout | UnitKind::LightCavalry | UnitKind::Hussar => 4,
         _ => return None,
     })
 }

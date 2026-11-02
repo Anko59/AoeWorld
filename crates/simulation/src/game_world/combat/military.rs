@@ -33,14 +33,26 @@ pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u64) ->
             | UnitKind::Spearman
             | UnitKind::LongSwordsman
             | UnitKind::Pikeman
+            | UnitKind::TwoHandedSwordsman
+            | UnitKind::Champion
+            | UnitKind::Halberdier
     );
     let archer = matches!(
         kind,
-        UnitKind::Archer | UnitKind::Skirmisher | UnitKind::Crossbowman | UnitKind::EliteSkirmisher
+        UnitKind::Archer
+            | UnitKind::Skirmisher
+            | UnitKind::Crossbowman
+            | UnitKind::EliteSkirmisher
+            | UnitKind::Arbalester
     );
     let cavalry = matches!(
         kind,
-        UnitKind::Scout | UnitKind::Knight | UnitKind::LightCavalry
+        UnitKind::Scout
+            | UnitKind::Knight
+            | UnitKind::LightCavalry
+            | UnitKind::Cavalier
+            | UnitKind::Paladin
+            | UnitKind::Hussar
     );
     if kind == UnitKind::Scout && feudal {
         s.attack += 2;
@@ -65,6 +77,21 @@ pub fn apply_research_stats(mut s: UnitCombat, feudal: bool, researched: u64) ->
     {
         s.melee_armour += 1;
         s.pierce_armour += 1;
+    }
+    if has(Tech::BlastFurnace) && (infantry || cavalry) {
+        s.attack += 2;
+    }
+    if infantry && has(Tech::PlateMailArmor)
+        || cavalry && has(Tech::PlateBardingArmor)
+        || archer && has(Tech::RingArcherArmor)
+    {
+        s.melee_armour += 1;
+        s.pierce_armour += 2;
+    }
+    if archer && has(Tech::Bracer) {
+        s.attack += 1;
+        s.range += 1;
+        s.los += 1;
     }
     if (archer || matches!(kind, UnitKind::Galley | UnitKind::WarGalley)) && has(Tech::BodkinArrow)
     {
@@ -110,7 +137,7 @@ impl GameWorld {
         } else {
             building_combat(kind).attack?
         };
-        for tech in [Tech::Fletching, Tech::BodkinArrow] {
+        for tech in [Tech::Fletching, Tech::BodkinArrow, Tech::Bracer] {
             if self.has_researched(player, tech) {
                 s.attack += 1;
                 if kind != BuildingKind::TownCenter {

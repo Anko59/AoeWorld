@@ -22,6 +22,10 @@ class Config:
     castle_villagers: int = 28
     castle_army_min: int = 12
     castle_knight_weight: float = 1.0
+    #: Save 1000 food and 800 gold for Imperial Age with this many villagers,
+    #: a standing Castle Age army and two Castle Age buildings.
+    imperial_villagers: int = 40
+    imperial_army_min: int = 24
     #: Villagers the Town Center queue is kept at.
     town_center_queue: int = 2
     #: Preferred share of villagers per resource before and after Feudal.
@@ -30,6 +34,10 @@ class Config:
     )
     feudal_shares: dict[str, float] = field(
         default_factory=lambda: {"FOOD": 0.46, "WOOD": 0.30, "GOLD": 0.24, "STONE": 0.0}
+    )
+    #: Gold-heavy shares while the Imperial Age is being saved for.
+    imperial_shares: dict[str, float] = field(
+        default_factory=lambda: {"FOOD": 0.40, "WOOD": 0.25, "GOLD": 0.35, "STONE": 0.0}
     )
     #: A resource node farther than this from every drop-off needs a camp.
     dropoff_distance: int = 9

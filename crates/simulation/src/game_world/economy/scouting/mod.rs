@@ -81,7 +81,15 @@ enum Poll {
 
 impl UnitKind {
     pub fn is_cavalry(self) -> bool {
-        matches!(self, Self::Scout | Self::Knight | Self::LightCavalry)
+        matches!(
+            self,
+            Self::Scout
+                | Self::Knight
+                | Self::LightCavalry
+                | Self::Cavalier
+                | Self::Paladin
+                | Self::Hussar
+        )
     }
 }
 

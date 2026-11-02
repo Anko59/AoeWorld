@@ -14,7 +14,10 @@ fn a_barracks_trains_a_militia_end_to_end() {
             UnitKind::Spearman,
             UnitKind::ManAtArms,
             UnitKind::LongSwordsman,
-            UnitKind::Pikeman
+            UnitKind::Pikeman,
+            UnitKind::TwoHandedSwordsman,
+            UnitKind::Champion,
+            UnitKind::Halberdier
         ]
     );
     let worker = villager_at(&mut world, 99, 100);

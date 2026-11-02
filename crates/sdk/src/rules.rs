@@ -67,6 +67,16 @@ fn native_unit(kind: UnitKind) -> sim::UnitKind {
         UnitKind::WarGalley => sim::UnitKind::WarGalley,
         UnitKind::Vassal => sim::UnitKind::Vassal,
         UnitKind::General => sim::UnitKind::General,
+        UnitKind::TwoHandedSwordsman => sim::UnitKind::TwoHandedSwordsman,
+        UnitKind::Champion => sim::UnitKind::Champion,
+        UnitKind::Halberdier => sim::UnitKind::Halberdier,
+        UnitKind::Arbalester => sim::UnitKind::Arbalester,
+        UnitKind::Cavalier => sim::UnitKind::Cavalier,
+        UnitKind::Paladin => sim::UnitKind::Paladin,
+        UnitKind::Hussar => sim::UnitKind::Hussar,
+        UnitKind::CappedRam => sim::UnitKind::CappedRam,
+        UnitKind::SiegeRam => sim::UnitKind::SiegeRam,
+        UnitKind::Onager => sim::UnitKind::Onager,
     }
 }
 
@@ -105,6 +115,25 @@ fn native_tech(tech: Tech) -> sim::Tech {
         Tech::Masonry => sim::Tech::Masonry,
         Tech::Ballistics => sim::Tech::Ballistics,
         Tech::MurderHoles => sim::Tech::MurderHoles,
+        Tech::ImperialAge => sim::Tech::ImperialAge,
+        Tech::TwoHandedSwordsman => sim::Tech::TwoHandedSwordsman,
+        Tech::Champion => sim::Tech::Champion,
+        Tech::Halberdier => sim::Tech::Halberdier,
+        Tech::Arbalester => sim::Tech::Arbalester,
+        Tech::Cavalier => sim::Tech::Cavalier,
+        Tech::Paladin => sim::Tech::Paladin,
+        Tech::Hussar => sim::Tech::Hussar,
+        Tech::CappedRam => sim::Tech::CappedRam,
+        Tech::SiegeRam => sim::Tech::SiegeRam,
+        Tech::Onager => sim::Tech::Onager,
+        Tech::BlastFurnace => sim::Tech::BlastFurnace,
+        Tech::PlateMailArmor => sim::Tech::PlateMailArmor,
+        Tech::PlateBardingArmor => sim::Tech::PlateBardingArmor,
+        Tech::Bracer => sim::Tech::Bracer,
+        Tech::RingArcherArmor => sim::Tech::RingArcherArmor,
+        Tech::CropRotation => sim::Tech::CropRotation,
+        Tech::TwoManSaw => sim::Tech::TwoManSaw,
+        Tech::StoneShaftMining => sim::Tech::StoneShaftMining,
         Tech::WarGalley => sim::Tech::WarGalley,
     }
 }
@@ -140,6 +169,7 @@ pub fn building_required_age(kind: BuildingKind) -> crate::Age {
         sim::Age::Dark => crate::Age::Dark,
         sim::Age::Feudal => crate::Age::Feudal,
         sim::Age::Castle => crate::Age::Castle,
+        sim::Age::Imperial => crate::Age::Imperial,
     }
 }
 

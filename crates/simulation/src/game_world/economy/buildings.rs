@@ -4,6 +4,8 @@
 mod age;
 #[path = "buildings/barriers.rs"]
 mod barriers;
+#[path = "buildings/lines.rs"]
+mod lines;
 use super::{BuildingKind, Stockpile, UnitKind};
 use crate::Age;
 use aoe_map::ResourceKind;
@@ -49,13 +51,6 @@ const NONE: [bool; 4] = [false; 4];
 const ALL: [bool; 4] = [true; 4];
 const NO_UNITS: &[UnitKind] = &[];
 const VILLAGERS: &[UnitKind] = &[UnitKind::Villager];
-const MILITIA: &[UnitKind] = &[
-    UnitKind::Militia,
-    UnitKind::Spearman,
-    UnitKind::ManAtArms,
-    UnitKind::LongSwordsman,
-    UnitKind::Pikeman,
-];
 
 /// Canonical order of `BuildingKind`.
 pub const BUILDING_RULES: [BuildingRules; 23] = [
@@ -164,7 +159,7 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         depth: 3,
         los: 5,
         accepts: NONE,
-        trainable: MILITIA,
+        trainable: lines::MILITIA,
         requires: None,
         buildable: true,
         blocks: true,
@@ -235,12 +230,7 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         depth: 3,
         los: 6,
         accepts: NONE,
-        trainable: &[
-            UnitKind::Archer,
-            UnitKind::Skirmisher,
-            UnitKind::Crossbowman,
-            UnitKind::EliteSkirmisher,
-        ],
+        trainable: lines::RANGE,
         requires: Some(BuildingKind::Barracks),
         buildable: true,
         blocks: true,
@@ -256,7 +246,7 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         depth: 3,
         los: 6,
         accepts: NONE,
-        trainable: &[UnitKind::Scout, UnitKind::Knight, UnitKind::LightCavalry],
+        trainable: lines::STABLE,
         requires: Some(BuildingKind::Barracks),
         buildable: true,
         blocks: true,
@@ -360,7 +350,7 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
         40,
         1500,
         (4, 6),
-        &[UnitKind::Mangonel, UnitKind::BatteringRam],
+        lines::SIEGE,
         Some(BuildingKind::Blacksmith),
     ),
     BuildingRules {

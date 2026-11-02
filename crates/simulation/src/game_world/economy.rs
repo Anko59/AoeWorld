@@ -84,8 +84,29 @@ pub enum UnitKind {
     WarGalley,
     Vassal,
     General,
+    TwoHandedSwordsman,
+    Champion,
+    Halberdier,
+    Arbalester,
+    Cavalier,
+    Paladin,
+    Hussar,
+    CappedRam,
+    SiegeRam,
+    Onager,
 }
 impl UnitKind {
+    /// Battering Ram and its two upgrades.
+    pub const fn is_ram(self) -> bool {
+        matches!(self, Self::BatteringRam | Self::CappedRam | Self::SiegeRam)
+    }
+    /// Mangonel and its upgrade, which throw splash projectiles.
+    pub const fn is_artillery(self) -> bool {
+        matches!(self, Self::Mangonel | Self::Onager)
+    }
+    pub const fn is_siege(self) -> bool {
+        self.is_ram() || self.is_artillery()
+    }
     pub const fn is_naval(self) -> bool {
         matches!(
             self,
@@ -327,6 +348,8 @@ pub enum EconomyError {
     RequiresFeudalAge,
     #[error("requires Castle Age")]
     RequiresCastleAge,
+    #[error("requires Imperial Age")]
+    RequiresImperialAge,
     #[error("trading needs a completed Market")]
     NoMarket,
     #[error("player already has a starting village")]

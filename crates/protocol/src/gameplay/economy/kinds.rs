@@ -26,9 +26,19 @@ pub enum UnitKind {
     WarGalley,
     Vassal,
     General,
+    TwoHandedSwordsman,
+    Champion,
+    Halberdier,
+    Arbalester,
+    Cavalier,
+    Paladin,
+    Hussar,
+    CappedRam,
+    SiegeRam,
+    Onager,
 }
 impl UnitKind {
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 34] = [
         Self::Villager,
         Self::Scout,
         Self::Militia,
@@ -53,6 +63,16 @@ impl UnitKind {
         Self::WarGalley,
         Self::Vassal,
         Self::General,
+        Self::TwoHandedSwordsman,
+        Self::Champion,
+        Self::Halberdier,
+        Self::Arbalester,
+        Self::Cavalier,
+        Self::Paladin,
+        Self::Hussar,
+        Self::CappedRam,
+        Self::SiegeRam,
+        Self::Onager,
     ];
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -153,6 +173,7 @@ pub enum Age {
     Dark,
     Feudal,
     Castle,
+    Imperial,
 }
 /// A technology; bit `1 << tech as u8` of `GameplayPlayerState::researched`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -191,9 +212,28 @@ pub enum Tech {
     Ballistics,
     MurderHoles,
     WarGalley,
+    ImperialAge,
+    TwoHandedSwordsman,
+    Champion,
+    Halberdier,
+    Arbalester,
+    Cavalier,
+    Paladin,
+    Hussar,
+    CappedRam,
+    SiegeRam,
+    Onager,
+    BlastFurnace,
+    PlateMailArmor,
+    PlateBardingArmor,
+    Bracer,
+    RingArcherArmor,
+    CropRotation,
+    TwoManSaw,
+    StoneShaftMining,
 }
 impl Tech {
-    pub const ALL: [Tech; 34] = [
+    pub const ALL: [Tech; 53] = [
         Tech::Loom,
         Tech::TownWatch,
         Tech::FeudalAge,
@@ -228,10 +268,42 @@ impl Tech {
         Tech::Ballistics,
         Tech::MurderHoles,
         Tech::WarGalley,
+        Tech::ImperialAge,
+        Tech::TwoHandedSwordsman,
+        Tech::Champion,
+        Tech::Halberdier,
+        Tech::Arbalester,
+        Tech::Cavalier,
+        Tech::Paladin,
+        Tech::Hussar,
+        Tech::CappedRam,
+        Tech::SiegeRam,
+        Tech::Onager,
+        Tech::BlastFurnace,
+        Tech::PlateMailArmor,
+        Tech::PlateBardingArmor,
+        Tech::Bracer,
+        Tech::RingArcherArmor,
+        Tech::CropRotation,
+        Tech::TwoManSaw,
+        Tech::StoneShaftMining,
     ];
     pub const fn building(self) -> BuildingKind {
         match self {
             Self::WarGalley => BuildingKind::Dock,
+            Self::ImperialAge => BuildingKind::TownCenter,
+            Self::TwoHandedSwordsman | Self::Champion | Self::Halberdier => BuildingKind::Barracks,
+            Self::Arbalester => BuildingKind::ArcheryRange,
+            Self::Cavalier | Self::Paladin | Self::Hussar => BuildingKind::Stable,
+            Self::CappedRam | Self::SiegeRam | Self::Onager => BuildingKind::SiegeWorkshop,
+            Self::BlastFurnace
+            | Self::PlateMailArmor
+            | Self::PlateBardingArmor
+            | Self::Bracer
+            | Self::RingArcherArmor => BuildingKind::Blacksmith,
+            Self::CropRotation => BuildingKind::Mill,
+            Self::TwoManSaw => BuildingKind::LumberCamp,
+            Self::StoneShaftMining => BuildingKind::MiningCamp,
             Self::CastleAge | Self::HandCart | Self::TownPatrol => BuildingKind::TownCenter,
             Self::LongSwordsman | Self::Pikeman => BuildingKind::Barracks,
             Self::Crossbowman | Self::EliteSkirmisher => BuildingKind::ArcheryRange,

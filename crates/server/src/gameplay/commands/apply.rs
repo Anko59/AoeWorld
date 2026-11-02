@@ -230,6 +230,7 @@ pub(in crate::gameplay) fn apply(
         Err(E::AlreadyResearched) => CommandResult::RejectedAlreadyResearched,
         Err(E::ResearchBusy) => CommandResult::RejectedResearchBusy,
         Err(E::RequiresCastleAge) => CommandResult::RejectedRequiresCastleAge,
+        Err(E::RequiresImperialAge) => CommandResult::RejectedRequiresImperialAge,
         Err(E::RequiresFeudalAge) => CommandResult::RejectedRequiresFeudalAge,
         Err(E::NoMarket) => CommandResult::RejectedNoMarket,
         Err(E::TechRequirementMissing) => CommandResult::RejectedTechRequirement,

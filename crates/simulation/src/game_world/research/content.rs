@@ -2,7 +2,7 @@
 use crate::{Stockpile, UnitCombat, UnitCost, UnitKind, UnitTraining};
 
 const MAGIC: i32 = 0x414f4543;
-const BUILDING_WORDS: usize = 13;
+const BUILDING_WORDS: usize = 14;
 const TECH_WORDS: usize = 12;
 const UNIT_WORDS: usize = 20;
 
@@ -15,7 +15,7 @@ pub struct BrowserBuilding {
     pub age: u8,
     pub buildable: bool,
     pub requires: Option<u8>,
-    trainable: u32,
+    trainable: u64,
     pub blocks: bool,
     pub max_hp: u16,
 }
@@ -77,7 +77,7 @@ fn optional(value: i32) -> Option<u8> {
 impl BrowserContent {
     pub fn decode(data: &[i32]) -> Result<Self, &'static str> {
         let buildings = crate::BuildingKind::StoneGate as usize + 1;
-        let techs = crate::Tech::WarGalley as usize + 1;
+        let techs = crate::TECH_RULES.len();
         let units = UnitKind::ALL.len();
         let length = 5 + buildings * BUILDING_WORDS + techs * TECH_WORDS + units * UNIT_WORDS;
         if data.len() != length
@@ -91,9 +91,13 @@ impl BrowserContent {
         for (index, &word) in data[5..].iter().enumerate() {
             let unit_start = buildings * BUILDING_WORDS + techs * TECH_WORDS;
             let signed = index >= unit_start && matches!((index - unit_start) % UNIT_WORDS, 4 | 18);
-            let training_mask = index < buildings * BUILDING_WORDS && index % BUILDING_WORDS == 10;
-            let valid = if training_mask {
-                word >= 0 && word < (1 << units)
+            let building = index < buildings * BUILDING_WORDS;
+            let training_low = building && index % BUILDING_WORDS == 10;
+            let training_high = building && index % BUILDING_WORDS == 11;
+            let valid = if training_high {
+                word >= 0 && word < (1 << (units - 32))
+            } else if training_low {
+                true
             } else {
                 signed || (0..=1_000_000).contains(&word)
             };
@@ -117,9 +121,9 @@ impl BrowserContent {
                 || r[7] > 2
                 || r[8] > 1
                 || r[9] > buildings as i32
-                || r[10] >= 1 << units
-                || r[11] > 1
-                || r[12] > 65535
+                || r[11] >= 1 << (units - 32)
+                || r[12] > 1
+                || r[13] > 65535
             {
                 return Err("invalid game content building");
             }
@@ -131,9 +135,9 @@ impl BrowserContent {
                 age: r[7] as u8,
                 buildable: r[8] != 0,
                 requires: optional(r[9]),
-                trainable: r[10] as u32,
-                blocks: r[11] != 0,
-                max_hp: r[12] as u16,
+                trainable: u64::from(r[10] as u32) | (u64::from(r[11] as u32) << 32),
+                blocks: r[12] != 0,
+                max_hp: r[13] as u16,
             });
         }
         for tech in 0..techs {
@@ -141,7 +145,7 @@ impl BrowserContent {
             offset += TECH_WORDS;
             if r[0] != tech as i32
                 || r[1] >= buildings as i32
-                || r[2] > 2
+                || r[2] > 3
                 || r[7] > techs as i32
                 || r[8] >= 1 << buildings
                 || r[9] > buildings as i32
@@ -172,7 +176,7 @@ impl BrowserContent {
                 || r[8] > 255
                 || r[9] > 255
                 || r[10] > 255
-                || r[16] > 2
+                || r[16] > 3
                 || r[17] > techs as i32
                 || r[19] >= 1 << (techs - 32)
             {

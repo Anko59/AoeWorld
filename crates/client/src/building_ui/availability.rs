@@ -25,6 +25,7 @@ pub(crate) enum Availability {
     NotOwner,
     RequiresCastle,
     UniqueUnit,
+    RequiresImperial,
 }
 impl Availability {
     pub(crate) fn number(self) -> f64 {
@@ -78,14 +79,17 @@ pub(crate) fn research(
     }
     // A line exposes only its next technology; a completed step disappears.
     // Age advancement uses an age prerequisite rather than requires_tech.
-    if (r.tech == Tech::CastleAge as u8 && (p.age as u8) < r.age)
+    if ((r.tech == Tech::CastleAge as u8 || r.tech == Tech::ImperialAge as u8)
+        && (p.age as u8) < r.age)
         || r.requires_tech
             .is_some_and(|tech| p.researched & (1_u64 << tech) == 0)
     {
         return Availability::Unavailable;
     }
     if (p.age as u8) < r.age {
-        return if r.age == aoe_simulation::Age::Castle as u8 {
+        return if r.age == aoe_simulation::Age::Imperial as u8 {
+            Availability::RequiresImperial
+        } else if r.age == aoe_simulation::Age::Castle as u8 {
             Availability::RequiresCastle
         } else {
             Availability::RequiresFeudal
@@ -127,7 +131,9 @@ pub(crate) fn training(
         return Availability::Unavailable;
     }
     if (p.age as u8) < unit.age {
-        return if unit.age == aoe_simulation::Age::Castle as u8 {
+        return if unit.age == aoe_simulation::Age::Imperial as u8 {
+            Availability::RequiresImperial
+        } else if unit.age == aoe_simulation::Age::Castle as u8 {
             Availability::RequiresCastle
         } else {
             Availability::RequiresFeudal
@@ -164,7 +170,11 @@ pub(crate) fn primary_training(
 ) -> UnitKind {
     match b.kind {
         aoe_protocol::BuildingKind::Barracks => {
-            if player.is_some_and(|p| p.researched & Tech::LongSwordsman.bit() != 0) {
+            if player.is_some_and(|p| p.researched & Tech::Champion.bit() != 0) {
+                UnitKind::Champion
+            } else if player.is_some_and(|p| p.researched & Tech::TwoHandedSwordsman.bit() != 0) {
+                UnitKind::TwoHandedSwordsman
+            } else if player.is_some_and(|p| p.researched & Tech::LongSwordsman.bit() != 0) {
                 UnitKind::LongSwordsman
             } else if player.is_some_and(|p| p.researched & Tech::ManAtArms.bit() != 0) {
                 UnitKind::ManAtArms

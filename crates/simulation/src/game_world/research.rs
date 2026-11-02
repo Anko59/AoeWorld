@@ -8,6 +8,7 @@ use aoe_core::{EntityId, PlayerId};
 mod castle;
 mod content;
 mod effects;
+mod imperial;
 mod table;
 mod upgrades;
 
@@ -32,10 +33,10 @@ impl GameWorld {
         if self.player_economy(player).is_some_and(|p| p.age >= age) {
             return Ok(());
         }
-        Err(if age == Age::Castle {
-            EconomyError::RequiresCastleAge
-        } else {
-            EconomyError::RequiresFeudalAge
+        Err(match age {
+            Age::Imperial => EconomyError::RequiresImperialAge,
+            Age::Castle => EconomyError::RequiresCastleAge,
+            _ => EconomyError::RequiresFeudalAge,
         })
     }
 

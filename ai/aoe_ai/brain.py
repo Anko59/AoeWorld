@@ -137,7 +137,8 @@ class Brain:
                 mem.bump("buildings_completed")
             elif event.kind == "age_advanced":
                 mem.bump("ages")
-                mem.stats.setdefault("castle_tick" if ctx.castle else "feudal_tick", ctx.tick)
+                tick_key = "imperial_tick" if ctx.imperial else "castle_tick" if ctx.castle else "feudal_tick"
+                mem.stats.setdefault(tick_key, ctx.tick)
                 mem.blocked_units.clear()
 
     def on_rejected(self, ctx: Context, tracked: Any, result: Any) -> None:

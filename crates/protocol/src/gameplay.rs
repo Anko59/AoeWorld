@@ -161,6 +161,7 @@ pub enum CommandResult {
     RejectedVassalExists,
     RejectedVassalLeash,
     RejectedVassalHome,
+    RejectedRequiresImperialAge,
 }
 
 /// Immutable physical properties of the active geographic map. The package

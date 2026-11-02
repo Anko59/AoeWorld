@@ -166,8 +166,14 @@ impl GameWorld {
             | crate::UnitKind::DemolitionShip
             | crate::UnitKind::TransportShip
             | crate::UnitKind::WarGalley => 0,
-            crate::UnitKind::Knight | crate::UnitKind::LightCavalry => 1850,
-            crate::UnitKind::BatteringRam => 1200,
+            crate::UnitKind::Knight
+            | crate::UnitKind::LightCavalry
+            | crate::UnitKind::Cavalier
+            | crate::UnitKind::Paladin
+            | crate::UnitKind::Hussar => 1850,
+            crate::UnitKind::BatteringRam
+            | crate::UnitKind::CappedRam
+            | crate::UnitKind::SiegeRam => 1200,
             _ => 1000,
         };
         let die_ticks = (u64::from(self.config.tick_hz) * die_millis).div_ceil(1000);

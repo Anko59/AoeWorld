@@ -2,7 +2,7 @@ use crate::{BuildingKind, GameWorld, Tech, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
 impl UnitKind {
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 34] = [
         Self::Villager,
         Self::Scout,
         Self::Militia,
@@ -27,18 +27,46 @@ impl UnitKind {
         Self::WarGalley,
         Self::Vassal,
         Self::General,
+        Self::TwoHandedSwordsman,
+        Self::Champion,
+        Self::Halberdier,
+        Self::Arbalester,
+        Self::Cavalier,
+        Self::Paladin,
+        Self::Hussar,
+        Self::CappedRam,
+        Self::SiegeRam,
+        Self::Onager,
     ];
     /// The single current identity of each production line.
     pub fn upgraded(self, researched: u64) -> Self {
         let has = |t: Tech| researched & t.bit() != 0;
         match self {
             Self::Galley if has(Tech::WarGalley) => Self::WarGalley,
+            Self::Militia | Self::ManAtArms | Self::LongSwordsman | Self::TwoHandedSwordsman
+                if has(Tech::Champion) =>
+            {
+                Self::Champion
+            }
+            Self::Militia | Self::ManAtArms | Self::LongSwordsman
+                if has(Tech::TwoHandedSwordsman) =>
+            {
+                Self::TwoHandedSwordsman
+            }
             Self::Militia | Self::ManAtArms if has(Tech::LongSwordsman) => Self::LongSwordsman,
             Self::Militia if has(Tech::ManAtArms) => Self::ManAtArms,
+            Self::Spearman | Self::Pikeman if has(Tech::Halberdier) => Self::Halberdier,
             Self::Spearman if has(Tech::Pikeman) => Self::Pikeman,
+            Self::Archer | Self::Crossbowman if has(Tech::Arbalester) => Self::Arbalester,
             Self::Archer if has(Tech::Crossbowman) => Self::Crossbowman,
             Self::Skirmisher if has(Tech::EliteSkirmisher) => Self::EliteSkirmisher,
+            Self::Knight | Self::Cavalier if has(Tech::Paladin) => Self::Paladin,
+            Self::Knight if has(Tech::Cavalier) => Self::Cavalier,
+            Self::Scout | Self::LightCavalry if has(Tech::Hussar) => Self::Hussar,
             Self::Scout if has(Tech::LightCavalry) => Self::LightCavalry,
+            Self::BatteringRam | Self::CappedRam if has(Tech::SiegeRam) => Self::SiegeRam,
+            Self::BatteringRam if has(Tech::CappedRam) => Self::CappedRam,
+            Self::Mangonel if has(Tech::Onager) => Self::Onager,
             _ => self,
         }
     }
@@ -51,6 +79,16 @@ impl UnitKind {
             Self::Crossbowman => Some(Tech::Crossbowman),
             Self::EliteSkirmisher => Some(Tech::EliteSkirmisher),
             Self::LightCavalry => Some(Tech::LightCavalry),
+            Self::TwoHandedSwordsman => Some(Tech::TwoHandedSwordsman),
+            Self::Champion => Some(Tech::Champion),
+            Self::Halberdier => Some(Tech::Halberdier),
+            Self::Arbalester => Some(Tech::Arbalester),
+            Self::Cavalier => Some(Tech::Cavalier),
+            Self::Paladin => Some(Tech::Paladin),
+            Self::Hussar => Some(Tech::Hussar),
+            Self::CappedRam => Some(Tech::CappedRam),
+            Self::SiegeRam => Some(Tech::SiegeRam),
+            Self::Onager => Some(Tech::Onager),
             _ => None,
         }
     }
@@ -59,6 +97,8 @@ impl UnitKind {
             crate::Age::Feudal
         } else if self == Self::TransportShip {
             crate::Age::Dark
+        } else if self as u8 >= Self::TwoHandedSwordsman as u8 {
+            crate::Age::Imperial
         } else if self as u8 >= Self::LongSwordsman as u8 {
             crate::Age::Castle
         } else if matches!(self, Self::Villager | Self::Militia | Self::FishingShip) {

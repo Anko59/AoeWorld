@@ -18,6 +18,14 @@ fn occupants(
     building.garrison.iter().map(move |g| (g.unit, at))
 }
 
+/// Arrays this long have no `Default`, so the zero value is explicit.
+struct UnitCounts([usize; aoe_simulation::UNIT_COMBAT.len()]);
+impl Default for UnitCounts {
+    fn default() -> Self {
+        Self([0; aoe_simulation::UNIT_COMBAT.len()])
+    }
+}
+
 #[derive(Default, Serialize)]
 struct Player {
     id: u16,
@@ -38,7 +46,7 @@ struct Player {
     #[serde(skip)]
     army_sum: (i64, i64, usize),
     #[serde(skip)]
-    unit_counts: [usize; aoe_simulation::UNIT_COMBAT.len()],
+    unit_counts: UnitCounts,
     #[serde(skip)]
     building_counts: [usize; aoe_simulation::BUILDING_RULES.len()],
 }
@@ -89,7 +97,7 @@ pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
             ..Player::default()
         });
         player.population += 1;
-        player.unit_counts[unit.kind as usize] += 1;
+        player.unit_counts.0[unit.kind as usize] += 1;
         let activity = match unit.task {
             UnitTask::Attacking => 3,
             UnitTask::Building => 1,
@@ -124,7 +132,7 @@ pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
         // Format each occupied kind once per player, rather than allocating
         // a temporary String for every entity while holding the world lock.
         for rule in aoe_simulation::UNIT_COMBAT {
-            let count = player.unit_counts[rule.kind as usize];
+            let count = player.unit_counts.0[rule.kind as usize];
             if count > 0 {
                 player.units.insert(format!("{:?}", rule.kind), count);
             }

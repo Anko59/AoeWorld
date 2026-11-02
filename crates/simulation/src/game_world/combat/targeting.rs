@@ -114,8 +114,7 @@ impl GameWorld {
                         || self.embarked(id)
                         || !area.accepts(goal)
                         || !self.unit_visible_to(area.player, id)
-                        || (area.ram
-                            && !matches!(u.kind, UnitKind::Mangonel | UnitKind::BatteringRam))
+                        || (area.ram && !u.kind.is_siege())
                     {
                         return false;
                     }
@@ -187,8 +186,7 @@ impl GameWorld {
                         || !bounds.contains(u.position.tile_floor())
                         || !area.accepts(Goal::Unit(u.position, u.kind.collision_radius()))
                         || !self.unit_visible_to(area.player, id)
-                        || (area.ram
-                            && !matches!(u.kind, UnitKind::Mangonel | UnitKind::BatteringRam))
+                        || (area.ram && !u.kind.is_siege())
                     {
                         continue;
                     }

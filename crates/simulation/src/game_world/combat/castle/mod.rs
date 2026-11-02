@@ -129,10 +129,7 @@ impl GameWorld {
                                             && u.hp < u.max_hp
                                             && !self.embarked(u.id)
                                             && !u.kind.is_naval()
-                                            && !matches!(
-                                                u.kind,
-                                                UnitKind::Mangonel | UnitKind::BatteringRam
-                                            )
+                                            && !u.kind.is_siege()
                                     })
                                     .map(|u| u.id)
                                     .collect::<Vec<_>>()

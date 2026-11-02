@@ -21,7 +21,12 @@ impl UnitKind {
             table[UnitKind::LightCavalry as usize] = 256;
             table[UnitKind::Vassal as usize] = 308;
             table[UnitKind::General as usize] = 410;
+            table[UnitKind::Cavalier as usize] = 256;
+            table[UnitKind::Paladin as usize] = 256;
+            table[UnitKind::Hussar as usize] = 256;
             table[UnitKind::BatteringRam as usize] = 461;
+            table[UnitKind::CappedRam as usize] = 461;
+            table[UnitKind::SiegeRam as usize] = 461;
             table[UnitKind::FishingShip as usize] = 512;
             table[UnitKind::Galley as usize] = 512;
             table[UnitKind::FireShip as usize] = 512;
@@ -29,6 +34,7 @@ impl UnitKind {
             table[UnitKind::TransportShip as usize] = 512;
             table[UnitKind::WarGalley as usize] = 512;
             table[UnitKind::Mangonel as usize] = 512;
+            table[UnitKind::Onager as usize] = 512;
             table
         };
         // One load: this runs for every body tested in a collision scan.

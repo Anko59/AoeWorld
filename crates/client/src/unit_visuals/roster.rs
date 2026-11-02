@@ -30,14 +30,16 @@ pub(super) fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
         UnitKind::Spearman => [SpearmanStand, SpearmanWalk, SpearmanAttack, SpearmanDie],
         UnitKind::ManAtArms => [ManAtArmsStand, ManAtArmsWalk, ManAtArmsAttack, ManAtArmsDie],
         UnitKind::Scout => [ScoutStand, ScoutWalk, ScoutAttack, ScoutDie],
-        UnitKind::LongSwordsman => [
+        UnitKind::LongSwordsman | UnitKind::TwoHandedSwordsman | UnitKind::Champion => [
             LongSwordsmanStand,
             LongSwordsmanWalk,
             LongSwordsmanAttack,
             LongSwordsmanDie,
         ],
-        UnitKind::Pikeman => [PikemanStand, PikemanWalk, PikemanAttack, PikemanDie],
-        UnitKind::Crossbowman => [
+        UnitKind::Pikeman | UnitKind::Halberdier => {
+            [PikemanStand, PikemanWalk, PikemanAttack, PikemanDie]
+        }
+        UnitKind::Crossbowman | UnitKind::Arbalester => [
             CrossbowmanStand,
             CrossbowmanWalk,
             CrossbowmanAttack,
@@ -49,16 +51,20 @@ pub(super) fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
             EliteSkirmisherAttack,
             EliteSkirmisherDie,
         ],
-        UnitKind::Knight => [KnightStand, KnightWalk, KnightAttack, KnightDie],
-        UnitKind::LightCavalry => [
+        UnitKind::Knight | UnitKind::Cavalier | UnitKind::Paladin => {
+            [KnightStand, KnightWalk, KnightAttack, KnightDie]
+        }
+        UnitKind::LightCavalry | UnitKind::Hussar => [
             LightCavalryStand,
             LightCavalryWalk,
             LightCavalryAttack,
             LightCavalryDie,
         ],
         UnitKind::Monk => [MonkStand, MonkWalk, MonkAttack, MonkDie],
-        UnitKind::Mangonel => [MangonelStand, MangonelWalk, MangonelAttack, MangonelDie],
-        UnitKind::BatteringRam => [
+        UnitKind::Mangonel | UnitKind::Onager => {
+            [MangonelStand, MangonelWalk, MangonelAttack, MangonelDie]
+        }
+        UnitKind::BatteringRam | UnitKind::CappedRam | UnitKind::SiegeRam => [
             BatteringRamStand,
             BatteringRamWalk,
             BatteringRamAttack,

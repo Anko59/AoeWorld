@@ -142,6 +142,8 @@ class EconomyManager:
         if buildorder.wants_castle_food(ctx) and ctx.economy.gold >= tech_cost(Tech.CASTLE_AGE)[2] + tech_cost(Tech.CROSSBOWMAN)[2]:
             shares["FOOD"] += shares["GOLD"]
             shares["GOLD"] = 0.0
+        if buildorder.wants_imperial_food(ctx):
+            shares = dict(cfg.imperial_shares)
         # Early on nothing but food and wood matter.
         if len(ctx.villagers) < 10:
             shares.update(GOLD=0.0, STONE=0.0)

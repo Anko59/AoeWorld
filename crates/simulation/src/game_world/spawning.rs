@@ -76,7 +76,7 @@ impl GameWorld {
             death_tick: None,
             death_hunt: None,
             auto_scout: false,
-            stance: if kind == UnitKind::BatteringRam {
+            stance: if kind.is_ram() {
                 aoe_core::CombatStance::Defensive
             } else {
                 Default::default()

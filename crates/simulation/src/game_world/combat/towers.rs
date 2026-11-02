@@ -30,11 +30,13 @@ impl GameWorld {
                 crate::UnitKind::Villager => {
                     3 * (5
                         + u32::from(self.has_researched(b.player, crate::Tech::Fletching))
-                        + u32::from(self.has_researched(b.player, crate::Tech::BodkinArrow)))
+                        + u32::from(self.has_researched(b.player, crate::Tech::BodkinArrow))
+                        + u32::from(self.has_researched(b.player, crate::Tech::Bracer)))
                 }
                 crate::UnitKind::Archer
                 | crate::UnitKind::Skirmisher
                 | crate::UnitKind::Crossbowman
+                | crate::UnitKind::Arbalester
                 | crate::UnitKind::EliteSkirmisher => {
                     let stats =
                         super::researched_stats(g.unit.kind, self.is_feudal(b.player), researched);

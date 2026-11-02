@@ -128,7 +128,7 @@ impl GameWorld {
         match tech.rules().effect {
             TechEffect::UpgradeGalley => self.upgrade_galleys(player, changed),
             TechEffect::Military => {
-                if matches!(tech, Tech::Fletching | Tech::BodkinArrow) {
+                if matches!(tech, Tech::Fletching | Tech::BodkinArrow | Tech::Bracer) {
                     for b in self.economy.buildings.values_mut().filter(|b| {
                         b.player == player
                             && matches!(
@@ -172,10 +172,10 @@ impl GameWorld {
                     } else {
                         hp
                     };
-                    let (_, old_los) = building.kind.age_stats(if age == super::Age::Castle {
-                        super::Age::Feudal
-                    } else {
-                        super::Age::Dark
+                    let (_, old_los) = building.kind.age_stats(match age {
+                        super::Age::Imperial => super::Age::Castle,
+                        super::Age::Castle => super::Age::Feudal,
+                        _ => super::Age::Dark,
                     });
                     let bonus = hp.saturating_sub(building.max_hp);
                     let earned = if building.is_complete() {
@@ -214,8 +214,10 @@ impl GameWorld {
                 | Tech::TownPatrol
                 | Tech::FeudalAge
                 | Tech::CastleAge
+                | Tech::ImperialAge
                 | Tech::Fletching
                 | Tech::BodkinArrow
+                | Tech::Bracer
         ) {
             let ids = self
                 .buildings()
@@ -228,7 +230,12 @@ impl GameWorld {
         }
         if matches!(
             tech,
-            Tech::FeudalAge | Tech::CastleAge | Tech::Fletching | Tech::BodkinArrow
+            Tech::FeudalAge
+                | Tech::CastleAge
+                | Tech::ImperialAge
+                | Tech::Fletching
+                | Tech::BodkinArrow
+                | Tech::Bracer
         ) {
             let ids = self
                 .units()
@@ -241,6 +248,7 @@ impl GameWorld {
                                 | UnitKind::Skirmisher
                                 | UnitKind::Crossbowman
                                 | UnitKind::EliteSkirmisher
+                                | UnitKind::Arbalester
                                 | UnitKind::Galley
                                 | UnitKind::WarGalley
                         )
