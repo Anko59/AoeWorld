@@ -119,7 +119,10 @@ pub(crate) fn building_rule(building: &GameplayBuildingState) -> Option<&'static
         return Some("building.hp_positive");
     }
     if building.gate_open
-        && !(matches!(building.kind, BuildingKind::PalisadeGate | BuildingKind::StoneGate) && complete)
+        && !(matches!(
+            building.kind,
+            BuildingKind::PalisadeGate | BuildingKind::StoneGate
+        ) && complete)
     {
         return Some("building.gate_open");
     }
