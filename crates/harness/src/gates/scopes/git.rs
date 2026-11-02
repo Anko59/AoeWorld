@@ -108,3 +108,101 @@ pub(super) fn names(bytes: &[u8]) -> Result<Vec<String>> {
         .map(|name| Ok(String::from_utf8(name.to_vec())?))
         .collect()
 }
+
+/// One sanitized Git process per read operation. Requests are full object IDs,
+/// never revisions; size framing keeps binary data out of the line protocol.
+pub(super) struct Batch {
+    child: std::process::Child,
+    input: Option<std::process::ChildStdin>,
+    output: std::io::BufReader<std::process::ChildStdout>,
+}
+
+impl Batch {
+    pub(super) fn new(root: &Path) -> Result<Self> {
+        let mut child = command(root)
+            .args(["cat-file", "--batch"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()?;
+        let input = child.stdin.take().ok_or("missing batch input")?;
+        let output = child.stdout.take().ok_or("missing batch output")?;
+        Ok(Self {
+            child,
+            input: Some(input),
+            output: std::io::BufReader::new(output),
+        })
+    }
+
+    pub(super) fn read(&mut self, object: &str, kind: &str) -> Result<Vec<u8>> {
+        use std::io::{BufRead, Read};
+        oid(object)?;
+        let input = self.input.as_mut().ok_or("batch input closed")?;
+        writeln!(input, "{object}")?;
+        input.flush()?;
+        let mut header = String::new();
+        (&mut self.output).take(1024).read_line(&mut header)?;
+        let fields: Vec<_> = header.trim_end_matches('\n').split(' ').collect();
+        if !header.ends_with('\n') || fields.len() != 3 || fields[0] != object || fields[1] != kind
+        {
+            return Err("Git batch object identity/type mismatch or missing object".into());
+        }
+        let size: usize = fields[2].parse()?;
+        let mut bytes = Vec::new();
+        bytes.try_reserve_exact(size)?;
+        bytes.resize(size, 0);
+        self.output.read_exact(&mut bytes)?;
+        let mut end = [0];
+        self.output.read_exact(&mut end)?;
+        if end != *b"\n" {
+            return Err("Git batch object terminator missing".into());
+        }
+        Ok(bytes)
+    }
+
+    pub(super) fn finish(mut self) -> Result<()> {
+        self.input.take();
+        if !self.child.wait()?.success() {
+            return Err("Git batch process failed".into());
+        }
+        Ok(())
+    }
+}
+
+impl Drop for Batch {
+    fn drop(&mut self) {
+        // Errors must also close pipes and reap the child, including partial reads.
+        self.input.take();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Hash raw files in one process; Git's C quoting supports arbitrary path bytes,
+/// including newlines. No attributes, filters, or caller Git environment apply.
+pub(super) fn hash_files(root: &Path, paths: &[PathBuf], write: bool) -> Result<Vec<String>> {
+    let mut input = Vec::new();
+    for path in paths {
+        input.push(b'"');
+        for byte in path.as_os_str().as_encoded_bytes() {
+            input.extend_from_slice(format!("\\{byte:03o}").as_bytes());
+        }
+        input.extend_from_slice(b"\"\n");
+    }
+    let mut args = vec!["hash-object", "--no-filters", "--stdin-paths"];
+    if write {
+        args.push("-w");
+    }
+    let output = git(root, &args, Some(&input))?;
+    let objects: Vec<_> = std::str::from_utf8(&output)?
+        .lines()
+        .map(str::to_owned)
+        .collect();
+    if objects.len() != paths.len() {
+        return Err("Git file hash count mismatch".into());
+    }
+    for object in &objects {
+        oid(object)?;
+    }
+    Ok(objects)
+}

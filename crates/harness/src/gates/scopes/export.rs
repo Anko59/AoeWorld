@@ -1,13 +1,13 @@
 use super::*;
 
 pub(super) fn import_object(
-    source: &Path,
+    batch: &mut Batch,
     destination: &Path,
     object: &str,
     kind: &str,
 ) -> Result<()> {
     // Git provides object bytes, NOT worktree bytes; no checkout filters run here.
-    let bytes = git(source, &["cat-file", kind, oid(object)?], None)?;
+    let bytes = batch.read(object, kind)?;
     let imported = line(git(
         destination,
         &["hash-object", "-w", "-t", kind, "--stdin"],
@@ -76,12 +76,20 @@ pub(super) fn prepare_checkout(
         Kind::Working => return Err("working scope must not be exported".into()),
     };
     let parsed = entries(&records)?;
-    let mut imported = BTreeSet::new();
-    for entry in &parsed {
-        if imported.insert(&entry.object) {
-            import_object(source, &checkout, &entry.object, "blob")?;
-        }
+    let mut batch = Batch::new(source)?;
+    // Numeric private paths avoid interpreting candidate filenames as arguments.
+    let raw = tempfile::tempdir_in(checkout.join(".git"))?;
+    let objects: BTreeSet<_> = parsed.iter().map(|entry| &entry.object).collect();
+    let mut paths = Vec::new();
+    for (index, object) in objects.iter().enumerate() {
+        let path = raw.path().join(index.to_string());
+        fs::write(&path, batch.read(object, "blob")?)?;
+        paths.push(path);
     }
+    if hash_files(&checkout, &paths, true)?.iter().ne(objects) {
+        return Err("object identity changed during import".into());
+    }
+    drop(raw);
     git(
         &checkout,
         &["update-index", "-z", "--index-info"],
@@ -105,7 +113,7 @@ pub(super) fn prepare_checkout(
         if tree != resolve(source, commit, "tree")? {
             return Err("commit tree import mismatch".into());
         }
-        import_object(source, &checkout, commit, "commit")?;
+        import_object(&mut batch, &checkout, commit, "commit")?;
         commit.to_owned()
     } else {
         let raw = format!(
@@ -117,6 +125,7 @@ pub(super) fn prepare_checkout(
             Some(raw.as_bytes()),
         )?)?
     };
+    batch.finish()?;
     // HEAD is genuinely detached and its TREE matches the private index.
     fs::write(checkout.join(".git/HEAD"), format!("{detached}\n"))?;
     let mut prefix = checkout.as_os_str().to_os_string();
@@ -142,14 +151,13 @@ pub(super) fn verify_checkout(checkout: &Path, tree: &str) -> Result<()> {
     if index_entries != head_entries {
         return Err("gate altered snapshot index tree".into());
     }
-    // Compare actual bytes to blob OIDs, not a filtered Git diff alone.
-    for entry in index_entries {
-        let path = checked_file(checkout, &entry.name)?;
-        let actual = line(git(
-            checkout,
-            &["hash-object", "--no-filters", "--stdin"],
-            Some(&fs::read(&path)?),
-        )?)?;
+    // Compare raw unfiltered file hashes to blob OIDs in one Git operation.
+    let paths = index_entries
+        .iter()
+        .map(|entry| checked_file(checkout, &entry.name))
+        .collect::<Result<Vec<_>>>()?;
+    let hashes = hash_files(checkout, &paths, false)?;
+    for ((entry, path), actual) in index_entries.into_iter().zip(paths).zip(hashes) {
         if actual != entry.object {
             return Err(format!("export altered {}", entry.name).into());
         }
