@@ -26,6 +26,11 @@ FEUDAL_REQUIREMENT = (
 DARK, ADVANCE, FEUDAL = "dark", "advance", "feudal"
 CASTLE_ADVANCE, CASTLE = "castle-advance", "castle"
 CASTLE_REQUIREMENT = (BuildingKind.ARCHERY_RANGE, BuildingKind.STABLE, BuildingKind.BLACKSMITH, BuildingKind.MARKET)
+IMPERIAL_ADVANCE, IMPERIAL = "imperial-advance", "imperial"
+#: At least two different kinds of these must stand before Imperial Age.
+IMPERIAL_REQUIREMENT = (BuildingKind.CASTLE, BuildingKind.UNIVERSITY, BuildingKind.MONASTERY, BuildingKind.SIEGE_WORKSHOP)
+#: The two the AI raises: cheap wood buildings (the Siege Workshop needs the Blacksmith).
+IMPERIAL_BUILDINGS = (BuildingKind.UNIVERSITY, BuildingKind.SIEGE_WORKSHOP)
 
 
 def requirement_kinds(ctx: Context) -> int:
@@ -35,6 +40,21 @@ def requirement_kinds(ctx: Context) -> int:
 
 def castle_requirement_kinds(ctx: Context) -> int:
     return len({b.kind for b in ctx.buildings if b.complete and b.kind in CASTLE_REQUIREMENT})
+
+
+def imperial_requirement_kinds(ctx: Context) -> int:
+    return len({b.kind for b in ctx.buildings if b.complete and b.kind in IMPERIAL_REQUIREMENT})
+
+
+def imperial_ready(ctx: Context) -> bool:
+    """The Castle Age economy and army the climb to Imperial Age is built on."""
+    return (ctx.castle and not ctx.imperial and len(ctx.villagers) >= ctx.config.imperial_villagers
+            and ctx.board.stats.get("army_peak", 0) >= ctx.config.imperial_army_min)
+
+
+def wants_imperial_food(ctx: Context) -> bool:
+    """Save the age's food and gold while the Castle army and buildings finish."""
+    return imperial_ready(ctx)
 
 
 def castle_prerequisite_wood(ctx: Context) -> int:
@@ -53,7 +73,11 @@ def castle_prerequisite_wood(ctx: Context) -> int:
 
 
 def stage(ctx: Context) -> str:
+    if ctx.imperial:
+        return IMPERIAL
     if ctx.castle:
+        if imperial_ready(ctx) and imperial_requirement_kinds(ctx) >= 2:
+            return IMPERIAL_ADVANCE
         return CASTLE
     if ctx.feudal:
         ready = castle_requirement_kinds(ctx) >= 2
@@ -91,17 +115,22 @@ def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
         (BuildingKind.ARCHERY_RANGE, 1),
     ]
     wants.append((BuildingKind.BLACKSMITH, 1))
+    if ctx.castle or (ctx.center is not None and ctx.center.researching == Tech.CASTLE_AGE):
+        wants.insert(2, (BuildingKind.STABLE, 1))
+    # The Imperial Age buildings come before the second Barracks and Range:
+    # they are the age's prerequisite, the extra production is not.
+    if ctx.castle and not ctx.imperial and len(ctx.villagers) >= ctx.config.imperial_villagers - 6:
+        wants.extend((kind, 1) for kind in IMPERIAL_BUILDINGS)
     if len(ctx.villagers) >= 22:
         wants.append((BuildingKind.BARRACKS, ctx.config.max_barracks))
     if len(ctx.villagers) >= 26:
         wants.append((BuildingKind.ARCHERY_RANGE, ctx.config.max_ranges))
-    if ctx.castle or (ctx.center is not None and ctx.center.researching == Tech.CASTLE_AGE):
-        wants.insert(2, (BuildingKind.STABLE, 1))
     return wants
 
 
 #: A building that must be finished before another can be placed.
-PREREQUISITE = {BuildingKind.ARCHERY_RANGE: BuildingKind.BARRACKS, BuildingKind.STABLE: BuildingKind.BARRACKS}
+PREREQUISITE = {BuildingKind.ARCHERY_RANGE: BuildingKind.BARRACKS, BuildingKind.STABLE: BuildingKind.BARRACKS,
+                BuildingKind.SIEGE_WORKSHOP: BuildingKind.BLACKSMITH}
 
 
 # ----- technologies -------------------------------------------------------
@@ -130,6 +159,27 @@ UPGRADES: tuple[tuple[Tech, BuildingKind, Callable[[Context], bool]], ...] = (
 )
 
 
+def _has(tech: Tech) -> Callable[[Context], bool]:
+    return lambda ctx: ctx.economy is not None and ctx.economy.has_researched(tech)
+
+
+#: Imperial Age upgrades in priority order: the army's lines first (each step
+#: waits for the one before it), then armour and economy.
+IMPERIAL_UPGRADES: tuple[tuple[Tech, BuildingKind, Callable[[Context], bool]], ...] = (
+    (Tech.ARBALESTER, BuildingKind.ARCHERY_RANGE, _has(Tech.CROSSBOWMAN)),
+    (Tech.HALBERDIER, BuildingKind.BARRACKS, _has(Tech.PIKEMAN)),
+    (Tech.CAVALIER, BuildingKind.STABLE, lambda ctx: True),
+    (Tech.BRACER, BuildingKind.BLACKSMITH, _has(Tech.BODKIN_ARROW)),
+    (Tech.BLAST_FURNACE, BuildingKind.BLACKSMITH, _has(Tech.IRON_CASTING)),
+    (Tech.PLATE_MAIL_ARMOR, BuildingKind.BLACKSMITH, _has(Tech.CHAIN_MAIL_ARMOR)),
+    (Tech.RING_ARCHER_ARMOR, BuildingKind.BLACKSMITH, _has(Tech.LEATHER_ARCHER_ARMOR)),
+    (Tech.PLATE_BARDING_ARMOR, BuildingKind.BLACKSMITH, _has(Tech.CHAIN_BARDING_ARMOR)),
+    (Tech.PALADIN, BuildingKind.STABLE, _has(Tech.CAVALIER)),
+    (Tech.CROP_ROTATION, BuildingKind.MILL, _has(Tech.HEAVY_PLOW)),
+    (Tech.TWO_MAN_SAW, BuildingKind.LUMBER_CAMP, _has(Tech.BOW_SAW)),
+)
+
+
 def wanted_upgrades(ctx: Context) -> list[tuple[Tech, BuildingKind]]:
     if not ctx.feudal:
         return []
@@ -137,4 +187,6 @@ def wanted_upgrades(ctx: Context) -> list[tuple[Tech, BuildingKind]]:
     if ctx.castle:
         upgrades = [(Tech.CROSSBOWMAN, BuildingKind.ARCHERY_RANGE),
                     (Tech.PIKEMAN, BuildingKind.BARRACKS)] + upgrades
+    if ctx.imperial:
+        upgrades = [(tech, kind) for tech, kind, when in IMPERIAL_UPGRADES if when(ctx)] + upgrades
     return upgrades

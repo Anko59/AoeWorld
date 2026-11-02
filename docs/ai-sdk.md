@@ -336,6 +336,12 @@ Villager queues drain and optional upgrades wait during this preparation;
 military production is funded before extra farms until the configured Feudal
 army minimum is met, then the age receives the food reserve. After reaching
 Castle Age, Crossbowman and Pikeman upgrades precede optional Feudal upgrades.
+At 34 villagers in Castle Age it raises a University and a Siege Workshop. With 40
+villagers and 24 soldiers it holds villagers and soldiers, shifts workers toward
+gold and clicks Imperial Age; soldiers resume while it researches. In Imperial Age
+`Context.castle` stays true, so Castle behaviour continues; it trains each line's
+newest identity and researches Arbalester, Halberdier, Cavalier, Paladin, the
+tier-three Blacksmith techs, Crop Rotation and Two-Man Saw as predecessors allow.
 
 Robustness: every order is remembered until its verdict arrives; a refused
 node, animal or site is never tried again, a refused unit kind is substituted

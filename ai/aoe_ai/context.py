@@ -20,6 +20,9 @@ MILITARY = (
     UnitKind.LONG_SWORDSMAN, UnitKind.PIKEMAN, UnitKind.CROSSBOWMAN,
     UnitKind.ELITE_SKIRMISHER, UnitKind.KNIGHT, UnitKind.LIGHT_CAVALRY,
     UnitKind.MANGONEL, UnitKind.BATTERING_RAM,
+    UnitKind.TWO_HANDED_SWORDSMAN, UnitKind.CHAMPION, UnitKind.HALBERDIER, UnitKind.ARBALESTER,
+    UnitKind.CAVALIER, UnitKind.PALADIN, UnitKind.HUSSAR,
+    UnitKind.CAPPED_RAM, UnitKind.SIEGE_RAM, UnitKind.ONAGER,
 )
 
 #: Buildings that accept each resource as a drop-off.
@@ -109,11 +112,16 @@ class Context:
     # ----- queries ---------------------------------------------------------
     @property
     def feudal(self) -> bool:
-        return self.economy is not None and self.economy.age in (aoeworld.Age.FEUDAL, aoeworld.Age.CASTLE)
+        return self.economy is not None and self.economy.age in (aoeworld.Age.FEUDAL, aoeworld.Age.CASTLE, aoeworld.Age.IMPERIAL)
 
     @property
     def castle(self) -> bool:
-        return self.economy is not None and self.economy.age == aoeworld.Age.CASTLE
+        """Castle Age or later: every Castle capability stays in Imperial Age."""
+        return self.economy is not None and self.economy.age in (aoeworld.Age.CASTLE, aoeworld.Age.IMPERIAL)
+
+    @property
+    def imperial(self) -> bool:
+        return self.economy is not None and self.economy.age == aoeworld.Age.IMPERIAL
 
     def count(self, kind: BuildingKind, complete: bool = False) -> int:
         return sum(1 for b in self.buildings if b.kind == kind and (b.complete or not complete))

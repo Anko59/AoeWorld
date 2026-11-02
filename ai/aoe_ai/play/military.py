@@ -14,6 +14,14 @@ from ..geometry import Tile, clamp_tile, dist
 TRAINERS = (BuildingKind.BARRACKS, BuildingKind.ARCHERY_RANGE, BuildingKind.STABLE)
 #: What stands in for a kind the age does not allow yet.
 SUBSTITUTE = {UnitKind.SPEARMAN: UnitKind.MILITIA}
+#: Each base kind and its upgraded identities, last = newest.
+LINES = {
+    UnitKind.ARCHER: ((Tech.CROSSBOWMAN, UnitKind.CROSSBOWMAN), (Tech.ARBALESTER, UnitKind.ARBALESTER)),
+    UnitKind.SPEARMAN: ((Tech.PIKEMAN, UnitKind.PIKEMAN), (Tech.HALBERDIER, UnitKind.HALBERDIER)),
+    UnitKind.KNIGHT: ((Tech.CAVALIER, UnitKind.CAVALIER), (Tech.PALADIN, UnitKind.PALADIN)),
+}
+#: Upgraded identity -> the base kind whose share of the mix it fills.
+BASE_OF = {upgraded: base for base, line in LINES.items() for _, upgraded in line}
 MIX_KINDS = {
     "SPEARMAN": UnitKind.SPEARMAN,
     "ARCHER": UnitKind.ARCHER,
@@ -29,7 +37,7 @@ class MilitaryManager:
         for unit in ctx.army:
             # Militia stand in for spearmen until the age allows them.
             kind = UnitKind.SPEARMAN if unit.kind == UnitKind.MILITIA else unit.kind
-            kind = {UnitKind.CROSSBOWMAN: UnitKind.ARCHER, UnitKind.PIKEMAN: UnitKind.SPEARMAN}.get(kind, kind)
+            kind = BASE_OF.get(kind, kind)
             if kind in have:
                 have[kind] += 1
         for building in ctx.buildings:
@@ -63,7 +71,7 @@ class MilitaryManager:
                 continue
             ctx.spend(unit_cost(choice))
             ctx.order("train", building.id, choice)
-            bucket = {UnitKind.MILITIA: UnitKind.SPEARMAN, UnitKind.PIKEMAN: UnitKind.SPEARMAN, UnitKind.CROSSBOWMAN: UnitKind.ARCHER}.get(choice, choice)
+            bucket = BASE_OF.get(choice, UnitKind.SPEARMAN if choice == UnitKind.MILITIA else choice)
             have[bucket] += 1
             ctx.board.bump("army_queued")
 
@@ -86,10 +94,10 @@ class MilitaryManager:
         """`kind`, or a stand-in while the server has refused it for the age."""
         if kind == UnitKind.KNIGHT and not ctx.castle:
             return None
-        if ctx.castle:
-            for base, tech, upgraded in [(UnitKind.ARCHER, Tech.CROSSBOWMAN, UnitKind.CROSSBOWMAN),
-                                          (UnitKind.SPEARMAN, Tech.PIKEMAN, UnitKind.PIKEMAN)]:
-                if kind == base and ctx.economy.has_researched(tech):
+        if ctx.castle and kind in LINES:
+            # The newest researched identity of the line.
+            for tech, upgraded in reversed(LINES[kind]):
+                if ctx.economy.has_researched(tech):
                     return upgraded
         blocked = ctx.board.blocked_units
         if str(kind) not in blocked:

@@ -15,6 +15,14 @@ class ResearchManager:
         if eco is None or center is None:
             return
         stage = buildorder.stage(ctx)
+        if stage == buildorder.IMPERIAL_ADVANCE:
+            # Everything for the age stands: hold villagers and soldiers until
+            # it is bought, then resume while it researches.
+            if center.researching is None:
+                ctx.saving_castle = True
+                ctx.hold_town_center = True
+                self.research(ctx, Tech.IMPERIAL_AGE, center)
+                return
         if stage == buildorder.CASTLE_ADVANCE:
             ctx.saving_castle = True
             ctx.hold_town_center = True
