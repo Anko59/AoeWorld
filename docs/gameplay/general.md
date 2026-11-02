@@ -81,8 +81,8 @@ that trained it (nearest completed Castle for scenario-spawned Generals).
 The Castle's outside rendezvous survives destruction. Retreat lasts at least
 five seconds; once safe, the army regroups and resumes its retained destination.
 
-A march is an attack-move formation: any soldier that sees an enemy beside the
-route breaks off, fights and returns to its slot. The army counts an enemy as
+A march is a plain formation move. Soldiers keep their role slots until the
+army's next fight or retreat decision. The army counts an enemy as
 in sight when the General sees it (12 tiles) or any soldier does (8 tiles; at
 most 64 far candidates per decision). In sight of an enemy the army fights:
 the healthy non-siege soldiers split, in entity order, into groups of at most
