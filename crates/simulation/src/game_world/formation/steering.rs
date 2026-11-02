@@ -1,5 +1,6 @@
 //! One target preparation per group, then immutable member proposals through
 //! the ordinary parallel movement phase. Arrival never changes another slot.
+use super::packing::block_heading;
 use super::*;
 use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
@@ -160,12 +161,47 @@ impl GameWorld {
             }
             clearance = clearance.min(value);
         }
+        // A long file can still be on a bridge deck after the anchor's window
+        // has left it. Sample the corridor back to the rearmost member too, so
+        // the block keeps its narrow files until the whole column is across
+        // (a wider layout would aim members on the deck into the water).
+        // Open ground with an unpacked block needs no such scan.
+        let rear = if clearance < 15 || group.packing_files < group.members.len() {
+            group
+                .members
+                .iter()
+                .filter(|m| !m.arrived && !m.detached)
+                .inspect(|_| self.group_work.members(1))
+                .map(|m| m.progress)
+                .min()
+                .unwrap_or(group.progress)
+        } else {
+            group.progress
+        };
+        let mut trailing = 15;
+        let behind = group.progress - look;
+        if rear + 1024 < behind {
+            let span = behind - rear;
+            let steps = (span / 1024).clamp(1, 16);
+            let mut at = group.path.cursor_at(rear.max(0));
+            for k in 0..=steps {
+                let progress = (rear + span * k / steps).clamp(0, group.path.end());
+                let (point, _) = group.path.point(progress, &mut at);
+                if self.near_deck(point) {
+                    trailing =
+                        trailing.min(self.static_clearance(UnitKind::Militia, point.tile_floor()));
+                }
+            }
+        }
         let heading = block_heading(group);
-        let files = if clearance < 15
+        let files = if (clearance < 15
             && i32::from(clearance) * 512 < group.half_width
-            && !self.formation_layout_clear(group, heading)
+            && !self.formation_layout_clear(group, heading))
+            || (trailing < 15 && i32::from(trailing) * 512 < group.half_width)
         {
-            (i32::from(clearance) * 1024 / group.narrow_gap).max(1) as usize
+            // Clearance is measured at a tile centre; a staircase lane is
+            // narrower than that, so one half tile is kept as a margin.
+            (i32::from(clearance.min(trailing)) * 1024 / group.narrow_gap).max(1) as usize
         } else {
             group.members.len()
         };
@@ -242,15 +278,29 @@ impl GameWorld {
             // Every tile-centre edge admits this fixed inset lane. Keeping
             // its width fixed avoids steering across the bank on every change
             // of the circular clearance sample along a staircase route.
-            member.center = if member.following_corridor {
+            let lane_x = if member.following_corridor {
                 let lateral = (512 - unit.kind.terrain_radius() - 2).max(0);
-                next_rotation.oriented(
-                    point,
-                    WorldPosition::new(offset.x.clamp(-lateral, lateral), 0),
-                )
+                offset.x.clamp(-lateral, lateral)
             } else {
-                next_rotation.oriented(point, WorldPosition::new(offset.x, 0))
+                offset.x
             };
+            member.center = next_rotation.oriented(point, WorldPosition::new(lane_x, 0));
+            // A body beside its lane cannot enter a one-lane deck diagonally:
+            // before such a narrowing it first steps sideways onto the lane.
+            if (files < count || member.following_corridor)
+                && (self.static_clearance(unit.kind, member.center.tile_floor()) <= 1
+                    || self.static_clearance(unit.kind, unit.position.tile_floor()) <= 1)
+            {
+                let mut here = member.cursor;
+                let (point, tangent) = group.path.corridor_point(member.progress + 128, &mut here);
+                let lane = layout::oriented(point, WorldPosition::new(lane_x, 0), tangent);
+                if path::squared(lane, unit.position) > 192_i64.pow(2) {
+                    member.center = lane;
+                    // Arc progress is earned at the point actually steered
+                    // to, never a tile further on while the body stands.
+                    member.target_progress = member.progress + 128;
+                }
+            }
             // A rear slot ends before the centroid. Begin its final approach
             // at that slot's projection, rather than marching past it first.
             let goal_along = (i64::from(member.goal.x - end.x) * i64::from(final_heading.x)
@@ -303,7 +353,11 @@ impl GameWorld {
                 if path::distance(member.target, unit.position) <= 1 && !group.attack_move {
                     // An advanced row keeps walking at 3/4 of anchor pace,
                     // retaining its lateral file while the rear catches up.
-                    let advance = (u128::from(group.pace.0) * 3 / (u128::from(group.pace.1) * 4))
+                    // A single file keeps the full pace so the exit of a
+                    // one-lane passage never backs up into it.
+                    let quarters = if files == 1 { 4 } else { 3 };
+                    let advance = (u128::from(group.pace.0) * quarters
+                        / (u128::from(group.pace.1) * 4))
                         .clamp(1, 512) as i64;
                     member.target_progress = member.progress + advance;
                     let (point, tangent) = group
@@ -403,7 +457,9 @@ impl GameWorld {
             return;
         };
         let member = &mut group.members[at];
-        if motion.near_center {
+        // Only a body that moved earns the arc of the point it steered to: a
+        // blocked body beside a bend must not run its progress ahead.
+        if motion.near_center && from != to {
             member.progress = member.progress.max(motion.path_progress);
         }
         member.carry = motion.carry;
@@ -434,22 +490,4 @@ impl GameWorld {
             self.units[index].obstruction = None;
         }
     }
-}
-
-fn block_heading(group: &Group) -> WorldPosition {
-    let remaining = (group.path.end() - group.progress).max(0);
-    let radius = i64::from(group.half_width) + 2 * 1024;
-    if group.path.points.last() != Some(&group.destination) || remaining >= radius {
-        return group.travel_heading;
-    }
-    let normal = |point: WorldPosition| {
-        let (x, y) = (i64::from(point.x), i64::from(point.y));
-        let length = (x * x + y * y).isqrt().max(1);
-        (x * 1024 / length, y * 1024 / length)
-    };
-    let (a, b) = (normal(group.travel_heading), normal(group.heading));
-    WorldPosition::new(
-        ((a.0 * remaining + b.0 * (radius - remaining)) / radius) as i32,
-        ((a.1 * remaining + b.1 * (radius - remaining)) / radius) as i32,
-    )
 }

@@ -67,10 +67,13 @@ pub(super) fn base(name: &str) -> Fixture {
     });
     let mut hydrology = None;
     let mut cover = None;
-    if matches!(
-        name,
-        "river" | "bridge" | "long" | "general-river" | "general-far-bank"
-    ) {
+    let bridge_rivers = super::bridges::rivers(name);
+    if bridge_rivers.is_some()
+        || matches!(
+            name,
+            "river" | "bridge" | "long" | "general-river" | "general-far-bank"
+        )
+    {
         let segment = |x, from, to| RiverSegment {
             start: [x * 256, from * 256],
             end: [x * 256, to * 256],
@@ -80,7 +83,7 @@ pub(super) fn base(name: &str) -> Fixture {
             source_delta: [0, (to - from) * 256],
             source_station_delta: i64::from(to - from) * 256,
         };
-        let segments = match name {
+        let segments = bridge_rivers.unwrap_or_else(|| match name {
             "river" | "general-river" | "general-far-bank" => {
                 vec![segment(88, -1, 82), segment(88, 94, 258)]
             }
@@ -89,7 +92,7 @@ pub(super) fn base(name: &str) -> Fixture {
                 .into_iter()
                 .flat_map(|(x, y)| [segment(x + 4, -1, y), segment(x + 4, y + 16, 1200)])
                 .collect(),
-        };
+        });
         let evidence = HydrologyEvidencePage {
             level: 0,
             x: 0,
@@ -125,20 +128,22 @@ pub(super) fn base(name: &str) -> Fixture {
         hydrology = Some(evidence);
         cover = Some(land);
     }
-    let package = MapPackage::with_prepared_environment(
-        1,
-        MapRequest {
-            requested_side_meters: if name == "long" { 2400 } else { 514 },
-            compression: Ratio::new(1, 1).unwrap(),
-            seed: 0,
-            ..MapRequest::default()
-        },
-        vec![],
-        ProjectionMetadata::default(),
-        EnvironmentalProvenance::default(),
-        environment,
-    )
-    .unwrap();
+    let package =
+        MapPackage::with_prepared_environment(
+            1,
+            MapRequest {
+                requested_side_meters: super::bridges::side_meters(name)
+                    .unwrap_or(if name == "long" { 2400 } else { 514 }),
+                compression: Ratio::new(1, 1).unwrap(),
+                seed: 0,
+                ..MapRequest::default()
+            },
+            vec![],
+            ProjectionMetadata::default(),
+            EnvironmentalProvenance::default(),
+            environment,
+        )
+        .unwrap();
     let pages = elevation
         .iter()
         .cloned()

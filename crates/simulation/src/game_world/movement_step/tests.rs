@@ -135,3 +135,153 @@ fn late_game_proposals_keep_rotation_order_among_idle_crowds() {
         );
     }
 }
+
+#[test]
+fn a_waiting_formation_does_not_reverse_an_available_passing_lane() {
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
+    let from = WorldPosition::from_tile_center(TileCoord::new(50, 50)).unwrap();
+    let mover = world
+        .spawn_kind(PlayerId(0), crate::UnitKind::Militia, from)
+        .unwrap();
+    // The enemy body vetoes a direct/diagonal step, while either lateral
+    // lane stays open. Friendly squeeze cannot change that fixed geometry.
+    world
+        .spawn_kind(
+            PlayerId(1),
+            crate::UnitKind::Militia,
+            WorldPosition::new(from.x + 430, from.y),
+        )
+        .unwrap();
+    let goal = WorldPosition::new(from.x + 40 * 1024, from.y);
+    world
+        .issue_formation_move(
+            PlayerId(0),
+            &[mover],
+            aoe_core::Formation::Line,
+            goal,
+            false,
+            false,
+        )
+        .unwrap();
+    let index = world.lookup[&mover];
+    let proposed = WorldPosition::new(from.x + 50, from.y);
+    world.record_obstruction_towards(index, goal);
+    let first = world.avoid_unit_step(index, proposed);
+    assert!(
+        first.y > from.y,
+        "an available passing lane is required: {first:?}"
+    );
+    // The actor can remain queued while other traffic crosses. Waiting must
+    // not itself change a safe choice into a step back across that traffic.
+    for tick in 1..=60 {
+        world.tick.0 = tick;
+        world.record_obstruction_towards(index, goal);
+    }
+    let later = world.avoid_unit_step(index, proposed);
+    assert_eq!(
+        later, first,
+        "unchanged traffic must retain the passing lane"
+    );
+}
+
+fn static_pressure_proposal() -> (GameWorld, usize, FastStep) {
+    let mut world = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
+    let from = WorldPosition::from_tile_center(TileCoord::new(50, 50)).unwrap();
+    let mover = world
+        .spawn_kind(PlayerId(0), crate::UnitKind::Militia, from)
+        .unwrap();
+    world
+        .spawn_kind(
+            PlayerId(1),
+            crate::UnitKind::Militia,
+            WorldPosition::new(from.x + 430, from.y),
+        )
+        .unwrap();
+    world
+        .insert_building(
+            PlayerId(0),
+            crate::BuildingKind::Barracks,
+            aoe_core::TileRect::from_xywh(49, 51, 3, 3),
+            true,
+        )
+        .unwrap();
+    world
+        .issue_formation_move(
+            PlayerId(0),
+            &[mover],
+            aoe_core::Formation::Line,
+            WorldPosition::new(from.x + 40 * 1024, from.y),
+            false,
+            false,
+        )
+        .unwrap();
+    world.advance_formations(&mut Vec::new(), &mut Scratch::default());
+    let mut tables = Tables::default();
+    tables.refresh(&world, true);
+    let index = world.lookup[&mover];
+    let proposal = world.propose_group_step(index, &tables).unwrap();
+    assert_eq!(
+        proposal.state.position,
+        world.unit(mover).unwrap().position,
+        "the body, not terrain, must obstruct the primary proposal"
+    );
+    assert!(!proposal.member.unwrap().obstructed);
+    (world, index, proposal)
+}
+
+#[test]
+fn collision_adjustment_reuses_the_proposals_static_clearance_proof() {
+    let (mut world, index, mut proposal) = static_pressure_proposal();
+    let (mut reference, reference_index, reference_proposal) = static_pressure_proposal();
+    let motion = proposal.member.unwrap();
+    let from = world.units[index].state.position;
+    let proposed = crate::game_world::formation::group_step(from, motion.target, motion.budget);
+    let before = reference
+        .route_scheduler_stats()
+        .metrics
+        .group_collision_work;
+    reference
+        .record_obstruction_towards(reference_index, reference_proposal.member.unwrap().target);
+    let expected = reference.avoid_unit_step(reference_index, proposed);
+    let necessary = reference
+        .route_scheduler_stats()
+        .metrics
+        .group_collision_work
+        - before;
+    let before = world.route_scheduler_stats().metrics.group_collision_work;
+    world.adjust_group_step(&mut proposal, motion);
+    let actual = world.route_scheduler_stats().metrics.group_collision_work - before;
+    assert_eq!(proposal.state.position, expected);
+    assert!(world.local_unit_step_clear(index, from, expected));
+    assert!(world.body_step_clear(crate::UnitKind::Militia, from, expected));
+    assert!(
+        actual <= necessary,
+        "a proved static segment needs only live avoidance: {actual} queries vs {necessary}"
+    );
+}
+
+#[test]
+fn a_moved_actor_invalidates_the_cached_static_proof() {
+    let (mut world, index, mut proposal) = static_pressure_proposal();
+    let old = world.units[index].state.position;
+    let from = WorldPosition::new(old.x, 54 * 1024 + 206);
+    let id = world.units[index].state.id;
+    world.units[index].state.position = from;
+    let state = world.units[index].state;
+    world.track_unit_step(id, old.tile_floor(), &state);
+    // A body at the old endpoint forces live collision adjustment after the
+    // actor has moved to a legal point just outside the other building side.
+    world
+        .spawn_kind(PlayerId(1), crate::UnitKind::Militia, old)
+        .unwrap();
+    let motion = proposal.member.unwrap();
+    let primary = crate::game_world::formation::group_step(from, motion.target, motion.budget);
+    assert!(world.body_position_clear(crate::UnitKind::Militia, from));
+    assert!(!world.body_step_clear(crate::UnitKind::Militia, from, primary));
+    world.adjust_group_step(&mut proposal, motion);
+    assert!(
+        proposal.member.unwrap().obstructed,
+        "the old proof cannot certify the new start"
+    );
+    assert!(world.body_step_clear(crate::UnitKind::Militia, from, proposal.state.position));
+}

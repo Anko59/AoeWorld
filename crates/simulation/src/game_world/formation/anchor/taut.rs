@@ -32,7 +32,14 @@ impl GameWorld {
         if shaped == Some(end) || route.is_empty() || group.direct {
             return None;
         }
-        let kind = self.units[index].state.kind;
+        // The largest body must fit every straightened edge: a ram cannot
+        // follow a diagonal into a one-tile neck that a militiaman can.
+        let kind = group
+            .members
+            .iter()
+            .map(|m| self.units[self.lookup[&m.id]].state.kind)
+            .max_by_key(|kind| kind.collision_radius())
+            .unwrap_or(self.units[index].state.kind);
         let original = std::iter::once(order.waypoint)
             .chain(route.iter().copied())
             .collect::<Vec<_>>();
@@ -171,14 +178,22 @@ impl GameWorld {
         }
         let (first, last) = (from.tile_floor(), to.tile_floor());
         let mut previous = first;
+        let mut previous_point = from;
         for k in 1..=steps {
             *budget -= 1;
             self.group_work.collision(1);
-            let tile = WorldPosition::new(
+            let point = WorldPosition::new(
                 from.x + (i64::from(to.x - from.x) * k / steps) as i32,
                 from.y + (i64::from(to.y - from.y) * k / steps) as i32,
-            )
-            .tile_floor();
+            );
+            let tile = point.tile_floor();
+            // Near an obstacle the swept body itself must clear it.
+            if self.static_clearance(kind, tile) <= 3
+                && !self.body_step_clear(kind, previous_point, point)
+            {
+                return false;
+            }
+            previous_point = point;
             if tile != previous {
                 if !self.unit_step_clear(kind, previous, tile).unwrap_or(false)
                     || !self.building_step_clear(previous, tile)

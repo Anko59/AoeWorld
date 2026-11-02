@@ -212,3 +212,42 @@ Current output pins are refreshed with `make test-native-focused
 AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`:
 earlier arrivals and contact change the timestamps and battle census. Sight,
 hit reach, participation, spacing, no-overlap and work ceilings are unchanged.
+
+## Single-lane bridges
+
+The owner's 100-player games showed armies stuck at one-lane bridges: the
+front crossed, the rest stayed on the shore; two villagers and a Knight once
+held a deck against everyone. `bridge_march` reproduces this with typed
+hydrology and wood nodes shaped after generated-map crossings: a straight
+deck reached along a river strip (Paris-like), a 45-degree deck whose mouths
+are three-tile lanes through trees, and a 650-tile march over a straight, an
+off-grid (2:1) and a diagonal bridge between forest belts. Each runs a General
+with 100 followers and a 40-unit mixed formation; two formations also meet
+head-on at the straight and the wooded deck, and two villagers meet a Knight
+on the straight deck. The ideal adds the slowest unit's route to the time
+every commanded body needs to file over the deck at the slowest speed.
+
+Movement rules, all bounded and integer:
+
+- A body over a water corner beside a diagonal deck is not sealed in: the
+  continuous deck carries it (`group_tile_sealed`). A body pressed off a deck
+  edge may only step closer to the deck's centre line (`deck_recovery_step`).
+- A member earns arc progress only when it actually moved; a blocked body
+  beside a bend no longer runs its progress (and its target) tiles ahead.
+  Near a one-lane narrowing, including the body's own tile, a member first
+  steps sideways onto its lane at its own progress.
+- A packed block keeps its narrow files until its rearmost pending member has
+  left a bridge deck, sampled back along the corridor.
+- On a bridge deck, a single file's own members blocked for 16 ticks squeeze
+  to the friendly hard distance and pass through each other; the forest-pass
+  no-stacking rule stays strict elsewhere.
+- Oncoming same-player movers that stay blocked pass through each other on a
+  deck after 48 ticks, and in a passage at most one tile wide after 16 ticks
+  when they belong to different groups. Workers, enemies and same-direction
+  traffic keep their collision boundaries.
+
+Ordinary planning keeps one shared route; no member re-plans a long detour.
+The straightened corridor uses the group's largest body, and a slot cut off
+from the destination by water is pulled back to the last directly reachable
+point. Results are in the commit messages; real-map runs on the Paris and
+France packages are local measurements, not CI tests.

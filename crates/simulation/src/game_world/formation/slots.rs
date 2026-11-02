@@ -258,24 +258,22 @@ impl GameWorld {
                         })
                     })
             };
-            let goal = std::iter::once(desired)
-                .chain(
-                    [
-                        (0, -1),
-                        (1, -1),
-                        (1, 0),
-                        (1, 1),
-                        (0, 1),
-                        (-1, 1),
-                        (-1, 0),
-                        (-1, -1),
-                    ]
-                    .into_iter()
-                    .map(|(x, y)| WorldPosition::new(desired.x + x * 1024, desired.y + y * 1024)),
-                )
-                .filter(|&point| free(point))
-                .min_by_key(|&point| (path::squared(point, desired), point.x, point.y))
-                .unwrap_or(desired);
+            // A slot beyond water or a wall that cuts it off from the
+            // destination would send its member on a long detour: pull it
+            // back along the line to the last point it can reach directly.
+            let base = self.slot_reach(kind, group.destination, desired);
+            let goal = std::iter::once(base)
+                .chain((1..=2).flat_map(|ring: i32| {
+                    (-ring..=ring)
+                        .flat_map(move |y| (-ring..=ring).map(move |x| (x, y)))
+                        .filter(move |&(x, y)| x.abs().max(y.abs()) == ring)
+                        .map(move |(x, y)| WorldPosition::new(base.x + x * 1024, base.y + y * 1024))
+                }))
+                .filter(|&point| {
+                    free(point) && self.slot_reach(kind, group.destination, point) == point
+                })
+                .min_by_key(|&point| (path::squared(point, base), point.x, point.y))
+                .unwrap_or(base);
             member.offset = offset;
             member.goal = goal;
             member.stalled = 0;
@@ -324,5 +322,30 @@ impl GameWorld {
             .max()
             .unwrap_or(0)
             + group.gap / 2;
+    }
+}
+
+impl GameWorld {
+    /// The farthest point on the straight line from `from` toward `to` that
+    /// `kind` reaches through crossable tiles (sampled every half tile).
+    fn slot_reach(&self, kind: UnitKind, from: WorldPosition, to: WorldPosition) -> WorldPosition {
+        let steps = (path::distance(from, to) / 512).clamp(1, 64);
+        let (mut previous, mut reached) = (from.tile_floor(), from);
+        for k in 1..=steps {
+            self.group_work.collision(1);
+            let point = WorldPosition::new(
+                from.x + (i64::from(to.x - from.x) * k / steps) as i32,
+                from.y + (i64::from(to.y - from.y) * k / steps) as i32,
+            );
+            let tile = point.tile_floor();
+            if tile != previous
+                && (!self.unit_step_clear(kind, previous, tile).unwrap_or(false)
+                    || !self.building_step_clear(previous, tile))
+            {
+                return reached;
+            }
+            (previous, reached) = (tile, point);
+        }
+        to
     }
 }

@@ -99,8 +99,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // The straightened anchor corridor and proportional cohesion change the replay.
-        "01b427f3c6dcfe3790d725d2aa28270542c98bb5368422d2e0c1a0be8e2e5946"
+        // Ordered single-lane bridge crossing changes the replay.
+        "f87130519dcee274080406ae69ad42f5344a67064792a0bc14fd57c8ef4c29fb"
     );
 }
 

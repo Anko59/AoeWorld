@@ -67,3 +67,23 @@ impl GameWorld {
         }
     }
 }
+
+/// The block turns from its travel heading towards the order heading over
+/// the last block length before the destination.
+pub(super) fn block_heading(group: &Group) -> WorldPosition {
+    let remaining = (group.path.end() - group.progress).max(0);
+    let radius = i64::from(group.half_width) + 2 * 1024;
+    if group.path.points.last() != Some(&group.destination) || remaining >= radius {
+        return group.travel_heading;
+    }
+    let normal = |point: WorldPosition| {
+        let (x, y) = (i64::from(point.x), i64::from(point.y));
+        let length = (x * x + y * y).isqrt().max(1);
+        (x * 1024 / length, y * 1024 / length)
+    };
+    let (a, b) = (normal(group.travel_heading), normal(group.heading));
+    WorldPosition::new(
+        ((a.0 * remaining + b.0 * (radius - remaining)) / radius) as i32,
+        ((a.1 * remaining + b.1 * (radius - remaining)) / radius) as i32,
+    )
+}

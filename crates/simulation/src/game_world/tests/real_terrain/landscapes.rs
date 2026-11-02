@@ -44,28 +44,28 @@ fn run(case: &str, count: usize, limit: u32) {
         "river" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 24_576, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (10, 3));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (7, 2));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5436, 55225, 4975880)
+                (5436, 55225, 5480816)
             );
         }
         "long" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 16_384, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (24, 21));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (28, 17));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (37023, 41486, 81224920)
+                (36705, 41486, 88820779)
             );
         }
         _ => {
             result.assert_works(count);
             // Current-output pins also retain work for the complete report.
             let expected = match case {
-                "forest" => (3282, 1027, 2135639),
-                "town" => (3741, 1193, 2554099),
-                "crossing" => (3278, 1933, 2539731),
+                "forest" => (3282, 1027, 2445117),
+                "town" => (3741, 1193, 2884789),
+                "crossing" => (3278, 1933, 3097268),
                 "bridge" => (479, 354, 23210),
                 "siege" => (1556, 867, 44292),
                 "gap" => (580, 512, 24846),
