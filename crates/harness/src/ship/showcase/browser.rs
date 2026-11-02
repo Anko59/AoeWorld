@@ -34,13 +34,34 @@ pub(crate) enum Button {
     Right,
 }
 
+/// A keyboard modifier held through a `click_with` step (Playwright's names).
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) enum Modifier {
+    Shift,
+    Control,
+    Alt,
+    Meta,
+}
+
+/// A point in CSS pixels from a canvas element's top-left corner.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Point {
+    pub(crate) x: u32,
+    pub(crate) y: u32,
+}
+
 /// One action on the filmed page, written `{"click": "<selector>"}`,
 /// `{"click_at": {"selector": "#minimap", "x": 37, "y": 63}}` (CSS pixels
 /// from the element's top-left corner; add `"button": "right"` for a
 /// context click), `{"select": {"selector": "#map",
 /// "value": "<option value>"}}`, `{"wheel": {"selector": "canvas", "x": 640,
 /// "y": 360, "delta_y": -400}}` (one wheel event over that position),
-/// `{"key": "Enter"}`, `{"text": "typed"}` or `{"wait_ms": 500}`.
+/// `{"click_with": {"selector": ".unit-token", "modifiers": ["Shift"]}}` (a
+/// click with keys held, e.g. Shift+click), `{"drag": {"selector": "#scene",
+/// "from": {"x": 600, "y": 330}, "to": {"x": 760, "y": 500}}}` (a left-button
+/// drag between two points, for box selection), `{"key": "Enter"}`,
+/// `{"text": "typed"}` or `{"wait_ms": 500}`.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Step {
@@ -52,6 +73,15 @@ pub(crate) enum Step {
         /// `"button": "right"` issues a context click, e.g. a unit order.
         #[serde(default)]
         button: Button,
+    },
+    ClickWith {
+        selector: String,
+        modifiers: Vec<Modifier>,
+    },
+    Drag {
+        selector: String,
+        from: Point,
+        to: Point,
     },
     Select {
         selector: String,
@@ -83,6 +113,8 @@ impl Step {
         match self {
             Self::Click(_)
             | Self::ClickAt { .. }
+            | Self::ClickWith { .. }
+            | Self::Drag { .. }
             | Self::Select { .. }
             | Self::Wheel { .. }
             | Self::Key(_)
@@ -127,6 +159,39 @@ impl Step {
                     ));
                 }
                 Ok(())
+            }
+            Self::ClickWith {
+                selector,
+                modifiers,
+            } => {
+                Self::Click(selector.clone()).validate()?;
+                let distinct = modifiers
+                    .iter()
+                    .enumerate()
+                    .all(|(index, key)| !modifiers[..index].contains(key));
+                if modifiers.is_empty() || !distinct {
+                    return Err(
+                        "a modified click names one to four distinct modifiers (Shift, Control, Alt, Meta)"
+                            .into(),
+                    );
+                }
+                Ok(())
+            }
+            Self::Drag { selector, from, to } => {
+                Self::ClickAt {
+                    selector: selector.clone(),
+                    x: from.x,
+                    y: from.y,
+                    button: Button::Left,
+                }
+                .validate()?;
+                Self::ClickAt {
+                    selector: selector.clone(),
+                    x: to.x,
+                    y: to.y,
+                    button: Button::Left,
+                }
+                .validate()
             }
             Self::Select { selector, value } => {
                 Self::Click(selector.clone()).validate()?;
@@ -176,9 +241,15 @@ impl Step {
     }
 }
 
-/// Storyboard checks that need no configuration: the path stays relative to
-/// the app's origin, the hold is bounded and every step is well formed.
-pub(crate) fn validate_scene(path: &str, seconds: u32, steps: &[Step]) -> Result<(), String> {
+/// Storyboard checks that need only the storyboard: the path stays relative to
+/// the app's origin, the hold is bounded, every step is well formed and each
+/// drag point lies on the page (record.mjs checks it again on the element).
+pub(crate) fn validate_scene(
+    path: &str,
+    seconds: u32,
+    steps: &[Step],
+    viewport: super::Viewport,
+) -> Result<(), String> {
     if !path.starts_with('/')
         || path.starts_with("//")
         || path.len() > MAX_PATH_BYTES
@@ -198,9 +269,23 @@ pub(crate) fn validate_scene(path: &str, seconds: u32, steps: &[Step]) -> Result
             steps.len()
         ));
     }
+    let (width, height) = viewport.pixels();
     for (index, step) in steps.iter().enumerate() {
         step.validate()
             .map_err(|error| format!("step {}: {error}", index + 1))?;
+        if let Step::Drag { from, to, .. } = step {
+            // An offset is measured from the canvas's top-left corner, and the
+            // canvas lies on the page, so a point past the page cannot land.
+            if [from, to]
+                .iter()
+                .any(|point| point.x >= width || point.y >= height)
+            {
+                return Err(format!(
+                    "step {}: drag points must land on the {width}×{height} page",
+                    index + 1
+                ));
+            }
+        }
         if matches!(step, Step::StartSkirmish(_)) && !path.starts_with(steps::MENU_PATH) {
             return Err(format!(
                 "step {}: start_skirmish needs the menu: film `{}` (it skips the intro), not `{path}`",

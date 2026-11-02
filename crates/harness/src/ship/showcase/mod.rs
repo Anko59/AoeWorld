@@ -105,6 +105,16 @@ pub(crate) enum Viewport {
     Large,
 }
 
+impl Viewport {
+    /// The page size in CSS pixels; `large` is scaled into the 1280×720 video.
+    pub(crate) fn pixels(self) -> (u32, u32) {
+        match self {
+            Self::Default => (1280, 720),
+            Self::Large => (1920, 1080),
+        }
+    }
+}
+
 fn default_voice() -> String {
     "Kore".into()
 }
@@ -257,7 +267,7 @@ impl Scene {
 
 impl Scene {
     /// The kind's own limits; the narration limit is checked by the board.
-    fn validate(&self) -> Result<(), String> {
+    fn validate(&self, viewport: Viewport) -> Result<(), String> {
         match self {
             Self::Card { .. } => Ok(()),
             Self::Terminal { lines, compare, .. } => {
@@ -303,7 +313,7 @@ impl Scene {
                     .as_deref()
                     .or(bookmark.as_ref().map(|_| "/"))
                     .ok_or("a browser scene needs a path or bookmark")?;
-                browser::validate_scene(path, *seconds, steps)
+                browser::validate_scene(path, *seconds, steps, viewport)
             }
         }
     }
@@ -329,7 +339,7 @@ impl Storyboard {
                 ));
             }
             scene
-                .validate()
+                .validate(board.viewport)
                 .map_err(|error| format!("storyboard: scene {number} {error}"))?;
         }
         Ok(board)

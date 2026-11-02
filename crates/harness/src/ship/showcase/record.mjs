@@ -157,6 +157,33 @@ async function steps(page, scene) {
     else if ("click_at" in step) {
       const { selector, x, y, button } = step.click_at;
       await page.click(selector, { position: { x, y }, button, timeout: 10_000 });
+    } else if ("click_with" in step) {
+      const { selector, modifiers } = step.click_with;
+      await page.click(selector, { modifiers, timeout: 10_000 });
+    } else if ("drag" in step) {
+      const { selector, from, to } = step.drag;
+      const box = await page.locator(selector).boundingBox({ timeout: 10_000 });
+      if (!box) throw new Error(`drag: ${selector} has no box`);
+      // Both points must lie on the element and on the page, or the mouse
+      // would act on whatever is there instead.
+      const view = page.viewportSize();
+      for (const [name, point] of [["from", from], ["to", to]]) {
+        const x = box.x + point.x;
+        const y = box.y + point.y;
+        const onElement = point.x < box.width && point.y < box.height;
+        const onPage = x >= 0 && y >= 0 && x < view.width && y < view.height;
+        if (!onElement || !onPage) {
+          throw new Error(
+            `drag: ${name} (${point.x}, ${point.y}) is outside ${selector} ` +
+              `(${Math.round(box.width)}×${Math.round(box.height)} CSS px) on the ` +
+              `${view.width}×${view.height} page`,
+          );
+        }
+      }
+      await page.mouse.move(box.x + from.x, box.y + from.y);
+      await page.mouse.down();
+      await page.mouse.move(box.x + to.x, box.y + to.y, { steps: 8 });
+      await page.mouse.up();
     } else if ("wheel" in step) {
       const { selector, x, y, delta_y } = step.wheel;
       await page.hover(selector, { position: { x, y }, timeout: 10_000 });
