@@ -241,9 +241,15 @@ impl Step {
     }
 }
 
-/// Storyboard checks that need no configuration: the path stays relative to
-/// the app's origin, the hold is bounded and every step is well formed.
-pub(crate) fn validate_scene(path: &str, seconds: u32, steps: &[Step]) -> Result<(), String> {
+/// Storyboard checks that need only the storyboard: the path stays relative to
+/// the app's origin, the hold is bounded, every step is well formed and each
+/// drag point lies on the page (record.mjs checks it again on the element).
+pub(crate) fn validate_scene(
+    path: &str,
+    seconds: u32,
+    steps: &[Step],
+    viewport: super::Viewport,
+) -> Result<(), String> {
     if !path.starts_with('/')
         || path.starts_with("//")
         || path.len() > MAX_PATH_BYTES
@@ -263,9 +269,23 @@ pub(crate) fn validate_scene(path: &str, seconds: u32, steps: &[Step]) -> Result
             steps.len()
         ));
     }
+    let (width, height) = viewport.pixels();
     for (index, step) in steps.iter().enumerate() {
         step.validate()
             .map_err(|error| format!("step {}: {error}", index + 1))?;
+        if let Step::Drag { from, to, .. } = step {
+            // An offset is measured from the canvas's top-left corner, and the
+            // canvas lies on the page, so a point past the page cannot land.
+            if [from, to]
+                .iter()
+                .any(|point| point.x >= width || point.y >= height)
+            {
+                return Err(format!(
+                    "step {}: drag points must land on the {width}×{height} page",
+                    index + 1
+                ));
+            }
+        }
         if matches!(step, Step::StartSkirmish(_)) && !path.starts_with(steps::MENU_PATH) {
             return Err(format!(
                 "step {}: start_skirmish needs the menu: film `{}` (it skips the intro), not `{path}`",

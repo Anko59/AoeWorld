@@ -7,6 +7,7 @@ use super::{
 };
 
 mod bookmarks;
+mod drag;
 
 const APP: &str = "http://127.0.0.1:8080/";
 

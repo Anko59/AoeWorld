@@ -61,7 +61,11 @@ preserves commas and quotes in recorder paths.
   selector while holding `modifiers` (`Shift`, `Control`, `Alt`, `Meta`; one
   to four distinct names, e.g. Shift+click a unit portrait), `drag` the left
   button from one canvas point to another inside an element (`{"selector",
-  "from": {"x", "y"}, "to": {"x", "y"}}`, for box selection), press a
+  "from": {"x", "y"}, "to": {"x", "y"}}`, for box selection; both points
+  are CSS pixels from the element's top-left and must land on the page, under
+  1280×720 (1920×1080 with `"viewport": "large"`), or the storyboard is
+  refused; the recorder also fails the take when a point falls outside the
+  element or the page, rather than dragging elsewhere), press a
   `key`, type `text` at 22 ms a character, or `wait_ms` up to 60 000), then the
   page is held for `seconds` (1–300) after the last step, however long the
   steps took. At most 64 steps. Start the app first (`make dev`).
