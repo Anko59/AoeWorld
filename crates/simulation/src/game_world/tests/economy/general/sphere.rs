@@ -52,7 +52,8 @@ fn training_uses_only_buildings_within_fifty_tiles() {
             true,
         )
         .unwrap();
-    soldier(&mut w, UnitKind::General, 105, 100);
+    let g = soldier(&mut w, UnitKind::General, 105, 100);
+    w.issue_general_training(PlayerId(0), g, true).unwrap();
     for _ in 0..12 {
         decide(&mut w);
     }

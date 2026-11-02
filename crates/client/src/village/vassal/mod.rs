@@ -14,6 +14,93 @@ extern "C" {
     fn vassal_update(v: &[f64], label: &str);
 }
 
+#[wasm_bindgen(inline_js = "export function general_update(v) { window.aoeGeneral?.update(v); }")]
+extern "C" {
+    fn general_update(v: &[f64]);
+}
+
+/// `[id, army, state, training, queued, mix * 5, counts * 5]`; the panel in
+/// `web/interface/general-panel.js` reads exactly this layout.
+pub(super) fn panel_values(id: EntityId, g: aoe_protocol::GeneralStatus) -> Vec<f64> {
+    let state = match g.state {
+        aoe_protocol::GeneralState::Idle => 0.0,
+        aoe_protocol::GeneralState::Marching => 1.0,
+        aoe_protocol::GeneralState::Fighting => 2.0,
+        aoe_protocol::GeneralState::Retreating => 3.0,
+    };
+    let mut values = vec![
+        f64::from(id.0),
+        f64::from(g.army_size),
+        state,
+        f64::from(u8::from(g.training)),
+        f64::from(g.queued),
+    ];
+    values.extend(g.mix.iter().map(|&n| f64::from(n)));
+    values.extend(g.counts.iter().map(|&n| f64::from(n)));
+    values
+}
+
+/// The panel's callback (action 9: Train on/off; action 10: slider, code =
+/// role * 128 + percent) as a protocol command, given the current mix.
+pub(super) fn panel_command(
+    action: u32,
+    code: u32,
+    mix: [u8; 5],
+) -> Option<aoe_protocol::GeneralCommand> {
+    if action == 9 {
+        return Some(aoe_protocol::GeneralCommand::SetTraining { enabled: code != 0 });
+    }
+    let (role, share) = ((code / 128) as usize, (code % 128).min(100) as u8);
+    let mut mix = mix;
+    *mix.get_mut(role)? = share;
+    Some(aoe_protocol::GeneralCommand::SetMix { mix })
+}
+
+/// Values for the lone selected owned General, or empty (the panel hides).
+fn general_panel(client: &Client, player: PlayerId) -> Vec<f64> {
+    let mut selected = client.selected.units.iter();
+    let (Some(id), None) = (selected.next(), selected.next()) else {
+        return Vec::new();
+    };
+    client
+        .units
+        .get(id)
+        .filter(|u| u.player == player && u.hp > 0)
+        .and_then(|u| u.general)
+        .map_or_else(Vec::new, |g| panel_values(*id, g))
+}
+
+/// The selected General's Train button or a mix slider.
+pub(in super::super) fn general_command(client: &mut Client, action: u32, code: u32) {
+    let Some(&id) = client.selected.units.first() else {
+        return;
+    };
+    let Some(g) = client
+        .units
+        .get(&id)
+        .filter(|u| u.player == owner(client) && u.hp > 0)
+        .and_then(|u| u.general)
+    else {
+        return;
+    };
+    let Some(command) = panel_command(action, code, g.mix) else {
+        return;
+    };
+    if let aoe_protocol::GeneralCommand::SetMix { mix } = command
+        && let Some(general) = client.units.get_mut(&id).and_then(|u| u.general.as_mut())
+    {
+        // The sliders are the player's: show the change before the server echoes it.
+        general.mix = mix;
+    }
+    let sequence = client.next_sequence;
+    let message = aoe_protocol::GameplayClientMessage::GeneralOrder {
+        sequence,
+        entity_id: id,
+        command,
+    };
+    super::orders::send(client, message);
+}
+
 /// Polygons (screen space) for every owned Castle's territory, laid out as
 /// `[count, (active, selected, points, x0, y0, x1, y1, ...) * count]`.
 fn domains(client: &Client, player: PlayerId, selected: EntityId) -> Vec<f64> {
@@ -127,4 +214,5 @@ pub(super) fn present(client: &Client) {
         }
     }
     vassal_update(&points, &label);
+    general_update(&general_panel(client, player));
 }

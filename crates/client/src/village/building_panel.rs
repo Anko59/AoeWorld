@@ -237,6 +237,10 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 .set_attribute("data-order-mode", "attack-move");
             return;
         }
+        if action == 9 || action == 10 {
+            super::vassal::general_command(&mut client, action, code);
+            return;
+        }
         if action == 8 {
             client.village.garrison_cursor = false;
             client.village.unload_cursor = false;

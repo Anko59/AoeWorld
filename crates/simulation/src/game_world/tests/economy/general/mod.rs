@@ -7,6 +7,7 @@ mod orders;
 mod sphere;
 mod stances;
 mod targets;
+mod training;
 
 fn setup() -> (GameWorld, EntityId) {
     let (mut w, _, _) = village();
@@ -103,6 +104,7 @@ fn reinforcements_balance_available_production_and_reserve_the_cap() {
         );
     }
     let g = soldier(&mut w, UnitKind::General, 105, 100);
+    w.issue_general_training(PlayerId(0), g, true).unwrap();
     for _ in 0..12 {
         decide(&mut w);
     }
@@ -269,11 +271,19 @@ fn cancelled_recruitment_releases_reservations_and_never_overfills() {
         soldier(&mut w, UnitKind::Militia, 100 + n % 10, 100 + n / 10);
     }
     let g = soldier(&mut w, UnitKind::General, 105, 105);
+    w.issue_general_training(PlayerId(0), g, true).unwrap();
     decide(&mut w);
     assert_eq!(w.building(barracks).unwrap().training_queue.len(), 1);
     decide(&mut w);
     assert_eq!(w.building(barracks).unwrap().training_queue.len(), 1);
+    assert!(
+        !w.general_status(g).unwrap().training,
+        "full army: switched off"
+    );
     w.issue_cancel_training(PlayerId(0), barracks).unwrap();
+    decide(&mut w);
+    assert!(w.building(barracks).unwrap().training_queue.is_empty());
+    w.issue_general_training(PlayerId(0), g, true).unwrap();
     decide(&mut w);
     assert_eq!(w.building(barracks).unwrap().training_queue.len(), 1);
     advance(&mut w, 500);
@@ -387,7 +397,8 @@ fn economic_buildings_cannot_hide_available_military_production() {
             true,
         )
         .unwrap();
-    soldier(&mut w, UnitKind::General, 105, 100);
+    let g = soldier(&mut w, UnitKind::General, 105, 100);
+    w.issue_general_training(PlayerId(0), g, true).unwrap();
     decide(&mut w);
     assert_eq!(w.building(barracks).unwrap().training_queue.len(), 1);
     assert!(w.general_work().building_visits <= 625 + 128);

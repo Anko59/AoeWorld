@@ -111,3 +111,33 @@ fn general_only_move_has_a_current_golden_wire() {
     };
     assert!(encode_client(&negative).is_err());
 }
+
+#[test]
+fn general_training_orders_have_a_current_golden_wire() {
+    let train = ClientMessage::GeneralOrder {
+        sequence: 1,
+        entity_id: EntityId(2),
+        command: crate::GeneralCommand::SetTraining { enabled: true },
+    };
+    let wire = encode_client(&train).unwrap();
+    assert_eq!(wire, [31, 1, 2, 1, 1]);
+    assert_eq!(decode_client(&wire).unwrap(), train);
+    let mix = ClientMessage::GeneralOrder {
+        sequence: 1,
+        entity_id: EntityId(2),
+        command: crate::GeneralCommand::SetMix {
+            mix: [35, 30, 20, 10, 5],
+        },
+    };
+    let wire = encode_client(&mix).unwrap();
+    assert_eq!(wire, [31, 1, 2, 2, 35, 30, 20, 10, 5]);
+    assert_eq!(decode_client(&wire).unwrap(), mix);
+    let too_much = ClientMessage::GeneralOrder {
+        sequence: 1,
+        entity_id: EntityId(2),
+        command: crate::GeneralCommand::SetMix {
+            mix: [101, 0, 0, 0, 0],
+        },
+    };
+    assert!(encode_client(&too_much).is_err());
+}

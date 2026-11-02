@@ -173,6 +173,14 @@ enum PendingAction {
         entity_id: EntityId,
         destination: WorldPosition,
     },
+    GeneralTraining {
+        entity_id: EntityId,
+        enabled: bool,
+    },
+    GeneralMix {
+        entity_id: EntityId,
+        mix: [u8; 5],
+    },
     Hunt {
         unit_ids: Vec<EntityId>,
         animal_id: EntityId,
