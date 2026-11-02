@@ -21,6 +21,11 @@ pub use gameplay::{
     decode_server as decode_gameplay_server, encode_client as encode_gameplay_client,
     encode_server as encode_gameplay_server,
 };
+#[cfg(feature = "server-repair")]
+pub use gameplay::{
+    Violation as GameplayViolation, sanitize_server as sanitize_gameplay_server,
+    server_violations as gameplay_server_violations,
+};
 use serde::{
     Deserialize, Deserializer, Serialize,
     de::{SeqAccess, Visitor},

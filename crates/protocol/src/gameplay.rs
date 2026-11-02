@@ -7,11 +7,17 @@ use std::{fmt, marker::PhantomData};
 
 mod automation;
 mod garrison;
+#[cfg(feature = "server-repair")]
+mod sanitize;
 mod validation;
 pub use aoe_core::CombatStance;
 pub use aoe_core::Formation;
 pub use garrison::{GarrisonUnitState, VassalReport, VassalWait};
+#[cfg(feature = "server-repair")]
+pub use sanitize::sanitize_server;
 use validation::validate_server;
+#[cfg(feature = "server-repair")]
+pub use validation::{Violation, server_violations};
 pub(crate) mod economy;
 mod fog;
 mod projectiles;

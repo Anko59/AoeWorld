@@ -5,6 +5,11 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+# Server-side repair and diagnostics (`sanitize_server`, `server_violations`).
+# Only the server enables it, so the browser client does not compile them.
+server-repair = []
+
 [dependencies]
 aoe-core.workspace = true
 postcard = { version = "1.1", features = ["alloc"] }
@@ -12,6 +17,8 @@ serde.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+# Enables the server-only repair API for this crate's own tests (tests/degrade.rs).
+aoe-protocol = { path = ".", features = ["server-repair"] }
 gungraun = "=0.19.4"
 
 [[bench]]

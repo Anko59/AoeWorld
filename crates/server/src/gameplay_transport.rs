@@ -1,13 +1,14 @@
 use crate::gameplay::{Access, GameplayService};
 use aoe_protocol::{
     GAMEPLAY_VERSION, GameplayClientMessage, GameplayServerMessage, ResumeToken,
-    decode_gameplay_client, encode_gameplay_server,
+    decode_gameplay_client,
 };
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{Sink, SinkExt, StreamExt};
 use std::time::Duration;
 use tokio::{sync::mpsc, time::timeout};
 
+mod degrade;
 mod requests;
 
 /// How long one socket write may take before the peer counts as gone: long
@@ -91,7 +92,7 @@ pub(super) async fn handle_socket(service: GameplayService, socket: WebSocket) {
 #[derive(Debug, thiserror::Error)]
 enum SendFailure {
     #[error("invalid outgoing game state: {0}")]
-    Encode(aoe_protocol::GameplayError),
+    Encode(String),
     #[error("socket write timed out")]
     Timeout,
     #[error("socket write failed")]
@@ -102,7 +103,7 @@ async fn send_socket<S>(sink: &mut S, message: GameplayServerMessage) -> Result<
 where
     S: Sink<Message> + Unpin,
 {
-    let bytes = encode_gameplay_server(&message).map_err(SendFailure::Encode)?;
+    let bytes = degrade::encode(message)?;
     timeout(SEND_TIMEOUT, sink.send(Message::Binary(bytes.into())))
         .await
         .map_err(|_| SendFailure::Timeout)?

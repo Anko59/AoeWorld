@@ -72,9 +72,32 @@ pub(super) fn valid(b: &GameplayBuildingState) -> bool {
         && b.garrison
             .iter()
             .all(|u| u.id != b.id && b.kind.admits(u.kind) && u.hp > 0 && u.hp <= u.max_hp)
-        && b.garrison.iter().all(|u| {
-            u.vassal.is_none_or(|r| {
-                u.kind == UnitKind::Vassal && r.managed <= 100 && r.managed <= r.residents
-            })
-        })
+        && b.garrison.iter().all(vassal_valid)
+}
+
+/// A Vassal report belongs to a Vassal and stays within the managed bounds.
+fn vassal_valid(u: &GarrisonUnitState) -> bool {
+    u.vassal
+        .is_none_or(|r| u.kind == UnitKind::Vassal && r.managed <= 100 && r.managed <= r.residents)
+}
+
+/// Keeps the occupants `valid` accepts, in order and within capacity, so one
+/// bad occupant costs only itself.
+#[cfg(feature = "server-repair")]
+pub(super) fn repair(b: &mut GameplayBuildingState) {
+    if b.construction != ConstructionState::Complete {
+        b.garrison.clear();
+        return;
+    }
+    let (id, kind) = (b.id, b.kind);
+    for u in &mut b.garrison {
+        if !vassal_valid(u) {
+            u.vassal = None;
+        }
+    }
+    b.garrison
+        .retain(|u| u.id != id && kind.admits(u.kind) && u.hp > 0 && u.hp <= u.max_hp);
+    b.garrison.sort_by_key(|u| u.id);
+    b.garrison.dedup_by_key(|u| u.id);
+    b.garrison.truncate(usize::from(kind.garrison_capacity()));
 }

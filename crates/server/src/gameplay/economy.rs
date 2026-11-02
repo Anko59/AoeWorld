@@ -52,13 +52,13 @@ fn wire_resource(kind: aoe_map::ResourceKind) -> ResourceKind {
         aoe_map::ResourceKind::Stone => ResourceKind::Stone,
     }
 }
-pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitState {
-    let mut state = wire_unit(
-        unit,
-        world.gathering_kind(unit.id),
-        world.hunting_target(unit.id),
-    );
-    state.cargo_count = world.transport_cargo(unit.id).len() as u8;
+/// Home Castle, managers and General status. The wire carries them for living
+/// units only: a Dying body keeps its simulation records until it is removed,
+/// and one such unit used to make every Snapshot and Tick fail validation.
+pub(super) fn command_state(world: &GameWorld, unit: &GameUnit, state: &mut GameplayUnitState) {
+    if unit.hp == 0 {
+        return;
+    }
     state.home_castle = world
         .vassal_castle(unit.id)
         .or_else(|| world.general_castle(unit.id));
@@ -75,6 +75,15 @@ pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitStat
                 aoe_simulation::GeneralState::Retreating => aoe_protocol::GeneralState::Retreating,
             },
         });
+}
+pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitState {
+    let mut state = wire_unit(
+        unit,
+        world.gathering_kind(unit.id),
+        world.hunting_target(unit.id),
+    );
+    state.cargo_count = world.transport_cargo(unit.id).len() as u8;
+    command_state(world, unit, &mut state);
     state
 }
 /// A unit as the wire sees it, given the two facts only the economy knows.
@@ -87,11 +96,18 @@ pub(super) fn wire_unit(
         id: unit.id,
         player: unit.player,
         position: unit.position,
-        moving: unit.moving,
-        planning: unit.planning,
+        moving: unit.moving && unit.hp > 0,
+        planning: unit.planning && unit.hp > 0,
         facing: unit.facing as u8,
         kind: wire_kind(unit.kind),
-        task: match unit.task {
+        // A body at 0 HP is Dying whatever a late movement or job pass wrote to
+        // its task: the wire requires it, and a mismatch used to fail every
+        // Snapshot and Tick that carried the corpse.
+        task: match if unit.hp == 0 {
+            aoe_simulation::UnitTask::Dying
+        } else {
+            unit.task
+        } {
             aoe_simulation::UnitTask::Idle => UnitTask::Idle,
             aoe_simulation::UnitTask::Moving => UnitTask::Moving,
             aoe_simulation::UnitTask::Gathering => UnitTask::Gathering,
@@ -108,7 +124,7 @@ pub(super) fn wire_unit(
         gathering: gathering.map(wire_resource),
         hp: unit.hp,
         max_hp: unit.max_hp,
-        attack_target: unit.attack_target,
+        attack_target: unit.attack_target.filter(|_| unit.hp > 0),
         last_hit: unit.last_hit.map(wire_hit),
         death_tick: unit.death_tick,
         hunt_target,
@@ -269,22 +285,29 @@ pub(super) fn wire_building_state(
                 kind: wire_kind(g.unit.kind),
                 hp: g.unit.hp,
                 max_hp: g.unit.max_hp,
-                vassal: g.vassal.map(|v| aoe_protocol::VassalReport {
-                    managed: v.managed,
-                    residents: v.residents,
-                    wait: match v.wait {
-                        aoe_simulation::VassalWait::Growing => aoe_protocol::VassalWait::Growing,
-                        aoe_simulation::VassalWait::Census => aoe_protocol::VassalWait::Census,
-                        aoe_simulation::VassalWait::Full => aoe_protocol::VassalWait::Full,
-                        aoe_simulation::VassalWait::NoTownCenter => {
-                            aoe_protocol::VassalWait::NoTownCenter
-                        }
-                        aoe_simulation::VassalWait::Population => {
-                            aoe_protocol::VassalWait::Population
-                        }
-                        aoe_simulation::VassalWait::Food => aoe_protocol::VassalWait::Food,
-                    },
-                }),
+                // A Dying occupant carries no report, as no Dying unit carries
+                // command fields: the wire requires a living Vassal.
+                vassal: g
+                    .vassal
+                    .filter(|_| g.unit.hp > 0)
+                    .map(|v| aoe_protocol::VassalReport {
+                        managed: v.managed,
+                        residents: v.residents,
+                        wait: match v.wait {
+                            aoe_simulation::VassalWait::Growing => {
+                                aoe_protocol::VassalWait::Growing
+                            }
+                            aoe_simulation::VassalWait::Census => aoe_protocol::VassalWait::Census,
+                            aoe_simulation::VassalWait::Full => aoe_protocol::VassalWait::Full,
+                            aoe_simulation::VassalWait::NoTownCenter => {
+                                aoe_protocol::VassalWait::NoTownCenter
+                            }
+                            aoe_simulation::VassalWait::Population => {
+                                aoe_protocol::VassalWait::Population
+                            }
+                            aoe_simulation::VassalWait::Food => aoe_protocol::VassalWait::Food,
+                        },
+                    }),
             })
             .collect(),
         last_hit: state.last_hit.map(wire_hit),
@@ -391,3 +414,7 @@ fn wire_rally(target: aoe_simulation::RallyTarget) -> aoe_protocol::RallyTarget 
         N::Animal(id) => W::Animal(id),
     }
 }
+
+#[path = "economy/tests.rs"]
+#[cfg(test)]
+mod tests;
