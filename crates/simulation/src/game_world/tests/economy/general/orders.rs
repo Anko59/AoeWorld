@@ -30,7 +30,12 @@ fn army_move_leads_the_army_but_general_only_move_leaves_it_in_place() {
             w.issue_move(g, at(150, 104)).unwrap();
         }
         advance(&mut w, 500);
-        assert!(walked(&w, g, origin) > 20, "General walks (solo {solo})");
+        assert!(
+            // Led by his army's block the General is held to its pace.
+            walked(&w, g, origin) > 15,
+            "General walks (solo {solo}): {} tiles",
+            walked(&w, g, origin)
+        );
         let moved = ids
             .iter()
             .zip(&starts)

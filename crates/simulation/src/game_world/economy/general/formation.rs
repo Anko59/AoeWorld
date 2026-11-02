@@ -16,7 +16,7 @@ impl GameWorld {
         let player = army[0].player;
         work.orders += 1;
         if self
-            .issue_formation_move(player, &ids, aoe_core::Formation::Line, to, false, !retreat)
+            .issue_formation_move(player, &ids, aoe_core::Formation::Line, to, false, false)
             .is_err()
         {
             return;
