@@ -83,6 +83,13 @@ impl GameWorld {
         ] {
             world.spawn_kind(PlayerId(0), kind, tile_center(x, y)?)?;
         }
+        // A distant enemy house keeps the opponent alive for the whole take.
+        world.insert_building(
+            PlayerId(1),
+            BuildingKind::House,
+            TileRect::from_xywh(200, 128, 2, 2),
+            true,
+        )?;
         for n in 0..6 {
             let id = world.spawn_kind(
                 PlayerId(1),
