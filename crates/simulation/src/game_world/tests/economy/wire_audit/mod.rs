@@ -121,7 +121,6 @@ fn run_audited(w: &mut GameWorld, ticks: u32, seen: &mut std::collections::BTree
 fn rich(w: &mut GameWorld) {
     let p = w.economy.players.get_mut(&PlayerId(0)).unwrap();
     p.age = Age::Castle;
-    p.population_cap = 1000;
     p.stockpile = Stockpile {
         food: 50_000,
         wood: 50_000,
