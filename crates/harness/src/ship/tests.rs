@@ -408,7 +408,10 @@ fn timeline_observes_review_grade_and_only_reacquires_after_a_pass() {
         assert_eq!(reviews[1]["detail"]["grade"], grade);
         assert_eq!(reviews[1]["detail"]["ok"], grade == 9);
         assert_eq!(
-            entries.iter().filter(|e| e["stage"] == "lock-wait").count(),
+            entries
+                .iter()
+                .filter(|e| e["stage"] == "lock-acquire")
+                .count(),
             2
         );
         assert_eq!(

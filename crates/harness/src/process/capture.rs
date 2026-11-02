@@ -226,9 +226,6 @@ fn capture_once<W: Write>(
         return empty(CaptureExit::Start(error));
     }
     let stopped = || {
-        // A lock's gap accumulates across captures, including short sleeps that do not
-        // interrupt this child. Refresh it against its own last record on every poll.
-        crate::ship::lock::refresh_held();
         if cancellation.cancelled() {
             Some(CaptureExit::Cancelled)
         } else if started.elapsed() >= deadline {

@@ -133,7 +133,7 @@ pub(crate) struct Options {
     /// Showcase video for the "What" section (SHIP_VIDEO).
     #[arg(long)]
     pub(crate) video: Option<PathBuf>,
-    /// The heavy-slot environment of this process, read once by `execute`.
+    /// The long-job environment of this process, read once by `execute`.
     #[arg(skip)]
     pub(crate) slots: Box<crate::jobs::JobEnv>,
     /// The ship lock, let go during the review and taken again for the push.
@@ -291,7 +291,7 @@ pub(crate) fn ship_with(
     let base = crate::timeline::stage(root, "rebase", serde_json::json!({}), || {
         recheck::start::prepare(root, options)
     })?;
-    // The start-of-ship rebase is done. The gates take heavy slots, which serialize the heavy
+    // The start-of-ship rebase is done. Gates use resource admission and a separate lock for long
     // work, and their evidence is keyed by the exact commit, so the next ship may take the lock
     // and start meanwhile. The lock is taken again for the re-check and the push.
     if options.lock.release() {

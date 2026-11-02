@@ -28,12 +28,12 @@ pub(crate) struct GateResult {
     pub(crate) summary: String,
     /// The last 40 lines of output when the gate did not pass.
     pub(crate) tail: String,
-    /// Every run when retried, or when an overload retry's load wait was refused.
+    /// Every attempt when a suspend interrupted this gate.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) attempts: Vec<Attempt>,
 }
 
-/// One run of a gate that needed a suspend or overload retry.
+/// One run of a gate that needed a suspend retry.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct Attempt {
     pub(crate) seconds: f32,
@@ -107,8 +107,7 @@ pub(crate) fn run_gates(root: &Path, gates: &[&Gate], slots: &JobEnv) -> Vec<Gat
     run_gates_with(root, gates, slots, crate::jobs::guard::hold_timed)
 }
 
-/// `run_gates` without the overload retry: the agent stop check runs inside a hook and must
-/// never block for a load wait, so a timeout there fails at once as before.
+/// Gates for the bounded agent stop hook; a timeout fails immediately.
 pub(crate) fn run_gates_once(root: &Path, gates: &[&Gate], slots: &JobEnv) -> Vec<GateResult> {
     run_gates_scoped(
         root,
