@@ -19,6 +19,7 @@ mod scenes;
 pub(crate) mod session;
 mod steps;
 mod timing;
+mod voiceover;
 mod workdir;
 
 #[cfg(test)]
@@ -51,6 +52,9 @@ pub(crate) use steps::resolve_bookmarks;
 #[cfg(test)]
 pub(crate) use steps::warm::skirmish_maps;
 pub(crate) use timing::{Segment, Timings, check_duration, durations, measured_duration, track};
+pub(crate) use voiceover::make as narrate_video;
+#[cfg(test)]
+pub(crate) use voiceover::{VoiceLine, parse_lines, probe_seconds, silences};
 #[cfg(test)]
 pub(crate) use workdir::{create_work_dir, write_recorder};
 

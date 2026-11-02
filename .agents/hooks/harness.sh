@@ -5,7 +5,7 @@
 # judge it. Until origin/dev has this adapter, it is built from this checkout and
 # labelled a non-authoritative bootstrap.
 #   harness.sh <claude|codex|dsh|pi> <session-start|pre-tool-use|post-tool-use|stop|pre-compact>
-#   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-pr|issue|next|ledger|usage|compare|dev-server|dev-server-status|dev-server-stop|showcase|showcase-check|showcase-session|nightly-triage|carry-review|update-prs|metrics
+#   harness.sh exec duel|ship|ship-status|describe-check|review|review-floor|level-floor|level-stats|review-pr|issue|next|ledger|usage|compare|dev-server|dev-server-status|dev-server-stop|showcase|showcase-check|showcase-narrate|showcase-session|nightly-triage|carry-review|update-prs|metrics
 #   harness.sh build
 set -u
 probe=crates/harness/src/agents/runtime.rs
@@ -24,13 +24,14 @@ case ${1:-} in
       dev-server|dev-server-status|dev-server-stop) probe=crates/harness/src/devserver/mod.rs ;;
       showcase) probe=crates/harness/src/ship/showcase/mod.rs ;;
       showcase-check) probe=crates/harness/src/ship/showcase/check.rs ;;
+      showcase-narrate) probe=crates/harness/src/ship/showcase/voiceover/mod.rs ;;
       showcase-session) probe=crates/harness/src/ship/showcase/session.rs ;;
       nightly-triage) probe=crates/harness/src/ship/issues/triage.rs ;;
       carry-review) probe=crates/harness/src/ship/postpush/carry.rs ;;
       update-prs) probe=crates/harness/src/ship/postpush/update.rs ;;
       metrics) probe=crates/harness/src/ship/metrics/snapshot.rs ;;
       ledger|usage) probe=crates/harness/src/ledger/mod.rs ;;
-      *) echo "harness.sh exec: duel, ship, ship-status, describe-check, review, review-floor, level-floor, level-stats, review-pr, issue, next, ledger, usage, compare, dev-server, dev-server-status, dev-server-stop, showcase, showcase-check, showcase-session, nightly-triage, carry-review, update-prs or metrics only" >&2; exit 2 ;;
+      *) echo "harness.sh exec: duel, ship, ship-status, describe-check, review, review-floor, level-floor, level-stats, review-pr, issue, next, ledger, usage, compare, dev-server, dev-server-status, dev-server-stop, showcase, showcase-check, showcase-narrate, showcase-session, nightly-triage, carry-review, update-prs or metrics only" >&2; exit 2 ;;
     esac
     runtime=claude event=exec ;;
   *) echo "usage: harness.sh <claude|codex|dsh|pi> <event> | exec ship | build" >&2; exit 2 ;;

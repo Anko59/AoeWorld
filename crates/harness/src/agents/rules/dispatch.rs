@@ -20,6 +20,7 @@ const PERSON_TARGETS: &[&str] = &[
     // Showcase and ship-tools can make external requests or start containers.
     "showcase",
     "showcase-check",
+    "showcase-narrate",
     "ship-tools",
     // It posts a status and arms auto-merge: GitHub writes, main session only.
     "review-pr",
