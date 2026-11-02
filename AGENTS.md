@@ -10,8 +10,12 @@ are judged by the same hooks; see [agent runtimes](docs/agent-runtimes.md).
 Product work goes through `make duel` or follows the same tests-first order.
 Tests live in test files.
 
-Before committing, run `make hooks-install`, `make hooks-check`, and the focused
-gate plus `make preflight`. Publish only with `make ship` ([shipping](docs/shipping.md)). Never bypass hooks or reduce a gate/baseline to obtain
+Before committing, run `make hooks-install`, `make hooks-check`, `make fmt-check`,
+`make lint`, `make structure-check`, and focused tests for each touched crate
+(e.g. `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation
+AOE_NATIVE_TEST_FILTER='test(navy::)'` or `make test-harness-focused
+HARNESS_TEST_FILTER=agents::`). For client changes also run `make perf-wasm-cap`.
+Full suites, e2e and performance benchmarks run in CI. Publish only with `make ship` ([shipping](docs/shipping.md)). Never bypass hooks or reduce a gate/baseline to obtain
 a pass. Human-authored text files must stay within 500 lines, and a directory
 may directly contain at most 14 code/config files. Place substantive command
 logic in Rust, not Make, shell, or workflow YAML.

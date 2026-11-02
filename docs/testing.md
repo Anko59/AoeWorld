@@ -60,15 +60,19 @@ On a disk-constrained shared checkout, `CARGO_PROFILE_DEV_DEBUG=0` and
 assertions, overflow checks and the same test selection. Make forwards these
 optional Cargo settings too; use the normal target directory.
 
-Use `make fmt-check`, `make structure-check`, `make lint`, and `make test-unit`
-(`make lint` also compiles the test targets of the wasm32 packages `make test-wasm` runs, so wasm-only test code cannot break unnoticed; clippy is not denied for wasm32 yet)
-for focused checks. `make pre-commit` runs static gates; `make preflight` adds
-native tests through pinned cargo-nextest, followed by separate doctests and a
-WASM build. The test profile optimizes map, simulation, server, and procedural
+Before committing, use `make fmt-check`, `make structure-check`, `make lint`,
+focused tests for each touched crate, and `make perf-wasm-cap` for client changes.
+`make lint` also compiles the test targets of the wasm32 packages `make test-wasm`
+runs; clippy is not denied for wasm32 yet. `make pre-commit` checks the staged index with formatting, structure, architecture,
+docs and clippy (including WASM test-target compilation). The agent Stop hook
+runs only static stop-cadence gates, not the non-static build or test gates.
+Neither hook runs a full suite or benchmark.
+Standalone `make preflight` also builds WASM and runs native tests through pinned
+cargo-nextest, separate doctests, and a smoke benchmark. The test profile optimizes map, simulation, server, and procedural
 hashing (BLAKE3) code for the
 full-distance offline movement/replay regressions; debug assertions and integer
 overflow checks remain enabled. Distances, tick limits, and gate floors are
-unchanged. Local `make preflight` and the preflight gates of `make ship` run `test-unit`
+unchanged. Standalone `make preflight` runs `test-unit`
 only for the affected crates: the crates owning the files changed since the merge
 base with `origin/dev`, plus every workspace crate that depends on them,
 transitively (`cargo metadata`). A file outside every crate (root `Cargo.toml`,
@@ -83,8 +87,9 @@ For local iteration, `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simul
 AOE_NATIVE_TEST_FILTER='test(navy::)'` runs a Nextest filter inside the shared heavy
 slot. `make test-wasm-focused AOE_WASM_TEST_PACKAGE=aoe-client
 AOE_WASM_TEST_FILTER=dead_naval_units` runs matching library tests with the same
-browser runner, capabilities and deadline as `test-wasm`. These developer-selected
-runs do not replace the full gates or write their PASS reports.
+browser runner, capabilities and deadline as `test-wasm`. Use the relevant focused
+tests for each touched crate; client changes also require `make perf-wasm-cap`.
+These developer-selected runs do not write full-gate PASS reports; CI runs those gates.
 
 CI runs `make preflight` as two parallel legs of its `static` job (#388):
 `make preflight-checks` (`deny`, `build-wasm`, the static checks and clippy) and
@@ -369,8 +374,8 @@ it as a prerequisite. Code changes now select parser fuzzing as additional work.
 
 Plans do not imply automatic edit/stop interception. The opt-in local `gate-run`
 executor is available; protected judging and CI migration remain subsequent work.
-Existing Make/CI dispatch remains active; the static CI job and every handoff
-still require the full `make preflight`, including for documentation changes.
+Existing Make/CI dispatch remains active; full suites run in CI rather than
+being required at each handoff.
 Source/artwork/hardware checks are explicit qualification plans, never silently
 substituted by synthetic tests. Release publication is not a generic cadence.
 Pull requests into any branch receive the same validation, so a stacked pull

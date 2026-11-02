@@ -42,10 +42,10 @@ general promise for all AoE editions or resources. Reject unsupported formats
 and malformed input explicitly instead of guessing or silently skipping it.
 
 For importer changes, exercise parser fixtures and `make assets-verify` on a
-local pack when available. For client or renderer changes, run `make build-wasm`
-and `make test-e2e` to check visible pixels, movement, and WebGPU/Canvas 2D
-startup; follow the scoped rendering checks. Before committing, run
-`make hooks-install`, `make hooks-check`, a focused gate, and `make preflight`.
+local pack when available. For client or renderer changes, use focused browser tests and follow the scoped
+rendering checks; full e2e runs in CI to check visible pixels, movement, and
+WebGPU/Canvas 2D startup. Before committing, run
+`make hooks-install`, `make hooks-check`, `make fmt-check`, `make lint`, `make structure-check`, and relevant `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-assets AOE_NATIVE_TEST_FILTER='test(<changed_module>::)'` tests. For client changes also run `make perf-wasm-cap`.
 Report the exact revision and what was validated with fixtures versus private
 trial data. Do not use a synthetic workload as proof of finished large-scale
 RTS performance.
