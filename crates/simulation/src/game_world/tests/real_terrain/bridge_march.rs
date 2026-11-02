@@ -39,10 +39,19 @@ fn single_file_ideal(w: &GameWorld, starts: &[(EntityId, WorldPosition)], route:
 }
 
 fn cross(case: &str, count: usize, limit: u32) {
-    let mut fixture = build(case);
+    cross_fixture(case, build(case), count, limit, |f| f.issue());
+}
+
+pub(super) fn cross_fixture(
+    case: &str,
+    mut fixture: crate::game_world::terrain_fixtures::Fixture,
+    count: usize,
+    limit: u32,
+    issue: impl FnOnce(&mut crate::game_world::terrain_fixtures::Fixture),
+) {
     assert_eq!(fixture.ids.len(), count);
     let mut tracker = Tracker::new(&fixture.world, &fixture.ids);
-    fixture.issue();
+    issue(&mut fixture);
     tracker.attach(&offered(&fixture));
     for tick in 1..=limit {
         fixture.world.advance();
