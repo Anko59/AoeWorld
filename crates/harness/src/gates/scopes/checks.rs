@@ -11,7 +11,7 @@ fn phase<T>(name: &str, operation: impl FnOnce() -> Result<T>) -> Result<T> {
     result
 }
 
-/// Clippy for a scope. A pre-commit index that stages only test files may
+/// Clippy arguments when compilation is required. A tests-only index may
 /// hold red tests written before the code they name (test-first), so its
 /// test targets are left to the product commit; every other scope, and any
 /// index touching a non-test file, checks every target.
@@ -29,31 +29,44 @@ pub(super) fn clippy_args(kind: &Kind, staged: &[String]) -> Vec<&'static str> {
     args
 }
 
-fn staged_paths(source: &Path) -> Result<Vec<String>> {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(source)
-        .args(["diff", "--cached", "--name-only", "-z", "--no-renames"])
-        .output()?;
-    if !output.status.success() {
-        return Err("cannot list staged paths".into());
+/// Use the existing conservative suite classifier on the captured index paths.
+/// Instructions, unknown paths, mixed changes and non-Markdown data keep clippy.
+pub(super) fn docs_only(
+    kind: &Kind,
+    paths: &[String],
+    registry: &crate::gates::registry::Registry,
+) -> bool {
+    matches!(kind, Kind::Index)
+        && !paths.is_empty()
+        && paths.iter().all(|path| path.ends_with(".md"))
+        && registry
+            .classify(paths)
+            .suites
+            .iter()
+            .all(|suite| matches!(suite.as_str(), "docs" | "static"))
+}
+
+pub(super) fn skip_compilers(snapshot: &Snapshot) -> Result<bool> {
+    if snapshot.identity.kind != Kind::Index {
+        return Ok(false);
     }
-    Ok(output
-        .stdout
-        .split(|byte| *byte == 0)
-        .filter(|path| !path.is_empty())
-        .map(|path| String::from_utf8_lossy(path).into_owned())
-        .collect())
+    snapshot.run_checked(|root| {
+        let registry = crate::gates::registry::Registry::load(root)?;
+        if !docs_only(&snapshot.identity.kind, &snapshot.paths, &registry) {
+            return Ok(false);
+        }
+        // Retain compilation for embedded docs and other known Rust readers.
+        Ok(crate::native::affected::plan_files(root, &snapshot.paths)?
+            .packages()
+            .is_some_and(|packages| packages.is_empty()))
+    })
 }
 
 pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
     let source = fs::canonicalize(source)?;
-    let staged = match kind {
-        Kind::Index => staged_paths(&source)?,
-        _ => Vec::new(),
-    };
-    let clippy = clippy_args(&kind, &staged);
     let snapshot = phase("index/export", || Snapshot::prepare(&source, kind))?;
+    let clippy = clippy_args(&snapshot.identity.kind, &snapshot.paths);
+    let skip = phase("scope selection", || skip_compilers(&snapshot))?;
     let home = crate::process::cargo_cache::home(&source)?;
     let home = home.to_str().ok_or("non-UTF-8 Cargo cache path")?;
     let target = source.join("target");
@@ -95,10 +108,16 @@ pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
     })?;
     checked("architecture", &crate::architecture::check)?;
     checked("docs", &crate::gates::docs_check)?;
-    cargo("clippy native", &clippy, 600)?;
-    // A tests-only index skips test targets here too, so red wasm tests wait as well.
-    if clippy.contains(&"--all-targets") {
-        cargo("wasm check", &crate::native::wasm_check_args(), 600)?;
+    if skip {
+        println!(
+            "pre-commit: documentation-only index without Rust readers; compiler checks remain in CI"
+        );
+    } else {
+        cargo("clippy native", &clippy, 600)?;
+        // Tests-only indexes also leave red wasm test targets to the next commit.
+        if clippy.contains(&"--all-targets") {
+            cargo("wasm check", &crate::native::wasm_check_args(), 600)?;
+        }
     }
     println!(
         "static input: {}",

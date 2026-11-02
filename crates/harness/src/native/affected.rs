@@ -4,11 +4,16 @@
 //! every crate that depends on them, transitively, are tested. A file outside
 //! every crate runs the whole workspace, except under `web/`, `browser/` and
 //! `docs/`: those select the crates whose sources mention the path (or a parent
-//! directory two levels deep or more), because some tests read such files. Only the local preflight asks for a
-//! selection (`AOE_TEST_SELECT=<merge base>`); CI and `AOE_TEST_ALL=1` never get one.
-use crate::ship::git;
+//! directory two levels deep or more), because some tests read such files.
+//! Local preflight requests test selection (`AOE_TEST_SELECT=<merge base>`);
+//! CI and `AOE_TEST_ALL=1` never get one. Pre-commit reuses the reader mapping
+//! with exact index paths before omitting documentation-only compiler checks.
+use crate::{
+    process::{self, Cancellation, CaptureExit},
+    ship::git,
+};
 use serde_json::Value;
-use std::{collections::BTreeSet, path::Path, process::Command};
+use std::{collections::BTreeSet, path::Path, time::Duration};
 
 /// Paths that hold no Rust crate; only the crates that name them are affected.
 const NO_RUST: &[&str] = &["web/", "browser/", "docs/"];
@@ -264,23 +269,43 @@ fn changed_files(root: &Path, base: &str) -> Result<Vec<String>, String> {
 }
 
 fn metadata(root: &Path) -> Result<Vec<Package>, String> {
-    let output = Command::new("cargo")
-        .current_dir(root)
-        .args(["metadata", "--format-version", "1", "--no-deps", "--locked"])
-        .output()
-        .map_err(|e| format!("cargo metadata: {e}"))?;
-    if !output.status.success() {
+    let command = process::explicit_command(
+        root,
+        "cargo",
+        &[
+            "metadata",
+            "--format-version",
+            "1",
+            "--no-deps",
+            "--locked",
+            "--offline",
+        ],
+        &[],
+    );
+    let mut metadata = Vec::new();
+    let output = process::capture_command_retaining_stdout(
+        command,
+        Duration::from_secs(120),
+        &Cancellation::default(),
+        &mut metadata,
+    );
+    if !matches!(output.exit, CaptureExit::Success) {
         return Err(format!(
-            "cargo metadata failed: {}",
+            "cargo metadata failed ({:?}): {}",
+            output.exit,
             String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
-    parse_metadata(&String::from_utf8_lossy(&output.stdout))
+    parse_metadata(&String::from_utf8(metadata).map_err(|error| error.to_string())?)
 }
 
 pub(crate) fn plan(root: &Path, base: &str) -> Result<Selection, String> {
+    plan_files(root, &changed_files(root, base)?)
+}
+
+/// Use caller-captured paths, including exact index deletions and rename sides.
+pub(crate) fn plan_files(root: &Path, files: &[String]) -> Result<Selection, String> {
     let mut packages = metadata(root)?;
-    let files = changed_files(root, base)?;
     if files
         .iter()
         .any(|f| NO_RUST.iter().any(|p| f.starts_with(p)))
@@ -289,7 +314,7 @@ pub(crate) fn plan(root: &Path, base: &str) -> Result<Selection, String> {
             read_sources(&root.join(&package.dir), &mut package.text);
         }
     }
-    Ok(select(&packages, &files))
+    Ok(select(&packages, files))
 }
 
 /// The selected packages that have a library target, the only ones with doctests.
