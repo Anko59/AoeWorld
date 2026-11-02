@@ -70,7 +70,9 @@ blending and server-owned construction rules are unchanged by the animation pass
 ## Validation
 
 `make test-assets-de` validates all selected building SLDs against the licensed
-DAT in one inventory test. Portable tests cover bounded building tails, nested
+DAT in one inventory test. It checks shared origins for Dark, Feudal and Castle
+Age Town Centers and retained displacement for separate gate towers. Portable
+tests cover age-family replacement, back-to-front slice order, bounded building tails, nested
 references, native layers without classic IDs, full-cell selection, independent
 replay timing, recipe overlay index offsets, native geometry before residency,
 eviction, and destruction-to-rubble selection. The pressure fixture requires

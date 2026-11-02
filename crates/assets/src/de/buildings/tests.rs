@@ -131,3 +131,36 @@ fn separate_annex_sprites_are_placed_by_their_offsets() {
     let offsets: Vec<_> = parts.iter().map(|p| p.1).collect();
     assert_eq!(offsets, [[1.5, 0.0], [0.0, 0.0], [-1.5, 0.0]]);
 }
+
+#[test]
+fn later_age_heads_replace_shared_dark_age_annexes_at_the_origin() {
+    for age in [2, 3] {
+        let prefix = format!("b_west_town_center_age{age}");
+        let head = format!("{prefix}_back_x1");
+        let graphics = vec![
+            graphic(10, &head, 20),
+            graphic(11, &format!("{prefix}_main_x1"), 20),
+            graphic(12, &format!("{prefix}_center_x1"), 20),
+            graphic(13, &format!("{prefix}_front_x1"), 20),
+            graphic(21, "b_dark_town_center_age1_main_x1", 20),
+            graphic(22, "b_dark_town_center_age1_center_x1", 20),
+            graphic(23, "b_dark_town_center_age1_front_x1", 20),
+        ];
+        let units = vec![
+            unit(
+                1,
+                10,
+                &[(2, [1.0, -1.0]), (3, [-0.5, 0.5]), (4, [-1.0, 1.0])],
+            ),
+            unit(2, 21, &[]),
+            unit(3, 22, &[]),
+            unit(4, 23, &[]),
+        ];
+        let parts = assemble(graphics, units, &head);
+        let expected: Vec<_> = ["main", "back", "center", "front"]
+            .map(|part| (format!("de/{prefix}_{part}_x1.sld"), [0.0; 2]))
+            .into_iter()
+            .collect();
+        assert_eq!(parts, expected, "age {age}");
+    }
+}
