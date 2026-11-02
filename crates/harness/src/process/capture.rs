@@ -212,7 +212,6 @@ fn capture_once<W: Write>(
     if let Some(gap) = watch.gap_seconds() {
         command.env(suspend::GAP_VARIABLE, gap.to_string());
     }
-    command.envs(crate::slots::guard::child_env());
     let empty = |exit| Captured {
         exit,
         stdout: Vec::new(),
@@ -220,6 +219,12 @@ fn capture_once<W: Write>(
         truncated: false,
         duration: started.elapsed(),
     };
+    if let Err(error) = crate::jobs::guard::prepare_child(&mut command) {
+        return empty(CaptureExit::Start(error));
+    }
+    if let Err(error) = crate::resources::before_docker(&command) {
+        return empty(CaptureExit::Start(error));
+    }
     let stopped = || {
         // A lock's gap accumulates across captures, including short sleeps that do not
         // interrupt this child. Refresh it against its own last record on every poll.

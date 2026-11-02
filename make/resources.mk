@@ -1,12 +1,17 @@
 # Independent std-only observer: no workspace bootstrap or machine-wide build lock.
 RESOURCE_SOURCE := crates/harness/src/resources
 .PHONY: resource-measure test-resources
-$(RESOURCE_BINARY): $(RESOURCE_SOURCE)/launcher.rs $(RESOURCE_SOURCE)/measure.rs
+.cache/resource-runner: $(RESOURCE_SOURCE)/launcher.rs $(RESOURCE_SOURCE)/measure.rs $(RESOURCE_SOURCE)/policy.rs gates/container.args
 	@mkdir -p .cache
-	@docker run --rm --init --memory=256m --memory-swap=256m --cpu-shares=1024 --user $(UID):$(GID) $(call BIND_MOUNT,$(ROOT),$(ROOT)) -w $(ROOT) $(TOOL_IMAGE) rustc --edition=2024 $(RESOURCE_SOURCE)/launcher.rs -o $(RESOURCE_BINARY)
+	@docker run --rm --init --memory=256m --memory-swap=256m --cpu-shares=1024 --user $(UID):$(GID) $(call BIND_MOUNT,$(ROOT),$(ROOT)) -w $(call MOUNT_QUOTE,$(ROOT)) $(TOOL_IMAGE) rustc --edition=2024 $(RESOURCE_SOURCE)/launcher.rs -o .cache/resource-runner
 
-resource-measure: $(RESOURCE_BINARY)
-	@$(RESOURCE_BINARY) $(RESOURCE_MEASURE_ARGS)
+.PHONY: resource-bootstrap
+.EXTRA_PREREQS += resource-bootstrap
+resource-bootstrap: .cache/resource-runner
+resource-bootstrap .cache/resource-runner cache-mount-points help: .EXTRA_PREREQS :=
+
+resource-measure: .cache/resource-runner
+	@$(call MOUNT_QUOTE,$(RESOURCE_BINARY)) $(RESOURCE_MEASURE_ARGS)
 
 test-resources:
 	@mkdir -p .cache

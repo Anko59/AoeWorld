@@ -1,5 +1,7 @@
 use super::measure::{available_kib, cgroup_directory, parse_job};
 use std::path::Path;
+mod limits;
+mod makefile;
 
 #[test]
 fn container_observer_preserves_failure_exit_status() {

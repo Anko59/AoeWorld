@@ -338,7 +338,7 @@ pub(super) fn run(directory: &Path, hash: &str) -> Result<()> {
         "tests/country/source.spec.ts".into(),
         "--project=webgpu".into(),
     ];
-    args.splice(1..1, crate::slots::cap_args());
+    args.splice(1..1, crate::jobs::cap_args());
     let refs: Vec<_> = args.iter().map(String::as_str).collect();
     let (stop_monitor, peak_rss, monitor) = monitor_server_rss(server.0.id());
     let browser_result = process::run("docker", &refs, Duration::from_secs(900));

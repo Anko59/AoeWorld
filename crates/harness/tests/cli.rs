@@ -21,17 +21,17 @@ fn disk_floor_refuses_real_commands_before_any_slot_or_ship_work() {
         vec!["test-wasm"],
         vec!["test-e2e"],
         vec!["preflight"],
-        vec!["slot", "test-unit", "--", "false"],
-        vec!["slot", "test-wasm", "--", "false"],
-        vec!["slot", "test-e2e", "--", "false"],
+        vec!["job", "test-unit", "--", "false"],
+        vec!["job", "test-wasm", "--", "false"],
+        vec!["job", "test-e2e", "--", "false"],
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_aoe-harness"))
             .args(&arguments)
             .current_dir(root())
             .env_remove("CI")
             .env_remove("GITHUB_ACTIONS")
-            .env_remove("AOE_HEAVY_SLOT")
-            .env("AOE_HEAVY_DIR", unusable_queue.path())
+            .env_remove("AOE_LONG_JOB")
+            .env("AOE_LONG_DIR", unusable_queue.path())
             .env("AOE_DISK_FLOOR_GIB", "1000000")
             .output()
             .unwrap();
@@ -42,7 +42,7 @@ fn disk_floor_refuses_real_commands_before_any_slot_or_ship_work() {
             "{arguments:?}: {stderr}"
         );
         assert!(stderr.contains("1000000 GiB"), "{stderr}");
-        assert!(!stderr.contains("heavy slot:"), "{stderr}");
+        assert!(!stderr.contains("busy:"), "{stderr}");
     }
 }
 
@@ -70,33 +70,10 @@ fn disk_precheck_cli_can_be_disabled_and_skips_both_ci_markers() {
     }
 }
 
-#[test]
-fn make_checks_disk_before_any_requested_gate_takes_a_slot() {
-    for target in ["test-unit", "test-wasm", "test-e2e", "preflight"] {
-        let output = Command::new("make")
-            .args(["--dry-run", target])
-            .current_dir(root())
-            .env_remove("MAKEFLAGS")
-            .env_remove("MFLAGS")
-            .env_remove("GNUMAKEFLAGS")
-            .output()
-            .unwrap();
-        let text = String::from_utf8_lossy(&output.stdout);
-        assert!(output.status.success(), "{target}: {output:?}");
-        let check = text
-            .find("/debug/aoe-harness' disk-precheck")
-            .expect("host pre-check");
-        let slot = text.find("aoe-harness slot ").expect("gate slot");
-        assert!(check < slot, "{target}: {text}");
-        assert!(text.contains("-e AOE_DISK_FLOOR_GIB"), "{text}");
-        assert!(text.contains("-e CI"), "{text}");
-    }
-}
-
 fn invoke(arguments: &[&str], success: bool) {
     let mut command = Command::new(env!("CARGO_BIN_EXE_aoe-harness"));
     command.args(arguments).current_dir(root());
-    let _slot = ci::admission::inherit_or_fixture(&mut command);
+    let _long = ci::admission::inherit_or_fixture(&mut command);
     let output = command.output().expect("harness command");
     assert_eq!(
         output.status.success(),

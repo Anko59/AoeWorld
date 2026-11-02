@@ -135,7 +135,7 @@ pub(crate) struct Options {
     pub(crate) video: Option<PathBuf>,
     /// The heavy-slot environment of this process, read once by `execute`.
     #[arg(skip)]
-    pub(crate) slots: Box<crate::slots::SlotEnv>,
+    pub(crate) slots: Box<crate::jobs::JobEnv>,
     /// The ship lock, let go during the review and taken again for the push.
     #[arg(skip)]
     pub(crate) lock: lock::Handoff,
@@ -163,7 +163,7 @@ impl Default for Options {
     }
 }
 
-pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Result<()> {
+pub(crate) fn execute(command: Commands, slots: &crate::jobs::JobEnv) -> Result<()> {
     let root = PathBuf::from(git::git(Path::new("."), &["rev-parse", "--show-toplevel"])?);
     match command {
         Commands::Duel => duel::execute(&root).map_err(Into::into),
@@ -217,7 +217,7 @@ pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Resul
                 None => println!("no evidence for {head}; run `make ship`"),
             }
             lock::print_status(&root)?;
-            crate::slots::print_status(&root, slots)
+            crate::jobs::print_status(&root, slots)
         }
         Commands::ReviewPr => review_pr::execute(&root),
         Commands::Issue => issues::issue(&root),

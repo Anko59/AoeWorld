@@ -29,7 +29,7 @@ mod stop;
 #[cfg(test)]
 mod tests;
 
-use crate::slots::SlotEnv;
+use crate::jobs::JobEnv;
 use context::{Access, Context};
 use role::Role;
 pub(crate) use role::{is_test as is_test_path, protected as protected_path};
@@ -129,10 +129,7 @@ pub(crate) enum Commands {
     },
 }
 
-pub(crate) fn execute(
-    command: Commands,
-    slots: &SlotEnv,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) fn execute(command: Commands, slots: &JobEnv) -> Result<(), Box<dyn std::error::Error>> {
     match command {
         Commands::AgentHook { runtime, event } => run(runtime, event, slots),
         Commands::Prune { home, keep } => {
@@ -143,7 +140,7 @@ pub(crate) fn execute(
     }
 }
 
-fn run(runtime: Runtime, event: Event, slots: &SlotEnv) -> Result<(), Box<dyn std::error::Error>> {
+fn run(runtime: Runtime, event: Event, slots: &JobEnv) -> Result<(), Box<dyn std::error::Error>> {
     let mut bytes = Vec::new();
     let read = std::io::stdin()
         .take(INPUT_LIMIT as u64 + 1)
@@ -181,7 +178,7 @@ pub(crate) fn respond(
     bytes: Option<&[u8]>,
     root: &Path,
     launched_role: Option<&str>,
-    slots: &SlotEnv,
+    slots: &JobEnv,
 ) -> Option<Value> {
     let input: Option<Input> = bytes.and_then(|b| serde_json::from_slice(b).ok());
     let Some(input) = input.filter(|i| event.accepts(&i.hook_event_name)) else {

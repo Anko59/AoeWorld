@@ -1,6 +1,6 @@
 mod dispatch;
 
-use crate::{agents, assets, e2e, gates, ledger, native, perf_scale, qa, review, ship, slots};
+use crate::{agents, assets, e2e, gates, jobs, ledger, native, perf_scale, qa, review, ship};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -70,10 +70,8 @@ enum Command {
     LoadStatus,
     /// Report delivery stages over the last TIMELINE_DAYS (default seven).
     Timeline,
-    /// Print the CPUs each heavy slot gives its containers (gates/heavy.json cores shared among its slots).
-    SlotCpus,
-    /// Run `argv` holding a heavy slot named `gate`: the make wrapper's steps always queue.
-    Slot {
+    /// Run a Make job, refusing immediately if another long job holds its lock.
+    Job {
         gate: String,
         #[arg(last = true, required = true)]
         argv: Vec<String>,
@@ -206,9 +204,9 @@ pub(crate) fn main() {
     let gate = matches.subcommand_name().unwrap_or_default().to_owned();
     let args = Args::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
     // The one read of the heavy-slot variables: every gate, hook and ship run below takes this.
-    let slots = slots::SlotEnv::process();
+    let slots = jobs::JobEnv::process();
     if let Err(error) = dispatch::run(args.command, &gate, &slots) {
         eprintln!("error: {error}");
-        std::process::exit(1);
+        std::process::exit(jobs::lock::exit_code(error.as_ref()));
     }
 }

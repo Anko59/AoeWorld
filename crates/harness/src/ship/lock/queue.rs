@@ -61,16 +61,6 @@ impl<T: Serialize + DeserializeOwned> Ticket<T> {
         })
     }
 
-    pub(crate) fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// The payloads of the tickets older than ours that are still alive, oldest first
-    /// (`None` when unreadable). Tickets left by dead processes are removed on the way.
-    pub(crate) fn ahead(&self) -> Result<Vec<Option<T>>> {
-        self.ahead_ranked(0, |_| 0)
-    }
-
     /// The payloads of the live tickets that go before ours, in queue order: those with a
     /// higher `rank` than `own`, then those of equal rank that are older. An unreadable
     /// payload ranks 0. Tickets left by dead processes are removed on the way.
@@ -126,20 +116,6 @@ pub(crate) fn alive<T: DeserializeOwned>(dir: &Path) -> Result<Vec<Option<T>>> {
         }
     }
     Ok(alive)
-}
-
-/// Whether the ticket `name` in `dir` exists and its owner is still alive.
-pub(crate) fn is_alive(dir: &Path, name: &str) -> bool {
-    if name.is_empty() || name.starts_with('.') || name.contains('/') {
-        return false;
-    }
-    let Ok(file) = File::open(dir.join(name)) else {
-        return false;
-    };
-    matches!(
-        Flock::lock(file, FlockArg::LockExclusiveNonblock),
-        Err((_, nix::errno::Errno::EWOULDBLOCK))
-    )
 }
 
 /// Ticket file names in arrival order (staging files are not tickets yet).

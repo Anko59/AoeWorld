@@ -6,12 +6,12 @@
 //! `make ship` takes.
 use crate::{
     gates::registry::Gate,
+    jobs::JobEnv,
     process::suspend::SIMULATED_GAP_FILE,
     ship::{
         lock::{self, Holder},
         run::{GateVerdict, Retry, run_gates_retrying},
     },
-    slots::SlotEnv,
 };
 use std::{
     fs,
@@ -73,7 +73,7 @@ fn role() {
             let gate: Gate = serde_json::from_value(serde_json::json!({
                 "id": "work", "command": GATE, "requires": [], "select": "fixture",
                 "evidence": "exit status", "suites": ["static"], "cadences": ["preflight"],
-                "budget_s": 60, "static": false, "heavy": false, "capabilities": [], "blocks": []
+                "budget_s": 60, "static": false, "long": false, "capabilities": [], "blocks": []
             }))
             .unwrap();
             let mut first = gate.clone();
@@ -87,8 +87,8 @@ fn role() {
             let results = run_gates_retrying(
                 &dir,
                 &gates,
-                &SlotEnv::default(),
-                crate::slots::hold,
+                &JobEnv::default(),
+                crate::jobs::hold,
                 &Retry::never(),
             );
             assert!(results.iter().all(|r| r.verdict == GateVerdict::Pass));
@@ -108,7 +108,7 @@ fn role() {
         }
         _ => {
             let _lock = take("waiter", PATIENCE);
-            let record = crate::slots::queue::read_json::<Holder>(&path).expect("record");
+            let record = crate::ship::lock::queue::read_json::<Holder>(&path).expect("record");
             println!("GAP {}", record.gap.expect("a gap"));
             println!("ACQUIRED");
         }

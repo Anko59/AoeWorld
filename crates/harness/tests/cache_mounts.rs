@@ -1,13 +1,21 @@
 use std::{fs, os::unix::fs::MetadataExt, process::Command};
 
-fn slot_dry_run(target: &str, external: &std::path::Path) -> String {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let output = Command::new("make")
-        .current_dir(root)
-        .env_remove("MAKEFLAGS")
-        .env_remove("MFLAGS")
-        .env_remove("GNUMAKEFLAGS")
-        .args(["--dry-run", target])
+mod make_fixture;
+
+fn job_environment(target: &str, external: &std::path::Path) -> String {
+    use std::os::unix::fs::PermissionsExt;
+    let workspace = workspace();
+    let binary = external.join("target/debug/aoe-harness");
+    fs::create_dir_all(binary.parent().unwrap()).unwrap();
+    fs::create_dir_all(external.join("cargo")).unwrap();
+    fs::create_dir_all(workspace.path().join("bin")).unwrap();
+    fs::write(&binary, "#!/bin/sh\nprintf '%s|%s|%s|%s\\n' \"$1\" \"$TMPDIR\" \"$HARNESS_CARGO_CACHE\" \"$HARNESS_TARGET_CACHE\"\n").unwrap();
+    fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
+    let docker = workspace.path().join("bin/docker");
+    fs::write(&docker, "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).unwrap();
+    let output = make(&workspace)
+        .arg(target)
         .arg(format!("TMPDIR={}", external.join("temp").display()))
         .arg(format!(
             "HARNESS_CARGO_CACHE={}",
@@ -17,52 +25,43 @@ fn slot_dry_run(target: &str, external: &std::path::Path) -> String {
             "HARNESS_TARGET_CACHE={}",
             external.join("target").display()
         ))
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                workspace.path().join("bin").display(),
+                std::env::var("PATH").unwrap()
+            ),
+        )
         .output()
         .unwrap();
-    assert!(output.status.success(), "{output:?}");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     String::from_utf8(output.stdout)
         .unwrap()
         .lines()
-        .find(|line| line.contains("aoe-harness slot "))
-        .expect("slot wrapper command")
+        .find(|line| line.starts_with("job|"))
+        .unwrap()
         .to_owned()
 }
 
 #[test]
-fn slot_wrapper_mounts_external_tmpdir_at_its_host_path_for_nested_make() {
+fn host_job_wrapper_preserves_external_tmpdir_and_caches_for_nested_make() {
     let external = tempfile::tempdir().unwrap();
     for target in ["test-unit", "test-harness", "test-wasm"] {
-        let command = slot_dry_run(target, external.path());
-        let path = external.path().join("temp");
-        assert!(
-            command.contains(&format!("-v {}:{}", path.display(), path.display())),
-            "{command}"
+        let actual = job_environment(target, external.path());
+        assert_eq!(
+            actual,
+            format!(
+                "job|{}|{}|{}",
+                external.path().join("temp").display(),
+                external.path().join("cargo").display(),
+                external.path().join("target").display()
+            )
         );
-    }
-}
-
-#[test]
-fn slot_wrapper_forwards_external_caches_to_nested_make() {
-    let external = tempfile::tempdir().unwrap();
-    for target in ["test-unit", "test-harness", "test-wasm"] {
-        let command = slot_dry_run(target, external.path());
-        assert!(
-            command.contains(&mount(
-                &external.path().join("cargo").display().to_string(),
-                &external.path().join("cargo").display().to_string(),
-            )),
-            "host cache path is needed by nested harness Docker argv: {command}"
-        );
-        for (variable, directory) in [
-            ("HARNESS_CARGO_CACHE", "cargo"),
-            ("HARNESS_TARGET_CACHE", "target"),
-        ] {
-            let value = external.path().join(directory);
-            assert!(
-                command.contains(&format!("-e '{variable}={}'", value.display())),
-                "nested Make loses {variable}: {command}"
-            );
-        }
     }
 }
 
@@ -171,42 +170,7 @@ fn workspace() -> tempfile::TempDir {
 }
 
 fn workspace_named(prefix: &str) -> tempfile::TempDir {
-    let workspace = tempfile::Builder::new().prefix(prefix).tempdir().unwrap();
-    fs::write(
-        workspace.path().join("Makefile"),
-        include_str!("../../../Makefile"),
-    )
-    .unwrap();
-    // Copy every included Make file so the fixture exercises the real recipes.
-    fs::create_dir(workspace.path().join("make")).unwrap();
-    for included in [
-        ("make/agents.mk", include_str!("../../../make/agents.mk")),
-        ("make/ship.mk", include_str!("../../../make/ship.mk")),
-        (
-            "make/qualification.mk",
-            include_str!("../../../make/qualification.mk"),
-        ),
-        ("make/heavy.mk", include_str!("../../../make/heavy.mk")),
-        ("make/phony.mk", include_str!("../../../make/phony.mk")),
-        ("make/help.mk", include_str!("../../../make/help.mk")),
-        ("make/assets.mk", include_str!("../../../make/assets.mk")),
-        ("make/geodata.mk", include_str!("../../../make/geodata.mk")),
-        ("make/release.mk", include_str!("../../../make/release.mk")),
-        ("make/sdk.mk", include_str!("../../../make/sdk.mk")),
-        (
-            "make/profiling.mk",
-            include_str!("../../../make/profiling.mk"),
-        ),
-    ] {
-        fs::write(workspace.path().join(included.0), included.1).unwrap();
-    }
-    let initialized = Command::new("git")
-        .args(["init", "--quiet"])
-        .current_dir(workspace.path())
-        .output()
-        .unwrap();
-    assert!(initialized.status.success(), "{initialized:?}");
-    workspace
+    make_fixture::workspace_named(prefix)
 }
 
 fn make(workspace: &tempfile::TempDir) -> Command {
@@ -296,7 +260,7 @@ fn focused_test_filter_reaches_docker_as_literal_data() {
     fs::write(&docker, "#!/bin/sh\nprintf '<%s>\\n' \"$@\"\n").unwrap();
     fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).unwrap();
     let filter = "can't match $literal";
-    // Exercise the steps directly: the wrapper's slot admission is audited separately.
+    // Exercise the steps directly: the host wrapper's admission is audited separately.
     let result = make(&workspace)
         .args([
             "test-harness-focused-steps",

@@ -1,5 +1,5 @@
 use super::unstored;
-use crate::slots::SlotEnv;
+use crate::jobs::JobEnv;
 use crate::{
     agents::Runtime,
     review::{self, Plan, Report, Tier},
@@ -149,7 +149,7 @@ fn standalone_review_accepts_the_same_local_base_and_runs_gates() {
             report.store(root).unwrap();
             Ok(report)
         },
-        &SlotEnv::default(),
+        &JobEnv::default(),
     )
     .unwrap();
     assert_eq!(report.base, parent);

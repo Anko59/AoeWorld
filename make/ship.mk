@@ -55,9 +55,9 @@ export HARNESS_DUEL_BASE HARNESS_DUEL_REVISION
 ship:
 	@.agents/hooks/harness.sh exec ship
 
-# Who holds the heavy slots and who queues for them (read-only; docs/gates.md).
-load-status:
-	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- load-status
+# Current long-job holder and MemAvailable (read-only; docs/gates.md).
+load-status: job-bootstrap
+	@'$(JOB_BINARY)' load-status
 
 ship-status:
 	@.agents/hooks/harness.sh exec ship-status
@@ -110,7 +110,7 @@ metrics:
 
 # Duration and sound of SHIP_VIDEO (read from the environment), for make ship.
 video-probe:
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm $(call BIND_MOUNT,$(SHIP_VIDEO),/video,readonly) "$$BROWSER_IMAGE" sh -c 'ffmpeg=$$(ls /ms-playwright/ffmpeg-*/ffmpeg-linux); $$ffmpeg -hide_banner -i /video 2>&1; true'
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm $(call BIND_MOUNT,$(SHIP_VIDEO),/video,readonly) "$$BROWSER_IMAGE" sh -c 'ffmpeg=$$(ls /ms-playwright/ffmpeg-*/ffmpeg-linux); $$ffmpeg -hide_banner -i /video 2>&1; true'
 
 ship-tools:
 	@docker build -q -f docker/ship-tools.Dockerfile -t "$$SHIP_TOOLS_IMAGE" . >/dev/null
@@ -165,26 +165,26 @@ dev-server-stop:
 
 # Injected readiness hooks need Chromium, but no game server or assets.
 .PHONY: test-showcase-browser test-showcase-browser-steps
-test-showcase-browser: browser-deps slot-bootstrap
-	@$(SLOT_RUN) test-e2e -- make --no-print-directory test-showcase-browser-steps
+test-showcase-browser: browser-deps job-bootstrap
+	@$(JOB_RUN) test-e2e -- make --no-print-directory test-showcase-browser-steps
 
 test-showcase-browser-steps:
 	@$(BROWSER_RUN) npx playwright test tests/showcase/ --project=webgpu --output=../.cache/showcase-browser-tests
 
 .PHONY: test-showcase test-showcase-steps
-test-showcase: slot-bootstrap
-	@$(SLOT_RUN) test-harness -- make --no-print-directory test-showcase-steps
+test-showcase: job-bootstrap
+	@$(JOB_RUN) test-harness -- make --no-print-directory test-showcase-steps
 
 test-showcase-steps:
 	@$(DOCKER_RUN) cargo test --locked -p aoe-harness showcase
 
 # Classify every worktree; APPLY=1 removes merged clean ones and idle target/ (docs/troubleshooting.md).
 .PHONY: clean-stale
-clean-stale: slot-bootstrap
+clean-stale: job-bootstrap
 	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' clean-stale $(if $(filter 1,$(APPLY)),--apply)
 
 # Read-only report using this checkout before the command reaches the dev judge.
 export TIMELINE_DAYS
 .PHONY: timeline
-timeline: slot-bootstrap
+timeline: job-bootstrap
 	@'$(HARNESS_TARGET_CACHE)/debug/aoe-harness' timeline

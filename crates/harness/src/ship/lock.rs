@@ -4,15 +4,16 @@
 //! when the holder exits however it exits, so a dead holder never leaves a stale
 //! lock. The holder written into the file is for messages only.
 //!
-//! Waiters are served through the ticket queue in `ship.lock.queue/` (`slots::queue`,
+//! Waiters are served through the ticket queue in `ship.lock.queue/` (`jobs::queue`,
 //! shared with the heavy slots): a waiter may take the main lock only when no ticket ahead
 //! of it is still locked. Ships back from review go ahead of plain waiters (`handoff`).
 //! Tickets are removed on release and on drop.
 use super::{Result, git};
 mod handoff;
+pub(crate) mod queue;
 mod stale;
 use crate::process::suspend;
-use crate::slots::queue::{self, Ticket, read_json, write_json};
+use crate::ship::lock::queue::{Ticket, read_json, write_json};
 pub(crate) use handoff::Handoff;
 use nix::fcntl::{Flock, FlockArg};
 use serde::{Deserialize, Serialize};

@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     gates::scopes::Snapshot,
+    jobs::JobEnv,
     process::{self, Cancellation, CaptureExit},
-    slots::SlotEnv,
 };
 use evidence::{EndpointProof, PrivateOutput};
 use std::time::Instant;
@@ -15,7 +15,7 @@ pub(super) struct Local<'a> {
     pub(super) cancellation: Cancellation,
     pub(super) started: Instant,
     pub(super) total: Duration,
-    pub(super) slots: &'a SlotEnv,
+    pub(super) slots: &'a JobEnv,
 }
 impl Runtime for Local<'_> {
     fn now_ms(&self) -> u64 {
@@ -229,7 +229,7 @@ fn make_fixed(
     root: &ExecutionRoot,
     gate: &GateId,
     deadline: Duration,
-    slots: &SlotEnv,
+    slots: &JobEnv,
 ) -> Receipt {
     let cargo = match crate::process::cargo_cache::home(source) {
         Ok(path) => path,
@@ -267,25 +267,20 @@ fn make_fixed(
     };
     // A heavy gate queues for its slot before its deadline clock starts. The slot directory is the
     // real checkout's, not the snapshot's: a snapshot's own Git directory is private to this run.
-    let slot = match crate::slots::hold_snapshot(
-        root.path(),
-        source,
-        gate.as_str(),
-        slots,
-        cancellation,
-    ) {
-        Ok(slot) => slot,
-        Err(error) => {
-            return Receipt {
-                exit: Exit::StartError,
-                reason: error.to_string(),
-                log: None,
-                triage: Some(triage::CommandObservation::NotStarted {
-                    reason: triage::Precondition::PreconditionUnavailable,
-                }),
-            };
-        }
-    };
+    let slot =
+        match crate::jobs::hold_snapshot(root.path(), source, gate.as_str(), slots, cancellation) {
+            Ok(slot) => slot,
+            Err(error) => {
+                return Receipt {
+                    exit: Exit::StartError,
+                    reason: error.to_string(),
+                    log: None,
+                    triage: Some(triage::CommandObservation::NotStarted {
+                        reason: triage::Precondition::PreconditionUnavailable,
+                    }),
+                };
+            }
+        };
     let slot_env = slot.env();
     let mut environment = vec![
         ("HARNESS_CARGO_CACHE", cargo),
@@ -389,7 +384,7 @@ pub(super) fn fixture_make(
         root,
         gate,
         deadline,
-        &SlotEnv::default(),
+        &JobEnv::default(),
     )
 }
 

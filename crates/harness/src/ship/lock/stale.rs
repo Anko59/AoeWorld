@@ -5,7 +5,7 @@
 use super::{Holder, open};
 use crate::{
     process::suspend::{self, Clock},
-    slots::queue::{read_json, write_json},
+    ship::lock::queue::{read_json, write_json},
 };
 use nix::{
     sys::signal::{Signal, kill},

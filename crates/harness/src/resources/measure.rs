@@ -29,14 +29,7 @@ pub(super) fn container(args: &[String]) -> Result<i32> {
     Ok(status.code().unwrap_or(137))
 }
 
-pub(super) fn available_kib(text: &str) -> Result<u64> {
-    text.lines()
-        .find_map(|line| line.strip_prefix("MemAvailable:"))
-        .and_then(|value| value.split_whitespace().next())
-        .ok_or("MemAvailable missing")?
-        .parse()
-        .map_err(Into::into)
-}
+pub(super) use super::policy::available_kib;
 
 pub(super) fn cgroup_directory(text: &str) -> Result<PathBuf> {
     let relative = text
@@ -163,7 +156,6 @@ pub(super) fn run(args: Vec<String>) -> Result<()> {
         let child = Command::new("make")
             .arg(&target)
             .current_dir(&root)
-            .env("AOE_RESOURCE_OBSERVE", "1")
             .stdout(Stdio::from(log.try_clone()?))
             .stderr(Stdio::from(log))
             .spawn()?;
