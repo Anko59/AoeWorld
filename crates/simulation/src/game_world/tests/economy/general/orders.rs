@@ -63,6 +63,57 @@ fn general_only_move_ends_with_the_next_army_order() {
 }
 
 #[test]
+fn solo_hold_ignores_visible_threats_until_march_or_stop() {
+    for threat in ["soldier", "overwhelming", "building", "wounded"] {
+        for resume_with_stop in [false, true] {
+            let (mut w, _) = setup();
+            let (ids, g) = muster(&mut w);
+            w.issue_general_move(PlayerId(0), g, at(140, 104)).unwrap();
+            if threat == "building" {
+                w.insert_building(
+                    PlayerId(1),
+                    BuildingKind::House,
+                    aoe_core::TileRect::from_xywh(110, 104, 2, 2),
+                    true,
+                )
+                .unwrap();
+            } else {
+                let count = if threat == "overwhelming" { 30 } else { 1 };
+                for n in 0..count {
+                    w.spawn_kind(PlayerId(1), UnitKind::Knight, at(110 + n % 4, 104))
+                        .unwrap();
+                }
+            }
+            if threat == "wounded" {
+                w.units[w.lookup[&g]].state.hp = 1;
+            }
+            for _ in 0..8 {
+                decide(&mut w);
+                assert_eq!(
+                    w.general_status(g).unwrap().state,
+                    GeneralState::Idle,
+                    "{threat}"
+                );
+                assert_eq!(w.general_work().orders, 0, "solo means no army orders");
+                for &id in &ids {
+                    let u = w.unit(id).unwrap();
+                    assert!(!u.moving && !u.planning && u.attack_target.is_none());
+                    assert!(w.formation(id).is_none());
+                }
+            }
+            if resume_with_stop {
+                w.issue_stop(PlayerId(0), g).unwrap();
+            } else {
+                w.issue_move(g, at(140, 104)).unwrap();
+            }
+            decide(&mut w);
+            assert_ne!(w.general_status(g).unwrap().state, GeneralState::Idle);
+            assert!(w.general_work().orders > 0);
+        }
+    }
+}
+
+#[test]
 fn general_only_move_rejects_other_owners_and_other_units() {
     let (mut w, _) = setup();
     let (ids, g) = muster(&mut w);
