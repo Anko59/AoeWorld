@@ -3,6 +3,7 @@ use super::{buildings::*, *};
 
 mod approach;
 mod continuation;
+mod crowd;
 mod eject;
 
 #[test]
