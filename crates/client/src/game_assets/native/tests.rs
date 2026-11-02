@@ -216,11 +216,40 @@ fn native_chunks_verify_payload_and_dimensions_before_the_frame_can_be_uploaded(
     assert_eq!(native.requests(&[1]).unwrap(), vec![0]);
     let mut tampered = bytes.clone();
     tampered[0] ^= 1;
-    assert!(native.accept(0, tampered).is_err());
+    assert_eq!(
+        native.accept(0, tampered).unwrap_err().as_string().unwrap(),
+        "invalid frame chunk at byte 0: native chunk length or hash mismatch"
+    );
     native.accept(0, bytes).unwrap();
     assert_eq!(native.decode(1).unwrap().unwrap(), planes);
     native.cells[0].size = [2, 1];
-    assert!(native.decode(1).is_err());
+    assert_eq!(
+        native.decode(1).unwrap_err().as_string().unwrap(),
+        "invalid frame at byte 0: compressed frame dimensions disagree"
+    );
+}
+
+#[wasm_bindgen_test]
+fn native_frame_validation_preserves_importer_error_context() {
+    let location = FrameLocation {
+        chunk: 0,
+        offset: 2,
+        length: 2,
+    };
+    let widened: aoe_assets::Error = location.slice(&[1, 2, 3]).unwrap_err().into();
+    match widened {
+        aoe_assets::Error::Format {
+            format,
+            offset,
+            detail,
+        } => {
+            assert_eq!(
+                (format, offset, detail.as_str()),
+                ("frame chunk", 0, "frame outside chunk")
+            );
+        }
+        _ => panic!("expected a contextual frame validation error"),
+    }
 }
 
 #[wasm_bindgen_test]
