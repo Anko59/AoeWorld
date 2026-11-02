@@ -30,6 +30,36 @@ fn alive(w: &GameWorld, ids: &[EntityId]) -> usize {
         .count()
 }
 
+#[test]
+fn soldier_sight_beyond_the_adoption_radius_triggers_fighting() {
+    for offset in [25, 30, 50] {
+        let (mut w, _) = setup();
+        let army = muster(&mut w, 12, 100, 100);
+        let g = soldier(&mut w, UnitKind::General, 104, 104);
+        let mut u = w.unit(army[0]).unwrap();
+        w.remove_unit(army[0]);
+        u.position = at(104 + offset, 104);
+        u.previous_position = u.position;
+        w.insert_map_unit(u, 0);
+        let enemy = w
+            .spawn_kind(PlayerId(1), UnitKind::Militia, at(105 + offset, 104))
+            .unwrap();
+        assert!(w.unit_visible_to(PlayerId(0), enemy));
+        decide(&mut w);
+        assert_eq!(
+            w.general_status(g).unwrap().state,
+            GeneralState::Fighting,
+            "soldier at {offset}"
+        );
+        assert!(w.general_work().orders > 0);
+        assert!(w.general_work().unit_visits <= 1024);
+        // Enlarging enemy discovery must not enlarge adoption.
+        let outsider = soldier(&mut w, UnitKind::Militia, 139, 110);
+        decide(&mut w);
+        assert_eq!(w.general_controller(outsider), None);
+    }
+}
+
 fn tiles(a: WorldPosition, b: WorldPosition) -> i64 {
     (i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2)).isqrt() / 1024
 }
