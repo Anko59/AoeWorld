@@ -12,6 +12,11 @@ impl GameWorld {
         changed: &mut Vec<EntityId>,
         work: &mut GeneralWork,
     ) {
+        // MoveAlone suspends army leadership until an army march or Stop.
+        // In particular, a new sighting must not start a fight or retreat.
+        if self.economy.generals.armies[&u.id].solo {
+            return;
+        }
         let members: Vec<_> = self.economy.generals.armies[&u.id]
             .members
             .iter()
@@ -23,12 +28,9 @@ impl GameWorld {
             .filter(|v| v.hp > 0 && !self.embarked(v.id))
             .collect();
         army.push(u);
-        // A solo General is the player's to move: orders go to the army alone.
-        let solo = self.economy.generals.armies[&u.id].solo;
         let ordered: Vec<_> = army
             .iter()
             .copied()
-            .filter(|v| !solo || v.id != u.id)
             .filter(|v| in_influence(u.position, v.position))
             .collect();
         let friendly: u64 = army
