@@ -45,6 +45,8 @@ HEAVY_DIR_EXTERNAL := $(if $(AOE_HEAVY_DIR),$(filter-out $(HEAVY_DIR_COVERED),$(
 HEAVY_DIR_MOUNT := $(if $(HEAVY_DIR_EXTERNAL),-v $(HEAVY_DIR_EXTERNAL):$(HEAVY_DIR_EXTERNAL))
 TMP_MOUNT := $(if $(TMPDIR),-v $(TMPDIR):/aoe-harness-tmp -e TMPDIR=/aoe-harness-tmp)
 ROOT_MOUNTS := $(GIT_MOUNT) $(HEAVY_DIR_MOUNT) $(call BIND_MOUNT,$(ROOT),$(ROOT)) $(CACHE_MOUNTS) $(COMPILE_CACHE_MOUNTS)
+RESOURCE_BINARY := $(ROOT)/.cache/resource-runner
+RESOURCE_OBSERVER = $(if $(AOE_RESOURCE_OBSERVE),$(RESOURCE_BINARY) --container)
 DOCKER_RUN := \
   docker run --rm --init \
   --label aoe.harness-boot-gap=$(AOE_HARNESS_BOOT_GAP) \
@@ -59,7 +61,7 @@ DOCKER_RUN := \
   -e AOE_SHIP_EVIDENCE \
   $(ROOT_MOUNTS) \
   -w $(ROOT) \
-  $(TOOL_IMAGE)
+  $(TOOL_IMAGE) $(RESOURCE_OBSERVER)
 .PHONY: \
   help \
   bootstrap \
@@ -202,6 +204,7 @@ recover:
 	@docker run --rm --init $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) cargo run --locked -p aoe-harness -- recover
 
 include make/profiling.mk
+include make/resources.mk
 include make/agents.mk make/ship.mk make/qualification.mk make/heavy.mk make/phony.mk make/help.mk make/assets.mk make/geodata.mk make/release.mk make/sdk.mk
 
 structure-check:

@@ -35,6 +35,7 @@ mod release_promotion;
 mod release_publish;
 mod release_stack;
 mod repo_policy;
+mod resources;
 mod review;
 mod sdk_python;
 mod ship;
