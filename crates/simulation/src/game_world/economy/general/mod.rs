@@ -3,6 +3,7 @@ use crate::{GameUnit, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, WorldPosition};
 use std::collections::{BTreeMap, BTreeSet};
 mod decisions;
+mod fight;
 mod formation;
 mod hash;
 mod orders;
@@ -63,6 +64,8 @@ pub(crate) struct Army {
     pub training: bool,
     /// Unit-mix sliders per role; a role at zero is never bought.
     pub mix: [u8; 5],
+    /// The enemy each fighting group of `fight::FIGHT_GROUP` soldiers is sent against.
+    pub fight: [Option<EntityId>; fight::FIGHT_GROUPS],
     stances: [Option<StanceOverride>; GENERAL_ARMY_LIMIT + 1],
 }
 #[derive(Debug, Default)]
@@ -138,6 +141,7 @@ impl GameWorld {
                 solo: false,
                 training: false,
                 mix: DEFAULT_MIX,
+                fight: [None; fight::FIGHT_GROUPS],
                 stances: [None; GENERAL_ARMY_LIMIT + 1],
             },
         );

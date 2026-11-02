@@ -1,5 +1,4 @@
 use super::{survey::Survey, *};
-use aoe_core::CombatStance;
 fn strength(u: GameUnit) -> u64 {
     let s = crate::unit_combat(u.kind);
     u64::from(u.hp) * u64::from(s.attack.max(1)) * 200
@@ -78,13 +77,21 @@ impl GameWorld {
             GeneralState::Marching
         };
         let state = a.state;
+        // A finished fight with no march order regroups around the General.
+        let regroup = (old_state == GeneralState::Fighting
+            && state != GeneralState::Fighting
+            && a.destination.is_none())
+        .then_some(u.position);
         let destination = if state == GeneralState::Retreating {
             Some(a.home)
         } else {
-            a.destination
+            a.destination.or(regroup)
         };
         if old_state != state {
             a.routed = None;
+        }
+        if state != GeneralState::Fighting {
+            a.fight = [None; fight::FIGHT_GROUPS];
         }
         self.reconcile_general_stances(u.id, state, destination);
         if ordered.is_empty() {
@@ -103,56 +110,6 @@ impl GameWorld {
             }
             return;
         }
-        // Class, wounded fraction, distance, then entity id.
-        let target = survey
-            .enemies
-            .iter()
-            .min_by_key(|v| {
-                let priority = match v.kind {
-                    k if role(k) == Some(3) => 0,
-                    UnitKind::Monk => 1,
-                    UnitKind::General | UnitKind::Vassal => 2,
-                    k if role(k) == Some(1) => 3,
-                    _ => 4,
-                };
-                (
-                    priority,
-                    u32::from(v.hp) * 1000 / u32::from(v.max_hp),
-                    distance(v.position, u.position),
-                    v.id,
-                )
-            })
-            .map(|v| v.id);
-        let building = survey.buildings.first().copied();
-        let Some(a) = self.economy.generals.armies.get_mut(&u.id) else {
-            return;
-        };
-        a.routed = None;
-        let start = a.micro_after % ordered.len();
-        a.micro_after = (start + 16).min(start + ordered.len()) % ordered.len();
-        for n in 0..ordered.len().min(16) {
-            let v = ordered[(start + n) % ordered.len()];
-            work.orders += 1;
-            if v.hp * 3 < v.max_hp {
-                let home = self.economy.generals.armies[&u.id].home;
-                self.general_override_stance(
-                    u.id,
-                    v.id,
-                    CombatStance::NoAttack,
-                    stances::Reason::Wounded,
-                );
-                let _ = self.issue_move(v.id, home);
-            } else {
-                let siege = role(v.kind) == Some(3);
-                if let Some(to) = if siege {
-                    building.or(target)
-                } else {
-                    target.or(building)
-                } {
-                    let _ = self.issue_attack(u.player, v.id, to);
-                }
-            }
-            changed.push(v.id);
-        }
+        self.general_fight(u, &ordered, &survey, changed, work);
     }
 }

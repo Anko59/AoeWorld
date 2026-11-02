@@ -19,6 +19,9 @@ impl Economy {
             for n in [a.scan.0, a.scan.1, a.micro_after] {
                 h.update(&(n as u64).to_le_bytes());
             }
+            for target in a.fight {
+                h.update(&target.map_or(u32::MAX, |id| id.0).to_le_bytes());
+            }
             for p in [a.destination, a.routed] {
                 h.update(&[u8::from(p.is_some())]);
                 if let Some(p) = p {
