@@ -31,6 +31,9 @@ impl GameWorld {
                 .cmp(&((counts[b] + 1) * weights[a]))
                 .then(a.cmp(&b))
         });
+        let Some(centre) = self.unit(id).map(|u| u.position) else {
+            return;
+        };
         let mut visited = 0;
         // Sample each production index separately: economic buildings and a
         // large Barracks count must not hide Ranges, Stables or Workshops.
@@ -46,6 +49,10 @@ impl GameWorld {
         .inspect(|_| visited += 1)
         .filter(|b| {
             b.is_complete() && b.hp > 0 && b.training_queue.is_empty() && b.research.is_none()
+        })
+        .filter(|b| {
+            super::super::placement::position(b.footprint.min)
+                .is_ok_and(|p| in_influence(centre, p))
         })
         .map(|b| (b.id, b.kind))
         .collect();

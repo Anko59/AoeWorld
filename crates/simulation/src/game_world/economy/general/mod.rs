@@ -12,6 +12,8 @@ mod survey;
 use stances::StanceOverride;
 
 pub const GENERAL_ARMY_LIMIT: usize = 100;
+/// Tiles around a General within which he commands soldiers and picks buildings.
+pub const GENERAL_INFLUENCE_TILES: i64 = 50;
 pub const GENERAL_CADENCE: u64 = 10;
 pub const GENERAL_ADMISSIONS: usize = 8;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -78,6 +80,10 @@ pub(super) fn role(kind: UnitKind) -> Option<usize> {
         UnitKind::Scout | UnitKind::LightCavalry | UnitKind::Hussar => 4,
         _ => return None,
     })
+}
+/// Whether `p` lies inside a General's influence sphere centred on `centre`.
+pub(super) fn in_influence(centre: WorldPosition, p: WorldPosition) -> bool {
+    distance(centre, p) <= (GENERAL_INFLUENCE_TILES * 1024).pow(2)
 }
 pub(super) fn distance(a: WorldPosition, b: WorldPosition) -> i64 {
     let x = i64::from(a.x) - i64::from(b.x);

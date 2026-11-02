@@ -29,6 +29,13 @@ Queue reservations route new recruits directly to their General, regardless of
 spawn distance; cancellation, building destruction and General death retire
 reservations. Existing manual queues and rallies remain ordinary gameplay.
 
+## Influence sphere
+
+A General's influence reaches 50 tiles (`GENERAL_INFLUENCE_TILES`). He gives no
+march, fight, retreat or regroup order to a soldier beyond it (the soldier keeps
+its slot and is commanded again once back inside), and he buys units only from
+production buildings whose footprint is within it.
+
 ## Orders
 
 Right-clicking ground leads the army (above). The **General only** button or

@@ -4,6 +4,7 @@ use crate::{Age, GeneralState, Stockpile};
 mod appearance;
 mod movement;
 mod orders;
+mod sphere;
 mod stances;
 mod targets;
 
