@@ -78,7 +78,7 @@ fn unexplored_placement_rejection_has_current_golden_wire() {
         applied_tick: Tick(4),
     };
     let bytes = encode_server(&ack).unwrap();
-    assert_eq!(bytes, [3, 3, 32, 4]);
+    assert_eq!(bytes, [3, 3, 31, 4]);
     assert_eq!(decode_server(&bytes).unwrap(), ack);
 }
 

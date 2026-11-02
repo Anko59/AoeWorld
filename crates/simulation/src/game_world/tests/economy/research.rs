@@ -19,12 +19,6 @@ fn feudal(world: &mut GameWorld) {
 
 fn rich(world: &mut GameWorld) {
     set_stock(world, 1000, 1000, 1000, 1000);
-    world
-        .economy
-        .players
-        .get_mut(&PlayerId(0))
-        .unwrap()
-        .population_cap = 50;
 }
 
 /// Build and finish a building of `kind` with its top-left tile at `origin`.

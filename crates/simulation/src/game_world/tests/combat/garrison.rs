@@ -87,7 +87,7 @@ fn garrison_capacity_rules_and_population_are_authoritative() {
         );
         assert_eq!(
             world.player_economy(PlayerId(0)).unwrap().population_used,
-            capacity as u16 + if kind == BuildingKind::Castle { 1 } else { 2 }
+            capacity as u32 + if kind == BuildingKind::Castle { 1 } else { 2 }
         );
         assert_eq!(
             world.issue_ungarrison(PlayerId(1), building, None),

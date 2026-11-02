@@ -111,15 +111,11 @@ the same value in `X-AoeWorld-Admin-Token`.
 {"flat": {"tiles_per_side": 500, "seed": 3}, "slots": ["human", "ai", "ai"]}
 ```
 
-Optional match rules (both validated, defaults keep the shipped game):
-
-* `"population_cap": 5..5000` (default 1000): the ceiling on any player's
-  population; the world's capacities are sized per seat from it (see
-  [capacities](scale/capacity.md)). 100 players x 1,000 = 100,000 units.
-* `"start_units": {"villagers": n, "militia": m}`: extra units every player
-  starts with beside the standard kit, placed around the village. A scenario
-  hook for tests and [scale proofs](scale/match.md); the response reports
-  `population_cap` and `seeded_units`.
+Optional `"start_units": {"villagers": n, "militia": m}` adds units beside
+standard kits for tests and [scale proofs](scale/match.md). The sum must be at
+most 65,532 per seat to bound startup allocation; it never limits later
+training. The response reports `seeded_units`. Population has no gameplay cap.
+[Capacities](scale/capacity.md) documents independent storage and view bounds.
 
 `GET /match/stats?since=n` (same secret) returns the per-tick records of the
 server (`[tick, total_us, sim_us, late_us, orders, units, missed, planning_us]`)
@@ -163,8 +159,7 @@ example AI without any command line. `make dev` builds the wheel, installs it
 into `target/dev-ai/site` and runs the server in the SDK image with
 `AOE_AI_COMMAND="python3 -m aoe_ai host"`. After the map job, the browser calls
 `POST /skirmish {"map_hash", "opponents"}` (controller token): the server
-builds the match (slot 0 human, the rest AI, standard starts, population cap
-200), swaps it in and starts one host process per 13 AI slots, handing each
+builds the match (slot 0 human, the rest AI, standard starts), swaps it in and starts one host process per 13 AI slots, handing each
 its tokens on stdin. `GET /skirmish` reports the phase (`opening_map`,
 `placing_villages`, `starting_ai`, `connecting_ai`, `ready`, `failed`,
 `cancelled`, `stopped`) with measured counts. The hosts are killed by
@@ -315,13 +310,12 @@ attack state, counters):
 | `play/buildorder.py` | the plan: stage (Dark, advance, Feudal), when to Loom and click Feudal Age, which buildings and upgrades come next |
 | `play/research.py` | executes it: Loom, saving 500 food and Feudal Age (the Town Center queue drains first), then the upgrades |
 | `play/economy.py` | villagers without pause, shares of food, wood, gold and stone, sheep then berries then deer and boar, farms when the land runs dry |
-| `play/constructor.py` | houses before the cap, Lumber Camp and Mill, camps beside far resources, Barracks, Archery Range, Blacksmith |
+| `play/constructor.py` | Lumber Camp and Mill, camps beside far resources, Barracks, Archery Range, Blacksmith |
 | `play/military.py` | spearman : archer : skirmisher = 4 : 3 : 3 from Feudal Age on, rally point |
 | `play/scouting.py` | the starting area, then the circle round the map centre through home (far side first), then wider rings |
 | `play/combat.py` | defend the base (villagers next to raiders walk home when outnumbered), attack the nearest known enemy building at 12 units, retreat below 40% |
 
-The build order: villagers from the first second, a House before the cap, a
-Lumber Camp and a Mill at 8 villagers (they also satisfy the age's two-kinds
+The build order: villagers from the first second, a Lumber Camp and a Mill at 8 villagers (they also satisfy the age's two-kinds
 rule), Loom at 10, and at 21 villagers with those standing it stops training
 villagers, saves 500 food and researches Feudal Age. While the age researches
 it raises the Barracks; in Feudal Age the Archery Range, the Blacksmith, Double-Bit
@@ -459,8 +453,8 @@ economy and building views built once per tick; idle `Tick` messages dropped
 for AI slots (a heartbeat every half second); AI fog views at most once a
 second; one Rust runtime with two network threads for every connection of a
 Python process; `Fleet.wait` serving all bots from one Python thread. Capacities
-are sized per seat: 1,024 buildings and one gatherer, builder and hunter per
-unit of population for every seat ([capacities](scale/capacity.md)). A refused
+are sized per seat: 8,192 buildings and 65,536 gatherer, builder, hunter and projectile
+slots per seat ([capacities](scale/capacity.md)). A refused
 order says why: `REJECTED_WORLD_LIMIT` when a world capacity is reached,
 `REJECTED_ORDER_TOO_LARGE` for an oversized group or wall, and
 `REJECTED_QUEUE_FULL` only for a full order queue.

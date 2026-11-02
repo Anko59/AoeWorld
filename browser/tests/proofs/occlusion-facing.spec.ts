@@ -202,7 +202,6 @@ async function occlusionFixture(page: Page) {
           100,
           ...uint(200),
           3,
-          5,
           ...darkAgeState,
           ...marketPrices,
           1,

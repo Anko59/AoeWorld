@@ -1,7 +1,7 @@
-//! Match rules a host may set: the population ceiling and a start-unit hook.
+//! Match startup rules. Ordinary training has no population ceiling.
 use super::MAX_MATCH_SLOTS;
 use aoe_core::{EntityId, TileCoord, WorldPosition};
-use aoe_protocol::{MAX_MATCH_POPULATION, MAX_POPULATION};
+use aoe_protocol::MAX_SUBSCRIBED_UNITS;
 use aoe_simulation::{GameWorld, GameWorldError, WorldLimits};
 use serde::Deserialize;
 
@@ -13,19 +13,15 @@ pub enum MatchError {
     SlotCount,
     #[error("map has no land start for slot {0}; use a larger or less watery map")]
     NoStart(usize),
-    #[error(
-        "population_cap must be between 5 and {}",
-        aoe_protocol::MAX_MATCH_POPULATION
-    )]
-    PopulationCap,
-    #[error("start_units may not exceed the population cap")]
+    #[error("start_units exceeds the bounded startup memory budget")]
     StartUnits,
     #[error(transparent)]
     World(#[from] GameWorldError),
 }
 
-/// A population ceiling below this cannot hold even a Town Center's housing.
-const MIN_POPULATION: u16 = 5;
+/// Startup extras must leave room for the standard four-unit kit in the
+/// bounded initial view. This constrains setup requests, never later training.
+const MAX_START_UNITS: u64 = MAX_SUBSCRIBED_UNITS as u64 - 4;
 /// Tiles around a village searched for places to put its start units.
 const SEED_RADIUS: i32 = 60;
 /// Tiles at the village's centre kept clear of start units.
@@ -34,8 +30,7 @@ const SEED_HOLE: i32 = 4;
 /// Extra units each player starts with, around the village. A scenario hook
 /// for tests and scale proofs: the units are ordinary villagers and militia
 /// (one militia in `villagers / militia + 1` placed units when both are set),
-/// placed on free ground without cost. They count toward population, so a
-/// player above the ceiling trains nothing until it has housing.
+/// placed on free ground without cost. They count toward population.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct StartUnits {
@@ -45,42 +40,22 @@ pub struct StartUnits {
     pub militia: u32,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct MatchRules {
-    /// The most population any player may reach, however many houses stand.
-    pub population_cap: u16,
     pub start_units: StartUnits,
     /// Seeds which village each slot gets (and the human's seat in it). `None`
     /// keeps the canonical layout; a hosted match gets a fresh seed.
     pub seed: Option<u64>,
 }
 
-impl Default for MatchRules {
-    fn default() -> Self {
-        Self {
-            population_cap: MAX_POPULATION,
-            start_units: StartUnits::default(),
-            seed: None,
-        }
-    }
-}
-
 impl MatchRules {
-    pub fn new(
-        population_cap: Option<u16>,
-        start_units: Option<StartUnits>,
-    ) -> Result<Self, MatchError> {
-        let population_cap = population_cap.unwrap_or(MAX_POPULATION);
-        if !(MIN_POPULATION..=MAX_MATCH_POPULATION).contains(&population_cap) {
-            return Err(MatchError::PopulationCap);
-        }
+    pub fn new(start_units: Option<StartUnits>) -> Result<Self, MatchError> {
         let start_units = start_units.unwrap_or_default();
         let total = u64::from(start_units.villagers) + u64::from(start_units.militia);
-        if total > u64::from(population_cap) {
+        if total > MAX_START_UNITS {
             return Err(MatchError::StartUnits);
         }
         Ok(Self {
-            population_cap,
             start_units,
             seed: None,
         })
@@ -94,9 +69,9 @@ impl MatchRules {
         }
     }
 
-    /// World capacities for `players` seats under this ceiling.
+    /// World storage budgets for `players` seats.
     pub(super) fn limits(&self, players: usize) -> WorldLimits {
-        WorldLimits::for_match(players, self.population_cap)
+        WorldLimits::for_match(players)
     }
 }
 

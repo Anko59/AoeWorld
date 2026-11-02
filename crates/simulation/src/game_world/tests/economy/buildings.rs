@@ -1,9 +1,9 @@
-//! The building rules table, placement, refunds, housing, drop-off, barracks
+//! The building rules table, placement, refunds, population, drop-off, barracks
 //! and the outpost.
 use super::*;
 
 mod finalization;
-use crate::{BUILDING_RULES, ConstructionState, MAX_POPULATION, trainable_units};
+use crate::{BUILDING_RULES, ConstructionState, trainable_units};
 
 pub(super) fn set_stock(world: &mut GameWorld, food: u32, wood: u32, gold: u32, stone: u32) {
     let stock = &mut world
@@ -119,8 +119,11 @@ fn foundation_is_charged_on_placement_and_starts_at_zero_progress() {
     assert_eq!((house.footprint.width(), house.footprint.height()), (2, 2));
     assert_eq!((house.hp, house.max_hp), (1, 550));
     assert!(!world.tile_passable(at(100, 100)) && !world.tile_passable(at(101, 101)));
-    // The housing is not counted before completion.
-    assert_eq!(world.player_economy(PlayerId(0)).unwrap().population_cap, 5);
+    // A foundation never changes the count: four starting units plus this builder.
+    assert_eq!(
+        world.player_economy(PlayerId(0)).unwrap().population_used,
+        5
+    );
 }
 
 #[test]
@@ -330,7 +333,7 @@ fn cancelling_after_progress_refunds_only_the_undone_share() {
 }
 
 #[test]
-fn houses_raise_the_population_cap_by_five_up_to_one_thousand() {
+fn many_houses_can_complete_without_changing_the_population_count() {
     let (mut world, _, center) = village();
     set_stock(&mut world, 10000, 10000, 0, 0);
     world
@@ -351,11 +354,13 @@ fn houses_raise_the_population_cap_by_five_up_to_one_thousand() {
         .unwrap();
     finish(&mut world, house, 700);
     let player = world.player_economy(PlayerId(0)).unwrap();
-    assert_eq!(player.population_cap, 10);
+    assert_eq!(player.population_used, world.unit_count() as u32);
+    let before = player.population_used;
     world
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
-    // 205 houses would give 1030; the current ceiling is 1000.
+    // Even a large housing build changes only the buildings, not the count
+    // of people. The additional builders themselves do count.
     let mut houses = vec![house];
     for index in 0..204 {
         let (x, y) = (110 + (index % 11) * 3, 110 + (index / 11) * 3);
@@ -374,9 +379,8 @@ fn houses_raise_the_population_cap_by_five_up_to_one_thousand() {
             .all(|id| world.building(*id).unwrap().is_complete())
     );
     let player = world.player_economy(PlayerId(0)).unwrap();
-    assert_eq!(player.population_cap, MAX_POPULATION);
-    // Losing a completed house (not possible yet) would use the same recount;
-    // a cancelled foundation never changed the cap.
+    assert_eq!(player.population_used, before + 204);
+    // Cancelling a foundation does not add or remove people either.
     let extra = villager_at(&mut world, 200, 200);
     let spare = world
         .issue_build(
@@ -389,8 +393,8 @@ fn houses_raise_the_population_cap_by_five_up_to_one_thousand() {
         .unwrap();
     world.issue_cancel_construction(PlayerId(0), spare).unwrap();
     assert_eq!(
-        world.player_economy(PlayerId(0)).unwrap().population_cap,
-        MAX_POPULATION
+        world.player_economy(PlayerId(0)).unwrap().population_used,
+        before + 205
     );
 }
 

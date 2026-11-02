@@ -146,8 +146,8 @@ async fn headless_village_gathers_wood_deposits_and_trains_a_villager() {
                             }
                             if player.population_used != population {
                                 let line = format!(
-                                    "tick {tick}: villager trained, population {} / {}",
-                                    player.population_used, player.population_cap
+                                    "tick {tick}: villager trained, population {}",
+                                    player.population_used
                                 );
                                 println!("{line}");
                                 log.push(line);

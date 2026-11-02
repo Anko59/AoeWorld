@@ -133,7 +133,6 @@ pub(super) fn build(o: &Parameters) -> Result<(GameWorld, Armies), BoxError> {
         hunters: 1 << 20,
         animals: 1 << 20,
         projectiles: 1 << 20,
-        population: 2_000,
     });
     world.set_fog_disabled(o.fog_off);
     let armies = deploy(&mut world, o)?;

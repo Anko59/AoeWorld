@@ -25,7 +25,6 @@ struct Player {
     status: &'static str,
     age: String,
     population: usize,
-    pop_cap: u16,
     units: BTreeMap<String, usize>,
     buildings: BTreeMap<String, usize>,
     resources: Value,
@@ -72,7 +71,6 @@ pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
             ..Player::default()
         });
         player.age = format!("{:?}", economy.age);
-        player.pop_cap = economy.population_cap;
         let resources = economy.stockpile;
         player.resources = json!({"food": resources.food, "wood": resources.wood,
                                   "gold": resources.gold, "stone": resources.stone});

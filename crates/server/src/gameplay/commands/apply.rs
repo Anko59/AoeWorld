@@ -217,7 +217,6 @@ pub(in crate::gameplay) fn apply(
         Err(E::WrongUnitKind) => CommandResult::RejectedWrongUnitKind,
         Err(E::InvalidResource) => CommandResult::RejectedInvalidResource,
         Err(E::InsufficientFood) => CommandResult::RejectedInsufficientFood,
-        Err(E::PopulationCap) => CommandResult::RejectedPopulationCap,
         Err(E::TrainingQueueFull) => CommandResult::RejectedTrainingQueueFull,
         Err(E::NotBuildable) => CommandResult::RejectedNotBuildable,
         Err(E::RequirementMissing) => CommandResult::RejectedRequirementMissing,

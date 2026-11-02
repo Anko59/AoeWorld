@@ -58,14 +58,11 @@ class MilitaryManager:
                 continue
             if building.queue_length >= 2 or building.researching is not None or building.kind in ctx.draining:
                 continue
-            if ctx.free_population() <= 0:
-                return
             choice = self.pick(ctx, building, have, mix)
             if choice is None:
                 continue
             ctx.spend(unit_cost(choice))
             ctx.order("train", building.id, choice)
-            ctx.queued += 1
             bucket = {UnitKind.MILITIA: UnitKind.SPEARMAN, UnitKind.PIKEMAN: UnitKind.SPEARMAN, UnitKind.CROSSBOWMAN: UnitKind.ARCHER}.get(choice, choice)
             have[bucket] += 1
             ctx.board.bump("army_queued")

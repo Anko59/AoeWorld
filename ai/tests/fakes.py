@@ -43,10 +43,10 @@ def animal(id, tile, kind=AnimalKind.SHEEP, food=100):
               task=AnimalTask.IDLE, hp=7)
 
 
-def economy(food=200, wood=200, gold=100, stone=200, population=4, cap=10, age=Age.DARK, researched=()):
+def economy(food=200, wood=200, gold=100, stone=200, population=4, age=Age.DARK, researched=()):
     return NS(
-        food=food, wood=wood, gold=gold, stone=stone, population=population, population_cap=cap,
-        age=age, researched=list(researched), free_population=cap - population,
+        food=food, wood=wood, gold=gold, stone=stone, population=population,
+        age=age, researched=list(researched),
         has_researched=lambda tech: tech in researched,
     )
 

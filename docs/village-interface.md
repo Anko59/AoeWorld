@@ -37,9 +37,9 @@ Click the Town Center footprint (or press H to select and center it), then press
 Q or click Train Villager. The cost is fifty food and the authoritative training
 time is twenty-five seconds.
 The panel shows the queue and current progress. Cancel removes the active
-entry, refunds food and releases its reserved population slot. Refusals explain
-food, population, ownership and resource failures in plain words. The current
-rules start three villagers plus the scout, with five total population slots.
+entry and refunds food. Refusals explain ownership and resource failures in
+plain words. The current rules start three villagers plus the scout. The HUD
+shows the living population as one count; housing never limits training.
 
 Maps are created only through Single Player Game Setup. Menu offers Resume,
 disabled Settings and Quit to Main Menu. Retained requests reuse their original

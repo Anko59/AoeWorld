@@ -2,7 +2,7 @@
 
 The Vassal is an original AoeWorld unit using the licensed King graphic.
 A completed Castle in Castle Age trains one for 1,000 food and 1,000 gold
-in 60 game seconds, using one population slot. A queued Vassal reserves the
+in 60 game seconds, adding one living unit. A queued Vassal reserves the
 Castle too. Cancellation refunds the full cost; death permits a replacement.
 
 Its home is the Castle that trained it. A Vassal can shelter only there.
@@ -12,8 +12,7 @@ soft separation also enforce the bound, including detours. Transports and
 formations cannot carry it outside. If the Castle is destroyed, a surviving
 Vassal retains that home's location and cannot activate another Castle.
 
-The default population ceiling is 1,000 per player. Houses provide five slots
-and completed Castles twenty until that ceiling; queued units reserve slots.
+Population is uncapped; Houses and Castles never gate ordinary training.
 [World capacities](../scale/capacity.md) records the matching storage bounds
 and the distinction between capacity and performance qualification.
 
@@ -51,14 +50,11 @@ reported "20 managed" confusion.
 
 **Training.** Each complete Town Center in the territory with an empty queue
 trains one villager per pass (two orders per pass per Vassal) when the player
-has 50 food and the population cap allows, until residents (every living
-villager in the territory, sheltered ones included) plus queued villagers reach
-100. It stops, and the HUD says why, when: the census is incomplete (more than
-1,024 units in the circle), residents+queued is 100, no Town Center lies in the
-territory, population (cap) is reached, or food is short. Population is the
-usual reason in a large crowd: only an idle worker used to build the needed
-House, so a fully busy Vassal never built one. Now, when the cap is within two
-slots, the first unloaded managed worker builds a House.
+has 50 food, until residents (every living villager in the territory, sheltered
+ones included) plus queued villagers reach 100. It stops, and the HUD says why,
+when: the census is incomplete (more than 1,024 units in the circle),
+residents+queued is 100, no Town Center lies in the territory, or food is short.
+Population is uncapped, so no House is built for room.
 
 **Stalls.** Every pass the Vassal checks its managed workers. One whose task is
 Moving but whose position has not changed for 8 seconds is stopped and
@@ -75,7 +71,7 @@ Budgets and limits:
 The 100-villager limit counts living residents, including manual workers and
 sheltered villagers, plus queued villagers in every domain Town Center. Training
 uses complete TCs with their spawn perimeter and rally inside the domain; it
-respects the player's food and all reserved population slots. Deaths permit
+respects the player's food. Deaths permit
 replacements. Each domain can directly manage at most 100 workers.
 
 Jobs use the kingdom's shared stocks and actual deliveries, with default
@@ -90,8 +86,8 @@ canonical hash, including income earned before a Vassal becomes active.
 
 Idle workers and unloaded managed gatherers respond to those kingdom needs.
 Carried loads finish their ordinary delivery first, and a refused replacement
-keeps the current productive job. Training and essential housing retain their
-normal admission before productive reassignment; optional maintenance follows.
+keeps the current productive job. Training retains its normal admission before
+productive reassignment; optional maintenance follows.
 Known resources within ten tiles are preferred. A local miss can also probe a
 completed matching drop-off, rotating its building ID between queries. A
 retained search visits eight-tile blocks outward from the domain centre, so
@@ -108,8 +104,7 @@ cells around Mills and Town Centers; full clusters expand with another Mill.
 Farm placement resumes across passes within the same 32-site budget, and
 exhausting natural-resource searches does not prevent farming with the
 remaining order and placement budget. The manager helps unfinished economic
-foundations, prepays two normal Mill reseeds, and adds Houses when two or fewer
-housing slots remain. Every cost, exploration check, placement
+foundations and prepays two normal Mill reseeds. Every cost, exploration check, placement
 rule and build/train time is the ordinary simulation rule.
 
 Adopted farmers also build a nearby Mill for an old distant plot when a legal
@@ -161,8 +156,7 @@ outside (four-times clock). Garrison the first to watch it adopt every farmer,
 then the second to see the territory split with a double line.
 
 `POST /maps/reset?scenario=vassal-farming` prepares a resource-free plot with
-24 idle villagers, one Mill, a Vassal entering its Castle, and enough wood and
-housing. The 20-times clock makes normal farm construction and reseeding
+24 idle villagers, one Mill, a Vassal entering its Castle, and enough wood. The 20-times clock makes normal farm construction and reseeding
 visible in a short capture; it does not change the manager's work budgets.
 
 `POST /maps/reset?scenario=vassal-kingdom` prepares twenty busy farmers, nearby

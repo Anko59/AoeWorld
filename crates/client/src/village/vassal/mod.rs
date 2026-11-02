@@ -76,7 +76,6 @@ fn describe(report: Option<aoe_protocol::VassalReport>) -> String {
         Full => "waiting: 100-villager limit reached",
         Census => "waiting: too many units nearby to count",
         NoTownCenter => "waiting: no Town Center in its territory",
-        Population => "waiting: population cap (building Houses)",
         Food => "waiting: not enough food",
     };
     format!(

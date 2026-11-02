@@ -111,7 +111,7 @@ test("villager cursors use composed passability for grass, water, cliffs and bui
   await gameAssets(page);
   await fiveVillagerFixture(page);
   await page.goto("/?play=1");
-  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(page.locator("#population")).toHaveText("6");
   await activateSyntheticMap(page);
   await page.evaluate(() => {
     location.hash = "x=8188.5&y=8196.5&zoom=.5";

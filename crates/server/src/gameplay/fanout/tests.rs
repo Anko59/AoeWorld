@@ -83,8 +83,8 @@ async fn owned_buildings_stream_past_one_message_and_reconnect_without_oversized
     use aoe_protocol::{GameplayServerMessage as M, MAX_ECONOMY_BUILDINGS, encode_gameplay_server};
     use aoe_simulation::WorldLimits;
     let mut world = GameWorld::new(WorldConfig::new(1024, 1024, Seed(0)).unwrap()).unwrap();
-    assert!(WorldLimits::for_match(128, 5000).buildings <= aoe_protocol::MAX_RETAINED_BUILDINGS);
-    world.set_limits(WorldLimits::for_match(100, 200));
+    assert!(WorldLimits::for_match(128).buildings <= aoe_protocol::MAX_RETAINED_BUILDINGS);
+    world.set_limits(WorldLimits::for_match(100));
     world.set_fog_disabled(true);
     for raw in 0..=MAX_ECONOMY_BUILDINGS {
         let at = TileCoord::new(4 + (raw % 200) as i32 * 5, 4 + (raw / 200) as i32 * 5);

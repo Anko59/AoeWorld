@@ -27,9 +27,6 @@ pub(crate) fn player_rule(player: &GameplayPlayerState) -> Option<&'static str> 
     if !valid_prices(player.market_prices) {
         return Some("player.market_prices_in_range");
     }
-    if player.population_cap > MAX_MATCH_POPULATION {
-        return Some("player.population_cap_bound");
-    }
     None
 }
 

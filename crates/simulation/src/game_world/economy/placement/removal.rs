@@ -52,7 +52,6 @@ impl GameWorld {
         self.combat.tower_ready.remove(&id);
         self.combat.tower_targets.remove(&id);
         self.combat.target_rounds.remove(&id);
-        self.refresh_population_cap(building.player);
         self.update_observer(id, None);
         self.remember_visible_buildings();
     }

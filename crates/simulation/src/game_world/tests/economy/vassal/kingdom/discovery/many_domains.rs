@@ -75,7 +75,7 @@ fn hundred_prepared_domains() -> (GameWorld, Vec<(EntityId, EntityId)>) {
     let mut w =
         GameWorld::from_prepared_map(package, pages, water, Vec::new(), Vec::new()).unwrap();
     w.set_fog_disabled(true);
-    w.set_limits(crate::WorldLimits::for_match(100, 100));
+    w.set_limits(crate::WorldLimits::for_match(100));
     for node in clearing.into_values() {
         w.deplete_resource(node.id, node.initial_amount).unwrap();
     }

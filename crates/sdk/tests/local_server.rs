@@ -88,10 +88,7 @@ impl Bot for EconomyBot {
                 });
             }
         }
-        if center.state.training_queue.is_empty()
-            && economy.stockpile().food >= 50
-            && economy.free_population() > 0
-        {
+        if center.state.training_queue.is_empty() && economy.stockpile().food >= 50 {
             orders.push(Order::Train {
                 building: center.id(),
                 kind: UnitKind::Villager,

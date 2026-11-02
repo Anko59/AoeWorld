@@ -45,16 +45,22 @@ fn a_town_center_has_2400_hit_points_and_a_militia_scratches_one_per_hit() {
 }
 
 #[test]
-fn a_building_at_zero_hit_points_is_destroyed_and_frees_its_tiles_and_cap() {
+fn a_building_at_zero_hit_points_is_destroyed_and_frees_its_tiles() {
     let (mut world, _, theirs) = two_centers();
-    assert_eq!(world.player_economy(PlayerId(1)).unwrap().population_cap, 5);
+    assert_eq!(
+        world.player_economy(PlayerId(1)).unwrap().population_used,
+        0
+    );
     assert!(!world.tile_passable(TileCoord::new(121, 61)));
     world.economy.buildings.get_mut(&theirs).unwrap().hp = 2;
     let militia = world.spawn_militia(PlayerId(0), at(118, 62)).unwrap();
     world.issue_attack(PlayerId(0), militia, theirs).unwrap();
     ticks_until(&mut world, 400, |w| w.building(theirs).is_none());
     assert!(world.tile_passable(TileCoord::new(121, 61)));
-    assert_eq!(world.player_economy(PlayerId(1)).unwrap().population_cap, 0);
+    assert_eq!(
+        world.player_economy(PlayerId(1)).unwrap().population_used,
+        0
+    );
     assert_eq!(world.buildings().count(), 1);
     let militia = world.unit(militia).unwrap();
     assert_eq!(
@@ -110,7 +116,7 @@ fn militia_cost_is_paid_all_or_nothing_and_refunded_on_cancel() {
 }
 
 #[test]
-fn population_may_exceed_the_cap_after_a_town_center_falls_and_training_waits() {
+fn training_continues_after_a_town_center_falls_without_replacement_housing() {
     let (mut world, ours, _) = two_centers();
     let second = world
         .place_town_center(PlayerId(0), TileCoord::new(60, 100))
@@ -119,16 +125,16 @@ fn population_may_exceed_the_cap_after_a_town_center_falls_and_training_waits() 
         world.spawn_villager(PlayerId(0), at(70 + x, 80)).unwrap();
     }
     assert_eq!(
-        world.player_economy(PlayerId(0)).unwrap().population_cap,
-        10
+        world.player_economy(PlayerId(0)).unwrap().population_used,
+        7
     );
     world.economy.buildings.get_mut(&ours).unwrap().hp = 1;
     let raider = world.spawn_militia(PlayerId(1), at(58, 62)).unwrap();
     world.issue_attack(PlayerId(1), raider, ours).unwrap();
     ticks_until(&mut world, 400, |w| w.building(ours).is_none());
     let economy = world.player_economy(PlayerId(0)).unwrap();
-    assert_eq!((economy.population_used, economy.population_cap), (7, 5));
-    // Existing units survive; prepaid training waits for replacement housing.
+    assert_eq!(economy.population_used, 7);
+    // Existing units survive and the other producer keeps training.
     assert_eq!(world.units().filter(|u| u.player == PlayerId(0)).count(), 7);
     world
         .economy
@@ -141,10 +147,12 @@ fn population_may_exceed_the_cap_after_a_town_center_falls_and_training_waits() 
         .issue_train(PlayerId(0), second, UnitKind::Villager)
         .unwrap();
     advance(&mut world, 500);
-    assert_eq!(world.units().filter(|u| u.player == PlayerId(0)).count(), 7);
-    let queue = &world.building(second).unwrap().training_queue;
-    assert_eq!(queue.len(), 1);
-    assert_eq!(queue[0].progress_ticks, 0);
+    assert_eq!(world.units().filter(|u| u.player == PlayerId(0)).count(), 8);
+    assert_eq!(
+        world.player_economy(PlayerId(0)).unwrap().population_used,
+        8
+    );
+    assert!(world.building(second).unwrap().training_queue.is_empty());
 }
 
 #[test]
@@ -230,7 +238,7 @@ fn working_builders_do_not_retaliate_and_death_releases_their_job() {
 }
 
 #[test]
-fn destroying_a_house_uses_its_armour_and_removes_only_its_housing() {
+fn destroying_a_house_uses_its_armour_without_changing_population() {
     let (mut world, _, _) = two_centers();
     world
         .economy
@@ -252,8 +260,8 @@ fn destroying_a_house_uses_its_armour_and_removes_only_its_housing() {
     advance(&mut world, 600);
     assert!(world.building(house).unwrap().is_complete());
     assert_eq!(
-        world.player_economy(PlayerId(1)).unwrap().population_cap,
-        10
+        world.player_economy(PlayerId(1)).unwrap().population_used,
+        1
     );
     assert!(!world.tile_passable(TileCoord::new(100, 100)));
     world.economy.buildings.get_mut(&house).unwrap().hp = 4;
@@ -262,7 +270,10 @@ fn destroying_a_house_uses_its_armour_and_removes_only_its_housing() {
     world.advance();
     assert!(world.building(house).is_none());
     assert!(world.tile_passable(TileCoord::new(100, 100)));
-    assert_eq!(world.player_economy(PlayerId(1)).unwrap().population_cap, 5);
+    assert_eq!(
+        world.player_economy(PlayerId(1)).unwrap().population_used,
+        1
+    );
 }
 
 #[test]

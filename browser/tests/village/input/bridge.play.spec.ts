@@ -65,7 +65,7 @@ for (const queued of [false, true]) {
       true,
     );
     await page.goto("/?play=1#x=8192&y=8192&zoom=1");
-    await expect(page.locator("#population")).toHaveText("6/10");
+    await expect(page.locator("#population")).toHaveText("6");
     // Presentation fixture: three water tiles, with land on both banks and
     // alongside the deck. Simulation connectivity has independent Rust tests.
     const chunks = [-1, 0].flatMap((y) =>
@@ -161,7 +161,7 @@ test("bridge construction is disabled in Dark Age", async ({ page }) => {
   await gameAssets(page, true);
   await fiveVillagerFixture(page);
   await page.goto("/?play=1#x=8192&y=8192&zoom=1");
-  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(page.locator("#population")).toHaveText("6");
   const worker = (
     JSON.parse(
       (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
@@ -191,7 +191,7 @@ test("diagonal drag previews every bridge cell and marks an endpoint in a two-ti
     true,
   );
   await page.goto("/?play=1#x=8192&y=8192&zoom=1");
-  await expect(page.locator("#population")).toHaveText("6/10");
+  await expect(page.locator("#population")).toHaveText("6");
   const chunks = [-1, 0].flatMap((y) =>
     [-1, 0].map((x) => {
       const chunk = syntheticChunk(256 + x, 256 + y, () => false);

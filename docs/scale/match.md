@@ -13,7 +13,7 @@ the place to find hot spots.
 1. Builds and starts a release `aoe-server` (loopback port 9100, a private
    admin secret, `target/scale-match/server.log`).
 2. `POST /match` with 100 slots (slot 0 human, 1-99 `ai`), a France map, the
-   population cap and optional start units, timing the creation.
+   optional start units, timing the creation.
 3. Builds the release wheel (`sdk-python-steps`, in the same heavy slot) and starts the bots in
    `--hosts` sibling `aoeworld/sdk-python` containers, each one Python process
    running `python -m aoe_ai host` (many bots on one native runtime and one
@@ -37,7 +37,7 @@ make scale-match-smoke                   # 4 players, 1 minute, flat 500-tile ma
 ```
 
 Options (`aoe-harness scale-match --help`): `--players --humans --tiles
---population-cap --start-villagers --start-militia --minutes --hosts --map
+--start-villagers --start-militia --minutes --hosts --map
 procedural|package|flat --map-hash --package-directory --port --seed
 --asset-pack --browser --browser-minutes --browser-delay --out --summary
 --no-summary --label`. The browser step needs `make build-wasm` (the server serves `web/`) and
@@ -47,16 +47,11 @@ an original-art pack (`AOE_ASSET_PACK=local-assets/packs/<hash>`).
 
 `POST /match` accepts (see [the AI SDK](../ai-sdk.md)):
 
-* `population_cap` (5 to 5,000, default 1,000): the most population
-  any player reaches however many houses stand. World capacities are sized
-  from the seats and this cap ([capacities](capacity.md)): 5,120 buildings per
-  seat at cap 1,000 and one worker per unit of population.
-  100 players x 1,000 = 100,000 units.
 * `start_units: {"villagers": n, "militia": m}`: the scenario hook. After the
   standard start kit (Town Center, villagers, scout) every player gets `n`
   extra villagers and `m` militia placed on free ground around the village,
-  without cost. They count toward population: a seeded player above its
-  ceiling trains nothing until it builds housing.
+  without cost. They count toward population. Setup extras are bounded to 65,532 per
+  seat for memory safety; ordinary training has no population ceiling.
 
 The report states how many units come from where: `setup.seeded_units` (the
 hook), `setup.units_at_first_tick` (kit plus seeding) and
@@ -109,6 +104,8 @@ working tree before that commit, on `play/integration` 70c5da80). The owner's se
 source-backed France package (`cf552006...`, 16,000 tiles), 100 slots (slot 0 human and empty,
 99 `aoe_ai` bots on 8 hosts), population cap 200, standard starts, no seeding, 25 minutes of wall
 time; machine load 10 to 13 from other agents.
+
+Historical invocation; the removed `--population-cap` option is no longer accepted:
 
 ```sh
 SCALE_MATCH_ARGS="--players 100 --humans 1 --population-cap 200 --minutes 25 --hosts 8 \

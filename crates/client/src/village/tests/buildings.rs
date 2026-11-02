@@ -72,13 +72,12 @@ fn rich_player(researched: u64) -> aoe_protocol::GameplayPlayerState {
             stone: 10000,
         },
         population_used: 5,
-        population_cap: 5,
         market_prices: Default::default(),
     }
 }
 
 #[wasm_bindgen_test]
-fn training_buttons_allow_fifteen_entries_even_at_the_population_cap() {
+fn training_buttons_allow_fifteen_entries_without_housing() {
     use crate::building_ui::availability::training;
     let mut b = building(1);
     let player = rich_player(0);

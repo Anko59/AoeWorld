@@ -55,7 +55,6 @@ class Context:
         if self.center is not None and board.home is None:
             board.home = self.center.center
         self.home: Optional[Tile] = self.center.center if self.center else board.home
-        self.queued = sum(b.queue_length for b in self.buildings)
         self.spent = [0, 0, 0, 0]
         #: Set by a manager that needs the Town Center's queue to drain.
         self.hold_town_center = False
@@ -171,11 +170,6 @@ class Context:
             self.spend(cost)
             return True
         return False
-
-    def free_population(self) -> int:
-        if self.economy is None:
-            return 0
-        return self.economy.population_cap - self.economy.population - self.queued
 
     # ----- orders ----------------------------------------------------------
     def order(self, name: str, *args: Any, **options: Any) -> int:

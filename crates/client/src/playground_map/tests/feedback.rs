@@ -180,7 +180,6 @@ fn economy_rejections_remain_clear_in_the_existing_client() {
         (CommandResult::RejectedWrongUnitKind, "unit kind"),
         (CommandResult::RejectedInvalidResource, "exhausted"),
         (CommandResult::RejectedInsufficientFood, "food"),
-        (CommandResult::RejectedPopulationCap, "population"),
         (CommandResult::RejectedTrainingQueueFull, "training queue"),
         (CommandResult::RejectedResourceUnavailable, "unavailable"),
         (CommandResult::RejectedWorldLimit, "world"),

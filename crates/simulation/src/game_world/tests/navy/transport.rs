@@ -323,7 +323,6 @@ fn training_can_spawn_on_an_embarked_passengers_vacated_bank_tile() {
         .unwrap();
     let player = world.economy.players.get_mut(&PlayerId(0)).unwrap();
     player.stockpile.food = 100;
-    player.population_cap = 10;
     // A deterministic occupied-perimeter fixture leaves exactly the bank tile
     // available. Embarking must release it for ordinary producer placement.
     for tile in crate::game_world::economy::placement::perimeter(footprint) {
