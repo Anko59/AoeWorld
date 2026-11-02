@@ -412,7 +412,11 @@ fn imperial_age_keeps_castle_age_building_strength_and_is_deterministic() {
 #[test]
 fn the_imperial_showcase_is_ready_to_advance_through_the_ordinary_order() {
     let (mut w, _) = GameWorld::imperial_demo(aoe_core::Seed(1)).unwrap();
-    assert_eq!(w.config().tick_hz, 2, "ten times the 20 Hz game clock");
+    assert_eq!(
+        w.config().tick_hz,
+        1,
+        "twenty times slower than the server ticker"
+    );
     let tc = w
         .buildings()
         .find(|b| b.player == PlayerId(0) && b.kind == BuildingKind::TownCenter)

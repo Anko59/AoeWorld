@@ -1,4 +1,4 @@
-//! Imperial Age showcase on a ten-times clock (two simulation ticks per game
+//! Imperial Age showcase on a twenty-times clock (one simulation tick per game
 //! second under the server's 20-Hz ticker): a Castle Age base with a University
 //! and a Siege Workshop standing, a Castle Age army and a distant enemy group.
 //! Research, training and all orders stay real; only the clock and the prepaid
@@ -27,11 +27,12 @@ impl GameWorld {
     pub fn imperial_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         let mut config =
             WorldConfig::new(256, 256, seed).map_err(|_| EconomyError::InvalidFootprint)?;
-        config.tick_hz = 2;
+        config.tick_hz = 1;
         let mut world = Self::new(config)?;
         world.set_fog_disabled(true);
-        let primary = world.initialize_village(PlayerId(0), TileCoord::new(80, 128))?;
-        world.issue_move(primary, tile_center(100, 134)?)?;
+        world.initialize_village(PlayerId(0), TileCoord::new(96, 128))?;
+        // The camera centres on this scout, just south of the Town Center.
+        let primary = world.spawn_kind(PlayerId(0), UnitKind::Scout, tile_center(98, 134)?)?;
         world.complete_research(PlayerId(0), Tech::FeudalAge, &mut Vec::new());
         world.complete_research(PlayerId(0), Tech::CastleAge, &mut Vec::new());
         for tech in CASTLE_TECHS {
@@ -47,13 +48,13 @@ impl GameWorld {
             };
         }
         for (kind, x, y) in [
-            (BuildingKind::University, 90, 116),
-            (BuildingKind::SiegeWorkshop, 96, 116),
-            (BuildingKind::Barracks, 90, 140),
-            (BuildingKind::ArcheryRange, 95, 140),
-            (BuildingKind::Stable, 100, 140),
-            (BuildingKind::Blacksmith, 105, 140),
-            (BuildingKind::Mill, 86, 110),
+            (BuildingKind::University, 98, 123),
+            (BuildingKind::SiegeWorkshop, 90, 121),
+            (BuildingKind::Barracks, 88, 134),
+            (BuildingKind::Stable, 92, 138),
+            (BuildingKind::ArcheryRange, 97, 140),
+            (BuildingKind::Blacksmith, 103, 138),
+            (BuildingKind::Mill, 90, 128),
         ] {
             let r = kind.rules();
             world.insert_building(
@@ -68,17 +69,17 @@ impl GameWorld {
         }
         for n in 0..4 {
             for (kind, x) in [
-                (UnitKind::LongSwordsman, 112),
-                (UnitKind::Pikeman, 109),
-                (UnitKind::Crossbowman, 106),
-                (UnitKind::Knight, 115),
+                (UnitKind::LongSwordsman, 102),
+                (UnitKind::Pikeman, 106),
+                (UnitKind::Crossbowman, 107),
+                (UnitKind::Knight, 104),
             ] {
-                world.spawn_kind(PlayerId(0), kind, tile_center(x, 126 + n * 3)?)?;
+                world.spawn_kind(PlayerId(0), kind, tile_center(x, 128 + n * 2)?)?;
             }
         }
         for (kind, x, y) in [
-            (UnitKind::BatteringRam, 104, 122),
-            (UnitKind::Mangonel, 104, 126),
+            (UnitKind::BatteringRam, 101, 136),
+            (UnitKind::Mangonel, 104, 136),
         ] {
             world.spawn_kind(PlayerId(0), kind, tile_center(x, y)?)?;
         }
@@ -86,7 +87,7 @@ impl GameWorld {
             let id = world.spawn_kind(
                 PlayerId(1),
                 UnitKind::Militia,
-                tile_center(168, 124 + n * 3)?,
+                tile_center(130, 124 + n * 3)?,
             )?;
             world.issue_stance(PlayerId(1), &[id], CombatStance::StandGround)?;
         }

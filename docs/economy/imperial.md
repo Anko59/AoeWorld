@@ -98,7 +98,7 @@ Imperial Skirmishers, camels and Husbandry) is not part of this slice.
 
 `POST /maps/reset?scenario=imperial-army` prepares a Castle Age base with a
 University, Siege Workshop, Barracks, Archery Range, Stable and Blacksmith, a
-Castle Age army and six distant Militia. It runs the ordinary game on a ten-times
+Castle Age army and six distant Militia. It runs the ordinary game on a twenty-times
 clock (the demo scenarios' convention); prices, research, training and orders
 are unchanged. Open `/?play=1`, research Imperial Age at the Town Center, then
 the unit lines.
