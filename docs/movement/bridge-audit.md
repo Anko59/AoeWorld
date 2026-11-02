@@ -1,9 +1,10 @@
 # Bridge brief audit, 2026-11-02
 
-Incomplete: the pending production edits were measured and rejected, but
-the restored implementation still needs the requested comparison run and
-video. The capture build exhausted its five-minute heavy-slot admission
-limit. No gate, acceptance assertion or output pin was lowered or refreshed.
+The inherited production edits were measured with and without them and
+rejected. The restored implementation passes the nine original bridge cases
+and all six affected pins. A new two-General case exposes a larger unresolved
+failure: 190 of 202 actors arrive. The requested video remains incomplete.
+No gate, acceptance assertion or output pin was lowered or refreshed.
 
 ## Source decision
 
@@ -29,8 +30,9 @@ where the unchanged pin requires
 `f87130519dcee274080406ae69ad42f5344a67064792a0bc14fd57c8ef4c29fb`.
 The two production files were restored to the committed movement base;
 the rejected edits are saved under `.cache/bridge-audit/`. They were not
-committed. A fresh run without them remains required: the historical green
-result in the base commit is not a substitute for that comparison.
+committed. A fresh restored-source run passed all 26 existing selected tests,
+including the nine bridge cases and all six affected pins. Its only failure
+was the newly added two-General case, described below.
 
 Static review also found an unchecked `desired` fallback in the proposed
 slot search. Its region covers a square of radius 40, rather than limiting
@@ -72,9 +74,35 @@ on opposite banks of the same wooded diagonal bridge. Both receive ordinary
 move orders after observation starts. It asserts each General's own census
 and uses the existing crossing acceptance assertions for all 202 actors.
 This combines General leadership and opposing traffic in one case, rather
-than inferring that combination from separate tests. Its runtime result is
-**unmeasured**: the heavy-slot blocker prevented a further test attempt.
-Static compilation does not prove that this new case passes.
+than inferring that combination from separate tests. At the 30,000-tick
+bound, **190/202 arrived and 12 remained pending**, with a maximum stationary
+interval of 21,739 ticks. No unit exceeded its speed or lost group membership.
+This fails the unchanged exact-arrival acceptance assertion.
+
+A small experiment retained a group's friendly passing permission on the
+physical deck when members detached for recovery or the group widened. It
+improved the result to 200/202, but two remained pending and the maximum still
+interval was 23,044 ticks. The full simulation run was 864 passed, one failed:
+all pre-existing tests passed, but the new case still failed. The experiment
+was reverted and saved as `.cache/bridge-audit/deck-recovery-experiment.patch`.
+Its log is `.cache/bridge-audit/deck-recovery-tests.log`. It is not an accepted
+production fix. This larger case needs further recovery-planner diagnosis;
+the brief permits reporting failures that do not yield to a small fix.
+
+## Fresh restored-source measurements
+
+| Synthetic scenario | Arrived / commanded | Pending | Last / ideal ticks | Max still |
+| --- | --- | --- | --- | --- |
+| Straight bridge, General + 100 | 101 / 101 | 0 | 5558 / 5710 | 30 |
+| Straight bridge, mixed formation | 40 / 40 | 0 | 4359 / 4804 | 22 |
+| Opposing straight-bridge formations | 40 / 40 | 0 | 7600 / 6961 | 18 |
+| Villagers, Knight and militia meeting | 4 / 4 | 0 | 621 / 650 | 6 |
+| Wooded diagonal bridge, General + 100 | 101 / 101 | 0 | 8491 / 8382 | 30 |
+| Wooded diagonal bridge, mixed formation | 40 / 40 | 0 | 7391 / 7479 | 14 |
+| Opposing wooded-diagonal formations | 40 / 40 | 0 | 6688 / 6928 | 47 |
+| Three rivers and forest belts, General + 100 | 101 / 101 | 0 | 24198 / 22139 | 28 |
+| Three rivers and forest belts, mixed formation | 40 / 40 | 0 | 22239 / 21207 | 28 |
+| Two Generals and 200 followers, wooded diagonal | 190 / 202 | 12 | 30000 / 9976 | 21739 |
 
 ## Commands and evidence
 
@@ -84,6 +112,11 @@ Static compilation does not prove that this new case passes.
   production edits; admitted after 153 seconds.
 - The same target with `AOE_NATIVE_TEST_FILTER='all()'`: 858/864 passed,
   six unchanged regressions failed; admitted after 92 seconds.
+- Restored source: the same target with
+  `AOE_NATIVE_TEST_FILTER='test(real_terrain_formations::)|test(late_game_full_population_replays_at_the_profile_checkpoint)'`:
+  26/27 passed; only the new 202-actor case failed. Log:
+  `.cache/bridge-audit/restored-tests.log`. Admission took 83 seconds; the
+  machine-load wait cleared before the five-minute limit.
 - Logs: `.cache/bridge-audit/pending-tests-current.log` and
   `.cache/bridge-audit/pending-pins.log`. Earlier incorrect filter attempts
   selected zero tests and are not acceptance evidence.
@@ -107,12 +140,23 @@ service ticks. Its bootstrap compiled, but Dockerized `make build` failed:
 `.cache/bridge-audit/capture-build-current.log`. No holder or gate was changed
 to obtain admission, and the failed command was not restarted in a loop.
 
+After the recovery experiment, an intermediate capture build completed with
+that experimental code. Its binary was saved locally, and the experiment was
+reverted in both the main and capture checkouts. The final recording build
+therefore uses the restored production implementation. It was admitted after
+238 seconds, then remained at the machine-load gate (21.4 load, 12 cores).
+Its wrapper started at 20:07:41 UTC and was still waiting without a build
+child at 20:12:51 UTC. It was stopped at that point under the brief's
+five-minute total waiting limit. The log is
+`.cache/bridge-audit/capture-build-baseline.log`. This repeated the shared
+machine-capacity blocker across three goal attempts; further heavy work
+requires external contention to clear.
+
 `.cache/showcase/bridge.webm` was not produced. No first, middle or last frame
 was available to inspect, so there is no claim that footage shows the far bank.
 
-After external contention clears, run the focused bridge suite and the six
-affected pins on the restored implementation, including the new 202-actor
-case. Then build the recording server and record the requested close-camera
-diagonal, forest-lined crossing, at most 60 seconds. Inspect the first,
-middle and last frames and confirm that the last shows the army on the far
-bank before closing this brief.
+The remaining delivery is the requested close-camera diagonal, forest-lined
+crossing video, at most 60 seconds. Inspect the first, middle and last frames
+and confirm that the last shows the army on the far bank before closing the
+brief. The larger two-General deadlock is reported as an unresolved limit,
+not as successful crossing evidence.
