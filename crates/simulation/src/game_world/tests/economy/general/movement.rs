@@ -1,6 +1,16 @@
 use super::*;
 
 #[test]
+fn gameplay_guide_describes_plain_formation_marching() {
+    let guide = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../docs/gameplay/general.md"
+    ));
+    assert!(!guide.contains("A march is an attack-move formation"));
+    assert!(guide.contains("A march is a plain formation move"));
+}
+
+#[test]
 fn adoption_waits_for_a_march_order_before_forming_at_the_castle_exit() {
     let (mut w, _) = setup();
     let ids: Vec<_> = [UnitKind::Militia, UnitKind::Archer, UnitKind::BatteringRam]
