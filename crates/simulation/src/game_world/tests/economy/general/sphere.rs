@@ -63,3 +63,27 @@ fn training_uses_only_buildings_within_fifty_tiles() {
         "an Archery Range 90 tiles away is out of reach"
     );
 }
+
+#[test]
+fn solo_move_preserves_an_out_of_sphere_soldiers_existing_order() {
+    for x in [152, 153] {
+        let (mut w, _) = setup();
+        let far = soldier(&mut w, UnitKind::Militia, 100, 100);
+        let g = soldier(&mut w, UnitKind::General, 102, 104);
+        let mut u = w.unit(far).unwrap();
+        w.remove_unit(far);
+        u.position = at(x, 104);
+        u.previous_position = u.position;
+        w.insert_map_unit(u, 0);
+        w.issue_move(far, at(180, 104)).unwrap();
+        let before = w.unit(far).unwrap();
+        assert!(before.moving || before.planning);
+        w.issue_general_move(PlayerId(0), g, at(130, 104)).unwrap();
+        let after = w.unit(far).unwrap();
+        if x == 152 {
+            assert!(!after.moving && !after.planning, "50 tiles is inside");
+        } else {
+            assert_eq!(after, before, "51 tiles receives no command");
+        }
+    }
+}
