@@ -99,9 +99,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Wood re-picks, occupied-waypoint travel and formation detours all change the replay.
-        // Population is uncapped: no House or cap gates training.
-        "db3813a02e8347e4cc5ea0bab6e5b1ce309a7ee227fe266ab5c59e67b1a18851"
+        // Kingdom-priority Vassal job choice and uncapped population (no House or cap gates training) change the replay.
+        "e4b7ad5ac2296e0e41dff1a76c3289b4afdc1888918d64420d8c324f24b5dac9"
     );
 }
 

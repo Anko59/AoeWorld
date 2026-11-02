@@ -178,7 +178,6 @@ fn farming_showcase_starts_with_twenty_four_workers_and_empty_farmland() {
             .any(|b| b.is_complete())
     );
     let p = w.player_economy(PlayerId(0)).unwrap();
-    assert!(p.population_cap >= p.population_used + 3);
     assert!(
         p.stockpile.wood
             >= 24 * BuildingKind::Farm.rules().cost.wood + 3 * BuildingKind::Mill.rules().cost.wood
