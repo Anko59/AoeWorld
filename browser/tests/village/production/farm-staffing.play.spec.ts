@@ -1,9 +1,94 @@
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { test } from "../../../server.js";
 import { gameAssets } from "../../game-assets.js";
 import { centerVillage, freshHud } from "../fixtures/resources.js";
 
 test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
+
+type Actor = { id: number; kind: string; x: number; y: number; task: string };
+async function actors(page: Page): Promise<Actor[]> {
+  return JSON.parse(
+    (await page.locator("#scene").getAttribute("data-actors")) ?? "[]",
+  );
+}
+
+async function selectWorkers(page: Page, ids: number[]) {
+  await page.keyboard.press("Escape");
+  for (const [index, id] of ids.entries()) {
+    const actor = (await actors(page)).find((a) => a.id === id);
+    if (!actor) throw new Error(`Worker ${id} missing`);
+    if (index) await page.keyboard.down("Shift");
+    await page.mouse.click(actor.x, actor.y);
+    if (index) await page.keyboard.up("Shift");
+  }
+  await expect(page.locator("#selection")).toHaveAttribute(
+    "data-count",
+    String(ids.length),
+  );
+}
+
+async function place(page: Page, kind: string, x: number, y: number) {
+  await page.locator("#build-menu").click();
+  await page.locator(`#build-${kind}`).click();
+  await page.mouse.move(x, y);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-placement-valid",
+    "true",
+  );
+  await page.keyboard.down("Shift");
+  await page.mouse.click(x, y);
+  await page.keyboard.up("Shift");
+  await page.keyboard.press("Escape");
+}
+
+test("farm staffing keeps a single builder's queued house", async ({
+  page,
+  request,
+}, info) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  expect(
+    (await request.post("/maps/reset?scenario=feudal-economy")).status(),
+  ).toBe(204);
+  await gameAssets(page);
+  await page.goto("/?play=1");
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await centerVillage(page);
+  const workers = (await actors(page))
+    .filter((a) => a.kind === "Villager")
+    .sort((a, b) => a.id - b.id)
+    .slice(0, 2)
+    .map((a) => a.id);
+  expect(workers).toHaveLength(2);
+  const first = workers[0];
+  if (first === undefined) throw new Error("First worker missing");
+  await selectWorkers(page, workers);
+  await place(page, "farm", 250, 200);
+  await selectWorkers(page, [first]);
+  expect((await actors(page)).find((a) => a.id === first)?.task).toMatch(
+    /Moving|Building/,
+  );
+  await place(page, "house", 1050, 200);
+  await expect
+    .poll(async () => (await actors(page)).some((a) => a.kind === "House"))
+    .toBe(true);
+  const house = (await actors(page)).find((a) => a.kind === "House");
+  if (!house) throw new Error("Queued house missing");
+  await page.mouse.click(house.x, house.y);
+  await expect(page.locator("#building-status")).toContainText("Complete", {
+    timeout: 70_000,
+  });
+  await expect(page.locator("#workers-food")).toHaveText("1");
+  await page.screenshot({
+    path: `../.cache/showcase/farm-unique-queue-${info.project.name}.png`,
+  });
+  await page.waitForTimeout(2000);
+  const video = page.video();
+  await page.close();
+  await video?.saveAs(
+    `../.cache/showcase/farm-unique-queue-${info.project.name}.webm`,
+  );
+});
 
 test("three queued farms retain three farmers without another order", async ({
   page,

@@ -1,6 +1,39 @@
 use super::*;
 
 #[test]
+fn farm_staffing_preserves_the_lower_id_builders_unique_queue() {
+    fn run() -> [u8; 32] {
+        let (mut world, first, _, farm) = mill_and_farm();
+        let helper = villager_at(&mut world, 106, 104);
+        assert!(first < helper);
+        world
+            .issue_construct(PlayerId(0), &[first, helper], farm)
+            .unwrap();
+        fixture::survey(&mut world, PlayerId(0), at(110, 100), 3);
+        let house = world
+            .issue_build(
+                PlayerId(0),
+                &[first],
+                BuildingKind::House,
+                at(110, 100),
+                true,
+            )
+            .unwrap();
+        finish(&mut world, farm, 700);
+        assert_eq!(
+            world.economy.builders.get(&first).map(|job| job.building),
+            Some(house),
+            "the unique queued order must survive farm staffing"
+        );
+        finish(&mut world, house, 1400);
+        advance(&mut world, 100);
+        assert_eq!(world.gathering_kind(helper), Some(ResourceKind::Food));
+        world.canonical_hash()
+    }
+    assert_eq!(run(), run());
+}
+
+#[test]
 fn queued_group_farms_leave_one_farmer_on_each_completed_farm() {
     fn run() -> [u8; 32] {
         let (mut world, first, _, farm) = mill_and_farm();
