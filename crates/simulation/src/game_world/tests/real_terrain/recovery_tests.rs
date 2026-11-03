@@ -117,3 +117,8 @@ fn recovery(enclose_after_acquisition: bool) {
 fn general_first_sight_unreachable_enemy_keeps_march() {
     recovery(false);
 }
+
+#[test]
+fn general_retained_enemy_becoming_unreachable_keeps_march() {
+    recovery(true);
+}

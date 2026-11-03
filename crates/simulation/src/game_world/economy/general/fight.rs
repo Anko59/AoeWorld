@@ -174,7 +174,12 @@ impl GameWorld {
             .count()
             * 2
             > soldiers.len();
-        if kept.is_some() && !idle {
+        // A retained group's route can fail after terrain closes. A surviving
+        // moving/planning minority must not conceal that terminal failure.
+        let failed = soldiers
+            .iter()
+            .any(|v| self.movement_failure(v.id).is_some());
+        if kept.is_some() && !idle && !failed {
             return;
         }
         // A visible enemy's centre can be inside an unreachable enclosure.
