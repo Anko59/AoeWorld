@@ -21,7 +21,7 @@ pub fn workspace_named(prefix: &str) -> tempfile::TempDir {
         "Cargo.toml",
         "Cargo.lock",
         "crates/harness/src/resources/launcher.rs",
-        "crates/harness/src/resources/measure.rs",
+        "crates/harness/src/resources/observer.rs",
         "crates/harness/src/resources/policy.rs",
     ] {
         let destination = root.join(file);

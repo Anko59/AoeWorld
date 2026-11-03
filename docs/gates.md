@@ -13,7 +13,6 @@ A second long job refuses with exit 75 and `busy: <holder command, branch, workt
 Exec children inherit the lock descriptor, so killing the parent does not free it while those children run. Nested targets carry `AOE_LONG_JOB` and `AOE_LONG_DIR`, accepting ownership only while the kernel lock and its proof are live. Snapshots use the source repository's lock directory.
 The host job wrapper takes the lock before running long-target prerequisites. The independent std-only resource launcher bootstraps in a small 256 MiB container; workspace compilation is admitted and capped, without a machine-wide bootstrap lock.
 CI uses the same caps and immediate admission; each job has its own runner. `make load-status` shows MemAvailable and the current long-job holder. No wait-time environment variables remain.
-`make resource-measure RESOURCE_MEASURE_ARGS='--output .cache/measurement --job /absolute/worktree=lint'` records actual Make duration, final container peaks, once-per-second MemAvailable, uptime/free output and other running containers. Repeat `--job` to measure concurrent jobs; warm each worktree before comparing times.
 
 | Gate | Command | Depends on | Suites | Cadences | Budget (s) | Long job | Evidence |
 |---|---|---|---|---|---|---|---|

@@ -28,6 +28,6 @@ pub(crate) fn before_docker(command: &std::process::Command) -> std::io::Result<
     Ok(())
 }
 #[cfg(test)]
-mod measure;
+mod observer;
 #[cfg(test)]
 mod tests;
