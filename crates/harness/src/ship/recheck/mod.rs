@@ -14,8 +14,8 @@ use super::{
 };
 use crate::{
     gates::registry::{Cadence, Gate, Registry},
+    jobs::JobEnv,
     review::{Report, base},
-    slots::SlotEnv,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -319,7 +319,7 @@ fn rebase(
 /// Every `static` gate of the preflight cadence, whole-repository: the
 /// structure, format, docs and architecture checks and `lint`, which compiles
 /// the workspace (clippy), so no separate compile check is added.
-fn static_gates(root: &Path, slots: &SlotEnv) -> Result<Vec<GateResult>> {
+fn static_gates(root: &Path, slots: &JobEnv) -> Result<Vec<GateResult>> {
     let registry = Registry::load(root)?;
     let gates: Vec<&Gate> = registry
         .gates

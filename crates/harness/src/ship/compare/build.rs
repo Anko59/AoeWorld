@@ -38,7 +38,7 @@ pub(crate) fn docker_tools(
         .map(String::from)
         .to_vec();
     all.push(user());
-    all.extend(crate::slots::cap_args());
+    all.extend(crate::jobs::cap_args());
     for (name, value) in [
         ("CARGO_HOME", cargo_home.display().to_string()),
         ("CARGO_TARGET_DIR", target.display().to_string()),

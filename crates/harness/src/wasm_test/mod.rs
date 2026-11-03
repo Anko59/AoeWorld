@@ -29,7 +29,7 @@ impl Drop for Driver {
 }
 
 fn docker(args: &[&str]) -> Result<String> {
-    let output = Command::new("docker").args(args).output()?;
+    let output = crate::resources::docker_command(args)?.output()?;
     if !output.status.success() {
         return Err(format!(
             "docker {args:?}: {}",
@@ -65,7 +65,7 @@ fn start_driver(port: u16) -> Result<Driver> {
             .gap_seconds()
             .map_or_else(String::new, |gap| gap.to_string())
     );
-    let cap = crate::slots::cap_args();
+    let cap = crate::jobs::cap_args();
     let mut args = vec!["run"];
     args.extend(cap.iter().map(String::as_str));
     args.extend([

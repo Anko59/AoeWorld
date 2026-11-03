@@ -14,7 +14,7 @@ the place to find hot spots.
    admin secret, `target/scale-match/server.log`).
 2. `POST /match` with 100 slots (slot 0 human, 1-99 `ai`), a France map, the
    optional start units, timing the creation.
-3. Builds the release wheel (`sdk-python-steps`, in the same heavy slot) and starts the bots in
+3. Builds the release wheel (`sdk-python-steps`, under the same inherited long-job lock) and starts the bots in
    `--hosts` sibling `aoeworld/sdk-python` containers, each one Python process
    running `python -m aoe_ai host` (many bots on one native runtime and one
    thread).

@@ -43,8 +43,11 @@ fn user() -> String {
 
 /// Run Docker as the caller with unambiguous bind mounts.
 pub(super) fn docker(mounts: &[&Path], image: &str, args: &[&str]) -> Result<std::process::Output> {
+    crate::resources::policy::check()?;
     let mut command = Command::new("docker");
-    command.args(["run", "--rm", "--user", &user()]);
+    command
+        .args(["run", "--rm", "--user", &user()])
+        .args(crate::jobs::cap_args());
     for dir in mounts {
         command.arg("--mount").arg(bind(dir, dir, false));
     }
@@ -93,9 +96,11 @@ fn record(root: &Path, work: &Path, plan: &Plan<'_>) -> Result<(PathBuf, Timings
         let (host, port) = bridged.origin.address()?;
         bridges.push(Bridge::start(work, bridged.socket, &host, port)?);
     }
+    crate::resources::policy::check()?;
     let status = Command::new("docker")
+        .arg("run")
+        .args(crate::jobs::cap_args())
         .args([
-            "run",
             "--rm",
             "--init",
             "--network",

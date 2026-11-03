@@ -146,6 +146,7 @@ dependencies = [
  "axum",
  "blake3",
  "clap",
+ "command-fds",
  "futures-util",
  "nix",
  "png",
@@ -625,6 +626,16 @@ name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
+
+[[package]]
+name = "command-fds"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b60b5124979fccd9addd89d8b97a1d6eebb4950694520c75ddd722535ea443f"
+dependencies = [
+ "nix",
+ "thiserror",
+]
 
 [[package]]
 name = "const-oid"

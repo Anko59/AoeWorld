@@ -25,7 +25,7 @@ fn focused_check_forwards_environment_before_each_docker_image() {
     let output = String::from_utf8(output.stdout).unwrap();
     let commands: Vec<_> = output
         .lines()
-        .filter(|line| line.starts_with("docker run "))
+        .filter(|line| line.contains("--run docker run "))
         .collect();
     assert_eq!(commands.len(), 2);
     for (line, image) in commands
@@ -39,6 +39,8 @@ fn focused_check_forwards_environment_before_each_docker_image() {
             assert!(env_index < image_index);
             assert_eq!(args[env_index - 1], "-e");
         }
-        assert_eq!(args[image_index + 1], "cargo");
+        assert!(args[image_index + 1].ends_with("/.cache/resource-runner'"));
+        assert_eq!(args[image_index + 2], "--container");
+        assert_eq!(args[image_index + 3], "cargo");
     }
 }

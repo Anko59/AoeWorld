@@ -1,11 +1,17 @@
 [package]
 name = "aoe-harness"
 version = "0.1.0"
+default-run = "aoe-harness"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[[bin]]
+name = "aoe-resource-runner"
+path = "src/resources/launcher.rs"
+
 [dependencies]
+command-fds = "0.3.3"
 aoe-assets = { path = "../assets" }
 aoe-core.workspace = true
 aoe-rendering = { path = "../rendering" }

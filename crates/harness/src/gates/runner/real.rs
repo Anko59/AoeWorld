@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     gates::scopes::Snapshot,
+    jobs::JobEnv,
     process::{self, Cancellation, CaptureExit},
-    slots::SlotEnv,
 };
 use evidence::{EndpointProof, PrivateOutput};
 use std::time::Instant;
@@ -15,7 +15,7 @@ pub(super) struct Local<'a> {
     pub(super) cancellation: Cancellation,
     pub(super) started: Instant,
     pub(super) total: Duration,
-    pub(super) slots: &'a SlotEnv,
+    pub(super) slots: &'a JobEnv,
 }
 impl Runtime for Local<'_> {
     fn now_ms(&self) -> u64 {
@@ -126,7 +126,7 @@ impl Runtime for Local<'_> {
             root,
             gate,
             deadline,
-            self.slots,
+            (root.path(), self.slots),
         )
     }
 }
@@ -229,8 +229,9 @@ fn make_fixed(
     root: &ExecutionRoot,
     gate: &GateId,
     deadline: Duration,
-    slots: &SlotEnv,
+    admission: (&Path, &JobEnv),
 ) -> Receipt {
+    let (admission_root, slots) = admission;
     let cargo = match crate::process::cargo_cache::home(source) {
         Ok(path) => path,
         Err(error) => {
@@ -265,10 +266,10 @@ fn make_fixed(
             }),
         };
     };
-    // A heavy gate queues for its slot before its deadline clock starts. The slot directory is the
-    // real checkout's, not the snapshot's: a snapshot's own Git directory is private to this run.
-    let slot = match crate::slots::hold_snapshot(
-        root.path(),
+    // Long-job admission uses the source repository's shared lock, even for a snapshot.
+    // A refusal is a precondition result; no command deadline or retry is started.
+    let slot = match crate::jobs::hold_snapshot(
+        admission_root,
         source,
         gate.as_str(),
         slots,
@@ -389,7 +390,9 @@ pub(super) fn fixture_make(
         root,
         gate,
         deadline,
-        &SlotEnv::default(),
+        // The fixture can deliberately use a missing execution cwd. Classify
+        // against its valid policy root so capture observes the actual start error.
+        (source, &JobEnv::default()),
     )
 }
 

@@ -10,8 +10,8 @@ use super::{
 };
 use crate::{
     gates::registry::{Cadence, Registry},
+    jobs::JobEnv,
     ship::run::{GateResult, GateVerdict},
-    slots::SlotEnv,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -155,7 +155,7 @@ pub(crate) fn respond(
     context: &Context,
     session: &str,
     agent: Option<&str>,
-    slots: &SlotEnv,
+    slots: &JobEnv,
 ) -> Option<serde_json::Value> {
     if context.role == Role::Reviewer {
         return None;
@@ -302,7 +302,7 @@ fn changed(root: &Path, merge_base: Option<&str>) -> Result<Vec<String>, String>
     Ok(paths)
 }
 
-fn execute(root: &Path, scope: Scope, fingerprint: String, slots: &SlotEnv) -> Run {
+fn execute(root: &Path, scope: Scope, fingerprint: String, slots: &JobEnv) -> Run {
     let finish = |verdict, report| Run {
         fingerprint: fingerprint.clone(),
         scope,
