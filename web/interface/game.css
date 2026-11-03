@@ -273,3 +273,13 @@ html[data-lod=map] #garrison-flags,html[data-lod=markers] #garrison-flags { disp
 #general-train { width:100%; margin-top:5px; padding:4px 0; font-weight:600; color:#f5e1a5; background:#5c6544; border:1px solid #d9bd7d; }
 #general-train[aria-pressed=true] { background:#7a4a2c; }
 #general-train-note { color:#c0c3ab; font-size:10px; margin-top:3px; }
+
+#vassal-controls { display:grid; gap:3px; margin-top:5px; font-size:12px; }
+#vassal-controls[hidden] { display:none; }
+#vassal-controls label { display:flex; align-items:center; gap:6px; }
+#vassal-controls input[type=range] { flex:1; min-width:60px; width:90px; }
+#vassal-controls output { width:24px; text-align:right; }
+#selection-content:has(#vassal-controls:not([hidden])) { display:grid; grid-template-columns:minmax(0,1fr) minmax(150px,230px); column-gap:12px; align-items:start; }
+#selection-content:has(#vassal-controls:not([hidden])) > :not(#vassal-controls) { grid-column:1; }
+#selection-content #vassal-controls { grid-column:2; grid-row:1 / span 12; margin-top:0; }
+#vassal-controls button { font-size:11px; padding:4px 6px; }

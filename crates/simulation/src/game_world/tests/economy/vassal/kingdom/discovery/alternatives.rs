@@ -234,7 +234,7 @@ fn alternative_fixture(kind: ResourceKind, bad_count: usize, layout: Layout) -> 
             position(TileCoord::new(footprint.min.x - 1, footprint.min.y)),
         )
         .unwrap();
-    w.bind_vassal(vassal, castle, footprint);
+
     reserves(
         &mut w,
         30_000,

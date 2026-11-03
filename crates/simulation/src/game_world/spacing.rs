@@ -151,8 +151,7 @@ impl GameWorld {
         }) {
             return false;
         }
-        if !self.vassal_position_allowed(unit.id, at)
-            || !self.body_position_clear(unit.kind, at)
+        if !self.body_position_clear(unit.kind, at)
             || !self.collision_sweep(index, unit.position, at, false, true)
             || !self.building_step_clear(unit.position.tile_floor(), tile)
             || !self

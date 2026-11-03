@@ -72,7 +72,7 @@ pub struct UnitState {
     /// Authoritative cavalry exploration toggle.
     pub auto_scout: bool,
     pub cargo_count: u8,
-    /// Owner-only home of a living Vassal or General.
+    /// Owner-only home of a living General.
     pub home_castle: Option<EntityId>,
     /// Owner-only ID of the Vassal currently managing this villager.
     pub managed_by: Option<EntityId>,
@@ -172,6 +172,8 @@ pub enum CommandResult {
     RejectedRequiresImperialAge,
     /// Housing space is exhausted. Appended to preserve existing wire values.
     RejectedPopulationCap,
+    /// The Vassal's weights, cap or training switch are outside their ranges.
+    RejectedInvalidVassalSettings,
 }
 
 /// Immutable physical properties of the active geographic map. The package

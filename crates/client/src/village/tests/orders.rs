@@ -65,8 +65,6 @@ fn economy_refusals_explain_food_population_ownership_and_exhaustion() {
     use aoe_protocol::CommandResult::*;
     for (result, words) in [
         (RejectedInsufficientFood, "not enough food"),
-        (RejectedVassalLeash, "100 tiles"),
-        (RejectedVassalHome, "home Castle"),
         (RejectedVassalExists, "already has a Vassal"),
         (RejectedNotOwner, "another player"),
         (RejectedInvalidResource, "exhausted"),
@@ -110,7 +108,7 @@ fn vassal_poses_use_the_king_for_standing_walking_and_death() {
         death_hunt: None,
         auto_scout: false,
         cargo_count: 0,
-        home_castle: Some(EntityId(8)),
+        home_castle: None,
         managed_by: None,
         commanded_by: None,
         general: None,

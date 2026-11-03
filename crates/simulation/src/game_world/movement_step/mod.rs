@@ -241,9 +241,6 @@ impl GameWorld {
         } else {
             interpolate(order, order.travelled)
         };
-        if !self.vassal_position_allowed(id, position) {
-            return None;
-        }
         let (previous_tile, tile) = (state.position.tile_floor(), position.tile_floor());
         if !self.local_unit_step_clear(index, state.position, position) {
             return None;

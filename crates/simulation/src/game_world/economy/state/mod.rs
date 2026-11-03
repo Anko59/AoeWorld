@@ -23,6 +23,8 @@ pub(crate) struct Economy {
     #[cfg(test)]
     pub(crate) tick_work: TickWork,
     pub(crate) garrison_orders: BTreeMap<EntityId, EntityId>,
+    /// Derived from live Vassal garrison orders, at most one per Castle.
+    pub(crate) garrison_vassals: BTreeMap<EntityId, EntityId>,
     pub(crate) garrison_reservations: BTreeMap<EntityId, u8>,
     pub(crate) occupied_garrisons: BTreeSet<EntityId>,
     pub(crate) ejections: BTreeMap<EntityId, (TileRect, Vec<GarrisonedUnit>)>,

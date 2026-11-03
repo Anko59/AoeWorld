@@ -3,15 +3,19 @@ use super::{Client, building_center, owner};
 use crate::playground::game::map;
 use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{BuildingKind, ConstructionState, UnitKind};
-use wasm_bindgen::prelude::wasm_bindgen;
+use std::{cell::RefCell, rc::Rc};
+use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
 mod territory;
 
 #[wasm_bindgen(
-    inline_js = "export function vassal_update(v, label) { window.aoeVassal?.update(v, label); }"
+    inline_js = "export function vassal_update(v, label, settings) { window.aoeVassal?.update(v, label, settings); } export function vassal_bind(callback) { window.aoeVassal.bind(callback); } export function vassal_settings() { return window.aoeVassal.settings(); }"
 )]
 extern "C" {
-    fn vassal_update(v: &[f64], label: &str);
+    fn vassal_update(v: &[f64], label: &str, settings: &[u32]);
+    fn vassal_settings() -> Vec<u8>;
+    #[wasm_bindgen(catch)]
+    fn vassal_bind(callback: &js_sys::Function) -> Result<(), JsValue>;
 }
 
 #[wasm_bindgen(inline_js = "export function general_update(v) { window.aoeGeneral?.update(v); }")]
@@ -157,14 +161,15 @@ fn describe(report: Option<aoe_protocol::VassalReport>) -> String {
     let Some(r) = report else {
         return "Vassal domain active · evaluating".into();
     };
-    let limit = aoe_simulation::VASSAL_RULES.max_villagers;
+    let limit = r.cap;
     let why = match r.wait {
         Growing => "training villagers",
-        Full => "waiting: 100-villager limit reached",
+        Full => "waiting: villager limit reached",
         Census => "waiting: too many units nearby to count",
         NoTownCenter => "waiting: no Town Center in its territory",
         Food => "waiting: not enough food",
         Population => "waiting: more housing needed",
+        Paused => "waiting: villager training is off",
     };
     format!(
         "Vassal domain active · {}/{limit} villagers managed · {} in territory · {why}",
@@ -176,6 +181,7 @@ pub(super) fn present(client: &Client) {
     let player = owner(client);
     let mut points = Vec::new();
     let mut label = String::new();
+    let mut settings = Vec::new();
     if let Some(b) = client.village.buildings.iter().find(|b| {
         Some(b.id) == client.selected.building_id
             && b.player == player
@@ -188,6 +194,11 @@ pub(super) fn present(client: &Client) {
             .find(|g| g.kind == UnitKind::Vassal && g.hp > 0);
         points = domains(client, player, b.id);
         label = if let Some(v) = vassal {
+            if let Some(r) = v.vassal {
+                settings.push(v.id.0);
+                settings.extend(r.weights.map(u32::from));
+                settings.extend([u32::from(r.cap), u32::from(r.training)]);
+            }
             describe(v.vassal)
         } else {
             "Garrison a Vassal here to activate its 100-tile domain".into()
@@ -211,9 +222,49 @@ pub(super) fn present(client: &Client) {
         } else if u.managed_by.is_some() {
             label = "Managed by Vassal".into();
         } else if u.kind == UnitKind::Vassal {
-            label = "Garrison in its home Castle to manage the economy within 100 tiles".into();
+            label = "Garrison in any owned Castle without a Vassal to manage its economy".into();
         }
     }
-    vassal_update(&points, &label);
+    vassal_update(&points, &label, &settings);
     general_update(&general_panel(client, player));
+}
+
+pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
+    let callback = Closure::<dyn FnMut(u32)>::new(move |action| {
+        let mut client = shared.borrow_mut();
+        let Some(vassal_id) = super::production::selected(&client)
+            .filter(|b| b.player == owner(&client) && b.kind == BuildingKind::Castle)
+            .and_then(|b| {
+                b.garrison
+                    .iter()
+                    .find(|g| g.kind == UnitKind::Vassal && g.hp > 0)
+            })
+            .map(|g| g.id)
+        else {
+            return;
+        };
+        let sequence = client.next_sequence;
+        let message = if action == 1 {
+            aoe_protocol::GameplayClientMessage::VassalDismissOrder {
+                sequence,
+                vassal_id,
+            }
+        } else {
+            let values = vassal_settings();
+            let [food, wood, gold, stone, cap, training] = values.as_slice() else {
+                return;
+            };
+            aoe_protocol::GameplayClientMessage::VassalSettingsOrder {
+                sequence,
+                vassal_id,
+                weights: [*food, *wood, *gold, *stone],
+                cap: *cap,
+                training: *training == 1,
+            }
+        };
+        super::orders::send(&mut client, message);
+    });
+    vassal_bind(callback.as_ref().unchecked_ref())?;
+    callback.forget();
+    Ok(())
 }

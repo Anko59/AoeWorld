@@ -5,12 +5,13 @@ A completed Castle in Castle Age trains one for 1,000 food and 1,000 gold
 in 60 game seconds, adding one living unit. A queued Vassal reserves the
 Castle too. Cancellation refunds the full cost; death permits a replacement.
 
-Its home is the Castle that trained it. A Vassal can shelter only there.
-Orders outside a circular radius of 100 tiles from the Castle centre are
-refused with a specific message, preserving the current order. Movement and
-soft separation also enforce the bound, including detours. Transports and
-formations cannot carry it outside. If the Castle is destroyed, a surviving
-Vassal retains that home's location and cannot activate another Castle.
+A Vassal can move freely and shelter in any completed owned Castle without
+another Vassal. Occupants, queued training and incoming garrison orders reserve
+the single Vassal place. Cancelling an arrival frees that reservation. Leaving
+releases its domain and workers immediately, and the old Castle can train a
+replacement. Outside a Castle it manages nothing, including after destruction.
+Settings travel with the Vassal when it occupies a different Castle.
+Roaming Vassals can board transports through the ordinary shore rendezvous.
 
 There is no global population ceiling. Completed Houses, Town Centers and
 Castles provide space; training waits when that space is full.
@@ -19,14 +20,14 @@ and the distinction between capacity and performance qualification.
 
 ## Deterministic economy
 
-Sheltering the Vassal at home activates its circular domain. The Rust simulation
+Sheltering the Vassal in a Castle activates its circular domain. The Rust simulation
 visits up to eight active domains every 20 ticks (one second at 20 Hz), rotating
 in entity order. Each domain scans at most 1,024 spatial-bucket entries and 2,048
 of its owner's buildings; a retained cursor progresses through crowded buckets.
 A partial census never authorizes training or a new foundation. Each admitted
-domain may attempt two ordinary orders, eight bounded resource searches and 32
+domain may attempt 64 ordinary orders, eight bounded resource searches and 32
 placement checks. Site searches resume across passes. The world maxima per pass
-are therefore 8,192 unit visits, 16,384 building visits, 16 orders, 64 resource
+are therefore 8,192 unit visits, 16,384 building visits, 512 orders, 64 resource
 searches and 256 site checks. Ordinary pathfinding retains its shared budgets.
 
 ### Exact rules (what is adopted, when TCs train, why it stops)
@@ -49,14 +50,18 @@ adopted. The old rule adopted only idle villagers, so a Castle built among
 busy workers showed a small "managed" count whatever the crowd; that was the
 reported "20 managed" confusion.
 
-**Training.** Each complete Town Center in the territory with an empty queue
-trains one villager per pass (two orders per pass per Vassal) when the player
+**Training.** Training starts OFF. The selected occupied Castle exposes a
+training switch, four resource-mix sliders (0–100, at least one positive), and
+a villager-cap slider (0–100, default 100). These settings belong to its Vassal
+and are confirmed by the server. When training is on, each complete Town Center in the territory with an empty queue
+trains one villager per pass (within the original two-order support window per Vassal) when the player
 has 50 food, until residents (every living villager in the territory, sheltered
-ones included) plus queued villagers reach 100. It stops, and the HUD says why,
+ones included) plus queued villagers reach the chosen cap. It stops, and the HUD says why,
 when: the census is incomplete (more than 1,024 units in the circle),
-residents+queued is 100, no Town Center lies in the territory, or food is short.
-The Vassal builds Houses before population plus queued training fills the
-player’s space, including when its workers are already busy.
+residents+queued reaches the chosen cap, no Town Center lies in the territory,
+food is short, or housing is full. The Vassal builds Houses before population
+plus queued training fills the player's space, including when its workers are
+already busy.
 
 **Stalls.** Every pass the Vassal checks its managed workers. One whose task is
 Moving but whose position has not changed for 8 seconds is stopped and
@@ -70,11 +75,15 @@ counted only units inside the camera subscription).
 
 Budgets and limits:
 
-The 100-villager limit counts living residents, including manual workers and
+The selected villager cap (at most 100) counts living residents, including manual workers and
 sheltered villagers, plus queued villagers in every domain Town Center. Training
 uses complete TCs with their spawn perimeter and rally inside the domain; it
 respects the player's food. Deaths permit
-replacements. Each domain can directly manage at most 100 workers.
+replacements. New adoptions stop at the selected cap.
+When the owner lowers the cap, excess managed villagers move to the nearest
+active Vassal with room. Idle villagers that cannot find local work may also
+transfer. Workers stay in place when no other Vassal has room. Ordinary
+movement, order budgets and territory adoption still apply.
 
 Jobs use the kingdom's shared stocks and actual deliveries, with default
 food:wood:gold:stone weights of 45:30:15:10. The lowest weighted projected
@@ -123,9 +132,18 @@ the circle are never adopted. Ejection/death/destruction deactivates management
 and releases its tags; current ordinary jobs can finish. Autonomous resource
 replacement and return targets stay within an active domain.
 
-The original eight-search, two-order and 32-site limits still apply per admitted
-domain. Finder telemetry counts returned block lists and candidate/cache checks:
-at most 25 lists and 1,608 checks per query. Cold map-block construction is
+Automatic orders also carry the issuing domain before an idle worker has a
+controller. Ordinary resource fallback must obey that territory too; a refused
+assignment reserves no managed slot. Manual orders keep their ordinary rules.
+
+The eight-search and 32-site limits still apply per admitted domain. Productive
+job probes and ordinary command attempts are each capped at 64, so even a
+fully unemployed crowd cannot cause unlimited job scans. Finder telemetry counts returned block lists and candidate/cache checks:
+at most 25 lists per query. A bounded query returns up to eight nearest offers for reuse during the current
+pass. Each search admission funds up to 1,608 candidate
+checks, including retained offers reused by later workers in the same pass.
+Every cache entry is counted; unused allowance is shared without admitting
+more map searches. Cold map-block construction is
 separate: an eight-tile block has at most 32 spatial history-range seeks, 256
 retained starting identities and 64 tile probes before deduplication to 64
 returned candidates. These are fixed spatial bounds, rather than a scan of the
@@ -144,7 +162,11 @@ Selecting a completed owned Castle shows the yellow territory of every owned
 Castle; a solid outline is an active garrisoned Vassal, a dashed circle an
 inactive domain. Where two active territories meet, each outline stops 0.4 tiles
 short of the equal-distance border, drawn as a double line. Selected managed villagers show “Managed by
-Vassal”. Training is disabled while that Castle has a queued or living Vassal.
+Vassal”. Vassal production is disabled while that Castle has a queued or garrisoned Vassal. Incoming Vassals also reserve its place on the server.
+An occupied Castle also offers “Dismiss idle villagers”: it kills idle owned
+villagers in that Vassal's territory that no Vassal currently manages, including
+stopped villagers holding a load, using normal death and population handling. Busy, managed, sheltered, foreign and
+out-of-territory units are preserved. An inactive Vassal cannot dismiss workers.
 
 The original DAT's King (unit 434) supplies the pose IDs and timing. Its SLPs
 1767/1771/1764/1768 are absent from the trial DRS, so the private asset import
@@ -165,3 +187,36 @@ visible in a short capture; it does not change the manager's work budgets.
 forest and a completed Lumber Camp, with 30,000 Food/Gold/Stone and 1,000 Wood.
 Its four-times game clock preserves ordinary orders and manager budgets.
 Recenter on the stationary Scout to frame the farm clusters and forest.
+
+`POST /maps/reset?scenario=vassal-throughput` prepares forty idle villagers,
+known forest, a Lumber Camp and an ungarrisoned Vassal. Its ordinary 20 Hz clock
+and real garrison/gather orders make the dispatch burst visible without time
+acceleration. Fog is disabled for this local capture scene.
+
+Villager training and optional reseeds/drop-off repairs retain their original
+two-order support window. The larger shared budget serves productive worker
+orders; it does not divert a burst of busy farmers into optional repairs.
+
+## Coastal work
+
+The same bounded spatial census includes owned Fishing Ships in the territory,
+with a separate fleet limit of 100; ships do not consume the villager cap.
+Busy fishing ships are adopted in place, and idle ships receive ordinary fish
+orders. Manual moves stay manual until real idle; foreign and outside ships
+are excluded. Leaving the Castle releases the fleet, and autonomous replacement
+fish and return targets remain in the active territory.
+
+Each map domain advances one discovery block even when its land workers are
+busy, retaining at most eight known, explored fish nodes. Ship-local queries
+share the eight-search allowance and all cache inspections are counted. A
+coastal domain with known fish builds an ordinary Dock when the territory has
+none, reuses an existing foundation, and replaces a lost builder. Placement
+shares the 32-site allowance. The training switch covers villagers and fishing
+ships; a completed Dock trains ships only with Food priority, available Wood,
+an empty queue. Inland domains without fish buy no Dock.
+
+`POST /maps/reset?scenario=vassal-fishing` prepares a synthetic flat coast,
+a Vassal entering a Castle, eight villagers and one fishing ship already on
+an ordinary fish job. It starts without a Dock; normal construction and
+Food-priority training grow the fleet. Its one-Hz game clock runs twenty times
+faster under the server ticker for local recording, with fog disabled.

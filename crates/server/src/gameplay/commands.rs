@@ -56,6 +56,38 @@ impl GameplayService {
         )
         .await;
     }
+    pub async fn queue_vassal_dismiss(&self, session_id: u64, sequence: u64, vassal_id: EntityId) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::VassalDismiss { vassal_id },
+        )
+        .await;
+    }
+    pub async fn queue_vassal_settings(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        vassal_id: EntityId,
+        weights: [u8; 4],
+        cap: u8,
+        training: bool,
+    ) {
+        let settings = aoe_simulation::VassalSettings {
+            weights,
+            cap,
+            training,
+        };
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::VassalSettings {
+                vassal_id,
+                settings,
+            },
+        )
+        .await;
+    }
     pub async fn queue_farm_reseed(
         &self,
         session_id: u64,

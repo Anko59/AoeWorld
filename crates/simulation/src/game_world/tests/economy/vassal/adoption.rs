@@ -51,6 +51,7 @@ fn a_vassal_adopts_busy_villagers_and_trains_to_a_hundred() {
         )
         .unwrap();
     }
+    super::manager::training_on(&mut w, vassal);
     w.insert_building(
         PlayerId(0),
         BuildingKind::TownCenter,
@@ -136,6 +137,7 @@ fn villagers_beyond_the_limit_stay_unmanaged_and_a_manual_move_is_not_adopted() 
 #[test]
 fn status_names_what_blocks_growth() {
     let (mut w, _, vassal) = active();
+    super::manager::training_on(&mut w, vassal);
     w.economy.players.get_mut(&PlayerId(0)).unwrap().stockpile = Stockpile::default();
     pass(&mut w);
     assert_eq!(w.vassal_status(vassal).unwrap().wait, VassalWait::Food);

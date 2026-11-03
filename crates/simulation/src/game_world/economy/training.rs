@@ -30,14 +30,7 @@ impl GameWorld {
         if !super::trainable_units(building.kind).contains(&kind) {
             return Err(EconomyError::WrongUnitKind);
         }
-        if kind == UnitKind::Vassal
-            && (building.training_queue.iter().any(|e| e.kind == kind)
-                || self
-                    .economy
-                    .vassal_homes
-                    .values()
-                    .any(|home| home.castle == center))
-        {
+        if kind == UnitKind::Vassal && self.vassal_reserved(building, None) {
             return Err(EconomyError::VassalExists);
         }
         self.require_age(player, kind.required_age())?;
@@ -213,9 +206,6 @@ impl GameWorld {
             if let Ok(unit) = spawned {
                 if kind == UnitKind::General {
                     self.bind_general_castle(unit, id);
-                }
-                if kind == UnitKind::Vassal {
-                    self.bind_vassal(unit, id, footprint);
                 }
                 if let Some(building) = self.economy.buildings.get_mut(&id) {
                     building.training_queue.pop_front();

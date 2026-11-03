@@ -3,6 +3,8 @@
 use crate::{BuildingKind, EconomyError, GameWorld, Stockpile};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 
+#[path = "demo/coast.rs"]
+mod coast;
 #[path = "demo/imperial.rs"]
 mod imperial;
 #[path = "demo/kingdom.rs"]
@@ -151,12 +153,10 @@ impl GameWorld {
         world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
         for (x, y) in [(100, 100), (150, 100)] {
             let footprint = TileRect::from_xywh(x, y, 4, 4);
-            let castle =
-                world.insert_building(PlayerId(0), BuildingKind::Castle, footprint, true)?;
+            world.insert_building(PlayerId(0), BuildingKind::Castle, footprint, true)?;
             let at = aoe_core::WorldPosition::from_tile_center(TileCoord::new(x + 2, y + 5))
                 .map_err(|_| EconomyError::InvalidFootprint)?;
-            let vassal = world.spawn_kind(PlayerId(0), UnitKind::Vassal, at)?;
-            world.bind_vassal(vassal, castle, footprint);
+            world.spawn_kind(PlayerId(0), UnitKind::Vassal, at)?;
         }
         for i in 0..40 {
             let at = TileCoord::new(87 + 4 * (i % 20), 146 + 4 * (i / 20));
@@ -218,7 +218,7 @@ impl GameWorld {
             };
         }
         let vassal = world.spawn_kind(PlayerId(0), UnitKind::Vassal, position(99, 100)?)?;
-        world.bind_vassal(vassal, castle, footprint);
+
         for n in 0..24 {
             world.spawn_villager(PlayerId(0), position(122 + (n % 8) * 2, 123 + (n / 8) * 2)?)?;
         }

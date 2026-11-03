@@ -156,7 +156,7 @@ fn remote_income_world(kind: ResourceKind, stalled: bool) -> RemoteIncome {
     let remote = w
         .spawn_kind(PlayerId(0), UnitKind::Vassal, position(exit))
         .unwrap();
-    w.bind_vassal(remote, castle, footprint);
+
     // Complete drop-offs before residents exist, so their chosen initial work
     // tiles cannot end up inside a newly inserted Camp or Mill footprint.
     let dropoff = if kind == ResourceKind::Food {

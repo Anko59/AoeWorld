@@ -223,6 +223,9 @@ fn one_bad_garrison_occupant_costs_only_itself() {
 #[test]
 fn a_vassal_report_on_a_non_vassal_is_cleared_not_the_building() {
     let report = VassalReport {
+        weights: [45, 30, 15, 10],
+        cap: 100,
+        training: false,
         managed: 3,
         residents: 4,
         wait: VassalWait::Growing,

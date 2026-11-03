@@ -1,6 +1,5 @@
 //! A Vassal takes over the owned villagers in its territory, busy ones
 //! included. Accepted owner overrides remain manual until real idle.
-use super::VASSAL_RULES;
 use super::snapshot::Snapshot;
 use crate::{GameUnit, GameWorld};
 use aoe_map::ResourceKind;
@@ -34,7 +33,7 @@ impl GameWorld {
                 .economy
                 .vassal_homes
                 .get(&s.vassal)
-                .is_none_or(|h| h.workers.len() >= VASSAL_RULES.max_villagers);
+                .is_none_or(|h| h.workers.len() >= h.cap());
             if full {
                 break;
             }

@@ -38,9 +38,6 @@ impl GameWorld {
         // Snap into the legal edge band (as on dev), keeping the exact point:
         // radius movement honours positions inside a tile.
         let destination = self.config.clamp_ground_position(destination);
-        if !self.vassal_position_allowed(id, destination) {
-            return Err(GameWorldError::VassalLeash);
-        }
         let kind = self.units[index].state.kind;
         let passable = self
             .unit_tile_passable(kind, destination.tile_floor(), &|| false)

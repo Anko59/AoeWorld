@@ -41,8 +41,8 @@ pub use economy::{
     ConstructionState, EconomyError, GameBuilding, GarrisonedUnit, GeneralState, GeneralStatus,
     GeneralWork, MARKET_RULES, MAX_BUILD_GROUP, MAX_WALL_SEGMENTS, MarketPrices, PlayerEconomy,
     RallyPoint, RallyTarget, Stockpile, TickPhase, TrainingEntry, UnitKind, UnitTask, VASSAL_RULES,
-    VASSAL_STALL_SECONDS, VILLAGE_RULES, VassalRules, VassalStatus, VassalWait, VassalWork,
-    VillageRules, WorldLimits, trainable_units,
+    VASSAL_STALL_SECONDS, VILLAGE_RULES, VassalRules, VassalSettings, VassalStatus, VassalWait,
+    VassalWork, VillageRules, WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;
@@ -91,8 +91,6 @@ pub enum GameWorldError {
     InvalidConfig(#[from] aoe_core::CoordinateError),
     #[error("position is outside the valid map ground")]
     InvalidPosition,
-    #[error("a Vassal must stay within 100 tiles of its home Castle")]
-    VassalLeash,
     #[error("destination is unreachable from the unit position")]
     Unreachable,
     #[error("path planning exceeded its deterministic work budget")]

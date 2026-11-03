@@ -48,7 +48,7 @@ fn summary(mut values: Vec<f64>) -> serde_json::Value {
     })
 }
 
-fn measure(installed: bool) {
+fn measure(installed: bool) -> [u8; 32] {
     let mut world = fixture::flat_world(2048);
     let Terrain::Map { generator, .. } = world.terrain() else {
         panic!()
@@ -110,23 +110,6 @@ fn measure(installed: bool) {
     let Terrain::Map { generator, .. } = world.terrain() else {
         panic!()
     };
-    // Pin the current authoritative result in both physical cache modes. Re-pinned
-    // for the bundled economy reservations, Vassal and walking changes, which alter
-    // this workload's gatherer and route outcomes; both cache modes still agree.
-    // Swept avoidance adds current obstruction/arrival state; friendly
-    // squeeze-through and worksite-only gather redirects change it again. Regenerated with
-    // `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server
-    // AOE_NATIVE_TEST_FILTER='test(large_navigation_)'`; both cache modes retain
-    // their identical workload, canonical state and no-construction assertions.
-    assert_eq!(
-        world.canonical_hash(),
-        [
-            // PR 7 removes follower waits/index hashing; both navigation modes reproduce this pin.
-            // Re-pinned for the kingdom income and Vassal job-priority hash fields.
-            18, 169, 52, 239, 186, 56, 160, 39, 71, 93, 239, 3, 208, 9, 187, 229, 93, 82, 111, 7,
-            81, 59, 186, 39, 223, 138, 57, 1, 153, 215, 114, 206,
-        ]
-    );
     if installed {
         for phase in [0, 1, 3, 4] {
             assert_eq!(
@@ -180,14 +163,41 @@ fn measure(installed: bool) {
     )
     .unwrap();
     println!("navigation perf {name}: {report}");
+    world.canonical_hash()
+}
+
+fn replay(installed: bool) {
+    let run = |workers| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(workers)
+            .build()
+            .unwrap()
+            .install(|| measure(installed))
+    };
+    let single = run(1);
+    assert_eq!(
+        single,
+        run(4),
+        "navigation replay must agree across worker counts"
+    );
+    // Vassal controls, transfer reservations and current squad state change this
+    // checkpoint. Keep the workload, 1/4-worker equality and installed-mode
+    // no-construction assertions above intact when regenerating the pin.
+    assert_eq!(
+        single,
+        [
+            19, 37, 174, 123, 81, 69, 198, 206, 118, 74, 53, 96, 207, 143, 74, 76, 180, 54, 59,
+            217, 114, 59, 68, 45, 16, 171, 55, 125, 210, 188, 197, 71,
+        ]
+    );
 }
 
 #[test]
 fn large_navigation_lazy_tick_measurement() {
-    measure(false);
+    replay(false);
 }
 
 #[test]
 fn large_navigation_static_tick_measurement() {
-    measure(true);
+    replay(true);
 }
