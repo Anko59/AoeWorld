@@ -1,35 +1,31 @@
 use crate::playground::game::capture::{Capture, ChunkCounts, Fragment};
-use aoe_core::{Camera, WorldConfig};
+use aoe_core::Camera;
 use std::collections::BTreeSet;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
-fn camera_fragment_clamps_world_and_shared_zoom_limits() {
-    let config = WorldConfig::default();
+fn camera_fragment_keeps_outside_centers_and_shared_zoom_limits() {
     let camera = Camera::new([100.0, 200.0], [1280.0, 720.0]);
-    let edge = Fragment([-500.0, 9999999.0, 3.0, 0.0]).apply(camera, config);
+    let edge = Fragment([-500.0, 9999999.0, 3.0, 0.0]).apply(camera);
     assert_eq!(edge.zoom, 3.0);
     let expected = Camera {
-        center: [0.0, f64::from(config.height_tiles) - 1.0],
+        center: [-500.0, 9999999.0],
         zoom: 3.0,
         ..camera
-    }
-    .clamp_center(config);
+    };
     assert_eq!(edge, expected);
     assert_eq!(
-        Fragment([f64::NAN, f64::NAN, 0.25, 0.0])
-            .apply(camera, config)
-            .zoom,
+        Fragment([f64::NAN, f64::NAN, 0.25, 0.0]).apply(camera).zoom,
         0.25
     );
     assert_eq!(
         Fragment([f64::NAN, f64::NAN, 2.0, 0.0])
-            .apply(camera, config)
+            .apply(camera)
             .center,
         camera.center
     );
-    assert_eq!(Fragment([f64::NAN; 4]).apply(camera, config), camera);
+    assert_eq!(Fragment([f64::NAN; 4]).apply(camera), camera);
 }
 
 #[wasm_bindgen_test]

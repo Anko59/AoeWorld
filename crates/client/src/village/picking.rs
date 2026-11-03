@@ -81,12 +81,10 @@ fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(Enti
 }
 
 pub(in super::super) fn enemy_building(client: &Client, point: ScreenPoint) -> Option<EntityId> {
-    let (depth, id) = building_target(client, point)?;
-    if resource_target(client, point)
-        .is_some_and(|(d, r, _)| !in_front((depth, u64::from(id.0)), (d, r)))
-    {
+    if actor(client, point).is_some() || resource_target(client, point).is_some() {
         return None;
     }
+    let (_, id) = building_target(client, point)?;
     client
         .village
         .buildings
@@ -112,22 +110,13 @@ pub(in super::super) fn click(client: &mut Client, point: ScreenPoint, unit: Opt
         client.selected.units(vec![id]);
         return;
     }
-    let resource = resource_target(client, point);
-    if let Some((depth, id)) = building_target(client, point)
-        && resource.is_none_or(|(d, r, _)| in_front((depth, u64::from(id.0)), (d, r)))
-    {
-        client.selected.building(id);
-    } else if let Some((_, id, _)) = resource {
+    if let Some((_, id, _)) = resource_target(client, point) {
         client.selected.resource(id);
+    } else if let Some((_, id)) = building_target(client, point) {
+        client.selected.building(id);
     } else {
         client.selected = Default::default();
     }
-}
-
-// Rendering sorts by body depth, then entity ID. Storage order and the
-// inverse-projected ground tile must not select something behind a roof.
-fn in_front(a: (f64, u64), b: (f64, u64)) -> bool {
-    a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).is_ge()
 }
 
 fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId)> {
@@ -264,10 +253,8 @@ pub(in super::super) fn resource(
     client: &Client,
     point: ScreenPoint,
 ) -> Option<(u64, ResourceKind)> {
-    let (depth, id, kind) = resource_target(client, point)?;
-    building_target(client, point)
-        .is_none_or(|(d, b)| in_front((depth, id), (d, u64::from(b.0))))
-        .then_some((id, kind))
+    let (_, id, kind) = resource_target(client, point)?;
+    Some((id, kind))
 }
 
 fn resource_target(client: &Client, point: ScreenPoint) -> Option<(f64, u64, ResourceKind)> {

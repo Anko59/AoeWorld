@@ -137,8 +137,7 @@ pub fn run(o: Options) -> Result<(), BoxError> {
     let report = json!({
         "version": 1,
         "execution": { "workers": world.movement_worker_count(),
-            "available_parallelism": std::thread::available_parallelism().map(|n| n.get()).ok(),
-            "slot_cpus": std::env::var("AOE_SLOT_CPUS").ok() },
+            "available_parallelism": std::thread::available_parallelism().map(|n| n.get()).ok() },
         "revision": git(&["rev-parse", "HEAD"]),
         "dirty": !git(&["status", "--porcelain"]).is_empty(),
         "workload": {

@@ -63,14 +63,10 @@ pub(crate) struct Gate {
     pub(crate) budget_s: u32,
     /// Describes the check; does NOT make it unconditional.
     pub(crate) r#static: bool,
-    /// Compiles or runs the workspace's tests, browsers or benchmarks: takes one machine-wide
-    /// heavy slot for its whole run and queues for it (docs/gates.md). Absent means light.
+    /// A benchmark, full E2E, coverage, or an aggregate that runs those: takes the
+    /// nonblocking long-job lock. Short gates never contend for that lock.
     #[serde(default)]
-    pub(crate) heavy: bool,
-    /// Read but not yet used: the registry may name long jobs before the code that acts on
-    /// them lands, because the trusted judge is built from `origin/dev` (reader-first rollout).
-    #[serde(default, rename = "long")]
-    _long: bool,
+    pub(crate) long: bool,
     pub(crate) capabilities: Vec<Capability>,
     /// Failure/incompleteness blocks these cadences; runner must enforce later.
     pub(crate) blocks: Vec<Cadence>,

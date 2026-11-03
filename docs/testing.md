@@ -50,7 +50,7 @@ binaries, proc macros and nested clippy calls still account for substantial work
 
 For bounded core/asset/simulation iteration, use `make test-game-focused
 AOE_GAME_TEST_FILTER='test(catalog::packing)|test(browser_content)'` (on one
-line). It takes the shared heavy slot and fails if the filter selects no tests;
+line). It uses the shared container resource policy and fails if the filter selects no tests;
 `make test-unit` remains the full native gate.
 If another shared-machine cleanup removes active incremental files, use the
 command prefix `CARGO_INCREMENTAL=0`; Make forwards it through Docker and nested

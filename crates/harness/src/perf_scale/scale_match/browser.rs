@@ -2,7 +2,7 @@
 use super::{BoxError, Options};
 use std::{
     path::Path,
-    process::{Child, Command, Stdio},
+    process::{Child, Stdio},
 };
 
 pub(super) const SCRIPT: &str = "scale/match-fps.mjs";
@@ -35,7 +35,7 @@ pub(super) fn docker_args(options: &Options, root: &Path, out: &Path) -> Vec<Str
     ]
     .map(str::to_owned)
     .into();
-    args.extend(crate::slots::cap_args());
+    args.extend(crate::jobs::cap_args());
     args.extend([
         "--user".to_owned(),
         user,
@@ -69,9 +69,10 @@ pub(super) fn docker_args(options: &Options, root: &Path, out: &Path) -> Vec<Str
 pub(super) fn spawn(options: &Options, root: &Path, out: &Path) -> Result<Child, BoxError> {
     std::fs::create_dir_all(root.join(".cache/browser-home"))?;
     let log = std::fs::File::create(out.with_extension("log"))?;
-    Ok(Command::new("docker")
-        .args(docker_args(options, root, out))
-        .stdout(Stdio::from(log.try_clone()?))
-        .stderr(Stdio::from(log))
-        .spawn()?)
+    Ok(
+        crate::resources::docker_command(&docker_args(options, root, out))?
+            .stdout(Stdio::from(log.try_clone()?))
+            .stderr(Stdio::from(log))
+            .spawn()?,
+    )
 }

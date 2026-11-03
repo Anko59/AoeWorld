@@ -3,6 +3,8 @@ import { isolatedTest as test } from "../../server.js";
 import { PNG } from "pngjs";
 import { gameAssets } from "../game-assets.js";
 
+test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
+
 async function camera(page: Page, x: string, y: string, zoom: string) {
   await expect(page.locator("#minimap")).toHaveAttribute("data-camera-x", x);
   await expect(page.locator("#minimap")).toHaveAttribute("data-camera-y", y);
@@ -228,4 +230,69 @@ test("a second page's camera fragments settle on terrain the first page opened a
   } finally {
     await context.close();
   }
+});
+
+test.describe("free map-edge camera", () => {
+  test("outside centres stay fixed across zooms and stationary edge frames are measured", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const { fiveVillagerFixture } =
+      await import("../village/fixtures/village.js");
+    const { writeFile } = await import("node:fs/promises");
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await gameAssets(page, true);
+    await fiveVillagerFixture(page);
+    await page.goto("/?play=1#x=-2&y=2&zoom=.5");
+    await expect(page.locator("#connection")).toHaveText("connected");
+    const measurements = [];
+    for (const zoom of [0.25, 0.5, 1, 2]) {
+      await page.evaluate((zoom) => {
+        location.hash = `x=-2&y=2&zoom=${zoom}`;
+      }, zoom);
+      await camera(page, "-2", "2", String(zoom));
+      await expect(page.locator("#scene")).toHaveAttribute(
+        "data-chunks-pending",
+        "0",
+        { timeout: 60_000 },
+      );
+      await page.waitForTimeout(500);
+      const clip = { x: 20, y: 80, width: 1000, height: 400 };
+      const first = PNG.sync.read(
+        await page.screenshot({
+          clip,
+          path: `../.cache/showcase/camera-${zoom}-first.png`,
+        }),
+      );
+      await page.waitForTimeout(500);
+      const last = PNG.sync.read(
+        await page.screenshot({
+          clip,
+          path: `../.cache/showcase/camera-${zoom}-last.png`,
+        }),
+      );
+      let changedPixels = 0;
+      for (let i = 0; i < first.data.length; i += 4) {
+        if (
+          first.data
+            .subarray(i, i + 4)
+            .compare(last.data.subarray(i, i + 4)) !== 0
+        )
+          changedPixels++;
+      }
+      await camera(page, "-2", "2", String(zoom));
+      measurements.push({
+        zoom,
+        changedPixels,
+        pixels: first.width * first.height,
+      });
+    }
+    await writeFile(
+      "../.cache/showcase/camera-flicker.json",
+      JSON.stringify(measurements, null, 2),
+    );
+    const video = page.video();
+    await page.close();
+    await video?.saveAs("../.cache/showcase/free-camera-raw.webm");
+  });
 });

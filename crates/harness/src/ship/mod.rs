@@ -133,9 +133,9 @@ pub(crate) struct Options {
     /// Showcase video for the "What" section (SHIP_VIDEO).
     #[arg(long)]
     pub(crate) video: Option<PathBuf>,
-    /// The heavy-slot environment of this process, read once by `execute`.
+    /// The long-job environment of this process, read once by `execute`.
     #[arg(skip)]
-    pub(crate) slots: Box<crate::slots::SlotEnv>,
+    pub(crate) slots: Box<crate::jobs::JobEnv>,
     /// The ship lock, let go during the review and taken again for the push.
     #[arg(skip)]
     pub(crate) lock: lock::Handoff,
@@ -163,7 +163,7 @@ impl Default for Options {
     }
 }
 
-pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Result<()> {
+pub(crate) fn execute(command: Commands, slots: &crate::jobs::JobEnv) -> Result<()> {
     let root = PathBuf::from(git::git(Path::new("."), &["rev-parse", "--show-toplevel"])?);
     match command {
         Commands::Duel => duel::execute(&root).map_err(Into::into),
@@ -217,7 +217,7 @@ pub(crate) fn execute(command: Commands, slots: &crate::slots::SlotEnv) -> Resul
                 None => println!("no evidence for {head}; run `make ship`"),
             }
             lock::print_status(&root)?;
-            crate::slots::print_status(&root, slots)
+            crate::jobs::print_status(&root, slots)
         }
         Commands::ReviewPr => review_pr::execute(&root),
         Commands::Issue => issues::issue(&root),
@@ -291,7 +291,7 @@ pub(crate) fn ship_with(
     let base = crate::timeline::stage(root, "rebase", serde_json::json!({}), || {
         recheck::start::prepare(root, options)
     })?;
-    // The start-of-ship rebase is done. The gates take heavy slots, which serialize the heavy
+    // The start-of-ship rebase is done. Gates use resource admission and a separate lock for long
     // work, and their evidence is keyed by the exact commit, so the next ship may take the lock
     // and start meanwhile. The lock is taken again for the re-check and the push.
     if options.lock.release() {

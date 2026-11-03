@@ -28,7 +28,7 @@ for (const available of [false, true]) {
         return route.fulfill({
           json: {
             units: { 83: art, 109: art },
-            technologies: { 22: art },
+            technologies: { 22: art, 101: art },
             commands: { move: art, stop: art, build: art, military: art },
             resources: { wood: art },
             panels: {
@@ -70,6 +70,12 @@ for (const available of [false, true]) {
       await expect(
         page.locator('#top-bar [data-ui-id="wood"] .original-icon'),
       ).toBeVisible();
+      await expect(page.locator("#research-feudal-age")).toBeDisabled();
+      await expect(page.locator("#research-feudal-age")).toHaveCSS(
+        "filter",
+        "none",
+      );
+      await page.screenshot({ path: "../.cache/showcase/command-colours.png" });
     } else {
       await expect(page.locator("html")).toHaveAttribute(
         "data-interface-art",
@@ -180,7 +186,17 @@ test("mixed Archery Range queue keeps each authoritative unit icon", async ({
     ).find((actor) => actor.kind === "ArcheryRange"),
   );
   if (!range) throw new Error("Archery Range missing");
-  await page.mouse.click(range.x, range.y);
+  // Native roofs can overlap another building's ground hotspot. Select the
+  // Range's unobstructed roof while preserving the queue/icon assertions.
+  for (const dy of [0, -24, -48, -72, -96]) {
+    await page.mouse.click(range.x, range.y + dy);
+    await freshHud(page);
+    if (
+      (await page.locator("#selection").getAttribute("data-kind")) ===
+      "ArcheryRange"
+    )
+      break;
+  }
   await expect(page.locator("#selection")).toHaveAttribute(
     "data-kind",
     "ArcheryRange",

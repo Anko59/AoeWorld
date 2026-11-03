@@ -2,7 +2,8 @@ use super::{Client, building_center, owner};
 use crate::playground::game::{map, position_at};
 use aoe_protocol::{ResourceKind, UnitKind, UnitTask};
 use std::{cell::RefCell, rc::Rc};
-use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
+use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
+use web_sys::{Element, MouseEvent};
 
 #[wasm_bindgen(
     inline_js = "export function village_update(values, status, details) { window.aoeInterface?.numeric(values, status); window.aoeInterface?.details(details); }"
@@ -290,6 +291,37 @@ pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsVal
             )?;
         callback.forget();
     }
+    // One delegated listener serves every portrait the panel renders.
+    let panel = shared.clone();
+    let portraits =
+        wasm_bindgen::closure::Closure::<dyn FnMut(MouseEvent)>::new(move |event: MouseEvent| {
+            let token = event
+                .target()
+                .and_then(|target| target.dyn_into::<Element>().ok())
+                .and_then(|element| element.closest(".unit-token").ok().flatten());
+            let Some(id) = token
+                .and_then(|token| token.get_attribute("data-unit-id"))
+                .and_then(|id| id.parse::<u32>().ok())
+            else {
+                return;
+            };
+            super::selection::portrait(
+                &mut panel.borrow_mut(),
+                aoe_core::EntityId(id),
+                event.shift_key(),
+                event.ctrl_key(),
+            );
+        });
+    shared
+        .borrow()
+        .document
+        .get_element_by_id("selected-icons")
+        .ok_or("selected units panel missing")?
+        .add_event_listener_with_callback(
+            "click",
+            wasm_bindgen::JsCast::unchecked_ref(portraits.as_ref()),
+        )?;
+    portraits.forget();
     super::building_panel::install(shared)
 }
 

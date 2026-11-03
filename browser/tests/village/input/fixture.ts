@@ -39,6 +39,7 @@ export function building(
   hp = 900,
   complete = true,
   player = 0,
+  food?: number,
 ) {
   return [
     id,
@@ -53,7 +54,7 @@ export function building(
     ...uint(hp),
     ...uint(900),
     4,
-    0,
+    ...(food === undefined ? [0] : [1, ...uint(food)]),
     0,
     0,
     0,
@@ -80,12 +81,15 @@ export async function inputFixture(
     cargo?: number;
     player?: number[];
     military?: boolean;
+    originalArt?: boolean;
+    url?: string;
+    resources?: Parameters<typeof chunks>[0];
   } = {},
 ) {
   const navy =
     options.cargo === undefined ? undefined : { cargo: options.cargo };
   const commands: number[][] = [];
-  await gameAssets(page, true);
+  if (!options.originalArt) await gameAssets(page, true);
   if (cursorCatalog) {
     const art = {
       page: "fixture-color.png",
@@ -220,7 +224,7 @@ export async function inputFixture(
   });
   const preference = renderer === "canvas2d" ? "canvas" : renderer;
   await page.goto(
-    `/?play=1${options.query ?? ""}#x=8192.5&y=8192.5&zoom=.6&renderer=${preference}`,
+    `${options.url ?? "/"}?play=1${options.query ?? ""}#x=8192.5&y=8192.5&zoom=.6&renderer=${preference}`,
   );
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 60_000,
@@ -229,7 +233,7 @@ export async function inputFixture(
     "data-renderer",
     renderer,
   );
-  const terrain = chunks().map((chunk) => {
+  const terrain = chunks(options.resources).map((chunk) => {
     if (!navy) return chunk;
     const bytes = Buffer.from(chunk.payload_hex, "hex");
     for (let i = 0; i < 1024; i++) {

@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
-import { sampleFrames } from "../rendering/fixtures/bigview.js";
+import { sampleFrames } from "../../rendering/fixtures/bigview.js";
 
 // A real source-backed Paris package, 8,000 tiles per side, prepared locally.
 // No scripted sockets, fog, terrain or opponents in this qualification take.

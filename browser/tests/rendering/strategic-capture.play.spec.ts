@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fallbackTest as test, forceWebGl } from "./backends.js";
 import { sampleFrames } from "./fixtures/bigview.js";
-import { strategicLargeProof } from "../proofs/strategic-large.js";
+import { strategicLargeProof } from "../proofs/strategic/large.js";
 
 // Local original-art proof. The normal regression spec uses disposable servers;
 // this explicitly requested take uses only this checkout's make dev on 8153.

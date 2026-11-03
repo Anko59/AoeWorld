@@ -66,9 +66,11 @@ impl Worker {
         );
         let mount = format!("{}:{}", root.display(), root.display());
         let home = format!("HOME={}/.cache/browser-home", root.display());
+        crate::resources::policy::check()?;
         let mut process = Command::new("docker")
+            .arg("run")
+            .args(crate::jobs::cap_args())
             .args([
-                "run",
                 "--rm",
                 "--init",
                 "-i",

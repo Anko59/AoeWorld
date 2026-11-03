@@ -17,6 +17,9 @@ pub(crate) fn git(root: &Path, args: &[&str]) -> Result<String> {
 pub(crate) fn git_raw(root: &Path, args: &[&str]) -> Result<String> {
     let mut command = Command::new("git");
     command.arg("-C").arg(root).args(args);
+    if matches!(args.first(), Some(&"rebase" | &"push")) {
+        super::lock::prepare_command(root, &mut command).map_err(|e| e.to_string())?;
+    }
     let output = if matches!(args.first(), Some(&"fetch" | &"push")) {
         remote::output(&mut command)?
     } else {

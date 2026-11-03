@@ -67,7 +67,7 @@ General selection/march/return to sprite zoom on renderer projects.
 for this checkout's dev server on port 8153. The ignored file
 `.cache/showcase/zoom.json` supplies `{"url":"http://127.0.0.1:8153/","mode":"general"}`;
 `vassal` captures the economy demo and `large` uses the locally prepared
-8,000-tile Paris package named in `tests/proofs/strategic-large.ts`, with 99 real
+8,000-tile Paris package named in `tests/proofs/strategic/large.ts`, with 99 real
 AI opponents. Packages must be installed before starting the dev server. The
 large proof stops its AI hosts in its cleanup path. Videos and source-backed
 game assets remain outside Git. See the [local evidence record](scale/far-zoom-evidence.md) for actual

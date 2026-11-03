@@ -1,9 +1,9 @@
 //! Single gate registry, documentation rendering, and path-based impact selection.
 pub(crate) mod dispatch_status;
 pub(crate) mod flaky;
-mod heavy_slots;
 mod paths;
 pub(crate) mod registry;
+mod resource_limits;
 pub(crate) mod review;
 pub(crate) mod runner;
 pub(crate) mod scopes;
@@ -27,8 +27,8 @@ fn parse(bytes: &[u8]) -> Result<Registry, Box<dyn Error>> {
 
 fn table(registry: &Registry) -> String {
     let mut output = "# Implemented gate registry\n\nGenerated from `gates/registry.json`. `make docs-check` detects drift.\n\nRegistry v2 drives selection and dependency plans. The opt-in gate-run CLI executes cadence or complete CI-job plans with explicit budgets and local evidence. Existing Make/CI dispatch and minimum preflight remain mandatory until protected judging replaces bootstrap execution. No automatic agent interception is implied.\n\n".to_owned();
-    output.push_str(&heavy_slots::paragraph());
-    output.push_str("| Gate | Command | Depends on | Suites | Cadences | Budget (s) | Heavy slot | Evidence |\n|---|---|---|---|---|---|---|---|\n");
+    output.push_str(&resource_limits::paragraph());
+    output.push_str("| Gate | Command | Depends on | Suites | Cadences | Budget (s) | Long job | Evidence |\n|---|---|---|---|---|---|---|---|\n");
     for gate in &registry.gates {
         let requires = if gate.requires.is_empty() {
             "—".to_owned()
@@ -43,7 +43,7 @@ fn table(registry: &Registry) -> String {
             gate.suites.join(", "),
             gate.cadences,
             gate.budget_s,
-            if gate.heavy { "yes" } else { "—" },
+            if gate.long { "yes" } else { "—" },
             gate.evidence
         ));
     }

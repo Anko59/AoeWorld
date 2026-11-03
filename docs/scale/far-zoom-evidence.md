@@ -1,10 +1,11 @@
 # Far-zoom local evidence, 2026-11-03
 
-Executable revision: `34675232f27234ee117784c36c3bc9b29dd6d94c`, including camera
+Captured executable revision: `34675232f27234ee117784c36c3bc9b29dd6d94c`, including camera
 fix `46d1ab167e9cba1aa03edc0406df152a8f8da1a6`. Both commits have the requested
-coauthor trailer. The final evidence commit changes documentation only.
-The dev server's `/health` reported the exact executable revision; the full
-WASM report identifies that revision with `dirty: false` and `result: PASS`.
+coauthor trailer. The initial evidence commit `462ee2737f0f` changed documentation only.
+The dev server's `/health` reported the exact executable revision; the saved
+`.cache/showcase/wasm-committed.json` identifies that revision with
+`dirty: false` and `result: PASS`.
 
 ## Checks
 
@@ -34,9 +35,10 @@ paged snapshot atomicity, layer keys, real selection/orders and return to near
 zoom. It runs across WebGPU, WebGL2 and Canvas renderer projects. The real-art
 capture intentionally uses only the normal-compositor WebGL2 project.
 Tests were written and observed failing before the relevant fixes. No baseline
-or gate was reduced. This checkout retains the old queue harness, so heavy
-commands used `AOE_HEAVY_WAIT_MINUTES=5`; no dev merge was performed and no
-exit-75/76 refusal was retried.
+or gate was reduced. At capture time this checkout retained the old queue harness, so heavy
+commands used `AOE_HEAVY_WAIT_MINUTES=5`; the captures preceded the dev merge.
+The post-capture integration below drops that setting. No exit-75/76 refusal
+was retried.
 
 ## Browser captures
 
@@ -62,7 +64,8 @@ warm-up frames; the browser runs on a shared development machine. General
 median/p95 frame time was 16.7/19.7 ms (draw median 0.1 ms, UI 0.3 ms); Vassal
 16.7/16.9 ms (draw/UI medians 0.1/0.1 ms). At the large map's 2% home view, median/p95 was 16.7/22.7 ms, UI median 0.2 ms, draw median below the timer's resolution and draw p95 0.2 ms. The first film frame also displays a **864.1 ms transition frame** before the stable sample. The short median does not account for that startup hitch. Health reported two tick deadline misses; this is a cumulative server counter, not an isolated match benchmark.
 
-SHA-256 (local identity checks, not provenance authentication):
+SHA-256 at capture time (local identity checks, not provenance authentication;
+subsequent builds replace the two WASM paths):
 
 ```text
 ead8453a1efa27aa1f48bd75de6aedc3773e8329dadfd47dacc46a591e8a2a4f  far-zoom.webm
@@ -94,3 +97,50 @@ for these new commits is unavailable. Synthetic/demo workloads do not prove
 finished RTS performance.
 
 Cleanup passed: `/skirmish` reported `phase: stopped` and `ai_hosts: 0`; `make down DEV_PORT=8153` stopped this checkout's server. `make status DEV_PORT=8153` reported stopped and the port-8153 health request failed to connect as expected. All focused browser jobs completed, including their disposable-server cleanup. No test match or task-owned server remains running.
+
+## Integration with current dev
+
+After the initial handoff, stop hook `stop:5` rejected `heavy` in the old
+registry: the judge at `2d05cf302554f37b6d16e6bdf14502344314a269` accepts the
+current `long` schema. The original failure is preserved in
+`.cache/showcase/stop-schema-failure.txt`. Dev was merged, retaining its current
+resource-admission implementation and registry together. No parser alias,
+gate removal, budget reduction or baseline change was introduced. Subsequent
+commands omit `AOE_HEAVY_WAIT_MINUTES`; no actual admission refusal occurred.
+
+Dev's additional proof files exposed a 15-file directory. Moving this task's
+helper to `browser/tests/proofs/strategic/large.ts` and updating its two imports
+restored the existing 14-file limit. The failing structure log is retained as
+`zoom-merge-static.log`; the successful rerun is `zoom-merge-static-green.log`.
+
+Post-merge Dockerized checks:
+
+- `make hooks-install hooks-check fmt-check lint structure-check docs-check browser-check`: PASS.
+- `make deny architecture-check browser-check`: PASS.
+- `make test-resources`: eight passed.
+- `make test-harness-focused HARNESS_TEST_FILTER=gates::registry::`: 35 passed.
+- `make test-harness-focused HARNESS_TEST_FILTER=long_`: nine harness unit tests, one resource-runner unit test and four integration tests passed, including immediate long-job refusal and short-job admission fixtures.
+- `make test-harness-focused HARNESS_TEST_FILTER=agents::`: 87 passed.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='test(economy::farming)'`: 18 passed.
+- `make perf-wasm-cap`: **377,821 gzip bytes**, +24.8%, cap 378,521, **700 bytes headroom**. Diagnostic gzip remains 90,268 bytes.
+
+- `make test-wasm`: PASS; two supporting tests, 264 client integration tests and 394 client unit tests.
+- `make test-e2e AOE_E2E_WORKERS=1 AOE_E2E_SPECS='tests/rendering/strategic.play.spec.ts tests/village/input/cursors.play.spec.ts tests/rendering/bigview-population.play.spec.ts tests/camera/hooks.play.spec.ts'`: 29 passed, 0 skipped, zero unexpected or flaky results.
+
+`make gate-run HARNESS_CADENCE=stop HARNESS_SCOPE=working HARNESS_EVIDENCE_DIR=/tmp/aoeworld-zoom-stop-evidence-20261103` also passed all eight stop-cadence gates, including the WASM build. Its bootstrap-local ledger is local, non-authoritative evidence; logs and ledger are copied to `.cache/showcase/zoom-merge-stop/`.
+
+These checks ran on the merged worktree before the integration commit;
+the saved `merge-wasm.json` therefore correctly records source HEAD
+`462ee2737f0ff637443dab4b56ce2f7457d81e18`, `dirty: true`, and `PASS`.
+The earlier films and frame observations remain tied to captured revision
+`34675232f272`, rather than being relabelled as captures of the merged build.
+The post-merge browser regression verifies the real General selection/march,
+resource cache and near-camera behavior. No new original-art film was recorded.
+
+The post-merge logs and JSON copies are retained under `.cache/showcase/` with
+`zoom-merge-`, `merge-browser-regression` and `merge-wasm` names. The full e2e suite,
+CI and hardware qualifications excluded above remain unrun. No ship, push or
+publication was attempted. The dev server stays stopped, and disposable browser
+servers and WASM drivers were cleaned up when their checks completed.
+
+Post-merge optimized client gzip SHA-256: `57f95e7d3947e35ef8371d5d7421bffb7ed188b9866700bfc76d8375bd70e927` (`.cache/showcase/merge-optimized.wasm.gz`).

@@ -65,7 +65,7 @@ fn build_identity(root: &Path) -> Result<String> {
 }
 
 fn docker(args: &[&str]) -> Result<String> {
-    let output = Command::new("docker").args(args).output()?;
+    let output = crate::resources::docker_command(args)?.output()?;
     if !output.status.success() {
         return Err(format!(
             "docker {args:?}: {}",

@@ -359,7 +359,8 @@ fn the_push_names_the_evidenced_commit_for_the_pre_push_hook() {
 fn timeline_records_real_ship_stage_boundaries_and_failures() {
     for (gate, passed) in [("true", true), ("false", false)] {
         let (_temp, root) = fixture(gate);
-        assert_eq!(ship(&root, &offline()).is_ok(), passed);
+        let result = ship(&root, &offline());
+        assert_eq!(result.is_ok(), passed, "{result:?}");
         let path = root.join(".git/aoe-ship/timeline/feature.jsonl");
         let lines = fs::read_to_string(path).unwrap();
         let entries: Vec<serde_json::Value> = lines
@@ -408,7 +409,10 @@ fn timeline_observes_review_grade_and_only_reacquires_after_a_pass() {
         assert_eq!(reviews[1]["detail"]["grade"], grade);
         assert_eq!(reviews[1]["detail"]["ok"], grade == 9);
         assert_eq!(
-            entries.iter().filter(|e| e["stage"] == "lock-wait").count(),
+            entries
+                .iter()
+                .filter(|e| e["stage"] == "lock-acquire")
+                .count(),
             2
         );
         assert_eq!(
