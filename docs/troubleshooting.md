@@ -78,9 +78,9 @@ ignores it); they do not suspend a real machine, so the timing of a real resume 
 
 `make load-status` shows MemAvailable and the live long-job holder. Short jobs
 start without an exclusive lock. Each workload container uses the shared caps in
-`gates/container.args` (4 GiB RAM including swap, CPU shares 1024, four Cargo
-compiler jobs). There is no CPU quota. A lightweight std-only bootstrap has a
-256 MiB cap. Before starting a workload container the host checks MemAvailable:
+`gates/container.args` (4 GiB memory and combined memory plus swap, CPU shares
+1024, four Cargo compiler jobs). There is no CPU quota. A lightweight std-only
+bootstrap has a 256 MiB cap. Before starting a workload container the host checks MemAvailable:
 below 3 GiB it refuses immediately with the observed value and floor. This is
 an observation at admission, not a reservation against other processes.
 
@@ -92,3 +92,13 @@ aggregates containing them are long; a nonempty `AOE_E2E_SPECS` selection is sho
 Low-memory admission uses exit 76 in the host resource runner; Make reports the
 recipe failure. Neither refusal sleeps or retries. CI keeps these resource caps
 and memory admission checks; each CI job has its own runner.
+
+The 2026-11-03 shared-host qualification used four cold lint/WASM builds in two
+worktrees, with distinct empty targets and compiler caching disabled. Six Cargo
+jobs per container fell to 2.23 GiB available. Four jobs kept the observed minimum
+at 3.30 GiB (3.37 GiB in the independent one-second `free` log), with 293 seconds
+of four-way overlap. Host swap reached 4 GiB; no container or readable kernel
+journal OOM kill was observed. The cold two-job repeat measured lint at 1.06x
+its solo time and WASM at 1.37x; an earlier WASM run missed 1.5x at 1.61x.
+These measurements justify the current setting, not a capacity reservation or a
+latency guarantee under arbitrary other load. Remeasure when changing the policy.
