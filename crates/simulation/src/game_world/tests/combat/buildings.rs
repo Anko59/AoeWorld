@@ -116,7 +116,7 @@ fn militia_cost_is_paid_all_or_nothing_and_refunded_on_cancel() {
 }
 
 #[test]
-fn training_continues_after_a_town_center_falls_without_replacement_housing() {
+fn population_may_exceed_the_space_after_a_town_center_falls_and_training_waits() {
     let (mut world, ours, _) = two_centers();
     let second = world
         .place_town_center(PlayerId(0), TileCoord::new(60, 100))
@@ -125,16 +125,16 @@ fn training_continues_after_a_town_center_falls_without_replacement_housing() {
         world.spawn_villager(PlayerId(0), at(70 + x, 80)).unwrap();
     }
     assert_eq!(
-        world.player_economy(PlayerId(0)).unwrap().population_used,
-        7
+        world.player_economy(PlayerId(0)).unwrap().population_cap,
+        10
     );
     world.economy.buildings.get_mut(&ours).unwrap().hp = 1;
     let raider = world.spawn_militia(PlayerId(1), at(58, 62)).unwrap();
     world.issue_attack(PlayerId(1), raider, ours).unwrap();
     ticks_until(&mut world, 400, |w| w.building(ours).is_none());
     let economy = world.player_economy(PlayerId(0)).unwrap();
-    assert_eq!(economy.population_used, 7);
-    // Existing units survive and the other producer keeps training.
+    assert_eq!((economy.population_used, economy.population_cap), (7, 5));
+    // Existing units survive; prepaid training waits for replacement housing.
     assert_eq!(world.units().filter(|u| u.player == PlayerId(0)).count(), 7);
     world
         .economy
@@ -147,12 +147,10 @@ fn training_continues_after_a_town_center_falls_without_replacement_housing() {
         .issue_train(PlayerId(0), second, UnitKind::Villager)
         .unwrap();
     advance(&mut world, 500);
-    assert_eq!(world.units().filter(|u| u.player == PlayerId(0)).count(), 8);
-    assert_eq!(
-        world.player_economy(PlayerId(0)).unwrap().population_used,
-        8
-    );
-    assert!(world.building(second).unwrap().training_queue.is_empty());
+    assert_eq!(world.units().filter(|u| u.player == PlayerId(0)).count(), 7);
+    let queue = &world.building(second).unwrap().training_queue;
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue[0].progress_ticks, 0);
 }
 
 #[test]

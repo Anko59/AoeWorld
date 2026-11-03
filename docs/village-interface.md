@@ -39,8 +39,9 @@ time is twenty-five seconds.
 The panel shows the queue and current progress. Cancel removes the active
 entry and refunds food. Refusals explain ownership and resource failures in
 plain words. The current rules start three villagers plus the scout. The HUD
-shows living population / building space. Full space blocks training until
-more housing completes. There is no global maximum population.
+shows living population / building space. Up to fifteen units can be queued per
+building even at full space; training waits until more housing completes.
+There is no global maximum population.
 
 Maps are created only through Single Player Game Setup. Menu offers Resume,
 disabled Settings and Quit to Main Menu. Retained requests reuse their original

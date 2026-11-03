@@ -3,6 +3,7 @@ import { test } from "../../../server.js";
 import { playerState, productionFixture } from "./fixture.js";
 
 test.setTimeout(90_000);
+test.use({ video: "on" });
 
 test("a population-blocked building accepts fifteen units and explains housing", async ({
   page,

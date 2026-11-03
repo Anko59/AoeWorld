@@ -26,7 +26,6 @@ pub(crate) enum Availability {
     RequiresCastle,
     UniqueUnit,
     RequiresImperial,
-    Population,
 }
 impl Availability {
     pub(crate) fn number(self) -> f64 {
@@ -145,9 +144,6 @@ pub(crate) fn training(
     }
     if b.training_queue.len() >= aoe_protocol::MAX_TRAINING_QUEUE {
         return Availability::QueueFull;
-    }
-    if p.population_used >= p.population_cap {
-        return Availability::Population;
     }
     let need = if kind == UnitKind::Villager {
         Stockpile {

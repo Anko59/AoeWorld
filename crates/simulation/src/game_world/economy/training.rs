@@ -60,9 +60,6 @@ impl GameWorld {
             .players
             .get(&player)
             .ok_or(EconomyError::NotOwner)?;
-        if state.population_used >= state.population_cap {
-            return Err(EconomyError::PopulationCap);
-        }
         let seconds = if kind == UnitKind::Villager {
             if state.stockpile.food < VILLAGE_RULES.villager_food_cost {
                 return Err(EconomyError::InsufficientFood);

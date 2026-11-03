@@ -31,15 +31,44 @@ fn initial_population_and_later_spawns_are_not_truncated_to_u16() {
 
 #[test]
 fn housing_blocks_training_and_removal_preserves_living_units() {
+    assert_eq!(housing_lifecycle(), housing_lifecycle());
+}
+
+fn housing_lifecycle() -> [u8; 32] {
     let (mut world, _, center) = village();
+    world
+        .economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .stockpile
+        .food = 1000;
     world
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
     advance(&mut world, 500);
     assert_eq!(world.unit_count(), 5);
+    for _ in 0..15 {
+        world
+            .issue_train(PlayerId(0), center, UnitKind::Villager)
+            .unwrap();
+    }
+    let full = world.canonical_hash();
     assert_eq!(
         world.issue_train(PlayerId(0), center, UnitKind::Villager),
-        Err(EconomyError::PopulationCap)
+        Err(EconomyError::TrainingQueueFull)
+    );
+    assert_eq!(world.canonical_hash(), full);
+    assert_eq!(
+        world.player_economy(PlayerId(0)).unwrap().stockpile.food,
+        200
+    );
+    advance(&mut world, 500);
+    assert_eq!(world.unit_count(), 5);
+    assert_eq!(world.building(center).unwrap().training_queue.len(), 15);
+    assert_eq!(
+        world.building(center).unwrap().training_queue[0].progress_ticks,
+        0
     );
     let house = world
         .insert_building(
@@ -53,18 +82,25 @@ fn housing_blocks_training_and_removal_preserves_living_units() {
         world.player_economy(PlayerId(0)).unwrap().population_cap,
         10
     );
-    world
-        .issue_train(PlayerId(0), center, UnitKind::Villager)
-        .unwrap();
     advance(&mut world, 500);
     assert_eq!(world.unit_count(), 6);
     world.remove_building(house);
     assert_eq!(world.player_economy(PlayerId(0)).unwrap().population_cap, 5);
     assert_eq!(world.unit_count(), 6);
+    advance(&mut world, 500);
+    assert_eq!(world.unit_count(), 6);
+    assert_eq!(world.building(center).unwrap().training_queue.len(), 14);
     assert_eq!(
-        world.issue_train(PlayerId(0), center, UnitKind::Villager),
-        Err(EconomyError::PopulationCap)
+        world.building(center).unwrap().training_queue[0].progress_ticks,
+        0
     );
+    world.issue_cancel_training(PlayerId(0), center).unwrap();
+    assert_eq!(world.building(center).unwrap().training_queue.len(), 13);
+    assert_eq!(
+        world.player_economy(PlayerId(0)).unwrap().stockpile.food,
+        250
+    );
+    world.canonical_hash()
 }
 
 #[test]

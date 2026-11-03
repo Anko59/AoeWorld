@@ -5,7 +5,6 @@ import { gameAssets } from "../game-assets.js";
 import {
   centerVillage,
   frameResource,
-  freshHud,
   scoutVillage,
 } from "./fixtures/resources.js";
 
@@ -78,7 +77,7 @@ test("server stockpile and population; Q queues and cancels a villager", async (
   await expect(page.locator("#training-progress")).toBeHidden();
 });
 
-test("gatherers deposit wood while the Town Center trains; full housing refuses Q", async ({
+test("gatherers deposit wood while the Town Center trains; full housing queues Q", async ({
   page,
 }) => {
   test.setTimeout(100_000);
@@ -134,13 +133,16 @@ test("gatherers deposit wood while the Town Center trains; full housing refuses 
   });
   await expect(
     page.getByRole("button", { name: /Train Villager/ }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await page.keyboard.press("q");
-  await freshHud(page);
-  // Full housing refuses the order without spending food or queuing a unit.
-  await expect(page.locator("#stockpile-food")).toHaveText("150");
-  await expect(page.locator("#training")).toBeHidden();
-  await expect(page.locator("#selection-task")).toHaveText("Ready");
+  // Orders beyond the space are prepaid and wait for housing.
+  await expect(page.locator("#stockpile-food")).toHaveText("100");
+  await expect(page.locator("#training-label")).toContainText(
+    "Waiting for housing",
+  );
+  await expect(page.locator("#selection-task")).toHaveText(
+    "Waiting for housing",
+  );
   await expect(page.locator("#connection")).toHaveText("connected");
 
   await expect
@@ -149,9 +151,11 @@ test("gatherers deposit wood while the Town Center trains; full housing refuses 
       { timeout: 60_000 },
     )
     .toBeGreaterThan(200);
-  await expect(page.locator("#stockpile-food")).toHaveText("150");
+  await expect(page.locator("#stockpile-food")).toHaveText("100");
   await expect(page.locator("#population")).toHaveText("5/5");
-  await expect(page.locator("#training")).toBeHidden();
+  await expect(page.locator("#training-label")).toContainText(
+    "Waiting for housing",
+  );
   await expect(page.locator("#connection")).toHaveText("connected");
 });
 

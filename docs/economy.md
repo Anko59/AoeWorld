@@ -80,8 +80,8 @@ load.
 
 Train commands require an owned, completed building that trains the unit,
 enough resources and space in its fifteen-unit queue. Acceptance pays the unit
-cost; population counts living units. Full housing refuses new training orders
-and pauses prepaid queues until space is available.
+cost; population counts living units. Orders may fill the queue even without
+housing space; training pauses until space is available.
 Only the front entry advances. A completed entry waits for a free passable perimeter tile without paying
 again. New villagers use the shared entity allocator. Cancelling the active
 entry refunds its cost; cancelling an empty queue cannot create resources.

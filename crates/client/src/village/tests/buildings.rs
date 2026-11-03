@@ -198,7 +198,7 @@ fn age_technology_line_exposes_only_its_current_step() {
 }
 
 #[wasm_bindgen_test]
-fn training_buttons_explain_full_population_space() {
+fn training_buttons_allow_queues_at_or_above_population_space() {
     use crate::building_ui::availability::{Availability, training};
     let b = building(1);
     let mut p = rich_player(0);
@@ -206,7 +206,7 @@ fn training_buttons_explain_full_population_space() {
         p.population_used = used;
         assert!(matches!(
             training(&b, Some(&p), PlayerId(0), aoe_protocol::UnitKind::Villager),
-            Availability::Population
+            Availability::Ready
         ));
     }
     p.population_cap = 105;
