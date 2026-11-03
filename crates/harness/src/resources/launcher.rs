@@ -1,12 +1,21 @@
 //! Small host launcher, compiled independently of the workspace dependency graph.
 mod measure;
 mod policy;
+mod watch;
 
 #[cfg(test)]
 mod tests;
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "--watch") {
+        args.remove(0);
+        if let Err(error) = watch::run(&args) {
+            eprintln!("resource watchdog: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if args.first().is_some_and(|arg| arg == "--run") {
         args.remove(0);
         std::process::exit(run(&args).unwrap_or_else(|error| {
