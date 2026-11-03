@@ -384,8 +384,13 @@ request is tested before its parent merges; protected branch publication is unch
 ## Exact static inputs
 
 `make pre-commit` now checks an exported index tree, not unstaged working bytes.
-It preserves the existing formatting (including fuzz), structure, test placement, architecture,
-docs, and strict workspace/all-target Clippy checks. Git's effective hook index
+Formatting (including fuzz), structure, test placement, architecture and docs
+checks always run. Native workspace/all-target Clippy and wasm test compilation
+also run, with the [test-first exception](shipping.md#test-first). A nonempty
+Index change containing only Markdown paths classified as docs/static by the
+gate registry skips compiler checks only for additions and content edits. Deletions, renames,
+type or mode changes, instructions, unknown paths, data and
+mixed changes retain compiler checks. Git's effective hook index
 is forwarded into Docker: `commit -a` and pathspec commits use temporary indexes,
 not necessarily the ordinary index. No source `write-tree` or index refresh runs.
 Private Git metadata disables checkout conversions; raw file bytes and modes
