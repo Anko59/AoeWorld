@@ -21,7 +21,7 @@ The harness enforces these rules on every call:
   instructions). Never lower a gate, floor or baseline to pass.
 - No commit, push, branch change or GitHub write; the duel driver commits each step; the main session reviews and ships.
 - Compile and check only through Dockerized Make targets (`make lint`,
-  `make test-unit`, `make build-wasm`…). No host `cargo`, no interpreters.
+  `make test-native-focused`, `make test-harness-focused`…). No host `cargo`, no interpreters.
 - Files stay within 500 lines and directories within 14 code/config files.
 
 When you stop, check-fast runs; you are held while it is red, for five rounds,

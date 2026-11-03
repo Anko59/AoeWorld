@@ -1,5 +1,6 @@
 //! Fixtures mutate ONLY their own tempfile repositories.
 use super::*;
+mod batch;
 mod compiler;
 mod index_context;
 mod metadata;

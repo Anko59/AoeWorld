@@ -86,10 +86,10 @@ struct Payload<'a> {
     files: &'a [ContentFile],
     objects: &'a [ContentObject],
 }
-fn add_object(root: &Path, objects: &mut Objects, object: &str, kind: &str) -> Result<()> {
+fn add_object(batch: &mut Batch, objects: &mut Objects, object: &str, kind: &str) -> Result<()> {
     oid(object)?;
     ObjectKind::parse(kind)?;
-    let bytes = git(root, &["cat-file", kind, object], None)?;
+    let bytes = batch.read(object, kind)?;
     let key = (object.to_owned(), kind.to_owned());
     let hash = blake3::hash(&bytes).to_hex().to_string();
     if objects.get(&key).is_some_and(|previous| previous != &hash) {
@@ -98,9 +98,9 @@ fn add_object(root: &Path, objects: &mut Objects, object: &str, kind: &str) -> R
     objects.insert(key, hash);
     Ok(())
 }
-fn tree_objects(root: &Path, tree: &str) -> Result<Objects> {
+fn tree_objects(root: &Path, tree: &str, batch: &mut Batch) -> Result<Objects> {
     let mut objects = BTreeMap::new();
-    add_object(root, &mut objects, tree, "tree")?;
+    add_object(batch, &mut objects, tree, "tree")?;
     let listing = git(
         root,
         &["ls-tree", "-r", "-t", "--full-tree", "-z", oid(tree)?],
@@ -125,7 +125,7 @@ fn tree_objects(root: &Path, tree: &str) -> Result<Objects> {
         ) {
             return Err("content tree contains an unsupported mode/type".into());
         }
-        add_object(root, &mut objects, header[2], header[1])?;
+        add_object(batch, &mut objects, header[2], header[1])?;
     }
     Ok(objects)
 }
@@ -209,7 +209,9 @@ impl Snapshot {
                 .ok_or("content witness tree missing")?;
             oid(tree)?;
             let private_inventory = inventory(&tree_records(root, tree)?)?;
-            let private_objects = tree_objects(root, tree)?;
+            let mut private_batch = Batch::new(root)?;
+            let mut source_batch = Batch::new(&self.source)?;
+            let private_objects = tree_objects(root, tree, &mut private_batch)?;
             let (kind, expected_inventory, source_blobs, objects) = match &self.identity.kind {
                 Kind::Commit(commit) => {
                     oid(commit)?;
@@ -220,14 +222,14 @@ impl Snapshot {
                         return Err("selected content commit/tree mismatch".into());
                     }
                     let expected_inventory = inventory(&tree_records(&self.source, commit)?)?;
-                    let mut source = tree_objects(&self.source, tree)?;
-                    add_object(&self.source, &mut source, commit, "commit")?;
+                    let mut source = tree_objects(&self.source, tree, &mut source_batch)?;
+                    add_object(&mut source_batch, &mut source, commit, "commit")?;
                     let mut captured = self.objects.clone();
                     if self.probe.head != *commit {
                         captured.remove(&(self.probe.head.clone(), "commit".into()));
                     }
                     let mut private = private_objects;
-                    add_object(root, &mut private, commit, "commit")?;
+                    add_object(&mut private_batch, &mut private, commit, "commit")?;
                     if source != captured || private != source {
                         return Err("selected source/private raw object content changed".into());
                     }
@@ -244,9 +246,9 @@ impl Snapshot {
                 Kind::Index => {
                     let expected_inventory = inventory(&self.probe.entries)?;
                     let mut source = BTreeMap::new();
-                    add_object(&self.source, &mut source, &self.probe.head, "commit")?;
+                    add_object(&mut source_batch, &mut source, &self.probe.head, "commit")?;
                     for (_, object) in expected_inventory.values() {
-                        add_object(&self.source, &mut source, object, "blob")?;
+                        add_object(&mut source_batch, &mut source, object, "blob")?;
                     }
                     for (key, hash) in &source {
                         if self.objects.get(key) != Some(hash) {
@@ -282,6 +284,8 @@ impl Snapshot {
                 }
                 Kind::Working => return Err("working content witness is unavailable".into()),
             };
+            source_batch.finish()?;
+            private_batch.finish()?;
             if private_inventory != expected_inventory {
                 return Err(
                     "private path/mode/blob inventory differs from selected content".into(),

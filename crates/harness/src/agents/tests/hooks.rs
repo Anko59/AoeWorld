@@ -193,6 +193,16 @@ fn session_start_gives_context_and_compaction_progress_comes_back() {
         "{context}"
     );
     assert!(context.contains("make hooks-install"), "{context}");
+    for target in [
+        "make fmt-check",
+        "make lint",
+        "make structure-check",
+        "make test-native-focused",
+        "make test-harness-focused",
+        "make perf-wasm-cap",
+    ] {
+        assert!(context.contains(target), "missing {target}: {context}");
+    }
     assert!(
         context.contains("GitHub auto-merges once the review passes"),
         "{context}"

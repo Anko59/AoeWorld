@@ -5,8 +5,9 @@ pub(super) type Objects = BTreeMap<(String, String), String>;
 
 pub(super) fn referenced_objects(source: &Path, kind: &Kind, observed: &Probe) -> Result<Objects> {
     let mut objects = BTreeMap::new();
+    let mut batch = Batch::new(source)?;
     let mut add = |object: &str, kind: &str| -> Result<()> {
-        let bytes = git(source, &["cat-file", kind, object], None)?;
+        let bytes = batch.read(object, kind)?;
         objects.insert(
             (object.to_owned(), kind.to_owned()),
             blake3::hash(&bytes).to_hex().to_string(),
@@ -52,6 +53,7 @@ pub(super) fn referenced_objects(source: &Path, kind: &Kind, observed: &Probe) -
             add(&entry.object, "blob")?;
         }
     }
+    batch.finish()?;
     Ok(objects)
 }
 

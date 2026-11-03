@@ -194,6 +194,10 @@ fn the_holders_environment_carries_the_cap_and_unset_means_no_flag() {
 /// Files that start a `docker run` themselves, and why one needs no cap. Everything else must
 /// take `cap_args()`, so a container started under a slot has the slot's CPU limit.
 const OWN_DOCKER_RUN_EXEMPT: &[(&str, &str)] = &[
+    (
+        "compile_cache/mod.rs",
+        "the shared storage daemon never compiles; compile_cache tests require its fixed one-CPU/512-MiB bounds",
+    ),
     ("dev.rs", "the long-lived dev server, not a gate"),
     ("qa_mcp.rs", "the interactive QA server tool"),
     (

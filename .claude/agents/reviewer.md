@@ -17,4 +17,4 @@ what fails and why; say plainly when you find nothing.
 
 The harness enforces these rules on every call: you write nothing (temp
 directories aside), only read Git and GitHub, and run checks only through
-Make targets (`make lint`, `make test-unit`, `make preflight`, `*-check`).
+Make targets (`make lint`, `make test-native-focused`, `make test-harness-focused`, `*-check`).

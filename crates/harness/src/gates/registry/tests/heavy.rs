@@ -73,3 +73,11 @@ fn heavy_must_be_a_boolean_and_unknown_fields_are_still_refused() {
     gate_mut(&mut value, "lint")["slots"] = json!(3);
     assert!(parse(&value).is_err());
 }
+
+#[test]
+fn the_registry_may_name_long_jobs_before_the_code_uses_them() {
+    let text = include_str!("../../../../../../gates/registry.json");
+    let marked = text.replacen("\"heavy\":true", "\"heavy\":true,\"long\":true", 1);
+    assert_ne!(marked, text);
+    Registry::parse(marked.as_bytes()).expect("a registry naming a long job parses");
+}

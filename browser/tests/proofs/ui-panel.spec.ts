@@ -9,6 +9,7 @@ import { generalProof } from "./general.js";
 import { generalAppearanceProof } from "./general-appearance.js";
 import { siegeProof } from "./siege.js";
 import { pressureProof } from "./pressure.js";
+import { townCenterProof } from "./town-center.js";
 import { centerVillage } from "../village/fixtures/resources.js";
 
 test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
@@ -23,12 +24,17 @@ test("local original panel proof with real selection and training", async ({
         river?: RiverRecording;
         url: string;
         renderer?: "webgpu" | "webgl2";
+        arenaToken?: string;
+        side?: "before" | "after";
+        agesOnly?: boolean;
       },
     () => null,
   );
   test.skip(!config, "Local panel proof was not requested");
   if (!config) return;
-  test.setTimeout(config.phase === "castle" ? 300_000 : 180_000);
+  test.setTimeout(
+    ["castle", "de-town-center"].includes(config.phase) ? 300_000 : 180_000,
+  );
   const url = new URL(config.url);
   expect(url.hostname).toBe("127.0.0.1");
   expect(url.protocol).toBe("http:");
@@ -44,6 +50,17 @@ test("local original panel proof with real selection and training", async ({
   if (config.phase === "general-river") {
     if (!config.river) throw new Error("River recording setup missing");
     await generalRiverProof(page, config.url, config.river);
+    return;
+  }
+  if (config.phase === "de-town-center") {
+    if (!config.arenaToken) throw new Error("Local arena token required");
+    await townCenterProof(
+      page,
+      config.url,
+      config.arenaToken,
+      config.side ?? "after",
+      config.agesOnly,
+    );
     return;
   }
   if (config.phase === "general") {
