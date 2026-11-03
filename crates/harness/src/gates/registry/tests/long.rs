@@ -28,5 +28,12 @@ fn long_marking_is_accepted_and_retained_by_the_parser() {
     let mut value = proposal();
     gate_mut(&mut value, "lint")["long"] = json!(true);
     let registry = parse(&value).expect("a registry naming a long job parses");
-    assert!(registry.gates.iter().find(|gate| gate.id == "lint").unwrap().long);
+    assert!(
+        registry
+            .gates
+            .iter()
+            .find(|gate| gate.id == "lint")
+            .unwrap()
+            .long
+    );
 }

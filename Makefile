@@ -177,7 +177,7 @@ orchestrator-tools: tools
 .PHONY: compile-cache-start compile-cache-stop compile-cache-stats
 compile-cache-start compile-cache-stop compile-cache-stats: orchestrator-tools
 	@mkdir -p '$(HARNESS_SCCACHE_DIR)'
-	@docker run --rm $(HEAVY_ENV) $(SLOT_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -v /var/run/docker.sock:/var/run/docker.sock $(ORCH_IMAGE) /usr/local/bin/aoe-compile-cache --service $(patsubst compile-cache-%,%,$@) '$(HARNESS_SCCACHE_DIR)' '$(UID):$(GID)'
+	@$(RESOURCE_RUN) docker run --rm $(JOB_ENV) $(RESOURCE_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -v /var/run/docker.sock:/var/run/docker.sock $(ORCH_IMAGE) /usr/local/bin/aoe-compile-cache --service $(patsubst compile-cache-%,%,$@) '$(HARNESS_SCCACHE_DIR)' '$(UID):$(GID)'
 
 browser-deps: browser-tools
 	@mkdir -p .cache/browser-home
