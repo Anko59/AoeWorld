@@ -10,10 +10,14 @@ pub(super) fn default_base(
 ) -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
     let packs = packs.canonicalize()?;
     let de = de.canonicalize()?;
+    // The streamed actor category is a pack too, but belongs to this overlay
+    // and must never compete with the trial pack for automatic attachment.
+    let actors = de.join("actors").canonicalize().ok();
     let mut candidates = Vec::new();
     for entry in std::fs::read_dir(&packs)? {
         let path = entry?.path();
         if path == de
+            || actors.as_deref() == Some(path.as_path())
             || !path.join("manifest.json").is_file()
             || std::fs::symlink_metadata(path.join("buildings")).is_ok()
         {
