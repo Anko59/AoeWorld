@@ -133,6 +133,9 @@ impl GameWorld {
     /// exactly the same orders as a match. The existing demo clock runs 4x.
     pub fn vassal_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         let (mut world, primary) = Self::military_demo(seed)?;
+        // The kit's wolf lurks beside the farm ring and kills the starting
+        // villagers while a slow client is still working through the demo.
+        world.remove_animals(crate::AnimalKind::Wolf);
         world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
         world.insert_building(
             PlayerId(0),
