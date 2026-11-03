@@ -176,6 +176,7 @@ fn snapshot() -> GameplayServerMessage {
             age: aoe_protocol::Age::Dark,
             researched: 0,
             recent_deliveries: [0; 4],
+            unit_counts: [0; 34],
             market_prices: aoe_protocol::MarketPrices::default(),
         }],
         buildings: vec![GameplayBuildingState {

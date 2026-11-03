@@ -1,4 +1,5 @@
 import { icon, entityIcon, trainingKinds, panelArt } from '/interface/ui-art.js';
+import { initProduction } from '/navigation/production.js';
 
 // One retained panel; values are reports, never estimates from stock changes.
 export function initCockpit() {
@@ -12,13 +13,15 @@ export function initCockpit() {
     <p class="cockpit-note">Collections: last minute in 5s buckets (55–60s). Land: building footprints, not borders.</p>
     <div class="cockpit-army" aria-label="Army by type"></div>`;
   document.body.append(panel);
+  const production = initProduction();
   let signature = '';
   const number = value => Number.isFinite(value) ? value.toLocaleString('en-US') : '?';
   function text(selector, value) {
     const node = panel.querySelector(selector);
     if (node.textContent !== value) node.textContent = value;
   }
-  function update(values = []) {
+  function update(values = [], census = []) {
+    production.ready(Number.isFinite(values[4]) && document.getElementById('connection')?.textContent === 'connected');
     panelArt(panel, 'selection');
     // Decode borrowed WASM slices immediately; no retained WASM-memory view.
     ['wood', 'food', 'gold', 'stone'].forEach((name, index) => {
@@ -28,14 +31,13 @@ export function initCockpit() {
     text('[data-population]', `${number(values[4])} / ${number(values[5])}`);
     text('[data-land]', `${number(values[10])} tiles`);
     const counts = new Map();
-    for (let at = 11; at + 1 < values.length; at += 2) {
-      const kind = values[at], count = values[at + 1];
-      if (!Number.isInteger(kind) || !trainingKinds[kind] || !Number.isInteger(count) || count <= 0
-        || [0, 3, 22].includes(kind)) continue;
-      counts.set(kind, (counts.get(kind) ?? 0) + count);
+    for (let kind = 0; kind < Math.min(census.length, trainingKinds.length); kind++) {
+      const count = census[kind];
+      if (!Number.isInteger(count) || count <= 0 || [0, 3, 22].includes(kind)) continue;
+      counts.set(kind, count);
     }
     const rows = [...counts].sort((a, b) => a[0] - b[0]);
-    const known = Number.isFinite(values[4]);
+    const known = census.length === trainingKinds.length;
     const next = JSON.stringify([known, rows]);
     if (next !== signature) {
       signature = next;
@@ -44,5 +46,5 @@ export function initCockpit() {
         + rows.map(([kind, count]) => `<span>${entityIcon(trainingKinds[kind])}${trainingKinds[kind]}: ${number(count)}</span>`).join('');
     }
   }
-  return { update, show(value) { panel.hidden = !value; }, reset() { signature = ''; update(); } };
+  return { update, production, show(value) { panel.hidden = !value; production.show(value); }, reset() { signature = ''; production.reset(); update(); } };
 }

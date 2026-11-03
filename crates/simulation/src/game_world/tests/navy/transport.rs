@@ -9,6 +9,25 @@ fn fixture() -> (GameWorld, EntityId, EntityId, TileCoord, TileCoord) {
 }
 
 #[test]
+fn unit_census_keeps_embarked_soldiers_and_separates_owners() {
+    let (mut world, transport, passenger, land, water) = fixture();
+    ship(&mut world, UnitKind::Galley, water, 1);
+    let before = world.unit_census();
+    assert_eq!(before[&PlayerId(0)][UnitKind::Militia as usize], 1);
+    assert_eq!(before[&PlayerId(0)][UnitKind::TransportShip as usize], 1);
+    assert_eq!(before[&PlayerId(1)][UnitKind::Galley as usize], 1);
+    world
+        .issue_load(PlayerId(0), &[passenger], transport)
+        .unwrap();
+    assert!(!world.unit_visible_to(PlayerId(0), passenger));
+    let hash = world.canonical_hash();
+    assert_eq!(world.unit_census(), before);
+    assert_eq!(world.canonical_hash(), hash);
+    world.issue_unload(PlayerId(0), transport, land).unwrap();
+    assert_eq!(world.unit_census(), before);
+}
+
+#[test]
 fn loaded_units_are_hidden_untargetable_and_cannot_act_until_unloaded() {
     let (mut world, transport, passenger, land, water) = fixture();
     let enemy = ship(&mut world, UnitKind::Galley, water, 1);

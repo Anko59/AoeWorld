@@ -95,3 +95,58 @@ reports remain ignored local evidence; a failed run is not counted as a pass.
 These are local demo workloads using ordinary server state/orders and real
 art. They do not qualify finished RTS performance, a source-backed large-map
 match or dedicated hardware. Full suites, CI and publication were not run.
+
+## Authoritative census and production checks
+
+The completed player report appends a fixed 34-kind census. It includes living
+transport passengers, building garrisons and blocked shelter exits; the server
+computes it once per tick before filtering each viewer's reports. This replaces
+reconstruction from the client's bounded actor stream. The current wire golden
+pins were regenerated, with no compatibility path or discriminator changes.
+
+Focused current-census checks: protocol `all()` 92 passed; simulation
+`test(unit_census)` two passed; server `test(gameplay::economy::) |
+test(gameplay::fanout::)` 11 passed; SDK `test(world::)` 28 passed.
+`make test-wasm-focused AOE_WASM_TEST_PACKAGE=aoe-client
+AOE_WASM_TEST_FILTER=village::production` passed nine tests. A later
+`AOE_WASM_TEST_FILTER=units_here_split` run passed all four split tests.
+The combined cockpit/views/production browser selection passed ten tests,
+including ordinary real-server production and the three-producer mock split.
+
+The two-Barracks film attempt reached a reduced population cap and honestly
+requested only one of six units; its assertion expecting six failed. Later
+captures warm licensed art before resetting the raided scenario. Separate E2E
+invocations were found to share report paths, so final capture/check runs are
+serialized. Concurrent index-check compilation also required refreshing the
+root protocol build after a stale artifact omitted the new census field.
+Failed attempts remain local evidence and are not reported as passes.
+
+`make perf-smoke` was refused with recipe exit 75 because another worktree held
+the long-job slot. No retry loop or benchmark substitution was used. The census
+is exercised by the focused fanout tests, including 100 viewers, but this is
+not a substitute for performance benchmark qualification.
+
+## Final finish window
+
+The owner requested importing `origin/dev`, stopping size compression work and
+committing working production within a further 20 minutes. `git fetch origin`
+and `git merge origin/dev` produced `5b286bb2ce1dd537cf9adc184763fbec6e5a2f5f`,
+including #672 and #676. The approved baseline update was still absent from
+`origin/dev` at the final pre-commit fetch (`e7bd12c53`). No baseline was edited
+on this branch. `make perf-wasm-cap` measured **378,651 gzip bytes** and failed
+the still-current 378,521-byte cap by 130 bytes. The owner-approved forthcoming
+block is approximately 469,940 bytes; its merge remains external work.
+
+After the merge, hooks-install/check, fmt-check, lint, structure-check and
+browser-check passed. Focused checks passed: protocol 92, simulation 3, server
+11, SDK 28 and production WASM 9. The ten product browser tests passed. The
+combined run also contained one opt-in recording failure while waiting for
+all three queued units to finish; its report is not a full-run PASS.
+
+The final short production proof orders three Militia, observes the ordinary
+queue/rally and ends after the first completion, retaining the remaining queue.
+Its local outcome is recorded in `.cache/showcase/short-proof.log`; films and
+extracted frames remain in the ignored showcase directory. `shipping-size.log`
+and `shipping-{static,protocol,simulation,server,sdk,wasm,browser}.log` retain
+commands and outcomes. Full CI, large RTS benchmarks and dedicated hardware
+qualification remain unrun. Nothing was pushed or published.

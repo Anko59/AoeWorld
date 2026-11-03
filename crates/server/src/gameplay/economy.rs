@@ -165,24 +165,27 @@ fn wire_market_prices(prices: aoe_simulation::MarketPrices) -> aoe_protocol::Mar
     }
 }
 pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerState> {
+    let census = world.unit_census();
     world
         .players()
         .map(|state| {
+            let mut unit_counts = [0; UnitKind::ALL.len()];
+            if let Some(counts) = census.get(&state.player) {
+                for (out, kind) in unit_counts.iter_mut().zip(UnitKind::ALL) {
+                    *out = counts[native_kind(kind) as usize];
+                }
+            }
             (
                 state.player,
-                player_state(&state, world.recent_deliveries(state.player)),
+                player_state(&state, world.recent_deliveries(state.player), unit_counts),
             )
         })
         .collect()
 }
-pub(super) fn player(world: &GameWorld, player: PlayerId) -> Option<GameplayPlayerState> {
-    world
-        .player_economy(player)
-        .map(|state| player_state(&state, world.recent_deliveries(player)))
-}
 fn player_state(
     state: &aoe_simulation::PlayerEconomy,
     recent_deliveries: [u64; 4],
+    unit_counts: [u32; UnitKind::ALL.len()],
 ) -> GameplayPlayerState {
     GameplayPlayerState {
         player: state.player,
@@ -203,6 +206,7 @@ fn player_state(
         researched: state.researched,
         market_prices: wire_market_prices(state.market_prices),
         recent_deliveries,
+        unit_counts,
     }
 }
 pub(super) fn building_in_camera(

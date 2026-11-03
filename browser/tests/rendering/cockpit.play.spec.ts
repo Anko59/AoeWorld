@@ -59,8 +59,13 @@ test("cockpit reports real deliveries and owned army types, and clears on reset"
     );
     (window as unknown as { cockpitTest: unknown }).cockpitTest = strategic;
     // Stock, population, actual credited deliveries in recent buckets, footprint
-    // area, then living own unit kind/count pairs. No stock-delta estimate.
-    strategic.cockpit([120, 240, 80, 40, 12, 20, 9, 17, 0, 3, 32, 1, 2, 2, 5]);
+    // area, then the fixed authoritative census. No stock-delta estimate.
+    // The authoritative census also includes soldiers not in the map stream,
+    // such as transport passengers. Map actors must not reconstruct it.
+    const census = new Uint32Array(34);
+    census[1] = 2;
+    census[2] = 5;
+    strategic.cockpit([120, 240, 80, 40, 12, 20, 9, 17, 0, 3, 32], census);
     strategic.frame([256, 256, 128, 128, 1280, 720, 0.04, 1]);
   });
   const panel = page.locator("#strategic-cockpit");

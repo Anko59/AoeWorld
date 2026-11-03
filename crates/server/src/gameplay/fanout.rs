@@ -82,13 +82,17 @@ fn viewer_states(
             view.rebuild || view.fog_disabled != Some(world.fog_disabled());
     }
     let disabled = world.fog_disabled();
+    // One global census per tick, shared by every viewer, not per session.
+    let all_players = economy::players(world);
     let mut everything = None;
     let mut viewers = BTreeMap::new();
     for (viewer, rebuild) in rebuild {
         let players = if disabled {
-            economy::players(world)
+            all_players.clone()
         } else {
-            economy::player(world, viewer)
+            all_players
+                .get(&viewer)
+                .copied()
                 .map(|state| (state.player, state))
                 .into_iter()
                 .collect()

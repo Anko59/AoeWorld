@@ -7,6 +7,8 @@ use serde::{
 use std::fmt;
 #[path = "economy/bounds.rs"]
 mod bounds;
+#[path = "economy/census.rs"]
+mod census;
 pub(super) use bounds::*;
 #[path = "economy/rules.rs"]
 mod rules;
@@ -123,6 +125,9 @@ pub struct GameplayPlayerState {
     /// Credited Food/Wood/Gold/Stone deliveries in twelve live five-second
     /// simulation buckets. Excludes stock edits, trade and refunds.
     pub recent_deliveries: [u64; 4],
+    /// Authoritative living units by current UnitKind, including cargo/shelters.
+    #[serde(with = "census")]
+    pub unit_counts: [u32; UnitKind::ALL.len()],
 }
 /// The most recent damage taken. A client plays a hit reaction when `tick`
 /// is newer than the one it last saw, and a swing for `attacker`.

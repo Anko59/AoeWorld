@@ -13,6 +13,13 @@
 .cockpit-army>b { width:100%; }
 .cockpit-army>span { display:flex; align-items:center; gap:4px; }
 .cockpit-army .icon { width:22px; height:22px; }
+#units-here { position:fixed; right:12px; top:320px; z-index:4; width:320px; max-height:calc(100vh - 536px); overflow:auto; padding:26px 12px 10px; color:#261d13; background:#d6c494; border:2px solid #9d8150; box-shadow:0 3px 12px #0008; font-size:12px; display:grid; grid-template-columns:1fr 65px; gap:6px; }
+#units-here label { display:flex; flex-direction:column; gap:2px; }
+#units-here select,#units-here input { min-width:0; width:100%; background:#f1dfb7; color:#261d13; border:1px solid #786139; padding:3px; }
+#units-here button { grid-column:1 / -1; background:#504b34; color:#fff0c9; padding:5px; }
+#units-here button[aria-pressed=true] { outline:2px solid #49351a; background:#72531f; }
+#units-here-status { grid-column:1 / -1; font-size:10px; line-height:13px; margin:0; }
+html.units-here-armed #scene { cursor:crosshair; }
 * { box-sizing:border-box; }
 html,body,#playground { width:100%; height:100%; margin:0; overflow:hidden; }
 body { background:#172516; color:var(--ink); font:14px/1.4 system-ui,sans-serif; }

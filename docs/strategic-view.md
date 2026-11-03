@@ -60,7 +60,7 @@ focus. Only the visible tile request is clipped to the map bounds.
 
 The far view has an original-art kingdom panel with held resources,
 population used/cap, recent credited deliveries, occupied building tiles and
-living owned military/support units by type, including garrisoned units and
+living owned military/support units by type, including embarked/garrisoned units and
 commanders. Villagers, Fishing Ships and Vassals are excluded from the army.
 The General token counts its soldiers; the kingdom total also counts the
 General himself. A missing economic report is shown as `?`.
@@ -84,6 +84,21 @@ lowest General ID). Space jumps to the newest observed damage to an owned
 unit or building. These jumps preserve zoom; a saved view restores zoom.
 Missing targets stay disabled. Bookmarks and alerts clear when the world resets.
 Typing in a form or opening a dialog suppresses these shortcuts.
+
+## Units here
+
+In the far-view production form, choose a type and a count from 1 to 50,
+press Units here, then click ground. Esc, right-click, leaving far zoom or
+losing focus cancels the destination. Feedback says how many ordinary orders
+were requested; the server still validates every rally and training order.
+
+Eligible producers must be owned, alive, complete and able to train the type
+at the reported age/research/resources. The deterministic split chooses the
+shortest queue, then squared distance to the destination, then building ID.
+It includes pending training, reserves resources and population, and bounds
+the burst including one rally per chosen producer. Every chosen producer's
+rally is changed to the clicked ground. Existing queued units share that
+producer rally. Missing economic reports disable the action.
 
 ## Local verification
 

@@ -3,6 +3,9 @@ use aoe_core::TileRect;
 use aoe_protocol::{Age, BuildingKind, ConstructionState, Stockpile, TrainingState};
 use wasm_bindgen_test::wasm_bindgen_test;
 
+#[path = "tests/here.rs"]
+mod here_tests;
+
 fn barracks(id: u32, count: usize) -> GameplayBuildingState {
     GameplayBuildingState {
         id: EntityId(id),
@@ -57,6 +60,7 @@ fn shortest_queue_counts_burst_clicks_and_ignores_ineligible_selected_buildings(
         population_used: 5,
         population_cap: 100,
         recent_deliveries: [0; 4],
+        unit_counts: [0; 34],
         market_prices: Default::default(),
     };
     let mut selected = Selection::default();
@@ -84,7 +88,7 @@ fn shortest_queue_counts_burst_clicks_and_ignores_ineligible_selected_buildings(
         )
         .unwrap();
         assert_eq!(target.id, EntityId(expected));
-        pending.record(sequence as u64, target.id);
+        pending.record(sequence as u64, target.id, UnitKind::Militia);
     }
     for building in &mut buildings[..3] {
         building.training_queue = barracks(0, 15).training_queue;
@@ -106,17 +110,17 @@ fn shortest_queue_counts_burst_clicks_and_ignores_ineligible_selected_buildings(
 #[wasm_bindgen_test]
 fn pending_training_is_bounded_and_reconciles_acknowledgements_with_authoritative_ticks() {
     let mut pending = PendingTraining::default();
-    pending.record(1, EntityId(2));
+    pending.record(1, EntityId(2), UnitKind::Militia);
     pending.acknowledge(1, CommandResult::Accepted, 10, 9);
     pending.observe(10);
     assert_eq!(pending.count(EntityId(2)), 1);
     pending.observe(11);
     assert_eq!(pending.count(EntityId(2)), 0);
-    pending.record(2, EntityId(3));
+    pending.record(2, EntityId(3), UnitKind::Militia);
     pending.acknowledge(2, CommandResult::RejectedTrainingQueueFull, 11, 11);
     assert_eq!(pending.count(EntityId(3)), 0);
     for sequence in 0..100 {
-        pending.record(sequence, EntityId(1));
+        pending.record(sequence, EntityId(1), UnitKind::Militia);
     }
     assert!(!pending.can_send());
     assert_eq!(
@@ -145,6 +149,7 @@ fn full_queues_do_not_reintroduce_locked_or_superseded_training_buttons() {
         population_used: 5,
         population_cap: 100,
         recent_deliveries: [0; 4],
+        unit_counts: [0; 34],
         market_prices: Default::default(),
     };
     let mut pending = PendingTraining::default();
@@ -181,7 +186,7 @@ fn full_queues_do_not_reintroduce_locked_or_superseded_training_buttons() {
     ));
     building.training_queue.clear();
     for sequence in 0..aoe_protocol::MAX_PENDING_COMMANDS_PER_CONNECTION as u64 {
-        pending.record(sequence, building.id);
+        pending.record(sequence, building.id, UnitKind::Militia);
     }
     assert!(matches!(
         blocked_reason(
@@ -223,6 +228,7 @@ fn grouped_vassal_training_skips_castles_with_an_occupant_or_pending_unit() {
         population_used: 5,
         population_cap: 100,
         recent_deliveries: [0; 4],
+        unit_counts: [0; 34],
         market_prices: Default::default(),
     };
     let mut selected = Selection::default();
@@ -246,7 +252,7 @@ fn grouped_vassal_training_skips_castles_with_an_occupant_or_pending_unit() {
         .map(|b| b.id)
     };
     assert_eq!(choose(&pending), Some(EntityId(2)));
-    pending.record(1, EntityId(2));
+    pending.record(1, EntityId(2), UnitKind::Vassal);
     assert_eq!(choose(&pending), None);
 }
 

@@ -176,6 +176,9 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             send_order(&mut client, target);
             return;
         }
+        if event.button() == 0 && super::village::production::here::click(&mut client, target) {
+            return;
+        }
         if event.button() == 0 && super::strategic::focus(&mut client, target) {
             return;
         }

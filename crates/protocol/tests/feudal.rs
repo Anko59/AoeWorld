@@ -72,6 +72,7 @@ fn dark_players_cannot_claim_feudal_techs_and_wheelbarrow_loads_round_trip() {
         age: Age::Dark,
         researched: Tech::DoubleBitAxe.bit(),
         recent_deliveries: [0; 4],
+        unit_counts: [0; 34],
         market_prices: aoe_protocol::MarketPrices::default(),
     };
     let mut snapshot = GameplayServerMessage::Snapshot {

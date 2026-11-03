@@ -6,7 +6,7 @@ use aoe_protocol::{BuildingKind, GameplayUnitState, UnitKind};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
-    inline_js = "export function strategic_update(a, e, b, c, w, o, s) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
+    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
 )]
 extern "C" {
     fn strategic_alert(tick: f64, x: f64, y: f64);
@@ -18,6 +18,7 @@ extern "C" {
         workers: &[f64],
         orders: &[f64],
         summary: &[f64],
+        counts: &[u32],
     );
 }
 
@@ -73,7 +74,8 @@ pub(in super::super) fn update(client: &Client) {
     let mut workers = Vec::new();
     let mut last_alert = [f64::NAN; 3];
     let mut summary = vec![f64::NAN; 11];
-    if let Some(p) = client.village.players.iter().find(|p| p.player == owner) {
+    let player = client.village.players.iter().find(|p| p.player == owner);
+    if let Some(p) = player {
         let s = p.stockpile;
         summary.copy_from_slice(&[
             f64::from(s.wood),
@@ -105,9 +107,6 @@ pub(in super::super) fn update(client: &Client) {
         if u.hp == 0 {
             continue;
         }
-        if own {
-            summary.extend([u.kind as u8 as f64, 1.0]);
-        }
         if armies.len() < 256 * 15
             && let Some(v) = army_record(u, owner, client.selected.units.contains(&u.id), None)
         {
@@ -133,9 +132,6 @@ pub(in super::super) fn update(client: &Client) {
             if b.kind != BuildingKind::Bridge {
                 summary[10] += f64::from(b.footprint.max.x - b.footprint.min.x)
                     * f64::from(b.footprint.max.y - b.footprint.min.y);
-            }
-            for g in b.garrison.iter().filter(|g| g.hp > 0) {
-                summary.extend([g.kind as u8 as f64, 1.0]);
             }
         }
         if b.kind == BuildingKind::Bridge && bridges.len() < 256 * 4 {
@@ -187,7 +183,14 @@ pub(in super::super) fn update(client: &Client) {
         }
     }
     strategic_update(
-        &armies, &economy, &bridges, &contacts, &workers, &orders, &summary,
+        &armies,
+        &economy,
+        &bridges,
+        &contacts,
+        &workers,
+        &orders,
+        &summary,
+        player.map_or(&[], |p| p.unit_counts.as_slice()),
     );
     strategic_alert(last_alert[0], last_alert[1], last_alert[2]);
 }

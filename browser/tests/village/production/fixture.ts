@@ -63,6 +63,7 @@ export function playerState(
     0,
     0,
     0, // Actual deliveries in the current player schema.
+    ...Array<number>(34).fill(0), // Current authoritative census.
   ];
 }
 

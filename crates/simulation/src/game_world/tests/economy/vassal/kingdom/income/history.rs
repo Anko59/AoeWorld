@@ -16,6 +16,31 @@ fn empty_household() -> GameWorld {
 }
 
 #[test]
+fn unit_census_keeps_building_garrisons_without_double_counting() {
+    let mut w = empty_household();
+    let owner = PlayerId(0);
+    let center = w
+        .insert_building(
+            owner,
+            BuildingKind::TownCenter,
+            aoe_core::TileRect::from_xywh(40, 40, 4, 4),
+            true,
+        )
+        .unwrap();
+    let soldier = w
+        .spawn_militia(
+            owner,
+            aoe_core::WorldPosition::from_tile_center(aoe_core::TileCoord::new(39, 41)).unwrap(),
+        )
+        .unwrap();
+    let before = w.unit_census();
+    w.issue_garrison(owner, soldier, center).unwrap();
+    advance(&mut w, 5);
+    assert!(w.unit(soldier).is_none());
+    assert_eq!(w.unit_census(), before);
+}
+
+#[test]
 fn cockpit_deliveries_exclude_stock_edits_and_expire_on_simulation_time() {
     let mut w = empty_household();
     let player = PlayerId(0);

@@ -273,6 +273,7 @@ export function initNavigation() {
     actors: view.actors,
     resources: strategic.resources,
     strategic,
+    production: strategic.production,
     views,
     overview: () => expanded,
     fragment: () => parseCameraFragment(location.hash),
