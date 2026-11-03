@@ -81,8 +81,25 @@ impl GameWorld {
         accept: impl Fn(&ResourceNode) -> bool,
         work: &mut ResourceSearchWork,
     ) -> Option<ResourceNode> {
+        self.nearest_resources_matching_counted::<1>(origin, kind, radius, exclude, accept, work)[0]
+    }
+
+    /// Fixed-capacity batches share the scalar finder's radius and work bounds.
+    pub(crate) fn nearest_resources_matching_counted<const N: usize>(
+        &self,
+        origin: TileCoord,
+        kind: ResourceKind,
+        radius: i32,
+        exclude: Option<u64>,
+        accept: impl Fn(&ResourceNode) -> bool,
+        work: &mut ResourceSearchWork,
+    ) -> [Option<ResourceNode>; N] {
+        let mut nearest = [None; N];
+        let Some(last) = N.checked_sub(1) else {
+            return nearest;
+        };
         let Terrain::Map { generator, overlay } = &self.terrain else {
-            return None;
+            return nearest;
         };
         // Public callers cannot enlarge the rule's bounded replacement search.
         let radius = radius.clamp(0, VILLAGE_RULES.replacement_radius_tiles);
@@ -94,15 +111,14 @@ impl GameWorld {
         // A candidate tile lies at most `radius` from `origin`, so its chunk
         // is at most this many chunks away in Chebyshev terms.
         let rings = (radius as u32).div_ceil(BLOCK_TILES as u32);
-        let mut nearest = None;
-        let mut score = (u64::MAX, u64::MAX);
+        let mut score = [(u64::MAX, u64::MAX); N];
         for ring in 0..=rings {
             // A chunk `ring` chunks away holds tiles at least this far from
             // `origin`; once that already loses, no farther chunk can win.
             // An equal distance could still win on the lower id, so only
             // strictly worse rings are cut.
             let closest = u64::from(ring.saturating_sub(1)) * BLOCK_TILES_U64 + 1;
-            if closest * closest > score.0 {
+            if closest * closest > score[last].0 {
                 break;
             }
             for dy in -(ring as i32)..=(ring as i32) {
@@ -120,7 +136,7 @@ impl GameWorld {
                     };
                     let (gx, gy) = (gap(origin.x, block.0), gap(origin.y, block.1));
                     let nearest_tile = gx * gx + gy * gy;
-                    if nearest_tile > squared || nearest_tile > score.0 {
+                    if nearest_tile > squared || nearest_tile > score[last].0 {
                         continue;
                     }
                     work.blocks += 1;
@@ -137,12 +153,15 @@ impl GameWorld {
                             || Some(node.id) == exclude
                             || !overlay.resource_available(*node)
                             || !accept(node)
-                            || (distance, node.id) >= score
+                            || (distance, node.id) >= score[last]
                         {
                             continue;
                         }
-                        nearest = Some(*node);
-                        score = (distance, node.id);
+                        let at = score.partition_point(|old| *old <= (distance, node.id));
+                        nearest.copy_within(at..last, at + 1);
+                        score.copy_within(at..last, at + 1);
+                        nearest[at] = Some(*node);
+                        score[at] = (distance, node.id);
                     }
                 }
             }

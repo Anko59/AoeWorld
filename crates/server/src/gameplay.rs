@@ -159,6 +159,13 @@ enum PendingAction {
         building_id: EntityId,
         add: bool,
     },
+    VassalDismiss {
+        vassal_id: EntityId,
+    },
+    VassalSettings {
+        vassal_id: EntityId,
+        settings: aoe_simulation::VassalSettings,
+    },
     SetRally {
         building_id: EntityId,
         target: aoe_protocol::RallyTarget,

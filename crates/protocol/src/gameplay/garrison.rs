@@ -16,6 +16,9 @@ pub struct GarrisonUnitState {
 /// What the Vassal's domain is doing and, if it is not growing, why not.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct VassalReport {
+    pub weights: [u8; 4],
+    pub cap: u8,
+    pub training: bool,
     pub managed: u16,
     pub residents: u16,
     pub wait: VassalWait,
@@ -28,6 +31,7 @@ pub enum VassalWait {
     NoTownCenter,
     Food,
     Population,
+    Paused,
 }
 
 impl BuildingKind {
@@ -81,8 +85,14 @@ pub(super) fn valid(b: &GameplayBuildingState) -> bool {
 
 /// A Vassal report belongs to a Vassal and stays within the managed bounds.
 fn vassal_valid(u: &GarrisonUnitState) -> bool {
-    u.vassal
-        .is_none_or(|r| u.kind == UnitKind::Vassal && r.managed <= 100 && r.managed <= r.residents)
+    u.vassal.is_none_or(|r| {
+        u.kind == UnitKind::Vassal
+            && r.managed <= 100
+            && r.managed <= r.residents
+            && r.cap <= 100
+            && r.weights.iter().all(|w| *w <= 100)
+            && r.weights.iter().any(|w| *w > 0)
+    })
 }
 
 /// Keeps the occupants `valid` accepts, in order and within capacity, so one

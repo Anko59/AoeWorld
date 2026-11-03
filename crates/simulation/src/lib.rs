@@ -40,9 +40,9 @@ pub use game_world::{
     ProjectileKind, RallyPoint, RallyTarget, ResearchEntry, RouteSchedulerStats, Stockpile,
     TECH_RULES, Tech, TechEffect, TechRequirement, TechRules, TickPhase, TrainingEntry,
     UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VASSAL_RULES,
-    VASSAL_STALL_SECONDS, VILLAGE_RULES, VassalRules, VassalStatus, VassalWait, VassalWork,
-    VillageRules, WorldLimits, building_combat, damage_dealt, researched_stats, trainable_units,
-    unit_combat, villager_capacity,
+    VASSAL_STALL_SECONDS, VILLAGE_RULES, VassalRules, VassalSettings, VassalStatus, VassalWait,
+    VassalWork, VillageRules, WorldLimits, building_combat, damage_dealt, researched_stats,
+    trainable_units, unit_combat, villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::BTreeMap;

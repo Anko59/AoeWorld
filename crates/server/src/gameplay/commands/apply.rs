@@ -45,6 +45,11 @@ pub(in crate::gameplay) fn apply(
         PendingAction::FarmReseed { building_id, add } => {
             world.issue_farm_reseed(player, building_id, add)
         }
+        PendingAction::VassalDismiss { vassal_id } => world.issue_vassal_dismiss(player, vassal_id),
+        PendingAction::VassalSettings {
+            vassal_id,
+            settings,
+        } => world.issue_vassal_settings(player, vassal_id, settings),
         PendingAction::SetRally {
             building_id,
             target,
@@ -224,8 +229,7 @@ pub(in crate::gameplay) fn apply(
             CommandResult::RejectedUnknownEntity
         }
         Err(E::VassalExists) => CommandResult::RejectedVassalExists,
-        Err(E::VassalHome) => CommandResult::RejectedVassalHome,
-        Err(E::Movement(W::VassalLeash)) => CommandResult::RejectedVassalLeash,
+        Err(E::InvalidVassalSettings) => CommandResult::RejectedInvalidVassalSettings,
         Err(E::GarrisonFull) => CommandResult::RejectedGarrisonFull,
         Err(E::InvalidTarget) => CommandResult::RejectedInvalidTarget,
         Err(E::InsufficientResources) => CommandResult::RejectedInsufficientResources,

@@ -142,7 +142,7 @@ fn hundred_prepared_domains() -> (GameWorld, Vec<(EntityId, EntityId)>) {
                 position(TileCoord::new(at.x - 1, at.y)),
             )
             .unwrap();
-        w.bind_vassal(vassal, castle, footprint);
+
         // Adjacent ordinary garrisons need no unbounded setup movement or
         // manager passes before all hundred domains are available to rotate.
         w.issue_garrison(owner, vassal, castle).unwrap();

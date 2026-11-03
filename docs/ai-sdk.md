@@ -68,9 +68,10 @@ Layers, each testable on its own:
 | Example AI | `ai/` (`aoe_ai`) | a Dark and Feudal Age player and a many-bot host |
 
 `UnitKind.VASSAL` (Rust `UnitKind::Vassal`) trains at a Castle with
-`client.train(castle.id, aoeworld.UnitKind.VASSAL)`. Garrison it in that Castle
+`client.train(castle.id, aoeworld.UnitKind.VASSAL)`. Garrison it in any completed owned Castle without a Vassal
 with the normal command to activate the [domain economy](economy/vassal.md).
-`Unit.home_castle` identifies its home, and a Villager's `Unit.managed_by`
+A roaming Vassal has no `Unit.home_castle` (that field is used by Generals).
+A Villager's `Unit.managed_by`
 identifies its controlling Vassal. Both are optional entity IDs, visible only to
 the owner. The Rust getters return `Option<EntityId>`; Python returns `int | None`.
 Manual worker orders release management until the worker becomes idle.

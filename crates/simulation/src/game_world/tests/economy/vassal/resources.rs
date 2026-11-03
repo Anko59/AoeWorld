@@ -52,12 +52,13 @@ pub(super) fn wood_domain(workers: usize) -> (GameWorld, ResourceNode, EntityId,
             WorldPosition::from_tile_center(exit).unwrap(),
         )
         .unwrap();
-    w.bind_vassal(id, castle, footprint);
+
     w.issue_garrison(PlayerId(0), id, castle).unwrap();
     for _ in 1..workers {
         w.spawn_villager(PlayerId(0), w.unit(worker).unwrap().position)
             .unwrap();
     }
+    advance(&mut w, 2);
     (w, node, worker, id)
 }
 

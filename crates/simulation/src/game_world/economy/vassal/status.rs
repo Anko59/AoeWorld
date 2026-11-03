@@ -19,10 +19,13 @@ pub enum VassalWait {
     Population,
     /// Not enough food for the next villager.
     Food,
+    /// The owner has switched villager training off for this Vassal.
+    Paused,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct VassalStatus {
+    pub settings: super::VassalSettings,
     /// Villagers this Vassal currently manages.
     pub managed: u16,
     /// Living villagers (including sheltered) inside its territory.

@@ -90,7 +90,7 @@ impl GameWorld {
         state.position = at;
         state.previous_position = at;
         if state.kind == UnitKind::Vassal {
-            self.set_vassal_active(state.id, false);
+            self.set_vassal_castle(state.id, None);
         }
         self.insert_map_unit(state, occupant.next_hit_tick);
         true
@@ -107,7 +107,7 @@ impl GameWorld {
         let mut retained = Vec::new();
         for occupant in occupants {
             if occupant.unit.kind == UnitKind::Vassal {
-                self.set_vassal_active(occupant.unit.id, false);
+                self.set_vassal_castle(occupant.unit.id, None);
             }
             if self.eject_occupant(footprint, occupant, true) {
                 changed.push(occupant.unit.id);

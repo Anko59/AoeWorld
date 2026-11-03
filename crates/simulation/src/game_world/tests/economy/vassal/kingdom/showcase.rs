@@ -124,3 +124,40 @@ fn kingdom_showcase_has_legal_nonoverlapping_buildings_and_two_preserved_wood_so
     assert!(w.resource_remaining(first.id).unwrap() > 0);
     assert!(w.resource_remaining(second.id).unwrap() > 0);
 }
+#[test]
+fn throughput_showcase_starts_forty_idle_workers_then_orders_all_at_normal_game_speed() {
+    let (mut w, _) = GameWorld::vassal_throughput_demo(aoe_core::Seed(7)).unwrap();
+    assert_eq!(w.config().tick_hz, 20);
+    let king = w.units().find(|u| u.kind == UnitKind::Vassal).unwrap().id;
+    let castle = w
+        .buildings()
+        .find(|b| b.kind == BuildingKind::Castle)
+        .unwrap()
+        .id;
+    let workers: Vec<_> = w
+        .units()
+        .filter(|u| u.kind == UnitKind::Villager)
+        .map(|u| u.id)
+        .collect();
+    assert_eq!(workers.len(), 40);
+    assert!(
+        workers
+            .iter()
+            .all(|id| w.unit(*id).unwrap().task == UnitTask::Idle)
+    );
+    assert_eq!(w.vassal_status(king), None);
+    w.issue_garrison(PlayerId(0), king, castle).unwrap();
+    for _ in 0..2 * w.config().tick_hz {
+        w.advance();
+    }
+    assert_eq!(
+        workers
+            .iter()
+            .filter(|id| w.vassal_controller(**id) == Some(king)
+                && w.gathering_kind(**id) == Some(ResourceKind::Wood))
+            .count(),
+        40,
+        "{}",
+        super::throughput::missing_work(&w, king, &workers)
+    );
+}

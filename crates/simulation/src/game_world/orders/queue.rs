@@ -16,9 +16,6 @@ impl GameWorld {
             return Err(GameWorldError::InvalidPosition.into());
         }
         let destination = self.config.snap_ground_position(destination);
-        if !self.vassal_position_allowed(id, destination) {
-            return Err(GameWorldError::VassalLeash.into());
-        }
         if !self
             .unit_tile_passable(unit.kind, destination.tile_floor(), &|| false)
             .map_err(GameWorldError::Environment)?

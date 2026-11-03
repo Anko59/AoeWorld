@@ -204,7 +204,7 @@ fn full_queues_do_not_reintroduce_locked_or_superseded_training_buttons() {
 }
 
 #[wasm_bindgen_test]
-fn grouped_vassal_training_skips_castles_with_a_home_or_pending_unit() {
+fn grouped_vassal_training_skips_castles_with_an_occupant_or_pending_unit() {
     let mut buildings = vec![barracks(1, 0), barracks(2, 0)];
     for b in &mut buildings {
         b.kind = BuildingKind::Castle;

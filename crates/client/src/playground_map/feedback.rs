@@ -133,9 +133,9 @@ pub(crate) fn order_message(result: CommandResult, blocker: Option<ObjectKind>) 
     use CommandResult::*;
     match result {
         Accepted => "connected",
+        RejectedVassalLeash | RejectedVassalHome => "Vassal order was refused.",
         RejectedVassalExists => "This Castle already has a Vassal or one in training.",
-        RejectedVassalLeash => "A Vassal must stay within 100 tiles of its home Castle.",
-        RejectedVassalHome => "A Vassal can garrison only in its home Castle.",
+        RejectedInvalidVassalSettings => "Vassal settings are outside their allowed ranges.",
         RejectedGarrisonFull => "Cannot garrison: that building is full.",
         RejectedDisconnected => "The order was not sent. Please try again.",
         RejectedUnknownEntity => "Cannot give orders: the unit is no longer available.",

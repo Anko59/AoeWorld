@@ -218,15 +218,15 @@ fn carried_rule(unit: &UnitState) -> bool {
 /// The first rule `unit` breaks.
 pub(crate) fn unit_rule(unit: &UnitState) -> Option<&'static str> {
     let alive = unit.hp > 0;
-    if unit.home_castle.is_some_and(|id| {
-        !(matches!(unit.kind, UnitKind::Vassal | UnitKind::General) && alive && id != unit.id)
-    }) {
+    if unit
+        .home_castle
+        .is_some_and(|id| !(unit.kind == UnitKind::General && alive && id != unit.id))
+    {
         return Some("unit.home_castle");
     }
-    if unit
-        .managed_by
-        .is_some_and(|id| !(unit.kind == UnitKind::Villager && alive && id != unit.id))
-    {
+    if unit.managed_by.is_some_and(|id| {
+        !(matches!(unit.kind, UnitKind::Villager | UnitKind::FishingShip) && alive && id != unit.id)
+    }) {
         return Some("unit.managed_by");
     }
     if unit.commanded_by.is_some_and(|id| {

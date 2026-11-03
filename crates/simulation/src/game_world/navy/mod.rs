@@ -71,7 +71,7 @@ impl GameWorld {
             if unit.player != player {
                 return Err(EconomyError::NotOwner);
             }
-            if unit.kind.is_naval() || unit.kind == UnitKind::Vassal {
+            if unit.kind.is_naval() {
                 return Err(EconomyError::WrongUnitKind);
             }
             if unit.hp == 0 || self.embarked(id) {

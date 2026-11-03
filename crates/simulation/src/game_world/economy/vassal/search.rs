@@ -135,7 +135,7 @@ impl GameWorld {
         if !matches!(self.terrain, Terrain::Map { .. }) {
             return false;
         }
-        let Some(priority) = self.vassal_priority(s.player) else {
+        let Some(priority) = self.vassal_priority(s.player, s.home.settings.weights) else {
             return false;
         };
         let wanted = priority.kinds()[0];
@@ -202,7 +202,7 @@ impl GameWorld {
             home.resources.dropoff_after[kind as usize] = Some(id);
         }
         let mut counted = ResourceSearchWork::default();
-        let node = self.nearest_resource_matching_counted(
+        let nodes = self.nearest_resources_matching_counted::<CANDIDATES>(
             origin,
             kind,
             10,
@@ -211,7 +211,11 @@ impl GameWorld {
             &mut counted,
         );
         work.resource_blocks += counted.blocks;
-        work.resource_nodes += counted.nodes;
+        budget.queried_nodes(work, counted.nodes);
+        let node = nodes[0];
+        if node.is_some() {
+            s.offers[kind as usize] = nodes.into_iter().flatten().collect();
+        }
         node
     }
 
@@ -233,7 +237,7 @@ impl GameWorld {
         for kind in super::priority::KINDS {
             let mut candidates = std::mem::take(&mut s.home.resources.candidates[kind as usize]);
             candidates.retain(|node| {
-                work.resource_nodes += 1;
+                budget.queried_nodes(work, 1);
                 self.vassal_node_known(*node, s)
             });
             s.home.resources.candidates[kind as usize] = candidates;
@@ -252,13 +256,14 @@ impl GameWorld {
         work.resource_blocks += 1;
         let nodes = self.block_resource_nodes(generator, overlay, block);
         for node in nodes.iter().copied() {
-            work.resource_nodes += 1;
+            budget.queried_nodes(work, 1);
+            self.vassal_remember_fish(node, s, budget, work);
             if !self.vassal_node_known(node, s) {
                 continue;
             }
             let candidates = &mut s.home.resources.candidates[node.kind as usize];
             if candidates.iter().any(|old| {
-                work.resource_nodes += 1;
+                budget.queried_nodes(work, 1);
                 old.id == node.id
             }) {
                 continue;
@@ -274,8 +279,8 @@ impl GameWorld {
         true
     }
 
-    /// Both the ordinary local query and the small retained cache share a
-    /// search admission; every entry inspected contributes to work telemetry.
+    /// Eight finder admissions also fund a bounded pool of cache inspections;
+    /// later workers can reuse known offers without another map query.
     pub(super) fn vassal_resource(
         &mut self,
         worker: EntityId,
@@ -288,19 +293,17 @@ impl GameWorld {
             return None;
         }
         let from = self.unit(worker)?.position.tile_floor();
-        let mut searched = false;
         for preference in 0..3 {
             if preference == 1
                 && let Some(node) = self.vassal_camp_resource(worker, kind, s, budget, work)
             {
-                return self.vassal_offer_resource(worker, kind, Some(node), s, work);
+                return self.vassal_offer_resource(worker, kind, Some(node), s, budget, work);
             }
             if !budget.search(work) {
                 break;
             }
-            searched = true;
             let mut counted = ResourceSearchWork::default();
-            let local = self.nearest_resource_matching_counted(
+            let nodes = self.nearest_resources_matching_counted::<CANDIDATES>(
                 from,
                 kind,
                 10,
@@ -313,15 +316,42 @@ impl GameWorld {
                 &mut counted,
             );
             work.resource_blocks += counted.blocks;
-            work.resource_nodes += counted.nodes;
+            budget.queried_nodes(work, counted.nodes);
+            let local = nodes[0];
             if local.is_some() {
-                return self.vassal_offer_resource(worker, kind, local, s, work);
+                s.offers[kind as usize] = nodes.into_iter().flatten().collect();
+            }
+            if local.is_some() {
+                return self.vassal_offer_resource(worker, kind, local, s, budget, work);
             }
         }
-        if !searched {
-            return None;
+        let refused = s
+            .home
+            .resources
+            .refused
+            .get(&worker)
+            .and_then(|nodes| nodes[kind as usize]);
+        let retained = self.vassal_offer_resource(worker, kind, None, s, budget, work);
+        if retained.is_some_and(|node| Some(node.id) != refused) {
+            return retained;
         }
-        self.vassal_offer_resource(worker, kind, None, s, work)
+        let mut chosen = None;
+        for node in &s.offers[kind as usize] {
+            if !budget.inspect(work, 1) {
+                break;
+            }
+            if Some(node.id) != refused && self.vassal_node_eligible(*node, worker, s) {
+                chosen = Some(*node);
+                break;
+            }
+        }
+        if let Some(node) = chosen {
+            // Retain and rotate every offered node, even after a refused order.
+            self.vassal_offer_resource(worker, kind, Some(node), s, budget, work)
+                .or(retained)
+        } else {
+            retained
+        }
     }
 
     /// Local and camp probes contribute knowledge to the same rotating queue.
@@ -334,8 +364,14 @@ impl GameWorld {
         kind: ResourceKind,
         incoming: Option<ResourceNode>,
         s: &mut Snapshot,
+        budget: &mut Budget,
         work: &mut VassalWork,
     ) -> Option<ResourceNode> {
+        // Inspect the whole small queue so even reused knowledge remains within
+        // the allowance paid for by this pass's eight finder admissions.
+        if !budget.inspect(work, s.home.resources.candidates[kind as usize].len()) {
+            return None;
+        }
         let refused = s
             .home
             .resources
@@ -347,7 +383,6 @@ impl GameWorld {
         let (mut first, mut second) = (None, None);
         let (mut fallback, mut incoming_index) = (None, None);
         for (index, node) in candidates.iter().copied().enumerate() {
-            work.resource_nodes += 1;
             if incoming.is_some_and(|next| next.id == node.id) {
                 incoming_index = Some(index);
             }
@@ -359,11 +394,6 @@ impl GameWorld {
                 } else if second.is_none() {
                     second = Some((index, node));
                 }
-            }
-            if (prefer_probe && incoming_index.is_some())
-                || (first.is_some() && (incoming.is_none() || incoming_index.is_some()))
-            {
-                break;
             }
         }
         if let Some(node) = incoming.filter(|_| incoming_index.is_none()) {

@@ -141,7 +141,11 @@ fn the_territory_demo_shows_adoption_then_a_split_when_the_second_vassal_shelter
     let (mut w, _) = GameWorld::vassal_territory_demo(aoe_core::Seed(7)).unwrap();
     let vassals: Vec<_> = w.economy.vassal_homes.keys().copied().collect();
     let (first, second) = (vassals[0], vassals[1]);
-    let home = w.vassal_castle(first).unwrap();
+    let castles: Vec<_> = w
+        .player_buildings_of(PlayerId(0), BuildingKind::Castle)
+        .map(|b| b.id)
+        .collect();
+    let home = castles[0];
     w.issue_garrison(PlayerId(0), first, home).unwrap();
     advance(&mut w, 80);
     let farmers = |w: &GameWorld, v| {
@@ -154,7 +158,7 @@ fn the_territory_demo_shows_adoption_then_a_split_when_the_second_vassal_shelter
         40,
         "one Vassal adopts every busy farmer"
     );
-    let castle = w.vassal_castle(second).unwrap();
+    let castle = castles[1];
     w.issue_garrison(PlayerId(0), second, castle).unwrap();
     advance(&mut w, 100);
     let (a, b) = (farmers(&w, first), farmers(&w, second));

@@ -109,3 +109,94 @@ fn general_train_and_mix_are_owner_checked_and_gate_recruiting() {
         CommandResult::Accepted
     );
 }
+
+#[test]
+fn vassal_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
+    use aoe_core::{PlayerId, TileCoord, WorldPosition};
+    use aoe_simulation::{GameWorld, UnitKind, VassalSettings};
+    let owner = PlayerId(0);
+    let (mut world, _) = GameWorld::vassal_territory_demo(Seed(7)).unwrap();
+    let vassal_id = world
+        .units()
+        .find(|u| u.kind == UnitKind::Vassal)
+        .unwrap()
+        .id;
+    let castle = world
+        .buildings()
+        .find(|b| b.player == owner && b.kind == aoe_simulation::BuildingKind::Castle)
+        .unwrap()
+        .id;
+    world.issue_garrison(owner, vassal_id, castle).unwrap();
+    for _ in 0..20 {
+        world.advance();
+    }
+    let settings = VassalSettings {
+        weights: [10, 70, 10, 10],
+        cap: 75,
+        training: true,
+    };
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(1),
+            PendingAction::VassalSettings {
+                vassal_id,
+                settings
+            }
+        ),
+        CommandResult::RejectedNotOwner
+    );
+    assert_eq!(
+        apply(
+            &mut world,
+            owner,
+            PendingAction::VassalSettings {
+                vassal_id,
+                settings
+            }
+        ),
+        CommandResult::Accepted
+    );
+    let native = world.building(castle).unwrap();
+    let own = crate::gameplay::economy::wire_building_state(native, Some(owner));
+    let report = own
+        .garrison
+        .iter()
+        .find(|u| u.id == vassal_id)
+        .unwrap()
+        .vassal
+        .unwrap();
+    assert_eq!(
+        (report.weights, report.cap, report.training),
+        (settings.weights, 75, true)
+    );
+    assert!(
+        crate::gameplay::economy::wire_building_state(native, Some(PlayerId(1)))
+            .garrison
+            .is_empty()
+    );
+    let worker = world
+        .spawn_villager(
+            owner,
+            WorldPosition::from_tile_center(TileCoord::new(108, 110)).unwrap(),
+        )
+        .unwrap();
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(1),
+            PendingAction::VassalDismiss { vassal_id }
+        ),
+        CommandResult::RejectedNotOwner
+    );
+    assert!(world.unit(worker).unwrap().hp > 0);
+    assert_eq!(
+        apply(
+            &mut world,
+            owner,
+            PendingAction::VassalDismiss { vassal_id }
+        ),
+        CommandResult::Accepted
+    );
+    assert_eq!(world.unit(worker).unwrap().hp, 0);
+}

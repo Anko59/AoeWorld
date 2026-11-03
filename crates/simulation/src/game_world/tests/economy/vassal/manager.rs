@@ -1,5 +1,18 @@
 use super::*;
-use crate::VASSAL_RULES;
+use crate::{VASSAL_RULES, VassalSettings};
+
+/// Villager training is off by default; tests that expect it switch it on.
+pub(super) fn training_on(w: &mut GameWorld, vassal: EntityId) {
+    w.issue_vassal_settings(
+        PlayerId(0),
+        vassal,
+        VassalSettings {
+            training: true,
+            ..VassalSettings::default()
+        },
+    )
+    .unwrap();
+}
 
 pub(super) fn active() -> (GameWorld, EntityId, EntityId) {
     let (mut w, castle) = setup();
@@ -27,7 +40,8 @@ pub(super) fn pass(w: &mut GameWorld) {
 #[test]
 fn a_vassal_builds_a_house_when_population_space_runs_out() {
     for extra in [18, 25] {
-        let (mut world, _, _) = active();
+        let (mut world, _, vassal) = active();
+        training_on(&mut world, vassal);
         let center = world
             .player_buildings_of(PlayerId(0), BuildingKind::TownCenter)
             .next()
@@ -132,7 +146,8 @@ fn a_manual_order_takes_a_worker_out_until_it_is_idle_again() {
 
 #[test]
 fn training_counts_existing_workers_all_tc_queues_and_sheltered_villagers() {
-    let (mut w, _, _) = active();
+    let (mut w, _, vassal) = active();
+    training_on(&mut w, vassal);
     for i in 0..200 {
         w.insert_building(
             PlayerId(0),
@@ -298,7 +313,7 @@ fn hundred_thousand_population_manager_work_stays_inside_its_world_budget() {
                 WorldPosition::from_tile_center(TileCoord::new(x - 1, y)).unwrap(),
             )
             .unwrap();
-        w.bind_vassal(id, castle, footprint);
+
         w.issue_garrison(p, id, castle).unwrap();
     }
     w.advance_garrisons(&mut Vec::new());

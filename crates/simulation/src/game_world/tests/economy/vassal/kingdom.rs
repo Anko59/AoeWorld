@@ -3,9 +3,12 @@ use super::*;
 use std::collections::BTreeSet;
 mod discovery;
 mod income;
+mod long_run;
 mod manual;
 mod rebalancing;
 mod showcase;
+mod territory;
+mod throughput;
 
 fn reserves(w: &mut GameWorld, food: u32, wood: u32, gold: u32, stone: u32) {
     w.economy.players.get_mut(&PlayerId(0)).unwrap().stockpile = Stockpile {
@@ -242,7 +245,7 @@ fn far_mining_camp(kind: ResourceKind) {
     let vassal = w
         .spawn_kind(PlayerId(0), UnitKind::Vassal, position(exit))
         .unwrap();
-    w.bind_vassal(vassal, castle, footprint);
+
     w.issue_garrison(PlayerId(0), vassal, castle).unwrap();
     reserves(
         &mut w,

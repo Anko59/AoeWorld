@@ -27,6 +27,8 @@ impl GameWorld {
                 }
                 if let Some(node) = generator.object_at(tile)
                     && node.id != exclude
+                    && aoe_core::WorldPosition::from_tile_center(node.tile)
+                        .is_ok_and(|at| self.managed_target_allowed(worker, at))
                     && overlay.resource_available(node)
                     && (node.object == ObjectKind::ShoreFish
                         || (naval && node.object == ObjectKind::DeepFish))

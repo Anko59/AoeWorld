@@ -89,6 +89,9 @@ impl GameWorld {
         if kind == UnitKind::General {
             self.register_general(id);
         }
+        if kind == UnitKind::Vassal {
+            self.register_vassal(id);
+        }
         Ok(id)
     }
 

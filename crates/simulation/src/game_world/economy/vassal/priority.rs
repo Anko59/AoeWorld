@@ -1,11 +1,12 @@
 //! Kingdom reserves plus real deliveries; worker assignments are not income.
+//! Each Vassal's weights scale how strongly a resource's reserve counts.
 use super::{VASSAL_RULES, VassalWork, rules::Budget, snapshot::Snapshot};
 use crate::GameWorld;
 use aoe_core::EntityId;
 use aoe_core::PlayerId;
 use aoe_map::ResourceKind;
+use std::cmp::Ordering;
 
-const MIX: [u64; 4] = [45, 30, 15, 10];
 pub(super) const KINDS: [ResourceKind; 4] = [
     ResourceKind::Food,
     ResourceKind::Wood,
@@ -15,16 +16,29 @@ pub(super) const KINDS: [ResourceKind; 4] = [
 
 pub(super) struct Priority {
     reserves: [u64; 4],
+    weights: [u64; 4],
 }
 
 impl Priority {
+    /// Ordered by reserve per weight, then by higher weight, then by kind.
+    /// Zero-weight kinds come last: they are used only when nothing else works.
+    fn compare(&self, a: usize, b: usize) -> Ordering {
+        let (wa, wb) = (self.weights[a], self.weights[b]);
+        match (wa, wb) {
+            (0, 0) => Ordering::Equal,
+            (0, _) => Ordering::Greater,
+            (_, 0) => Ordering::Less,
+            _ => (u128::from(self.reserves[a]) * u128::from(wb))
+                .cmp(&(u128::from(self.reserves[b]) * u128::from(wa)))
+                .then(wb.cmp(&wa)),
+        }
+    }
+
     pub(super) fn kinds(&self) -> [ResourceKind; 4] {
         let mut kinds = KINDS;
         kinds.sort_by(|a, b| {
             let (a, b) = (*a as usize, *b as usize);
-            (u128::from(self.reserves[a]) * u128::from(MIX[b]))
-                .cmp(&(u128::from(self.reserves[b]) * u128::from(MIX[a])))
-                .then(a.cmp(&b))
+            self.compare(a, b).then(a.cmp(&b))
         });
         kinds
     }
@@ -34,8 +48,8 @@ impl Priority {
     pub(super) fn improves(&self, next: ResourceKind, current: ResourceKind) -> bool {
         let (next, current) = (next as usize, current as usize);
         next != current
-            && u128::from(self.reserves[next]) * u128::from(MIX[current]) * 105
-                < u128::from(self.reserves[current]) * u128::from(MIX[next]) * 100
+            && u128::from(self.reserves[next]) * u128::from(self.weights[current]) * 105
+                < u128::from(self.reserves[current]) * u128::from(self.weights[next]) * 100
     }
 }
 
@@ -49,7 +63,7 @@ impl GameWorld {
         work: &mut VassalWork,
         changed: &mut Vec<EntityId>,
     ) {
-        let Some(priority) = self.vassal_priority(s.player) else {
+        let Some(priority) = self.vassal_priority(s.player, s.home.settings.weights) else {
             return;
         };
         let wanted = priority.kinds()[0];
@@ -61,9 +75,7 @@ impl GameWorld {
             .map(|u| u.id)
             .collect();
         for worker in ids {
-            if budget.orders >= VASSAL_RULES.orders_per_domain
-                || budget.searches >= VASSAL_RULES.resource_searches_per_domain
-            {
+            if budget.orders >= VASSAL_RULES.orders_per_domain {
                 break;
             }
             if self.vassal_controller(worker) != Some(s.vassal)
@@ -78,6 +90,9 @@ impl GameWorld {
             };
             if !priority.improves(wanted, current) {
                 continue;
+            }
+            if !budget.job() {
+                break;
             }
             if let Some(home) = self.economy.vassal_homes.get_mut(&s.vassal) {
                 home.worker_after = Some(worker)
@@ -95,7 +110,7 @@ impl GameWorld {
         }
     }
 
-    pub(super) fn vassal_priority(&self, player: PlayerId) -> Option<Priority> {
+    pub(super) fn vassal_priority(&self, player: PlayerId, weights: [u8; 4]) -> Option<Priority> {
         let stock = self.player_economy(player)?.stockpile;
         let mut reserves = [stock.food, stock.wood, stock.gold, stock.stone].map(u64::from);
         if let Some(income) = self.economy.income.get(&player) {
@@ -106,6 +121,9 @@ impl GameWorld {
                 *reserve = reserve.saturating_add(amount);
             }
         }
-        Some(Priority { reserves })
+        Some(Priority {
+            reserves,
+            weights: weights.map(u64::from),
+        })
     }
 }
