@@ -32,6 +32,34 @@ pub enum Error {
     PngDecode(#[from] png::DecodingError),
 }
 
+/// Pure native-frame validation cannot produce importer I/O, JSON or PNG errors.
+/// Keeping that boundary typed lets browser callers retain only its diagnostics.
+#[derive(Debug, thiserror::Error)]
+#[error("invalid {format} at byte 0: {detail}")]
+pub struct NativeFrameError {
+    format: &'static str,
+    detail: String,
+}
+
+impl NativeFrameError {
+    pub(crate) fn new(format: &'static str, detail: impl Into<String>) -> Self {
+        Self {
+            format,
+            detail: detail.into(),
+        }
+    }
+}
+
+impl From<NativeFrameError> for Error {
+    fn from(error: NativeFrameError) -> Self {
+        Self::Format {
+            format: error.format,
+            offset: 0,
+            detail: error.detail,
+        }
+    }
+}
+
 fn invalid(format: &'static str, offset: usize, detail: impl Into<String>) -> Error {
     Error::Format {
         format,

@@ -66,7 +66,7 @@ pub(super) struct Client {
     pub token: Option<ResumeToken>,
     pub revision: u64,
     pub sent_region: Option<TileRect>,
-    pub last_subscribe: f64,
+    pub subscribe_after: f64,
     pub next_sequence: u64,
     pub order_feedback: map::feedback::OrderFeedback,
     pub units: BTreeMap<EntityId, GameplayUnitState>,
@@ -110,6 +110,9 @@ pub(super) fn resize(client: &mut Client) {
     }
 }
 
+const SUBSCRIBE_INTERVAL_MS: f64 = 150.0;
+const SUBSCRIBE_RETRY_MS: f64 = 1_100.0;
+
 fn requested_region(client: &Client) -> TileRect {
     let visible = map::terrain_visible_tiles(client);
     let width = visible.width().clamp(1, 512);
@@ -123,6 +126,13 @@ fn requested_region(client: &Client) -> TileRect {
     .clamp(client.config.width_tiles, client.config.height_tiles)
 }
 
+/// Sending a view does not mean the server accepted it: send the current
+/// camera again after a full rate window, even while the camera is stationary.
+pub(super) fn retry_refused_view(client: &mut Client, time: f64) {
+    client.sent_region = None;
+    client.subscribe_after = time + SUBSCRIBE_RETRY_MS;
+}
+
 pub(super) fn subscribe(client: &mut Client) {
     if client.primary.is_none()
         || client
@@ -133,7 +143,8 @@ pub(super) fn subscribe(client: &mut Client) {
         return;
     }
     let region = requested_region(client);
-    if client.sent_region == Some(region) || now() - client.last_subscribe < 100.0 {
+    let time = now();
+    if client.sent_region == Some(region) || time < client.subscribe_after {
         return;
     }
     client.revision = client.revision.saturating_add(1);
@@ -145,7 +156,8 @@ pub(super) fn subscribe(client: &mut Client) {
         && network::send(client, &bytes)
     {
         client.sent_region = Some(region);
-        client.last_subscribe = now();
+        // Leave headroom below the server's rolling ten-per-second window.
+        client.subscribe_after = time + SUBSCRIBE_INTERVAL_MS;
     }
 }
 

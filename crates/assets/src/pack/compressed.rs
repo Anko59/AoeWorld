@@ -1,16 +1,20 @@
 //! Lossless, independently decodable colour/player/shadow frame payloads.
-use crate::{Error, catalog::packing::MAX_FRAME_EXTENT, invalid};
+use crate::{Error, NativeFrameError, catalog::packing::MAX_FRAME_EXTENT, invalid};
 use flate2::{Compression, Decompress, FlushDecompress, Status, write::ZlibEncoder};
 use std::io::Write;
 
 pub const MAX_ENCODED_FRAME_BYTES: usize = 64 * 1024 * 1024;
 
-fn plane_bytes(size: [u16; 2]) -> Result<usize, Error> {
+fn frame_error(detail: impl Into<String>) -> NativeFrameError {
+    NativeFrameError::new("frame", detail)
+}
+
+fn plane_bytes(size: [u16; 2]) -> Result<usize, NativeFrameError> {
     if size
         .into_iter()
         .any(|side| side == 0 || side > MAX_FRAME_EXTENT)
     {
-        return Err(invalid("frame", 0, "invalid frame dimensions"));
+        return Err(frame_error("invalid frame dimensions"));
     }
     // The validated 2044-pixel side bound also bounds this multiplication.
     Ok(usize::from(size[0]) * usize::from(size[1]) * 4)
@@ -42,7 +46,7 @@ struct Decoder<'a> {
 }
 
 impl Decoder<'_> {
-    fn fill(&mut self, output: &mut [u8]) -> Result<(), Error> {
+    fn fill(&mut self, output: &mut [u8]) -> Result<(), NativeFrameError> {
         let mut filled = 0;
         while filled < output.len() {
             let before_in = self.state.total_in();
@@ -50,48 +54,48 @@ impl Decoder<'_> {
             let input = self
                 .bytes
                 .get(before_in as usize..)
-                .ok_or_else(|| invalid("frame", 0, "invalid compressed offset"))?;
+                .ok_or_else(|| frame_error("invalid compressed offset"))?;
             let status = self
                 .state
                 .decompress(input, &mut output[filled..], FlushDecompress::None)
-                .map_err(|e| invalid("frame", 0, e.to_string()))?;
+                .map_err(|e| frame_error(e.to_string()))?;
             filled += (self.state.total_out() - before_out) as usize;
             self.ended = status == Status::StreamEnd;
             if (self.ended && filled != output.len())
                 || (self.state.total_in() == before_in && self.state.total_out() == before_out)
             {
-                return Err(invalid("frame", 0, "incomplete compressed frame"));
+                return Err(frame_error("incomplete compressed frame"));
             }
         }
         Ok(())
     }
 
-    fn finish(mut self, expected: usize) -> Result<(), Error> {
+    fn finish(mut self, expected: usize) -> Result<(), NativeFrameError> {
         if !self.ended {
             let input = self
                 .bytes
                 .get(self.state.total_in() as usize..)
-                .ok_or_else(|| invalid("frame", 0, "invalid compressed offset"))?;
+                .ok_or_else(|| frame_error("invalid compressed offset"))?;
             let status = self
                 .state
                 .decompress(input, &mut [0; 1], FlushDecompress::Finish)
-                .map_err(|e| invalid("frame", 0, e.to_string()))?;
+                .map_err(|e| frame_error(e.to_string()))?;
             self.ended = status == Status::StreamEnd;
         }
         if !self.ended
             || self.state.total_in() != self.bytes.len() as u64
             || self.state.total_out() != expected as u64
         {
-            return Err(invalid("frame", 0, "compressed frame length mismatch"));
+            return Err(frame_error("compressed frame length mismatch"));
         }
         Ok(())
     }
 }
 
-pub fn decode_frame(bytes: &[u8], size: [u16; 2]) -> Result<[Vec<u8>; 3], Error> {
+pub fn decode_frame(bytes: &[u8], size: [u16; 2]) -> Result<[Vec<u8>; 3], NativeFrameError> {
     let length = plane_bytes(size)?;
     if bytes.len() > MAX_ENCODED_FRAME_BYTES {
-        return Err(invalid("frame", 0, "encoded frame exceeds byte limit"));
+        return Err(frame_error("encoded frame exceeds byte limit"));
     }
     let mut decoder = Decoder {
         bytes,
@@ -105,7 +109,7 @@ pub fn decode_frame(bytes: &[u8], size: [u16; 2]) -> Result<[Vec<u8>; 3], Error>
         u16::from_le_bytes([header[2], header[3]]),
     ] != size
     {
-        return Err(invalid("frame", 0, "compressed frame dimensions disagree"));
+        return Err(frame_error("compressed frame dimensions disagree"));
     }
     let mut planes = std::array::from_fn(|_| vec![0; length]);
     for plane in &mut planes {

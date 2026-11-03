@@ -148,7 +148,7 @@ class Constructor:
         if self.pending(ctx, BuildingKind.HOUSE) >= 2:
             return
         builder = self.builder_near(ctx, ctx.home)
-        if builder is not None and self.place(ctx, BuildingKind.HOUSE, ctx.home, [builder], gap=1):
+        if builder is not None and self.place(ctx, BuildingKind.HOUSE, ctx.home, [builder], gap=ctx.config.building_gap):
             ctx.board.bump("houses")
 
     def age_requirements(self, ctx: Context) -> None:
@@ -160,7 +160,7 @@ class Constructor:
             if self.total(ctx, kind) == 0:
                 builder = self.builder_near(ctx, ctx.home)
                 tile = self.camp_site_hint(ctx, kind)
-                if builder is not None and self.place(ctx, kind, tile, [builder], radius=10, gap=1):
+                if builder is not None and self.place(ctx, kind, tile, [builder], radius=10, gap=ctx.config.building_gap):
                     ctx.board.cool("age-buildings", ctx.tick, 2 * ctx.world.tick_hz)
                     return
 
@@ -184,6 +184,6 @@ class Constructor:
             if not ctx.can_afford((cost[0], cost[1] + ctx.config.wood_reserve, cost[2], cost[3])):
                 continue
             builder = self.builder_near(ctx, ctx.home)
-            if builder is not None and self.place(ctx, kind, ctx.home, [builder], gap=1):
+            if builder is not None and self.place(ctx, kind, ctx.home, [builder], gap=ctx.config.building_gap):
                 ctx.board.cool("production", ctx.tick, 3 * ctx.world.tick_hz)
                 return

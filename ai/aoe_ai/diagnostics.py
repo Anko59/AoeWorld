@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import time
 
-from aoeworld import CommandResult
+from aoeworld import CommandResult, UnitKind
 
 RUN_ID = f"{time.time_ns()}-{os.getpid()}"
 
@@ -54,6 +54,9 @@ def trace(host, tick, seed):
             "stats": board.stats,
             "target": board.attack_target,
             "age": str(eco.age),
+            "population": eco.population,
+            "population_space": eco.population_cap,
+            "idle_workers": sum(u.kind == UnitKind.VILLAGER and u.idle for u in units),
             "buildings": [{"id": b.id, "kind": str(b.kind), "tile": b.center,
                            "complete": b.complete, "progress": b.progress}
                           for b in world.my_buildings()],

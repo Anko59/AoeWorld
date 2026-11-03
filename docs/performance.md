@@ -229,6 +229,17 @@ Recovery URL serialization and startup diagnostics run in JavaScript: formatting
 the live camera's floats in Rust would retain its full decimal formatter solely
 for a browser navigation. Camera, seat and unknown fragment fields are preserved.
 
+#### Browser size baseline
+
+The block guards against a jump, not an absolute ceiling, but a fixed baseline
+makes every feature spend the same allowance. On 2026-11-03 dev went over the
+378,521-byte cap, refusing unrelated changes, and #672 left only 2,569 bytes of
+room, so the owner approved re-taking
+the baseline at 375,952 gzip bytes, measured with `make perf-wasm-size` at
+`85ceef00c`; the +25% block is now 469,940 bytes. The perf comment still
+shows every change's size difference. Re-take it deliberately when the allowance
+is spent, after checking `make perf-wasm-functions` for waste.
+
 #### Browser size investigation
 
 At `a2f5099d432e`, `make perf-wasm-size` measured 376,727 gameplay gzip bytes
@@ -257,6 +268,11 @@ use hash tables. Their output order still comes from semantic vectors and
 authoritative unit maps, which remain ordered. This measured 372,720 gameplay
 gzip bytes (4,007 fewer; 5,801 bytes below the cap); diagnostics stayed at
 90,268. Identity tests cover every native pixel input and first-encounter IDs.
+
+Native frame validation returns its own error type, preserving the exact
+diagnostics and importer context without retaining PNG/JSON/I/O formatters in
+the browser. Gameplay gzip measured 372,720 → 368,482 bytes (4,238 fewer;
+10,039 bytes below the cap); diagnostics remained 90,268 bytes.
 
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts. A missing baseline or sample cannot pass. WASM size is a
