@@ -78,9 +78,28 @@ impl GameWorld {
                     .then_some((*id, job.building))
             })
             .collect::<Vec<_>>();
+        let mut remaining = BTreeMap::<EntityId, usize>::new();
+        for &(_, building) in &finished {
+            *remaining.entry(building).or_default() += 1;
+        }
+        let mut staffed = std::collections::BTreeSet::new();
         for (builder, building) in finished {
             let (player, kind, footprint) = completed[&building];
-            if !self.next_queued_build(builder)
+            let helpers = remaining.get_mut(&building).unwrap();
+            *helpers -= 1;
+            // Leave one farmer while helpers carry on with the shared queue.
+            // A lone builder still completes its queued sites before farming.
+            if kind == BuildingKind::Farm
+                && *helpers > 0
+                && staffed.insert(building)
+                && self
+                    .economy
+                    .gatherers
+                    .occupied(super::super::gathering::WorkTarget::Farm(building), builder)
+                    == 0
+            {
+                self.finish_farm_builder(builder, player, building);
+            } else if !self.next_queued_build(builder)
                 && (kind == BuildingKind::Farm || !self.continue_foundation(builder, player))
             {
                 self.after_building(builder, player, building, kind, footprint);
@@ -115,8 +134,27 @@ impl GameWorld {
         targets: &[EntityId],
         queued: bool,
     ) -> bool {
+        let has_helpers = queued
+            && builders.iter().any(|id| {
+                !self
+                    .economy
+                    .gatherers
+                    .get(id)
+                    .is_some_and(|job| job.farm.is_some())
+            });
         let mut any = false;
         for &builder in builders {
+            // Repeated group placements may arrive after the previous farm
+            // finishes. Keep its farmer while the remaining helpers build.
+            if has_helpers
+                && self
+                    .economy
+                    .gatherers
+                    .get(&builder)
+                    .is_some_and(|job| job.farm.is_some())
+            {
+                continue;
+            }
             if queued && let Some(task) = self.economy.builders.get_mut(&builder) {
                 task.queue.extend_from_slice(targets);
                 self.player_override(builder);
