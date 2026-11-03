@@ -8,6 +8,45 @@ thread_local! {
 }
 
 #[wasm_bindgen_test]
+async fn diagnostic_world_keeps_ground_when_fog_is_disabled_and_no_map_chunks_exist() {
+    let scene = PreparedScene::new(
+        Camera {
+            center: [8.0; 2],
+            zoom: 1.0,
+            viewport: [320.0; 2],
+            focus_elevation_meters: 0.0,
+        },
+        Vec::new(),
+    );
+    let mut client = review_tests::client(&scene).await;
+    client.terrain_chunks.clear();
+    client.map_content_hash = None;
+    assert!(client.fog.apply(aoe_protocol::FogState {
+        revision: 1,
+        tick: aoe_core::Tick(0),
+        region: TileRect::from_xywh(0, 0, 16, 16),
+        disabled: true,
+        tiles: Vec::new(),
+        overview: Vec::new(),
+    }));
+    let ground = super::super::scene_terrain(&client);
+    assert!(
+        !ground.is_empty(),
+        "native DDS terrain needs ground geometry and residency demand"
+    );
+    assert!(
+        ground
+            .iter()
+            .all(|tile| tile.material == 0 && tile.elevation_meters == 0.0)
+    );
+    client.map_content_hash = Some([1; 32]);
+    assert!(
+        super::super::scene_terrain(&client).is_empty(),
+        "a geographic map must wait for its own terrain"
+    );
+}
+
+#[wasm_bindgen_test]
 async fn stationary_wall_corner_projections_reuse_the_prepared_foundation_key() {
     let empty = PreparedScene::new(
         Camera {

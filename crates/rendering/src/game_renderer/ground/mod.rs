@@ -32,7 +32,10 @@ pub fn apply_building_foundations(
             if unit.visual.ghost()
                 || unit.visual.moving()
                 || unit.kind.rubble()
-                || unit.kind.building_slot().is_some_and(|slot| slot >= 65)
+                || unit
+                    .kind
+                    .building_slot()
+                    .is_some_and(|slot| (65..74).contains(&slot))
             {
                 return None;
             }

@@ -11,6 +11,7 @@ fn gameplay_resources_fit_core_webgpu_default_limits_with_native_art() {
     assert!(instance_buffer::MAX_BUFFER_BYTES <= limits.max_buffer_size);
     assert!(std::mem::size_of::<Sprite>() as u32 <= limits.max_vertex_buffer_array_stride);
     assert!(7 <= limits.max_vertex_attributes);
+    assert!(13 <= limits.max_inter_stage_shader_variables);
     assert!(1 <= limits.max_vertex_buffers);
     assert!(2 <= limits.max_bind_groups);
     assert!(3 <= limits.max_bindings_per_bind_group);
