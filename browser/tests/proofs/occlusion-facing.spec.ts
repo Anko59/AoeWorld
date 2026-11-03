@@ -5,7 +5,7 @@ import { centerVillage, freshHud } from "../village/fixtures/resources.js";
 import { scoutCombat, villagerCombat } from "../wire/combat.js";
 import {
   darkAgeState,
-  marketPrices,
+  playerEconomyTail,
   townCenterState,
 } from "../wire/buildings.js";
 import { disabledFog } from "../wire/fog.js";
@@ -204,7 +204,7 @@ async function occlusionFixture(page: Page) {
           3,
           5,
           ...darkAgeState,
-          ...marketPrices,
+          ...playerEconomyTail,
           1,
           1,
           0,

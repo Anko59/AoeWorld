@@ -352,6 +352,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         population_cap: 5,
         age: Age::Feudal,
         researched: Tech::FeudalAge.bit(),
+        recent_deliveries: [0; 4],
         market_prices: MarketPrices::default(),
     });
     client.village.buildings.push(GameplayBuildingState {

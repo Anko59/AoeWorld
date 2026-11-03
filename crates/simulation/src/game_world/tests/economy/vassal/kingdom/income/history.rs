@@ -16,6 +16,28 @@ fn empty_household() -> GameWorld {
 }
 
 #[test]
+fn cockpit_deliveries_exclude_stock_edits_and_expire_on_simulation_time() {
+    let mut w = empty_household();
+    let player = PlayerId(0);
+    reserves(&mut w, 500, 500, 500, 500);
+    assert_eq!(w.recent_deliveries(player), [0; 4]);
+    let hz = w.config().tick_hz;
+    assert!(w.economy.credit_delivery(
+        player,
+        CarriedResource {
+            kind: ResourceKind::Wood,
+            amount: 17,
+        },
+        w.tick().0,
+        hz
+    ));
+    assert_eq!(w.recent_deliveries(player), [0, 17, 0, 0]);
+    assert_eq!(w.recent_deliveries(PlayerId(1)), [0; 4]);
+    advance(&mut w, 60 * hz);
+    assert_eq!(w.recent_deliveries(player), [0; 4]);
+}
+
+#[test]
 fn equal_current_income_with_different_live_deposit_timing_has_a_different_canonical_hash() {
     let mut older = empty_household();
     let mut younger = empty_household();

@@ -59,6 +59,10 @@ export function playerState(
     100,
     100,
     100,
+    0,
+    0,
+    0,
+    0, // Actual deliveries in the current player schema.
   ];
 }
 

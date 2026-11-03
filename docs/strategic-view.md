@@ -56,6 +56,24 @@ The camera focus can move outside the world, keeping map edges inspectable.
 Zoom preserves the ground under the pointer even when that requires an outside
 focus. Only the visible tile request is clipped to the map bounds.
 
+## Kingdom cockpit
+
+The far view has an original-art kingdom panel with held resources,
+population used/cap, recent credited deliveries, occupied building tiles and
+living owned military/support units by type, including garrisoned units and
+commanders. Villagers, Fishing Ships and Vassals are excluded from the army.
+The General token counts its soldiers; the kingdom total also counts the
+General himself. A missing economic report is shown as `?`.
+
+Collection numbers are actual deposits in the simulation's twelve live
+five-second buckets (55–60 seconds), without extrapolation. Spending, trade,
+refunds and stock edits do not count as collection. Occupied land sums living
+owned building footprints, including foundations and excluding water bridges;
+it does not claim territorial borders or Castle-domain ownership.
+
+Local original-art evidence and qualification limits are recorded in
+[the cockpit evidence record](scale/cockpit-evidence.md).
+
 ## Local verification
 
 The focused browser regression is `tests/rendering/strategic.play.spec.ts`.

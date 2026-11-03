@@ -6,7 +6,7 @@ use aoe_protocol::{BuildingKind, GameplayUnitState, UnitKind};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
-    inline_js = "export function strategic_update(a, e, b, c, w, o) { window.aoeNavigation?.strategic?.receive(a, e, b, c, w, o); }"
+    inline_js = "export function strategic_update(a, e, b, c, w, o, s) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s); }"
 )]
 extern "C" {
     fn strategic_update(
@@ -16,6 +16,7 @@ extern "C" {
         contacts: &[f64],
         workers: &[f64],
         orders: &[f64],
+        summary: &[f64],
     );
 }
 
@@ -60,6 +61,23 @@ pub(in super::super) fn update(client: &Client) {
     let mut armies = Vec::new();
     let mut contacts = Vec::new();
     let mut workers = Vec::new();
+    let mut summary = vec![f64::NAN; 11];
+    if let Some(p) = client.village.players.iter().find(|p| p.player == owner) {
+        let s = p.stockpile;
+        summary.copy_from_slice(&[
+            f64::from(s.wood),
+            f64::from(s.food),
+            f64::from(s.gold),
+            f64::from(s.stone),
+            f64::from(p.population_used),
+            f64::from(p.population_cap),
+            p.recent_deliveries[1] as f64,
+            p.recent_deliveries[0] as f64,
+            p.recent_deliveries[2] as f64,
+            p.recent_deliveries[3] as f64,
+            0.0,
+        ]);
+    }
     for u in client.units.values() {
         let p = u.position.as_tiles();
         let own = u.player == owner;
@@ -72,6 +90,9 @@ pub(in super::super) fn update(client: &Client) {
         }
         if u.hp == 0 {
             continue;
+        }
+        if own {
+            summary.extend([u.kind as u8 as f64, 1.0]);
         }
         if armies.len() < 256 * 15
             && let Some(v) = army_record(u, owner, client.selected.units.contains(&u.id), None)
@@ -93,6 +114,15 @@ pub(in super::super) fn update(client: &Client) {
     let mut economy = Vec::new();
     let mut bridges = Vec::new();
     for b in &client.village.buildings {
+        if b.player == owner && b.hp > 0 {
+            if b.kind != BuildingKind::Bridge {
+                summary[10] += f64::from(b.footprint.max.x - b.footprint.min.x)
+                    * f64::from(b.footprint.max.y - b.footprint.min.y);
+            }
+            for g in b.garrison.iter().filter(|g| g.hp > 0) {
+                summary.extend([g.kind as u8 as f64, 1.0]);
+            }
+        }
         if b.kind == BuildingKind::Bridge && bridges.len() < 256 * 4 {
             bridges.extend([
                 f64::from(b.footprint.min.x),
@@ -141,5 +171,7 @@ pub(in super::super) fn update(client: &Client) {
             orders.extend([f64::from(q.entity_id.0), p[0], p[1]]);
         }
     }
-    strategic_update(&armies, &economy, &bridges, &contacts, &workers, &orders);
+    strategic_update(
+        &armies, &economy, &bridges, &contacts, &workers, &orders, &summary,
+    );
 }

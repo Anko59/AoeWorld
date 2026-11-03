@@ -167,15 +167,23 @@ fn wire_market_prices(prices: aoe_simulation::MarketPrices) -> aoe_protocol::Mar
 pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerState> {
     world
         .players()
-        .map(|state| (state.player, player_state(&state)))
+        .map(|state| {
+            (
+                state.player,
+                player_state(&state, world.recent_deliveries(state.player)),
+            )
+        })
         .collect()
 }
 pub(super) fn player(world: &GameWorld, player: PlayerId) -> Option<GameplayPlayerState> {
     world
         .player_economy(player)
-        .map(|state| player_state(&state))
+        .map(|state| player_state(&state, world.recent_deliveries(player)))
 }
-fn player_state(state: &aoe_simulation::PlayerEconomy) -> GameplayPlayerState {
+fn player_state(
+    state: &aoe_simulation::PlayerEconomy,
+    recent_deliveries: [u64; 4],
+) -> GameplayPlayerState {
     GameplayPlayerState {
         player: state.player,
         stockpile: Stockpile {
@@ -194,6 +202,7 @@ fn player_state(state: &aoe_simulation::PlayerEconomy) -> GameplayPlayerState {
         },
         researched: state.researched,
         market_prices: wire_market_prices(state.market_prices),
+        recent_deliveries,
     }
 }
 pub(super) fn building_in_camera(

@@ -120,6 +120,9 @@ pub struct GameplayPlayerState {
     pub researched: u64,
     /// The player's Market commodity prices, in gold per 100 units.
     pub market_prices: MarketPrices,
+    /// Credited Food/Wood/Gold/Stone deliveries in twelve live five-second
+    /// simulation buckets. Excludes stock edits, trade and refunds.
+    pub recent_deliveries: [u64; 4],
 }
 /// The most recent damage taken. A client plays a hit reaction when `tick`
 /// is newer than the one it last saw, and a swing for `attacker`.

@@ -1,4 +1,18 @@
 :root { color-scheme: dark; --ink:#eee4ca; --muted:#b7b49e; --gold:#b39a63; --edge:#696756; --panel:#202620; --bottom:208px; }
+#strategic-cockpit { position:fixed; left:12px; top:104px; width:310px; max-height:calc(100vh - 330px); overflow:auto; z-index:4; padding:26px 14px 12px; color:#261d13; background:#d6c494; border:2px solid #9d8150; box-shadow:0 3px 12px #0009; font-size:12px; }
+#strategic-cockpit header { display:flex; flex-direction:column; border-bottom:1px solid #665438; margin-bottom:8px; }
+#strategic-cockpit header b { font:small-caps bold 20px Georgia,serif; }
+.cockpit-resources { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.cockpit-resources>div { display:flex; align-items:center; gap:6px; }
+.cockpit-resources b { display:block; font-size:19px; line-height:22px; }
+.cockpit-resources small { display:block; }
+.cockpit-census { display:flex; justify-content:space-between; margin-top:10px; gap:8px; }
+.cockpit-census b { display:block; }
+.cockpit-note { font-size:10px; line-height:13px; margin:6px 0; }
+.cockpit-army { display:flex; flex-wrap:wrap; gap:4px 10px; border-top:1px solid #665438; padding-top:6px; }
+.cockpit-army>b { width:100%; }
+.cockpit-army>span { display:flex; align-items:center; gap:4px; }
+.cockpit-army .icon { width:22px; height:22px; }
 * { box-sizing:border-box; }
 html,body,#playground { width:100%; height:100%; margin:0; overflow:hidden; }
 body { background:#172516; color:var(--ink); font:14px/1.4 system-ui,sans-serif; }

@@ -2,6 +2,7 @@ import { aggregatePixels, actorColour } from '/minimap.js';
 import { initLayers } from '/navigation/layers.js';
 import { initTokens } from '/navigation/tokens.js';
 import { initContacts } from '/navigation/contacts.js';
+import { initCockpit } from '/navigation/cockpit.js';
 
 // A backend-independent, cached strategic plane. The detailed renderer keeps
 // its GPU/context alive, but emits no terrain, resources or sprites at these LODs.
@@ -23,6 +24,7 @@ export function initStrategic(fog, actors) {
   let resourceSnapshot = false;
   let modelRevision = 0, modelSignature = '', lastState = null;
   const tokens = initTokens(), contacts = initContacts();
+  const cockpit = initCockpit();
   const layers = initLayers(() => {
     modelRevision++;
     if (lastState) frame(lastState);
@@ -32,7 +34,7 @@ export function initStrategic(fog, actors) {
     const scene = document.getElementById('scene');
     const [worldWidth, worldHeight, cx, cy, width, height, zoom, level] = state;
     const lod = ['sprites', 'markers', 'map'][level];
-    tokens.show(!!level); layers.show(!!level);
+    tokens.show(!!level); layers.show(!!level); cockpit.show(!!level);
     if (scene.dataset.lod !== lod) {
       scene.dataset.lod = lod;
       document.documentElement.dataset.lod = lod;
@@ -146,7 +148,7 @@ export function initStrategic(fog, actors) {
   }
   function present() {
     canvas.hidden = label.hidden = true;
-    tokens.show(false); layers.show(false);
+    tokens.show(false); layers.show(false); cockpit.show(false);
     if (canvas.width !== 1) canvas.width = canvas.height = 1;
     canvas.dataset.workingBytes = '4';
   }
@@ -156,7 +158,7 @@ export function initStrategic(fog, actors) {
       if (next === modelSignature) return;
       modelSignature = next; tokens.update(a, e, b); modelRevision++;
   }
-  return { frame, pick, present, entity: tokens.entity, update,
+  return { frame, pick, present, entity: tokens.entity, update, cockpit: cockpit.update,
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
     // at HUD cadence, rather than retaining Rust map implementations in WASM.
     receive(a, castles, b, c, workers, orders) {
@@ -185,6 +187,7 @@ export function initStrategic(fog, actors) {
       update(armies, economy, b, c);
     },
     reset() {
+      cockpit.reset();
       tokens.update([], [], []); contacts.reset(); resources = [];
       knownResources.clear(); retiredResources.clear(); resourceSnapshot = false;
       modelSignature = ''; modelRevision++; previous = '';

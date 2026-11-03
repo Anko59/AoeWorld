@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 import { syntheticChunk } from "../synthetic-map.js";
 import { disabledFog } from "../wire/fog.js";
-import { marketPrices } from "../wire/buildings.js";
+import { playerEconomyTail } from "../wire/buildings.js";
 import { freshHud } from "../village/fixtures/resources.js";
 import { position, sint, uint } from "../village/input/fixture.js";
 
@@ -148,7 +148,7 @@ export async function bundleProof(page: Page, url: string, film = false) {
           ...uint(200),
           2,
           ...uint(4 + 16384),
-          ...marketPrices,
+          ...playerEconomyTail,
           buildings.length,
           ...buildings.flat(),
         ]),
