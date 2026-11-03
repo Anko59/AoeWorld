@@ -326,3 +326,66 @@ fn diagonal_bridge_updates_persisted_chunk_corner_routes_and_destruction() {
         Some(to)
     );
 }
+
+#[test]
+fn diagonal_bridge_crossing_one_chunk_side_is_connected_on_flat_ground() {
+    for preparation in 0..3 {
+        let terrain = flat_terrain_with_water_wall(64, 32, -1);
+        if preparation > 0 {
+            let chunks: Vec<_> = (0..2)
+                .flat_map(|y| (0..2).map(move |x| (x, y)))
+                .map(|(x, y)| {
+                    terrain
+                        .prepare_static_navigation_chunk(x, y, &|| false)
+                        .unwrap()
+                })
+                .collect();
+            if preparation == 1 {
+                terrain.install_static_navigation(chunks).unwrap();
+            } else {
+                let mut bytes = Vec::new();
+                let records = chunks
+                    .iter()
+                    .map(|chunk| {
+                        let start = bytes.len();
+                        bytes.extend(chunk.encode().unwrap());
+                        start..bytes.len()
+                    })
+                    .collect();
+                let snapshot =
+                    NavigationSnapshot::from_storage(2, Arc::new(bytes), records, &|| false)
+                        .unwrap();
+                terrain
+                    .install_navigation_snapshot(Arc::new(snapshot))
+                    .unwrap();
+            }
+        }
+        let mut overlay = crate::ResourceOverlay::default();
+        let span =
+            aoe_core::BridgeSpan::new(TileCoord::new(31, 20), TileCoord::new(33, 22)).unwrap();
+        overlay.add_bridge(span).unwrap();
+        terrain.prepare_navigation(&overlay, &|| false).unwrap();
+        let (from, to) = (TileCoord::new(28, 20), TileCoord::new(36, 22));
+        for (from, to) in [(from, to), (to, from)] {
+            assert!(matches!(
+                crate::find_path_with_overlay(&terrain, &overlay, from, to, 4096),
+                crate::MovementOutcome::Path(_)
+            ));
+            assert_eq!(
+                terrain
+                    .navigation_destination(&overlay, from, to, &|| false)
+                    .unwrap(),
+                Some(to),
+                "preparation={preparation}"
+            );
+        }
+        overlay.remove_bridge(span);
+        terrain.prepare_navigation(&overlay, &|| false).unwrap();
+        assert_ne!(
+            terrain
+                .navigation_destination(&overlay, from, to, &|| false)
+                .unwrap(),
+            Some(to)
+        );
+    }
+}

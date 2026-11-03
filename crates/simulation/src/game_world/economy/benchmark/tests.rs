@@ -99,8 +99,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Housing space is restored in the canonical state; retain the full 1/4-worker comparison above.
-        "9c98181d0e47d61999092690cee4a64920e56d3e446192f256f88e029216ad14"
+        // Typed squads, corridor recovery and restored housing change this replay; the 1/4-worker comparison above still holds.
+        "e70767c03b946890c1d608a07fd1f100ce977244d94c9adb9d994f0558edfc45"
     );
 }
 

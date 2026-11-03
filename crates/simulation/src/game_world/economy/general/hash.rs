@@ -16,7 +16,7 @@ impl Economy {
             h.update(&[a.state as u8, u8::from(a.solo), u8::from(a.training)]);
             h.update(&a.mix);
             h.update(&a.retreat_until.to_le_bytes());
-            for n in [a.scan.0, a.scan.1, a.micro_after] {
+            for n in [a.scan.0, a.scan.1, a.micro_after, a.fight_after] {
                 h.update(&(n as u64).to_le_bytes());
             }
             for n in a.production_scan {
@@ -30,6 +30,23 @@ impl Economy {
                 if let Some(p) = p {
                     h.update(&p.x.to_le_bytes());
                     h.update(&p.y.to_le_bytes());
+                }
+            }
+            h.update(&a.pace.0.to_le_bytes());
+            h.update(&a.pace.1.to_le_bytes());
+            h.update(&[u8::from(a.layout.is_some())]);
+            if let Some((goal, heading)) = a.layout {
+                for point in [goal, heading] {
+                    h.update(&point.x.to_le_bytes());
+                    h.update(&point.y.to_le_bytes());
+                }
+            }
+            h.update(&(a.squads.len() as u64).to_le_bytes());
+            for squad in &a.squads {
+                h.update(&[squad.arm as u8]);
+                h.update(&(squad.members.len() as u64).to_le_bytes());
+                for member in &squad.members {
+                    h.update(&member.0.to_le_bytes());
                 }
             }
             h.update(&(a.members.len() as u64).to_le_bytes());

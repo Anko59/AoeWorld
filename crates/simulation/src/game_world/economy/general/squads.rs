@@ -1,0 +1,330 @@
+//! Bounded typed offices inside an army. Each squad owns one ordinary shared
+//! route; all squads consume the General's single bounded threat census.
+use super::*;
+
+pub(super) const SQUAD_LIMIT: usize = 10;
+const CAPACITY: [usize; 4] = [20, 15, 10, 5];
+
+#[derive(Debug)]
+pub(crate) struct Squad {
+    pub arm: usize,
+    pub members: Vec<EntityId>,
+}
+
+pub(super) fn arm(kind: UnitKind) -> Option<usize> {
+    role(kind).map(|role| if role == 4 { 2 } else { role })
+}
+
+impl Army {
+    /// Include prepaid soldiers before admitting another body. Reservations
+    /// fill existing offices first, then consume one of the ten free offices.
+    pub(super) fn room_for(&self, kind: UnitKind) -> bool {
+        let mut offices: Vec<_> = self
+            .squads
+            .iter()
+            .map(|s| (s.arm, s.members.len()))
+            .collect();
+        for kind in self.pending.values().copied().chain([kind]) {
+            let Some(arm) = arm(kind) else { return false };
+            if let Some((_, size)) = offices
+                .iter_mut()
+                .find(|(a, size)| *a == arm && *size < CAPACITY[arm])
+            {
+                *size += 1;
+            } else if offices.len() < SQUAD_LIMIT {
+                offices.push((arm, 1));
+            } else {
+                return false;
+            }
+        }
+        true
+    }
+
+    pub(super) fn assign_squad(&mut self, id: EntityId, kind: UnitKind) {
+        let Some(arm) = arm(kind) else { return };
+        if let Some(squad) = self
+            .squads
+            .iter_mut()
+            .find(|s| s.arm == arm && s.members.len() < CAPACITY[arm])
+        {
+            if let Err(at) = squad.members.binary_search(&id) {
+                squad.members.insert(at, id);
+            }
+        } else {
+            debug_assert!(self.squads.len() < SQUAD_LIMIT);
+            self.squads.push(Squad {
+                arm,
+                members: vec![id],
+            });
+        }
+    }
+
+    pub(super) fn remove_from_squads(&mut self, id: EntityId) {
+        for squad in &mut self.squads {
+            squad.members.retain(|&member| member != id);
+        }
+        self.squads.retain(|squad| !squad.members.is_empty());
+    }
+}
+
+fn offset(arm: usize, number: usize, counts: &[usize; 4], scout: bool) -> WorldPosition {
+    let width = counts[arm].clamp(1, 4);
+    let infantry_rows = counts[0].div_ceil(4).max(1) as i32;
+    let archer_rows = counts[1].div_ceil(4).max(1) as i32;
+    let side = (2 * (number % width) as i32 - (width as i32 - 1)) * 4;
+    let row = (number / width) as i32 * 8;
+    let (side, along) = match arm {
+        0 => (side, 8 - row),
+        1 => (side, 4 - infantry_rows * 8 - row),
+        2 => (
+            if number.is_multiple_of(2) { -20 } else { 20 },
+            (if scout { 16 } else { 8 }) - (number / 2) as i32 * 8,
+        ),
+        _ => (side, 8 - (infantry_rows + archer_rows) * 8 - row),
+    };
+    WorldPosition::new(side * 1024, along * 1024)
+}
+
+impl GameWorld {
+    pub(crate) fn general_squad_pace(&self, id: EntityId) -> Option<(u64, u64)> {
+        let g = self.general_controller(id).unwrap_or(id);
+        let army = self.economy.generals.armies.get(&g)?;
+        if !matches!(
+            army.state,
+            GeneralState::Marching | GeneralState::Retreating
+        ) {
+            return None;
+        }
+        if id == g {
+            return Some(army.pace);
+        }
+        let general = self.unit(g)?;
+        let unit = self.unit(id)?;
+        let to = if army.state == GeneralState::Retreating {
+            army.home
+        } else {
+            army.destination?
+        };
+        let (dx, dy) = (
+            i64::from(to.x) - i64::from(general.position.x),
+            i64::from(to.y) - i64::from(general.position.y),
+        );
+        let length = (dx * dx + dy * dy).isqrt();
+        let lead = (i64::from(unit.position.x) - i64::from(general.position.x)) * dx
+            + (i64::from(unit.position.y) - i64::from(general.position.y)) * dy;
+        // Independent squads catch up at their own speed. A twelve-tile lead
+        // keeps scouts loosely ahead without letting them abandon the march.
+        // Once the commander arrives, each squad finishes its local approach.
+        (length >= 1024 && lead > length * 12 * 1024).then_some(army.pace)
+    }
+
+    fn squad_destination(
+        &self,
+        kind: UnitKind,
+        to: WorldPosition,
+        heading: WorldPosition,
+        offset: WorldPosition,
+    ) -> Option<WorldPosition> {
+        let length = (i64::from(heading.x).pow(2) + i64::from(heading.y).pow(2))
+            .isqrt()
+            .max(1);
+        let desired = self.config.snap_ground_position(WorldPosition::new(
+            to.x + ((i64::from(heading.x) * i64::from(offset.y)
+                - i64::from(heading.y) * i64::from(offset.x))
+                / length) as i32,
+            to.y + ((i64::from(heading.y) * i64::from(offset.y)
+                + i64::from(heading.x) * i64::from(offset.x))
+                / length) as i32,
+        ));
+        // A bounded shared centre search, once per squad order. Ordinary
+        // formation assignment separately validates each physical final slot.
+        std::iter::once(desired)
+            .chain((1_i32..=8).flat_map(|ring| {
+                (-ring..=ring).flat_map(move |y| {
+                    (-ring..=ring).filter_map(move |x| {
+                        (x.abs().max(y.abs()) == ring).then_some(WorldPosition::new(
+                            desired.x + x * 1024,
+                            desired.y + y * 1024,
+                        ))
+                    })
+                })
+            }))
+            .find(|&point| self.body_position_clear(kind, point))
+    }
+
+    pub(super) fn resume_general_squad(
+        &mut self,
+        g: EntityId,
+        group: usize,
+        soldiers: &[GameUnit],
+        changed: &mut Vec<EntityId>,
+        work: &mut GeneralWork,
+    ) {
+        let army = &self.economy.generals.armies[&g];
+        let Some(to) = army.destination else {
+            return;
+        };
+        let Some((_, heading)) = army.layout else {
+            return;
+        };
+        let goal = if group == SQUAD_LIMIT {
+            Some(to)
+        } else {
+            let squad = &army.squads[group];
+            let mut counts = [0; 4];
+            for squad in &army.squads {
+                counts[squad.arm] += 1;
+            }
+            let number = army.squads[..group]
+                .iter()
+                .filter(|s| s.arm == squad.arm)
+                .count();
+            let scout = soldiers.iter().any(|v| role(v.kind) == Some(4));
+            let Some(largest) = soldiers
+                .iter()
+                .map(|v| v.kind)
+                .max_by_key(|k| k.collision_radius())
+            else {
+                return;
+            };
+            self.squad_destination(
+                largest,
+                to,
+                heading,
+                offset(squad.arm, number, &counts, scout),
+            )
+        };
+        let Some(goal) = goal else {
+            return;
+        };
+        let ids: Vec<_> = soldiers.iter().map(|v| v.id).collect();
+        if !self.formation_matches(&ids, goal) {
+            work.orders += 1;
+            if self
+                .issue_formation_move(
+                    soldiers[0].player,
+                    &ids,
+                    aoe_core::Formation::Line,
+                    goal,
+                    false,
+                    false,
+                )
+                .is_ok()
+            {
+                changed.extend(ids);
+            }
+        }
+    }
+
+    pub(super) fn march_squads(
+        &mut self,
+        g: EntityId,
+        army: &[GameUnit],
+        to: WorldPosition,
+        retreat: bool,
+        changed: &mut Vec<EntityId>,
+        work: &mut GeneralWork,
+    ) {
+        if self.economy.generals.armies[&g].routed == Some(to) {
+            return;
+        }
+        let Some(general) = self.unit(g) else { return };
+        let heading = match self.economy.generals.armies[&g].layout {
+            Some((goal, heading)) if goal == to => heading,
+            _ => {
+                let h = WorldPosition::new(to.x - general.position.x, to.y - general.position.y);
+                let h = if h == WorldPosition::new(0, 0) {
+                    WorldPosition::new(1024, 0)
+                } else {
+                    h
+                };
+                let Some(army) = self.economy.generals.armies.get_mut(&g) else {
+                    return;
+                };
+                army.layout = Some((to, h));
+                h
+            }
+        };
+        let available: BTreeSet<_> = army.iter().map(|u| u.id).collect();
+        let mut counts = [0; 4];
+        for squad in &self.economy.generals.armies[&g].squads {
+            counts[squad.arm] += 1;
+        }
+        let mut numbers = [0; 4];
+        let mut plans = Vec::new();
+        for squad in &self.economy.generals.armies[&g].squads {
+            let number = numbers[squad.arm];
+            numbers[squad.arm] += 1;
+            let ids: Vec<_> = squad
+                .members
+                .iter()
+                .copied()
+                .filter(|id| available.contains(id))
+                .collect();
+            if ids.is_empty() {
+                continue;
+            }
+            let scout = ids
+                .iter()
+                .any(|&id| self.unit(id).is_some_and(|u| role(u.kind) == Some(4)));
+            let Some(largest) = ids
+                .iter()
+                .filter_map(|&id| self.unit(id))
+                .map(|u| u.kind)
+                .max_by_key(|kind| kind.collision_radius())
+            else {
+                continue;
+            };
+            let goal = self.squad_destination(
+                largest,
+                to,
+                heading,
+                offset(squad.arm, number, &counts, scout),
+            );
+            plans.push((if scout { 0 } else { squad.arm + 1 }, ids, goal));
+        }
+        // Leading cavalry gets the destination's first look. The ordinary
+        // observer/fog system reports sightings through the shared survey.
+        plans.sort_by_key(|(priority, ids, _)| (*priority, ids[0]));
+        plans.push((5, vec![g], Some(to)));
+        let marching = self.economy.generals.armies[&g].state != GeneralState::Idle;
+        let mut complete = true;
+        for (_, ids, goal) in plans {
+            let Some(goal) = goal else {
+                complete = false;
+                continue;
+            };
+            if !self.formation_matches(&ids, goal) {
+                work.orders += 1;
+                if self
+                    .issue_formation_move(
+                        general.player,
+                        &ids,
+                        aoe_core::Formation::Line,
+                        goal,
+                        false,
+                        false,
+                    )
+                    .is_err()
+                {
+                    complete = false;
+                    continue;
+                }
+            }
+            if marching {
+                for &id in &ids {
+                    let (stance, reason) = if retreat {
+                        (aoe_core::CombatStance::NoAttack, stances::Reason::Retreat)
+                    } else {
+                        (aoe_core::CombatStance::Defensive, stances::Reason::March)
+                    };
+                    self.general_override_stance(g, id, stance, reason);
+                }
+            }
+            changed.extend(ids);
+        }
+        if complete && let Some(army) = self.economy.generals.armies.get_mut(&g) {
+            army.routed = Some(to);
+        }
+    }
+}

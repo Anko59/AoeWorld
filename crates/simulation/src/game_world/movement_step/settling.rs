@@ -100,7 +100,13 @@ impl GameWorld {
             pass_until: 0,
         });
         if obstruction.last_tick != self.tick.0 {
-            if obstruction.blocked > 0 && obstruction.blocked.is_multiple_of(48) {
+            // Formation avoidance remembers the side actually taken and
+            // already tries the other side when blocked. A timer flip alone
+            // sends queued bodies back across their still-open passing lane.
+            if unit.formation.is_none()
+                && obstruction.blocked > 0
+                && obstruction.blocked.is_multiple_of(48)
+            {
                 obstruction.side = -obstruction.side;
             }
             obstruction.blocked = obstruction.blocked.saturating_add(1);

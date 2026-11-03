@@ -54,20 +54,19 @@ export function initGeneralPanel() {
       training = isTraining === 1;
       panel.dataset.state = states[state] ?? 'idle';
       for (const s of ['marching', 'fighting']) byId(`general-${s}`).setAttribute('aria-current', String(states[state] === s));
-      byId('general-army').textContent = `${army}/100 soldiers · ${states[state] ?? 'idle'}`;
+      byId('general-army').textContent = `${army} soldiers · up to 10 squads · ${states[state] ?? 'idle'}`;
       sliders.forEach((s, role) => {
         // Never fight the hand that is dragging a slider.
         if (document.activeElement !== s.input) s.input.value = String(values[5 + role]);
         s.out.textContent = `${s.input.value}%`;
         counts[role].textContent = String(values[10 + role]);
       });
-      const full = army + pending >= 100;
       const button = byId('general-train');
       button.textContent = training ? 'Stop training' : 'Train';
       button.setAttribute('aria-pressed', String(training));
       byId('general-train-note').textContent = training
-        ? `Training toward 100 soldiers (${pending} queued)`
-        : full ? 'At capacity · press Train after losses' : 'Idle · press Train to start';
+        ? `Training squad vacancies (${pending} queued)`
+        : 'Idle · press Train to fill squad vacancies';
     },
   };
 }

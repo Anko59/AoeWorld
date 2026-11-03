@@ -6,6 +6,11 @@ use crate::game_world::formation::{Motion, group_step};
 
 impl GameWorld {
     fn group_tile_sealed(&self, kind: UnitKind, from: WorldPosition) -> bool {
+        // A body on or beside a diagonal deck can stand over a water corner
+        // whose tile has no grid exit; the continuous deck still carries it.
+        if self.near_deck(from) {
+            return false;
+        }
         let tile = from.tile_floor();
         (-1..=1).all(|dy| {
             (-1..=1).all(|dx| {
@@ -27,6 +32,9 @@ impl GameWorld {
         to: WorldPosition,
         certified: bool,
     ) -> bool {
+        if self.deck_recovery_step(kind, from, to) {
+            return true;
+        }
         if certified {
             // Clearance proves tile bodies/buildings, but not elevation edges.
             return from.tile_floor() == to.tile_floor()
@@ -143,8 +151,17 @@ impl GameWorld {
         {
             self.record_obstruction_towards(index, motion.target);
             let mut proposed = group_step(from, motion.target, motion.budget);
-            let terrain_clear =
-                self.group_static_step_clear(step.state.kind, from, proposed, motion.static_clear);
+            // Terrain cannot mutate during ordered movement. Reuse a positive
+            // primary proof when the actor still starts at its snapshot point;
+            // body traffic is the part that earlier writes can invalidate.
+            let same_start = from == step.state.previous_position;
+            let terrain_clear = (same_start && !motion.obstructed)
+                || self.group_static_step_clear(
+                    step.state.kind,
+                    from,
+                    proposed,
+                    same_start && motion.static_clear,
+                );
 
             if !terrain_clear {
                 proposed = group_step(from, motion.center, motion.budget);

@@ -70,6 +70,18 @@ fn an_enemy_camp_is_cleared_instead_of_idled_in() {
     let army = muster(&mut w, 40, 100, 100);
     let g = soldier(&mut w, UnitKind::General, 104, 104);
     let camp = enemies(&mut w, 16, 140, 90, 6);
+    // Keep both halves visible: otherwise the army can finish its march with
+    // untouched enemies hidden in fog. Outposts supply sight, never damage.
+    for y in [94, 106] {
+        w.insert_building(
+            PlayerId(0),
+            BuildingKind::Outpost,
+            TileRect::from_xywh(149, y, 1, 1),
+            true,
+        )
+        .unwrap();
+    }
+    assert!(camp.iter().all(|&id| w.unit_visible_to(PlayerId(0), id)));
     w.issue_move(g, at(148, 98)).unwrap();
     // Longest run of ticks an army member stood idle with a camp member
     // within eight tiles: it must keep fighting.

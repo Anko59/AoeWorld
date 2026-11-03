@@ -44,6 +44,9 @@ incremental = false
 
 [profile.test]
 incremental = false
+# Full workspace test builds must fit the shared 4 GiB container cap. Debug
+# symbols exhausted it before tests ran; assertions and overflow checks stay on.
+debug = 0
 
 [profile.dev.package."*"]
 debug = 0

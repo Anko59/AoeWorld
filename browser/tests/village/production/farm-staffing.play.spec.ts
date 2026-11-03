@@ -95,14 +95,19 @@ test("farm staffing keeps a single builder's queued house", async ({
   await page.keyboard.press("1");
   await expect(page.locator("#selection")).toHaveAttribute("data-count", "2");
   await place(page, "farm", 250, 200);
+  // Placement sends an asynchronous server order. Wait for its foundation and
+  // task snapshot before checking the builder, rather than reading Mill-era Idle.
+  await expect
+    .poll(async () => (await actors(page)).some((a) => a.kind === "Farm"))
+    .toBe(true);
   // Escape ends placement and clears selection; recall the moving builders.
   await page.keyboard.press("1");
   await expect(page.locator("#selection")).toHaveAttribute("data-count", "2");
   await page.locator(`[data-unit-id="${first}"]`).click({ force: true });
   await expect(page.locator("#selection")).toHaveAttribute("data-count", "1");
-  expect((await actors(page)).find((a) => a.id === first)?.task).toMatch(
-    /Moving|Building/,
-  );
+  await expect
+    .poll(async () => (await actors(page)).find((a) => a.id === first)?.task)
+    .toMatch(/Moving|Building/);
   await place(page, "house", 1050, 200);
   await expect
     .poll(async () => (await actors(page)).some((a) => a.kind === "House"))

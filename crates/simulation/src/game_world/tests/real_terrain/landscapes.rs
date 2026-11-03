@@ -2,7 +2,7 @@ use super::*;
 use crate::game_world::terrain_fixtures::{Command, Fixture, build};
 use metrics::{Tracker, reference_from};
 
-fn offered(f: &Fixture) -> Vec<Option<WorldPosition>> {
+pub(super) fn offered(f: &Fixture) -> Vec<Option<WorldPosition>> {
     f.ids
         .iter()
         .map(|&id| {
@@ -39,33 +39,35 @@ fn run(case: &str, count: usize, limit: u32) {
     // First terrain milestone: protect full arrival, <=1.3x time, physical
     // speed, membership, exact slots and bounded work. Pin the two known
     // recovery/oscillation deficits explicitly until the next small commit.
-    // Regenerate intentional output pins with the focused real_terrain tests.
+    // Independent typed squads intentionally change the current-output pins.
+    // Keep all arrival, work, speed, membership and 60-tick acceptance bounds.
+    // The audit reports increased long-march work/reversals, not just gains.
     match case {
         "river" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 24_576, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (26, 5));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (5, 2));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (6035, 55225, 5501204)
+                (5527, 55473, 5422483)
             );
         }
         "long" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 16_384, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (149, 37));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (32, 26));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (40838, 41726, 97557301)
+                (35529, 378134, 111559118)
             );
         }
         _ => {
             result.assert_works(count);
             // Current-output pins also retain work for the complete report.
             let expected = match case {
-                "forest" => (3471, 1027, 2595950),
-                "town" => (3777, 1193, 2975722),
-                "crossing" => (3388, 1933, 2706351),
+                "forest" => (3282, 1027, 2444034),
+                "town" => (3741, 1193, 2884789),
+                "crossing" => (3278, 1933, 3096055),
                 "bridge" => (479, 354, 23210),
                 "siege" => (1556, 867, 44292),
                 "gap" => (580, 512, 24846),

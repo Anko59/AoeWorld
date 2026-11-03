@@ -67,7 +67,13 @@ pub(super) fn base(name: &str) -> Fixture {
     });
     let mut hydrology = None;
     let mut cover = None;
-    if matches!(name, "river" | "bridge" | "long") {
+    let bridge_rivers = super::bridges::rivers(name);
+    if bridge_rivers.is_some()
+        || matches!(
+            name,
+            "river" | "bridge" | "long" | "general-river" | "general-far-bank"
+        )
+    {
         let segment = |x, from, to| RiverSegment {
             start: [x * 256, from * 256],
             end: [x * 256, to * 256],
@@ -77,14 +83,16 @@ pub(super) fn base(name: &str) -> Fixture {
             source_delta: [0, (to - from) * 256],
             source_station_delta: i64::from(to - from) * 256,
         };
-        let segments = match name {
-            "river" => vec![segment(88, -1, 82), segment(88, 94, 258)],
+        let segments = bridge_rivers.unwrap_or_else(|| match name {
+            "river" | "general-river" | "general-far-bank" => {
+                vec![segment(88, -1, 82), segment(88, 94, 258)]
+            }
             "bridge" => vec![segment(88, -1, 258)],
             _ => [(240, 100), (510, 65), (780, 105)]
                 .into_iter()
                 .flat_map(|(x, y)| [segment(x + 4, -1, y), segment(x + 4, y + 16, 1200)])
                 .collect(),
-        };
+        });
         let evidence = HydrologyEvidencePage {
             level: 0,
             x: 0,
@@ -120,20 +128,22 @@ pub(super) fn base(name: &str) -> Fixture {
         hydrology = Some(evidence);
         cover = Some(land);
     }
-    let package = MapPackage::with_prepared_environment(
-        1,
-        MapRequest {
-            requested_side_meters: if name == "long" { 2400 } else { 514 },
-            compression: Ratio::new(1, 1).unwrap(),
-            seed: 0,
-            ..MapRequest::default()
-        },
-        vec![],
-        ProjectionMetadata::default(),
-        EnvironmentalProvenance::default(),
-        environment,
-    )
-    .unwrap();
+    let package =
+        MapPackage::with_prepared_environment(
+            1,
+            MapRequest {
+                requested_side_meters: super::bridges::side_meters(name)
+                    .unwrap_or(if name == "long" { 2400 } else { 514 }),
+                compression: Ratio::new(1, 1).unwrap(),
+                seed: 0,
+                ..MapRequest::default()
+            },
+            vec![],
+            ProjectionMetadata::default(),
+            EnvironmentalProvenance::default(),
+            environment,
+        )
+        .unwrap();
     let pages = elevation
         .iter()
         .cloned()
@@ -187,19 +197,35 @@ pub(super) fn trees(w: &mut GameWorld, rect: TileRect) {
     }
     w.collision_closed(rect);
 }
+fn kind_for(n: usize) -> UnitKind {
+    match n % 10 {
+        0..=3 => UnitKind::Militia,
+        4..=6 => UnitKind::Archer,
+        7..=8 => UnitKind::Scout,
+        _ => UnitKind::BatteringRam,
+    }
+}
 pub(super) fn mixed(w: &mut GameWorld, x: i32, y: i32, count: usize) -> Vec<EntityId> {
     (0..count)
         .map(|n| {
-            let kind = match n % 10 {
-                0..=3 => UnitKind::Militia,
-                4..=6 => UnitKind::Archer,
-                7..=8 => UnitKind::Scout,
-                _ => UnitKind::BatteringRam,
-            };
             w.spawn_kind(
                 PlayerId(0),
-                kind,
+                kind_for(n),
                 at(x + (n % 8) as i32 * 2, y + (n / 8) as i32 * 2),
+            )
+            .unwrap()
+        })
+        .collect()
+}
+/// Ten columns at one-tile spacing: a compact block that a General's 24-tile
+/// census adopts whole, unlike the two-tile grid of `mixed`.
+pub(super) fn block(w: &mut GameWorld, x: i32, y: i32, count: usize) -> Vec<EntityId> {
+    (0..count)
+        .map(|n| {
+            w.spawn_kind(
+                PlayerId(0),
+                kind_for(n),
+                at(x + (n % 10) as i32, y + (n / 10) as i32),
             )
             .unwrap()
         })

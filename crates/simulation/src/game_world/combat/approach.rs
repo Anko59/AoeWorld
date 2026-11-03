@@ -66,7 +66,7 @@ impl GameWorld {
         true
     }
 
-    pub(super) fn reserve_attack_search(&mut self) -> bool {
+    pub(crate) fn reserve_attack_search(&mut self) -> bool {
         if self.combat.search_tick != self.tick.0 {
             self.combat.search_tick = self.tick.0;
             self.combat.searches_used = 0;

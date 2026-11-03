@@ -22,7 +22,9 @@ use height_bounds::{HeightBoundsError, package_height_bounds};
 mod minimap;
 pub(crate) use minimap::MinimapCache;
 use minimap::minimap;
+mod reset;
 mod routes;
+pub(super) use reset::reset;
 mod startup;
 pub(super) use routes::routes;
 
@@ -344,45 +346,6 @@ fn preview_coordinate(tiles_per_side: u64, sample: u16) -> Result<i32, String> {
         .ok_or_else(|| "preview sample count was zero".to_owned())?
         .min(tiles_per_side.saturating_sub(1));
     i32::try_from(coordinate).map_err(|_| "preview coordinate exceeded map bounds".to_owned())
-}
-
-#[derive(serde::Deserialize)]
-pub(super) struct ResetOptions {
-    scenario: Option<String>,
-}
-
-pub(super) async fn reset(
-    State(state): State<AppState>,
-    Query(options): Query<ResetOptions>,
-) -> StatusCode {
-    let service = match options.scenario.as_deref() {
-        None => GameplayService::new(state.diagnostic_scenario.seed),
-        Some(
-            name @ ("feudal-economy" | "vassal-economy" | "vassal-territory" | "vassal-farming"
-            | "vassal-kingdom" | "feudal-military" | "general-army" | "general-appearance"
-            | "imperial-army"),
-        ) => {
-            let constructor = match name {
-                "feudal-economy" => GameplayService::feudal_demo,
-                "vassal-economy" => GameplayService::vassal_demo,
-                "vassal-territory" => GameplayService::vassal_territory_demo,
-                "vassal-farming" => GameplayService::vassal_farming_demo,
-                "vassal-kingdom" => GameplayService::vassal_kingdom_demo,
-                "general-army" => GameplayService::general_demo,
-                "imperial-army" => GameplayService::imperial_demo,
-                "general-appearance" => GameplayService::general_appearance_demo,
-                _ => GameplayService::military_demo,
-            };
-            match constructor(state.diagnostic_scenario.seed) {
-                Ok(service) => service,
-                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
-            }
-        }
-        Some(_) => return StatusCode::BAD_REQUEST,
-    };
-    *state.gameplay.write().await = service;
-    state.generation.fetch_add(1, Ordering::SeqCst);
-    StatusCode::NO_CONTENT
 }
 
 pub(super) async fn package(

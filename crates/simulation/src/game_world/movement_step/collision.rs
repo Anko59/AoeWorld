@@ -54,6 +54,35 @@ pub(crate) fn hard_distance(unit: &crate::GameUnit, other: &crate::GameUnit) -> 
 }
 
 impl GameWorld {
+    /// Persistent queues behind another group's parked bodies need a local
+    /// detour. A group's own files retain their shared packing and route.
+    pub(crate) fn stationary_external_traffic(&self, index: usize) -> bool {
+        let unit = &self.units[index];
+        self.collisions.blocked(
+            (
+                unit.state.position,
+                unit.state.kind.collision_radius() + 1024,
+            ),
+            unit.state.kind.is_naval(),
+            self.tick.0.wrapping_add(u64::from(unit.state.id.0)),
+            &self.group_work,
+            |id| {
+                let other = &self.units[self.collisions.unit_index(id)];
+                let r = i64::from(
+                    unit.state.kind.collision_radius() + other.state.kind.collision_radius() + 128,
+                );
+                let dx = i64::from(unit.state.position.x) - i64::from(other.state.position.x);
+                let dy = i64::from(unit.state.position.y) - i64::from(other.state.position.y);
+                id != unit.state.id
+                    && other.state.hp > 0
+                    && !other.state.moving
+                    && other.formation != unit.formation
+                    && dx * dx + dy * dy < r * r
+            },
+            |_| true,
+        )
+    }
+
     pub(super) fn collision_occupied(
         &self,
         index: usize,
@@ -135,23 +164,47 @@ impl GameWorld {
         let crowded = attack
             .and_then(|target| self.attack_goal(target, unit.player))
             .is_some_and(|goal| self.melee_contact_traffic(unit.id, &goal));
-        let soft = (self.units[index].formation.is_none() || self.is_detached_member(index))
-            && (crowded
-                || (attack.is_none()
-                    && self.units[index].obstruction.is_some_and(|o| {
-                        let (x, y) = (
-                            i64::from(o.goal.x) - i64::from(from.x),
-                            i64::from(o.goal.y) - i64::from(from.y),
-                        );
-                        o.pass_until > self.tick.0
-                            && (x * x + y * y > 2048 * 2048
-                                || self.free_work_approach(index, o.goal))
-                    })));
+        // A persistently blocked group member earns the same bounded friendly
+        // passing clearance as an independent mover. Group membership must not
+        // make parked friendly bodies an unbreakable wall.
+        let soft = crowded
+            || (attack.is_none()
+                && self.units[index].obstruction.is_some_and(|o| {
+                    let (x, y) = (
+                        i64::from(o.goal.x) - i64::from(from.x),
+                        i64::from(o.goal.y) - i64::from(from.y),
+                    );
+                    o.pass_until > self.tick.0
+                        && (x * x + y * y > 2048 * 2048
+                            || self
+                                .formation_destination_slot(unit.id)
+                                .is_some_and(|goal| {
+                                    let dx = i64::from(goal.x) - i64::from(from.x);
+                                    let dy = i64::from(goal.y) - i64::from(from.y);
+                                    dx * dx + dy * dy > 2048 * 2048
+                                })
+                            || self.free_work_approach(index, o.goal))
+                }));
         let general_alone = unit.kind == UnitKind::General && self.units[index].formation.is_none();
         let work_squeeze = unit.kind == UnitKind::Villager
             && self.units[index].obstruction.is_some()
             && self.crowded_resource_approach(unit.id);
         let narrow_water = unit.kind.is_naval() && unit.moving && self.narrow_water_lane(from);
+        // On a deck or in a one-lane passage a player's own bodies that are
+        // not travelling the same way (oncoming or standing) pass through each
+        // other, so a head-on meeting can never lock the lane for anyone.
+        let mut narrow = None;
+        let file = self.single_file_group(index).filter(|_| {
+            self.units[index]
+                .obstruction
+                .is_some_and(|o| o.blocked >= 16)
+                && self.near_deck(from)
+        });
+        // Inside a one-lane passage a single file's own members pass through
+        // each other: a knot of friendly bodies at the mouth cannot lock it.
+        // Both passes are last resorts for a body that has stayed blocked.
+        let blocked = self.units[index].obstruction.map_or(0, |o| o.blocked);
+        let ghost = file.is_some();
         // Every query can reject centres outside the swept box expanded by
         // the largest observed hull; overfull-cell policy remains independent.
         let (min_x, max_x, min_y, max_y) = {
@@ -184,12 +237,18 @@ impl GameWorld {
                 if other.hp == 0 || (stationary && other.moving) {
                     return false;
                 }
-                // His own army yields to a General the player walks alone;
-                // inside a march, the shared block already spaces everyone.
+                // His own army yields to a General the player walks alone.
                 if general_alone && self.is_general_follower(other.id, unit.id) {
                     return false;
                 }
-                let r = if !soft && !work_squeeze && !unit.kind.is_naval() {
+                let r = if file.is_some()
+                    && self.units[self.collisions.unit_index(id)].formation == file
+                {
+                    if ghost {
+                        return false;
+                    }
+                    hard_distance(unit, other)
+                } else if !soft && !work_squeeze && !unit.kind.is_naval() {
                     i64::from(own_radius + other.kind.collision_radius())
                 } else {
                     self.movement_contact_distance(unit, other, soft, narrow_water, work_squeeze)
@@ -199,15 +258,13 @@ impl GameWorld {
                 let start = x * x + y * y;
                 let dot = x * dx + y * dy;
                 // Spawn overlaps may separate without moving closer; separated bodies stay hard.
-                if start < r * r {
-                    if padding > 0 {
-                        return true;
+                let hit = if start < r * r {
+                    padding > 0 || {
+                        let x = i64::from(other.position.x) - i64::from(to.x);
+                        let y = i64::from(other.position.y) - i64::from(to.y);
+                        !repairing_spawn && x * x + y * y < start
                     }
-                    let x = i64::from(other.position.x) - i64::from(to.x);
-                    let y = i64::from(other.position.y) - i64::from(to.y);
-                    return !repairing_spawn && x * x + y * y < start;
-                }
-                if dot <= 0 {
+                } else if dot <= 0 {
                     false
                 } else if dot >= length {
                     let x = i64::from(other.position.x) - i64::from(to.x);
@@ -216,7 +273,21 @@ impl GameWorld {
                 } else {
                     let cross = i128::from(x) * i128::from(dy) - i128::from(y) * i128::from(dx);
                     cross * cross < i128::from(r * r) * i128::from(length)
-                }
+                };
+                hit && !(blocked >= 16
+                    && unit.task == UnitTask::Moving
+                    && other.task == UnitTask::Moving
+                    && other.player == unit.player
+                    && !other.kind.is_naval()
+                    && !unit.kind.is_naval()
+                    && (self.units[self.collisions.unit_index(id)].formation
+                        != self.units[index].formation
+                        || self.units[index].formation.is_none())
+                    && self
+                        .deck_heading(self.collisions.unit_index(id))
+                        .is_some_and(|(x, y)| x * dx + y * dy < 0)
+                    && *narrow.get_or_insert_with(|| self.passing_lane(index, from, blocked))
+                    && self.passing_lane(self.collisions.unit_index(id), other.position, u16::MAX))
             },
             |tile| {
                 // More than 32 centres in one tile cannot form a separated packing

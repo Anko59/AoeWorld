@@ -22,24 +22,56 @@ fn formation_certificate_bound_respects_homogeneous_physical_speed_and_carry() {
 }
 
 #[test]
-fn cohesion_waits_only_for_rear_stragglers() {
+fn cohesion_brake_follows_the_rear_tenths_lag_and_tightens_on_arrival() {
     let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
     let at = WorldPosition::new(100 * 1024, 100 * 1024);
-    let id = w.spawn_kind(PlayerId(0), UnitKind::Militia, at).unwrap();
+    let ids = (0..2)
+        .map(|n| {
+            w.spawn_kind(
+                PlayerId(0),
+                UnitKind::Militia,
+                WorldPosition::new(at.x, at.y + n * 2048),
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
     w.issue_formation_move(
         PlayerId(0),
-        &[id],
+        &ids,
         Formation::Line,
-        WorldPosition::new(125 * 1024, 100 * 1024),
+        WorldPosition::new(150 * 1024, 100 * 1024),
         false,
         false,
     )
     .unwrap();
-    let mut group = w.formations.remove(&id).unwrap();
-    for (dx, dy, cohesive) in [(0, 10, true), (-10, 0, true), (1, 0, true), (3, 0, false)] {
-        group.members[0].ideal = WorldPosition::new(at.x + dx * 1024, at.y + dy * 1024);
-        assert_eq!(w.formation_cohesive(&group), cohesive, "delta={dx},{dy}");
+    let mut group = w.formations.remove(&ids[0]).unwrap();
+    group.form_distance = 0;
+    // Corridor lag in tiles behind each slot; 64ths of pace braked. On the
+    // march the rearmost tenth (here the larger lag) brakes from two tiles,
+    // fully from ten.
+    group.progress = 20 * 1024;
+    for (lags, brake) in [
+        ([-3, 0], 0),
+        ([2, 2], 0),
+        ([4, 0], 2),
+        ([3, 6], 4),
+        ([7, 1], 5),
+        ([9, 30], 8),
+    ] {
+        for (member, lag) in group.members.iter_mut().zip(lags) {
+            member.progress = group.progress + i64::from(member.offset.y) - lag * 1024;
+        }
+        assert_eq!(w.formation_brake(&group), brake, "lags={lags:?}");
     }
+    // Within a block length of the destination, a body's remaining distance
+    // to its slot counts as lag too: these bodies never left the start.
+    group.progress = group.path.end() - 2 * 1024;
+    for member in &mut group.members {
+        member.progress = group.progress + i64::from(member.offset.y);
+    }
+    assert_eq!(w.formation_brake(&group), 8);
+    group.attack_move = true;
+    assert_eq!(w.formation_brake(&group), 0);
 }
 
 impl GameWorld {
