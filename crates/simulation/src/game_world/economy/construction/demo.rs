@@ -9,6 +9,8 @@ mod coast;
 mod imperial;
 #[path = "demo/kingdom.rs"]
 mod kingdom;
+#[path = "demo/recovery.rs"]
+mod recovery;
 #[path = "demo/river.rs"]
 mod river;
 

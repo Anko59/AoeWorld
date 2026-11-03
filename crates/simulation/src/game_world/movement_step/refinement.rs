@@ -4,11 +4,13 @@ use aoe_core::{TileCoord, WorldPosition};
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, VecDeque};
 
+mod work;
+
 const RADIUS: i32 = 8;
 const STEP: i32 = 256;
 
-fn grid(p: WorldPosition) -> TileCoord {
-    TileCoord::new(p.x.div_euclid(STEP), p.y.div_euclid(STEP))
+fn grid(p: WorldPosition, step: i32) -> TileCoord {
+    TileCoord::new(p.x.div_euclid(step), p.y.div_euclid(step))
 }
 const SIDE: usize = 17;
 const CELLS: usize = SIDE * SIDE;
@@ -91,6 +93,17 @@ impl GameWorld {
         } else {
             self.local_unit_route(index, goal)
         };
+        // A stationary job can seal a building lane without sealing the static
+        // map. Try the same bounded node count on a wider lattice before giving
+        // up; ordinary moving/idle traffic keeps its established refinement.
+        if self.units[index]
+            .obstruction
+            .is_some_and(|o| o.blocked >= 48)
+            && self.stationary_work_traffic(index)
+            && self.refine_work_detour(index, order)
+        {
+            return true;
+        }
         // An occupied nearby waypoint only needs the wider escape when it
         // belongs to a detached corridor member. An independent boxed mover
         // must exhaust its obstruction budget instead of circling locally.
@@ -203,7 +216,7 @@ impl GameWorld {
             return None;
         }
         self.local_refinement_left -= 1;
-        self.local_search(index, goal, false)
+        self.local_search(index, goal, false, STEP)
     }
 
     pub(super) fn local_free_arrival_route(
@@ -217,7 +230,7 @@ impl GameWorld {
             return None;
         }
         self.local_refinement_left -= 1;
-        self.local_search(index, goal, true)
+        self.local_search(index, goal, true, STEP)
     }
 
     fn local_search(
@@ -225,13 +238,14 @@ impl GameWorld {
         index: usize,
         goal: WorldPosition,
         free_arrival: bool,
+        step: i32,
     ) -> Option<VecDeque<WorldPosition>> {
         let _span = self
             .planning_probe
             .as_ref()
             .and_then(|p| p.movement_span("local_refinement"));
         let unit = self.units[index].state;
-        let start = grid(unit.position);
+        let start = grid(unit.position, step);
         let start_tile = unit.position.tile_floor();
         let stationary_only = !free_arrival && self.has_work_task(unit.id);
         let slot = |tile: TileCoord| {
@@ -250,7 +264,7 @@ impl GameWorld {
         // Clipping the anchor to a neighbouring tile can put the objective
         // inside a building and repeatedly choose the same obstructed pocket.
         if !free_arrival {
-            slot(grid(goal))?;
+            slot(grid(goal, step))?;
         }
         if !self.config.valid_ground_position(goal)
             || (!free_arrival && self.position_occupied(index, goal, stationary_only))
@@ -276,7 +290,7 @@ impl GameWorld {
                         + if side / 2 == 0 { -1 } else { 1 },
                 ))
             } else {
-                Some(WorldPosition::new(tile(at).x * STEP, tile(at).y * STEP))
+                Some(WorldPosition::new(tile(at).x * step, tile(at).y * step))
             }
         };
         let mut occupied = [None; CELLS];
@@ -285,7 +299,7 @@ impl GameWorld {
                 return true;
             };
             *occupied[at].get_or_insert_with(|| {
-                let p = WorldPosition::new(point.x * STEP, point.y * STEP);
+                let p = WorldPosition::new(point.x * step, point.y * step);
                 !self.config.valid_ground_position(p)
                     || self.position_occupied(index, p, stationary_only)
                     || stationary_only && self.destination_point_reserved(p, unit.id)
@@ -324,7 +338,7 @@ impl GameWorld {
             }
             closed[at] = true;
             let from = point(at)?;
-            let current = grid(from);
+            let current = grid(from, step);
             if free_arrival && at < CELLS && !self.destination_point_reserved(from, unit.id) {
                 let x = i64::from(from.x) - i64::from(goal.x);
                 let y = i64::from(from.y) - i64::from(goal.y);
@@ -340,8 +354,8 @@ impl GameWorld {
                 }
             }
             if !free_arrival
-                && current.x.abs_diff(grid(goal).x) <= 4
-                && current.y.abs_diff(grid(goal).y) <= 4
+                && current.x.abs_diff(grid(goal, step).x) <= 4
+                && current.y.abs_diff(grid(goal, step).y) <= 4
                 && clear(from, goal)
             {
                 return trace_path(at, source, &previous, &point, Some(goal));

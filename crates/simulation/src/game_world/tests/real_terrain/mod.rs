@@ -9,6 +9,7 @@ mod crowded;
 mod general_followers;
 mod general_opposed;
 mod landscapes;
+mod lane_tests;
 mod metrics;
 mod recovery_tests;
 mod terrain;

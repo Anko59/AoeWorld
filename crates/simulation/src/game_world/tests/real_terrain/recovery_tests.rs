@@ -122,3 +122,43 @@ fn general_first_sight_unreachable_enemy_keeps_march() {
 fn general_retained_enemy_becoming_unreachable_keeps_march() {
     recovery(true);
 }
+
+#[test]
+fn recovery_recording_has_a_full_army_and_a_sealed_enemy() {
+    for acquired in [false, true] {
+        let (mut world, general) =
+            GameWorld::movement_recovery_demo(aoe_core::Seed(1), acquired).unwrap();
+        assert_eq!(world.general_status(general).unwrap().army_size, 100);
+        assert_eq!(
+            world.units().filter(|u| u.player == PlayerId(0)).count(),
+            101
+        );
+        assert_eq!(world.buildings().count(), 48);
+        let enemy = world.units().find(|u| u.player == PlayerId(1)).unwrap();
+        assert_eq!(enemy.hp, enemy.max_hp);
+        assert!(
+            world
+                .economy
+                .blocked_tiles
+                .contains(&TileCoord::new(132, 128))
+        );
+        if acquired {
+            assert!(
+                (0..11).any(|group| world.general_fight_target(general, group) == Some(enemy.id))
+            );
+        } else {
+            world.issue_move(general, center(213, 135)).unwrap();
+        }
+        for _ in 0..6000 {
+            world.advance();
+        }
+        assert_eq!(
+            world
+                .units()
+                .filter(|u| u.player == PlayerId(0) && u.position.x >= 178 * 1024)
+                .count(),
+            101
+        );
+        assert_eq!(world.unit(enemy.id).unwrap().hp, enemy.max_hp);
+    }
+}
