@@ -13,11 +13,17 @@ pub(super) struct Host {
     pub log: PathBuf,
 }
 
-fn docker_python(options: &Options, root: &Path, name: &str, site: &Path) -> Command {
+fn docker_python(
+    options: &Options,
+    root: &Path,
+    name: &str,
+    site: &Path,
+) -> Result<Command, BoxError> {
+    crate::resources::policy::check()?;
     let mut command = Command::new("docker");
     command
         .args(["run", "--rm", "--init"])
-        .args(crate::slots::cap_args())
+        .args(crate::jobs::cap_args())
         .args(["--network", "host", "--user"])
         .arg(format!(
             "{}:{}",
@@ -43,14 +49,15 @@ fn docker_python(options: &Options, root: &Path, name: &str, site: &Path) -> Com
         .arg("-w")
         .arg(root)
         .arg(&options.bot_image);
-    command
+    crate::jobs::guard::prepare_child(&mut command)?;
+    Ok(command)
 }
 
 fn install_wheel(options: &Options, root: &Path, site: &Path) -> Result<(), BoxError> {
     let wheel = crate::sdk_python::newest_wheel(&root.join("target/wheels"))
         .map_err(|e| format!("{e}: run `make sdk-python` first"))?;
     let _ = fs::remove_dir_all(site);
-    let status = docker_python(options, root, "aoe-scale-wheel", site)
+    let status = docker_python(options, root, "aoe-scale-wheel", site)?
         .args([
             "python3",
             "-m",
@@ -89,7 +96,7 @@ pub(super) fn start_hosts(
         let name = format!("aoe-scale-bots-{}-{index}", options.port);
         let log_path = work.join(format!("bots-{index}.log"));
         let log = fs::File::create(&log_path)?;
-        let child = docker_python(options, root, &name, &site)
+        let child = docker_python(options, root, &name, &site)?
             .args(["python3", "-m", "aoe_ai", "host", "--url"])
             .arg(format!("http://127.0.0.1:{}", options.port))
             .arg("--tokens-file")

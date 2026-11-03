@@ -8,17 +8,17 @@ RTS performance or dedicated hardware qualification.
 
 ## Reproduction
 
-Run these serially; `AOE_HEAVY_SLOTS=1` gives a 12-CPU container on this host.
+These long jobs admit one invocation at a time using the nonblocking long-job lock.
 The JSON records the admitted CPU quota, Rayon workers and available CPUs.
 `CARGO_PROFILE_DEV_DEBUG=0` bounds the command bootstrap's memory; it does not
 change the release workload or bench profile.
 
 ```sh
-CARGO_PROFILE_DEV_DEBUG=0 AOE_HEAVY_SLOTS=1 make perf-groups-profile
+CARGO_PROFILE_DEV_DEBUG=0 make perf-groups-profile
 make perf-groups-annotate
 make perf-groups-annotate GROUP_CALLGRIND_INCLUSIVE=no \
   GROUP_CALLGRIND_REPORT=reports/perf/group-callgrind-self.txt
-CARGO_PROFILE_DEV_DEBUG=0 AOE_HEAVY_SLOTS=1 make perf-groups \
+CARGO_PROFILE_DEV_DEBUG=0 make perf-groups \
   PERF_GROUPS_ARGS='--coarse-groups --out reports/perf/group-coarse.json'
 ```
 
@@ -189,7 +189,7 @@ checks remain. No existing assertion was loosened or deleted.
 
 ## Validation
 
-Checks use Dockerized Make targets, serially, with `AOE_HEAVY_SLOTS=1` and
+Checks use Dockerized Make targets, serially, with the shared resource caps and
 `CARGO_PROFILE_DEV_DEBUG=0`:
 
 - `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation AOE_NATIVE_TEST_FILTER='all()'`: 713 passed, none skipped; the unchanged 14,000-unit checkpoint pin passes.

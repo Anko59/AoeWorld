@@ -179,7 +179,7 @@ fn run_browser(root: &Path, address: SocketAddr, inputs: &Path) -> Result<()> {
         "tests/source-geographic-visuals.spec.ts".to_owned(),
         "--project=webgpu".to_owned(),
     ];
-    args.splice(1..1, crate::slots::cap_args());
+    args.splice(1..1, crate::jobs::cap_args());
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     process::run("docker", &refs, BROWSER_DEADLINE)?;
     Ok(())

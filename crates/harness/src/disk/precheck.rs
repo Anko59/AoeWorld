@@ -1,12 +1,12 @@
-//! Refuse local work before slot admission; diagnostics inventory the host's worktrees.
+//! Refuse local work before job admission; diagnostics inventory the host's worktrees.
 use crate::{hooks::common_directory, ship::git};
 use std::path::{Path, PathBuf};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub(super) const GIB: u64 = 1024 * 1024 * 1024;
 
-/// Direct commands and Make's slot wrapper share the same admission policy: `gate` is the
-/// command's gate, or for `slot` the gate it runs.
+/// Direct commands and Make's host job wrapper share the same admission policy: `gate` is the
+/// command's gate, or for `job` the gate it runs.
 pub(crate) fn before_command(gate: &str, ci: bool) -> Result<()> {
     if matches!(
         gate,

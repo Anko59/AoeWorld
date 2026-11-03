@@ -70,6 +70,17 @@ fn compile_cache_is_wired_once_into_shared_mounts_and_environment() {
     assert!(make.contains("$(HOME)/.cache/aoe-sccache"));
     assert!(make.contains("SCCACHE_CLIENT_SIDE=1"));
     assert!(make.contains("$(wildcard $(HARNESS_SCCACHE_DIR)/server.sock)"));
+    let jobs = make
+        .lines()
+        .find(|line| line.starts_with("JOB_ENV :="))
+        .unwrap();
+    assert!(jobs.contains("$(COMPILE_CACHE_ENV)"));
+    assert!(jobs.contains("HARNESS_SCCACHE_DIR=$(HARNESS_SCCACHE_DIR)"));
+    let mounts = make
+        .lines()
+        .find(|line| line.starts_with("ROOT_MOUNTS :="))
+        .unwrap();
+    assert!(mounts.contains("$(COMPILE_CACHE_MOUNTS)"));
 }
 
 #[test]

@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     gates::scopes::{Kind, Snapshot},
+    jobs::JobEnv,
     process::Cancellation,
-    slots::SlotEnv,
 };
 use evidence::{EndpointProof, JudgeIdentity, Metadata, PrivateOutput};
 use std::time::Instant;
@@ -40,7 +40,7 @@ pub(crate) struct Options {
     per_gate_seconds: u64,
 }
 
-pub(crate) fn execute(root: &Path, options: Options, slots: &SlotEnv) -> Result<()> {
+pub(crate) fn execute(root: &Path, options: Options, slots: &JobEnv) -> Result<()> {
     let started = Instant::now();
     let total = Duration::from_secs(options.total_seconds);
     let cancellation = Cancellation::default();
@@ -77,6 +77,8 @@ pub(crate) fn execute(root: &Path, options: Options, slots: &SlotEnv) -> Result<
         Selection::CiJob,
     );
     let plan = PreparedPlan::new(&registry, selection)?;
+    let planned: Vec<_> = plan.gates.iter().map(|(_, gate)| gate).collect();
+    let _long_job = crate::jobs::guard::hold_plan(&source, "gate-run", &planned, slots)?;
     let (source_fingerprint, private) = snapshot.fingerprints()?;
     let fingerprint = EndpointProof {
         source: source_fingerprint,

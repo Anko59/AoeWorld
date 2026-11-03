@@ -49,7 +49,7 @@ agent policy refuses `$` in agent-set Make values.
    title and body are updated. A draft never has auto-merge armed; this step posts
    no `harness/review` status. The `draft-push` timeline stage records this work.
    Stacked branches, review-ahead, `no_pr` and `no_review` retain their ordering.
-7. **Reviews** the commit, with the ship lock still released (`ship: lock released for the gates and the review`, printed after the start-of-ship rebase; no heavy slot is held either) so the next ship runs meanwhile, with the tiered [adversarial review](review.md)
+7. **Reviews** the commit, with the ship lock still released (`ship: lock released for the gates and the review`, printed after the start-of-ship rebase) so the next ship runs meanwhile, with the tiered [adversarial review](review.md)
    (`SHIP_TIER`, never below `make review-floor`; `SHIP_RUNTIME` picks the model
    family). A full review below 7/10 or with a blocking finding (confirmed major or critical, disputed
 critical), an incomplete review, or a closing review
@@ -77,7 +77,7 @@ critical), an incomplete review, or a closing review
    `review of <sha> reused (same patch)`.
    Reuse after a rebase for `make review-pr` is planned in issue #146
    ([review](review.md#pull-requests-the-harness-did-not-open)).
-8. **Re-checks the base** after queueing for the lock again, in the same first-come queue (`ship: lock reacquired for the push (waited Ns)`; a failed review exits without it): it fetches dev and the stacked parent again. A merged/closed
+8. **Re-checks the base** after immediately trying the lock again (`ship: lock reacquired for the push`; a busy result stops and names the holder, and a failed review exits without it): it fetches dev and the stacked parent again. A merged/closed
    parent or missing parent branch stops with restack instructions, keeping the passed review. If the base moved,
    only the branch's own commits are rebased (conflicts abort, restore the branch and name files); every static preflight gate runs on
    the result (`lint` compiles the workspace), up to 3 times if it moves again. A red gate stops with
@@ -111,7 +111,7 @@ critical), an incomplete review, or a closing review
 Gameplay changes also include a **Playtest (advisory)** report for the gated
 revision when available. If the target exists and the report is missing, ship
 starts `make playtest` as a child process before the review; the child takes its
-heavy slot through the Makefile's slot wrapper, so the review never waits on it.
+normal container resource limits; the review runs alongside it.
 A failed review kills the child and is reported at once; after a passing review
 ship waits up to 30 minutes for the report. Failures, timeouts and missing
 reports do not block shipping. The `BLOCKING` constant in
@@ -119,30 +119,20 @@ reports do not block shipping. The `BLOCKING` constant in
 
 ## One ship at a time
 
-Sessions share one machine, so `make ship` and `make duel` take a machine-wide
-lock before any heavy work and release it when they exit, by whatever route: an OS file lock on
-`<git common dir>/aoe-ship/ship.lock`, shared by every worktree, so a dead or killed holder
-frees it. The file also names the holder (worktree, branch, command, start time) for messages.
+`make ship` and `make duel` try a nonblocking kernel lock on
+`<git common dir>/aoe-ship/ship.lock`, shared by every worktree. A second run
+immediately reports `busy: <command, branch, worktree, started>, retry later`
+(harness exit 75; Make reports recipe failure). There is no waiting queue.
+`make ship-status` shows the current holder; `make load-status` shows the long-job
+holder and available memory. Read-only commands never acquire the ship lock.
 
-Waiters are served in arrival order, except that a ship back from its review (`make ship`
-queues again for the push) goes before every plain waiter, in arrival order among such ships.
-Priority only picks who is admitted next. A holder is interrupted only when a host suspend froze
-it: a waiter then says `taking over` ([troubleshooting](troubleshooting.md)). Each waiter keeps an
-OS lock on a ticket in `aoe-ship/ship.lock.queue/` (arrival time, pid, counter; a returning
-ship's ticket is marked) while it waits and runs, and takes the main lock only when no ticket
-ahead of it in that order is still locked. A ticket whose lock can be taken belongs to a dead
-process and is removed; tickets are removed on release and on drop.
-
-A second run prints `ship: waiting for <branch> in <worktree> (started <time>)` and
-`ship: position N in the queue` (`(returning from review)` for a returning ship), then a line
-every 5 minutes and whenever its position changes, and gives up after `SHIP_LOCK_WAIT_MINUTES`
-(default 120; `0` fails immediately). `make ship-status` and `make load-status` list the holder
-and the queue in admission order without waiting. Read-only commands (`review-floor`,
-`showcase-check`, `ship-status`…) never take the lock. Never wait for another ship by scanning
-processes: a `pgrep -f` loop matches its own command line and waits on itself forever. `make
-ship` holds the lock for the start-of-ship rebase and for the re-check and push, not for the
-gates or the review (heavy slots serialize the heavy work, and evidence is keyed by commit).
-Ctrl-C while unlocked leaves no ticket.
+Ship holds the lock during the initial rebase and the final recheck and push,
+and releases it during gates and review. If reacquiring is busy, ship stops.
+Rerun it later: gate evidence and review results for the same commit are reused.
+The kernel frees a dead holder's lock. Intended rebase and push children inherit
+its descriptor, retaining serialization if their controller dies during a mutation.
+Normal handoff explicitly releases it. Metadata left by a dead process never
+makes a free kernel lock busy. No process polling or automatic takeover is needed.
 
 ## Stacked pull requests
 
@@ -490,7 +480,7 @@ See [delivery timeline](timeline.md) for `make timeline`, stage journals and his
   between the before and after checks is not seen.
 - `dev` moving while CI runs after the push is covered by up-to-date branches
   and the PR updater ([after the push](post-push.md)). A gate over its deadline
-  reports the machine load; an overloaded local timeout reruns once ([gates](gates.md)).
+  reports the machine load and stops ([gates](gates.md)).
 - `gh` is checked for a minimum version, not pinned to an image yet.
 - `make ship` is local feedback with recorded evidence; it is not a protected
   judge. A same-user process can still forge files it can write, and CI is the

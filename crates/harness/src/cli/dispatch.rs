@@ -1,9 +1,9 @@
 use super::{Command, DevCommand};
 use crate::{
-    agents, architecture, assets, coverage, dev, e2e, format_commands, fuzz, gates, hooks, ledger,
-    native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure, perf_scale, perf_size,
-    perf_soak, perf_stress, policy, process, qa, qa_mcp, release, release_promotion,
-    release_publish, repo_policy, review, ship, slots, timeline, wasm_test,
+    agents, architecture, assets, coverage, dev, e2e, format_commands, fuzz, gates, hooks, jobs,
+    ledger, native, perf, perf_comment, perf_hardware, perf_micro, perf_pressure, perf_scale,
+    perf_size, perf_soak, perf_stress, policy, process, qa, qa_mcp, release, release_promotion,
+    release_publish, repo_policy, review, ship, timeline, wasm_test,
 };
 use std::{
     path::{Path, PathBuf},
@@ -13,17 +13,20 @@ use std::{
 pub(super) fn run(
     command: Command,
     gate: &str,
-    slots: &slots::SlotEnv,
+    slots: &jobs::JobEnv,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let admitted = match &command {
-        Command::Slot { gate, .. } => gate.as_str(),
+        Command::Job { gate, .. } => gate.as_str(),
+        Command::Preflight {
+            part: native::part::PreflightPart::Checks,
+        } => "preflight-checks",
         _ => gate,
     };
     crate::disk::precheck::before_command(admitted, slots.ci)?;
     // The agent hook takes no slot: a broken registry must not stop it judging edits.
     let _slot = match command {
-        Command::Agents(_) => None,
-        _ => Some(slots::guard::guard(gate, slots)?),
+        Command::Agents(_) | Command::Job { .. } => None,
+        _ => Some(jobs::guard::guard(admitted, slots)?),
     };
     match command {
         Command::Assets { command } => assets::run(command)?,
@@ -78,13 +81,9 @@ pub(super) fn run(
         Command::Timeline => timeline::run(Path::new("."))?,
         Command::LoadStatus => {
             ship::lock::print_status(Path::new("."))?;
-            slots::print_status(Path::new("."), slots)?
+            jobs::print_status(Path::new("."), slots)?
         }
-        Command::Slot { gate, argv } => std::process::exit(slots::run_here(&gate, &argv, slots)?),
-        Command::SlotCpus => println!(
-            "{}",
-            slots::Config::load(Path::new("."), slots)?.cpus_per_slot()
-        ),
+        Command::Job { gate, argv } => std::process::exit(jobs::run_here(&gate, &argv, slots)?),
         Command::TestWasm => wasm_test::run()?,
         Command::TestWasmFocused => wasm_test::run_selected()?,
         Command::TestE2e => e2e::run()?,
@@ -132,7 +131,7 @@ pub(super) fn run(
             if part.runs_unit() {
                 let select = native::affected::preflight_base();
                 {
-                    let _slot = slots::guard::guard("test-unit", slots)?;
+                    let _slot = jobs::guard::guard("test-unit", slots)?;
                     native::test_unit(select)?;
                 }
                 run(Command::PerfSmoke, "perf-smoke", slots)?;

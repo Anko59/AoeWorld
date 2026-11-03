@@ -1,0 +1,1 @@
+--memory=4g --memory-swap=4g --cpu-shares=1024 -e CARGO_BUILD_JOBS=4

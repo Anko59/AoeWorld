@@ -6,9 +6,9 @@ AGENT_HOOK_HOME := $(GIT_COMMON)/aoe-agent-hook
 agent-hook-build:
 	@test -n '$(AGENT_HOOK_OUTPUT)' || { echo 'run .agents/hooks/harness.sh build' >&2; exit 2; }
 	@$(if $(AGENT_HOOK_REVISION),rm -rf '$(AGENT_HOOK_HOME)/source' && mkdir -p '$(AGENT_HOOK_HOME)/source' && git archive '$(AGENT_HOOK_REVISION)' | tar -x -C '$(AGENT_HOOK_HOME)/source',true)
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(if $(AGENT_HOOK_REVISION),$(AGENT_HOOK_HOME)/source,$(ROOT)) $(TOOL_IMAGE) cargo build --locked -p aoe-harness --target-dir $(AGENT_HOOK_HOME)/target
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(if $(AGENT_HOOK_REVISION),$(AGENT_HOOK_HOME)/source,$(ROOT)) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo build --locked -p aoe-harness --target-dir $(AGENT_HOOK_HOME)/target
 	@install -D -m 0755 '$(AGENT_HOOK_HOME)/target/debug/aoe-harness' '$(AGENT_HOOK_OUTPUT)'
-	@docker run $(HEAVY_ENV) $(SLOT_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(if $(AGENT_HOOK_REVISION),$(AGENT_HOOK_HOME)/source,$(ROOT)) $(TOOL_IMAGE) '$(AGENT_HOOK_OUTPUT)' agent-prune --home '$(AGENT_HOOK_HOME)' --keep '$(notdir $(patsubst %/,%,$(dir $(AGENT_HOOK_OUTPUT))))'
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(if $(AGENT_HOOK_REVISION),$(AGENT_HOOK_HOME)/source,$(ROOT)) $(TOOL_IMAGE) '$(AGENT_HOOK_OUTPUT)' agent-prune --home '$(AGENT_HOOK_HOME)' --keep '$(notdir $(patsubst %/,%,$(dir $(AGENT_HOOK_OUTPUT))))'
 
 # Run a runtime's own CLI headless as a launched implementer and check that its
 # tool calls reach the judge: RUNTIME=claude|codex|dsh|pi.

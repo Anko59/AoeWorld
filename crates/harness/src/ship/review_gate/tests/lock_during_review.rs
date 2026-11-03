@@ -15,7 +15,6 @@ use std::{
 
 const WAIT: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(20);
-const NEVER: Duration = Duration::from_secs(3600);
 
 fn holder(root: &Path, branch: &str) -> Holder {
     Holder {
@@ -23,25 +22,14 @@ fn holder(root: &Path, branch: &str) -> Holder {
         branch: branch.into(),
         command: "make ship".into(),
         started: 1_791_900_000,
-        returning: false,
-        pid: 0,
-        pid_started: None,
-        gap: None,
     }
 }
 
 /// The lock as `make ship` takes it, held by a `Handoff`.
-fn take(root: &Path, wait: Duration) -> Handoff {
-    let held = lock::acquire_at(
-        &lock::path(root).unwrap(),
-        &holder(root, "test"),
-        wait,
-        POLL,
-        NEVER,
-        &mut |_| {},
+fn take(root: &Path) -> Handoff {
+    Handoff::holding(
+        lock::acquire_at(&lock::path(root).unwrap(), &holder(root, "test")).expect("the lock"),
     )
-    .expect("the lock");
-    Handoff::holding(held)
 }
 
 fn fixture_with_identity() -> (tempfile::TempDir, PathBuf) {
@@ -62,7 +50,7 @@ fn remote_tip(root: &Path, branch: &str) -> String {
 
 fn with_lock(root: &Path, options: Options) -> Options {
     Options {
-        lock: take(root, Duration::ZERO),
+        lock: take(root),
         ..options
     }
 }
@@ -122,56 +110,54 @@ fn the_next_ship_runs_its_gates_while_the_first_reviews_and_both_push() {
 }
 
 #[test]
-fn the_first_push_waits_for_the_lock_the_next_ship_holds() {
+fn a_busy_push_stops_and_a_retry_reuses_the_review() {
     let (_temp, root) = fixture_with_identity();
     let (reviewing, in_review) = mpsc::channel();
     let (finish, finished) = mpsc::channel::<()>();
+    let (completed, result) = mpsc::channel();
     thread::scope(|scope| {
         let work = &root;
         let first = scope.spawn(move || {
             let options = with_lock(work, reviewed());
-            ship_with(work, &options, &|root, tier, _, _, _| {
+            let result = ship_with(work, &options, &|root, tier, _, _, _| {
                 reviewing.send(()).unwrap();
-                finished
-                    .recv_timeout(WAIT)
-                    .expect("the test releases the review");
+                finished.recv_timeout(WAIT).expect("release the review");
                 Ok(graded(root, tier, 9))
             })
-            .map(|evidence| evidence.head)
-            .map_err(|error| error.to_string())
+            .map(|e| e.head)
+            .map_err(|e| e.to_string());
+            completed.send(result.clone()).unwrap();
+            result
         });
-        in_review
-            .recv_timeout(WAIT)
-            .expect("the first ship reviews");
-        let other = take(&root, Duration::ZERO); // the next ship, in its gates
+        in_review.recv_timeout(WAIT).expect("review started");
+        let other = take(&root);
         finish.send(()).unwrap();
-        thread::sleep(Duration::from_millis(600));
-        assert!(!first.is_finished(), "the push must wait for the lock");
-        assert!(
-            remote_tip(&root, "feature").is_empty(),
-            "nothing pushed yet"
-        );
-        let queued = lock::queue(&lock::path(&root).unwrap()).unwrap();
-        assert_eq!(queued.len(), 2, "the holder and the waiting first ship");
+        let error = result
+            .recv_timeout(Duration::from_secs(5))
+            .expect("refusal never waits for the other ship")
+            .unwrap_err();
+        assert!(error.contains("busy:"), "{error}");
+        assert!(remote_tip(&root, "feature").is_empty());
         drop(other);
-        let head = first
-            .join()
-            .unwrap()
-            .expect("the first ship pushes once it can");
-        assert_eq!(remote_tip(&root, "feature"), head);
+        first.join().unwrap().unwrap_err();
+        let options = with_lock(&root, reviewed());
+        let retried = ship_with(&root, &options, &|_, _, _, _, _| {
+            panic!("the exact-commit review must be cached")
+        })
+        .expect("retry reuses the finished review");
+        assert_eq!(remote_tip(&root, "feature"), retried.head);
     });
 }
 
 #[test]
-fn ownlease_waiting_ship_never_overwrites_a_newer_push_with_its_older_evidence() {
-    use std::{io::Write, time::Instant};
+fn ownlease_busy_ship_stops_before_another_ship_advances_the_checkout() {
     for force in [true, false] {
         let (_temp, root) = fixture_with_identity();
         let h0 = git::git(&root, &["rev-parse", "HEAD"]).unwrap();
-        let dev = git::git(&root, &["rev-parse", "origin/dev"]).unwrap();
         run(&root, &["push", "-q", "origin", "feature"]);
         let (reviewing, in_review) = mpsc::channel();
         let (finish, finished) = mpsc::channel::<()>();
+        let (completed, result) = mpsc::channel();
         thread::scope(|scope| {
             let work = &root;
             let first = scope.spawn(move || {
@@ -182,57 +168,40 @@ fn ownlease_waiting_ship_never_overwrites_a_newer_push_with_its_older_evidence()
                         ..reviewed()
                     },
                 );
-                ship_with(work, &options, &|root, tier, _, _, _| {
+                let result = ship_with(work, &options, &|root, tier, _, _, _| {
                     let report = graded(root, tier, 9);
                     reviewing.send(report.head.clone()).unwrap();
                     finished.recv_timeout(WAIT).expect("release the review");
                     Ok(report)
                 })
-                .map(|evidence| evidence.head)
-                .map_err(|error| error.to_string())
+                .map(|e| e.head)
+                .map_err(|e| e.to_string());
+                completed.send(result.clone()).unwrap();
+                result
             });
             assert_eq!(in_review.recv_timeout(WAIT).unwrap(), h0);
-            let other = take(&root, Duration::ZERO);
+            let other = take(&root);
             finish.send(()).unwrap();
-            let deadline = Instant::now() + WAIT;
-            while lock::queue(&lock::path(&root).unwrap()).unwrap().len() != 2 {
-                assert!(
-                    Instant::now() < deadline,
-                    "first ship must queue after review"
-                );
-                assert!(!first.is_finished(), "first ship must wait for the lock");
-                thread::sleep(POLL);
-            }
-            // Review has returned at H0. While A waits, B advances this same checkout
-            // to H1 = H0 plus a nonempty commit and publishes H1; dev stays unchanged.
+            let error = result
+                .recv_timeout(Duration::from_secs(5))
+                .expect("busy ship exits before the holder releases")
+                .unwrap_err();
+            assert!(error.contains("busy:"), "{error}");
+            first.join().unwrap().unwrap_err();
             std::fs::write(root.join("newer.txt"), "newer ship\n").unwrap();
             run(&root, &["add", "newer.txt"]);
             run(&root, &["commit", "-q", "-m", "newer ship"]);
-            let newer = ship_with(&root, &offline(), &|_, _, _, _, _| {
-                panic!("second ship does not need a review fixture")
-            })
-            .unwrap();
+            let newer = ship_with(&root, &offline(), &|_, _, _, _, _| panic!("offline")).unwrap();
             assert_ne!(newer.head, h0);
-            assert_eq!(git::git(&root, &["rev-parse", "HEAD^"]).unwrap(), h0);
-            assert_eq!(remote_tip(&root, "feature"), newer.head);
-            assert_eq!(git::git(&root, &["rev-parse", "origin/dev"]).unwrap(), dev);
-            assert!(!first.is_finished(), "A is still waiting for B's lock");
             drop(other);
-            let error = first.join().unwrap().unwrap_err();
-            assert!(
-                error.contains("changed beyond the expected head"),
-                "{error}"
-            );
             assert_eq!(remote_tip(&root, "feature"), newer.head);
             assert_eq!(git::git(&root, &["rev-parse", "HEAD"]).unwrap(), newer.head);
-            assert_eq!(git::git(&root, &["status", "--porcelain"]).unwrap(), "");
-            writeln!(std::io::stdout(), "ownleasefix: force={force}, reviewed H0={h0}, checkout/remote H1={}; waiting ship refused: {error}; H1 retained", newer.head).unwrap();
         });
     }
 }
 
 #[test]
-fn a_failed_review_leaves_no_lock_or_ticket_and_takes_none_it_did_not_hold() {
+fn a_failed_review_leaves_no_lock_and_takes_none_it_did_not_hold() {
     let (_temp, root) = fixture_with_identity();
     let path = lock::path(&root).unwrap();
     let fails = |_: &Path,
@@ -249,9 +218,8 @@ fn a_failed_review_leaves_no_lock_or_ticket_and_takes_none_it_did_not_hold() {
         lock::status(&path).unwrap().is_none(),
         "released, not retaken"
     );
-    assert!(lock::queue(&path).unwrap().is_empty(), "no stale ticket");
     // A ship that holds nothing (review-pr, tests) releases nothing of someone else's.
-    let other = take(&root, Duration::ZERO);
+    let other = take(&root);
     let error = ship_with(&root, &reviewed(), &fails)
         .unwrap_err()
         .to_string();

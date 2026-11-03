@@ -39,6 +39,7 @@ pub(in crate::ship) fn push(root: &Path, evidence: &Evidence, lease: Option<&str
         command.env("GIT_SSH_COMMAND", ssh);
     }
     command.args(["origin", &refspec]);
+    crate::ship::lock::prepare_command(root, &mut command)?;
     git::remote::run_visible(&mut command)?;
     // Best effort: a commit-id refspec cannot set the upstream itself.
     let _ = git::git(

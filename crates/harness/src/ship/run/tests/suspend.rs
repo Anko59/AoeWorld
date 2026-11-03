@@ -10,37 +10,31 @@ fn role() {
         return;
     };
     let dir = std::env::current_dir().unwrap();
-    let (retry, waits) = policy(true, OVERLOADED);
+    let retry = policy();
     let command = match role.as_str() {
-        "overload-suspend" | "overload-stop-fails" => {
-            "echo run >> count; case $(wc -l < count) in 1) sleep 3;; 2) sleep 0.1; echo 300 > gap; sleep 3;; *) test -f stopped;; esac"
+        "suspend" | "stop-fails" => {
+            "echo run >> count; if [ $(wc -l < count) -eq 1 ]; then sleep 0.1; echo 300 > gap; sleep 3; else test -f stopped; fi"
         }
-        "stop-fails" => {
-            "echo run >> count; if [ $(wc -l < count) -eq 1 ]; then sleep 0.1; echo 300 > gap; sleep 3; fi"
-        }
-        "suspend-overload-suspend" => {
-            "echo run >> count; case $(wc -l < count) in 1) sleep 0.1; echo 300 > gap; sleep 3;; 2) sleep 3;; *) sleep 0.1; echo 600 > gap; sleep 3;; esac"
+        "suspend-twice" => {
+            "echo run >> count; sleep 0.1; if [ $(wc -l < count) -eq 1 ]; then echo 300 > gap; else echo 600 > gap; fi; sleep 3"
         }
         _ => panic!("unknown role: {role}"),
     };
     let result = run_one(&dir, command, &retry);
     let calls = fs::read_to_string(dir.join("docker-calls")).unwrap_or_default();
     println!(
-        "{role}: {}\nruns={} waits={}\nDocker calls:\n{calls}",
+        "{role}: {}\nruns={}\nDocker calls:\n{calls}",
         result.line(),
-        runs(&dir),
-        waits.load(Ordering::SeqCst)
+        runs(&dir)
     );
     match role.as_str() {
-        "overload-suspend" => {
+        "suspend" => {
             assert_eq!(result.verdict, GateVerdict::Pass, "{}", result.line());
-            assert_eq!(runs(&dir), 3);
-            assert_eq!(waits.load(Ordering::SeqCst), 1);
+            assert_eq!(runs(&dir), 2);
             assert_eq!(calls.matches("rm -f frozen-one").count(), 1);
-            assert!(result.attempts.first().unwrap().timed_out);
-            assert_eq!(result.attempts.last().unwrap().verdict, GateVerdict::Pass);
+            assert_eq!(result.attempts.len(), 2);
         }
-        "stop-fails" | "overload-stop-fails" => {
+        "stop-fails" => {
             assert_eq!(
                 result.verdict,
                 GateVerdict::Unavailable,
@@ -53,26 +47,17 @@ fn role() {
                 "{}",
                 result.summary
             );
-            assert_eq!(
-                runs(&dir),
-                if role == "stop-fails" { 1 } else { 2 },
-                "no run on top of a surviving container"
-            );
-            assert!(!dir.join("stopped").exists(), "container still running");
+            assert_eq!(runs(&dir), 1, "no retry on top of a surviving container");
+            assert!(!dir.join("stopped").exists());
         }
-        "suspend-overload-suspend" => {
+        "suspend-twice" => {
             assert_eq!(result.verdict, GateVerdict::Fail);
             assert!(
                 result.summary.contains("host suspend"),
                 "{}",
                 result.summary
             );
-            assert_eq!(
-                runs(&dir),
-                3,
-                "suspend allowance is shared by the whole gate"
-            );
-            assert_eq!(waits.load(Ordering::SeqCst), 1);
+            assert_eq!(runs(&dir), 2, "one suspend allowance per gate");
             assert_eq!(calls.matches("rm -f frozen-one").count(), 1);
         }
         _ => unreachable!(),
@@ -117,21 +102,14 @@ fn scenario(role: &str) {
 }
 
 #[test]
-fn a_first_suspend_during_the_overload_retry_stops_containers_and_retries() {
-    scenario("overload-suspend");
+fn a_first_suspend_stops_containers_before_the_one_immediate_retry() {
+    scenario("suspend");
 }
-
 #[test]
 fn failed_container_cleanup_reports_unavailable_and_never_retries() {
     scenario("stop-fails");
 }
-
 #[test]
-fn failed_cleanup_after_the_overload_retry_also_blocks_retrying() {
-    scenario("overload-stop-fails");
-}
-
-#[test]
-fn the_suspend_retry_is_once_per_gate_across_overload_retries() {
-    scenario("suspend-overload-suspend");
+fn the_suspend_retry_is_once_per_gate() {
+    scenario("suspend-twice");
 }

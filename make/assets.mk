@@ -40,39 +40,39 @@ building-proof: building-proof-build
 
 # Repeat local protocol preparation with the already-built proof tool.
 building-proof building-proof-run:
-	@$(subst docker run,docker run --network host,$(DOCKER_RUN)) target/debug/examples/building-proof '$(BUILDING_PROOF_REQUEST)'
+	@$(subst $(RESOURCE_RUN) docker run,$(RESOURCE_RUN) docker run --network host,$(DOCKER_RUN)) target/debug/examples/building-proof '$(BUILDING_PROOF_REQUEST)'
 
-building-proof-build: slot-bootstrap
-	@$(SLOT_RUN) building-proof-build -- make --no-print-directory building-proof-build-steps
+building-proof-build: job-bootstrap
+	@$(JOB_RUN) building-proof-build -- make --no-print-directory building-proof-build-steps
 
 building-proof-build-steps:
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness --example building-proof
 
 .PHONY: test-assets-pack test-assets-pack-steps
-test-assets-pack: slot-bootstrap
-	@$(SLOT_RUN) test-assets-pack -- make --no-print-directory test-assets-pack-steps
+test-assets-pack: job-bootstrap
+	@$(JOB_RUN) test-assets-pack -- make --no-print-directory test-assets-pack-steps
 
 test-assets-pack-steps:
 	@$(subst $(TOOL_IMAGE),-e $(call MOUNT_QUOTE,AOE_REVIEWED_PACK_MANIFEST=$(ROOT)/$(AOE_ASSET_PACK)/manifest.json) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo nextest run --locked -p aoe-assets --run-ignored only --no-tests fail --success-output immediate -E 'test(original_manifest_all_reviewed_frames_fit_bounded_atlas)'
 
 .PHONY: test-assets-ui test-assets-ui-steps ui-proof ui-proof-steps
-test-assets-ui: slot-bootstrap
-	@$(SLOT_RUN) test-assets-ui -- make --no-print-directory test-assets-ui-steps
+test-assets-ui: job-bootstrap
+	@$(JOB_RUN) test-assets-ui -- make --no-print-directory test-assets-ui-steps
 
 test-assets-ui-steps:
 	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-assets --no-tests fail -E 'test(interface_)'
 
 # Local screenshots stay ignored; the spec requires .cache/ui/proof.json.
-ui-proof: browser-deps slot-bootstrap
-	@$(SLOT_RUN) ui-proof -- make --no-print-directory ui-proof-steps
+ui-proof: browser-deps job-bootstrap
+	@$(JOB_RUN) ui-proof -- make --no-print-directory ui-proof-steps
 
 AOE_UI_PROOF_PROJECT ?= webgpu
 ui-proof-steps:
 	@$(BROWSER_RUN) xvfb-run -a npx playwright test tests/proofs/ui-panel.spec.ts --project=$(call MOUNT_QUOTE,$(AOE_UI_PROOF_PROJECT)) --output=../.cache/ui/playwright-results
 
 .PHONY: test-assets-ui-local test-assets-ui-local-steps
-test-assets-ui-local: slot-bootstrap
-	@$(SLOT_RUN) test-assets-ui-local -- make --no-print-directory test-assets-ui-local-steps
+test-assets-ui-local: job-bootstrap
+	@$(JOB_RUN) test-assets-ui-local -- make --no-print-directory test-assets-ui-local-steps
 
 test-assets-ui-local-steps:
 	@$(DOCKER_RUN) cargo nextest run --locked -p aoe-assets --run-ignored only --no-tests fail -E 'test(interface_trial_dat_icon_ids)'

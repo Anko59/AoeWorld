@@ -170,8 +170,11 @@ pub(crate) fn make(root: &Path) -> Result<PathBuf> {
         &mut create_new(&input)?,
     )?;
     // ffmpeg exits nonzero without an output file; the banner is what we want.
+    crate::resources::policy::check()?;
     let banner = Command::new("docker")
-        .args(["run", "--rm", "--user"])
+        .arg("run")
+        .args(crate::jobs::cap_args())
+        .args(["--rm", "--user"])
         .arg(format!(
             "{}:{}",
             nix::unistd::getuid(),

@@ -6,9 +6,9 @@ sdk-python-tools: tools
 	@$(call IMAGE_BUILD,sdk-python,$(SDK_IMAGE))
 
 SDK_RUN = \
-  docker run --rm --init \
-  $(HEAVY_ENV) \
-  $(SLOT_CAP) \
+  $(RESOURCE_RUN) docker run --rm --init \
+  $(JOB_ENV) \
+  $(RESOURCE_CAP) \
   --user $(UID):$(GID) \
   -e HOME=/tmp \
   -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) \
@@ -17,24 +17,24 @@ SDK_RUN = \
   $(SDK_IMAGE)
 
 # Builds the aoeworld wheel into target/wheels.
-sdk-python: sdk-python-tools slot-bootstrap
-	@$(SLOT_RUN) sdk-python -- make --no-print-directory sdk-python-steps
+sdk-python: sdk-python-tools job-bootstrap
+	@$(JOB_RUN) sdk-python -- make --no-print-directory sdk-python-steps
 
 sdk-python-steps:
 	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python build
 
 # Builds the server and a wheel, then runs pytest for the bindings and the
 # example AI against a local server.
-sdk-python-test: sdk-python-tools slot-bootstrap
-	@$(SLOT_RUN) sdk-python-test -- make --no-print-directory sdk-python-test-steps
+sdk-python-test: sdk-python-tools job-bootstrap
+	@$(JOB_RUN) sdk-python-test -- make --no-print-directory sdk-python-test-steps
 
 sdk-python-test-steps:
 	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python test
 
 # Fast fake-world regressions; sdk-python-test remains the full integration gate.
 .PHONY: sdk-python-logic-test sdk-python-logic-test-steps
-sdk-python-logic-test: sdk-python-tools slot-bootstrap
-	@$(SLOT_RUN) sdk-python-logic-test -- make --no-print-directory sdk-python-logic-test-steps
+sdk-python-logic-test: sdk-python-tools job-bootstrap
+	@$(JOB_RUN) sdk-python-logic-test -- make --no-print-directory sdk-python-logic-test-steps
 
 sdk-python-logic-test-steps:
 	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python logic-test
@@ -45,8 +45,8 @@ ARENA_SIZE ?= 300
 ARENA_BOTS ?= 2
 ARENA_MINUTES ?= 30
 ARENA_SEEDS ?= 1,2,3,4,5
-ai-arena: sdk-python-tools slot-bootstrap
-	@$(SLOT_RUN) ai-arena -- make --no-print-directory ai-arena-steps ARENA_SIZE=$(ARENA_SIZE) ARENA_BOTS=$(ARENA_BOTS) ARENA_MINUTES=$(ARENA_MINUTES) ARENA_SEEDS=$(ARENA_SEEDS)
+ai-arena: sdk-python-tools job-bootstrap
+	@$(JOB_RUN) ai-arena -- make --no-print-directory ai-arena-steps ARENA_SIZE=$(ARENA_SIZE) ARENA_BOTS=$(ARENA_BOTS) ARENA_MINUTES=$(ARENA_MINUTES) ARENA_SEEDS=$(ARENA_SEEDS)
 
 ai-arena-steps:
 	@$(SDK_RUN) cargo run --locked -p aoe-harness -- sdk-python arena --size $(ARENA_SIZE) --bots $(ARENA_BOTS) --minutes $(ARENA_MINUTES) --seeds $(ARENA_SEEDS)
@@ -58,16 +58,26 @@ ai-arena-steps:
 # The harness runs in the orchestrator image (it starts sibling bot and browser containers);
 # the wheel is built by the same target, and `--browser` needs `make build-wasm` first.
 .PHONY: scale-match scale-match-steps scale-match-smoke scale-match-smoke-steps
-scale-match: orchestrator-tools sdk-python-tools browser-deps slot-bootstrap
-	@$(SLOT_RUN) scale-match -- make --no-print-directory scale-match-steps
+scale-match: resource-bootstrap
+	@$(RESOURCE_LONG) scale-match -- $(MAKE) --no-print-directory scale-match-admitted
+
+.PHONY: scale-match-admitted
+scale-match-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory scale-match-steps
 
 # One slot for the wheel and the run: the wheel is built inside the held slot.
 scale-match-steps: sdk-python-steps
+	@$(MAKE) --no-print-directory orchestrator-tools sdk-python-tools browser-deps
 	@$(DEV_ORCH_RUN) cargo run --release --locked -p aoe-harness -- scale-match $(SCALE_MATCH_ARGS)
 
 # Four players for one minute on a flat 500-tile map: the whole path, none of the scale.
-scale-match-smoke: orchestrator-tools sdk-python-tools slot-bootstrap
-	@$(SLOT_RUN) scale-match-smoke -- make --no-print-directory scale-match-smoke-steps
+scale-match-smoke: resource-bootstrap
+	@$(RESOURCE_LONG) scale-match-smoke -- $(MAKE) --no-print-directory scale-match-smoke-admitted
+
+.PHONY: scale-match-smoke-admitted
+scale-match-smoke-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory scale-match-smoke-steps
 
 scale-match-smoke-steps: sdk-python-steps
+	@$(MAKE) --no-print-directory orchestrator-tools sdk-python-tools
 	@$(DEV_ORCH_RUN) cargo run --release --locked -p aoe-harness -- scale-match --players 4 --humans 1 --tiles 500 --map flat --start-villagers 20 --hosts 1 --minutes 1 --label smoke --out reports/scale/match/match-smoke.json --no-summary

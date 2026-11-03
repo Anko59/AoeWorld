@@ -112,6 +112,12 @@ fn fixture<'a>(source: &Path, output: &'a PrivateOutput) -> Fixture<'a> {
 }
 fn root(recipe: &str) -> (tempfile::TempDir, ExecutionRoot) {
     let owner = tempfile::tempdir().unwrap();
+    fs::create_dir(owner.path().join("gates")).unwrap();
+    fs::write(
+        owner.path().join("gates/registry.json"),
+        serde_json::to_vec(&runner::tests::registry()).unwrap(),
+    )
+    .unwrap();
     fs::write(
         owner.path().join("Makefile"),
         format!("alpha:\n\t@{recipe}\ngamma:\n\t@printf 'later independent success\\n'\n"),
