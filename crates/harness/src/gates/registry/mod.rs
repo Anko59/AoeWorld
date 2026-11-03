@@ -67,6 +67,10 @@ pub(crate) struct Gate {
     /// heavy slot for its whole run and queues for it (docs/gates.md). Absent means light.
     #[serde(default)]
     pub(crate) heavy: bool,
+    /// Read but not yet used: the registry may name long jobs before the code that acts on
+    /// them lands, because the trusted judge is built from `origin/dev` (reader-first rollout).
+    #[serde(default, rename = "long")]
+    _long: bool,
     pub(crate) capabilities: Vec<Capability>,
     /// Failure/incompleteness blocks these cadences; runner must enforce later.
     pub(crate) blocks: Vec<Cadence>,
