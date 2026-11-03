@@ -70,5 +70,5 @@ for this checkout's dev server on port 8153. The ignored file
 8,000-tile Paris package named in `tests/proofs/strategic-large.ts`, with 99 real
 AI opponents. Packages must be installed before starting the dev server. The
 large proof stops its AI hosts in its cleanup path. Videos and source-backed
-game assets remain outside Git. See the task's local evidence record for the
-actual captures, measurements and limits.
+game assets remain outside Git. See the [local evidence record](scale/far-zoom-evidence.md) for actual
+captures, measurements and limits.
