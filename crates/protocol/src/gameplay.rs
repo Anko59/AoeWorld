@@ -33,7 +33,7 @@ pub use projectiles::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 5;
+pub const VERSION: u16 = 6;
 /// One gameplay frame: room for 65,536 units alongside bounded buildings,
 /// training queues and other view state. This is a memory guard, not housing.
 pub const MAX_MESSAGE: usize = 16 * 1_048_576;
@@ -170,6 +170,8 @@ pub enum CommandResult {
     RejectedVassalLeash,
     RejectedVassalHome,
     RejectedRequiresImperialAge,
+    /// Housing space is exhausted. Appended to preserve existing wire values.
+    RejectedPopulationCap,
 }
 
 /// Immutable physical properties of the active geographic map. The package

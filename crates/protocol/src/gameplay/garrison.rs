@@ -27,6 +27,7 @@ pub enum VassalWait {
     Full,
     NoTownCenter,
     Food,
+    Population,
 }
 
 impl BuildingKind {

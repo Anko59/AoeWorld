@@ -32,7 +32,7 @@ async function start(page: Page) {
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 30_000,
   });
-  await expect(page.locator("#population")).toHaveText("4");
+  await expect(page.locator("#population")).toHaveText("4/5");
   await centerVillage(page);
 }
 
@@ -51,7 +51,7 @@ test("server stockpile and population; Q queues and cancels a villager", async (
       String(amount),
     );
   }
-  await expect(page.locator("#population")).toHaveText("4");
+  await expect(page.locator("#population")).toHaveText("4/5");
   await clickActor(page, "TownCenter");
   await expect(page.locator("#selection-name")).toHaveText("Town Center");
   await expect(
@@ -77,7 +77,7 @@ test("server stockpile and population; Q queues and cancels a villager", async (
   await expect(page.locator("#training-progress")).toBeHidden();
 });
 
-test("gatherers deposit wood while the Town Center trains a villager", async ({
+test("gatherers deposit wood while the Town Center trains; full housing queues Q", async ({
   page,
 }) => {
   test.setTimeout(100_000);
@@ -128,16 +128,21 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
   await centerVillage(page, true);
   await page.keyboard.press("q");
   await expect(page.locator("#stockpile-food")).toHaveText("150");
-  await expect(page.locator("#population")).toHaveText("5", {
+  await expect(page.locator("#population")).toHaveText("5/5", {
     timeout: 32_000,
   });
+  await expect(
+    page.getByRole("button", { name: /Train Villager/ }),
+  ).toBeEnabled();
   await page.keyboard.press("q");
-  // A second real unit completes without adding a House.
+  // Orders beyond the space are prepaid and wait for housing.
   await expect(page.locator("#stockpile-food")).toHaveText("100");
-  await expect(page.locator("#population")).toHaveText("6", {
-    timeout: 32_000,
-  });
-  await expect(page.locator("#training-progress")).toBeHidden();
+  await expect(page.locator("#training-label")).toContainText(
+    "Waiting for housing",
+  );
+  await expect(page.locator("#selection-task")).toHaveText(
+    "Waiting for housing",
+  );
   await expect(page.locator("#connection")).toHaveText("connected");
 
   await expect
@@ -146,6 +151,12 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
       { timeout: 60_000 },
     )
     .toBeGreaterThan(200);
+  await expect(page.locator("#stockpile-food")).toHaveText("100");
+  await expect(page.locator("#population")).toHaveText("5/5");
+  await expect(page.locator("#training-label")).toContainText(
+    "Waiting for housing",
+  );
+  await expect(page.locator("#connection")).toHaveText("connected");
 });
 
 test("menu resumes and quits; minimap lives in the bottom frame and navigates", async ({

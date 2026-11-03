@@ -40,14 +40,20 @@ export function productionBuilding(b: ProductionBuilding) {
     0,
   ];
 }
-export function playerState(age: number, researched = 0, population = 4) {
+export function playerState(
+  age: number,
+  researched = 0,
+  population = 4,
+  cap = 5,
+) {
   return [
     0,
     ...uint(10000),
     ...uint(10000),
     ...uint(10000),
     ...uint(10000),
-    ...uint(population),
+    population,
+    cap,
     age,
     ...uint(researched),
     100,

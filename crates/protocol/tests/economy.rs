@@ -14,6 +14,7 @@ fn player() -> GameplayPlayerState {
             stone: 200,
         },
         population_used: 4,
+        population_cap: 5,
         age: aoe_protocol::Age::Dark,
         researched: 0,
         market_prices: aoe_protocol::MarketPrices::default(),
@@ -195,9 +196,9 @@ fn full_economy_snapshot_and_delta_roundtrip() {
         // Includes combat stance after the two optional owner identifiers.
         vec![
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 25, 25, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 0, 0, 100, 100, 100, 1,
-            1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0, 0,
-            0, 0, 0, 0, 0
+            0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 100, 100, 100,
+            1, 1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18, 224, 18, 8, 0, 1, 0, 3, 244, 3, 0, 0,
+            0, 0, 0, 0, 0, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);
@@ -446,5 +447,35 @@ fn castle_age_production_buildings_round_trip_rallies() {
         };
         let bytes = encode_gameplay_server(&frame).unwrap();
         assert_eq!(decode_gameplay_server(&bytes).unwrap(), frame);
+    }
+}
+
+#[test]
+fn population_space_is_wide_and_rejection_is_appended_on_the_wire() {
+    let mut p = player();
+    p.population_used = 70_000;
+    p.population_cap = u32::MAX;
+    let state = GameplayServerMessage::Snapshot {
+        revision: 1,
+        tick: Tick(0),
+        units: vec![],
+        players: vec![p],
+        buildings: vec![],
+    };
+    assert_eq!(
+        decode_gameplay_server(&encode_gameplay_server(&state).unwrap()).unwrap(),
+        state
+    );
+    for (result, tag) in [
+        (CommandResult::RejectedInvalidTarget, 15),
+        (CommandResult::RejectedRequiresImperialAge, 37),
+        (CommandResult::RejectedPopulationCap, 38),
+    ] {
+        let ack = GameplayServerMessage::CommandAck {
+            sequence: 1,
+            result,
+            applied_tick: Tick(0),
+        };
+        assert_eq!(encode_gameplay_server(&ack).unwrap(), vec![3, 1, tag, 0]);
     }
 }

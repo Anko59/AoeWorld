@@ -12,7 +12,8 @@ soft separation also enforce the bound, including detours. Transports and
 formations cannot carry it outside. If the Castle is destroyed, a surviving
 Vassal retains that home's location and cannot activate another Castle.
 
-Population is uncapped; Houses and Castles never gate ordinary training.
+There is no global population ceiling. Completed Houses, Town Centers and
+Castles provide space; training waits when that space is full.
 [World capacities](../scale/capacity.md) records the matching storage bounds
 and the distinction between capacity and performance qualification.
 
@@ -54,7 +55,8 @@ has 50 food, until residents (every living villager in the territory, sheltered
 ones included) plus queued villagers reach 100. It stops, and the HUD says why,
 when: the census is incomplete (more than 1,024 units in the circle),
 residents+queued is 100, no Town Center lies in the territory, or food is short.
-Population is uncapped, so no House is built for room.
+The Vassal builds Houses before population plus queued training fills the
+player’s space, including when its workers are already busy.
 
 **Stalls.** Every pass the Vassal checks its managed workers. One whose task is
 Moving but whose position has not changed for 8 seconds is stopped and

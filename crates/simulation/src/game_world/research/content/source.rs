@@ -26,6 +26,7 @@ pub fn browser_content() -> Vec<i32> {
             (trainable >> 32) as i32,
             i32::from(r.blocks),
             i32::from(r.max_hp),
+            i32::from(r.population_support),
         ]);
     }
     for r in crate::TECH_RULES {

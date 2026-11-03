@@ -237,7 +237,8 @@ mirror!(
         RejectedGarrisonFull,
         RejectedVassalExists,
         RejectedVassalLeash,
-        RejectedVassalHome
+        RejectedVassalHome,
+        RejectedPopulationCap
     ]
 );
 

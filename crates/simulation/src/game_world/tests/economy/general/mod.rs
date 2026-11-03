@@ -29,6 +29,15 @@ fn setup() -> (GameWorld, EntityId) {
             true,
         )
         .unwrap();
+    for i in 0..30 {
+        w.insert_building(
+            PlayerId(0),
+            BuildingKind::House,
+            TileRect::from_xywh(10 + 3 * (i % 10), 10 + 3 * (i / 10), 2, 2),
+            true,
+        )
+        .unwrap();
+    }
     (w, castle)
 }
 fn at(x: i32, y: i32) -> WorldPosition {

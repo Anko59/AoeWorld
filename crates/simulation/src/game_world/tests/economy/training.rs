@@ -149,6 +149,20 @@ fn queued_training_finishes_and_refusals_are_atomic_and_typed() {
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
     advance(&mut world, 1000);
+    assert_eq!(world.unit_count(), 5);
+    assert_eq!(
+        world.building(center).unwrap().training_queue[0].progress_ticks,
+        0
+    );
+    world
+        .insert_building(
+            PlayerId(0),
+            BuildingKind::House,
+            TileRect::from_xywh(20, 20, 2, 2),
+            true,
+        )
+        .unwrap();
+    advance(&mut world, 500);
     assert_eq!(world.unit_count(), 6);
     assert!(world.building(center).unwrap().training_queue.is_empty());
 }
@@ -157,6 +171,7 @@ fn queued_training_finishes_and_refusals_are_atomic_and_typed() {
 fn food_queue_and_serial_training_limits_use_one_rules_table() {
     let (mut world, _, center) = village();
     let player = world.economy.players.get_mut(&PlayerId(0)).unwrap();
+    player.population_cap = 20;
     player.stockpile.food = 800;
     for _ in 0..15 {
         world

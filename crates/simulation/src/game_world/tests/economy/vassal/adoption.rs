@@ -38,10 +38,19 @@ fn villagers(w: &GameWorld) -> usize {
 
 /// The owner's report: a Castle placed among 60 busy villagers and two Town
 /// Centers with ample food must adopt busy villagers, then keep training to
-/// 100 managed villagers with no population cap in the way.
+/// 100 managed villagers with enough housing.
 #[test]
 fn a_vassal_adopts_busy_villagers_and_trains_to_a_hundred() {
     let (mut w, _, vassal) = active();
+    for i in 0..20 {
+        w.insert_building(
+            PlayerId(0),
+            BuildingKind::House,
+            TileRect::from_xywh(10 + 3 * (i % 10), 10 + 3 * (i / 10), 2, 2),
+            true,
+        )
+        .unwrap();
+    }
     w.insert_building(
         PlayerId(0),
         BuildingKind::TownCenter,

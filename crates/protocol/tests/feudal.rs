@@ -68,6 +68,7 @@ fn dark_players_cannot_claim_feudal_techs_and_wheelbarrow_loads_round_trip() {
         player: PlayerId(0),
         stockpile: Stockpile::default(),
         population_used: 1,
+        population_cap: 5,
         age: Age::Dark,
         researched: Tech::DoubleBitAxe.bit(),
         market_prices: aoe_protocol::MarketPrices::default(),

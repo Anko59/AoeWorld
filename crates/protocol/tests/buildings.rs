@@ -12,6 +12,7 @@ fn player() -> GameplayPlayerState {
             stone: 200,
         },
         population_used: 4,
+        population_cap: 5,
         age: aoe_protocol::Age::Dark,
         researched: 0,
         market_prices: aoe_protocol::MarketPrices::default(),

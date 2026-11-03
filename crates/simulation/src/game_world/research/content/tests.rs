@@ -9,6 +9,7 @@ fn browser_content_roundtrips_the_current_rules_without_a_second_balance_table()
         assert_eq!((view.side, view.depth), (rule.side, rule.depth));
         assert_eq!(view.age, rule.age as u8);
         assert_eq!(view.buildable, rule.buildable);
+        assert_eq!(view.population_support, rule.population_support);
         for unit in crate::UNIT_COMBAT {
             assert_eq!(
                 view.trains(unit.kind as u8),

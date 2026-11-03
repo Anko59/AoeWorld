@@ -99,8 +99,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Typed squads, corridor recovery and bounded traffic probes change this replay.
-        "8e69490ccf200969444015ccd9a1803a1742ab391d386772780ea9cbe797c99a"
+        // Typed squads, corridor recovery and restored housing change this replay; the 1/4-worker comparison above still holds.
+        "e70767c03b946890c1d608a07fd1f100ce977244d94c9adb9d994f0558edfc45"
     );
 }
 

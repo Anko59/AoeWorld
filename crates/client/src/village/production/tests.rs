@@ -55,6 +55,7 @@ fn shortest_queue_counts_burst_clicks_and_ignores_ineligible_selected_buildings(
         age: Age::Dark,
         researched: 0,
         population_used: 5,
+        population_cap: 100,
         market_prices: Default::default(),
     };
     let mut selected = Selection::default();
@@ -141,6 +142,7 @@ fn full_queues_do_not_reintroduce_locked_or_superseded_training_buttons() {
         age: Age::Castle,
         researched: aoe_protocol::Tech::FeudalAge.bit() | aoe_protocol::Tech::CastleAge.bit(),
         population_used: 5,
+        population_cap: 100,
         market_prices: Default::default(),
     };
     let mut pending = PendingTraining::default();
@@ -217,6 +219,7 @@ fn grouped_vassal_training_skips_castles_with_a_home_or_pending_unit() {
         age: Age::Castle,
         researched: 0,
         population_used: 5,
+        population_cap: 100,
         market_prices: Default::default(),
     };
     let mut selected = Selection::default();

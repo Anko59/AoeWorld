@@ -32,10 +32,12 @@ async fn default_game_starts_with_four_units() {
             TileRect::new(TileCoord::new(8000, 8000), TileCoord::new(8384, 8384)),
         )
         .await;
-    let GameplayServerMessage::Snapshot { units, .. } = rx.try_recv().unwrap() else {
+    let GameplayServerMessage::Snapshot { units, players, .. } = rx.try_recv().unwrap() else {
         panic!("snapshot")
     };
     assert_eq!(units.len(), 4);
+    assert_eq!(players[0].population_used, 4);
+    assert_eq!(players[0].population_cap, 5);
 }
 
 #[tokio::test]

@@ -66,15 +66,15 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// by one, so all six digests changed; counts and assertions are unchanged.
 /// General commander/army fields extend the current unit wire. Message counts
 /// and every workload, replay and visibility assertion stay unchanged.
+/// Restored housing extends player state and pauses full producers; the same
+/// 400-tick scenario and visibility assertions produce these current streams.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 5904972656309535373),
-    // PR 10 legal work contact changes gathering and fog updates.
-    (409, 7391452391951109991),
-    (60, 11176561324540927087),
-    (176, 447773566619623902),
-    // PR 10 legal contacts and unavailable land-work queues change this stream.
-    (420, 11630451472446676418),
-    (407, 17807171542109202846),
+    (407, 6205794337568153004),
+    (187, 16495370670290857238),
+    (60, 1780256642041405484),
+    (176, 13848062883790336040),
+    (420, 16572561531079986710),
+    (407, 2183301173389447027),
 ];
 
 #[tokio::test(flavor = "multi_thread")]
