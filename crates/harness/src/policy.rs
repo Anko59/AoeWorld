@@ -121,10 +121,39 @@ pub(crate) fn is_code_or_config(path: &Path) -> bool {
     })
 }
 
+/// Recordings attach to a PR through `SHIP_VIDEO`; only shipped game art is tracked.
+fn is_misplaced_media(path: &Path) -> bool {
+    !path.starts_with("web/art")
+        && path.extension().and_then(|x| x.to_str()).is_some_and(|x| {
+            matches!(
+                x.to_ascii_lowercase().as_str(),
+                "webm"
+                    | "mp4"
+                    | "m4v"
+                    | "mkv"
+                    | "mov"
+                    | "avi"
+                    | "wmv"
+                    | "flv"
+                    | "gif"
+                    | "mp3"
+                    | "wav"
+                    | "ogg"
+                    | "flac"
+            )
+        })
+}
+
 pub fn structure(root: &Path) -> Result<(), PolicyError> {
     let mut count = BTreeMap::<PathBuf, usize>::new();
     let mut problems = Vec::new();
     for relative in tracked(root)? {
+        if is_misplaced_media(&relative) {
+            problems.push(format!(
+                "{}: media belongs in web/art or a PR's SHIP_VIDEO, not in Git",
+                relative.display()
+            ));
+        }
         let path = root.join(&relative);
         if !path.is_file() {
             continue;
@@ -194,6 +223,27 @@ mod tests {
         assert!(is_text(Path::new("docker/runtime.Dockerfile")));
         assert!(is_text(Path::new(".dockerignore")));
         assert!(is_code_or_config(Path::new("docker/runtime.Dockerfile")));
+    }
+
+    #[test]
+    fn media_is_only_tracked_under_web_art() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        git(root, &["init", "-q"]);
+        for path in [
+            "docs/evidence/run.webm",
+            "CLIP.MP4",
+            "web/art/cinematic/shot.webm",
+        ] {
+            let file = root.join(path);
+            fs::create_dir_all(file.parent().unwrap()).unwrap();
+            fs::write(file, [0_u8]).unwrap();
+        }
+        git(root, &["add", "-A"]);
+        let result = structure(root).unwrap_err().to_string();
+        assert!(result.contains("docs/evidence/run.webm: media"));
+        assert!(result.contains("CLIP.MP4: media"));
+        assert!(!result.contains("shot.webm"), "{result}");
     }
 
     #[test]
