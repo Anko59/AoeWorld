@@ -6,9 +6,10 @@ use aoe_protocol::{BuildingKind, GameplayUnitState, UnitKind};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
-    inline_js = "export function strategic_update(a, e, b, c, w, o, s) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s); }"
+    inline_js = "export function strategic_update(a, e, b, c, w, o, s) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
 )]
 extern "C" {
+    fn strategic_alert(tick: f64, x: f64, y: f64);
     fn strategic_update(
         armies: &[f64],
         economy: &[f64],
@@ -18,6 +19,15 @@ extern "C" {
         orders: &[f64],
         summary: &[f64],
     );
+}
+
+fn report_hit(hit: Option<aoe_protocol::HitState>, position: [f64; 2], newest: &mut [f64; 3]) {
+    if let Some(hit) = hit {
+        let tick = hit.tick.0 as f64;
+        if !newest[0].is_finite() || tick > newest[0] {
+            *newest = [tick, position[0], position[1]];
+        }
+    }
 }
 
 // [id, world x/y, owned, selected, size (-1 unknown), state, stance,
@@ -61,6 +71,7 @@ pub(in super::super) fn update(client: &Client) {
     let mut armies = Vec::new();
     let mut contacts = Vec::new();
     let mut workers = Vec::new();
+    let mut last_alert = [f64::NAN; 3];
     let mut summary = vec![f64::NAN; 11];
     if let Some(p) = client.village.players.iter().find(|p| p.player == owner) {
         let s = p.stockpile;
@@ -81,6 +92,9 @@ pub(in super::super) fn update(client: &Client) {
     for u in client.units.values() {
         let p = u.position.as_tiles();
         let own = u.player == owner;
+        if own {
+            report_hit(u.last_hit, p, &mut last_alert);
+        }
         if !own && client.fog.state(p.map(|n| n.floor() as i32)) != 2 {
             continue;
         }
@@ -115,6 +129,7 @@ pub(in super::super) fn update(client: &Client) {
     let mut bridges = Vec::new();
     for b in &client.village.buildings {
         if b.player == owner && b.hp > 0 {
+            report_hit(b.last_hit, village::building_center(b), &mut last_alert);
             if b.kind != BuildingKind::Bridge {
                 summary[10] += f64::from(b.footprint.max.x - b.footprint.min.x)
                     * f64::from(b.footprint.max.y - b.footprint.min.y);
@@ -174,4 +189,5 @@ pub(in super::super) fn update(client: &Client) {
     strategic_update(
         &armies, &economy, &bridges, &contacts, &workers, &orders, &summary,
     );
+    strategic_alert(last_alert[0], last_alert[1], last_alert[2]);
 }

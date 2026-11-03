@@ -35,6 +35,7 @@ export function initStrategic(fog, actors) {
     const [worldWidth, worldHeight, cx, cy, width, height, zoom, level] = state;
     const lod = ['sprites', 'markers', 'map'][level];
     tokens.show(!!level); layers.show(!!level); cockpit.show(!!level);
+    window.aoeNavigation?.views?.show(!!level);
     if (scene.dataset.lod !== lod) {
       scene.dataset.lod = lod;
       document.documentElement.dataset.lod = lod;
@@ -149,6 +150,7 @@ export function initStrategic(fog, actors) {
   function present() {
     canvas.hidden = label.hidden = true;
     tokens.show(false); layers.show(false); cockpit.show(false);
+    window.aoeNavigation?.views?.show(false);
     if (canvas.width !== 1) canvas.width = canvas.height = 1;
     canvas.dataset.workingBytes = '4';
   }
@@ -162,6 +164,7 @@ export function initStrategic(fog, actors) {
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
     // at HUD cadence, rather than retaining Rust map implementations in WASM.
     receive(a, castles, b, c, workers, orders) {
+      window.aoeNavigation?.views?.armies(a);
       const jobs = new Map(), homes = new Map(), destinations = new Map();
       for (let at = 0; at + 4 < workers.length; at += 5) {
         const [id, manager, job, idle, home] = workers.slice(at, at + 5);

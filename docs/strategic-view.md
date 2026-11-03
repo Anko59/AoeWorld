@@ -74,6 +74,17 @@ it does not claim territorial borders or Castle-domain ownership.
 Local original-art evidence and qualification limits are recorded in
 [the cockpit evidence record](scale/cockpit-evidence.md).
 
+## Saved views and jumps
+
+At far zoom, Ctrl+F1–F4 save the camera position and zoom for this world;
+Shift+F1–F4 recall them. The on-screen Save/View buttons do the same.
+Plain F1–F6 still control layers. H uses the existing main-base command.
+End jumps to the largest reported owned General army (soldier count, then
+lowest General ID). Space jumps to the newest observed damage to an owned
+unit or building. These jumps preserve zoom; a saved view restores zoom.
+Missing targets stay disabled. Bookmarks and alerts clear when the world resets.
+Typing in a form or opening a dialog suppresses these shortcuts.
+
 ## Local verification
 
 The focused browser regression is `tests/rendering/strategic.play.spec.ts`.

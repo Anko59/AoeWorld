@@ -47,6 +47,23 @@ The far diamond is largely black under real early-match fog. Its blue actor
 marks are normal strategic markers; the near frames verify native sprites,
 not square sprite fallbacks. The demo has no source terrain overview raster.
 
+## View-key evidence
+
+`item2-views.webm` is a 32.64-second continuous excerpt from the headless
+`cockpit-capture.play.spec.ts` take. First/middle/last extracted film frames
+were viewed directly: original Castle/grass/soldiers, the marching General
+in far view, and the General in combat after an actual damage alert.
+`item2-{recalled,army,alert}.png` retain the individual jump screenshots.
+The capture records base `(83,131)`, largest army `(102.5,128.5)` and latest
+observed damage `(165.54,130.5)`, preserving 4% zoom. It also asserts saved
+position and zoom recall. The take is from the working tree on `a16a38c69`,
+including the production form preview, rather than a clean executable build.
+
+The same-fragment bookmark regression was reproduced after using H:
+recall previously left the camera at the base because the URL had not changed.
+The focused test now exercises that sequence as well as layer-key coexistence,
+owned-army selection, newest-alert ordering, form focus and world reset.
+
 ## Checks and limits
 
 Tests were written before implementation. The panel browser test first failed
