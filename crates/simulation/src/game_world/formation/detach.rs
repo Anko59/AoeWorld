@@ -22,6 +22,30 @@ impl GameWorld {
         }
     }
 
+    /// The group a member marches with in single file, when it does: its
+    /// files squeeze past each other at the friendly hard distance, so a knot
+    /// at the mouth of a one-lane passage cannot lock the whole column.
+    pub(crate) fn single_file_group(&self, index: usize) -> Option<EntityId> {
+        let unit = &self.units[index];
+        let leader = unit.formation?;
+        let group = self.formations.get(&leader)?;
+        (group.packing_files == 1
+            && group.members.len() > 1
+            && group
+                .member_index(unit.state.id)
+                .is_some_and(|at| !group.members[at].detached && !group.members[at].arrived))
+        .then_some(leader)
+    }
+
+    /// A grouped member's current steering target, uncounted: traffic
+    /// queries read it without charging group work.
+    pub(crate) fn formation_member_target(&self, index: usize) -> Option<WorldPosition> {
+        let unit = &self.units[index];
+        let group = self.formations.get(&unit.formation?)?;
+        let member = &group.members[group.member_index(unit.state.id)?];
+        (!member.detached).then_some(member.target)
+    }
+
     pub(crate) fn is_detached_member(&self, index: usize) -> bool {
         let unit = &self.units[index];
         unit.formation

@@ -99,8 +99,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Kingdom-priority Vassal job choice and uncapped population (no House or cap gates training) change the replay.
-        "e4b7ad5ac2296e0e41dff1a76c3289b4afdc1888918d64420d8c324f24b5dac9"
+        // General controls and bridge movement intentionally change the combined replay.
+        "575a774847525864239b77dcd34908aae5fe73b093b3c239e39061b06325ac11"
     );
 }
 

@@ -2,6 +2,12 @@ use super::*;
 use crate::game_movement::SegmentAdvance;
 use crate::game_path::segment_length;
 
+mod taut;
+
+/// Known route kept ahead of the anchor, so the corridor can be shaped
+/// across leg boundaries before the block reaches them.
+const PREFETCH_DISTANCE: i64 = 64 * 1024;
+
 impl GameWorld {
     /// Scheduler storage belongs to the first member; only this shared point
     /// consumes its route. No physical member is moved by this loop.
@@ -25,18 +31,29 @@ impl GameWorld {
                 order.speed_carry = (u128::from(order.speed_carry) * u128::from(denominator)
                     / u128::from(previous_denominator)) as u64;
             }
-            let denom = denominator * 8;
-            // Reserve at most 1/8 pace for cohesion. A prolonged 3/4-pace
-            // squeeze alone exceeds the 1.3x arrival budget; persistent
-            // outliers recover independently instead of holding the march.
-            let pace = speed
-                * if self.formation_cohesive(&group) {
-                    8
-                } else {
-                    7
-                };
+            let denom = denominator * 64;
+            // Reserve at most 1/8 pace for cohesion, in proportion to how far
+            // members trail. A prolonged 3/4-pace squeeze alone exceeds the
+            // 1.3x arrival budget; persistent outliers recover independently.
+            let pace = speed * (64 - self.formation_brake(&group));
             group.pace = (pace, denom);
-            self.prefetch_group_route(index, order, front_near_end);
+            self.prefetch_group_route(index, order, front_near_end, group.anchor);
+            if let Some(mut points) = self
+                .taut_route(index, &mut group, order)
+                .map(VecDeque::from)
+                && let Some(waypoint) = points.pop_front()
+            {
+                let heading =
+                    WorldPosition::new(waypoint.x - group.anchor.x, waypoint.y - group.anchor.y);
+                if heading != WorldPosition::new(0, 0) {
+                    group.travel_heading = heading;
+                }
+                order.origin = group.anchor;
+                order.waypoint = waypoint;
+                order.travelled = 0;
+                order.segment_length = segment_length(i64::from(heading.x), i64::from(heading.y));
+                self.units[index].route = points;
+            }
             self.refresh_group_path(index, &mut group, order);
             let mut credit = u128::from(order.speed_carry) + u128::from(pace);
             order.speed_carry = 0;
@@ -142,60 +159,92 @@ impl GameWorld {
 }
 
 impl GameWorld {
-    pub(super) fn formation_cohesive(&self, group: &Group) -> bool {
-        // An attack-move group meets enemies on the way: bodies in its path
-        // hold marching members back, and the blend toward the destination
-        // layout makes the outermost slot run away at exactly the catch-up
-        // pace. Waiting for them would slow the whole army at every contact.
+    /// Pace reserved for cohesion, in 64ths of the slowest member's speed.
+    /// It scales with how far the rearmost tenth of the pending members
+    /// trails its slot: nothing within two tiles, the full 1/8 from ten on
+    /// the march. A few blocked stragglers never hold the march, and a long
+    /// march does not wait for laggards that cannot close the gap anyway.
+    /// Within a block length of the destination the full reserve needs only
+    /// six tiles and also counts a slot's remaining sideways distance, so
+    /// the ranks arrive together.
+    pub(super) fn formation_brake(&self, group: &Group) -> u64 {
         if group.direct || group.attack_move {
-            return true;
+            return 0;
         }
-        let (x, y) = (
-            i64::from(group.travel_heading.x),
-            i64::from(group.travel_heading.y),
-        );
-        let span = (x * x + y * y).isqrt().max(1);
-        // Hard-body files still need close cohesion while squeezing past
-        // real obstacles. A nearby edge outside the block is not a squeeze.
-        let mut cursor = group.path_cursor;
-        let near_terrain = [-8, -4, 0, 4, 8].into_iter().any(|delta| {
-            let at = (group.progress + delta * 1024).clamp(0, group.path.end());
-            let (point, _) = group.path.point(at, &mut cursor);
-            self.static_clearance(UnitKind::Militia, point.tile_floor()) < 15
-        });
-        let constrained = group.tight_destination()
-            || (near_terrain && !self.formation_layout_clear(group, group.travel_heading));
-        group.members.iter().all(|member| {
+        if group.tight_destination() {
+            // Files that end inside a passage cannot reorder there: hold the
+            // whole reserve until every member is within half a tile.
+            let loose = group.members.iter().any(|member| {
+                self.group_work.members(1);
+                !(member.arrived || member.detached || member.blocked >= 240)
+                    && path::squared(
+                        member.ideal,
+                        self.units[self.lookup[&member.id]].state.position,
+                    ) > 512_i64.pow(2)
+            });
+            return if loose { 8 } else { 0 };
+        }
+        let remaining = group.path.end() - group.progress;
+        let arriving = group.path.points.last() == Some(&group.destination)
+            && remaining <= i64::from(group.half_width) + 8 * 1024;
+        let count = group.members.len();
+        let packed = group.packing_files < count;
+        let forming = (group.progress - group.form_start).clamp(0, group.form_distance);
+        let mut trailing = Vec::with_capacity(count);
+        for member in &group.members {
             self.group_work.members(1);
             if member.arrived || member.detached || member.blocked >= 240 {
-                return true;
+                continue;
             }
-            let unit = self.units[self.lookup[&member.id]].state;
-            let position = unit.position;
-            let obstructed = !constrained
-                && !group
-                    .static_area
-                    .is_some_and(|area| area.covers(position, unit.kind.collision_radius(), 0))
-                && self.static_clearance(unit.kind, position.tile_floor()) < 15
-                && !self.body_step_clear(
-                    unit.kind,
-                    position,
-                    path::step(position, member.goal, 2 * 1024),
-                );
-            if constrained || obstructed {
-                path::squared(member.ideal, position) <= 512_i64.pow(2)
+            let along = if packed {
+                i64::from(
+                    slots::packed(member.rank, count, group.packing_files, group.narrow_gap).y,
+                )
+            } else if group.form_distance == 0 {
+                i64::from(member.offset.y)
             } else {
-                i64::from(member.ideal.x - position.x) * x
-                    + i64::from(member.ideal.y - position.y) * y
-                    <= 2 * 1024 * span
+                let (start, end) = (i64::from(member.start_offset.y), i64::from(member.offset.y));
+                start + (end - start) * forming / group.form_distance
+            };
+            let mut behind = group.progress + along - member.progress;
+            if arriving {
+                let position = self.units[self.lookup[&member.id]].state.position;
+                behind = behind.max(path::distance(position, member.goal) - remaining);
             }
-        })
+            trailing.push(behind);
+        }
+        if trailing.is_empty() {
+            return 0;
+        }
+        let rank = if arriving {
+            0
+        } else {
+            trailing.len().div_ceil(10) - 1
+        };
+        let (_, &mut lag, _) = trailing.select_nth_unstable_by(rank, |a, b| b.cmp(a));
+        let (free, ramp) = if arriving {
+            (1024, 4 * 1024)
+        } else {
+            (2 * 1024, 8 * 1024)
+        };
+        ((lag - free).clamp(0, ramp) * 8 / ramp) as u64
     }
 
     /// Emit only already proven continuations. Keep a bounded FIFO ahead of
     /// the front ranks; the anchor must not make them extrapolate a partial leg.
-    fn prefetch_group_route(&mut self, index: usize, order: MovementOrder, front_near_end: bool) {
-        if !front_near_end
+    fn prefetch_group_route(
+        &mut self,
+        index: usize,
+        order: MovementOrder,
+        front_near_end: bool,
+        anchor: WorldPosition,
+    ) {
+        let end = self.units[index]
+            .route
+            .back()
+            .copied()
+            .unwrap_or(order.waypoint);
+        if !(front_near_end || path::distance(anchor, end) < PREFETCH_DISTANCE)
             || path::distance(order.origin, order.destination) < 30 * 1024
             || self.units[index].route.len() >= 64
             || !self.units[index]
@@ -205,11 +254,6 @@ impl GameWorld {
         {
             return;
         }
-        let end = self.units[index]
-            .route
-            .back()
-            .copied()
-            .unwrap_or(order.waypoint);
         let mut prefix = std::mem::take(&mut self.units[index].route);
         if let SegmentAdvance::Next(next) = self.next_map_segment(
             index,

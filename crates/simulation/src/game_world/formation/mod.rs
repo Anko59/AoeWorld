@@ -75,6 +75,8 @@ pub(crate) struct Group {
     queue: VecDeque<(WorldPosition, bool)>,
     attack_move: bool,
     path: path::Path,
+    /// Route end when the anchor corridor was last straightened.
+    taut_end: Option<WorldPosition>,
     progress: i64,
     path_cursor: usize,
 }
