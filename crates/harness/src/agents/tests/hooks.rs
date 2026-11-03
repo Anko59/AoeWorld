@@ -2,7 +2,7 @@ use super::{
     super::{Event, Runtime, respond, role::Role, shell},
     Fixture,
 };
-use crate::slots::SlotEnv;
+use crate::jobs::JobEnv;
 use serde_json::{Value, json};
 use std::fs;
 
@@ -14,7 +14,7 @@ fn call(fixture: &Fixture, event: Event, input: Value) -> Option<Value> {
         Some(&bytes),
         fixture.root(),
         None,
-        &SlotEnv::default(),
+        &JobEnv::default(),
     )
 }
 
@@ -47,7 +47,7 @@ fn unreadable_oversized_or_mismatched_input_is_denied() {
             None,
             fixture.root(),
             None,
-            &SlotEnv::default(),
+            &JobEnv::default(),
         )),
         Some("deny")
     );
@@ -58,7 +58,7 @@ fn unreadable_oversized_or_mismatched_input_is_denied() {
             Some(b"{not json"),
             fixture.root(),
             None,
-            &SlotEnv::default(),
+            &JobEnv::default(),
         )),
         Some("deny")
     );
@@ -78,7 +78,7 @@ fn unreadable_oversized_or_mismatched_input_is_denied() {
             None,
             fixture.root(),
             None,
-            &SlotEnv::default(),
+            &JobEnv::default(),
         ),
         None
     );

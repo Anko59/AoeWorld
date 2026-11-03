@@ -201,7 +201,7 @@ target explicitly when several packs remain.
 
 Run `make test-assets-de` (or `make test-assets-de DE_DIR=/path/to/AoE2DE`)
 for the real-house decoder and player-plane checks. This dedicated target takes
-a heavy slot, mounts `DE_DIR` read-only at `/de-install`, and sets `AOE_DE_DIR`
+the shared container resource policy, mounts `DE_DIR` read-only at `/de-install`, and sets `AOE_DE_DIR`
 inside the test container. It fails if the install is missing or no tests match.
 Setting `AOE_DE_DIR` on the host for `make test-unit` does not forward it or mount
 the install; ordinary unit tests use synthetic fixtures and skip real-file checks.

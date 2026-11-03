@@ -180,8 +180,8 @@ pub(crate) struct Mount {
 }
 
 fn docker(args: &[String]) -> Result<String> {
-    let output = Command::new("docker")
-        .args(args)
+    let output = crate::resources::docker_command(args)
+        .map_err(|error| error.to_string())?
         .output()
         .map_err(|e| format!("docker: {e}"))?;
     if output.status.success() {

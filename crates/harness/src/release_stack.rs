@@ -5,7 +5,6 @@ use std::{
     error::Error,
     io::{Read, Write},
     net::TcpStream,
-    process::Command,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -20,7 +19,7 @@ struct RealRuntime;
 
 impl Runtime for RealRuntime {
     fn docker(&self, args: &[&str]) -> Result<String> {
-        let output = Command::new("docker").args(args).output()?;
+        let output = crate::resources::docker_command(args)?.output()?;
         if !output.status.success() {
             return Err(format!(
                 "docker {args:?}: {}",

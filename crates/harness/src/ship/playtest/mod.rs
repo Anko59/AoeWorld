@@ -147,8 +147,8 @@ fn make() -> String {
 }
 
 /// The playtest of `head`, started before the review. A missing report is produced by a
-/// `make playtest` child in its own process group: it takes its heavy slot through the Makefile's
-/// slot wrapper, never this process's, so the review is not held behind that slot.
+/// `make playtest` child in its own process group, using the shared container resource
+/// policy while the review runs alongside it.
 pub(super) struct Started {
     path: PathBuf,
     head: String,

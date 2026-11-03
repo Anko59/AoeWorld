@@ -51,7 +51,7 @@ fn replay_budget(exhausted: bool) {
     for tool in ["cargo", "docker"] {
         fixture::wrapper(&bin.join(tool), tool);
     }
-    let (mut command, _slot) = fixture::command();
+    let mut command = fixture::command();
     let mut child = command
         .current_dir(root)
         .env(
@@ -172,7 +172,7 @@ fn flaky_wasm_cli_retries_only_quarantined_tests_and_records_recoveries() {
         for tool in ["cargo", "docker"] {
             fixture::wrapper(&bin.join(tool), tool);
         }
-        let (mut command, _slot) = fixture::command();
+        let mut command = fixture::command();
         let mut child = command
             .current_dir(root)
             .env(

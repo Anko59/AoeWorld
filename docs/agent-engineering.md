@@ -56,43 +56,24 @@ hashes, modes, coding/Docker UID, nor fixture mocks authenticate a restricted
 worker, controller, publisher, hidden verdict, approval, runtime QA, or served
 build. Qualification and authorization remain independent required planes.
 
-## Heavy gates queue
+## Resource admission and long jobs
 
-Gates that run the workspace's tests or heavy builds (`test-unit`,
-`test-wasm`, `test-e2e`, coverage, perf; the `heavy` flag in
-`gates/registry.json`) take one of two machine-wide slots and queue first come,
-first served (static checks such as `lint` never queue: they run in the Stop
-hook), so many agents on one machine no longer push each other past their
-deadlines ([gates](gates.md)). Do not wait for the load to fall by hand, and
-never scan processes to decide when to start: run the target and let it queue.
-Before starting heavy work it also waits up to 30 minutes while the 1-minute
-load exceeds the core count, reporting every 5 minutes. Its deadline starts
-when it runs. SIGINT/SIGTERM stops a load wait and releases the slot. Load is
-checked once at admission; nested stages and supervised children inherit the
-validated slot token and queue directory. Only a validated inherited slot skips
-that wait; a child acquiring its own slot checks load. Integration tests inherit
-the parent's slot or hold an admitted fixture ticket in a private queue. Load rising
-after start never pauses or aborts running gates. Direct `test-harness`, `test-unit` and `test-wasm` recipes take
-the slot before compiling their test steps. So do the make targets that compile or test without
-being gates (`build`, `map-test`, `geodata-test`, `test-harness-focused`,
-`test-geographic-visuals-unit`, `duel-check`, `dev-build`, `test-country-source`, the single-command
-gates `fuzz-smoke`, `fuzz-nightly`, `perf-smoke`, `perf-ci`, `perf-full`,
-`perf-pressure`, `perf-stress`, `perf-soak-*`, and the release `map-*` targets): each runs
-`$(SLOT_RUN) <target> -- make <target>-steps`, and `aoe-harness slot` queues it whatever the registry
-says. Each slot's containers take `cores / slots` CPUs (2 slots in `gates/heavy.json` on 12 cores, so
-6 CPUs each): Docker gets `--cpus` and cargo the same job count (`CARGO_BUILD_JOBS`). The holder
-computes the count and exports it as `AOE_SLOT_CPUS` beside `AOE_HEAVY_SLOT`; Make only expands it
-(unset: no slot, no flag), and the containers the harness starts itself (Playwright, chromedriver)
-take `--cpus` from the same value (`slots::cap_args`). The wrapper container only waits and
-orchestrates, so it carries no cap of its own. Cores are counted from the process's CPU affinity list, not from
-`available_parallelism`, so a container's quota does not shrink the machine that the load check sees.
-The command-only bootstrap before
-admission is static work, serialized across worktrees by flock, with hard
-limits of one CPU, one Cargo job and 2 GiB including swap; it builds no tests.
-This bounded bootstrap permits cold starts without letting gate compilation
-bypass slots. External Cargo/target cache paths and TMPDIR reach both wrapper
-and steps containers. `make load-status` shows the holders; a
-queue that outlasts `AOE_HEAVY_WAIT_MINUTES` fails with the holders named.
+Short gates start without an exclusive lock or load wait. Workload containers
+share the memory/swap caps and CPU shares in `gates/container.args`; CPU quotas
+are not used. A host MemAvailable check refuses immediately below 3 GiB.
+`make load-status` shows available memory and the live long-job holder.
+
+The `long` registry flag covers full e2e, coverage, local perf benchmarks and
+aggregates containing them. A nonempty `AOE_E2E_SPECS` selection is short.
+The std-only resource runner takes the long-job lock through Linux `flock` before
+bootstrapping the harness or starting Cargo. The runner builds its tool image
+before compiling itself on a clean checkout. A second invocation names its holder
+and stops with `retry later`. Intended children inherit the live descriptor and
+validated proof, so nested targets do not refuse themselves and controller death
+does not admit a competing long job while its child is running. Do useful work
+and rerun later; never poll or retry in a loop. Ship separately locks its rebase
+and push, releasing during gates and review; a busy reacquisition stops while
+preserving evidence for the commit. See [gates](gates.md) and [shipping](shipping.md).
 
 A new field in `gates/registry.json` ships in two changes: first the code that
 reads it (the judge built from `dev` parses the file strictly and refuses an

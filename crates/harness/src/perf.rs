@@ -127,7 +127,6 @@ struct Environment {
     rustc: String,
     dedicated_hardware: bool,
     available_parallelism: usize,
-    slot_cpus: Option<String>,
 }
 
 fn git(args: &[&str]) -> String {
@@ -249,7 +248,7 @@ pub fn late_game(check: bool, instructions: bool) -> Result<(), Box<dyn Error>> 
         }
         for (target, filter) in [
             ("test-harness-focused", "perf"),
-            ("test-harness-focused", "slots::tests::makefile"),
+            ("test-harness-focused", "jobs::tests"),
         ] {
             crate::process::run(
                 "make",
@@ -406,7 +405,6 @@ pub fn run(mode: &str) -> Result<(), Box<dyn Error>> {
             rustc: rustc_version(),
             dedicated_hardware: false,
             available_parallelism: std::thread::available_parallelism().map_or(1, |n| n.get()),
-            slot_cpus: std::env::var("AOE_SLOT_CPUS").ok(),
         },
         workloads,
         comparisons,

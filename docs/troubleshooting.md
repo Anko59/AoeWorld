@@ -14,7 +14,7 @@ See the [documented Chromium compositor failure and working flag set](https://gi
 ## Harness disk use
 
 Local `make ship`, `make test-e2e`, `make test-wasm`, `make test-unit` and
-`make preflight` refuse before taking a heavy slot when either the worktree's
+`make preflight` refuse before starting work when either the worktree's
 target filesystem or the shared `<git common dir>/aoe-cargo` filesystem has
 less than 15 GiB available. `AOE_DISK_FLOOR_GIB` sets a whole-GiB floor;
 `0` disables it. CI (`CI` or `GITHUB_ACTIONS` nonempty) skips the check.
@@ -52,30 +52,53 @@ The child receives its start gap in `AOE_HARNESS_BOOT_GAP`.
 - **Gates run by `aoe-harness gates`** retry once. Their harness containers are
   stopped first, because killing the `docker run` client does not stop the
   container. A second suspend is the gate's result, reported as a monitor error.
-- **Ship gates** (`make ship`) get one suspend retry per gate, including when the
-  interrupted attempt followed an overloaded timeout. If stopping interrupted containers
+- **Ship gates** (`make ship`) get one suspend retry per gate, per invocation. If stopping interrupted containers
   fails, the gate is unavailable, names the containers, and starts no retry. **Duel steps** do not retry: an
   interrupted one fails and its process group is killed; containers it started are
   labelled (below) and `make recover` can stop them.
 - **Containers** started by the harness carry the label
   `aoe.harness-boot-gap=<seconds>`, the gap when they started. These are the e2e
-  browser run, the wasm driver, and the `DOCKER_RUN` and `SLOT_RUN` recipes under
+  browser run, the wasm driver, and the `DOCKER_RUN` recipes under
   a supervised `make`. `make recover` stops the labelled containers whose gap has
   moved, names each one, and still stops the others when one removal fails.
   Plain `docker run` recipes without the label (for example `GEODATA_RUN`,
   `BROWSER_RUN` and `SOURCE_QUAL_RUN`) are not found by `make recover`.
 
-**The ship lock.** The lock is an OS file lock, so waiters keep waiting while the holder
-process exists, even when a suspend froze it. The holder records the boot-time gap when it
-takes the lock. While supervising a child, the holder compares the current gap with its last
-lock record on every poll, and refreshes that record when the difference exceeds 60 s.
-This includes several short sleeps across different children. A waiter ends a holder only when
-the record's gap moved by more than 60 s since it was written and the same record still
-reads that way at the next poll (one second later), by killing the recorded pid if its
-start time matches. It prints `ship: taking over from the stale lock holder <branch> in
-<worktree> (pid N): ...`. A holder that runs no supervised child across a suspend is ended.
+**The ship lock.** A busy ship immediately names its holder and stops. It never
+kills another holder or waits for it. Rerun later to reuse evidence for the same
+commit. A dead holder's kernel lock is released; an active mutation child keeps
+it until that child exits. `make ship-status` reads the live holder without waiting.
 
 Limits: detection needs Linux; elsewhere the clocks are not read and nothing is
 judged interrupted. The tests inject clock readings, or write seconds into the file named by
 `AOE_HARNESS_SIMULATED_GAP_FILE` (added to the boot clock only in test builds; production
 ignores it); they do not suspend a real machine, so the timing of a real resume is not verified.
+
+## Container memory and long jobs
+
+`make load-status` shows MemAvailable and the live long-job holder. Short jobs
+start without an exclusive lock. Each workload container uses the shared caps in
+`gates/container.args` (4 GiB memory and combined memory plus swap, CPU shares
+1024, four Cargo compiler jobs). There is no CPU quota. A lightweight std-only
+bootstrap has a 256 MiB cap. Before starting a workload container the host checks MemAvailable:
+below 3 GiB it refuses immediately with the observed value and floor. This is
+an observation at admission, not a reservation against other processes.
+
+A container OOM kill reports that its memory cap was exceeded, with the observed
+cgroup peak when the observer survives. Reduce concurrent work or investigate the
+workload; do not weaken a gate. A second long job immediately reports its holder
+and `retry later` (harness exit 75). Full e2e, coverage, local perf benchmarks and
+aggregates containing them are long; a nonempty `AOE_E2E_SPECS` selection is short.
+Low-memory admission uses exit 76 in the host resource runner; Make reports the
+recipe failure. Neither refusal sleeps or retries. CI keeps these resource caps
+and memory admission checks; each CI job has its own runner.
+
+The 2026-11-03 shared-host qualification used four cold lint/WASM builds in two
+worktrees, with distinct empty targets and compiler caching disabled. Six Cargo
+jobs per container fell to 2.23 GiB available. Four jobs kept the observed minimum
+at 3.30 GiB (3.37 GiB in the independent one-second `free` log), with 293 seconds
+of four-way overlap. Host swap reached 4 GiB; no container or readable kernel
+journal OOM kill was observed. The cold two-job repeat measured lint at 1.06x
+its solo time and WASM at 1.37x; an earlier WASM run missed 1.5x at 1.61x.
+These measurements justify the current setting, not a capacity reservation or a
+latency guarantee under arbitrary other load. Remeasure when changing the policy.

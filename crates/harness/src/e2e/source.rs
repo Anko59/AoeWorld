@@ -224,7 +224,7 @@ fn run_browser(root: &Path, address: SocketAddr, phase: &str, project: &str) -> 
         "tests/source-creator.spec.ts".to_owned(),
         format!("--project={project}"),
     ];
-    args.splice(1..1, crate::slots::cap_args());
+    args.splice(1..1, crate::jobs::cap_args());
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     process::run("docker", &refs, BROWSER_DEADLINE)?;
     Ok(())

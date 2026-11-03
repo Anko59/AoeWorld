@@ -12,7 +12,7 @@
 ["make review-pr REVIEW_PR=161 REVIEW_RUNTIME=codex", false]
 ["make ship", false]
 ["make ship 'SHIP_BODY=$(shell git push origin main)'", false]
-["make ship SHIP_LOCK_WAIT_MINUTES=0 SHIP_TITLE=x SHIP_BODY=/tmp/body.md", false]
+["make ship SHIP_TITLE=x SHIP_BODY=/tmp/body.md", false]
 ["make ship SHIP_TITLE='$(shell id)'", false]
 ["make ship SHIP_TITLE=x SHIP_BODY=/tmp/body.md", false]
 ["make ship-tools", false]

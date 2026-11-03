@@ -208,6 +208,8 @@ pub(crate) fn run(
     ];
     args.extend([run.image.to_owned(), "node".into(), "capture.mjs".into()]);
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let capped = crate::resources::docker_args(&args)?;
+    let args: Vec<&str> = capped.iter().map(String::as_str).collect();
     process::run("docker", &args, deadline).map_err(|e| {
         format!(
             "the {} browser run ({}, {short}) failed: {e}",
