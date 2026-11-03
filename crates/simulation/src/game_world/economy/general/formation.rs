@@ -9,32 +9,7 @@ impl GameWorld {
         changed: &mut Vec<EntityId>,
         work: &mut GeneralWork,
     ) {
-        if self.economy.generals.armies[&g].routed == Some(to) {
-            return;
-        }
-        let ids: Vec<_> = army.iter().map(|v| v.id).collect();
-        let player = army[0].player;
-        work.orders += 1;
-        if self
-            .issue_formation_move(player, &ids, aoe_core::Formation::Line, to, false, false)
-            .is_err()
-        {
-            return;
-        }
-        // A regroup after a fight (no destination) is not a march.
-        let marching = self.economy.generals.armies[&g].state != GeneralState::Idle;
-        for &id in ids.iter().filter(|_| marching) {
-            let (stance, reason) = if retreat {
-                (aoe_core::CombatStance::NoAttack, stances::Reason::Retreat)
-            } else {
-                (aoe_core::CombatStance::Defensive, stances::Reason::March)
-            };
-            self.general_override_stance(g, id, stance, reason);
-        }
-        if let Some(a) = self.economy.generals.armies.get_mut(&g) {
-            a.routed = Some(to);
-        }
-        changed.extend(ids);
+        self.march_squads(g, army, to, retreat, changed, work);
     }
 
     /// Role offsets enter the block's ordinary destination assignment, before

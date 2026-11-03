@@ -223,7 +223,13 @@ impl GameWorld {
             .map(|(member, u)| {
                 front_near_end |= member.following_corridor
                     && path::squared(u.position, end) <= (4 * 1024_i64).pow(2);
-                self.movement_speed(u.kind, u.player)
+                let own = self.movement_speed(u.kind, u.player);
+                self.general_squad_pace(u.id)
+                    .filter(|pace| {
+                        u128::from(pace.0) * u128::from(own.1)
+                            < u128::from(own.0) * u128::from(pace.1)
+                    })
+                    .unwrap_or(own)
             })
             .min_by(|a, b| {
                 (u128::from(a.0) * u128::from(b.1)).cmp(&(u128::from(b.0) * u128::from(a.1)))

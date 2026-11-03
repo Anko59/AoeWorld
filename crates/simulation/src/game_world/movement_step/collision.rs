@@ -54,6 +54,35 @@ pub(crate) fn hard_distance(unit: &crate::GameUnit, other: &crate::GameUnit) -> 
 }
 
 impl GameWorld {
+    /// Persistent queues behind another group's parked bodies need a local
+    /// detour. A group's own files retain their shared packing and route.
+    pub(crate) fn stationary_external_traffic(&self, index: usize) -> bool {
+        let unit = &self.units[index];
+        self.collisions.blocked(
+            (
+                unit.state.position,
+                unit.state.kind.collision_radius() + 1024,
+            ),
+            unit.state.kind.is_naval(),
+            self.tick.0.wrapping_add(u64::from(unit.state.id.0)),
+            &self.group_work,
+            |id| {
+                let other = &self.units[self.collisions.unit_index(id)];
+                let r = i64::from(
+                    unit.state.kind.collision_radius() + other.state.kind.collision_radius() + 128,
+                );
+                let dx = i64::from(unit.state.position.x) - i64::from(other.state.position.x);
+                let dy = i64::from(unit.state.position.y) - i64::from(other.state.position.y);
+                id != unit.state.id
+                    && other.state.hp > 0
+                    && !other.state.moving
+                    && other.formation != unit.formation
+                    && dx * dx + dy * dy < r * r
+            },
+            |_| true,
+        )
+    }
+
     pub(super) fn collision_occupied(
         &self,
         index: usize,
@@ -135,18 +164,27 @@ impl GameWorld {
         let crowded = attack
             .and_then(|target| self.attack_goal(target, unit.player))
             .is_some_and(|goal| self.melee_contact_traffic(unit.id, &goal));
-        let soft = (self.units[index].formation.is_none() || self.is_detached_member(index))
-            && (crowded
-                || (attack.is_none()
-                    && self.units[index].obstruction.is_some_and(|o| {
-                        let (x, y) = (
-                            i64::from(o.goal.x) - i64::from(from.x),
-                            i64::from(o.goal.y) - i64::from(from.y),
-                        );
-                        o.pass_until > self.tick.0
-                            && (x * x + y * y > 2048 * 2048
-                                || self.free_work_approach(index, o.goal))
-                    })));
+        // A persistently blocked group member earns the same bounded friendly
+        // passing clearance as an independent mover. Group membership must not
+        // make parked friendly bodies an unbreakable wall.
+        let soft = crowded
+            || (attack.is_none()
+                && self.units[index].obstruction.is_some_and(|o| {
+                    let (x, y) = (
+                        i64::from(o.goal.x) - i64::from(from.x),
+                        i64::from(o.goal.y) - i64::from(from.y),
+                    );
+                    o.pass_until > self.tick.0
+                        && (x * x + y * y > 2048 * 2048
+                            || self
+                                .formation_destination_slot(unit.id)
+                                .is_some_and(|goal| {
+                                    let dx = i64::from(goal.x) - i64::from(from.x);
+                                    let dy = i64::from(goal.y) - i64::from(from.y);
+                                    dx * dx + dy * dy > 2048 * 2048
+                                })
+                            || self.free_work_approach(index, o.goal))
+                }));
         let general_alone = unit.kind == UnitKind::General && self.units[index].formation.is_none();
         let work_squeeze = unit.kind == UnitKind::Villager
             && self.units[index].obstruction.is_some()

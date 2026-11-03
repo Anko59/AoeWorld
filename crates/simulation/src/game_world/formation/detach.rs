@@ -68,7 +68,13 @@ impl GameWorld {
             .filter(|member| {
                 !member.detached
                     && !member.arrived
-                    && (member.blocked >= DETACH_AFTER || member.stalled >= 60)
+                    && (member.blocked >= DETACH_AFTER || member.stalled >= 60 || {
+                        let index = self.lookup[&member.id];
+                        let unit = &self.units[index];
+                        unit.state.position == unit.state.previous_position
+                            && unit.obstruction.is_some_and(|o| o.blocked >= 32)
+                            && self.stationary_external_traffic(index)
+                    })
             })
             .map(|member| member.id)
             .take(4)
@@ -135,7 +141,11 @@ impl GameWorld {
         self.units[index].state.planning = planning;
         self.units[index].state.moving = !planning;
         self.units[index].state.task = UnitTask::Moving;
-        self.units[index].obstruction = None;
+        // Recovery must retain the traffic wait already earned. Clearing it
+        // here makes a member wait for friendly passing permission twice.
+        if let Some(obstruction) = &mut self.units[index].obstruction {
+            obstruction.goal = goal;
+        }
         self.units[index].last_movement_error = None;
         let Some(group) = self.units[index]
             .formation
@@ -166,11 +176,10 @@ impl GameWorld {
                 self.group_work.members(1);
                 let index = self.lookup[&member.id];
                 let unit = self.units[index].state;
-                let timed_out = !navigating
-                    && (self.units[index]
-                        .obstruction
-                        .is_some_and(|o| o.blocked >= GIVE_UP_AFTER_TICKS)
-                        || (self.units[index].order.is_none() && !unit.planning));
+                // A traffic wait is not an unreachable verdict. In particular,
+                // successful completion of an intermediate checkpoint must
+                // rejoin the corridor even after the carrier has arrived.
+                let timed_out = !navigating && self.units[index].last_movement_error.is_some();
                 let near = self.units[index].order.is_some_and(|order| {
                     navigating && path::squared(unit.position, order.destination) <= 512_i64.pow(2)
                 }) || (!navigating

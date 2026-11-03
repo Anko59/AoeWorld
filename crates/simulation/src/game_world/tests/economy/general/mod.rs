@@ -6,6 +6,7 @@ mod fighting;
 mod movement;
 mod orders;
 mod sphere;
+mod squads;
 mod stances;
 mod targets;
 mod training;
@@ -38,13 +39,16 @@ fn soldier(w: &mut GameWorld, kind: UnitKind, x: i32, y: i32) -> EntityId {
 }
 fn decide(w: &mut GameWorld) {
     w.tick.0 += 10;
+    // This helper advances only decisions. Each new tick must still receive
+    // the same shared route/firing-position allowance as a full world tick.
+    w.refill_route_budgets();
     w.advance_generals(&mut Vec::new());
 }
 #[test]
-fn creation_claims_at_most_100_owned_military_and_never_steals() {
+fn creation_claims_at_most_ten_full_infantry_squads_and_never_steals() {
     let (mut w, _) = setup();
-    let ids: Vec<_> = (0..120)
-        .map(|n| soldier(&mut w, UnitKind::Militia, 100 + n % 8, 100 + n / 8))
+    let ids: Vec<_> = (0..220)
+        .map(|n| soldier(&mut w, UnitKind::Militia, 100 + n % 11, 100 + n / 11))
         .collect();
     let worker = soldier(&mut w, UnitKind::Villager, 102, 102);
     let enemy = w
@@ -52,7 +56,7 @@ fn creation_claims_at_most_100_owned_military_and_never_steals() {
         .unwrap();
     let a = soldier(&mut w, UnitKind::General, 102, 102);
     let b = soldier(&mut w, UnitKind::General, 103, 102);
-    assert_eq!(w.general_status(a).unwrap().army_size, 100);
+    assert_eq!(w.general_status(a).unwrap().army_size, 200);
     assert_eq!(w.general_status(b).unwrap().army_size, 20);
     assert_eq!(w.general_controller(worker), None);
     assert_eq!(w.general_controller(enemy), None);
@@ -60,7 +64,7 @@ fn creation_claims_at_most_100_owned_military_and_never_steals() {
         ids.iter()
             .filter(|&&id| w.general_controller(id) == Some(a))
             .count(),
-        100
+        200
     );
     w.forget_general(a);
     assert!(ids.iter().all(|&id| w.general_controller(id) != Some(a)));
@@ -122,7 +126,7 @@ fn reinforcements_balance_available_production_and_reserve_the_cap() {
     ] {
         assert!(queued.contains(&kind), "missing {kind:?}: {queued:?}");
     }
-    assert!(queued.len() <= 100);
+    assert!(queued.len() <= buildings.len());
     advance(&mut w, 1200);
     assert!(
         w.units()
@@ -268,7 +272,7 @@ fn cancelled_recruitment_releases_reservations_and_never_overfills() {
             true,
         )
         .unwrap();
-    for n in 0..99 {
+    for n in 0..199 {
         soldier(&mut w, UnitKind::Militia, 100 + n % 10, 100 + n / 10);
     }
     let g = soldier(&mut w, UnitKind::General, 105, 105);
@@ -290,7 +294,7 @@ fn cancelled_recruitment_releases_reservations_and_never_overfills() {
     advance(&mut w, 500);
     assert_eq!(
         w.general_status(g).unwrap().army_size,
-        100,
+        200,
         "queue {:?}, general {:?}, hz {}",
         w.building(barracks).unwrap().training_queue,
         w.unit(g),

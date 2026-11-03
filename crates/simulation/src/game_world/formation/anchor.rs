@@ -71,7 +71,7 @@ impl GameWorld {
                 let from = group.anchor.tile_floor();
                 let to = next.tile_floor();
                 if !self
-                    .unit_step_clear(self.units[index].state.kind, from, to)
+                    .unit_position_step_clear(self.units[index].state.kind, group.anchor, next)
                     .unwrap_or(false)
                     || !self.building_step_clear(from, to)
                 {

@@ -285,3 +285,44 @@ fn a_moved_actor_invalidates_the_cached_static_proof() {
     );
     assert!(world.body_step_clear(crate::UnitKind::Militia, from, proposal.state.position));
 }
+
+#[test]
+fn a_blocked_scout_escapes_a_fractional_parking_wedge_without_new_overlap() {
+    use crate::UnitKind;
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, Seed(0)).unwrap()).unwrap();
+    let from = WorldPosition::new(44556, 44504);
+    let id = w.spawn_kind(PlayerId(0), UnitKind::Scout, from).unwrap();
+    let others: Vec<_> = [
+        (UnitKind::Archer, WorldPosition::new(44680, 44704)),
+        (UnitKind::Villager, WorldPosition::new(44616, 44299)),
+        (UnitKind::Scout, WorldPosition::new(44386, 44271)),
+    ]
+    .into_iter()
+    .map(|(kind, at)| w.spawn_kind(PlayerId(0), kind, at).unwrap())
+    .collect();
+    let index = w.lookup[&id];
+    let goal = WorldPosition::new(60000, 60000);
+    w.issue_move(id, goal).unwrap();
+    for _ in 0..40 {
+        w.tick.0 += 1;
+        w.record_obstruction_towards(index, goal);
+    }
+    let next = w.avoid_unit_step(index, WorldPosition::new(from.x + 54, from.y + 55));
+    assert_ne!(next, from, "there is a body-clear southwest escape");
+    let distance = |a: WorldPosition, b: WorldPosition| {
+        i64::from(a.x - b.x).pow(2) + i64::from(a.y - b.y).pow(2)
+    };
+    assert!(
+        distance(from, next) <= 78 * 78,
+        "only this tick's movement credit"
+    );
+    for other in others {
+        let other = w.unit(other).unwrap();
+        let hard = collision::hard_distance(w.unit(id).as_ref().unwrap(), &other);
+        let before = distance(from, other.position);
+        assert!(
+            distance(next, other.position) >= before.min(hard * hard),
+            "no new penetration: {other:?}"
+        );
+    }
+}

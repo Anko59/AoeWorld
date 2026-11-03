@@ -39,33 +39,35 @@ fn run(case: &str, count: usize, limit: u32) {
     // First terrain milestone: protect full arrival, <=1.3x time, physical
     // speed, membership, exact slots and bounded work. Pin the two known
     // recovery/oscillation deficits explicitly until the next small commit.
-    // Regenerate intentional output pins with the focused real_terrain tests.
+    // Independent typed squads intentionally change the current-output pins.
+    // Keep all arrival, work, speed, membership and 60-tick acceptance bounds.
+    // The audit reports increased long-march work/reversals, not just gains.
     match case {
         "river" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 24_576, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (7, 2));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (5, 2));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5436, 55225, 5480816)
+                (5527, 55473, 5422483)
             );
         }
         "long" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 16_384, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (28, 17));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (32, 26));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (36705, 41486, 88820779)
+                (35529, 378134, 111559118)
             );
         }
         _ => {
             result.assert_works(count);
             // Current-output pins also retain work for the complete report.
             let expected = match case {
-                "forest" => (3282, 1027, 2445117),
+                "forest" => (3282, 1027, 2444034),
                 "town" => (3741, 1193, 2884789),
-                "crossing" => (3278, 1933, 3097268),
+                "crossing" => (3278, 1933, 3096055),
                 "bridge" => (479, 354, 23210),
                 "siege" => (1556, 867, 44292),
                 "gap" => (580, 512, 24846),

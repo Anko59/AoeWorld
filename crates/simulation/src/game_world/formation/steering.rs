@@ -4,47 +4,6 @@ use super::packing::block_heading;
 use super::*;
 use crate::game_world::movement_step::settling::GIVE_UP_AFTER_TICKS;
 
-const FRACTION: u64 = 1 << 32;
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Motion {
-    pub(crate) target: WorldPosition,
-    pub(crate) center: WorldPosition,
-    pub(crate) goal: WorldPosition,
-    pub(crate) budget: i32,
-    pub(crate) carry: u64,
-    pub(crate) navigating: bool,
-    pub(crate) final_leg: bool,
-    pub(crate) done: bool,
-    pub(crate) facing: Facing,
-    pub(crate) obstructed: bool,
-    pub(crate) path_progress: i64,
-    pub(crate) neighbor_radius: i32,
-    pub(crate) certified: bool,
-    pub(crate) static_clear: bool,
-    pub(crate) remaining: i64,
-    pub(crate) near_center: bool,
-}
-
-impl Motion {
-    /// Pure member bookkeeping belongs to the parallel proposal. An ordered
-    /// collision adjustment rebuilds it from the final position.
-    pub(crate) fn at(mut self, position: WorldPosition) -> Self {
-        self.remaining = path::distance(position, self.goal);
-        self.near_center = path::squared(position, self.center) <= 512_i64.pow(2);
-        self
-    }
-}
-
-/// A member trailing its slot catches up at up to 1.5 times the group pace,
-/// capped by its own speed. Faster roles placed far from their start (scouts
-/// ahead, rams behind) re-form within the march instead of after it.
-pub(crate) fn matched_speed(pace: (u64, u64), own: (u64, u64)) -> u64 {
-    let catch_up = u128::from(pace.0) * u128::from(FRACTION) * 3 / (u128::from(pace.1) * 2);
-    let cap = u128::from(own.0) * u128::from(FRACTION) / u128::from(own.1);
-    catch_up.min(cap) as u64
-}
-
 impl GameWorld {
     pub(crate) fn advance_formations(
         &mut self,
@@ -217,6 +176,10 @@ impl GameWorld {
         for member in &mut group.members {
             self.group_work.members(1);
             let unit = self.units[self.lookup[&member.id]].state;
+            // Carrier arrival does not prove that a trailing body has passed
+            // the route's bends. Keep its shared corridor until it catches up.
+            let catching_up = group.progress - member.progress > i64::from(group.half_width) + 1024;
+            member.following_corridor |= !navigating && !group.direct && catching_up;
             let offset = if files < count {
                 slots::packed(member.rank, count, files, group.narrow_gap)
             } else {
@@ -278,7 +241,11 @@ impl GameWorld {
             // Every tile-centre edge admits this fixed inset lane. Keeping
             // its width fixed avoids steering across the bank on every change
             // of the circular clearance sample along a staircase route.
-            let lane_x = if member.following_corridor {
+            let lane_x = if self.near_deck(unit.position) || self.near_deck(point) {
+                // A single-lane deck has no lateral passing lane. At a bend,
+                // a smoothed normal can otherwise push an edge slot off it.
+                0
+            } else if member.following_corridor {
                 let lateral = (512 - unit.kind.terrain_radius() - 2).max(0);
                 offset.x.clamp(-lateral, lateral)
             } else {
@@ -315,8 +282,10 @@ impl GameWorld {
             if member.following_corridor
                 && !final_approach
                 && files == count
+                && !catching_up
                 && forward_to_slot >= 0
                 && self.static_clearance(unit.kind, unit.position.tile_floor()) == 15
+                && self.static_clearance(unit.kind, ideal.tile_floor()) >= 3
             {
                 member.following_corridor = false;
             }
@@ -334,6 +303,24 @@ impl GameWorld {
                 } else {
                     member.ideal
                 };
+            // A lateral slot can cross the inside of a bend even though the
+            // shared centreline is clear. Aim at the proven next checkpoint,
+            // rather than repeatedly asking local avoidance to enter a tree.
+            if !group.direct
+                && !member.arrived
+                && (member.following_corridor || member.blocked >= 16)
+                && !self.near_deck(member.target)
+                && self.static_clearance(unit.kind, member.target.tile_floor()) <= 2
+                && !self.body_position_clear(unit.kind, member.target)
+            {
+                let mut at = member.cursor;
+                let point = group.path.corridor_point(member.target_progress, &mut at).0;
+                if self.body_position_clear(unit.kind, point) {
+                    member.target = point;
+                    member.center = point;
+                    member.following_corridor = true;
+                }
+            }
             if navigating
                 && !group.direct
                 && !member.arrived

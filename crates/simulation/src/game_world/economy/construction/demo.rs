@@ -22,8 +22,8 @@ impl GameWorld {
             WorldPosition::from_tile_center(TileCoord::new(x, y))
                 .map_err(|_| EconomyError::InvalidFootprint)
         };
-        // A penned reserve keeps the leader confident but cannot rescue him
-        // before the siege volley. These are ordinary closed wall footprints.
+        // A penned reserve cannot rescue the solo leader before the siege
+        // volley. These are ordinary closed wall footprints.
         for y in 112..=116 {
             for x in 132..=138 {
                 if x == 132 || x == 138 || y == 112 || y == 116 {
@@ -44,6 +44,9 @@ impl GameWorld {
             )?;
         }
         let general = world.spawn_kind(PlayerId(0), UnitKind::General, position(128, 128)?)?;
+        // The appearance proof exercises a player's solo attack; autonomous
+        // retreat must not replace that explicit animation sequence.
+        world.issue_general_move(PlayerId(0), general, position(128, 128)?)?;
         for (kind, x, y) in std::iter::once((UnitKind::BatteringRam, 142, 128))
             .chain((0..20).map(|n| (UnitKind::Mangonel, 145 + n / 5, 126 + n % 5)))
             .chain((0..5).map(|n| (UnitKind::LightCavalry, 148, 132 + n)))

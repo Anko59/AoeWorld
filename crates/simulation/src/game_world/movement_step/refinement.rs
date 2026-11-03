@@ -91,7 +91,7 @@ impl GameWorld {
         } else {
             self.local_unit_route(index, goal)
         };
-        if short_join
+        if (short_join || bypass)
             && pops == 0
             && self.units[index]
                 .obstruction

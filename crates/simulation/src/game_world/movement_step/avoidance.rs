@@ -219,6 +219,16 @@ impl GameWorld {
             } else {
                 (0, 0)
             },
+            if yield_back {
+                (-dx + 2 * right.0, -dy + 2 * right.1)
+            } else {
+                (0, 0)
+            },
+            if yield_back {
+                (-dx - 2 * right.0, -dy - 2 * right.1)
+            } else {
+                (0, 0)
+            },
             if yield_back { (-dx, -dy) } else { (0, 0) },
         ] {
             if x == 0 && y == 0 {

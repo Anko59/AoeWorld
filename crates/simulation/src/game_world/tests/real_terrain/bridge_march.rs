@@ -53,12 +53,55 @@ pub(super) fn cross_fixture(
     let mut tracker = Tracker::new(&fixture.world, &fixture.ids);
     issue(&mut fixture);
     tracker.attach(&offered(&fixture));
+    let mut failed = false;
     for tick in 1..=limit {
+        let root = &fixture.world.units[fixture.world.lookup[&fixture.primary]];
+        let before = root.order;
+        let planner = root.planner.as_ref().map(|p| {
+            (
+                p.origin(),
+                p.destination(),
+                p.certified_destination(),
+                p.work(),
+                p.leg_work(),
+            )
+        });
         fixture.world.advance();
+        if !failed && fixture.world.movement_failure(fixture.primary).is_some() {
+            failed = true;
+            eprintln!(
+                "first-failure {case} tick={tick} before={before:?} planner={planner:?} error={:?} samples={:?}",
+                fixture.world.movement_failure(fixture.primary),
+                fixture.world.route_scheduler_stats().metrics.samples
+            );
+        }
         tracker.attach(&offered(&fixture));
         if tracker.observe(&fixture.world, tick) {
             break;
         }
+    }
+    let mut samples = std::collections::BTreeMap::new();
+    for &id in &fixture.ids {
+        let unit = fixture.world.unit(id).unwrap();
+        if !unit.moving && fixture.world.formation_destination_slot(id) == Some(unit.position) {
+            continue;
+        }
+        let index = fixture.world.lookup[&id];
+        let leader = fixture.world.units[index].formation.unwrap_or(id);
+        let count = samples.entry(leader).or_insert(0);
+        if *count >= 2 {
+            continue;
+        }
+        *count += 1;
+        let root = &fixture.world.units[fixture.world.lookup[&leader]];
+        eprintln!(
+            "unfinished {case} id={id:?} unit={unit:?} anchor={:?} motion={:?} carrier={leader:?} order={:?} route={:?} error={:?}",
+            fixture.world.formation_anchor(id),
+            fixture.world.formation_motion(index),
+            root.order,
+            root.route.iter().take(4).collect::<Vec<_>>(),
+            root.last_movement_error
+        );
     }
     let goals = tracker.goals();
     let starts = tracker.starts.clone();
@@ -120,4 +163,88 @@ fn hundred_followers_cross_three_bridged_rivers_and_forest_belts() {
 #[test]
 fn forty_in_formation_cross_three_bridged_rivers_and_forest_belts() {
     cross("long-bridges-40", 40, 40_000);
+}
+
+fn solo_three_bridges(formation: bool, slow: bool) {
+    let mut f = build("long-bridges");
+    let g = f.primary;
+    if slow {
+        f.world.config.tick_hz = 47;
+    }
+    for id in f
+        .ids
+        .iter()
+        .copied()
+        .filter(|&id| id != g)
+        .collect::<Vec<_>>()
+    {
+        f.world.remove_unit(id);
+    }
+    let goal = center(610, 110);
+    f.world
+        .issue_general_move(PlayerId(0), g, f.world.unit(g).unwrap().position)
+        .unwrap();
+    if formation {
+        f.world
+            .issue_formation_move(
+                PlayerId(0),
+                &[g],
+                aoe_core::Formation::Line,
+                goal,
+                false,
+                false,
+            )
+            .unwrap();
+    } else {
+        f.world.issue_general_move(PlayerId(0), g, goal).unwrap();
+    }
+    let ideal = reference_ticks(&f.world, &[(g, goal)]);
+    let mut tracker = Tracker::new(&f.world, &[g]);
+    tracker.attach(&[Some(goal)]);
+    let mut failed = false;
+    for tick in 1..=30_000 {
+        let before = f.world.movement_order(g);
+        let planner = f.world.units[f.world.lookup[&g]].planner.as_ref().map(|p| {
+            (
+                p.origin(),
+                p.destination(),
+                p.certified_destination(),
+                p.work(),
+                p.leg_work(),
+            )
+        });
+        f.world.advance();
+        if !failed && f.world.movement_failure(g).is_some() {
+            failed = true;
+            eprintln!(
+                "solo-three-bridge formation={formation} tick={tick} before={before:?} planner={planner:?} error={:?} samples={:?}",
+                f.world.movement_failure(g),
+                f.world.route_scheduler_stats().metrics.samples
+            );
+        }
+        if tracker.observe(&f.world, tick) {
+            break;
+        }
+    }
+    let result = tracker.finish(ideal);
+    eprintln!("solo-three-bridge formation={formation} {result:?}");
+    assert_eq!(result.arrived, 1, "{result:?}");
+    assert!(
+        result.last_tick * 10 <= result.ideal_ticks * 13,
+        "{result:?}"
+    );
+}
+
+#[test]
+fn three_bridge_solo_general_uses_all_ordinary_route_continuations() {
+    solo_three_bridges(false, false);
+}
+#[test]
+fn three_bridge_solo_formation_uses_all_virtual_route_continuations() {
+    solo_three_bridges(true, false);
+}
+
+#[test]
+fn slow_three_bridge_solo_formation_retains_continuations() {
+    solo_three_bridges(true, true);
 }

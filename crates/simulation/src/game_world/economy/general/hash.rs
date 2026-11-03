@@ -32,6 +32,23 @@ impl Economy {
                     h.update(&p.y.to_le_bytes());
                 }
             }
+            h.update(&a.pace.0.to_le_bytes());
+            h.update(&a.pace.1.to_le_bytes());
+            h.update(&[u8::from(a.layout.is_some())]);
+            if let Some((goal, heading)) = a.layout {
+                for point in [goal, heading] {
+                    h.update(&point.x.to_le_bytes());
+                    h.update(&point.y.to_le_bytes());
+                }
+            }
+            h.update(&(a.squads.len() as u64).to_le_bytes());
+            for squad in &a.squads {
+                h.update(&[squad.arm as u8]);
+                h.update(&(squad.members.len() as u64).to_le_bytes());
+                for member in &squad.members {
+                    h.update(&member.0.to_le_bytes());
+                }
+            }
             h.update(&(a.members.len() as u64).to_le_bytes());
             for id in &a.members {
                 h.update(&id.0.to_le_bytes());

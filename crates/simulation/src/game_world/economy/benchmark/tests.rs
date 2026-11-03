@@ -99,8 +99,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // General controls and bridge movement intentionally change the combined replay.
-        "575a774847525864239b77dcd34908aae5fe73b093b3c239e39061b06325ac11"
+        // Typed squads, corridor recovery and bounded traffic probes change this replay.
+        "8e69490ccf200969444015ccd9a1803a1742ab391d386772780ea9cbe797c99a"
     );
 }
 
