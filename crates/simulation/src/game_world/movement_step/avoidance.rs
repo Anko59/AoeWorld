@@ -208,9 +208,11 @@ impl GameWorld {
         let yield_back = self.units[index]
             .obstruction
             .is_some_and(|o| o.blocked >= 32);
-        // The wider backward probes recover a marching corridor. Ordinary
-        // movers and combat pursuits keep their bounded sidestep policy.
-        let corridor_escape = yield_back && self.units[index].formation.is_some();
+        // Traffic also needs the wider probes to leave fractional parking
+        // wedges. Combat pursuits retain their established sidestep policy;
+        // independent traffic still has no corridor-only lateral refinement.
+        let wide_escape =
+            yield_back && (self.units[index].formation.is_some() || unit.attack_target.is_none());
         let right = (-dy * side, dx * side);
         for (x, y) in [
             (dx + right.0, dy + right.1),
@@ -222,12 +224,12 @@ impl GameWorld {
             } else {
                 (0, 0)
             },
-            if corridor_escape {
+            if wide_escape {
                 (-dx + 2 * right.0, -dy + 2 * right.1)
             } else {
                 (0, 0)
             },
-            if corridor_escape {
+            if wide_escape {
                 (-dx - 2 * right.0, -dy - 2 * right.1)
             } else {
                 (0, 0)
