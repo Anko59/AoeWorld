@@ -273,6 +273,16 @@ fn stop_cancels_the_army_march_and_death_releases_command() {
 #[test]
 fn cancelled_recruitment_releases_reservations_and_never_overfills() {
     let (mut w, _) = setup();
+    // House a full 200-soldier army, its General and the starting villagers.
+    for i in 0..10 {
+        w.insert_building(
+            PlayerId(0),
+            BuildingKind::House,
+            TileRect::from_xywh(10 + 3 * i, 19, 2, 2),
+            true,
+        )
+        .unwrap();
+    }
     let barracks = w
         .insert_building(
             PlayerId(0),
