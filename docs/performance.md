@@ -229,6 +229,17 @@ Recovery URL serialization and startup diagnostics run in JavaScript: formatting
 the live camera's floats in Rust would retain its full decimal formatter solely
 for a browser navigation. Camera, seat and unknown fragment fields are preserved.
 
+#### Browser size baseline
+
+The block guards against a jump, not an absolute ceiling, but a fixed baseline
+makes every feature spend the same allowance. On 2026-11-03 dev went over the
+378,521-byte cap, refusing unrelated changes, and #672 left only 2,569 bytes of
+room, so the owner approved re-taking
+the baseline at 375,952 gzip bytes, measured with `make perf-wasm-size` at
+`85ceef00c`; the +25% block is now 469,940 bytes. The perf comment still
+shows every change's size difference. Re-take it deliberately when the allowance
+is spent, after checking `make perf-wasm-functions` for waste.
+
 #### Browser size investigation
 
 At `a2f5099d432e`, `make perf-wasm-size` measured 376,727 gameplay gzip bytes
