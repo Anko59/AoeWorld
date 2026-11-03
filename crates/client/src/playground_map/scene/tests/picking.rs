@@ -412,6 +412,26 @@ async fn a_tree_rectangle_behind_an_enemy_building_wins_selection_and_orders() {
 }
 
 #[wasm_bindgen_test]
+async fn completed_farm_has_a_work_cursor_for_a_selected_villager() {
+    let mut client = fixture(1.0).await;
+    client.units.get_mut(&EntityId(1)).unwrap().kind = aoe_protocol::UnitKind::Villager;
+    client.selected.units(vec![EntityId(1)]);
+    let owner = crate::playground::game::village::owner(&client);
+    let farm = &mut client.village.buildings[0];
+    farm.kind = BuildingKind::Farm;
+    farm.player = owner;
+    farm.footprint = TileRect::from_xywh(99, 99, 3, 3);
+    farm.food_remaining = Some(175);
+    client.pointer = Some(ScreenPoint { x: 640.0, y: 360.0 });
+    let values = crate::playground::game::village::presentation::values(&client);
+    assert_eq!(
+        values[3], 2.0,
+        "a usable farm must not show forbidden feedback"
+    );
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
 async fn building_portrait_removal_keeps_the_remaining_building_selected() {
     let mut client = fixture(1.0).await;
     client.village.buildings.push(building(9, 103, 103));

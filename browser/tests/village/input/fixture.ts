@@ -39,6 +39,7 @@ export function building(
   hp = 900,
   complete = true,
   player = 0,
+  food?: number,
 ) {
   return [
     id,
@@ -53,7 +54,7 @@ export function building(
     ...uint(hp),
     ...uint(900),
     4,
-    0,
+    ...(food === undefined ? [0] : [1, ...uint(food)]),
     0,
     0,
     0,

@@ -325,7 +325,7 @@ fn passable(client: &Client, point: ScreenPoint) -> bool {
             aoe_map::ObjectKind::ShoreFish | aoe_map::ObjectKind::DeepFish
         )
     });
-    let building = occupant.is_some() && !bridge;
+    let building = occupant.is_some_and(|b| b.kind != aoe_protocol::BuildingKind::Farm) && !bridge;
     aoe_simulation::destination_passable(ground, resource, building)
 }
 

@@ -193,6 +193,30 @@ test("huntable and hostile animals use attack artwork for villagers and military
   }
 });
 
+test("a completed farm offers work feedback and receives a farm order", async ({
+  page,
+}, info) => {
+  test.setTimeout(90_000);
+  const commands = await inputFixture(
+    page,
+    info.project.name === "webgpu" ? "webgpu" : "webgl2",
+    [building(30, 5, 8197, 8188, 3, 900, true, 0, 175)],
+  );
+  await selectWorker(page);
+  const farm = screen(8198.5, 8189.5);
+  await page.mouse.move(farm.x, farm.y);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-command-cursor",
+    "move",
+  );
+  await page.screenshot({
+    path: `../.cache/showcase/farm-cursor-${info.project.name}.png`,
+  });
+  await page.mouse.click(farm.x, farm.y, { button: "right" });
+  await expect.poll(() => commands.at(-1)?.[0]).toBe(11);
+  expect(commands.at(-1)?.at(-1)).toBe(30);
+});
+
 test("berries inside a Town Center footprint win selection and gather orders", async ({
   page,
 }, info) => {

@@ -9,6 +9,7 @@ import { generalAppearanceProof } from "./general-appearance.js";
 import { siegeProof } from "./siege.js";
 import { regressFireProof } from "./regress-fire.js";
 import { regressPickingProof } from "./regress-picking.js";
+import { regressFarmCursorProof } from "./regress-farm-cursor.js";
 import { pressureProof } from "./pressure.js";
 import { townCenterProof } from "./town-center.js";
 import { centerVillage } from "../village/fixtures/resources.js";
@@ -56,6 +57,10 @@ test("local original panel proof with real selection and training", async ({
       config.side ?? "after",
       config.agesOnly,
     );
+    return;
+  }
+  if (config.phase === "regress-farm-cursor") {
+    await regressFarmCursorProof(page, config.url);
     return;
   }
   if (config.phase === "regress-picking") {
