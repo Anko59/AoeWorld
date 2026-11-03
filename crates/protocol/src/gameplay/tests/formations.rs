@@ -130,7 +130,7 @@ fn general_training_orders_have_a_current_golden_wire() {
         },
     };
     let wire = encode_client(&mix).unwrap();
-    assert_eq!(wire, [31, 1, 2, 2, 35, 30, 20, 10, 5]);
+    assert_eq!(wire, [32, 1, 2, 2, 35, 30, 20, 10, 5]);
     assert_eq!(decode_client(&wire).unwrap(), mix);
     let too_much = ClientMessage::GeneralOrder {
         sequence: 1,
