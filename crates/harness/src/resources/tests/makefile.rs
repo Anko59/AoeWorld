@@ -134,3 +134,16 @@ fn resource_bootstrap_builds_the_tool_image_before_using_it() {
     assert!(build < compile, "{plan}");
     assert!(!String::from_utf8_lossy(&output.stderr).contains("Circular"));
 }
+
+#[test]
+fn browser_wrapper_observes_cgroup_events_before_container_removal() {
+    let text = fs::read_to_string(root().join("Makefile")).unwrap();
+    let wrapper = text
+        .lines()
+        .find(|line| line.starts_with("BROWSER_RUN :="))
+        .unwrap();
+    assert!(
+        wrapper.ends_with("$(BROWSER_IMAGE) $(RESOURCE_OBSERVER)"),
+        "{wrapper}"
+    );
+}
