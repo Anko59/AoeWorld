@@ -100,7 +100,7 @@ fn general_only_move_has_a_current_golden_wire() {
         },
     };
     let wire = encode_client(&message).unwrap();
-    assert_eq!(wire, [31, 1, 2, 0, 128, 8, 128, 24]);
+    assert_eq!(wire, [32, 1, 2, 0, 128, 8, 128, 24]);
     assert_eq!(decode_client(&wire).unwrap(), message);
     let negative = ClientMessage::GeneralOrder {
         sequence: 1,
@@ -120,7 +120,7 @@ fn general_training_orders_have_a_current_golden_wire() {
         command: crate::GeneralCommand::SetTraining { enabled: true },
     };
     let wire = encode_client(&train).unwrap();
-    assert_eq!(wire, [31, 1, 2, 1, 1]);
+    assert_eq!(wire, [32, 1, 2, 1, 1]);
     assert_eq!(decode_client(&wire).unwrap(), train);
     let mix = ClientMessage::GeneralOrder {
         sequence: 1,
