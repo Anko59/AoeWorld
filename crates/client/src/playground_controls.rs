@@ -1,5 +1,5 @@
 use super::{Client, Drag, center_on_primary, map, position_at, reconnect, send_order, subscribe};
-use aoe_core::{Camera, ScreenPoint, WorldConfig};
+use aoe_core::{Camera, ScreenPoint};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{Event, PointerEvent, WheelEvent};
@@ -67,7 +67,7 @@ fn pick_box(client: &Client, start: ScreenPoint, end: ScreenPoint) -> Vec<aoe_co
     )
 }
 
-fn pan_camera(mut camera: Camera, config: WorldConfig, delta: [f64; 2]) -> Camera {
+fn pan_camera(mut camera: Camera, delta: [f64; 2]) -> Camera {
     let center = ScreenPoint {
         x: camera.viewport[0] / 2.0,
         y: camera.viewport[1] / 2.0,
@@ -84,7 +84,7 @@ fn pan_camera(mut camera: Camera, config: WorldConfig, delta: [f64; 2]) -> Camer
         camera.center[0] + after[0] - before[0],
         camera.center[1] + after[1] - before[1],
     ];
-    camera.clamp_center(config)
+    camera
 }
 
 // Wheel zoom is browser UI arithmetic, not deterministic simulation state.
@@ -101,7 +101,7 @@ fn wheel_zoom(zoom: f64, delta: f64) -> f64 {
 }
 
 fn pan(client: &mut Client, delta: [f64; 2]) {
-    client.camera = pan_camera(client.camera, client.config, delta);
+    client.camera = pan_camera(client.camera, delta);
 }
 
 pub(super) fn edge_pan(client: &mut Client, delta_ms: f64) {
@@ -217,7 +217,6 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 center[0] + before[0] - after[0],
                 center[1] + before[1] - after[1],
             ];
-            client.camera = client.camera.clamp_center(client.config);
             subscribe(&mut client);
         }
     });
@@ -314,10 +313,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             _ => event.delta_y(),
         };
         let zoom = wheel_zoom(client.camera.zoom, delta);
-        client.camera = client
-            .camera
-            .zoom_around(target, zoom)
-            .clamp_center(client.config);
+        client.camera = client.camera.zoom_around(target, zoom);
         subscribe(&mut client);
     });
     canvas.add_event_listener_with_callback("wheel", onwheel.as_ref().unchecked_ref())?;

@@ -108,7 +108,6 @@ pub(super) fn resize(client: &mut Client) {
     if changed {
         client.renderer.resize(backing[0], backing[1]);
     }
-    client.camera = client.camera.clamp_center(client.config);
 }
 
 fn requested_region(client: &Client) -> TileRect {
@@ -186,7 +185,6 @@ pub(super) fn center_on_primary(client: &mut Client) {
     if let Some(primary) = client.primary {
         map::center_on_world(client, position_at(client, primary));
     }
-    client.camera = client.camera.clamp_center(client.config);
 }
 
 pub(super) fn send_order(client: &mut Client, point: ScreenPoint) {

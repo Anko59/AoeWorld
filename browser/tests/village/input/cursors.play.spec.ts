@@ -129,6 +129,9 @@ test("villagers see build and repair cursors and send construction commands", as
       building(23, 1, 8187, 8190, 2, 400, true, 1),
     ],
     true,
+    0,
+    undefined,
+    { resources: [] },
   );
   await selectWorker(page);
   const canvas = page.locator("#scene");
@@ -188,4 +191,61 @@ test("huntable and hostile animals use attack artwork for villagers and military
       expect(commands.at(-1)?.[0]).toBe(worker ? 15 : 7);
     }
   }
+});
+
+test("a completed farm offers work feedback and receives a farm order", async ({
+  page,
+}, info) => {
+  test.setTimeout(90_000);
+  const commands = await inputFixture(
+    page,
+    info.project.name === "webgpu" ? "webgpu" : "webgl2",
+    [building(30, 5, 8197, 8188, 3, 900, true, 0, 175)],
+  );
+  await selectWorker(page);
+  const farm = screen(8198.5, 8189.5);
+  await page.mouse.move(farm.x, farm.y);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-command-cursor",
+    "move",
+  );
+  await page.screenshot({
+    path: `../.cache/showcase/farm-cursor-${info.project.name}.png`,
+  });
+  await page.mouse.click(farm.x, farm.y, { button: "right" });
+  await expect.poll(() => commands.at(-1)?.[0]).toBe(11);
+  expect(commands.at(-1)?.at(-1)).toBe(30);
+});
+
+test("berries inside a Town Center footprint win selection and gather orders", async ({
+  page,
+}, info) => {
+  test.setTimeout(90_000);
+  const commands = await inputFixture(
+    page,
+    info.project.name === "webgpu" ? "webgpu" : "webgl2",
+    [building(20, 0, 8190, 8190, 4)],
+    false,
+    0,
+    undefined,
+    {
+      resources: [
+        { kind: 0, name: "berry", gather: "forage", x: 8190, y: 8191 },
+      ],
+    },
+  );
+  const berry = screen(8190.5, 8191.5);
+  await page.mouse.click(berry.x, berry.y);
+  await expect(page.locator("#selection")).toHaveAttribute(
+    "data-kind",
+    "Resource",
+  );
+  await selectWorker(page);
+  await page.mouse.move(berry.x, berry.y);
+  await expect(page.locator("#scene")).toHaveAttribute(
+    "data-command-cursor",
+    "gather",
+  );
+  await page.mouse.click(berry.x, berry.y, { button: "right" });
+  await expect.poll(() => commands.at(-1)?.[0]).toBe(4);
 });

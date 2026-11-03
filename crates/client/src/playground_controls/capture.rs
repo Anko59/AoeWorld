@@ -1,6 +1,6 @@
 //! Camera links and cheap presentation evidence, independent of gameplay authority.
 use super::{Client, map};
-use aoe_core::{Camera, ScreenPoint, WorldConfig};
+use aoe_core::{Camera, ScreenPoint};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
@@ -20,7 +20,7 @@ impl Fragment {
         }
     }
 
-    pub fn apply(&self, mut camera: Camera, config: WorldConfig) -> Camera {
+    pub fn apply(&self, mut camera: Camera) -> Camera {
         if !self.has_camera() {
             return camera;
         }
@@ -35,12 +35,10 @@ impl Fragment {
         }
         for axis in 0..2 {
             if self.0[axis].is_finite() {
-                let extent = [config.width_tiles, config.height_tiles][axis];
-                camera.center[axis] =
-                    aoe_core::clamp_f64(self.0[axis], 0.0, f64::from(extent) - 1.0);
+                camera.center[axis] = self.0[axis];
             }
         }
-        camera.clamp_center(config)
+        camera
     }
 }
 
@@ -55,11 +53,10 @@ fn apply_current(client: &mut Client) {
     if !fragment.has_camera() {
         return;
     }
-    let camera = fragment.apply(client.camera, client.config);
+    let camera = fragment.apply(client.camera);
     client.camera.zoom = camera.zoom;
     // Reuse minimap centering, including its deferred terrain altitude focus.
     map::center_on_world(client, camera.center);
-    client.camera = client.camera.clamp_center(client.config);
     client.pointer = None;
 }
 
@@ -77,8 +74,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
 
 pub(super) fn world_received(client: &mut Client, map_changed: bool) {
     if !client.capture.world_known || map_changed {
-        // The first welcome supplies actual dimensions; do not retain an initial
-        // clamp against the diagnostic world's size. Reconnects preserve panning.
+        // Reapply the requested view for a new world; reconnects preserve panning.
         apply_current(client);
     }
     client.capture.world_known = true;

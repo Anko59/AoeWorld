@@ -77,6 +77,24 @@ pub(super) async fn overlay(manifest: &mut Manifest) -> Result<(), JsValue> {
                     *record += manifest.frames.len();
                 }
             }
+            // DE's particle-only damage graphics have no sprite cells. Keep
+            // the base pack's drawable flame when this overlay supplies none.
+            if let Some(base) = manifest
+                .buildings
+                .iter()
+                .find(|old| old.unit_id == b.unit_id)
+            {
+                for damage in &mut b.damage {
+                    if damage.parts.is_empty()
+                        && let Some(base) = base.damage.iter().find(|old| {
+                            old.damage_percent == damage.damage_percent
+                                && old.apply_mode == damage.apply_mode
+                        })
+                    {
+                        damage.parts = base.parts.clone();
+                    }
+                }
+            }
         }
         manifest
             .buildings
