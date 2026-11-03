@@ -61,6 +61,8 @@ class Config:
     #: Seconds before an unconfirmed planned building is forgotten.
     plan_timeout_seconds: int = 60
     build_search_radius: int = 18
+    #: Leave two-way worker lanes between the core village buildings.
+    building_gap: int = 2
     #: Seconds an order kind waits after the server reports a world limit.
     world_limit_wait_seconds: int = 30
 
