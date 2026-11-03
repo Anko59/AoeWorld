@@ -3,6 +3,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 
 /** Cold-context navigation to the first complete presented landscape. */
 export async function startupProof(page: Page, url: string, label: string) {
+  expect(
+    (
+      await page.request.post(`${url}maps/reset?scenario=imperial-army`)
+    ).status(),
+  ).toBe(204);
   if (label.startsWith("trial")) {
     await page.route("**/asset-pack/buildings/**", (route) =>
       route.fulfill({ status: 404 }),
@@ -28,7 +33,7 @@ export async function startupProof(page: Page, url: string, label: string) {
     };
     document.addEventListener("DOMContentLoaded", observe, { once: true });
   });
-  await page.goto(`${url}?play=1#zoom=.4&renderer=webgpu`);
+  await page.goto(`${url}?play=1#x=98&y=134&zoom=.4&renderer=webgpu`);
   await expect
     .poll(() => page.evaluate(() => Reflect.get(window, "firstLandscapeMs")), {
       timeout: 90_000,

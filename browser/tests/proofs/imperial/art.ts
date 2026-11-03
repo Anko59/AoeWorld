@@ -10,12 +10,13 @@ export async function imperialArtProof(
   url: string,
   startup: boolean,
 ) {
+  const recordingStarted = Date.now();
   expect(
     (
       await page.request.post(`${url}maps/reset?scenario=imperial-army`)
     ).status(),
   ).toBe(204);
-  await page.goto(`${url}?play=1#zoom=.4&renderer=webgpu`);
+  await page.goto(`${url}?play=1#x=98&y=134&zoom=.4&renderer=webgpu`);
   const scene = page.locator("#scene");
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 60_000,
@@ -105,6 +106,7 @@ export async function imperialArtProof(
       `../.cache/imperial-art/shots/${name}.json`,
       JSON.stringify(
         {
+          recordingSeconds: (Date.now() - recordingStarted) / 1000,
           health: await (await page.request.get(`${url}health`)).json(),
           age: await page.locator("#age").textContent(),
           actors: await actors(),
