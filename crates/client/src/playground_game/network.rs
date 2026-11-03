@@ -88,6 +88,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.order_feedback.clear();
         client.village.pending_training.clear();
         client.sent_region = None;
+        client.subscribe_after = 0.0;
         client.connection_id
     };
     let opened = Rc::downgrade(&shared);
@@ -408,6 +409,9 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 if result != aoe_protocol::CommandResult::Accepted {
                     client.last_error = Some(client.status.clone());
                 }
+            }
+            Ok(GameplayServerMessage::Error { code: 429, .. }) => {
+                retry_refused_view(&mut client, now());
             }
             Ok(GameplayServerMessage::Error { message, .. }) => {
                 client.status = format!("server error: {message}");

@@ -44,6 +44,19 @@ fn contact_scene() -> PreparedScene {
 }
 
 #[wasm_bindgen_test]
+async fn a_refused_view_is_sent_again_after_the_rate_window() {
+    let mut client = client(&contact_scene()).await;
+    client.sent_region = Some(aoe_core::TileRect::from_xywh(0, 0, 4, 4));
+    client.subscribe_after = 0.0;
+
+    super::super::super::retry_refused_view(&mut client, 1_000.0);
+
+    assert_eq!(client.sent_region, None);
+    assert_eq!(client.subscribe_after, 2_100.0);
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
 fn review_f1_passable_center_contacts_source_ground_below_the_cliff() {
     let scene = contact_scene();
     assert_eq!(scene.height([282.5, 603.5]), Some(78.5));
@@ -185,7 +198,7 @@ pub(super) async fn client_with_backend(scene: &PreparedScene, backend: Option<&
         token: None,
         revision: 0,
         sent_region: None,
-        last_subscribe: 0.0,
+        subscribe_after: 0.0,
         next_sequence: 1,
         order_feedback: Default::default(),
         units: BTreeMap::from([(
