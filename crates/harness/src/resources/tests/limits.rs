@@ -23,5 +23,14 @@ fn containers_have_memory_swap_and_relative_cpu_limits_without_cpu_quotas() {
     assert!(args.iter().any(|arg| arg.starts_with("--memory-swap=")));
     assert!(args.iter().any(|arg| arg.starts_with("--cpu-shares=")));
     assert!(!args.iter().any(|arg| arg.starts_with("--cpus")));
-    assert!(args.iter().any(|arg| arg == "CARGO_BUILD_JOBS=1"));
+    let compiler_jobs: u32 = args
+        .iter()
+        .find_map(|arg| arg.strip_prefix("CARGO_BUILD_JOBS="))
+        .expect("explicit compiler parallelism")
+        .parse()
+        .unwrap();
+    assert!(
+        compiler_jobs >= 4,
+        "global compiler parallelism must not serialize cold builds"
+    );
 }

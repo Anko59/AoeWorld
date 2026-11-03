@@ -78,8 +78,8 @@ ignores it); they do not suspend a real machine, so the timing of a real resume 
 
 `make load-status` shows MemAvailable and the live long-job holder. Short jobs
 start without an exclusive lock. Each workload container uses the shared caps in
-`gates/container.args` (4 GiB RAM including swap, CPU shares 1024, one Cargo
-compiler job). There is no CPU quota. A lightweight std-only bootstrap has a
+`gates/container.args` (4 GiB RAM including swap, CPU shares 1024, six Cargo
+compiler jobs). There is no CPU quota. A lightweight std-only bootstrap has a
 256 MiB cap. Before starting a workload container the host checks MemAvailable:
 below 3 GiB it refuses immediately with the observed value and floor. This is
 an observation at admission, not a reservation against other processes.
