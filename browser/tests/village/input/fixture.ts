@@ -80,12 +80,14 @@ export async function inputFixture(
     cargo?: number;
     player?: number[];
     military?: boolean;
+    originalArt?: boolean;
+    url?: string;
   } = {},
 ) {
   const navy =
     options.cargo === undefined ? undefined : { cargo: options.cargo };
   const commands: number[][] = [];
-  await gameAssets(page, true);
+  if (!options.originalArt) await gameAssets(page, true);
   if (cursorCatalog) {
     const art = {
       page: "fixture-color.png",
@@ -220,7 +222,7 @@ export async function inputFixture(
   });
   const preference = renderer === "canvas2d" ? "canvas" : renderer;
   await page.goto(
-    `/?play=1${options.query ?? ""}#x=8192.5&y=8192.5&zoom=.6&renderer=${preference}`,
+    `${options.url ?? "/"}?play=1${options.query ?? ""}#x=8192.5&y=8192.5&zoom=.6&renderer=${preference}`,
   );
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 60_000,

@@ -71,3 +71,37 @@ async fn dat_building_and_corpse_geometry_keep_signed_anchors_and_half_scale_bri
         }
     }
 }
+
+#[wasm_bindgen_test]
+async fn overlay_without_drawable_fire_keeps_the_base_damage_animation() {
+    let mut base = pack_fixture([("synthetic-fire".into(), 2, false)]);
+    let part = serde_json::json!({"graphic_id":1,"slp_id":1,"source":"synthetic-fire",
+        "available":true,"frames":2,"angles":1,"primary":false,"frame_rate":0.05,
+        "replay_delay":0.0,"offset":[-12,-40],"misplacement":[0.0,0.0],"layer":20});
+    let recipe = |parts: serde_json::Value| {
+        serde_json::json!({"unit_id":70,"footprint":[2.0,2.0],
+        "foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],"parts":[],
+        "construction":[],"states":[],"damage":[{"damage_percent":25,"apply_mode":0,"parts":parts}]})
+    };
+    base["buildings"] = serde_json::json!([recipe(serde_json::json!([part]))]);
+    compile(&mut base);
+    let mut extra = pack_fixture([]);
+    extra["buildings"] = serde_json::json!([recipe(serde_json::json!([]))]);
+    compile(&mut extra);
+    let _fetch = FetchFixture::install(&extra);
+    js_sys::Function::new_with_args("data", "window.fetch=async()=>new Response(data)")
+        .call1(&JsValue::NULL, &JsValue::from_str(&extra.to_string()))
+        .unwrap();
+    let mut manifest: Manifest = serde_json::from_value(base).unwrap();
+    manifest.buildings = recipes::decode(&manifest.building_data, &manifest.frames).unwrap();
+    building_sprites::overlay(&mut manifest).await.unwrap();
+    let damage = &manifest.buildings[0].damage[0];
+    assert_eq!(
+        damage.parts.len(),
+        1,
+        "a particle-only overlay must retain the drawable base flame"
+    );
+    assert_eq!(damage.parts[0].record, Some(0));
+    assert_eq!(damage.parts[0].offset, [-12, -40]);
+    assert_eq!(damage.parts[0].frames, 2);
+}
