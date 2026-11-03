@@ -405,6 +405,14 @@ fn real_de_building_catalog_retains_every_spawned_recipe() {
     }
     let catalog = de::buildings::resolve(&root).unwrap();
     assert_eq!(catalog.recipes.len(), aoe_assets::catalog::MAX_COMPOSITIONS);
+    // Town Center slices share the building origin; gate towers are displaced.
+    for id in [109, 71, 141] {
+        let tc = catalog.recipes.iter().find(|b| b.unit_id == id).unwrap();
+        assert!(tc.parts.len() >= 4, "Town Center {id}");
+        assert!(tc.parts.iter().all(|p| p.misplacement == [0.0; 2]), "{id}");
+    }
+    let gate = catalog.recipes.iter().find(|b| b.unit_id == 64).unwrap();
+    assert!(gate.parts.iter().any(|p| p.misplacement != [0.0; 2]));
     let mut counts = std::collections::BTreeMap::new();
     for source in &catalog.sources {
         let path = root

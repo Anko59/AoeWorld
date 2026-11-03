@@ -92,13 +92,20 @@ impl Resolver<'_> {
         }
         Ok(out)
     }
+    /// Shadows first, then annexes from back to front; ties keep DAT order.
+    fn assembled(&mut self, id: i16, head: Option<&str>) -> Result<Vec<dat::BuildingPart>, Error> {
+        let mut ordered = Vec::new();
+        self.annexes(id, head, [0.0; 2], &mut BTreeSet::new(), &mut ordered)?;
+        ordered.sort_by(|a, b| a.1.layer.cmp(&b.1.layer).then(a.0.total_cmp(&b.0)));
+        Ok(ordered.into_iter().map(|(_, part)| part).collect())
+    }
     fn annexes(
         &mut self,
         id: i16,
         head: Option<&str>,
         position: [f32; 2],
         seen: &mut BTreeSet<i16>,
-        out: &mut Vec<dat::BuildingPart>,
+        out: &mut Vec<(f32, dat::BuildingPart)>,
     ) -> Result<(), Error> {
         if self.disabled.contains(&id) {
             return Ok(());
@@ -111,19 +118,33 @@ impl Resolver<'_> {
             .get(&id)
             .ok_or_else(|| invalid("DE building", 0, format!("missing annex {id}")))?;
         let mut graphic = unit.standing;
-        if let Some(head) = head
-            && let Some(g) = self.graphics.get(&graphic)
-            && let Some(p) = g.parts.iter().find(|p| p.graphic == graphic)
-            && let Some(file) = family(head, &p.animation.file)
+        // DE slices a multi-piece building (Town Center main/back/center/front)
+        // from one sprite: each piece's hotspot is already the building origin
+        // and its annex offset only orders depth. An annex outside the head's
+        // age family (a gate's corner towers) is a separate sprite that the
+        // offset places.
+        let family_file = head.and_then(|head| {
+            let g = self.graphics.get(&graphic)?;
+            let p = g.parts.iter().find(|p| p.graphic == graphic)?;
+            family(head, &p.animation.file)
+        });
+        let slice = family_file.is_some();
+        if let Some(file) = &family_file
             && let Some((&found, _)) = self.graphics.iter().find(|(_, g)| {
                 g.parts
                     .iter()
-                    .any(|p| p.animation.file == file && p.x == 0 && p.y == 0)
+                    .any(|p| p.animation.file == *file && p.x == 0 && p.y == 0)
             })
         {
             graphic = found;
         }
-        out.extend(self.parts(graphic, position)?);
+        let depth = position[1] - position[0];
+        for mut part in self.parts(graphic, position)? {
+            if slice {
+                part.misplacement = [0.0; 2];
+            }
+            out.push((depth, part));
+        }
         if let Some(b) = &unit.building {
             for a in &b.annexes {
                 self.annexes(
@@ -200,14 +221,7 @@ pub fn resolve(install: &Path) -> Result<Catalog, Error> {
             .get(&u.standing)
             .and_then(|g| g.parts.iter().find(|p| p.graphic == u.standing))
             .map(|p| p.animation.file.as_str());
-        let mut parts = Vec::new();
-        r.annexes(id, head, [0.0; 2], &mut BTreeSet::new(), &mut parts)?;
-        parts.sort_by(|a, b| {
-            a.layer.cmp(&b.layer).then_with(|| {
-                (a.misplacement[1] - a.misplacement[0])
-                    .total_cmp(&(b.misplacement[1] - b.misplacement[0]))
-            })
-        });
+        let mut parts = r.assembled(id, head)?;
         if let Some(p) = parts
             .iter_mut()
             .find(|p| p.graphic_id == i32::from(u.standing) && p.misplacement == [0.0; 2])
@@ -287,3 +301,5 @@ pub fn resolve(install: &Path) -> Result<Catalog, Error> {
         sources: r.sources,
     })
 }
+#[cfg(test)]
+mod tests;
