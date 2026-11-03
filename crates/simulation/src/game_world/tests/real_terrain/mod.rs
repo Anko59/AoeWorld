@@ -10,6 +10,7 @@ mod general_followers;
 mod general_opposed;
 mod landscapes;
 mod metrics;
+mod recovery_tests;
 mod terrain;
 mod unreachable_enemy;
 use metrics::{measure, reference_ticks};

@@ -64,8 +64,13 @@ impl GameWorld {
                         )
                     })
                     .map(|v| v.id);
-                if let Some(to) = if siege { building.or(first) } else { building } {
-                    let _ = self.issue_attack(u.player, v.id, to);
+                if let Some(to) = if siege { building.or(first) } else { building }
+                    && matches!(
+                        self.issue_attack(u.player, v.id, to),
+                        Err(crate::EconomyError::NoAttackPosition)
+                    )
+                {
+                    self.resume_general_fighter(u.id, v.id, changed, work);
                 }
             } else {
                 continue;
