@@ -55,9 +55,17 @@ impl GameWorld {
                     }
                 })
                 .sum::<u64>();
+        let pace = army
+            .iter()
+            .map(|v| self.movement_speed(v.kind, v.player))
+            .min_by(|a, b| {
+                (u128::from(a.0) * u128::from(b.1)).cmp(&(u128::from(b.0) * u128::from(a.1)))
+            })
+            .unwrap_or((0, 1));
         let Some(a) = self.economy.generals.armies.get_mut(&u.id) else {
             return;
         };
+        a.pace = pace;
         let old_state = a.state;
         let hurt = u.hp * 3 < u.max_hp
             || army.iter().map(|v| u64::from(v.hp)).sum::<u64>() * 3

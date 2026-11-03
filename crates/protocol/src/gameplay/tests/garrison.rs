@@ -247,12 +247,12 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
     };
 
     u.general = Some(crate::GeneralStatus {
-        army_size: 100,
+        army_size: 200,
         state: crate::GeneralState::Retreating,
         training: true,
         queued: 3,
         mix: [35, 30, 20, 10, 5],
-        counts: [40, 30, 20, 5, 5],
+        counts: [200, 0, 0, 0, 0],
     });
     assert_eq!(u.for_viewer(PlayerId(0)), u);
     let foreign = u.for_viewer(PlayerId(1));
@@ -270,16 +270,16 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
     // GeneralState gained Idle at index 0 (in place, no migration): Retreating is now 3.
     // Train flag, queued recruits, five mix shares, five role counts follow.
     assert!(bytes.ends_with(&[
-        0, 0, 1, 100, 3, 1, 3, 35, 30, 20, 10, 5, 40, 30, 20, 5, 5, 0, 0
+        0, 0, 1, 200, 1, 3, 1, 3, 35, 30, 20, 10, 5, 200, 1, 0, 0, 0, 0, 0, 0
     ]));
     assert_eq!(decode_server(&bytes).unwrap(), message(u));
     u.general.as_mut().unwrap().state = crate::GeneralState::Idle;
     let idle = encode_server(&message(u)).unwrap();
     assert!(idle.ends_with(&[
-        0, 0, 1, 100, 0, 1, 3, 35, 30, 20, 10, 5, 40, 30, 20, 5, 5, 0, 0
+        0, 0, 1, 200, 1, 0, 1, 3, 35, 30, 20, 10, 5, 200, 1, 0, 0, 0, 0, 0, 0
     ]));
     assert_eq!(decode_server(&idle).unwrap(), message(u));
-    u.general.as_mut().unwrap().army_size = 101;
+    u.general.as_mut().unwrap().army_size = 201;
     assert!(encode_server(&message(u)).is_err());
     u.general = None;
     u.home_castle = None;

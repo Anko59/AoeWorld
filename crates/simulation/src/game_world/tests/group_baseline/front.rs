@@ -187,7 +187,8 @@ fn attack_move_front_engages_alone_while_the_rest_march_on() {
     assert_eq!(front.first_engage, Some(81));
     assert!(front.max_engage_distance <= 400, "{front:?}");
     // PR 10 legal contact engages 19 members by five seconds.
-    assert_eq!((front.at_2s, front.at_5s), ((10, 14, 14, 0), (19, 5, 5, 0)));
+    // Proportional cohesion: 18 by five seconds (19 under the 7/8 hold).
+    assert_eq!((front.at_2s, front.at_5s), ((10, 14, 14, 0), (18, 6, 6, 0)));
     // PR 10 approach strikes use the full one-tile reach without false poses.
     assert_eq!(
         (front.pose_out_of_reach_ticks, front.max_pose_distance),
@@ -195,9 +196,9 @@ fn attack_move_front_engages_alone_while_the_rest_march_on() {
     );
     assert!(front.max_hit_distance <= 100, "{front:?}");
     assert!(front.group_pace * 100 >= front.speed * 90, "{front:?}");
-    // The 7/8 cohesion pace clears three ticks earlier; sight, reach,
-    // participation, moving pace and all-survivor assertions above stay fixed.
-    assert_eq!((front.cleared, front.engaged_total), (Some(338), 24));
+    // Proportional cohesion clears at tick 319 (338 under the 7/8 hold); sight,
+    // reach, participation, moving pace and all-survivor assertions stay fixed.
+    assert_eq!((front.cleared, front.engaged_total), (Some(319), 24));
     // Every one of the 24 survives and stands at its slot.
     assert!(ids.iter().all(|&id| {
         w.unit(id).is_some_and(|u| u.hp > 0 && !u.moving)

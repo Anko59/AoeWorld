@@ -55,10 +55,11 @@ line). It uses the shared container resource policy and fails if the filter sele
 If another shared-machine cleanup removes active incremental files, use the
 command prefix `CARGO_INCREMENTAL=0`; Make forwards it through Docker and nested
 slot commands without changing the target directory or the checks.
-On a disk-constrained shared checkout, `CARGO_PROFILE_DEV_DEBUG=0` and
-`CARGO_PROFILE_TEST_DEBUG=0` omit compiler debug symbols while preserving
-assertions, overflow checks and the same test selection. Make forwards these
-optional Cargo settings too; use the normal target directory.
+Workspace test builds omit compiler debug symbols to fit the shared 4 GiB
+container cap, preserving assertions, overflow checks and the same test selection.
+On a disk-constrained shared checkout, `CARGO_PROFILE_DEV_DEBUG=0` also omits
+development symbols. Make forwards these optional Cargo profile settings;
+use the normal target directory.
 
 Before committing, use `make fmt-check`, `make structure-check`, `make lint`,
 focused tests for each touched crate, and `make perf-wasm-cap` for client changes.

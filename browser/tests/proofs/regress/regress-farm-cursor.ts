@@ -4,7 +4,7 @@ import {
   inputFixture,
   screen,
   selectWorker,
-} from "../village/input/fixture.js";
+} from "../../village/input/fixture.js";
 
 export async function regressFarmCursorProof(page: Page, url: string) {
   const commands = await inputFixture(

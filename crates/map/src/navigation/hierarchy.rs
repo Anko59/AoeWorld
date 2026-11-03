@@ -313,10 +313,13 @@ impl Ground<'_> {
                 if inside(key, to) {
                     continue;
                 }
-                // On a uniform-height chunk a side crossing always has a
-                // cardinal equivalent through its local corner. Corner-to-
-                // corner chunk crossings still need their exact check.
-                if grid.uniform_height && (chunk_of(to).0 == key.0 || chunk_of(to).1 == key.1) {
+                // Flat land side crossings have a cardinal equivalent, but
+                // a diagonal bridge's side cells may be water. Keep its exact
+                // portal even when the terrain heights are uniform.
+                if grid.uniform_height
+                    && (chunk_of(to).0 == key.0 || chunk_of(to).1 == key.1)
+                    && self.overlay.bridge_edge(from, to) != Some(true)
+                {
                     continue;
                 }
                 if let Some(cost) = self.diagonal_transition(from, to)? {

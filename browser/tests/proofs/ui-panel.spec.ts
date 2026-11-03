@@ -4,12 +4,13 @@ import { test } from "../../server.js";
 import { forceWebGl } from "../rendering/backends.js";
 import { bundleProof } from "./bundle.js";
 import { castleProof } from "./castle.js";
+import { generalRiverProof, type RiverRecording } from "./general-river.js";
 import { generalProof } from "./general.js";
 import { generalAppearanceProof } from "./general-appearance.js";
 import { siegeProof } from "./siege.js";
-import { regressFireProof } from "./regress-fire.js";
-import { regressPickingProof } from "./regress-picking.js";
-import { regressFarmCursorProof } from "./regress-farm-cursor.js";
+import { regressFireProof } from "./regress/regress-fire.js";
+import { regressPickingProof } from "./regress/regress-picking.js";
+import { regressFarmCursorProof } from "./regress/regress-farm-cursor.js";
 import { pressureProof } from "./pressure.js";
 import { townCenterProof } from "./town-center.js";
 import { centerVillage } from "../village/fixtures/resources.js";
@@ -23,6 +24,7 @@ test("local original panel proof with real selection and training", async ({
     (text) =>
       JSON.parse(text) as {
         phase: string;
+        river?: RiverRecording;
         url: string;
         renderer?: "webgpu" | "webgl2";
         arenaToken?: string;
@@ -48,6 +50,11 @@ test("local original panel proof with real selection and training", async ({
   }
   await page.setViewportSize({ width: 1280, height: 720 });
   if (config.renderer !== "webgpu") await forceWebGl(page);
+  if (config.phase === "general-river") {
+    if (!config.river) throw new Error("River recording setup missing");
+    await generalRiverProof(page, config.url, config.river);
+    return;
+  }
   if (config.phase === "de-town-center") {
     if (!config.arenaToken) throw new Error("Local arena token required");
     await townCenterProof(

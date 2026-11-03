@@ -157,11 +157,11 @@ fn slider_orders_are_owner_and_range_checked() {
 fn at_capacity_training_stops_until_the_button_is_pressed_again() {
     let (mut w, _) = setup();
     let (barracks, range) = production(&mut w);
-    let recruits: Vec<_> = (0..100)
+    let recruits: Vec<_> = (0..200)
         .map(|n| soldier(&mut w, UnitKind::Militia, 100 + n % 10, 100 + n / 10))
         .collect();
     let g = soldier(&mut w, UnitKind::General, 105, 98);
-    assert_eq!(w.general_status(g).unwrap().army_size, 100);
+    assert_eq!(w.general_status(g).unwrap().army_size, 200);
     w.issue_general_training(PlayerId(0), g, true).unwrap();
     decide(&mut w);
     assert!(
@@ -177,8 +177,10 @@ fn at_capacity_training_stops_until_the_button_is_pressed_again() {
     assert!(queued(&w, barracks).is_empty() && queued(&w, range).is_empty());
     w.issue_general_training(PlayerId(0), g, true).unwrap();
     decide(&mut w);
-    // The 99 Militia leave archers furthest below their share.
-    assert!(!queued(&w, range).is_empty());
+    // Ten infantry offices remain: one casualty leaves an infantry vacancy,
+    // rather than creating an eleventh office for a new archer sergeant.
+    assert!(!queued(&w, barracks).is_empty());
+    assert!(queued(&w, range).is_empty());
 }
 
 #[test]

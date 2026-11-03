@@ -205,7 +205,7 @@ pub(super) fn present(client: &Client) {
                 aoe_protocol::GeneralState::Fighting => "fighting",
                 aoe_protocol::GeneralState::Retreating => "retreating",
             };
-            label = format!("General · {}/100 soldiers · {state}", g.army_size);
+            label = format!("General · {} soldiers · {state}", g.army_size);
         } else if u.commanded_by.is_some() {
             label = "Commanded by General".into();
         } else if u.managed_by.is_some() {
