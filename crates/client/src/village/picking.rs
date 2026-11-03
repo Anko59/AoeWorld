@@ -18,7 +18,8 @@ pub(in super::super) fn unit(client: &Client, point: ScreenPoint) -> Option<Enti
 
 fn target(client: &Client, point: ScreenPoint, units_only: bool) -> Option<(EntityId, bool, bool)> {
     if crate::playground::game::strategic::active(client) {
-        return None;
+        return crate::playground::game::strategic::unit(client, point)
+            .map(|id| (id, false, client.units[&id].player != owner(client)));
     }
     let scene = map::scene::prepare(client);
     let terrain_depth = aoe_rendering::surface_depth_at(&scene.triangles, point);

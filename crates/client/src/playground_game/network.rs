@@ -295,13 +295,25 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             }
             Ok(GameplayServerMessage::Tick { .. }) => {}
             Ok(GameplayServerMessage::ResourceState(state)) => {
-                if state.subscription_revision == client.revision
-                    && !client.resources.apply_at(state, super::now())
-                {
-                    reconnect(
-                        &mut client,
-                        "resource state out of sync; reconnect required",
-                    );
+                if state.subscription_revision == client.revision {
+                    let begin = state.snapshot_page.is_none_or(|(offset, _)| offset == 0);
+                    let complete = state.snapshot_page.is_none_or(|(offset, total)| {
+                        offset as usize + state.changes.len() == total as usize
+                    });
+                    let retired: Vec<_> = state
+                        .changes
+                        .iter()
+                        .filter(|c| c.remaining == 0)
+                        .flat_map(|c| [f64::from(c.id as u32), f64::from((c.id >> 32) as u32)])
+                        .collect();
+                    if client.resources.apply_at(state, super::now()) {
+                        super::strategic::strategic_depleted(&retired, begin, complete);
+                    } else {
+                        reconnect(
+                            &mut client,
+                            "resource state out of sync; reconnect required",
+                        );
+                    }
                 }
             }
             Ok(GameplayServerMessage::FogState(state)) => {

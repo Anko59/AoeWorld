@@ -44,3 +44,28 @@ fn the_train_button_and_each_slider_become_general_commands() {
     );
     assert_eq!(panel_command(10, 9 * 128, mix), None, "no such role");
 }
+
+#[wasm_bindgen_test]
+fn strategic_armies_do_not_disclose_foreign_mix_stance_or_orders() {
+    use crate::playground::game::strategic::army_record;
+    use aoe_core::PlayerId;
+    use aoe_protocol::{CombatStance, UnitKind, UnitTask};
+    let mut unit = super::workers::villager(UnitTask::Moving);
+    unit.kind = UnitKind::General;
+    unit.general = Some(status());
+    unit.stance = CombatStance::Defensive;
+    let own = army_record(&unit, PlayerId(0), true, Some([30.5, 20.5])).unwrap();
+    assert_eq!(own[5], 42.0);
+    assert_eq!(&own[8..10], &[30.5, 20.5]);
+    assert_eq!(&own[10..], &[20.0, 10.0, 6.0, 4.0, 2.0]);
+    let foreign = army_record(&unit, PlayerId(1), false, Some([30.5, 20.5])).unwrap();
+    assert_eq!(foreign[5], -1.0);
+    assert_eq!(foreign[7], -1.0);
+    assert!(foreign[8].is_nan() && foreign[9].is_nan());
+    assert_eq!(&foreign[10..], &[0.0; 5]);
+    unit.hp = 0;
+    assert!(army_record(&unit, PlayerId(0), false, None).is_none());
+    unit.hp = 25;
+    unit.kind = UnitKind::Villager;
+    assert!(army_record(&unit, PlayerId(0), false, None).is_none());
+}

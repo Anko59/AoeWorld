@@ -28,6 +28,7 @@ fn starting_nodes_are_visible_without_chunks_and_follow_depletion_and_resync() {
         ..state.clone()
     }));
     assert_eq!(cache.starting_nodes().count(), 0);
+    assert_eq!(cache.starting_records().collect::<Vec<_>>(), vec![node]);
     cache.clear();
     assert!(cache.apply(state));
     assert_eq!(cache.starting_nodes().collect::<Vec<_>>(), vec![node]);

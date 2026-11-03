@@ -29,7 +29,8 @@ export function initDevTools() {
     if (event.key.toLowerCase() === 'l') {
       event.preventDefault();
       toggle();
-    } else if (event.key === 'F3') {
+    } else if ((event.key === 'F3' && !['map', 'markers'].includes(document.documentElement.dataset.lod))
+      || (event.key === 'F8' && ['map', 'markers'].includes(document.documentElement.dataset.lod))) {
       event.preventDefault();
       performance.enable(!performance.enabled);
     }

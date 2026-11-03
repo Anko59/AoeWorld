@@ -161,6 +161,7 @@ export function initNavigation() {
     stopPanning();
     view.reset();
     view.actors([]);
+    strategic.reset();
     strategic.terrain(null);
     pending = [NaN, NaN];
     request?.abort();
@@ -228,6 +229,7 @@ export function initNavigation() {
 
   window.aoeNavigation = {
     clearGroups() {
+      strategic.reset();
       groups.forEach(group => group.clear());
       groupTap = null;
       groupPositions.clear();

@@ -43,7 +43,8 @@ export function initPerformance() {
       state.frames++;
       if (now - updated >= 250) {
         const cpu = state.cpuMs;
-        overlay.textContent = `Frame: ${state.frameMs.toFixed(2)} ms\nLOD: ${document.getElementById('scene')?.dataset.lod ?? 'sprites'}\nCPU decode: ${cpu.decode.toFixed(2)} ms\nCPU upload: ${cpu.upload.toFixed(2)} ms\nCPU draw: ${cpu.draw.toFixed(2)} ms\nCPU UI: ${cpu.ui.toFixed(2)} ms\nGPU: ${state.gpuMs === null ? state.gpuStatus : state.gpuMs.toFixed(2) + ' ms'}\nF3: hide`;
+        const lod = document.getElementById('scene')?.dataset.lod ?? 'sprites';
+        overlay.textContent = `Frame: ${state.frameMs.toFixed(2)} ms\nLOD: ${lod}\nCPU decode: ${cpu.decode.toFixed(2)} ms\nCPU upload: ${cpu.upload.toFixed(2)} ms\nCPU draw: ${cpu.draw.toFixed(2)} ms\nCPU UI: ${cpu.ui.toFixed(2)} ms\nGPU: ${state.gpuMs === null ? state.gpuStatus : state.gpuMs.toFixed(2) + ' ms'}\n${lod === 'sprites' ? 'F3' : 'F8'}: hide`;
         updated = now;
       }
     } else if (section <= 3) {
