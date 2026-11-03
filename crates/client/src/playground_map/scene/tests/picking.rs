@@ -402,3 +402,16 @@ async fn a_tree_rectangle_behind_an_enemy_building_does_not_hide_it() {
     );
     client.canvas.remove();
 }
+
+#[wasm_bindgen_test]
+async fn building_portrait_removal_keeps_the_remaining_building_selected() {
+    let mut client = fixture(1.0).await;
+    client.village.buildings.push(building(9, 103, 103));
+    client.selected.building(EntityId(8));
+    client.selected.buildings.push(EntityId(9));
+    crate::playground::game::village::selection::portrait(&mut client, EntityId(8), true, false);
+    assert_eq!(client.selected.building_id, Some(EntityId(9)));
+    assert_eq!(client.selected.buildings, [EntityId(9)]);
+    assert!(client.selected.units.is_empty());
+    client.canvas.remove();
+}

@@ -134,3 +134,36 @@ fn building_group_selection_is_owned_on_screen_and_exclusive_with_units_and_reso
     selected.resource(42);
     assert!(selected.buildings.is_empty());
 }
+
+#[wasm_bindgen_test]
+fn portrait_clicks_follow_the_panel_modifiers() {
+    use super::super::selection::narrow_by_portrait;
+    let kinds = |id: EntityId| match id.0 {
+        0 => Some(UnitKind::Scout),
+        2 | 3 => Some(UnitKind::Villager),
+        _ => None,
+    };
+    let group = [EntityId(0), EntityId(2), EntityId(3)];
+    let ids = |v: Vec<EntityId>| v.into_iter().map(|id| id.0).collect::<Vec<_>>();
+    assert_eq!(
+        ids(narrow_by_portrait(&group, EntityId(2), kinds, false, false)),
+        [2]
+    );
+    assert_eq!(
+        ids(narrow_by_portrait(&group, EntityId(0), kinds, true, false)),
+        [2, 3]
+    );
+    assert_eq!(
+        ids(narrow_by_portrait(&group, EntityId(2), kinds, false, true)),
+        [2, 3]
+    );
+    assert_eq!(
+        ids(narrow_by_portrait(&group, EntityId(2), kinds, true, true)),
+        [0]
+    );
+    // An unknown clicked kind leaves a Ctrl-selection untouched.
+    assert_eq!(
+        ids(narrow_by_portrait(&group, EntityId(9), kinds, false, true)),
+        [0, 2, 3]
+    );
+}
