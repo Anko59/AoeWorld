@@ -207,7 +207,7 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
                 } else {
                     0
                 },
-                elevation_meters: map::elevation_at_world(client, position),
+                elevation_meters: map::elevation_at_world(client, position) as f32,
             });
         }
     }

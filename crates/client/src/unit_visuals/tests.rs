@@ -32,3 +32,30 @@ fn the_first_frame_is_held_between_swings_before_a_shot_and_after_a_pause() {
     // A shot newer than the clock (clock skew) holds the release frame.
     assert_eq!(clock(Some(100), 99.0), 350.0);
 }
+
+#[wasm_bindgen_test]
+fn imperial_promotions_use_their_own_pose_and_corpse() {
+    use super::{decay_pair, military_poses};
+    use aoe_protocol::UnitKind::*;
+    for (kind, older) in [
+        (TwoHandedSwordsman, LongSwordsman),
+        (Champion, TwoHandedSwordsman),
+        (Halberdier, Pikeman),
+        (Arbalester, Crossbowman),
+        (Cavalier, Knight),
+        (Paladin, Cavalier),
+        (Hussar, LightCavalry),
+        (CappedRam, BatteringRam),
+        (SiegeRam, CappedRam),
+        (Onager, Mangonel),
+    ] {
+        let poses = military_poses(kind).unwrap();
+        let old = military_poses(older).unwrap();
+        for action in 0..4 {
+            assert_ne!(poses[action], old[action], "{kind:?}, action {action}");
+        }
+        let (die, decay) = decay_pair(poses[3]).expect("native corpse lifecycle");
+        assert_eq!(die, poses[3]);
+        assert_ne!(die, decay);
+    }
+}

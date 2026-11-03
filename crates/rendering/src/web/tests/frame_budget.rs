@@ -1,6 +1,31 @@
 use super::*;
 
 #[wasm_bindgen_test]
+fn gameplay_resources_fit_core_webgpu_default_limits_with_native_art() {
+    let limits = wgpu::Limits::default();
+    assert!(crate::GAME_ATLAS_SIDE <= limits.max_texture_dimension_2d);
+    assert!(crate::MAX_GAME_ATLAS_PAGES <= limits.max_texture_array_layers);
+    // Runtime residency is 512 MiB, with one previous texture during growth.
+    // Each allocation and the reusable two-plane upload texture are D2 arrays.
+    assert!(32 <= limits.max_texture_array_layers);
+    assert!(instance_buffer::MAX_BUFFER_BYTES <= limits.max_buffer_size);
+    assert!(std::mem::size_of::<Sprite>() as u32 <= limits.max_vertex_buffer_array_stride);
+    assert!(7 <= limits.max_vertex_attributes);
+    assert!(1 <= limits.max_vertex_buffers);
+    assert!(2 <= limits.max_bind_groups);
+    assert!(3 <= limits.max_bindings_per_bind_group);
+    assert!(2 <= limits.max_sampled_textures_per_shader_stage);
+    assert!(1 <= limits.max_samplers_per_shader_stage);
+    assert!(2 <= limits.max_color_attachments);
+    assert!(8 <= limits.max_color_attachment_bytes_per_sample);
+    // The sprite and contour pipelines bind no storage or uniform buffers.
+    assert_eq!(
+        instance_buffer::MAX_CAPACITY * std::mem::size_of::<Sprite>(),
+        (instance_buffer::MAX_BUFFER_BYTES / 112 * 112) as usize
+    );
+}
+
+#[wasm_bindgen_test]
 async fn outstanding_frame_budget_skips_the_third_frame_then_resumes_after_completion() {
     let mut renderer = terrain_blend::surface_renderer().await;
     let first = renderer.render_sprites(&[solid_sprite()]).unwrap();

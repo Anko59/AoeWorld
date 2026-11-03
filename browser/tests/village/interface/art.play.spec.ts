@@ -25,6 +25,11 @@ for (const available of [false, true]) {
         return route.fulfill({ status: 404, body: "No local UI catalog" });
       }
       if (route.request().url().endsWith("interface.json") && available) {
+        if (route.request().url().endsWith("buildings/interface.json")) {
+          return route.fulfill({
+            json: { units: { 109: art }, technologies: { 22: art, 103: art } },
+          });
+        }
         return route.fulfill({
           json: {
             units: { 83: art, 109: art },
@@ -67,6 +72,12 @@ for (const available of [false, true]) {
       await expect(
         page.locator('#research-loom [data-ui-id="22"] .original-icon'),
       ).toBeVisible();
+      await expect(
+        page.locator("#research-loom .original-icon image"),
+      ).toHaveAttribute("href", "/asset-pack/buildings/ui-test.svg");
+      await expect(
+        page.locator("#research-imperial-age .original-icon image"),
+      ).toHaveAttribute("href", "/asset-pack/buildings/ui-test.svg");
       await expect(
         page.locator('#top-bar [data-ui-id="wood"] .original-icon'),
       ).toBeVisible();

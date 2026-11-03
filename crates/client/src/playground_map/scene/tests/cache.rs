@@ -80,24 +80,39 @@ async fn stationary_wall_corner_projections_reuse_the_prepared_foundation_key() 
         !Rc::ptr_eq(&foundation, &moved),
         "replacement positions invalidate ground"
     );
+    buildings[0].age = aoe_protocol::Age::Imperial;
+    replace_buildings(&mut client, buildings.clone());
+    let aged = prepare(&client);
+    assert!(
+        !Rc::ptr_eq(&moved, &aged),
+        "an observed age update invalidates the construction identity"
+    );
     buildings.clear();
     replace_buildings(&mut client, buildings);
     assert!(
-        !Rc::ptr_eq(&moved, &prepare(&client)),
+        !Rc::ptr_eq(&aged, &prepare(&client)),
         "removal invalidates ground"
     );
 }
 
 #[wasm_bindgen_test]
 fn building_family_uses_its_observed_age_including_construction() {
-    for (kind, dark, feudal, castle) in [
-        (BuildingKind::TownCenter, 109, 71, 141),
-        (BuildingKind::House, 70, 463, 464),
-        (BuildingKind::Mill, 68, 129, 130),
-        (BuildingKind::LumberCamp, 562, 563, 564),
-        (BuildingKind::MiningCamp, 584, 585, 586),
-        (BuildingKind::Barracks, 12, 498, 132),
-        (BuildingKind::Dock, 45, 133, 47),
+    for (kind, ids) in [
+        (BuildingKind::TownCenter, [109, 71, 141, 142]),
+        (BuildingKind::House, [70, 463, 464, 465]),
+        (BuildingKind::Mill, [68, 129, 130, 131]),
+        (BuildingKind::LumberCamp, [562, 563, 564, 565]),
+        (BuildingKind::MiningCamp, [584, 585, 586, 587]),
+        (BuildingKind::Barracks, [12, 498, 132, 20]),
+        (BuildingKind::Dock, [45, 133, 47, 51]),
+        (BuildingKind::ArcheryRange, [87, 87, 10, 14]),
+        (BuildingKind::Stable, [101, 101, 86, 153]),
+        (BuildingKind::Blacksmith, [103, 103, 18, 19]),
+        (BuildingKind::Market, [84, 84, 116, 137]),
+        (BuildingKind::Monastery, [104, 104, 31, 32]),
+        (BuildingKind::University, [209, 209, 209, 210]),
+        (BuildingKind::SiegeWorkshop, [49, 49, 49, 150]),
+        (BuildingKind::Castle, [82, 82, 82, 82]),
     ] {
         let mut building = GameplayBuildingState {
             id: EntityId(1),
@@ -120,24 +135,30 @@ fn building_family_uses_its_observed_age_including_construction() {
             garrison: Vec::new(),
             bridge_span: None,
         };
-        assert_eq!(building_kind(&building).building_id(), Some(dark));
-        building.age = aoe_protocol::Age::Feudal;
-        assert_eq!(building_kind(&building).building_id(), Some(feudal));
-        building.construction = ConstructionState::UnderConstruction;
-        building.progress_permille = 100;
-        assert_eq!(building_kind(&building).building_id(), Some(feudal));
-        building.age = aoe_protocol::Age::Castle;
-        assert_eq!(
-            building_kind(&building).building_id(),
-            Some(feudal),
-            "Castle foundation: {kind:?}"
-        );
-        building.construction = ConstructionState::Complete;
-        building.progress_permille = 1000;
-        assert_eq!(
-            building_kind(&building).building_id(),
-            Some(castle),
-            "Castle complete: {kind:?}"
-        );
+        for (age, id) in [
+            aoe_protocol::Age::Dark,
+            aoe_protocol::Age::Feudal,
+            aoe_protocol::Age::Castle,
+            aoe_protocol::Age::Imperial,
+        ]
+        .into_iter()
+        .zip(ids)
+        {
+            building.age = age;
+            building.construction = ConstructionState::Complete;
+            building.progress_permille = 1000;
+            assert_eq!(
+                building_kind(&building).building_id(),
+                Some(id),
+                "complete {kind:?}, {age:?}"
+            );
+            building.construction = ConstructionState::UnderConstruction;
+            building.progress_permille = 100;
+            assert_eq!(
+                building_kind(&building).building_id(),
+                Some(id),
+                "foundation {kind:?}, {age:?}"
+            );
+        }
     }
 }

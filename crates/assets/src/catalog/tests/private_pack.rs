@@ -335,7 +335,7 @@ fn portable_proof_rejects_missing_duplicate_and_corrupt_source_rectangles() {
     let mut manifest = synthetic_manifest();
     assert_eq!(
         actor_frames(),
-        92473,
+        121070,
         // Complete current DAT unit cells, including neutral colour semantics.
         // Pin the complete current selection independently of runtime residency.
         "military, Castle, projectile and farmer cells included"

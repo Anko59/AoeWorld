@@ -1,7 +1,7 @@
 # DAT building art
 
 `make assets-import-de AOE_ASSET_PACK=local-assets/packs/<base-hash>` imports
-all 41 gameplay building records and the six spawned bridge segments in one
+all 55 gameplay building records and the six spawned bridge segments in one
 pass. The owner-licensed DE installation is mounted read-only; original pixels,
 source digests and generated packs stay in ignored local storage. The current
 base still supplies interface and remaining effect assets until their category
@@ -45,6 +45,12 @@ building filename lists, sampled fish sheets and special farm crop window.
 
 ## Residency and lifecycle
 
+The private overlay keeps world art and actor art in separate bounded components;
+its required `actors/` link points to the verified actor component. All DAT states
+remain in the source pack. The runtime validates all of them and selects complete,
+construction, damage, destruction, rubble and gate-opening art for residency;
+unimplemented snow/research/debris states do not occupy the live frame table.
+
 Building timelines share the unit cache, starting at four colour/mask page
 pairs and growing for visible demand within 512 MiB including startup layers.
 Current and recently presented cells stay pinned for three turns. Missing phases
@@ -79,6 +85,6 @@ eviction, and destruction-to-rubble selection. The pressure fixture requires
 large complete loops to fit through residency rather than startup atlas sampling.
 
 Per-commit checks follow the owner's redirect: focused tests, `make test-wasm`,
-`make lint`, `make structure-check` and `make perf-ci`. Shipping owns E2E and
-video qualification. Synthetic tests do not establish finished RTS performance
+`make lint` and `make structure-check`. Real-pack screenshots and video
+qualification remain separate from these checks. Synthetic tests do not establish finished RTS performance
 or dedicated hardware qualification.

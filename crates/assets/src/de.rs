@@ -15,7 +15,9 @@ use std::{
 
 pub mod buildings;
 mod cache;
+mod categories;
 mod compose;
+mod icons;
 mod native;
 mod preview;
 mod select;
@@ -31,7 +33,7 @@ const MAX_SLD: u64 = 64 * 1024 * 1024;
 const GRAPHICS: &str = "resources/_common/drs/graphics";
 const TEXTURES: &str = "resources/_common/terrain/textures/2x";
 /// Folded into the pack hash so a change of the conversion rules makes a new pack.
-const CONVERSION: &str = "de-sld-rgb565-weighted-player-chunked-dat-environment";
+const CONVERSION: &str = "de-sld-rgb565-weighted-player-chunked-dat-categories";
 
 /// What one selected source contributed to the pack.
 #[derive(Clone, Debug)]
@@ -113,6 +115,7 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
     hasher.update(b"pack indexed building startup data\0");
     hasher.update(CONVERSION.as_bytes());
     hasher.update(&serde_json::to_vec(&buildings.recipes)?);
+    let icons = icons::resolve(&install, &units, &mut hasher)?;
     let mut loaded = Vec::new();
     let mut absent = Vec::new();
     let mut plans: Vec<_> = SELECTION
@@ -251,6 +254,8 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         frames: s.frames,
     }));
     let split = loaded.len();
+    let icon_start = refs.len();
+    refs.extend(icons.refs());
     let mut entries = Vec::new();
     for sprite in &loaded {
         entries.push(Entry {
@@ -287,25 +292,50 @@ pub fn import(install: &Path, output_root: &Path) -> Result<Report, Error> {
         }
         Ok(vec![terrain::Decoder::new(crate::dds::parse(&bytes)?)])
     });
+    let unit_start = loaded
+        .iter()
+        .position(|s| s.unit.is_some())
+        .unwrap_or(split);
+    let (world_indices, actor_indices) = categories::indices(refs.len(), unit_start..split)?;
+    let hash = hasher.finalize().to_hex().to_string();
+    let actor_hash = blake3::hash(format!("{hash}:actors").as_bytes())
+        .to_hex()
+        .to_string();
+    let actor_refs: Vec<_> = actor_indices.iter().map(|&i| refs[i].clone()).collect();
+    let actors = write_pack_streamed(
+        &output_root,
+        actor_hash,
+        &actor_refs,
+        Vec::new(),
+        Vec::new(),
+        |_, _| true,
+        |sprite, frame| cache.get(actor_indices[sprite])?[0].frame(frame),
+    )?;
+    let world_refs: Vec<_> = world_indices.iter().map(|&i| refs[i].clone()).collect();
     let pack = write_pack_streamed(
         &output_root,
-        hasher.finalize().to_hex().to_string(),
-        &refs,
+        hash,
+        &world_refs,
         buildings.recipes,
         terrain.terrains,
         |sprite, _| {
-            sprite >= split
-                || (sprite < split
-                    && matches!(loaded[sprite].building, "unit" | "projectile" | "building"))
+            let sprite = world_indices[sprite];
+            (split..icon_start).contains(&sprite)
+                || (sprite < split && matches!(loaded[sprite].building, "projectile" | "building"))
         },
         |sprite, frame| {
+            let sprite = world_indices[sprite];
             if sprite < split {
                 cache.get(sprite)?[0].frame(frame)
-            } else {
+            } else if sprite < icon_start {
                 terrain_cache.get(sprite - split)?[0].frame(frame)
+            } else {
+                icons.frame(sprite - icon_start)
             }
         },
     )?;
+    categories::attach(&pack, &actors)?;
+    icons.write(&pack)?;
     let report = Report {
         pack,
         entries,

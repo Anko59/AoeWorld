@@ -2,6 +2,12 @@
 use super::manifest::{BuildingComposition, BuildingPart};
 use super::*;
 
+// The renderer consumes destruction, rubble and open gates. Other DAT states
+// stay in the verified source pack and are validated here without GPU residency.
+fn runtime_state(role: u8) -> bool {
+    matches!(role, 0 | 1 | 5)
+}
+
 #[inline(never)]
 pub(super) fn select(
     manifest: &Manifest,
@@ -51,10 +57,15 @@ pub(super) fn select(
         // Resolve each recipe slice through one loop, including state and damage
         // layers. Keeping the part loop outside iterator adapters avoids cloning
         // its validation and source-selection body for each recipe section.
-        for group in [&building.parts, &building.construction]
+        for (group, resident) in [(&building.parts, true), (&building.construction, true)]
             .into_iter()
-            .chain(building.states.iter().map(|(_, parts)| parts))
-            .chain(building.damage.iter().map(|d| &d.parts))
+            .chain(
+                building
+                    .states
+                    .iter()
+                    .map(|(role, parts)| (parts, runtime_state(*role))),
+            )
+            .chain(building.damage.iter().map(|d| (&d.parts, true)))
         {
             for part in group {
                 if part.frames == 0
@@ -99,6 +110,9 @@ pub(super) fn select(
                 let Some(frames) = source_frames(manifest, source, count) else {
                     return Err(error(format!("corrupt building art ({source})")));
                 };
+                if !resident {
+                    continue;
+                }
                 let step = 1;
                 for index in frames.into_iter().step_by(step) {
                     if !selected.contains(&index) {
@@ -267,6 +281,7 @@ pub(super) fn resolve(
             states: b
                 .states
                 .iter()
+                .filter(|(role, _)| runtime_state(*role))
                 .map(|(role, p)| (*role, parts(b.unit_id, p, manifest, selected, records)))
                 .collect(),
             damage: b

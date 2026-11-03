@@ -127,7 +127,7 @@ fn single_direction_ship_deaths_use_their_dat_row_for_every_native_heading() {
 
 #[wasm_bindgen_test]
 fn rebased_stone_barriers_keep_dat_identity_and_do_not_alias_native_actors() {
-    assert_eq!(std::mem::size_of::<SceneUnitKind>(), 1);
+    assert_eq!(std::mem::size_of::<SceneUnitKind>(), 2);
     assert_eq!(std::mem::size_of::<SceneUnit>(), 32);
     for (slot, id) in [(71, 117), (72, 64), (73, 64)] {
         let kind = SceneUnitKind::building(slot);
@@ -165,7 +165,7 @@ fn rebased_stone_gate_uses_the_dat_open_state() {
 
 #[wasm_bindgen_test]
 fn current_building_slots_round_trip_without_claiming_actor_tags() {
-    for slot in 0..=73 {
+    for slot in 0..=87 {
         let kind = SceneUnitKind::building(slot);
         if slot == 22 {
             assert!(kind.actor_slot().is_some());
@@ -174,5 +174,15 @@ fn current_building_slots_round_trip_without_claiming_actor_tags() {
             assert_eq!(kind.building_slot(), Some(slot));
             assert_eq!(kind.actor_slot(), None);
         }
+    }
+}
+
+#[wasm_bindgen_test]
+fn imperial_actor_tags_round_trip_all_current_poses_in_a_compact_scene() {
+    assert_eq!(std::mem::size_of::<SceneUnit>(), 32);
+    for slot in 167..217 {
+        let kind = SceneUnitKind::actor(slot);
+        assert_eq!(kind.actor_slot(), Some(usize::from(slot)));
+        assert_eq!(kind.building_slot(), None);
     }
 }

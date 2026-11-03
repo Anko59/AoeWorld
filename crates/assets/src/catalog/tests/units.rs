@@ -171,6 +171,7 @@ fn every_shooting_attack_releases_inside_its_animation() {
         (Pose::ArcherAttack, 15),
         (Pose::SkirmisherAttack, 19),
         (Pose::CrossbowmanAttack, 15),
+        (Pose::ArbalesterAttack, 20),
         (Pose::EliteSkirmisherAttack, 19),
     ] {
         let release = release_frame(pose).unwrap();

@@ -58,7 +58,8 @@ pub(super) fn append(
             facing: (u32::from(building.progress_permille) * 3 / 1000).min(2) as u8,
             elevation_meters: scene
                 .height(position)
-                .unwrap_or_else(|| elevation_at_world(client, position)),
+                .unwrap_or_else(|| elevation_at_world(client, position))
+                as f32,
         };
         if aoe_rendering::scene_building_visible(&client.art, unit, camera, 0) {
             units.push(unit);

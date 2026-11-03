@@ -55,7 +55,12 @@ pub(super) fn marker(
             [7.0, 30.0]
         },
     };
-    if let Some(mut sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
+    if let Some(mut sprite) = scene_sprite(
+        frame,
+        unit.position,
+        f64::from(unit.elevation_meters),
+        camera,
+    ) {
         sprite.color = if building {
             [0.72, 0.58, 0.35, 1.0]
         } else if matches!(
@@ -179,7 +184,7 @@ pub(super) fn building_select(
                     ];
                     frame.anchor = frame.size.map(|v| v / 2.0);
                     if let Some(mut sprite) =
-                        scene_sprite(frame, position, unit.elevation_meters, camera)
+                        scene_sprite(frame, position, f64::from(unit.elevation_meters), camera)
                     {
                         sprite.pages[3] |= 128; // Crop the native terrain diamond on every backend.
                         emit((
@@ -327,7 +332,12 @@ pub(super) fn building_select(
         native.anchor[0] -= part.offset[0];
         native.anchor[1] -= part.offset[1];
         let frame = world_frame(native);
-        if let Some(sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
+        if let Some(sprite) = scene_sprite(
+            frame,
+            unit.position,
+            f64::from(unit.elevation_meters),
+            camera,
+        ) {
             emit((
                 sprite.with_owner(unit.visual),
                 scaled(frame, camera.zoom as f32),
@@ -382,7 +392,12 @@ pub(super) fn sprite_building(
     };
     for index in indices.into_iter().take(count) {
         let frame = world_frame(frames[index]);
-        if let Some(sprite) = scene_sprite(frame, unit.position, unit.elevation_meters, camera) {
+        if let Some(sprite) = scene_sprite(
+            frame,
+            unit.position,
+            f64::from(unit.elevation_meters),
+            camera,
+        ) {
             emit((
                 if (65..=70).contains(&art_slot) {
                     sprite.with_unit_contour(unit.visual.outline_colour())

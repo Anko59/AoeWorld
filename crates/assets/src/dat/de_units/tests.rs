@@ -62,3 +62,11 @@ fn common_unit_fields_and_shared_task_indirection_are_preserved() {
 
 #[path = "tests/buildings.rs"]
 mod buildings;
+
+#[test]
+fn unit_icon_is_the_dat_sheet_index() {
+    let mut bytes = unit(1);
+    bytes[51..53].copy_from_slice(&123_i16.to_le_bytes());
+    let decoded = serde_json::to_value(parse(&bytes, 0, 1).unwrap()).unwrap();
+    assert_eq!(decoded["icon"], 123);
+}

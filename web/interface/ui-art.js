@@ -5,15 +5,13 @@ const entities = { Scout:448, Villager:83, TownCenter:109, House:70, LumberCamp:
   MiningCamp:584, Mill:68, Farm:50, Barracks:12, PalisadeWall:72, Outpost:598,
   Dock:45, ArcheryRange:87, Stable:101, Blacksmith:103, Market:84, WatchTower:79,
   PalisadeGate:792, Militia:74, ManAtArms:75, FishingShip:13, Sheep:594,
-  Deer:65, Boar:48, Wolf:126, Archer:4, Skirmisher:7, Spearman:93, Castle:82, Monastery:104, University:209, SiegeWorkshop:49, LongSwordsman:77, Pikeman:358, Crossbowman:24, EliteSkirmisher:6, Knight:38, LightCavalry:546, Monk:125, Mangonel:280, BatteringRam:35, Galley:539, FireShip:529, DemolitionShip:527, TransportShip:545, WarGalley:21, Vassal:434, General:629,
+  Deer:65, Boar:48, Wolf:126, Archer:4, Skirmisher:7, Spearman:93, Castle:82, Monastery:104, University:209, SiegeWorkshop:49, LongSwordsman:77, Pikeman:358, Crossbowman:24, EliteSkirmisher:6, Knight:38, LightCavalry:546, Monk:125, Mangonel:280, BatteringRam:35, Galley:539, FireShip:529, DemolitionShip:527, TransportShip:545, WarGalley:21, Vassal:434, General:632,
   TwoHandedSwordsman:473, Champion:567, Halberdier:359, Arbalester:492, Cavalier:283, Paladin:569, Hussar:441, CappedRam:422, SiegeRam:548, Onager:550 };
-// A pack without these newer icons shows its older line's icon instead.
-const iconFallback = { TwoHandedSwordsman:'LongSwordsman', Champion:'LongSwordsman', Halberdier:'Pikeman', Arbalester:'Crossbowman', Cavalier:'Knight', Paladin:'Knight', Hussar:'LightCavalry', CappedRam:'BatteringRam', SiegeRam:'BatteringRam', Onager:'Mangonel' };
 export const techIds = [22,8,101,202,14,55,278,213,222,67,74,81,199,211,102,207,197,100,98,254,249,280,68,76,82,200,212,13,203,182,50,93,321,34,103,217,264,429,237,209,265,428,96,255,257,75,77,80,201,219,12,221,279];
 export const trainingKinds = ['Villager','Scout','Militia','FishingShip','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley','Vassal','General',...imperialUnits];
 let catalog = null;
 const fallback = name => `<svg class="icon fallback-icon" aria-hidden="true"><use href="/interface/icons.svg#${name}"></use></svg>`;
-const validArt = art => art && /^[\w-]+\.(png|svg)$/.test(art.page)
+const validArt = art => art && /^(?:buildings\/)?[\w-]+\.(png|svg)$/.test(art.page)
   && ['x','y','width','height','page_width','page_height'].every(key => Number.isInteger(art[key]) && art[key]>=0)
   && art.width>0 && art.height>0 && art.page_width<=2048 && art.page_height<=2048
   && art.x+art.width<=art.page_width && art.y+art.height<=art.page_height;
@@ -26,7 +24,7 @@ export function entityIcon(kind) {
   const symbol = ['Scout','Knight','LightCavalry','General','Cavalier','Paladin','Hussar'].includes(kind)?'scout':['Villager','Vassal'].includes(kind)?'villager':['FishingShip','Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(kind)?'ship':
     ['Militia','ManAtArms','Archer','Skirmisher','Spearman',...castleUnits,...imperialUnits].includes(kind)?'soldier':
     ['Sheep','Deer','Boar','Wolf'].includes(kind)?'animal':'towncenter';
-  return icon('units', entities[kind] ?? -1, symbol, entities[iconFallback[kind]] ?? -1);
+  return icon('units', entities[kind] ?? -1, symbol);
 }
 export function setEntityIcon(node, kind) {
   if (node.dataset.entityIcon===kind) return;
@@ -53,8 +51,15 @@ export function initArt() {
     if (name) node.outerHTML=name==='villager' && !node.closest('.population')?entityIcon('Villager'):
       icon('resources',node.closest('.population')?'population':name,name);
   }
-  fetch('/asset-pack/interface.json').then(response => response.ok?response.json():null).then(async data => {
-    if (!data) return;
+  Promise.all(['interface.json','buildings/interface.json'].map(path =>
+    fetch(`/asset-pack/${path}`).then(response => response.ok?response.json():null).catch(() => null)
+  )).then(async ([base, overlay]) => {
+    if (!base && !overlay) return;
+    const data=base ?? {};
+    for (const group of ['units','technologies']) if (overlay?.[group])
+      data[group]={...data[group],...Object.fromEntries(
+        Object.entries(overlay[group]).map(([id,art]) => [id,{...art,page:`buildings/${art.page}`}])
+      )};
     const arts=Object.values(data).flatMap(group => Object.values(group));
     if (!arts.length || !arts.every(validArt)) return;
     await Promise.all([...new Set(arts.map(art=>art.page))].map(page=>new Promise((resolve,reject)=>{

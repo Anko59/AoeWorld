@@ -149,7 +149,8 @@ impl BuildingGround {
             // Cull once per redraw, before every terrain triangle tests candidates.
             // Include the full projected 3x3 footprint, even with its center offscreen.
             .filter(|u| {
-                let p = projection.world_to_screen_at_height(u.position, u.elevation_meters);
+                let p =
+                    projection.world_to_screen_at_height(u.position, f64::from(u.elevation_meters));
                 p.x + extent[0] >= 0.0
                     && p.y + extent[1] >= 0.0
                     && p.x - extent[0] <= camera.viewport[0]

@@ -276,7 +276,7 @@ pub fn import(input: &Path, output_root: &Path) -> Result<PathBuf, Error> {
                 return Err(invalid("composition", 0, reason));
             }
             interface_dat = Some(dat.clone());
-            crate::catalog::GAMEPLAY_BUILDING_IDS
+            crate::catalog::TRIAL_BUILDING_IDS
                 .iter()
                 .filter(|id| dat.unit(**id).is_some_and(|u| u.building.is_some()))
                 .map(|id| dat.building_composition(*id))

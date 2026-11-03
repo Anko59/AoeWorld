@@ -214,7 +214,8 @@ pub(super) fn emit_world_sprite_frames(
             }
             continue;
         };
-        let screen = projection.world_to_screen_at_height(unit.position, unit.elevation_meters);
+        let screen =
+            projection.world_to_screen_at_height(unit.position, f64::from(unit.elevation_meters));
         if unit.kind.building_side().is_some() {
             village::resident_building(art, unit, camera, animation, &mut |(
                 mut sprite,
@@ -310,9 +311,13 @@ pub(super) fn emit_world_sprite_frames(
         scaled_frame.size = scaled_frame.size.map(|value| value * scale);
         scaled_frame.anchor = scaled_frame.anchor.map(|value| value * scale);
         let depth = object_depth(object);
-        if let Some((shadow, shadow_frame)) =
-            alpha_shadow(frame, unit.position, unit.elevation_meters, camera, 0.28)
-        {
+        if let Some((shadow, shadow_frame)) = alpha_shadow(
+            frame,
+            unit.position,
+            f64::from(unit.elevation_meters),
+            camera,
+            0.28,
+        ) {
             emit((shadow, shadow_frame, depth, object.stable_id()));
         }
         emit((sprite, scaled_frame, depth, object.stable_id()));
@@ -352,7 +357,7 @@ impl WorldObject {
     fn elevation_meters(self) -> f64 {
         match self {
             Self::Resource(resource, _, _) => resource.elevation_meters,
-            Self::Unit(unit) => unit.elevation_meters,
+            Self::Unit(unit) => f64::from(unit.elevation_meters),
         }
     }
 }

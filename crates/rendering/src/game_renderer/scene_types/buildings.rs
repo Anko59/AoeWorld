@@ -1,292 +1,251 @@
 use super::SceneUnitKind;
+use SceneUnitKind::*;
 
-// One semantic slot order owns both projections; actor tags have no building slot.
-const BUILDINGS: [SceneUnitKind; 74] = {
-    use SceneUnitKind::*;
-    [
-        BuildingTownCenter,
-        House,
-        LumberCamp,
-        MiningCamp,
-        Mill,
-        Farm,
-        Barracks,
-        PalisadeWall,
-        Outpost,
-        ConstructionPalisadeWall,
-        ConstructionHouse,
-        ConstructionBarracks,
-        ConstructionTownCenter,
-        RubbleTownCenter,
-        RubbleHouse,
-        RubbleLumberCamp,
-        RubbleMiningCamp,
-        RubbleMill,
-        RubbleFarm,
-        RubbleBarracks,
-        RubblePalisadeWall,
-        RubbleOutpost,
-        SceneUnitKind::BuilderWork,
-        Dock,
-        FoundationDock,
-        RubbleDock,
-        ArcheryRange,
-        Stable,
-        Blacksmith,
-        Market,
-        WatchTower,
-        PalisadeGate,
-        RubbleArcheryRange,
-        RubbleStable,
-        RubbleBlacksmith,
-        RubbleMarket,
-        RubbleWatchTower,
-        RubblePalisadeGate,
-        FeudalTownCenter,
-        FeudalHouse,
-        FeudalMill,
-        FeudalBarracks,
-        OpenPalisadeGate,
-        GateFoundation,
-        FeudalDock,
-        Castle,
-        Monastery,
-        University,
-        SiegeWorkshop,
-        RubbleCastle,
-        RubbleMonastery,
-        RubbleUniversity,
-        RubbleSiegeWorkshop,
-        CastleTownCenter,
-        CastleHouse,
-        CastleLumberCamp,
-        CastleMiningCamp,
-        CastleMill,
-        CastleBarracks,
-        CastleDock,
-        CastleArcheryRange,
-        CastleStable,
-        CastleBlacksmith,
-        CastleMarket,
-        CastleMonastery,
-        BridgeATop,
-        BridgeAMiddle,
-        BridgeABottom,
-        BridgeBTop,
-        BridgeBMiddle,
-        BridgeBBottom,
-        StoneWall,
-        StoneGate,
-        OpenStoneGate,
-    ]
+#[derive(Clone, Copy)]
+struct Meta {
+    id: i16,
+    slot: u8,
+    side: u8,
+    flags: u8,
+}
+const EMPTY: Meta = Meta {
+    id: -1,
+    slot: u8::MAX,
+    side: 0,
+    flags: 0,
 };
-const SLOTS: [u8; SceneUnitKind::Actor0 as usize] = {
-    let mut slots = [u8::MAX; SceneUnitKind::Actor0 as usize];
+const FOUNDATION: u8 = 1;
+const RUBBLE: u8 = 2;
+
+// Stable semantic slots; actor tags never enter the building metadata table.
+const ROWS: [(SceneUnitKind, i16, u8); 88] = [
+    (BuildingTownCenter, 109, 4),
+    (House, 70, 2),
+    (LumberCamp, 562, 2),
+    (MiningCamp, 584, 2),
+    (Mill, 68, 2),
+    (Farm, 50, 3),
+    (Barracks, 12, 3),
+    (PalisadeWall, 72, 1),
+    (Outpost, 598, 1),
+    (ConstructionPalisadeWall, 72, 1),
+    (ConstructionHouse, 70, 2),
+    (ConstructionBarracks, 12, 3),
+    (ConstructionTownCenter, 109, 4),
+    (RubbleTownCenter, 109, 4),
+    (RubbleHouse, 70, 2),
+    (RubbleLumberCamp, 562, 2),
+    (RubbleMiningCamp, 584, 2),
+    (RubbleMill, 68, 2),
+    (RubbleFarm, 50, 3),
+    (RubbleBarracks, 12, 3),
+    (RubblePalisadeWall, 72, 1),
+    (RubbleOutpost, 598, 1),
+    (SceneUnitKind::BuilderWork, -1, 1),
+    (Dock, 45, 3),
+    (FoundationDock, 45, 3),
+    (RubbleDock, 45, 3),
+    (ArcheryRange, 87, 3),
+    (Stable, 101, 3),
+    (Blacksmith, 103, 3),
+    (Market, 84, 4),
+    (WatchTower, 79, 1),
+    (PalisadeGate, 792, 4),
+    (RubbleArcheryRange, 87, 3),
+    (RubbleStable, 101, 3),
+    (RubbleBlacksmith, 103, 3),
+    (RubbleMarket, 84, 4),
+    (RubbleWatchTower, 79, 1),
+    (RubblePalisadeGate, 792, 4),
+    (FeudalTownCenter, 71, 4),
+    (FeudalHouse, 463, 2),
+    (FeudalMill, 129, 2),
+    (FeudalBarracks, 498, 3),
+    (OpenPalisadeGate, 792, 4),
+    (GateFoundation, 792, 4),
+    (FeudalDock, 133, 3),
+    (Castle, 82, 4),
+    (Monastery, 104, 3),
+    (University, 209, 4),
+    (SiegeWorkshop, 49, 4),
+    (RubbleCastle, 82, 4),
+    (RubbleMonastery, 104, 3),
+    (RubbleUniversity, 209, 4),
+    (RubbleSiegeWorkshop, 49, 4),
+    (CastleTownCenter, 141, 4),
+    (CastleHouse, 464, 2),
+    (CastleLumberCamp, 564, 2),
+    (CastleMiningCamp, 586, 2),
+    (CastleMill, 130, 2),
+    (CastleBarracks, 132, 3),
+    (CastleDock, 47, 3),
+    (CastleArcheryRange, 10, 3),
+    (CastleStable, 86, 3),
+    (CastleBlacksmith, 18, 3),
+    (CastleMarket, 116, 4),
+    (CastleMonastery, 31, 3),
+    (BridgeATop, 605, 1),
+    (BridgeAMiddle, 606, 1),
+    (BridgeABottom, 607, 1),
+    (BridgeBTop, 608, 1),
+    (BridgeBMiddle, 609, 1),
+    (BridgeBBottom, 610, 1),
+    (StoneWall, 117, 1),
+    (StoneGate, 64, 4),
+    (OpenStoneGate, 64, 4),
+    (ImperialTownCenter, 142, 4),
+    (ImperialHouse, 465, 2),
+    (ImperialLumberCamp, 565, 2),
+    (ImperialMiningCamp, 587, 2),
+    (ImperialMill, 131, 2),
+    (ImperialBarracks, 20, 3),
+    (ImperialDock, 51, 3),
+    (ImperialArcheryRange, 14, 3),
+    (ImperialStable, 153, 3),
+    (ImperialBlacksmith, 19, 3),
+    (ImperialMarket, 137, 4),
+    (ImperialMonastery, 32, 3),
+    (ImperialUniversity, 210, 4),
+    (ImperialSiegeWorkshop, 150, 4),
+];
+
+// Construction retains the selected DAT age identity.
+const FOUNDATIONS: [(SceneUnitKind, i16, u8, u8); 53] = [
+    (ConstructionTownCenter, 109, 4, 12),
+    (ConstructionHouse, 70, 2, 10),
+    (ConstructionLumberCamp, 562, 2, 10),
+    (ConstructionMiningCamp, 584, 2, 10),
+    (ConstructionMill, 68, 2, 10),
+    (ConstructionFarm, 50, 3, 5),
+    (ConstructionBarracks, 12, 3, 11),
+    (ConstructionPalisadeWall, 72, 1, 9),
+    (ConstructionOutpost, 598, 1, 9),
+    (ConstructionRange, 87, 3, 11),
+    (ConstructionStable, 101, 3, 11),
+    (ConstructionBlacksmith, 103, 3, 11),
+    (ConstructionMarket, 84, 4, 12),
+    (ConstructionTower, 79, 1, 9),
+    (ConstructionGate, 792, 4, 43),
+    (ConstructionFeudalTownCenter, 71, 4, 12),
+    (ConstructionFeudalHouse, 463, 2, 10),
+    (ConstructionFeudalMill, 129, 2, 10),
+    (ConstructionFeudalLumberCamp, 563, 2, 10),
+    (ConstructionFeudalMiningCamp, 585, 2, 10),
+    (ConstructionFeudalBarracks, 498, 3, 11),
+    (ConstructionFeudalDock, 133, 3, 24),
+    (ConstructionCastle, 82, 4, 12),
+    (ConstructionMonastery, 104, 3, 11),
+    (ConstructionUniversity, 209, 4, 12),
+    (ConstructionSiegeWorkshop, 49, 4, 12),
+    (FoundationDock, 45, 3, 24),
+    (ConstructionCastleTownCenter, 141, 4, 12),
+    (ConstructionCastleHouse, 464, 2, 10),
+    (ConstructionCastleLumberCamp, 564, 2, 10),
+    (ConstructionCastleMiningCamp, 586, 2, 10),
+    (ConstructionCastleMill, 130, 2, 10),
+    (ConstructionCastleBarracks, 132, 3, 11),
+    (ConstructionCastleDock, 47, 3, 24),
+    (ConstructionCastleArcheryRange, 10, 3, 11),
+    (ConstructionCastleStable, 86, 3, 11),
+    (ConstructionCastleBlacksmith, 18, 3, 11),
+    (ConstructionCastleMarket, 116, 4, 12),
+    (ConstructionCastleMonastery, 31, 3, 11),
+    (ConstructionImperialTownCenter, 142, 4, 12),
+    (ConstructionImperialHouse, 465, 2, 10),
+    (ConstructionImperialLumberCamp, 565, 2, 10),
+    (ConstructionImperialMiningCamp, 587, 2, 10),
+    (ConstructionImperialMill, 131, 2, 10),
+    (ConstructionImperialBarracks, 20, 3, 11),
+    (ConstructionImperialDock, 51, 3, 24),
+    (ConstructionImperialArcheryRange, 14, 3, 11),
+    (ConstructionImperialStable, 153, 3, 11),
+    (ConstructionImperialBlacksmith, 19, 3, 11),
+    (ConstructionImperialMarket, 137, 4, 12),
+    (ConstructionImperialMonastery, 32, 3, 11),
+    (ConstructionImperialUniversity, 210, 4, 12),
+    (ConstructionImperialSiegeWorkshop, 150, 4, 12),
+];
+const META: [Meta; SceneUnitKind::Actor0 as usize] = {
+    let mut out = [EMPTY; SceneUnitKind::Actor0 as usize];
     let mut i = 0;
-    while i < BUILDINGS.len() {
-        let tag = BUILDINGS[i] as usize;
-        if tag < slots.len() {
-            slots[tag] = i as u8;
+    while i < ROWS.len() {
+        let (kind, id, side) = ROWS[i];
+        let tag = kind as usize;
+        if tag < out.len() {
+            let rubble =
+                (i >= 13 && i <= 21) || i == 25 || (i >= 32 && i <= 37) || (i >= 49 && i <= 52);
+            out[tag] = Meta {
+                id,
+                slot: i as u8,
+                side,
+                flags: if rubble { RUBBLE } else { 0 },
+            };
         }
         i += 1;
     }
-    slots[SceneUnitKind::FeudalLumberCamp as usize] = 2;
-    slots[SceneUnitKind::FeudalMiningCamp as usize] = 3;
-    slots
+    i = 0;
+    while i < FOUNDATIONS.len() {
+        let (kind, id, side, slot) = FOUNDATIONS[i];
+        out[kind as usize] = Meta {
+            id,
+            slot,
+            side,
+            flags: FOUNDATION,
+        };
+        i += 1;
+    }
+    out[TownCenter as usize] = Meta {
+        id: 109,
+        slot: u8::MAX,
+        side: 4,
+        flags: 0,
+    };
+    out[FeudalLumberCamp as usize] = Meta {
+        id: 563,
+        slot: 2,
+        side: 2,
+        flags: 0,
+    };
+    out[FeudalMiningCamp as usize] = Meta {
+        id: 585,
+        slot: 3,
+        side: 2,
+        flags: 0,
+    };
+    out
 };
 impl SceneUnitKind {
+    fn building_meta(self) -> Meta {
+        META.get(self as usize).copied().unwrap_or(EMPTY)
+    }
     pub fn bridge(along_x: bool, piece: u8) -> Self {
         Self::building((if along_x { 68 } else { 65 }) + piece.min(2))
     }
-
-    /// Map building roles to the atlas's semantic order.
     pub fn building(slot: u8) -> Self {
-        BUILDINGS[usize::from(slot.min(73))]
+        ROWS[usize::from(slot).min(ROWS.len() - 1)].0
     }
     pub(in crate::game_renderer) fn building_slot(self) -> Option<u8> {
-        if let Some(&slot) = SLOTS.get(self as usize)
-            && slot != u8::MAX
-        {
-            return Some(slot);
-        }
-        if self.is_foundation() {
-            return Some(match self.building_id()? {
-                // The DAT farm has no construction graphic: a farm being
-                // built is its own foundation terrain, never scaffolding.
-                50 => 5,
-                109 | 71 | 84 | 82 | 209 | 49 => 12,
-                104 => 11,
-                12 | 87 | 101 | 103 | 498 => 11,
-                72 | 598 | 79 => 9,
-                792 => 43,
-                133 => 24,
-                _ => 10,
-            });
-        }
-        None
+        let slot = self.building_meta().slot;
+        (slot != u8::MAX).then_some(slot)
     }
-
     pub fn foundation(id: i16) -> Self {
-        use SceneUnitKind::*;
-        match id {
-            141 => ConstructionFeudalTownCenter,
-            464 => ConstructionFeudalHouse,
-            564 => ConstructionFeudalLumberCamp,
-            586 => ConstructionFeudalMiningCamp,
-            130 => ConstructionFeudalMill,
-            132 => ConstructionFeudalBarracks,
-            47 => ConstructionFeudalDock,
-            10 => ConstructionRange,
-            86 => ConstructionStable,
-            18 => ConstructionBlacksmith,
-            116 => ConstructionMarket,
-            31 => ConstructionMonastery,
-
-            45 => FoundationDock,
-            82 => ConstructionCastle,
-            104 => ConstructionMonastery,
-            209 => ConstructionUniversity,
-            49 => ConstructionSiegeWorkshop,
-            109 => ConstructionTownCenter,
-            70 => ConstructionHouse,
-            562 => ConstructionLumberCamp,
-            584 => ConstructionMiningCamp,
-            68 => ConstructionMill,
-            50 => ConstructionFarm,
-            12 => ConstructionBarracks,
-            72 => ConstructionPalisadeWall,
-            87 => ConstructionRange,
-            101 => ConstructionStable,
-            103 => ConstructionBlacksmith,
-            84 => ConstructionMarket,
-            79 => ConstructionTower,
-            792 => ConstructionGate,
-            71 => ConstructionFeudalTownCenter,
-            463 => ConstructionFeudalHouse,
-            129 => ConstructionFeudalMill,
-            563 => ConstructionFeudalLumberCamp,
-            585 => ConstructionFeudalMiningCamp,
-            498 => ConstructionFeudalBarracks,
-            133 => ConstructionFeudalDock,
-            _ => ConstructionOutpost,
-        }
+        FOUNDATIONS
+            .iter()
+            .find(|row| row.1 == id)
+            .map_or(ConstructionOutpost, |row| row.0)
     }
     pub(in crate::game_renderer) fn is_foundation(self) -> bool {
-        matches!(
-            self,
-            Self::ConstructionCastle
-                | Self::ConstructionMonastery
-                | Self::ConstructionUniversity
-                | Self::ConstructionSiegeWorkshop
-        ) || self == Self::FoundationDock
-            || (Self::ConstructionTownCenter as u8..=Self::ConstructionFeudalDock as u8)
-                .contains(&(self as u8))
+        self.building_meta().flags & FOUNDATION != 0
     }
     pub(in crate::game_renderer) fn rubble(self) -> bool {
-        self.building_slot().is_some_and(|s| {
-            (13..=21).contains(&s) || s == 25 || (32..=37).contains(&s) || (49..=52).contains(&s)
-        })
+        self.building_meta().flags & RUBBLE != 0
     }
     pub fn building_id(self) -> Option<i32> {
-        use SceneUnitKind::*;
-        match self {
-            Self::ConstructionCastle => return Some(82),
-            Self::ConstructionMonastery => return Some(104),
-            Self::ConstructionUniversity => return Some(209),
-            Self::ConstructionSiegeWorkshop => return Some(49),
-            _ => {}
-        }
-        if self.is_foundation() && self != FoundationDock {
-            return [
-                109, 70, 562, 584, 68, 50, 12, 72, 598, 87, 101, 103, 84, 79, 792, 71, 463, 129,
-                563, 585, 498, 133,
-            ]
-            .get((self as u8 - Self::ConstructionTownCenter as u8) as usize)
-            .copied();
-        }
-        Some(match self {
-            StoneWall => 117,
-            StoneGate | OpenStoneGate => 64,
-            CastleTownCenter => 141,
-            CastleHouse => 464,
-            CastleLumberCamp => 564,
-            CastleMiningCamp => 586,
-            CastleMill => 130,
-            CastleBarracks => 132,
-            CastleDock => 47,
-            CastleArcheryRange => 10,
-            CastleStable => 86,
-            CastleBlacksmith => 18,
-            CastleMarket => 116,
-            CastleMonastery => 31,
-
-            TownCenter | BuildingTownCenter => 109,
-            House => 70,
-            LumberCamp => 562,
-            MiningCamp => 584,
-            Mill => 68,
-            Farm => 50,
-            Barracks => 12,
-            PalisadeWall => 72,
-            Outpost => 598,
-            Dock | FoundationDock => 45,
-            ArcheryRange => 87,
-            Stable => 101,
-            Blacksmith => 103,
-            Market => 84,
-            WatchTower => 79,
-            PalisadeGate | OpenPalisadeGate | GateFoundation => 792,
-            FeudalTownCenter => 71,
-            FeudalHouse => 463,
-            FeudalMill => 129,
-            FeudalLumberCamp => 563,
-            FeudalMiningCamp => 585,
-            FeudalBarracks => 498,
-            FeudalDock => 133,
-            Castle => 82,
-            Monastery => 104,
-            University => 209,
-            SiegeWorkshop => 49,
-            BridgeATop => 605,
-            BridgeAMiddle => 606,
-            BridgeABottom => 607,
-            BridgeBTop => 608,
-            BridgeBMiddle => 609,
-            BridgeBBottom => 610,
-            RubbleTownCenter => 109,
-            RubbleHouse => 70,
-            RubbleLumberCamp => 562,
-            RubbleMiningCamp => 584,
-            RubbleMill => 68,
-            RubbleFarm => 50,
-            RubbleBarracks => 12,
-            RubblePalisadeWall => 72,
-            RubbleOutpost => 598,
-            RubbleDock => 45,
-            RubbleArcheryRange => 87,
-            RubbleStable => 101,
-            RubbleBlacksmith => 103,
-            RubbleMarket => 84,
-            RubbleWatchTower => 79,
-            RubblePalisadeGate => 792,
-            RubbleCastle => 82,
-            RubbleMonastery => 104,
-            RubbleUniversity => 209,
-            RubbleSiegeWorkshop => 49,
-            _ => return None,
-        })
+        let id = self.building_meta().id;
+        (id >= 0).then_some(i32::from(id))
     }
     pub(in crate::game_renderer) fn building_side(self) -> Option<f64> {
-        if self == Self::TownCenter {
-            return Some(4.0);
-        }
-        let slot = self.building_slot()?;
-        Some(match slot {
-            0 | 12 | 13 | 29 | 31 | 35 | 37 | 38 | 42 | 43 | 45 | 47 | 48 | 49 | 51 | 52 | 53
-            | 63 | 72 | 73 => 4.0,
-            1..=4 | 10 | 14..=17 | 39 | 40 | 54..=57 => 2.0,
-            5 | 6 | 11 | 18 | 19 | 23..=28 | 32..=34 | 41 | 44 | 46 | 50 | 58..=62 | 64 => 3.0,
-            _ => 1.0,
-        })
+        let side = self.building_meta().side;
+        (side != 0).then_some(f64::from(side))
     }
 }

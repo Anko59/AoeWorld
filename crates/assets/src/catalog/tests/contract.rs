@@ -87,7 +87,8 @@ fn catalog_has_unique_roles_and_nonempty_frame_ranges() {
     );
     // Castle poses, architecture and deduplicated composite recipes extend the catalog.
     // King poses extend the current semantic catalog; atlas limits are unchanged.
-    assert_eq!(VERSION, 21);
+    // Imperial poses and native icon identities extend the current catalog.
+    assert_eq!(VERSION, 23);
     assert_eq!(AssetRole::StoneDeposit as usize, 13);
     assert_eq!(AssetRole::TreeConifer as usize, 14);
     assert_eq!(AssetRole::TreePalm as usize, 15);
