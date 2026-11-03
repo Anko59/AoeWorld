@@ -1,4 +1,7 @@
 //! Small host launcher, compiled independently of the workspace dependency graph.
+#[allow(dead_code)]
+mod lock;
+mod long;
 mod observer;
 mod policy;
 
@@ -7,6 +10,16 @@ mod tests;
 
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
+    if args
+        .first()
+        .is_some_and(|arg| arg == "--long" || arg == "--locked")
+    {
+        let locked = args.remove(0) == "--locked";
+        std::process::exit(long::run(&args, locked).unwrap_or_else(|error| {
+            eprintln!("long job: {error}");
+            lock::exit_code(error.as_ref())
+        }));
+    }
     if args.first().is_some_and(|arg| arg == "--run") {
         args.remove(0);
         std::process::exit(run(&args).unwrap_or_else(|error| {

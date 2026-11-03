@@ -65,7 +65,9 @@ are not used. A host MemAvailable check refuses immediately below 3 GiB.
 
 The `long` registry flag covers full e2e, coverage, local perf benchmarks and
 aggregates containing them. A nonempty `AOE_E2E_SPECS` selection is short.
-Long jobs take one nonblocking kernel lock; a second invocation names its holder
+The std-only resource runner takes the long-job lock through Linux `flock` before
+bootstrapping the harness or starting Cargo. The runner builds its tool image
+before compiling itself on a clean checkout. A second invocation names its holder
 and stops with `retry later`. Intended children inherit the live descriptor and
 validated proof, so nested targets do not refuse themselves and controller death
 does not admit a competing long job while its child is running. Do useful work

@@ -17,15 +17,23 @@ disk-precheck: job-bootstrap
 	@env $(call MOUNT_QUOTE,HARNESS_TARGET_CACHE=$(HARNESS_TARGET_CACHE)) $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) '$(HARNESS_TARGET_CACHE)/debug/aoe-harness' disk-precheck
 
 # Admit standalone preflight before its workload prerequisites, including with make -j.
-preflight: job-bootstrap
-	@$(JOB_RUN) preflight -- make --no-print-directory preflight-steps
+preflight: resource-bootstrap
+	@$(RESOURCE_LONG) preflight -- $(MAKE) --no-print-directory preflight-admitted
+
+.PHONY: preflight-admitted
+preflight-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory preflight-steps
 
 preflight-steps: disk-precheck
 	@$(MAKE) --no-print-directory deny build-wasm
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight
 
-coverage: job-bootstrap
-	@$(JOB_RUN) coverage -- make --no-print-directory coverage-steps
+coverage: resource-bootstrap
+	@$(RESOURCE_LONG) coverage -- $(MAKE) --no-print-directory coverage-admitted
+
+.PHONY: coverage-admitted
+coverage-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory coverage-steps
 	@$(MAKE) --no-print-directory coverage-check
 
 coverage-steps:
@@ -37,8 +45,12 @@ coverage-steps:
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) $(RESOURCE_OBSERVER) cargo llvm-cov report --lcov --output-path reports/coverage/native.lcov
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT) $(COVERAGE_IMAGE) $(RESOURCE_OBSERVER) cargo llvm-cov report --json --output-path reports/coverage/native.json
 
-perf-instructions: job-bootstrap
-	@$(JOB_RUN) perf-instructions -- make --no-print-directory perf-instructions-steps
+perf-instructions: resource-bootstrap
+	@$(RESOURCE_LONG) perf-instructions -- $(MAKE) --no-print-directory perf-instructions-admitted
+
+.PHONY: perf-instructions-admitted
+perf-instructions-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-instructions-steps
 
 perf-instructions-steps:
 	@$(MAKE) --no-print-directory analysis-tools
@@ -49,16 +61,24 @@ perf-instructions-steps:
 
 # Headless 100-player, 100,000-unit tick benchmark; PERF_SCALE_ARGS passes harness flags
 # (for example `PERF_SCALE_ARGS="--players 8 --ticks 100" make perf-scale`).
-perf-scale: job-bootstrap
-	@$(JOB_RUN) perf-scale -- make --no-print-directory perf-scale-steps
+perf-scale: resource-bootstrap
+	@$(RESOURCE_LONG) perf-scale -- $(MAKE) --no-print-directory perf-scale-admitted
+
+.PHONY: perf-scale-admitted
+perf-scale-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-scale-steps
 
 perf-scale-steps:
 	@$(MAKE) --no-print-directory tools
 	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-scale $(PERF_SCALE_ARGS)
 
 # A tiny run (4 players, 2,000 units, 50 ticks) that executes the whole benchmark path.
-perf-scale-smoke: job-bootstrap
-	@$(JOB_RUN) perf-scale-smoke -- make --no-print-directory perf-scale-smoke-steps
+perf-scale-smoke: resource-bootstrap
+	@$(RESOURCE_LONG) perf-scale-smoke -- $(MAKE) --no-print-directory perf-scale-smoke-admitted
+
+.PHONY: perf-scale-smoke-admitted
+perf-scale-smoke-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-scale-smoke-steps
 
 perf-scale-smoke-steps:
 	@$(MAKE) --no-print-directory tools
@@ -66,8 +86,12 @@ perf-scale-smoke-steps:
 
 # About 11,000 military movers in 200 armies on open ground: the movement span split
 # (docs/movement/group-movement-rewrite.md section 5.2). PERF_GROUPS_ARGS passes harness flags.
-perf-groups: job-bootstrap
-	@$(JOB_RUN) perf-groups -- make --no-print-directory perf-groups-steps
+perf-groups: resource-bootstrap
+	@$(RESOURCE_LONG) perf-groups -- $(MAKE) --no-print-directory perf-groups-admitted
+
+.PHONY: perf-groups-admitted
+perf-groups-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-groups-steps
 
 perf-groups-steps:
 	@$(MAKE) --no-print-directory tools
@@ -109,8 +133,12 @@ build-wasm-steps:
 	@$(DOCKER_RUN) cargo build --locked --profile wasm-release --target wasm32-unknown-unknown -p aoe-client --features diagnostics
 	@$(DOCKER_RUN) wasm-bindgen --target web --out-dir web/diagnostics-pkg --out-name aoe_client target/wasm32-unknown-unknown/wasm-release/aoe_client.wasm
 
-test-e2e: job-bootstrap
-	@$(JOB_RUN) test-e2e -- make --no-print-directory test-e2e-steps
+test-e2e: resource-bootstrap
+	@$(RESOURCE_LONG) test-e2e -- $(MAKE) --no-print-directory test-e2e-admitted
+
+.PHONY: test-e2e-admitted
+test-e2e-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory test-e2e-steps
 
 test-e2e-steps:
 	@$(MAKE) --no-print-directory disk-precheck build-wasm browser-deps orchestrator-tools
@@ -267,8 +295,12 @@ fuzz-nightly: fuzz-tools orchestrator-tools job-bootstrap
 fuzz-nightly-steps:
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -w $(ROOT)/fuzz $(FUZZ_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked --manifest-path $(ROOT)/crates/harness/Cargo.toml -- fuzz-nightly
 
-perf-smoke: job-bootstrap
-	@$(JOB_RUN) perf-smoke -- make --no-print-directory perf-smoke-steps
+perf-smoke: resource-bootstrap
+	@$(RESOURCE_LONG) perf-smoke -- $(MAKE) --no-print-directory perf-smoke-admitted
+
+.PHONY: perf-smoke-admitted
+perf-smoke-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-smoke-steps
 
 perf-smoke-steps:
 	@$(MAKE) --no-print-directory orchestrator-tools
@@ -276,51 +308,79 @@ perf-smoke-steps:
 
 # Standalone, identical late-game repetitions for before/after profiling.
 .PHONY: perf-late-game perf-late-game-steps
-perf-late-game: job-bootstrap
-	@$(JOB_RUN) perf-late-game -- make --no-print-directory perf-late-game-steps
+perf-late-game: resource-bootstrap
+	@$(RESOURCE_LONG) perf-late-game -- $(MAKE) --no-print-directory perf-late-game-admitted
+
+.PHONY: perf-late-game-admitted
+perf-late-game-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-late-game-steps
 
 perf-late-game-steps:
 	@$(MAKE) --no-print-directory orchestrator-tools
 	@$(RESOURCE_RUN) docker run --rm --init $(JOB_ENV) $(RESOURCE_CAP) --user $(UID):$(GID) --group-add $(shell stat -c %g /var/run/docker.sock) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) $(ROOT_MOUNTS) -v /var/run/docker.sock:/var/run/docker.sock -w $(ROOT) $(ORCH_IMAGE) $(RESOURCE_OBSERVER) cargo run --release --locked -p aoe-harness -- perf-late-game $(AOE_LATE_GAME_ARGS)
 
-perf-ci: job-bootstrap
-	@$(JOB_RUN) perf-ci -- make --no-print-directory perf-ci-steps
+perf-ci: resource-bootstrap
+	@$(RESOURCE_LONG) perf-ci -- $(MAKE) --no-print-directory perf-ci-admitted
+
+.PHONY: perf-ci-admitted
+perf-ci-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-ci-steps
 
 perf-ci-steps:
 	@$(MAKE) --no-print-directory analysis-tools orchestrator-tools
 	@make --no-print-directory perf-wasm-size perf-instructions
 	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-ci
 
-perf-full: job-bootstrap
-	@$(JOB_RUN) perf-full -- make --no-print-directory perf-full-steps
+perf-full: resource-bootstrap
+	@$(RESOURCE_LONG) perf-full -- $(MAKE) --no-print-directory perf-full-admitted
+
+.PHONY: perf-full-admitted
+perf-full-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-full-steps
 
 perf-full-steps:
 	@$(MAKE) --no-print-directory perf-instructions perf-wasm-size orchestrator-tools
 	@$(DOCKER_RUN) cargo run --release --locked -p aoe-harness -- perf-full
 
-perf-pressure: job-bootstrap
-	@$(JOB_RUN) perf-pressure -- make --no-print-directory perf-pressure-steps
+perf-pressure: resource-bootstrap
+	@$(RESOURCE_LONG) perf-pressure -- $(MAKE) --no-print-directory perf-pressure-admitted
+
+.PHONY: perf-pressure-admitted
+perf-pressure-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-pressure-steps
 
 perf-pressure-steps:
 	@$(MAKE) --no-print-directory orchestrator-tools
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-pressure
 
-perf-stress: job-bootstrap
-	@$(JOB_RUN) perf-stress -- make --no-print-directory perf-stress-steps
+perf-stress: resource-bootstrap
+	@$(RESOURCE_LONG) perf-stress -- $(MAKE) --no-print-directory perf-stress-admitted
+
+.PHONY: perf-stress-admitted
+perf-stress-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-stress-steps
 
 perf-stress-steps:
 	@$(MAKE) --no-print-directory orchestrator-tools
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-stress
 
-perf-soak-10: job-bootstrap
-	@$(JOB_RUN) perf-soak-10 -- make --no-print-directory perf-soak-10-steps
+perf-soak-10: resource-bootstrap
+	@$(RESOURCE_LONG) perf-soak-10 -- $(MAKE) --no-print-directory perf-soak-10-admitted
+
+.PHONY: perf-soak-10-admitted
+perf-soak-10-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-soak-10-steps
 
 perf-soak-10-steps:
 	@$(MAKE) --no-print-directory orchestrator-tools
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-soak-10
 
-perf-soak-30: job-bootstrap
-	@$(JOB_RUN) perf-soak-30 -- make --no-print-directory perf-soak-30-steps
+perf-soak-30: resource-bootstrap
+	@$(RESOURCE_LONG) perf-soak-30 -- $(MAKE) --no-print-directory perf-soak-30-admitted
+
+.PHONY: perf-soak-30-admitted
+perf-soak-30-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-soak-30-steps
 
 perf-soak-30-steps:
 	@$(MAKE) --no-print-directory orchestrator-tools
@@ -417,8 +477,12 @@ test-formations-perf-steps:
 	@$(DOCKER_RUN) cargo test --locked --release -p aoe-simulation --lib formations_measure_warm -- --nocapture
 # One complete late-game tick under Callgrind for focused optimisation work.
 .PHONY: perf-late-game-instructions perf-late-game-instructions-steps
-perf-late-game-instructions: job-bootstrap
-	@$(JOB_RUN) perf-late-game-instructions -- make --no-print-directory perf-late-game-instructions-steps
+perf-late-game-instructions: resource-bootstrap
+	@$(RESOURCE_LONG) perf-late-game-instructions -- $(MAKE) --no-print-directory perf-late-game-instructions-admitted
+
+.PHONY: perf-late-game-instructions-admitted
+perf-late-game-instructions-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-late-game-instructions-steps
 
 perf-late-game-instructions-steps:
 	@$(MAKE) --no-print-directory analysis-tools

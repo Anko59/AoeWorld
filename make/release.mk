@@ -1,5 +1,9 @@
-release-build: job-bootstrap
-	@$(JOB_RUN) release-build -- make --no-print-directory release-build-steps
+release-build: resource-bootstrap
+	@$(RESOURCE_LONG) release-build -- $(MAKE) --no-print-directory release-build-admitted
+
+.PHONY: release-build-admitted
+release-build-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory release-build-steps
 
 release-build-steps:
 	@$(MAKE) --no-print-directory orchestrator-tools

@@ -107,12 +107,12 @@ fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
         let declaration = lines.next().unwrap();
         assert_eq!(
             declaration,
-            format!("{target}: job-bootstrap"),
+            format!("{target}: resource-bootstrap"),
             "{target}: prerequisites must run inside admission"
         );
         let recipe = lines.next().unwrap();
         assert!(
-            recipe.contains(&format!("$(JOB_RUN) {target} -- ")),
+            recipe.contains(&format!("$(RESOURCE_LONG) {target} -- ")),
             "{target}: {recipe}"
         );
     }

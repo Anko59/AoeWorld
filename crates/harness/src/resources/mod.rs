@@ -1,4 +1,5 @@
 //! Host-side container resource policy and qualification.
+pub(crate) mod lock;
 pub(crate) mod policy;
 pub(crate) fn docker_command<T: AsRef<str>>(args: &[T]) -> std::io::Result<std::process::Command> {
     let mut command = std::process::Command::new("docker");

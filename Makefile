@@ -41,6 +41,7 @@ LONG_DIR_MOUNT := $(if $(LONG_DIR_EXTERNAL),-v $(LONG_DIR_EXTERNAL):$(LONG_DIR_E
 TMP_MOUNT := $(if $(TMPDIR),-v $(TMPDIR):/aoe-harness-tmp -e TMPDIR=/aoe-harness-tmp)
 ROOT_MOUNTS := $(GIT_MOUNT) $(LONG_DIR_MOUNT) $(call BIND_MOUNT,$(ROOT),$(ROOT)) $(CACHE_MOUNTS) $(COMPILE_CACHE_MOUNTS)
 RESOURCE_BINARY := $(ROOT)/.cache/resource-runner
+RESOURCE_LONG := $(call MOUNT_QUOTE,$(RESOURCE_BINARY)) --long
 RESOURCE_RUN := $(call MOUNT_QUOTE,$(RESOURCE_BINARY)) --run
 RESOURCE_OBSERVER = $(call MOUNT_QUOTE,$(RESOURCE_BINARY)) --container
 DOCKER_RUN := \
@@ -277,8 +278,12 @@ ci-dispatch-status: orchestrator-tools
 ci-check:
 	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e AOE_BASE_SHA -e GITHUB_EVENT_NAME -e GITHUB_REF_NAME -e AOE_SELECTION_JSON -e AOE_JOB_RESULTS_JSON $(ROOT_MOUNTS) -w $(ROOT) $(TOOL_IMAGE) $(RESOURCE_OBSERVER) cargo run --locked -p aoe-harness -- ci-check
 
-perf-baseline-propose: job-bootstrap
-	@$(JOB_RUN) perf-baseline-propose -- make --no-print-directory perf-baseline-propose-steps
+perf-baseline-propose: resource-bootstrap
+	@$(RESOURCE_LONG) perf-baseline-propose -- $(MAKE) --no-print-directory perf-baseline-propose-admitted
+
+.PHONY: perf-baseline-propose-admitted
+perf-baseline-propose-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-baseline-propose-steps
 
 perf-baseline-propose-steps: perf-instructions perf-wasm-size
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- perf-baseline-propose
@@ -307,8 +312,12 @@ preflight-checks: disk-precheck
 	@$(MAKE) --no-print-directory deny build-wasm
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight --part checks
 
-preflight-unit: job-bootstrap
-	@$(JOB_RUN) preflight-unit -- make --no-print-directory preflight-unit-steps
+preflight-unit: resource-bootstrap
+	@$(RESOURCE_LONG) preflight-unit -- $(MAKE) --no-print-directory preflight-unit-admitted
+
+.PHONY: preflight-unit-admitted
+preflight-unit-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory preflight-unit-steps
 
 preflight-unit-steps: disk-precheck
 	@$(DOCKER_RUN) cargo run --locked -p aoe-harness -- preflight --part unit

@@ -23,6 +23,8 @@ pub fn workspace_named(prefix: &str) -> tempfile::TempDir {
         "crates/harness/src/resources/launcher.rs",
         "crates/harness/src/resources/observer.rs",
         "crates/harness/src/resources/policy.rs",
+        "crates/harness/src/resources/long.rs",
+        "crates/harness/src/resources/lock.rs",
     ] {
         let destination = root.join(file);
         fs::create_dir_all(destination.parent().unwrap()).unwrap();

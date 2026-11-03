@@ -58,8 +58,12 @@ ai-arena-steps:
 # The harness runs in the orchestrator image (it starts sibling bot and browser containers);
 # the wheel is built by the same target, and `--browser` needs `make build-wasm` first.
 .PHONY: scale-match scale-match-steps scale-match-smoke scale-match-smoke-steps
-scale-match: job-bootstrap
-	@$(JOB_RUN) scale-match -- make --no-print-directory scale-match-steps
+scale-match: resource-bootstrap
+	@$(RESOURCE_LONG) scale-match -- $(MAKE) --no-print-directory scale-match-admitted
+
+.PHONY: scale-match-admitted
+scale-match-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory scale-match-steps
 
 # One slot for the wheel and the run: the wheel is built inside the held slot.
 scale-match-steps: sdk-python-steps
@@ -67,8 +71,12 @@ scale-match-steps: sdk-python-steps
 	@$(DEV_ORCH_RUN) cargo run --release --locked -p aoe-harness -- scale-match $(SCALE_MATCH_ARGS)
 
 # Four players for one minute on a flat 500-tile map: the whole path, none of the scale.
-scale-match-smoke: job-bootstrap
-	@$(JOB_RUN) scale-match-smoke -- make --no-print-directory scale-match-smoke-steps
+scale-match-smoke: resource-bootstrap
+	@$(RESOURCE_LONG) scale-match-smoke -- $(MAKE) --no-print-directory scale-match-smoke-admitted
+
+.PHONY: scale-match-smoke-admitted
+scale-match-smoke-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory scale-match-smoke-steps
 
 scale-match-smoke-steps: sdk-python-steps
 	@$(MAKE) --no-print-directory orchestrator-tools sdk-python-tools

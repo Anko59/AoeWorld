@@ -1,7 +1,11 @@
 # Same army builder as perf-groups; instrument only movement at tick 201.
 .PHONY: perf-groups-instructions perf-groups-instructions-steps
-perf-groups-instructions: job-bootstrap
-	@$(JOB_RUN) perf-groups-instructions -- make --no-print-directory perf-groups-instructions-steps
+perf-groups-instructions: resource-bootstrap
+	@$(RESOURCE_LONG) perf-groups-instructions -- $(MAKE) --no-print-directory perf-groups-instructions-admitted
+
+.PHONY: perf-groups-instructions-admitted
+perf-groups-instructions-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-groups-instructions-steps
 
 perf-groups-instructions-steps:
 	@$(MAKE) --no-print-directory analysis-tools
@@ -17,8 +21,12 @@ perf-groups-annotate:
 
 # Keep the matched timing and instruction measurements in one admitted slot.
 .PHONY: perf-groups-profile perf-groups-profile-steps
-perf-groups-profile: job-bootstrap
-	@$(JOB_RUN) perf-groups-profile -- make --no-print-directory perf-groups-profile-steps
+perf-groups-profile: resource-bootstrap
+	@$(RESOURCE_LONG) perf-groups-profile -- $(MAKE) --no-print-directory perf-groups-profile-admitted
+
+.PHONY: perf-groups-profile-admitted
+perf-groups-profile-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-groups-profile-steps
 
 perf-groups-profile-steps:
 	@$(MAKE) --no-print-directory analysis-tools
