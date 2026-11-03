@@ -83,7 +83,8 @@ test("farm staffing keeps a single builder's queued house", async ({
   if (first === undefined) throw new Error("First worker missing");
   await selectWorkers(page, workers);
   await place(page, "farm", 250, 200);
-  await page.locator(`[data-unit-id="${first}"]`).click();
+  // The live HUD replaces moving-unit portraits every refresh.
+  await page.locator(`[data-unit-id="${first}"]`).click({ force: true });
   await expect(page.locator("#selection")).toHaveAttribute("data-count", "1");
   expect((await actors(page)).find((a) => a.id === first)?.task).toMatch(
     /Moving|Building/,
