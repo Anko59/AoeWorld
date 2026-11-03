@@ -97,7 +97,7 @@ export function initInterface() {
       const signature=selected.map(unit=>`${unit.id}:${unit.kind}`).join(',');
       if (signature!==previousSelection) {
         setEntityIcon(byId('selection-portrait'),first.kind);
-        byId('selected-icons').innerHTML=count>1?selected.map(unit=>`<span class="unit-token" title="${unit.name}">${entityIcon(unit.kind)}</span>`).join(''):'';
+        byId('selected-icons').innerHTML=count>1?selected.map(unit=>`<span class="unit-token" data-unit-id="${unit.id}" title="${unit.name}">${entityIcon(unit.kind)}</span>`).join(''):'';
         previousSelection=signature;
       }
     } else previousSelection='';

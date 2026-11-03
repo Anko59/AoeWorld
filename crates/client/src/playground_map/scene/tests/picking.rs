@@ -193,7 +193,7 @@ async fn ground_farms_remain_selectable_and_do_not_hide_units() {
 }
 
 #[wasm_bindgen_test]
-async fn building_selection_obeys_draw_depth_for_resources_and_other_buildings() {
+async fn building_selection_yields_to_resources_on_both_sides_and_orders_match() {
     let mut client = fixture(1.0).await;
     let scout = client.units.get_mut(&EntityId(1)).unwrap();
     scout.position = WorldPosition::from_tile_center(TileCoord::new(101, 101)).unwrap();
@@ -227,9 +227,17 @@ async fn building_selection_obeys_draw_depth_for_resources_and_other_buildings()
     });
     click(&mut client, [0.0, -90.0]);
     assert_eq!(
-        client.selected.building_id,
-        Some(EntityId(8)),
-        "roof hides berries behind it"
+        client.selected.resource_id,
+        Some(berry.id),
+        "berries behind the roof remain selectable"
+    );
+    assert_eq!(
+        picking::resource(&client, ScreenPoint { x: 640.0, y: 270.0 }),
+        Some((berry.id, aoe_protocol::ResourceKind::Food))
+    );
+    assert_eq!(
+        picking::enemy_building(&client, ScreenPoint { x: 640.0, y: 270.0 }),
+        None
     );
     let foreground =
         aoe_map::ResourceNode::starting(TileCoord::new(100, 101), aoe_map::ResourceKind::Food)
@@ -358,7 +366,7 @@ async fn gold_behind_a_tree_remains_a_resource_target() {
 }
 
 #[wasm_bindgen_test]
-async fn a_tree_rectangle_behind_an_enemy_building_does_not_hide_it() {
+async fn a_tree_rectangle_behind_an_enemy_building_wins_selection_and_orders() {
     let mut client = fixture(1.0).await;
     client.units.clear();
     let enemy = if crate::playground::game::village::owner(&client) == PlayerId(1) {
@@ -387,18 +395,51 @@ async fn a_tree_rectangle_behind_an_enemy_building_does_not_hide_it() {
         overview: vec![],
         disabled: true,
     });
-    // The roof is drawn in front of the tree: it keeps the click for selection
-    // and for attack, and the tree does not become a gather target.
+    // Resources win even behind a roof; an empty part of the silhouette still
+    // belongs to the building.
     click(&mut client, [0.0, -90.0]);
-    assert_eq!(client.selected.building_id, Some(EntityId(8)));
-    assert_eq!(client.selected.resource_id, None);
+    assert_eq!(client.selected.building_id, None);
+    assert_eq!(client.selected.resource_id, Some(tree.id));
     assert_eq!(
         picking::enemy_building(&client, ScreenPoint { x: 640.0, y: 270.0 }),
-        Some(EntityId(8))
+        None
     );
     assert_eq!(
         picking::resource(&client, ScreenPoint { x: 640.0, y: 180.0 }),
         None
     );
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn completed_farm_has_a_work_cursor_for_a_selected_villager() {
+    let mut client = fixture(1.0).await;
+    client.units.get_mut(&EntityId(1)).unwrap().kind = aoe_protocol::UnitKind::Villager;
+    client.selected.units(vec![EntityId(1)]);
+    let owner = crate::playground::game::village::owner(&client);
+    let farm = &mut client.village.buildings[0];
+    farm.kind = BuildingKind::Farm;
+    farm.player = owner;
+    farm.footprint = TileRect::from_xywh(99, 99, 3, 3);
+    farm.food_remaining = Some(175);
+    client.pointer = Some(ScreenPoint { x: 640.0, y: 360.0 });
+    let values = crate::playground::game::village::presentation::values(&client);
+    assert_eq!(
+        values[3], 2.0,
+        "a usable farm must not show forbidden feedback"
+    );
+    client.canvas.remove();
+}
+
+#[wasm_bindgen_test]
+async fn building_portrait_removal_keeps_the_remaining_building_selected() {
+    let mut client = fixture(1.0).await;
+    client.village.buildings.push(building(9, 103, 103));
+    client.selected.building(EntityId(8));
+    client.selected.buildings.push(EntityId(9));
+    crate::playground::game::village::selection::portrait(&mut client, EntityId(8), true, false);
+    assert_eq!(client.selected.building_id, Some(EntityId(9)));
+    assert_eq!(client.selected.buildings, [EntityId(9)]);
+    assert!(client.selected.units.is_empty());
     client.canvas.remove();
 }

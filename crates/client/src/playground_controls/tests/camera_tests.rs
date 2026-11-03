@@ -1,5 +1,5 @@
 use super::*;
-use aoe_core::{Seed, project};
+use aoe_core::{Seed, WorldConfig, project};
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -68,7 +68,6 @@ fn wheel_zoom_preserves_finite_nonfinite_and_clamped_pointer_zoom() {
 
 #[wasm_bindgen_test]
 fn camera_pan_moves_in_the_requested_screen_direction() {
-    let config = WorldConfig::new(512, 512, Seed(1)).unwrap();
     let camera = Camera {
         center: [256.0, 256.0],
         zoom: 1.0,
@@ -77,13 +76,33 @@ fn camera_pan_moves_in_the_requested_screen_direction() {
     };
     let initial = project(camera.center);
 
-    let left = pan_camera(camera, config, [-60.0, 0.0]);
-    let right = pan_camera(camera, config, [60.0, 0.0]);
-    let up = pan_camera(camera, config, [0.0, -60.0]);
-    let down = pan_camera(camera, config, [0.0, 60.0]);
+    let left = pan_camera(camera, [-60.0, 0.0]);
+    let right = pan_camera(camera, [60.0, 0.0]);
+    let up = pan_camera(camera, [0.0, -60.0]);
+    let down = pan_camera(camera, [0.0, 60.0]);
 
     assert!(project(left.center).x < initial.x);
     assert!(project(right.center).x > initial.x);
     assert!(project(up.center).y < initial.y);
     assert!(project(down.center).y > initial.y);
+}
+
+#[wasm_bindgen_test]
+fn camera_pan_can_center_beyond_every_map_edge() {
+    let config = WorldConfig::new(512, 512, Seed(1)).unwrap();
+    for center in [
+        [-10.0, -10.0],
+        [
+            f64::from(config.width_tiles) + 10.0,
+            f64::from(config.height_tiles) + 10.0,
+        ],
+    ] {
+        let camera = Camera {
+            center,
+            zoom: 1.0,
+            viewport: [1280.0, 720.0],
+            focus_elevation_meters: 0.0,
+        };
+        assert_eq!(pan_camera(camera, [0.0, 0.0]).center, center);
+    }
 }

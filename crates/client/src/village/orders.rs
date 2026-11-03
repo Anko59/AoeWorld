@@ -107,15 +107,16 @@ pub(in super::super) fn at_pointer(client: &mut Client, point: ScreenPoint, queu
         .map(|a| a.0)
         .or_else(|| super::picking::enemy_building(client, point));
     let animal = actor.filter(|a| a.1).map(|a| a.0);
+    let resource = super::picking::resource(client, point);
     if !queued
+        && actor.is_none()
+        && resource.is_none()
         && enemy.is_none()
-        && animal.is_none()
         && (super::garrison::interact(client, point)
             || super::construction::interact(client, point))
     {
         return;
     }
-    let resource = super::picking::resource(client, point);
     let Some(world) = map::world_at_screen(client, point) else {
         client.status = "terrain unavailable at pointer".into();
         return;
@@ -323,7 +324,6 @@ pub(in super::super) fn focus_town_center(client: &mut Client, select: bool) {
         .map(|b| (b.id, super::building_center(b)))
     {
         map::center_on_world(client, position);
-        client.camera = client.camera.clamp_center(client.config);
         if select {
             client.selected.building(id);
         }

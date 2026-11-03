@@ -1,6 +1,7 @@
 //! Farms: they need a mill, hold 175 food, take one farmer and then vanish.
 use super::{buildings::*, *};
 mod contact;
+mod group_builders;
 
 fn at(x: i32, y: i32) -> TileCoord {
     TileCoord::new(x, y)

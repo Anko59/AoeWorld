@@ -78,9 +78,49 @@ impl GameWorld {
                     .then_some((*id, job.building))
             })
             .collect::<Vec<_>>();
+        let mut remaining = BTreeMap::<EntityId, usize>::new();
+        let mut queued = BTreeMap::<EntityId, usize>::new();
+        for &(_, building) in &finished {
+            *remaining.entry(building).or_default() += 1;
+        }
+        for &(builder, _) in &finished {
+            let targets = self.economy.builders[&builder]
+                .queue
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>();
+            for target in targets {
+                *queued.entry(*target).or_default() += 1;
+            }
+        }
+        let mut staffed = std::collections::BTreeSet::new();
         for (builder, building) in finished {
             let (player, kind, footprint) = completed[&building];
-            if !self.next_queued_build(builder)
+            let helpers = remaining.get_mut(&building).unwrap();
+            *helpers -= 1;
+            // Staff only when helpers retain every queued order. A builder
+            // with a unique order must carry it out before becoming a farmer.
+            if kind == BuildingKind::Farm
+                && *helpers > 0
+                && self.economy.builders[&builder]
+                    .queue
+                    .iter()
+                    .all(|target| queued[target] > 1)
+                && staffed.insert(building)
+                && self
+                    .economy
+                    .gatherers
+                    .occupied(super::super::gathering::WorkTarget::Farm(building), builder)
+                    == 0
+            {
+                let targets = self.economy.builders[&builder]
+                    .queue
+                    .iter()
+                    .collect::<std::collections::BTreeSet<_>>();
+                for target in targets {
+                    *queued.get_mut(target).unwrap() -= 1;
+                }
+                self.finish_farm_builder(builder, player, building);
+            } else if !self.next_queued_build(builder)
                 && (kind == BuildingKind::Farm || !self.continue_foundation(builder, player))
             {
                 self.after_building(builder, player, building, kind, footprint);

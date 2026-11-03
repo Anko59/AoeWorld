@@ -80,7 +80,6 @@ pub(in super::super) fn idle(client: &mut super::Client, military: bool) {
     client.drag = None;
     client.selected.units(vec![id]);
     crate::playground::game::map::center_on_world(client, position);
-    client.camera = client.camera.clamp_center(client.config);
     crate::playground::game::subscribe(client);
     let _ = client.canvas.focus();
 }
@@ -172,4 +171,70 @@ pub(crate) fn box_members(
             .then_some(id)
         })
         .collect()
+}
+
+/// Selection after a click on a unit portrait in the multi-selection panel,
+/// as in AoE2 DE: a plain click keeps only that unit, Shift removes it, Ctrl
+/// keeps only units of its type and Ctrl+Shift removes every unit of its type.
+/// Type rules need the clicked unit's kind; an unknown kind changes nothing.
+pub(crate) fn narrow_by_portrait<K: Copy + Eq>(
+    selected: &[EntityId],
+    clicked: EntityId,
+    kind_of: impl Fn(EntityId) -> Option<K>,
+    shift: bool,
+    ctrl: bool,
+) -> Vec<EntityId> {
+    match (shift, ctrl) {
+        (false, false) => vec![clicked],
+        (true, false) => selected
+            .iter()
+            .copied()
+            .filter(|id| *id != clicked)
+            .collect(),
+        (_, true) => {
+            let Some(kind) = kind_of(clicked) else {
+                return selected.to_vec();
+            };
+            selected
+                .iter()
+                .copied()
+                .filter(|id| (kind_of(*id) == Some(kind)) != shift)
+                .collect()
+        }
+    }
+}
+
+pub(in super::super) fn portrait(
+    client: &mut super::Client,
+    clicked: EntityId,
+    shift: bool,
+    ctrl: bool,
+) {
+    if client.selected.building_id.is_some() {
+        let next = narrow_by_portrait(
+            &client.selected.buildings,
+            clicked,
+            |id| {
+                client
+                    .village
+                    .buildings
+                    .iter()
+                    .find(|b| b.id == id)
+                    .map(|b| b.kind)
+            },
+            shift,
+            ctrl,
+        );
+        client.selected.building_id = next.first().copied();
+        client.selected.buildings = next;
+        return;
+    }
+    let next = narrow_by_portrait(
+        &client.selected.units,
+        clicked,
+        |id| client.units.get(&id).map(|unit| unit.kind),
+        shift,
+        ctrl,
+    );
+    client.selected.units(next);
 }
