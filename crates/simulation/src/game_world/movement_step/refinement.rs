@@ -91,7 +91,10 @@ impl GameWorld {
         } else {
             self.local_unit_route(index, goal)
         };
-        if (short_join || bypass)
+        // An occupied nearby waypoint only needs the wider escape when it
+        // belongs to a detached corridor member. An independent boxed mover
+        // must exhaust its obstruction budget instead of circling locally.
+        if (short_join || (bypass && self.units[index].formation.is_some()))
             && pops == 0
             && self.units[index]
                 .obstruction

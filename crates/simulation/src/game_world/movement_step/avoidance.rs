@@ -208,6 +208,9 @@ impl GameWorld {
         let yield_back = self.units[index]
             .obstruction
             .is_some_and(|o| o.blocked >= 32);
+        // The wider backward probes recover a marching corridor. Ordinary
+        // movers and combat pursuits keep their bounded sidestep policy.
+        let corridor_escape = yield_back && self.units[index].formation.is_some();
         let right = (-dy * side, dx * side);
         for (x, y) in [
             (dx + right.0, dy + right.1),
@@ -219,12 +222,12 @@ impl GameWorld {
             } else {
                 (0, 0)
             },
-            if yield_back {
+            if corridor_escape {
                 (-dx + 2 * right.0, -dy + 2 * right.1)
             } else {
                 (0, 0)
             },
-            if yield_back {
+            if corridor_escape {
                 (-dx - 2 * right.0, -dy - 2 * right.1)
             } else {
                 (0, 0)
