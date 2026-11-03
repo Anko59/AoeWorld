@@ -62,7 +62,10 @@ pub(crate) struct NativeFrames {
 }
 
 fn valid_name(name: &str) -> bool {
-    let file = name.strip_prefix("buildings/").unwrap_or(name);
+    let file = name
+        .strip_prefix("buildings/actors/")
+        .or_else(|| name.strip_prefix("buildings/"))
+        .unwrap_or(name);
     !file.is_empty()
         && !file.contains('/')
         && !file.contains('\\')

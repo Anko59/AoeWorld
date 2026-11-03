@@ -3,6 +3,35 @@ use aoe_core::EntityId;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 #[wasm_bindgen_test]
+fn animation_prefetch_waits_for_a_presented_gameplay_scene() {
+    let scene = Rc::new(());
+    let mut cache = RenderFrameCache::default();
+    assert!(!cache.prefetch_ready());
+    cache.record_success(&scene, &art(), &[], &[], false, 0, camera());
+    assert!(
+        !cache.prefetch_ready(),
+        "an empty startup frame is not a landscape"
+    );
+    cache.record_success(
+        &scene,
+        &art(),
+        &[unit([1.0, 2.0], false, false)],
+        &[],
+        false,
+        0,
+        camera(),
+    );
+    assert!(cache.prefetch_ready());
+    cache.invalidate();
+    assert!(
+        cache.prefetch_ready(),
+        "keep playing on the previous complete frame"
+    );
+    cache.clear();
+    assert!(!cache.prefetch_ready());
+}
+
+#[wasm_bindgen_test]
 fn cold_native_admission_preserves_source_order_within_both_priority_groups() {
     let mut art = art();
     art.resident = vec![Some(aoe_rendering::AtlasAddress::WHITE); 256];

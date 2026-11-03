@@ -30,16 +30,14 @@ pub(super) fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
         UnitKind::Spearman => [SpearmanStand, SpearmanWalk, SpearmanAttack, SpearmanDie],
         UnitKind::ManAtArms => [ManAtArmsStand, ManAtArmsWalk, ManAtArmsAttack, ManAtArmsDie],
         UnitKind::Scout => [ScoutStand, ScoutWalk, ScoutAttack, ScoutDie],
-        UnitKind::LongSwordsman | UnitKind::TwoHandedSwordsman | UnitKind::Champion => [
+        UnitKind::LongSwordsman => [
             LongSwordsmanStand,
             LongSwordsmanWalk,
             LongSwordsmanAttack,
             LongSwordsmanDie,
         ],
-        UnitKind::Pikeman | UnitKind::Halberdier => {
-            [PikemanStand, PikemanWalk, PikemanAttack, PikemanDie]
-        }
-        UnitKind::Crossbowman | UnitKind::Arbalester => [
+        UnitKind::Pikeman => [PikemanStand, PikemanWalk, PikemanAttack, PikemanDie],
+        UnitKind::Crossbowman => [
             CrossbowmanStand,
             CrossbowmanWalk,
             CrossbowmanAttack,
@@ -51,26 +49,47 @@ pub(super) fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
             EliteSkirmisherAttack,
             EliteSkirmisherDie,
         ],
-        UnitKind::Knight | UnitKind::Cavalier | UnitKind::Paladin => {
-            [KnightStand, KnightWalk, KnightAttack, KnightDie]
-        }
-        UnitKind::LightCavalry | UnitKind::Hussar => [
+        UnitKind::Knight => [KnightStand, KnightWalk, KnightAttack, KnightDie],
+        UnitKind::LightCavalry => [
             LightCavalryStand,
             LightCavalryWalk,
             LightCavalryAttack,
             LightCavalryDie,
         ],
         UnitKind::Monk => [MonkStand, MonkWalk, MonkAttack, MonkDie],
-        UnitKind::Mangonel | UnitKind::Onager => {
-            [MangonelStand, MangonelWalk, MangonelAttack, MangonelDie]
-        }
-        UnitKind::BatteringRam | UnitKind::CappedRam | UnitKind::SiegeRam => [
+        UnitKind::Mangonel => [MangonelStand, MangonelWalk, MangonelAttack, MangonelDie],
+        UnitKind::BatteringRam => [
             BatteringRamStand,
             BatteringRamWalk,
             BatteringRamAttack,
             BatteringRamDie,
         ],
 
+        UnitKind::TwoHandedSwordsman => [
+            TwoHandedSwordsmanStand,
+            TwoHandedSwordsmanWalk,
+            TwoHandedSwordsmanAttack,
+            TwoHandedSwordsmanDie,
+        ],
+        UnitKind::Champion => [ChampionStand, ChampionWalk, ChampionAttack, ChampionDie],
+        UnitKind::Halberdier => [
+            HalberdierStand,
+            HalberdierWalk,
+            HalberdierAttack,
+            HalberdierDie,
+        ],
+        UnitKind::Arbalester => [
+            ArbalesterStand,
+            ArbalesterWalk,
+            ArbalesterAttack,
+            ArbalesterDie,
+        ],
+        UnitKind::Cavalier => [CavalierStand, CavalierWalk, CavalierAttack, CavalierDie],
+        UnitKind::Paladin => [PaladinStand, PaladinWalk, PaladinAttack, PaladinDie],
+        UnitKind::Hussar => [HussarStand, HussarWalk, HussarAttack, HussarDie],
+        UnitKind::CappedRam => [CappedRamStand, CappedRamWalk, CappedRamAttack, CappedRamDie],
+        UnitKind::SiegeRam => [SiegeRamStand, SiegeRamWalk, SiegeRamAttack, SiegeRamDie],
+        UnitKind::Onager => [OnagerStand, OnagerWalk, OnagerAttack, OnagerDie],
         _ => return None,
     })
 }

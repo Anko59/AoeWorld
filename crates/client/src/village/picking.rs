@@ -157,7 +157,7 @@ fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId
         .filter_map(|(u, ground)| {
             let depth = if ground {
                 world.map_or(0.0, |p| {
-                    p[0] + p[1] + 2.0 * scene.height(p).unwrap_or(u.elevation_meters)
+                    p[0] + p[1] + 2.0 * scene.height(p).unwrap_or(f64::from(u.elevation_meters))
                 })
             } else {
                 aoe_rendering::scene_unit_depth(u)

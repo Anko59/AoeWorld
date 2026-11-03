@@ -4,6 +4,59 @@ import { fiveVillagerFixture } from "../fixtures/village.js";
 import { centerVillage, freshHud } from "../fixtures/resources.js";
 import { gameAssets } from "../../game-assets.js";
 
+test("Imperial Siege Workshop research remains clickable beneath training", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(90_000);
+  expect(
+    (await request.post("/maps/reset?scenario=imperial-army")).status(),
+  ).toBe(204);
+  await gameAssets(page);
+  await page.goto("/?play=1");
+  await expect(page.locator("#connection")).toHaveText("connected");
+  await centerVillage(page, true);
+  await page.locator("#research-imperial-age").click();
+  await expect(page.locator("#age")).toContainText("Imperial Age", {
+    timeout: 25_000,
+  });
+  await page.evaluate(() => {
+    location.hash = "zoom=.35";
+  });
+  await freshHud(page);
+  const site = await page.locator("#scene").evaluate((el) =>
+    (
+      JSON.parse(el.getAttribute("data-actors") ?? "[]") as {
+        kind: string;
+        x: number;
+        y: number;
+      }[]
+    ).find((a) => a.kind === "SiegeWorkshop"),
+  );
+  if (!site) throw new Error("Siege Workshop missing");
+  for (const dy of [0, -24, -48, -72]) {
+    await page.mouse.click(site.x, site.y + dy);
+    await freshHud(page);
+    if (
+      (await page.locator("#selection").getAttribute("data-kind")) ===
+      "SiegeWorkshop"
+    )
+      break;
+  }
+  await expect(page.locator("#selection")).toHaveAttribute(
+    "data-kind",
+    "SiegeWorkshop",
+  );
+  const train = await page.locator("#train-mangonel").boundingBox();
+  const research = await page.locator("#research-capped-ram").boundingBox();
+  if (!train || !research) throw new Error("Workshop commands missing");
+  expect(research.y).toBeGreaterThanOrEqual(train.y + train.height);
+  await page.locator("#research-capped-ram").click({ timeout: 5000 });
+  await expect(page.locator("#research-capped-ram")).toBeHidden({
+    timeout: 15_000,
+  });
+});
+
 for (const available of [false, true]) {
   test(`original UI catalog ${available ? "hydrates original art" : "keeps SVG fallback"}`, async ({
     page,
@@ -25,6 +78,11 @@ for (const available of [false, true]) {
         return route.fulfill({ status: 404, body: "No local UI catalog" });
       }
       if (route.request().url().endsWith("interface.json") && available) {
+        if (route.request().url().endsWith("buildings/interface.json")) {
+          return route.fulfill({
+            json: { units: { 109: art }, technologies: { 22: art, 103: art } },
+          });
+        }
         return route.fulfill({
           json: {
             units: { 83: art, 109: art },
@@ -67,6 +125,12 @@ for (const available of [false, true]) {
       await expect(
         page.locator('#research-loom [data-ui-id="22"] .original-icon'),
       ).toBeVisible();
+      await expect(
+        page.locator("#research-loom .original-icon image"),
+      ).toHaveAttribute("href", "/asset-pack/buildings/ui-test.svg");
+      await expect(
+        page.locator("#research-imperial-age .original-icon image"),
+      ).toHaveAttribute("href", "/asset-pack/buildings/ui-test.svg");
       await expect(
         page.locator('#top-bar [data-ui-id="wood"] .original-icon'),
       ).toBeVisible();

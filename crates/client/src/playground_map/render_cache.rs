@@ -88,6 +88,12 @@ impl<S> Default for RenderFrameCache<S> {
 }
 
 impl<S> RenderFrameCache<S> {
+    pub(crate) fn prefetch_ready(&self) -> bool {
+        self.previous
+            .as_ref()
+            .is_some_and(|frame| !frame.units.is_empty())
+    }
+
     pub(crate) fn resident_bytes(&self, scene_bytes: impl FnOnce(&S) -> usize) -> usize {
         self.previous.as_ref().map_or(0, |frame| {
             scene_bytes(&frame.scene)

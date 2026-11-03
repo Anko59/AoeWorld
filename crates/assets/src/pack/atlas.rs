@@ -169,6 +169,7 @@ pub(super) fn save_page(
 }
 
 /// One sprite of a pack: its identity and how many frames `write_pack` asks for.
+#[derive(Clone)]
 pub(crate) struct SpriteRef {
     pub id: String,
     pub hash: String,

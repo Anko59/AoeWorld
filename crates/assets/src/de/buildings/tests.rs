@@ -37,6 +37,7 @@ fn unit(id: i16, standing: i16, annexes: &[(i16, [f32; 2])]) -> (i16, de_units::
     };
     let unit = de_units::Unit {
         id,
+        icon: -1,
         name: String::new(),
         standing,
         dying: -1,

@@ -272,8 +272,13 @@ fn animate(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             );
             let coverage = map::render_cache::NativeCoverage::new(&client.art, &substitutes);
             coverage.prioritize(&mut required);
-            let prefetch =
-                aoe_rendering::scene_native_prefetch(&client.art, &units, camera, time as usize);
+            // Keep cold startup requests for visible pixels. Future animation
+            // poses can stream after the first populated scene is presented.
+            let prefetch = if client.rendered_frame.prefetch_ready() {
+                aoe_rendering::scene_native_prefetch(&client.art, &units, camera, time as usize)
+            } else {
+                Vec::new()
+            };
             let Client {
                 native,
                 art,

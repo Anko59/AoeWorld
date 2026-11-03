@@ -357,7 +357,7 @@ async fn building_overlay_replaces_recipes_and_offsets_every_native_state_record
         "states":[{"role":0,"parts":[part.clone()]},{"role":1,"parts":[part]}]}]);
     compile(&mut extra);
     let _fetch = FetchFixture::install(&extra);
-    js_sys::Function::new_with_args("data", "window.fetch=async()=>new Response(data)")
+    js_sys::Function::new_with_args("data", "window.fetch=async path=>new Response(path.includes('/actors/') ? JSON.stringify({...JSON.parse(data),frames:[],chunks:[],building_data:'00',buildings:[]}) : data)")
         .call1(&JsValue::NULL, &JsValue::from_str(&extra.to_string()))
         .unwrap();
     let mut manifest: Manifest = serde_json::from_value(manifest::fixture()).unwrap();
@@ -400,3 +400,6 @@ async fn building_overlay_replaces_recipes_and_offsets_every_native_state_record
 
 #[path = "buildings/current.rs"]
 mod current;
+
+#[path = "buildings/categories.rs"]
+mod categories;

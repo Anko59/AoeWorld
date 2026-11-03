@@ -41,6 +41,7 @@ pub fn projectile_facing(east: f64, south: f64) -> u8 {
 pub const fn release_frame(pose: Pose) -> Option<u8> {
     match pose {
         Pose::ArcherAttack | Pose::CrossbowmanAttack => Some(15),
+        Pose::ArbalesterAttack => Some(20),
         Pose::SkirmisherAttack | Pose::EliteSkirmisherAttack => Some(19),
         _ => None,
     }

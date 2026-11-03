@@ -13,6 +13,8 @@ import { regressPickingProof } from "./regress/regress-picking.js";
 import { regressFarmCursorProof } from "./regress/regress-farm-cursor.js";
 import { pressureProof } from "./pressure.js";
 import { townCenterProof } from "./town-center.js";
+import { imperialArtProof } from "./imperial/art.js";
+import { startupProof } from "./imperial/startup.js";
 import { centerVillage } from "../village/fixtures/resources.js";
 
 test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
@@ -36,7 +38,12 @@ test("local original panel proof with real selection and training", async ({
   test.skip(!config, "Local panel proof was not requested");
   if (!config) return;
   test.setTimeout(
-    ["castle", "de-town-center"].includes(config.phase) ? 300_000 : 180_000,
+    config.phase.startsWith("imperial-art") ||
+      config.phase === "imperial-load-compare"
+      ? 600_000
+      : ["castle", "de-town-center"].includes(config.phase)
+        ? 300_000
+        : 180_000,
   );
   const url = new URL(config.url);
   expect(url.hostname).toBe("127.0.0.1");
@@ -44,6 +51,35 @@ test("local original panel proof with real selection and training", async ({
   expect(["8080", "8081", "8097"]).not.toContain(url.port);
   const health = await page.request.get(`${config.url}health`);
   expect(health.ok()).toBe(true);
+  if (config.phase === "imperial-load-compare") {
+    const browser = page.context().browser();
+    if (!browser) throw new Error("A fresh browser context is required");
+    for (const label of [
+      "trial-1",
+      "de-1",
+      "trial-2",
+      "de-2",
+      "trial-3",
+      "de-3",
+    ]) {
+      const context = await browser.newContext();
+      try {
+        await startupProof(await context.newPage(), config.url, label);
+      } finally {
+        await context.close();
+      }
+    }
+    return;
+  }
+  if (config.phase.startsWith("imperial-load-")) {
+    await startupProof(page, config.url, config.phase.slice(14));
+    return;
+  }
+  if (config.phase.startsWith("imperial-art")) {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await imperialArtProof(page, config.url, config.phase.endsWith("startup"));
+    return;
+  }
   if (config.phase.startsWith("pressure-")) {
     await pressureProof(page, config.url, config.phase);
     return;

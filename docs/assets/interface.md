@@ -43,6 +43,14 @@ selects the other catalogued frame before initialisation.
 
 ## DAT mapping
 
+The licensed DE overlay replaces unit icons and all 53 current technology icons
+with native DDS cells. The unit and research DAT indices select their own
+`units` and `tech` directories; equal numeric indices never merge these sheets.
+Research language identities locate the supported VER 8.9 records, whose signed
+icon fields select the installed DDS numeric prefixes. Missing or ambiguous
+cells fail import. Both groups merge into the HUD catalog with overlay-local
+page paths, retaining base command, resource and panel art.
+
 The unit field is signed `icon_id` at byte 47 of the measured VER 5.7 unit
 record. Negative IDs mean no icon. Building type 80 uses the building sheet;
 other unit types use the unit sheet. The decoder now walks all civilisations

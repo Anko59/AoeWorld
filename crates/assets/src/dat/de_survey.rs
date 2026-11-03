@@ -11,8 +11,10 @@ pub use military::ProjectileSource;
 #[path = "de_survey/economy.rs"]
 mod economy;
 pub mod graphics;
+mod icons;
 mod soldiers;
 pub mod terrains;
+pub use icons::technology_icons;
 pub use soldiers::soldier;
 
 const BUILDINGS: &[(i16, i32, &str)] = &[
@@ -130,6 +132,7 @@ pub struct Technology {
     pub requires: Vec<i16>,
     pub cost: Vec<(i16, i16, u8)>,
     pub effect: i16,
+    pub icon: i16,
     pub locations: Vec<(i16, i16, u8, i32)>,
 }
 #[derive(Debug, Serialize)]
@@ -298,7 +301,9 @@ fn technology(bytes: &[u8], id: i16, language: i32) -> Result<Technology, Error>
                 .collect::<Result<Vec<_>, Error>>()?;
             r.skip(6 + 8)?;
             let effect = r.i16()?;
-            r.skip(12)?;
+            r.skip(2)?;
+            let icon = r.i16()?;
+            r.skip(8)?;
             let name = debug(&mut r)?;
             r.skip(1)?;
             let n = count(&mut r, 16, "research locations")?;
@@ -315,6 +320,7 @@ fn technology(bytes: &[u8], id: i16, language: i32) -> Result<Technology, Error>
                 requires,
                 cost,
                 effect,
+                icon,
                 locations,
             })
         })();

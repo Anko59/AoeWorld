@@ -2,6 +2,12 @@
 use super::manifest::{BuildingComposition, BuildingPart};
 use super::*;
 
+// The renderer consumes destruction, rubble and open gates. Other DAT states
+// stay in the verified source pack and are validated here without GPU residency.
+fn runtime_state(role: u8) -> bool {
+    matches!(role, 0 | 1 | 5)
+}
+
 #[inline(never)]
 pub(super) fn select(
     manifest: &Manifest,
@@ -10,6 +16,10 @@ pub(super) fn select(
 ) -> Result<(), JsValue> {
     if manifest.buildings.len() > aoe_assets::catalog::MAX_COMPOSITIONS {
         return Err(error("too many building recipes"));
+    }
+    let mut present = vec![false; manifest.frames.len()];
+    for &index in selected.iter() {
+        present[index] = true;
     }
     for (slot, building) in manifest.buildings.iter().enumerate() {
         if manifest.buildings[..slot]
@@ -39,11 +49,12 @@ pub(super) fn select(
             let frames = source_frames(manifest, &source, count)
                 .ok_or_else(|| error("missing DAT foundation terrain"))?;
             for index in frames {
-                if !selected.contains(&index) {
+                if !present[index] {
                     if selected.len() == MAX_SELECTED_FRAMES {
                         return Err(error("too many foundation frames"));
                     }
                     selected.push(index);
+                    present[index] = true;
                     domains.push(AtlasDomain::Terrain);
                 }
             }
@@ -51,10 +62,15 @@ pub(super) fn select(
         // Resolve each recipe slice through one loop, including state and damage
         // layers. Keeping the part loop outside iterator adapters avoids cloning
         // its validation and source-selection body for each recipe section.
-        for group in [&building.parts, &building.construction]
+        for (group, resident) in [(&building.parts, true), (&building.construction, true)]
             .into_iter()
-            .chain(building.states.iter().map(|(_, parts)| parts))
-            .chain(building.damage.iter().map(|d| &d.parts))
+            .chain(
+                building
+                    .states
+                    .iter()
+                    .map(|(role, parts)| (parts, runtime_state(*role))),
+            )
+            .chain(building.damage.iter().map(|d| (&d.parts, true)))
         {
             for part in group {
                 if part.frames == 0
@@ -99,13 +115,17 @@ pub(super) fn select(
                 let Some(frames) = source_frames(manifest, source, count) else {
                     return Err(error(format!("corrupt building art ({source})")));
                 };
+                if !resident {
+                    continue;
+                }
                 let step = 1;
                 for index in frames.into_iter().step_by(step) {
-                    if !selected.contains(&index) {
+                    if !present[index] {
                         if selected.len() == MAX_SELECTED_FRAMES {
                             return Err(error("too many selected building frames"));
                         }
                         selected.push(index);
+                        present[index] = true;
                         domains.push(
                             if (605..=610).contains(&building.unit_id)
                                 || aoe_assets::catalog::ENVIRONMENT_UNIT_IDS
@@ -129,7 +149,7 @@ fn parts(
     unit_id: i32,
     parts: &[BuildingPart],
     manifest: &Manifest,
-    selected: &[usize],
+    slots: &[Option<usize>],
     records: &[GameFrame],
 ) -> Vec<aoe_rendering::BuildingPart> {
     let scale = if (605..=610).contains(&unit_id) {
@@ -148,7 +168,7 @@ fn parts(
             continue;
         };
         let source = &manifest.frames[record].source;
-        let Some(slot) = selected.iter().position(|&i| i == record) else {
+        let Some(slot) = slots[record] else {
             // An absent trial resource is explicit: no partial assemblies and
             // no unrelated sprite substituted for the missing roof or camp.
             return Vec::new();
@@ -171,17 +191,11 @@ fn parts(
             frame: scaled(records[slot]),
             angles,
             animation: if u32::from(part.frames) * u32::from(angles) > 1 {
-                (0..u32::from(part.frames) * u32::from(angles))
+                source_frames(manifest, source, u32::from(part.frames) * u32::from(angles))
+                    .unwrap_or_default()
+                    .into_iter()
                     .step_by(step)
-                    .filter_map(|number| {
-                        selected
-                            .iter()
-                            .position(|&i| {
-                                manifest.frames[i].source == *source
-                                    && manifest.frames[i].frame == number
-                            })
-                            .map(|slot| scaled(records[slot]))
-                    })
+                    .filter_map(|index| slots[index].map(|slot| scaled(records[slot])))
                     .collect()
             } else {
                 Vec::new()
@@ -251,33 +265,77 @@ pub(super) fn resolve(
     selected: &[usize],
     records: &[GameFrame],
 ) -> Vec<aoe_rendering::BuildingArt> {
-    manifest
+    // Native actor catalogs can precede building cells by over 100k entries.
+    // Index once; animation cells must not rescan that prefix for each phase.
+    let mut slots = vec![None; manifest.frames.len()];
+    for (slot, &record) in selected.iter().enumerate() {
+        slots[record].get_or_insert(slot);
+    }
+    let mut art: Vec<_> = manifest
         .buildings
         .iter()
-        .map(|b| aoe_rendering::BuildingArt {
-            unit_id: b.unit_id,
-            footprint: b.footprint,
-            foundation_material: if b.unit_id == 50 && !manifest.terrains.is_empty() {
-                Some(17)
-            } else {
-                material(b)
-            },
-            parts: parts(b.unit_id, &b.parts, manifest, selected, records),
-            construction: parts(b.unit_id, &b.construction, manifest, selected, records),
-            states: b
-                .states
-                .iter()
-                .map(|(role, p)| (*role, parts(b.unit_id, p, manifest, selected, records)))
-                .collect(),
-            damage: b
-                .damage
-                .iter()
-                .map(|d| aoe_rendering::BuildingDamage {
-                    damage_percent: d.damage_percent as u8,
-                    apply_mode: d.apply_mode,
-                    parts: parts(-1, &d.parts, manifest, selected, records),
-                })
-                .collect(),
-        })
-        .collect()
+        .map(|b| resolve_building(b.unit_id, b, manifest, &slots, records))
+        .collect();
+    // The trial has Castle recipes but no Imperial identities. Reuse the
+    // resolved Castle assembly only for an absent recipe; native Imperial art
+    // (including its explicit missing parts) always remains authoritative.
+    for (imperial, castle) in [
+        (142, 141),
+        (465, 464),
+        (565, 564),
+        (587, 586),
+        (131, 130),
+        (20, 132),
+        (51, 47),
+        (14, 10),
+        (153, 86),
+        (19, 18),
+        (137, 116),
+        (32, 31),
+        (210, 209),
+        (150, 49),
+    ] {
+        if !manifest.buildings.iter().any(|b| b.unit_id == imperial)
+            && let Some(base) = manifest.buildings.iter().find(|b| b.unit_id == castle)
+        {
+            art.push(resolve_building(imperial, base, manifest, &slots, records));
+        }
+    }
+    art
+}
+
+#[inline(never)]
+fn resolve_building(
+    unit_id: i32,
+    b: &BuildingComposition,
+    manifest: &Manifest,
+    slots: &[Option<usize>],
+    records: &[GameFrame],
+) -> aoe_rendering::BuildingArt {
+    aoe_rendering::BuildingArt {
+        unit_id,
+        footprint: b.footprint,
+        foundation_material: if b.unit_id == 50 && !manifest.terrains.is_empty() {
+            Some(17)
+        } else {
+            material(b)
+        },
+        parts: parts(b.unit_id, &b.parts, manifest, slots, records),
+        construction: parts(b.unit_id, &b.construction, manifest, slots, records),
+        states: b
+            .states
+            .iter()
+            .filter(|(role, _)| runtime_state(*role))
+            .map(|(role, p)| (*role, parts(b.unit_id, p, manifest, slots, records)))
+            .collect(),
+        damage: b
+            .damage
+            .iter()
+            .map(|d| aoe_rendering::BuildingDamage {
+                damage_percent: d.damage_percent as u8,
+                apply_mode: d.apply_mode,
+                parts: parts(-1, &d.parts, manifest, slots, records),
+            })
+            .collect(),
+    }
 }

@@ -178,7 +178,7 @@ impl DatFile {
             return Err(crate::invalid(
                 "composition",
                 0,
-                "cyclic or oversized graphic deltas",
+                format!("cyclic or oversized graphic deltas: {chain:?} -> {id}"),
             ));
         }
         let graphic = self

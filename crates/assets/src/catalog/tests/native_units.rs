@@ -45,7 +45,7 @@ fn militia_timelines_use_fractional_native_dat_durations() {
 
 #[test]
 fn every_spawned_unit_pose_uses_all_native_cells_and_dat_timing() {
-    assert_eq!(SPRITES.len(), 167);
+    assert_eq!(SPRITES.len(), 217);
     for (pose, source) in SPRITES.iter().copied().enumerate() {
         if matches!(pose, 72 | 73 | 120) {
             continue;
@@ -77,4 +77,67 @@ fn gameplay_building_inventory_includes_current_stone_barriers() {
     for id in [117, 64] {
         assert!(crate::catalog::GAMEPLAY_BUILDING_IDS.contains(&id));
     }
+}
+
+#[test]
+fn imperial_unit_bindings_select_each_dat_identity_for_all_actions() {
+    use crate::de::unit_catalog::{Action, BINDINGS};
+    for (name, id) in [
+        ("TwoHandedSwordsman", 473),
+        ("Champion", 567),
+        ("Halberdier", 359),
+        ("Arbalester", 492),
+        ("Cavalier", 283),
+        ("Paladin", 569),
+        ("Hussar", 441),
+        ("CappedRam", 422),
+        ("SiegeRam", 548),
+        ("Onager", 550),
+    ] {
+        for (suffix, action) in [
+            ("Stand", Action::Idle),
+            ("Walk", Action::Walk),
+            ("Attack", Action::Attack),
+            ("Die", Action::Death),
+            ("Decay", Action::Decay),
+        ] {
+            let pose = format!("{name}{suffix}");
+            let binding = BINDINGS
+                .iter()
+                .find(|b| format!("{:?}", b.pose) == pose)
+                .unwrap_or_else(|| panic!("missing {pose}"));
+            assert_eq!(binding.unit, id, "{pose}");
+            assert_eq!(
+                std::mem::discriminant(&binding.action),
+                std::mem::discriminant(&action)
+            );
+            assert!(SPRITES[binding.pose as usize].is_native(), "{pose}");
+        }
+    }
+}
+
+#[test]
+fn imperial_building_inventory_includes_every_current_age_record() {
+    for id in [
+        142, 465, 565, 587, 131, 20, 51, 14, 153, 19, 137, 32, 210, 150,
+    ] {
+        assert!(
+            crate::catalog::GAMEPLAY_BUILDING_IDS.contains(&id),
+            "missing Imperial DAT building {id}"
+        );
+    }
+}
+
+#[test]
+fn imperial_buildings_are_imported_from_de_without_unshipped_trial_recipes() {
+    for id in [
+        142, 465, 565, 587, 131, 20, 51, 14, 153, 19, 137, 32, 210, 150,
+    ] {
+        assert!(!crate::catalog::TRIAL_BUILDING_IDS.contains(&id));
+    }
+    assert!(
+        crate::catalog::TRIAL_BUILDING_IDS
+            .iter()
+            .all(|id| crate::catalog::GAMEPLAY_BUILDING_IDS.contains(id))
+    );
 }

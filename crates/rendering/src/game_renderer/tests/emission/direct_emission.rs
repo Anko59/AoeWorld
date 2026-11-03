@@ -184,7 +184,7 @@ fn direct_scene_is_deterministic_with_expected_order_and_ties_in_72_bounded_case
                     visual: crate::SceneUnitVisual::new(i % 2 == 0).with_selected(i % 3 == 0),
                     facing: (i % 8) as u8,
                     elevation_meters: if i == 1 {
-                        f64::from_bits(0x7ff8_0000_0000_0001)
+                        f32::from_bits(0x7fc0_0001)
                     } else {
                         0.0
                     },

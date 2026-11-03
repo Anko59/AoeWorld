@@ -12,6 +12,8 @@ use std::{
 };
 mod bindings;
 pub use bindings::BINDINGS;
+mod canonical;
+mod inventory;
 mod scene;
 #[derive(Clone, Copy)]
 pub enum Action {
@@ -31,6 +33,8 @@ pub struct Binding {
 }
 #[derive(Clone, Debug)]
 pub struct Selected {
+    pub unit: i16,
+    pub icon: i16,
     pub pose: usize,
     pub sprite: u32,
     pub file: String,
@@ -191,6 +195,8 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
         let terminal = matches!(binding.action, Action::Decay) && graphic == u.dying;
         let file = format!("dat_{graphic}");
         selected.push(Selected {
+            unit: u.id,
+            icon: u.icon,
             pose: binding.pose as usize,
             sprite: 200_000 + graphic as u32,
             file,
@@ -203,6 +209,7 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
             parts,
         });
     }
+    canonical::apply(&mut selected)?;
     Ok(selected)
 }
 
@@ -210,6 +217,7 @@ pub fn resolve(install: &Path) -> Result<Vec<Selected>, Error> {
 /// or source digests enter these checked-in metadata tables.
 pub fn generate(install: &Path) -> Result<(), Error> {
     let selected = resolve(install)?;
+    inventory::write(install, &selected)?;
     let mut unique = BTreeMap::new();
     for s in &selected {
         if let Some(old) = unique.insert(s.sprite, s)
@@ -288,7 +296,7 @@ pub fn generate(install: &Path) -> Result<(), Error> {
         graphics,
     )?;
     fs::write("crates/assets/src/catalog/units/generated.rs", poses)?;
-    let metadata:Vec<_>=selected.iter().map(|s|serde_json::json!({"pose":s.pose,"sprite":s.sprite,"file":s.file,"frames":s.frames,"angles":s.angles,"cells":s.cells,"seconds":s.seconds,"replay":s.replay})).collect();
+    let metadata:Vec<_>=selected.iter().map(|s|serde_json::json!({"pose":s.pose,"sprite":s.sprite,"file":s.file,"frames":s.frames,"angles":s.angles,"cells":s.cells,"seconds":s.seconds,"replay":s.replay,"unit":s.unit,"parts":s.parts.iter().map(|p|serde_json::json!({"file":p.animation.file,"frames":p.animation.frames,"angles":p.animation.angles,"seconds":p.animation.seconds,"replay":p.animation.replay_delay,"x":p.x,"y":p.y,"layer":p.layer})).collect::<Vec<_>>()})).collect();
     fs::write(
         "local-assets/unit-catalog.json",
         serde_json::to_vec_pretty(&metadata)?,

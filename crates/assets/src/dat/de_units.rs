@@ -14,6 +14,7 @@ pub fn disabled(bytes: &[u8]) -> Result<BTreeSet<i16>, Error> {
 pub struct Unit {
     pub id: i16,
     pub name: String,
+    pub icon: i16,
     pub standing: i16,
     pub dying: i16,
     pub dead: i16,
@@ -47,6 +48,8 @@ fn parse(bytes: &[u8], at: usize, id: i16) -> Result<Unit, Error> {
     }
     r.pos = at + 45;
     let dead = r.i16()?;
+    r.pos = at + 51;
+    let icon = r.i16()?;
     r.pos = at + 157;
     let count = usize::from(r.u8()?);
     r.bounded(count, 32, "damage graphics")?;
@@ -76,6 +79,7 @@ fn parse(bytes: &[u8], at: usize, id: i16) -> Result<Unit, Error> {
     let mut unit = Unit {
         id,
         name,
+        icon,
         standing,
         dying,
         dead,
