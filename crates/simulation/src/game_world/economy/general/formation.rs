@@ -21,7 +21,9 @@ impl GameWorld {
         {
             return;
         }
-        for &id in &ids {
+        // A regroup after a fight (no destination) is not a march.
+        let marching = self.economy.generals.armies[&g].state != GeneralState::Idle;
+        for &id in ids.iter().filter(|_| marching) {
             let (stance, reason) = if retreat {
                 (aoe_core::CombatStance::NoAttack, stances::Reason::Retreat)
             } else {

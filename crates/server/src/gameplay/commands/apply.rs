@@ -55,6 +55,21 @@ pub(in crate::gameplay) fn apply(
         ),
         PendingAction::Stop { entity_id } => world.issue_stop(player, entity_id),
         PendingAction::Delete { entity_ids } => world.issue_delete(player, &entity_ids),
+        PendingAction::GeneralMoveAlone {
+            entity_id,
+            destination,
+        } => {
+            if !world.config().valid_map_position(destination) {
+                return CommandResult::RejectedInvalidDestination;
+            }
+            world.issue_general_move(player, entity_id, destination)
+        }
+        PendingAction::GeneralTraining { entity_id, enabled } => {
+            world.issue_general_training(player, entity_id, enabled)
+        }
+        PendingAction::GeneralMix { entity_id, mix } => {
+            world.issue_general_mix(player, entity_id, mix)
+        }
         PendingAction::Hunt {
             unit_ids,
             animal_id,

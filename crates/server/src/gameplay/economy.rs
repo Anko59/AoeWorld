@@ -64,17 +64,22 @@ pub(super) fn command_state(world: &GameWorld, unit: &GameUnit, state: &mut Game
         .or_else(|| world.general_castle(unit.id));
     state.managed_by = world.vassal_controller(unit.id);
     state.commanded_by = world.general_controller(unit.id);
-    state.general = world
-        .general_status(unit.id)
-        .map(|g| aoe_protocol::GeneralStatus {
-            army_size: g.army_size,
-            state: match g.state {
-                aoe_simulation::GeneralState::Idle => aoe_protocol::GeneralState::Idle,
-                aoe_simulation::GeneralState::Marching => aoe_protocol::GeneralState::Marching,
-                aoe_simulation::GeneralState::Fighting => aoe_protocol::GeneralState::Fighting,
-                aoe_simulation::GeneralState::Retreating => aoe_protocol::GeneralState::Retreating,
-            },
-        });
+    state.general = world.general_status(unit.id).map(wire_general);
+}
+pub(super) fn wire_general(g: aoe_simulation::GeneralStatus) -> aoe_protocol::GeneralStatus {
+    aoe_protocol::GeneralStatus {
+        army_size: g.army_size,
+        state: match g.state {
+            aoe_simulation::GeneralState::Idle => aoe_protocol::GeneralState::Idle,
+            aoe_simulation::GeneralState::Marching => aoe_protocol::GeneralState::Marching,
+            aoe_simulation::GeneralState::Fighting => aoe_protocol::GeneralState::Fighting,
+            aoe_simulation::GeneralState::Retreating => aoe_protocol::GeneralState::Retreating,
+        },
+        training: g.training,
+        queued: g.queued,
+        mix: g.mix,
+        counts: g.counts,
+    }
 }
 pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitState {
     let mut state = wire_unit(

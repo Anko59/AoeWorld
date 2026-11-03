@@ -98,6 +98,54 @@ impl GameplayService {
             .await;
     }
 
+    pub async fn queue_general_move_alone(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        destination: WorldPosition,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::GeneralMoveAlone {
+                entity_id,
+                destination,
+            },
+        )
+        .await;
+    }
+
+    pub async fn queue_general_training(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        enabled: bool,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::GeneralTraining { entity_id, enabled },
+        )
+        .await;
+    }
+
+    pub async fn queue_general_mix(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        entity_id: EntityId,
+        mix: [u8; 5],
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::GeneralMix { entity_id, mix },
+        )
+        .await;
+    }
+
     pub async fn queue_hunt(
         &self,
         session_id: u64,

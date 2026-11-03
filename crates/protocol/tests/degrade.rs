@@ -90,6 +90,10 @@ fn a_unit_that_breaks_a_rule_is_named_repaired_and_the_rest_arrive() {
             u.general = Some(GeneralStatus {
                 army_size: 101,
                 state: GeneralState::Idle,
+                training: false,
+                queued: 0,
+                mix: [0; 5],
+                counts: [0; 5],
             });
         }),
         ("unit.facing", |u| u.facing = 8),

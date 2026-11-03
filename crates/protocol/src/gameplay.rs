@@ -108,10 +108,18 @@ pub enum GeneralState {
 pub struct GeneralStatus {
     pub army_size: u16,
     pub state: GeneralState,
+    /// The Train button is active: the General is buying recruits.
+    pub training: bool,
+    /// Recruits queued in production buildings but not yet in the army.
+    pub queued: u16,
+    /// Unit-mix sliders, 0..=100 per role (infantry, archers, cavalry, siege, scouts).
+    pub mix: [u8; 5],
+    /// Soldiers of each role in the army.
+    pub counts: [u16; 5],
 }
 
 mod commands;
-pub use commands::ClientMessage;
+pub use commands::{ClientMessage, GeneralCommand};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum CommandResult {

@@ -3,14 +3,20 @@ use crate::{GameUnit, GameWorld, UnitKind};
 use aoe_core::{EntityId, PlayerId, WorldPosition};
 use std::collections::{BTreeMap, BTreeSet};
 mod decisions;
+mod fight;
 mod formation;
 mod hash;
+mod orders;
 mod reinforcement;
 mod stances;
 mod survey;
 use stances::StanceOverride;
 
 pub const GENERAL_ARMY_LIMIT: usize = 100;
+/// Tiles around a General within which he commands soldiers and picks buildings.
+pub const GENERAL_INFLUENCE_TILES: i64 = 50;
+/// Infantry:archers:heavy cavalry:siege:scouts a new General aims for.
+pub const DEFAULT_MIX: [u8; 5] = [35, 30, 20, 10, 5];
 pub const GENERAL_CADENCE: u64 = 10;
 pub const GENERAL_ADMISSIONS: usize = 8;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -24,6 +30,14 @@ pub enum GeneralState {
 pub struct GeneralStatus {
     pub army_size: u16,
     pub state: GeneralState,
+    /// The Train button is active.
+    pub training: bool,
+    /// Recruits queued in production buildings, not yet in the army.
+    pub queued: u16,
+    /// Unit-mix sliders per role (infantry, archers, cavalry, siege, scouts).
+    pub mix: [u8; 5],
+    /// Living soldiers of each role.
+    pub counts: [u16; 5],
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GeneralWork {
@@ -42,8 +56,18 @@ pub(crate) struct Army {
     pub state: GeneralState,
     pub micro_after: usize,
     pub scan: (usize, usize),
+    /// Next bounded slice of each production-kind index.
+    pub production_scan: [usize; 5],
     pub retreat_until: u64,
     pub routed: Option<WorldPosition>,
+    /// The player is moving the General alone; the army holds and is not led.
+    pub solo: bool,
+    /// The player pressed Train: recruits are bought until the army is full.
+    pub training: bool,
+    /// Unit-mix sliders per role; a role at zero is never bought.
+    pub mix: [u8; 5],
+    /// The enemy each fighting group of `fight::FIGHT_GROUP` soldiers is sent against.
+    pub fight: [Option<EntityId>; fight::FIGHT_GROUPS],
     stances: [Option<StanceOverride>; GENERAL_ARMY_LIMIT + 1],
 }
 #[derive(Debug, Default)]
@@ -75,6 +99,10 @@ pub(super) fn role(kind: UnitKind) -> Option<usize> {
         UnitKind::Scout | UnitKind::LightCavalry | UnitKind::Hussar => 4,
         _ => return None,
     })
+}
+/// Whether `p` lies inside a General's influence sphere centred on `centre`.
+pub(super) fn in_influence(centre: WorldPosition, p: WorldPosition) -> bool {
+    distance(centre, p) <= (GENERAL_INFLUENCE_TILES * 1024).pow(2)
 }
 pub(super) fn distance(a: WorldPosition, b: WorldPosition) -> i64 {
     let x = i64::from(a.x) - i64::from(b.x);
@@ -110,8 +138,13 @@ impl GameWorld {
                 state: GeneralState::Idle,
                 micro_after: 0,
                 scan: (0, 0),
+                production_scan: [0; 5],
                 retreat_until: 0,
                 routed: None,
+                solo: false,
+                training: false,
+                mix: DEFAULT_MIX,
+                fight: [None; fight::FIGHT_GROUPS],
                 stances: [None; GENERAL_ARMY_LIMIT + 1],
             },
         );
@@ -144,13 +177,30 @@ impl GameWorld {
     }
     pub fn general_status(&self, id: EntityId) -> Option<GeneralStatus> {
         let army = self.economy.generals.armies.get(&id)?;
+        let mut counts = [0; 5];
+        for r in army
+            .members
+            .iter()
+            .filter_map(|&m| self.unit(m).filter(|u| u.hp > 0))
+            .filter_map(|u| role(u.kind))
+        {
+            counts[r] += 1;
+        }
         Some(GeneralStatus {
             army_size: army.members.len() as u16,
             state: army.state,
+            training: army.training,
+            queued: army.pending.len() as u16,
+            mix: army.mix,
+            counts,
         })
     }
     pub fn general_controller(&self, id: EntityId) -> Option<EntityId> {
         self.economy.generals.controlled.get(&id).copied()
+    }
+    #[inline]
+    pub(crate) fn is_general_follower(&self, unit: EntityId, general: EntityId) -> bool {
+        self.economy.generals.controlled.get(&unit) == Some(&general)
     }
     pub fn general_castle(&self, id: EntityId) -> Option<EntityId> {
         self.economy.generals.armies.get(&id)?.castle
@@ -185,6 +235,7 @@ impl GameWorld {
         };
         a.destination = None;
         a.routed = None;
+        a.solo = false;
         a.state = GeneralState::Idle;
         a.retreat_until = 0;
         let mut members = [None; GENERAL_ARMY_LIMIT];
@@ -201,6 +252,7 @@ impl GameWorld {
         if let Some(a) = self.economy.generals.armies.get_mut(&id) {
             a.destination = Some(destination);
             a.routed = None;
+            a.solo = false;
         }
     }
     pub(super) fn claim_general_unit(&mut self, g: EntityId, u: GameUnit) {

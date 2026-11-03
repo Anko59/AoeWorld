@@ -199,6 +199,22 @@ pub enum ClientMessage {
         #[serde(deserialize_with = "bounded_members")]
         entity_ids: Vec<EntityId>,
     },
+    /// A command addressed to the General himself, not to his army.
+    GeneralOrder {
+        sequence: u64,
+        entity_id: EntityId,
+        command: GeneralCommand,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum GeneralCommand {
+    /// Walk alone; the army holds its place and is not led.
+    MoveAlone { destination: WorldPosition },
+    /// The Train button: buy recruits toward the army limit, or stop.
+    SetTraining { enabled: bool },
+    /// Unit-mix sliders, 0..=100 per role (infantry, archers, cavalry, siege, scouts).
+    SetMix { mix: [u8; 5] },
 }
 
 fn bounded_members<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<EntityId>, D::Error> {
@@ -225,6 +241,22 @@ pub(super) fn validate(message: &ClientMessage) -> Result<(), Error> {
                 .collect::<std::collections::BTreeSet<_>>()
                 .len()
                 != unit_ids.len())
+    {
+        return Err(Error::InvalidEconomyState);
+    }
+    if let ClientMessage::GeneralOrder {
+        command: GeneralCommand::MoveAlone { destination },
+        ..
+    } = message
+        && (destination.x < 0 || destination.y < 0)
+    {
+        return Err(Error::InvalidEconomyState);
+    }
+    if let ClientMessage::GeneralOrder {
+        command: GeneralCommand::SetMix { mix },
+        ..
+    } = message
+        && mix.iter().any(|&share| share > 100)
     {
         return Err(Error::InvalidEconomyState);
     }

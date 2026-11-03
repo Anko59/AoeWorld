@@ -240,10 +240,13 @@ pub(crate) fn unit_rule(unit: &UnitState) -> Option<&'static str> {
     }) {
         return Some("unit.commanded_by");
     }
-    if unit
-        .general
-        .is_some_and(|g| !(unit.kind == UnitKind::General && alive && g.army_size <= 100))
-    {
+    if unit.general.is_some_and(|g| {
+        !(unit.kind == UnitKind::General
+            && alive
+            && g.army_size <= 100
+            && g.mix.iter().all(|&share| share <= 100)
+            && g.counts.iter().map(|&n| usize::from(n)).sum::<usize>() <= 100)
+    }) {
         return Some("unit.general");
     }
     if unit.cargo_count > 5

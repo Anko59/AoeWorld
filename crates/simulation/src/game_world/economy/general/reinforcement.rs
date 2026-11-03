@@ -10,8 +10,18 @@ impl GameWorld {
         let Some(a) = self.economy.generals.armies.get(&id) else {
             return;
         };
+        // Nothing is bought until the player presses Train.
+        if !a.training {
+            return;
+        }
+        let weights = a.mix;
+        let mut cursors = a.production_scan;
         for &member in &a.members {
-            if let Some(r) = self.unit(member).and_then(|u| role(u.kind)) {
+            if let Some(r) = self
+                .unit(member)
+                .filter(|u| u.hp > 0)
+                .and_then(|u| role(u.kind))
+            {
                 counts[r] += 1;
             }
         }
@@ -21,20 +31,27 @@ impl GameWorld {
             }
         }
         if counts.iter().sum::<usize>() >= GENERAL_ARMY_LIMIT {
+            // Full: stay idle until the player presses Train again.
+            if let Some(a) = self.economy.generals.armies.get_mut(&id) {
+                a.training = false;
+            }
             return;
         }
-        // Ratios 35:30:20:10:5. Cross multiplication avoids floats.
-        let weights = [35, 30, 20, 10, 5];
-        let mut roles = [0, 1, 2, 3, 4];
+        // The sliders' ratios; a role at zero is never bought. Cross
+        // multiplication avoids floats.
+        let mut roles: Vec<usize> = (0..5).filter(|&r| weights[r] > 0).collect();
         roles.sort_by(|&a, &b| {
-            ((counts[a] + 1) * weights[b])
-                .cmp(&((counts[b] + 1) * weights[a]))
+            ((counts[a] + 1) * usize::from(weights[b]))
+                .cmp(&((counts[b] + 1) * usize::from(weights[a])))
                 .then(a.cmp(&b))
         });
-        let mut visited = 0;
-        // Sample each production index separately: economic buildings and a
-        // large Barracks count must not hide Ranges, Stables or Workshops.
-        let buildings: Vec<_> = [
+        let Some(centre) = self.unit(id).map(|u| u.position) else {
+            return;
+        };
+        let mut buildings = Vec::new();
+        // Rotate bounded slices of each index. Out-of-sphere buildings must
+        // not keep a later, eligible building hidden forever.
+        for (slot, kind) in [
             crate::BuildingKind::Barracks,
             crate::BuildingKind::ArcheryRange,
             crate::BuildingKind::Stable,
@@ -42,14 +59,37 @@ impl GameWorld {
             crate::BuildingKind::Castle,
         ]
         .into_iter()
-        .flat_map(|kind| self.player_buildings_of(player, kind).take(25))
-        .inspect(|_| visited += 1)
-        .filter(|b| {
-            b.is_complete() && b.hp > 0 && b.training_queue.is_empty() && b.research.is_none()
-        })
-        .map(|b| (b.id, b.kind))
-        .collect();
-        work.building_visits += visited;
+        .enumerate()
+        {
+            let Some(ids) = self
+                .economy
+                .dropoffs
+                .get(&(player, kind))
+                .filter(|ids| !ids.is_empty())
+            else {
+                cursors[slot] = 0;
+                continue;
+            };
+            let start = cursors[slot] % ids.len();
+            let count = ids.len().min(25);
+            for &building in ids[start..].iter().chain(&ids[..start]).take(count) {
+                work.building_visits += 1;
+                if let Some(b) = self.building(building)
+                    && b.is_complete()
+                    && b.hp > 0
+                    && b.training_queue.is_empty()
+                    && b.research.is_none()
+                    && super::super::placement::position(b.footprint.min)
+                        .is_ok_and(|p| in_influence(centre, p))
+                {
+                    buildings.push((b.id, b.kind));
+                }
+            }
+            cursors[slot] = (start + count) % ids.len();
+        }
+        if let Some(a) = self.economy.generals.armies.get_mut(&id) {
+            a.production_scan = cursors;
+        }
         for r in roles {
             let kinds: &[UnitKind] = match r {
                 0 => &[UnitKind::Militia, UnitKind::Spearman],

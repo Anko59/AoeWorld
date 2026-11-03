@@ -35,6 +35,7 @@ export function initBuildings() {
   ];
   const formations=['Line','Box','Staggered','Flank'].map((name,i)=>{const button=document.createElement('button');button.id=`formation-${name.toLowerCase()}`;button.className='formation-command';button.hidden=true;button.type='button';button.innerHTML=`<svg class="formation-icon" viewBox="0 0 32 24" aria-hidden="true">${formationDots[i].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="2.2"/>`).join('')}</svg><span class="formation-name">${name}</span>`;button.title=`${name} formation`;button.setAttribute('aria-label',button.title);button.setAttribute('aria-pressed',String(i===0));button.addEventListener('click',()=>formations.forEach(b=>b.setAttribute('aria-pressed',String(b===button))));grid.append(button);return button;});
   const attackMove=document.createElement('button');attackMove.id='attack-move-units';attackMove.hidden=true;attackMove.type='button';attackMove.innerHTML='<svg class="formation-icon" viewBox="0 0 32 24" aria-hidden="true"><path d="M7 20 24 3M13 3h11v11" fill="none" stroke="currentColor" stroke-width="3"/></svg><span class="formation-name">Attack move</span>';attackMove.title='Advance in formation and engage visible enemies';grid.append(attackMove);
+  const generalMove=document.createElement('button');generalMove.id='general-only-move';generalMove.hidden=true;generalMove.type='button';generalMove.innerHTML='<svg class="formation-icon" viewBox="0 0 32 24" aria-hidden="true"><circle cx="8" cy="12" r="3"/><path d="M14 12h12M21 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3"/></svg><span class="formation-name">General only</span>';generalMove.title='Move the General alone (Alt+right-click) · his army holds position';grid.append(generalMove);
   const reseedButtons=['add','remove'].map(side=>{const button=document.createElement('button');button.id=`${side}-farm-reseed`;button.hidden=true;button.innerHTML=entityIcon('Farm')+`<span class="command-label">${side==='add'?'Queue farm reseed':'Remove farm reseed'}</span>`;grid.append(button);return button;});
   const trainIcon=document.createElement('span');trainIcon.className='train-icon';
   byId('train-villager').querySelector(':scope>.icon').replaceWith(trainIcon);
@@ -111,6 +112,7 @@ export function initBuildings() {
   military.addEventListener('click',()=>{open=open==='military'?false:'military';menu();});
   window.aoeBuildings={
     bind(callback) {
+      window.aoeBuildings.command=callback;
       [...buttons,...techs,byId('cancel-construction'),byId('cancel-research'),...reseedButtons,autoScout].forEach((button,i)=>button.addEventListener('click',()=>callback(0,i)));
       militaryTrain.forEach(({button,kind})=>button.addEventListener('click',()=>callback(1,kind)));
       tradeButtons.forEach(({button},i)=>button.addEventListener('click',()=>callback(2,i)));
@@ -119,6 +121,7 @@ export function initBuildings() {
       unload.addEventListener('click',()=>callback(4,0));
       formations.forEach((button,i)=>button.addEventListener('click',()=>callback(5,i)));
       attackMove.addEventListener('click',()=>callback(6,0));
+      generalMove.addEventListener('click',()=>callback(8,0));
       byId('combat-stance').addEventListener('change',event=>{ if(event.target.value!=='') callback(7,Number(event.target.value)); event.target.value=''; });
     },
     queue(values,visible) { queue=values; byId('training').hidden=!visible||!queue.length; },

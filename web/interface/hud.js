@@ -3,6 +3,7 @@ import { imperialUnits, imperialUnitNames } from '/interface/imperial.js';
 import { initBuildings, buildingKinds, buildingNames } from '/interface/buildings.js';
 import { initArt, icon as packIcon, entityIcon, setEntityIcon } from '/interface/ui-art.js';
 import { initVassal } from '/interface/vassal/panel.js';
+import { initGeneralPanel } from '/interface/general-panel.js';
 import { updateDetails } from '/interface/details.js';
 // Original interface artwork and DOM presentation. Authoritative values arrive
 // from Rust at most four times per second; no frame loop or gameplay rules here.
@@ -15,6 +16,7 @@ const attribute = (node,name,value) => { if (node.getAttribute(name) !== value) 
 export function initInterface() {
   initBuildings();
   initVassal();
+  initGeneralPanel();
   byId('move-units').querySelector('.icon').outerHTML=packIcon('commands','move','move');
   byId('stop-units').querySelector('.icon').outerHTML=packIcon('commands','stop','stop');
   byId('delete-units').querySelector('.icon').outerHTML=packIcon('commands','delete','delete');
@@ -69,6 +71,7 @@ export function initInterface() {
     byId('combat-stance').value=scene().dataset.selectedStance??'';
     for(const name of ['line','box','staggered','flank']){show(`formation-${name}`,military);}
     show('attack-move-units',military);
+    show('general-only-move',owned && count===1 && first.kind==='General');
     attribute(byId('selection'),'data-count',String(count));
     attribute(byId('selection'),'data-kind',first?.kind ?? '');
     attribute(byId('selection'),'data-owned',String(owned));
@@ -79,7 +82,7 @@ export function initInterface() {
     const actions=building?2:units?3:0;
     empty.forEach((node,index)=>{node.hidden=index>=15-actions;});
     text('command-context',count>1?`${count} ${building?'buildings':'units'}`:first?.name ?? 'Select a unit');
-    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Ctrl+right-click: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='General'?'Right-click ground: march with your army · retreat and regroup automatically':first.kind==='Vassal'?'Garrison in its home Castle · 100-tile leash':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,...imperialUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
+    text('command-hint',!owned && first?'You cannot command this player’s units or buildings':building?'Q: train a villager · 50 food':units?first.kind==='Villager'?'Right-click: work or move · Ctrl+right-click: queue move · Ctrl+0–9: group':first.kind==='FishingShip'?'Right-click: fish or move':first.kind==='General'?'Right-click ground: march with your army · Alt+right-click: General only':first.kind==='Vassal'?'Garrison in its home Castle · 100-tile leash':first.kind==='Monk'?'Right-click: move · heals nearby injured units automatically':['Militia','Scout','Archer','Skirmisher','Spearman','ManAtArms',...castleUnits,...imperialUnits,'Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(first.kind)?'Right-click: attack or move · Ctrl+0–9: group':first.kind==='TransportShip'?'Load at the bank · sail · unload passengers':first.kind==='Sheep'?'Right-click: herd owned sheep':'Select a villager to hunt this animal':'Click to select · drag: group · arrows: camera · 0–9: recall group');
     show('selection-health',count===1);
     show('unit-hp',count===1 && !building); show('unit-combat',count===1 && !building);
     if (first) {

@@ -18,16 +18,48 @@ Adoption alone leaves soldiers in place; a march order, combat or retreat
 decision starts field movement. A newly trained commander does not pull the
 army back into its Castle exit before the player's first order.
 
-When space remains, an admitted decision may buy one ordinary unit from an
-idle completed owned production building. Infantry:archers:heavy cavalry:siege:
-scouts aim for 35:30:20:10:5. Upgrades follow the current research roster.
-Unavailable or unaffordable roles fall through to another available role.
+A new General trains nothing. After the **Train** button (`GeneralCommand::SetTraining`;
+SDK `Order::GeneralTrain`), an admitted decision with space remaining may buy one
+ordinary unit from an idle completed owned production building within the
+influence sphere. When the army and queued recruits reach 100, training switches
+itself off and stays off, even after losses, until Train is pressed again. The
+**unit-mix sliders** (`GeneralCommand::SetMix`, SDK `Order::GeneralMix`, 0 to 100
+per role: infantry, archers, heavy cavalry, siege, scouts; default 35:30:20:10:5)
+set the ratio the manager buys toward; a role at zero is never bought. Upgrades
+follow the current research roster. Unavailable or unaffordable roles fall
+through to another available role.
 Barracks, Ranges, Stables and Workshops supply the current military roster;
 Castles currently train leaders, so they do not supply ordinary reinforcements.
 The manager does not build missing production buildings or research upgrades.
 Queue reservations route new recruits directly to their General, regardless of
 spawn distance; cancellation, building destruction and General death retire
 reservations. Existing manual queues and rallies remain ordinary gameplay.
+
+## The General's panel
+
+Selecting one owned General shows a panel above the command bar with two modes;
+a General starts in **Captain** mode. Captain shows what he manages: soldiers
+by role, and the Marching or Fighting sub-mode he is currently in. **Trainer**
+shows the five unit-mix sliders and the Train button with a note (idle, training
+toward 100, or at capacity). The mode is a client convenience; the sliders, the
+button and the soldier counts are authoritative server state
+(`GeneralStatus.training/mix/counts/queued`).
+
+## Influence sphere
+
+A General's influence reaches 50 tiles (`GENERAL_INFLUENCE_TILES`). He gives no
+march, fight, retreat or regroup order to a soldier beyond it (the soldier keeps
+its slot and is commanded again once back inside), and he buys units only from
+production buildings whose footprint is within it.
+
+## Orders
+
+Right-clicking ground leads the army (above). The **General only** button or
+Alt+right-click walks the General alone (`GeneralOrder::MoveAlone`; Rust SDK
+`Order::GeneralMove`): the army stops where it stands and is not led or retreated
+until the next army march or Stop, and the General is no longer in the shared
+block. His followers yield to him in collision (they never block a General the
+player walks alone), so he can cross a bridge or ford through his own army.
 
 ## March and combat
 
@@ -49,13 +81,24 @@ that trained it (nearest completed Castle for scenario-spawned Generals).
 The Castle's outside rendezvous survives destruction. Retreat lasts at least
 five seconds; once safe, the army regroups and resumes its retained destination.
 
-In a favourable fight, soldiers focus visible siege (including Mangonels and
-Battering Rams), then Monks, then leaders (Generals and Vassals), then all
-archer kinds (including Skirmishers), then other wounded targets. Within each
-class, the lowest remaining HP fraction wins, then distance and entity ID
-resolve ties. Siege prefers
-visible buildings. Units below one-third HP withdraw toward home. A rotating
-16-member micro window prevents a large army from monopolising orders.
+A march is a plain formation move. Soldiers keep their role slots until the
+army's next fight or retreat decision. The army counts an enemy as
+in sight when the General sees it (12 tiles) or any soldier does (8 tiles; at
+most 64 far candidates per decision). In sight of an enemy the army fights:
+the healthy non-siege soldiers split, in entity order, into groups of at most
+20 (`FIGHT_GROUP`); each group attack-moves, as one ordinary formation order,
+against its own target. A group's target is the best visible enemy for it:
+siege (including Mangonels and Battering Rams), then Monks, then leaders
+(Generals and Vassals), then all archer kinds (including Skirmishers), then
+others; within a class the lowest remaining HP fraction wins, then the
+distance from that group, then entity ID. A group keeps its target while it
+stays visible and nothing of a higher class appears, and is re-ordered only
+when its target changes or half its soldiers stand idle, so it does not
+re-form every decision. When no enemy remains in sight, the army regroups:
+with a march order it resumes the march, without one it forms up around the
+General's position. Siege prefers visible buildings. Units below one-third HP
+withdraw toward home. A rotating 16-member micro window (wounded, siege, and a
+fight against buildings only) prevents a large army from monopolising orders.
 The General records each soldier's original stance before a march, retreat or
 wounded withdrawal overrides it. The original stance returns when that reason
 ends, including healing, arrival, fighting, regrouping without a destination,
