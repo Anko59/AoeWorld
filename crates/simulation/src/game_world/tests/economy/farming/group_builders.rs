@@ -80,34 +80,30 @@ fn queued_group_farms_leave_one_farmer_on_each_completed_farm() {
 }
 
 #[test]
-fn later_queued_group_placements_keep_the_farmer_already_left_behind() {
-    let (mut world, first, _, farm) = mill_and_farm();
-    let workers = [
-        first,
-        villager_at(&mut world, 106, 104),
-        villager_at(&mut world, 107, 104),
-    ];
-    world.issue_construct(PlayerId(0), &workers, farm).unwrap();
-    finish(&mut world, farm, 700);
-    advance(&mut world, 100);
-    let farmer = workers
-        .iter()
-        .copied()
-        .find(|id| world.unit(*id).is_some_and(|u| u.task == UnitTask::Farming))
-        .unwrap();
-    fixture::survey(&mut world, PlayerId(0), at(107, 101), 3);
-    world
-        .issue_build(
-            PlayerId(0),
-            &workers,
-            BuildingKind::Farm,
-            at(106, 100),
-            true,
-        )
-        .unwrap();
-    assert_eq!(
-        world.gathering_kind(farmer),
-        Some(ResourceKind::Food),
-        "queued placement must use the remaining helpers"
-    );
+fn queued_mixed_farmer_and_idle_orders_include_every_selected_worker() {
+    fn run(kind: BuildingKind) -> [u8; 32] {
+        let (mut world, farmer, _, farm) = mill_and_farm();
+        finish(&mut world, farm, 700);
+        advance(&mut world, 100);
+        assert_eq!(world.unit(farmer).unwrap().task, UnitTask::Farming);
+        let idle = villager_at(&mut world, 107, 104);
+        assert_eq!(world.unit(idle).unwrap().task, UnitTask::Idle);
+        fixture::survey(&mut world, PlayerId(0), at(110, 101), 4);
+        let target = world
+            .issue_build(PlayerId(0), &[farmer, idle], kind, at(109, 100), true)
+            .unwrap();
+        for worker in [farmer, idle] {
+            assert_eq!(
+                world.economy.builders.get(&worker).map(|job| job.building),
+                Some(target),
+                "every selected worker must receive the queued {kind:?} order"
+            );
+        }
+        assert_eq!(world.gathering_kind(farmer), None);
+        finish(&mut world, target, 1400);
+        world.canonical_hash()
+    }
+    for kind in [BuildingKind::House, BuildingKind::Farm] {
+        assert_eq!(run(kind), run(kind));
+    }
 }

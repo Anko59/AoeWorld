@@ -155,27 +155,8 @@ impl GameWorld {
         targets: &[EntityId],
         queued: bool,
     ) -> bool {
-        let has_helpers = queued
-            && builders.iter().any(|id| {
-                !self
-                    .economy
-                    .gatherers
-                    .get(id)
-                    .is_some_and(|job| job.farm.is_some())
-            });
         let mut any = false;
         for &builder in builders {
-            // Repeated group placements may arrive after the previous farm
-            // finishes. Keep its farmer while the remaining helpers build.
-            if has_helpers
-                && self
-                    .economy
-                    .gatherers
-                    .get(&builder)
-                    .is_some_and(|job| job.farm.is_some())
-            {
-                continue;
-            }
             if queued && let Some(task) = self.economy.builders.get_mut(&builder) {
                 task.queue.extend_from_slice(targets);
                 self.player_override(builder);
