@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { building, inputFixture } from "../village/input/fixture.js";
+import { building, inputFixture } from "../../village/input/fixture.js";
 
 /** Frozen health, with the real client and locally served original art. */
 export async function regressFireProof(page: Page, url: string) {
