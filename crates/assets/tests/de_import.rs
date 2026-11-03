@@ -167,14 +167,16 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
 
     let report = de::import(Path::new("install"), Path::new("local-assets/packs")).expect("import");
     let manifest = pack::verify(&report.pack).expect("verify");
+    let actors = pack::verify(&report.pack.join("actors")).expect("verify actors");
     let native: Vec<_> = manifest
         .frames
         .iter()
+        .chain(&actors.frames)
         .filter(|f| f.native.is_some())
         .collect();
     assert_eq!(
         native.len(),
-        90_135,
+        118_760,
         "every native unit/stone source cell is chunked"
     );
     assert_eq!(
@@ -222,7 +224,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         .find(|f| f.source == "de/terrain/g_fm1.dds")
         .expect("farm");
     assert_eq!((farm.width, farm.height), (32, 32));
-    assert_eq!(report.entries.len(), 155);
+    assert_eq!(report.entries.len(), 195);
     assert_eq!(
         manifest
             .frames
@@ -232,7 +234,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
         30
     );
     assert_eq!(
-        manifest
+        actors
             .frames
             .iter()
             .filter(|f| f.source
@@ -252,7 +254,7 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
     ] {
         let source = SPRITES[pose as usize];
         assert_eq!(
-            manifest
+            actors
                 .frames
                 .iter()
                 .filter(|f| f.source == source.manifest_source())
