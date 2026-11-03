@@ -91,7 +91,7 @@ export function initBuildings() {
   };
   slots([{button:byId('train-villager'),site:0}],()=>1);
   slots([...militaryTrain,...navalTrain.map(entry=>({...entry,site:9}))],()=>1,new Map([[6,1],[9,1]]));
-  slots(techs.map((button,i)=>({button,site:sites[i]})),site=>[0,6,9,10,11].includes(site)?2:1);
+  slots(techs.map((button,i)=>({button,site:sites[i]})),site=>[0,6,9,10,11,19].includes(site)?2:1);
   const panel=document.createElement('div');panel.id='building-panel';panel.hidden=true;
   panel.innerHTML='<b id="building-hp"></b><div id="building-status"></div><progress id="construction-progress" max="1000"></progress><div id="research-status"><span id="research-icon"></span><span id="research-label"></span><progress id="research-progress" max="100" aria-label="Research progress" hidden></progress></div><div id="market-prices"></div><button id="cancel-construction" hidden>Cancel construction</button><button id="cancel-research" hidden>Cancel research</button>';
   byId('selection-content').insertBefore(panel,byId('training'));
