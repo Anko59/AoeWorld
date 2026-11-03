@@ -16,16 +16,24 @@ impl GameWorld {
             return Ok(true);
         }
         let radius = kind.terrain_radius();
-        Ok(!kind.is_naval()
-            && self.on_bridge_corridor(from, radius)
-            && self.on_bridge_corridor(to, radius)
-            && [from, to].into_iter().all(|point| {
-                let tile = point.tile_floor();
-                self.unit_tile_passable(kind, tile, &|| false)
-                    .unwrap_or(false)
-                    || self.bridge_water_clear(tile)
-            })
-            && self.body_step_clear(kind, from, to))
+        if kind.is_naval() {
+            return Ok(false);
+        }
+        let ground = |point: WorldPosition| {
+            self.unit_tile_passable(kind, point.tile_floor(), &|| false)
+                .unwrap_or(false)
+        };
+        let deck = |point: WorldPosition| {
+            self.on_bridge_corridor(point, radius)
+                && (ground(point) || self.bridge_water_clear(point.tile_floor()))
+        };
+        // A body squeezed off a deck edge over water may always step back
+        // onto ground or towards the deck's centre line, never further out.
+        let stranded = !ground(from) && !deck(from);
+        Ok(
+            ((deck(from) && deck(to)) || (stranded && (ground(to) || self.near_deck(to))))
+                && self.body_step_clear(kind, from, to),
+        )
     }
 
     // Raster bridge links form a one-tile-wide continuous deck. On a diagonal
@@ -213,5 +221,102 @@ impl GameWorld {
             }
         }
         false
+    }
+}
+
+impl GameWorld {
+    /// Where oncoming friendly bodies blocked for `blocked` ticks may pass
+    /// through each other: on a bridge deck after 48 ticks, and for grouped
+    /// members in a passage at most one tile wide after 16.
+    pub(in crate::game_world::movement_step) fn passing_lane(
+        &self,
+        index: usize,
+        at: WorldPosition,
+        blocked: u16,
+    ) -> bool {
+        let unit = &self.units[index];
+        if self.near_deck(at) {
+            return blocked >= 48;
+        }
+        unit.formation.is_some() && self.static_clearance(unit.state.kind, at.tile_floor()) <= 2
+    }
+
+    /// Squared distance from `at` to the nearest neighbouring deck link, as
+    /// an exact fraction (numerator, link length squared).
+    fn deck_offset(&self, at: WorldPosition) -> Option<(i128, i128)> {
+        let Terrain::Map { overlay, .. } = &self.terrain else {
+            return None;
+        };
+        let here = at.tile_floor();
+        let mut best: Option<(i128, i128)> = None;
+        for y in -1..=1 {
+            for x in -1..=1 {
+                let from = TileCoord::new(here.x + x, here.y + y);
+                let (Some(mask), Ok(start)) = (
+                    overlay.bridge_connections(from),
+                    WorldPosition::from_tile_center(from),
+                ) else {
+                    continue;
+                };
+                for (dx, dy) in (-1..=1).flat_map(|dy| (-1..=1).map(move |dx| (dx, dy))) {
+                    let to = TileCoord::new(from.x + dx, from.y + dy);
+                    if mask & (1 << ((dy + 1) * 3 + dx + 1)) == 0
+                        || overlay.bridge_edge(from, to) != Some(true)
+                    {
+                        continue;
+                    }
+                    let (vx, vy) = (i128::from(dx * 1024), i128::from(dy * 1024));
+                    let (px, py) = (i128::from(at.x - start.x), i128::from(at.y - start.y));
+                    let (len, dot) = (vx * vx + vy * vy, px * vx + py * vy);
+                    let offset = ((px * vy - py * vx).pow(2), len);
+                    if len > 0
+                        && dot >= 0
+                        && dot <= len
+                        && best.is_none_or(|b| offset.0 * b.1 < b.0 * offset.1)
+                    {
+                        best = Some(offset);
+                    }
+                }
+            }
+        }
+        best
+    }
+
+    /// Within one tile of a deck link's centre line.
+    pub(crate) fn near_deck(&self, at: WorldPosition) -> bool {
+        self.deck_offset(at)
+            .is_some_and(|(n, len)| n <= 1024 * 1024 * len)
+    }
+
+    /// A body pressed off a deck edge, overlapping water, may take any step
+    /// that brings it closer to the deck's centre line, and nothing else.
+    pub(in crate::game_world::movement_step) fn deck_recovery_step(
+        &self,
+        kind: UnitKind,
+        from: WorldPosition,
+        to: WorldPosition,
+    ) -> bool {
+        !kind.is_naval()
+            && !self.body_position_clear(kind, from)
+            && match (self.deck_offset(from), self.deck_offset(to)) {
+                (Some(a), Some(b)) => b.0 * a.1 < a.0 * b.1,
+                _ => false,
+            }
+    }
+
+    /// Where a body on a deck is heading: its formation target, otherwise its
+    /// ordinary waypoint. `None` for a body without either (standing idle).
+    pub(in crate::game_world::movement_step) fn deck_heading(
+        &self,
+        index: usize,
+    ) -> Option<(i64, i64)> {
+        let unit = &self.units[index];
+        let target = self
+            .formation_member_target(index)
+            .or_else(|| unit.order.map(|order| order.waypoint))?;
+        Some((
+            i64::from(target.x) - i64::from(unit.state.position.x),
+            i64::from(target.y) - i64::from(unit.state.position.y),
+        ))
     }
 }

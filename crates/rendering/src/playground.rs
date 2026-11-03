@@ -59,8 +59,8 @@ pub struct GameArt {
     pub actors: Vec<Vec<GameFrame>>,
     /// Native DAT direction count for each semantic actor pose.
     pub actor_rows: Vec<usize>,
-    /// Nine standing kinds, four foundation sizes, nine rubble kinds, builder.
-    pub buildings: [Vec<GameFrame>; 74],
+    /// Semantic building slots, including the current age-specific identities.
+    pub buildings: [Vec<GameFrame>; 88],
     /// Shore fish and naval working art.
     pub fishing: [Vec<GameFrame>; 12],
     pub village: [Vec<GameFrame>; 9],

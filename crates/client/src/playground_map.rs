@@ -171,7 +171,7 @@ pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
 
 pub(super) fn scene_terrain(client: &Client) -> Vec<SceneTerrain> {
     let visible = resident_visible_tiles(client);
-    if client.map_content_hash.is_none() && !client.fog.disabled() {
+    if client.map_content_hash.is_none() && client.terrain_chunks.is_empty() {
         return fog::uniform_ground(visible);
     }
     let mut terrain = Vec::new();

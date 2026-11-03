@@ -238,7 +238,8 @@ mirror!(
         RejectedVassalExists,
         RejectedVassalLeash,
         RejectedVassalHome,
-        RejectedPopulationCap
+        RejectedPopulationCap,
+        RejectedInvalidVassalSettings
     ]
 );
 

@@ -89,7 +89,7 @@ async fn review_f1_unit_dto_stays_on_source_ground_instead_of_cliff_top() {
     assert_eq!(
         client
             .camera
-            .world_to_screen_at_height(units[0].position, units[0].elevation_meters),
+            .world_to_screen_at_height(units[0].position, f64::from(units[0].elevation_meters)),
         client
             .camera
             .world_to_screen_at_height([282.5, 603.5], 78.5)
@@ -464,7 +464,8 @@ async fn projectile_scene_uses_native_arrow_and_javelin_and_current_fog() {
         assert_eq!(rendered.len(), 1);
         assert_eq!(rendered[0].position, [283.5, 603.5]);
         assert!(
-            rendered[0].elevation_meters > scene.height(rendered[0].position).unwrap() + 1.0,
+            f64::from(rendered[0].elevation_meters)
+                > scene.height(rendered[0].position).unwrap() + 1.0,
             "mid-flight projectile arcs above its launch height"
         );
         assert_eq!(

@@ -80,8 +80,42 @@ impl GameWorld {
             .copied()
             .filter(|v| v.hp * 3 >= v.max_hp && role(v.kind) != Some(3))
             .collect();
-        for (group, soldiers) in fighters.chunks(FIGHT_GROUP).enumerate() {
-            self.general_fight_group(u.id, group, soldiers, survey, changed, work);
+        let squads: Vec<Vec<GameUnit>> = self.economy.generals.armies[&u.id]
+            .squads
+            .iter()
+            .map(|squad| {
+                squad
+                    .members
+                    .iter()
+                    .filter_map(|id| fighters.iter().find(|v| v.id == *id).copied())
+                    .collect()
+            })
+            .collect();
+        // The four expensive firing-position searches are shared. Rotate the
+        // first group by one each decision so unreachable early squads cannot
+        // consume them forever. Include the commander in the same bounded ring.
+        let count = squads.len() + 1;
+        let Some(army) = self.economy.generals.armies.get_mut(&u.id) else {
+            return;
+        };
+        let start = army.fight_after % count;
+        army.fight_after = (start + 1) % count;
+        for offset in 0..count {
+            let group = (start + offset) % count;
+            if group < squads.len() {
+                if !squads[group].is_empty() {
+                    self.general_fight_group(u.id, group, &squads[group], survey, changed, work);
+                }
+            } else if let Some(general) = fighters.iter().find(|v| v.id == u.id) {
+                self.general_fight_group(
+                    u.id,
+                    squads::SQUAD_LIMIT,
+                    &[*general],
+                    survey,
+                    changed,
+                    work,
+                );
+            }
         }
     }
 
@@ -138,13 +172,46 @@ impl GameWorld {
         if kept.is_some() && !idle {
             return;
         }
+        // A visible enemy's centre can be inside an unreachable enclosure.
+        // Prove one firing position for the squad's longest-ranged soldier
+        // through the same bounded search that ordinary soldiers use.
+        let Some(representative) = soldiers.iter().max_by_key(|v| {
+            let range = self
+                .unit_stats(v.id)
+                .map_or(0, |stats| crate::game_world::navy::attack_range(&stats));
+            (
+                range,
+                std::cmp::Reverse(distance(v.position, target.position)),
+                std::cmp::Reverse(v.id),
+            )
+        }) else {
+            return;
+        };
+        if !self.reserve_attack_search() {
+            return;
+        }
+        let Some(goal) = self.attack_goal(target.id, soldiers[0].player) else {
+            return;
+        };
+        let Ok(search) = self.attack_search(representative.id, &goal) else {
+            return;
+        };
+        let Some(destination) = search.destination else {
+            if search.wait.is_none() {
+                self.resume_general_squad(g, group, soldiers, changed, work);
+                if let Some(army) = self.economy.generals.armies.get_mut(&g) {
+                    army.fight[group] = None;
+                }
+            }
+            return;
+        };
         let ids: Vec<_> = soldiers.iter().map(|v| v.id).collect();
         work.orders += 1;
         let ordered = self.issue_formation_move(
             soldiers[0].player,
             &ids,
             aoe_core::Formation::Line,
-            target.position,
+            destination,
             false,
             true,
         );

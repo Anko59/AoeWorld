@@ -2,7 +2,8 @@
 
 Read [the engineering guide](docs/agent-engineering.md), then the scoped
 `AGENTS.md` for any subsystem you change. Use Dockerized Make targets for
-compilation and checks. Keep original game assets outside Git and images.
+compilation and checks. Keep original game assets outside Git and images, and
+recordings outside Git too: attach them with `SHIP_VIDEO`.
 The provider-neutral task guides in `skills/` route focused work to the same
 canonical documentation and commands. Claude Code, Codex, DeepSeek Harness and pi
 are judged by the same hooks; see [agent runtimes](docs/agent-runtimes.md).

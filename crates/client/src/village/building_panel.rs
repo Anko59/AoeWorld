@@ -207,7 +207,7 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
                 } else {
                     0
                 },
-                elevation_meters: map::elevation_at_world(client, position),
+                elevation_meters: map::elevation_at_world(client, position) as f32,
             });
         }
     }
@@ -219,6 +219,7 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
 #[inline(never)]
 pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     super::garrison::install(shared.clone())?;
+    super::vassal::install(shared.clone())?;
     // The DOM owns button identities; one bounded callback dispatches ordinary
     // orders. Keep the research/build/unit tables out of a second string list.
     let callback = Closure::<dyn FnMut(u32, u32)>::new(move |action, code| {

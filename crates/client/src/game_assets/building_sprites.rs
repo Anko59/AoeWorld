@@ -4,21 +4,40 @@ use super::*;
 /// Optional overlay is served from a private pack link made by assets-import-de.
 #[inline(never)]
 pub(super) async fn overlay(manifest: &mut Manifest) -> Result<(), JsValue> {
+    if append_category(manifest, "buildings").await?
+        && !append_category(manifest, "buildings/actors").await?
+    {
+        return Err(error(
+            "Missing native actor category; regenerate the DE pack",
+        ));
+    }
+    Ok(())
+}
+
+async fn append_category(manifest: &mut Manifest, prefix: &str) -> Result<bool, JsValue> {
     let response: Response = JsFuture::from(
         web_sys::window()
             .ok_or("No window")?
-            .fetch_with_str("/asset-pack/buildings/manifest.json"),
+            .fetch_with_str(&format!("/asset-pack/{prefix}/manifest.json")),
     )
     .await?
     .dyn_into()?;
     if response.status() == 404 {
-        return Ok(());
+        return Ok(false);
     }
     if !response.ok() {
         return Err(JsValue::from_str("Building pack unavailable"));
     }
     let bytes = Uint8Array::new(&JsFuture::from(response.array_buffer()?).await?).to_vec();
-    let mut extra = decode_manifest(&bytes)?;
+    merge(manifest, decode_manifest(&bytes)?, prefix)?;
+    Ok(true)
+}
+
+pub(super) fn merge(
+    manifest: &mut Manifest,
+    mut extra: Manifest,
+    prefix: &str,
+) -> Result<(), JsValue> {
     if extra.version != 1
         || extra.pages.len() > 256
         || extra.frames.len() > aoe_assets::pack::MAX_FRAMES
@@ -39,14 +58,14 @@ pub(super) async fn overlay(manifest: &mut Manifest) -> Result<(), JsValue> {
         {
             return Err(error("Invalid native chunk name"));
         }
-        chunk.file = format!("buildings/{}", chunk.file);
+        chunk.file = format!("{prefix}/{}", chunk.file);
     }
     for page in &mut extra.pages {
         for name in [&mut page.color, &mut page.player, &mut page.shadow] {
             if name.contains('/') || name.contains('\\') {
                 return Err(JsValue::from_str("Invalid building page"));
             }
-            *name = format!("buildings/{name}");
+            *name = format!("{prefix}/{name}");
         }
     }
     for frame in &mut extra.frames {

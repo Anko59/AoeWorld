@@ -47,7 +47,8 @@ pub use general::{GeneralState, GeneralStatus, GeneralWork};
 #[cfg(test)]
 pub(crate) use vassal::vassal_stall;
 pub use vassal::{
-    VASSAL_RULES, VASSAL_STALL_SECONDS, VassalRules, VassalStatus, VassalWait, VassalWork,
+    VASSAL_RULES, VASSAL_STALL_SECONDS, VassalRules, VassalSettings, VassalStatus, VassalWait,
+    VassalWork,
 };
 mod wall;
 
@@ -296,8 +297,8 @@ pub const VILLAGE_RULES: VillageRules = VillageRules {
 pub enum EconomyError {
     #[error("this Castle already has a Vassal or one in training")]
     VassalExists,
-    #[error("a Vassal can garrison only in its home Castle")]
-    VassalHome,
+    #[error("Vassal settings are outside their allowed ranges")]
+    InvalidVassalSettings,
     #[error("entity does not exist")]
     UnknownEntity,
     #[error("the building garrison is full")]

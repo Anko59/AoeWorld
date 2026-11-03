@@ -1,6 +1,6 @@
 //! Bounded shelter orders and occupants, removed from every map/vision index.
 use super::placement::{adjacent, distance_squared, perimeter, position};
-use crate::{BuildingKind, EconomyError, GameUnit, GameWorld, UnitKind, UnitTask};
+use crate::{BuildingKind, EconomyError, GameBuilding, GameUnit, GameWorld, UnitKind, UnitTask};
 use aoe_core::{EntityId, PlayerId, TileRect};
 
 mod hash;
@@ -53,6 +53,16 @@ impl BuildingKind {
 }
 
 impl GameWorld {
+    pub(super) fn vassal_reserved(&self, b: &GameBuilding, except: Option<EntityId>) -> bool {
+        b.training_queue.iter().any(|e| e.kind == UnitKind::Vassal)
+            || b.garrison.iter().any(|g| g.unit.kind == UnitKind::Vassal)
+            || self
+                .economy
+                .garrison_vassals
+                .get(&b.id)
+                .is_some_and(|id| Some(*id) != except)
+    }
+
     pub fn issue_garrison(
         &mut self,
         player: PlayerId,
@@ -73,8 +83,8 @@ impl GameWorld {
         if !shelter.kind.admits(actor.kind) {
             return Err(EconomyError::WrongUnitKind);
         }
-        if actor.kind == UnitKind::Vassal && self.vassal_castle(unit) != Some(building) {
-            return Err(EconomyError::VassalHome);
+        if actor.kind == UnitKind::Vassal && self.vassal_reserved(shelter, Some(unit)) {
+            return Err(EconomyError::VassalExists);
         }
         let reserved = usize::from(
             self.economy
@@ -86,6 +96,7 @@ impl GameWorld {
         if shelter.garrison.len() + reserved >= usize::from(shelter.kind.garrison_capacity()) {
             return Err(EconomyError::GarrisonFull);
         }
+        let is_vassal = actor.kind == UnitKind::Vassal;
         let footprint = shelter.footprint;
         if !adjacent(footprint, actor.position.tile_floor())
             && !footprint.contains(actor.position.tile_floor())
@@ -99,7 +110,11 @@ impl GameWorld {
         self.cancel_attack(unit);
         self.economy.builders.remove(&unit);
         self.units[self.lookup[&unit]].state.task = UnitTask::Moving;
+        self.cancel_garrison_order(unit);
         self.economy.garrison_orders.insert(unit, building);
+        if is_vassal {
+            self.economy.garrison_vassals.insert(building, unit);
+        }
         *self
             .economy
             .garrison_reservations
@@ -112,6 +127,9 @@ impl GameWorld {
         if let Some(building) = self.economy.garrison_orders.remove(&id)
             && let Some(count) = self.economy.garrison_reservations.get_mut(&building)
         {
+            if self.economy.garrison_vassals.get(&building) == Some(&id) {
+                self.economy.garrison_vassals.remove(&building);
+            }
             *count -= 1;
             if *count == 0 {
                 self.economy.garrison_reservations.remove(&building);
@@ -225,7 +243,9 @@ impl GameWorld {
                     vassal: None,
                 },
             );
-            self.set_vassal_active(id, unit.kind == UnitKind::Vassal);
+            if unit.kind == UnitKind::Vassal {
+                self.set_vassal_castle(id, Some(building));
+            }
             self.economy.occupied_garrisons.insert(building);
             self.combat.tower_ready.entry(building).or_insert(0);
         }

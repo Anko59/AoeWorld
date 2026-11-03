@@ -59,7 +59,12 @@ pub fn scene_unit_bounds(
     if mirrored {
         frame.anchor[0] = frame.size[0] - frame.anchor[0];
     }
-    sprite_screen_bounds(frame, unit.position, unit.elevation_meters, camera)
+    sprite_screen_bounds(
+        frame,
+        unit.position,
+        f64::from(unit.elevation_meters),
+        camera,
+    )
 }
 
 /// Exclude packed actor phases that cannot affect visible animated pixels.
@@ -89,7 +94,13 @@ pub(super) fn frames_visible(
             if flipped {
                 frame.anchor[0] = frame.size[0] - frame.anchor[0];
             }
-            sprite_screen_bounds(frame, unit.position, unit.elevation_meters, camera).is_some()
+            sprite_screen_bounds(
+                frame,
+                unit.position,
+                f64::from(unit.elevation_meters),
+                camera,
+            )
+            .is_some()
         })
 }
 
@@ -141,7 +152,7 @@ pub(super) fn animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> b
                 sprite_screen_bounds(
                     world_frame(*f),
                     unit.position,
-                    unit.elevation_meters,
+                    f64::from(unit.elevation_meters),
                     camera,
                 )
                 .is_some()
@@ -191,7 +202,7 @@ pub(super) fn animates(art: &GameArt, unit: SceneUnit, camera: SceneCamera) -> b
                         && scene_sprite(
                             world_frame(p.frame),
                             unit.position,
-                            unit.elevation_meters,
+                            f64::from(unit.elevation_meters),
                             camera,
                         )
                         .is_some()

@@ -158,6 +158,25 @@ pub(super) async fn read_requests(
                     .queue_set_rally(session_id, sequence, building_id, target)
                     .await
             }
+            Ok(GameplayClientMessage::VassalDismissOrder {
+                sequence,
+                vassal_id,
+            }) => {
+                service
+                    .queue_vassal_dismiss(session_id, sequence, vassal_id)
+                    .await
+            }
+            Ok(GameplayClientMessage::VassalSettingsOrder {
+                sequence,
+                vassal_id,
+                weights,
+                cap,
+                training,
+            }) => {
+                service
+                    .queue_vassal_settings(session_id, sequence, vassal_id, weights, cap, training)
+                    .await
+            }
             Ok(GameplayClientMessage::FarmReseedOrder {
                 sequence,
                 building_id,

@@ -29,7 +29,8 @@ pub struct SceneUnit {
     pub visual: SceneUnitVisual,
     /// Unit direction, or construction stage/wall variant for a building.
     pub facing: u8,
-    pub elevation_meters: f64,
+    /// Render height; integer game levels stay exact while 16-bit tags fit 32 bytes.
+    pub elevation_meters: f32,
 }
 
 #[derive(Clone, Copy)]

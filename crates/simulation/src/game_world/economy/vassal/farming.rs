@@ -91,6 +91,11 @@ impl GameWorld {
                 })
                 .collect()
         };
+        // Wait for the helpers already being trained rather than interrupt
+        // a productive farmer while its replacement is on the way.
+        if idle_builders.is_empty() && s.queued > 0 {
+            return;
+        }
         // The entire repair phase gets at most half the remaining placement
         // work. Idle reuse and new foundations keep their share even when
         // several far crops have no legal Mill site.
@@ -104,10 +109,7 @@ impl GameWorld {
             targets.partition_point(|&(farm, _, _)| farm <= after)
         });
         for &(farm, worker, near) in targets[split..].iter().chain(&targets[..split]) {
-            if !s.complete
-                || budget.sites >= site_limit
-                || budget.orders >= VASSAL_RULES.orders_per_domain
-            {
+            if !s.complete || budget.sites >= site_limit || !budget.support_available() {
                 break;
             }
             s.home.repair_after = Some(farm);

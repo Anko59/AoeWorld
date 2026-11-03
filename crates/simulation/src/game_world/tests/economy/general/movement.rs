@@ -76,7 +76,20 @@ fn role_destinations_rotate_and_keep_hard_bodies_separate() {
         assert!(along(slots[3]) > along(slots[1]), "scouts ahead");
         assert!(along(slots[1]) > along(slots[0]), "infantry front");
         assert!(along(slots[0]) > along(slots[2]), "siege rear");
-        assert!(across(slots[4]) < 0 && across(slots[5]) > 0, "flanks");
+        let flank = 3 * 1024 * (i64::from(heading.x).pow(2) + i64::from(heading.y).pow(2)).isqrt();
+        assert!(
+            across(slots[4]).abs() > flank && across(slots[5]).abs() > flank,
+            "cavalry squad on the flank"
+        );
+        assert_eq!(
+            across(slots[4]).signum(),
+            across(slots[5]).signum(),
+            "one squad stays on one flank"
+        );
+        assert_eq!(
+            w.units[w.lookup[&ids[4]]].formation,
+            w.units[w.lookup[&ids[5]]].formation
+        );
         let mut all = slots;
         all.push(w.formation_destination_slot(g).unwrap());
         for (n, &a) in all.iter().enumerate() {

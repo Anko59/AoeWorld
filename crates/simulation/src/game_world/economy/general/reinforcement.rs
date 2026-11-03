@@ -30,7 +30,17 @@ impl GameWorld {
                 counts[r] += 1;
             }
         }
-        if counts.iter().sum::<usize>() >= GENERAL_ARMY_LIMIT {
+        if ![
+            UnitKind::Militia,
+            UnitKind::Archer,
+            UnitKind::Knight,
+            UnitKind::BatteringRam,
+            UnitKind::Scout,
+        ]
+        .into_iter()
+        .enumerate()
+        .any(|(r, kind)| weights[r] > 0 && a.room_for(kind))
+        {
             // Full: stay idle until the player presses Train again.
             if let Some(a) = self.economy.generals.armies.get_mut(&id) {
                 a.training = false;
@@ -104,6 +114,7 @@ impl GameWorld {
                 }
                 for &unit in kinds {
                     if crate::trainable_units(kind).contains(&unit)
+                        && self.economy.generals.armies[&id].room_for(unit)
                         && self.issue_train(player, building, unit).is_ok()
                     {
                         let Some(actual) = self

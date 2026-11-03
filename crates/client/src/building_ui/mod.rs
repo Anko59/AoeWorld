@@ -294,8 +294,13 @@ pub fn age_sprite_slot(
     rubble: bool,
     age: aoe_protocol::Age,
 ) -> usize {
-    const CASTLE: [u8; 20] = [
-        53, 54, 55, 56, 57, 5, 58, 7, 8, 59, 60, 61, 62, 63, 30, 31, 45, 64, 47, 48,
+    const LATE: [[u8; 20]; 2] = [
+        [
+            53, 54, 55, 56, 57, 5, 58, 7, 8, 59, 60, 61, 62, 63, 30, 31, 45, 64, 47, 48,
+        ],
+        [
+            74, 75, 76, 77, 78, 5, 79, 7, 8, 80, 81, 82, 83, 84, 30, 31, 45, 85, 86, 87,
+        ],
     ];
     if kind == BuildingKind::Bridge {
         return sprite_slot(kind, progress, rubble);
@@ -304,7 +309,7 @@ pub fn age_sprite_slot(
         return slot;
     }
     if progress == 1000 && !rubble && age >= aoe_protocol::Age::Castle {
-        return CASTLE[kind as usize] as usize;
+        return LATE[usize::from(age == aoe_protocol::Age::Imperial)][kind as usize] as usize;
     }
     const FEUDAL: [u8; 16] = [38, 39, 2, 3, 40, 5, 41, 7, 8, 44, 26, 27, 28, 29, 30, 31];
     if kind as usize >= 16 {

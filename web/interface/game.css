@@ -257,6 +257,22 @@ html[data-lod=markers] #unit-health-bars,html[data-lod=markers] #carried-loads,
 html[data-lod=map] #idle-markers,html[data-lod=markers] #idle-markers,
 html[data-lod=map] #garrison-flags,html[data-lod=markers] #garrison-flags { display:none; }
 #strategic-label { position:fixed; top:64px; right:12px; pointer-events:none; padding:5px 9px; background:#142019ee; color:#e9efdb; font:12px monospace; z-index:1; }
+#strategic-layers { position:fixed; top:98px; right:12px; display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px; max-width:540px; z-index:3; }
+#strategic-layers[hidden], #strategic-tokens[hidden], #strategic-tokens button[hidden] { display:none; }
+#strategic-layers button { padding:5px 8px; background:#182b24ee; border:1px solid #7e8b66; color:#f4ecd3; font:11px sans-serif; cursor:pointer; }
+#strategic-layers button[aria-pressed="false"] { opacity:.6; text-decoration:line-through; }
+#strategic-tokens { position:fixed; inset:0; pointer-events:none; z-index:2; }
+#strategic-tokens button { position:absolute; transform:translate(-50%,-50%); box-sizing:border-box; pointer-events:auto; cursor:pointer; box-shadow:0 2px 5px #000b; }
+.army-token { width:116px; height:48px; padding:3px 5px; border:2px solid var(--player-colour,#67a9ff); border-radius:5px; background:#122b3bf5; color:#f6f3da; text-align:center; }
+.army-token[data-owned="false"] { border-color:#f08476; background:#3b211ff5; }
+.army-token b { display:block; font:700 16px sans-serif; }
+.army-token small { display:block; white-space:nowrap; font:9px sans-serif; }
+.army-mix { display:flex; height:5px; margin-top:3px; background:#0c1518; }
+.army-mix i { display:block; height:100%; }
+.vassal-card { width:218px; min-height:62px; padding:5px 8px; border:1px solid #eac24d; border-radius:4px; background:#292c18f5; color:#f3e9bb; font:11px/17px sans-serif; text-align:left; white-space:pre-line; }
+#strategic-tokens button[aria-pressed="true"] { outline:2px solid #fff2ad; outline-offset:3px; }
+html[data-lod="map"] #vassal-domain, html[data-lod="markers"] #vassal-domain { visibility:hidden; }
+html[data-lod="map"] #general-panel, html[data-lod="markers"] #general-panel { left:12px; }
 #general-panel { position:fixed; left:336px; bottom:calc(var(--bottom) + 8px); width:260px; padding:6px 8px 8px; z-index:4; color:var(--ink); font-size:11px; background:linear-gradient(135deg,#454b3b,#242a22); border:1px solid #807658; box-shadow:inset 0 0 0 2px #1117,0 2px 8px #0008; }
 #general-modes { display:flex; gap:4px; margin-bottom:6px; }
 #general-modes button { flex:1; padding:3px 0; color:var(--ink); background:#242a22; border:1px solid #807658; }
@@ -273,3 +289,13 @@ html[data-lod=map] #garrison-flags,html[data-lod=markers] #garrison-flags { disp
 #general-train { width:100%; margin-top:5px; padding:4px 0; font-weight:600; color:#f5e1a5; background:#5c6544; border:1px solid #d9bd7d; }
 #general-train[aria-pressed=true] { background:#7a4a2c; }
 #general-train-note { color:#c0c3ab; font-size:10px; margin-top:3px; }
+
+#vassal-controls { display:grid; gap:3px; margin-top:5px; font-size:12px; }
+#vassal-controls[hidden] { display:none; }
+#vassal-controls label { display:flex; align-items:center; gap:6px; }
+#vassal-controls input[type=range] { flex:1; min-width:60px; width:90px; }
+#vassal-controls output { width:24px; text-align:right; }
+#selection-content:has(#vassal-controls:not([hidden])) { display:grid; grid-template-columns:minmax(0,1fr) minmax(150px,230px); column-gap:12px; align-items:start; }
+#selection-content:has(#vassal-controls:not([hidden])) > :not(#vassal-controls) { grid-column:1; }
+#selection-content #vassal-controls { grid-column:2; grid-row:1 / span 12; margin-top:0; }
+#vassal-controls button { font-size:11px; padding:4px 6px; }

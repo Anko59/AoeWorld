@@ -4,7 +4,7 @@
 //! Entries here identify only frames verified in that local pack.
 
 /// Increment when the reviewed semantic mappings change.
-pub const VERSION: u8 = 21;
+pub const VERSION: u8 = 23;
 
 pub mod buildings;
 pub mod candidates;
@@ -20,13 +20,31 @@ pub use topology::TerrainFrameTopology;
 /// Reviewed selection ceiling, not an increase to the fixed five-page atlas.
 pub const MAX_REVIEWED_FRAMES: u32 = 2_371;
 
-/// Buildings represented by the current gameplay protocol. Other DAT recipes
-/// remain available to offline tools without occupying the live match atlas.
-pub const GAMEPLAY_BUILDING_IDS: [i32; 47] = [
+/// Shipped trial recipes. Its unused Imperial records include cyclic deltas;
+/// the licensed DE importer supplies the current Imperial architecture.
+pub const TRIAL_BUILDING_IDS: [i32; 47] = [
     109, 70, 68, 562, 584, 50, 12, 72, 598, 45, 87, 101, 103, 84, 79, 792, 71, 463, 129, 563, 585,
     498, 133, 82, 104, 209, 49, 141, 464, 564, 586, 130, 132, 47, 10, 86, 18, 116, 31, 605, 606,
     607, 608, 609, 610, 117, 64,
 ];
+pub const IMPERIAL_BUILDING_IDS: [i32; 14] = [
+    142, 465, 565, 587, 131, 20, 51, 14, 153, 19, 137, 32, 210, 150,
+];
+
+/// All current gameplay recipes, imported from their authoritative edition.
+pub const GAMEPLAY_BUILDING_IDS: [i32; 61] = {
+    let mut ids = [0; 61];
+    let mut i = 0;
+    while i < 61 {
+        ids[i] = if i < 47 {
+            TRIAL_BUILDING_IDS[i]
+        } else {
+            IMPERIAL_BUILDING_IDS[i - 47]
+        };
+        i += 1;
+    }
+    ids
+};
 
 /// Resource, tree and scenery identities used by the gameplay scene.
 pub const ENVIRONMENT_UNIT_IDS: [i32; 15] = [

@@ -205,7 +205,7 @@ fn an_overlapping_cliff_is_drawn_over_a_lower_depth_selection_marker() {
         elevation_meters: 0.0,
     };
     let (marker, depth) =
-        game_grid::selection_ring(camera, unit.position, unit.elevation_meters)[0];
+        game_grid::selection_ring(camera, unit.position, f64::from(unit.elevation_meters))[0];
     let screen = ScreenPoint {
         x: (f64::from(marker.position[0]) + 1.0) * camera.viewport[0] * 0.5,
         y: (1.0 - f64::from(marker.position[1])) * camera.viewport[1] * 0.5,

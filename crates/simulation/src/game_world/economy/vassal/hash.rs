@@ -22,8 +22,14 @@ impl Economy {
         for id in &m.manual {
             h.update(&id.0.to_le_bytes());
         }
+        h.update(&(m.transfers.len() as u64).to_le_bytes());
+        for (worker, destination) in &m.transfers {
+            h.update(&worker.0.to_le_bytes());
+            h.update(&destination.0.to_le_bytes());
+        }
         for home in self.vassal_homes.values() {
             home.resources.update_hash(h);
+            home.navy.update_hash(h);
             h.update(&(home.scan_chunk as u64).to_le_bytes());
             h.update(&(home.scan_offset as u64).to_le_bytes());
             h.update(&(home.site_after as u64).to_le_bytes());
@@ -40,6 +46,8 @@ impl Economy {
                 h.update(&farm.0.to_le_bytes());
                 h.update(&(*cursor as u64).to_le_bytes());
             }
+            h.update(&home.settings.weights);
+            h.update(&[home.settings.cap, u8::from(home.settings.training)]);
             h.update(&home.worker_after.map_or(u32::MAX, |id| id.0).to_le_bytes());
             h.update(&(home.workers.len() as u64).to_le_bytes());
             for id in &home.workers {
@@ -62,7 +70,7 @@ impl Economy {
                 h.update(&[stall.avoid_kind.map_or(u8::MAX, |k| k as u8)]);
             }
         }
-        // `automatic` is a transient advance guard. Work counters are read-only
+        // `automatic` and `ordering` are transient advance guards. Work counters are read-only
         // telemetry; neither affects admission or decisions on subsequent ticks.
     }
 }

@@ -104,9 +104,9 @@ export function updateDetails(values) {
   if (!world.every(value => value > 0)) return;
   window.aoeNavigation?.actors(values.subarray(9, 9 + values[6] * 5));
   let at = 9 + values[6] * 5, resources = '';
-  window.aoeNavigation?.resources(values.subarray(at, at + values[7] * 3));
+  window.aoeNavigation?.resources(values.subarray(at, at + values[7] * 5));
   const point = () => [values[at+1]/world[0]*256, values[at+2]/world[1]*256];
-  for (let index=0; index<values[7]; index++,at+=3) {
+  for (let index=0; index<values[7]; index++,at+=5) {
     const [x,y] = point();
     const colour = ['#ce4d59', '', '#f2cf50', '#c4c8d0'][values[at]];
     resources += `<circle cx="${x}" cy="${y}" r="${Math.min(2, 128 / Math.max(...world))}" fill="${colour}"/>`;

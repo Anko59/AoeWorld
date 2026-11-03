@@ -217,8 +217,10 @@ class CommandResult:
     REJECTED_VASSAL_EXISTS: CommandResult
     REJECTED_VASSAL_LEASH: CommandResult
     REJECTED_VASSAL_HOME: CommandResult
+    REJECTED_INVALID_VASSAL_SETTINGS: CommandResult
     REJECTED_UNEXPLORED_PLACEMENT: CommandResult
     REJECTED_REQUIRES_CASTLE_AGE: CommandResult
+    REJECTED_REQUIRES_IMPERIAL_AGE: CommandResult
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 

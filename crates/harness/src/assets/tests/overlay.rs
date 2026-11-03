@@ -47,3 +47,24 @@ fn an_import_attaches_only_to_the_unique_pack_without_an_overlay() {
     attach_in(packs, &base, &de).unwrap();
     assert_eq!(default_base(packs, &de).unwrap(), None);
 }
+
+#[test]
+fn actor_category_is_not_an_automatic_trial_base_candidate() {
+    let root = tempfile::tempdir().unwrap();
+    let packs = root.path();
+    let base = packs.join("trial");
+    let de = packs.join("de");
+    let actors = packs.join("actors");
+    for path in [&base, &de, &actors] {
+        fs::create_dir(path).unwrap();
+        fs::write(path.join("manifest.json"), "{}").unwrap();
+    }
+    std::os::unix::fs::symlink(&actors, de.join("actors")).unwrap();
+    assert_eq!(default_base(packs, &de).unwrap(), Some(base.clone()));
+    attach_in(packs, &default_base(packs, &de).unwrap().unwrap(), &de).unwrap();
+    assert_eq!(
+        base.join("buildings/actors").canonicalize().unwrap(),
+        actors
+    );
+    assert_eq!(default_base(packs, &de).unwrap(), None);
+}

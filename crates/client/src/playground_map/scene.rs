@@ -287,7 +287,8 @@ pub(in super::super) fn units(
                 facing: 0,
                 elevation_meters: scene
                     .height(position)
-                    .unwrap_or_else(|| elevation_at_world(client, position)),
+                    .unwrap_or_else(|| elevation_at_world(client, position))
+                    as f32,
             }
             .with_actor_frame(facing)
         })
@@ -322,7 +323,8 @@ pub(in super::super) fn units(
             facing: 0,
             elevation_meters: scene
                 .height(position)
-                .unwrap_or_else(|| elevation_at_world(client, position)),
+                .unwrap_or_else(|| elevation_at_world(client, position))
+                as f32,
         }
         .with_actor_frame(frame);
         let slot = units.partition_point(|u| u.id < animal.id);
@@ -373,7 +375,8 @@ pub(in super::super) fn units(
             },
             elevation_meters: scene
                 .height(position)
-                .unwrap_or_else(|| elevation_at_world(client, position)),
+                .unwrap_or_else(|| elevation_at_world(client, position))
+                as f32,
         };
         if building.kind.is_gate() {
             if !aoe_rendering::scene_building_visible(
@@ -419,7 +422,8 @@ pub(in super::super) fn units(
             facing: 0,
             elevation_meters: scene
                 .height(position)
-                .unwrap_or_else(|| elevation_at_world(client, position)),
+                .unwrap_or_else(|| elevation_at_world(client, position))
+                as f32,
         };
         let slot = units.partition_point(|u| u.id < building.id);
         units.insert(slot, unit);

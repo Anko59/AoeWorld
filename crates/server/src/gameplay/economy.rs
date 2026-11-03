@@ -59,9 +59,7 @@ pub(super) fn command_state(world: &GameWorld, unit: &GameUnit, state: &mut Game
     if unit.hp == 0 {
         return;
     }
-    state.home_castle = world
-        .vassal_castle(unit.id)
-        .or_else(|| world.general_castle(unit.id));
+    state.home_castle = world.general_castle(unit.id);
     state.managed_by = world.vassal_controller(unit.id);
     state.commanded_by = world.general_controller(unit.id);
     state.general = world.general_status(unit.id).map(wire_general);
@@ -298,6 +296,9 @@ pub(super) fn wire_building_state(
                     .vassal
                     .filter(|_| g.unit.hp > 0)
                     .map(|v| aoe_protocol::VassalReport {
+                        weights: v.settings.weights,
+                        cap: v.settings.cap,
+                        training: v.settings.training,
                         managed: v.managed,
                         residents: v.residents,
                         wait: match v.wait {
@@ -312,6 +313,7 @@ pub(super) fn wire_building_state(
                             aoe_simulation::VassalWait::Population => {
                                 aoe_protocol::VassalWait::Population
                             }
+                            aoe_simulation::VassalWait::Paused => aoe_protocol::VassalWait::Paused,
                             aoe_simulation::VassalWait::Food => aoe_protocol::VassalWait::Food,
                         },
                     }),

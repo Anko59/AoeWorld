@@ -83,6 +83,29 @@ pub(super) fn actors(install: &Path) {
         records.extend([0; 30 * 7 + 4]);
     }
     fs::write(graphics.join("b_dark_house_age1_x1.sld"), super::sld()).unwrap();
+    // Current DAT research identities and synthetic DDS cells complete the icon inventory.
+    for language in [
+        7102_i32, 7204, 7176, 7100, 7098, 7261, 7246, 7282, 7068, 7076, 7082, 7150, 7209, 7013,
+        7190, 7180, 7050, 7093, 7321, 7189, 7014, 7055, 7276, 7211, 7101, 7008, 7230, 7067, 7074,
+        7081, 7172, 7208, 7022, 7034, 7103, 7217, 7260, 7414, 7233, 7207, 7259, 7417, 7096, 7263,
+        7262, 7075, 7077, 7080, 7151, 7216, 7012, 7231, 7277,
+    ] {
+        records.extend([0; 33]);
+        records.extend(language.to_le_bytes());
+        records.extend((language + 1000).to_le_bytes());
+        records.extend([0; 6]); // effect, type, and icon
+        records.extend([0; 8]);
+        records.extend([0x60, 0x0a, 4, 0]);
+        records.extend(b"TEST");
+        records.push(0);
+        records.extend(1_u16.to_le_bytes());
+        records.extend([0; 9]);
+    }
+    for (directory, file) in [("units", "0_50730.dds"), ("tech", "0_test.dds")] {
+        let path = install.join("widgetui/textures/ingame").join(directory);
+        fs::create_dir_all(&path).unwrap();
+        fs::write(path.join(file), super::dds()).unwrap();
+    }
     let mut encoder = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::fast());
     encoder.write_all(&records).unwrap();
     fs::write(dat.join("empires2_x2_p1.dat"), encoder.finish().unwrap()).unwrap();

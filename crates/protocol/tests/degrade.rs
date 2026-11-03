@@ -88,12 +88,24 @@ fn a_unit_that_breaks_a_rule_is_named_repaired_and_the_rest_arrive() {
         ("unit.general", |u| {
             u.kind = UnitKind::General;
             u.general = Some(GeneralStatus {
-                army_size: 101,
+                // Ten infantry squads can now contain 200 soldiers.
+                army_size: 201,
                 state: GeneralState::Idle,
                 training: false,
                 queued: 0,
                 mix: [0; 5],
                 counts: [0; 5],
+            });
+        }),
+        ("unit.general", |u| {
+            u.kind = UnitKind::General;
+            u.general = Some(GeneralStatus {
+                army_size: 200,
+                state: GeneralState::Idle,
+                training: false,
+                queued: 0,
+                mix: [0; 5],
+                counts: [100, 101, 0, 0, 0],
             });
         }),
         ("unit.facing", |u| u.facing = 8),
@@ -211,6 +223,9 @@ fn one_bad_garrison_occupant_costs_only_itself() {
 #[test]
 fn a_vassal_report_on_a_non_vassal_is_cleared_not_the_building() {
     let report = VassalReport {
+        weights: [45, 30, 15, 10],
+        cap: 100,
+        training: false,
         managed: 3,
         residents: 4,
         wait: VassalWait::Growing,

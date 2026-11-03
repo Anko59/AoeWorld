@@ -19,7 +19,45 @@ export function initVassal() {
   };
   const status=document.createElement('div');status.id='vassal-status';status.hidden=true;
   document.getElementById('selection-content').append(status);
-  window.aoeVassal={update(values,label){
+  const controls=document.createElement('div');controls.id='vassal-controls';controls.hidden=true;
+  const sliders=[];
+  for(const [i,name] of ['Food weight','Wood weight','Gold weight','Stone weight','Villager cap'].entries()){
+    const row=document.createElement('label');row.textContent=name;
+    const input=document.createElement('input');input.type='range';input.min='0';input.max='100';input.step='1';
+    input.id=`vassal-setting-${i}`;input.setAttribute('aria-label',name);
+    const value=document.createElement('output');input.addEventListener('input',()=>{value.textContent=input.value;});
+    row.append(input,value);controls.append(row);sliders.push({input,value});
+  }
+  const toggle=document.createElement('input');toggle.type='checkbox';toggle.id='vassal-training';
+  const train=document.createElement('label');train.append(toggle,'Train villagers and fishing ships');controls.append(train);
+  const dismiss=document.createElement('button');dismiss.id='vassal-dismiss';dismiss.textContent='Dismiss idle villagers';
+  dismiss.title='Kill idle own villagers in this territory that no Vassal manages';controls.append(dismiss);
+  document.getElementById('selection-content').append(controls);
+  let settingsSignature='',confirmedWeights=[];
+  window.aoeVassal={
+  bind(callback){controls.addEventListener('change',()=>{
+    // Keep the last server-confirmed mix when the final positive weight is
+    // dragged to zero. Never submit a mix that would poison later changes.
+    if(sliders.slice(0,4).every(s=>Number(s.input.value)===0)){
+      confirmedWeights.forEach((weight,i)=>{
+        sliders[i].input.value=String(weight);sliders[i].value.textContent=String(weight);
+      });
+      return;
+    }
+    callback(0);
+  });dismiss.addEventListener('click',()=>callback(1));},
+  settings(){return new Uint8Array([...sliders.map(s=>Number(s.input.value)),Number(toggle.checked)]);},
+  update(values,label,settings){
+    controls.hidden=settings.length===0;
+    const signature=Array.from(settings).join(',');
+    if(signature!==settingsSignature){
+      settingsSignature=signature;
+      if(settings.length===7){
+        confirmedWeights=Array.from(settings.slice(1,5));
+        for(let i=0;i<5;i++){sliders[i].input.value=String(settings[i+1]);sliders[i].value.textContent=String(settings[i+1]);}
+        toggle.checked=settings[6]===1;
+      }
+    }
     const count=values.length>0?values[0]:0;layer.style.display=count>0?'block':'none';
     layer.dataset.count=String(count);layer.dataset.radius='100';
     let at=1;

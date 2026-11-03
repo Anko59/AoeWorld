@@ -205,6 +205,19 @@ pub enum ClientMessage {
         entity_id: EntityId,
         command: GeneralCommand,
     },
+    /// Set one owned Vassal's resource-mix weights (food, wood, gold, stone),
+    /// villager cap and training switch. Refused values change nothing.
+    VassalSettingsOrder {
+        sequence: u64,
+        vassal_id: EntityId,
+        weights: [u8; 4],
+        cap: u8,
+        training: bool,
+    },
+    VassalDismissOrder {
+        sequence: u64,
+        vassal_id: EntityId,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -14,7 +14,7 @@ impl GameWorld {
         work: &mut VassalWork,
     ) -> Option<ResourceKind> {
         let unit = self.unit(worker)?;
-        let priority = self.vassal_priority(s.player)?;
+        let priority = self.vassal_priority(s.player, s.home.settings.weights)?;
         let kinds = priority.kinds();
         if current.is_none()
             && kinds[0] == ResourceKind::Food

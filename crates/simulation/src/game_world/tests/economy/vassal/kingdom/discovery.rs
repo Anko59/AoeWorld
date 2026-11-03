@@ -145,7 +145,7 @@ fn distant_ore(
     let vassal = w
         .spawn_kind(PlayerId(0), UnitKind::Vassal, position(exit))
         .unwrap();
-    w.bind_vassal(vassal, castle, castle_rect);
+
     w.issue_garrison(PlayerId(0), vassal, castle).unwrap();
     w.advance_garrisons(&mut Vec::new());
     assert!(w.vassal_status(vassal).is_some());

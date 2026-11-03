@@ -218,15 +218,15 @@ fn carried_rule(unit: &UnitState) -> bool {
 /// The first rule `unit` breaks.
 pub(crate) fn unit_rule(unit: &UnitState) -> Option<&'static str> {
     let alive = unit.hp > 0;
-    if unit.home_castle.is_some_and(|id| {
-        !(matches!(unit.kind, UnitKind::Vassal | UnitKind::General) && alive && id != unit.id)
-    }) {
+    if unit
+        .home_castle
+        .is_some_and(|id| !(unit.kind == UnitKind::General && alive && id != unit.id))
+    {
         return Some("unit.home_castle");
     }
-    if unit
-        .managed_by
-        .is_some_and(|id| !(unit.kind == UnitKind::Villager && alive && id != unit.id))
-    {
+    if unit.managed_by.is_some_and(|id| {
+        !(matches!(unit.kind, UnitKind::Villager | UnitKind::FishingShip) && alive && id != unit.id)
+    }) {
         return Some("unit.managed_by");
     }
     if unit.commanded_by.is_some_and(|id| {
@@ -243,9 +243,9 @@ pub(crate) fn unit_rule(unit: &UnitState) -> Option<&'static str> {
     if unit.general.is_some_and(|g| {
         !(unit.kind == UnitKind::General
             && alive
-            && g.army_size <= 100
+            && g.army_size <= 200
             && g.mix.iter().all(|&share| share <= 100)
-            && g.counts.iter().map(|&n| usize::from(n)).sum::<usize>() <= 100)
+            && g.counts.iter().map(|&n| usize::from(n)).sum::<usize>() <= 200)
     }) {
         return Some("unit.general");
     }

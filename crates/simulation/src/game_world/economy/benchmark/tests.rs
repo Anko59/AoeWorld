@@ -99,8 +99,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Housing space is restored in the canonical state; retain the full 1/4-worker comparison above.
-        "9c98181d0e47d61999092690cee4a64920e56d3e446192f256f88e029216ad14"
+        // Current Vassal controls and transfer reservations change this replay;
+        // the complete 1/4-worker comparison above still holds.
+        "3e7e90a05ce77ae131f54a9212567994d762cc530a596749896ac8baa4b0312d"
     );
 }
 

@@ -2,6 +2,116 @@
 use super::super::Graphic;
 pub(super) const GRAPHICS: &[(u32, Graphic)] = &[
     (
+        201608,
+        Graphic {
+            stem: "dat_1608",
+            cells: 481,
+            seconds: f32::from_bits(1025758987),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 30,
+        },
+    ),
+    (
+        201682,
+        Graphic {
+            stem: "dat_1682",
+            cells: 961,
+            seconds: f32::from_bits(1020054734),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 60,
+        },
+    ),
+    (
+        201767,
+        Graphic {
+            stem: "dat_1767",
+            cells: 960,
+            seconds: f32::from_bits(1020054733),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 60,
+        },
+    ),
+    (
+        201770,
+        Graphic {
+            stem: "dat_1770",
+            cells: 960,
+            seconds: f32::from_bits(1015580809),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 60,
+        },
+    ),
+    (
+        201773,
+        Graphic {
+            stem: "dat_1773",
+            cells: 16,
+            seconds: f32::from_bits(0),
+            replay_delay: f32::from_bits(1065353216),
+            angles: 16,
+            stride: 1,
+        },
+    ),
+    (
+        201774,
+        Graphic {
+            stem: "dat_1774",
+            cells: 480,
+            seconds: f32::from_bits(1065353216),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 30,
+        },
+    ),
+    (
+        201777,
+        Graphic {
+            stem: "dat_1777",
+            cells: 960,
+            seconds: f32::from_bits(1015994647),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 60,
+        },
+    ),
+    (
+        201848,
+        Graphic {
+            stem: "dat_1848",
+            cells: 481,
+            seconds: f32::from_bits(1023969417),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 30,
+        },
+    ),
+    (
+        201851,
+        Graphic {
+            stem: "dat_1851",
+            cells: 961,
+            seconds: f32::from_bits(1028443341),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 60,
+        },
+    ),
+    (
+        201852,
+        Graphic {
+            stem: "dat_1852",
+            cells: 481,
+            seconds: f32::from_bits(1065353216),
+            replay_delay: f32::from_bits(0),
+            angles: 16,
+            stride: 30,
+        },
+    ),
+    (
         201855,
         Graphic {
             stem: "dat_1855",
@@ -150,116 +260,6 @@ pub(super) const GRAPHICS: &[(u32, Graphic)] = &[
             stem: "dat_2457",
             cells: 721,
             seconds: f32::from_bits(1018563425),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 45,
-        },
-    ),
-    (
-        202643,
-        Graphic {
-            stem: "dat_2643",
-            cells: 481,
-            seconds: f32::from_bits(1023969417),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 30,
-        },
-    ),
-    (
-        202646,
-        Graphic {
-            stem: "dat_2646",
-            cells: 481,
-            seconds: f32::from_bits(1023969417),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 30,
-        },
-    ),
-    (
-        202649,
-        Graphic {
-            stem: "dat_2649",
-            cells: 961,
-            seconds: f32::from_bits(1028443341),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 60,
-        },
-    ),
-    (
-        202650,
-        Graphic {
-            stem: "dat_2650",
-            cells: 481,
-            seconds: f32::from_bits(1065353216),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 30,
-        },
-    ),
-    (
-        202653,
-        Graphic {
-            stem: "dat_2653",
-            cells: 481,
-            seconds: f32::from_bits(1019115210),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 30,
-        },
-    ),
-    (
-        202762,
-        Graphic {
-            stem: "dat_2762",
-            cells: 10,
-            seconds: f32::from_bits(1055286886),
-            replay_delay: f32::from_bits(0),
-            angles: 1,
-            stride: 10,
-        },
-    ),
-    (
-        202789,
-        Graphic {
-            stem: "dat_2789",
-            cells: 10,
-            seconds: f32::from_bits(1055286886),
-            replay_delay: f32::from_bits(0),
-            angles: 1,
-            stride: 10,
-        },
-    ),
-    (
-        202798,
-        Graphic {
-            stem: "dat_2798",
-            cells: 481,
-            seconds: f32::from_bits(1028443341),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 30,
-        },
-    ),
-    (
-        202801,
-        Graphic {
-            stem: "dat_2801",
-            cells: 720,
-            seconds: f32::from_bits(1026057248),
-            replay_delay: f32::from_bits(0),
-            angles: 16,
-            stride: 45,
-        },
-    ),
-    (
-        202804,
-        Graphic {
-            stem: "dat_2804",
-            cells: 720,
-            seconds: f32::from_bits(1032358025),
             replay_delay: f32::from_bits(0),
             angles: 16,
             stride: 45,

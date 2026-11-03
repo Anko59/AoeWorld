@@ -49,6 +49,15 @@ impl GameWorld {
                 point(hash, p);
                 hash.update(&[u8::from(attack_move)]);
             }
+            match group.taut_end {
+                Some(p) => {
+                    hash.update(&[1]);
+                    point(hash, p);
+                }
+                None => {
+                    hash.update(&[0]);
+                }
+            }
             hash.update(&(group.path.points.len() as u64).to_le_bytes());
             for (&p, &length) in group.path.points.iter().zip(&group.path.lengths) {
                 point(hash, p);

@@ -202,7 +202,7 @@ fn vassal_refreshes_lumber_camp_after_tree_depletion() {
             position(TileCoord::new(old.tile.x - 6, old.tile.y + 8)).unwrap(),
         )
         .unwrap();
-    world.bind_vassal(vassal, castle, castle_rect);
+
     world.issue_garrison(PlayerId(0), vassal, castle).unwrap();
     world.advance_garrisons(&mut Vec::new());
     let mut task = GatherTask::new(old.id, old.tile, ResourceKind::Wood, None);

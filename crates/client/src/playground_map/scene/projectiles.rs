@@ -102,11 +102,11 @@ pub(super) fn append(client: &Client, scene: &PreparedScene, units: &mut Vec<Sce
                 position,
                 visual: aoe_rendering::SceneUnitVisual::new(true).with_selected(false),
                 facing: 0,
-                elevation_meters: scene
+                elevation_meters: (scene
                     .height(position)
                     .unwrap_or_else(|| elevation_at_world(client, position))
                     + 1.0
-                    + arc(fraction, distance),
+                    + arc(fraction, distance)) as f32,
             }
             .with_actor_frame(frame),
         );

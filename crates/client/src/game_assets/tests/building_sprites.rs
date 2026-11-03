@@ -129,8 +129,10 @@ async fn native_army_overlay_accepts_the_bounded_complete_source_inventory() {
     let value =
         super::selection_tests::pack_fixture([("de/synthetic-army.sld".into(), 65_536, false)]);
     let _fetch = super::selection_tests::FetchFixture::install(&value);
-    let install =
-        js_sys::Function::new_with_args("data", "window.fetch = async () => new Response(data);");
+    let install = js_sys::Function::new_with_args(
+        "data",
+        "window.fetch = async path => new Response(path.includes('/actors/') ? data : JSON.stringify({...JSON.parse(data),frames:[],pages:[],chunks:[],building_data:'00',buildings:[]}));",
+    );
     install
         .call1(&JsValue::NULL, &JsValue::from_str(&value.to_string()))
         .unwrap();

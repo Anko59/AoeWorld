@@ -88,14 +88,14 @@ fn append_selections(entries: &mut Vec<WorldLayer>, units: &[SceneUnit], camera:
             game_grid::selection_ellipse(
                 camera,
                 unit.position,
-                unit.elevation_meters,
+                f64::from(unit.elevation_meters),
                 [
                     side / 2.0 * aoe_core::ISO_TILE_WIDTH,
                     side / 2.0 * aoe_core::ISO_TILE_HEIGHT,
                 ],
             )
         } else {
-            game_grid::selection_ring(camera, unit.position, unit.elevation_meters)
+            game_grid::selection_ring(camera, unit.position, f64::from(unit.elevation_meters))
         };
         for (mut sprite, depth) in selections {
             if unit.visual.hostile() {

@@ -303,7 +303,7 @@ fn test_unit(kind: SceneUnitKind) -> SceneUnit {
 }
 
 #[wasm_bindgen_test]
-fn feudal_buildings_paint_native_foundations_and_aprons_only_on_land() {
+fn feudal_and_imperial_buildings_paint_native_foundations_and_aprons_only_on_land() {
     for (slot, id) in [
         (26, 87),
         (27, 101),
@@ -312,6 +312,20 @@ fn feudal_buildings_paint_native_foundations_and_aprons_only_on_land() {
         (30, 79),
         (31, 792),
         (44, 133),
+        (74, 142),
+        (75, 465),
+        (76, 565),
+        (77, 587),
+        (78, 131),
+        (79, 20),
+        (80, 51),
+        (81, 14),
+        (82, 153),
+        (83, 19),
+        (84, 137),
+        (85, 32),
+        (86, 210),
+        (87, 150),
     ] {
         let mut art = crate::surface_mesh::mix::fixture::art();
         art.compositions.push(crate::BuildingArt {

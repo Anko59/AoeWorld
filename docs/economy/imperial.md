@@ -73,11 +73,12 @@ Center arrows). Crop Rotation adds 175 food per new Farm, Two-Man Saw +20% wood
 gathering and Stone Shaft Mining +15% stone gathering, using the same exact
 fixed-point rates as the earlier tiers.
 
-Buildings keep Castle Age hit points, line of sight, armour and art in Imperial
-Age: the DAT's Imperial architecture sets are not imported, and the render tag
-space (256 values) is full, so Imperial buildings and the new units reuse the
-Castle Age buildings and the line's base art. A DE overlay for Imperial art needs a
-wider tag first.
+Buildings keep Castle Age hit points, line of sight and armour in Imperial Age.
+The new unit tiers now select their own native DE pose bindings and icons; see
+[unit art](../assets/units.md). Building selection follows each observed building's
+age, including construction and completed research updates. The
+[Imperial art inventory](../assets/imperial.md) records the DAT age-four identities
+and the Western families that legitimately share their earlier art.
 
 ## Wire and AI
 

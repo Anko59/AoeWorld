@@ -23,4 +23,4 @@ runs:
           .git/aoe-cargo/registry
           .git/aoe-cargo/git
           target
-        key: rust-shared-${{ inputs.leg }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'docker/rust-tools.Dockerfile') }}
+        key: rust-shared-${{ inputs.leg }}-${{ hashFiles('Cargo.toml') }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml', 'docker/rust-tools.Dockerfile') }}

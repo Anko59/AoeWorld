@@ -315,3 +315,35 @@ fn native_upload_tiles_preserve_owner_weights_shadow_and_transparent_gutters() {
         .is_err()
     );
 }
+
+#[wasm_bindgen_test]
+async fn native_fetch_accepts_only_the_current_pack_component_paths() {
+    for name in [
+        "frames-0000.bin",
+        "buildings/frames-0000.bin",
+        "buildings/actors/frames-0000.bin",
+    ] {
+        native_response(&[1, 2, 3], 3);
+        let result = fetch_chunk(name, 3).await;
+        native_restore_fetch();
+        assert!(result.is_ok(), "current component path rejected: {name}");
+        assert_eq!(
+            js_sys::Uint8Array::new(&result.unwrap()).to_vec(),
+            [1, 2, 3]
+        );
+    }
+    for name in [
+        "actors/frames-0000.bin",
+        "buildings/actors/../frames-0000.bin",
+        "buildings/actors/nested/frames-0000.bin",
+        "buildings/buildings/frames-0000.bin",
+        "buildings/actors/frames-0000.bin?extra=1",
+        "buildings/actors/frames-0000.bin#fragment",
+        "buildings/actors/frames-0000.bin/extra",
+    ] {
+        native_response(&[1, 2, 3], 3);
+        let result = fetch_chunk(name, 3).await;
+        native_restore_fetch();
+        assert!(result.is_err(), "unsafe component path accepted: {name}");
+    }
+}

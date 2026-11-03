@@ -7,6 +7,7 @@ pub(super) struct Snapshot {
     pub home: Home,
     pub player: PlayerId,
     pub units: Vec<GameUnit>,
+    pub boats: Vec<GameUnit>,
     pub buildings: Vec<GameBuilding>,
     pub complete: bool,
     pub villagers: usize,
@@ -14,6 +15,8 @@ pub(super) struct Snapshot {
     pub global_queued: usize,
     /// The stalled node/kind the worker now being tasked must not choose again.
     pub avoid: Option<super::watchdog::Stall>,
+    /// Only reused within this authoritative pass; accepted jobs retain state.
+    pub offers: [Vec<aoe_map::ResourceNode>; 4],
 }
 impl GameWorld {
     /// Spatial buckets only, with a retained position when crowds exceed the
@@ -24,7 +27,7 @@ impl GameWorld {
         work: &mut VassalWork,
     ) -> Option<Snapshot> {
         let home = self.economy.vassal_homes.get(&id)?.clone();
-        let player = self.building(home.castle)?.player;
+        let player = self.building(home.castle?)?.player;
         let center = home.center.tile_floor();
         let r = VASSAL_RULES.radius_tiles;
         let first = ChunkCoord {
@@ -42,6 +45,7 @@ impl GameWorld {
         let start = (chunk, offset);
         let mut visits = 0;
         let mut units = Vec::new();
+        let mut boats = Vec::new();
         while chunk < count && visits < VASSAL_RULES.unit_visits_per_domain {
             let key = ChunkCoord {
                 x: first.x + (chunk % width) as i32,
@@ -55,11 +59,15 @@ impl GameWorld {
                 if let Some(u) = unit
                     && u.player == player
                     && u.hp > 0
-                    && u.kind == UnitKind::Villager
+                    && matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip)
                     && !self.embarked(u.id)
                     && home.owns(u.position)
                 {
-                    units.push(u);
+                    if u.kind == UnitKind::FishingShip {
+                        boats.push(u);
+                    } else {
+                        units.push(u);
+                    }
                 }
             }
             if offset >= bucket.len() {
@@ -77,6 +85,7 @@ impl GameWorld {
             };
         }
         units.sort_unstable_by_key(|u| u.id);
+        boats.sort_unstable_by_key(|u| u.id);
         let building_count: usize = self
             .economy
             .dropoffs
@@ -114,12 +123,14 @@ impl GameWorld {
             home,
             player,
             units,
+            boats,
             buildings,
             complete: complete_units && building_count <= VASSAL_RULES.building_visits_per_domain,
             villagers,
             queued,
             global_queued,
             avoid: None,
+            offers: Default::default(),
         })
     }
 }

@@ -1,5 +1,9 @@
 use crate::{TileCoord, TileRect, WorldConfig};
 
+#[cfg(test)]
+#[path = "projection/tests/edges.rs"]
+mod edge_tests;
+
 pub const MIN_CAMERA_ZOOM: f64 = 1.0 / 4096.0;
 
 pub const ISO_TILE_WIDTH: f64 = 128.0;
@@ -76,63 +80,6 @@ impl Camera {
         let after = self.screen_to_world_at_height(pointer, self.focus_elevation_meters);
         self.center[0] += before[0] - after[0];
         self.center[1] += before[1] - after[1];
-        self
-    }
-
-    pub fn clamp_center(mut self, config: WorldConfig) -> Self {
-        let corners = [
-            self.screen_to_world_at_height(
-                ScreenPoint { x: 0.0, y: 0.0 },
-                self.focus_elevation_meters,
-            ),
-            self.screen_to_world_at_height(
-                ScreenPoint {
-                    x: self.viewport[0],
-                    y: self.viewport[1],
-                },
-                self.focus_elevation_meters,
-            ),
-        ];
-        let min_x = corners
-            .iter()
-            .map(|point| point[0])
-            .fold(f64::INFINITY, f64::min);
-        let max_x = corners
-            .iter()
-            .map(|point| point[0])
-            .fold(f64::NEG_INFINITY, f64::max);
-        let min_y = corners
-            .iter()
-            .map(|point| point[1])
-            .fold(f64::INFINITY, f64::min);
-        let max_y = corners
-            .iter()
-            .map(|point| point[1])
-            .fold(f64::NEG_INFINITY, f64::max);
-        let width = f64::from(config.width_tiles);
-        let height = f64::from(config.height_tiles);
-        // Once the entire isometric world fits, keep it centered rather than
-        // alternately clamping opposite edges and pinning it to a corner.
-        if (width + height) * ISO_TILE_WIDTH * 0.5 * self.zoom <= self.viewport[0]
-            && (width + height) * ISO_TILE_HEIGHT * 0.5 * self.zoom <= self.viewport[1]
-        {
-            self.center = [width * 0.5, height * 0.5];
-            return self;
-        }
-        if min_x < 0.0 {
-            self.center[0] -= min_x;
-        }
-        if max_x > width {
-            self.center[0] -= max_x - width;
-        }
-        if min_y < 0.0 {
-            self.center[1] -= min_y;
-        }
-        if max_y > height {
-            self.center[1] -= max_y - height;
-        }
-        self.center[0] = crate::clamp_f64(self.center[0], 0.0, width);
-        self.center[1] = crate::clamp_f64(self.center[1], 0.0, height);
         self
     }
 
@@ -281,28 +228,6 @@ mod tests {
         let rect = camera.visible_tiles(config, 2.0);
         assert_eq!(rect.min, TileCoord::new(0, 0));
         assert!(rect.max.x <= 100 && rect.max.y <= 80);
-    }
-
-    #[test]
-    fn camera_center_is_clamped_inside_virtual_world_bounds() {
-        let config = WorldConfig::new(10, 8, Seed(1)).unwrap();
-        let camera = Camera {
-            center: [0.0, 0.0],
-            zoom: 1.0,
-            viewport: [512.0, 256.0],
-            focus_elevation_meters: 0.0,
-        }
-        .clamp_center(config);
-        assert_eq!(camera.center, [4.0, 0.0]);
-
-        let far = Camera {
-            center: [1_000.0, 1_000.0],
-            zoom: 1.0,
-            viewport: [512.0, 256.0],
-            focus_elevation_meters: 0.0,
-        }
-        .clamp_center(config);
-        assert_eq!(far.center, [6.0, 8.0]);
     }
 
     #[test]

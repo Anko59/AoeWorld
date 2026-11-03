@@ -3,10 +3,14 @@
 use crate::{BuildingKind, EconomyError, GameWorld, Stockpile};
 use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 
+#[path = "demo/coast.rs"]
+mod coast;
 #[path = "demo/imperial.rs"]
 mod imperial;
 #[path = "demo/kingdom.rs"]
 mod kingdom;
+#[path = "demo/river.rs"]
+mod river;
 
 impl GameWorld {
     /// Real-time art inspection encounter. Normal orders, weapon damage and
@@ -22,8 +26,8 @@ impl GameWorld {
             WorldPosition::from_tile_center(TileCoord::new(x, y))
                 .map_err(|_| EconomyError::InvalidFootprint)
         };
-        // A penned reserve keeps the leader confident but cannot rescue him
-        // before the siege volley. These are ordinary closed wall footprints.
+        // A penned reserve cannot rescue the solo leader before the siege
+        // volley. These are ordinary closed wall footprints.
         for y in 112..=116 {
             for x in 132..=138 {
                 if x == 132 || x == 138 || y == 112 || y == 116 {
@@ -44,6 +48,9 @@ impl GameWorld {
             )?;
         }
         let general = world.spawn_kind(PlayerId(0), UnitKind::General, position(128, 128)?)?;
+        // The appearance proof exercises a player's solo attack; autonomous
+        // retreat must not replace that explicit animation sequence.
+        world.issue_general_move(PlayerId(0), general, position(128, 128)?)?;
         for (kind, x, y) in std::iter::once((UnitKind::BatteringRam, 142, 128))
             .chain((0..20).map(|n| (UnitKind::Mangonel, 145 + n / 5, 126 + n % 5)))
             .chain((0..5).map(|n| (UnitKind::LightCavalry, 148, 132 + n)))
@@ -146,12 +153,10 @@ impl GameWorld {
         world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
         for (x, y) in [(100, 100), (150, 100)] {
             let footprint = TileRect::from_xywh(x, y, 4, 4);
-            let castle =
-                world.insert_building(PlayerId(0), BuildingKind::Castle, footprint, true)?;
+            world.insert_building(PlayerId(0), BuildingKind::Castle, footprint, true)?;
             let at = aoe_core::WorldPosition::from_tile_center(TileCoord::new(x + 2, y + 5))
                 .map_err(|_| EconomyError::InvalidFootprint)?;
-            let vassal = world.spawn_kind(PlayerId(0), UnitKind::Vassal, at)?;
-            world.bind_vassal(vassal, castle, footprint);
+            world.spawn_kind(PlayerId(0), UnitKind::Vassal, at)?;
         }
         for i in 0..40 {
             let at = TileCoord::new(87 + 4 * (i % 20), 146 + 4 * (i / 20));
@@ -213,7 +218,7 @@ impl GameWorld {
             };
         }
         let vassal = world.spawn_kind(PlayerId(0), UnitKind::Vassal, position(99, 100)?)?;
-        world.bind_vassal(vassal, castle, footprint);
+
         for n in 0..24 {
             world.spawn_villager(PlayerId(0), position(122 + (n % 8) * 2, 123 + (n / 8) * 2)?)?;
         }

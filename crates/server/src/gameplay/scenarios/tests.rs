@@ -125,3 +125,61 @@ async fn kingdom_showcase_streams_valid_initial_and_active_encoded_frames() {
         "recording client receives the active twenty-worker Vassal report"
     );
 }
+
+#[tokio::test]
+async fn fishing_showcase_streams_valid_managed_ships_and_a_completed_dock() {
+    use aoe_protocol::{BuildingKind, UnitKind, decode_gameplay_server};
+    let service = GameplayService::vassal_fishing_demo(Seed(1)).unwrap();
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
+    let (session, _) = service.register(None, sender).await;
+    service
+        .subscribe(session, 1, TileRect::from_xywh(40, 0, 210, 180))
+        .await;
+    let (mut snapshot, mut fleet, mut dock) = (false, false, false);
+    for _ in 0..600 {
+        while let Ok(message) = receiver.try_recv() {
+            let bytes = encode_gameplay_server(&message).expect("valid fleet game frame");
+            assert_eq!(decode_gameplay_server(&bytes).unwrap(), message);
+            let (units, buildings) = match &message {
+                GameplayServerMessage::Snapshot {
+                    units, buildings, ..
+                } => {
+                    snapshot = true;
+                    (units, buildings)
+                }
+                GameplayServerMessage::Tick {
+                    changed_units,
+                    changed_buildings,
+                    ..
+                } => (changed_units, changed_buildings),
+                GameplayServerMessage::Error { .. } => {
+                    panic!("coast subscription failed: {message:?}")
+                }
+                _ => continue,
+            };
+            fleet |= units
+                .iter()
+                .any(|u| u.kind == UnitKind::FishingShip && u.managed_by.is_some());
+            dock |= buildings
+                .iter()
+                .any(|b| b.kind == BuildingKind::Dock && b.progress_permille == 1_000);
+        }
+        if snapshot && fleet && dock {
+            break;
+        }
+        service.tick().await;
+    }
+    assert!(
+        snapshot && fleet && dock,
+        "recording client must see actual managed ships and a finished Dock"
+    );
+}
+
+#[tokio::test]
+async fn river_recording_rejects_uniform_world_without_replacing_it() {
+    let service = GameplayService::general_demo(Seed(7)).unwrap();
+    let before = service.world.read().await.canonical_hash();
+    assert!(service.prepare_general_river_demo().await.is_err());
+    assert_eq!(service.world.read().await.canonical_hash(), before);
+    assert!(service.map_content_hash.is_none());
+}

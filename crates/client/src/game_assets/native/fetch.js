@@ -1,6 +1,7 @@
 // Reserve one exact bounded chunk, then cancel incomplete or excessive streams.
 export async function fetch_chunk(name, expected) {
-    const file = name.startsWith('buildings/') ? name.slice(10) : name;
+    const file = name.startsWith('buildings/actors/') ? name.slice(17) :
+        name.startsWith('buildings/') ? name.slice(10) : name;
     if (!/^[a-zA-Z0-9_.-]+\.bin$/.test(file) ||
         !Number.isInteger(expected) || expected <= 0 || expected > 67108864)
         throw Error('Invalid native chunk request');

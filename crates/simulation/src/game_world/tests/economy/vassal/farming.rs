@@ -42,7 +42,7 @@ fn farmland(count: i32) -> (GameWorld, EntityId, Vec<EntityId>) {
     let vassal = w
         .spawn_kind(PlayerId(0), UnitKind::Vassal, at(89, 90))
         .unwrap();
-    w.bind_vassal(vassal, castle, footprint);
+
     let workers = (0..count)
         .map(|n| {
             w.spawn_villager(PlayerId(0), at(115 + (n % 8) * 2, 115 + (n / 8) * 2))

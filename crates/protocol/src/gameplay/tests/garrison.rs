@@ -56,6 +56,8 @@ fn vassal_training_and_specific_refusals_pin_the_current_wire() {
         (CommandResult::RejectedVassalLeash, 35),
         (CommandResult::RejectedVassalHome, 36),
         (CommandResult::RejectedRequiresImperialAge, 37),
+        (CommandResult::RejectedPopulationCap, 38),
+        (CommandResult::RejectedInvalidVassalSettings, 39),
     ] {
         let ack = ServerMessage::CommandAck {
             sequence: 3,
@@ -125,20 +127,32 @@ fn vassal_queue_and_garrison_roundtrip_and_other_buildings_reject_training() {
         hp: 75,
         max_hp: 75,
         vassal: Some(crate::VassalReport {
+            weights: [45, 30, 15, 10],
+            cap: 75,
+            training: true,
             managed: 20,
             residents: 31,
             wait: crate::VassalWait::Food,
         }),
     });
-    let snapshot = message(occupied);
+    assert_eq!(
+        postcard::to_allocvec(&occupied.garrison[0].vassal.unwrap()).unwrap(),
+        [45, 30, 15, 10, 75, 1, 20, 31, 4]
+    );
+    let snapshot = message(occupied.clone());
     assert_eq!(
         decode_server(&encode_server(&snapshot).unwrap()).unwrap(),
         snapshot
     );
+    occupied.garrison[0].vassal.as_mut().unwrap().weights = [0; 4];
+    assert!(encode_server(&message(occupied.clone())).is_err());
+    occupied.garrison[0].vassal.as_mut().unwrap().weights = [45, 30, 15, 10];
+    occupied.garrison[0].vassal.as_mut().unwrap().cap = 101;
+    assert!(encode_server(&message(occupied)).is_err());
 }
 
 #[test]
-fn vassal_home_and_worker_management_are_current_owner_only_state() {
+fn roaming_vassal_and_worker_management_are_current_owner_only_state() {
     let mut u = UnitState {
         id: EntityId(2),
         player: PlayerId(0),
@@ -159,7 +173,7 @@ fn vassal_home_and_worker_management_are_current_owner_only_state() {
         death_hunt: None,
         auto_scout: false,
         cargo_count: 0,
-        home_castle: Some(EntityId(9)),
+        home_castle: None,
         managed_by: None,
         commanded_by: None,
         general: None,
@@ -169,7 +183,7 @@ fn vassal_home_and_worker_management_are_current_owner_only_state() {
     assert!(
         postcard::to_allocvec(&u)
             .unwrap()
-            .ends_with(&[1, 9, 0, 0, 0, 0])
+            .ends_with(&[0, 0, 0, 0, 0])
     );
     u.stance = CombatStance::Defensive;
     assert_eq!(u.for_viewer(PlayerId(0)), u);
@@ -187,6 +201,9 @@ fn vassal_home_and_worker_management_are_current_owner_only_state() {
         decode_server(&encode_server(&snapshot).unwrap()).unwrap(),
         snapshot
     );
+    let mut bound = u;
+    bound.home_castle = Some(EntityId(9));
+    assert!(encode_server(&message(bound)).is_err());
     u.kind = UnitKind::Villager;
     u.home_castle = None;
     u.hp = 25;
@@ -198,6 +215,13 @@ fn vassal_home_and_worker_management_are_current_owner_only_state() {
         decode_server(&encode_server(&snapshot).unwrap()).unwrap(),
         snapshot
     );
+    u.kind = UnitKind::FishingShip;
+    let snapshot = message(u);
+    assert_eq!(
+        decode_server(&encode_server(&snapshot).unwrap()).unwrap(),
+        snapshot
+    );
+    assert_eq!(u.for_viewer(PlayerId(1)).managed_by, None);
     u.kind = UnitKind::Militia;
     assert!(
         encode_server(&message(u)).is_err(),
@@ -247,12 +271,12 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
     };
 
     u.general = Some(crate::GeneralStatus {
-        army_size: 100,
+        army_size: 200,
         state: crate::GeneralState::Retreating,
         training: true,
         queued: 3,
         mix: [35, 30, 20, 10, 5],
-        counts: [40, 30, 20, 5, 5],
+        counts: [200, 0, 0, 0, 0],
     });
     assert_eq!(u.for_viewer(PlayerId(0)), u);
     let foreign = u.for_viewer(PlayerId(1));
@@ -270,23 +294,54 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
     // GeneralState gained Idle at index 0 (in place, no migration): Retreating is now 3.
     // Train flag, queued recruits, five mix shares, five role counts follow.
     assert!(bytes.ends_with(&[
-        0, 0, 1, 100, 3, 1, 3, 35, 30, 20, 10, 5, 40, 30, 20, 5, 5, 0, 0
+        0, 0, 1, 200, 1, 3, 1, 3, 35, 30, 20, 10, 5, 200, 1, 0, 0, 0, 0, 0, 0
     ]));
     assert_eq!(decode_server(&bytes).unwrap(), message(u));
     u.general.as_mut().unwrap().state = crate::GeneralState::Idle;
     let idle = encode_server(&message(u)).unwrap();
     assert!(idle.ends_with(&[
-        0, 0, 1, 100, 0, 1, 3, 35, 30, 20, 10, 5, 40, 30, 20, 5, 5, 0, 0
+        0, 0, 1, 200, 1, 0, 1, 3, 35, 30, 20, 10, 5, 200, 1, 0, 0, 0, 0, 0, 0
     ]));
     assert_eq!(decode_server(&idle).unwrap(), message(u));
-    u.general.as_mut().unwrap().army_size = 101;
+    u.general.as_mut().unwrap().army_size = 201;
     assert!(encode_server(&message(u)).is_err());
     u.general = None;
     u.home_castle = None;
+    u.kind = UnitKind::Vassal;
+    u.commanded_by = Some(EntityId(88));
+    assert!(
+        encode_server(&message(u)).is_err(),
+        "a Vassal cannot be a member of a General's army"
+    );
     u.kind = UnitKind::Knight;
     u.commanded_by = Some(EntityId(88));
     assert!(encode_server(&message(u)).is_ok());
     assert_eq!(u.for_viewer(PlayerId(1)).commanded_by, None);
     u.commanded_by = Some(u.id);
     assert!(encode_server(&message(u)).is_err());
+}
+
+#[test]
+fn vassal_settings_order_pins_weights_cap_and_training_wire() {
+    let order = ClientMessage::VassalSettingsOrder {
+        sequence: 3,
+        vassal_id: EntityId(9),
+        weights: [45, 30, 15, 10],
+        cap: 100,
+        training: true,
+    };
+    let bytes = encode_client(&order).unwrap();
+    assert_eq!(bytes, [33, 3, 9, 45, 30, 15, 10, 100, 1]);
+    assert_eq!(decode_client(&bytes).unwrap(), order);
+}
+
+#[test]
+fn dismiss_vassal_order_pins_the_current_wire() {
+    let order = ClientMessage::VassalDismissOrder {
+        sequence: 4,
+        vassal_id: EntityId(9),
+    };
+    let bytes = encode_client(&order).unwrap();
+    assert_eq!(bytes, [34, 4, 9]);
+    assert_eq!(decode_client(&bytes).unwrap(), order);
 }

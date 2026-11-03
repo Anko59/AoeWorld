@@ -1,6 +1,41 @@
 use super::*;
 
 #[wasm_bindgen_test]
+fn building_animation_keeps_frame_order_and_first_selected_alias() {
+    let source = "synthetic-building";
+    let mut value = pack_fixture([(source.into(), 3, false), ("unrelated".into(), 1, false)]);
+    let part = serde_json::json!({"graphic_id":1,"slp_id":1,"source":source,
+        "available":true,"frames":3,"angles":1,"primary":true,"frame_rate":0.1,
+        "replay_delay":0.0,"offset":[0,0],"misplacement":[0.0,0.0],"layer":20});
+    value["buildings"] = serde_json::json!([{"unit_id":70,"footprint":[2.0,2.0],
+        "foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],
+        "parts":[part],"construction":[],"damage":[],"states":[]}]);
+    compile(&mut value);
+    let mut manifest: Manifest = serde_json::from_value(value).unwrap();
+    manifest.buildings = recipes::decode(&manifest.building_data, &manifest.frames).unwrap();
+    let selected = [2, 3, 0, 1, 0];
+    let records: Vec<_> = selected
+        .iter()
+        .enumerate()
+        .map(|(slot, &index)| {
+            let mut frame = placement::record(&manifest.frames[index], Placement::default());
+            frame.anchor[0] = slot as f32;
+            frame
+        })
+        .collect();
+    let art = buildings::resolve(&manifest, &selected, &records);
+    assert_eq!(art[0].parts[0].frame.anchor[0], 2.0);
+    assert_eq!(
+        art[0].parts[0]
+            .animation
+            .iter()
+            .map(|f| f.anchor[0])
+            .collect::<Vec<_>>(),
+        [2.0, 3.0, 0.0]
+    );
+}
+
+#[wasm_bindgen_test]
 async fn converted_categories_do_not_guess_sources_from_superseded_startup_lists() {
     let value = pack_fixture(
         REQUIRED_RENDER_SOURCES
@@ -104,4 +139,71 @@ async fn overlay_without_drawable_fire_keeps_the_base_damage_animation() {
     assert_eq!(damage.parts[0].record, Some(0));
     assert_eq!(damage.parts[0].offset, [-12, -40]);
     assert_eq!(damage.parts[0].frames, 2);
+}
+
+#[wasm_bindgen_test]
+fn imperial_buildings_keep_castle_art_only_when_the_imperial_recipe_is_absent() {
+    use aoe_protocol::{Age, BuildingKind};
+    for kind in BuildingKind::ALL.into_iter().take(20) {
+        let identity = |age| {
+            aoe_rendering::SceneUnitKind::building(crate::building_ui::age_sprite_slot(
+                kind, 1000, false, age,
+            ) as u8)
+            .building_id()
+            .unwrap()
+        };
+        let (castle, imperial) = (identity(Age::Castle), identity(Age::Imperial));
+        if castle == imperial {
+            continue;
+        }
+        let mut value = pack_fixture([("castle".into(), 1, false), ("imperial".into(), 1, false)]);
+        let recipe = |id, source| {
+            let part = serde_json::json!({"graphic_id":1,"slp_id":1,"source":source,
+                "available":true,"frames":1,"angles":1,"primary":true,"frame_rate":0.0,
+                "replay_delay":0.0,"offset":[-9,11],"misplacement":[0.0,0.0],"layer":20});
+            serde_json::json!({"unit_id":id,"footprint":[4.0,4.0],"foundation_terrain":-1,
+                "foundation_slp":null,"foundation_size":[0,0],"parts":[part.clone()],
+                "construction":[part.clone()],"damage":[],"states":[{"role":1,"parts":[part]}]})
+        };
+        for native in [false, true] {
+            value["buildings"] = serde_json::json!([recipe(castle, "castle")]);
+            if native {
+                value["buildings"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(recipe(imperial, "imperial"));
+            }
+            compile(&mut value);
+            let mut manifest: Manifest = serde_json::from_value(value.clone()).unwrap();
+            manifest.buildings =
+                recipes::decode(&manifest.building_data, &manifest.frames).unwrap();
+            let (mut selected, mut domains) = (Vec::new(), Vec::new());
+            buildings::select(&manifest, &mut selected, &mut domains).unwrap();
+            let records: Vec<_> = selected
+                .iter()
+                .map(|&i| {
+                    let mut frame = placement::record(&manifest.frames[i], Placement::default());
+                    frame.anchor[0] = i as f32;
+                    frame
+                })
+                .collect();
+            let art = buildings::resolve(&manifest, &selected, &records);
+            let building = art
+                .iter()
+                .find(|b| b.unit_id == imperial)
+                .expect("Imperial art survives age-up");
+            assert_eq!(
+                building.parts[0].frame.anchor[0],
+                f32::from(native),
+                "{kind:?}"
+            );
+            assert_eq!(building.construction.len(), 1);
+            assert_eq!(building.states[0].1.len(), 1);
+            assert_eq!(
+                selected.len(),
+                if native { 2 } else { 1 },
+                "fallback reuses Castle cells"
+            );
+        }
+    }
 }

@@ -123,12 +123,6 @@ impl GameWorld {
                 if skipped {
                     speed_budget += u128::from(step) * u128::from(denominator);
                 }
-                if !self.vassal_position_allowed(id, position) {
-                    self.stop_unit_orders(index);
-                    self.units[index].last_movement_error = Some(GameWorldError::VassalLeash);
-                    finished = true;
-                    break;
-                }
                 let previous_tile = current_position.tile_floor();
                 let tile = position.tile_floor();
                 let terrain_ok = match self.unit_position_step_clear(

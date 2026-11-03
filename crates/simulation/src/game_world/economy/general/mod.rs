@@ -8,11 +8,12 @@ mod formation;
 mod hash;
 mod orders;
 mod reinforcement;
+mod squads;
 mod stances;
 mod survey;
 use stances::StanceOverride;
 
-pub const GENERAL_ARMY_LIMIT: usize = 100;
+pub const GENERAL_ARMY_LIMIT: usize = 200;
 /// Tiles around a General within which he commands soldiers and picks buildings.
 pub const GENERAL_INFLUENCE_TILES: i64 = 50;
 /// Infantry:archers:heavy cavalry:siege:scouts a new General aims for.
@@ -52,9 +53,16 @@ pub(crate) struct Army {
     pub home: WorldPosition,
     pub pending: BTreeMap<EntityId, UnitKind>,
     pub members: BTreeSet<EntityId>,
+    pub squads: Vec<squads::Squad>,
+    /// Stable orientation for retries of the same army destination.
+    pub layout: Option<(WorldPosition, WorldPosition)>,
+    /// Shared march pace, refreshed once per admitted army decision.
+    pub pace: (u64, u64),
     pub destination: Option<WorldPosition>,
     pub state: GeneralState,
     pub micro_after: usize,
+    /// Next first fighting group, including the commander, for shared searches.
+    pub fight_after: usize,
     pub scan: (usize, usize),
     /// Next bounded slice of each production-kind index.
     pub production_scan: [usize; 5],
@@ -134,9 +142,13 @@ impl GameWorld {
                 home,
                 pending: BTreeMap::new(),
                 members: BTreeSet::new(),
+                squads: Vec::new(),
+                layout: None,
+                pace: (0, 1),
                 destination: None,
                 state: GeneralState::Idle,
                 micro_after: 0,
+                fight_after: 0,
                 scan: (0, 0),
                 production_scan: [0; 5],
                 retreat_until: 0,
@@ -225,6 +237,7 @@ impl GameWorld {
             && let Some(army) = self.economy.generals.armies.get_mut(&g)
         {
             army.members.remove(&id);
+            army.remove_from_squads(id);
             army.routed = None;
         }
     }
@@ -235,6 +248,7 @@ impl GameWorld {
         };
         a.destination = None;
         a.routed = None;
+        a.layout = None;
         a.solo = false;
         a.state = GeneralState::Idle;
         a.retreat_until = 0;
@@ -252,6 +266,7 @@ impl GameWorld {
         if let Some(a) = self.economy.generals.armies.get_mut(&id) {
             a.destination = Some(destination);
             a.routed = None;
+            a.layout = None;
             a.solo = false;
         }
     }
@@ -266,7 +281,9 @@ impl GameWorld {
 
         if let Some(a) = self.economy.generals.armies.get_mut(&g)
             && a.members.len() + a.pending.len() < GENERAL_ARMY_LIMIT
+            && a.room_for(u.kind)
         {
+            a.assign_squad(u.id, u.kind);
             a.members.insert(u.id);
             a.routed = None;
             self.economy.generals.controlled.insert(u.id, g);

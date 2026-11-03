@@ -13,6 +13,8 @@ type Actor = {
   x: number;
   y: number;
   selected: boolean;
+  hp: number;
+  task: string;
 };
 const actors = async (page: Page): Promise<Actor[]> =>
   JSON.parse(
@@ -122,10 +124,12 @@ test("train one Vassal per Castle and activate its visible economic domain", asy
     })
     .toBe(true);
   await select(page, "Vassal");
-  await expect(page.locator("#vassal-status")).toContainText("home Castle");
+  await expect(page.locator("#vassal-status")).toContainText(
+    "any owned Castle",
+  );
   const viewport = page.viewportSize();
   if (!viewport) throw new Error("Viewport missing");
-  // Bring the King out from behind its Castle using an ordinary leashed move.
+  // Bring the King out from behind its Castle using an ordinary move.
   await page.mouse.click(viewport.width / 2, viewport.height / 2 + 120, {
     button: "right",
   });
@@ -158,6 +162,51 @@ test("train one Vassal per Castle and activate its visible economic domain", asy
     "100",
   );
   await expect(page.locator("#vassal-status")).toContainText("domain active");
+  const controls = page.locator("#vassal-controls");
+  await expect(controls).toBeVisible();
+  for (const name of [
+    "Food weight",
+    "Wood weight",
+    "Gold weight",
+    "Stone weight",
+    "Villager cap",
+    "Train villagers and fishing ships",
+  ]) {
+    await expect(page.getByLabel(name, { exact: true })).toBeInViewport();
+  }
+  await expect(
+    page.getByRole("button", { name: "Dismiss idle villagers", exact: true }),
+  ).toBeInViewport();
+
+  await expect(page.getByLabel("Food weight", { exact: true })).toHaveValue(
+    "45",
+  );
+  await page.getByLabel("Wood weight", { exact: true }).press("End");
+  await expect(page.getByLabel("Wood weight", { exact: true })).toHaveValue(
+    "100",
+  );
+  await freshHud(page);
+  await page.getByLabel("Villager cap", { exact: true }).press("ArrowLeft");
+  await page
+    .getByLabel("Train villagers and fishing ships", { exact: true })
+    .check();
+  await expect(
+    page.getByLabel("Train villagers and fishing ships", { exact: true }),
+  ).toBeChecked();
+  await expect(page.locator("#vassal-status")).toContainText(
+    "/99 villagers managed",
+  );
+  await page.keyboard.press("Escape");
+  await select(page, "Castle");
+  await expect(page.getByLabel("Wood weight", { exact: true })).toHaveValue(
+    "100",
+  );
+  await expect(page.getByLabel("Villager cap", { exact: true })).toHaveValue(
+    "99",
+  );
+  await expect(
+    page.getByRole("button", { name: "Dismiss idle villagers", exact: true }),
+  ).toBeEnabled();
   await centerVillage(page);
   await page.keyboard.press("1");
   await expect(page.locator("#selection-name")).toHaveText("Villager");
@@ -207,11 +256,67 @@ test("train one Vassal per Castle and activate its visible economic domain", asy
     await page.screenshot({ path: "../.cache/vassal/domain-firefox.png" });
     await centerCastle(page);
   }
+  // A zero cap leaves the next normally trained villager unmanaged. Exercise
+  // the real dismiss button through the socket, rather than only its presence.
+  await page.getByLabel("Villager cap", { exact: true }).press("Home");
+  await page
+    .getByLabel("Train villagers and fishing ships", { exact: true })
+    .uncheck();
+  await expect(page.locator("#vassal-status")).toContainText("training is off");
+  await expect(page.locator("#vassal-status")).toContainText(
+    "/0 villagers managed",
+  );
+  await page.keyboard.press("h");
+  await expect(page.locator("#selection-name")).toHaveText("Town Center");
+  await freshHud(page);
+  const beforeTraining = Math.max(...(await actors(page)).map((a) => a.id));
+  await page.locator("#train-villager").click();
+  let dismissedId = -1;
+  await expect(async () => {
+    const idle = (await actors(page)).find(
+      (a) =>
+        a.kind === "Villager" &&
+        a.id > beforeTraining &&
+        a.task === "Idle" &&
+        a.hp > 0,
+    );
+    if (!idle) throw new Error("New idle villager has not finished training");
+    dismissedId = idle.id;
+  }).toPass({ timeout: 20_000 });
+  await centerCastle(page);
+  await select(page, "Castle");
+  expect(
+    (await actors(page)).find((a) => a.id === dismissedId)?.hp,
+  ).toBeGreaterThan(0);
+  await page
+    .getByRole("button", { name: "Dismiss idle villagers", exact: true })
+    .click();
+  await expect
+    .poll(
+      async () => (await actors(page)).find((a) => a.id === dismissedId)?.hp,
+    )
+    .toBe(0);
+  await expect(page.locator("#connection")).toHaveText("connected");
   await page.locator("#ungarrison").click();
   await expect(page.locator("#garrison-count")).toHaveText("0 / 20");
+  await expect(controls).toBeHidden();
   await expect(page.locator("#vassal-domain")).toHaveAttribute(
     "data-active",
     "false",
   );
+  // A roaming Vassal no longer reserves the Castle that trained it.
+  await expect(train).toBeEnabled();
+  await expect
+    .poll(async () =>
+      (await actors(page)).some((a) => a.kind === "Vassal" && a.hp > 0),
+    )
+    .toBe(true);
+  await train.click();
+  await expect(
+    page.locator('#training-queue [title="Vassal queued"]'),
+  ).toBeVisible();
   await expect(train).toBeDisabled();
+  await page.locator("#cancel-training").click();
+  await expect(page.locator("#training")).toBeHidden();
+  await expect(train).toBeEnabled();
 });

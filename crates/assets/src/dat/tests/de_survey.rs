@@ -81,6 +81,15 @@ fn tech(language: i32, effect: i16) -> Vec<u8> {
     out.extend_from_slice(&123_i32.to_le_bytes());
     out
 }
+
+#[test]
+fn de_technology_icon_is_read_from_the_native_record() {
+    let mut bytes = tech(7103, 103);
+    bytes[45..47].copy_from_slice(&32_i16.to_le_bytes());
+    assert_eq!(technology(&bytes, 103, 7103).unwrap().icon, 32);
+    bytes[45..47].copy_from_slice(&(-1_i16).to_le_bytes());
+    assert_eq!(technology(&bytes, 103, 7103).unwrap().icon, -1);
+}
 fn fixture() -> Vec<u8> {
     let mut out = b"VER 8.9\0".to_vec();
     out.extend_from_slice(&300_i32.to_le_bytes());

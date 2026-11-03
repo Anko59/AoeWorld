@@ -33,3 +33,19 @@ def test_package_reexports_the_native_api():
         assert hasattr(aoeworld, name), name
     assert aoeworld.UnitKind.VILLAGER != aoeworld.UnitKind.SCOUT
     assert aoeworld.BuildingKind.TOWN_CENTER == aoeworld.BuildingKind.TOWN_CENTER
+
+
+def test_command_result_stub_contains_every_native_member():
+    tree = ast.parse(STUB.read_text())
+    command_result = next(
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "CommandResult"
+    )
+    declared = {
+        node.target.id for node in command_result.body
+        if isinstance(node, ast.AnnAssign)
+    }
+    exported = {
+        name for name in dir(_native.CommandResult) if name.isupper()
+    }
+    assert declared == exported, declared ^ exported
