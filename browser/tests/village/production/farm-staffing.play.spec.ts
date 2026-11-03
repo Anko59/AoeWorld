@@ -64,11 +64,9 @@ test("farm staffing keeps a single builder's queued house", async ({
   page,
   request,
 }, info) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await page.setViewportSize({ width: 1280, height: 720 });
-  expect(
-    (await request.post("/maps/reset?scenario=feudal-economy")).status(),
-  ).toBe(204);
+  expect((await request.post("/maps/reset")).status()).toBe(204);
   await gameAssets(page);
   await page.goto("/?play=1");
   await expect(page.locator("#connection")).toHaveText("connected");
@@ -82,8 +80,23 @@ test("farm staffing keeps a single builder's queued house", async ({
   const first = workers[0];
   if (first === undefined) throw new Error("First worker missing");
   await selectWorkers(page, workers);
+  await page.keyboard.press("Control+1");
+  await place(page, "mill", 900, 380);
+  await expect
+    .poll(async () => (await actors(page)).some((a) => a.kind === "Mill"))
+    .toBe(true);
+  const mill = (await actors(page)).find((a) => a.kind === "Mill");
+  if (!mill) throw new Error("Mill missing");
+  await page.mouse.click(mill.x, mill.y);
+  await expect(page.locator("#building-status")).toContainText("Complete", {
+    timeout: 70_000,
+  });
+  await page.keyboard.press("1");
+  await expect(page.locator("#selection")).toHaveAttribute("data-count", "2");
   await place(page, "farm", 250, 200);
-  // The live HUD replaces moving-unit portraits every refresh.
+  // Escape ends placement and clears selection; recall the moving builders.
+  await page.keyboard.press("1");
+  await expect(page.locator("#selection")).toHaveAttribute("data-count", "2");
   await page.locator(`[data-unit-id="${first}"]`).click({ force: true });
   await expect(page.locator("#selection")).toHaveAttribute("data-count", "1");
   expect((await actors(page)).find((a) => a.id === first)?.task).toMatch(
