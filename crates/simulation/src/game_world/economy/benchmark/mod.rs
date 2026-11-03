@@ -99,6 +99,7 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
             .players
             .get_mut(&player)
             .ok_or(EconomyError::NotOwner)?;
+        state.population_cap = 200;
         state.stockpile = Stockpile {
             food: 100_000,
             wood: 100_000,
@@ -140,6 +141,14 @@ fn build(players: u16) -> Result<GameWorld, Box<dyn std::error::Error>> {
         }
         actors::seed(&mut world, player, primary, center, &spots, production[1])
             .map_err(|error| format!("seat {seat}: actor setup: {error}"))?;
+        // Scenario-only mature housing, restored after all setup construction.
+        // Keep the measured actor counts and production queues unchanged.
+        world
+            .economy
+            .players
+            .get_mut(&player)
+            .ok_or(EconomyError::NotOwner)?
+            .population_cap = 200;
         // The combined workload respects eco2 reservations: use all resource
         // kinds in the ordinary starting kit, rather than overbooking the few
         // nearby trees. Keep all 80 real gather/return jobs and full queues.

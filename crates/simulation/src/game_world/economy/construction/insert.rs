@@ -89,6 +89,7 @@ impl GameWorld {
             player,
             stockpile: Stockpile::default(),
             population_used,
+            population_cap: 0,
             age: crate::Age::Dark,
             researched: 0,
             market_prices: MarketPrices::default(),
@@ -153,6 +154,7 @@ impl GameWorld {
         if complete && matches!(kind, BuildingKind::Castle | BuildingKind::WatchTower) {
             self.combat.tower_ready.insert(id, 0);
         }
+        self.refresh_population_cap(player);
         self.index_new_building(id, player, footprint);
         if complete {
             if matches!(kind, BuildingKind::WatchTower | BuildingKind::Castle) {

@@ -339,10 +339,10 @@ fn many_houses_can_complete_without_changing_the_population_count() {
     world
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
-    let builder = villager_at(&mut world, 99, 100);
     world
         .issue_train(PlayerId(0), center, UnitKind::Villager)
         .unwrap();
+    let builder = villager_at(&mut world, 99, 100);
     let house = world
         .issue_build(
             PlayerId(0),

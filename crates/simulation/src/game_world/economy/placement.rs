@@ -97,6 +97,20 @@ impl GameWorld {
         self.insert_building(player, BuildingKind::TownCenter, footprint, true)
     }
 
+    /// Housing space from completed owned buildings, with saturating arithmetic.
+    pub(super) fn refresh_population_cap(&mut self, player: PlayerId) {
+        // Only the player's own buildings, through the per-kind index: a
+        // whole-world scan here ran on every placement in a 100-seat world.
+        let cap = self
+            .player_buildings(player)
+            .filter(|building| building.is_complete())
+            .map(|building| u32::from(building.kind.rules().population_support))
+            .fold(0_u32, u32::saturating_add);
+        if let Some(state) = self.economy.players.get_mut(&player) {
+            state.population_cap = cap;
+        }
+    }
+
     pub(super) fn open_town_center_arches(&mut self, footprint: TileRect) {
         let Some(solid) = BuildingKind::TownCenter.collision_rect(footprint, true) else {
             return;

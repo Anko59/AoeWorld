@@ -90,8 +90,9 @@ are capacity/correctness bounds, not long-session performance qualification.
 
 ## Uncapped population
 
-Houses, Town Centers and Castles provide no population allowance. Only resource
-costs, producer queue length and free spawn space affect ordinary training.
+Completed Houses and Town Centers provide 5 space each, and Castles provide 20.
+Training also requires resources, producer queue room and a free spawn tile.
+Space is summed with saturating u32 arithmetic; there is no global ceiling.
 The living count is u32 throughout simulation, protocol, SDKs and HUD.
 Regression tests train beyond 6,000 units and count beyond 65,535.
 

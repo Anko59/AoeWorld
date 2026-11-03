@@ -13,6 +13,7 @@ fn rich_feudal() -> (GameWorld, EntityId) {
         gold: 10000,
         stone: 10000,
     };
+    p.population_cap = 200;
     (w, tc)
 }
 

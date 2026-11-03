@@ -113,6 +113,8 @@ pub struct GameplayPlayerState {
     /// A count, with no gameplay ceiling. Storage is bounded by frame and
     /// retained-entity limits, independently of this scalar.
     pub population_used: u32,
+    /// Space from completed owned buildings, without a gameplay ceiling.
+    pub population_cap: u32,
     pub age: Age,
     /// Bit `1 << tech as u8` is set once researched.
     pub researched: u64,

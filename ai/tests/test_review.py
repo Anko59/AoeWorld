@@ -14,20 +14,9 @@ def armed(count=12, tile=(60, 60)):
     return [unit(300 + i, UnitKind.SPEARMAN, tile=tile) for i in range(count)]
 
 
-def test_training_uses_food_without_housing_even_at_high_population():
-    for population in (6, 6_000):
-        units, buildings = base(5)
-        world = FakeWorld(units, buildings, eco=economy(food=500, wood=100, population=population))
-        _, client = play(world)
-        trained = client.named("train")
-        assert len(trained) == 2
-        assert all(args == (500, UnitKind.VILLAGER) for args in trained)
-        assert not any(args[1] == BuildingKind.HOUSE for args in client.named("build"))
-
-
 def test_an_unexplored_build_refusal_releases_the_plan_without_blacklisting_the_site():
     units, buildings = base(8)
-    world = FakeWorld(units, buildings, eco=economy(wood=100, population=11))
+    world = FakeWorld(units, buildings, eco=economy(wood=100, population=11, cap=15))
     brain, client = play(world)
     sequence, args = next((i + 1, a) for i, (name, a) in enumerate(client.calls) if name == "build")
     from aoe_ai.context import Context
@@ -86,7 +75,7 @@ def test_villagers_over_the_decision_cap_wait_unstamped_and_dead_ones_are_forgot
     from fakes import node
     from aoeworld import ResourceKind
     nodes = [node(i, ResourceKind.WOOD, (55 + i % 5, 55)) for i in range(30)]
-    world = FakeWorld(units, buildings, nodes=nodes, eco=economy(population=20))
+    world = FakeWorld(units, buildings, nodes=nodes, eco=economy(population=20, cap=40))
     brain.decide(client, decision(world))
     stamped = {i for i in brain.board.assigned if i in {u.id for u in units}}
     assert 9999 not in brain.board.assigned
@@ -110,7 +99,8 @@ def test_castle_age_saves_resources_drains_tc_and_uses_two_feudal_kinds():
     units += armed()
     buildings += [building(600, BuildingKind.ARCHERY_RANGE, tile=(60, 50)),
                   building(601, BuildingKind.BLACKSMITH, tile=(64, 50))]
-    eco = economy(food=850, wood=500, gold=250, population=35, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])
+    eco = economy(food=850, wood=500, gold=250, population=35, cap=60,
+                  age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])
     _, client = play(FakeWorld(units, buildings, eco=eco))
     assert (500, Tech.CASTLE_AGE) in client.named("research")
     assert not client.named("train"), "save the Castle budget while researching"
@@ -120,7 +110,8 @@ def test_castle_army_trains_knights_and_keeps_feudal_economy_active():
     units, buildings = base(34)
     buildings += [building(600, BuildingKind.STABLE, tile=(60, 50)),
                   building(601, BuildingKind.ARCHERY_RANGE, tile=(64, 50))]
-    eco = economy(food=900, wood=900, gold=900, population=35, age=Age.CASTLE, researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.CASTLE_AGE])
+    eco = economy(food=900, wood=900, gold=900, population=35, cap=60,
+                  age=Age.CASTLE, researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.CASTLE_AGE])
     _, client = play(FakeWorld(units, buildings, eco=eco))
     assert (600, UnitKind.KNIGHT) in client.named("train")
     assert any(args[1] == UnitKind.VILLAGER for args in client.named("train"))
@@ -142,7 +133,7 @@ def test_castle_saving_waits_until_a_feudal_army_is_established():
     buildings += [building(600, BuildingKind.ARCHERY_RANGE, tile=(60, 50)),
                   building(601, BuildingKind.BLACKSMITH, tile=(64, 50))]
     _, client = play(FakeWorld(units, buildings, eco=economy(food=900, wood=900, gold=900,
-        population=39, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
+        population=39, cap=60, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
     assert (500, Tech.CASTLE_AGE) not in client.named("research")
     assert any(args[1] != UnitKind.VILLAGER for args in client.named("train"))
     assert not any(args[1] == UnitKind.VILLAGER for args in client.named("train"))
@@ -152,7 +143,7 @@ def test_castle_prerequisite_wood_is_not_spent_on_an_endless_feudal_army():
     units, buildings = base(34)
     buildings += [building(600, BuildingKind.ARCHERY_RANGE, tile=(60, 50))]
     _, client = play(FakeWorld(units, buildings, eco=economy(food=900, wood=100, gold=900,
-        population=35, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
+        population=35, cap=60, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
     assert not [args for args in client.named("train") if args[1] != UnitKind.VILLAGER]
 
 
@@ -161,7 +152,7 @@ def test_castle_prerequisite_wood_accumulates_before_new_farms():
     buildings += [building(600, BuildingKind.MILL), building(601, BuildingKind.LUMBER_CAMP),
                   building(602, BuildingKind.BARRACKS), building(603, BuildingKind.ARCHERY_RANGE)]
     _, client = play(FakeWorld(units, buildings, eco=economy(food=900, wood=100, gold=900,
-        population=35, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
+        population=35, cap=100, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
     assert not [a for a in client.named("build") if a[1] == BuildingKind.FARM]
 
 
@@ -170,7 +161,7 @@ def test_castle_blacksmith_is_placed_before_farms_can_consume_its_budget():
     buildings += [building(600, BuildingKind.MILL), building(601, BuildingKind.LUMBER_CAMP),
                   building(602, BuildingKind.BARRACKS), building(603, BuildingKind.ARCHERY_RANGE)]
     _, client = play(FakeWorld(units, buildings, eco=economy(food=900, wood=200, gold=900,
-        population=35, age=Age.FEUDAL,
+        population=35, cap=100, age=Age.FEUDAL,
         researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.DOUBLE_BIT_AXE, Tech.WHEELBARROW])))
     kinds = [a[1] for a in client.named("build")]
     assert BuildingKind.BLACKSMITH in kinds
@@ -182,7 +173,7 @@ def test_castle_wood_is_also_reserved_when_the_range_is_the_missing_prerequisite
     buildings += [building(600, BuildingKind.MILL), building(601, BuildingKind.LUMBER_CAMP),
                   building(602, BuildingKind.BARRACKS), building(603, BuildingKind.BLACKSMITH)]
     _, client = play(FakeWorld(units, buildings, eco=economy(food=900, wood=100, gold=900,
-        population=35, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
+        population=35, cap=100, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
     assert not [a for a in client.named("build") if a[1] == BuildingKind.FARM]
     assert not [a for a in client.named("train") if a[1] != UnitKind.VILLAGER]
 
@@ -193,7 +184,7 @@ def test_castle_prerequisite_saving_starts_when_feudal_begins_before_thirty_two_
         buildings += [building(600, BuildingKind.MILL), building(601, BuildingKind.LUMBER_CAMP),
                       building(602, BuildingKind.BARRACKS), building(603, BuildingKind.ARCHERY_RANGE)]
         _, client = play(FakeWorld(units, buildings, eco=economy(food=900, wood=wood, gold=900,
-            population=villagers + 1, age=Age.FEUDAL,
+            population=villagers + 1, cap=100, age=Age.FEUDAL,
             researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.DOUBLE_BIT_AXE, Tech.WHEELBARROW])))
         kinds = [a[1] for a in client.named("build")]
         assert BuildingKind.FARM not in kinds
@@ -215,7 +206,7 @@ def test_castle_saving_redirects_empty_gold_workers_to_food_without_losing_loade
         buildings += [building(600, BuildingKind.ARCHERY_RANGE), building(601, BuildingKind.BLACKSMITH)]
         food = node(900, ResourceKind.FOOD, (48, 52))
         _, client = play(FakeWorld(units, buildings, nodes=[food], eco=economy(food=100, wood=300,
-            gold=900, population=49, age=Age.FEUDAL,
+            gold=900, population=49, cap=100, age=Age.FEUDAL,
             researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
         assert (empty.id, food.id) in client.named("gather")
         assert not [a for a in client.named("gather") if a[0] == loaded.id]
@@ -229,7 +220,7 @@ def test_castle_preparation_defers_optional_upgrades_while_the_feudal_army_forms
     buildings += [building(600, BuildingKind.BARRACKS), building(601, BuildingKind.LUMBER_CAMP),
                   building(602, BuildingKind.ARCHERY_RANGE), building(603, BuildingKind.BLACKSMITH)]
     _, client = play(FakeWorld(units, buildings, eco=economy(food=300, wood=300, gold=900,
-        population=43, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
+        population=43, cap=100, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
     assert not client.named("research")
     assert not [a for a in client.named("train") if a[1] == UnitKind.VILLAGER]
     assert [a for a in client.named("train") if a[1] != UnitKind.VILLAGER]
@@ -242,7 +233,7 @@ def test_castle_army_minimum_is_funded_before_more_farms_consume_its_wood():
                   building(602, BuildingKind.ARCHERY_RANGE), building(603, BuildingKind.BLACKSMITH),
                   building(604, BuildingKind.MILL)]
     _, client = play(FakeWorld(units, buildings, eco=economy(food=700, wood=135, gold=900,
-        population=39, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
+        population=39, cap=100, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
     assert {a[0] for a in client.named("train")} == {600, 602}
     first_farm = next((i for i, (name, args) in enumerate(client.calls)
                        if name == "build" and args[1] == BuildingKind.FARM), len(client.calls))
@@ -255,7 +246,7 @@ def test_castle_unit_upgrade_precedes_optional_feudal_economy_upgrades():
     buildings += [building(600, BuildingKind.ARCHERY_RANGE), building(601, BuildingKind.BLACKSMITH),
                   building(602, BuildingKind.LUMBER_CAMP)]
     _, client = play(FakeWorld(units, buildings, eco=economy(food=900, wood=900, gold=900,
-        population=47, age=Age.CASTLE,
+        population=47, cap=100, age=Age.CASTLE,
         researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.CASTLE_AGE])))
     assert (600, Tech.CROSSBOWMAN) in client.named("research")
 
@@ -266,7 +257,7 @@ def test_castle_preparation_protects_food_at_twenty_eight_workers_without_skippi
     buildings += [building(600, BuildingKind.BARRACKS), building(601, BuildingKind.ARCHERY_RANGE),
                   building(602, BuildingKind.BLACKSMITH)]
     _, client = play(FakeWorld(units, buildings, eco=economy(food=900, wood=900, gold=900,
-        population=33, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
+        population=33, cap=60, age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE])))
     assert not [a for a in client.named("train") if a[1] == UnitKind.VILLAGER]
     assert [a for a in client.named("train") if a[1] != UnitKind.VILLAGER]
     assert (500, Tech.CASTLE_AGE) not in client.named("research")
@@ -287,7 +278,7 @@ def test_first_castle_army_upgrade_uses_its_exact_budget_before_optional_spendin
     units.append(unit(300, UnitKind.ARCHER))
     buildings.append(building(600, BuildingKind.ARCHERY_RANGE))
     world = FakeWorld(units, buildings, eco=economy(food=175, wood=0, gold=100,
-        population=32, age=Age.CASTLE,
+        population=32, cap=60, age=Age.CASTLE,
         researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.CASTLE_AGE]))
     _, client = play(world)
     assert (600, Tech.CROSSBOWMAN) in client.named("research")
@@ -298,7 +289,7 @@ def test_first_castle_army_upgrade_stops_new_training_that_would_spend_its_food(
     units += [unit(300, UnitKind.ARCHER), unit(301, UnitKind.SPEARMAN)]
     buildings += [building(600, BuildingKind.ARCHERY_RANGE, queue=1), building(601, BuildingKind.BARRACKS)]
     world = FakeWorld(units, buildings, eco=economy(food=110, wood=500, gold=500,
-        population=33, age=Age.CASTLE,
+        population=33, cap=60, age=Age.CASTLE,
         researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.CASTLE_AGE]))
     _, client = play(world)
     assert not client.named("train")
@@ -313,7 +304,39 @@ def test_first_castle_army_pause_ends_once_its_upgrade_is_researching_or_bought(
         buildings += [building(600, BuildingKind.ARCHERY_RANGE, researching=range_tech),
                       building(601, BuildingKind.BARRACKS)]
         world = FakeWorld(units, buildings, eco=economy(food=400, wood=500, gold=500,
-            population=33, age=Age.CASTLE,
+            population=33, cap=60, age=Age.CASTLE,
             researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.CASTLE_AGE, *researched]))
         _, client = play(world)
         assert client.named("train"), (range_tech, researched)
+
+
+def test_a_house_is_built_before_the_population_cap_is_hit():
+    units, buildings = base(8)
+    world = FakeWorld(units, buildings, eco=economy(wood=100, population=11, cap=15))
+    brain, client = play(world)
+    houses = [args for args in client.named("build") if args[1] == BuildingKind.HOUSE]
+    assert len(houses) == 1
+    # One house at a time while it is under way.
+    brain2, client2 = play(world, brain=brain)
+    assert [a for a in client2.named("build") if a[1] == BuildingKind.HOUSE] == []
+
+
+def test_houses_are_built_even_above_the_former_population_ceiling():
+    units, buildings = base(8)
+    world = FakeWorld(units, buildings, eco=economy(wood=100, population=6001, cap=6005))
+    _, client = play(world)
+    assert [args for args in client.named("build") if args[1] == BuildingKind.HOUSE]
+
+
+def test_command_result_numbers_stay_stable_when_housing_is_appended():
+    assert CommandResult.REJECTED_TRAINING_QUEUE_FULL == 13
+    assert CommandResult.REJECTED_INVALID_TARGET == 15
+    assert CommandResult.REJECTED_REQUIRES_IMPERIAL_AGE == 33
+    assert CommandResult.REJECTED_POPULATION_CAP == 38
+
+
+def test_no_villager_is_queued_without_food_or_room():
+    units, buildings = base(5)
+    for eco in (economy(food=40), economy(food=500, population=10, cap=10)):
+        _, client = play(FakeWorld(units, buildings, eco=eco))
+        assert client.named("train") == []

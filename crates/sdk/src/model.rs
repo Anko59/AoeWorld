@@ -126,6 +126,14 @@ impl Economy {
     pub fn population(&self) -> u32 {
         self.state.population_used
     }
+    pub fn population_cap(&self) -> u32 {
+        self.state.population_cap
+    }
+    pub fn free_population(&self) -> u32 {
+        self.state
+            .population_cap
+            .saturating_sub(self.state.population_used)
+    }
     pub fn has_researched(&self, tech: Tech) -> bool {
         self.state.researched & tech.bit() != 0
     }

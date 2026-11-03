@@ -80,7 +80,8 @@ load.
 
 Train commands require an owned, completed building that trains the unit,
 enough resources and space in its fifteen-unit queue. Acceptance pays the unit
-cost; population counts living units. Housing never blocks training.
+cost; population counts living units. Orders may fill the queue even without
+housing space; training pauses until space is available.
 Only the front entry advances. A completed entry waits for a free passable perimeter tile without paying
 again. New villagers use the shared entity allocator. Cancelling the active
 entry refunds its cost; cancelling an empty queue cannot create resources.
@@ -164,7 +165,10 @@ foundation refunds the cost in proportion to the work not yet done (all of it
 before any progress). One wall order (`BuildWallOrder` names a palisade or stone `kind`) lays at most 64
 segments, all or none.
 
-Population has no gameplay ceiling. Training needs a completed building
+Population has no global gameplay ceiling. Completed owned Town Centers and
+Houses support 5 each; Castles support 20. Foundations add no space. Destroying
+housing removes its space without killing existing units. Space uses a saturating
+32-bit sum; entity storage remains memory-bounded. Training needs a completed building
 whose table lists the unit (`trainable_units`); the Barracks trains Militia
 (50 food, 20 gold, 21 s, measured in the licensed DE dat; cancelling refunds both). A returning villager walks to the nearest completed
 owned building that accepts its load (`nearest_dropoff`).
@@ -345,4 +349,4 @@ Champion, Halberdier, Arbalester, Paladin, Hussar, Siege Ram and Onager lines,
 the third Blacksmith tier and three economy upgrades.
 
 The original [Vassal](economy/vassal.md) is trained at a Castle and has a fixed
-100-tile home radius. Population is uncapped.
+100-tile home radius. It builds Houses before its population space runs out.
