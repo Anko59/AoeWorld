@@ -9,8 +9,9 @@ use std::sync::Arc;
 mod pages;
 pub(crate) use pages::flat_fixture;
 
+mod bridges;
 mod environment;
-use environment::{at, base, mixed, trees};
+use environment::{at, base, block, mixed, trees};
 
 pub struct Fixture {
     pub world: GameWorld,
@@ -41,6 +42,7 @@ impl Fixture {
             include_bytes!("mod.rs").as_slice(),
             include_bytes!("environment.rs").as_slice(),
             include_bytes!("pages.rs").as_slice(),
+            include_bytes!("bridges.rs").as_slice(),
             self.package.content_hash.as_slice(),
         ] {
             hash.update(bytes);
@@ -79,7 +81,11 @@ impl Fixture {
                     self.world.issue_move(*id, *goal).unwrap();
                 }
                 Command::General(id, goal) => {
-                    assert_eq!(self.world.general_status(*id).unwrap().army_size, 99);
+                    // Every follower was adopted at spawn: all ids but the General.
+                    assert_eq!(
+                        self.world.general_status(*id).unwrap().army_size,
+                        u16::try_from(self.ids.len() - 1).unwrap()
+                    );
                     self.world.issue_move(*id, *goal).unwrap();
                 }
             }
@@ -92,6 +98,40 @@ impl Fixture {
         self.commands.push(Command::Group(ids, goal));
     }
 
+    /// A General at `general` adopts a 100-soldier block at `block_at`, then
+    /// receives an ordinary move order toward `goal`.
+    fn general_army(&mut self, general: (i32, i32), block_at: (i32, i32), goal: WorldPosition) {
+        let mut ids = block(&mut self.world, block_at.0, block_at.1, 100);
+        let general = self
+            .world
+            .spawn_kind(PlayerId(0), UnitKind::General, at(general.0, general.1))
+            .unwrap();
+        ids.push(general);
+        self.ids.extend(ids);
+        self.commands.push(Command::General(general, goal));
+    }
+
+    /// A completed single-lane bridge, opened for collision and navigation.
+    fn bridge(&mut self, from: TileCoord, to: TileCoord) {
+        let span = aoe_core::BridgeSpan::new(from, to).unwrap();
+        self.world
+            .insert_building_shape(
+                PlayerId(0),
+                BuildingKind::Bridge,
+                span.footprint(),
+                true,
+                Some(span),
+            )
+            .unwrap();
+        if let Terrain::Map { overlay, .. } = &mut self.world.terrain {
+            overlay.add_bridge(span).unwrap();
+        }
+        for tile in span.tiles() {
+            self.world.economy.blocked_tiles.remove(&tile);
+        }
+        self.world.collision_opened(span.footprint());
+    }
+
     fn move_unit(&mut self, kind: UnitKind, from: WorldPosition, to: WorldPosition) {
         let id = self.world.spawn_kind(PlayerId(0), kind, from).unwrap();
         self.ids.push(id);
@@ -102,6 +142,17 @@ impl Fixture {
 /// No warm-up or commands are hidden inside fixture construction.
 pub fn build(name: &str) -> Fixture {
     let mut f = base(name);
+    if f.build_bridges(name) {
+        f.primary = f
+            .commands
+            .iter()
+            .find_map(|c| match c {
+                Command::General(id, _) => Some(*id),
+                _ => None,
+            })
+            .unwrap_or(f.ids[0]);
+        return f;
+    }
     match name {
         "river" => f.group(35, 43, 40, at(145, 48)),
         "forest" => {
@@ -150,27 +201,19 @@ pub fn build(name: &str) -> Fixture {
             f.commands.push(Command::General(general, at(1045, 100)));
         }
         "bridge" => {
-            let span =
-                aoe_core::BridgeSpan::new(TileCoord::new(83, 65), TileCoord::new(92, 71)).unwrap();
-            f.world
-                .insert_building_shape(
-                    PlayerId(0),
-                    BuildingKind::Bridge,
-                    span.footprint(),
-                    true,
-                    Some(span),
-                )
-                .unwrap();
-            if let Terrain::Map { overlay, .. } = &mut f.world.terrain {
-                overlay.add_bridge(span).unwrap();
-            }
-            for tile in span.tiles() {
-                f.world.economy.blocked_tiles.remove(&tile);
-            }
-            f.world.collision_opened(span.footprint());
+            f.bridge(TileCoord::new(83, 65), TileCoord::new(92, 71));
             f.move_unit(UnitKind::Villager, at(80, 63), at(95, 73));
             f.move_unit(UnitKind::Villager, at(95, 73), at(80, 63));
         }
+        // A General's 100 followers (fixture-scale, one-tile block spacing).
+        "general-river" => f.general_army((26, 43), (30, 38), at(145, 48)),
+        "general-forest" => {
+            trees(&mut f.world, TileRect::from_xywh(75, 15, 12, 31));
+            trees(&mut f.world, TileRect::from_xywh(75, 52, 12, 55));
+            f.general_army((26, 43), (30, 38), at(135, 48));
+        }
+        // The General stands on the east bank, the followers on the west bank.
+        "general-far-bank" => f.general_army((96, 43), (74, 38), at(150, 48)),
         "siege" => {
             f.world
                 .insert_building(

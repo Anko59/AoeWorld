@@ -157,6 +157,22 @@ impl Tracker {
                 self.out.max_stuck_ticks = self.out.max_stuck_ticks.max(self.still[n]);
                 if self.still[n] == 61 {
                     let index = w.lookup[&id];
+                    if w.unit_count() == 270 {
+                        let nearby: Vec<_> = w
+                            .units()
+                            .filter(|other| distance(at, other.position) < 1536)
+                            .map(|other| {
+                                (
+                                    other.id,
+                                    other.kind,
+                                    other.position,
+                                    other.moving,
+                                    w.units[w.lookup[&other.id]].formation,
+                                )
+                            })
+                            .collect();
+                        eprintln!("crowded-neighbors stalled={id:?} {nearby:?}");
+                    }
                     eprintln!(
                         "terrain-stall tick={tick} id={id:?} at={at:?} goal={:?} kind={:?} order={:?} obstruction={:?} motion={:?}",
                         self.goals[n],

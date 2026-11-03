@@ -78,6 +78,7 @@ impl GameWorld {
         };
         a.destination = None;
         a.routed = None;
+        a.layout = None;
         a.solo = true;
         a.retreat_until = 0;
         a.state = GeneralState::Idle;

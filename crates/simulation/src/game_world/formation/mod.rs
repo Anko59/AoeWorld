@@ -17,9 +17,47 @@ mod slots;
 mod steering;
 pub(crate) use path::step as group_step;
 pub(crate) use resume::Resume;
-pub(crate) use steering::Motion;
-#[cfg(test)]
-pub(crate) use steering::matched_speed;
+
+const FRACTION: u64 = 1 << 32;
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Motion {
+    pub(crate) target: WorldPosition,
+    pub(crate) center: WorldPosition,
+    pub(crate) goal: WorldPosition,
+    pub(crate) budget: i32,
+    pub(crate) carry: u64,
+    pub(crate) navigating: bool,
+    pub(crate) final_leg: bool,
+    pub(crate) done: bool,
+    pub(crate) facing: Facing,
+    pub(crate) obstructed: bool,
+    pub(crate) path_progress: i64,
+    pub(crate) neighbor_radius: i32,
+    pub(crate) certified: bool,
+    pub(crate) static_clear: bool,
+    pub(crate) remaining: i64,
+    pub(crate) near_center: bool,
+}
+
+impl Motion {
+    /// Pure member bookkeeping belongs to the parallel proposal. An ordered
+    /// collision adjustment rebuilds it from the final position.
+    pub(crate) fn at(mut self, position: WorldPosition) -> Self {
+        self.remaining = path::distance(position, self.goal);
+        self.near_center = path::squared(position, self.center) <= 512_i64.pow(2);
+        self
+    }
+}
+
+/// A member trailing its slot catches up at up to 1.5 times the group pace,
+/// capped by its own speed. Faster roles placed far from their start (scouts
+/// ahead, rams behind) re-form within the march instead of after it.
+pub(crate) fn matched_speed(pace: (u64, u64), own: (u64, u64)) -> u64 {
+    let catch_up = u128::from(pace.0) * u128::from(FRACTION) * 3 / (u128::from(pace.1) * 2);
+    let cap = u128::from(own.0) * u128::from(FRACTION) / u128::from(own.1);
+    catch_up.min(cap) as u64
+}
 
 #[derive(Debug)]
 pub(crate) struct Member {
@@ -75,11 +113,27 @@ pub(crate) struct Group {
     queue: VecDeque<(WorldPosition, bool)>,
     attack_move: bool,
     path: path::Path,
+    /// Route end when the anchor corridor was last straightened.
+    taut_end: Option<WorldPosition>,
     progress: i64,
     path_cursor: usize,
 }
 
 impl GameWorld {
+    /// An unchanged squad keeps its current shared route and final slots.
+    pub(crate) fn formation_matches(&self, ids: &[EntityId], goal: WorldPosition) -> bool {
+        let Some(leader) = ids
+            .first()
+            .and_then(|id| self.lookup.get(id))
+            .and_then(|&index| self.units[index].formation)
+        else {
+            return false;
+        };
+        self.formations.get(&leader).is_some_and(|group| {
+            group.destination == goal && group.members.iter().map(|m| m.id).eq(ids.iter().copied())
+        })
+    }
+
     pub fn formation(&self, id: EntityId) -> Option<Formation> {
         let leader = self.units[*self.lookup.get(&id)?].formation?;
         Some(self.formations.get(&leader)?.form)
@@ -102,12 +156,10 @@ impl GameWorld {
     }
 
     /// Where the member's slot lies once the group has reached its destination.
-    #[cfg(test)]
     pub(crate) fn formation_destination_slot(&self, id: EntityId) -> Option<WorldPosition> {
         let leader = self.units[*self.lookup.get(&id)?].formation?;
         let group = self.formations.get(&leader)?;
-        let member = group.members.iter().find(|m| m.id == id)?;
-        Some(member.goal)
+        Some(group.members[group.member_index(id)?].goal)
     }
 
     /// One unit leaves its group: a death, a stop, a single-unit move or
@@ -134,15 +186,14 @@ impl GameWorld {
                     .members
                     .retain(|m| leavers.binary_search(&m.id).is_err());
                 // Members stay in id order, so the first is the new carrier.
-                if let Some(carrier) = group
+                if let Some(at) = group
                     .members
                     .iter()
-                    .find(|member| !member.detached)
-                    .or_else(|| group.members.first())
-                    .map(|member| member.id)
+                    .position(|member| !member.detached)
+                    .or_else(|| (!group.members.is_empty()).then_some(0))
                 {
+                    let carrier = group.members[at].id;
                     group.forget_departures();
-                    let at = group.member_index(carrier).expect("remaining carrier");
                     group.members[at].detached = false;
                     if carrier != leader {
                         self.hand_over_route(leader, carrier);

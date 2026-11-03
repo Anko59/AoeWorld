@@ -152,7 +152,7 @@ the nearest free point in a spiral of at most 8 cells.
   `squeeze = min(1, clearance / half_width)` once per group per tick. A pass
   narrows the block (A2 *scaling*) to `max(1, floor(2 * clearance /
   diameter))` files; turns need no wheeling stop.
-- **Catch-up.** Members may reach 1.25× pace, capped by their own speed (A2
+- **Catch-up.** Members may reach 1.5× pace, capped by their own speed (A2
   "temporary boost"); a far member heads for its moving target, so the block
   forms while walking [F 153015].
 - **Short or scattered orders** (under 20 tiles [F 44725], or spread larger
@@ -432,7 +432,7 @@ one client branch at a time. PR 6 needs PR 5, and PRs 7–11 build on PR 6.
 
 - Should plain-move members hit back at melee range while marching? AoE2 suggests not [G]; §3.4
   already gives fighting on arrival.
-- `h`, the two-body stack limit, the 1.25 catch-up, `L` and `K` are AoeWorld choices [G]. Tune them
+- `h`, the two-body stack limit, the 1.5 catch-up, `L` and `K` are AoeWorld choices [G]. Tune them
   on the scenario metrics, not by feel.
 - DE ship radii and head-on corridor behaviour are unpublished [G]; PRs 8–9 are judged on their
   scenarios.
@@ -486,7 +486,7 @@ Implementation evidence and differences from the design:
 - Hard bodies remain until PR 7. Open slots leave a passing lane plus a
   snapshot step; narrow files need only a diameter plus that step. A half-tile
   lag slows the anchor to 0.75×, except for attack-move groups (contact would
-  slow the army: pace 42/45); catch-up is exactly 1.25×, capped by own speed.
+  slow the army: pace 42/45); catch-up is now 1.5× (was 1.25×), capped by own speed.
   Initial offsets blend toward the fixed destination layout while walking.
 - Five clearance samples cover eight tiles ahead/behind. Static obstruction
   for 120 ticks permits at most four detached scheduler requests per tick;

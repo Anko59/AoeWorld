@@ -4,6 +4,8 @@ import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
 import { centerVillage } from "./fixtures/resources.js";
 
+test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
+
 test("villager build menu places a House and watches authoritative completion", async ({
   page,
   request,
@@ -43,11 +45,14 @@ test("villager build menu places a House and watches authoritative completion", 
   const worker = (await actors()).find((a) => a.kind === "Villager");
   if (!worker) throw new Error("Starting villager missing");
   const selectWorker = async (nth: number | "Farming", boxed = false) => {
+    if (typeof nth === "number") {
+      // Recall the original builder, even while it moves beside a foundation.
+      await page.keyboard.press(String(nth + 1));
+      await expect(page.locator("#selection-name")).toHaveText("Villager");
+      return;
+    }
     const villagers = (await actors()).filter((a) => a.kind === "Villager");
-    const worker =
-      nth === "Farming"
-        ? villagers.find((a) => a.task === "Farming")
-        : villagers[nth];
+    const worker = villagers.find((a) => a.task === "Farming");
     if (!worker) throw new Error("Builder missing");
     if (boxed) {
       // A stationary farmer can share ground with a foreground sheep.
@@ -60,7 +65,16 @@ test("villager build menu places a House and watches authoritative completion", 
     }
     await expect(page.locator("#selection-name")).toHaveText("Villager");
   };
-  await page.mouse.click(worker.x, worker.y);
+  // Register idle builders before construction starts. A later coordinate
+  // snapshot can be stale by the time the browser dispatches a mouse click.
+  const builders = (await actors()).filter((a) => a.kind === "Villager");
+  expect(builders.length).toBeGreaterThanOrEqual(2);
+  for (const [index, builder] of builders.slice(0, 2).entries()) {
+    await page.mouse.click(builder.x, builder.y);
+    await expect(page.locator("#selection-name")).toHaveText("Villager");
+    await page.keyboard.press(`Control+${index + 1}`);
+  }
+  await selectWorker(0);
   await page.locator("#build-menu").click();
   await expect(page.locator("#build-farm")).toBeDisabled();
   await expect(page.locator("#build-house")).toContainText("25");
