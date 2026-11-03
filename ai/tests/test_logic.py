@@ -34,24 +34,6 @@ def test_the_town_center_queue_is_kept_full_while_food_lasts():
     assert len(trained) == 2 and all(args == (500, UnitKind.VILLAGER) for args in trained)
 
 
-def test_no_villager_is_queued_without_food_or_room():
-    units, buildings = base(5)
-    for eco in (economy(food=40), economy(food=500, population=10, cap=10)):
-        _, client = play(FakeWorld(units, buildings, eco=eco))
-        assert client.named("train") == []
-
-
-def test_a_house_is_built_before_the_population_cap_is_hit():
-    units, buildings = base(8)
-    world = FakeWorld(units, buildings, eco=economy(wood=100, population=11, cap=15))
-    brain, client = play(world)
-    houses = [args for args in client.named("build") if args[1] == BuildingKind.HOUSE]
-    assert len(houses) == 1
-    # One house at a time while it is under way.
-    brain2, client2 = play(world, brain=brain)
-    assert [a for a in client2.named("build") if a[1] == BuildingKind.HOUSE] == []
-
-
 def test_idle_villagers_follow_the_wood_and_food_shares():
     units, buildings = base(6)
     nodes = [node(1, ResourceKind.WOOD, (56, 52)), node(2, ResourceKind.FOOD, (44, 52))]
@@ -511,10 +493,3 @@ def test_crowded_defence_leaves_query_budget_to_issue_orders():
     _, client = play(FakeWorld(units + army, buildings, enemies=foes,
                                eco=economy(population=27, cap=40)))
     assert [a for a in client.named("attack") if a[0] >= 300]
-
-
-def test_houses_are_built_even_above_the_former_population_ceiling():
-    units, buildings = base(8)
-    world = FakeWorld(units, buildings, eco=economy(wood=100, population=6001, cap=6005))
-    _, client = play(world)
-    assert [args for args in client.named("build") if args[1] == BuildingKind.HOUSE]

@@ -308,3 +308,35 @@ def test_first_castle_army_pause_ends_once_its_upgrade_is_researching_or_bought(
             researched=[Tech.LOOM, Tech.FEUDAL_AGE, Tech.CASTLE_AGE, *researched]))
         _, client = play(world)
         assert client.named("train"), (range_tech, researched)
+
+
+def test_a_house_is_built_before_the_population_cap_is_hit():
+    units, buildings = base(8)
+    world = FakeWorld(units, buildings, eco=economy(wood=100, population=11, cap=15))
+    brain, client = play(world)
+    houses = [args for args in client.named("build") if args[1] == BuildingKind.HOUSE]
+    assert len(houses) == 1
+    # One house at a time while it is under way.
+    brain2, client2 = play(world, brain=brain)
+    assert [a for a in client2.named("build") if a[1] == BuildingKind.HOUSE] == []
+
+
+def test_houses_are_built_even_above_the_former_population_ceiling():
+    units, buildings = base(8)
+    world = FakeWorld(units, buildings, eco=economy(wood=100, population=6001, cap=6005))
+    _, client = play(world)
+    assert [args for args in client.named("build") if args[1] == BuildingKind.HOUSE]
+
+
+def test_command_result_numbers_stay_stable_when_housing_is_appended():
+    assert CommandResult.REJECTED_TRAINING_QUEUE_FULL == 13
+    assert CommandResult.REJECTED_INVALID_TARGET == 15
+    assert CommandResult.REJECTED_REQUIRES_IMPERIAL_AGE == 33
+    assert CommandResult.REJECTED_POPULATION_CAP == 38
+
+
+def test_no_villager_is_queued_without_food_or_room():
+    units, buildings = base(5)
+    for eco in (economy(food=40), economy(food=500, population=10, cap=10)):
+        _, client = play(FakeWorld(units, buildings, eco=eco))
+        assert client.named("train") == []

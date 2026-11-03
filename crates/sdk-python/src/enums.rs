@@ -213,7 +213,6 @@ mirror!(
         RejectedWrongUnitKind,
         RejectedInvalidResource,
         RejectedInsufficientFood,
-        RejectedPopulationCap,
         RejectedTrainingQueueFull,
         RejectedResourceUnavailable,
         RejectedInvalidTarget,
@@ -238,7 +237,8 @@ mirror!(
         RejectedGarrisonFull,
         RejectedVassalExists,
         RejectedVassalLeash,
-        RejectedVassalHome
+        RejectedVassalHome,
+        RejectedPopulationCap
     ]
 );
 
