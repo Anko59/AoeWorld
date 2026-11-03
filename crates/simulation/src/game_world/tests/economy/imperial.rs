@@ -14,6 +14,15 @@ fn rich_castle() -> (GameWorld, EntityId) {
         gold: 20000,
         stone: 20000,
     };
+    for i in 0..5 {
+        w.insert_building(
+            PlayerId(0),
+            BuildingKind::House,
+            TileRect::from_xywh(10 + 3 * (i % 10), 10 + 3 * (i / 10), 2, 2),
+            true,
+        )
+        .unwrap();
+    }
     (w, tc)
 }
 

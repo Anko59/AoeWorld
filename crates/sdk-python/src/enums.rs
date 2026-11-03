@@ -213,6 +213,7 @@ mirror!(
         RejectedWrongUnitKind,
         RejectedInvalidResource,
         RejectedInsufficientFood,
+        RejectedPopulationCap,
         RejectedTrainingQueueFull,
         RejectedResourceUnavailable,
         RejectedInvalidTarget,

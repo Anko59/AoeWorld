@@ -2,7 +2,7 @@
 use crate::{Stockpile, UnitCombat, UnitCost, UnitKind, UnitTraining};
 
 const MAGIC: i32 = 0x414f4543;
-const BUILDING_WORDS: usize = 14;
+const BUILDING_WORDS: usize = 15;
 const TECH_WORDS: usize = 12;
 const UNIT_WORDS: usize = 20;
 
@@ -18,6 +18,7 @@ pub struct BrowserBuilding {
     trainable: u64,
     pub blocks: bool,
     pub max_hp: u16,
+    pub population_support: u16,
 }
 impl BrowserBuilding {
     pub fn trains(&self, kind: u8) -> bool {
@@ -124,6 +125,7 @@ impl BrowserContent {
                 || r[11] >= 1 << (units - 32)
                 || r[12] > 1
                 || r[13] > 65535
+                || r[14] > 65535
             {
                 return Err("invalid game content building");
             }
@@ -138,6 +140,7 @@ impl BrowserContent {
                 trainable: u64::from(r[10] as u32) | (u64::from(r[11] as u32) << 32),
                 blocks: r[12] != 0,
                 max_hp: r[13] as u16,
+                population_support: r[14] as u16,
             });
         }
         for tech in 0..techs {

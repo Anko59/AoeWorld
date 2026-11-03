@@ -28,8 +28,26 @@ impl GameWorld {
             return Some(ResourceKind::Food);
         }
         if current.is_none() {
-            // General construction may use idle helpers. A Farm
+            // General construction and housing may use idle helpers. A Farm
             // foundation is considered only when Food wins resource selection.
+            let p = self.player_economy(s.player)?;
+            if s.complete
+                && p.population_used as usize + s.global_queued + 2 >= p.population_cap as usize
+                && !s
+                    .buildings
+                    .iter()
+                    .any(|b| b.kind == BuildingKind::House && !b.is_complete())
+                && self.vassal_build_near(
+                    worker,
+                    BuildingKind::House,
+                    unit.position.tile_floor(),
+                    s,
+                    budget,
+                    work,
+                )
+            {
+                return Some(ResourceKind::Wood);
+            }
             if let Some(kind) = self.vassal_help_foundation(worker, None, s, budget, work) {
                 return Some(kind);
             }

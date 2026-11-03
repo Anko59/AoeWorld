@@ -81,6 +81,12 @@ fn completed_training_checks_local_occupants_and_retries_a_freed_exit() {
 #[test]
 fn cancelled_and_destroyed_queues_stop_work_without_losing_serial_progress() {
     let (mut world, _, center) = village();
+    world
+        .economy
+        .players
+        .get_mut(&PlayerId(0))
+        .unwrap()
+        .population_cap = 20;
     for _ in 0..2 {
         world
             .issue_train(PlayerId(0), center, UnitKind::Villager)
@@ -170,7 +176,11 @@ fn fifteen_unit_limit_is_per_building_and_cancellation_refunds_queued_training()
         .units()
         .filter(|u| !previous_ids.contains(&u.id))
         .collect();
-    assert_eq!(spawned.len(), 2, "both producers finish without housing");
+    assert_eq!(
+        spawned.len(),
+        2,
+        "both producers finish with available housing"
+    );
     for center in [first, second] {
         assert!(
             spawned

@@ -164,6 +164,7 @@ fn describe(report: Option<aoe_protocol::VassalReport>) -> String {
         Census => "waiting: too many units nearby to count",
         NoTownCenter => "waiting: no Town Center in its territory",
         Food => "waiting: not enough food",
+        Population => "waiting: more housing needed",
     };
     format!(
         "Vassal domain active · {}/{limit} villagers managed · {} in territory · {why}",

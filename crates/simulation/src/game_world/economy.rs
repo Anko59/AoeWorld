@@ -199,6 +199,8 @@ pub struct PlayerEconomy {
     pub player: PlayerId,
     pub stockpile: Stockpile,
     pub population_used: u32,
+    /// Space provided by completed owned buildings; no gameplay maximum.
+    pub population_cap: u32,
     pub age: super::Age,
     /// Bit `1 << tech as u8` is set once researched.
     pub researched: u64,
@@ -308,6 +310,8 @@ pub enum EconomyError {
     InvalidResource,
     #[error("not enough food to train a villager")]
     InsufficientFood,
+    #[error("population space is full")]
+    PopulationCap,
     #[error("town center training queue is full")]
     TrainingQueueFull,
     #[error("attack target is unknown, dead or belongs to the same player")]

@@ -60,6 +60,9 @@ impl GameWorld {
             .players
             .get(&player)
             .ok_or(EconomyError::NotOwner)?;
+        if state.population_used >= state.population_cap {
+            return Err(EconomyError::PopulationCap);
+        }
         let seconds = if kind == UnitKind::Villager {
             if state.stockpile.food < VILLAGE_RULES.villager_food_cost {
                 return Err(EconomyError::InsufficientFood);
@@ -137,6 +140,15 @@ impl GameWorld {
             let Some(building) = self.economy.buildings.get_mut(&id) else {
                 continue;
             };
+            // Housing blocks progress, while the prepaid queue remains intact.
+            if self
+                .economy
+                .players
+                .get(&building.player)
+                .is_none_or(|state| state.population_used >= state.population_cap)
+            {
+                continue;
+            }
             let Some(entry) = building.training_queue.front_mut() else {
                 continue;
             };

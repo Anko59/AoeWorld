@@ -72,12 +72,13 @@ fn rich_player(researched: u64) -> aoe_protocol::GameplayPlayerState {
             stone: 10000,
         },
         population_used: 5,
+        population_cap: 100,
         market_prices: Default::default(),
     }
 }
 
 #[wasm_bindgen_test]
-fn training_buttons_allow_fifteen_entries_without_housing() {
+fn training_buttons_allow_fifteen_entries_with_housing() {
     use crate::building_ui::availability::training;
     let mut b = building(1);
     let player = rich_player(0);
@@ -194,4 +195,23 @@ fn age_technology_line_exposes_only_its_current_step() {
             }
         }
     }
+}
+
+#[wasm_bindgen_test]
+fn training_buttons_explain_full_population_space() {
+    use crate::building_ui::availability::{Availability, training};
+    let b = building(1);
+    let mut p = rich_player(0);
+    for used in [100, 101] {
+        p.population_used = used;
+        assert!(matches!(
+            training(&b, Some(&p), PlayerId(0), aoe_protocol::UnitKind::Villager),
+            Availability::Population
+        ));
+    }
+    p.population_cap = 105;
+    assert_eq!(
+        training(&b, Some(&p), PlayerId(0), aoe_protocol::UnitKind::Villager).number(),
+        1.0
+    );
 }

@@ -25,25 +25,38 @@ pub(super) fn pass(w: &mut GameWorld) {
 }
 
 #[test]
-fn a_vassal_trains_workers_without_waiting_for_more_housing() {
-    let (mut world, _, _) = active();
-    let center = world
-        .player_buildings_of(PlayerId(0), BuildingKind::TownCenter)
-        .next()
-        .unwrap()
-        .id;
-    while !world.building(center).unwrap().training_queue.is_empty() {
-        world.issue_cancel_training(PlayerId(0), center).unwrap();
+fn a_vassal_builds_a_house_when_population_space_runs_out() {
+    for extra in [18, 25] {
+        let (mut world, _, _) = active();
+        let center = world
+            .player_buildings_of(PlayerId(0), BuildingKind::TownCenter)
+            .next()
+            .unwrap()
+            .id;
+        while !world.building(center).unwrap().training_queue.is_empty() {
+            world.issue_cancel_training(PlayerId(0), center).unwrap();
+        }
+        for index in 0..extra {
+            let tile = TileCoord::new(120 + 2 * (index % 5), 120 + 2 * (index / 5));
+            world
+                .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(tile).unwrap())
+                .unwrap();
+        }
+        assert_eq!(
+            world.player_economy(PlayerId(0)).unwrap().population_used,
+            5 + extra as u32
+        );
+        pass(&mut world);
+        assert_eq!(
+            world.building(center).unwrap().training_queue.is_empty(),
+            extra == 25
+        );
+        assert!(
+            world
+                .player_buildings_of(PlayerId(0), BuildingKind::House)
+                .any(|b| !b.is_complete())
+        );
     }
-    for index in 0..25 {
-        let tile = TileCoord::new(120 + 2 * (index % 5), 120 + 2 * (index / 5));
-        world
-            .spawn_villager(PlayerId(0), WorldPosition::from_tile_center(tile).unwrap())
-            .unwrap();
-    }
-    assert!(world.player_economy(PlayerId(0)).unwrap().population_used > 25);
-    pass(&mut world);
-    assert_eq!(world.building(center).unwrap().training_queue.len(), 1);
 }
 
 #[test]

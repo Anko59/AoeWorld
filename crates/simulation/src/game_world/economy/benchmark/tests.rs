@@ -99,8 +99,8 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Kingdom-priority Vassal job choice and uncapped population (no House or cap gates training) change the replay.
-        "e4b7ad5ac2296e0e41dff1a76c3289b4afdc1888918d64420d8c324f24b5dac9"
+        // Housing space is restored in the canonical state; retain the full 1/4-worker comparison above.
+        "9c98181d0e47d61999092690cee4a64920e56d3e446192f256f88e029216ad14"
     );
 }
 
