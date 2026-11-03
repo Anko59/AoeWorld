@@ -148,14 +148,18 @@ pub(in super::super) fn values(client: &Client) -> Vec<f64> {
             || super::picking::enemy_building(client, point).is_some()
         {
             values[3] = 4.0;
-        } else if let Some(building) = super::garrison::target(client, point) {
+        } else if let Some(building) =
+            super::garrison::target(client, point).filter(|_| actor.is_none() && hover.is_none())
+        {
             values[3] = if building.garrison.len() < usize::from(building.kind.garrison_capacity())
             {
                 11.0
             } else {
                 3.0
             };
-        } else if !super::construction::builders(client).is_empty()
+        } else if actor.is_none()
+            && hover.is_none()
+            && !super::construction::builders(client).is_empty()
             && super::construction::target(client, point).is_some_and(|b| {
                 b.construction == aoe_protocol::ConstructionState::UnderConstruction
                     || b.hp < b.max_hp

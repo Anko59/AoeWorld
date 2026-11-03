@@ -82,6 +82,7 @@ export async function inputFixture(
     military?: boolean;
     originalArt?: boolean;
     url?: string;
+    resources?: Parameters<typeof chunks>[0];
   } = {},
 ) {
   const navy =
@@ -231,7 +232,7 @@ export async function inputFixture(
     "data-renderer",
     renderer,
   );
-  const terrain = chunks().map((chunk) => {
+  const terrain = chunks(options.resources).map((chunk) => {
     if (!navy) return chunk;
     const bytes = Buffer.from(chunk.payload_hex, "hex");
     for (let i = 0; i < 1024; i++) {

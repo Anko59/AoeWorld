@@ -186,7 +186,17 @@ test("mixed Archery Range queue keeps each authoritative unit icon", async ({
     ).find((actor) => actor.kind === "ArcheryRange"),
   );
   if (!range) throw new Error("Archery Range missing");
-  await page.mouse.click(range.x, range.y);
+  // Native roofs can overlap another building's ground hotspot. Select the
+  // Range's unobstructed roof while preserving the queue/icon assertions.
+  for (const dy of [0, -24, -48, -72, -96]) {
+    await page.mouse.click(range.x, range.y + dy);
+    await freshHud(page);
+    if (
+      (await page.locator("#selection").getAttribute("data-kind")) ===
+      "ArcheryRange"
+    )
+      break;
+  }
   await expect(page.locator("#selection")).toHaveAttribute(
     "data-kind",
     "ArcheryRange",
