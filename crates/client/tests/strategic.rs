@@ -38,14 +38,23 @@ fn strategic_camera_covers_a_16k_world_and_keeps_pointer_anchor() {
     let bounds = distant.visible_tiles(WorldConfig::default(), 0.0);
     assert_eq!(bounds.width(), 16384);
     assert_eq!(bounds.height(), 16384);
-    let centered = Camera::new([256.0; 2], [1280.0, 720.0])
-        .zoom_around(pointer, 0.001)
-        .clamp_center(WorldConfig {
-            width_tiles: 512,
-            height_tiles: 512,
-            ..WorldConfig::default()
-        });
-    assert_eq!(centered.center, [256.0; 2]);
+    let small_world = WorldConfig {
+        width_tiles: 512,
+        height_tiles: 512,
+        ..WorldConfig::default()
+    };
+    let small = Camera::new([256.0; 2], [1280.0, 720.0]);
+    let anchor = small.screen_to_world(pointer);
+    let distant = small.zoom_around(pointer, 0.001);
+    // The pointer anchor requires a focus outside this small map. Snapping
+    // back to the map centre or edge would move the ground under the pointer.
+    assert!(distant.center.iter().any(|coordinate| *coordinate > 512.0));
+    for (before, after) in anchor.into_iter().zip(distant.screen_to_world(pointer)) {
+        assert!((before - after).abs() < 1e-8);
+    }
+    let bounds = distant.visible_tiles(small_world, 0.0);
+    assert_eq!(bounds.width(), 512);
+    assert_eq!(bounds.height(), 512);
 }
 
 #[test]

@@ -52,9 +52,9 @@ paged snapshots commit their removals only when complete. New discoveries pause
 during a partial snapshot. A camera move neither clears known deposits nor
 reveals unscouted ones. World replacement clears the cache.
 
-The camera clamps its focus point to the world rather than applying opposing
-viewport-edge corrections. Repeated clamps are idempotent at far zoom and map
-edges remain inspectable.
+The camera focus can move outside the world, keeping map edges inspectable.
+Zoom preserves the ground under the pointer even when that requires an outside
+focus. Only the visible tile request is clipped to the map bounds.
 
 ## Local verification
 

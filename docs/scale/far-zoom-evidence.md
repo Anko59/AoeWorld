@@ -144,3 +144,35 @@ publication was attempted. The dev server stays stopped, and disposable browser
 servers and WASM drivers were cleaned up when their checks completed.
 
 Post-merge optimized client gzip SHA-256: `57f95e7d3947e35ef8371d5d7421bffb7ed188b9866700bfc76d8375bd70e927` (`.cache/showcase/merge-optimized.wasm.gz`).
+
+## CI camera regression repair
+
+On 2026-11-03, `git merge origin/dev` from `79c415224ede` reported already
+up to date. The native strategic test reproduced the reported failure at its
+small-map centre assertion: actual `(512,512)`, expected `(256,256)`.
+Its preceding 16K coverage and pointer-anchor assertions passed. The client
+already permits outside-map focus; only this obsolete test called the unused
+`clamp_center` helper. That helper and its superseded clamp tests are removed.
+The strategic regression retains its 16K checks and now additionally requires
+small-map coverage and pointer anchoring with an outside-map focus. Core tests
+cover outside centres and elevated pointer anchoring across zooms and map edges.
+
+Dockerized checks on the repair worktree:
+
+- `make hooks-install hooks-check fmt-check lint docs-check structure-check browser-check`: PASS. The reported CI static failure did not reproduce locally; remote CI logs were not accessed.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-client AOE_NATIVE_TEST_FILTER='binary(strategic)'`: five passed.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-core AOE_NATIVE_TEST_FILTER='test(projection)'`: eight passed.
+- `make test-wasm-focused AOE_WASM_TEST_PACKAGE=aoe-client AOE_WASM_TEST_FILTER=wheel_zoom_preserves_finite_nonfinite_and_clamped_pointer_zoom`: one passed in Chrome. Earlier filters using the source filename as a module matched zero tests and provide no evidence.
+- `make test-wasm-focused AOE_WASM_TEST_PACKAGE=aoe-client AOE_WASM_TEST_FILTER=playground::game::controls::tests::`: four passed in Chrome, covering wheel anchoring, outside-map panning, pan direction and backing size.
+- `make perf-wasm-cap`: PASS, client gzip 377,821 bytes; diagnostics 90,268 bytes. No baseline changed.
+- `make test-e2e AOE_E2E_WORKERS=1 AOE_E2E_SPECS=tests/camera/hooks.play.spec.ts`: six passed, zero skipped, unexpected or flaky results (`reports/e2e/filtered.json`).
+
+The focused browser run recorded `.cache/showcase/free-camera-raw.webm`
+(SHA-256 `5aff2a0029fa03269adad334fe4d6e7c5880397f3a27b0074fca53f0224eb03a`).
+Its `camera-flicker.json` records zero changed pixels out of 400,000 sampled
+pixels at each zoom 0.25, 0.5, 1 and 2, with focus `(-2,2)` throughout.
+The 0.5 first-frame crop was viewed directly: stable synthetic grass terrain.
+This is camera evidence using test assets, not new original-art or RTS
+performance qualification. Video, crops and JSON remain ignored local files.
+The run used the repair worktree before commit, not a clean committed build.
+No full e2e, preflight, ship, push or GitHub CLI command was run.

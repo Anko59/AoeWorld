@@ -1,7 +1,7 @@
 use crate::{TileCoord, TileRect, WorldConfig};
 
 #[cfg(test)]
-#[path = "projection/tests/clamp.rs"]
+#[path = "projection/tests/edges.rs"]
 mod edge_tests;
 
 pub const MIN_CAMERA_ZOOM: f64 = 1.0 / 4096.0;
@@ -80,15 +80,6 @@ impl Camera {
         let after = self.screen_to_world_at_height(pointer, self.focus_elevation_meters);
         self.center[0] += before[0] - after[0];
         self.center[1] += before[1] - after[1];
-        self
-    }
-
-    pub fn clamp_center(mut self, config: WorldConfig) -> Self {
-        // Clamp the focus point, not opposite viewport edges. At far zoom a
-        // viewport can span both map edges; applying both old corrections made
-        // repeated calls alternate between two centres even without input.
-        self.center[0] = crate::clamp_f64(self.center[0], 0.0, f64::from(config.width_tiles));
-        self.center[1] = crate::clamp_f64(self.center[1], 0.0, f64::from(config.height_tiles));
         self
     }
 
