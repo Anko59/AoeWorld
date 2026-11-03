@@ -27,3 +27,15 @@ test-resource-browser-oom: .cache/browser-resource-tests browser-tools
 # The Rust test supplies a 128 MiB cap and verifies it before allocating.
 resource-browser-oom-child: .cache/browser-resource-tests
 	@$(BROWSER_RUN) $(ROOT)/.cache/browser-resource-tests --child
+
+# Probe before even building the launcher; the launcher still owns real admission.
+LONG_GOALS := coverage preflight preflight-unit test-e2e release-build scale-match scale-match-smoke perf-baseline-propose perf-instructions perf-scale perf-scale-smoke perf-groups perf-groups-instructions perf-groups-profile perf-smoke perf-late-game perf-late-game-instructions perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30
+ifneq ($(strip $(filter $(LONG_GOALS),$(MAKECMDGOALS))),)
+ifneq ($(strip $(filter-out test-e2e,$(filter $(LONG_GOALS),$(MAKECMDGOALS)))$(if $(strip $(AOE_E2E_SPECS)),, $(filter test-e2e,$(MAKECMDGOALS)))),)
+.PHONY: long-precheck
+resource-bootstrap .cache/resource-runner: | long-precheck
+long-precheck: .EXTRA_PREREQS :=
+long-precheck:
+	@lock=$(call MOUNT_QUOTE,$(GIT_COMMON)/aoe-ship/long.lock); if [ -f "$$lock" ]; then flock -n -E 75 "$$lock" true || { status=$$?; [ "$$status" = 75 ] || exit "$$status"; { IFS= read -r proof; IFS= read -r holder || :; } < "$$lock"; if [ -n "$$AOE_LONG_JOB" ] && [ "$$proof" = "$$AOE_LONG_JOB" ] && [ "$$AOE_LONG_DIR/long.lock" = "$$lock" ]; then exit 0; fi; echo "long job busy: $${holder:-holder metadata is being recorded}, retry later" >&2; exit 75; }; fi
+endif
+endif

@@ -97,7 +97,16 @@ fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
         "scale-match-smoke",
     ];
     let files = files();
+    let resources = fs::read_to_string(root().join("make/resources.mk")).unwrap();
+    let guarded: Vec<_> = resources
+        .lines()
+        .find_map(|line| line.strip_prefix("LONG_GOALS := "))
+        .unwrap()
+        .split_whitespace()
+        .collect();
+    assert_eq!(guarded.len(), long.len());
     for target in long {
+        assert!(guarded.contains(&target), "missing pre-check for {target}");
         let prefix = format!("{target}:");
         let (_, text) = files
             .iter()
