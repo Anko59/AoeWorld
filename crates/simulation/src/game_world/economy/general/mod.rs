@@ -61,6 +61,8 @@ pub(crate) struct Army {
     pub destination: Option<WorldPosition>,
     pub state: GeneralState,
     pub micro_after: usize,
+    /// Next first fighting group, including the commander, for shared searches.
+    pub fight_after: usize,
     pub scan: (usize, usize),
     /// Next bounded slice of each production-kind index.
     pub production_scan: [usize; 5],
@@ -146,6 +148,7 @@ impl GameWorld {
                 destination: None,
                 state: GeneralState::Idle,
                 micro_after: 0,
+                fight_after: 0,
                 scan: (0, 0),
                 production_scan: [0; 5],
                 retreat_until: 0,

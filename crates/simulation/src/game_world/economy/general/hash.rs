@@ -16,7 +16,7 @@ impl Economy {
             h.update(&[a.state as u8, u8::from(a.solo), u8::from(a.training)]);
             h.update(&a.mix);
             h.update(&a.retreat_until.to_le_bytes());
-            for n in [a.scan.0, a.scan.1, a.micro_after] {
+            for n in [a.scan.0, a.scan.1, a.micro_after, a.fight_after] {
                 h.update(&(n as u64).to_le_bytes());
             }
             for n in a.production_scan {

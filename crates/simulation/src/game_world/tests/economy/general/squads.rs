@@ -121,3 +121,52 @@ fn a_sergeants_death_promotes_its_next_soldier_without_reforming_other_squads() 
             .all(|&id| w.general_controller(id) == Some(g))
     );
 }
+
+#[test]
+fn unreachable_early_archer_squads_do_not_starve_a_reachable_later_squad() {
+    let (mut w, _) = setup();
+    // Four full archer squads cannot leave this sealed courtyard. The fifth
+    // stands outside it and can shoot the same visible enemy.
+    for n in 0..60 {
+        soldier(&mut w, UnitKind::Archer, 100 + n % 10, 100 + n / 10);
+    }
+    for n in 0..15 {
+        soldier(&mut w, UnitKind::Archer, 120 + n % 5, 100 + n / 5);
+    }
+    let g = soldier(&mut w, UnitKind::General, 122, 108);
+    for n in 96..=115 {
+        for tile in [
+            TileCoord::new(n, 96),
+            TileCoord::new(n, 115),
+            TileCoord::new(96, n),
+            TileCoord::new(115, n),
+        ] {
+            w.economy.blocked_tiles.insert(tile);
+        }
+    }
+    w.collision_closed(aoe_core::TileRect::from_xywh(96, 96, 20, 20));
+    let enemy = w
+        .spawn_kind(PlayerId(1), UnitKind::Militia, at(128, 100))
+        .unwrap();
+    assert!(w.unit_visible_to(PlayerId(0), enemy));
+    for _ in 0..6 {
+        decide(&mut w);
+        assert_eq!(w.general_status(g).unwrap().state, GeneralState::Fighting);
+        assert!(w.general_work().orders <= 32, "bounded decision work");
+        if w.general_fight_target(g, 4) == Some(enemy) {
+            return;
+        }
+    }
+    panic!("the reachable fifth squad never received its fight order");
+}
+
+#[test]
+fn fight_rotation_is_part_of_the_canonical_state() {
+    let (mut w, _) = setup();
+    let g = soldier(&mut w, UnitKind::General, 104, 108);
+    let before = w.canonical_hash();
+    w.economy.generals.armies.get_mut(&g).unwrap().fight_after = 1;
+    assert_ne!(before, w.canonical_hash());
+    w.economy.generals.armies.get_mut(&g).unwrap().fight_after = 0;
+    assert_eq!(before, w.canonical_hash());
+}

@@ -91,22 +91,31 @@ impl GameWorld {
                     .collect()
             })
             .collect();
-        for (group, soldiers) in squads
-            .iter()
-            .enumerate()
-            .filter(|(_, soldiers)| !soldiers.is_empty())
-        {
-            self.general_fight_group(u.id, group, soldiers, survey, changed, work);
-        }
-        if let Some(general) = fighters.iter().find(|v| v.id == u.id) {
-            self.general_fight_group(
-                u.id,
-                squads::SQUAD_LIMIT,
-                &[*general],
-                survey,
-                changed,
-                work,
-            );
+        // The four expensive firing-position searches are shared. Rotate the
+        // first group by one each decision so unreachable early squads cannot
+        // consume them forever. Include the commander in the same bounded ring.
+        let count = squads.len() + 1;
+        let Some(army) = self.economy.generals.armies.get_mut(&u.id) else {
+            return;
+        };
+        let start = army.fight_after % count;
+        army.fight_after = (start + 1) % count;
+        for offset in 0..count {
+            let group = (start + offset) % count;
+            if group < squads.len() {
+                if !squads[group].is_empty() {
+                    self.general_fight_group(u.id, group, &squads[group], survey, changed, work);
+                }
+            } else if let Some(general) = fighters.iter().find(|v| v.id == u.id) {
+                self.general_fight_group(
+                    u.id,
+                    squads::SQUAD_LIMIT,
+                    &[*general],
+                    survey,
+                    changed,
+                    work,
+                );
+            }
         }
     }
 
