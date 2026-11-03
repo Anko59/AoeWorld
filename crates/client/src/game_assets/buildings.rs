@@ -271,34 +271,71 @@ pub(super) fn resolve(
     for (slot, &record) in selected.iter().enumerate() {
         slots[record].get_or_insert(slot);
     }
-    manifest
+    let mut art: Vec<_> = manifest
         .buildings
         .iter()
-        .map(|b| aoe_rendering::BuildingArt {
-            unit_id: b.unit_id,
-            footprint: b.footprint,
-            foundation_material: if b.unit_id == 50 && !manifest.terrains.is_empty() {
-                Some(17)
-            } else {
-                material(b)
-            },
-            parts: parts(b.unit_id, &b.parts, manifest, &slots, records),
-            construction: parts(b.unit_id, &b.construction, manifest, &slots, records),
-            states: b
-                .states
-                .iter()
-                .filter(|(role, _)| runtime_state(*role))
-                .map(|(role, p)| (*role, parts(b.unit_id, p, manifest, &slots, records)))
-                .collect(),
-            damage: b
-                .damage
-                .iter()
-                .map(|d| aoe_rendering::BuildingDamage {
-                    damage_percent: d.damage_percent as u8,
-                    apply_mode: d.apply_mode,
-                    parts: parts(-1, &d.parts, manifest, &slots, records),
-                })
-                .collect(),
-        })
-        .collect()
+        .map(|b| resolve_building(b.unit_id, b, manifest, &slots, records))
+        .collect();
+    // The trial has Castle recipes but no Imperial identities. Reuse the
+    // resolved Castle assembly only for an absent recipe; native Imperial art
+    // (including its explicit missing parts) always remains authoritative.
+    for (imperial, castle) in [
+        (142, 141),
+        (465, 464),
+        (565, 564),
+        (587, 586),
+        (131, 130),
+        (20, 132),
+        (51, 47),
+        (14, 10),
+        (153, 86),
+        (19, 18),
+        (137, 116),
+        (32, 31),
+        (210, 209),
+        (150, 49),
+    ] {
+        if !manifest.buildings.iter().any(|b| b.unit_id == imperial)
+            && let Some(base) = manifest.buildings.iter().find(|b| b.unit_id == castle)
+        {
+            art.push(resolve_building(imperial, base, manifest, &slots, records));
+        }
+    }
+    art
+}
+
+#[inline(never)]
+fn resolve_building(
+    unit_id: i32,
+    b: &BuildingComposition,
+    manifest: &Manifest,
+    slots: &[Option<usize>],
+    records: &[GameFrame],
+) -> aoe_rendering::BuildingArt {
+    aoe_rendering::BuildingArt {
+        unit_id,
+        footprint: b.footprint,
+        foundation_material: if b.unit_id == 50 && !manifest.terrains.is_empty() {
+            Some(17)
+        } else {
+            material(b)
+        },
+        parts: parts(b.unit_id, &b.parts, manifest, slots, records),
+        construction: parts(b.unit_id, &b.construction, manifest, slots, records),
+        states: b
+            .states
+            .iter()
+            .filter(|(role, _)| runtime_state(*role))
+            .map(|(role, p)| (*role, parts(b.unit_id, p, manifest, slots, records)))
+            .collect(),
+        damage: b
+            .damage
+            .iter()
+            .map(|d| aoe_rendering::BuildingDamage {
+                damage_percent: d.damage_percent as u8,
+                apply_mode: d.apply_mode,
+                parts: parts(-1, &d.parts, manifest, slots, records),
+            })
+            .collect(),
+    }
 }
