@@ -5,8 +5,11 @@ import { gameAssets } from "../game-assets.js";
 import {
   centerVillage,
   frameResource,
+  freshHud,
   scoutVillage,
 } from "./fixtures/resources.js";
+
+test.use({ video: "on" });
 
 type Actor = { id: number; kind: string; x: number; y: number };
 async function actors(page: Page): Promise<Actor[]> {
@@ -75,7 +78,7 @@ test("server stockpile and population; Q queues and cancels a villager", async (
   await expect(page.locator("#training-progress")).toBeHidden();
 });
 
-test("gatherers deposit wood while the Town Center trains a villager", async ({
+test("gatherers deposit wood while the Town Center trains; full housing refuses Q", async ({
   page,
 }) => {
   test.setTimeout(100_000);
@@ -129,16 +132,15 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
   await expect(page.locator("#population")).toHaveText("5/5", {
     timeout: 32_000,
   });
+  await expect(
+    page.getByRole("button", { name: /Train Villager/ }),
+  ).toBeDisabled();
   await page.keyboard.press("q");
-  // Orders beyond the cap are now prepaid and queued, then wait for housing.
-  // The training panel explains the wait without reporting a connection error.
-  await expect(page.locator("#stockpile-food")).toHaveText("100");
-  await expect(page.locator("#training-label")).toContainText(
-    "Waiting for housing",
-  );
-  await expect(page.locator("#selection-task")).toHaveText(
-    "Waiting for housing",
-  );
+  await freshHud(page);
+  // Full housing refuses the order without spending food or queuing a unit.
+  await expect(page.locator("#stockpile-food")).toHaveText("150");
+  await expect(page.locator("#training")).toBeHidden();
+  await expect(page.locator("#selection-task")).toHaveText("Ready");
   await expect(page.locator("#connection")).toHaveText("connected");
 
   await expect
@@ -147,6 +149,10 @@ test("gatherers deposit wood while the Town Center trains a villager", async ({
       { timeout: 60_000 },
     )
     .toBeGreaterThan(200);
+  await expect(page.locator("#stockpile-food")).toHaveText("150");
+  await expect(page.locator("#population")).toHaveText("5/5");
+  await expect(page.locator("#training")).toBeHidden();
+  await expect(page.locator("#connection")).toHaveText("connected");
 });
 
 test("menu resumes and quits; minimap lives in the bottom frame and navigates", async ({
