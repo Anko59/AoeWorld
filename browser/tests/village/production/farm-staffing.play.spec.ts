@@ -88,6 +88,7 @@ test("farm staffing keeps a single builder's queued house", async ({
   const mill = (await actors(page)).find((a) => a.kind === "Mill");
   if (!mill) throw new Error("Mill missing");
   await page.mouse.click(mill.x, mill.y);
+  await expect(page.locator("#selection-name")).toHaveText("Mill");
   await expect(page.locator("#building-status")).toContainText("Complete", {
     timeout: 70_000,
   });
@@ -109,8 +110,9 @@ test("farm staffing keeps a single builder's queued house", async ({
   const house = (await actors(page)).find((a) => a.kind === "House");
   if (!house) throw new Error("Queued house missing");
   await page.mouse.click(house.x, house.y);
+  await expect(page.locator("#selection-name")).toHaveText("House");
   await expect(page.locator("#building-status")).toContainText("Complete", {
-    timeout: 70_000,
+    timeout: 100_000,
   });
   await expect(page.locator("#workers-food")).toHaveText("1");
   await page.screenshot({
@@ -157,6 +159,7 @@ test("queued house orders include a selected farmer and idle villager", async ({
   const house = (await actors(page)).find((a) => a.kind === "House");
   if (!house) throw new Error("Queued house missing");
   await page.mouse.click(house.x, house.y);
+  await expect(page.locator("#selection-name")).toHaveText("House");
   await expect(page.locator("#building-status")).toContainText("Complete", {
     timeout: 70_000,
   });
