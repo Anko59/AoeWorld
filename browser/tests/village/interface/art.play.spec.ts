@@ -28,7 +28,7 @@ for (const available of [false, true]) {
         return route.fulfill({
           json: {
             units: { 83: art, 109: art },
-            technologies: { 22: art },
+            technologies: { 22: art, 101: art },
             commands: { move: art, stop: art, build: art, military: art },
             resources: { wood: art },
             panels: {
@@ -70,6 +70,12 @@ for (const available of [false, true]) {
       await expect(
         page.locator('#top-bar [data-ui-id="wood"] .original-icon'),
       ).toBeVisible();
+      await expect(page.locator("#research-feudal-age")).toBeDisabled();
+      await expect(page.locator("#research-feudal-age")).toHaveCSS(
+        "filter",
+        "none",
+      );
+      await page.screenshot({ path: "../.cache/showcase/command-colours.png" });
     } else {
       await expect(page.locator("html")).toHaveAttribute(
         "data-interface-art",
