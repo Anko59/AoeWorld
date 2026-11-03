@@ -68,6 +68,12 @@ fn river_recording_setup_preserves_map_water_and_adopts_one_hundred() {
         .initialize_village(PlayerId(0), TileCoord::new(10, 10))
         .unwrap();
     let (g, span, goal) = f.world.prepare_general_river_demo().unwrap();
+    assert_ne!(span.from.x, span.to.x, "grid-diagonal bridge changes x");
+    assert_ne!(span.from.y, span.to.y, "grid-diagonal bridge changes y");
+    assert_eq!(
+        (span.to.x - span.from.x).abs(),
+        (span.to.y - span.from.y).abs()
+    );
     assert_eq!(f.world.general_status(g).unwrap().army_size, 100);
     assert_eq!(f.world.unit_count(), 101);
     assert_eq!(
@@ -101,4 +107,13 @@ fn river_recording_setup_preserves_map_water_and_adopts_one_hundred() {
         f.world.advance();
     }
     assert_eq!(f.world.unit(g).unwrap().position, goal);
+    let end = WorldPosition::from_tile_center(span.to).unwrap();
+    let dx = i64::from(span.to.x - span.from.x);
+    let dy = i64::from(span.to.y - span.from.y);
+    let across = f
+        .world
+        .units()
+        .filter(|u| i64::from(u.position.x - end.x) * dx + i64::from(u.position.y - end.y) * dy > 0)
+        .count();
+    assert_eq!(across, 101, "the whole recording army reaches the far bank");
 }

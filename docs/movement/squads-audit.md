@@ -155,7 +155,7 @@ updated to 200; it still rejects 201. Logs: `protocol-capacity-red.log` and
 100-soldier capacity label and describes ten squads. WASM-cap validation passes at 375226 compressed bytes (+23.9% versus
 302817, below the unchanged +25% block). `make browser-format browser-check` passes; the real-source browser proof passes. No per-sergeant configuration has been implemented.
 
-## Real-source recording
+## Original real-source recording: axis-aligned bridge
 
 The seven locked base geographic inputs were downloaded and SHA-verified with
 `make geodata-bootstrap`. `make map-generate-detailed` generated the Paris map
@@ -164,8 +164,10 @@ The seven locked base geographic inputs were downloaded and SHA-verified with
 The setup samples this existing map, adds a completed bridge from (231,252) to
 (248,252), and spawns 100 mixed soldiers and their General on clear ground.
 It preserves source water pages and leaves the march to ordinary browser input.
-The recording uses WebGL2 software rendering, zoom 0.4, and a four-times clock
-(world tick rate 5 under the server's 20 Hz ticker). No owner server was touched.
+This span is axis-aligned in the map grid (both endpoints have y = 252);
+its diagonal appearance comes from isometric projection. It is not evidence of
+a grid-diagonal crossing. The recording uses WebGL2 software rendering, zoom
+0.4, and a four-times clock (world tick rate 5 under the server's 20 Hz ticker). No owner server was touched.
 
 The first browser attempt selected the standalone DE overlay and failed the
 required base-art check. A second attempt exposed an off-screen camera choice.
@@ -203,7 +205,7 @@ remain unimplemented. The existing General's role sliders remain available.
 Preflight, perf-ci, full E2E and publication are excluded by the explicit brief.
 No 1000-player, dedicated-hardware or finished RTS performance claim is made.
 
-## Unfinished recovery follow-up at the budget stop
+## Historical budget stop: unfinished recovery follow-up
 
 Two additional boundary tests found failures in the committed squad code:
 
@@ -223,4 +225,88 @@ The source recording contains no enemy and predates this independent attempt.
 
 Remaining work includes these two recovery boundaries, sergeant hero art and
 per-General/per-sergeant/same-sergeant-group unit-mix configuration. The task
-is incomplete; the verified commits and video do not establish those features.
+stopped incomplete; the verified commits and video do not establish those features.
+The present review follow-up is limited to F1 and F2 in the squad-fix brief.
+
+## Review follow-up: F1 shared fight-search starvation
+
+Commit `6eca0831633260977d0c7d60bd2ed95d2aa6052a` fixes the fixed-order
+squad search loop. A separate hashed cursor rotates the first fighting group by
+one on each admitted fight decision, including the commander in the same ring
+of at most eleven groups. Search and order budgets are unchanged. This gives
+every group first access within at most eleven such decisions; it does not
+reserve searches against unrelated consumers of the shared world budget.
+
+The new regression has four full archer squads inside a sealed courtyard and
+a fifth outside, able to shoot the same visible enemy. It failed after six
+decisions before the fix and passes after it. A separate hash regression checks
+that changing the rotation cursor changes canonical state. All 56 focused
+General tests pass, including deterministic replay and work-bound checks.
+Logs: `reports/squads/fair-search-red.log` and `fair-search-green.log`.
+`make hooks-install hooks-check`, `make fmt-check lint structure-check` and the
+isolated-index pre-commit checks passed; logs are `fix-hooks.log`,
+`fair-search-static.log` and `fair-search-commit.log` in the same directory.
+
+## Review follow-up: F2 grid-diagonal source-river recording
+
+The recording constructor now searches only the two grid-diagonal axes. Its
+new endpoint assertions failed first on equal y = 128 in the synthetic fixture.
+The corrected fixture passes with all 101 units beyond the bridge's far-end
+plane after 5,000 ticks, retaining the source-water and population assertions.
+This is synthetic constructor coverage, separate from the real-source film.
+
+The fresh private server loads the same Paris package and its 19 source locks.
+Runtime `BridgeSpan` data in `reports/squads/diagonal-final-server.log` gives
+**(241,255) to (247,249)**: delta **(+6,-6)**, genuinely diagonal in the grid.
+`diagonal-map.json` retains the package metadata. No terrain pages or forest
+nodes were added for the take. The near approach is open; existing source trees
+appear at the far-bank edge in the final view. A fresh server is needed for
+each take: attempting to prepare another demo in the existing bridged world
+fails. That adapter limitation was not changed in this review follow-up.
+
+The new clip is `.cache/showcase/river-diagonal-raw.webm`, SHA-256
+`8cfdc1f4a8d4f5be5b9b3bcf0139104da999fbb8f22ef4e954a588b6f2e3bf50`.
+It is a continuous 57.8-second excerpt starting at 37.4 seconds in the
+95.4-second Playwright capture, with no video retiming, narration or cuts inside
+the excerpt. It uses software WebGL2, zoom 0.4 and the existing four-times
+showcase clock. The General adopts 40 infantry, 30 archers, 20 cavalry and ten
+siege units. Ordinary UI input issues the march and clears the selection panel;
+the camera moves to the deck early and then to the far-bank army.
+
+The extracted frames in `.cache/showcase/diagonal-frames/` were inspected:
+
+- First, 0 s: troops approach and occupy the deck; leading cavalry exits it.
+- Crossing, 5 s: multiple troop types cross the fully visible deck.
+- Middle, 28.88 s: the deck is empty; trailing siege is at the far-right edge.
+- Last, 57.76 s: General, infantry, archers and siege stand on the far bank,
+  with source trees at upper right. Cavalry flanks extend outside this close view.
+
+`reports/squads/diagonal-observations.json` retains all 101 living army sprite
+anchors and the actual camera coordinates before, during and after the march.
+The height-independent horizontal projection in `crates/core/src/projection.rs`
+recovers x-y from those anchors. Counts beyond the far endpoint's x-y = -2
+plane are 0/101 before, 17/101 during and 101/101 after; the final minimum x-y
+margin is 34.624 tiles. This is an anchor observation, not an exact arrival-time
+measurement. `.cache/showcase/river-diagonal.json` retains settings, hashes,
+frame descriptions and these measurements. The minimap raster failed and stays
+schematic; the main view renders the loaded source terrain.
+
+Validation used Dockerized Make targets (all final runs passed):
+
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation
+  AOE_NATIVE_TEST_FILTER='test(economy::general::)'`: 56/56.
+- `make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-simulation
+  AOE_NATIVE_TEST_FILTER='test(river_recording_setup)'`: 1/1, after failing red.
+- `make hooks-install hooks-check fmt-check lint structure-check`.
+- `make build`; `make browser-format browser-check`; `make ui-proof`.
+- `make video-probe` with the new clip: 57.80 seconds, 1280x720, 25 fps.
+
+Final logs are `diagonal-recording-green.log`, `diagonal-final-static.log`,
+`diagonal-build.log`, `diagonal-browser-check.log`, `diagonal-final-video.log`
+and `diagonal-video-metadata.log` under `reports/squads/`. One browser check
+raced capture startup's dependency installation and lost `tsc`; its sequential
+rerun passed. Failed camera/setup takes are not crossing evidence. The original
+59-second axis-aligned clip remains historical evidence, not the F2 deliverable.
+Videos, source assets and generated map data remain ignored. No new CI evidence,
+real-source before timing, dedicated hardware or finished RTS performance is
+claimed. Preflight, perf-ci, full E2E and publication remain excluded by the brief.

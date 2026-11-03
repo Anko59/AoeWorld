@@ -50,6 +50,8 @@ export async function generalRiverProof(
     .toBe(true);
   const general = (await actors()).find((a) => a.kind === "General");
   if (!general) throw new Error("General missing after scene initialization");
+  expect(general.x).toBeGreaterThan(0);
+  expect(general.x).toBeLessThan(1280);
   expect(general.y).toBeGreaterThan(64);
   expect(general.y).toBeLessThan(500);
   await page.mouse.click(general.x, general.y - 10);
@@ -118,12 +120,14 @@ export async function generalRiverProof(
     .click({ position: { x: 640, y: 360 }, button: "right" });
   await expect(page.locator("#vassal-status")).toContainText("marching");
   await mapClick(setup.camera, "left");
-  await page.mouse.move(640, 340);
-  await page.waitForTimeout(20_000);
+  // Ordinary deselection keeps the Captain/Trainer panel off the crossing.
+  await page.locator("#scene").click({ position: { x: 640, y: 80 } });
+  await page.mouse.move(640, 80);
+  await page.waitForTimeout(4_000);
   if (setup.follow?.[0]) await mapClick(setup.follow[0], "left");
   await page.waitForTimeout(500);
   await capture("middle");
-  await page.waitForTimeout(30_000);
+  await page.waitForTimeout(46_000);
   if (setup.follow?.[1]) await mapClick(setup.follow[1], "left");
   await page.waitForTimeout(500);
   await capture("after");

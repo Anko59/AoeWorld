@@ -10,7 +10,7 @@ fn position(tile: TileCoord) -> Result<WorldPosition, EconomyError> {
 impl GameWorld {
     /// Off-tick local showcase setup. It samples the existing map, never
     /// replaces terrain pages, and leaves the march for an ordinary UI order.
-    /// At most 16,384 sample origins, four axes and 24 tiles per half-span.
+    /// At most 16,384 sample origins, two diagonal axes and 24 tiles per half-span.
     pub fn prepare_general_river_demo(
         &mut self,
     ) -> Result<(EntityId, BridgeSpan, WorldPosition), EconomyError> {
@@ -31,7 +31,7 @@ impl GameWorld {
                 if self.demo_water(at) != Some(true) {
                     return None;
                 }
-                for (dx, dy) in [(1, 0), (0, 1), (1, 1), (1, -1)] {
+                for (dx, dy) in [(1, 1), (1, -1)] {
                     let bank = |sign| {
                         (1..=24)
                             .map(|n| TileCoord::new(at.x + sign * dx * n, at.y + sign * dy * n))
