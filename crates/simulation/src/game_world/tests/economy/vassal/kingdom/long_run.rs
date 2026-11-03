@@ -1,5 +1,6 @@
 //! Ten simulated minutes, ordinary movement and delivery, no accelerated rules.
 use super::*;
+mod river;
 
 #[derive(Default, Debug)]
 struct Samples {

@@ -99,6 +99,10 @@ Idle workers and unloaded managed gatherers respond to those kingdom needs.
 Carried loads finish their ordinary delivery first, and a refused replacement
 keeps the current productive job. Training retains its normal admission before
 productive reassignment; optional maintenance follows.
+Each domain pass adjusts at most one productive job for a moderate imbalance.
+Further changes require the new weighted projected reserve to be below one
+quarter of the current resource's reserve. Idle dispatch keeps its ordinary
+budget, and severe shortages can still redirect the available workforce.
 Known resources within ten tiles are preferred. A local miss can also probe a
 completed matching drop-off, rotating its building ID between queries. A
 retained search visits eight-tile blocks outward from the domain centre, so
@@ -187,6 +191,13 @@ visible in a short capture; it does not change the manager's work budgets.
 forest and a completed Lumber Camp, with 30,000 Food/Gold/Stone and 1,000 Wood.
 Its four-times game clock preserves ordinary orders and manager budgets.
 Recenter on the stationary Scout to frame the farm clusters and forest.
+
+`POST /maps/reset?scenario=vassal-stability` uses the same paid working Farms
+with 1,800 Food, 1,000 Wood and a Vassal waiting in a clear spot outside its
+Castle. Garrison it during the headless showcase take to observe the first
+moderate productive adjustments. Farmers retain their real carried loads and
+finish normal deliveries before changing jobs. It uses the same four-times
+demo clock and ordinary management budgets.
 
 `POST /maps/reset?scenario=vassal-throughput` prepares forty idle villagers,
 known forest, a Lumber Camp and an ungarrisoned Vassal. Its ordinary 20 Hz clock

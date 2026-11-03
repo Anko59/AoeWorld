@@ -1,6 +1,40 @@
 use super::*;
 use std::collections::BTreeMap;
 
+#[test]
+fn moderate_shortage_moves_one_productive_worker_per_domain_pass() {
+    let (mut w, vassal, workers, _) = wood_realm(20);
+    reserves(&mut w, 1_000, 30_000, 30_000, 30_000);
+    let castle = w.vassal_castle(vassal).unwrap();
+    let anchor = w.building(castle).unwrap().footprint.min;
+    assign_farms(&mut w, &workers, TileCoord::new(anchor.x + 7, anchor.y + 7));
+    advance(&mut w, 20);
+    assert!(
+        assigned(&w, vassal, &workers, ResourceKind::Food) >= 18,
+        "ordinary Mill repair may retain one builder"
+    );
+    assert!(
+        workers
+            .iter()
+            .all(|id| w.unit(*id).unwrap().carried.is_none())
+    );
+    // Food/45 = 40 and Wood/30 = 33.3: a real moderate imbalance,
+    // but no emergency that should interrupt the entire workforce at once.
+    reserves(&mut w, 1_800, 1_000, 30_000, 30_000);
+    advance(&mut w, 20);
+    assert_eq!(
+        assigned(&w, vassal, &workers, ResourceKind::Wood),
+        1,
+        "one moderate adjustment lets new deliveries inform the next pass"
+    );
+    advance(&mut w, 20);
+    assert_eq!(
+        assigned(&w, vassal, &workers, ResourceKind::Wood),
+        2,
+        "rotation still makes progress on the shortage"
+    );
+}
+
 fn carried_food(w: &GameWorld) -> BTreeMap<EntityId, u16> {
     w.units()
         .filter(|u| u.player == PlayerId(0))

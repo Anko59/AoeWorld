@@ -54,7 +54,8 @@ impl GameWorld {
         }
         for kind in kinds {
             if unit.carried.is_some_and(|c| c.kind != kind)
-                || current.is_some_and(|old| !priority.improves(kind, old))
+                || current
+                    .is_some_and(|old| !priority.improves_in_pass(kind, old, budget.reassigned))
                 || s.avoid.is_some_and(|a| a.avoid_kind == Some(kind))
             {
                 continue;

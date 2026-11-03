@@ -88,6 +88,42 @@ impl GameWorld {
         Ok((world, primary))
     }
 
+    /// Twenty paid, working Farms and a moderate Wood shortage. The owner
+    /// activates management by garrisoning the waiting Vassal during capture.
+    pub fn vassal_stability_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+        let (mut world, primary) = Self::vassal_kingdom_demo(seed)?;
+        let vassal = world
+            .units()
+            .find(|u| u.kind == UnitKind::Vassal)
+            .map(|u| u.id)
+            .ok_or(EconomyError::UnknownEntity)?;
+        let from = world
+            .unit(vassal)
+            .ok_or(EconomyError::UnknownEntity)?
+            .position
+            .tile_floor();
+        let waiting = TileCoord::new(from.x - 5, from.y + 12);
+        if !world.tile_free(waiting) {
+            return Err(EconomyError::InvalidTarget);
+        }
+        world.issue_stop(PlayerId(0), vassal)?;
+        // Initial placement keeps the original actor and its population slot.
+        // Reindex its clear waiting spot before any recording session exists.
+        let index = world.lookup[&vassal];
+        world.units[index].state.position = kingdom_position(waiting)?;
+        let state = world.units[index].state;
+        world.track_unit_step(vassal, from, &state);
+        if let Some(player) = world.economy.players.get_mut(&PlayerId(0)) {
+            player.stockpile = Stockpile {
+                food: 1_800,
+                wood: 1_000,
+                gold: 30_000,
+                stone: 30_000,
+            };
+        }
+        Ok((world, primary))
+    }
+
     /// Forty idle workers beside known forest, on the ordinary 20 Hz clock.
     /// The owner garrisons the waiting Vassal to start the actual job pass.
     pub fn vassal_throughput_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
