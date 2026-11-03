@@ -84,23 +84,13 @@ fn only_index_paths_classified_as_documentation_are_candidates() {
 }
 
 #[test]
-fn documentation_selection_keeps_compilers_for_embedded_edits_and_deletions() {
+fn documentation_selection_uses_change_status_even_for_embedded_files() {
     let repo = repo();
     let root = repo.path();
     put(
         root,
-        "Cargo.toml",
-        "[workspace]\nmembers=[\"crates/example\"]\nresolver=\"3\"\n",
-    );
-    put(
-        root,
-        "crates/example/Cargo.toml",
-        "[package]\nname=\"example\"\nversion=\"0.1.0\"\nedition=\"2024\"\n",
-    );
-    put(
-        root,
         "crates/example/src/lib.rs",
-        "pub const GUIDE: &str = include_str!(\"../../../docs/embedded.md\");\n",
+        "pub const GUIDE: &str = include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/../../docs/\", \"embedded.md\"));\n",
     );
     put(root, "docs/embedded.md", "original\n");
     put(
@@ -108,14 +98,6 @@ fn documentation_selection_keeps_compilers_for_embedded_edits_and_deletions() {
         "gates/registry.json",
         fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../gates/registry.json")).unwrap(),
     );
-    crate::process::run_in(
-        root,
-        "cargo",
-        &["generate-lockfile", "--offline"],
-        &[],
-        std::time::Duration::from_secs(30),
-    )
-    .unwrap();
     run(root, &["add", "."]);
     run(
         root,
@@ -125,17 +107,19 @@ fn documentation_selection_keeps_compilers_for_embedded_edits_and_deletions() {
     run(root, &["add", "docs/unread.md"]);
     let snapshot = Snapshot::prepare(root, Kind::Index).unwrap();
     assert!(super::super::checks::skip_compilers(&snapshot).unwrap());
-    // Unstaged Rust edits cannot change the reader inventory of an Index scope.
-    put(
-        root,
-        "crates/example/src/lib.rs",
-        "pub const GUIDE: &str = \"unstaged\";\n",
-    );
     put(root, "docs/embedded.md", "changed\n");
     run(root, &["add", "docs/embedded.md"]);
     let snapshot = Snapshot::prepare(root, Kind::Index).unwrap();
-    assert!(!super::super::checks::skip_compilers(&snapshot).unwrap());
+    assert!(super::super::checks::skip_compilers(&snapshot).unwrap());
     run(root, &["rm", "-f", "docs/embedded.md"]);
+    let snapshot = Snapshot::prepare(root, Kind::Index).unwrap();
+    assert!(!super::super::checks::skip_compilers(&snapshot).unwrap());
+    run(root, &["reset", "--hard", "HEAD"]);
+    run(root, &["update-index", "--chmod=+x", "docs/embedded.md"]);
+    let snapshot = Snapshot::prepare(root, Kind::Index).unwrap();
+    assert!(!super::super::checks::skip_compilers(&snapshot).unwrap());
+    run(root, &["reset", "--hard", "HEAD"]);
+    run(root, &["mv", "docs/embedded.md", "docs/renamed.md"]);
     let snapshot = Snapshot::prepare(root, Kind::Index).unwrap();
     assert!(!super::super::checks::skip_compilers(&snapshot).unwrap());
 }

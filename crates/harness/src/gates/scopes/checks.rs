@@ -55,10 +55,47 @@ pub(super) fn skip_compilers(snapshot: &Snapshot) -> Result<bool> {
         if !docs_only(&snapshot.identity.kind, &snapshot.paths, &registry) {
             return Ok(false);
         }
-        // Retain compilation for embedded docs and other known Rust readers.
-        Ok(crate::native::affected::plan_files(root, &snapshot.paths)?
-            .packages()
-            .is_some_and(|packages| packages.is_empty()))
+        let raw = git_at(
+            &snapshot.source,
+            Some(&snapshot.source_index),
+            &[
+                "diff",
+                "--cached",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--no-renames",
+                "--raw",
+                "-z",
+                &snapshot.identity.source_head,
+                "--",
+            ],
+            None,
+        )?;
+        let fields: Vec<_> = raw.split(|byte| *byte == 0).collect();
+        if fields.last() != Some(&&b""[..]) || fields.len() != snapshot.paths.len() * 2 + 1 {
+            return Ok(false);
+        }
+        let mut paths = Vec::new();
+        for pair in fields[..fields.len() - 1].as_chunks::<2>().0 {
+            let Ok(header) = std::str::from_utf8(pair[0]) else {
+                return Ok(false);
+            };
+            let parts: Vec<_> = header.split_ascii_whitespace().collect();
+            if parts.len() != 5
+                || !matches!(
+                    (parts[0], parts[1], parts[4]),
+                    (":000000", "100644", "A") | (":100644", "100644", "M")
+                )
+            {
+                return Ok(false);
+            }
+            let Ok(path) = std::str::from_utf8(pair[1]) else {
+                return Ok(false);
+            };
+            paths.push(path.to_owned());
+        }
+        paths.sort();
+        Ok(paths == snapshot.paths)
     })
 }
 
@@ -110,7 +147,7 @@ pub(super) fn run(source: &Path, kind: Kind) -> Result<()> {
     checked("docs", &crate::gates::docs_check)?;
     if skip {
         println!(
-            "pre-commit: documentation-only index without Rust readers; compiler checks remain in CI"
+            "pre-commit: documentation-only additions and edits; compiler checks remain in CI"
         );
     } else {
         cargo("clippy native", &clippy, 600)?;
