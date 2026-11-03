@@ -117,3 +117,20 @@ fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
         );
     }
 }
+
+#[test]
+fn resource_bootstrap_builds_the_tool_image_before_using_it() {
+    let output = std::process::Command::new("make")
+        .current_dir(root())
+        .args(["-n", "-B", ".cache/resource-runner"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let plan = String::from_utf8(output.stdout).unwrap();
+    let build = plan
+        .find("-f docker/rust-tools.Dockerfile")
+        .expect("tool image build");
+    let compile = plan.find("rustc --edition=2024").expect("runner compile");
+    assert!(build < compile, "{plan}");
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("Circular"));
+}
