@@ -240,7 +240,7 @@ which `steps.mjs` runs; its settle rule is the shared `compare/capture/readiness
 
 Play camera links use `/#x=320.5&y=350.25&zoom=1.75`, on load and
 `hashchange`. Each finite value applies
-independently, with the normal world and zoom clamps; panning never rewrites
+independently, with unrestricted finite camera centres and the normal zoom limits; panning never rewrites
 the fragment. Optional `renderer=webgpu|webgl2|canvas` chooses the initial
 backend, retaining capability fallbacks; later renderer changes are ignored.
 `#minimap` exposes `data-camera-x`, `data-camera-y` and `data-zoom` together.

@@ -100,20 +100,7 @@ pub(super) fn frame(client: &mut Client, delta_ms: f64) {
     navigation_frame(&mut input);
     let destination = [input[13], input[14]];
     if destination.iter().all(|value| value.is_finite()) {
-        let destination = [
-            aoe_core::clamp_f64(
-                destination[0],
-                0.0,
-                f64::from(client.config.width_tiles) - 1.0,
-            ),
-            aoe_core::clamp_f64(
-                destination[1],
-                0.0,
-                f64::from(client.config.height_tiles) - 1.0,
-            ),
-        ];
         map::center_on_world(client, destination);
-        client.camera = client.camera.clamp_center(client.config);
         client.pointer = None;
     }
     let delta = [input[11], input[12]];

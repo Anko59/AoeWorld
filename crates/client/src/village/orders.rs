@@ -323,7 +323,6 @@ pub(in super::super) fn focus_town_center(client: &mut Client, select: bool) {
         .map(|b| (b.id, super::building_center(b)))
     {
         map::center_on_world(client, position);
-        client.camera = client.camera.clamp_center(client.config);
         if select {
             client.selected.building(id);
         }

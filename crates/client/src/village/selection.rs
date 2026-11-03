@@ -80,7 +80,6 @@ pub(in super::super) fn idle(client: &mut super::Client, military: bool) {
     client.drag = None;
     client.selected.units(vec![id]);
     crate::playground::game::map::center_on_world(client, position);
-    client.camera = client.camera.clamp_center(client.config);
     crate::playground::game::subscribe(client);
     let _ = client.canvas.focus();
 }
