@@ -44,6 +44,10 @@ impl IdleFinder {
         self.ids.len()
     }
 
+    pub fn contains(&self, id: EntityId) -> bool {
+        self.ids.contains(&id)
+    }
+
     pub fn next(&mut self) -> Option<EntityId> {
         let next = self
             .last

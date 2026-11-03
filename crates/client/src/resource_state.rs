@@ -39,9 +39,13 @@ impl ResourceStateCache {
 
     #[cfg(target_arch = "wasm32")]
     pub fn starting_nodes(&self) -> impl Iterator<Item = aoe_map::ResourceNode> + '_ {
+        self.starting_records().filter(|node| self.visible(node.id))
+    }
+    /// Includes exhausted records, so discovery and depletion share exact IDs.
+    #[cfg(target_arch = "wasm32")]
+    pub fn starting_records(&self) -> impl Iterator<Item = aoe_map::ResourceNode> + '_ {
         self.amounts
             .iter()
-            .filter(|amount| amount.remaining > 0)
             .filter_map(|amount| aoe_map::ResourceNode::starting_from_id(amount.id))
     }
     pub fn clear(&mut self) {

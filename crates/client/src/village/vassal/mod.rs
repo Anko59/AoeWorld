@@ -186,7 +186,11 @@ pub(super) fn present(client: &Client) {
             .garrison
             .iter()
             .find(|g| g.kind == UnitKind::Vassal && g.hp > 0);
-        points = domains(client, player, b.id);
+        // Strategic cards have their own cached, flat domain geometry. Do not
+        // rebuild every Castle's elevated sprite outline behind that view.
+        if !crate::playground::game::strategic::active(client) {
+            points = domains(client, player, b.id);
+        }
         label = if let Some(v) = vassal {
             describe(v.vassal)
         } else {

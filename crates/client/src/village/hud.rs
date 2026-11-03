@@ -271,6 +271,7 @@ pub(in super::super) fn update(client: &Client) {
     village_update(&values, map::feedback::connection_label(client), &details);
     super::building_panel::update(client);
     super::vassal::present(client);
+    crate::playground::game::strategic::update(client);
 }
 
 pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
@@ -330,7 +331,9 @@ pub(in super::super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsVal
 /// waiting for a drop-off) and every food job (forager, hunter, shepherd,
 /// fisherman, farmer). Idle, building, fighting and dead workers count for
 /// nothing, whatever they carry.
-pub(super) fn worker_resource(unit: &aoe_protocol::GameplayUnitState) -> Option<ResourceKind> {
+pub(in super::super) fn worker_resource(
+    unit: &aoe_protocol::GameplayUnitState,
+) -> Option<ResourceKind> {
     if unit.hp == 0
         || matches!(
             unit.task,
