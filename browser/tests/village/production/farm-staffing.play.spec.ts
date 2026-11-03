@@ -146,12 +146,16 @@ test("queued house orders include a selected farmer and idle villager", async ({
     .map((a) => a.id);
   const first = workers[0];
   if (first === undefined) throw new Error("First worker missing");
-  await selectWorkers(page, [first]);
+  await selectWorkers(page, workers);
+  await page.keyboard.press("Control+1");
+  await page.locator(`[data-unit-id="${first}"]`).click({ force: true });
+  await expect(page.locator("#selection")).toHaveAttribute("data-count", "1");
   await place(page, "farm", 250, 200);
   await expect(page.locator("#workers-food")).toHaveText("1", {
     timeout: 30_000,
   });
-  await selectWorkers(page, workers);
+  await page.keyboard.press("1");
+  await expect(page.locator("#selection")).toHaveAttribute("data-count", "2");
   await place(page, "house", 1050, 200);
   await expect(page.locator("#workers-food")).toHaveText("0", {
     timeout: 5000,
