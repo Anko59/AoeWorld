@@ -125,3 +125,12 @@ async fn kingdom_showcase_streams_valid_initial_and_active_encoded_frames() {
         "recording client receives the active twenty-worker Vassal report"
     );
 }
+
+#[tokio::test]
+async fn river_recording_rejects_uniform_world_without_replacing_it() {
+    let service = GameplayService::general_demo(Seed(7)).unwrap();
+    let before = service.world.read().await.canonical_hash();
+    assert!(service.prepare_general_river_demo().await.is_err());
+    assert_eq!(service.world.read().await.canonical_hash(), before);
+    assert!(service.map_content_hash.is_none());
+}

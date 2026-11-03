@@ -7,6 +7,8 @@ use aoe_core::{EntityId, PlayerId, Seed, TileCoord, TileRect, WorldConfig};
 mod imperial;
 #[path = "demo/kingdom.rs"]
 mod kingdom;
+#[path = "demo/river.rs"]
+mod river;
 
 impl GameWorld {
     /// Real-time art inspection encounter. Normal orders, weapon damage and

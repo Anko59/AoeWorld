@@ -7,11 +7,10 @@ It preserves General-only follower yielding and single-file bridge recovery.
 The combined baseline's independent one/four-worker replay agrees exactly on
 `575a774847525864239b77dcd34908aae5fe73b093b3c239e39061b06325ac11`.
 
-The verified increment contains squad simulation, movement recovery, bridge
-components, protocol capacity and their tests. Recording adapters, the recording
-constructor and basic HUD wording remain separate working-tree changes pending
-browser proof; descriptions of those below are preparation status, not delivered
-features of this increment.
+The verified squad/bridge increment is
+`c3fb64d27a9151c6992c3fcbcd5666fe965df568`. Its pre-commit hook passes on
+isolated index tree `84decd6cf00721d4ca3361ef0a63448252976cac`.
+This follow-up adds the local source recording setup and basic capacity wording.
 
 ## Reproduction scope
 
@@ -101,7 +100,7 @@ plan first; squads share one threat census. Independent squads catch up at their
 own speed and use army pace beyond a twelve-tile lead. This is bounded synthetic
 coverage, not 1000-player performance or dedicated hardware qualification.
 
-## Remaining work and commands
+## Final checks and follow-up evidence
 
 The cold full-army three-bridge case now passes: 101/101, last tick 22097,
 ideal 22200, maximum still 49, route work 780695, maximum per-tick route work
@@ -154,27 +153,74 @@ maximum-size wire regression failed red, then passed with production validation
 updated to 200; it still rejects 201. Logs: `protocol-capacity-red.log` and
 `protocol-capacity-green.log`. The basic HUD removes its obsolete
 100-soldier capacity label and describes ten squads. WASM-cap validation passes at 375226 compressed bytes (+23.9% versus
-302817, below the unchanged +25% block). Browser validation is pending. No per-sergeant configuration has been implemented.
+302817, below the unchanged +25% block). `make browser-format browser-check` passes; the real-source browser proof passes. No per-sergeant configuration has been implemented.
 
-The seven locked geographic inputs were downloaded and SHA-verified with
-`make geodata-bootstrap`. `make assets-import-de` imported native original art
-outside Git. `make map-generate-detailed` generated real-source Paris package
-`e0a0c70a58577d2731b926c29ec1eb988411d8eb2132c21fe814e2b7cd142b77`.
-The map request is 30 km, compression 30:1, 600 CE, seed 1. Source/art data and
-pixels remain ignored. A local recording constructor adds a General, 100 mixed
-soldiers and a completed bridge to the existing map. It samples clear spawn
-positions without replacing terrain. Its first simulation setup test passed;
-the woodland-aware spawn selection passes in the final 100-test simulation run. The source server starts at 127.0.0.1:8205 with the original imported pack;
-its immutable navigation bake maps 256 chunks (337818 retained bytes, 4168 heap
-bytes) off tick. This is a small-map observation, not a heap/RSS qualification.
-The recording setup finds the original river at (231,252) to (248,252), keeps its
-water pages and issues no march until browser input. The first browser attempt failed because the DE overlay was selected without
-its required trial base pack. It never connected and is not crossing evidence.
-The local base-pack preparation is in progress. No crossing video has yet been
-inspected.
+## Real-source recording
 
-Sergeant hero appearance and configuration UI follow a passing simulation
-slice. They are not implemented. The required close-camera real-source river
-video and first/middle/last-frame inspection remain outstanding. Preflight,
-perf-ci, full E2E, publication, owner servers and other checkouts are excluded
-by the explicit brief. No source-map performance claim is made.
+The seven locked base geographic inputs were downloaded and SHA-verified with
+`make geodata-bootstrap`. `make map-generate-detailed` generated the Paris map
+`e0a0c70a58577d2731b926c29ec1eb988411d8eb2132c21fe814e2b7cd142b77`:
+30 km, compression 30:1, 500 tiles per side, 600 CE, seed 1, 19 source locks.
+The setup samples this existing map, adds a completed bridge from (231,252) to
+(248,252), and spawns 100 mixed soldiers and their General on clear ground.
+It preserves source water pages and leaves the march to ordinary browser input.
+The recording uses WebGL2 software rendering, zoom 0.4, and a four-times clock
+(world tick rate 5 under the server's 20 Hz ticker). No owner server was touched.
+
+The first browser attempt selected the standalone DE overlay and failed the
+required base-art check. A second attempt exposed an off-screen camera choice.
+Neither is crossing evidence. The successful setup uses the trial base pack
+`54916fcb9c1e43c7a63aa486e3c47824b24ba94c887168ed210517273626bff6`
+and DE overlay
+`5a0a9945b34c693e4f979210f5b5803a5dbb5a29dfc6075db9be1b88ad676f49`.
+The extracted trial installer matches the documented 49083656-byte SHA-256
+`0f5df430b54a377a6cfd1e253169de2cf8a60a1751d6e8b72718d297bd45174c`.
+Source assets, generated packs and video pixels stay ignored and outside images.
+
+Frame inspection also caught a setup population error: removing a previous
+village's units without death cleanup retained their population. The strengthened
+fixture fails 206 versus 101, then passes with normal death cleanup. The refreshed
+recording shows population 101. Native setup test, six focused server tests,
+browser checks, static checks and WASM-cap pass. Logs are in `reports/squads/`:
+`recording-village-population-red.log`, `recording-population-green.log`,
+`server-final.log`, `recording-browser-check.log`, `recording-static.log`,
+`recording-final-wasm-cap.log`, and `source-final-video.log`.
+
+The 59-second clip is `reports/squads/general-river-crossing.webm`, SHA-256
+`40866da79ecca42468cadf41a4bc6ab8d57da6653cdff4def0dd105fd0dc7b57`.
+It is a continuous excerpt starting 43.4 seconds into the 102.4-second raw
+Playwright capture, removing startup. `reports/squads/river-video.json` retains
+settings and hashes. The extracted first (0 s), middle (29.48 s) and last
+(58.96 s) frames in `reports/squads/video-frames/` were inspected: the army files
+onto the deck, units reach the far bank, and the squads spread beyond it.
+The camera remains close enough to distinguish individual units. This is visual
+crossing evidence; no real-source before measurement or exact arrival-time claim
+is made. The clip was built from the squad commit plus the recording setup,
+before the separate first-sight recovery follow-up.
+
+Sergeant hero appearance and per-sergeant/same-type-group unit-mix controls
+remain unimplemented. The existing General's role sliders remain available.
+Preflight, perf-ci, full E2E and publication are excluded by the explicit brief.
+No 1000-player, dedicated-hardware or finished RTS performance claim is made.
+
+## Unfinished recovery follow-up at the budget stop
+
+Two additional boundary tests found failures in the committed squad code:
+
+| Case | Passed beyond enclosure | Longest still ticks |
+| --- | --- | --- |
+| Unreachable enemy visible at the first march order | 101/101 | 318 |
+| Enemy enclosed after a fighting target was acquired | 0/101 | 5821 |
+
+The terrain-changing fixture explicitly invalidates collision/navigation caches.
+`first-sight-invalidated-red.log` retains this baseline. An attempted heading
+fallback and failed-route retry only reached 90/101 in the second case and left
+312 still ticks in the first. It is not a verified fix. The two new draft tests
+and that attempt are saved in `reports/squads/unverified-first-sight-followup.patch`;
+they are excluded from the delivered tree at the owner's explicit budget stop.
+No existing accepted test or acceptance bound was removed or weakened.
+The source recording contains no enemy and predates this independent attempt.
+
+Remaining work includes these two recovery boundaries, sergeant hero art and
+per-General/per-sergeant/same-sergeant-group unit-mix configuration. The task
+is incomplete; the verified commits and video do not establish those features.

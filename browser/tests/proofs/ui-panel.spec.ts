@@ -4,6 +4,7 @@ import { test } from "../../server.js";
 import { forceWebGl } from "../rendering/backends.js";
 import { bundleProof } from "./bundle.js";
 import { castleProof } from "./castle.js";
+import { generalRiverProof, type RiverRecording } from "./general-river.js";
 import { generalProof } from "./general.js";
 import { generalAppearanceProof } from "./general-appearance.js";
 import { siegeProof } from "./siege.js";
@@ -19,6 +20,7 @@ test("local original panel proof with real selection and training", async ({
     (text) =>
       JSON.parse(text) as {
         phase: string;
+        river?: RiverRecording;
         url: string;
         renderer?: "webgpu" | "webgl2";
       },
@@ -39,6 +41,11 @@ test("local original panel proof with real selection and training", async ({
   }
   await page.setViewportSize({ width: 1280, height: 720 });
   if (config.renderer !== "webgpu") await forceWebGl(page);
+  if (config.phase === "general-river") {
+    if (!config.river) throw new Error("River recording setup missing");
+    await generalRiverProof(page, config.url, config.river);
+    return;
+  }
   if (config.phase === "general") {
     await generalProof(page, config.url, config.renderer ?? "canvas");
     return;

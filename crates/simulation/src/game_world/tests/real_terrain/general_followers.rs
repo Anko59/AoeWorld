@@ -60,3 +60,45 @@ fn hundred_followers_march_through_a_tree_patch() {
 fn followers_across_a_river_from_their_general_go_around_to_it() {
     march("general-far-bank", 16_000);
 }
+
+#[test]
+fn river_recording_setup_preserves_map_water_and_adopts_one_hundred() {
+    let mut f = build("general-river");
+    f.world
+        .initialize_village(PlayerId(0), TileCoord::new(10, 10))
+        .unwrap();
+    let (g, span, goal) = f.world.prepare_general_river_demo().unwrap();
+    assert_eq!(f.world.general_status(g).unwrap().army_size, 100);
+    assert_eq!(f.world.unit_count(), 101);
+    assert_eq!(
+        f.world.player_economy(PlayerId(0)).unwrap().population_used,
+        101
+    );
+    let Terrain::Map { generator, .. } = f.world.terrain() else {
+        panic!("the recording must keep its map");
+    };
+    for tile in span
+        .tiles()
+        .into_iter()
+        .filter(|&t| t != span.from && t != span.to)
+    {
+        assert_ne!(
+            generator
+                .tile_and_node_with_cancel(tile, &|| false)
+                .unwrap()
+                .unwrap()
+                .0
+                .water,
+            aoe_map::WaterKind::None
+        );
+    }
+    assert!(
+        goal.x != f.world.unit(g).unwrap().position.x
+            || goal.y != f.world.unit(g).unwrap().position.y
+    );
+    f.world.issue_move(g, goal).unwrap();
+    for _ in 0..5_000 {
+        f.world.advance();
+    }
+    assert_eq!(f.world.unit(g).unwrap().position, goal);
+}
