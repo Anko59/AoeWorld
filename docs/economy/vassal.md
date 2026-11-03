@@ -42,13 +42,14 @@ whose territory holds its centre, and must also lie wholly in the circle.
 
 **Adoption.** Each pass a Vassal scans its territory and adopts, in entity
 order, up to 100 of the owner's villagers: busy ones (gathering, farming,
-building) are taken over in place and keep working; idle ones are given work
-by the job pass. Villagers under a manual order (plain move, garrison order)
+building) are taken over in place when their existing job also belongs to
+this domain; idle ones are given work by the job pass. A worker crossing a
+neighbour's territory to serve its farm, resource or building keeps that job
+without being adopted there. It can be adopted when it enters the job's domain.
+Villagers under a manual order (plain move, garrison order)
 are left alone until idle again, and an accepted manual order releases a worker
 at once. Soldiers, foreign units and units outside the territory are never
-adopted. The old rule adopted only idle villagers, so a Castle built among
-busy workers showed a small "managed" count whatever the crowd; that was the
-reported "20 managed" confusion.
+adopted.
 
 **Training.** Training starts OFF. The selected occupied Castle exposes a
 training switch, four resource-mix sliders (0–100, at least one positive), and
@@ -182,6 +183,8 @@ For a repeatable local capture, `POST /maps/reset?scenario=vassal-territory`
 prepares two overlapping Castles, 40 busy farmers and two Vassals waiting
 outside (four-times clock). Garrison the first to watch it adopt every farmer,
 then the second to see the territory split with a double line.
+Fog is disabled, and inherited military opponents and Wolves are removed so
+the waiting farmers survive this management comparison.
 
 `POST /maps/reset?scenario=vassal-farming` prepares a resource-free plot with
 24 idle villagers, one Mill, a Vassal entering its Castle, and enough wood. The 20-times clock makes normal farm construction and reseeding

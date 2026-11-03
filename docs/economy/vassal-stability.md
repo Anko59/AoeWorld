@@ -177,3 +177,53 @@ The existing full-population checkpoint also passed unchanged:
 `assert_eq!(single, run(4))` before its current hash assertion. No replay pin
 was regenerated. The focused Vassal and economy benchmark selection passed
 87 tests, including both long runs and the severe-shortage dispatch regression.
+
+### Accepted: busy-job adoption across a territory boundary
+
+The next comparison uses committed pacing revision `aa24e196ec597` as its
+baseline. Adoption previously considered the worker's position without checking
+the site of its existing job. A neighbouring Vassal could claim a worker walking
+to another domain's Farm or foundation. The focused regression first failed
+with that neighbouring controller instead of an unclaimed worker.
+
+The candidate admits a busy gatherer only when its resource/Farm target belongs
+to this domain, and a builder only when the existing building belongs here.
+It leaves the actual job and carried resources intact. A worker can be adopted
+when it reaches its job's domain. The regression checks the whole ordinary trip
+for both Farm and construction work, then adoption after actual arrival.
+
+| River workload metric | Paced baseline | After adoption check |
+|---|---:|---:|
+| Reassignments / villager / minute | 1.1925 | 1.1500 |
+| Resource-kind / same-resource changes | 343 / 110 | 337 / 99 |
+| Construction starts | 24 | 24 |
+| Moving/planning share | 57.06% | 55.75% |
+| Delivered resources / minute | 369.0 | 380.5 |
+| Food / Wood delivered / minute | 127 / 242 | 132.5 / 248 |
+| Mean idle villagers | 0.0704 | 0.0723 |
+| Minute-boundary idle / disconnected targets | 0 / 0 | 0 / 0 |
+| Outside-territory targets, affected samples / peak | 4 / 3 | 0 / 0 |
+
+This is a modest additional 3.6% reduction (17 fewer job changes), with 3.1%
+more income. The independent one/four-worker river assertion passes again.
+Territory samples inspect managed targets; temporarily unclaimed crossing
+workers still count in all forty-worker churn, walking, income and idle
+measurements. Zero sampled territory violations is not proof for every map or
+for boundaries changing while a worker is already managed. The local raw
+candidate observation is `river-after-adoption.txt`.
+
+The single-domain observation is unchanged: 76 movement starts/minute,
+16 resource-kind changes/minute, 216 delivered resources/minute, and zero final
+idle. It is retained as `flat-after-adoption.txt`.
+
+All 89 focused Vassal/economy tests pass, including the full-population
+one/four-worker comparison and its unchanged checkpoint pin. The river test
+now also requires zero sampled outside-territory targets. No replay pin was
+regenerated for this change.
+
+The territory capture fixture now disables fog and removes the military
+opponents and Wolves inherited from its base scene. A new guard first failed
+because farmers died before activation; it requires all forty to survive
+three game minutes. The same fixture-only patch is applied to the capture
+baseline at `aa24e196e`, leaving its Vassal AI unchanged. Capture frames are
+illustrative; the prepared-river test remains the quantitative comparison.

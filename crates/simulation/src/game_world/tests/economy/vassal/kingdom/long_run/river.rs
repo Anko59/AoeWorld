@@ -268,4 +268,8 @@ fn ten_minute_river_vassals_measure_churn_and_match_one_and_four_workers() {
         one.unreachable_minutes.iter().all(|&n| n == 0),
         "no disconnected target may appear in a minute sample: {report}"
     );
+    assert!(
+        one.poaching_minutes.iter().all(|&n| n == 0),
+        "a controller must not adopt a job serving another domain: {report}"
+    );
 }
