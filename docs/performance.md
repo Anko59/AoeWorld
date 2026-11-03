@@ -258,6 +258,11 @@ authoritative unit maps, which remain ordered. This measured 372,720 gameplay
 gzip bytes (4,007 fewer; 5,801 bytes below the cap); diagnostics stayed at
 90,268. Identity tests cover every native pixel input and first-encounter IDs.
 
+Native frame validation returns its own error type, preserving the exact
+diagnostics and importer context without retaining PNG/JSON/I/O formatters in
+the browser. Gameplay gzip measured 372,720 → 368,482 bytes (4,238 fewer;
+10,039 bytes below the cap); diagnostics remained 90,268 bytes.
+
 The comparison logic has explicit `PASS`, `REGRESSION`, `UNBASELINED`, and
 `INCONCLUSIVE` verdicts. A missing baseline or sample cannot pass. WASM size is a
 trend, not a budget: only a jump of more than 25% (`perf::THRESHOLD_PERCENT`; 5%
