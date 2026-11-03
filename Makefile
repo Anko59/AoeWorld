@@ -34,7 +34,7 @@ COMPILE_CACHE_MOUNTS := $(call BIND_MOUNT,$(ROOT),/aoe-source) $(if $(filter-out
 CACHE_MOUNTS := $(if $(filter-out $(ROOT)/.cache/cargo,$(HARNESS_CARGO_CACHE)),$(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(ROOT)/.cache/cargo) $(call BIND_MOUNT,$(HARNESS_CARGO_CACHE),$(HARNESS_CARGO_CACHE))) $(if $(filter-out $(ROOT)/target,$(HARNESS_TARGET_CACHE)),$(call BIND_MOUNT,$(HARNESS_TARGET_CACHE),$(ROOT)/target))
 JOB_ENV := $(COMPILE_CACHE_ENV) -e $(call MOUNT_QUOTE,HARNESS_SCCACHE_DIR=$(HARNESS_SCCACHE_DIR)) -e $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) -e CARGO_INCREMENTAL -e CARGO_PROFILE_DEV_DEBUG -e CARGO_PROFILE_TEST_DEBUG -e GITHUB_ACTIONS -e CI -e AOE_DISK_FLOOR_GIB -e AOE_TEST_SELECT -e AOE_TEST_ALL -e AOE_LONG_JOB -e AOE_LONG_DIR
 RESOURCE_CAP := $(file <gates/container.args)
-# A snapshot's slot directory is the real repository's Git directory: mount it unless a mount covers it.
+# A snapshot's long-lock directory is the real repository's Git directory: mount it unless a mount covers it.
 LONG_DIR_COVERED := $(ROOT) $(ROOT)/% $(if $(GIT_EXTERNAL),$(GIT_EXTERNAL) $(GIT_EXTERNAL)/%)
 LONG_DIR_EXTERNAL := $(if $(AOE_LONG_DIR),$(filter-out $(LONG_DIR_COVERED),$(AOE_LONG_DIR)))
 LONG_DIR_MOUNT := $(if $(LONG_DIR_EXTERNAL),-v $(LONG_DIR_EXTERNAL):$(LONG_DIR_EXTERNAL))

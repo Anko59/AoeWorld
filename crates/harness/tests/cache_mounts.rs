@@ -387,7 +387,14 @@ fn cache_mount_options_keep_spaces_in_cargo_and_target_paths() {
     let target = workspace.path().join("target cache");
     fs::create_dir(&cargo).unwrap();
     fs::create_dir(&target).unwrap();
-    for recipe in ["ci-select", "slot-bootstrap", "test-harness-focused-steps"] {
+    fs::create_dir_all(target.join("debug")).unwrap();
+    let binary = target.join("debug/aoe-harness");
+    fs::write(&binary, "fixture binary").unwrap();
+    fs::File::open(binary)
+        .unwrap()
+        .set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(86400))
+        .unwrap();
+    for recipe in ["ci-select", "job-bootstrap", "test-harness-focused-steps"] {
         let result = make(&workspace)
             .arg(recipe)
             .arg(format!("HARNESS_CARGO_CACHE={}", cargo.display()))
@@ -415,4 +422,47 @@ fn cache_mount_options_keep_spaces_in_cargo_and_target_paths() {
             "{recipe}: {output}"
         );
     }
+}
+
+#[test]
+fn bootstrap_remembers_a_successful_noop_cargo_build_for_newer_test_inputs() {
+    use std::{
+        os::unix::fs::PermissionsExt,
+        time::{Duration, SystemTime},
+    };
+    let workspace = workspace();
+    let root = workspace.path();
+    let binary = root.join("target/debug/aoe-harness");
+    fs::create_dir_all(binary.parent().unwrap()).unwrap();
+    fs::write(&binary, "already built command").unwrap();
+    fs::File::open(&binary)
+        .unwrap()
+        .set_modified(SystemTime::now() - Duration::from_secs(86400))
+        .unwrap();
+    fs::create_dir(root.join("bin")).unwrap();
+    let docker = root.join("bin/docker");
+    fs::write(&docker, "#!/bin/sh\nprintf 'build\\n' >> \"$BOOT_LOG\"\n").unwrap();
+    fs::set_permissions(&docker, fs::Permissions::from_mode(0o755)).unwrap();
+    let log = root.join("bootstrap.log");
+    for _ in 0..2 {
+        let result = make(&workspace)
+            .arg("job-bootstrap")
+            .env("BOOT_LOG", &log)
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    root.join("bin").display(),
+                    std::env::var("PATH").unwrap()
+                ),
+            )
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+    assert_eq!(fs::read_to_string(log).unwrap().lines().count(), 1);
 }

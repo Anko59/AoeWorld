@@ -203,7 +203,7 @@ pub(crate) fn main() {
     let matches = Args::command().get_matches();
     let gate = matches.subcommand_name().unwrap_or_default().to_owned();
     let args = Args::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
-    // The one read of the heavy-slot variables: every gate, hook and ship run below takes this.
+    // The one read of the long-job variables: every gate, hook and ship run below takes this.
     let slots = jobs::JobEnv::process();
     if let Err(error) = dispatch::run(args.command, &gate, &slots) {
         eprintln!("error: {error}");

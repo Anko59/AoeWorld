@@ -6,8 +6,10 @@ JOB_RUN = env $(call MOUNT_QUOTE,HARNESS_CARGO_CACHE=$(HARNESS_CARGO_CACHE)) $(c
 .PHONY: job-bootstrap perf-wasm-cap
 job-bootstrap: $(JOB_TARGET)
 
-$(JOB_TARGET): $(JOB_SOURCES)
+$(JOB_TARGET): .EXTRA_PREREQS :=
+$(JOB_TARGET): $(JOB_SOURCES) | resource-bootstrap cache-mount-points
 	@$(DOCKER_RUN) cargo build --locked -p aoe-harness
+	@touch $(call MOUNT_QUOTE,$(JOB_BINARY))
 
 export AOE_DISK_FLOOR_GIB
 .PHONY: disk-precheck

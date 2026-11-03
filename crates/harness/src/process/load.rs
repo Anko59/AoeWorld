@@ -32,7 +32,7 @@ pub(crate) fn read() -> Option<Load> {
 
 /// The cores this process may run on: its CPU affinity list, which `taskset` narrows. It is not
 /// `available_parallelism`, which also applies a container's CPU quota (`--cpus`): a container
-/// started under a heavy slot keeps the machine's count, not its slot's share.
+/// uses the host's affinity count when describing machine load.
 pub(crate) fn cores() -> usize {
     fs::read_to_string("/proc/self/status")
         .ok()

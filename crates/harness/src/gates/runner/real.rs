@@ -126,7 +126,7 @@ impl Runtime for Local<'_> {
             root,
             gate,
             deadline,
-            self.slots,
+            (root.path(), self.slots),
         )
     }
 }
@@ -229,8 +229,9 @@ fn make_fixed(
     root: &ExecutionRoot,
     gate: &GateId,
     deadline: Duration,
-    slots: &JobEnv,
+    admission: (&Path, &JobEnv),
 ) -> Receipt {
+    let (admission_root, slots) = admission;
     let cargo = match crate::process::cargo_cache::home(source) {
         Ok(path) => path,
         Err(error) => {
@@ -265,22 +266,27 @@ fn make_fixed(
             }),
         };
     };
-    // A heavy gate queues for its slot before its deadline clock starts. The slot directory is the
-    // real checkout's, not the snapshot's: a snapshot's own Git directory is private to this run.
-    let slot =
-        match crate::jobs::hold_snapshot(root.path(), source, gate.as_str(), slots, cancellation) {
-            Ok(slot) => slot,
-            Err(error) => {
-                return Receipt {
-                    exit: Exit::StartError,
-                    reason: error.to_string(),
-                    log: None,
-                    triage: Some(triage::CommandObservation::NotStarted {
-                        reason: triage::Precondition::PreconditionUnavailable,
-                    }),
-                };
-            }
-        };
+    // Long-job admission uses the source repository's shared lock, even for a snapshot.
+    // A refusal is a precondition result; no command deadline or retry is started.
+    let slot = match crate::jobs::hold_snapshot(
+        admission_root,
+        source,
+        gate.as_str(),
+        slots,
+        cancellation,
+    ) {
+        Ok(slot) => slot,
+        Err(error) => {
+            return Receipt {
+                exit: Exit::StartError,
+                reason: error.to_string(),
+                log: None,
+                triage: Some(triage::CommandObservation::NotStarted {
+                    reason: triage::Precondition::PreconditionUnavailable,
+                }),
+            };
+        }
+    };
     let slot_env = slot.env();
     let mut environment = vec![
         ("HARNESS_CARGO_CACHE", cargo),
@@ -384,7 +390,9 @@ pub(super) fn fixture_make(
         root,
         gate,
         deadline,
-        &JobEnv::default(),
+        // The fixture can deliberately use a missing execution cwd. Classify
+        // against its valid policy root so capture observes the actual start error.
+        (source, &JobEnv::default()),
     )
 }
 

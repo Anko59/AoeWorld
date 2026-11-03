@@ -37,6 +37,9 @@ fn holder(command: &str) -> String {
 
 #[test]
 fn long_contention_refuses_immediately_with_the_complete_holder() {
+    if isolated("long_contention_refuses_immediately_with_the_complete_holder") {
+        return;
+    }
     let _serial = SERIAL.lock().unwrap();
     let temp = tempdir();
     let path = temp.path().join("long.lock");
@@ -64,6 +67,9 @@ fn long_contention_refuses_immediately_with_the_complete_holder() {
 
 #[test]
 fn nested_jobs_accept_only_a_live_owners_proof() {
+    if isolated("nested_jobs_accept_only_a_live_owners_proof") {
+        return;
+    }
     let _serial = SERIAL.lock().unwrap();
     let temp = tempdir();
     let path = temp.path().join("long.lock");
@@ -132,6 +138,9 @@ fn child(path: &Path, descendant: bool) -> (std::process::Child, u32) {
 
 #[test]
 fn kernel_releases_a_killed_holder_without_a_stale_ticket() {
+    if isolated("kernel_releases_a_killed_holder_without_a_stale_ticket") {
+        return;
+    }
     let _serial = SERIAL.lock().unwrap();
     let temp = tempdir();
     let path = temp.path().join("long.lock");
@@ -145,6 +154,9 @@ fn kernel_releases_a_killed_holder_without_a_stale_ticket() {
 
 #[test]
 fn an_exec_child_retains_the_kernel_lock_after_its_parent_is_killed() {
+    if isolated("an_exec_child_retains_the_kernel_lock_after_its_parent_is_killed") {
+        return;
+    }
     let _serial = SERIAL.lock().unwrap();
     let temp = tempdir();
     let path = temp.path().join("long.lock");
@@ -169,6 +181,9 @@ fn an_exec_child_retains_the_kernel_lock_after_its_parent_is_killed() {
 
 #[test]
 fn intended_exec_children_retain_the_lock_after_normal_guard_drop() {
+    if isolated("intended_exec_children_retain_the_lock_after_normal_guard_drop") {
+        return;
+    }
     let _serial = SERIAL.lock().unwrap();
     let temp = tempdir();
     let path = temp.path().join("long.lock");
@@ -191,6 +206,9 @@ fn intended_exec_children_retain_the_lock_after_normal_guard_drop() {
 
 #[test]
 fn unrelated_exec_children_do_not_retain_another_scopes_lock() {
+    if isolated("unrelated_exec_children_do_not_retain_another_scopes_lock") {
+        return;
+    }
     let _serial = SERIAL.lock().unwrap();
     let temp = tempdir();
     let path = temp.path().join("long.lock");
@@ -204,4 +222,25 @@ fn unrelated_exec_children_do_not_retain_another_scopes_lock() {
         next.is_ok(),
         "an unrelated exec must not acquire an inheritable descriptor"
     );
+}
+
+// Fork briefly inherits every descriptor before exec closes unrelated ones. Keep
+// lifetime assertions in their own process, outside other libtest threads' forks.
+fn isolated(name: &str) -> bool {
+    if std::env::var("AOE_TEST_LOCK_CASE").as_deref() == Ok(name) {
+        return false;
+    }
+    let exact = format!("jobs::tests::lock::{name}");
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", &exact, "--nocapture"])
+        .env("AOE_TEST_LOCK_CASE", name)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    true
 }

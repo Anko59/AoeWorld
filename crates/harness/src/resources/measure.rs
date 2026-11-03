@@ -64,6 +64,7 @@ struct Job {
     started: Instant,
     root: PathBuf,
     target: String,
+    cache: Option<PathBuf>,
 }
 
 fn context(output: &mut File) -> Result<()> {
@@ -134,7 +135,17 @@ pub(super) fn run(args: Vec<String>) -> Result<()> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--output" => output = args.next().map(PathBuf::from),
-            "--job" => requested.push(parse_job(args.next().ok_or("missing --job value")?)?),
+            "--job" => {
+                let (root, target) = parse_job(args.next().ok_or("missing --job value")?)?;
+                requested.push((root, target, None));
+            }
+            "--target-cache" => {
+                let cache = args.next().filter(|value| !value.is_empty());
+                let (Some(job), Some(cache)) = (requested.last_mut(), cache) else {
+                    return Err("cache needs a preceding job and a path".into());
+                };
+                job.2 = Some(PathBuf::from(cache));
+            }
             _ => return Err(format!("unknown measurement argument: {arg}").into()),
         }
     }
@@ -148,12 +159,16 @@ pub(super) fn run(args: Vec<String>) -> Result<()> {
     let mut observations = File::create(directory.join("memory.tsv"))?;
     writeln!(observations, "seconds\tMemAvailable_kib")?;
     let mut results = File::create(directory.join("jobs.tsv"))?;
-    writeln!(results, "worktree\ttarget\tseconds\texit")?;
+    writeln!(results, "worktree\ttarget\tseconds\texit\ttarget_cache")?;
     let mut jobs = Vec::new();
-    for (index, (root, target)) in requested.into_iter().enumerate() {
+    for (index, (root, target, cache)) in requested.into_iter().enumerate() {
         let log = File::create(directory.join(format!("job-{index}-{target}.log")))?;
         let started = Instant::now();
-        let child = Command::new("make")
+        let mut command = Command::new("make");
+        if let Some(cache) = &cache {
+            command.env("HARNESS_TARGET_CACHE", cache);
+        }
+        let child = command
             .arg(&target)
             .current_dir(&root)
             .stdout(Stdio::from(log.try_clone()?))
@@ -164,6 +179,7 @@ pub(super) fn run(args: Vec<String>) -> Result<()> {
             started,
             root,
             target,
+            cache,
         });
     }
     let begun = Instant::now();
@@ -187,11 +203,15 @@ pub(super) fn run(args: Vec<String>) -> Result<()> {
                 failed |= !status.success();
                 writeln!(
                     results,
-                    "{}\t{}\t{:.3}\t{}",
+                    "{}\t{}\t{:.3}\t{}\t{}",
                     job.root.display(),
                     job.target,
                     job.started.elapsed().as_secs_f64(),
-                    status.code().unwrap_or(128)
+                    status.code().unwrap_or(128),
+                    job.cache
+                        .as_deref()
+                        .unwrap_or_else(|| Path::new("default"))
+                        .display()
                 )?;
             } else {
                 index += 1;

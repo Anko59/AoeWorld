@@ -89,7 +89,7 @@ baselines and the 5% allowance stay unchanged.
 `make perf-late-game-instructions` repeats only its Callgrind kernel for focused
 iteration. `make perf-late-game AOE_LATE_GAME_ARGS='--check --instructions'`
 adds focused simulation/server/harness checks and the complete microbenchmarks
-under one inherited heavy slot. No full native suite is run by that option.
+under one inherited long-job lock. No full native suite is run by that option.
 
 Raw local before/after evidence lives under ignored `.cache/`; ordinary gate
 reports live under `reports/perf/`. The generated workload does not qualify

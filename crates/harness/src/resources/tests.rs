@@ -55,3 +55,19 @@ fn measurement_jobs_are_single_make_targets_in_explicit_worktrees() {
         assert!(parse_job(job).is_err(), "{job}");
     }
 }
+
+#[test]
+fn measurement_cache_requires_a_preceding_job_and_explicit_path() {
+    for args in [
+        vec!["--target-cache", "/tmp/cache"],
+        vec!["--job", "/tmp=lint", "--target-cache"],
+    ] {
+        let error = super::measure::run(args.into_iter().map(String::from).collect()).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("cache needs a preceding job and a path"),
+            "{error}"
+        );
+    }
+}
