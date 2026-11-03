@@ -42,8 +42,50 @@ substituting Feudal foundations for Castle buildings. Observed building updates
 invalidate the existing scene cache; an age change adds no per-frame building
 scan and never substitutes a live enemy owner's age for remembered observations.
 
-This inventory and implementation are not runtime qualification. Pack
-regeneration, runtime tests, close in-game screenshots and the requested age-up
-video remain separate qualification. No imported pixels or private packs belong
-in Git. The opt-in `imperial-art` panel proof drives normal research and building
-commands against a local licensed pack and saves private screenshots.
+Native pixel chunks stream on visible demand. Startup resolves building animation
+cells through a manifest index rather than repeatedly searching the entire unit
+catalog. Future animation poses wait until a populated gameplay scene has been
+presented before prefetching; cold requests therefore serve visible pixels first.
+Metadata remains eager and bounded by the pack validator.
+
+The opt-in `imperial-art` panel proof drives normal research, movement and building
+commands against a local licensed pack and saves private screenshots and video.
+`imperial-load-compare` alternates three fresh browser contexts per pack selection,
+with identical camera and world. Its first-landscape measurement reads actual
+world pixels and includes screenshot latency; a presentation counter alone can
+describe an earlier empty frame. Optional `imperial-load-de-profile` also saves a
+Chromium CPU profile. These local proofs are separate from dedicated hardware or
+finished RTS performance qualification. No imported pixels or private packs
+belong in Git.
+
+## Local art check, 2026-11-03
+
+The regenerated trial, DE world and DE actor packs passed `make assets-verify`.
+The focused asset tests passed 132 tests; `make test-wasm` passed 668 tests.
+The native-pack browser proof completed ordinary Imperial research and inspected
+all ten Imperial unit tiers and their DE portraits. Town Center, Market and
+University changed between Ages III and IV; House, Barracks and Castle retained
+their installed Western silhouettes. Siege Workshop upgrades occupy a separate
+command row from training and have a focused click regression test.
+
+The private `.cache/showcase/imperial-art.webm` is a 28-second cut of the actual
+browser recording. First, middle and last frames show the Castle Age Town Center,
+native research icons and the Imperial Onager respectively. Its building pairs,
+menus and ten unit closeups were compared with the inspected proof stills.
+
+Three alternating fresh Chromium contexts per selection measured first visible
+landscape at 19.91 seconds median without DE (12.70–21.59) and 15.15 seconds with
+DE (14.27–17.82). These software-WebGPU upper bounds include screenshot latency,
+share server and OS caches, and are not a controlled performance benchmark.
+Only 33 native chunks, about 34 MB of the 1.63 GB payload, were fetched in each
+DE startup capture. Native metadata remains eager.
+
+Headed Firefox 159 rendered the Imperial village using WebGPU on the NVIDIA
+offload path. `nvidia-smi` identified its WebDriver process on the GTX 1660 Ti
+with 495 MiB allocated; the WebGL privacy bucket names a different card family.
+Captured console logs contained the core/default-limits adapter message and no
+GPU errors. The native screenshot used about 274 MB of GPU textures and 4.6 MB
+of buffers. This is a local rendering observation, not hardware qualification.
+The earlier owner's black-world failure remains unconfirmed. A separate white
+ground failure in fog-disabled diagnostic worlds was reproduced and fixed by
+requesting native terrain for their chunk-free geometry.

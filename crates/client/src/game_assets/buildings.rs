@@ -17,6 +17,10 @@ pub(super) fn select(
     if manifest.buildings.len() > aoe_assets::catalog::MAX_COMPOSITIONS {
         return Err(error("too many building recipes"));
     }
+    let mut present = vec![false; manifest.frames.len()];
+    for &index in selected.iter() {
+        present[index] = true;
+    }
     for (slot, building) in manifest.buildings.iter().enumerate() {
         if manifest.buildings[..slot]
             .iter()
@@ -45,11 +49,12 @@ pub(super) fn select(
             let frames = source_frames(manifest, &source, count)
                 .ok_or_else(|| error("missing DAT foundation terrain"))?;
             for index in frames {
-                if !selected.contains(&index) {
+                if !present[index] {
                     if selected.len() == MAX_SELECTED_FRAMES {
                         return Err(error("too many foundation frames"));
                     }
                     selected.push(index);
+                    present[index] = true;
                     domains.push(AtlasDomain::Terrain);
                 }
             }
@@ -115,11 +120,12 @@ pub(super) fn select(
                 }
                 let step = 1;
                 for index in frames.into_iter().step_by(step) {
-                    if !selected.contains(&index) {
+                    if !present[index] {
                         if selected.len() == MAX_SELECTED_FRAMES {
                             return Err(error("too many selected building frames"));
                         }
                         selected.push(index);
+                        present[index] = true;
                         domains.push(
                             if (605..=610).contains(&building.unit_id)
                                 || aoe_assets::catalog::ENVIRONMENT_UNIT_IDS
@@ -143,7 +149,7 @@ fn parts(
     unit_id: i32,
     parts: &[BuildingPart],
     manifest: &Manifest,
-    selected: &[usize],
+    slots: &[Option<usize>],
     records: &[GameFrame],
 ) -> Vec<aoe_rendering::BuildingPart> {
     let scale = if (605..=610).contains(&unit_id) {
@@ -162,7 +168,7 @@ fn parts(
             continue;
         };
         let source = &manifest.frames[record].source;
-        let Some(slot) = selected.iter().position(|&i| i == record) else {
+        let Some(slot) = slots[record] else {
             // An absent trial resource is explicit: no partial assemblies and
             // no unrelated sprite substituted for the missing roof or camp.
             return Vec::new();
@@ -185,17 +191,11 @@ fn parts(
             frame: scaled(records[slot]),
             angles,
             animation: if u32::from(part.frames) * u32::from(angles) > 1 {
-                (0..u32::from(part.frames) * u32::from(angles))
+                source_frames(manifest, source, u32::from(part.frames) * u32::from(angles))
+                    .unwrap_or_default()
+                    .into_iter()
                     .step_by(step)
-                    .filter_map(|number| {
-                        selected
-                            .iter()
-                            .position(|&i| {
-                                manifest.frames[i].source == *source
-                                    && manifest.frames[i].frame == number
-                            })
-                            .map(|slot| scaled(records[slot]))
-                    })
+                    .filter_map(|index| slots[index].map(|slot| scaled(records[slot])))
                     .collect()
             } else {
                 Vec::new()
@@ -265,6 +265,12 @@ pub(super) fn resolve(
     selected: &[usize],
     records: &[GameFrame],
 ) -> Vec<aoe_rendering::BuildingArt> {
+    // Native actor catalogs can precede building cells by over 100k entries.
+    // Index once; animation cells must not rescan that prefix for each phase.
+    let mut slots = vec![None; manifest.frames.len()];
+    for (slot, &record) in selected.iter().enumerate() {
+        slots[record].get_or_insert(slot);
+    }
     manifest
         .buildings
         .iter()
@@ -276,13 +282,13 @@ pub(super) fn resolve(
             } else {
                 material(b)
             },
-            parts: parts(b.unit_id, &b.parts, manifest, selected, records),
-            construction: parts(b.unit_id, &b.construction, manifest, selected, records),
+            parts: parts(b.unit_id, &b.parts, manifest, &slots, records),
+            construction: parts(b.unit_id, &b.construction, manifest, &slots, records),
             states: b
                 .states
                 .iter()
                 .filter(|(role, _)| runtime_state(*role))
-                .map(|(role, p)| (*role, parts(b.unit_id, p, manifest, selected, records)))
+                .map(|(role, p)| (*role, parts(b.unit_id, p, manifest, &slots, records)))
                 .collect(),
             damage: b
                 .damage
@@ -290,7 +296,7 @@ pub(super) fn resolve(
                 .map(|d| aoe_rendering::BuildingDamage {
                     damage_percent: d.damage_percent as u8,
                     apply_mode: d.apply_mode,
-                    parts: parts(-1, &d.parts, manifest, selected, records),
+                    parts: parts(-1, &d.parts, manifest, &slots, records),
                 })
                 .collect(),
         })

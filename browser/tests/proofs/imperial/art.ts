@@ -10,7 +10,15 @@ export async function imperialArtProof(
   url: string,
   startup: boolean,
 ) {
+  page.setDefaultTimeout(15_000);
   const recordingStarted = Date.now();
+  const diagnostics: { level: string; text: string }[] = [];
+  page.on("console", (message) =>
+    diagnostics.push({ level: message.type(), text: message.text() }),
+  );
+  page.on("pageerror", (error) =>
+    diagnostics.push({ level: "pageerror", text: error.message }),
+  );
   expect(
     (
       await page.request.post(`${url}maps/reset?scenario=imperial-army`)
@@ -86,19 +94,81 @@ export async function imperialArtProof(
     if (!framed) throw new Error(`${kind} left the captured scene`);
     return framed;
   };
-  const select = async (kind: string) => {
-    const actor = await frame(kind, 0.5);
-    await page.mouse.click(actor.x, actor.y);
+  const pick = async (actor: Actor, kind: string) => {
+    for (const [dx, dy] of [
+      [0, 0],
+      [0, -24],
+      [0, -48],
+      [-24, -24],
+      [24, -24],
+      [0, -72],
+      [-48, 0],
+      [48, 0],
+    ] as const) {
+      await page.mouse.click(actor.x + dx, actor.y + dy);
+      await freshHud(page);
+      if ((await page.locator("#selection").getAttribute("data-kind")) === kind)
+        return;
+    }
     await expect(page.locator("#selection")).toHaveAttribute("data-kind", kind);
   };
+  const select = async (kind: string) => {
+    await pick(await frame(kind, 0.5), kind);
+  };
+  const move = async (actor: Actor, x: number, y: number) => {
+    const camera = await page.locator("#minimap").evaluate((el) => ({
+      x: Number(el.dataset["cameraX"]),
+      y: Number(el.dataset["cameraY"]),
+      zoom: Number(el.dataset["zoom"]),
+    }));
+    const sx = 640 + (x - camera.x - (y - camera.y)) * 64 * camera.zoom;
+    const sy = 360 + (x - camera.x + (y - camera.y)) * 32 * camera.zoom;
+    await page.mouse.click(sx, sy, { button: "right" });
+    await expect
+      .poll(async () => {
+        const current = (await actors()).find((a) => a.id === actor.id);
+        return current ? Math.hypot(current.x - sx, current.y - sy) : Infinity;
+      })
+      .toBeLessThan(12);
+  };
   const capture = async (name: string, kind: string, zoom = 2) => {
+    let origin: { x: number; y: number } | undefined;
+    if (
+      [
+        "TwoHandedSwordsman",
+        "Champion",
+        "Halberdier",
+        "Arbalester",
+        "Cavalier",
+        "Paladin",
+        "LightCavalry",
+        "Hussar",
+        "CappedRam",
+        "SiegeRam",
+        "Onager",
+      ].includes(kind)
+    ) {
+      const actor = await frame(kind, 0.35);
+      const camera = await page.locator("#minimap").evaluate((el) => ({
+        x: Number(el.dataset["cameraX"]),
+        y: Number(el.dataset["cameraY"]),
+      }));
+      const dx = (actor.x - 640) / (64 * 0.35),
+        dy = (actor.y - 360) / (32 * 0.35);
+      origin = { x: camera.x + (dx + dy) / 2, y: camera.y + (dy - dx) / 2 };
+      await pick(actor, kind);
+      await move(actor, 110.5, 126.5);
+    }
     const actor = await frame(kind, zoom);
-    await page.mouse.click(actor.x, actor.y);
-    await expect(page.locator("#selection")).toHaveAttribute("data-kind", kind);
+    await pick(actor, kind);
     await expect(
       page.locator("#selection-portrait .original-icon"),
     ).toBeVisible();
     await expect(scene).toHaveAttribute("data-chunks-failed", "0");
+    await expect(page.locator("#playground")).toHaveAttribute(
+      "data-renderer",
+      "webgpu",
+    );
     // Hold the inspected native animation in the recording as well as the still.
     await page.waitForTimeout(1200);
     await page.screenshot({ path: `../.cache/imperial-art/shots/${name}.png` });
@@ -118,6 +188,11 @@ export async function imperialArtProof(
         2,
       ),
     );
+    if (origin) {
+      const actor = await frame(kind, 0.35);
+      await pick(actor, kind);
+      await move(actor, origin.x, origin.y);
+    }
   };
   await capture("unit-pack-startup", "Knight");
   if (startup) return;
@@ -154,7 +229,15 @@ export async function imperialArtProof(
   await build("Castle", "castle", true);
   if (!(await actors()).some((a) => a.owned && a.kind === "House"))
     await build("House", "house", false);
-  for (const kind of ["House", "Barracks", "Castle", "TownCenter"])
+  await build("Market", "market", false);
+  for (const kind of [
+    "House",
+    "Barracks",
+    "Castle",
+    "TownCenter",
+    "Market",
+    "University",
+  ])
     await capture(`age3-${kind}`, kind, 0.8);
   await select("Castle");
   await page.locator("#train-vassal").click();
@@ -164,7 +247,14 @@ export async function imperialArtProof(
   await expect(page.locator("#age")).toContainText("Imperial Age", {
     timeout: 25_000,
   });
-  for (const kind of ["House", "Barracks", "Castle", "TownCenter"])
+  for (const kind of [
+    "House",
+    "Barracks",
+    "Castle",
+    "TownCenter",
+    "Market",
+    "University",
+  ])
     await capture(`age4-${kind}`, kind, 0.8);
   const research = async (
     site: string,
@@ -172,9 +262,16 @@ export async function imperialArtProof(
     resultingUnit: string,
   ) => {
     await select(site);
+    await page.waitForTimeout(1200);
     await page.screenshot({
       path: `../.cache/imperial-art/shots/menu-${tech}.png`,
     });
+    await writeFile(
+      `../.cache/imperial-art/shots/menu-${tech}.json`,
+      JSON.stringify({
+        recordingSeconds: (Date.now() - recordingStarted) / 1000,
+      }),
+    );
     await page.locator(`#research-${tech}`).click();
     await expect
       .poll(
@@ -202,4 +299,15 @@ export async function imperialArtProof(
     await research(site, tech, kind);
   }
   for (const kind of ["Vassal", "General"]) await capture(kind, kind);
+  await writeFile(
+    "../.cache/imperial-art/art-console.json",
+    JSON.stringify(diagnostics, null, 2),
+  );
+  expect(
+    diagnostics.filter(
+      (entry) =>
+        entry.level === "pageerror" ||
+        /WebGPU (uncaptured error|device lost|produced no)/.test(entry.text),
+    ),
+  ).toEqual([]);
 }

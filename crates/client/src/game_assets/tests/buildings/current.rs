@@ -1,6 +1,41 @@
 use super::*;
 
 #[wasm_bindgen_test]
+fn building_animation_keeps_frame_order_and_first_selected_alias() {
+    let source = "synthetic-building";
+    let mut value = pack_fixture([(source.into(), 3, false), ("unrelated".into(), 1, false)]);
+    let part = serde_json::json!({"graphic_id":1,"slp_id":1,"source":source,
+        "available":true,"frames":3,"angles":1,"primary":true,"frame_rate":0.1,
+        "replay_delay":0.0,"offset":[0,0],"misplacement":[0.0,0.0],"layer":20});
+    value["buildings"] = serde_json::json!([{"unit_id":70,"footprint":[2.0,2.0],
+        "foundation_terrain":-1,"foundation_slp":null,"foundation_size":[0,0],
+        "parts":[part],"construction":[],"damage":[],"states":[]}]);
+    compile(&mut value);
+    let mut manifest: Manifest = serde_json::from_value(value).unwrap();
+    manifest.buildings = recipes::decode(&manifest.building_data, &manifest.frames).unwrap();
+    let selected = [2, 3, 0, 1, 0];
+    let records: Vec<_> = selected
+        .iter()
+        .enumerate()
+        .map(|(slot, &index)| {
+            let mut frame = placement::record(&manifest.frames[index], Placement::default());
+            frame.anchor[0] = slot as f32;
+            frame
+        })
+        .collect();
+    let art = buildings::resolve(&manifest, &selected, &records);
+    assert_eq!(art[0].parts[0].frame.anchor[0], 2.0);
+    assert_eq!(
+        art[0].parts[0]
+            .animation
+            .iter()
+            .map(|f| f.anchor[0])
+            .collect::<Vec<_>>(),
+        [2.0, 3.0, 0.0]
+    );
+}
+
+#[wasm_bindgen_test]
 async fn converted_categories_do_not_guess_sources_from_superseded_startup_lists() {
     let value = pack_fixture(
         REQUIRED_RENDER_SOURCES
