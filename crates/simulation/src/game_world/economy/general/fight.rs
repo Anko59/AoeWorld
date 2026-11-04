@@ -64,8 +64,13 @@ impl GameWorld {
                         )
                     })
                     .map(|v| v.id);
-                if let Some(to) = if siege { building.or(first) } else { building } {
-                    let _ = self.issue_attack(u.player, v.id, to);
+                if let Some(to) = if siege { building.or(first) } else { building }
+                    && matches!(
+                        self.issue_attack(u.player, v.id, to),
+                        Err(crate::EconomyError::NoAttackPosition)
+                    )
+                {
+                    self.resume_general_fighter(u.id, v.id, changed, work);
                 }
             } else {
                 continue;
@@ -169,7 +174,12 @@ impl GameWorld {
             .count()
             * 2
             > soldiers.len();
-        if kept.is_some() && !idle {
+        // A retained group's route can fail after terrain closes. A surviving
+        // moving/planning minority must not conceal that terminal failure.
+        let failed = soldiers
+            .iter()
+            .any(|v| self.movement_failure(v.id).is_some());
+        if kept.is_some() && !idle && !failed {
             return;
         }
         // A visible enemy's centre can be inside an unreachable enclosure.

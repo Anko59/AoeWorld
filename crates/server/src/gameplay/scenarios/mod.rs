@@ -36,6 +36,19 @@ impl GameplayService {
         Ok(service)
     }
 
+    pub fn movement_lane_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::movement_lane_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
+
+    pub fn movement_recovery_demo(
+        seed: Seed,
+        acquired: bool,
+    ) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::movement_recovery_demo(seed, acquired)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
+
     pub fn general_appearance_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::general_appearance_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
@@ -79,6 +92,10 @@ impl GameplayService {
     }
     pub fn vassal_kingdom_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::vassal_kingdom_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
+    pub fn vassal_stability_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::vassal_stability_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
 }

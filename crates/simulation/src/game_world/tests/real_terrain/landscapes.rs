@@ -42,6 +42,8 @@ fn run(case: &str, count: usize, limit: u32) {
     // Independent typed squads intentionally change the current-output pins.
     // Keep all arrival, work, speed, membership and 60-tick acceptance bounds.
     // The audit reports increased long-march work/reversals, not just gains.
+    // Pre-existing building-overlap recovery adds collision checks only; these
+    // current-output counts retain every movement and bounded-work limit above.
     match case {
         "river" => {
             result.assert_arrival_and_work(count);
@@ -49,7 +51,7 @@ fn run(case: &str, count: usize, limit: u32) {
             assert_eq!((result.max_stuck_ticks, result.oscillations), (5, 2));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5527, 55473, 5422483)
+                (5527, 55473, 5423087)
             );
         }
         "long" => {
@@ -58,17 +60,17 @@ fn run(case: &str, count: usize, limit: u32) {
             assert_eq!((result.max_stuck_ticks, result.oscillations), (32, 26));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (35529, 378134, 111559118)
+                (35529, 378134, 111561228)
             );
         }
         _ => {
             result.assert_works(count);
             // Current-output pins also retain work for the complete report.
             let expected = match case {
-                "forest" => (3282, 1027, 2444034),
-                "town" => (3741, 1193, 2884789),
+                "forest" => (3282, 1027, 2444324),
+                "town" => (3741, 1193, 2884887),
                 "crossing" => (3278, 1933, 3096055),
-                "bridge" => (479, 354, 23210),
+                "bridge" => (479, 354, 23300),
                 "siege" => (1556, 867, 44292),
                 "gap" => (580, 512, 24846),
                 _ => unreachable!(),

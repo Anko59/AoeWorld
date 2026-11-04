@@ -2,6 +2,7 @@
 //! included. Accepted owner overrides remain manual until real idle.
 use super::snapshot::Snapshot;
 use crate::{GameUnit, GameWorld};
+use aoe_core::WorldPosition;
 use aoe_map::ResourceKind;
 
 impl GameWorld {
@@ -40,22 +41,26 @@ impl GameWorld {
             if self.economy.vassals.controlled.contains_key(&u.id) {
                 continue;
             }
-            if let Some(kind) = self.vassal_busy_kind(u) {
+            if let Some(kind) = self.vassal_busy_kind(u, s) {
                 self.claim_vassal_worker(s.vassal, u.id, kind);
             }
         }
     }
     /// The resource a busy villager is serving, or `None` for a worker the
-    /// owner is steering by hand (plain move, garrison order) or that is idle.
-    fn vassal_busy_kind(&self, u: &GameUnit) -> Option<ResourceKind> {
+    /// owner is steering by hand (plain move, garrison order), that is idle,
+    /// or that is crossing this territory to serve a different domain's job.
+    fn vassal_busy_kind(&self, u: &GameUnit, s: &Snapshot) -> Option<ResourceKind> {
         if self.economy.garrison_orders.contains_key(&u.id) {
             return None;
         }
-        self.gathering_kind(u.id).or_else(|| {
-            self.economy
-                .builders
-                .contains_key(&u.id)
-                .then_some(ResourceKind::Wood)
-        })
+        if let Some(task) = self.economy.gatherers.get(&u.id) {
+            let target = WorldPosition::from_tile_center(task.tile).ok()?;
+            return s.home.owns(target).then_some(task.kind);
+        }
+        let task = self.economy.builders.get(&u.id)?;
+        let building = self.building(task.building)?;
+        s.home
+            .covers(building.footprint, 0)
+            .then_some(ResourceKind::Wood)
     }
 }

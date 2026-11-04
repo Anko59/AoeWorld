@@ -52,6 +52,61 @@ fn overlapping_domains_split_at_equal_distance_and_nothing_has_two_masters() {
 }
 
 #[test]
+fn crossing_workers_keep_their_foreign_farm_or_build_job_until_they_reach_its_domain() {
+    for building in [false, true] {
+        let (mut w, _, _, a, b) = two_vassals();
+        let kind = if building {
+            BuildingKind::House
+        } else {
+            BuildingKind::Farm
+        };
+        let site = w
+            .insert_building(
+                PlayerId(0),
+                kind,
+                TileRect::from_xywh(110, 108, kind.rules().side, kind.rules().depth),
+                !building,
+            )
+            .unwrap();
+        let worker = at(&mut w, 130, 110);
+        if building {
+            w.issue_construct(PlayerId(0), &[worker], site).unwrap();
+        } else {
+            w.issue_farm(PlayerId(0), worker, site).unwrap();
+        }
+        pass(&mut w);
+        assert!(w.economy.vassal_homes[&b].owns(w.unit(worker).unwrap().position));
+        assert_eq!(
+            w.vassal_controller(worker),
+            None,
+            "{b:?} must not take a worker serving a site in {a:?}'s domain"
+        );
+        // Check every step of the ordinary trip, then adoption at actual
+        // arrival. A six-second window alone does not guarantee entry.
+        for _ in 0..1_200 {
+            if w.economy.vassal_homes[&a].owns(w.unit(worker).unwrap().position) {
+                break;
+            }
+            assert_eq!(w.vassal_controller(worker), None);
+            if building {
+                assert_eq!(w.economy.builders[&worker].building, site);
+            } else {
+                assert!(
+                    w.building(site)
+                        .unwrap()
+                        .footprint
+                        .contains(w.gather_tile(worker).unwrap())
+                );
+            }
+            w.advance();
+        }
+        assert!(w.economy.vassal_homes[&a].owns(w.unit(worker).unwrap().position));
+        pass(&mut w);
+        assert_eq!(w.vassal_controller(worker), Some(a));
+    }
+}
+
+#[test]
 fn an_exact_tie_goes_to_the_lower_id_and_a_lone_castle_keeps_its_whole_circle() {
     let (w, _, _, a, b) = two_vassals();
     let tie = WorldPosition::new(
@@ -134,6 +189,25 @@ fn a_managed_worker_that_never_moves_is_retasked_and_counts_as_idle() {
         "a Moving worker must have somewhere to go"
     );
     assert_eq!(w.vassal_controller(id), Some(vassal), "still managed");
+}
+
+#[test]
+fn territory_showcase_keeps_forty_farmers_alive_before_activation() {
+    let (mut w, _) = GameWorld::vassal_territory_demo(aoe_core::Seed(7)).unwrap();
+    let farmers: Vec<_> = w
+        .units()
+        .filter(|u| w.gathering_kind(u.id) == Some(aoe_map::ResourceKind::Food))
+        .map(|u| u.id)
+        .collect();
+    assert_eq!(farmers.len(), 40);
+    let ticks = w.config().tick_hz * 180;
+    advance(&mut w, ticks);
+    assert!(
+        farmers
+            .iter()
+            .all(|id| w.unit(*id).is_some_and(|u| u.hp > 0)),
+        "the capture must isolate management instead of losing farmers to hostile actors"
+    );
 }
 
 #[test]
