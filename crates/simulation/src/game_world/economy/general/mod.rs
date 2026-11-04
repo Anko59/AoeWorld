@@ -9,6 +9,8 @@ mod hash;
 mod orders;
 mod reinforcement;
 mod squads;
+mod status;
+pub use status::{GeneralStatus, SquadKind, SquadStatus};
 mod stances;
 mod survey;
 use stances::StanceOverride;
@@ -26,19 +28,6 @@ pub enum GeneralState {
     Marching,
     Fighting,
     Retreating,
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct GeneralStatus {
-    pub army_size: u16,
-    pub state: GeneralState,
-    /// The Train button is active.
-    pub training: bool,
-    /// Recruits queued in production buildings, not yet in the army.
-    pub queued: u16,
-    /// Unit-mix sliders per role (infantry, archers, cavalry, siege, scouts).
-    pub mix: [u8; 5],
-    /// Living soldiers of each role.
-    pub counts: [u16; 5],
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GeneralWork {
@@ -86,6 +75,7 @@ pub(crate) struct Manager {
     pub recruits: BTreeMap<EntityId, (EntityId, UnitKind)>,
     pub cursor: Option<EntityId>,
     pub work: GeneralWork,
+    pub appearance_changes: BTreeSet<EntityId>,
 }
 pub(super) fn role(kind: UnitKind) -> Option<usize> {
     Some(match kind {
@@ -187,26 +177,6 @@ impl GameWorld {
             .min_by_key(|&p| (distance(p, fallback), p.x, p.y))
             .unwrap_or(fallback)
     }
-    pub fn general_status(&self, id: EntityId) -> Option<GeneralStatus> {
-        let army = self.economy.generals.armies.get(&id)?;
-        let mut counts = [0; 5];
-        for r in army
-            .members
-            .iter()
-            .filter_map(|&m| self.unit(m).filter(|u| u.hp > 0))
-            .filter_map(|u| role(u.kind))
-        {
-            counts[r] += 1;
-        }
-        Some(GeneralStatus {
-            army_size: army.members.len() as u16,
-            state: army.state,
-            training: army.training,
-            queued: army.pending.len() as u16,
-            mix: army.mix,
-            counts,
-        })
-    }
     pub fn general_controller(&self, id: EntityId) -> Option<EntityId> {
         self.economy.generals.controlled.get(&id).copied()
     }
@@ -227,6 +197,7 @@ impl GameWorld {
         }
         if let Some(army) = self.economy.generals.armies.remove(&id) {
             for member in army.members {
+                self.set_sergeant(member, false);
                 self.economy.generals.controlled.remove(&member);
             }
             for building in army.pending.keys() {
@@ -237,8 +208,11 @@ impl GameWorld {
             && let Some(army) = self.economy.generals.armies.get_mut(&g)
         {
             army.members.remove(&id);
-            army.remove_from_squads(id);
+            let promoted = army.remove_from_squads(id);
             army.routed = None;
+            if let Some(id) = promoted {
+                self.set_sergeant(id, true);
+            }
         }
     }
     pub(crate) fn stop_general(&mut self, id: EntityId) {
@@ -280,17 +254,27 @@ impl GameWorld {
             return;
         }
 
+        let mut promotion = None;
         if let Some(a) = self.economy.generals.armies.get_mut(&g)
             && a.members.len() + a.pending.len() < GENERAL_ARMY_LIMIT
             && a.room_for(u.kind)
         {
-            a.assign_squad(u.id, u.kind);
+            promotion = a.assign_squad(u.id, u.kind);
             a.members.insert(u.id);
             a.routed = None;
             self.economy.generals.controlled.insert(u.id, g);
         }
+        if let Some((old, new)) = promotion {
+            if let Some(old) = old {
+                self.set_sergeant(old, false);
+            }
+            self.set_sergeant(new, true);
+        }
     }
     pub(crate) fn advance_generals(&mut self, changed: &mut Vec<EntityId>) {
+        changed.extend(std::mem::take(
+            &mut self.economy.generals.appearance_changes,
+        ));
         if self.economy.generals.armies.is_empty() {
             return;
         }
@@ -320,6 +304,9 @@ impl GameWorld {
                 changed.push(id);
             }
         }
+        changed.extend(std::mem::take(
+            &mut self.economy.generals.appearance_changes,
+        ));
         self.economy.generals.work = work;
     }
 }

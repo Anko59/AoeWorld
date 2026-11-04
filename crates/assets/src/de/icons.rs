@@ -81,15 +81,22 @@ pub(super) fn resolve(
         .filter(|b| matches!(b.action, unit_catalog::Action::Idle))
         .map(|b| b.unit)
         .collect();
-    let units: BTreeMap<_, _> = selected
+    let mut units: BTreeMap<_, _> = selected
         .iter()
         .filter(|s| wanted.contains(&s.unit))
         .map(|s| (s.unit, s.icon))
         .collect();
     let files = inventory(&install.join("widgetui/textures/ingame/units"))?;
     let dat = read_bounded(&install.join("resources/_common/dat/empires2_x2_p1.dat"))?;
-    let technologies =
-        crate::dat::de_survey::technology_icons(&crate::dat::de_survey::inflate(&dat)?)?;
+    let dat = crate::dat::de_survey::inflate(&dat)?;
+    // Squad cards need native hero portraits without loading unused actor timelines.
+    units.extend(
+        crate::dat::de_units::find(&dat, &[432, 200, 198, 170])?
+            .into_iter()
+            .filter(|(id, _)| [432, 200, 198, 170].contains(id))
+            .map(|(id, unit)| (id, unit.icon)),
+    );
+    let technologies = crate::dat::de_survey::technology_icons(&dat)?;
     let tech_files = named_inventory(&install.join("widgetui/textures/ingame/tech"), None)?;
     let mut sources = Vec::new();
     hash.update(b"DE DAT native unit interface icons\0");

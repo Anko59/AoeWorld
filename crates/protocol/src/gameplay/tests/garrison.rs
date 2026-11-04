@@ -175,6 +175,7 @@ fn roaming_steward_and_worker_management_are_current_owner_only_state() {
         hunt_target: None,
         death_hunt: None,
         auto_scout: false,
+        sergeant: false,
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
@@ -265,6 +266,7 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
         hunt_target: None,
         death_hunt: None,
         auto_scout: false,
+        sergeant: false,
         cargo_count: 0,
         home_castle: Some(EntityId(9)),
         managed_by: None,
@@ -280,6 +282,14 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
         queued: 3,
         mix: [35, 30, 20, 10, 5],
         counts: [200, 0, 0, 0, 0],
+        squads: std::array::from_fn(|n| {
+            Some(crate::SquadStatus {
+                leader: EntityId(100 + n as u32),
+                kind: crate::SquadKind::Infantry,
+                size: 20,
+                state: crate::GeneralState::Retreating,
+            })
+        }),
     });
     assert_eq!(u.for_viewer(PlayerId(0)), u);
     let foreign = u.for_viewer(PlayerId(1));
@@ -294,17 +304,35 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
         buildings: vec![],
     };
     let bytes = encode_server(&message(u)).unwrap();
-    // GeneralState gained Idle at index 0 (in place, no migration): Retreating is now 3.
-    // Train flag, queued recruits, five mix shares, five role counts follow.
-    assert!(bytes.ends_with(&[
-        0, 0, 1, 200, 1, 3, 1, 3, 35, 30, 20, 10, 5, 200, 1, 0, 0, 0, 0, 0, 0
-    ]));
+    let valid = u.general;
+    u.general.as_mut().unwrap().squads[0].as_mut().unwrap().size = 21;
+    assert!(
+        encode_server(&message(u)).is_err(),
+        "bounded typed capacity"
+    );
+    u.general = valid;
+    u.general.as_mut().unwrap().squads[1] = u.general.unwrap().squads[0];
+    assert!(encode_server(&message(u)).is_err(), "distinct leaders");
+    u.general = valid;
+    u.general.as_mut().unwrap().squads[0] = None;
+    assert!(
+        encode_server(&message(u)).is_err(),
+        "the roster accounts for every soldier"
+    );
+    u.general = valid;
+    // Current wire: state, training, queue, mix, counts and ten typed offices.
+    let roster: Vec<u8> = (100..110).flat_map(|id| [1, id, 0, 20, 3]).collect();
+    let mut tail = vec![
+        0, 0, 1, 200, 1, 3, 1, 3, 35, 30, 20, 10, 5, 200, 1, 0, 0, 0, 0,
+    ];
+    tail.extend_from_slice(&roster);
+    tail.extend_from_slice(&[0, 0]);
+    assert_eq!(&bytes[bytes.len() - tail.len()..], tail);
     assert_eq!(decode_server(&bytes).unwrap(), message(u));
     u.general.as_mut().unwrap().state = crate::GeneralState::Idle;
     let idle = encode_server(&message(u)).unwrap();
-    assert!(idle.ends_with(&[
-        0, 0, 1, 200, 1, 0, 1, 3, 35, 30, 20, 10, 5, 200, 1, 0, 0, 0, 0, 0, 0
-    ]));
+    tail[5] = 0;
+    assert_eq!(&idle[idle.len() - tail.len()..], tail);
     assert_eq!(decode_server(&idle).unwrap(), message(u));
     u.general.as_mut().unwrap().army_size = 201;
     assert!(encode_server(&message(u)).is_err());

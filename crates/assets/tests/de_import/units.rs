@@ -20,13 +20,20 @@ pub(super) fn append(bytes: &mut Vec<u8>) {
         };
         units.entry(b.unit).or_insert([-1; 8])[index] = graphic;
     }
+    for id in super::HERO_PORTRAITS {
+        units.entry(id).or_insert([-1; 8]);
+    }
     for (id, g) in units {
         let dead = if g[5] >= 0 && g[5] != g[4] {
             id + 3000
         } else {
             -1
         };
-        bytes.extend(record(id, &g, dead));
+        let mut row = record(id, &g, dead);
+        if super::HERO_PORTRAITS.contains(&id) {
+            row[51..53].copy_from_slice(&id.to_le_bytes());
+        }
+        bytes.extend(row);
         if dead >= 0 {
             bytes.extend(record(dead, &[g[5], -1, -1, -1, -1, -1, -1, -1], -1));
         }

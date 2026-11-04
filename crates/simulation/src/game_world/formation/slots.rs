@@ -34,6 +34,7 @@ impl Group {
     }
 
     pub(super) fn forget_departures(&mut self) {
+        self.long_files &= self.members.len() > 32;
         self.packing_files = self.members.len();
         let mut order = (0..self.members.len()).collect::<Vec<_>>();
         order.sort_unstable_by_key(|&at| {
@@ -106,6 +107,7 @@ impl GameWorld {
     }
 
     pub(super) fn assign_group_slots(&self, group: &mut Group) {
+        group.long_files = false;
         let count = group.members.len();
         let mut roles = self.general_role_slots(group.members.iter().map(|m| m.id), group.gap);
         let mut slots = roles.as_ref().map_or_else(

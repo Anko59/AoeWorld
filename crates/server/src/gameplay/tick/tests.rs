@@ -70,13 +70,14 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// 400-tick scenario and visibility assertions produce these current streams.
 /// The cockpit's unit census extends player state; message counts are unchanged.
 /// Steward extends the census by one entry, so the digests move, not the counts.
+/// Sergeant identity adds one byte per unit; all six session message counts are unchanged.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 11304757869660396421),
-    (187, 10500125606841663035),
-    (60, 3036268264563016540),
-    (176, 674498555216934564),
-    (420, 9326413221556101391),
-    (407, 17811913090445074740),
+    (407, 12302094832780914053),
+    (187, 18102123851847806713),
+    (60, 8832132356731911670),
+    (176, 7840207906882801570),
+    (420, 15399661995292538263),
+    (407, 1260977910633523928),
 ];
 
 #[tokio::test(flavor = "multi_thread")]

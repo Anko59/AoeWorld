@@ -38,11 +38,11 @@ pub use game_world::{
     GeneralWork, HitRecord, MARKET_RULES, MAX_BUILD_GROUP, MAX_WALL_SEGMENTS, MarketPrices,
     MovementOrder, PlanningProbe, PlayerEconomy, PreparedResourceDepletion, Projectile,
     ProjectileKind, RallyPoint, RallyTarget, ResearchEntry, RouteSchedulerStats, STEWARD_RULES,
-    STEWARD_STALL_SECONDS, StewardRules, StewardSettings, StewardStatus, StewardWait, StewardWork,
-    Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules, TickPhase, TrainingEntry,
-    UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VASSAL_LIMIT,
-    VASSAL_RADIUS, VILLAGE_RULES, VassalStatus, VassalWait, VillageRules, WorldLimits,
-    building_combat, damage_dealt, researched_stats, trainable_units, unit_combat,
+    STEWARD_STALL_SECONDS, SquadKind, SquadStatus, StewardRules, StewardSettings, StewardStatus,
+    StewardWait, StewardWork, Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules,
+    TickPhase, TrainingEntry, UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining,
+    VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalStatus, VassalWait, VillageRules,
+    WorldLimits, building_combat, damage_dealt, researched_stats, trainable_units, unit_combat,
     villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;

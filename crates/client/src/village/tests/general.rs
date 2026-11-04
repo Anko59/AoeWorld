@@ -11,6 +11,7 @@ fn status() -> GeneralStatus {
         queued: 3,
         mix: [35, 30, 20, 10, 5],
         counts: [20, 10, 6, 4, 2],
+        squads: [None; 10],
     }
 }
 
@@ -19,8 +20,23 @@ fn the_panel_receives_state_training_mix_and_counts_in_a_fixed_layout() {
     assert_eq!(
         panel_values(EntityId(9), status()),
         [
-            9.0, 42.0, 2.0, 1.0, 3.0, 35.0, 30.0, 20.0, 10.0, 5.0, 20.0, 10.0, 6.0, 4.0, 2.0
+            9.0, 42.0, 2.0, 1.0, 3.0, 35.0, 30.0, 20.0, 10.0, 5.0, 20.0, 10.0, 6.0, 4.0, 2.0, 0.0
         ]
+    );
+}
+
+#[wasm_bindgen_test]
+fn the_panel_receives_authoritative_squad_leaders_sizes_and_states() {
+    let mut g = status();
+    g.squads[0] = Some(aoe_protocol::SquadStatus {
+        leader: EntityId(101),
+        kind: aoe_protocol::SquadKind::Infantry,
+        size: 20,
+        state: GeneralState::Marching,
+    });
+    assert_eq!(
+        &panel_values(EntityId(9), g)[15..],
+        &[1.0, 101.0, 0.0, 20.0, 1.0]
     );
 }
 
@@ -35,14 +51,19 @@ fn the_train_button_and_each_slider_become_general_commands() {
         panel_command(9, 0, mix),
         Some(GeneralCommand::SetTraining { enabled: false })
     );
-    // Role 2 (cavalry) to 70 percent changes only that share.
+    // Cavalry gets 70%; the remaining shares keep their relative proportions.
     assert_eq!(
         panel_command(10, 2 * 128 + 70, mix),
         Some(GeneralCommand::SetMix {
-            mix: [35, 30, 70, 10, 5]
+            mix: [13, 11, 70, 4, 2]
         })
     );
     assert_eq!(panel_command(10, 9 * 128, mix), None, "no such role");
+    assert_eq!(panel_command(11, 0, mix), None, "no such action");
+    let Some(GeneralCommand::SetMix { mix }) = panel_command(10, 50, [100, 0, 0, 0, 0]) else {
+        panic!("mix command");
+    };
+    assert_eq!(mix, [50, 13, 13, 12, 12]);
 }
 
 #[wasm_bindgen_test]

@@ -40,10 +40,10 @@ pub use economy::{
     BUILDING_RULES, BUILDINGS_PER_PLAYER, BuildingKind, BuildingRules, CarriedResource,
     ConstructionState, EconomyError, GameBuilding, GarrisonedUnit, GeneralState, GeneralStatus,
     GeneralWork, MARKET_RULES, MAX_BUILD_GROUP, MAX_WALL_SEGMENTS, MarketPrices, PlayerEconomy,
-    RallyPoint, RallyTarget, STEWARD_RULES, STEWARD_STALL_SECONDS, StewardRules, StewardSettings,
-    StewardStatus, StewardWait, StewardWork, Stockpile, TickPhase, TrainingEntry, UnitKind,
-    UnitTask, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalStatus, VassalWait, VillageRules,
-    WorldLimits, trainable_units,
+    RallyPoint, RallyTarget, STEWARD_RULES, STEWARD_STALL_SECONDS, SquadKind, SquadStatus,
+    StewardRules, StewardSettings, StewardStatus, StewardWait, StewardWork, Stockpile, TickPhase,
+    TrainingEntry, UnitKind, UnitTask, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalStatus,
+    VassalWait, VillageRules, WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;
@@ -73,6 +73,8 @@ pub struct GameUnit {
     pub death_hunt: Option<AnimalKind>,
     /// Authoritative cavalry exploration toggle.
     pub auto_scout: bool,
+    /// Promoted squad officer; retained on the corpse for its native hero poses.
+    pub sergeant: bool,
     pub stance: aoe_core::CombatStance,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

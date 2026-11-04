@@ -43,7 +43,7 @@ pub use training::rally::{RallyPoint, RallyTarget};
 mod bridge;
 mod general;
 mod steward;
-pub use general::{GeneralState, GeneralStatus, GeneralWork};
+pub use general::{GeneralState, GeneralStatus, GeneralWork, SquadKind, SquadStatus};
 #[cfg(test)]
 pub(crate) use steward::steward_stall;
 pub use steward::{

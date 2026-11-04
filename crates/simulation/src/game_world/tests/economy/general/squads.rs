@@ -32,6 +32,18 @@ fn a_mixed_hundred_marches_as_eight_independent_typed_squads() {
             .push(id);
     }
     assert_eq!(squads.len(), 8, "40/20 + 30/15 + 20/10 + 10/5");
+    let report = w.general_status(g).unwrap();
+    let offices: Vec<_> = report.squads.into_iter().flatten().collect();
+    assert_eq!(offices.len(), 8);
+    assert_eq!(
+        offices.iter().map(|s| usize::from(s.size)).sum::<usize>(),
+        100
+    );
+    for office in offices {
+        assert!(w.unit(office.leader).unwrap().sergeant);
+        assert_eq!(usize::from(office.size), squads[&office.leader].len());
+        assert_eq!(office.state, GeneralState::Marching);
+    }
     for members in squads.values() {
         let kind = w.unit(members[0]).unwrap().kind;
         assert!(
@@ -109,6 +121,19 @@ fn a_sergeants_death_promotes_its_next_soldier_without_reforming_other_squads() 
     assert_eq!(squads.len(), 2);
     assert_eq!(squads[0].members[0], ids[1]);
     assert_eq!(squads[1].members, vec![ids[20]]);
+    assert!(
+        w.unit(ids[0]).unwrap().sergeant,
+        "the corpse retains officer identity"
+    );
+    assert!(
+        w.unit(ids[1]).unwrap().sergeant,
+        "the promoted leader gets officer identity"
+    );
+    assert!(!w.unit(ids[2]).unwrap().sergeant);
+    assert_eq!(
+        w.general_status(g).unwrap().squads[0].unwrap().leader,
+        ids[1]
+    );
     assert_eq!(w.units[w.lookup[&ids[20]]].formation, other);
     assert_eq!(
         w.general_work().orders,
@@ -119,6 +144,38 @@ fn a_sergeants_death_promotes_its_next_soldier_without_reforming_other_squads() 
         ids[1..]
             .iter()
             .all(|&id| w.general_controller(id) == Some(g))
+    );
+}
+
+#[test]
+fn officer_changes_are_published_when_idle_and_after_the_general_dies() {
+    let (mut w, _) = setup();
+    let ids: Vec<_> = (0..21)
+        .map(|n| soldier(&mut w, UnitKind::Militia, 100 + n % 7, 100 + n / 7))
+        .collect();
+    let g = soldier(&mut w, UnitKind::General, 104, 106);
+    let updates = w.advance();
+    for id in [ids[0], ids[20]] {
+        assert!(updates.iter().any(|u| u.id == id && u.sergeant));
+    }
+    w.kill_unit(w.lookup[&ids[0]]);
+    assert!(w.advance().iter().any(|u| u.id == ids[1] && u.sergeant));
+    let before = w.canonical_hash();
+    w.units[w.lookup[&ids[2]]].state.sergeant = true;
+    assert_ne!(
+        before,
+        w.canonical_hash(),
+        "officer identity belongs to canonical state"
+    );
+    w.units[w.lookup[&ids[2]]].state.sergeant = false;
+    w.kill_unit(w.lookup[&g]);
+    let updates = w.advance();
+    for id in [ids[1], ids[20]] {
+        assert!(updates.iter().any(|u| u.id == id && !u.sergeant));
+    }
+    assert!(
+        w.unit(ids[0]).unwrap().sergeant,
+        "a released army retains its dead officer identity"
     );
 }
 

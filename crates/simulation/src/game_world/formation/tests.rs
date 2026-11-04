@@ -75,6 +75,14 @@ fn cohesion_brake_follows_the_rear_tenths_lag_and_tightens_on_arrival() {
 }
 
 impl GameWorld {
+    pub(crate) fn group_density_probe(&self, id: EntityId) -> String {
+        let group = &self.formations[&self.units[self.lookup[&id]].formation.unwrap()];
+        let member = &group.members[group.member_index(id).unwrap()];
+        format!(
+            "files={} anchor={:?} progress={} width={} member={member:?}",
+            group.packing_files, group.anchor, group.progress, group.half_width
+        )
+    }
     /// Test-only observation of the shared anchor; no simulation instrumentation.
     pub(crate) fn group_march_probe(&self, id: EntityId) -> (i64, i64, (u64, u64), (u64, u64)) {
         let leader = self.units[self.lookup[&id]].formation.unwrap();

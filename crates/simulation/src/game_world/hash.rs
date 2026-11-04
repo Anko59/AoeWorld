@@ -188,6 +188,19 @@ impl GameWorld {
             }
         }
         self.hash_formations(&mut hash);
+        let sergeants: Vec<_> = self
+            .units
+            .iter()
+            .filter(|u| u.state.sergeant)
+            .map(|u| u.state.id)
+            .collect();
+        if !sergeants.is_empty() {
+            hash.update(b"sergeants");
+            hash.update(&(sergeants.len() as u64).to_le_bytes());
+            for id in sergeants {
+                hash.update(&id.0.to_le_bytes());
+            }
+        }
         *hash.finalize().as_bytes()
     }
 

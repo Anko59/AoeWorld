@@ -32,10 +32,26 @@ fn clear(w: &GameWorld, kind: UnitKind, from: WorldPosition, to: WorldPosition) 
 }
 
 fn run(count: usize, general: bool) {
-    let mut f = build(if general { "general-forest" } else { "forest" });
+    run_case(count, general, false);
+}
+
+fn run_case(count: usize, general: bool, town: bool) {
+    let mut f = build(if town {
+        "town"
+    } else if general {
+        "general-forest"
+    } else {
+        "forest"
+    });
     if !general {
         // The fixture's original forty stand at the crowded exit. Command a
         // new compact column past them, then around the forest's offset gap.
+        if town {
+            for id in &f.ids {
+                f.world.kill_unit(f.world.lookup[id]);
+                f.world.remove_unit(*id);
+            }
+        }
         f.ids.clear();
         f.commands.clear();
         for n in 0..count {
@@ -55,8 +71,10 @@ fn run(count: usize, general: bool) {
                     .unwrap(),
             );
         }
-        f.commands
-            .push(Command::Group(f.ids.clone(), center(135, 48)));
+        f.commands.push(Command::Group(
+            f.ids.clone(),
+            center(135, if town { 31 } else { 48 }),
+        ));
     }
     for n in 0..30 {
         f.world
@@ -67,9 +85,27 @@ fn run(count: usize, general: bool) {
             )
             .unwrap();
     }
+    if town {
+        // A base frontage beside the selected block: the shared route must
+        // bend around an end before entering the town streets.
+        for y in (18..63).step_by(3) {
+            f.world
+                .insert_building(
+                    PlayerId(0),
+                    BuildingKind::Barracks,
+                    TileRect::from_xywh(33, y, 3, 3),
+                    true,
+                )
+                .unwrap();
+        }
+    }
     let mut tracker = Tracker::new(&f.world, &f.ids);
     let mut targets = Targets::default();
     let mut bad_ticks = vec![0; f.ids.len()];
+    let mut moving_samples = 0_u64;
+    let mut pending_samples = 0_u64;
+    let mut max_density = 0;
+    let mut density_peak = None;
     f.issue();
     for tick in 1..=12_000 {
         f.world.advance();
@@ -77,6 +113,26 @@ fn run(count: usize, general: bool) {
         let arrived = tracker.observe(&f.world, tick);
         if tick % 10 == 0 {
             let accounting = std::mem::take(&mut f.world.group_work);
+            for &id in &f.ids {
+                let u = f.world.unit(id).unwrap();
+                if f.world.formation_destination_slot(id) != Some(u.position) {
+                    pending_samples += 1;
+                    moving_samples += u64::from(u.position != u.previous_position);
+                }
+                let density = f
+                    .ids
+                    .iter()
+                    .filter(|&&other| {
+                        let p = f.world.unit(other).unwrap().position;
+                        i64::from(p.x - u.position.x).pow(2) + i64::from(p.y - u.position.y).pow(2)
+                            <= 1024_i64.pow(2)
+                    })
+                    .count();
+                if density > max_density {
+                    max_density = density;
+                    density_peak = Some((tick, id, u.position, f.world.group_density_probe(id)));
+                }
+            }
             for (n, &id) in f.ids.iter().enumerate() {
                 let index = f.world.lookup[&id];
                 let u = f.world.unit(id).unwrap();
@@ -109,12 +165,22 @@ fn run(count: usize, general: bool) {
         }
     }
     let result = tracker.finish(0);
-    eprintln!("crowded count={count} general={general} {targets:?} {result:?}");
+    eprintln!(
+        "crowded count={count} general={general} town={town} moving={moving_samples}/{pending_samples} max_bodies_in_one_tile_radius={max_density} peak={density_peak:?} {targets:?} {result:?}"
+    );
     assert_eq!(result.arrived, f.ids.len(), "{result:?}; {targets:?}");
     assert!(result.max_stuck_ticks <= 60, "{result:?}; {targets:?}");
     assert!(targets.longest_bad_ticks <= 60, "{targets:?}");
     assert_eq!(result.max_speed_excess, 0, "{result:?}");
     assert_eq!(result.lost_group_ticks, 0, "{result:?}");
+    if !general && count >= 100 {
+        // The input block has five bodies in this disk. A bend may compress
+        // it, but must not funnel the entire wide selection into one lane.
+        assert!(
+            max_density <= 12,
+            "density={max_density} at {density_peak:?}"
+        );
+    }
 }
 
 #[test]
@@ -132,4 +198,14 @@ fn two_hundred_without_general_recover_from_a_crowded_start() {
 #[test]
 fn general_hundred_recover_from_a_crowded_start() {
     run(100, true);
+}
+
+#[test]
+fn hundred_leave_crowded_base_through_bending_town_streets() {
+    run_case(100, false, true);
+}
+
+#[test]
+fn two_hundred_leave_crowded_base_through_bending_town_streets() {
+    run_case(200, false, true);
 }

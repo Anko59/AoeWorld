@@ -77,6 +77,26 @@ pub(super) fn wire_general(g: aoe_simulation::GeneralStatus) -> aoe_protocol::Ge
         queued: g.queued,
         mix: g.mix,
         counts: g.counts,
+        squads: g.squads.map(|s| {
+            s.map(|s| aoe_protocol::SquadStatus {
+                leader: s.leader,
+                kind: match s.kind {
+                    aoe_simulation::SquadKind::Infantry => aoe_protocol::SquadKind::Infantry,
+                    aoe_simulation::SquadKind::Archers => aoe_protocol::SquadKind::Archers,
+                    aoe_simulation::SquadKind::Cavalry => aoe_protocol::SquadKind::Cavalry,
+                    aoe_simulation::SquadKind::Siege => aoe_protocol::SquadKind::Siege,
+                },
+                size: s.size,
+                state: match s.state {
+                    aoe_simulation::GeneralState::Idle => aoe_protocol::GeneralState::Idle,
+                    aoe_simulation::GeneralState::Marching => aoe_protocol::GeneralState::Marching,
+                    aoe_simulation::GeneralState::Fighting => aoe_protocol::GeneralState::Fighting,
+                    aoe_simulation::GeneralState::Retreating => {
+                        aoe_protocol::GeneralState::Retreating
+                    }
+                },
+            })
+        }),
     }
 }
 pub(super) fn unit_state(world: &GameWorld, unit: &GameUnit) -> GameplayUnitState {
@@ -133,6 +153,7 @@ pub(super) fn wire_unit(
         death_tick: unit.death_tick,
         hunt_target,
         auto_scout: unit.auto_scout,
+        sergeant: unit.sergeant,
         cargo_count: 0,
         home_castle: None,
         managed_by: None,

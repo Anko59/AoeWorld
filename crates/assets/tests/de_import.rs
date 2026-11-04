@@ -168,6 +168,17 @@ fn synthetic_install_imports_into_a_verified_pack_with_previews_and_table() {
     let report = de::import(Path::new("install"), Path::new("local-assets/packs")).expect("import");
     let manifest = pack::verify(&report.pack).expect("verify");
     let actors = pack::verify(&report.pack.join("actors")).expect("verify actors");
+    let interface: aoe_assets::catalog::interface::Interface =
+        serde_json::from_slice(&fs::read(report.pack.join("interface.json")).unwrap()).unwrap();
+    for id in fixture::HERO_PORTRAITS {
+        assert!(interface.units.contains_key(&i32::from(id)), "hero {id}");
+        assert!(
+            manifest
+                .frames
+                .iter()
+                .any(|f| f.source == format!("de/interface/{id}.dds"))
+        );
+    }
     let native: Vec<_> = manifest
         .frames
         .iter()
@@ -300,6 +311,24 @@ fn missing_native_siege_stone_is_rejected_before_pack_creation() {
         .expect_err("native siege art is required");
     assert!(error.to_string().contains("p_mangonel_x1.sld"), "{error}");
     assert!(!Path::new("local-assets/packs").exists());
+}
+
+#[test]
+fn missing_native_hero_portrait_is_rejected_before_pack_or_table_creation() {
+    let temporary = tempfile::tempdir().unwrap();
+    let original = std::env::current_dir().unwrap();
+    std::env::set_current_dir(temporary.path()).unwrap();
+    let _restore = CurrentDirectory(original);
+    fixture::actors(Path::new("install"));
+    fs::remove_file("install/widgetui/textures/ingame/units/432_50730.dds").unwrap();
+    let error = de::import(Path::new("install"), Path::new("local-assets/packs"))
+        .expect_err("native hero portrait is required");
+    assert!(
+        error.to_string().contains("missing sheet index 432"),
+        "{error}"
+    );
+    assert!(!Path::new("local-assets/packs").exists());
+    assert!(!Path::new("local-assets/de-table.md").exists());
 }
 
 #[test]

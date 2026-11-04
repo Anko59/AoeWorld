@@ -5,6 +5,8 @@ mod buildings;
 #[path = "units.rs"]
 mod units;
 
+pub(super) const HERO_PORTRAITS: [i16; 4] = [432, 200, 198, 170];
+
 pub(super) fn actors(install: &Path) {
     let graphics = install.join("resources/_common/drs/graphics");
     let dat = install.join("resources/_common/dat");
@@ -115,6 +117,14 @@ pub(super) fn actors(install: &Path) {
         fs::write(path.join(file), super::dds()).unwrap();
     }
     native_interface(install);
+    // Squad cards resolve native hero portraits independently of actor timelines.
+    for id in HERO_PORTRAITS {
+        fs::write(
+            install.join(format!("widgetui/textures/ingame/units/{id}_50730.dds")),
+            super::dds(),
+        )
+        .unwrap();
+    }
     let mut encoder = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::fast());
     encoder.write_all(&records).unwrap();
     fs::write(dat.join("empires2_x2_p1.dat"), encoder.finish().unwrap()).unwrap();
