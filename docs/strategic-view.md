@@ -15,7 +15,7 @@ The developer timing overlay uses F8 here and retains F3 at sprite zoom.
 
 | Key | Layer | Available data |
 | --- | --- | --- |
-| F1 | Ownership | Coloured building plots and the actual domains of active Castles |
+| F1 | Ownership | Coloured building plots and active Town Center work domains |
 | F2 | Armies | Army tokens and unit clusters |
 | F3 | Economy | Steward cards and their Town Center domains |
 | F4 | Threats | Historical enemy sightings, labelled with age, for two minutes |
@@ -81,7 +81,7 @@ focus. Only the visible tile request is clipped to the map bounds.
 ## Kingdom cockpit
 
 The far view has an original-art kingdom panel with held resources,
-population used/cap, recent credited deliveries, occupied building tiles and
+population used/cap, recent credited deliveries, building footprint area and
 living owned military/support units by type, including embarked/garrisoned units and
 commanders. Villagers, Fishing Ships and Vassals are excluded from the army.
 The General token counts its soldiers; the kingdom total also counts the
@@ -89,9 +89,15 @@ General himself. A missing economic report is shown as `?`.
 
 Collection numbers are actual deposits in the simulation's twelve live
 five-second buckets (55–60 seconds), without extrapolation. Spending, trade,
-refunds and stock edits do not count as collection. Occupied land sums living
+refunds and stock edits do not count as collection. Building area sums living
 owned building footprints, including foundations and excluding water bridges;
-it does not claim territorial borders or Castle-domain ownership.
+it does not claim territorial borders or Town Center-domain ownership.
+The cockpit explicitly reports held territory as unavailable. The existing
+Steward domains assign work to the nearest active Town Center within a player;
+other players do not contest those domains. The authorized stream has no
+cross-player land claims, contested boundary state or authoritative held-area
+report from which to count political territory.
+
 Resources, population and the authoritative army total stay in a compact strip.
 Kingdom controls opens one scrollable drawer for building, production, map
 layers and saved views. It ends above the selection HUD. Collapsing preserves

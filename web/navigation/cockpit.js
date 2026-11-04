@@ -13,8 +13,9 @@ export function initCockpit(changed = () => {}) {
     <span class="cockpit-population">Population <b data-population>?</b></span><b data-army-total>Army ?</b>
     <section id="cockpit-details" aria-label="Kingdom controls">
     <header><b>Kingdom cockpit</b><span>Held · collected / minute</span></header>
-    <div class="cockpit-census"><span>Occupied land <b data-land>?</b></span></div>
-    <p class="cockpit-note">Collections: last minute in 5s buckets (55–60s). Land: building footprints, not borders.</p>
+    <div class="cockpit-census"><span>Building area <b data-land>?</b></span></div>
+    <p class="cockpit-note">Collections: last minute in 5s buckets (55–60s). Building footprints only.</p>
+    <p class="cockpit-note">Territory held: unavailable. Town Center work areas do not establish land ownership.</p>
     <div class="cockpit-army" aria-label="Army by type"></div></section>`;
   document.body.append(panel);
   const production = initProduction();

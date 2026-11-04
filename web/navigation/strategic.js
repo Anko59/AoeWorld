@@ -137,7 +137,7 @@ export function initStrategic(fog, actors) {
     canvas.dataset.resources = String(resources.length);
     canvas.dataset.clusters = String(picks.length);
     canvas.dataset.terrainDraws = terrain ? '1' : '0';
-    canvas.dataset.territory = 'building footprints and active Castle domains';
+    canvas.dataset.territory = 'building footprints and active Town Center work domains';
     canvas.dataset.fields = String(holdings.fields);
     canvas.dataset.settlements = String(holdings.icons);
     canvas.dataset.borders = String(holdings.borders);

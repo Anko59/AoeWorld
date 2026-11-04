@@ -75,6 +75,8 @@ test("cockpit reports real deliveries and owned army types, and clears on reset"
   await expect(panel).toContainText("17");
   await expect(panel).toContainText("12 / 20");
   await expect(panel).toContainText("32 tiles");
+  await expect(panel).toContainText("Building area");
+  await expect(panel).toContainText("Territory held: unavailable");
   await expect(panel).toContainText("Scout: 2");
   await expect(panel).toContainText("Militia: 5");
   await expect(panel.locator(".art-icon")).not.toHaveCount(0);
