@@ -136,3 +136,48 @@ fn military_formations_gain_the_road_bonus_too() {
         "formation road displacement {road}, ordinary {ordinary}"
     );
 }
+
+#[test]
+fn sequential_fallback_and_parallel_proposal_share_the_road_speed() {
+    use crate::game_world::movement_step::Obstruction;
+    // `blocked >= 16` makes the parallel proposal decline, so the same unit
+    // takes the sequential loop.
+    let run = |roads: bool, sequential: bool| {
+        let mut w = world();
+        if roads {
+            for x in 80..100 {
+                w.insert_building(
+                    PlayerId(0),
+                    BuildingKind::Road,
+                    TileRect::from_xywh(x, 80, 1, 1),
+                    true,
+                )
+                .unwrap();
+            }
+        }
+        let start = WorldPosition::new(80 * 1024 + 512, 80 * 1024 + 512);
+        let id = w.spawn_villager(PlayerId(0), start).unwrap();
+        w.issue_move(id, WorldPosition::new(98 * 1024 + 512, start.y))
+            .unwrap();
+        if sequential {
+            let index = w.lookup[&id];
+            w.units[index].obstruction = Some(Obstruction {
+                goal: start,
+                remaining: 0,
+                blocked: 16,
+                side: 1,
+                last_tick: u64::MAX,
+                search_tick: u64::MAX,
+                pass_until: 0,
+            });
+        }
+        for _ in 0..30 {
+            w.advance();
+        }
+        w.unit(id).unwrap().position.x - start.x
+    };
+    assert_eq!(run(false, true), run(false, false), "paths agree off road");
+    let parallel = run(true, false);
+    assert!(parallel > run(false, false), "road bonus applies");
+    assert_eq!(run(true, true), parallel, "sequential path loses the bonus");
+}

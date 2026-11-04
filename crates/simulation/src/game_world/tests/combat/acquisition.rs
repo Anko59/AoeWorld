@@ -87,6 +87,25 @@ fn an_automatic_building_attack_yields_to_units_but_a_manual_target_is_kept() {
 }
 
 #[test]
+fn roads_are_never_automatic_targets_but_can_be_attacked_deliberately() {
+    let mut w = world();
+    let a = w.spawn_militia(PlayerId(0), at(100, 100)).unwrap();
+    let road = w
+        .insert_building(
+            PlayerId(1),
+            BuildingKind::Road,
+            TileRect::from_xywh(102, 100, 1, 1),
+            true,
+        )
+        .unwrap();
+    advance(&mut w, 20);
+    assert_eq!(w.unit(a).unwrap().attack_target, None);
+    w.issue_attack(PlayerId(0), a, road).unwrap();
+    advance(&mut w, 1);
+    assert_eq!(w.unit(a).unwrap().attack_target, Some(road));
+}
+
+#[test]
 fn an_attack_burst_shares_its_search_budget_and_repeated_targets_reuse_orders() {
     let mut w = world();
     let target = w.spawn_villager(PlayerId(1), at(200, 200)).unwrap();

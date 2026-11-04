@@ -39,7 +39,8 @@ export function initBuildings() {
   const build = document.createElement('button');
   build.id='build-menu'; build.hidden=true; build.innerHTML=icon('commands','build','towncenter')+'<kbd>B</kbd><small>Economic</small>'; build.title='Economic buildings (B)'; grid.append(build);
   const military=document.createElement('button');military.id='build-military-menu';military.hidden=true;military.innerHTML=icon('commands','military','soldier')+'<kbd>V</kbd><small>Military</small>';military.title='Military buildings (V)';grid.append(military);
-  const militaryKinds=new Set([5,6,7,9,10,13,14,15,18,20,21]);
+  // Roads join walls and gates here: the economic page already fills three rows.
+  const militaryKinds=new Set([5,6,7,9,10,13,14,15,18,20,21,22]);
   const category=i=>militaryKinds.has(i)?'military':'economy';
   const buttons=commands.map(([id,name,key,cost],i)=>{
     const button=document.createElement('button'); button.id=`build-${id}`; button.className="build-command"; button.hidden=true;

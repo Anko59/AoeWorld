@@ -98,7 +98,11 @@ impl GameWorld {
             };
             let unit = self.units[index].state;
             self.units[index].state.previous_position = unit.position;
-            let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
+            let (speed, denominator) = self.road_speed(
+                unit.kind,
+                unit.position,
+                self.movement_speed(unit.kind, unit.player),
+            );
             let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
             order.speed_carry = 0;
             let mut current_position = self.units[index].state.position;

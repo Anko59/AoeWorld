@@ -22,7 +22,7 @@ test("Dark Age Road previews a line and sends the appended kind with Shift", asy
   const worker = actors.find((a) => a.kind === "Villager");
   if (!worker) throw Error("Villager missing");
   await page.mouse.click(worker.x, worker.y);
-  await page.locator("#build-menu").click();
+  await page.locator("#build-military-menu").click();
   await expect(page.locator("#build-road")).toBeEnabled();
   await page.locator("#build-road").click();
   const size = page.viewportSize();
