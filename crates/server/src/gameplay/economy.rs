@@ -117,6 +117,7 @@ pub(super) fn wire_unit(
             aoe_simulation::UnitTask::Carrying => UnitTask::Carrying,
             aoe_simulation::UnitTask::Returning => UnitTask::Returning,
             aoe_simulation::UnitTask::Building => UnitTask::Building,
+            aoe_simulation::UnitTask::Seeding => UnitTask::Seeding,
             aoe_simulation::UnitTask::Farming => UnitTask::Farming,
             aoe_simulation::UnitTask::Attacking => UnitTask::Attacking,
             aoe_simulation::UnitTask::Dying => UnitTask::Dying,

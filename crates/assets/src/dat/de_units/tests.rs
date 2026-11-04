@@ -39,6 +39,7 @@ fn common_unit_fields_and_shared_task_indirection_are_preserved() {
     }
     task[49..51].copy_from_slice(&105_i16.to_le_bytes());
     task[53..55].copy_from_slice(&106_i16.to_le_bytes());
+    let task_at = b.len();
     b.extend(task);
     b.extend_from_slice(&[1, 0, 1, 0x60, 0x0a, 4, 0]);
     b.extend(b"Gaia");
@@ -56,6 +57,9 @@ fn common_unit_fields_and_shared_task_indirection_are_preserved() {
         ),
         (101, 102, 103, 104, 105, 106)
     );
+    // Farmer build tasks use proceeding for the hammer and working for seed.
+    b[task_at + 51..task_at + 53].copy_from_slice(&107_i16.to_le_bytes());
+    assert_eq!(find(&b, &[1]).unwrap()[&1].work, 107);
     b.truncate(b.len() - 1);
     assert_eq!(tasks::find(&b, 2).unwrap().len(), 0);
 }

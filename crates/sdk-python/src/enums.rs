@@ -182,7 +182,8 @@ mirror!(
         Farming,
         Hunting,
         Shepherding,
-        Fishing
+        Fishing,
+        Seeding
     ]
 );
 mirror!(AnimalKind, aoe_sdk::AnimalKind, [Sheep, Deer, Boar, Wolf]);

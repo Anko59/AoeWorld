@@ -170,6 +170,8 @@ pub enum UnitTask {
     Hunting,
     Shepherding,
     Fishing,
+    /// Constructing a farm by sowing seed.
+    Seeding,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CarriedResource {

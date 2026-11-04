@@ -4,6 +4,56 @@ fn at(x: i32, y: i32) -> TileCoord {
     TileCoord::new(x, y)
 }
 
+#[test]
+fn farm_construction_seeds_until_complete_while_house_construction_builds() {
+    for (kind, task) in [
+        (BuildingKind::Farm, UnitTask::Seeding),
+        (BuildingKind::House, UnitTask::Building),
+    ] {
+        let (mut world, _, _) = village();
+        world
+            .insert_building(
+                PlayerId(0),
+                BuildingKind::Mill,
+                aoe_core::TileRect::from_xywh(90, 90, 2, 2),
+                true,
+            )
+            .unwrap();
+        let builder = villager_at(&mut world, 99, 100);
+        let id = world
+            .issue_build(PlayerId(0), &[builder], kind, at(100, 100), false)
+            .unwrap();
+        for _ in 0..20 {
+            world.advance();
+            assert_eq!(world.unit(builder).unwrap().task, task, "{kind:?}");
+            assert!(!world.unit(builder).unwrap().moving);
+        }
+        let progress = world.building(id).unwrap().work_done;
+        assert!(progress > 0);
+        world
+            .issue_move(
+                builder,
+                WorldPosition::from_tile_center(at(95, 100)).unwrap(),
+            )
+            .unwrap();
+        world.advance();
+        assert_eq!(world.unit(builder).unwrap().task, UnitTask::Moving);
+        assert_eq!(world.building(id).unwrap().work_done, progress);
+        world.issue_construct(PlayerId(0), &[builder], id).unwrap();
+        finish(&mut world, id, 900);
+        // A seeder may still walk from its perimeter work spot onto the farm.
+        advance(&mut world, 100);
+        assert_eq!(
+            world.unit(builder).unwrap().task,
+            if kind == BuildingKind::Farm {
+                UnitTask::Farming
+            } else {
+                UnitTask::Idle
+            }
+        );
+    }
+}
+
 fn foundation(world: &mut GameWorld, player: PlayerId, x: i32, y: i32) -> EntityId {
     world
         .insert_building(

@@ -144,6 +144,9 @@ Sight starts with the first builder's work and grows with construction progress
 to the building's LOS (radius rounded up to whole tiles). Fog toggles and LOS
 research use the same rule. Orders on never-seen ground return
 `RejectedUnexploredPlacement`; explored grey fog permits placement.
+Farm builders report the authoritative `Seeding` task and use the DE seed
+animation while working; other construction and repairs report `Building`.
+Approaching workers keep their movement task.
 Builders walk to a tile beside it; each tick the foundation gains `builders + 2`
 of `3 x base seconds x tick rate` work, the AoE II rule `base x 3 / (n + 2)`: one
 builder takes the base time, three take three fifths of it. On completion, builders follow their queued foundations first. A farm builder

@@ -98,6 +98,16 @@ fn fishing_appends_wire_discriminants_and_round_trips_orders() {
     assert_eq!(decode_client(&bytes).unwrap(), order);
 }
 
+#[test]
+fn farm_seeding_task_has_a_current_golden_wire() {
+    let bytes = postcard::to_allocvec(&UnitTask::Seeding).unwrap();
+    assert_eq!(bytes, [12]);
+    assert_eq!(
+        postcard::from_bytes::<UnitTask>(&bytes).unwrap(),
+        UnitTask::Seeding
+    );
+}
+
 fn region() -> TileRect {
     TileRect::new(TileCoord::new(0, 0), TileCoord::new(8, 8))
 }

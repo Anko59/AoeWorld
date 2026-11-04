@@ -38,6 +38,9 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     if u.task == UnitTask::Farming && !u.moving && u.hp > 0 {
         return FarmerWork;
     }
+    if u.task == UnitTask::Seeding && !u.moving && u.hp > 0 {
+        return FarmerSeed;
+    }
     if u.hp == 0 {
         return match u.kind {
             UnitKind::Militia => MilitiaDie,
@@ -59,8 +62,26 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
             MilitiaStand
         };
     }
-    if u.hunt_target.is_some() && u.task == UnitTask::Returning {
-        return HunterCarry;
+    if (u.moving
+        || matches!(
+            u.task,
+            UnitTask::Idle | UnitTask::Moving | UnitTask::Returning | UnitTask::Carrying
+        ))
+        && let Some(load) = u.carried
+        && load.amount > 0
+    {
+        return match (load.kind, u.moving, u.hunt_target.is_some()) {
+            (ResourceKind::Food, true, true) => HunterCarry,
+            (ResourceKind::Food, false, true) => HunterCarryIdle,
+            (ResourceKind::Wood, true, _) => CarryWood,
+            (ResourceKind::Food, true, _) => CarryFood,
+            (ResourceKind::Gold, true, _) => CarryGold,
+            (ResourceKind::Stone, true, _) => CarryStone,
+            (ResourceKind::Wood, false, _) => CarryWoodIdle,
+            (ResourceKind::Food, false, _) => CarryFoodIdle,
+            (ResourceKind::Gold, false, _) => CarryGoldIdle,
+            (ResourceKind::Stone, false, _) => CarryStoneIdle,
+        };
     }
     let sheep = animal.is_some_and(|a| a.kind == AnimalKind::Sheep);
     if u.hunt_target.is_some() && u.task == UnitTask::Moving {
@@ -111,17 +132,6 @@ pub(crate) fn unit_pose(u: &GameplayUnitState, animal: Option<&AnimalState>) -> 
     if u.hunt_target.is_some() {
         return if sheep { ShepherdStand } else { HunterStand };
     }
-    if matches!(u.task, UnitTask::Returning | UnitTask::Carrying)
-        && let Some(load) = u.carried
-        && load.amount > 0
-    {
-        return match load.kind {
-            ResourceKind::Wood => CarryWood,
-            ResourceKind::Food => CarryFood,
-            ResourceKind::Gold => CarryGold,
-            ResourceKind::Stone => CarryStone,
-        };
-    }
     if u.moving {
         return VillagerWalk;
     }
@@ -168,6 +178,7 @@ pub(crate) fn scene_pose(
 pub(crate) fn walks_as_villager(u: &GameplayUnitState, animal: Option<&AnimalState>) -> bool {
     u.hunt_target.is_some()
         && u.task == UnitTask::Moving
+        && u.carried.is_none_or(|load| load.amount == 0)
         && animal.is_some_and(|a| a.kind == AnimalKind::Sheep)
 }
 
@@ -317,7 +328,18 @@ pub(crate) fn packed_frame(
     let source = sprites()[pose as usize];
     let millis = (source.frame_millis() * f64::from(source.sample_step())).max(0.001);
     let stride = u64::from(source.stride.div_ceil(source.sample_step()));
-    let phase = if stride <= 1 {
+    // DE supplies a resource-specific carry walk, but no separate carry idle.
+    // Hold its native first cell when stopped instead of walking in place or
+    // replacing the load with the worker's tool-only standing graphic.
+    let phase = if stride <= 1
+        || matches!(
+            pose,
+            Pose::CarryWoodIdle
+                | Pose::CarryFoodIdle
+                | Pose::CarryGoldIdle
+                | Pose::CarryStoneIdle
+                | Pose::HunterCarryIdle
+        ) {
         0
     } else if let Some(died) = death {
         // The same native frame duration governs looping and one-shot playback.

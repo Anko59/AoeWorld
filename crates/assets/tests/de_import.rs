@@ -34,7 +34,7 @@ fn real_all_unit_timelines_match_de_dat_and_complete_native_sld_cells() {
         );
     }
     let selected = de::unit_catalog::resolve(root).unwrap();
-    assert_eq!(selected.len(), 164);
+    assert_eq!(selected.len(), 220);
     let mut seen = std::collections::BTreeSet::new();
     for g in selected {
         let source = aoe_assets::catalog::units::SPRITES[g.pose];

@@ -218,4 +218,10 @@ pub const BINDINGS: &[Binding] = &[
     b(Pose::OnagerAttack, 550, Action::Attack),
     b(Pose::OnagerDie, 550, Action::Death),
     b(Pose::OnagerDecay, 550, Action::Decay),
+    b(Pose::CarryWoodIdle, 123, Action::Carry),
+    b(Pose::CarryFoodIdle, 120, Action::Carry),
+    b(Pose::CarryGoldIdle, 579, Action::Carry),
+    b(Pose::CarryStoneIdle, 124, Action::Carry),
+    b(Pose::FarmerSeed, 118, Action::Work),
+    b(Pose::HunterCarryIdle, 122, Action::Carry),
 ];

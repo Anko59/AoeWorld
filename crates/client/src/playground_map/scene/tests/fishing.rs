@@ -2,6 +2,54 @@ use super::*;
 use aoe_rendering::{AtlasAddress, GameFrame};
 
 #[wasm_bindgen_test]
+async fn seeding_and_animal_tasks_have_distinct_numeric_hud_tags() {
+    let scene = contact_scene();
+    let mut client = client_with_backend(&scene, Some("canvas")).await;
+    let worker = client.units.get_mut(&EntityId(1)).unwrap();
+    worker.kind = aoe_protocol::UnitKind::Villager;
+    worker.task = aoe_protocol::UnitTask::Seeding;
+    for (id, task) in [
+        (2, aoe_protocol::AnimalTask::Idle),
+        (3, aoe_protocol::AnimalTask::Fleeing),
+    ] {
+        client.village.animals.push(aoe_protocol::AnimalState {
+            id: EntityId(id),
+            kind: aoe_protocol::AnimalKind::Sheep,
+            owner: Some(PlayerId(1)),
+            hp: 7,
+            position: WorldPosition::new(0, 0),
+            task,
+            food_remaining: 100,
+            target: None,
+            facing: 0,
+            moving: false,
+            death_tick: None,
+        });
+    }
+    let previous = js_sys::Function::new_no_args(
+        "const old=window.aoeInterface; window.aoeInterface={numeric:v=>{window.__seedingHUD=Array.from(v)},details:()=>{}}; return old;",
+    )
+    .call0(&wasm_bindgen::JsValue::UNDEFINED)
+    .unwrap();
+    crate::playground::game::village::hud::update(&client);
+    let window = web_sys::window().unwrap();
+    let captured = js_sys::Reflect::get(&window, &"__seedingHUD".into()).unwrap();
+    js_sys::Reflect::set(&window, &"aoeInterface".into(), &previous).unwrap();
+    js_sys::Reflect::delete_property(&window, &"__seedingHUD".into()).unwrap();
+    let values: Vec<_> = js_sys::Array::from(&captured)
+        .iter()
+        .map(|v| v.as_f64().unwrap())
+        .collect();
+    let tasks: Vec<_> = values[17..]
+        .chunks_exact(18)
+        .take(3)
+        .map(|record| (record[0] as u32, record[5] as u8))
+        .collect();
+    client.canvas.remove();
+    assert_eq!(tasks, [(1, 12), (2, 13), (3, 14)]);
+}
+
+#[wasm_bindgen_test]
 async fn movement_cursor_uses_selected_domains_and_accepts_any_in_mixed_selection() {
     use aoe_map::{GroundMaterial, MapChunkGenerator, WaterKind};
     use aoe_protocol::UnitKind;

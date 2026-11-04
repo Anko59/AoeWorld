@@ -153,6 +153,7 @@ class UnitTask:
     HUNTING: UnitTask
     SHEPHERDING: UnitTask
     FISHING: UnitTask
+    SEEDING: UnitTask
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 
