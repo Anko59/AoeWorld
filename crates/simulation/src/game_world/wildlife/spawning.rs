@@ -42,6 +42,22 @@ impl GameWorld {
         Ok(id)
     }
 
+    /// Fixture hook: drop every living animal of one kind from the village kit.
+    pub(crate) fn remove_animals(&mut self, kind: AnimalKind) {
+        let found: Vec<_> = self
+            .wildlife
+            .animals
+            .iter()
+            .filter(|(_, a)| a.state.kind == kind)
+            .map(|(id, a)| (*id, cell(a.state.position)))
+            .collect();
+        for (id, key) in found {
+            self.wildlife.animals.remove(&id);
+            self.wildlife.engaged.remove(&id);
+            self.unindex_animal(id, key);
+        }
+    }
+
     /// The terrain generator has no animal hooks. A bounded local kit is
     /// placed after the resource kit without changing terrain or collision.
     pub(crate) fn initialize_wildlife(&mut self, center: TileCoord) {
