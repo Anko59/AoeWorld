@@ -57,7 +57,7 @@ export function initTokens() {
       layer.hidden = !value; if (!value) hits = [];
     },
     update(a, e, b) {
-      armies = rows(a, 15, 256); economy = rows(e, 13, 64); bridges = rows(b, 4, 256);
+      armies = rows(a, 15, 256); economy = rows(e, 13, 64); bridges = rows(b, 5, 2048);
       const next = economy.map(r => [r[0], r[2], r[3], r[7] === -1]).flat().join(',');
       if (next !== domainSignature) {
         domainSignature = next; domains.clear();
@@ -119,7 +119,13 @@ export function initTokens() {
       }
       if (options.roads) {
         context.strokeStyle = '#f8dfac'; context.lineWidth = 4;
-        for (const [x0, y0, x1, y1] of bridges) {
+        for (const [x0, y0, x1, y1, kind] of bridges) {
+          if (kind === 23) {
+            const corners = [[x0,y0],[x1,y0],[x1,y1],[x0,y1]].map(project);
+            context.fillStyle = '#d6b57b'; context.beginPath(); context.moveTo(...corners[0]);
+            for (const p of corners.slice(1)) context.lineTo(...p);
+            context.closePath(); context.fill(); continue;
+          }
           const a = project([x0, y0]), b = project([x1, y1]);
           context.beginPath(); context.moveTo(...a); context.lineTo(...b); context.stroke();
         }

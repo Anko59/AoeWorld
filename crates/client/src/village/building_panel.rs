@@ -125,7 +125,7 @@ pub(super) fn update(client: &Client) {
     buildings_update(&v);
 }
 
-pub(super) const KINDS: [aoe_protocol::BuildingKind; 23] = aoe_protocol::BuildingKind::ALL;
+pub(super) const KINDS: [aoe_protocol::BuildingKind; 24] = aoe_protocol::BuildingKind::ALL;
 
 #[inline(never)]
 pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::SceneUnit>) {

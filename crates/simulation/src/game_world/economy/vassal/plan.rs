@@ -101,5 +101,6 @@ pub(super) fn sites(
             add(wall, x, y);
         }
     }
+    sites.extend(super::roads::sites(w, center, player));
     sites
 }

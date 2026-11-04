@@ -366,8 +366,9 @@ Ungarrisoning releases the domain.
 
 Development has a finite target: two Watch Towers (from Feudal Age), one
 Castle-side Barracks and a 21-by-21 wall perimeter with two four-tile gates.
-Castle Age uses stone walls; earlier ages use palisades. The panel counts all
-77 Castle Age sites and reports the next deficit, construction, reserve,
+Castle Age uses stone walls; earlier ages use palisades. After these 77 Castle
+Age sites, development adds a road to the nearest Town Center. The panel counts
+the fortifications and road tiles and reports the next deficit, construction, reserve,
 blocked sites, missing builders, pause or completion. Completed land stops
 buying and releases its builders. Destruction reopens the relevant deficit.
 Each purchase preserves 200 food, 200 wood, 100 gold and 200 stone for the
@@ -378,9 +379,22 @@ engage them and friendly Generals within 100 tiles receive ordinary marches.
 Once the threat leaves, surviving Generals resume their saved destination or
 return to their previous position. A newer owner march or stop takes precedence.
 
-Roads and bridges are outside this slice. Roads need an authoritative movement
-cost benefit, terrain-aware connected routes and a finite maintenance budget.
-Bridges additionally need water-bank connectivity and span admission, builder
-access from a reachable bank, age/cost reserves and invalidation when a crossing
-is destroyed. Both need deterministic route selection and panel explanations
-before they can join this development plan.
+## Roads
+
+Roads are Dark Age dirt tracks: 1 wood per tile, two seconds for one villager,
+100 HP, no collision. Drag a line (up to 64 tiles), as for walls; Shift appends
+construction. Every tile must be explored, walkable and free of structures or
+resources. The whole line is validated before spending. Completed tiles give
+all land units, including enemies, 25% more movement speed while their centres
+occupy the tile. Foundations and demolished roads give no bonus. Routes and
+pathfinding costs are unchanged; an empty road index skips tile lookups.
+
+The close view paints the pack's native dirt sheet into the shared terrain;
+the far map's F6 Roads & bridges layer shows known road plots. After completing
+its towers, barracks and gated wall ring, a Vassal builds a road from its Castle
+to the nearest completed owned Town Center. Those tiles count toward developed
+enough, and the panel reports Road as the next step. The route search visits
+at most 8192 tiles per pass and can use completed friendly gates and existing
+bridges. An unavailable route remains a blocked deficit. Automatic purchases
+of new bridges need a separate bounded bank/span planner; this slice does not
+infer a bridge from water or lay a road over it.

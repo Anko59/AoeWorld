@@ -129,6 +129,18 @@ fn preview_checks_every_footprint_tile_and_map_bounds() {
 fn art_selection_distinguishes_every_kind_and_construction_stage() {
     for rule in aoe_simulation::BUILDING_RULES {
         let kind = B::ALL[rule.kind as usize];
+        if kind == B::Road {
+            assert_eq!(
+                sprite_slot(kind, 1000, false),
+                9,
+                "road preview uses a one-tile foundation; standing roads paint ground"
+            );
+            assert_eq!(
+                age_sprite_slot(kind, 1000, false, aoe_protocol::Age::Imperial),
+                9
+            );
+            continue;
+        }
         if matches!(kind, B::StoneWall | B::StoneGate) {
             continue; // covered by the stone art slot test
         }

@@ -396,3 +396,24 @@ async fn vassal_demo_streams_castle_age_stocks_and_the_active_defensive_report()
     );
     assert!(active, "demo must publish the authoritative Vassal report");
 }
+
+#[tokio::test]
+async fn road_demo_stream_contains_valid_road_buildings() {
+    let service = GameplayService::roads_demo(Seed(7)).unwrap();
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(128);
+    let (session, _) = service.register(None, sender).await;
+    service
+        .subscribe(session, 1, TileRect::from_xywh(60, 60, 70, 70))
+        .await;
+    let mut roads = 0;
+    while let Ok(message) = receiver.try_recv() {
+        encode_gameplay_server(&message).unwrap();
+        if let GameplayServerMessage::Snapshot { buildings, .. } = message {
+            roads += buildings
+                .iter()
+                .filter(|b| b.kind == aoe_protocol::BuildingKind::Road)
+                .count();
+        }
+    }
+    assert_eq!(roads, 29);
+}

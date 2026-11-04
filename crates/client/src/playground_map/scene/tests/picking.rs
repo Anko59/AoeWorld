@@ -443,3 +443,29 @@ async fn building_portrait_removal_keeps_the_remaining_building_selected() {
     assert!(client.selected.units.is_empty());
     client.canvas.remove();
 }
+
+#[wasm_bindgen_test]
+async fn road_ground_paints_only_complete_tiles_and_remains_selectable() {
+    let mut client = fixture(1.0).await;
+    let mut road = building(77, 99, 99);
+    road.kind = BuildingKind::Road;
+    road.footprint = TileRect::from_xywh(99, 99, 1, 1);
+    let mut terrain = vec![SceneTerrain {
+        position: [99.5, 99.5],
+        material: 0,
+        elevation_meters: 0.0,
+        surface: aoe_rendering::SceneTerrainSurface::flat(0.0),
+        appearance: None,
+    }];
+    road.construction = ConstructionState::UnderConstruction;
+    roads::paint(&mut terrain, &[road.clone()]);
+    assert_eq!(terrain[0].material, 0);
+    road.construction = ConstructionState::Complete;
+    roads::paint(&mut terrain, &[road.clone()]);
+    assert_eq!(terrain[0].material, 2);
+    client.village.buildings = vec![road];
+    let point = super::super::screen_position(&client, [99.5, 99.5]);
+    picking::click(&mut client, point, None);
+    assert_eq!(client.selected.building_id, Some(EntityId(77)));
+    client.canvas.remove();
+}

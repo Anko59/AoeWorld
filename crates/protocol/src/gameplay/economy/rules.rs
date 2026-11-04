@@ -42,6 +42,7 @@ fn rally_rule(building: &GameplayBuildingState) -> Option<&'static str> {
             | BuildingKind::Mill
             | BuildingKind::LumberCamp
             | BuildingKind::MiningCamp
+            | BuildingKind::Road
             | BuildingKind::Bridge
             | BuildingKind::PalisadeWall
             | BuildingKind::PalisadeGate

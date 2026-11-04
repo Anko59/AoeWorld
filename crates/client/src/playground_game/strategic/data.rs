@@ -177,12 +177,13 @@ pub(in super::super) fn update(client: &Client) {
                     * f64::from(b.footprint.max.y - b.footprint.min.y);
             }
         }
-        if b.kind == BuildingKind::Bridge && bridges.len() < 256 * 4 {
+        if matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road) && bridges.len() < 2048 * 5 {
             bridges.extend([
                 f64::from(b.footprint.min.x),
                 f64::from(b.footprint.min.y),
                 f64::from(b.footprint.max.x),
                 f64::from(b.footprint.max.y),
+                b.kind as u8 as f64,
             ]);
         }
         if b.player != owner || b.kind != BuildingKind::TownCenter || economy.len() >= 64 * 8 {

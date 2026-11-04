@@ -55,7 +55,7 @@ const NO_UNITS: &[UnitKind] = &[];
 const VILLAGERS: &[UnitKind] = &[UnitKind::Villager, UnitKind::Steward];
 
 /// Canonical order of `BuildingKind`.
-pub const BUILDING_RULES: [BuildingRules; 23] = [
+pub const BUILDING_RULES: [BuildingRules; 24] = [
     BuildingRules {
         kind: BuildingKind::TownCenter,
         cost: cost(0, 275, 0, 100),
@@ -390,6 +390,23 @@ pub const BUILDING_RULES: [BuildingRules; 23] = [
     },
     barriers::STONE_WALL,
     barriers::STONE_GATE,
+    BuildingRules {
+        kind: BuildingKind::Road,
+        cost: cost(0, 1, 0, 0),
+        build_seconds: 2,
+        max_hp: 100,
+        side: 1,
+        depth: 1,
+        los: 1,
+        population_support: 0,
+        accepts: NONE,
+        trainable: NO_UNITS,
+        requires: None,
+        buildable: true,
+        blocks: false,
+        food: 0,
+        age: Age::Dark,
+    },
 ];
 
 const fn castle(

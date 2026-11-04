@@ -117,7 +117,8 @@ pub(super) const fn building_armour(kind: BuildingKind) -> Classes {
         | BuildingKind::StoneWall
         | BuildingKind::StoneGate
         | BuildingKind::Bridge => &[(Building, 0), (StandardBuilding, 0), (Wall, 0)],
-        BuildingKind::TownCenter
+        BuildingKind::Road
+        | BuildingKind::TownCenter
         | BuildingKind::House
         | BuildingKind::LumberCamp
         | BuildingKind::MiningCamp
@@ -146,6 +147,7 @@ pub(super) const fn building_attacks(kind: BuildingKind, secondary: bool) -> Cla
     }
     match kind {
         // Town Centers fire only secondary arrows, which carry these attacks.
+        BuildingKind::Road => &[(Building, 0), (StandardBuilding, 0)],
         BuildingKind::TownCenter => &[(Building, 5), (Ship, 5), (FishingShip, 5)],
         BuildingKind::WatchTower => &[(Spear, 2), (Ship, 7), (FishingShip, 7)],
         BuildingKind::Castle => &[(Spear, 2)],

@@ -149,6 +149,7 @@ pub enum BuildingKind {
     Bridge,
     StoneWall,
     StoneGate,
+    Road,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]

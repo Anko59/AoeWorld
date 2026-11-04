@@ -38,12 +38,13 @@ pub(crate) async fn reset(
             }
         }
         Some(
-            name @ ("vassal-defense" | "feudal-economy" | "steward-economy" | "steward-territory"
-            | "steward-farming" | "steward-kingdom" | "feudal-military" | "general-army"
-            | "general-appearance" | "imperial-army" | "steward-fishing"
-            | "steward-throughput" | "steward-stability"),
+            name @ ("roads" | "vassal-defense" | "feudal-economy" | "steward-economy"
+            | "steward-territory" | "steward-farming" | "steward-kingdom"
+            | "feudal-military" | "general-army" | "general-appearance" | "imperial-army"
+            | "steward-fishing" | "steward-throughput" | "steward-stability"),
         ) => {
             let constructor = match name {
+                "roads" => GameplayService::roads_demo,
                 "vassal-defense" => GameplayService::vassal_defense_demo,
                 "feudal-economy" => GameplayService::feudal_demo,
                 "steward-economy" => GameplayService::steward_demo,
