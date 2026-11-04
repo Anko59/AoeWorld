@@ -20,7 +20,7 @@ fn cockpit_reports_append_the_current_wire_without_renumbering_fields() {
         vec![
             1, 1, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 5, 5, 0, 0, 100, 100, 100, 7, 17, 0,
             172, 2, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), message);

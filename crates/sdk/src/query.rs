@@ -36,7 +36,7 @@ impl World {
         self.snapshot_seen
     }
     pub fn economy(&self) -> Option<Economy> {
-        self.economy.map(|state| Economy { state })
+        self.economy.clone().map(|state| Economy { state })
     }
 
     fn wrap_unit(&self, state: aoe_protocol::GameplayUnitState) -> Unit {

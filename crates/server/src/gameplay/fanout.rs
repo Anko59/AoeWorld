@@ -86,7 +86,7 @@ fn viewer_states(
     let mut everything = None;
     let mut viewers = BTreeMap::new();
     for (viewer, rebuild) in rebuild {
-        let players = if disabled {
+        let mut players = if disabled {
             all_players
                 .get_or_insert_with(|| economy::players(world))
                 .clone()
@@ -96,6 +96,9 @@ fn viewer_states(
                 .into_iter()
                 .collect()
         };
+        if disabled && let Some(own) = economy::player(world, viewer) {
+            players.insert(viewer, own);
+        }
         let buildings = if disabled {
             // With fog disabled all targets are revealed as well. Keep one
             // shared map even when a hundred seats have set their rally points.

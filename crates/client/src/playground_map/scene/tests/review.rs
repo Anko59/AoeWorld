@@ -48,9 +48,7 @@ async fn a_refused_view_is_sent_again_after_the_rate_window() {
     let mut client = client(&contact_scene()).await;
     client.sent_region = Some(aoe_core::TileRect::from_xywh(0, 0, 4, 4));
     client.subscribe_after = 0.0;
-
     super::super::super::retry_refused_view(&mut client, 1_000.0);
-
     assert_eq!(client.sent_region, None);
     assert_eq!(client.subscribe_after, 2_100.0);
     client.canvas.remove();
@@ -369,6 +367,10 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         researched: Tech::FeudalAge.bit(),
         recent_deliveries: [0; 4],
         unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
+        held_tiles: 0,
+        held_share_ppm: 0,
+        holdings: Vec::new(),
+        holdings_complete: true,
         market_prices: MarketPrices::default(),
     });
     client.village.buildings.push(GameplayBuildingState {
@@ -403,7 +405,6 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
     client.village.buildings[0].age = Age::Feudal;
     assert_eq!(rendered(&client), aoe_rendering::SceneUnitKind::FeudalHouse);
 }
-
 #[wasm_bindgen_test]
 async fn authoritative_gate_stays_open_when_the_holding_enemy_is_not_resident() {
     use aoe_core::{TileCoord, TileRect};
@@ -448,7 +449,6 @@ async fn authoritative_gate_stays_open_when_the_holding_enemy_is_not_resident() 
     assert_eq!(client.village.gate_art.borrow().updates(), 2);
     client.canvas.remove();
 }
-
 #[wasm_bindgen_test]
 async fn projectile_scene_uses_native_arrow_and_javelin_and_current_fog() {
     use aoe_core::{Tick, TileCoord, TileRect};

@@ -38,6 +38,7 @@ pub(crate) struct Vision {
 
 mod batch;
 mod change;
+mod land;
 mod observers;
 
 #[path = "state.rs"]

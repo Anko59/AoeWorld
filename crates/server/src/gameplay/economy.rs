@@ -214,11 +214,23 @@ pub(super) fn player(world: &GameWorld, viewer: PlayerId) -> Option<GameplayPlay
     let counts = std::array::from_fn(|index| {
         row.map_or(0, |row| row[native_kind(UnitKind::ALL[index]) as usize])
     });
-    Some(player_state(
-        &state,
-        world.recent_deliveries(viewer),
-        counts,
-    ))
+    let mut report = player_state(&state, world.recent_deliveries(viewer), counts);
+    let land = world.land_control(viewer);
+    report.held_tiles = land.tiles;
+    report.held_share_ppm = land.share_ppm;
+    report.holdings_complete = land.shapes.len() <= aoe_protocol::MAX_HOLDING_SPANS;
+    report.holdings = land
+        .shapes
+        .iter()
+        .take(aoe_protocol::MAX_HOLDING_SPANS)
+        .map(|s| aoe_protocol::HoldingSpan {
+            player: s.player,
+            y: s.y,
+            x0: s.x0,
+            x1: s.x1,
+        })
+        .collect();
+    Some(report)
 }
 
 fn player_state(
@@ -246,6 +258,10 @@ fn player_state(
         market_prices: wire_market_prices(state.market_prices),
         recent_deliveries,
         unit_counts,
+        held_tiles: 0,
+        held_share_ppm: 0,
+        holdings: Vec::new(),
+        holdings_complete: true,
     }
 }
 pub(super) fn building_in_camera(

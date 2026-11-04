@@ -13,6 +13,7 @@ pub use game_world::browser_content;
 #[cfg(feature = "bench-fixtures")]
 pub use game_world::terrain_fixtures;
 pub use game_world::{BrowserBuilding, BrowserContent, BrowserTech, BrowserUnit};
+pub use game_world::{HoldingSpan, LandControl};
 mod movement_speed;
 mod navigation_cache;
 mod terrain;

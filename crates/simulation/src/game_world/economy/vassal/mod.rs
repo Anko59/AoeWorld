@@ -290,3 +290,14 @@ fn inside(center: TileCoord, at: WorldPosition) -> bool {
     super::general::distance(WorldPosition::new(center.x * 1024, center.y * 1024), at)
         <= (i64::from(VASSAL_RADIUS) * 1024).pow(2)
 }
+
+impl GameWorld {
+    pub(super) fn vassal_land_sources(&self) -> Vec<(PlayerId, TileCoord, i32)> {
+        self.economy
+            .vassals
+            .domains
+            .values()
+            .map(|d| (d.player, d.center, VASSAL_RADIUS))
+            .collect()
+    }
+}

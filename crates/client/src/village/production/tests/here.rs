@@ -17,6 +17,10 @@ fn player() -> GameplayPlayerState {
         market_prices: Default::default(),
         recent_deliveries: [0; 4],
         unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
+        held_tiles: 0,
+        held_share_ppm: 0,
+        holdings: Vec::new(),
+        holdings_complete: true,
     }
 }
 fn request(count: usize) -> HereRequest {

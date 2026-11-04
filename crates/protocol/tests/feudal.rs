@@ -73,6 +73,10 @@ fn dark_players_cannot_claim_feudal_techs_and_wheelbarrow_loads_round_trip() {
         researched: Tech::DoubleBitAxe.bit(),
         recent_deliveries: [0; 4],
         unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
+        held_tiles: 0,
+        held_share_ppm: 0,
+        holdings: Vec::new(),
+        holdings_complete: true,
         market_prices: aoe_protocol::MarketPrices::default(),
     };
     let mut snapshot = GameplayServerMessage::Snapshot {

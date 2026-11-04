@@ -329,3 +329,16 @@ fn the_territory_demo_shows_adoption_then_a_split_when_the_second_steward_shelte
         );
     }
 }
+
+#[test]
+fn active_steward_domains_contribute_the_existing_radius_to_land_control() {
+    let (mut w, _, _, _, _) = two_stewards();
+    w.set_fog_disabled(true);
+    let held = w.land_control(PlayerId(0));
+    assert!(
+        held.shapes
+            .iter()
+            .any(|s| s.y == 92 && s.x0 <= 10 && s.x1 > 10)
+    );
+    assert!(held.tiles > 30_000);
+}

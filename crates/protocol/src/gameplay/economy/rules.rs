@@ -24,6 +24,15 @@ fn valid_research(player: &GameplayPlayerState) -> bool {
 
 /// The first rule `player` breaks.
 pub(crate) fn player_rule(player: &GameplayPlayerState) -> Option<&'static str> {
+    if player.held_share_ppm > 1_000_000
+        || player.holdings.len() > MAX_HOLDING_SPANS
+        || player
+            .holdings
+            .iter()
+            .any(|s| s.x0 < 0 || s.y < 0 || s.x1 <= s.x0)
+    {
+        return Some("player.holdings_in_range");
+    }
     if !valid_research(player) {
         return Some("player.researched_matches_age");
     }

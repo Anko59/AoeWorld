@@ -284,7 +284,7 @@ impl World {
         if Some(player.player) != self.me {
             return;
         }
-        if let Some(old) = self.economy {
+        if let Some(old) = &self.economy {
             for tech in Tech::ALL {
                 if player.researched & tech.bit() != 0 && old.researched & tech.bit() == 0 {
                     events.push(Event::ResearchCompleted { tech });

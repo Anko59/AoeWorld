@@ -1,3 +1,4 @@
+mod land_control;
 use super::*;
 use aoe_core::{Seed, TILE_GROUND_RADIUS_SUBUNITS};
 use aoe_map::{MapChunkGenerator, MapPackage, MapRequest, MovementOutcome, ResourceOverlay};

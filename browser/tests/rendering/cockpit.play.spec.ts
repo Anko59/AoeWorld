@@ -23,6 +23,17 @@ test("real server cockpit counts own soldiers and follows authoritative stock an
   await expect(page.locator("#connection")).toHaveText("connected");
   const panel = page.locator("#strategic-cockpit");
   await expect(panel).toBeVisible();
+  await expect(panel).toContainText("Land held");
+  await expect(panel.locator("[data-land]")).toHaveText(
+    /[1-9][\d,]* tiles · [\d.]+% of map/,
+  );
+  const map = page.locator("#strategic-scene");
+  await expect
+    .poll(async () => Number(await map.getAttribute("data-holding-runs")))
+    .toBeGreaterThan(0);
+  await page.keyboard.press("F1");
+  await expect(map).toHaveAttribute("data-holding-runs", "0");
+  await page.keyboard.press("F1");
   // The scenario also contains five enemy Militia. They must never enter this census.
   await expect(panel).toContainText("Militia: 4");
   await expect(panel).toContainText("Archer: 4");
@@ -59,14 +70,18 @@ test("cockpit reports real deliveries and owned army types, and clears on reset"
       { records: () => [], revision: () => 0 },
     );
     (window as unknown as { cockpitTest: unknown }).cockpitTest = strategic;
-    // Stock, population, actual credited deliveries in recent buckets, footprint
-    // area, then the fixed authoritative census. No stock-delta estimate.
+    // Stock, population, actual credited deliveries in recent buckets, held
+    // area and map share, then the fixed authoritative census. No stock-delta estimate.
     // The authoritative census also includes soldiers not in the map stream,
     // such as transport passengers. Map actors must not reconstruct it.
     const census = new Uint32Array(35);
     census[1] = 2;
     census[2] = 5;
-    strategic.cockpit([120, 240, 80, 40, 12, 20, 9, 17, 0, 3, 32], census);
+    strategic.cockpit(
+      [120, 240, 80, 40, 12, 20, 9, 17, 0, 3, 32, 125_000, 1],
+      census,
+    );
+    strategic.holdings([20, 20, 40, 0x4080ff, 20, 21, 40, 0x4080ff]);
     strategic.frame([256, 256, 128, 128, 1280, 720, 0.04, 1]);
   });
   const panel = page.locator("#strategic-cockpit");
@@ -75,8 +90,12 @@ test("cockpit reports real deliveries and owned army types, and clears on reset"
   await expect(panel).toContainText("17");
   await expect(panel).toContainText("12 / 20");
   await expect(panel).toContainText("32 tiles");
-  await expect(panel).toContainText("Building area");
-  await expect(panel).toContainText("Territory held: unavailable");
+  await expect(panel).toContainText("Land held");
+  await expect(panel).toContainText("12.50% of map");
+  await expect(page.locator("#strategic-scene")).toHaveAttribute(
+    "data-holding-runs",
+    "2",
+  );
   await expect(panel).toContainText("Scout: 2");
   await expect(panel).toContainText("Militia: 5");
   await expect(panel.locator(".art-icon")).not.toHaveCount(0);

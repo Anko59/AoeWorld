@@ -112,7 +112,7 @@ impl Building {
 }
 
 /// The slot's own economy: stockpile, population, age and research.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Economy {
     pub state: GameplayPlayerState,
 }

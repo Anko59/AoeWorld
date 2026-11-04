@@ -180,7 +180,7 @@ fn deliver_tick(
         .players
         .iter()
         .filter(|(id, state)| session.resident_players.get(*id) != Some(*state))
-        .map(|(_, state)| *state)
+        .map(|(_, state)| state.clone())
         .collect::<Vec<_>>();
     let mut changed_buildings = Vec::new();
     let mut building_removals = Vec::new();

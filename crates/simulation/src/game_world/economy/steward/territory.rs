@@ -247,3 +247,14 @@ impl GameWorld {
         }));
     }
 }
+
+impl GameWorld {
+    pub(crate) fn steward_land_sources(&self) -> Vec<(PlayerId, aoe_core::TileCoord, i32)> {
+        self.economy
+            .steward_homes
+            .values()
+            .filter(|h| h.town_center.is_some())
+            .map(|h| (h.player, h.center.tile_floor(), STEWARD_RULES.radius_tiles))
+            .collect()
+    }
+}

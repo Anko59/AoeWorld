@@ -51,3 +51,9 @@ pub(crate) fn bounded_training<'de, D: Deserializer<'de>>(
 ) -> Result<Vec<TrainingState>, D::Error> {
     bounded::<D, _, MAX_TRAINING_QUEUE>(d)
 }
+
+pub(crate) fn bounded_holdings<'de, D: Deserializer<'de>>(
+    d: D,
+) -> Result<Vec<HoldingSpan>, D::Error> {
+    bounded::<D, _, MAX_HOLDING_SPANS>(d)
+}

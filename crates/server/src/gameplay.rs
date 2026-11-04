@@ -417,7 +417,7 @@ impl GameplayService {
             revision,
             tick: world.tick(),
             units: units.clone(),
-            players: players.values().copied().collect(),
+            players: players.values().cloned().collect(),
             buildings: buildings.values().cloned().collect(),
         };
         let animals = wildlife::animals(&world, region, player);
