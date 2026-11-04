@@ -2,7 +2,7 @@
 
 The VER 8.9 DE DAT is authoritative for every unit kind spawned by the game,
 including workers, wildlife, naval units, promotion tiers, the General and
-Vassal. `make assets-unit-table-de` regenerates the one current numeric catalog
+Vassal and Steward. `make assets-unit-table-de` regenerates the one current numeric catalog
 from the owner's installed DAT. The semantic binding table names DAT unit IDs
 and actions; it contains no image names, frame counts or timing constants.
 
@@ -36,7 +36,7 @@ Two-Handed Swordsman (473), Champion (567), Halberdier (359), Arbalester (492),
 Cavalier (283), Paladin (569), Hussar (441), Capped Ram (422), Siege Ram (548)
 and Onager (550) each bind their own DAT idle, walk, attack, death and corpse
 references. The generated catalog contains 217 semantic poses. General retains
-DAT hero 632 and Vassal retains Western King 434; their HUD icons use those
+DAT hero 632 and Vassal and Steward use Western King 434; their HUD icons use those
 same identities. The DE overlay exports native DDS icons selected by DAT index,
 without substituting an earlier unit tier's icon. Arbalester releases at DAT
 frame 20, independently of Crossbowman's frame 15.

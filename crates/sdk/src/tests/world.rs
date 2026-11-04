@@ -9,8 +9,8 @@ use aoe_protocol::{
 mod dock;
 #[path = "land.rs"]
 mod land;
-#[path = "vassal.rs"]
-mod vassal;
+#[path = "steward.rs"]
+mod steward;
 
 const ME: PlayerId = PlayerId(3);
 const FOE: PlayerId = PlayerId(4);
@@ -130,7 +130,7 @@ fn player(researched: u64, age: aoe_protocol::Age) -> GameplayPlayerState {
         age,
         researched,
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: MarketPrices::default(),
     }
 }

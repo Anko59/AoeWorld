@@ -34,7 +34,7 @@ fn the_smoke_run_writes_a_valid_report_whose_phases_add_up() {
     let on = &report["simulation_fog_on"];
     assert_eq!(on["ticks"], 12);
     assert_eq!(on["tick_budget_ms"], 50.0);
-    for phase in ["unit_spacing", "vassal_economy", "idle_tail"] {
+    for phase in ["unit_spacing", "steward_economy", "idle_tail"] {
         assert!(on["phases"][phase]["mean_ms"].is_number(), "{phase}");
     }
     assert_eq!(on["hashes"].as_array().unwrap().len(), 2);
@@ -75,7 +75,10 @@ fn phase_time_sums_to_the_advance_time_and_the_budget_follows_the_tick_rate() {
     let mut driver = Driver::new(2, built.players.len(), 3.0, built.world.config().tick_hz);
     let run = run_ticks(&mut built.world, &mut built.players, &mut driver, 6, 0);
     assert_eq!(PHASES[TickPhase::Spacing as usize], "unit_spacing");
-    assert_eq!(PHASES[TickPhase::VassalEconomy as usize], "vassal_economy");
+    assert_eq!(
+        PHASES[TickPhase::StewardEconomy as usize],
+        "steward_economy"
+    );
     assert_eq!(PHASES[TickPhase::Changed as usize], "result_collation");
     assert_eq!(PHASES.last(), Some(&"idle_tail"));
     assert_eq!(run.phases.len(), TickPhase::Changed as usize + 2);

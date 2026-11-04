@@ -204,7 +204,7 @@ fn one_bad_garrison_occupant_costs_only_itself() {
         kind: UnitKind::Villager,
         hp,
         max_hp: 25,
-        vassal: None,
+        steward: None,
     };
     let mut tc = building(10);
     tc.garrison = vec![occupant(1, 25), occupant(2, 0), occupant(3, 25)];
@@ -221,14 +221,14 @@ fn one_bad_garrison_occupant_costs_only_itself() {
 }
 
 #[test]
-fn a_vassal_report_on_a_non_vassal_is_cleared_not_the_building() {
-    let report = VassalReport {
+fn a_steward_report_on_a_non_steward_is_cleared_not_the_building() {
+    let report = StewardReport {
         weights: [45, 30, 15, 10],
         cap: 100,
         training: false,
         managed: 3,
         residents: 4,
-        wait: VassalWait::Growing,
+        wait: StewardWait::Growing,
     };
     let mut tc = building(10);
     tc.garrison = vec![GarrisonUnitState {
@@ -236,7 +236,7 @@ fn a_vassal_report_on_a_non_vassal_is_cleared_not_the_building() {
         kind: UnitKind::Villager,
         hp: 25,
         max_hp: 25,
-        vassal: Some(report),
+        steward: Some(report),
     }];
     let mut message = snapshot(vec![], vec![tc]);
     let reported = sanitize_gameplay_server(&mut message);
@@ -245,5 +245,5 @@ fn a_vassal_report_on_a_non_vassal_is_cleared_not_the_building() {
     encode_gameplay_server(&message).unwrap();
     let garrison = &parts(&message).1[0].garrison;
     assert_eq!(garrison.len(), 1);
-    assert!(garrison[0].vassal.is_none());
+    assert!(garrison[0].steward.is_none());
 }

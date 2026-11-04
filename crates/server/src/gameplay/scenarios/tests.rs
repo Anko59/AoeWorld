@@ -4,17 +4,17 @@ use aoe_protocol::{GameplayServerMessage, encode_gameplay_server};
 
 #[tokio::test]
 async fn stability_showcase_waits_for_the_recorded_garrison_order() {
-    let service = GameplayService::vassal_stability_demo(Seed(7)).unwrap();
+    let service = GameplayService::steward_stability_demo(Seed(7)).unwrap();
     for _ in 0..40 {
         service.tick().await;
     }
     let world = service.world.read().await;
     let king = world
         .units()
-        .find(|u| u.kind == aoe_simulation::UnitKind::Vassal)
+        .find(|u| u.kind == aoe_simulation::UnitKind::Steward)
         .unwrap();
     assert!(world.movement_order(king.id).is_none());
-    assert!(world.vassal_status(king.id).is_none());
+    assert!(world.steward_status(king.id).is_none());
     assert_eq!(
         world
             .units()
@@ -27,7 +27,7 @@ async fn stability_showcase_waits_for_the_recorded_garrison_order() {
 
 #[tokio::test]
 async fn farming_showcase_streams_valid_initial_and_active_economy_frames() {
-    let service = GameplayService::vassal_farming_demo(Seed(7)).unwrap();
+    let service = GameplayService::steward_farming_demo(Seed(7)).unwrap();
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
     let (session, _) = service.register(None, sender).await;
     service
@@ -51,7 +51,7 @@ async fn farming_showcase_streams_valid_initial_and_active_economy_frames() {
             active |= buildings.iter().any(|b| {
                 b.garrison
                     .iter()
-                    .any(|u| u.vassal.is_some_and(|report| report.managed > 0))
+                    .any(|u| u.steward.is_some_and(|report| report.managed > 0))
             });
         }
         service.tick().await;
@@ -62,7 +62,7 @@ async fn farming_showcase_streams_valid_initial_and_active_economy_frames() {
     );
     assert!(
         active,
-        "the recording client sees its active Vassal's report"
+        "the recording client sees its active Steward's report"
     );
 }
 
@@ -70,7 +70,7 @@ async fn farming_showcase_streams_valid_initial_and_active_economy_frames() {
 async fn kingdom_showcase_streams_valid_initial_and_active_encoded_frames() {
     use aoe_core::PlayerId;
     use aoe_protocol::{ResourceKind, Stockpile, UnitKind, decode_gameplay_server};
-    let service = GameplayService::vassal_kingdom_demo(Seed(7)).unwrap();
+    let service = GameplayService::steward_kingdom_demo(Seed(7)).unwrap();
     let region = {
         let w = service.world.read().await;
         let min_x = w.buildings().map(|b| b.footprint.min.x).min().unwrap() - 8;
@@ -131,7 +131,7 @@ async fn kingdom_showcase_streams_valid_initial_and_active_encoded_frames() {
             active |= buildings.iter().any(|b| {
                 b.garrison
                     .iter()
-                    .any(|u| u.vassal.is_some_and(|report| report.managed == 20))
+                    .any(|u| u.steward.is_some_and(|report| report.managed == 20))
             });
         }
         if initial && active {
@@ -145,14 +145,14 @@ async fn kingdom_showcase_streams_valid_initial_and_active_encoded_frames() {
     );
     assert!(
         active,
-        "recording client receives the active twenty-worker Vassal report"
+        "recording client receives the active twenty-worker Steward report"
     );
 }
 
 #[tokio::test]
 async fn fishing_showcase_streams_valid_managed_ships_and_a_completed_dock() {
     use aoe_protocol::{BuildingKind, UnitKind, decode_gameplay_server};
-    let service = GameplayService::vassal_fishing_demo(Seed(1)).unwrap();
+    let service = GameplayService::steward_fishing_demo(Seed(1)).unwrap();
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
     let (session, _) = service.register(None, sender).await;
     service

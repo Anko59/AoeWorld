@@ -23,7 +23,7 @@ impl GameWorld {
                 UnitTask::Idle
             };
         }
-        if !self.economy.vassals.automatic
+        if !self.economy.stewards.automatic
             && self.unit(id).is_some_and(|u| u.kind == UnitKind::General)
         {
             self.general_march(id, destination);

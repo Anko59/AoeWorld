@@ -16,7 +16,7 @@ fn focus_orders_siege_monks_leaders_archers_then_wounded_by_distance_and_id() {
         UnitKind::BatteringRam,
         UnitKind::Monk,
         UnitKind::General,
-        UnitKind::Vassal,
+        UnitKind::Steward,
         UnitKind::Archer,
         UnitKind::Crossbowman,
         UnitKind::Skirmisher,

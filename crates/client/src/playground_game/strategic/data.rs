@@ -112,14 +112,14 @@ pub(in super::super) fn update(client: &Client) {
         {
             armies.extend(v);
         }
-        if own && (u.managed_by.is_some() || u.kind == UnitKind::Vassal) {
+        if own && (u.managed_by.is_some() || u.kind == UnitKind::Steward) {
             workers.extend([
                 f64::from(u.id.0),
                 u.managed_by.map_or(-1.0, |id| f64::from(id.0)),
                 village::hud::worker_resource(u).map_or(-1.0, |kind| kind as u8 as f64),
                 f64::from(u8::from(client.village.idle_villagers.contains(u.id))),
                 u.home_castle
-                    .filter(|_| u.kind == UnitKind::Vassal)
+                    .filter(|_| u.kind == UnitKind::Steward)
                     .map_or(-1.0, |id| f64::from(id.0)),
             ]);
         }
@@ -142,15 +142,15 @@ pub(in super::super) fn update(client: &Client) {
                 f64::from(b.footprint.max.y),
             ]);
         }
-        if b.player != owner || b.kind != BuildingKind::Castle || economy.len() >= 64 * 8 {
+        if b.player != owner || b.kind != BuildingKind::TownCenter || economy.len() >= 64 * 8 {
             continue;
         }
         let p = village::building_center(b);
         let garrison = b
             .garrison
             .iter()
-            .find(|g| g.kind == UnitKind::Vassal && g.hp > 0);
-        let report = garrison.and_then(|g| g.vassal);
+            .find(|g| g.kind == UnitKind::Steward && g.hp > 0);
+        let report = garrison.and_then(|g| g.steward);
         economy.extend([
             f64::from(b.id.0),
             p[0],

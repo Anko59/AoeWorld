@@ -111,26 +111,30 @@ fn general_train_and_mix_are_owner_checked_and_gate_recruiting() {
 }
 
 #[test]
-fn vassal_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
+fn steward_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
     use aoe_core::{PlayerId, TileCoord, WorldPosition};
-    use aoe_simulation::{GameWorld, UnitKind, VassalSettings};
+    use aoe_simulation::{GameWorld, StewardSettings, UnitKind};
     let owner = PlayerId(0);
-    let (mut world, _) = GameWorld::vassal_territory_demo(Seed(7)).unwrap();
-    let vassal_id = world
+    let (mut world, _) = GameWorld::steward_territory_demo(Seed(7)).unwrap();
+    let steward_id = world
         .units()
-        .find(|u| u.kind == UnitKind::Vassal)
+        .find(|u| u.kind == UnitKind::Steward)
         .unwrap()
         .id;
     let castle = world
         .buildings()
-        .find(|b| b.player == owner && b.kind == aoe_simulation::BuildingKind::Castle)
+        .find(|b| {
+            b.player == owner
+                && b.kind == aoe_simulation::BuildingKind::TownCenter
+                && b.footprint.min.x == 100
+        })
         .unwrap()
         .id;
-    world.issue_garrison(owner, vassal_id, castle).unwrap();
+    world.issue_garrison(owner, steward_id, castle).unwrap();
     for _ in 0..20 {
         world.advance();
     }
-    let settings = VassalSettings {
+    let settings = StewardSettings {
         weights: [10, 70, 10, 10],
         cap: 75,
         training: true,
@@ -139,8 +143,8 @@ fn vassal_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
         apply(
             &mut world,
             PlayerId(1),
-            PendingAction::VassalSettings {
-                vassal_id,
+            PendingAction::StewardSettings {
+                steward_id,
                 settings
             }
         ),
@@ -150,8 +154,8 @@ fn vassal_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
         apply(
             &mut world,
             owner,
-            PendingAction::VassalSettings {
-                vassal_id,
+            PendingAction::StewardSettings {
+                steward_id,
                 settings
             }
         ),
@@ -162,9 +166,9 @@ fn vassal_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
     let report = own
         .garrison
         .iter()
-        .find(|u| u.id == vassal_id)
+        .find(|u| u.id == steward_id)
         .unwrap()
-        .vassal
+        .steward
         .unwrap();
     assert_eq!(
         (report.weights, report.cap, report.training),
@@ -185,7 +189,7 @@ fn vassal_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
         apply(
             &mut world,
             PlayerId(1),
-            PendingAction::VassalDismiss { vassal_id }
+            PendingAction::StewardDismiss { steward_id }
         ),
         CommandResult::RejectedNotOwner
     );
@@ -194,7 +198,7 @@ fn vassal_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
         apply(
             &mut world,
             owner,
-            PendingAction::VassalDismiss { vassal_id }
+            PendingAction::StewardDismiss { steward_id }
         ),
         CommandResult::Accepted
     );

@@ -16,7 +16,7 @@ const nativeDevice = (name: "Desktop Chrome" | "Desktop Firefox") => {
 // whole file names, never substrings (`play.spec.ts` alone must not match
 // every `*.play.spec.ts`).
 const rendererDependent = [
-  /[\\/]village[\\/]vassal[\\/]vassal\.play\.spec\.ts$/,
+  /[\\/]village[\\/]steward[\\/]steward\.play\.spec\.ts$/,
   /[\\/]village[\\/]castle[\\/]castle\.play\.spec\.ts$/,
   /[\\/]play\.spec\.ts$/,
   /(?:^|[\\/.])shared-surfaces\.spec\.ts$/,
@@ -62,7 +62,7 @@ export default defineConfig({
     {
       name: "firefox-webgl2",
       testMatch:
-        /[\\/]rendering[\\/](?:startup|placement)\.play\.spec\.ts$|[\\/]village[\\/](?:(?:input|formations|vassal)[\\/][^\\/]+|production[\\/](?:rally|reseed|auto-scout)|castle[\\/]castle)\.play\.spec\.ts$|[\\/]proofs[\\/]ui-panel\.spec\.ts$/,
+        /[\\/]rendering[\\/](?:startup|placement)\.play\.spec\.ts$|[\\/]village[\\/](?:(?:input|formations|steward)[\\/][^\\/]+|production[\\/](?:rally|reseed|auto-scout)|castle[\\/]castle)\.play\.spec\.ts$|[\\/]proofs[\\/]ui-panel\.spec\.ts$/,
       use: {
         ...nativeDevice("Desktop Firefox"),
         launchOptions: { firefoxUserPrefs: { "webgl.force-enabled": true } },
@@ -89,7 +89,7 @@ export default defineConfig({
     {
       name: "canvas",
       testMatch:
-        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/](?:feudal|vassal[\\/]vassal|castle[\\/]castle)\.play\.spec\.ts$|[\\/]rendering[\\/](?:bigview-interaction|bigview-population|strategic)\.play\.spec\.ts$/,
+        /(?:^|[\\/.])shared-surfaces\.spec\.ts$|[\\/]village[\\/](?:feudal|steward[\\/]steward|castle[\\/]castle)\.play\.spec\.ts$|[\\/]rendering[\\/](?:bigview-interaction|bigview-population|strategic)\.play\.spec\.ts$/,
       use: { launchOptions: { args: [] } },
     },
     {

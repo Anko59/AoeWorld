@@ -2,7 +2,7 @@ use super::*;
 use aoe_map::{ObjectKind, ordered_water_page_root};
 
 mod facing;
-mod vassal;
+mod steward;
 
 #[test]
 fn feudal_age_and_wheelbarrow_preserve_naval_capacity_speed_and_dock_training() {

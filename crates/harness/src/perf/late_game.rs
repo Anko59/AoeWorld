@@ -17,7 +17,7 @@ pub(super) const PHASES: [&str; 10] = [
     "construction",
     "gathering",
     "research_training",
-    "vassal_economy",
+    "steward_economy",
     "building_memory",
     "changed",
 ];

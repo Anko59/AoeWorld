@@ -373,24 +373,24 @@ fn training_can_spawn_on_an_embarked_passengers_vacated_bank_tile() {
 }
 
 #[test]
-fn roaming_vassal_can_board_and_leave_transport_without_activating_a_domain() {
+fn roaming_steward_can_board_and_leave_transport_without_activating_a_domain() {
     let (mut world, boat, _, land, _) = fixture();
     let king = world
-        .spawn_kind(PlayerId(0), UnitKind::Vassal, at(land))
+        .spawn_kind(PlayerId(0), UnitKind::Steward, at(land))
         .unwrap();
-    let settings = crate::VassalSettings {
+    let settings = crate::StewardSettings {
         cap: 42,
         ..Default::default()
     };
     world
-        .issue_vassal_settings(PlayerId(0), king, settings)
+        .issue_steward_settings(PlayerId(0), king, settings)
         .unwrap();
     world.issue_load(PlayerId(0), &[king], boat).unwrap();
     assert_eq!(world.transport_cargo(boat), &[king]);
-    assert_eq!(world.vassal_castle(king), None);
-    assert_eq!(world.vassal_status(king), None);
+    assert_eq!(world.steward_town_center(king), None);
+    assert_eq!(world.steward_status(king), None);
     world.issue_unload(PlayerId(0), boat, land).unwrap();
     assert!(!world.embarked(king));
-    assert_eq!(world.vassal_castle(king), None);
-    assert_eq!(world.vassal_settings(king), Some(settings));
+    assert_eq!(world.steward_town_center(king), None);
+    assert_eq!(world.steward_settings(king), Some(settings));
 }

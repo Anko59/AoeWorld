@@ -89,8 +89,8 @@ impl GameWorld {
         let mut state = occupant.unit;
         state.position = at;
         state.previous_position = at;
-        if state.kind == UnitKind::Vassal {
-            self.set_vassal_castle(state.id, None);
+        if state.kind == UnitKind::Steward {
+            self.set_steward_town_center(state.id, None);
         }
         self.insert_map_unit(state, occupant.next_hit_tick);
         true
@@ -106,8 +106,8 @@ impl GameWorld {
         self.economy.occupied_garrisons.remove(&id);
         let mut retained = Vec::new();
         for occupant in occupants {
-            if occupant.unit.kind == UnitKind::Vassal {
-                self.set_vassal_castle(occupant.unit.id, None);
+            if occupant.unit.kind == UnitKind::Steward {
+                self.set_steward_town_center(occupant.unit.id, None);
             }
             if self.eject_occupant(footprint, occupant, true) {
                 changed.push(occupant.unit.id);

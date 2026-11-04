@@ -19,18 +19,18 @@ impl Economy {
                 hash.update(&coord.to_le_bytes());
             }
         }
-        self.hash_vassal_manager(hash);
+        self.hash_steward_manager(hash);
         self.hash_generals(hash);
         hash.update(&(self.income.len() as u64).to_le_bytes());
         for (player, income) in &self.income {
             hash.update(&player.0.to_le_bytes());
             income.update_hash(hash);
         }
-        hash.update(&(self.vassal_homes.len() as u64).to_le_bytes());
-        for (id, home) in &self.vassal_homes {
+        hash.update(&(self.steward_homes.len() as u64).to_le_bytes());
+        for (id, home) in &self.steward_homes {
             hash.update(&id.0.to_le_bytes());
-            hash.update(&[u8::from(home.castle.is_some())]);
-            if let Some(castle) = home.castle {
+            hash.update(&[u8::from(home.town_center.is_some())]);
+            if let Some(castle) = home.town_center {
                 hash.update(&castle.0.to_le_bytes());
             }
             hash.update(&home.center.x.to_le_bytes());

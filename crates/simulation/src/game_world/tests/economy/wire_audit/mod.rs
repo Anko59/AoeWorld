@@ -26,18 +26,18 @@ fn audit(w: &GameWorld) -> Vec<String> {
                 || naval
                 || matches!(
                     u.kind,
-                    UnitKind::Villager | UnitKind::Vassal | UnitKind::General | UnitKind::Monk
+                    UnitKind::Villager | UnitKind::Steward | UnitKind::General | UnitKind::Monk
                 ))
         {
             note("unit.commanded_by");
         }
-        if w.vassal_controller(u.id).is_some() && !(villager && alive) {
+        if w.steward_controller(u.id).is_some() && !(villager && alive) {
             note("unit.managed_by");
         }
-        if w.vassal_castle(u.id)
+        if w.steward_town_center(u.id)
             .or_else(|| w.general_castle(u.id))
             .is_some()
-            && !(matches!(u.kind, UnitKind::Vassal | UnitKind::General) && alive)
+            && !(matches!(u.kind, UnitKind::Steward | UnitKind::General) && alive)
         {
             note("unit.home_castle");
         }
@@ -105,7 +105,7 @@ fn run_audited(w: &mut GameWorld, ticks: u32, seen: &mut std::collections::BTree
     for t in 0..ticks {
         w.advance();
         for finding in audit(w) {
-            // KNOWN (reproduced by the Vassal scenario): a villager killed
+            // KNOWN (reproduced by the Steward scenario): a villager killed
             // mid-job can leave its corpse with task Idle. The server's wire
             // builder normalizes it; the writer in the simulation is not found.
             if finding.starts_with("unit.dying_iff_no_hp") {
@@ -145,7 +145,7 @@ fn a_general_army_in_battle_never_leaves_an_invalid_wire_state() {
     rich(&mut w);
     w.insert_building(
         PlayerId(0),
-        BuildingKind::Castle,
+        BuildingKind::TownCenter,
         aoe_core::TileRect::from_xywh(90, 90, 4, 4),
         true,
     )
@@ -190,28 +190,28 @@ fn a_general_army_in_battle_never_leaves_an_invalid_wire_state() {
 }
 
 #[test]
-fn vassals_and_their_villagers_dying_never_leave_an_invalid_wire_state() {
+fn stewards_and_their_villagers_dying_never_leave_an_invalid_wire_state() {
     let (mut w, castle) = {
         let (mut w, _, _) = village();
         rich(&mut w);
         let castle = w
             .insert_building(
                 PlayerId(0),
-                BuildingKind::Castle,
+                BuildingKind::TownCenter,
                 aoe_core::TileRect::from_xywh(90, 90, 4, 4),
                 true,
             )
             .unwrap();
         (w, castle)
     };
-    w.issue_train(PlayerId(0), castle, UnitKind::Vassal)
+    w.issue_train(PlayerId(0), castle, UnitKind::Steward)
         .unwrap();
     let mut seen = Default::default();
     let training = 60 * w.config().tick_hz;
     run_audited(&mut w, training, &mut seen);
-    // A Vassal only manages while garrisoned in its home Castle.
-    let vassal = w.units().find(|u| u.kind == UnitKind::Vassal).unwrap().id;
-    w.issue_garrison(PlayerId(0), vassal, castle).unwrap();
+    // A Steward only manages while garrisoned in its home Town Center.
+    let steward = w.units().find(|u| u.kind == UnitKind::Steward).unwrap().id;
+    w.issue_garrison(PlayerId(0), steward, castle).unwrap();
     run_audited(&mut w, 2, &mut seen);
     for n in 0..30 {
         w.spawn_villager(PlayerId(0), at(96 + n % 6, 96 + n / 6))
@@ -226,7 +226,7 @@ fn vassals_and_their_villagers_dying_never_leave_an_invalid_wire_state() {
     assert!(
         villagers
             .iter()
-            .any(|&id| w.vassal_controller(id).is_some()),
+            .any(|&id| w.steward_controller(id).is_some()),
         "the scenario must have managed villagers"
     );
     for (n, id) in villagers.iter().enumerate() {
@@ -236,10 +236,10 @@ fn vassals_and_their_villagers_dying_never_leave_an_invalid_wire_state() {
             run_audited(&mut w, 3, &mut seen);
         }
     }
-    w.issue_ungarrison(PlayerId(0), castle, Some(vassal))
+    w.issue_ungarrison(PlayerId(0), castle, Some(steward))
         .unwrap();
     run_audited(&mut w, 5, &mut seen);
-    let index = w.lookup[&vassal];
+    let index = w.lookup[&steward];
     w.kill_unit(index);
     run_audited(&mut w, 900, &mut seen);
     assert!(seen.is_empty(), "{}", report(&seen));

@@ -23,7 +23,7 @@ test("far construction previews the footprint and reports only server acknowledg
   // A strategic label must not intercept the site while placement is armed.
   await page.evaluate(() => {
     const button = document.createElement("button");
-    button.className = "vassal-card";
+    button.className = "steward-card";
     button.textContent = "Castle label above the proposed site";
     button.style.cssText = "left:700px;top:340px";
     document.getElementById("strategic-tokens")?.append(button);

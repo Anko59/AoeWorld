@@ -17,18 +17,17 @@ The developer timing overlay uses F8 here and retains F3 at sprite zoom.
 | --- | --- | --- |
 | F1 | Ownership | Occupied settlement cells, not invented territorial borders |
 | F2 | Armies | Army tokens and unit clusters |
-| F3 | Economy | Vassal cards and their Castle domains |
+| F3 | Economy | Steward cards and their Town Center domains |
 | F4 | Threats | Historical enemy sightings, labelled with age, for two minutes |
 | F5 | Resources | Discovered deposits, retained across camera subscriptions and terrain eviction |
 | F6 | Roads & bridges | Known bridges; road-network data is unavailable |
 
-Vassal cards select the same Castle as near zoom. They show the server's
+Steward cards select the same Town Center as near zoom. They show the server's
 managed/resident counts and growth wait reason, plus observed food, wood, gold,
 stone jobs and idle workers identified by their authoritative manager. Job
 counts describe the current authorized unit stream; they are not an invented
 global census. A question mark means the report is unavailable. An ungarrisoned
-Vassal's domain is inactive. The Castle selection path is the hook for future
-Vassal sliders; this revision has no Vassal settings protocol or sliders.
+Steward's domain is inactive. Selecting its Town Center opens its resource weights, cap and training controls.
 
 ## Work bounds
 
@@ -39,7 +38,7 @@ by scanning all players on every animation frame. The client forwards numeric
 records; JavaScript aggregates worker jobs and order destinations to conserve
 WASM space. Territory geometry and unchanged DOM content are cached.
 
-Presentation is capped at 256 General records, 64 Castle records, 256 bridge
+Presentation is capped at 256 General records, 64 Town Center records, 256 bridge
 records, 1,024 historical contacts and the existing 2,048 deposit markers. Nearby
 labels use a bounded screen-grid placement search and retain lines to their true
 locations. These bounds are not a qualification of a crowded 1,000-player RTS.
@@ -147,7 +146,7 @@ General selection/march/return to sprite zoom on renderer projects.
 `tests/rendering/strategic-capture.play.spec.ts` is an opt-in original-art proof
 for this checkout's dev server on port 8153. The ignored file
 `.cache/showcase/zoom.json` supplies `{"url":"http://127.0.0.1:8153/","mode":"general"}`;
-`vassal` captures the economy demo and `large` uses the locally prepared
+`steward` captures the economy demo and `large` uses the locally prepared
 8,000-tile Paris package named in `tests/proofs/strategic/large.ts`, with 99 real
 AI opponents. Packages must be installed before starting the dev server. The
 large proof stops its AI hosts in its cleanup path. Videos and source-backed

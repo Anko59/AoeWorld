@@ -60,6 +60,7 @@ impl Unit {
                 | UnitKind::Scout
                 | UnitKind::FishingShip
                 | UnitKind::TransportShip
+                | UnitKind::Steward
                 | UnitKind::Vassal
         )
     }

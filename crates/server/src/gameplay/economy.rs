@@ -60,7 +60,7 @@ pub(super) fn command_state(world: &GameWorld, unit: &GameUnit, state: &mut Game
         return;
     }
     state.home_castle = world.general_castle(unit.id);
-    state.managed_by = world.vassal_controller(unit.id);
+    state.managed_by = world.steward_controller(unit.id);
     state.commanded_by = world.general_controller(unit.id);
     state.general = world.general_status(unit.id).map(wire_general);
 }
@@ -321,30 +321,34 @@ pub(super) fn wire_building_state(
                 hp: g.unit.hp,
                 max_hp: g.unit.max_hp,
                 // A Dying occupant carries no report, as no Dying unit carries
-                // command fields: the wire requires a living Vassal.
-                vassal: g
-                    .vassal
+                // command fields: the wire requires a living Steward.
+                steward: g
+                    .steward
                     .filter(|_| g.unit.hp > 0)
-                    .map(|v| aoe_protocol::VassalReport {
+                    .map(|v| aoe_protocol::StewardReport {
                         weights: v.settings.weights,
                         cap: v.settings.cap,
                         training: v.settings.training,
                         managed: v.managed,
                         residents: v.residents,
                         wait: match v.wait {
-                            aoe_simulation::VassalWait::Growing => {
-                                aoe_protocol::VassalWait::Growing
+                            aoe_simulation::StewardWait::Growing => {
+                                aoe_protocol::StewardWait::Growing
                             }
-                            aoe_simulation::VassalWait::Census => aoe_protocol::VassalWait::Census,
-                            aoe_simulation::VassalWait::Full => aoe_protocol::VassalWait::Full,
-                            aoe_simulation::VassalWait::NoTownCenter => {
-                                aoe_protocol::VassalWait::NoTownCenter
+                            aoe_simulation::StewardWait::Census => {
+                                aoe_protocol::StewardWait::Census
                             }
-                            aoe_simulation::VassalWait::Population => {
-                                aoe_protocol::VassalWait::Population
+                            aoe_simulation::StewardWait::Full => aoe_protocol::StewardWait::Full,
+                            aoe_simulation::StewardWait::NoTownCenter => {
+                                aoe_protocol::StewardWait::NoTownCenter
                             }
-                            aoe_simulation::VassalWait::Paused => aoe_protocol::VassalWait::Paused,
-                            aoe_simulation::VassalWait::Food => aoe_protocol::VassalWait::Food,
+                            aoe_simulation::StewardWait::Population => {
+                                aoe_protocol::StewardWait::Population
+                            }
+                            aoe_simulation::StewardWait::Paused => {
+                                aoe_protocol::StewardWait::Paused
+                            }
+                            aoe_simulation::StewardWait::Food => aoe_protocol::StewardWait::Food,
                         },
                     }),
             })
@@ -406,7 +410,7 @@ impl GameplayService {
                         aoe_simulation::TickPhase::Construction => "construction",
                         aoe_simulation::TickPhase::Gathering => "gathering",
                         aoe_simulation::TickPhase::ResearchTraining => "research_training",
-                        aoe_simulation::TickPhase::VassalEconomy => "vassal_economy",
+                        aoe_simulation::TickPhase::StewardEconomy => "steward_economy",
                         aoe_simulation::TickPhase::BuildingMemory => "building_memory",
                         aoe_simulation::TickPhase::Changed => "changed",
                     };

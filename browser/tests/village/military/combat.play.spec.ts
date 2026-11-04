@@ -23,10 +23,10 @@ test("a Castle rally survives reload without poisoning the game snapshot", async
 }, info) => {
   test.setTimeout(90_000);
   expect(
-    (await request.post("/maps/reset?scenario=vassal-economy")).status(),
+    (await request.post("/maps/reset?scenario=general-army")).status(),
   ).toBe(204);
   await gameAssets(page, true);
-  await page.goto("/?play=1#x=137&y=132&zoom=.5");
+  await page.goto("/?play=1#x=100&y=126&zoom=.5");
   await expect(page.locator("#connection")).toHaveText("connected", {
     timeout: 60_000,
   });

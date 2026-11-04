@@ -188,9 +188,9 @@ export function initStrategic(fog, actors) {
       }
       for (let at = 0; at + 7 < castles.length; at += 8) {
         const [id, x, y, selected, garrison, managed, residents, wait] = castles.slice(at, at + 8);
-        const vassal = garrison >= 0 ? garrison : homes.get(id);
-        if (vassal === undefined) continue;
-        economy.push(id, vassal, x, y, selected, managed, residents, wait, ...(jobs.get(vassal) ?? [0, 0, 0, 0, 0]));
+        const steward = garrison >= 0 ? garrison : homes.get(id);
+        if (steward === undefined) continue;
+        economy.push(id, steward, x, y, selected, managed, residents, wait, ...(jobs.get(steward) ?? [0, 0, 0, 0, 0]));
       }
       update(armies, economy, b, c);
     },

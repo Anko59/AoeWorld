@@ -35,7 +35,7 @@ export function initCockpit() {
     const counts = new Map();
     for (let kind = 0; kind < Math.min(census.length, trainingKinds.length); kind++) {
       const count = census[kind];
-      if (!Number.isInteger(count) || count <= 0 || [0, 3, 22].includes(kind)) continue;
+      if (!Number.isInteger(count) || count <= 0 || [0, 3, 22, 34].includes(kind)) continue;
       counts.set(kind, count);
     }
     const rows = [...counts].sort((a, b) => a[0] - b[0]);

@@ -153,8 +153,8 @@ fn a_long_dropoff_trip_still_replaces_a_tree_in_the_reachable_work_area() {
 }
 
 #[test]
-fn vassal_refreshes_lumber_camp_after_tree_depletion() {
-    use crate::{Age, Stockpile, VASSAL_RULES};
+fn steward_refreshes_lumber_camp_after_tree_depletion() {
+    use crate::{Age, STEWARD_RULES, Stockpile};
     let (mut world, old) = cleared_work_area(ResourceKind::Wood);
     world.set_fog_disabled(true);
     let next = ResourceNode::starting(
@@ -175,14 +175,19 @@ fn vassal_refreshes_lumber_camp_after_tree_depletion() {
             true,
         )
         .unwrap();
-    let castle_rect = aoe_core::TileRect::from_xywh(old.tile.x - 5, old.tile.y + 8, 4, 4);
+    let castle_rect = aoe_core::TileRect::from_xywh(old.tile.x - 5, old.tile.y + 16, 4, 4);
     let castle = world
-        .insert_building(PlayerId(0), crate::BuildingKind::Castle, castle_rect, true)
+        .insert_building(
+            PlayerId(0),
+            crate::BuildingKind::TownCenter,
+            castle_rect,
+            true,
+        )
         .unwrap();
     let p = world.economy.players.get_mut(&PlayerId(0)).unwrap();
     p.age = Age::Castle;
     // Wood is the kingdom's scarcest reserve here, so the wood gatherer keeps
-    // its job. With zero food, gold or stone the Vassal would rightly move it.
+    // its job. With zero food, gold or stone the Steward would rightly move it.
     p.stockpile = Stockpile {
         food: 30_000,
         wood: 1000,
@@ -195,15 +200,15 @@ fn vassal_refreshes_lumber_camp_after_tree_depletion() {
             position(TileCoord::new(old.tile.x - 1, old.tile.y)).unwrap(),
         )
         .unwrap();
-    let vassal = world
+    let steward = world
         .spawn_kind(
             PlayerId(0),
-            UnitKind::Vassal,
-            position(TileCoord::new(old.tile.x - 6, old.tile.y + 8)).unwrap(),
+            UnitKind::Steward,
+            position(TileCoord::new(old.tile.x - 6, old.tile.y + 16)).unwrap(),
         )
         .unwrap();
 
-    world.issue_garrison(PlayerId(0), vassal, castle).unwrap();
+    world.issue_garrison(PlayerId(0), steward, castle).unwrap();
     world.advance_garrisons(&mut Vec::new());
     let mut task = GatherTask::new(old.id, old.tile, ResourceKind::Wood, None);
     task.dropoff = Some(camp);
@@ -227,18 +232,18 @@ fn vassal_refreshes_lumber_camp_after_tree_depletion() {
     world.economy.gatherers.insert(worker, task);
     world
         .economy
-        .vassals
+        .stewards
         .controlled
-        .insert(worker, (vassal, ResourceKind::Wood));
+        .insert(worker, (steward, ResourceKind::Wood));
     world
         .economy
-        .vassal_homes
-        .get_mut(&vassal)
+        .steward_homes
+        .get_mut(&steward)
         .unwrap()
         .workers
         .insert(worker);
-    world.tick = aoe_core::Tick(VASSAL_RULES.period_ticks);
-    world.advance_vassals(&mut Vec::new());
+    world.tick = aoe_core::Tick(STEWARD_RULES.period_ticks);
+    world.advance_stewards(&mut Vec::new());
     assert_eq!(
         world
             .player_buildings_of(PlayerId(0), crate::BuildingKind::LumberCamp)

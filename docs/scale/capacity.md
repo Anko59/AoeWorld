@@ -111,7 +111,7 @@ checks now read one player's buildings (the per-player, per-kind index) or the
 order's own group. `advance_training` visits only buildings with a queue.
 Training spawn occupancy and placement occupancy now use spatial buckets and
 the existing full-footprint building tile index, including Farms and TC arches.
-The Vassal phase has [fixed admission budgets](../economy/vassal.md), separate
+The Steward phase has [fixed admission budgets](../economy/steward.md), separate
 from the ordinary shared route budgets.
 Remaining O(buildings) per-tick scans: research, gates, the watched-building
 memory refresh. In a debug build 13,600 buildings and 31,000 collision tiles

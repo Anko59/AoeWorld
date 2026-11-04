@@ -67,14 +67,16 @@ Layers, each testable on its own:
 | Python bindings | `crates/sdk-python` (`aoeworld`) | the SDK for Python, GIL released while waiting |
 | Example AI | `ai/` (`aoe_ai`) | a Dark and Feudal Age player and a many-bot host |
 
-`UnitKind.VASSAL` (Rust `UnitKind::Vassal`) trains at a Castle with
-`client.train(castle.id, aoeworld.UnitKind.VASSAL)`. Garrison it in any completed owned Castle without a Vassal
-with the normal command to activate the [domain economy](economy/vassal.md).
-A roaming Vassal has no `Unit.home_castle` (that field is used by Generals).
+`UnitKind.STEWARD` (Rust `UnitKind::Steward`) trains at a Town Center with
+`client.train(town_center.id, aoeworld.UnitKind.STEWARD)`. Garrison it in any completed owned Town Center without a Steward
+with the normal command to activate the [domain economy](economy/steward.md).
+A roaming Steward has no `Unit.home_castle` (that field is used by Generals).
 A Villager's `Unit.managed_by`
-identifies its controlling Vassal. Both are optional entity IDs, visible only to
+identifies its controlling Steward. Both are optional entity IDs, visible only to
 the owner. The Rust getters return `Option<EntityId>`; Python returns `int | None`.
 Manual worker orders release management until the worker becomes idle.
+
+Vassals still train at Castles; their defensive and land development duties are coming.
 
 ## Slots, tokens and what a slot sees
 
