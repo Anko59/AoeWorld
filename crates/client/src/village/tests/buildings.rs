@@ -3,7 +3,7 @@ use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use aoe_protocol::{BuildingKind, ConstructionState, GameplayBuildingState, MAX_ECONOMY_BUILDINGS};
 use wasm_bindgen_test::wasm_bindgen_test;
 
-fn building(id: usize) -> GameplayBuildingState {
+pub(super) fn building(id: usize) -> GameplayBuildingState {
     GameplayBuildingState {
         id: EntityId(id as u32),
         player: PlayerId(0),

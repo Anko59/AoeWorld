@@ -69,3 +69,42 @@ fn strategic_armies_do_not_disclose_foreign_mix_stance_or_orders() {
     unit.kind = UnitKind::Villager;
     assert!(army_record(&unit, PlayerId(0), false, None).is_none());
 }
+
+#[wasm_bindgen_test]
+fn site_projection_caps_after_owned_capitals_and_castles_and_visibility() {
+    use crate::playground::game::strategic::site_buildings;
+    use aoe_core::PlayerId;
+    use aoe_protocol::BuildingKind;
+    let mut buildings: Vec<_> = (0..2048)
+        .map(|id| {
+            let mut b = super::buildings::building(id);
+            b.player = PlayerId(1);
+            b.kind = if id % 2 == 0 {
+                BuildingKind::Castle
+            } else {
+                BuildingKind::TownCenter
+            };
+            b
+        })
+        .collect();
+    let mut castle = super::buildings::building(9000);
+    castle.kind = BuildingKind::Castle;
+    buildings.push(castle);
+    buildings.push(super::buildings::building(9001));
+    let sites: Vec<_> = site_buildings(&buildings, PlayerId(0), |_| true)
+        .map(|b| b.id)
+        .collect();
+    assert_eq!(sites.len(), 2048);
+    assert_eq!(&sites[..2], &[EntityId(9001), EntityId(9000)]);
+    let own_only: Vec<_> = site_buildings(&buildings, PlayerId(0), |_| false)
+        .map(|b| b.id)
+        .collect();
+    assert_eq!(own_only, vec![EntityId(9001), EntityId(9000)]);
+    buildings.last_mut().unwrap().hp = 0;
+    assert_eq!(
+        site_buildings(&buildings, PlayerId(0), |_| false)
+            .map(|b| b.id)
+            .collect::<Vec<_>>(),
+        vec![EntityId(9000)]
+    );
+}
