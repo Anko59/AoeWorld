@@ -25,7 +25,9 @@ async function select(page: Page, kind: string, excludedId?: number) {
   await expect(async () => {
     await freshHud(page);
     const candidates = (await actors(page)).filter(
-      (a) => a.kind === (kind === "Town Center" ? "TownCenter" : kind) && a.id !== excludedId,
+      (a) =>
+        a.kind === (kind === "Town Center" ? "TownCenter" : kind) &&
+        a.id !== excludedId,
     );
     const actor = candidates[attempt++ % candidates.length];
     if (!actor) throw new Error(`${kind} has no target`);
@@ -135,7 +137,8 @@ test("train one Steward per Town Center and activate its visible economic domain
   });
   await expect
     .poll(
-      async () => (await actors(page)).find((a) => a.kind === "Steward")?.y ?? 0,
+      async () =>
+        (await actors(page)).find((a) => a.kind === "Steward")?.y ?? 0,
     )
     .toBeGreaterThan(viewport.height / 2 + 70);
   await expect(page.locator("#selection-task")).toHaveText("Idle");
@@ -215,7 +218,9 @@ test("train one Steward per Town Center and activate its visible economic domain
       (await actors(page)).filter((a) => a.selected).map((a) => a.id),
     )
     .toEqual(workerIds);
-  await expect(page.locator("#steward-status")).toHaveText("Managed by Steward");
+  await expect(page.locator("#steward-status")).toHaveText(
+    "Managed by Steward",
+  );
   if (capture)
     await page.screenshot({ path: "../.cache/steward/managed-firefox.png" });
   await centerTownCenter(page);
@@ -262,7 +267,9 @@ test("train one Steward per Town Center and activate its visible economic domain
   await page
     .getByLabel("Train villagers and fishing ships", { exact: true })
     .uncheck();
-  await expect(page.locator("#steward-status")).toContainText("training is off");
+  await expect(page.locator("#steward-status")).toContainText(
+    "training is off",
+  );
   await expect(page.locator("#steward-status")).toContainText(
     "/0 villagers managed",
   );

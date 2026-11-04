@@ -244,7 +244,9 @@ export async function imperialArtProof(
   await page.locator("#train-general").click();
   await select("TownCenter");
   await page.locator("#train-steward").click();
-  await expect(page.locator("#research-imperial-age")).toBeEnabled({ timeout: 45_000 });
+  await expect(page.locator("#research-imperial-age")).toBeEnabled({
+    timeout: 45_000,
+  });
   await page.locator("#research-imperial-age").click();
   await expect(page.locator("#age")).toContainText("Imperial Age", {
     timeout: 25_000,
@@ -300,7 +302,8 @@ export async function imperialArtProof(
     if (!site || !tech || !kind) throw new Error("Incomplete research capture");
     await research(site, tech, kind);
   }
-  for (const kind of ["Vassal", "Steward", "General"]) await capture(kind, kind);
+  for (const kind of ["Vassal", "Steward", "General"])
+    await capture(kind, kind);
   await writeFile(
     "../.cache/imperial-art/art-console.json",
     JSON.stringify(diagnostics, null, 2),

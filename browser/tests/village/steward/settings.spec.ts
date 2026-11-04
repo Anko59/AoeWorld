@@ -76,7 +76,9 @@ test("F4: the last positive weight remains visible after attempting an all-zero 
   await expect(page.locator("#steward-setting-3 + output")).toHaveText("10");
 });
 
-test("training portraits retain wire slots and append the Steward's real King icon", async ({ page }) => {
+test("training portraits retain wire slots and append the Steward's real King icon", async ({
+  page,
+}) => {
   await page.goto("/");
   const art = await page.evaluate(async () => {
     const source = "/interface/ui-art.js";
