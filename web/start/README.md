@@ -22,9 +22,10 @@ Loading Cancel uses the cancellation API and returns to setup after confirmation
 Progress is measured within the current job phase, never an invented aggregate.
 Unknown phase counts are indeterminate. After activation, loading waits for the
 activated map hash, zero pending and failed scene chunks, a new presented frame,
-a ready minimap raster and a connected game. It centres the Town Center
+and a connected game. The minimap may still be loading or using its schematic;
+its background request and retries continue during play. It centres the Town Center
 (or the starting scout when no village exists) before fading, including when the geographic
-centre is water. A bounded terrain wait reports an error with a route back to setup.
+centre is water. Preparation and activation failures offer a route back to setup.
 
 The eight player colours are saved in session storage and passed to the game
 as `#playground data-player-colour` and the `--player-colour` CSS property.
@@ -46,6 +47,15 @@ request. Reduced-motion preferences disable pans, fades and bar animation.
 Browser specs in `browser/tests/start/` cover entry, requests, progress,
 errors, reload resume, capture hooks and both requested desktop sizes. Their screenshots
 are written to `.cache/start-shots/`.
+
+The opt-in `skirmish-startup-*` phase of `make ui-proof` measures a real-art
+France start with 99 opponents, at 960 km and 240:1 compression. Point
+`.cache/ui/proof.json` at an idle, real-pack development server, for example
+`{"phase":"skirmish-startup-run","url":"http://127.0.0.1:8109/"}`.
+Prepare that source-backed request with `AOE_PRESET_MAPS` before measuring.
+Restart the server and use a fresh browser context for each cold minimap run.
+Results under `.cache/startup/` separate the playable frame from the optional
+raster's completion and retain resource timings, status phases and screenshots.
 
 **Opponents** sets 0 to 99 AI players (default 7, saved in session storage),
 each with the standard start and uncapped population. A server
@@ -71,8 +81,8 @@ seat. If no match is running, the page falls back to the cinematic or menu as us
 
 The terrain wait has no wall-clock failure deadline: a ready, connected match
 keeps loading under CPU pressure. The scene's pending chunk count is shown as
-"Opening terrain · n chunks remaining"; retrying requests and a missing minimap
-have separate messages. Definitive preparation/activation errors still open the
+"Opening terrain · n chunks remaining"; retrying terrain requests have their
+own message. Definitive preparation/activation errors still open the
 error screen. Both new games and reloads use this wait.
 
 The **France** preset is all of mainland France (46.6 N, 2.5 E) at the

@@ -250,7 +250,6 @@ export function initStartSequence({ readJson, start, cancel }) {
     const sameMap = minimap.dataset.mapHash === waiting.hash;
     const terrain = sameMap && Number(scene.dataset.frame) > 0 && scene.dataset.chunksPending === '0'
       && scene.dataset.chunksFailed === '0' && scene.dataset.frame !== waiting.frame;
-    const raster = sameMap && minimap.dataset.raster === 'ready';
     const pending = sameMap ? Number(scene.dataset.chunksPending) : NaN;
     const failed = sameMap ? Number(scene.dataset.chunksFailed) : 0;
     const connected = el('connection').textContent === 'connected';
@@ -260,11 +259,12 @@ export function initStartSequence({ readJson, start, cancel }) {
       : failed > 0 ? 'Opening terrain · retrying terrain requests'
         : Number.isSafeInteger(pending) && pending > 0
           ? `Opening terrain · ${pending.toLocaleString()} chunks remaining`
-          : !raster ? 'Opening terrain · waiting for the minimap'
-            : 'Opening terrain · waiting for the first landscape';
-    progress(Number(terrain) + Number(raster), 2,
-      terrain && raster && connected ? 'Your landscape is ready' : phase);
-    if (terrain && raster && connected) {
+          : 'Opening terrain · waiting for the first landscape';
+    // The strategic raster is optional presentation. Its background request
+    // and retries must never keep a complete, connected landscape covered.
+    progress(Number(terrain) + Number(connected), 2,
+      terrain && connected ? 'Your landscape is ready' : phase);
+    if (terrain && connected) {
       const primary = el('minimap-primary');
       const start = [Number(primary.getAttribute('cx')) * Number(minimap.dataset.worldWidth) / 256,
         Number(primary.getAttribute('cy')) * Number(minimap.dataset.worldHeight) / 256];
@@ -292,7 +292,7 @@ export function initStartSequence({ readJson, start, cancel }) {
   }
   const observer = new MutationObserver(checkTerrain);
   observer.observe(el('scene'), { attributes: true, attributeFilter: ['data-connected', 'data-chunks-pending', 'data-chunks-failed', 'data-frame'] });
-  observer.observe(el('minimap'), { attributes: true, attributeFilter: ['data-raster', 'data-map-hash'] });
+  observer.observe(el('minimap'), { attributes: true, attributeFilter: ['data-map-hash'] });
   observer.observe(el('connection'), { childList: true, subtree: true, characterData: true });
   function returnToSetup() {
     skirmishJob = false;
