@@ -37,7 +37,7 @@ pub use game_world::{
     GameBuilding, GameUnit, GameWorld, GameWorldError, GarrisonedUnit, GeneralState, GeneralStatus,
     GeneralWork, HitRecord, MARKET_RULES, MAX_BUILD_GROUP, MAX_WALL_SEGMENTS, MarketPrices,
     MovementOrder, PlanningProbe, PlayerEconomy, PreparedResourceDepletion, Projectile,
-    ProjectileKind, RallyPoint, RallyTarget, ResearchEntry, RouteSchedulerStats, STEWARD_RULES,
+    ProjectileKind, RallyPoint, RallyTarget, ResearchEntry, RouteSchedulerStats, SquadKind, SquadStatus, STEWARD_RULES,
     STEWARD_STALL_SECONDS, StewardRules, StewardSettings, StewardStatus, StewardWait, StewardWork,
     Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules, TickPhase, TrainingEntry,
     UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VASSAL_LIMIT,

@@ -6,6 +6,7 @@ use aoe_protocol::{BuildingKind, ConstructionState, UnitKind};
 use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
+mod mix;
 mod territory;
 mod vassal;
 
@@ -42,6 +43,15 @@ pub(super) fn panel_values(id: EntityId, g: aoe_protocol::GeneralStatus) -> Vec<
     ];
     values.extend(g.mix.iter().map(|&n| f64::from(n)));
     values.extend(g.counts.iter().map(|&n| f64::from(n)));
+    values.push(g.squads.iter().flatten().count() as f64);
+    for squad in g.squads.into_iter().flatten() {
+        values.extend([
+            f64::from(squad.leader.0),
+            squad.kind as u8 as f64,
+            f64::from(squad.size),
+            squad.state as u8 as f64,
+        ]);
+    }
     values
 }
 
@@ -55,9 +65,11 @@ pub(super) fn panel_command(
     if action == 9 {
         return Some(aoe_protocol::GeneralCommand::SetTraining { enabled: code != 0 });
     }
+    if action != 10 {
+        return None;
+    }
     let (role, share) = ((code / 128) as usize, (code % 128).min(100) as u8);
-    let mut mix = mix;
-    *mix.get_mut(role)? = share;
+    let mix = mix::percentage(mix, role, share)?;
     Some(aoe_protocol::GeneralCommand::SetMix { mix })
 }
 

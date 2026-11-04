@@ -15,6 +15,7 @@ fn repair_unit(rule: &str, u: &mut UnitState) -> bool {
         "unit.managed_by" => u.managed_by = None,
         "unit.commanded_by" => u.commanded_by = None,
         "unit.general" => u.general = None,
+        "unit.sergeant" => u.sergeant = false,
         "unit.cargo_count" => u.cargo_count = 0,
         "unit.facing" => u.facing &= 7,
         "unit.auto_scout" => u.auto_scout = false,

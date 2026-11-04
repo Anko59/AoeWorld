@@ -76,6 +76,7 @@ impl GameWorld {
             death_tick: None,
             death_hunt: None,
             auto_scout: false,
+            sergeant: false,
             stance: if kind.is_ram() {
                 aoe_core::CombatStance::Defensive
             } else {

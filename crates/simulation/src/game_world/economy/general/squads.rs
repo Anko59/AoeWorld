@@ -40,30 +40,44 @@ impl Army {
         true
     }
 
-    pub(super) fn assign_squad(&mut self, id: EntityId, kind: UnitKind) {
-        let Some(arm) = arm(kind) else { return };
+    pub(super) fn assign_squad(
+        &mut self,
+        id: EntityId,
+        kind: UnitKind,
+    ) -> Option<(Option<EntityId>, EntityId)> {
+        let arm = arm(kind)?;
         if let Some(squad) = self
             .squads
             .iter_mut()
             .find(|s| s.arm == arm && s.members.len() < CAPACITY[arm])
         {
+            let old = squad.members.first().copied();
             if let Err(at) = squad.members.binary_search(&id) {
                 squad.members.insert(at, id);
             }
+            let new = *squad.members.first()?;
+            (old != Some(new)).then_some((old, new))
         } else {
             debug_assert!(self.squads.len() < SQUAD_LIMIT);
             self.squads.push(Squad {
                 arm,
                 members: vec![id],
             });
+            Some((None, id))
         }
     }
 
-    pub(super) fn remove_from_squads(&mut self, id: EntityId) {
+    pub(super) fn remove_from_squads(&mut self, id: EntityId) -> Option<EntityId> {
+        let mut promoted = None;
         for squad in &mut self.squads {
+            let leader = squad.members.first() == Some(&id);
             squad.members.retain(|&member| member != id);
+            if leader {
+                promoted = squad.members.first().copied();
+            }
         }
         self.squads.retain(|squad| !squad.members.is_empty());
+        promoted
     }
 }
 

@@ -2,6 +2,13 @@ use super::super::Economy;
 impl Economy {
     pub(crate) fn hash_generals(&self, h: &mut blake3::Hasher) {
         let m = &self.generals;
+        if !m.appearance_changes.is_empty() {
+            h.update(b"sergeant-changes");
+            h.update(&(m.appearance_changes.len() as u64).to_le_bytes());
+            for id in &m.appearance_changes {
+                h.update(&id.0.to_le_bytes());
+            }
+        }
         if m.armies.is_empty() && m.recruits.is_empty() {
             return;
         }

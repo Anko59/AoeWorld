@@ -27,6 +27,11 @@ export function entityIcon(kind) {
     ['Sheep','Deer','Boar','Wolf'].includes(kind)?'animal':'towncenter';
   return icon('units', entities[kind] ?? -1, symbol);
 }
+// Officers use imported hero portraits only; absent art is never substituted.
+export function squadIcon(kind) {
+  const id = [432,200,198,170][kind], art = catalog?.units?.[id];
+  return `<span class="art-icon" data-ui-group="units" data-ui-id="${id}" data-native-only="true">${validArt(art)?original(art):''}</span>`;
+}
 export function setEntityIcon(node, kind) {
   if (node.dataset.entityIcon===kind) return;
   node.dataset.entityIcon=kind;

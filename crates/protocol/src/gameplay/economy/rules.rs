@@ -222,6 +222,9 @@ fn carried_rule(unit: &UnitState) -> bool {
 /// The first rule `unit` breaks.
 pub(crate) fn unit_rule(unit: &UnitState) -> Option<&'static str> {
     let alive = unit.hp > 0;
+    if unit.sergeant && crate::SquadKind::for_unit(unit.kind).is_none() {
+        return Some("unit.sergeant");
+    }
     if unit
         .home_castle
         .is_some_and(|id| !(unit.kind == UnitKind::General && alive && id != unit.id))
@@ -253,7 +256,24 @@ pub(crate) fn unit_rule(unit: &UnitState) -> Option<&'static str> {
             && alive
             && g.army_size <= 200
             && g.mix.iter().all(|&share| share <= 100)
-            && g.counts.iter().map(|&n| usize::from(n)).sum::<usize>() <= 200)
+            && g.counts.iter().map(|&n| usize::from(n)).sum::<usize>() <= 200
+            && g.squads
+                .iter()
+                .flatten()
+                .map(|s| u16::from(s.size))
+                .sum::<u16>()
+                == g.army_size
+            && g.squads.iter().enumerate().all(|(n, s)| {
+                s.is_none_or(|s| {
+                    s.size > 0
+                        && s.size <= s.kind.capacity()
+                        && s.leader != unit.id
+                        && !g.squads[..n]
+                            .iter()
+                            .flatten()
+                            .any(|old| old.leader == s.leader)
+                })
+            }))
     }) {
         return Some("unit.general");
     }

@@ -298,6 +298,13 @@ html[data-lod=map] #garrison-flags,html[data-lod=markers] #garrison-flags { disp
 #strategic-tokens button[aria-pressed="true"] { outline:2px solid #fff2ad; outline-offset:3px; }
 html[data-lod="map"] #steward-domain, html[data-lod="markers"] #steward-domain { visibility:hidden; }
 html[data-lod="map"] #general-panel, html[data-lod="markers"] #general-panel { left:12px; }
+#general-squads { list-style:none; padding:0; margin:6px 0 0; max-height:320px; overflow:auto; }
+#general-squads li { display:flex; align-items:center; gap:8px; min-height:30px; padding:3px 0; border-top:1px solid #80765855; }
+#general-squads .art-icon { width:28px; height:28px; flex:none; }
+#general-squads .icon { width:28px; height:28px; }
+#general-squads li>span:last-child { flex:1; }
+#general-squads b { float:right; font-variant-numeric:tabular-nums; }
+#general-squads small { display:block; color:#c5c5ad; }
 #general-panel { position:fixed; left:336px; bottom:calc(var(--bottom) + 8px); width:260px; padding:6px 8px 8px; z-index:4; color:var(--ink); font-size:11px; background:linear-gradient(135deg,#454b3b,#242a22); border:1px solid #807658; box-shadow:inset 0 0 0 2px #1117,0 2px 8px #0008; }
 #general-modes { display:flex; gap:4px; margin-bottom:6px; }
 #general-modes button { flex:1; padding:3px 0; color:var(--ink); background:#242a22; border:1px solid #807658; }

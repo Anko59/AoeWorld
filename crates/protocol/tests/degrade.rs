@@ -23,6 +23,7 @@ fn unit(id: u32) -> GameplayUnitState {
         hunt_target: None,
         death_hunt: None,
         auto_scout: false,
+        sergeant: false,
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
@@ -85,6 +86,7 @@ fn a_unit_that_breaks_a_rule_is_named_repaired_and_the_rest_arrive() {
             u.managed_by = Some(EntityId(9));
         }),
         ("unit.commanded_by", |u| u.commanded_by = Some(EntityId(9))),
+        ("unit.sergeant", |u| u.sergeant = true),
         ("unit.general", |u| {
             u.kind = UnitKind::General;
             u.general = Some(GeneralStatus {
@@ -95,6 +97,7 @@ fn a_unit_that_breaks_a_rule_is_named_repaired_and_the_rest_arrive() {
                 queued: 0,
                 mix: [0; 5],
                 counts: [0; 5],
+                squads: [None; 10],
             });
         }),
         ("unit.general", |u| {
@@ -106,6 +109,7 @@ fn a_unit_that_breaks_a_rule_is_named_repaired_and_the_rest_arrive() {
                 queued: 0,
                 mix: [0; 5],
                 counts: [100, 101, 0, 0, 0],
+                squads: [None; 10],
             });
         }),
         ("unit.facing", |u| u.facing = 8),

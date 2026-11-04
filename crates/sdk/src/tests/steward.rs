@@ -29,6 +29,23 @@ fn general_summary_and_commander_follow_authoritative_updates() {
         queued: 0,
         mix: [35, 30, 20, 10, 5],
         counts: [10, 10, 10, 6, 6],
+        squads: std::array::from_fn(|n| {
+            let (kind, size) = *[
+                (crate::SquadKind::Infantry, 10),
+                (crate::SquadKind::Archers, 10),
+                (crate::SquadKind::Cavalry, 10),
+                (crate::SquadKind::Cavalry, 6),
+                (crate::SquadKind::Siege, 5),
+                (crate::SquadKind::Siege, 1),
+            ]
+            .get(n)?;
+            Some(crate::SquadStatus {
+                leader: EntityId(100 + n as u32),
+                kind,
+                size,
+                state: crate::GeneralState::Retreating,
+            })
+        }),
     });
     let mut soldier = unit(4, ME, UnitKind::Knight);
     soldier.commanded_by = Some(general.id);

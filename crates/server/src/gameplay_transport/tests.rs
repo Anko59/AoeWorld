@@ -57,6 +57,7 @@ async fn one_invalid_entity_does_not_freeze_the_stream() {
         hunt_target: None,
         death_hunt: None,
         auto_scout: false,
+        sergeant: false,
         cargo_count: 0,
         home_castle: None,
         managed_by: None,

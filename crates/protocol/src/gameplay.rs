@@ -33,7 +33,7 @@ pub use projectiles::{MAX_PROJECTILES, ProjectileKind, ProjectileState};
 pub use resources::{MAX_RESOURCE_CACHE, MAX_RESOURCE_CHANGES, ResourceAmount, ResourceState};
 pub use wildlife::*;
 
-pub const VERSION: u16 = 6;
+pub const VERSION: u16 = 7;
 /// One gameplay frame: room for 65,536 units alongside bounded buildings,
 /// training queues and other view state. This is a memory guard, not housing.
 pub const MAX_MESSAGE: usize = 16 * 1_048_576;
@@ -73,6 +73,8 @@ pub struct UnitState {
     pub death_hunt: Option<AnimalKind>,
     /// Authoritative cavalry exploration toggle.
     pub auto_scout: bool,
+    /// Public identity of a promoted squad officer, including its corpse.
+    pub sergeant: bool,
     pub cargo_count: u8,
     /// Owner-only home of a living General.
     pub home_castle: Option<EntityId>,
@@ -118,6 +120,40 @@ pub struct GeneralStatus {
     pub mix: [u8; 5],
     /// Soldiers of each role in the army.
     pub counts: [u16; 5],
+    pub squads: [Option<SquadStatus>; 10],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum SquadKind {
+    Infantry,
+    Archers,
+    Cavalry,
+    Siege,
+}
+
+impl SquadKind {
+    pub const fn capacity(self) -> u8 {
+        [20, 15, 10, 5][self as usize]
+    }
+    pub const fn for_unit(kind: UnitKind) -> Option<Self> {
+        use UnitKind::*;
+        Some(match kind {
+            Militia | ManAtArms | LongSwordsman | Spearman | Pikeman | TwoHandedSwordsman
+            | Champion | Halberdier => Self::Infantry,
+            Archer | Crossbowman | Arbalester | Skirmisher | EliteSkirmisher => Self::Archers,
+            Knight | Cavalier | Paladin | Scout | LightCavalry | Hussar => Self::Cavalry,
+            Mangonel | Onager | BatteringRam | CappedRam | SiegeRam => Self::Siege,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SquadStatus {
+    pub leader: EntityId,
+    pub kind: SquadKind,
+    pub size: u8,
+    pub state: GeneralState,
 }
 
 mod commands;

@@ -30,6 +30,7 @@ fn unit(hp: u16, task: UnitTask, target: Option<EntityId>) -> GameplayUnitState 
         hunt_target: None,
         death_hunt: None,
         auto_scout: false,
+        sergeant: false,
         cargo_count: 0,
         home_castle: None,
         managed_by: None,
@@ -114,16 +115,16 @@ fn death_and_hunting_fields_are_appended_to_the_current_unit_wire() {
     // Current unit tails append home_castle, managed_by and combat stance.
     // Regenerate the suffix pins for those owner-only fields, preserving option tags.
     assert_eq!(
-        &bytes[bytes.len() - 15..],
-        &[1, 41, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        &bytes[bytes.len() - 16..],
+        &[1, 41, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     );
     round_trips(&tick_with(vec![dying], vec![]));
     dying.kind = UnitKind::Villager;
     dying.death_hunt = Some(aoe_protocol::AnimalKind::Sheep);
     let bytes = encode_gameplay_server(&tick_with(vec![dying], vec![])).unwrap();
     assert_eq!(
-        &bytes[bytes.len() - 16..],
-        &[1, 41, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        &bytes[bytes.len() - 17..],
+        &[1, 41, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     );
     round_trips(&tick_with(vec![dying], vec![]));
     let mut hunter = unit(25, UnitTask::Hunting, None);
@@ -131,8 +132,8 @@ fn death_and_hunting_fields_are_appended_to_the_current_unit_wire() {
     hunter.hunt_target = Some(EntityId(9));
     let bytes = encode_gameplay_server(&tick_with(vec![hunter], vec![])).unwrap();
     assert_eq!(
-        &bytes[bytes.len() - 15..],
-        &[0, 1, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        &bytes[bytes.len() - 16..],
+        &[0, 1, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     );
     round_trips(&tick_with(vec![hunter], vec![]));
 }

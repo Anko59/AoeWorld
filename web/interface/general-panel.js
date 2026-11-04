@@ -1,8 +1,9 @@
 // The selected General's panel. Authoritative values arrive from Rust through
 // window.aoeGeneral.update(values); orders leave through the shared callback
 // (action 9: Train on/off; action 10: mix slider, role*128+percent).
+import { squadIcon } from '/interface/ui-art.js';
 // values = [] to hide, else [id, army, state, training, pending,
-//           mix0..mix4, count0..count4]; state 0 idle 1 marching 2 fighting 3 retreating.
+//           mix0..mix4, count0..count4, squads, (leader, kind, size, state)*squads].
 const roles = ['Infantry', 'Archers', 'Cavalry', 'Siege', 'Scouts'];
 const states = ['idle', 'marching', 'fighting', 'retreating'];
 const modes = new Map(); // General id -> 'captain' | 'trainer'; a new General starts as captain.
@@ -18,7 +19,7 @@ export function initGeneralPanel() {
     <div id="general-captain-view"><div id="general-submodes">
       <span id="general-marching" class="submode">Marching</span>
       <span id="general-fighting" class="submode">Fighting</span></div>
-      <p id="general-army"></p><ul id="general-counts"></ul></div>
+      <p id="general-army"></p><ul id="general-squads" aria-label="Squads"></ul></div>
     <div id="general-trainer-view"><div id="general-sliders"></div>
       <button type="button" id="general-train"></button><p id="general-train-note"></p></div>`;
   document.body.append(panel);
@@ -31,8 +32,7 @@ export function initGeneralPanel() {
     byId('general-sliders').append(row);
     return { input, out: row.querySelector('output') };
   });
-  const counts = roles.map(name => { const li = document.createElement('li'); li.innerHTML = `<span>${name}</span><b></b>`; byId('general-counts').append(li); return li.querySelector('b'); });
-  let current = null, training = false;
+  let current = null, training = false, roster = '';
   const setMode = mode => { if (current === null) return; modes.set(current, mode); render(mode); };
   const render = mode => {
     panel.dataset.mode = mode;
@@ -48,18 +48,32 @@ export function initGeneralPanel() {
     update(values) {
       if (!values || values.length === 0) { panel.hidden = true; current = null; return; }
       const [id, army, state, isTraining, pending] = values;
-      if (id !== current) { current = id; }
+      const changed = id !== current;
+      current = id;
+      panel.dataset.general = String(id);
       panel.hidden = false;
       render(modes.get(id) ?? 'captain');
       training = isTraining === 1;
       panel.dataset.state = states[state] ?? 'idle';
       for (const s of ['marching', 'fighting']) byId(`general-${s}`).setAttribute('aria-current', String(states[state] === s));
       byId('general-army').textContent = `${army} soldiers · up to 10 squads · ${states[state] ?? 'idle'}`;
+      const signature = `${id}:${values.slice(15).join(',')}`;
+      if (signature !== roster) {
+        roster = signature;
+        const list = byId('general-squads'); list.replaceChildren();
+        const capacities = [20,15,10,5];
+        for (let n = 0; n < Math.min(10, values[15]); n++) {
+          const [leader, kind, size, status] = values.slice(16 + n * 4, 20 + n * 4);
+          const li = document.createElement('li'); li.dataset.leader = String(leader);
+          li.innerHTML = `${squadIcon(kind)}<span>${roles[kind]} <b>${size}/${capacities[kind]}</b><small>${states[status]}</small></span>`;
+          list.append(li);
+        }
+        if (values[15] === 0) { const li = document.createElement('li'); li.textContent = 'No squads yet'; list.append(li); }
+      }
       sliders.forEach((s, role) => {
         // Never fight the hand that is dragging a slider.
-        if (document.activeElement !== s.input) s.input.value = String(values[5 + role]);
+        if (changed || document.activeElement !== s.input) s.input.value = String(values[5 + role]);
         s.out.textContent = `${s.input.value}%`;
-        counts[role].textContent = String(values[10 + role]);
       });
       const button = byId('general-train');
       button.textContent = training ? 'Stop training' : 'Train';
