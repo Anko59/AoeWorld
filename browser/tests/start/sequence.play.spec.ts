@@ -128,6 +128,12 @@ test("a preset submits the creator request and loading waits for visible terrain
   await page.route(`**/maps/${hash}/minimap`, (route) => {
     rasterRoute = route;
   });
+  const terrainRoutes: Route[] = [];
+  let releaseTerrain = false;
+  await page.route(`**/maps/${hash}/chunks/*/*`, (route) => {
+    if (releaseTerrain) return route.continue();
+    terrainRoutes.push(route);
+  });
   await page.route("**/maps/jobs/91", async (route) => {
     await route.fulfill({
       json: {
@@ -172,10 +178,11 @@ test("a preset submits the creator request and loading waits for visible terrain
     preparation: "automatic",
     hydrology_mode: "automatic",
   });
-  // Hold the actual minimap request to prove job completion alone cannot
+  // Hold the actual terrain requests to prove job completion alone cannot
   // uncover an unfinished scene. Activation and terrain are real.
   completed = true;
   await expect.poll(() => Boolean(rasterRoute)).toBe(true);
+  await expect.poll(() => terrainRoutes.length).toBeGreaterThan(0);
   await expect(page.locator("#loading-phase")).toContainText("terrain");
   await expect(page.locator("#loading-screen")).toBeVisible();
   if (!rasterRoute) throw new Error("minimap request is missing");
@@ -186,8 +193,14 @@ test("a preset submits the creator request and loading waits for visible terrain
     location.hash = "x=40&y=40&zoom=1";
   });
   await expect(page.locator("#minimap")).toHaveAttribute("data-camera-x", "40");
-  await rasterRoute.continue();
+  releaseTerrain = true;
+  await Promise.all(terrainRoutes.map((route) => route.continue()));
   await expect(page.locator("#start-sequence")).toBeHidden();
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-raster",
+    "pending",
+  );
+  await rasterRoute.continue();
   await expect(page.locator("#scene")).toBeVisible();
   await expect
     .poll(() =>
