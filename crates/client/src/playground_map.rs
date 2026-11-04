@@ -110,7 +110,7 @@ pub(super) fn inspection_label(client: &Client) -> String {
 }
 
 pub(super) fn request_visible(shared: Rc<RefCell<Client>>) {
-    if super::strategic::active(&shared.borrow()) {
+    if super::strategic::active(&shared.borrow()) && shared.borrow().village.placement.is_none() {
         return;
     }
     let (connection_id, map_hash, requests) = {

@@ -38,6 +38,12 @@ pub(super) fn active(client: &Client) -> bool {
 
 pub(super) fn render(client: &mut Client) -> bool {
     let level = level(client);
+    if level == Lod::Sprites && client.village.far_placement {
+        super::village::construction::cancel(client);
+    }
+    if level != Lod::Sprites {
+        super::village::construction::strategic::preview(client);
+    }
     let state = [
         f64::from(client.config.width_tiles),
         f64::from(client.config.height_tiles),

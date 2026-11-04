@@ -241,3 +241,18 @@ fn throughput_showcase_starts_forty_idle_workers_then_orders_all_at_normal_game_
         super::throughput::missing_work(&w, king, &workers)
     );
 }
+
+#[test]
+fn kingdom_demo_uses_the_large_world_extent_and_replays_deterministically() {
+    let (mut a, _) = GameWorld::steward_kingdom_demo(Seed(7)).unwrap();
+    assert_eq!(
+        [a.config().width_tiles, a.config().height_tiles],
+        [8000, 8000]
+    );
+    let (mut b, _) = GameWorld::steward_kingdom_demo(Seed(7)).unwrap();
+    for _ in 0..64 {
+        a.advance();
+        b.advance();
+        assert_eq!(a.canonical_hash(), b.canonical_hash());
+    }
+}

@@ -2,6 +2,7 @@ import { aggregatePixels, actorColour } from '/minimap.js';
 import { initLayers } from '/navigation/layers.js';
 import { initTokens } from '/navigation/tokens.js';
 import { initContacts } from '/navigation/contacts.js';
+import { initReveal } from '/navigation/reveal.js';
 import { initCockpit } from '/navigation/cockpit.js';
 
 // A backend-independent, cached strategic plane. The detailed renderer keeps
@@ -24,7 +25,7 @@ export function initStrategic(fog, actors) {
   let resourceSnapshot = false;
   let modelRevision = 0, modelSignature = '', lastState = null;
   const tokens = initTokens(), contacts = initContacts();
-  const cockpit = initCockpit();
+  const cockpit = initCockpit(), reveal = initReveal();
   const layers = initLayers(() => {
     modelRevision++;
     if (lastState) frame(lastState);
@@ -34,7 +35,7 @@ export function initStrategic(fog, actors) {
     const scene = document.getElementById('scene');
     const [worldWidth, worldHeight, cx, cy, width, height, zoom, level] = state;
     const lod = ['sprites', 'markers', 'map'][level];
-    tokens.show(!!level); layers.show(!!level); cockpit.show(!!level);
+    tokens.show(!!level); layers.show(!!level); cockpit.show(!!level); reveal.show(!!level);
     window.aoeNavigation?.views?.show(!!level);
     if (scene.dataset.lod !== lod) {
       scene.dataset.lod = lod;
@@ -131,6 +132,9 @@ export function initStrategic(fog, actors) {
     canvas.dataset.clusters = String(picks.length);
     canvas.dataset.terrainDraws = terrain ? '1' : '0';
     canvas.dataset.territory = 'settlements';
+    // Retained GPU canvases can composite independently. Cover their whole
+    // surface until the detailed renderer presents a complete replacement.
+    scene.dataset.strategicCovered = 'true';
     canvas.dataset.redraws = String(++redraws);
     canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count })));
     return true;
@@ -148,8 +152,9 @@ export function initStrategic(fog, actors) {
     return nearest;
   }
   function present() {
+    delete document.getElementById('scene').dataset.strategicCovered;
     canvas.hidden = label.hidden = true;
-    tokens.show(false); layers.show(false); cockpit.show(false);
+    tokens.show(false); layers.show(false); cockpit.show(false); reveal.show(false);
     window.aoeNavigation?.views?.show(false);
     if (canvas.width !== 1) canvas.width = canvas.height = 1;
     canvas.dataset.workingBytes = '4';
@@ -160,7 +165,7 @@ export function initStrategic(fog, actors) {
       if (next === modelSignature) return;
       modelSignature = next; tokens.update(a, e, b); modelRevision++;
   }
-  return { frame, pick, present, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production,
+  return { frame, pick, present, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building,
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
     // at HUD cadence, rather than retaining Rust map implementations in WASM.
     receive(a, castles, b, c, workers, orders) {
@@ -190,7 +195,7 @@ export function initStrategic(fog, actors) {
       update(armies, economy, b, c);
     },
     reset() {
-      cockpit.reset();
+      cockpit.reset(); reveal.reset();
       tokens.update([], [], []); contacts.reset(); resources = [];
       knownResources.clear(); retiredResources.clear(); resourceSnapshot = false;
       modelSignature = ''; modelRevision++; previous = '';

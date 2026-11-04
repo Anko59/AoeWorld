@@ -224,6 +224,10 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     // orders. Keep the research/build/unit tables out of a second string list.
     let callback = Closure::<dyn FnMut(u32, u32)>::new(move |action, code| {
         let mut client = shared.borrow_mut();
+        if action == 11 {
+            construction::cancel(&mut client);
+            return;
+        }
         if action == 5 {
             super::orders::formation(&mut client, code);
             return;

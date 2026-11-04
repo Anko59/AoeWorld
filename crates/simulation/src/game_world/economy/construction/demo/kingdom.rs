@@ -11,7 +11,7 @@ impl GameWorld {
     /// A synthetic, flat resource map on the ordinary four-times demo clock.
     /// Every worker starts on a real Farm before its Steward becomes active.
     pub fn steward_kingdom_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
-        let mut world = kingdom_world(seed)?;
+        let mut world = kingdom_environment(seed, false, 480_000)?;
         world.config.tick_hz = 5;
         world.set_fog_disabled(true);
         let tree = kingdom_tree(&mut world)?;
@@ -133,7 +133,7 @@ impl GameWorld {
     /// Forty idle workers beside known forest, on the ordinary 20 Hz clock.
     /// The owner garrisons the waiting Steward to start the actual job pass.
     pub fn steward_throughput_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
-        let mut world = kingdom_world(seed)?;
+        let mut world = kingdom_environment(seed, false, 30_000)?;
         world.set_fog_disabled(true);
         let origin = kingdom_tree(&mut world)?.tile;
         clear_kingdom_plot(
@@ -263,15 +263,15 @@ pub(super) fn clear_kingdom_plot(
     Ok(())
 }
 
-fn kingdom_world(seed: Seed) -> Result<GameWorld, EconomyError> {
-    kingdom_environment(seed, false)
-}
-
 pub(super) fn coastal_world(seed: Seed) -> Result<GameWorld, EconomyError> {
-    kingdom_environment(seed, true)
+    kingdom_environment(seed, true, 15_360)
 }
 
-fn kingdom_environment(seed: Seed, coast: bool) -> Result<GameWorld, EconomyError> {
+fn kingdom_environment(
+    seed: Seed,
+    coast: bool,
+    side_meters: u64,
+) -> Result<GameWorld, EconomyError> {
     let fine = ElevationPage {
         level: 0,
         x: 0,
@@ -352,11 +352,7 @@ fn kingdom_environment(seed: Seed, coast: bool) -> Result<GameWorld, EconomyErro
         1,
         MapRequest {
             seed: seed.0,
-            requested_side_meters: if coast {
-                15_360
-            } else {
-                MapRequest::default().requested_side_meters
-            },
+            requested_side_meters: side_meters,
             ..MapRequest::default()
         },
         Vec::new(),

@@ -342,7 +342,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 client.village.general_only = false;
                 client.drag = None;
             }
-            6 if client.village.repeat_placement => {
+            6 if client.village.repeat_placement || client.village.far_placement => {
                 super::village::construction::cancel(&mut client)
             }
             2 => toggle_grid(&mut client),
