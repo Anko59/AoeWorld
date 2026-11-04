@@ -51,7 +51,8 @@ heights, cities, road connections or political boundaries are invented.
 
 At most 2,048 authorized building footprints feed farm plots, owner-coloured plot
 borders and 192 retained settlement symbols. Plot paths are batched by owner
-colour and rebuilt only when the HUD records change. Capital/Castle symbols take priority
+colour and rebuilt only when the HUD records change. An explicit owned flag gives your settlement symbols a bright ring and priority;
+colour never establishes ownership. Capital/Castle symbols take priority
 when icons share a screen cell. Architectural symbols distinguish capitals,
 Castles, towers, mills, barracks and harbours; the near scene and cockpit retain
 original game art. Enemy buildings require explored terrain; the server's authorized

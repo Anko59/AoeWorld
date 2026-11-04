@@ -45,6 +45,24 @@ pub(in super::super) fn site_buildings<'a>(
     .take(2048)
 }
 
+pub(in super::super) fn site_record(
+    b: &GameplayBuildingState,
+    owner: PlayerId,
+    colour: [u8; 3],
+) -> [f64; 8] {
+    let [r, g, blue] = colour.map(u32::from);
+    [
+        f64::from(b.id.0),
+        f64::from(b.footprint.min.x),
+        f64::from(b.footprint.min.y),
+        f64::from(b.footprint.max.x),
+        f64::from(b.footprint.max.y),
+        b.kind as u8 as f64,
+        f64::from(r << 16 | g << 8 | blue),
+        f64::from(u8::from(b.player == owner)),
+    ]
+}
+
 fn report_hit(hit: Option<aoe_protocol::HitState>, position: [f64; 2], newest: &mut [f64; 3]) {
     if let Some(hit) = hit {
         let tick = hit.tick.0 as f64;
@@ -156,17 +174,11 @@ pub(in super::super) fn update(client: &Client) {
             > 0
     })
     .flat_map(|b| {
-        let [r, g, blue] =
-            aoe_rendering::player_colour(b.player, owner, client.team_colour).map(u32::from);
-        [
-            f64::from(b.id.0),
-            f64::from(b.footprint.min.x),
-            f64::from(b.footprint.min.y),
-            f64::from(b.footprint.max.x),
-            f64::from(b.footprint.max.y),
-            b.kind as u8 as f64,
-            f64::from(r << 16 | g << 8 | blue),
-        ]
+        site_record(
+            b,
+            owner,
+            aoe_rendering::player_colour(b.player, owner, client.team_colour),
+        )
     })
     .collect();
     for b in &client.village.buildings {

@@ -12,7 +12,7 @@ html[data-lod=map] #minimap,html[data-lod=markers] #minimap { height:208px; widt
 #strategic-map-key .forest:before { background:#305739; }
 #strategic-map-key .fields:before { background:#bea45d; }
 #strategic-map-key .water:before { background:#36748e; }
-#strategic-map-key .holdings:before { background:#4191f577; border-color:#79b9ff; }
+#strategic-map-key .holdings:before { background:var(--player-colour,#4191f5); border-color:#fff8d6; border-radius:50%; }
 #strategic-map-key .map-scale { margin-top:7px; gap:8px; font:10px system-ui,sans-serif; }
 .map-scale i { display:block; height:5px; border:1px solid #e3d6b0; border-top:0; transform:rotate(26.565deg); }
 
