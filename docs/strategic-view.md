@@ -124,6 +124,16 @@ One build can be pending at a time. The client tracks outgoing commands against
 the human burst of 20 and refill of 10 per second; the server retains authority.
 Esc, right-click, focus loss and returning to near zoom cancel placement.
 
+## First far view
+
+The first far zoom in each match opens a short parchment introduction to armies
+and kingdoms, Units here and building, and jump keys. Next advances immediately;
+Skip tour, Esc, clicking into the game or returning to near zoom dismisses it.
+It highlights the relevant cockpit controls in three brief steps and respects
+reduced-motion preferences. The game and all commands remain live throughout.
+A session-stored digest of the match resume identity prevents replays on reload
+or reconnect; a new match can present again. It adds no invented kingdom counts.
+
 ## Local verification
 
 The focused browser regression is `tests/rendering/strategic.play.spec.ts`.
