@@ -13,6 +13,7 @@ from aoeworld import (
     tech_cost,
     UnitKind,
     UnitTask,
+    building_cost,
     unit_cost,
 )
 
@@ -76,6 +77,34 @@ class EconomyManager:
         self.assign_idle(ctx)
         self.rebalance(ctx)
         queue_reseeds(ctx)
+
+    def wood_dropoff(self, ctx: Context) -> None:
+        """Fund a nearby camp before queues spend every distant wood delivery.
+
+        Live woodcutters do not fall idle when their original forest runs out.
+        Inspect empty-handed workers too, keeping loaded returns on their trip.
+        Paid camps release the budget; a refused site gets the usual cooldown.
+        """
+        if ctx.economy is None or ctx.home is None:
+            return
+        kind = BuildingKind.LUMBER_CAMP
+        if ctx.board.cooling("camp:" + str(kind), ctx.tick):
+            return
+        for worker in ctx.villagers:
+            if (worker.gathering != ResourceKind.WOOD or worker.carrying is not None
+                    or worker.id in ctx.busy or worker.id in ctx.board.builders
+                    or worker.task == UnitTask.BUILDING):
+                continue
+            node = self.best_node(ctx, worker, ResourceKind.WOOD)
+            if (node is None or ctx.dropoff_distance(node) <= ctx.config.dropoff_distance
+                    or self.constructor.camp_near(ctx, kind, node)):
+                continue
+            cost = building_cost(kind)
+            if not ctx.can_afford(cost):
+                ctx.spend(cost)
+            else:
+                self.constructor.ensure_camp(ctx, kind, node, worker)
+            return
 
     def castle_food(self, ctx: Context) -> None:
         """Keep gold for the age and its first army upgrade before moving miners."""
@@ -427,5 +456,8 @@ class EconomyManager:
             return False
         farms = self.constructor.total(ctx, BuildingKind.FARM)
         if farms >= ctx.config.farm_target + len(ctx.villagers) // 8:
+            return False
+        cost = building_cost(BuildingKind.FARM)
+        if not ctx.can_afford((cost[0], cost[1] + buildorder.farm_wood_reserve(ctx), cost[2], cost[3])):
             return False
         return self.constructor.place(ctx, BuildingKind.FARM, mill.center, [villager], radius=9, gap=0)

@@ -2,6 +2,7 @@
 from aoeworld import BuildingKind, building_cost
 
 from ..context import Context
+from . import buildorder
 
 
 def queue_reseeds(ctx: Context) -> None:
@@ -9,7 +10,7 @@ def queue_reseeds(ctx: Context) -> None:
         return
     cost = building_cost(BuildingKind.FARM)
     reserve = list(cost)
-    reserve[1] += ctx.config.wood_reserve
+    reserve[1] += buildorder.farm_wood_reserve(ctx)
     for mill in ctx.buildings:
         key = f"reseed:{mill.id}"
         if (mill.kind == BuildingKind.MILL and mill.complete

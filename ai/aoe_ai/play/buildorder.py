@@ -97,6 +97,22 @@ def wants_loom(ctx: Context) -> bool:
     return len(ctx.villagers) >= ctx.config.loom_villagers
 
 
+def farm_wood_reserve(ctx: Context) -> int:
+    """Food expansion must leave wood for houses and the first Barracks.
+
+    Start saving when the villagers are ready to advance, even if food is
+    still accumulating. A foundation or pending order has already been paid.
+    Free food and existing farms can keep feeding us while wood accumulates.
+    """
+    placed = any(b.kind == BuildingKind.BARRACKS for b in ctx.buildings) or any(
+        p.kind == BuildingKind.BARRACKS for p in ctx.board.plans
+    )
+    advancing = (ctx.feudal or len(ctx.villagers) >= ctx.config.feudal_villagers
+                 or (ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE))
+    return ctx.config.wood_reserve + (building_cost(BuildingKind.BARRACKS)[1]
+                                      if advancing and not placed else 0)
+
+
 # ----- buildings ----------------------------------------------------------
 def wanted_buildings(ctx: Context) -> list[tuple[BuildingKind, int]]:
     """(kind, how many) in the order they should appear; Feudal Age only.
