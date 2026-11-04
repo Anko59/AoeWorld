@@ -33,6 +33,11 @@ export function initCockpit(changed = () => {}) {
     try { sessionStorage.setItem('aoeworld.cockpit-layout', JSON.stringify({ identity, collapsed })); } catch { /* In-memory choice remains usable. */ }
   }
   toggle.addEventListener('click', () => { generation++; collapse(!collapsed); persist(); changed(); });
+  function fnv(text) {
+    let a = 0x811c9dc5, b = 0x01000193;
+    for (let i = 0; i < text.length; i++) { a = Math.imul(a ^ text.charCodeAt(i), 0x01000193) >>> 0; b = Math.imul(b ^ a, 0x85ebca6b) >>> 0; }
+    return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
+  }
   async function restore() {
     let token = '';
     try { token = localStorage.getItem('aoeworld.resume-token') ?? ''; } catch { /* In-memory fallback. */ }
@@ -41,9 +46,14 @@ export function initCockpit(changed = () => {}) {
     const current = ++generation;
     identity = '';
     if (!token) return;
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+    let key;
+    try {
+      // crypto.subtle exists only on secure origins; others use a local fallback key.
+      key = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token))),
+        b => b.toString(16).padStart(2, '0')).join('');
+    } catch { key = 'fnv:' + fnv(token); }
     if (token !== tokenSeen) return;
-    identity = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+    identity = key;
     if (current !== generation) { persist(); return; }
     let saved;
     try { saved = JSON.parse(sessionStorage.getItem('aoeworld.cockpit-layout') ?? 'null'); } catch { /* Default expanded. */ }

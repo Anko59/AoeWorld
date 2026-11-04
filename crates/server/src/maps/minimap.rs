@@ -21,7 +21,7 @@ pub(crate) const MINIMAP_MAGIC: [u8; 4] = *b"AWMM";
 pub(crate) const MAX_MINIMAP_BYTES: usize =
     MINIMAP_HEADER_BYTES + (MAX_MINIMAP_SAMPLES_PER_AXIS as usize).pow(2);
 /// Rasters retained across requests; at most `4 * MAX_MINIMAP_BYTES` bytes.
-pub(crate) const MAX_CACHED_MINIMAPS: usize = 4;
+pub(crate) const MAX_CACHED_MINIMAPS: usize = 8;
 /// Wall-clock budget for one raster. An exhausted budget fails the request
 /// instead of returning a partial raster; nothing partial is cached.
 pub(crate) const MINIMAP_TIME_BUDGET: Duration = Duration::from_secs(30);

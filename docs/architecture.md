@@ -76,7 +76,9 @@ in the low nibble and north-west relief shade in the high nibble, at most
 262,152 bytes.
 One raster is generated at a time off the async runtime on four bounded workers
 within 30 seconds,
-never partially, and the four most recent are cached. The client rejects any
+never partially, and the eight most recent rasters are cached. Coarse and fine
+rasters share the cache as `{hash}:coarse` and `{hash}`, so four maps keep both stages
+(at most 2 MiB). The client rejects any
 other shape and retains its coarse map on refinement failure (or its schematic
 map when neither stage succeeded); it requests no chunks for the map. Surface
 queries preserve the composed terrain while omitting final resource and decoration

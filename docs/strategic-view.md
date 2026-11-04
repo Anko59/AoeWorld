@@ -171,7 +171,7 @@ queries. They omit final resource and decorative objects while preserving
 the shared exclusions that determine canopy.
 Four bounded native workers fill disjoint row bands with independent query
 memos, preserving row-major output. They share immutable source inputs.
-Each raster retains its 30-second limit and shares the four-entry cache.
+Each raster retains its 30-second limit and shares the eight-entry cache (coarse and fine count separately).
 A failed refinement keeps the coarse terrain visible and retries the fine map.
 World replacement cancels both stages and clears their images and timing data.
 `data-coarse-ms` and `data-fine-ms` record arrival/draw time for the current load.

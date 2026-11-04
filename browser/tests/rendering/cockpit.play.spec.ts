@@ -153,6 +153,41 @@ test("cockpit collapse keeps a summary, commands and match preference without pa
     }
 });
 
+test("cockpit remembers its collapsed choice without crypto.subtle", async ({
+  page,
+  request,
+}) => {
+  expect(
+    (await request.post("/maps/reset?scenario=general-army")).status(),
+  ).toBe(204);
+  await forceWebGl(page);
+  await gameAssets(page);
+  // Non-secure origins have no crypto.subtle.
+  await page.addInitScript(() => {
+    Object.defineProperty(crypto, "subtle", { value: undefined });
+    const seen = window as Window & { rejections?: number };
+    seen.rejections = 0;
+    addEventListener("unhandledrejection", () => {
+      seen.rejections = (seen.rejections ?? 0) + 1;
+    });
+  });
+  await page.goto("/?play=1#x=110&y=128&zoom=.04");
+  await expect(page.locator("#connection")).toHaveText("connected");
+  const toggle = page.getByRole("button", {
+    name: "Kingdom controls",
+    exact: true,
+  });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await page.reload();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(
+    await page.evaluate(
+      () => (window as Window & { rejections?: number }).rejections,
+    ),
+  ).toBe(0);
+});
+
 test("General and Steward labels leave the open controls clear", async ({
   page,
 }) => {

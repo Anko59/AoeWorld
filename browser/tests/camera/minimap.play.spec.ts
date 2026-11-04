@@ -25,11 +25,13 @@ test("strategic raster is one bounded request per map and never loads the world"
   const hash = "0b".repeat(32);
   const rasters: string[] = [];
   const coarse: string[] = [];
+  const preview: string[] = [];
   const detailed: string[] = [];
   page.on("request", (event) => {
-    if (event.url().includes(`/maps/${hash}/minimap`))
-      rasters.push(event.url());
-    if (event.url().includes(`/maps/${hash}/preview`)) coarse.push(event.url());
+    const path = new URL(event.url()).pathname;
+    if (path === `/maps/${hash}/minimap`) rasters.push(path);
+    if (path === `/maps/${hash}/minimap/coarse`) coarse.push(path);
+    if (path.startsWith(`/maps/${hash}/preview`)) preview.push(path);
     if (event.url().includes(`/maps/${hash}/chunks/`))
       detailed.push(event.url());
   });
@@ -37,6 +39,13 @@ test("strategic raster is one bounded request per map and never loads the world"
     route.fulfill({
       contentType: "application/octet-stream",
       body: syntheticRaster(),
+    }),
+  );
+  // The coarse stage is also a bounded raster; a smaller one proves refinement.
+  await page.route(`**/maps/${hash}/minimap/coarse`, (route) =>
+    route.fulfill({
+      contentType: "application/octet-stream",
+      body: syntheticRaster(8),
     }),
   );
   await page.goto("/?play=1");
@@ -96,8 +105,10 @@ test("strategic raster is one bounded request per map and never loads the world"
       );
     })
     .toBe(true);
-  expect(rasters).toHaveLength(1);
-  expect(coarse).toHaveLength(0);
+  // Exactly one coarse and one fine request per map, however often it is announced.
+  expect(coarse).toEqual([`/maps/${hash}/minimap/coarse`]);
+  expect(rasters).toEqual([`/maps/${hash}/minimap`]);
+  expect(preview).toHaveLength(0);
   expect(detailed).toHaveLength(0);
   await page.evaluate(() => {
     const navigation = (window as Window & { aoeNavigation?: Navigation })
