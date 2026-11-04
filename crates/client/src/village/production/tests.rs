@@ -60,7 +60,7 @@ fn shortest_queue_counts_burst_clicks_and_ignores_ineligible_selected_buildings(
         population_used: 5,
         population_cap: 100,
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: Default::default(),
     };
     let mut selected = Selection::default();
@@ -149,7 +149,7 @@ fn full_queues_do_not_reintroduce_locked_or_superseded_training_buttons() {
         population_used: 5,
         population_cap: 100,
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: Default::default(),
     };
     let mut pending = PendingTraining::default();
@@ -228,7 +228,7 @@ fn grouped_steward_training_skips_town_centers_with_an_occupant_or_pending_unit(
         population_used: 5,
         population_cap: 100,
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: Default::default(),
     };
     let mut selected = Selection::default();

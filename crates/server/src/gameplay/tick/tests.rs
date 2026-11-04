@@ -69,13 +69,14 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// Restored housing extends player state and pauses full producers; the same
 /// 400-tick scenario and visibility assertions produce these current streams.
 /// The cockpit's unit census extends player state; message counts are unchanged.
+/// Steward extends the census by one entry, so the digests move, not the counts.
 const PINNED: [(usize, u64); SEATS + 1] = [
-    (407, 17015074343070780237),
-    (187, 14724408842625684443),
-    (60, 14622115424655001030),
-    (176, 7676731242776010508),
-    (420, 10773652188506755395),
-    (407, 15604425670347363858),
+    (407, 11304757869660396421),
+    (187, 10500125606841663035),
+    (60, 3036268264563016540),
+    (176, 674498555216934564),
+    (420, 9326413221556101391),
+    (407, 17811913090445074740),
 ];
 
 #[tokio::test(flavor = "multi_thread")]

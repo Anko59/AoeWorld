@@ -8,7 +8,7 @@ fn at(x: i32, y: i32) -> WorldPosition {
 
 #[test]
 fn cockpit_player_report_keeps_real_delivery_totals() {
-    let (mut world, _) = GameWorld::vassal_kingdom_demo(Seed(7)).unwrap();
+    let (mut world, _) = GameWorld::steward_kingdom_demo(Seed(7)).unwrap();
     for _ in 0..600 {
         world.advance();
     }
