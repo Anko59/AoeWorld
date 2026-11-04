@@ -71,3 +71,29 @@ fn far_build_admission_honours_twenty_burst_and_ten_per_second_and_pending_ack()
     budget.pending = None;
     assert!(budget.ready(200.0));
 }
+
+#[wasm_bindgen_test]
+fn far_build_never_recruits_across_the_map_or_prefers_distant_idle_workers() {
+    let mut nearby = villager(UnitTask::Gathering);
+    nearby.id = EntityId(1);
+    nearby.position = WorldPosition::from_tile_center(TileCoord::new(12, 10)).unwrap();
+    let mut distant = villager(UnitTask::Idle);
+    distant.id = EntityId(2);
+    distant.position = WorldPosition::from_tile_center(TileCoord::new(100, 10)).unwrap();
+    assert_eq!(
+        choose(
+            [&distant, &nearby].into_iter(),
+            PlayerId(0),
+            TileCoord::new(10, 10)
+        ),
+        vec![EntityId(1)]
+    );
+    assert!(choose([&distant].into_iter(), PlayerId(0), TileCoord::new(10, 10)).is_empty());
+    nearby.position = WorldPosition::from_tile_center(TileCoord::new(74, 10)).unwrap();
+    assert!(choose([&nearby].into_iter(), PlayerId(0), TileCoord::new(10, 10)).is_empty());
+    nearby.position = WorldPosition::from_tile_center(TileCoord::new(73, 10)).unwrap();
+    assert_eq!(
+        choose([&nearby].into_iter(), PlayerId(0), TileCoord::new(10, 10)),
+        vec![EntityId(1)]
+    );
+}

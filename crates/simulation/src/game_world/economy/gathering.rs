@@ -128,7 +128,7 @@ impl GameWorld {
         {
             return Err(EconomyError::InvalidResource);
         }
-        if self.economy.vassals.automatic && !self.managed_target_allowed(id, position(node.tile)?)
+        if self.economy.stewards.automatic && !self.managed_target_allowed(id, position(node.tile)?)
         {
             return Err(EconomyError::InvalidResource);
         }
@@ -281,7 +281,15 @@ impl GameWorld {
             return false;
         };
         if task.phase == GatherPhase::WaitingDropoff {
-            return self.tick.0 < task.retry_tick || self.begin_return(id, task);
+            if self.tick.0 < task.retry_tick {
+                return true;
+            }
+            // Retry a retained farmer's bounded perimeter search once per
+            // second, so opening a route resumes delivery without a new order.
+            if task.farm.is_some() {
+                task.failed_dropoffs.clear();
+            }
+            return self.begin_return(id, task);
         }
         if self.gather_contact(index, task) {
             self.clear_planner(index);

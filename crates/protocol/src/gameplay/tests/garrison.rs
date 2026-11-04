@@ -42,22 +42,24 @@ fn garrison_and_selective_or_all_ungarrison_have_current_golden_wire() {
 }
 
 #[test]
-fn vassal_training_and_specific_refusals_pin_the_current_wire() {
+fn steward_training_and_specific_refusals_pin_the_current_wire() {
     let order = ClientMessage::TrainOrder {
         sequence: 3,
         building_id: EntityId(9),
-        kind: UnitKind::Vassal,
+        kind: UnitKind::Steward,
     };
     let bytes = encode_client(&order).unwrap();
-    assert_eq!(bytes, [5, 3, 9, 22]);
+    assert_eq!(bytes, [5, 3, 9, 34]);
+    assert_eq!(postcard::to_allocvec(&UnitKind::Vassal).unwrap(), [22]);
+    assert_eq!(postcard::to_allocvec(&UnitKind::Onager).unwrap(), [33]);
     assert_eq!(decode_client(&bytes).unwrap(), order);
     for (result, value) in [
-        (CommandResult::RejectedVassalExists, 34),
-        (CommandResult::RejectedVassalLeash, 35),
-        (CommandResult::RejectedVassalHome, 36),
+        (CommandResult::RejectedStewardExists, 34),
+        (CommandResult::RejectedStewardLeash, 35),
+        (CommandResult::RejectedStewardHome, 36),
         (CommandResult::RejectedRequiresImperialAge, 37),
         (CommandResult::RejectedPopulationCap, 38),
-        (CommandResult::RejectedInvalidVassalSettings, 39),
+        (CommandResult::RejectedInvalidStewardSettings, 39),
     ] {
         let ack = ServerMessage::CommandAck {
             sequence: 3,
@@ -70,11 +72,11 @@ fn vassal_training_and_specific_refusals_pin_the_current_wire() {
 }
 
 #[test]
-fn vassal_queue_and_garrison_roundtrip_and_other_buildings_reject_training() {
+fn steward_queue_and_garrison_roundtrip_and_other_buildings_reject_training() {
     let castle = GameplayBuildingState {
         id: EntityId(7),
         player: PlayerId(0),
-        kind: BuildingKind::Castle,
+        kind: BuildingKind::TownCenter,
         footprint: TileRect::from_xywh(1, 1, 4, 4),
         construction: ConstructionState::Complete,
         progress_permille: 1000,
@@ -83,7 +85,7 @@ fn vassal_queue_and_garrison_roundtrip_and_other_buildings_reject_training() {
         los: 11,
         food_remaining: None,
         training_queue: vec![TrainingState {
-            kind: UnitKind::Vassal,
+            kind: UnitKind::Steward,
             progress_ticks: 1,
             total_ticks: 1200,
         }],
@@ -103,7 +105,7 @@ fn vassal_queue_and_garrison_roundtrip_and_other_buildings_reject_training() {
         players: vec![],
         buildings: vec![b],
     };
-    // Castles train Vassals and accept rallies through the same command path.
+    // Town Centers train Stewards and accept rallies through the same command path.
     // Every subsequent snapshot must remain encodable after that right-click.
     let mut castle = castle;
     let position = WorldPosition::new(4096, 4096);
@@ -117,26 +119,26 @@ fn vassal_queue_and_garrison_roundtrip_and_other_buildings_reject_training() {
         snapshot
     );
     let mut other = castle.clone();
-    other.kind = BuildingKind::TownCenter;
+    other.kind = BuildingKind::Castle;
     assert!(encode_server(&message(other)).is_err());
     let mut occupied = castle;
     occupied.training_queue.clear();
     occupied.garrison.push(GarrisonUnitState {
         id: EntityId(9),
-        kind: UnitKind::Vassal,
+        kind: UnitKind::Steward,
         hp: 75,
         max_hp: 75,
-        vassal: Some(crate::VassalReport {
+        steward: Some(crate::StewardReport {
             weights: [45, 30, 15, 10],
             cap: 75,
             training: true,
             managed: 20,
             residents: 31,
-            wait: crate::VassalWait::Food,
+            wait: crate::StewardWait::Food,
         }),
     });
     assert_eq!(
-        postcard::to_allocvec(&occupied.garrison[0].vassal.unwrap()).unwrap(),
+        postcard::to_allocvec(&occupied.garrison[0].steward.unwrap()).unwrap(),
         [45, 30, 15, 10, 75, 1, 20, 31, 4]
     );
     let snapshot = message(occupied.clone());
@@ -144,15 +146,15 @@ fn vassal_queue_and_garrison_roundtrip_and_other_buildings_reject_training() {
         decode_server(&encode_server(&snapshot).unwrap()).unwrap(),
         snapshot
     );
-    occupied.garrison[0].vassal.as_mut().unwrap().weights = [0; 4];
+    occupied.garrison[0].steward.as_mut().unwrap().weights = [0; 4];
     assert!(encode_server(&message(occupied.clone())).is_err());
-    occupied.garrison[0].vassal.as_mut().unwrap().weights = [45, 30, 15, 10];
-    occupied.garrison[0].vassal.as_mut().unwrap().cap = 101;
+    occupied.garrison[0].steward.as_mut().unwrap().weights = [45, 30, 15, 10];
+    occupied.garrison[0].steward.as_mut().unwrap().cap = 101;
     assert!(encode_server(&message(occupied)).is_err());
 }
 
 #[test]
-fn roaming_vassal_and_worker_management_are_current_owner_only_state() {
+fn roaming_steward_and_worker_management_are_current_owner_only_state() {
     let mut u = UnitState {
         id: EntityId(2),
         player: PlayerId(0),
@@ -160,7 +162,7 @@ fn roaming_vassal_and_worker_management_are_current_owner_only_state() {
         moving: false,
         planning: false,
         facing: 0,
-        kind: UnitKind::Vassal,
+        kind: UnitKind::Steward,
         task: UnitTask::Idle,
         carried: None,
         gathering: None,
@@ -225,7 +227,7 @@ fn roaming_vassal_and_worker_management_are_current_owner_only_state() {
     u.kind = UnitKind::Militia;
     assert!(
         encode_server(&message(u)).is_err(),
-        "military cannot be managed by a Vassal"
+        "military cannot be managed by a Steward"
     );
 }
 
@@ -307,11 +309,11 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
     assert!(encode_server(&message(u)).is_err());
     u.general = None;
     u.home_castle = None;
-    u.kind = UnitKind::Vassal;
+    u.kind = UnitKind::Steward;
     u.commanded_by = Some(EntityId(88));
     assert!(
         encode_server(&message(u)).is_err(),
-        "a Vassal cannot be a member of a General's army"
+        "a Steward cannot be a member of a General's army"
     );
     u.kind = UnitKind::Knight;
     u.commanded_by = Some(EntityId(88));
@@ -322,10 +324,10 @@ fn general_summary_and_command_tags_are_bounded_owner_only_state() {
 }
 
 #[test]
-fn vassal_settings_order_pins_weights_cap_and_training_wire() {
-    let order = ClientMessage::VassalSettingsOrder {
+fn steward_settings_order_pins_weights_cap_and_training_wire() {
+    let order = ClientMessage::StewardSettingsOrder {
         sequence: 3,
-        vassal_id: EntityId(9),
+        steward_id: EntityId(9),
         weights: [45, 30, 15, 10],
         cap: 100,
         training: true,
@@ -336,10 +338,10 @@ fn vassal_settings_order_pins_weights_cap_and_training_wire() {
 }
 
 #[test]
-fn dismiss_vassal_order_pins_the_current_wire() {
-    let order = ClientMessage::VassalDismissOrder {
+fn dismiss_steward_order_pins_the_current_wire() {
+    let order = ClientMessage::StewardDismissOrder {
         sequence: 4,
-        vassal_id: EntityId(9),
+        steward_id: EntityId(9),
     };
     let bytes = encode_client(&order).unwrap();
     assert_eq!(bytes, [34, 4, 9]);

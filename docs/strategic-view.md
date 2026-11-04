@@ -15,20 +15,19 @@ The developer timing overlay uses F8 here and retains F3 at sprite zoom.
 
 | Key | Layer | Available data |
 | --- | --- | --- |
-| F1 | Ownership | Occupied settlement cells, not invented territorial borders |
+| F1 | Ownership | Coloured building plots and the actual domains of active Castles |
 | F2 | Armies | Army tokens and unit clusters |
-| F3 | Economy | Vassal cards and their Castle domains |
+| F3 | Economy | Steward cards and their Town Center domains |
 | F4 | Threats | Historical enemy sightings, labelled with age, for two minutes |
 | F5 | Resources | Discovered deposits, retained across camera subscriptions and terrain eviction |
 | F6 | Roads & bridges | Known bridges; road-network data is unavailable |
 
-Vassal cards select the same Castle as near zoom. They show the server's
+Steward cards select the same Town Center as near zoom. They show the server's
 managed/resident counts and growth wait reason, plus observed food, wood, gold,
 stone jobs and idle workers identified by their authoritative manager. Job
 counts describe the current authorized unit stream; they are not an invented
 global census. A question mark means the report is unavailable. An ungarrisoned
-Vassal's domain is inactive. The Castle selection path is the hook for future
-Vassal sliders; this revision has no Vassal settings protocol or sliders.
+Steward's domain is inactive. Selecting its Town Center opens its resource weights, cap and training controls.
 
 ## Work bounds
 
@@ -39,11 +38,30 @@ by scanning all players on every animation frame. The client forwards numeric
 records; JavaScript aggregates worker jobs and order destinations to conserve
 WASM space. Territory geometry and unchanged DOM content are cached.
 
-Presentation is capped at 256 General records, 64 Castle records, 256 bridge
+Presentation is capped at 256 General records, 64 Town Center records, 256 bridge
 records, 1,024 historical contacts and the existing 2,048 deposit markers. Nearby
 labels use a bounded screen-grid placement search and retain lines to their true
 locations. These bounds are not a qualification of a crowded 1,000-player RTS.
-The strategic scene retains one terrain raster and fog plane; zooming does not
+The strategic scene retains one terrain raster and fog plane. The cartographic
+surface is baked once per map, capped at 1,024² RGBA pixels (4 MiB), from the
+server's existing 512² terrain classes and DEM-derived relief shades. Water and
+forests retain those measured classes; fields and grazing retain the generator's
+historical land-use classifications. Soil alone never becomes farmland. No
+heights, cities, road connections or political boundaries are invented.
+
+At most 2,048 authorized building footprints feed farm plots, owner-coloured plot
+borders and 192 retained settlement symbols. Plot paths are batched by owner
+colour and rebuilt only when the HUD records change. Capital/Castle symbols take priority
+when icons share a screen cell. Architectural symbols distinguish capitals,
+Castles, towers, mills, barracks and harbours; the near scene and cockpit retain
+original game art. Enemy buildings require explored terrain; the server's authorized
+building stream remains the source. The legend gives a scale along a world tile
+axis. Empty near-view command/selection compartments make room for land; selecting
+an entity still opens its ordinary controls. `data-frame-ms` measures strategic
+CPU drawing; `data-terrain-build-ms` measures the one-time cartographic bake.
+Driver/compositor memory and time are additional.
+
+Zooming does not
 request detailed terrain for the whole map. While it covers the detailed scene,
 the retained renderer canvas is transparent but remains the input surface. The
 strategic cover is removed only after a complete near frame is presented,
@@ -118,24 +136,32 @@ and prerequisite checks apply, including wall and bridge spans. Only chunks
 under the proposed site load at far zoom. Red footprints explain a blocked or
 unavailable site; green is a local preview, not server acceptance.
 
-Each grouped order sends up to four nearest suitable villagers. Free idle
+Each grouped order sends up to four suitable villagers within 64 tiles of the
+site. A site without nearby available workers explains why it cannot recruit. Free idle
 workers take priority, then other free workers; managed workers can answer
 when no free workers are available. Workers already building, fighting or
 hunting are excluded. Ties use entity ID. No selection or zoom change is needed.
 Feedback says Submitting until the ordinary server acknowledgement arrives.
-One build can be pending at a time. The client tracks outgoing commands against
+One build can be pending at a time. A connection reset clears its pending
+admission and reports that the previous order was not confirmed; inspect the
+site before retrying. The Build here icon retains its DOM node across HUD
+updates so a held pointer can complete its click. The client tracks outgoing commands against
 the human burst of 20 and refill of 10 per second; the server retains authority.
 Esc, right-click, focus loss and returning to near zoom cancel placement.
 
 ## First far view
 
-The first far zoom in each match opens a short parchment introduction to armies
-and kingdoms, Units here and building, and jump keys. Next advances immediately;
-Skip tour, Esc, clicking into the game or returning to near zoom dismisses it.
-It highlights the relevant cockpit controls in three brief steps and respects
-reduced-motion preferences. The game and all commands remain live throughout.
-A session-stored digest of the match resume identity prevents replays on reload
-or reconnect; a new match can present again. It adds no invented kingdom counts.
+The first zoom-out in each match pulls back from the village for 3.2 seconds,
+reveals the wider land, then brings in the cockpit at 4.4 seconds. It completes
+at 5.8 seconds. The already-presented village scales and fades over the strategic
+plane; the detailed renderer remains retained without rebuilding a moving terrain view.
+The transition never subscribes to detailed terrain across the whole map.
+Skip or Esc completes the moment immediately. Pointer, wheel, keyboard input or
+focus loss ends it and returns control at once. Direct far-view links and
+reduced-motion preferences preserve the requested camera and show a brief title.
+The simulation keeps running throughout. A session-stored digest of
+the match resume identity prevents replay on reload or reconnect; a new match
+can present again.
 
 ## Local verification
 
@@ -147,9 +173,16 @@ General selection/march/return to sprite zoom on renderer projects.
 `tests/rendering/strategic-capture.play.spec.ts` is an opt-in original-art proof
 for this checkout's dev server on port 8153. The ignored file
 `.cache/showcase/zoom.json` supplies `{"url":"http://127.0.0.1:8153/","mode":"general"}`;
-`vassal` captures the economy demo and `large` uses the locally prepared
+`steward` captures the economy demo and `large` uses the locally prepared
 8,000-tile Paris package named in `tests/proofs/strategic/large.ts`, with 99 real
 AI opponents. Packages must be installed before starting the dev server. The
 large proof stops its AI hosts in its cleanup path. Videos and source-backed
 game assets remain outside Git. See the [local evidence record](scale/far-zoom-evidence.md) for actual
 captures, measurements and limits.
+
+The cockpit3 source-backed take uses `.cache/showcase/cockpit3.json` with
+`{"url":"http://127.0.0.1:8155/","phase":"after"}` (or `before`). It records
+original art on the 8,000 × 8,000 Paris package without socket, map, actor or art
+mocks. Fog is explicitly disabled for this landscape inspection. Its moving
+camera stays within the land during frame sampling. This new-game scene has
+four real starting units and one Town Center, not a crowded RTS qualification.

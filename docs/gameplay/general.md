@@ -5,7 +5,7 @@ in Castle Age for 800 food and 800 gold in 60 seconds, one population slot.
 Its 350 HP, 22 melee attack, 5 melee armour, 6 pierce armour, 1.8-second attack
 period and 1.40-tile/second speed make it a strong fighter. There is no
 one-per-Castle restriction. Ordinary population, training and cancellation
-rules apply. The Vassal remains the more expensive economy specialist.
+rules apply. The Steward is the economy specialist.
 
 ## Command and production
 
@@ -92,7 +92,7 @@ the healthy non-siege soldiers split, in entity order, into groups of at most
 20 (`FIGHT_GROUP`); each group attack-moves, as one ordinary formation order,
 against its own target. A group's target is the best visible enemy for it:
 siege (including Mangonels and Battering Rams), then Monks, then leaders
-(Generals and Vassals), then all archer kinds (including Skirmishers), then
+(Generals, Vassals and Stewards), then all archer kinds (including Skirmishers), then
 others; within a class the lowest remaining HP fraction wins, then the
 distance from that group, then entity ID. A group keeps its target while it
 stays visible and nothing of a higher class appears, and is re-ordered only

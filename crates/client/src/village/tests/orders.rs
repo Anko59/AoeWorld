@@ -65,7 +65,7 @@ fn economy_refusals_explain_food_population_ownership_and_exhaustion() {
     use aoe_protocol::CommandResult::*;
     for (result, words) in [
         (RejectedInsufficientFood, "not enough food"),
-        (RejectedVassalExists, "already has a Vassal"),
+        (RejectedStewardExists, "already has a Steward"),
         (RejectedNotOwner, "another player"),
         (RejectedInvalidResource, "exhausted"),
     ] {
@@ -85,7 +85,7 @@ fn actor_hotspots_outside_native_pixels_remain_pickable_without_a_large_ground_h
 }
 
 #[wasm_bindgen_test]
-fn vassal_poses_use_the_king_for_standing_walking_and_death() {
+fn steward_poses_use_the_king_for_standing_walking_and_death() {
     use crate::unit_visuals::{Pose, lifecycle_pose, unit_pose};
     use aoe_protocol::{GameplayUnitState, UnitTask};
     let mut u = GameplayUnitState {
@@ -95,7 +95,7 @@ fn vassal_poses_use_the_king_for_standing_walking_and_death() {
         moving: false,
         planning: false,
         facing: 0,
-        kind: UnitKind::Vassal,
+        kind: UnitKind::Steward,
         task: UnitTask::Idle,
         carried: None,
         gathering: None,

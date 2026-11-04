@@ -63,7 +63,10 @@ fn trains(building: BuildingKind, unit: UnitKind) -> bool {
     matches!(
         (building, unit),
         (BuildingKind::Castle, UnitKind::Vassal | UnitKind::General)
-            | (BuildingKind::TownCenter, UnitKind::Villager)
+            | (
+                BuildingKind::TownCenter,
+                UnitKind::Villager | UnitKind::Steward
+            )
             | (BuildingKind::Barracks, UnitKind::Militia)
             | (
                 BuildingKind::Barracks,
@@ -234,7 +237,11 @@ pub(crate) fn unit_rule(unit: &UnitState) -> Option<&'static str> {
             || !alive
             || matches!(
                 unit.kind,
-                UnitKind::Villager | UnitKind::Vassal | UnitKind::General | UnitKind::Monk
+                UnitKind::Villager
+                    | UnitKind::Vassal
+                    | UnitKind::Steward
+                    | UnitKind::General
+                    | UnitKind::Monk
             )
             || unit.kind.is_naval()
     }) {

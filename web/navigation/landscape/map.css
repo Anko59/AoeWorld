@@ -1,0 +1,21 @@
+#strategic-settlements { position:fixed; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); pointer-events:none; }
+html:is([data-lod=map],[data-lod=markers]) body #bottom-panel { background:transparent; border:0; box-shadow:none; pointer-events:none; }
+html:is([data-lod=map],[data-lod=markers]) #bottom-panel:before { display:none; }
+html:is([data-lod=map],[data-lod=markers]) #bottom-panel > * { pointer-events:auto; }
+html:is([data-lod=map],[data-lod=markers]) #bottom-panel:has(#selection[data-count="0"]) #commands,
+html:is([data-lod=map],[data-lod=markers]) #selection[data-count="0"] { visibility:hidden; }
+html:is([data-lod=map],[data-lod=markers]) #minimap { position:fixed; right:0; bottom:0; }
+html:is([data-lod=map],[data-lod=markers]):has(#selection:not([data-count="0"])) #strategic-views { left:auto; right:12px; top:140px; bottom:auto; width:320px; }
+html[data-lod=map] #minimap,html[data-lod=markers] #minimap { height:208px; width:230px; }
+html[data-lod=map] #strategic-views,html[data-lod=markers] #strategic-views { top:auto; bottom:16px; left:12px; right:auto; width:310px; }
+html[data-lod=map] #units-here,html[data-lod=markers] #units-here { top:auto; bottom:196px; max-height:220px; }
+html[data-lod=map] #strategic-cockpit,html[data-lod=markers] #strategic-cockpit { max-height:calc(100vh - 310px); }
+#strategic-map-key { position:fixed; left:50%; bottom:16px; translate:-50% 0; z-index:2; pointer-events:none; color:#eee2bb; text-shadow:0 1px 2px #101d20; background:#192725d9; border:1px solid #9c906455; padding:7px 12px; font:11px Georgia,serif; }
+#strategic-map-key>div { display:flex; align-items:center; justify-content:center; gap:12px; }
+#strategic-map-key span:before { content:''; display:inline-block; width:8px; height:8px; margin-right:4px; border:1px solid #ddd5ac66; }
+#strategic-map-key .forest:before { background:#305739; }
+#strategic-map-key .fields:before { background:#bea45d; }
+#strategic-map-key .water:before { background:#36748e; }
+#strategic-map-key .holdings:before { background:#4191f577; border-color:#79b9ff; }
+#strategic-map-key .map-scale { margin-top:7px; gap:8px; font:10px system-ui,sans-serif; }
+.map-scale i { display:block; height:5px; border:1px solid #e3d6b0; border-top:0; transform:rotate(26.565deg); }

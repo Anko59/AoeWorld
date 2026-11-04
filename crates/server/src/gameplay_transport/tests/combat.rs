@@ -51,7 +51,7 @@ async fn open(address: std::net::SocketAddr) -> Socket {
         &mut socket,
         GameplayClientMessage::Subscribe {
             revision: 1,
-            region: TileRect::from_xywh(100, 100, 60, 60),
+            region: TileRect::from_xywh(80, 100, 60, 60),
         },
     )
     .await;
@@ -88,7 +88,7 @@ async fn ack(service: &GameplayService, socket: &mut Socket, sequence: u64) -> C
 
 #[tokio::test]
 async fn castle_target_commands_and_a_slow_session_do_not_disconnect_other_sockets() {
-    let (mut world, primary) = GameWorld::vassal_demo(Seed(7)).unwrap();
+    let (mut world, primary) = GameWorld::general_demo(Seed(7)).unwrap();
     world.set_fog_disabled(true);
     let castle = world
         .buildings()
@@ -96,7 +96,7 @@ async fn castle_target_commands_and_a_slow_session_do_not_disconnect_other_socke
         .unwrap()
         .id;
     let enemy = world
-        .place_town_center(PlayerId(1), TileCoord::new(146, 134))
+        .place_town_center(PlayerId(1), TileCoord::new(105, 124))
         .unwrap();
     let service = GameplayService::from_scale_world(world, primary);
     let handler = service.clone();
@@ -115,7 +115,7 @@ async fn castle_target_commands_and_a_slow_session_do_not_disconnect_other_socke
     let (blocked_tx, _blocked_rx) = mpsc::channel(1);
     let (blocked, _) = service.register(None, blocked_tx).await;
     service
-        .subscribe(blocked, 1, TileRect::from_xywh(100, 100, 60, 60))
+        .subscribe(blocked, 1, TileRect::from_xywh(80, 100, 60, 60))
         .await;
 
     // This is the current browser's right-click on an enemy building with a
@@ -126,7 +126,7 @@ async fn castle_target_commands_and_a_slow_session_do_not_disconnect_other_socke
             sequence: 1,
             building_id: castle,
             target: aoe_protocol::RallyTarget::Ground(
-                WorldPosition::from_tile_center(TileCoord::new(147, 135)).unwrap(),
+                WorldPosition::from_tile_center(TileCoord::new(106, 125)).unwrap(),
             ),
         },
     )

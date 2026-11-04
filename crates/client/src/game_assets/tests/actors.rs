@@ -231,7 +231,7 @@ fn repeated_scout_cells_are_static_but_changed_pixels_and_hotspots_keep_the_loop
 }
 
 #[wasm_bindgen_test]
-fn vassal_king_groups_select_every_native_cell_and_refuse_partial_art() {
+fn steward_king_groups_select_every_native_cell_and_refuse_partial_art() {
     let poses = [
         Pose::KingStand,
         Pose::KingWalk,

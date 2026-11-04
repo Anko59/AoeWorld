@@ -6,9 +6,9 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 #[path = "strategic/data.rs"]
 mod data;
-#[cfg(test)]
-pub(super) use data::army_record;
 pub(super) use data::update;
+#[cfg(test)]
+pub(super) use data::{army_record, site_buildings};
 
 #[wasm_bindgen(inline_js = "
 export function strategic_pick(point) {
@@ -16,12 +16,14 @@ export function strategic_pick(point) {
   if (world) point.set(world); else point.fill(NaN);
 }
 export function strategic_frame(state) { return window.aoeNavigation?.strategic?.frame(state) ?? false; }
+export function strategic_cinematic() { return window.aoeNavigation?.strategic?.cinematic() ?? false; }
 export function strategic_present() { window.aoeNavigation?.strategic?.present(); }
 export function strategic_entity(x, y) { return window.aoeNavigation?.strategic?.entity(x, y) ?? NaN; }
 export function strategic_depleted(ids, begin, complete) { window.aoeNavigation?.strategic?.depleted(ids, begin, complete); }
 ")]
 extern "C" {
     fn strategic_frame(state: &[f64]) -> bool;
+    fn strategic_cinematic() -> bool;
     fn strategic_pick(point: &mut [f64]);
     fn strategic_present();
     fn strategic_entity(x: f64, y: f64) -> f64;
@@ -29,7 +31,12 @@ extern "C" {
 }
 
 pub(super) fn level(client: &Client) -> Lod {
-    lod_for_viewport(client.camera.zoom, client.camera.viewport)
+    let level = lod_for_viewport(client.camera.zoom, client.camera.viewport);
+    if level == Lod::Sprites && strategic_cinematic() {
+        Lod::Markers
+    } else {
+        level
+    }
 }
 
 pub(super) fn active(client: &Client) -> bool {
@@ -52,7 +59,8 @@ pub(super) fn render(client: &mut Client) -> bool {
         client.camera.viewport[0],
         client.camera.viewport[1],
         client.camera.zoom,
-        f64::from(level as u32),
+        f64::from(lod_for_viewport(client.camera.zoom, client.camera.viewport) as u32),
+        f64::from(u8::from(level != Lod::Sprites)),
     ];
     if strategic_frame(&state) {
         client.capture.frame = client.capture.frame.saturating_add(1);

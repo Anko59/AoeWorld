@@ -19,7 +19,7 @@ pub(super) fn military_poses(kind: UnitKind) -> Option<[Pose; 4]> {
             TransportShipDie,
         ],
         UnitKind::General => [GeneralStand, GeneralWalk, GeneralAttack, GeneralDie],
-        UnitKind::Vassal => [KingStand, KingWalk, KingStand, KingDie],
+        UnitKind::Vassal | UnitKind::Steward => [KingStand, KingWalk, KingStand, KingDie],
         UnitKind::Archer => [ArcherStand, ArcherWalk, ArcherAttack, ArcherDie],
         UnitKind::Skirmisher => [
             SkirmisherStand,

@@ -94,7 +94,7 @@ fn hidden_unit_bonus_rows_are_independent_of_base_armour() {
         (FishingShip, Galley, 0),
         (TransportShip, Galley, 0),
         (DemolitionShip, Galley, 0),
-        (Vassal, Knight, 0),
+        (Steward, Knight, 0),
     ] {
         assert_eq!(
             crate::game_world::combat::military::class_bonus(attacker, victim),

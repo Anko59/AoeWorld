@@ -159,7 +159,7 @@ fn combat_state_round_trips_for_units_and_buildings() {
             age: aoe_protocol::Age::Dark,
             researched: 0,
             recent_deliveries: [0; 4],
-            unit_counts: [0; 34],
+            unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
             market_prices: aoe_protocol::MarketPrices::default(),
         }],
         buildings: vec![center(1)],

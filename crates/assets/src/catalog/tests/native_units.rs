@@ -17,7 +17,7 @@ fn farm_seed_pose_resolves_the_farmers_native_seeding_action() {
 
 #[test]
 fn military_units_keep_complete_native_de_direction_blocks() {
-    // The army roster, including all current promotion tiers and the Vassal.
+    // The army roster, including all current promotion tiers and the Steward.
     let slots = (0..4)
         .chain([29, 30, 31, 37])
         .chain(50..72)

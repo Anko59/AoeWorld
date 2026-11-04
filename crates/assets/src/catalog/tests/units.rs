@@ -88,7 +88,7 @@ fn navy_actor_sources_keep_every_native_direction_and_sail_phase() {
 }
 
 #[test]
-fn vassal_uses_king_poses_with_native_timing() {
+fn steward_uses_king_poses_with_native_timing() {
     // The DE King contributes all four complete sixteen-direction timelines.
     for (pose, name, id, stride, millis, frames) in [
         (Pose::KingStand, "dat_1851", 201851, 60, 50, 961),

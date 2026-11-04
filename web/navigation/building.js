@@ -12,18 +12,21 @@ export function initFarBuilding(panel) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.id = 'far-footprint'; svg.setAttribute('hidden', ''); svg.setAttribute('aria-hidden', 'true');
   document.body.append(svg);
-  let visible = false, state = [], signature = '';
+  let visible = false, state = [], signature = '', shownKind = -1;
   function refresh() {
     const kind = Number(select.value);
     button.disabled = state[(kind + buildingKinds.length - 1) % buildingKinds.length] !== 1;
-    button.innerHTML = `${entityIcon(buildingKinds[kind])} Build here`;
+    if (shownKind !== kind) {
+      shownKind = kind;
+      button.innerHTML = `${entityIcon(buildingKinds[kind])} Build here`;
+    }
     button.title = button.disabled ? 'Needs available villagers, resources, age and prerequisite buildings' : 'Choose a site in the far view';
   }
   select.addEventListener('change', refresh);
   button.addEventListener('click', () => {
     window.aoeNavigation?.production?.reset();
     window.aoeBuildings?.command(0, (Number(select.value) + buildingKinds.length - 1) % buildingKinds.length);
-    status.textContent = 'Click a clear site · nearest free villagers answer · Esc or right-click cancels.';
+    status.textContent = 'Click a clear site · free villagers within 64 tiles answer · Esc or right-click cancels.';
     document.getElementById('scene')?.focus();
   });
   return {

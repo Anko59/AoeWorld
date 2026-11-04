@@ -3,6 +3,10 @@ use super::*;
 use aoe_protocol::{CommandResult, GameplayUnitState, UnitTask};
 use wasm_bindgen::prelude::wasm_bindgen;
 
+const REACH_TILES: u64 = 64;
+const NO_NEARBY: &str =
+    "No available villagers within 64 tiles of this site. Choose a site nearer your village.";
+
 pub(crate) fn choose<'a>(
     units: impl Iterator<Item = &'a GameplayUnitState>,
     player: aoe_core::PlayerId,
@@ -19,9 +23,13 @@ pub(crate) fn choose<'a>(
             );
         let dx = (i64::from(u.position.x) - i64::from(at.x) * 1024).unsigned_abs();
         let dy = (i64::from(u.position.y) - i64::from(at.y) * 1024).unsigned_abs();
+        let distance = dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy));
+        if distance > (REACH_TILES * 1024).pow(2) {
+            continue;
+        }
         let key = (
             u8::from(u.managed_by.is_some()) * 2 + u8::from(!idle),
-            dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy)),
+            distance,
             u.id,
         );
         let index = candidates.partition_point(|c| *c < key);
@@ -97,6 +105,20 @@ pub(crate) fn acknowledge(client: &mut Client, sequence: u64, result: CommandRes
     });
 }
 
+pub(crate) fn connection_reset(client: &mut Client) {
+    let pending = client.village.build_admission.pending.is_some();
+    client.village.build_admission = Admission::default();
+    if pending {
+        far_build_result(
+            "Connection reset; the previous building order was not confirmed. Check the site before trying again.",
+        );
+    }
+}
+
+pub(crate) fn no_nearby() {
+    far_build_result(NO_NEARBY);
+}
+
 pub(crate) fn preview(client: &Client) {
     let Some(kind) = client.village.placement else {
         far_build_preview(&[], "");
@@ -106,8 +128,11 @@ pub(crate) fn preview(client: &Client) {
         return;
     };
     let tiles = tiles(client, at).unwrap_or_default();
-    let valid = span_valid(client, kind, &tiles);
-    let reason = if valid {
+    let nearby = !choose(client.units.values(), owner(client), at).is_empty();
+    let valid = nearby && span_valid(client, kind, &tiles);
+    let reason = if !nearby {
+        NO_NEARBY
+    } else if valid {
         "Click to send nearby villagers · Esc cancels"
     } else if !enabled(client, kind, 1) {
         "No available villagers, resources, age or required buildings"

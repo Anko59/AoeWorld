@@ -19,6 +19,7 @@ impl UnitKind {
             table[UnitKind::Scout as usize] = 256;
             table[UnitKind::Knight as usize] = 256;
             table[UnitKind::LightCavalry as usize] = 256;
+            table[UnitKind::Steward as usize] = 308;
             table[UnitKind::Vassal as usize] = 308;
             table[UnitKind::General as usize] = 410;
             table[UnitKind::Cavalier as usize] = 256;

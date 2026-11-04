@@ -302,6 +302,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     let onwheel = Closure::<dyn FnMut(WheelEvent)>::new(move |event: WheelEvent| {
         event.prevent_default();
         let mut client = zoomed.borrow_mut();
+        navigation::interrupt_reveal(&mut client);
         super::resize(&mut client);
         let bounds = client.canvas.get_bounding_client_rect();
         let target = ScreenPoint {

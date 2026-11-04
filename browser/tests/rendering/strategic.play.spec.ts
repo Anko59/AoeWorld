@@ -78,9 +78,9 @@ test("strategic tokens retain identity, layers and fog-safe reports", async ({
     const buttons = [...document.querySelectorAll(".army-token")].map(
       (e) => e.textContent,
     );
-    const card = document.querySelector(".vassal-card")?.textContent;
+    const card = document.querySelector(".steward-card")?.textContent;
     const bounds = [
-      ...document.querySelectorAll(".army-token,.vassal-card"),
+      ...document.querySelectorAll(".army-token,.steward-card"),
     ].map((e) => {
       const r = e.getBoundingClientRect();
       return { x: r.x, y: r.y, width: r.width, height: r.height };
@@ -121,7 +121,7 @@ test("strategic tokens retain identity, layers and fog-safe reports", async ({
       threats,
       deadThreats,
       resetThreats: canvas.dataset.threats,
-      remaining: document.querySelectorAll(".army-token,.vassal-card").length,
+      remaining: document.querySelectorAll(".army-token,.steward-card").length,
     };
   });
   expect(result.pick).toBe(7);
@@ -223,6 +223,7 @@ test("a General is selected and marched without leaving far zoom", async ({
     "General",
   );
   await expect(page.locator("#general-panel")).toBeVisible();
+  await page.locator("#general-only-move").hover();
   await page.mouse.click(810, 380, { button: "right" });
   await expect(page.locator("#general-panel")).toHaveAttribute(
     "data-state",
@@ -238,4 +239,156 @@ test("a General is selected and marched without leaving far zoom", async ({
   await page.keyboard.press("F3");
   expect(await perfEnabled()).toBe(true);
   await page.keyboard.press("F3");
+});
+
+test("kingdom landscape keeps source relief, settlements and farms bounded and cached", async ({
+  page,
+}) => {
+  await page.route("**/landscape-test", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<link rel="stylesheet" href="/interface/game.css"><canvas id="scene" style="width:1280px;height:720px"></canvas><section id="bottom-panel"><div id="commands"></div><div id="selection" data-count="0"></div></section>',
+    }),
+  );
+  await page.goto("/landscape-test");
+  const result = await page.evaluate(async () => {
+    // @ts-expect-error Served browser module.
+    const { paintTerrain } = await import("/navigation/landscape/terrain.js");
+    // @ts-expect-error Served browser module.
+    const { initStrategic } = await import("/navigation/strategic.js");
+    document.documentElement.dataset.interfaceArt = "original";
+    const cells = new Uint8Array([
+      0x20, 0xe0, 0x82, 0x89, 0x80, 0x80, 0x82, 0x89, 0x80, 0x80, 0x82, 0x89,
+      0x80, 0x80, 0x82, 0x89,
+    ]);
+    const terrain = paintTerrain({ samples: 4, cells });
+    const pixel = (x: number, y: number) =>
+      Array.from(
+        terrain.getContext("2d").getImageData(x, y, 1, 1).data,
+      ) as number[];
+    const dark = pixel(0, 0),
+      lit = pixel(2, 0),
+      forest = pixel(4, 0),
+      river = pixel(6, 0);
+    const s = initStrategic(
+      { disabled: true, canvas: document.createElement("canvas"), revision: 0 },
+      { records: () => [], revision: () => 0 },
+    );
+    s.terrain(terrain);
+    const sites = [
+      10, 498, 498, 502, 502, 0, 0x4191f5, 11, 506, 500, 509, 503, 5, 0x4191f5,
+      12, 490, 500, 494, 504, 16, 0xf54141,
+    ];
+    s.settlements(sites);
+    const state = [8000, 8000, 500, 500, 1280, 720, 0.04, 1];
+    s.frame(state);
+    const node = document.querySelector(
+      '#strategic-settlements [data-kind="TownCenter"]',
+    );
+    const before = document
+      .querySelector("#strategic-scene")
+      ?.getAttribute("data-redraws");
+    s.settlements(sites);
+    s.frame(state);
+    const cached =
+      before ===
+      document.querySelector("#strategic-scene")?.getAttribute("data-redraws");
+    const retained =
+      node ===
+      document.querySelector('#strategic-settlements [data-kind="TownCenter"]');
+    const count = document.querySelectorAll(
+      "#strategic-settlements > *",
+    ).length;
+    const canvas =
+      document.querySelector<HTMLCanvasElement>("#strategic-scene");
+    if (!canvas) throw new Error("Missing strategic surface");
+    const fields = canvas.dataset.fields;
+    const many = Array.from({ length: 3000 }, (_, id) => {
+      const x = (id % 50) * 150,
+        y = Math.floor(id / 50) * 120;
+      return [id, x, y, x + 4, y + 4, 1, 0x4191f5];
+    }).flat();
+    s.settlements(many);
+    s.terrain(
+      paintTerrain({
+        samples: 512,
+        cells: new Uint8Array(512 * 512).fill(0x80),
+      }),
+    );
+    s.frame([8000, 8000, 4000, 4000, 1280, 720, 0.001, 2]);
+    const bounded = {
+      icons: Number(canvas.dataset.settlements),
+      borders: Number(canvas.dataset.borders),
+    };
+    const paintTimes: number[] = [],
+      intervals: number[] = [];
+    let last = performance.now();
+    for (let i = 0; i < 35; i++) {
+      s.frame([
+        8000,
+        8000,
+        4000 + Math.sin(i / 10) * 80,
+        4000,
+        1280,
+        720,
+        0.001,
+        2,
+      ]);
+      await new Promise(requestAnimationFrame);
+      const now = performance.now();
+      if (i >= 5) {
+        paintTimes.push(Number(canvas.dataset.frameMs));
+        intervals.push(now - last);
+      }
+      last = now;
+    }
+    const percentile = (v: number[], p: number) =>
+      v.sort((a, b) => a - b)[Math.floor(v.length * p)] ?? 0;
+    const budget = {
+      inputFootprints: 3000,
+      acceptedCap: 2048,
+      iconCap: 192,
+      terrainBytes: Number(canvas.dataset.terrainBytes),
+      samples: paintTimes.length,
+      paintP50Ms: percentile(paintTimes, 0.5),
+      paintP95Ms: percentile(paintTimes, 0.95),
+      frameP95Ms: percentile(intervals, 0.95),
+    };
+    s.reset();
+    s.frame(state);
+    return {
+      backdrop: getComputedStyle(
+        document.getElementById("bottom-panel") as HTMLElement,
+      ).backgroundColor,
+      dark,
+      lit,
+      forest,
+      river,
+      cached,
+      retained,
+      count,
+      size: [terrain.width, terrain.height],
+      fields,
+      bounded,
+      budget,
+      remaining: document.querySelectorAll("#strategic-settlements > *").length,
+    };
+  });
+  expect(result.backdrop).toBe("rgba(0, 0, 0, 0)");
+  expect(result.size).toEqual([8, 8]);
+  expect(result.lit[0]).toBeGreaterThan(result.dark[0] ?? -1);
+  expect(result.forest[1]).toBeGreaterThan(result.forest[0] ?? -1);
+  expect(result.river[2]).toBeGreaterThan(result.river[0] ?? -1);
+  expect(result.cached).toBe(true);
+  expect(result.retained).toBe(true);
+  expect(result.count).toBe(2);
+  expect(result.fields).toBe("1");
+  expect(result.bounded.icons).toBeLessThanOrEqual(192);
+  expect(result.bounded.borders).toBeLessThanOrEqual(2048);
+  expect(result.budget.terrainBytes).toBe(4 * 1024 * 1024);
+  await test.info().attach("kingdom-render-budget", {
+    body: JSON.stringify(result.budget, null, 2),
+    contentType: "application/json",
+  });
+  expect(result.remaining).toBe(0);
 });

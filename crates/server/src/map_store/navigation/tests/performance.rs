@@ -180,7 +180,7 @@ fn replay(installed: bool) {
         run(4),
         "navigation replay must agree across worker counts"
     );
-    // Vassal controls, transfer reservations and current squad state change this
+    // Steward controls, transfer reservations and current squad state change this
     // checkpoint. Keep the workload, 1/4-worker equality and installed-mode
     // no-construction assertions above intact when regenerating the pin.
     assert_eq!(

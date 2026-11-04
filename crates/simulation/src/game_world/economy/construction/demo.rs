@@ -15,6 +15,27 @@ mod recovery;
 mod river;
 
 impl GameWorld {
+    /// Local economy recordings isolate management from inherited raiders.
+    fn isolate_economy_demo(&mut self, primary: EntityId) {
+        let enemies: Vec<_> = self
+            .units()
+            .filter(|u| u.player != PlayerId(0))
+            .map(|u| u.id)
+            .collect();
+        for id in enemies {
+            self.kill_unit(self.lookup[&id]);
+            self.remove_unit(id);
+        }
+        let wolves: Vec<_> = self
+            .animals()
+            .filter(|a| a.kind == crate::AnimalKind::Wolf)
+            .map(|a| a.id)
+            .collect();
+        for id in wolves {
+            self.strike_animal(id, primary, u16::MAX);
+        }
+    }
+
     /// Real-time art inspection encounter. Normal orders, weapon damage and
     /// death retention expose all hero poses without changing match rules.
     pub fn general_appearance_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
@@ -131,57 +152,41 @@ impl GameWorld {
         Ok((world, primary))
     }
 
-    /// Local Castle economy fixture; production, garrison and management use
+    /// Local Town Center economy fixture; production, garrison and management use
     /// exactly the same orders as a match. The existing demo clock runs 4x.
-    pub fn vassal_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+    pub fn steward_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         let (mut world, primary) = Self::military_demo(seed)?;
-        // The kit's wolf lurks beside the farm ring and kills the starting
-        // villagers while a slow client is still working through the demo.
+        // Keep dev's training fixture wolf-free, including retained corpses.
         world.remove_animals(crate::AnimalKind::Wolf);
+        world.isolate_economy_demo(primary);
         world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
         world.insert_building(
             PlayerId(0),
-            BuildingKind::Castle,
+            BuildingKind::TownCenter,
             TileRect::from_xywh(139, 134, 4, 4),
             true,
         )?;
         Ok((world, primary))
     }
 
-    /// Territory showcase on the four-times clock: two overlapping Castles, 40
-    /// busy farmers between them and both Vassals waiting outside. Garrisoning
+    /// Territory showcase on the four-times clock: two overlapping Town Centers, 40
+    /// busy farmers between them and both Stewards waiting outside. Garrisoning
     /// the first adopts every farmer; garrisoning the second splits the area.
     /// All orders stay real.
-    pub fn vassal_territory_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+    pub fn steward_territory_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         use crate::UnitKind;
         let (mut world, primary) = Self::military_demo(seed)?;
         world.set_fog_disabled(true);
         // The inherited military scene contains opponents. This comparison
-        // isolates management while the owner activates both Castles.
-        let enemies: Vec<_> = world
-            .units()
-            .filter(|u| u.player != PlayerId(0))
-            .map(|u| u.id)
-            .collect();
-        for id in enemies {
-            world.kill_unit(world.lookup[&id]);
-            world.remove_unit(id);
-        }
-        let wolves: Vec<_> = world
-            .animals()
-            .filter(|a| a.kind == crate::AnimalKind::Wolf)
-            .map(|a| a.id)
-            .collect();
-        for id in wolves {
-            world.strike_animal(id, primary, u16::MAX);
-        }
+        // isolates management while the owner activates both Town Centers.
+        world.isolate_economy_demo(primary);
         world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
         for (x, y) in [(100, 100), (150, 100)] {
             let footprint = TileRect::from_xywh(x, y, 4, 4);
-            world.insert_building(PlayerId(0), BuildingKind::Castle, footprint, true)?;
+            world.insert_building(PlayerId(0), BuildingKind::TownCenter, footprint, true)?;
             let at = aoe_core::WorldPosition::from_tile_center(TileCoord::new(x + 2, y + 5))
                 .map_err(|_| EconomyError::InvalidFootprint)?;
-            world.spawn_kind(PlayerId(0), UnitKind::Vassal, at)?;
+            world.spawn_kind(PlayerId(0), UnitKind::Steward, at)?;
         }
         for i in 0..40 {
             let at = TileCoord::new(87 + 4 * (i % 20), 146 + 4 * (i / 20));
@@ -203,7 +208,7 @@ impl GameWorld {
 
     /// Farmland-only comparison: 24 idle workers, one Mill and prepaid wood.
     /// The accelerated clock keeps ordinary farm construction filmable.
-    pub fn vassal_farming_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+    pub fn steward_farming_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         use crate::UnitKind;
         use aoe_core::WorldPosition;
         let mut config =
@@ -217,7 +222,8 @@ impl GameWorld {
         };
         let primary = world.spawn_kind(PlayerId(0), UnitKind::Scout, position(135, 135)?)?;
         let footprint = TileRect::from_xywh(100, 100, 4, 4);
-        let castle = world.insert_building(PlayerId(0), BuildingKind::Castle, footprint, true)?;
+        let castle =
+            world.insert_building(PlayerId(0), BuildingKind::TownCenter, footprint, true)?;
         world.insert_building(
             PlayerId(0),
             BuildingKind::Mill,
@@ -242,12 +248,12 @@ impl GameWorld {
                 stone: 10_000,
             };
         }
-        let vassal = world.spawn_kind(PlayerId(0), UnitKind::Vassal, position(99, 100)?)?;
+        let steward = world.spawn_kind(PlayerId(0), UnitKind::Steward, position(99, 100)?)?;
 
         for n in 0..24 {
             world.spawn_villager(PlayerId(0), position(122 + (n % 8) * 2, 123 + (n / 8) * 2)?)?;
         }
-        world.issue_garrison(PlayerId(0), vassal, castle)?;
+        world.issue_garrison(PlayerId(0), steward, castle)?;
         Ok((world, primary))
     }
 

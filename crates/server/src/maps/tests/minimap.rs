@@ -180,7 +180,7 @@ fn raster_has_the_documented_header_and_one_byte_per_sample() {
     assert!(
         raster[MINIMAP_HEADER_BYTES..]
             .iter()
-            .all(|cell| cell & 0x0f <= MinimapClass::Ocean as u8)
+            .all(|cell| cell & 0x0f <= MinimapClass::Pasture as u8)
     );
 }
 
@@ -221,11 +221,10 @@ fn synthetic_coast_forest_and_mountain_are_distinct_classes() {
         assert!(count(&raster, class) > cells / 200, "{class:?} is missing");
     }
     // Water is drawn flat; the mountain flank is visibly lit or shaded.
-    assert!(
-        raster[MINIMAP_HEADER_BYTES..]
-            .iter()
-            .all(|cell| { cell & 0x0f < MinimapClass::Shore as u8 || cell >> 4 == FLAT_SHADE })
-    );
+    assert!(raster[MINIMAP_HEADER_BYTES..].iter().all(|cell| {
+        !(MinimapClass::Shore as u8..=MinimapClass::Ocean as u8).contains(&(cell & 0x0f))
+            || cell >> 4 == FLAT_SHADE
+    }));
     assert!(
         raster[MINIMAP_HEADER_BYTES..]
             .iter()
@@ -377,4 +376,25 @@ async fn a_raster_past_its_deadline_is_cached_for_the_retry_with_bounded_backgro
         cache.get("2").is_none(),
         "the over-limit raster was not kept"
     );
+}
+
+#[test]
+fn source_land_use_is_visible_without_guessing_fields_from_dirt() {
+    use aoe_map::historical_parcels::LandUse;
+    let mut point = small_fallback_package()
+        .generator()
+        .landscape_point_with_cancel(TileCoord::new(10, 10), &|| false)
+        .unwrap()
+        .unwrap();
+    point.tile.terrain.water = aoe_map::WaterKind::None;
+    point.tile.appearance.canopy_strength = 0;
+    point.tile.terrain.material = aoe_map::GroundMaterial::Dirt;
+    point.historical_land_use = LandUse::Unobserved;
+    assert_eq!(classify(&point), MinimapClass::Soil);
+    point.historical_land_use = LandUse::Crop;
+    assert_eq!(classify(&point), MinimapClass::Cropland);
+    point.historical_land_use = LandUse::Grazing;
+    assert_eq!(classify(&point), MinimapClass::Pasture);
+    point.tile.terrain.water = aoe_map::WaterKind::River;
+    assert_eq!(classify(&point), MinimapClass::River);
 }

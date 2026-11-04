@@ -38,19 +38,20 @@ pub(crate) async fn reset(
             }
         }
         Some(
-            name @ ("feudal-economy" | "vassal-economy" | "vassal-territory" | "vassal-farming"
-            | "vassal-kingdom" | "feudal-military" | "general-army" | "general-appearance"
-            | "imperial-army" | "vassal-fishing" | "vassal-throughput" | "vassal-stability"),
+            name @ ("feudal-economy" | "steward-economy" | "steward-territory" | "steward-farming"
+            | "steward-kingdom" | "feudal-military" | "general-army" | "general-appearance"
+            | "imperial-army" | "steward-fishing" | "steward-throughput"
+            | "steward-stability"),
         ) => {
             let constructor = match name {
                 "feudal-economy" => GameplayService::feudal_demo,
-                "vassal-economy" => GameplayService::vassal_demo,
-                "vassal-territory" => GameplayService::vassal_territory_demo,
-                "vassal-farming" => GameplayService::vassal_farming_demo,
-                "vassal-kingdom" => GameplayService::vassal_kingdom_demo,
-                "vassal-stability" => GameplayService::vassal_stability_demo,
-                "vassal-fishing" => GameplayService::vassal_fishing_demo,
-                "vassal-throughput" => GameplayService::vassal_throughput_demo,
+                "steward-economy" => GameplayService::steward_demo,
+                "steward-territory" => GameplayService::steward_territory_demo,
+                "steward-farming" => GameplayService::steward_farming_demo,
+                "steward-kingdom" => GameplayService::steward_kingdom_demo,
+                "steward-stability" => GameplayService::steward_stability_demo,
+                "steward-fishing" => GameplayService::steward_fishing_demo,
+                "steward-throughput" => GameplayService::steward_throughput_demo,
                 "general-army" => GameplayService::general_demo,
                 "imperial-army" => GameplayService::imperial_demo,
                 "general-appearance" => GameplayService::general_appearance_demo,

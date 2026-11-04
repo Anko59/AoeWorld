@@ -48,6 +48,7 @@ class UnitKind:
     TRANSPORT_SHIP: UnitKind
     WAR_GALLEY: UnitKind
     VASSAL: UnitKind
+    STEWARD: UnitKind
     GENERAL: UnitKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
@@ -215,10 +216,10 @@ class CommandResult:
     REJECTED_WORLD_LIMIT: CommandResult
     REJECTED_ORDER_TOO_LARGE: CommandResult
     REJECTED_GARRISON_FULL: CommandResult
-    REJECTED_VASSAL_EXISTS: CommandResult
-    REJECTED_VASSAL_LEASH: CommandResult
-    REJECTED_VASSAL_HOME: CommandResult
-    REJECTED_INVALID_VASSAL_SETTINGS: CommandResult
+    REJECTED_STEWARD_EXISTS: CommandResult
+    REJECTED_STEWARD_LEASH: CommandResult
+    REJECTED_STEWARD_HOME: CommandResult
+    REJECTED_INVALID_STEWARD_SETTINGS: CommandResult
     REJECTED_UNEXPLORED_PLACEMENT: CommandResult
     REJECTED_REQUIRES_CASTLE_AGE: CommandResult
     REJECTED_REQUIRES_IMPERIAL_AGE: CommandResult

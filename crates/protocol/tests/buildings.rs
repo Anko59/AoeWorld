@@ -16,7 +16,7 @@ fn player() -> GameplayPlayerState {
         age: aoe_protocol::Age::Dark,
         researched: 0,
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: aoe_protocol::MarketPrices::default(),
     }
 }
@@ -68,7 +68,7 @@ fn garrison_occupants_are_bounded_alive_sorted_and_eligible() {
         kind: UnitKind::Villager,
         hp: 10,
         max_hp: 25,
-        vassal: None,
+        steward: None,
     }];
     let snapshot = |b| GameplayServerMessage::Snapshot {
         revision: 1,
@@ -112,7 +112,7 @@ fn garrison_occupants_are_bounded_alive_sorted_and_eligible() {
             kind: UnitKind::Villager,
             hp: 25,
             max_hp: 25,
-            vassal: None,
+            steward: None,
         })
         .collect();
     assert!(decode_gameplay_server(&postcard::to_allocvec(&snapshot(center)).unwrap()).is_err());

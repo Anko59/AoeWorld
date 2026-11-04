@@ -27,7 +27,7 @@ const PHASES: [&str; TickPhase::Changed as usize + 2] = [
     "construction_and_gates",
     "gathering_and_economy",
     "research_and_training",
-    "vassal_economy",
+    "steward_economy",
     "building_memory_per_player",
     "result_collation",
     "idle_tail",

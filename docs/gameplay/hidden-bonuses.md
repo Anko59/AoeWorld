@@ -67,7 +67,7 @@ Only attack classes with targets in our roster are listed. A dash means none.
 | Demolition Ship (527) | Ships (3) | All Buildings +220 |
 | Transport Ship (545) | Ships | — |
 | War Galley (21) | Ships | Ships +9; Fishing Ships +9; All Buildings +7; Rams +4 |
-| Vassal (custom) | — | — (cannot attack) |
+| Vassal / Steward (custom) | — | — (cannot attack) |
 
 Villagers have no generic infantry, archer, or cavalry class. Monks have their
 own class. Fishing Ships use their own class instead of also taking the Ships
@@ -131,7 +131,7 @@ Mangonel area hits select each victim's classes separately.
 
 No camels, elephants, eagles, cavalry archers, gunpowder, unique units, stone
 walls, or civilization-specific bonus resistance exist in the current roster.
-Vassal and Bridge are project-specific choices, not claims about DE units.
+Vassal, Steward and Bridge are project-specific choices, not claims about DE units.
 Independent licensed DE extraction and dedicated-hardware qualification remain
 external work. Instruction workloads are synthetic performance evidence.
 

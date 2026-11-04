@@ -59,7 +59,7 @@ export async function generalRiverProof(
     "data-kind",
     "General",
   );
-  await expect(page.locator("#vassal-status")).toContainText("100 soldiers");
+  await expect(page.locator("#steward-status")).toContainText("100 soldiers");
   const snapshots: unknown[] = [];
   const capture = async (name: string) => {
     await page.screenshot({ path: `../.cache/ui/general-river-${name}.png` });
@@ -118,7 +118,7 @@ export async function generalRiverProof(
   await page
     .locator("#scene")
     .click({ position: { x: 640, y: 360 }, button: "right" });
-  await expect(page.locator("#vassal-status")).toContainText("marching");
+  await expect(page.locator("#steward-status")).toContainText("marching");
   await mapClick(setup.camera, "left");
   // Ordinary deselection keeps the Captain/Trainer panel off the crossing.
   await page.locator("#scene").click({ position: { x: 640, y: 80 } });

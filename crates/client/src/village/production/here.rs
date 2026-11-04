@@ -82,7 +82,7 @@ pub(super) fn plan(
             .filter(|b| {
                 b.hp > 0
                     && queued(b) < aoe_protocol::MAX_TRAINING_QUEUE
-                    && (request.kind != UnitKind::Vassal
+                    && (request.kind != UnitKind::Steward
                         || (!occupied(b) && pending.count(b.id) == 0 && !result.contains(&b.id)))
                     && matches!(
                         availability::training(b, Some(player), owner, request.kind),
@@ -162,11 +162,11 @@ pub(in super::super::super) fn click(client: &mut Client, point: ScreenPoint) ->
         request,
         &client.village.pending_training,
         |b| {
-            super::has_vassal(b)
+            super::has_steward(b)
                 || client.units.values().any(|u| {
                     u.hp > 0
                         && u.player == player
-                        && u.kind == UnitKind::Vassal
+                        && u.kind == UnitKind::Steward
                         && u.home_castle == Some(b.id)
                 })
         },

@@ -351,5 +351,5 @@ The [Imperial Age](economy/imperial.md) completes the generic tech tree with
 Champion, Halberdier, Arbalester, Paladin, Hussar, Siege Ram and Onager lines,
 the third Blacksmith tier and three economy upgrades.
 
-The original [Vassal](economy/vassal.md) is trained at a Castle and has a fixed
+The [Steward](economy/steward.md) is trained at a Town Center and has a fixed
 100-tile home radius. It builds Houses before its population space runs out.

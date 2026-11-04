@@ -70,8 +70,9 @@ raster follows the world. Persisted river lines are additionally tested against
 each pixel footprint so narrow rivers stay visible at strategic scale; physical
 channels retain their tile-scale widths. The body is `AWMM`, a little-endian
 axis, two zero bytes and one byte per sample: terrain class (grass, dry grass,
-forest, soil, sand, rock, snow, ice, shore, river, lake, ocean) in the low
-nibble and north-west relief shade in the high nibble, at most 262,152 bytes.
+forest, soil, sand, rock, snow, ice, shore, river, lake, ocean, cropland, pasture)
+in the low nibble and north-west relief shade in the high nibble, at most
+262,152 bytes.
 One raster is generated at a time off the async runtime within 30 seconds,
 never partially, and the four most recent are cached. The client rejects any
 other shape and keeps its schematic map; it requests no chunks for the map.

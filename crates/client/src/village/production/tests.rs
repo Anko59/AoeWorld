@@ -60,7 +60,7 @@ fn shortest_queue_counts_burst_clicks_and_ignores_ineligible_selected_buildings(
         population_used: 5,
         population_cap: 100,
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: Default::default(),
     };
     let mut selected = Selection::default();
@@ -149,7 +149,7 @@ fn full_queues_do_not_reintroduce_locked_or_superseded_training_buttons() {
         population_used: 5,
         population_cap: 100,
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: Default::default(),
     };
     let mut pending = PendingTraining::default();
@@ -211,10 +211,10 @@ fn full_queues_do_not_reintroduce_locked_or_superseded_training_buttons() {
 }
 
 #[wasm_bindgen_test]
-fn grouped_vassal_training_skips_castles_with_an_occupant_or_pending_unit() {
+fn grouped_steward_training_skips_town_centers_with_an_occupant_or_pending_unit() {
     let mut buildings = vec![barracks(1, 0), barracks(2, 0)];
     for b in &mut buildings {
-        b.kind = BuildingKind::Castle;
+        b.kind = BuildingKind::TownCenter;
     }
     let player = GameplayPlayerState {
         player: PlayerId(0),
@@ -228,14 +228,14 @@ fn grouped_vassal_training_skips_castles_with_an_occupant_or_pending_unit() {
         population_used: 5,
         population_cap: 100,
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: Default::default(),
     };
     let mut selected = Selection::default();
     selected.same_buildings(
         buildings.iter().map(|b| (b.id, b.player, b.kind, true)),
         PlayerId(0),
-        BuildingKind::Castle,
+        BuildingKind::TownCenter,
         EntityId(1),
     );
     let mut pending = PendingTraining::default();
@@ -245,7 +245,7 @@ fn grouped_vassal_training_skips_castles_with_an_occupant_or_pending_unit() {
             &selected,
             Some(&player),
             PlayerId(0),
-            UnitKind::Vassal,
+            UnitKind::Steward,
             pending,
             |b| b.id == EntityId(1),
         )

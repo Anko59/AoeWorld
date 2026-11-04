@@ -21,7 +21,7 @@ fn player() -> GameplayPlayerState {
         age: aoe_protocol::Age::Dark,
         researched: 0,
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: aoe_protocol::MarketPrices::default(),
     }
 }
@@ -176,8 +176,8 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
             kind: UnitKind::FishingShip
         }
     );
-    // Onager is current discriminator 33; 34 is the first unknown unit kind.
-    assert!(decode_gameplay_client(&[5, 9, 3, 34]).is_err());
+    // Steward is current discriminator 34; 35 is the first unknown unit kind.
+    assert!(decode_gameplay_client(&[5, 9, 3, 35]).is_err());
     assert!(decode_gameplay_client(&[4, 9, 3]).is_err());
     // A build order may name at most MAX_BUILD_GROUP villagers.
     let crowd = GameplayClientMessage::BuildOrder {
@@ -192,7 +192,7 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
 
 #[test]
 fn full_economy_snapshot_and_delta_roundtrip() {
-    // The combined bundle appends water bridge spans and Vassal home/control
+    // The combined bundle appends water bridge spans and Steward home/control
     // IDs. This pin is regenerated from the current codec; retain both roundtrips.
     let snapshot = snapshot();
     let bytes = encode_gameplay_server(&snapshot).unwrap();
@@ -203,8 +203,8 @@ fn full_economy_snapshot_and_delta_roundtrip() {
             1, 1, 3, 1, 2, 0, 128, 16, 128, 16, 1, 0, 3, 0, 4, 1, 1, 10, 1, 1, 25, 25, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 200, 1, 200, 1, 100, 200, 1, 4, 5, 0, 0, 100, 100, 100,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18, 224, 18, 8,
-            0, 1, 0, 3, 244, 3, 0, 0, 0, 0, 0, 0, 0, 0
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232, 7, 224, 18, 224, 18,
+            8, 0, 1, 0, 3, 244, 3, 0, 0, 0, 0, 0, 0, 0, 0
         ]
     );
     assert_eq!(decode_gameplay_server(&bytes).unwrap(), snapshot);

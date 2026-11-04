@@ -270,7 +270,7 @@ pub(in super::super) fn update(client: &Client) {
     let details = super::presentation::values(client);
     village_update(&values, map::feedback::connection_label(client), &details);
     super::building_panel::update(client);
-    super::vassal::present(client);
+    super::steward::present(client);
     crate::playground::game::strategic::update(client);
 }
 

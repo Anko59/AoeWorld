@@ -16,7 +16,7 @@ fn player() -> GameplayPlayerState {
         researched: 0,
         market_prices: Default::default(),
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
     }
 }
 fn request(count: usize) -> HereRequest {

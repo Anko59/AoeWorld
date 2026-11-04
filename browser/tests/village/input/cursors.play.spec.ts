@@ -41,7 +41,7 @@ test("a nonzero player keeps ownership after its primary scout enters a Castle",
             1,
             45,
             45,
-            0, // No Vassal report.
+            0, // No Steward report.
             0, // No bridge endpoints.
             0,
           ]),

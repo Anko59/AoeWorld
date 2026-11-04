@@ -1,5 +1,6 @@
 @import url('/navigation/building.css');
 @import url('/navigation/reveal.css');
+@import url('/navigation/landscape/map.css');
 :root { color-scheme: dark; --ink:#eee4ca; --muted:#b7b49e; --gold:#b39a63; --edge:#696756; --panel:#202620; --bottom:208px; }
 #strategic-cockpit { position:fixed; left:12px; top:104px; width:310px; max-height:calc(100vh - 330px); overflow:auto; z-index:4; padding:26px 14px 12px; color:#261d13; background:#d6c494; border:2px solid #9d8150; box-shadow:0 3px 12px #0009; font-size:12px; }
 #strategic-cockpit header { display:flex; flex-direction:column; border-bottom:1px solid #665438; margin-bottom:8px; }
@@ -270,8 +271,8 @@ html[data-interface-art=original] #top-bar .counter, html[data-interface-art=ori
 #transport-hint { position:fixed; left:50%; top:70px; transform:translateX(-50%); padding:5px 12px; background:#172630e8; color:#fff; border:1px solid #9dd8eb; border-radius:5px; pointer-events:none; z-index:12; }
 #transport-loads { position:fixed; inset:0; pointer-events:none; z-index:5; }
 .transport-load { position:absolute; transform:translate(-50%,-48px); color:white; background:#173442df; border:1px solid #93cad7; border-radius:4px; padding:1px 5px; font-size:11px; }
-#vassal-status { color:#f0d48c; font-size:12px; margin-top:5px; }
-html[data-interface-art=original] #vassal-status { color:#4b3218; font-weight:600; }
+#steward-status { color:#f0d48c; font-size:12px; margin-top:5px; }
+html[data-interface-art=original] #steward-status { color:#4b3218; font-weight:600; }
 #minimap-zoom { position:absolute; right:0; top:0; padding:0 4px; font:10px monospace; z-index:1; }
 #minimap.expanded #minimap-zoom { right:85px; top:6px; }
 #scene[data-strategic-covered=true] { opacity:0; }
@@ -293,9 +294,9 @@ html[data-lod=map] #garrison-flags,html[data-lod=markers] #garrison-flags { disp
 .army-token small { display:block; white-space:nowrap; font:9px sans-serif; }
 .army-mix { display:flex; height:5px; margin-top:3px; background:#0c1518; }
 .army-mix i { display:block; height:100%; }
-.vassal-card { width:218px; min-height:62px; padding:5px 8px; border:1px solid #eac24d; border-radius:4px; background:#292c18f5; color:#f3e9bb; font:11px/17px sans-serif; text-align:left; white-space:pre-line; }
+.steward-card { width:218px; min-height:62px; padding:5px 8px; border:1px solid #eac24d; border-radius:4px; background:#292c18f5; color:#f3e9bb; font:11px/17px sans-serif; text-align:left; white-space:pre-line; }
 #strategic-tokens button[aria-pressed="true"] { outline:2px solid #fff2ad; outline-offset:3px; }
-html[data-lod="map"] #vassal-domain, html[data-lod="markers"] #vassal-domain { visibility:hidden; }
+html[data-lod="map"] #steward-domain, html[data-lod="markers"] #steward-domain { visibility:hidden; }
 html[data-lod="map"] #general-panel, html[data-lod="markers"] #general-panel { left:12px; }
 #general-panel { position:fixed; left:336px; bottom:calc(var(--bottom) + 8px); width:260px; padding:6px 8px 8px; z-index:4; color:var(--ink); font-size:11px; background:linear-gradient(135deg,#454b3b,#242a22); border:1px solid #807658; box-shadow:inset 0 0 0 2px #1117,0 2px 8px #0008; }
 #general-modes { display:flex; gap:4px; margin-bottom:6px; }
@@ -314,14 +315,14 @@ html[data-lod="map"] #general-panel, html[data-lod="markers"] #general-panel { l
 #general-train[aria-pressed=true] { background:#7a4a2c; }
 #general-train-note { color:#c0c3ab; font-size:10px; margin-top:3px; }
 
-#vassal-controls { display:grid; gap:3px; margin-top:5px; font-size:12px; }
-#vassal-controls[hidden] { display:none; }
-#vassal-controls label { display:flex; align-items:center; gap:6px; }
-#vassal-controls input[type=range] { flex:1; min-width:60px; width:90px; }
-#vassal-controls output { width:24px; text-align:right; }
-#selection-content:has(#vassal-controls:not([hidden])) { display:grid; grid-template-columns:minmax(0,1fr) minmax(150px,230px); column-gap:12px; align-items:start; }
-#selection-content:has(#vassal-controls:not([hidden])) > :not(#vassal-controls) { grid-column:1; }
-#selection-content #vassal-controls { grid-column:2; grid-row:1 / span 12; margin-top:0; }
-#vassal-controls button { font-size:11px; padding:4px 6px; }
+#steward-controls { display:grid; gap:3px; margin-top:5px; font-size:12px; }
+#steward-controls[hidden] { display:none; }
+#steward-controls label { display:flex; align-items:center; gap:6px; }
+#steward-controls input[type=range] { flex:1; min-width:60px; width:90px; }
+#steward-controls output { width:24px; text-align:right; }
+#selection-content:has(#steward-controls:not([hidden])) { display:grid; grid-template-columns:minmax(0,1fr) minmax(150px,230px); column-gap:12px; align-items:start; }
+#selection-content:has(#steward-controls:not([hidden])) > :not(#steward-controls) { grid-column:1; }
+#selection-content #steward-controls { grid-column:2; grid-row:1 / span 12; margin-top:0; }
+#steward-controls button { font-size:11px; padding:4px 6px; }
 
 html:has(#scene[data-order-mode=build]) #strategic-tokens button { pointer-events:none; }

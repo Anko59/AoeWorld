@@ -367,7 +367,7 @@ async fn remembered_building_art_uses_last_seen_age_instead_of_live_owner_age() 
         age: Age::Feudal,
         researched: Tech::FeudalAge.bit(),
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: MarketPrices::default(),
     });
     client.village.buildings.push(GameplayBuildingState {

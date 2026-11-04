@@ -63,7 +63,7 @@ test("cockpit reports real deliveries and owned army types, and clears on reset"
     // area, then the fixed authoritative census. No stock-delta estimate.
     // The authoritative census also includes soldiers not in the map stream,
     // such as transport passengers. Map actors must not reconstruct it.
-    const census = new Uint32Array(34);
+    const census = new Uint32Array(35);
     census[1] = 2;
     census[2] = 5;
     strategic.cockpit([120, 240, 80, 40, 12, 20, 9, 17, 0, 3, 32], census);

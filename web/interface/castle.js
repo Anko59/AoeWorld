@@ -28,7 +28,8 @@ export const castleTechs=[
 ];
 export const castleTraining=[
   ['general','General','800 food · 800 gold · leads up to 10 squads',16,23],
-  ['vassal','Vassal','1000 food · 1000 gold · one per Castle',16,22],
+  ['vassal','Vassal','1000 food · 1000 gold · defensive and land development duties coming soon',16,22],
+  ['steward','Steward','1000 food · 1000 gold · one per Town Center',0,34],
   ['long-swordsman','Long Swordsman','50 food · 20 gold',6,8],
   ['pikeman','Pikeman','35 food · 25 wood',6,9],
   ['crossbowman','Crossbowman','25 wood · 45 gold',10,10],

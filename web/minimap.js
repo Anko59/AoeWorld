@@ -20,6 +20,8 @@ export const MINIMAP_CLASSES = [
   ['river', [66, 138, 196]],
   ['lake', [52, 112, 170]],
   ['ocean', [30, 70, 118]],
+  ['cropland', [190, 168, 98]],
+  ['pasture', [150, 172, 104]],
 ];
 
 // Returns {samples, rgba} for a valid raster and null for anything else; a
@@ -45,7 +47,7 @@ export function decodeMinimap(buffer) {
     rgba[index * 4 + 2] = color[2] * light;
     rgba[index * 4 + 3] = 255;
   }
-  return { samples, rgba };
+  return { samples, rgba, cells: bytes.subarray(MINIMAP_HEADER_BYTES) };
 }
 
 // Normalized isometric map coordinates, before the SVG square's letterboxing.

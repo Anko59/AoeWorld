@@ -3,7 +3,7 @@ use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use aoe_protocol::{BuildingKind, ConstructionState, GameplayBuildingState, MAX_ECONOMY_BUILDINGS};
 use wasm_bindgen_test::wasm_bindgen_test;
 
-fn building(id: usize) -> GameplayBuildingState {
+pub(super) fn building(id: usize) -> GameplayBuildingState {
     GameplayBuildingState {
         id: EntityId(id as u32),
         player: PlayerId(0),
@@ -74,7 +74,7 @@ fn rich_player(researched: u64) -> aoe_protocol::GameplayPlayerState {
         population_used: 5,
         population_cap: 100,
         recent_deliveries: [0; 4],
-        unit_counts: [0; 34],
+        unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         market_prices: Default::default(),
     }
 }

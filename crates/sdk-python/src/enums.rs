@@ -70,6 +70,7 @@ mirror!(
         CappedRam,
         SiegeRam,
         Onager,
+        Steward,
     ]
 );
 mirror!(
@@ -236,11 +237,11 @@ mirror!(
         RejectedRequiresCastleAge,
         RejectedRequiresImperialAge,
         RejectedGarrisonFull,
-        RejectedVassalExists,
-        RejectedVassalLeash,
-        RejectedVassalHome,
+        RejectedStewardExists,
+        RejectedStewardLeash,
+        RejectedStewardHome,
         RejectedPopulationCap,
-        RejectedInvalidVassalSettings
+        RejectedInvalidStewardSettings
     ]
 );
 

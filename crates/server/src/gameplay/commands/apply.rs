@@ -45,11 +45,13 @@ pub(in crate::gameplay) fn apply(
         PendingAction::FarmReseed { building_id, add } => {
             world.issue_farm_reseed(player, building_id, add)
         }
-        PendingAction::VassalDismiss { vassal_id } => world.issue_vassal_dismiss(player, vassal_id),
-        PendingAction::VassalSettings {
-            vassal_id,
+        PendingAction::StewardDismiss { steward_id } => {
+            world.issue_steward_dismiss(player, steward_id)
+        }
+        PendingAction::StewardSettings {
+            steward_id,
             settings,
-        } => world.issue_vassal_settings(player, vassal_id, settings),
+        } => world.issue_steward_settings(player, steward_id, settings),
         PendingAction::SetRally {
             building_id,
             target,
@@ -228,8 +230,8 @@ pub(in crate::gameplay) fn apply(
         Err(E::UnknownEntity | E::Movement(W::UnknownEntity)) => {
             CommandResult::RejectedUnknownEntity
         }
-        Err(E::VassalExists) => CommandResult::RejectedVassalExists,
-        Err(E::InvalidVassalSettings) => CommandResult::RejectedInvalidVassalSettings,
+        Err(E::StewardExists) => CommandResult::RejectedStewardExists,
+        Err(E::InvalidStewardSettings) => CommandResult::RejectedInvalidStewardSettings,
         Err(E::GarrisonFull) => CommandResult::RejectedGarrisonFull,
         Err(E::InvalidTarget) => CommandResult::RejectedInvalidTarget,
         Err(E::InsufficientResources) => CommandResult::RejectedInsufficientResources,

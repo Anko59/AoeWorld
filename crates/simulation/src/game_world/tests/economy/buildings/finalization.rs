@@ -6,7 +6,7 @@ fn barracks_accepts_only_militia_and_requires_completion() {
     set_stock(&mut world, 500, 500, 0, 0);
     assert_eq!(
         trainable_units(BuildingKind::TownCenter),
-        &[UnitKind::Villager]
+        &[UnitKind::Villager, UnitKind::Steward]
     );
     assert_eq!(
         trainable_units(BuildingKind::Barracks),
