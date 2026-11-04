@@ -112,6 +112,87 @@ def distant_wood_village(wood):
                                  age=Age.FEUDAL, researched=[Tech.LOOM, Tech.FEUDAL_AGE]))
 
 
+def test_camp_checks_leave_every_route_query_available_for_idle_workers():
+    units, buildings = base(30)
+    for i, worker in enumerate(units[:-1]):
+        worker.task, worker.idle, worker.gathering = UnitTask.GATHERING, False, ResourceKind.WOOD
+        worker.tile = (45 + i % 6, 45 + i // 6)
+    buildings.append(building(901, BuildingKind.LUMBER_CAMP, tile=(47, 47)))
+    trees = [node(800 + i, ResourceKind.WOOD, w.tile) for i, w in enumerate(units[:-1])]
+    idle = unit(700, tile=(53, 52))
+    world = FakeWorld(units + [idle], buildings, nodes=trees, eco=economy(wood=0))
+    calls, route = [], world.land_route
+    world.land_route = lambda *args: (calls.append(args), route(*args))[1]
+    ctx = Context(FakeClient(), decision(world), Blackboard(), Config(land_queries_per_decision=1))
+    manager = EconomyManager(Constructor())
+    manager.wood_dropoff(ctx)
+    assert calls == [], "camp screening must not take the idle worker's route budget"
+    manager.assign_idle(ctx)
+    assert any(args[0] == idle.id for args in ctx.client.named("gather")), ctx.client.calls
+
+
+def test_camp_checks_rotate_without_querying_routes_or_inspecting_every_worker():
+    world = distant_wood_village(100)
+    near = unit(701, tile=(50, 50), task=UnitTask.GATHERING, gathering=ResourceKind.WOOD)
+    world._units.insert(0, near)
+    world._nodes.append(node(801, ResourceKind.WOOD, near.tile))
+    board, manager = Blackboard(), EconomyManager(Constructor())
+    world.land_route = lambda *args: (_ for _ in ()).throw(AssertionError("camp route query"))
+    first = Context(FakeClient(), decision(world), board, Config())
+    manager.wood_dropoff(first)
+    assert not first.client.named("build"), "only the first woodcutter should be screened"
+    world.tick += 10
+    second = Context(FakeClient(), decision(world), board, Config())
+    manager.wood_dropoff(second)
+    assert [args for args in second.client.named("build") if args[1] == BuildingKind.LUMBER_CAMP]
+
+
+def test_a_walking_woodcutter_does_not_guess_a_distant_camp_target():
+    world = distant_wood_village(100)
+    worker = world._units[0]
+    worker.task, worker.tile = UnitTask.MOVING, (40, 50)
+    ctx = Context(FakeClient(), decision(world), Blackboard(), Config())
+    EconomyManager(Constructor()).wood_dropoff(ctx)
+    assert ctx.spent[1] == 0
+    assert not ctx.client.named("build")
+
+
+def test_a_woodcutter_arriving_beside_a_tree_can_fund_a_camp_without_routing():
+    world = distant_wood_village(100)
+    world._units[0].task, world._units[0].tile = UnitTask.MOVING, (21, 50)
+    world.land_route = lambda *args: (_ for _ in ()).throw(AssertionError("camp route query"))
+    ctx = Context(FakeClient(), decision(world), Blackboard(), Config())
+    EconomyManager(Constructor()).wood_dropoff(ctx)
+    assert [args for args in ctx.client.named("build") if args[1] == BuildingKind.LUMBER_CAMP]
+
+
+def test_an_age_up_camp_cannot_take_the_first_barracks_wood():
+    for wood in (80, 200, 225):
+        world = advancing_village(wood)
+        world._units[0].task, world._units[0].idle = UnitTask.GATHERING, False
+        world._units[0].gathering, world._units[0].tile = ResourceKind.WOOD, (20, 50)
+        world._nodes = [node(800, ResourceKind.WOOD, (20, 50))]
+        _, client = play(world)
+        kinds = [args[1] for args in client.named("build")]
+        assert BuildingKind.LUMBER_CAMP not in kinds
+        assert (BuildingKind.BARRACKS in kinds) == (wood == 225), client.calls
+
+
+def test_an_age_up_camp_resumes_once_the_first_barracks_is_paid():
+    from aoe_ai.blackboard import Plan
+    for planned in (False, True):
+        world, brain = distant_wood_village(100), Brain()
+        world.economy.age = Age.DARK
+        world._buildings[0].researching = Tech.FEUDAL_AGE
+        if planned:
+            world._buildings = [b for b in world._buildings if b.kind != BuildingKind.BARRACKS]
+            brain.board.plans.append(Plan(BuildingKind.BARRACKS, (60, 60), world.tick))
+        else:
+            next(b for b in world._buildings if b.kind == BuildingKind.BARRACKS).complete = False
+        _, client = play(world, brain=brain)
+        assert [args for args in client.named("build") if args[1] == BuildingKind.LUMBER_CAMP]
+
+
 def test_distant_woodcutters_save_for_a_camp_before_small_deliveries_feed_army_queues():
     for wood in (80, 100):
         _, client = play(distant_wood_village(wood))

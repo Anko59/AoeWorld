@@ -327,8 +327,8 @@ upgrades, and an army from every Barracks and Range. No unit is trained in the
 Dark Age: its food belongs to villagers and the age.
 At the Feudal villager target, farms and reseeds save Barracks and house wood;
 paid foundations release it. Barracks builders precede idle jobs during age-up.
-Failed hunters use berries, paid farms or wood. Distant woodcutters fund a nearby
-camp before army queues; loaded returns finish and paid camps release the budget.
+Failed hunters use berries, paid farms or wood. One rotating woodcutter at its forest
+can fund a nearby camp without route queries, after the age-up Barracks is paid.
 From the start of Feudal, the next unpaid Castle prerequisite keeps its wood
 budget ahead of extra farms, reseeds and army spending. Paid foundations and
 pending build orders do not reserve that cost twice. Existing soldiers rally

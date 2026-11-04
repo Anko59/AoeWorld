@@ -97,6 +97,13 @@ def wants_loom(ctx: Context) -> bool:
     return len(ctx.villagers) >= ctx.config.loom_villagers
 
 
+def unpaid_age_up_barracks(ctx: Context) -> bool:
+    """The age-up's first Barracks must precede discretionary wood drop-offs."""
+    return (ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE
+            and not any(b.kind == BuildingKind.BARRACKS for b in ctx.buildings)
+            and not any(p.kind == BuildingKind.BARRACKS for p in ctx.board.plans))
+
+
 def farm_wood_reserve(ctx: Context) -> int:
     """Food expansion must leave wood for houses and the first Barracks.
 

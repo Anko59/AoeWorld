@@ -81,30 +81,36 @@ class EconomyManager:
     def wood_dropoff(self, ctx: Context) -> None:
         """Fund a nearby camp before queues spend every distant wood delivery.
 
-        Live woodcutters do not fall idle when their original forest runs out.
-        Inspect empty-handed workers too, keeping loaded returns on their trip.
-        Paid camps release the budget; a refused site gets the usual cooldown.
+        Inspect one rotating cutter in contact with its forest, even on arrival.
+        No route queries run before idle assignment, and the tree scan runs once.
+        Loaded returns finish; paid camps release the budget. During age-up the
+        first Barracks must be paid before a proactive camp can spend any wood.
         """
         if ctx.economy is None or ctx.home is None:
             return
         kind = BuildingKind.LUMBER_CAMP
         if ctx.board.cooling("camp:" + str(kind), ctx.tick):
             return
-        for worker in ctx.villagers:
-            if (worker.gathering != ResourceKind.WOOD or worker.carrying is not None
-                    or worker.id in ctx.busy or worker.id in ctx.board.builders
-                    or worker.task == UnitTask.BUILDING):
-                continue
-            node = self.best_node(ctx, worker, ResourceKind.WOOD)
-            if (node is None or ctx.dropoff_distance(node) <= ctx.config.dropoff_distance
-                    or self.constructor.camp_near(ctx, kind, node)):
-                continue
-            cost = building_cost(kind)
-            if not ctx.can_afford(cost):
-                ctx.spend(cost)
-            else:
-                self.constructor.ensure_camp(ctx, kind, node, worker)
+        if buildorder.unpaid_age_up_barracks(ctx):
             return
+        workers = [v for v in ctx.villagers if v.task in (UnitTask.GATHERING, UnitTask.MOVING)
+                   and v.gathering == ResourceKind.WOOD and v.carrying is None
+                   and v.id not in ctx.busy and v.id not in ctx.board.builders]
+        if not workers:
+            return
+        worker = workers[ctx.board.wood_dropoff_cursor % len(workers)]
+        ctx.board.wood_dropoff_cursor = (ctx.board.wood_dropoff_cursor + 1) % len(workers)
+        node = nearest((n for n in ctx.resources(ResourceKind.WOOD) if n.remaining > 0), worker.tile)
+        if (node is None or dist(node.tile, worker.tile) > ctx.config.wood_camp_contact_tiles
+                or dist(node.tile, ctx.home) > ctx.config.max_gather_distance
+                or ctx.dropoff_distance(node) <= ctx.config.dropoff_distance
+                or self.constructor.camp_near(ctx, kind, node)):
+            return
+        cost = building_cost(kind)
+        if not ctx.can_afford(cost):
+            ctx.spend(cost)
+        else:
+            self.constructor.ensure_camp(ctx, kind, node, worker)
 
     def castle_food(self, ctx: Context) -> None:
         """Keep gold for the age and its first army upgrade before moving miners."""
@@ -255,7 +261,8 @@ class EconomyManager:
         node = self.best_node(ctx, villager, kind)
         if node is None:
             return False
-        if ctx.dropoff_distance(node) > ctx.config.dropoff_distance:
+        if (ctx.dropoff_distance(node) > ctx.config.dropoff_distance
+                and not (kind == ResourceKind.WOOD and buildorder.unpaid_age_up_barracks(ctx))):
             if self.constructor.ensure_camp(ctx, CAMPS[kind], node, villager):
                 return True
         self.gather(ctx, villager, node)
