@@ -203,3 +203,17 @@ test("the pull-back keeps the input canvas full size and delivers the first grou
   await expect(scene).toHaveAttribute("data-first-button", "2");
   await expect(page.locator("#cockpit-reveal")).toBeHidden();
 });
+
+test("automatic reveal settles at the requested province camera", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.clock.install();
+  await far(page);
+  await expect(page.locator("#cockpit-reveal")).toBeVisible();
+  await camera(page);
+  await page.clock.runFor(6000);
+  expect((await camera(page))?.[2]).toBe(0.04);
+  expect(await camera(page)).toBeNull();
+  await expect(page.locator("#cockpit-reveal")).toBeHidden();
+});

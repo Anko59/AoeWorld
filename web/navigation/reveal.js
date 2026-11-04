@@ -39,7 +39,7 @@ export function initReveal() {
       const zoom = Math.max(1/4096, Math.min(latest[8], (w-40)/(64*(ww+wh)), (h-100)/(32*(ww+wh))));
       motion = { from: near, to: [ww/2,wh/2,zoom], requested:[latest[2],latest[3],latest[8]], started: performance.now() };
       phase('pullback');
-      timers.push(setTimeout(() => phase('land'),3200), setTimeout(() => phase('cockpit'),4400), setTimeout(() => dismiss(true),5800));
+      timers.push(setTimeout(() => phase('land'),3200), setTimeout(() => phase('cockpit'),4400), setTimeout(() => dismiss(false,true),5800));
     } else {
       // A direct far-view link and reduced motion preserve the requested camera.
       phase('cockpit'); timers.push(setTimeout(() => dismiss(),2400));
@@ -89,12 +89,14 @@ export function initReveal() {
     navigation(state) {
       latest = Array.from(state);
       if (motion) {
-        const t = Math.min(1, Math.max(0,(performance.now()-motion.started)/3200));
-        const ease = t*t*(3-2*t), {from,to} = motion;
+        const elapsed = performance.now()-motion.started, returning = elapsed > 4400;
+        const t = Math.min(1, Math.max(0,(elapsed-(returning ? 4400 : 0))/(returning ? 1400 : 3200)));
+        const ease = t*t*(3-2*t);
+        const from = returning ? motion.to : motion.from, to = returning ? motion.requested : motion.to;
         // Stay over the village until the detailed renderer has handed off.
-        const pan = Math.max(0,(ease-.45)/.55);
+        const pan = returning ? ease : Math.max(0,(ease-.45)/.55);
         const zoom = Math.exp(Math.log(from[2])+(Math.log(to[2])-Math.log(from[2]))*ease);
-        const ratio = zoom/from[2];
+        const ratio = zoom/motion.from[2];
         document.documentElement.style.setProperty('--reveal-scale',String(ratio));
         document.documentElement.style.setProperty('--reveal-opacity',String(Math.max(0,(ratio-.12)/.88)));
         return [from[0]+(to[0]-from[0])*pan, from[1]+(to[1]-from[1])*pan, zoom];
