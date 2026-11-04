@@ -117,12 +117,16 @@ and prerequisite checks apply, including wall and bridge spans. Only chunks
 under the proposed site load at far zoom. Red footprints explain a blocked or
 unavailable site; green is a local preview, not server acceptance.
 
-Each grouped order sends up to four nearest suitable villagers. Free idle
+Each grouped order sends up to four suitable villagers within 64 tiles of the
+site. A site without nearby available workers explains why it cannot recruit. Free idle
 workers take priority, then other free workers; managed workers can answer
 when no free workers are available. Workers already building, fighting or
 hunting are excluded. Ties use entity ID. No selection or zoom change is needed.
 Feedback says Submitting until the ordinary server acknowledgement arrives.
-One build can be pending at a time. The client tracks outgoing commands against
+One build can be pending at a time. A connection reset clears its pending
+admission and reports that the previous order was not confirmed; inspect the
+site before retrying. The Build here icon retains its DOM node across HUD
+updates so a held pointer can complete its click. The client tracks outgoing commands against
 the human burst of 20 and refill of 10 per second; the server retains authority.
 Esc, right-click, focus loss and returning to near zoom cancel placement.
 

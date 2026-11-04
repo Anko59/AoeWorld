@@ -2,6 +2,7 @@
 use super::*;
 
 pub(super) fn record_close(client: &mut Client, event: &Event) {
+    village::construction::strategic::connection_reset(client);
     let reason = js_sys::Reflect::get(&event, &JsValue::from_str("reason"))
         .ok()
         .and_then(|v| v.as_string())
@@ -18,6 +19,7 @@ pub(super) fn record_close(client: &mut Client, event: &Event) {
 }
 
 pub(super) fn reconnect(client: &mut Client, status: &str) {
+    village::construction::strategic::connection_reset(client);
     client.status = status.to_owned();
     client.last_error = Some(status.to_owned());
     client.resources.clear();
