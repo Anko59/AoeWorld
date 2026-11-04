@@ -38,6 +38,13 @@ fn unit_census_keeps_building_garrisons_without_double_counting() {
     advance(&mut w, 5);
     assert!(w.unit(soldier).is_none());
     assert_eq!(w.unit_census(), before);
+    w.upgrade_garrisoned_units(owner, crate::Tech::ManAtArms);
+    let upgraded = w.unit_census();
+    assert_eq!(upgraded[&owner][crate::UnitKind::Militia as usize], 0);
+    assert_eq!(upgraded[&owner][crate::UnitKind::ManAtArms as usize], 1);
+    w.issue_ungarrison(owner, center, None).unwrap();
+    assert_eq!(w.unit_census(), upgraded);
+    assert_eq!(w.unit_census_rebuilds(), 1);
 }
 
 #[test]

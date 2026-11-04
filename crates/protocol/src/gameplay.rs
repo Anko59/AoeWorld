@@ -40,6 +40,8 @@ pub const MAX_MESSAGE: usize = 16 * 1_048_576;
 pub const MAX_SUBSCRIPTION_TILES: i32 = 512;
 pub const MAX_SUBSCRIBED_UNITS: usize = 65_536;
 pub const MAX_PENDING_COMMANDS_PER_CONNECTION: usize = 64;
+/// Human command token-bucket burst, including rally and training orders.
+pub const HUMAN_COMMAND_BURST: usize = 20;
 pub const MAX_PENDING_COMMANDS_GLOBAL: usize = 1_024;
 pub const MAX_ACK_HISTORY: usize = 64;
 

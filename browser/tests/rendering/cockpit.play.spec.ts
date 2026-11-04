@@ -1,3 +1,4 @@
+import { access, readFile } from "node:fs/promises";
 import { expect } from "@playwright/test";
 import { test } from "../../server.js";
 import { gameAssets } from "../game-assets.js";
@@ -86,4 +87,14 @@ test("cockpit reports real deliveries and owned army types, and clears on reset"
   });
   await expect(panel).toBeHidden();
   await expect(panel).not.toContainText("240");
+});
+
+test("local cockpit capture and evidence stay outside the shipped repository", async () => {
+  await expect(
+    access("tests/rendering/cockpit-capture.play.spec.ts"),
+  ).rejects.toThrow();
+  await expect(access("../docs/scale/cockpit-evidence.md")).rejects.toThrow();
+  expect(await readFile("../docs/strategic-view.md", "utf8")).not.toContain(
+    "cockpit-evidence.md",
+  );
 });

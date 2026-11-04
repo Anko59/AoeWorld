@@ -25,7 +25,7 @@ test("Units here charges real resources, trains a soldier and persists its rally
   await page.getByLabel("Unit count").fill("3");
   await page.getByRole("button", { name: "Units here", exact: true }).click();
   await page.mouse.click(635, 374);
-  await expect(page.locator("#units-here-status")).toContainText("Requested 3");
+  await expect(page.locator("#units-here-status")).toContainText("Accepted 3");
   // The current authoritative Militia table charges 50 food and 20 gold.
   await expect(page.locator("#stockpile-food")).toHaveText("9850");
   await expect(page.locator("#stockpile-gold")).toHaveText("9940");
@@ -92,17 +92,70 @@ test("Units here shares ordinary training and rally orders across eligible neare
   await expect.poll(() => commands.filter((c) => c[0] === 5).length).toBe(5);
   const orders = commands.slice(before);
   expect(orders.filter((c) => c[0] === 5).map((c) => c[2])).toEqual([
-    2, 2, 3, 1, 2,
+    2, 2, 2, 3, 1,
   ]);
   const rallies = orders.filter((c) => c[0] === 20);
   expect(rallies.map((c) => c[2]).sort()).toEqual([1, 2, 3]);
   expect(rallies.every((c) => c[3] === 0)).toBe(true);
   expect(new Set(rallies.map((c) => JSON.stringify(c.slice(4)))).size).toBe(1);
-  await expect(page.locator("#units-here-status")).toContainText("Requested 5");
+  await expect(page.locator("#units-here-status")).toContainText("Accepted 5");
   await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
   await page.getByRole("button", { name: "Units here", exact: true }).click();
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Units here", exact: true }),
   ).toHaveAttribute("aria-pressed", "false");
+});
+
+test("Units here bounds human batches and displays accepted rather than planned training", async ({
+  page,
+}) => {
+  const { commands, update } = await productionFixture(
+    page,
+    [{ id: 1, kind: 6, x: 8191, y: 8186 }],
+    0,
+    0,
+    { trainResults: [0, 4, 0] },
+  );
+  update(playerState(0, 0, 4, 100));
+  await page.evaluate(() => {
+    location.hash = "x=8192.5&y=8192.5&zoom=.04";
+  });
+  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  await page.getByLabel("Unit count").fill("50");
+  await page.getByRole("button", { name: "Units here", exact: true }).click();
+  await expect(page.locator("#units-here-status")).toContainText("1 to 10");
+  expect(commands.filter((c) => c[0] === 5 || c[0] === 20)).toHaveLength(0);
+  await page.getByLabel("Unit count").fill("3");
+  await page.getByRole("button", { name: "Units here", exact: true }).click();
+  await page.mouse.click(635, 345);
+  await expect(page.locator("#units-here-status")).toHaveText(
+    "Accepted 2 of 3 Militia.",
+  );
+  expect(commands.filter((c) => c[0] === 5)).toHaveLength(3);
+  expect(commands.filter((c) => c[0] === 20)).toHaveLength(1);
+});
+
+test("Units here sends no training when the server rejects its rally", async ({
+  page,
+}) => {
+  const { commands, update } = await productionFixture(
+    page,
+    [{ id: 1, kind: 6, x: 8191, y: 8186 }],
+    0,
+    0,
+    { rallyResult: 4 },
+  );
+  update(playerState(0, 0, 4, 100));
+  await page.evaluate(() => {
+    location.hash = "x=8192.5&y=8192.5&zoom=.04";
+  });
+  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  await page.getByLabel("Unit count").fill("3");
+  await page.getByRole("button", { name: "Units here", exact: true }).click();
+  await page.mouse.click(635, 345);
+  await expect(page.locator("#units-here-status")).toHaveText(
+    "Accepted 0 of 3 Militia.",
+  );
+  expect(commands.filter((c) => c[0] === 5)).toHaveLength(0);
 });

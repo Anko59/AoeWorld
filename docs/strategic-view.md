@@ -71,9 +71,6 @@ refunds and stock edits do not count as collection. Occupied land sums living
 owned building footprints, including foundations and excluding water bridges;
 it does not claim territorial borders or Castle-domain ownership.
 
-Local original-art evidence and qualification limits are recorded in
-[the cockpit evidence record](scale/cockpit-evidence.md).
-
 ## Saved views and jumps
 
 At far zoom, Ctrl+F1–F4 save the camera position and zoom for this world;
@@ -87,14 +84,16 @@ Typing in a form or opening a dialog suppresses these shortcuts.
 
 ## Units here
 
-In the far-view production form, choose a type and a count from 1 to 50,
+In the far-view production form, choose a type and a count from 1 to 10,
 press Units here, then click ground. Esc, right-click, leaving far zoom or
-losing focus cancels the destination. Feedback says how many ordinary orders
-were requested; the server still validates every rally and training order.
+losing focus cancels the destination. Feedback counts server-accepted training orders. A rejected rally sends no
+training to that producer. Each batch includes at most 20 commands, matching
+the human admission burst; large or unaffordable requests can be partial.
 
 Eligible producers must be owned, alive, complete and able to train the type
-at the reported age/research/resources. The deterministic split chooses the
-shortest queue, then squared distance to the destination, then building ID.
+at the reported age/research/resources. The split first limits producers to a neighborhood extending 16 tiles beyond
+the closest ready producer. Within that neighborhood it chooses shortest queue,
+then squared distance to the destination, then building ID.
 It includes pending training, reserves resources and population, and bounds
 the burst including one rally per chosen producer. Every chosen producer's
 rally is changed to the clicked ground. Existing queued units share that

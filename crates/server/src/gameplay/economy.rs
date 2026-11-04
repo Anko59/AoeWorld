@@ -165,6 +165,9 @@ fn wire_market_prices(prices: aoe_simulation::MarketPrices) -> aoe_protocol::Mar
     }
 }
 pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerState> {
+    if world.players().next().is_none() {
+        return BTreeMap::new();
+    }
     let census = world.unit_census();
     world
         .players()
@@ -182,6 +185,21 @@ pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerSta
         })
         .collect()
 }
+pub(super) fn player(world: &GameWorld, viewer: PlayerId) -> Option<GameplayPlayerState> {
+    let state = world.player_economy(viewer)?;
+    let census = world.unit_census();
+    let counts = std::array::from_fn(|index| {
+        census
+            .get(&viewer)
+            .map_or(0, |row| row[native_kind(UnitKind::ALL[index]) as usize])
+    });
+    Some(player_state(
+        &state,
+        world.recent_deliveries(viewer),
+        counts,
+    ))
+}
+
 fn player_state(
     state: &aoe_simulation::PlayerEconomy,
     recent_deliveries: [u64; 4],

@@ -447,3 +447,38 @@ fn session_views_reuse_the_same_bounded_worker_pool_across_ticks() {
         }
     }
 }
+
+#[test]
+fn census_work_is_skipped_without_viewers_and_reused_for_one_fogged_viewer() {
+    let mut world = GameWorld::with_population(
+        WorldConfig::new(4096, 4096, Seed(7)).unwrap(),
+        100_000,
+        0,
+        100,
+    )
+    .unwrap();
+    world
+        .place_town_center(PlayerId(0), TileCoord::new(10, 10))
+        .unwrap();
+    world.set_fog_disabled(false);
+    assert!(viewer_states(&world, &[], &BTreeMap::new()).is_empty());
+    assert_eq!(world.unit_census_rebuilds(), 0);
+    let view = View {
+        session_id: 1,
+        subscription: Subscription {
+            revision: 1,
+            region: TileRect::from_xywh(0, 0, 32, 32),
+        },
+        vision: None,
+        fog_disabled: Some(false),
+        viewer: PlayerId(0),
+        primary: EntityId(0),
+        ai: false,
+        rebuild: false,
+    };
+    for _ in 0..4 {
+        let states = viewer_states(&world, std::slice::from_ref(&view), &BTreeMap::new());
+        assert_eq!(states[&PlayerId(0)].players.len(), 1);
+        assert_eq!(world.unit_census_rebuilds(), 1);
+    }
+}

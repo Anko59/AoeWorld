@@ -1,7 +1,9 @@
 //! A bounded deterministic plan, executed through ordinary rally/train orders.
 use super::*;
+mod batch;
 use aoe_core::{FIXED_SUBUNITS_PER_TILE, ScreenPoint, WorldPosition};
 use aoe_protocol::{GameplayClientMessage as Message, RallyTarget, Stockpile};
+pub(crate) use batch::Batch;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[derive(Clone, Copy)]
@@ -62,9 +64,31 @@ pub(super) fn plan(
         .map(|b| b.training_queue.len())
         .sum();
     population = population.saturating_add(queued as u32);
+    let ready = |b: &&GameplayBuildingState| {
+        b.hp > 0
+            && b.training_queue.len() + pending.count(b.id) < aoe_protocol::MAX_TRAINING_QUEUE
+            && (request.kind != UnitKind::Vassal || (!occupied(b) && pending.count(b.id) == 0))
+            && matches!(
+                availability::training(b, Some(player), owner, request.kind),
+                Availability::Ready
+            )
+    };
+    let Some(nearest) = buildings
+        .iter()
+        .filter(ready)
+        .map(|b| distance(b, request.position))
+        .min()
+    else {
+        return Vec::new();
+    };
+    // Balance locally: producers no farther than 16 tiles beyond the nearest.
+    let radius = nearest
+        .isqrt()
+        .saturating_add(16 * FIXED_SUBUNITS_PER_TILE as u64);
+    let max_distance = radius.saturating_mul(radius);
     let mut rally_count = 0;
     let mut result = Vec::new();
-    for _ in 0..request.count.min(50) {
+    for _ in 0..request.count.min(10) {
         if population >= player.population_cap
             || !matches!(availability::cost(stockpile, cost), Availability::Ready)
         {
@@ -79,6 +103,7 @@ pub(super) fn plan(
             .iter()
             .filter(|b| {
                 b.hp > 0
+                    && distance(b, request.position) <= max_distance
                     && queued(b) < aoe_protocol::MAX_TRAINING_QUEUE
                     && (request.kind != UnitKind::Vassal
                         || (!occupied(b) && pending.count(b.id) == 0 && !result.contains(&b.id)))
@@ -94,7 +119,10 @@ pub(super) fn plan(
         let new_rally = !result.contains(&building.id);
         let messages =
             pending.entries.len() + result.len() + rally_count + 1 + usize::from(new_rally);
-        if messages > aoe_protocol::MAX_PENDING_COMMANDS_PER_CONNECTION {
+        if messages
+            > aoe_protocol::HUMAN_COMMAND_BURST
+                .min(aoe_protocol::MAX_PENDING_COMMANDS_PER_CONNECTION)
+        {
             break;
         }
         rally_count += usize::from(new_rally);
@@ -107,14 +135,16 @@ pub(super) fn plan(
 #[wasm_bindgen(inline_js = "
 export function here_take(values) { const v = window.aoeNavigation?.production?.take(); if (v) values.set(v); }
 export function here_result(count) { window.aoeNavigation?.production?.result(count); }
+export function here_progress(count, done) { window.aoeNavigation?.production?.accepted(count, done); }
 ")]
 extern "C" {
     fn here_take(values: &mut [f64]);
     fn here_result(count: usize);
+    fn here_progress(count: usize, done: bool);
 }
 
 pub(in super::super::super) fn click(client: &mut Client, point: ScreenPoint) -> bool {
-    if !crate::playground::game::strategic::active(client) {
+    if client.village.here_orders.active() || !crate::playground::game::strategic::active(client) {
         return false;
     }
     let mut values = [f64::NAN; 2];
@@ -144,7 +174,7 @@ pub(in super::super::super) fn click(client: &mut Client, point: ScreenPoint) ->
     let position = client.config.snap_ground_position(position);
     let request = HereRequest {
         kind,
-        count: (values[1] as usize).clamp(1, 50),
+        count: (values[1] as usize).clamp(1, 10),
         position,
     };
     let player = owner(client);
@@ -165,28 +195,58 @@ pub(in super::super::super) fn click(client: &mut Client, point: ScreenPoint) ->
         },
     );
     let count = orders.len();
+    let mut batch = Batch::new(kind);
     for (at, &id) in orders.iter().enumerate() {
         if !orders[..at].contains(&id) {
+            let sequence = client.next_sequence;
+            batch.rallies.push((
+                sequence,
+                id,
+                orders.iter().filter(|other| **other == id).count(),
+            ));
             super::super::orders::send(
                 client,
                 Message::SetRallyOrder {
-                    sequence: client.next_sequence,
+                    sequence,
                     building_id: id,
                     target: RallyTarget::Ground(position),
                 },
             );
         }
-        let sequence = client.next_sequence;
-        super::super::orders::send(
-            client,
-            Message::TrainOrder {
-                sequence,
-                building_id: id,
-                kind,
-            },
-        );
-        client.village.pending_training.record(sequence, id, kind);
     }
+    client.village.here_orders = batch;
     here_result(count);
     true
+}
+
+pub(in super::super::super) fn acknowledge(
+    client: &mut Client,
+    sequence: u64,
+    result: CommandResult,
+) {
+    if !client.village.here_orders.active() {
+        return;
+    }
+    let mut batch = std::mem::take(&mut client.village.here_orders);
+    if let Some(ack) = batch.acknowledge(sequence, result) {
+        if let batch::Ack::Rally(id, count) = ack
+            && let Some(kind) = batch.kind
+        {
+            for _ in 0..count {
+                let sequence = client.next_sequence;
+                batch.trains.push(sequence);
+                super::super::orders::send(
+                    client,
+                    Message::TrainOrder {
+                        sequence,
+                        building_id: id,
+                        kind,
+                    },
+                );
+                client.village.pending_training.record(sequence, id, kind);
+            }
+        }
+        here_progress(batch.accepted, !batch.active());
+    }
+    client.village.here_orders = batch;
 }

@@ -3,6 +3,7 @@ use aoe_core::PlayerId;
 
 impl GameWorld {
     pub(crate) fn upgrade_garrisoned_units(&mut self, player: PlayerId, tech: Tech) {
+        let mut upgraded = 0;
         let units = self
             .economy
             .buildings
@@ -23,6 +24,7 @@ impl GameWorld {
                 }
                 TechEffect::UpgradeMilitia if u.kind == UnitKind::Militia => {
                     u.kind = UnitKind::ManAtArms;
+                    upgraded += 1;
                     u.hp += 5;
                     u.max_hp += 5;
                 }
@@ -31,11 +33,24 @@ impl GameWorld {
                         .hp
                         .saturating_sub(crate::unit_combat(from).hp);
                     u.kind = to;
+                    upgraded += 1;
                     u.hp += bonus;
                     u.max_hp += bonus;
                 }
                 _ => {}
             }
+        }
+        match tech.rules().effect {
+            TechEffect::UpgradeMilitia => self.change_unit_census(
+                player,
+                Some(UnitKind::Militia),
+                Some(UnitKind::ManAtArms),
+                upgraded,
+            ),
+            TechEffect::UpgradeUnit { from, to } => {
+                self.change_unit_census(player, Some(from), Some(to), upgraded)
+            }
+            _ => {}
         }
     }
 }

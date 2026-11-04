@@ -225,7 +225,7 @@ impl GameplayService {
                 last_sequence: None,
                 acknowledgements: VecDeque::new(),
                 pending_acks: VecDeque::new(),
-                command_tokens: 20.0,
+                command_tokens: aoe_protocol::HUMAN_COMMAND_BURST as f64,
                 last_command_refill: Instant::now(),
                 subscription_times: VecDeque::new(),
                 pending: VecDeque::new(),

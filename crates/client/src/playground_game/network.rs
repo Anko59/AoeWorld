@@ -87,6 +87,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.status = "connecting".to_owned();
         client.order_feedback.clear();
         client.village.pending_training.clear();
+        client.village.here_orders = Default::default();
         client.sent_region = None;
         client.subscribe_after = 0.0;
         client.connection_id
@@ -378,6 +379,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             Ok(GameplayServerMessage::WorldReset { .. }) => {
                 client.order_feedback.clear();
                 client.village.pending_training.clear();
+                client.village.here_orders = Default::default();
                 clear_world(&mut client);
                 client.primary = None;
                 if !client.surface_fixture {
@@ -395,6 +397,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
                 result,
                 applied_tick,
             }) => {
+                village::production::here::acknowledge(&mut client, sequence, result);
                 let observed = client.village.tick;
                 client.village.pending_training.acknowledge(
                     sequence,

@@ -30,8 +30,8 @@ fn request(count: usize) -> HereRequest {
 #[wasm_bindgen_test]
 fn units_here_split_balances_queue_then_distance_and_is_independent_of_input_order() {
     let mut buildings = vec![barracks(1, 2), barracks(2, 0), barracks(3, 1)];
-    buildings[1].footprint = TileRect::from_xywh(20, 10, 3, 3);
-    buildings[2].footprint = TileRect::from_xywh(30, 10, 3, 3);
+    buildings[1].footprint = TileRect::from_xywh(16, 10, 3, 3);
+    buildings[2].footprint = TileRect::from_xywh(22, 10, 3, 3);
     let expected = vec![
         EntityId(2),
         EntityId(2),
@@ -125,10 +125,7 @@ fn units_here_split_bounds_a_burst_including_one_rally_per_producer() {
         &PendingTraining::default(),
         |_| false,
     );
-    assert_eq!(
-        orders.len(),
-        aoe_protocol::MAX_PENDING_COMMANDS_PER_CONNECTION / 2
-    );
+    assert_eq!(orders.len(), aoe_protocol::HUMAN_COMMAND_BURST / 2);
     assert!(
         plan(
             &buildings,
@@ -140,4 +137,38 @@ fn units_here_split_bounds_a_burst_including_one_rally_per_producer() {
         )
         .is_empty()
     );
+}
+
+#[wasm_bindgen_test]
+fn units_here_prefers_the_nearest_ready_neighborhood_over_an_empty_distant_queue() {
+    let mut near = barracks(1, 1);
+    near.footprint = TileRect::from_xywh(10, 10, 3, 3);
+    let mut far = barracks(2, 0);
+    far.footprint = TileRect::from_xywh(1000, 1000, 3, 3);
+    assert_eq!(
+        plan(
+            &[far, near],
+            Some(&player()),
+            PlayerId(0),
+            request(1),
+            &PendingTraining::default(),
+            |_| false
+        ),
+        vec![EntityId(1)]
+    );
+}
+
+#[wasm_bindgen_test]
+fn units_here_respects_the_human_twenty_command_burst_including_rallies() {
+    let buildings: Vec<_> = (1..=40).map(|id| barracks(id, 0)).collect();
+    let orders = plan(
+        &buildings,
+        Some(&player()),
+        PlayerId(0),
+        request(50),
+        &PendingTraining::default(),
+        |_| false,
+    );
+    let unique: std::collections::BTreeSet<_> = orders.iter().copied().collect();
+    assert!(orders.len() + unique.len() <= 20);
 }
