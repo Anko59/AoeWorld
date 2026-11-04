@@ -84,15 +84,20 @@ class Constructor:
         ]
         return nearest(free, tile)
 
+    def camp_near(self, ctx: Context, kind: BuildingKind, node: Any) -> bool:
+        """A paid camp, including an unfinished or not-yet-visible one."""
+        return any(b.kind == kind and dist(b.center, node.tile) <= 8 for b in ctx.buildings) or any(
+            p.kind == kind and dist(p.tile, node.tile) <= 8 for p in ctx.board.plans
+        )
+
     def ensure_camp(self, ctx: Context, kind: BuildingKind, node: Any, builder: Any) -> bool:
         """A drop-off of `kind` close to `node`, unless one is on the way."""
-        for b in ctx.buildings:
-            if b.kind == kind and dist(b.center, node.tile) <= 8:
-                return False
-        for plan in ctx.board.plans:
-            if plan.kind == kind and dist(plan.tile, node.tile) <= 8:
-                return False
+        if self.camp_near(ctx, kind, node):
+            return False
         if ctx.board.cooling("camp:" + str(kind), ctx.tick):
+            return False
+        # Saving wood is not a failed site: do not cancel that budget's priority.
+        if not ctx.can_afford(building_cost(kind)):
             return False
         placed = self.place(ctx, kind, node.tile, [builder], radius=7, gap=0)
         if not placed:

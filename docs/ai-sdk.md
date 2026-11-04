@@ -325,12 +325,15 @@ it raises the Barracks; in Feudal Age the Archery Range, the Blacksmith, Double-
 Axe, Horse Collar (once farming), Wheelbarrow, Gold Mining and the Blacksmith
 upgrades, and an army from every Barracks and Range. No unit is trained in the
 Dark Age: its food belongs to villagers and the age.
+At the Feudal villager target, farms and reseeds save Barracks and house wood;
+paid foundations release it. Barracks builders precede idle jobs during age-up.
+Failed hunters use berries, paid farms or wood. One rotating woodcutter at its forest
+can fund a nearby camp without route queries, after the age-up Barracks is paid.
 From the start of Feudal, the next unpaid Castle prerequisite keeps its wood
 budget ahead of extra farms, reseeds and army spending. Paid foundations and
 pending build orders do not reserve that cost twice. Existing soldiers rally
 before idle workers use the decision's bounded route-query budget.
-At the configured 28-villager Castle preparation threshold, enough gold shifts
-the target allocation toward food;
+At the configured 28-villager Castle threshold, enough gold shifts allocation toward food;
 empty-handed miners are redirected one per decision, preserving loaded returns.
 Live resource jobs also rebalance one empty-handed worker per decision toward
 the target shares. Rally orders and resource changes can otherwise leave every

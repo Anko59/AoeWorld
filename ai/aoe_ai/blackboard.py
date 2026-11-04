@@ -45,6 +45,8 @@ class Blackboard:
     farmers: dict[int, int] = field(default_factory=dict)
     #: villager id -> (what, tile) job description while a build is under way
     builders: dict[int, tuple[str, Tile]] = field(default_factory=dict)
+    #: Rotate the single proactive wood-dropoff inspection across working cutters.
+    wood_dropoff_cursor: int = 0
     scout_waypoints: list[Tile] = field(default_factory=list)
     scout_index: int = 0
     scout_radius: int = 0

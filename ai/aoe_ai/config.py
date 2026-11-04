@@ -43,6 +43,8 @@ class Config:
     )
     #: A resource node farther than this from every drop-off needs a camp.
     dropoff_distance: int = 9
+    #: A proactive camp uses a tree beside its woodcutter, without routing.
+    wood_camp_contact_tiles: int = 2
     #: Never send a villager to a node farther than this from the Town Center.
     max_gather_distance: int = 70
     #: Hunting is considered while an animal is this close to the Town Center.

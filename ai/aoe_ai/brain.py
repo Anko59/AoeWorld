@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 import aoeworld
-from aoeworld import CommandResult, UnitKind
+from aoeworld import CommandResult, Tech, UnitKind
 
 from .play.combat import CombatManager
 from .play import buildorder
@@ -74,8 +74,10 @@ class Brain:
         self.military.rally(ctx)
         self.economy.produce(ctx)
         self.constructor.houses(ctx)
-        if (ctx.feudal and not ctx.castle
-                and buildorder.castle_requirement_kinds(ctx) < 2):
+        self.economy.wood_dropoff(ctx)
+        if ((ctx.center is not None and ctx.center.researching == Tech.FEUDAL_AGE)
+                or (ctx.feudal and not ctx.castle
+                    and buildorder.castle_requirement_kinds(ctx) < 2)):
             self.constructor.production(ctx)
             # Protect the next unpaid prerequisite before lower-priority
             # spending, without freezing surplus wood behind paid foundations.
