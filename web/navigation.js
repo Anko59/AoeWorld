@@ -50,7 +50,7 @@ export function initNavigation() {
   let mapHash = null;
   let request = null;
   let retryTimer;
-  let samples = 0;
+  let samples = 0, rasterUrl = null;
   let panImpulse = [0, 0];
 
   function rasterState(value) {
@@ -82,7 +82,7 @@ export function initNavigation() {
     toggle.setAttribute('aria-expanded', String(value));
     toggle.setAttribute('aria-label', value ? 'Close whole map' : 'Show whole map');
     panel.dataset.rasterSamples = String(samples);
-    title.textContent = `${value ? 'Whole map' : 'Minimap'} · ${samples ? 'terrain' : 'schematic'}`;
+    title.textContent = `${value ? 'Whole map' : 'Minimap'} · ${samples ? panel.dataset.raster === 'coarse' ? 'coarse terrain' : 'terrain' : 'schematic'}`;
     if (value) svg.focus();
   }
   toggle.addEventListener('click', () => overview(!expanded));
@@ -166,6 +166,7 @@ export function initNavigation() {
     fog(false, []);
     panel.dataset.mapHash = hash;
     rasterState('pending');
+    delete panel.dataset.coarseMs; delete panel.dataset.fineMs; rasterUrl = null;
     stopPanning();
     view.reset();
     view.actors([]);
@@ -181,41 +182,53 @@ export function initNavigation() {
   }
 
   async function loadRaster(hash) {
-    // Retry only the raster: a transient failure must retain camera and fog.
-    rasterState('pending');
-    const controller = new AbortController();
+    // Coarse and fine are the same measured land at different sample spacing.
+    // A refinement failure keeps the first usable map and retries only fine.
+    if (!samples) rasterState('pending');
+    const controller = new AbortController(), started = performance.now();
     request = controller;
+    const current = () => mapHash === hash && request === controller;
     const timeout = setTimeout(() => controller.abort(), 45000);
-    try {
-      const response = await fetch(`/maps/${hash}/minimap`, { signal: controller.signal });
+    async function receive(path, stage) {
+      const response = await fetch(`/maps/${hash}/${path}`, { signal: controller.signal });
       if (!response.ok || Number(response.headers.get('content-length') ?? 0) > MAX_MINIMAP_BYTES) {
         throw new Error('Minimap raster request failed or exceeded its byte limit');
       }
       const raster = decodeMinimap(await response.arrayBuffer());
-      if (mapHash !== hash || request !== controller) return;
+      if (!current()) return false;
       if (!raster) throw new Error('Invalid minimap raster');
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = raster.samples;
       const context = canvas.getContext('2d');
       if (!context) throw new Error('Minimap drawing context unavailable');
       context.putImageData(new ImageData(raster.rgba, raster.samples, raster.samples), 0, 0);
-      await drawRaster(canvas.toDataURL(), controller.signal);
-      if (mapHash !== hash || request !== controller) return;
+      const url = canvas.toDataURL();
+      await drawRaster(url, controller.signal);
+      if (!current()) return false;
+      rasterUrl = url;
       strategic.terrain(canvas, raster);
       samples = raster.samples;
+      rasterState(stage === 'coarse' ? 'coarse' : 'ready');
+      panel.dataset[`${stage}Ms`] = (performance.now() - started).toFixed(1);
       overview(expanded);
-      rasterState('ready');
+      return true;
+    }
+    try {
+      if (!samples) {
+        try { if (!await receive('minimap/coarse', 'coarse')) return; }
+        catch (error) { if (controller.signal.aborted || !current()) throw error; }
+      }
+      await receive('minimap', 'fine');
     } catch (error) {
-      if (mapHash === hash && request === controller) {
-        image.removeAttribute('href');
-        samples = 0;
+      if (current()) {
+        if (samples && rasterUrl) { image.setAttribute('href', rasterUrl); rasterState('coarse'); }
+        else { image.removeAttribute('href'); samples = 0; rasterState('failed'); }
         overview(expanded);
-        rasterState('failed');
         retryTimer = setTimeout(() => {
           if (mapHash === hash && request === null) void loadRaster(hash);
         }, 5000);
       }
-      if (error.name !== 'AbortError') console.warn('Minimap terrain unavailable; using schematic', error);
+      if (error.name !== 'AbortError') console.warn('Minimap refinement unavailable', error);
     } finally {
       clearTimeout(timeout);
       if (request === controller) request = null;

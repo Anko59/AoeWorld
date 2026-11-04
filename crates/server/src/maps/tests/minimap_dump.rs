@@ -18,6 +18,13 @@ fn dump_stored_minimap_rasters_when_packages_are_available() {
         });
         let start = std::time::Instant::now();
         let raster = package_minimap(&package, provider.clone(), &|| false).expect("server raster");
+        let elapsed = start.elapsed();
+        eprintln!("minimap {hash}: {elapsed:?}");
+        std::fs::write(
+            output.join(format!("current-{hash}.seconds")),
+            elapsed.as_secs_f64().to_string(),
+        )
+        .expect("write timing");
         assert!(start.elapsed() < super::super::super::minimap::MINIMAP_TIME_BUDGET);
         std::fs::write(output.join(format!("current-{hash}.awmm")), &raster).expect("write raster");
         // Export the same height samples for relief-only inspection and cell

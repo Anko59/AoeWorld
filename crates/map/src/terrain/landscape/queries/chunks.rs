@@ -1,6 +1,9 @@
 //! Bounded composed scene generation: the only chunk/point composition path.
 use super::*;
+#[path = "chunks/surface.rs"]
+mod surface;
 use crate::terrain::{resource_id, resources, unsigned_noise};
+use surface::{appearance, material, soft_ground, tree_family};
 #[path = "chunks/dressing.rs"]
 mod dressing;
 #[path = "chunks/memo.rs"]
@@ -51,7 +54,7 @@ impl MapChunkGenerator {
                     ox.checked_add(lx).ok_or(EnvironmentPageError::Invalid)?,
                     oy.checked_add(ly).ok_or(EnvironmentPageError::Invalid)?,
                 );
-                if let Some(point) = self.evaluate_landscape_point_with_memo(
+                if let Some(point) = self.evaluate_landscape_point_with_memo::<false, 1296, 2500>(
                     position,
                     policy_at,
                     reserved_at,
@@ -79,10 +82,38 @@ impl MapChunkGenerator {
         cancelled: &dyn Fn() -> bool,
     ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
         let memo = memo::PointMemo::new(self, position, cancelled);
-        self.evaluate_landscape_point_with_memo(position, policy_at, reserved_at, cancelled, &memo)
+        self.evaluate_landscape_point_with_memo::<false, 25, 361>(
+            position,
+            policy_at,
+            reserved_at,
+            cancelled,
+            &memo,
+        )
     }
 
-    fn evaluate_landscape_point_with_memo<const N: usize, const W: usize>(
+    /// The exact composed land surface without constructing resource or dressing
+    /// objects. Strategic rasters consume only this projection; gameplay keeps
+    /// the complete point query. Shared exclusions still determine canopy.
+    pub fn landscape_surface_with_cancel(
+        &self,
+        position: TileCoord,
+        cancelled: &dyn Fn() -> bool,
+    ) -> Result<Option<super::LandscapePoint>, EnvironmentPageError> {
+        let memo = memo::PointMemo::new(self, position, cancelled);
+        self.evaluate_landscape_point_with_memo::<true, 25, 361>(
+            position,
+            &crate::terrain::landscape_dispatch::default_policy,
+            &|at| self.landscape_reservations_at(at),
+            cancelled,
+            &memo,
+        )
+    }
+
+    fn evaluate_landscape_point_with_memo<
+        const SURFACE_ONLY: bool,
+        const N: usize,
+        const W: usize,
+    >(
         &self,
         position: TileCoord,
         policy_at: &dyn Fn(TileCoord, Tile) -> LandscapePolicy,
@@ -166,6 +197,14 @@ impl MapChunkGenerator {
             terrain,
             appearance,
         };
+        if SURFACE_ONLY {
+            return Ok(Some(super::LandscapePoint {
+                tile,
+                historical_land_use: sample.historical_land_use,
+                resource: None,
+                decoration: None,
+            }));
+        }
         let reserved = shared_reservations(position)?;
         // Large-forest glades and trails stay free of blocking resources.
         let open = sample.density.opening != crate::landscape_patches::Opening::None;
@@ -400,89 +439,6 @@ impl MapChunkGenerator {
             }
         }
         Ok(None)
-    }
-}
-
-fn tree_family(biome: Biome) -> ResourceVisualFamily {
-    match biome {
-        Biome::Boreal => ResourceVisualFamily::Conifer,
-        Biome::Tropical => ResourceVisualFamily::Tropical,
-        Biome::Woodland | Biome::Savanna => ResourceVisualFamily::DryScrub,
-        _ => ResourceVisualFamily::Broadleaf,
-    }
-}
-
-fn appearance(base: Tile, density: DensitySample) -> LandscapeAppearance {
-    let height_band = match base.geographic_height_centimeters {
-        ..100_000 => NativeHeightBand::Lowland,
-        100_000..180_000 => NativeHeightBand::Montane,
-        180_000..250_000 => NativeHeightBand::Subalpine,
-        250_000..350_000 => NativeHeightBand::Alpine,
-        _ => NativeHeightBand::Nival,
-    };
-    let palette = match base.biome {
-        Biome::Temperate => EcologicalPalette::Temperate,
-        Biome::Boreal => EcologicalPalette::Boreal,
-        Biome::Tropical => EcologicalPalette::Tropical,
-        Biome::Woodland => EcologicalPalette::DryScrub,
-        Biome::Savanna => EcologicalPalette::Savanna,
-        _ => EcologicalPalette::Treeless,
-    };
-    let exposure = if base.surface.is_cliff()
-        || base.material == GroundMaterial::Rock
-        || matches!(
-            height_band,
-            NativeHeightBand::Alpine | NativeHeightBand::Nival
-        ) {
-        NativeExposure::Exposed
-    } else if density.canopy_per_thousand > 0 {
-        NativeExposure::Sheltered
-    } else {
-        NativeExposure::Open
-    };
-    LandscapeAppearance {
-        canopy_strength: density.canopy_per_thousand,
-        floor_strength: density.forest_floor_per_thousand,
-        palette,
-        exposure,
-        height_band,
-    }
-}
-
-/// Rock, snow and ice shores stay as they are; everything else takes the band.
-const fn soft_ground(material: GroundMaterial) -> bool {
-    !matches!(
-        material,
-        GroundMaterial::Rock | GroundMaterial::Snow | GroundMaterial::Ice
-    )
-}
-
-/// Snow lies on everything walkable above the snow line, forest floor under
-/// canopy, bare rock in the band below the snow. Cold biomes below the snow
-/// line are summer grass and heath, not snow.
-fn material(
-    base: Tile,
-    appearance: LandscapeAppearance,
-    cover: Option<crate::terrain::relief::Cover>,
-) -> GroundMaterial {
-    use crate::terrain::relief::Cover;
-    if base.water != crate::WaterKind::None || base.material == GroundMaterial::Ice {
-        return base.material;
-    }
-    if cover == Some(Cover::Snow) {
-        return GroundMaterial::Snow;
-    }
-    if appearance.floor_strength > 0 {
-        return GroundMaterial::ForestFloor;
-    }
-    if cover == Some(Cover::Rock) {
-        return GroundMaterial::Rock;
-    }
-    match base.material {
-        GroundMaterial::ForestFloor => GroundMaterial::DryGrass,
-        GroundMaterial::Snow if base.biome == Biome::Boreal => GroundMaterial::TemperateGrass,
-        GroundMaterial::Snow => GroundMaterial::DryGrass,
-        material => material,
     }
 }
 

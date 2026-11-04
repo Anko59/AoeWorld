@@ -216,7 +216,7 @@ impl MapChunkGenerator {
 }
 
 /// Forest amount follows the source signal; support is full below the treeline.
-fn default_policy(_: TileCoord, _: Tile) -> LandscapePolicy {
+pub(in crate::terrain) fn default_policy(_: TileCoord, _: Tile) -> LandscapePolicy {
     LandscapePolicy {
         wildness_per_thousand: None,
         support_per_thousand: 1000,

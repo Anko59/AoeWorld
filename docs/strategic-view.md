@@ -44,7 +44,7 @@ labels use a bounded screen-grid placement search and retain lines to their true
 locations. These bounds are not a qualification of a crowded 1,000-player RTS.
 The strategic scene retains one terrain raster and fog plane. The cartographic
 surface is baked once per map, capped at 1,024² RGBA pixels (4 MiB), from the
-server's existing 512² terrain classes and DEM-derived relief shades. Water and
+server's measured terrain classes (64² first, then up to 512²) and DEM-derived relief shades. Water and
 forests retain those measured classes; fields and grazing retain the generator's
 historical land-use classifications. Soil alone never becomes farmland. No
 heights, cities, road connections or political boundaries are invented.
@@ -91,6 +91,12 @@ five-second buckets (55–60 seconds), without extrapolation. Spending, trade,
 refunds and stock edits do not count as collection. Occupied land sums living
 owned building footprints, including foundations and excluding water bridges;
 it does not claim territorial borders or Castle-domain ownership.
+Resources, population and the authoritative army total stay in a compact strip.
+Kingdom controls opens one scrollable drawer for building, production, map
+layers and saved views. It ends above the selection HUD. Collapsing preserves
+keyboard layer shortcuts and all commands remain in the drawer. A session-stored
+choice is keyed by a digest of the match resume identity, so reloading the same
+match retains it without copying the private token into another storage entry.
 
 ## Saved views and jumps
 
@@ -148,6 +154,20 @@ site before retrying. The Build here icon retains its DOM node across HUD
 updates so a held pointer can complete its click. The client tracks outgoing commands against
 the human burst of 20 and refill of 10 per second; the server retains authority.
 Esc, right-click, focus loss and returning to near zoom cancel placement.
+
+## First map arrival
+
+The client first requests `/maps/{hash}/minimap/coarse`, a complete raster of
+up to 64 samples per axis, then refines it through the ordinary minimap endpoint
+at up to 512 samples. Both use the same composed surface, land-use and river
+queries. They omit final resource and decorative objects while preserving
+the shared exclusions that determine canopy.
+Four bounded native workers fill disjoint row bands with independent query
+memos, preserving row-major output. They share immutable source inputs.
+Each raster retains its 30-second limit and shares the four-entry cache.
+A failed refinement keeps the coarse terrain visible and retries the fine map.
+World replacement cancels both stages and clears their images and timing data.
+`data-coarse-ms` and `data-fine-ms` record arrival/draw time for the current load.
 
 ## First far view
 
