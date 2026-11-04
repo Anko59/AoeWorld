@@ -39,6 +39,12 @@ async function snapshot(page: Page, label: string) {
 test("minimap raster readiness waits for terrain and resets when the map changes", async ({
   page,
 }) => {
+  await page.route("**/maps/*/minimap/coarse", (route) =>
+    route.fulfill({
+      contentType: "application/octet-stream",
+      body: Buffer.from([65, 87, 77, 77, 2, 0, 0, 0, 128, 130, 139, 128]),
+    }),
+  );
   let rasterRoute: Route | undefined;
   await page.route("**/maps/*/minimap", (route) => {
     rasterRoute = route;
@@ -48,10 +54,14 @@ test("minimap raster readiness waits for terrain and resets when the map changes
   await snapshot(page, "requested");
   await expect(page.locator("#minimap")).toHaveAttribute(
     "data-raster",
-    "pending",
+    "coarse",
+  );
+  await expect(page.locator("#minimap-terrain")).toHaveAttribute(
+    "href",
+    /^data:image\/png/,
   );
   await expect(page.locator("#minimap-title")).toHaveText(
-    "Minimap · schematic",
+    "Minimap · coarse terrain",
   );
   if (!rasterRoute) throw new Error("Raster request missing");
   await rasterRoute.continue();
@@ -116,6 +126,9 @@ for (const failure of ["network", "http", "decode"] as const) {
   test(`minimap raster reports failed after ${failure} failure`, async ({
     page,
   }) => {
+    await page.route("**/maps/*/minimap/coarse", (route) =>
+      route.abort("failed"),
+    );
     await page.route("**/maps/*/minimap", async (route) => {
       if (failure === "network") await route.abort("failed");
       else if (failure === "http") await route.fulfill({ status: 503 });
@@ -141,3 +154,49 @@ for (const failure of ["network", "http", "decode"] as const) {
     await snapshot(page, `${failure} result`);
   });
 }
+
+test("a failed refinement retains the usable coarse map", async ({ page }) => {
+  await page.route("**/maps/*/minimap/coarse", (route) =>
+    route.fulfill({
+      contentType: "application/octet-stream",
+      body: Buffer.from([65, 87, 77, 77, 2, 0, 0, 0, 128, 130, 139, 128]),
+    }),
+  );
+  await page.route("**/maps/*/minimap", (route) =>
+    route.fulfill({ status: 503 }),
+  );
+  await openMap(page);
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-raster",
+    "coarse",
+  );
+  await expect(page.locator("#minimap-terrain")).toHaveAttribute(
+    "href",
+    /^data:image\/png/,
+  );
+  await page.waitForTimeout(1000);
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-raster",
+    "coarse",
+  );
+});
+
+test("an identical coarse and fine image still finishes readiness", async ({
+  page,
+}) => {
+  const body = Buffer.from([65, 87, 77, 77, 2, 0, 0, 0, 128, 130, 139, 128]);
+  for (const path of ["**/maps/*/minimap/coarse", "**/maps/*/minimap"]) {
+    await page.route(path, (route) =>
+      route.fulfill({ contentType: "application/octet-stream", body }),
+    );
+  }
+  await openMap(page);
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-raster",
+    "ready",
+  );
+  await expect(page.locator("#minimap")).toHaveAttribute(
+    "data-raster-samples",
+    "2",
+  );
+});

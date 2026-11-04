@@ -276,8 +276,8 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
     );
     s.terrain(terrain);
     const sites = [
-      10, 498, 498, 502, 502, 0, 0x4191f5, 11, 506, 500, 509, 503, 5, 0x4191f5,
-      12, 490, 500, 494, 504, 16, 0xf54141,
+      10, 498, 498, 502, 502, 0, 0x4191f5, 1, 11, 506, 500, 509, 503, 5,
+      0x4191f5, 1, 12, 490, 500, 494, 504, 16, 0x4191f5, 0,
     ];
     s.settlements(sites);
     const state = [8000, 8000, 500, 500, 1280, 720, 0.04, 1];
@@ -303,10 +303,16 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
       document.querySelector<HTMLCanvasElement>("#strategic-scene");
     if (!canvas) throw new Error("Missing strategic surface");
     const fields = canvas.dataset.fields;
+    const owned = document.querySelectorAll(
+      '#strategic-settlements [data-owned="true"]',
+    ).length;
+    const halo = Array.from(
+      canvas.getContext("2d")?.getImageData(662, 355, 1, 1).data ?? [],
+    );
     const many = Array.from({ length: 3000 }, (_, id) => {
       const x = (id % 50) * 150,
         y = Math.floor(id / 50) * 120;
-      return [id, x, y, x + 4, y + 4, 1, 0x4191f5];
+      return [id, x, y, x + 4, y + 4, 1, 0x4191f5, 1];
     }).flat();
     s.settlements(many);
     s.terrain(
@@ -369,6 +375,8 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
       count,
       size: [terrain.width, terrain.height],
       fields,
+      owned,
+      halo,
       bounded,
       budget,
       remaining: document.querySelectorAll("#strategic-settlements > *").length,
@@ -382,6 +390,8 @@ test("kingdom landscape keeps source relief, settlements and farms bounded and c
   expect(result.cached).toBe(true);
   expect(result.retained).toBe(true);
   expect(result.count).toBe(2);
+  expect(result.owned).toBe(1);
+  expect(result.halo.slice(0, 3).every((n) => n > 180)).toBe(true);
   expect(result.fields).toBe("1");
   expect(result.bounded.icons).toBeLessThanOrEqual(192);
   expect(result.bounded.borders).toBeLessThanOrEqual(2048);

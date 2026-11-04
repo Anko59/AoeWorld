@@ -63,8 +63,9 @@ starts in a bounded cache, so HTTP can reuse that work. Complete static
 navigation disables redundant speculative walk-chunk preparation. Terrain
 timing logs separate time in the queue from time spent executing the work.
 
-The minimap and whole-map overview draw one strategic raster per package from
-`GET /maps/{hash}/minimap`. The server samples the composed landscape query
+The minimap and whole-map overview first draw a complete coarse raster from
+`GET /maps/{hash}/minimap/coarse` (up to 64 samples per axis), then refine it
+through `GET /maps/{hash}/minimap`. The server samples the composed landscape query
 that also produces chunks, at one sample per tile up to 512 per axis, so the
 raster follows the world. Persisted river lines are additionally tested against
 each pixel footprint so narrow rivers stay visible at strategic scale; physical
@@ -73,9 +74,15 @@ axis, two zero bytes and one byte per sample: terrain class (grass, dry grass,
 forest, soil, sand, rock, snow, ice, shore, river, lake, ocean, cropland, pasture)
 in the low nibble and north-west relief shade in the high nibble, at most
 262,152 bytes.
-One raster is generated at a time off the async runtime within 30 seconds,
-never partially, and the four most recent are cached. The client rejects any
-other shape and keeps its schematic map; it requests no chunks for the map.
+One raster is generated at a time off the async runtime on four bounded workers
+within 30 seconds,
+never partially, and the eight most recent rasters are cached. Coarse and fine
+rasters share the cache as `{hash}:coarse` and `{hash}`, so four maps keep both stages
+(at most 2 MiB). The client rejects any
+other shape and retains its coarse map on refinement failure (or its schematic
+map when neither stage succeeded); it requests no chunks for the map. Surface
+queries preserve the composed terrain while omitting final resource and decoration
+construction; shared canopy exclusions remain intact.
 Relief averages the unquantized directional slope with a mirrored separable
 box before encoding its shade. Its radius follows four elevation facets,
 bounded by a four-pixel minimum and one eighth of the raster axis (smaller

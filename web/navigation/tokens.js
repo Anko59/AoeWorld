@@ -90,13 +90,23 @@ export function initTokens() {
       const holdingColour = teamColours[document.getElementById('playground')?.dataset.playerColour] ?? teamColours.blue;
       const inView = (x, y) => x >= -100 && y >= -60 && x <= width + 100 && y <= height + 60;
       const occupied = new Set(), positions = new Map();
+      // Reserve actual HUD rectangles before placing world labels. The drawer
+      // and floating Captain controls can change without moving the camera.
+      for (const panel of document.querySelectorAll('#strategic-cockpit,#cockpit-details,#general-panel,#bottom-panel,#strategic-map-key,#strategic-label,#performance-overlay')) {
+        const r = panel.getBoundingClientRect();
+        if (!r.width || !r.height) continue;
+        for (let x = Math.floor((r.left - 4) / 32); x <= Math.floor((r.right + 4) / 32); x++) {
+          for (let y = Math.floor((r.top - 4) / 24); y <= Math.floor((r.bottom + 4) / 24); y++) occupied.add(`${x},${y}`);
+        }
+      }
+      let grouped = 0;
       // A small screen grid keeps nearby armies and cards individually usable.
       // Selected armies get their anchor first; displaced labels keep a leader
       // line to the actual world position. This never scans gameplay units.
       const labels = [
-        ...armies.filter(() => options.armies).map(r => ({ key: `a${r[0]}`, world: r.slice(1, 3), selected: r[4], w: 116, h: 48 })),
-        ...economy.filter(() => options.economy).map(r => ({ key: `e${r[0]}`, world: r.slice(2, 4), selected: r[4], w: 218, h: 68 })),
-      ].sort((a, b) => b.selected - a.selected);
+        ...armies.filter(() => options.armies).map(r => ({ key: `a${r[0]}`, world: r.slice(1, 3), selected: r[4], owned: r[3], w: 116, h: 48 })),
+        ...economy.filter(() => options.economy).map(r => ({ key: `e${r[0]}`, world: r.slice(2, 4), selected: r[4], owned: 1, w: 218, h: 68 })),
+      ].sort((a, b) => b.selected - a.selected || b.owned - a.owned);
       for (const label of labels) {
         const [ax, ay] = project(label.world).map(v => v * scale);
         if (!inView(ax / scale, ay / scale)) continue;
@@ -108,7 +118,7 @@ export function initTokens() {
           for (let gx = Math.floor((x - label.w / 2 - 3) / 32); gx <= Math.floor((x + label.w / 2 + 3) / 32); gx++) {
             for (let gy = Math.floor((y - label.h / 2 - 3) / 24); gy <= Math.floor((y + label.h / 2 + 3) / 24); gy++) cells.push(`${gx},${gy}`);
           }
-          if (cells.some(key => occupied.has(key)) && attempt < 64) continue;
+          if (cells.some(key => occupied.has(key))) continue;
           cells.forEach(key => occupied.add(key)); positions.set(label.key, [x / scale, y / scale]);
           if (Math.hypot(x - ax, y - ay) > 4) {
             context.strokeStyle = '#f4e9bb99'; context.lineWidth = 1;
@@ -116,7 +126,9 @@ export function initTokens() {
           }
           break;
         }
+        if (!positions.has(label.key)) grouped++;
       }
+      layer.dataset.grouped = String(grouped);
       if (options.roads) {
         context.strokeStyle = '#f8dfac'; context.lineWidth = 4;
         for (const [x0, y0, x1, y1, kind] of bridges) {
@@ -134,7 +146,7 @@ export function initTokens() {
         const [id, steward, wx, wy, selected, managed, residents, wait, f, w, g, s, idle] = r;
         const node = button(`e${id}`, 'steward-card');
         const [x, y] = project([wx, wy]);
-        const visible = options.economy && inView(x, y);
+        const visible = options.economy && inView(x, y) && positions.has(`e${id}`);
         if (options.economy || options.ownership) {
           context.beginPath();
           const ring = domains.get(id) ?? [];
@@ -180,7 +192,7 @@ export function initTokens() {
         }
         node.dataset.entity = String(id); node.dataset.owned = String(!!owned); node.dataset.order = order;
         node.setAttribute('aria-pressed', String(!!selected));
-        const visible = options.armies && inView(x, y);
+        const visible = options.armies && inView(x, y) && positions.has(`a${id}`);
         if (visible && owned && Number.isFinite(tx) && Number.isFinite(ty)) {
           const [ex, ey] = project([tx, ty]);
           const dx = ex - x, dy = ey - y, distance = Math.hypot(dx, dy);

@@ -2,7 +2,7 @@ export function initMapKey() {
   const key = document.createElement('div');
   key.id = 'strategic-map-key'; key.hidden = true;
   key.setAttribute('aria-label','Map legend and distance scale');
-  key.innerHTML = '<div><span class="forest">Forests</span><span class="fields">Fields</span><span class="water">Water</span><span class="holdings">Holdings</span></div><div class="map-scale"><i></i><b></b></div>';
+  key.innerHTML = '<div><span class="forest">Forests</span><span class="fields">Fields</span><span class="water">Water</span><span class="holdings">Your holdings</span></div><div class="map-scale"><i></i><b></b></div>';
   document.body.append(key);
   let previous = '';
   return {

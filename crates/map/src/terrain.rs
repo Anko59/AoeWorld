@@ -190,6 +190,16 @@ impl MapChunkGenerator {
         }
     }
 
+    /// Share immutable landscape inputs while giving a bounded query worker
+    /// its own memo tables. Neighbor scans on separate raster bands must not
+    /// contend on, or evict, one another's direct-mapped water entries.
+    pub fn fork_queries(&self) -> Self {
+        let mut worker = self.clone();
+        worker.river_queries = Arc::default();
+        worker.derived = Default::default();
+        worker
+    }
+
     /// Binds an immutable page provider without retaining a complete page
     /// vector. The provider owns source access and residency; this generator
     /// retains metadata, deterministic inputs and a bounded derived water cache.
