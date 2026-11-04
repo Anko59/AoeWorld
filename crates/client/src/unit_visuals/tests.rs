@@ -59,3 +59,26 @@ fn imperial_promotions_use_their_own_pose_and_corpse() {
         assert_ne!(die, decay);
     }
 }
+
+#[wasm_bindgen_test]
+fn steward_uses_the_imported_native_de_king_for_every_pose() {
+    use aoe_assets::catalog::units::{Pose, SPRITES};
+    use aoe_protocol::UnitKind;
+    let poses = super::roster::military_poses(UnitKind::Steward).unwrap();
+    assert_eq!(
+        poses,
+        [
+            Pose::KingStand,
+            Pose::KingWalk,
+            Pose::KingStand,
+            Pose::KingDie
+        ]
+    );
+    assert_eq!(super::roster::military_poses(UnitKind::Vassal), Some(poses));
+    for pose in poses {
+        let source = SPRITES[pose as usize];
+        assert!(source.manifest_source().starts_with("de/"));
+        assert_eq!(source.rows(), 16);
+        assert!(source.selected_frames() > 16);
+    }
+}

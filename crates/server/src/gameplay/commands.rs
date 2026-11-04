@@ -56,24 +56,29 @@ impl GameplayService {
         )
         .await;
     }
-    pub async fn queue_vassal_dismiss(&self, session_id: u64, sequence: u64, vassal_id: EntityId) {
-        self.queue_command(
-            session_id,
-            sequence,
-            PendingAction::VassalDismiss { vassal_id },
-        )
-        .await;
-    }
-    pub async fn queue_vassal_settings(
+    pub async fn queue_steward_dismiss(
         &self,
         session_id: u64,
         sequence: u64,
-        vassal_id: EntityId,
+        steward_id: EntityId,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::StewardDismiss { steward_id },
+        )
+        .await;
+    }
+    pub async fn queue_steward_settings(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        steward_id: EntityId,
         weights: [u8; 4],
         cap: u8,
         training: bool,
     ) {
-        let settings = aoe_simulation::VassalSettings {
+        let settings = aoe_simulation::StewardSettings {
             weights,
             cap,
             training,
@@ -81,8 +86,8 @@ impl GameplayService {
         self.queue_command(
             session_id,
             sequence,
-            PendingAction::VassalSettings {
-                vassal_id,
+            PendingAction::StewardSettings {
+                steward_id,
                 settings,
             },
         )

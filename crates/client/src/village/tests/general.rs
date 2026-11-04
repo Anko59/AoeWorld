@@ -1,4 +1,4 @@
-use super::super::vassal::{panel_command, panel_values};
+use super::super::steward::{panel_command, panel_values};
 use aoe_core::EntityId;
 use aoe_protocol::{GeneralCommand, GeneralState, GeneralStatus};
 use wasm_bindgen_test::wasm_bindgen_test;

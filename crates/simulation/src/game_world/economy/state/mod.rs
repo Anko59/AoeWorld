@@ -1,7 +1,7 @@
 //! Mutable economy indexes and test-only work accounting.
 use super::{
     BuildTask, BuildingKind, GameBuilding, GarrisonedUnit, PlayerEconomy, WorldLimits, farm,
-    gathering, scouting, vassal,
+    gathering, scouting, steward,
 };
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
@@ -18,13 +18,13 @@ pub(crate) struct TickWork {
 #[derive(Debug, Default)]
 pub(crate) struct Economy {
     pub(crate) generals: super::general::Manager,
-    pub(crate) vassals: vassal::Manager,
-    pub(crate) vassal_homes: BTreeMap<EntityId, vassal::Home>,
+    pub(crate) stewards: steward::Manager,
+    pub(crate) steward_homes: BTreeMap<EntityId, steward::Home>,
     #[cfg(test)]
     pub(crate) tick_work: TickWork,
     pub(crate) garrison_orders: BTreeMap<EntityId, EntityId>,
-    /// Derived from live Vassal garrison orders, at most one per Castle.
-    pub(crate) garrison_vassals: BTreeMap<EntityId, EntityId>,
+    /// Derived from live Steward garrison orders, at most one per Town Center.
+    pub(crate) garrison_stewards: BTreeMap<EntityId, EntityId>,
     pub(crate) garrison_reservations: BTreeMap<EntityId, u8>,
     pub(crate) occupied_garrisons: BTreeSet<EntityId>,
     pub(crate) ejections: BTreeMap<EntityId, (TileRect, Vec<GarrisonedUnit>)>,

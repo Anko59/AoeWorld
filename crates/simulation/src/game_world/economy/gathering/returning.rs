@@ -92,9 +92,11 @@ impl GameWorld {
             self.units[index].state.task = UnitTask::Carrying;
             self.refresh_spacing_order(id);
         }
-        // At most the owned centers' bounded perimeters are attempted once
-        // per trip. No center yet may appear later; exhausted choices end it.
-        !has_dropoff
+        // A full farmer keeps its paid plot while a blocked Town Center
+        // waits for a route or replacement drop-off. Other exhausted node
+        // jobs can release their reservations and choose another resource.
+        task.farm.is_some()
+            || !has_dropoff
             || candidates
                 .iter()
                 .any(|(_, tile)| !task.failed_dropoffs.contains(tile))

@@ -5,7 +5,7 @@
 //! These pins intentionally append absent spans for ordinary buildings; angled
 //! bridges now carry their exact endpoints in the single current wire schema.
 //! These pins intentionally change with the single current naval state schema.
-//! Unit tails now append the two optional Vassal identifiers. Regenerate the
+//! Unit tails now append the two optional Steward identifiers. Regenerate the
 //! current empty fragments for this deliberate schema change, preserving codec
 //! roundtrips and the browser mocks that consume these same fragments.
 //! Unit tails append the authoritative combat stance (Aggressive = 0).

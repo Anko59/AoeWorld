@@ -171,8 +171,8 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
             kind: UnitKind::FishingShip
         }
     );
-    // Onager is current discriminator 33; 34 is the first unknown unit kind.
-    assert!(decode_gameplay_client(&[5, 9, 3, 34]).is_err());
+    // Steward is current discriminator 34; 35 is the first unknown unit kind.
+    assert!(decode_gameplay_client(&[5, 9, 3, 35]).is_err());
     assert!(decode_gameplay_client(&[4, 9, 3]).is_err());
     // A build order may name at most MAX_BUILD_GROUP villagers.
     let crowd = GameplayClientMessage::BuildOrder {
@@ -187,7 +187,7 @@ fn economy_commands_have_current_golden_wire_and_roundtrip() {
 
 #[test]
 fn full_economy_snapshot_and_delta_roundtrip() {
-    // The combined bundle appends water bridge spans and Vassal home/control
+    // The combined bundle appends water bridge spans and Steward home/control
     // IDs. This pin is regenerated from the current codec; retain both roundtrips.
     let snapshot = snapshot();
     let bytes = encode_gameplay_server(&snapshot).unwrap();

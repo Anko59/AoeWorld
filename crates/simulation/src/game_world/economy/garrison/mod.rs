@@ -12,8 +12,8 @@ pub struct GarrisonedUnit {
     pub unit: GameUnit,
     pub(crate) next_hit_tick: u64,
     pub(crate) heal_at: u64,
-    /// Telemetry of an active Vassal's economy; outside the canonical hash.
-    pub vassal: Option<crate::VassalStatus>,
+    /// Telemetry of an active Steward's economy; outside the canonical hash.
+    pub steward: Option<crate::StewardStatus>,
 }
 
 impl BuildingKind {
@@ -26,12 +26,14 @@ impl BuildingKind {
         }
     }
     pub const fn admits(self, unit: UnitKind) -> bool {
-        !unit.is_naval()
+        (!matches!(unit, UnitKind::Steward) || matches!(self, Self::TownCenter))
+            && !unit.is_naval()
             && self.garrison_capacity() > 0
             && (matches!(self, Self::Castle)
                 || matches!(
                     unit,
                     UnitKind::Villager
+                        | UnitKind::Steward
                         | UnitKind::Militia
                         | UnitKind::ManAtArms
                         | UnitKind::Spearman
@@ -53,12 +55,12 @@ impl BuildingKind {
 }
 
 impl GameWorld {
-    pub(super) fn vassal_reserved(&self, b: &GameBuilding, except: Option<EntityId>) -> bool {
-        b.training_queue.iter().any(|e| e.kind == UnitKind::Vassal)
-            || b.garrison.iter().any(|g| g.unit.kind == UnitKind::Vassal)
+    pub(super) fn steward_reserved(&self, b: &GameBuilding, except: Option<EntityId>) -> bool {
+        b.training_queue.iter().any(|e| e.kind == UnitKind::Steward)
+            || b.garrison.iter().any(|g| g.unit.kind == UnitKind::Steward)
             || self
                 .economy
-                .garrison_vassals
+                .garrison_stewards
                 .get(&b.id)
                 .is_some_and(|id| Some(*id) != except)
     }
@@ -83,8 +85,8 @@ impl GameWorld {
         if !shelter.kind.admits(actor.kind) {
             return Err(EconomyError::WrongUnitKind);
         }
-        if actor.kind == UnitKind::Vassal && self.vassal_reserved(shelter, Some(unit)) {
-            return Err(EconomyError::VassalExists);
+        if actor.kind == UnitKind::Steward && self.steward_reserved(shelter, Some(unit)) {
+            return Err(EconomyError::StewardExists);
         }
         let reserved = usize::from(
             self.economy
@@ -96,7 +98,7 @@ impl GameWorld {
         if shelter.garrison.len() + reserved >= usize::from(shelter.kind.garrison_capacity()) {
             return Err(EconomyError::GarrisonFull);
         }
-        let is_vassal = actor.kind == UnitKind::Vassal;
+        let is_steward = actor.kind == UnitKind::Steward;
         let footprint = shelter.footprint;
         if !adjacent(footprint, actor.position.tile_floor())
             && !footprint.contains(actor.position.tile_floor())
@@ -112,8 +114,8 @@ impl GameWorld {
         self.units[self.lookup[&unit]].state.task = UnitTask::Moving;
         self.cancel_garrison_order(unit);
         self.economy.garrison_orders.insert(unit, building);
-        if is_vassal {
-            self.economy.garrison_vassals.insert(building, unit);
+        if is_steward {
+            self.economy.garrison_stewards.insert(building, unit);
         }
         *self
             .economy
@@ -127,8 +129,8 @@ impl GameWorld {
         if let Some(building) = self.economy.garrison_orders.remove(&id)
             && let Some(count) = self.economy.garrison_reservations.get_mut(&building)
         {
-            if self.economy.garrison_vassals.get(&building) == Some(&id) {
-                self.economy.garrison_vassals.remove(&building);
+            if self.economy.garrison_stewards.get(&building) == Some(&id) {
+                self.economy.garrison_stewards.remove(&building);
             }
             *count -= 1;
             if *count == 0 {
@@ -240,11 +242,11 @@ impl GameWorld {
                     unit,
                     next_hit_tick,
                     heal_at,
-                    vassal: None,
+                    steward: None,
                 },
             );
-            if unit.kind == UnitKind::Vassal {
-                self.set_vassal_castle(id, Some(building));
+            if unit.kind == UnitKind::Steward {
+                self.set_steward_town_center(id, Some(building));
             }
             self.economy.occupied_garrisons.insert(building);
             self.combat.tower_ready.entry(building).or_insert(0);

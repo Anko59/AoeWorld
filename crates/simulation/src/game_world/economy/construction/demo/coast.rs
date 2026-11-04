@@ -1,13 +1,13 @@
 //! Local accelerated coast, using real construction, training and fish orders.
 use super::kingdom::{clear_kingdom_plot, coastal_world, kingdom_building, kingdom_position};
-use crate::{BuildingKind, EconomyError, GameWorld, Stockpile, Tech, UnitKind, VassalSettings};
+use crate::{BuildingKind, EconomyError, GameWorld, StewardSettings, Stockpile, Tech, UnitKind};
 use aoe_core::{CombatStance, EntityId, PlayerId, Seed, TileCoord, TileRect};
 use aoe_map::{ObjectKind, ResourceNode};
 
 impl GameWorld {
     /// One-Hz game rules under the ordinary server ticker make coastal growth
     /// observable in a short local recording; no build or training time changes.
-    pub fn vassal_fishing_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+    pub fn steward_fishing_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         let mut w = coastal_world(seed)?;
         w.config.tick_hz = 1;
         w.set_fog_disabled(true);
@@ -29,7 +29,7 @@ impl GameWorld {
             TileRect::from_xywh(shore.x - 30, shore.y - 4, 26, 34),
         )?;
         let castle_at = TileCoord::new(shore.x - 15, shore.y + 10);
-        let castle = kingdom_building(&mut w, BuildingKind::Castle, castle_at)?;
+        let castle = kingdom_building(&mut w, BuildingKind::TownCenter, castle_at)?;
         for i in 0..6 {
             kingdom_building(
                 &mut w,
@@ -56,11 +56,11 @@ impl GameWorld {
             return Err(EconomyError::Capacity);
         }
         let exit = TileCoord::new(castle_at.x - 1, castle_at.y + 2);
-        let king = w.spawn_kind(PlayerId(0), UnitKind::Vassal, kingdom_position(exit)?)?;
-        w.issue_vassal_settings(
+        let king = w.spawn_kind(PlayerId(0), UnitKind::Steward, kingdom_position(exit)?)?;
+        w.issue_steward_settings(
             PlayerId(0),
             king,
-            VassalSettings {
+            StewardSettings {
                 training: true,
                 ..Default::default()
             },

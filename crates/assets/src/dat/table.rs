@@ -13,7 +13,7 @@ pub const DARK_AGE: &[(&str, i32)] = &[
     ("Militia", 74),
     ("Archer", 4),
     ("Scout Cavalry", 448),
-    ("King (Vassal)", 434),
+    ("King (Vassal and Steward)", 434),
     ("Joan of Arc mounted (General)", 629),
     ("Town Center", 109),
     ("Town Center (Dark Age unit)", 618),

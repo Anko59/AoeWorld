@@ -439,6 +439,7 @@ pub(super) fn stance(client: &mut Client, index: u32) {
                             | UnitKind::TransportShip
                             | UnitKind::Monk
                             | UnitKind::Vassal
+                            | UnitKind::Steward
                             | UnitKind::General
                     )
             })

@@ -30,8 +30,8 @@ impl GameWorld {
         if !super::trainable_units(building.kind).contains(&kind) {
             return Err(EconomyError::WrongUnitKind);
         }
-        if kind == UnitKind::Vassal && self.vassal_reserved(building, None) {
-            return Err(EconomyError::VassalExists);
+        if kind == UnitKind::Steward && self.steward_reserved(building, None) {
+            return Err(EconomyError::StewardExists);
         }
         self.require_age(player, kind.required_age())?;
         if kind

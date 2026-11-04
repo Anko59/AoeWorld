@@ -82,7 +82,7 @@ export async function generalProof(
                 .generalFrameCpuMs ?? [],
           ),
           selection: await page.locator("#selection").innerText(),
-          status: await page.locator("#vassal-status").textContent(),
+          status: await page.locator("#steward-status").textContent(),
           jumps,
           minimap: await page.locator("#minimap-map").boundingBox(),
           camera: await page
@@ -137,7 +137,7 @@ export async function generalProof(
     })
     .toBe(true);
   await select("General");
-  await expect(page.locator("#vassal-status")).toHaveText(
+  await expect(page.locator("#steward-status")).toHaveText(
     "General · 14 soldiers · idle",
   );
   await capture("command");
@@ -155,7 +155,7 @@ export async function generalProof(
   await page
     .locator("#scene")
     .click({ position: { x: 1056, y: 488 }, button: "right" });
-  const fighting = expect(page.locator("#vassal-status"))
+  const fighting = expect(page.locator("#steward-status"))
     .toContainText("fighting", {
       timeout: 60_000,
     })

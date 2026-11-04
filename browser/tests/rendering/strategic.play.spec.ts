@@ -78,9 +78,9 @@ test("strategic tokens retain identity, layers and fog-safe reports", async ({
     const buttons = [...document.querySelectorAll(".army-token")].map(
       (e) => e.textContent,
     );
-    const card = document.querySelector(".vassal-card")?.textContent;
+    const card = document.querySelector(".steward-card")?.textContent;
     const bounds = [
-      ...document.querySelectorAll(".army-token,.vassal-card"),
+      ...document.querySelectorAll(".army-token,.steward-card"),
     ].map((e) => {
       const r = e.getBoundingClientRect();
       return { x: r.x, y: r.y, width: r.width, height: r.height };
@@ -121,7 +121,7 @@ test("strategic tokens retain identity, layers and fog-safe reports", async ({
       threats,
       deadThreats,
       resetThreats: canvas.dataset.threats,
-      remaining: document.querySelectorAll(".army-token,.vassal-card").length,
+      remaining: document.querySelectorAll(".army-token,.steward-card").length,
     };
   });
   expect(result.pick).toBe(7);

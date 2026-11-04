@@ -42,13 +42,13 @@ pub use training::rally::{RallyPoint, RallyTarget};
 #[path = "economy/construction/bridge.rs"]
 mod bridge;
 mod general;
-mod vassal;
+mod steward;
 pub use general::{GeneralState, GeneralStatus, GeneralWork};
 #[cfg(test)]
-pub(crate) use vassal::vassal_stall;
-pub use vassal::{
-    VASSAL_RULES, VASSAL_STALL_SECONDS, VassalRules, VassalSettings, VassalStatus, VassalWait,
-    VassalWork,
+pub(crate) use steward::steward_stall;
+pub use steward::{
+    STEWARD_RULES, STEWARD_STALL_SECONDS, StewardRules, StewardSettings, StewardStatus,
+    StewardWait, StewardWork,
 };
 mod wall;
 
@@ -95,6 +95,7 @@ pub enum UnitKind {
     CappedRam,
     SiegeRam,
     Onager,
+    Steward,
 }
 impl UnitKind {
     /// Battering Ram and its two upgrades.
@@ -295,10 +296,10 @@ pub const VILLAGE_RULES: VillageRules = VillageRules {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum EconomyError {
-    #[error("this Castle already has a Vassal or one in training")]
-    VassalExists,
-    #[error("Vassal settings are outside their allowed ranges")]
-    InvalidVassalSettings,
+    #[error("this Town Center already has a Steward or one in training")]
+    StewardExists,
+    #[error("Steward settings are outside their allowed ranges")]
+    InvalidStewardSettings,
     #[error("entity does not exist")]
     UnknownEntity,
     #[error("the building garrison is full")]

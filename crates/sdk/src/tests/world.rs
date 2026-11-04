@@ -9,8 +9,8 @@ use aoe_protocol::{
 mod dock;
 #[path = "land.rs"]
 mod land;
-#[path = "vassal.rs"]
-mod vassal;
+#[path = "steward.rs"]
+mod steward;
 
 const ME: PlayerId = PlayerId(3);
 const FOE: PlayerId = PlayerId(4);

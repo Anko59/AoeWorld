@@ -219,7 +219,7 @@ pub(in super::super) fn preview(client: &Client, units: &mut Vec<aoe_rendering::
 #[inline(never)]
 pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
     super::garrison::install(shared.clone())?;
-    super::vassal::install(shared.clone())?;
+    super::steward::install(shared.clone())?;
     // The DOM owns button identities; one bounded callback dispatches ordinary
     // orders. Keep the research/build/unit tables out of a second string list.
     let callback = Closure::<dyn FnMut(u32, u32)>::new(move |action, code| {
@@ -243,7 +243,7 @@ pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
             return;
         }
         if action == 9 || action == 10 {
-            super::vassal::general_command(&mut client, action, code);
+            super::steward::general_command(&mut client, action, code);
             return;
         }
         if action == 8 {

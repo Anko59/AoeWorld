@@ -2,7 +2,7 @@ use crate::{BuildingKind, GameWorld, Tech, UnitKind};
 use aoe_core::{EntityId, PlayerId};
 
 impl UnitKind {
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 35] = [
         Self::Villager,
         Self::Scout,
         Self::Militia,
@@ -37,6 +37,7 @@ impl UnitKind {
         Self::CappedRam,
         Self::SiegeRam,
         Self::Onager,
+        Self::Steward,
     ];
     /// The single current identity of each production line.
     pub fn upgraded(self, researched: u64) -> Self {
@@ -93,7 +94,9 @@ impl UnitKind {
         }
     }
     pub fn required_age(self) -> crate::Age {
-        if matches!(self, Self::Galley | Self::FireShip | Self::DemolitionShip) {
+        if self == Self::Steward {
+            crate::Age::Castle
+        } else if matches!(self, Self::Galley | Self::FireShip | Self::DemolitionShip) {
             crate::Age::Feudal
         } else if self == Self::TransportShip {
             crate::Age::Dark

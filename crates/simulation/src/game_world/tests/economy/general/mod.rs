@@ -80,7 +80,7 @@ fn creation_claims_at_most_ten_full_infantry_squads_and_never_steals() {
     assert_eq!(w.general_status(b).unwrap().army_size, 20);
 }
 #[test]
-fn castle_trains_hero_for_less_than_vassal_and_binds_home() {
+fn castle_trains_hero_for_less_than_steward_and_binds_home() {
     let (mut w, castle) = setup();
     let training = GameWorld::unit_training(UnitKind::General).unwrap();
     assert_eq!(

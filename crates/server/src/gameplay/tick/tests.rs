@@ -52,7 +52,7 @@ fn digests(logs: &[SessionLog]) -> Vec<(usize, u64)> {
 /// AOE_NATIVE_TEST_FILTER='test(per_session_messages_match_the_pinned_stream)'`;
 /// keep the scenario, all six sessions and every visibility assertion unchanged.
 /// Combined bundle: gatherer reservations change routes, loads and message
-/// counts; water appends bridge spans and Vassal appends home/control IDs.
+/// counts; water appends bridge spans and Steward appends home/control IDs.
 /// Regenerated from the focused current encoder stream. The scenario, digest
 /// algorithm and independent replay/visibility assertions remain unchanged.
 /// Combat acquisition, stances and retaliation change the observed encounters;

@@ -60,7 +60,7 @@ impl Unit {
                 | UnitKind::Scout
                 | UnitKind::FishingShip
                 | UnitKind::TransportShip
-                | UnitKind::Vassal
+                | UnitKind::Steward
         )
     }
     /// Hit points as a fraction of the maximum, in `0.0..=1.0`.

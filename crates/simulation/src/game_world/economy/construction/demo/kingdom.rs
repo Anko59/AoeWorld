@@ -9,8 +9,8 @@ use aoe_map::{
 
 impl GameWorld {
     /// A synthetic, flat resource map on the ordinary four-times demo clock.
-    /// Every worker starts on a real Farm before its Vassal becomes active.
-    pub fn vassal_kingdom_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+    /// Every worker starts on a real Farm before its Steward becomes active.
+    pub fn steward_kingdom_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         let mut world = kingdom_world(seed)?;
         world.config.tick_hz = 5;
         world.set_fog_disabled(true);
@@ -21,8 +21,14 @@ impl GameWorld {
             TileRect::from_xywh(origin.x - 31, origin.y - 24, 31, 44),
         )?;
         let castle_at = TileCoord::new(origin.x - 25, origin.y - 20);
-        let castle = kingdom_building(&mut world, BuildingKind::Castle, castle_at)?;
-        for x in [origin.x - 29, origin.x - 26] {
+        let castle = kingdom_building(&mut world, BuildingKind::TownCenter, castle_at)?;
+        for x in [
+            origin.x - 29,
+            origin.x - 26,
+            origin.x - 23,
+            origin.x - 20,
+            origin.x - 17,
+        ] {
             kingdom_building(
                 &mut world,
                 BuildingKind::House,
@@ -70,13 +76,13 @@ impl GameWorld {
             kingdom_position(TileCoord::new(origin.x - 15, origin.y + 4))?,
         )?;
         world.issue_stance(PlayerId(0), &[primary], CombatStance::StandGround)?;
-        let vassal = world.spawn_kind(
+        let steward = world.spawn_kind(
             PlayerId(0),
-            UnitKind::Vassal,
+            UnitKind::Steward,
             kingdom_position(TileCoord::new(castle_at.x - 1, castle_at.y))?,
         )?;
 
-        world.issue_garrison(PlayerId(0), vassal, castle)?;
+        world.issue_garrison(PlayerId(0), steward, castle)?;
         if let Some(player) = world.economy.players.get_mut(&PlayerId(0)) {
             player.stockpile = Stockpile {
                 food: 30_000,
@@ -89,16 +95,16 @@ impl GameWorld {
     }
 
     /// Twenty paid, working Farms and a moderate Wood shortage. The owner
-    /// activates management by garrisoning the waiting Vassal during capture.
-    pub fn vassal_stability_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
-        let (mut world, primary) = Self::vassal_kingdom_demo(seed)?;
-        let vassal = world
+    /// activates management by garrisoning the waiting Steward during capture.
+    pub fn steward_stability_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+        let (mut world, primary) = Self::steward_kingdom_demo(seed)?;
+        let steward = world
             .units()
-            .find(|u| u.kind == UnitKind::Vassal)
+            .find(|u| u.kind == UnitKind::Steward)
             .map(|u| u.id)
             .ok_or(EconomyError::UnknownEntity)?;
         let from = world
-            .unit(vassal)
+            .unit(steward)
             .ok_or(EconomyError::UnknownEntity)?
             .position
             .tile_floor();
@@ -106,13 +112,13 @@ impl GameWorld {
         if !world.tile_free(waiting) {
             return Err(EconomyError::InvalidTarget);
         }
-        world.issue_stop(PlayerId(0), vassal)?;
+        world.issue_stop(PlayerId(0), steward)?;
         // Initial placement keeps the original actor and its population slot.
         // Reindex its clear waiting spot before any recording session exists.
-        let index = world.lookup[&vassal];
+        let index = world.lookup[&steward];
         world.units[index].state.position = kingdom_position(waiting)?;
         let state = world.units[index].state;
-        world.track_unit_step(vassal, from, &state);
+        world.track_unit_step(steward, from, &state);
         if let Some(player) = world.economy.players.get_mut(&PlayerId(0)) {
             player.stockpile = Stockpile {
                 food: 1_800,
@@ -125,8 +131,8 @@ impl GameWorld {
     }
 
     /// Forty idle workers beside known forest, on the ordinary 20 Hz clock.
-    /// The owner garrisons the waiting Vassal to start the actual job pass.
-    pub fn vassal_throughput_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
+    /// The owner garrisons the waiting Steward to start the actual job pass.
+    pub fn steward_throughput_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         let mut world = kingdom_world(seed)?;
         world.set_fog_disabled(true);
         let origin = kingdom_tree(&mut world)?.tile;
@@ -154,8 +160,8 @@ impl GameWorld {
             .clear();
         world.resource_collision_changed();
         let castle_at = TileCoord::new(origin.x - 25, origin.y - 20);
-        kingdom_building(&mut world, BuildingKind::Castle, castle_at)?;
-        for i in 0..6 {
+        kingdom_building(&mut world, BuildingKind::TownCenter, castle_at)?;
+        for i in 0..9 {
             kingdom_building(
                 &mut world,
                 BuildingKind::House,
@@ -187,7 +193,7 @@ impl GameWorld {
         }
         world.spawn_kind(
             PlayerId(0),
-            UnitKind::Vassal,
+            UnitKind::Steward,
             kingdom_position(TileCoord::new(castle_at.x - 1, castle_at.y))?,
         )?;
         let primary = world.spawn_kind(

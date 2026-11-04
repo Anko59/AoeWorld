@@ -150,7 +150,7 @@ export async function inputFixture(
             : kind === 2
               ? militiaCombat
               : villagerCombat;
-        // Cargo precedes the optional Vassal IDs, stance and General state.
+        // Cargo precedes the optional home and management IDs, stance and General state.
         return [
           id,
           player,

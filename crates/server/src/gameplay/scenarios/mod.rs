@@ -48,12 +48,12 @@ impl GameplayService {
         let (world, primary) = GameWorld::imperial_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
-    pub fn vassal_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
-        let (world, primary) = GameWorld::vassal_demo(seed)?;
+    pub fn steward_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::steward_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
-    pub fn vassal_territory_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
-        let (world, primary) = GameWorld::vassal_territory_demo(seed)?;
+    pub fn steward_territory_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::steward_territory_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
     pub fn military_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
@@ -65,24 +65,24 @@ impl GameplayService {
         let (world, primary) = GameWorld::feudal_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
-    pub fn vassal_farming_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
-        let (world, primary) = GameWorld::vassal_farming_demo(seed)?;
+    pub fn steward_farming_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::steward_farming_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
-    pub fn vassal_fishing_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
-        let (world, primary) = GameWorld::vassal_fishing_demo(seed)?;
+    pub fn steward_fishing_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::steward_fishing_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
-    pub fn vassal_throughput_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
-        let (world, primary) = GameWorld::vassal_throughput_demo(seed)?;
+    pub fn steward_throughput_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::steward_throughput_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
-    pub fn vassal_kingdom_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
-        let (world, primary) = GameWorld::vassal_kingdom_demo(seed)?;
+    pub fn steward_kingdom_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::steward_kingdom_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
-    pub fn vassal_stability_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
-        let (world, primary) = GameWorld::vassal_stability_demo(seed)?;
+    pub fn steward_stability_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::steward_stability_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))
     }
 }

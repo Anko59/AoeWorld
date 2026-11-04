@@ -36,7 +36,7 @@ test("local far zoom film", async ({ browser }, info) => {
       return;
     }
     const scenario =
-      config.mode === "vassal" ? "vassal-kingdom" : "general-army";
+      config.mode === "steward" ? "steward-kingdom" : "general-army";
     expect(
       (
         await page.request.post(`${config.url}maps/reset?scenario=${scenario}`)
@@ -52,7 +52,7 @@ test("local far zoom film", async ({ browser }, info) => {
       "data-renderer",
       "webgl2",
     );
-    if (config.mode !== "vassal") {
+    if (config.mode !== "steward") {
       type Actor = { kind: string; x: number; y: number };
       await expect
         .poll(async () => {
@@ -82,8 +82,8 @@ test("local far zoom film", async ({ browser }, info) => {
     await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
     const target = page
       .locator(
-        config.mode === "vassal"
-          ? ".vassal-card"
+        config.mode === "steward"
+          ? ".steward-card"
           : ".army-token[data-owned='true']",
       )
       .first();
@@ -95,7 +95,7 @@ test("local far zoom film", async ({ browser }, info) => {
     });
     await page.waitForTimeout(1500);
     await target.click();
-    if (config.mode !== "vassal") {
+    if (config.mode !== "steward") {
       await expect(page.locator("#selection")).toHaveAttribute(
         "data-kind",
         "General",
@@ -105,9 +105,9 @@ test("local far zoom film", async ({ browser }, info) => {
     } else {
       await expect(page.locator("#selection")).toHaveAttribute(
         "data-kind",
-        "Castle",
+        "TownCenter",
       );
-      await expect(page.locator("#vassal-status")).toContainText(
+      await expect(page.locator("#steward-status")).toContainText(
         "domain active",
       );
     }
@@ -115,7 +115,7 @@ test("local far zoom film", async ({ browser }, info) => {
     await page.screenshot({
       path: `../.cache/showcase/${config.mode}-middle.png`,
     });
-    const layerKey = config.mode === "vassal" ? "F3" : "F5";
+    const layerKey = config.mode === "steward" ? "F3" : "F5";
     await page.keyboard.press(layerKey);
     await page.waitForTimeout(1000);
     await page.screenshot({

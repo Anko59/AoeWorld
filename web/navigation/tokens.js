@@ -123,8 +123,8 @@ export function initTokens() {
         }
       }
       for (const r of economy) {
-        const [id, vassal, wx, wy, selected, managed, residents, wait, f, w, g, s, idle] = r;
-        const node = button(`e${id}`, 'vassal-card');
+        const [id, steward, wx, wy, selected, managed, residents, wait, f, w, g, s, idle] = r;
+        const node = button(`e${id}`, 'steward-card');
         const [x, y] = project([wx, wy]);
         const visible = options.economy && inView(x, y);
         if (options.economy) {
@@ -137,11 +137,11 @@ export function initTokens() {
           context.strokeStyle = '#eac24d'; context.lineWidth = selected ? 2 : 1;
           context.setLineDash(wait === -1 ? [5, 5] : []); context.stroke(); context.setLineDash([]);
         }
-        const label = waits[wait] ?? (wait === -1 ? 'Inactive · garrison in Castle' : 'Evaluating');
-        const text = `Vassal #${vassal} · ${managed < 0 ? '?' : managed} managed / ${residents < 0 ? '?' : residents} residents\nObserved jobs: F${f} W${w} G${g} S${s} · ${idle} idle\n${label}`;
+        const label = waits[wait] ?? (wait === -1 ? 'Inactive · garrison in Town Center' : 'Evaluating');
+        const text = `Steward #${steward} · ${managed < 0 ? '?' : managed} managed / ${residents < 0 ? '?' : residents} residents\nObserved jobs: F${f} W${w} G${g} S${s} · ${idle} idle\n${label}`;
         if (node.textContent !== text) node.textContent = text;
-        node.title = 'Select Castle and open its Vassal controls';
-        node.dataset.castle = String(id); node.dataset.vassal = String(vassal);
+        node.title = 'Select Town Center and open its Steward controls';
+        node.dataset.castle = String(id); node.dataset.steward = String(steward);
         node.setAttribute('aria-pressed', String(!!selected));
         const position = positions.get(`e${id}`) ?? [x, y];
         place(node, ...position, visible, 218, 68, -id - 1, scale);

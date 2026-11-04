@@ -52,7 +52,7 @@ const fn cost(food: u32, wood: u32, gold: u32, stone: u32) -> Stockpile {
 const NONE: [bool; 4] = [false; 4];
 const ALL: [bool; 4] = [true; 4];
 const NO_UNITS: &[UnitKind] = &[];
-const VILLAGERS: &[UnitKind] = &[UnitKind::Villager];
+const VILLAGERS: &[UnitKind] = &[UnitKind::Villager, UnitKind::Steward];
 
 /// Canonical order of `BuildingKind`.
 pub const BUILDING_RULES: [BuildingRules; 23] = [

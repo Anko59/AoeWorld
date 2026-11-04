@@ -12,7 +12,7 @@ mod sanitize;
 mod validation;
 pub use aoe_core::CombatStance;
 pub use aoe_core::Formation;
-pub use garrison::{GarrisonUnitState, VassalReport, VassalWait};
+pub use garrison::{GarrisonUnitState, StewardReport, StewardWait};
 #[cfg(feature = "server-repair")]
 pub use sanitize::sanitize_server;
 use validation::validate_server;
@@ -74,7 +74,7 @@ pub struct UnitState {
     pub cargo_count: u8,
     /// Owner-only home of a living General.
     pub home_castle: Option<EntityId>,
-    /// Owner-only ID of the Vassal currently managing this villager.
+    /// Owner-only ID of the Steward currently managing this villager.
     pub managed_by: Option<EntityId>,
     /// Owner-only posture; foreign records use the default.
     pub stance: CombatStance,
@@ -166,14 +166,14 @@ pub enum CommandResult {
     RejectedUnexploredPlacement,
     RejectedRequiresCastleAge,
     RejectedGarrisonFull,
-    RejectedVassalExists,
-    RejectedVassalLeash,
-    RejectedVassalHome,
+    RejectedStewardExists,
+    RejectedStewardLeash,
+    RejectedStewardHome,
     RejectedRequiresImperialAge,
     /// Housing space is exhausted. Appended to preserve existing wire values.
     RejectedPopulationCap,
-    /// The Vassal's weights, cap or training switch are outside their ranges.
-    RejectedInvalidVassalSettings,
+    /// The Steward's weights, cap or training switch are outside their ranges.
+    RejectedInvalidStewardSettings,
 }
 
 /// Immutable physical properties of the active geographic map. The package

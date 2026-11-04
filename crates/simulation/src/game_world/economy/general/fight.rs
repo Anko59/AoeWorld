@@ -13,7 +13,7 @@ fn class(kind: UnitKind) -> u8 {
     match kind {
         k if role(k) == Some(3) => 0,
         UnitKind::Monk => 1,
-        UnitKind::General | UnitKind::Vassal => 2,
+        UnitKind::General | UnitKind::Vassal | UnitKind::Steward => 2,
         k if role(k) == Some(1) => 3,
         _ => 4,
     }

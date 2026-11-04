@@ -11,7 +11,7 @@ pub enum TickPhase {
     Construction,
     Gathering,
     ResearchTraining,
-    VassalEconomy,
+    StewardEconomy,
     BuildingMemory,
     Changed,
 }
@@ -37,9 +37,9 @@ impl GameWorld {
         sink: &mut impl FnMut(&PreparedResourceDepletion<'_>) -> bool,
         probe: &mut impl FnMut(TickPhase),
     ) -> Vec<GameUnit> {
-        self.economy.vassals.automatic = true;
+        self.economy.stewards.automatic = true;
         let changed = self.advance_phases(sink, probe);
-        self.economy.vassals.automatic = false;
+        self.economy.stewards.automatic = false;
         // Every test tick checks that the route scheduler's counters equal
         // a recount: a drifted counter can block a player's routes for good.
         #[cfg(test)]
@@ -92,8 +92,8 @@ impl GameWorld {
         self.advance_training(&mut changed);
         probe(TickPhase::ResearchTraining);
         self.advance_generals(&mut changed);
-        self.advance_vassals(&mut changed);
-        probe(TickPhase::VassalEconomy);
+        self.advance_stewards(&mut changed);
+        probe(TickPhase::StewardEconomy);
         self.remember_visible_buildings();
         probe(TickPhase::BuildingMemory);
         self.refill_route_budgets();

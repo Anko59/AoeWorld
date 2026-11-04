@@ -368,7 +368,7 @@ fn approaching_melee_units_reserve_contact_positions_using_both_body_radii() {
     let mut w = world();
     w.set_fog_disabled(true);
     let target = w
-        .spawn_kind(PlayerId(1), UnitKind::Vassal, at(60, 60))
+        .spawn_kind(PlayerId(1), UnitKind::Steward, at(60, 60))
         .unwrap();
     w.units[w.lookup[&target]].state.hp = 20_000;
     // Contact geometry needs a stationary target: automatic combat would

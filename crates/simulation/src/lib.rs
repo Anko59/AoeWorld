@@ -37,12 +37,12 @@ pub use game_world::{
     GameBuilding, GameUnit, GameWorld, GameWorldError, GarrisonedUnit, GeneralState, GeneralStatus,
     GeneralWork, HitRecord, MARKET_RULES, MAX_BUILD_GROUP, MAX_WALL_SEGMENTS, MarketPrices,
     MovementOrder, PlanningProbe, PlayerEconomy, PreparedResourceDepletion, Projectile,
-    ProjectileKind, RallyPoint, RallyTarget, ResearchEntry, RouteSchedulerStats, Stockpile,
-    TECH_RULES, Tech, TechEffect, TechRequirement, TechRules, TickPhase, TrainingEntry,
-    UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VASSAL_RULES,
-    VASSAL_STALL_SECONDS, VILLAGE_RULES, VassalRules, VassalSettings, VassalStatus, VassalWait,
-    VassalWork, VillageRules, WorldLimits, building_combat, damage_dealt, researched_stats,
-    trainable_units, unit_combat, villager_capacity,
+    ProjectileKind, RallyPoint, RallyTarget, ResearchEntry, RouteSchedulerStats, STEWARD_RULES,
+    STEWARD_STALL_SECONDS, StewardRules, StewardSettings, StewardStatus, StewardWait, StewardWork,
+    Stockpile, TECH_RULES, Tech, TechEffect, TechRequirement, TechRules, TickPhase, TrainingEntry,
+    UNIT_COMBAT, UnitCombat, UnitCost, UnitKind, UnitTask, UnitTraining, VILLAGE_RULES,
+    VillageRules, WorldLimits, building_combat, damage_dealt, researched_stats, trainable_units,
+    unit_combat, villager_capacity,
 };
 pub use navigation_cache::NavigationCacheUsage;
 use std::collections::BTreeMap;

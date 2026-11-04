@@ -159,12 +159,12 @@ enum PendingAction {
         building_id: EntityId,
         add: bool,
     },
-    VassalDismiss {
-        vassal_id: EntityId,
+    StewardDismiss {
+        steward_id: EntityId,
     },
-    VassalSettings {
-        vassal_id: EntityId,
-        settings: aoe_simulation::VassalSettings,
+    StewardSettings {
+        steward_id: EntityId,
+        settings: aoe_simulation::StewardSettings,
     },
     SetRally {
         building_id: EntityId,
