@@ -42,7 +42,7 @@ export function initNavigation() {
   const groups = Array.from({ length: 10 }, () => new Set());
   const groupPositions = new Map();
   let groupTap = null;
-  const output = new Float64Array([0, 0, NaN, NaN]);
+  const output = new Float64Array([0, 0, NaN, NaN, NaN]);
   let world = [1, 1];
   let center = [0, 0];
   let pending = [NaN, NaN];
@@ -201,7 +201,7 @@ export function initNavigation() {
       context.putImageData(new ImageData(raster.rgba, raster.samples, raster.samples), 0, 0);
       await drawRaster(canvas.toDataURL(), controller.signal);
       if (mapHash !== hash || request !== controller) return;
-      strategic.terrain(canvas);
+      strategic.terrain(canvas, raster);
       samples = raster.samples;
       overview(expanded);
       rasterState('ready');
@@ -303,7 +303,7 @@ export function initNavigation() {
     },
     frame(state) {
       if (state.length !== 11 || !Array.from(state.slice(0, 4)).every(Number.isFinite)) {
-        output.set([0, 0, NaN, NaN]);
+        output.set([0, 0, NaN, NaN, NaN]);
         return output;
       }
       let delta = [0, 0];
@@ -319,6 +319,12 @@ export function initNavigation() {
       output[2] = pending[0];
       output[3] = pending[1];
       pending = [NaN, NaN];
+      const reveal = strategic.navigation(state);
+      output[4] = NaN;
+      if (reveal) {
+        output[0] = output[1] = 0;
+        output[2] = reveal[0]; output[3] = reveal[1]; output[4] = reveal[2];
+      }
       return output;
     },
   };

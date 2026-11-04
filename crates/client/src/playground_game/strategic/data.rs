@@ -6,7 +6,7 @@ use aoe_protocol::{BuildingKind, GameplayUnitState, UnitKind};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
-    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
+    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts, sites) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); v?.settlements?.(sites); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
 )]
 extern "C" {
     fn strategic_alert(tick: f64, x: f64, y: f64);
@@ -19,6 +19,7 @@ extern "C" {
         orders: &[f64],
         summary: &[f64],
         counts: &[u32],
+        sites: &[f64],
     );
 }
 
@@ -126,7 +127,25 @@ pub(in super::super) fn update(client: &Client) {
     }
     let mut economy = Vec::new();
     let mut bridges = Vec::new();
+    let mut sites = Vec::new();
     for b in &client.village.buildings {
+        let p = village::building_center(b);
+        if b.hp > 0
+            && sites.len() < 2048 * 7
+            && (b.player == owner || client.fog.state(p.map(|n| n.floor() as i32)) > 0)
+        {
+            let [r, g, blue] =
+                aoe_rendering::player_colour(b.player, owner, client.team_colour).map(u32::from);
+            sites.extend([
+                f64::from(b.id.0),
+                f64::from(b.footprint.min.x),
+                f64::from(b.footprint.min.y),
+                f64::from(b.footprint.max.x),
+                f64::from(b.footprint.max.y),
+                b.kind as u8 as f64,
+                f64::from(r << 16 | g << 8 | blue),
+            ]);
+        }
         if b.player == owner && b.hp > 0 {
             report_hit(b.last_hit, village::building_center(b), &mut last_alert);
             if b.kind != BuildingKind::Bridge {
@@ -191,6 +210,7 @@ pub(in super::super) fn update(client: &Client) {
         &orders,
         &summary,
         player.map_or(&[], |p| p.unit_counts.as_slice()),
+        &sites,
     );
     strategic_alert(last_alert[0], last_alert[1], last_alert[2]);
 }

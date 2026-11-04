@@ -176,3 +176,89 @@ This is camera evidence using test assets, not new original-art or RTS
 performance qualification. Video, crops and JSON remain ignored local files.
 The run used the repair worktree before commit, not a clean committed build.
 No full e2e, preflight, ship, push or GitHub CLI command was run.
+
+## Cockpit3: source landscape and first pull-back (2026-11-04)
+
+The `ui/far-cockpit-3` work starts at `205fab7629475894c8426a5dcb92db8cdccd03c3`.
+Review fixes are `0f42e41ab86933a001107935b2d92d235388885b`. The following feature
+commit contains the landscape and pull-back changes described here. Captures
+report the served identity `0f42e41ab-dirty`; they precede that feature commit.
+No publication, push or recordings/assets in Git are part of this work.
+
+Both takes use the existing source-backed Paris package
+`13445235e81ff032da67e4f01f246b71272d891a71506ccc3a95d3add2cb8de9`, 8,000 × 8,000
+tiles, original game art, fog explicitly disabled, and the actual starting
+village: four live units and one Town Center. No sockets, terrain, actors or art
+are mocked in the capture. This is a new-game landscape inspection, not a
+crowded RTS or dedicated-hardware qualification. The developer timing overlay
+is visible. Village, pull-back, land, cockpit and whole-world PNGs were inspected.
+
+Ignored local artifacts:
+
+- `.cache/showcase/c3-before.webm` and `c3-before-raw.webm`
+- `.cache/showcase/c3-after.webm` and `c3-after-raw.webm`
+- `.cache/showcase/c3-before-capture.json` / `c3-after-capture.json`
+- `.cache/showcase/c3-final-stress.json` and `c3-final-transition-sheet.png`
+
+The final real-map take samples 30 frames after warm-up. Steady frame interval
+median/p95 is 16.7/17.2 ms; moving by bounded keyboard pans is 16.6/21.7 ms.
+Moving CPU draw median/p95 is 0.5/0.7 ms. The one-time terrain bake is 31.8 ms.
+Nominal terrain backing is 4 MiB, viewport backing 3.52 MiB, and six cached
+64² architectural symbols add 96 KiB. Fog, path storage, driver/compositor
+allocations, original-art residency, capture overhead and server memory are
+additional. The capture uses headless software rendering, not a hardware GPU
+elapsed-time measurement; transition and cold-load costs are not those medians.
+
+A separate synthetic stress test supplies 3,000 footprints and accepts at most
+2,048, with at most 192 settlement symbols and 30 measured warm frames. Initial
+per-frame plot paths and SVG positioning cost about 18–20 ms median. Cached
+owner paths and tiny canvas symbols reduce paint median/p95 to 5.1/12.0 ms
+(WebGPU project), 3.3/4.9 ms (Canvas), and 4.5/11.8 ms (browser defaults).
+Corresponding captured frame p95 values remain 47.5/34.5/53.2 ms. These figures
+bound this synthetic kernel and do not establish finished RTS performance.
+
+Functional crop/source tests and 26 selected client WASM tests pass. The broad
+browser run had one reveal assertion subsequently corrected and a Canvas
+startup failure whose trace shows network-change errors; the final focused browser rerun passes all 33 tests, including both affected
+cases, without retries. Static, lint, structure, hooks and WASM-size
+checks pass; the optimized WASM gzip is 384,377 bytes against 375,952 baseline
+(+2.2%, unchanged +25% gate).
+
+The optional stored-map native dump diagnostic fails its unchanged 30-second
+raster-generation assertion: 87.1 seconds in the broad run and 115.9 seconds
+when selected alone. Its cause relative to the base revision is unqualified.
+The assertion and timing budget were not changed. This remains a cold-raster
+qualification limit. No road-network vectors or political territory data exist
+in this stream: bridges, actual building plots and active Castle domains are
+shown; connections and borders outside those data are not invented.
+
+Commands used for the changed paths (logs are under `.cache/showcase/c3-*`):
+
+```sh
+make hooks-install
+make hooks-check
+make fmt-check
+make lint
+make structure-check
+make perf-wasm-cap
+make browser-format
+make browser-check
+make test-wasm-focused AOE_WASM_TEST_PACKAGE=aoe-client AOE_WASM_TEST_FILTER=village::tests
+make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-map AOE_NATIVE_TEST_FILTER='test(starts_routes_history)'
+make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(source_land_use)'
+make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(maps::tests::minimap)'
+NEXTEST_TEST_THREADS=1 make test-native-focused AOE_NATIVE_TEST_PACKAGE=aoe-server AOE_NATIVE_TEST_FILTER='test(dump_stored_minimap)'
+make test-e2e AOE_E2E_WORKERS=1 AOE_E2E_SPECS='tests/rendering/strategic.play.spec.ts tests/rendering/cockpit-reveal.play.spec.ts tests/rendering/strategic-capture.play.spec.ts tests/rendering/strategic-transition.play.spec.ts tests/rendering/far-build.play.spec.ts tests/camera/minimap.play.spec.ts'
+make test-e2e AOE_E2E_WORKERS=1 AOE_E2E_SPECS='tests/rendering/strategic.play.spec.ts tests/rendering/cockpit-reveal.play.spec.ts tests/rendering/strategic-transition.play.spec.ts tests/rendering/far-build.play.spec.ts tests/camera/minimap.play.spec.ts'
+```
+
+The source-backed server was started using:
+
+```sh
+AOE_OPEN_MAP_PACKAGE=13445235e81ff032da67e4f01f246b71272d891a71506ccc3a95d3add2cb8de9 AOE_FOG_DISABLED=1 make dev DEV_PORT=8155 AOE_ASSET_PACK=local-assets/packs/54916fcb9c1e43c7a63aa486e3c47824b24ba94c887168ed210517273626bff6
+```
+
+Media trimming and frame sheets use the pinned `aoeworld/ship-tools:5.1.9`
+container's ffmpeg/ffprobe, with networking disabled. They do not alter game
+state or add artwork. No full suites, CI or dedicated GPU qualification have
+been run for this branch in this session.

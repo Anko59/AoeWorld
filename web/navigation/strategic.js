@@ -4,6 +4,9 @@ import { initTokens } from '/navigation/tokens.js';
 import { initContacts } from '/navigation/contacts.js';
 import { initReveal } from '/navigation/reveal.js';
 import { initCockpit } from '/navigation/cockpit.js';
+import { paintTerrain } from '/navigation/landscape/terrain.js';
+import { initSettlements } from '/navigation/landscape/settlements.js';
+import { initMapKey } from '/navigation/landscape/key.js';
 
 // A backend-independent, cached strategic plane. The detailed renderer keeps
 // its GPU/context alive, but emits no terrain, resources or sprites at these LODs.
@@ -26,6 +29,8 @@ export function initStrategic(fog, actors) {
   let modelRevision = 0, modelSignature = '', lastState = null;
   const tokens = initTokens(), contacts = initContacts();
   const cockpit = initCockpit(), reveal = initReveal();
+  const settlements = initSettlements();
+  const mapKey = initMapKey();
   const layers = initLayers(() => {
     modelRevision++;
     if (lastState) frame(lastState);
@@ -35,14 +40,16 @@ export function initStrategic(fog, actors) {
     const scene = document.getElementById('scene');
     const [worldWidth, worldHeight, cx, cy, width, height, zoom, level] = state;
     const lod = ['sprites', 'markers', 'map'][level];
-    tokens.show(!!level); layers.show(!!level); cockpit.show(!!level); reveal.show(!!level);
+    tokens.show(!!level); layers.show(!!level); cockpit.show(!!level); reveal.show(!!level, state);
+    settlements.show(!!level);
+    mapKey.show(!!level);
     window.aoeNavigation?.views?.show(!!level);
     if (scene.dataset.lod !== lod) {
       scene.dataset.lod = lod;
       document.documentElement.dataset.lod = lod;
     }
     if (level) canvas.hidden = label.hidden = false;
-    const title = `${level === 2 ? 'Map view' : 'Overview'} · ${(zoom * 100).toPrecision(3)}% · select an army · right-click to march · clusters zoom in`;
+    const title = `${level === 2 ? 'Kingdom' : 'Province'} · ${worldWidth.toLocaleString()} × ${worldHeight.toLocaleString()} tiles · ${(zoom * 100).toPrecision(3)}%`;
     if (label.textContent !== title) label.textContent = title;
     if (!level || !context) {
       previous = ''; picks = [];
@@ -51,6 +58,7 @@ export function initStrategic(fog, actors) {
     const key = [...state, terrainRevision, actors.revision(), fog.revision, resourceRevision, modelRevision,
       layers.enabled.threats ? contacts.clock() : 0].join(',');
     if (key === previous) return false;
+    const started = performance.now();
     previous = key;
     lastState = Array.from(state);
     if (canvas.width !== width) canvas.width = width;
@@ -59,7 +67,7 @@ export function initStrategic(fog, actors) {
     // Terrain and fog are shared cached rasters, not duplicated per frame.
     canvas.dataset.workingBytes = String(width * height * 4);
     context.setTransform(1, 0, 0, 1, 0, 0);
-    context.fillStyle = '#172516';
+    context.fillStyle = '#1e292b';
     context.fillRect(0, 0, width, height);
     const plane = () => context.setTransform(64 * zoom, 32 * zoom, -64 * zoom, 32 * zoom,
       width / 2 - (cx - cy) * 64 * zoom, height / 2 - (cx + cy) * 32 * zoom);
@@ -85,15 +93,9 @@ export function initStrategic(fog, actors) {
     }
     picks = aggregatePixels(records, project, width, height, cell);
     context.setTransform(1, 0, 0, 1, 0, 0);
-    if (level === 2 && layers.enabled.ownership) {
-      // Occupied settlement cells, not invented authoritative territorial borders.
-      context.globalAlpha = .18;
-      for (const pixel of picks) if (pixel.buildings) {
-        context.fillStyle = actorColour(pixel.colour);
-        context.fillRect(pixel.x - cell / 2, pixel.y - cell / 2, cell, cell);
-      }
-      context.globalAlpha = 1;
-    }
+    const scale = scene.clientWidth / width;
+    mapKey.update(zoom, scale);
+    const holdings = settlements.draw(context, project, layers.enabled.ownership, width, height, scale, plane, zoom);
     if (!fog.disabled) {
       plane();
       context.imageSmoothingEnabled = false;
@@ -105,8 +107,11 @@ export function initStrategic(fog, actors) {
     context.textBaseline = 'bottom';
     for (const pixel of picks) {
       context.fillStyle = actorColour(pixel.colour);
-      const radius = pixel.buildings ? 4 : 2;
-      context.fillRect(pixel.x - radius, pixel.y - radius, radius * 2, radius * 2);
+      const radius = pixel.buildings && !holdings.icons ? 4 : 2;
+      if (pixel.units || !holdings.icons) {
+        context.beginPath(); context.arc(pixel.x, pixel.y, radius, 0, Math.PI * 2);
+        context.strokeStyle = '#172525'; context.lineWidth = 2; context.stroke(); context.fill();
+      }
       if (level === 2 && pixel.units > 1) {
         context.strokeStyle = '#101910';
         context.lineWidth = 3;
@@ -115,7 +120,6 @@ export function initStrategic(fog, actors) {
       }
     }
     canvas.dataset.threats = String(layers.enabled.threats ? contacts.draw(context, project) : 0);
-    const scale = scene.clientWidth / width;
     tokens.draw(context, project, layers.enabled, scale, width, height);
     // Deposits remain legible after sprite drawing stops and above clusters.
     // Rust sends only explored, non-forest resources; forests live in terrain.
@@ -131,16 +135,22 @@ export function initStrategic(fog, actors) {
     canvas.dataset.resources = String(resources.length);
     canvas.dataset.clusters = String(picks.length);
     canvas.dataset.terrainDraws = terrain ? '1' : '0';
-    canvas.dataset.territory = 'settlements';
+    canvas.dataset.territory = 'building footprints and active Castle domains';
+    canvas.dataset.fields = String(holdings.fields);
+    canvas.dataset.settlements = String(holdings.icons);
+    canvas.dataset.borders = String(holdings.borders);
     // Retained GPU canvases can composite independently. Cover their whole
     // surface until the detailed renderer presents a complete replacement.
     scene.dataset.strategicCovered = 'true';
     canvas.dataset.redraws = String(++redraws);
     canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count })));
+    canvas.dataset.frameMs = (performance.now() - started).toFixed(3);
     return true;
   }
   function pick(x, y) {
     if (canvas.hidden) return null;
+    const settlement = settlements.pick(x,y);
+    if (settlement) return settlement;
     let nearest = null, distance = Infinity;
     for (const pixel of picks) {
       const dx = x - pixel.x, dy = y - pixel.y;
@@ -155,6 +165,8 @@ export function initStrategic(fog, actors) {
     delete document.getElementById('scene').dataset.strategicCovered;
     canvas.hidden = label.hidden = true;
     tokens.show(false); layers.show(false); cockpit.show(false); reveal.show(false);
+    settlements.show(false);
+    mapKey.show(false);
     window.aoeNavigation?.views?.show(false);
     if (canvas.width !== 1) canvas.width = canvas.height = 1;
     canvas.dataset.workingBytes = '4';
@@ -165,7 +177,7 @@ export function initStrategic(fog, actors) {
       if (next === modelSignature) return;
       modelSignature = next; tokens.update(a, e, b); modelRevision++;
   }
-  return { frame, pick, present, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building,
+  return { frame, pick, present, navigation: reveal.navigation, cinematic: reveal.active, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building,
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
     // at HUD cadence, rather than retaining Rust map implementations in WASM.
     receive(a, castles, b, c, workers, orders) {
@@ -194,13 +206,22 @@ export function initStrategic(fog, actors) {
       }
       update(armies, economy, b, c);
     },
+    settlements(values) { if (settlements.update(values)) { modelRevision++; previous = ''; } },
     reset() {
       cockpit.reset(); reveal.reset();
+      settlements.reset();
       tokens.update([], [], []); contacts.reset(); resources = [];
       knownResources.clear(); retiredResources.clear(); resourceSnapshot = false;
       modelSignature = ''; modelRevision++; previous = '';
     },
-    terrain(value) { terrain = value; terrainRevision++; },
+    terrain(value, raster) {
+      const started = performance.now();
+      terrain = raster ? paintTerrain(raster) ?? value : value;
+      canvas.dataset.terrainBuildMs = (performance.now() - started).toFixed(3);
+      canvas.dataset.terrainBytes = String(terrain ? terrain.width * terrain.height * 4 : 0);
+      canvas.dataset.relief = raster ? 'source-shaded' : 'schematic';
+      terrainRevision++;
+    },
     resources(values) {
       if (resourceSnapshot || typeof values?.length !== 'number') return;
       let changed = false;

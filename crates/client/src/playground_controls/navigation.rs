@@ -71,7 +71,7 @@ pub(super) fn map_changed(hash: Option<[u8; 32]>) {
     navigation_map(hash.as_ref().map_or(&[], |hash| hash.as_slice()));
 }
 
-fn frame_state(client: &Client, delta_ms: f64) -> [f64; 15] {
+fn frame_state(client: &Client, delta_ms: f64) -> [f64; 16] {
     let primary = client
         .primary
         .map_or([f64::NAN; 2], |id| position_at(client, id));
@@ -91,6 +91,7 @@ fn frame_state(client: &Client, delta_ms: f64) -> [f64; 15] {
         0.0,
         f64::NAN,
         f64::NAN,
+        f64::NAN,
     ]
 }
 
@@ -98,6 +99,9 @@ fn frame_state(client: &Client, delta_ms: f64) -> [f64; 15] {
 pub(super) fn frame(client: &mut Client, delta_ms: f64) {
     let mut input = frame_state(client, delta_ms);
     navigation_frame(&mut input);
+    if input[15].is_finite() {
+        client.camera.zoom = input[15].clamp(1.0 / 4096.0, 3.0);
+    }
     let destination = [input[13], input[14]];
     if destination.iter().all(|value| value.is_finite()) {
         map::center_on_world(client, destination);

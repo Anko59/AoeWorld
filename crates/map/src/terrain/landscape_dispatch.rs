@@ -7,6 +7,7 @@ use crate::landscape_ecology::Reservations;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LandscapePoint {
     pub tile: LandscapeTile,
+    pub historical_land_use: crate::historical_parcels::LandUse,
     pub resource: Option<LandscapeResource>,
     pub decoration: Option<LandscapeDecoration>,
 }

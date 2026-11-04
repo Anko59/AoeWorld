@@ -233,6 +233,14 @@ fn starts_routes_history_and_resource_approaches_share_the_same_forest_mask() {
             .all(|r| r.node.object != ObjectKind::Tree)
     );
     assert!(scene.decorations.is_empty());
+    let point = cleared
+        .landscape_point_with_cancel(TileCoord::new(100, 100), &|| false)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        point.historical_land_use,
+        crate::historical_parcels::LandUse::Crop
+    );
 }
 
 #[test]
