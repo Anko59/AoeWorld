@@ -1,33 +1,57 @@
-//! Sparse explored row runs, used to clip strategic ownership geometry.
-use crate::GameWorld;
+//! Clip known holding runs using sparse exploration words, not a viewer-wide scan.
+use crate::{GameWorld, HoldingSpan};
 use aoe_core::PlayerId;
 impl GameWorld {
-    pub(crate) fn explored_land_runs(&self, player: PlayerId) -> Vec<(i32, i32, i32)> {
-        let mut runs = Vec::new();
+    /// Last sightings only; no live-world scan or visibility probes per viewer.
+    pub(crate) fn remembered_land_buildings(
+        &self,
+        player: PlayerId,
+    ) -> impl Iterator<Item = &crate::GameBuilding> {
+        self.vision
+            .players
+            .get(&player)
+            .into_iter()
+            .flat_map(|v| v.remembered.values())
+            .filter(move |b| b.player != player)
+    }
+    pub(crate) fn clip_land_span(
+        &self,
+        player: PlayerId,
+        span: HoldingSpan,
+        out: &mut Vec<HoldingSpan>,
+    ) {
         let Some(vision) = self.vision.players.get(&player) else {
-            return runs;
+            return;
         };
-        for (&(cx, cy), words) in &vision.explored {
-            for (word, &bits) in words.iter().enumerate() {
-                for half in 0..2 {
-                    let mut bits = (bits >> (half * 32)) as u32;
-                    let mut offset = 0;
-                    while bits != 0 {
-                        let skip = bits.trailing_zeros();
-                        bits >>= skip;
-                        offset += skip;
-                        let count = bits.trailing_ones();
-                        let x = cx * 32 + offset as i32;
-                        runs.push((cy * 32 + (word * 2 + half) as i32, x, x + count as i32));
-                        if count == 32 {
-                            break;
-                        }
-                        bits >>= count;
-                        offset += count;
+        let mut x = span.x0;
+        while x < span.x1 {
+            let end = span.x1.min((x.div_euclid(32) + 1) * 32);
+            if let Some(words) = vision
+                .explored
+                .get(&(x.div_euclid(32), span.y.div_euclid(32)))
+            {
+                let index = (span.y.rem_euclid(32) * 32 + x.rem_euclid(32)) as usize;
+                let mut bits =
+                    ((words[index / 64] >> (index % 64)) & ((1u64 << (end - x)) - 1)) as u32;
+                let mut offset = x;
+                while bits != 0 {
+                    let skip = bits.trailing_zeros();
+                    bits >>= skip;
+                    offset += skip as i32;
+                    let count = bits.trailing_ones();
+                    out.push(HoldingSpan {
+                        x0: offset,
+                        x1: offset + count as i32,
+                        ..span
+                    });
+                    if count == 32 {
+                        break;
                     }
+                    bits >>= count;
+                    offset += count as i32;
                 }
             }
+            x = end;
         }
-        runs
     }
 }

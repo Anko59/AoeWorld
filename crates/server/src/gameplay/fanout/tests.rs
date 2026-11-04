@@ -246,6 +246,10 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
     for _ in 0..4 {
         receiver.recv().await.unwrap();
     }
+    assert!(matches!(
+        receiver.recv().await.unwrap(),
+        M::Holdings { revision: 1, .. }
+    ));
     tokio::task::yield_now().await;
     assert!(
         !service.sessions.lock().await[&id]
@@ -321,7 +325,7 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
     drop(sessions);
 
     // With no further world changes, replaying the skipped view must repair
-    // every baseline after the four initial frames have arrived in order.
+    // every baseline after the five initial frames have arrived in order.
     tokio::task::yield_now().await;
     assert!(matches!(
         receiver.try_recv().unwrap(),
@@ -330,6 +334,10 @@ async fn pending_subscription_holds_all_revision_updates_until_snapshot() {
     for _ in 0..3 {
         receiver.try_recv().unwrap();
     }
+    assert!(matches!(
+        receiver.try_recv().unwrap(),
+        M::Holdings { revision: 2, .. }
+    ));
     assert!(receiver.is_empty());
     let mut sessions = service.sessions.lock().await;
     assert!(
@@ -450,3 +458,6 @@ fn session_views_reuse_the_same_bounded_worker_pool_across_ticks() {
 
 #[path = "tests/census.rs"]
 mod census;
+
+#[path = "tests/holdings.rs"]
+mod holdings;

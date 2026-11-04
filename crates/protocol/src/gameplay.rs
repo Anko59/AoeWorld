@@ -296,6 +296,14 @@ pub enum ServerMessage {
         #[serde(deserialize_with = "bounded_vec")]
         queues: Vec<MoveQueue>,
     },
+    /// Independent low-rate, viewer-authorized ownership geometry.
+    Holdings {
+        revision: u64,
+        tick: Tick,
+        #[serde(deserialize_with = "economy::bounded_holdings")]
+        shapes: Vec<HoldingSpan>,
+        complete: bool,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]

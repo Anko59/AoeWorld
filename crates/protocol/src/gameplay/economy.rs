@@ -133,10 +133,6 @@ pub struct GameplayPlayerState {
     /// Exact owned map tiles and millionths of total map area.
     pub held_tiles: u64,
     pub held_share_ppm: u32,
-    /// Explored ownership row runs. A bounded prefix if shapes_complete is false.
-    #[serde(deserialize_with = "bounded_holdings")]
-    pub holdings: Vec<HoldingSpan>,
-    pub holdings_complete: bool,
 }
 /// The most recent damage taken. A client plays a hit reaction when `tick`
 /// is newer than the one it last saw, and a swing for `attacker`.

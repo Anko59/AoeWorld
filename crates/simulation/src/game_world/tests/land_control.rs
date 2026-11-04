@@ -82,3 +82,39 @@ fn destroyed_claims_expire_at_the_next_second_without_scanning_units() {
     assert_eq!(world.land_control(PlayerId(0)).tiles, 0);
     assert_eq!(world.land_control_rebuilds(), 2);
 }
+
+#[test]
+fn hidden_enemy_construction_destruction_and_domains_do_not_change_remembered_land() {
+    let mut w = world();
+    let at = WorldPosition::from_tile_center(TileCoord::new(64, 64)).unwrap();
+    let scout = w.spawn_unit(PlayerId(0), at).unwrap();
+    let enemy = w
+        .place_town_center(PlayerId(1), TileCoord::new(65, 65))
+        .unwrap();
+    w.advance();
+    w.remove_unit(scout);
+    w.advance();
+    let before = w.land_control(PlayerId(0)).shapes.clone();
+    assert!(before.iter().any(|s| s.player == PlayerId(1)));
+    w.remove_building(enemy);
+    let tc = w
+        .place_town_center(PlayerId(1), TileCoord::new(80, 65))
+        .unwrap();
+    let steward = w
+        .spawn_kind(
+            PlayerId(1),
+            UnitKind::Steward,
+            WorldPosition::from_tile_center(TileCoord::new(79, 65)).unwrap(),
+        )
+        .unwrap();
+    w.issue_garrison(PlayerId(1), steward, tc).unwrap();
+    for _ in 0..40 {
+        w.advance();
+    }
+    assert_eq!(w.land_control(PlayerId(0)).shapes, before);
+    w.spawn_unit(PlayerId(0), at).unwrap();
+    for _ in 0..20 {
+        w.advance();
+    }
+    assert_ne!(w.land_control(PlayerId(0)).shapes, before);
+}

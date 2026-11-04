@@ -24,8 +24,6 @@ fn player() -> GameplayPlayerState {
         unit_counts: [0; aoe_protocol::UnitKind::ALL.len()],
         held_tiles: 0,
         held_share_ppm: 0,
-        holdings: Vec::new(),
-        holdings_complete: true,
         market_prices: aoe_protocol::MarketPrices::default(),
     }
 }

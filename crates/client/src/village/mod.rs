@@ -26,6 +26,8 @@ pub(crate) struct Village {
     pub viewer: std::cell::Cell<Option<PlayerId>>,
     pub move_queues: Vec<aoe_protocol::MoveQueue>,
     pub players: Vec<GameplayPlayerState>,
+    pub holdings: Vec<aoe_protocol::HoldingSpan>,
+    pub holdings_complete: bool,
     pub buildings: Vec<GameplayBuildingState>,
     pub tick: u64,
     pub pending_training: production::PendingTraining,

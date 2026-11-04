@@ -16,7 +16,7 @@ fn census_scans_once_for_a_thousand_players_and_only_builds_connected_reports() 
             let own = &state.players[&id];
             assert!(own.held_tiles > 0);
             assert!(own.held_share_ppm > 0);
-            for span in &own.holdings {
+            for span in state.land.iter().flat_map(|l| &l.shapes) {
                 assert!((span.x0..span.x1).all(|x| {
                     world.visibility(id, aoe_core::TileCoord::new(x, span.y))
                         != aoe_simulation::TileVisibility::Unexplored

@@ -1,3 +1,5 @@
+#[path = "economy/holdings.rs"]
+pub(super) mod holdings;
 use super::GameplayService;
 #[path = "economy/kinds.rs"]
 mod kinds;
@@ -200,10 +202,12 @@ pub(super) fn players(world: &GameWorld) -> BTreeMap<PlayerId, GameplayPlayerSta
                     *out = counts[native_kind(kind) as usize];
                 }
             }
-            (
-                state.player,
-                player_state(&state, world.recent_deliveries(state.player), unit_counts),
-            )
+            (state.player, {
+                let mut p =
+                    player_state(&state, world.recent_deliveries(state.player), unit_counts);
+                (p.held_tiles, p.held_share_ppm) = world.held_land(state.player);
+                p
+            })
         })
         .collect()
 }
@@ -215,21 +219,7 @@ pub(super) fn player(world: &GameWorld, viewer: PlayerId) -> Option<GameplayPlay
         row.map_or(0, |row| row[native_kind(UnitKind::ALL[index]) as usize])
     });
     let mut report = player_state(&state, world.recent_deliveries(viewer), counts);
-    let land = world.land_control(viewer);
-    report.held_tiles = land.tiles;
-    report.held_share_ppm = land.share_ppm;
-    report.holdings_complete = land.shapes.len() <= aoe_protocol::MAX_HOLDING_SPANS;
-    report.holdings = land
-        .shapes
-        .iter()
-        .take(aoe_protocol::MAX_HOLDING_SPANS)
-        .map(|s| aoe_protocol::HoldingSpan {
-            player: s.player,
-            y: s.y,
-            x0: s.x0,
-            x1: s.x1,
-        })
-        .collect();
+    (report.held_tiles, report.held_share_ppm) = world.held_land(viewer);
     Some(report)
 }
 
@@ -260,8 +250,6 @@ fn player_state(
         unit_counts,
         held_tiles: 0,
         held_share_ppm: 0,
-        holdings: Vec::new(),
-        holdings_complete: true,
     }
 }
 pub(super) fn building_in_camera(

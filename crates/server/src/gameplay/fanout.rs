@@ -45,6 +45,7 @@ pub(super) struct ViewerState {
     pub players: BTreeMap<PlayerId, GameplayPlayerState>,
     pub buildings: Buildings,
     pub vision: u64,
+    pub land: Option<Arc<aoe_simulation::LandControl>>,
 }
 
 pub(super) struct SessionBuild {
@@ -124,6 +125,8 @@ fn viewer_states(
             viewer,
             ViewerState {
                 players,
+                land: (world.tick().0.is_multiple_of(20) || rebuild)
+                    .then(|| world.land_control(viewer)),
                 buildings,
                 vision: world.player_vision_revision(viewer),
             },

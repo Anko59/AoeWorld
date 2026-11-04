@@ -132,7 +132,7 @@ pub(in super::super) fn update(client: &Client) {
             p.recent_deliveries[3] as f64,
             p.held_tiles as f64,
             f64::from(p.held_share_ppm),
-            f64::from(u8::from(p.holdings_complete)),
+            f64::from(u8::from(client.village.holdings_complete)),
         ]);
     }
     for u in client.units.values() {
@@ -237,9 +237,10 @@ pub(in super::super) fn update(client: &Client) {
             orders.extend([f64::from(q.entity_id.0), p[0], p[1]]);
         }
     }
-    let land: Vec<f64> = player
-        .into_iter()
-        .flat_map(|p| &p.holdings)
+    let land: Vec<f64> = client
+        .village
+        .holdings
+        .iter()
         .flat_map(|s| {
             let [r, g, b] =
                 aoe_rendering::player_colour(s.player, owner, client.team_colour).map(u32::from);
