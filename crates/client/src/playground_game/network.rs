@@ -88,6 +88,7 @@ pub(super) fn connect(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
         client.order_feedback.clear();
         client.village.pending_training.clear();
         client.village.here_orders = Default::default();
+        village::construction::strategic::connection_reset(&mut client);
         client.sent_region = None;
         client.subscribe_after = 0.0;
         client.connection_id

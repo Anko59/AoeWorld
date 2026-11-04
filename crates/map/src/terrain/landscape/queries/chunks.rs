@@ -289,6 +289,7 @@ impl MapChunkGenerator {
         }
         Ok(Some(super::LandscapePoint {
             tile,
+            historical_land_use: sample.historical_land_use,
             resource,
             decoration,
         }))

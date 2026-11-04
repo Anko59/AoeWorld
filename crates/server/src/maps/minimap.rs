@@ -66,6 +66,8 @@ pub(crate) enum MinimapClass {
     River,
     Lake,
     Ocean,
+    Cropland,
+    Pasture,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -131,6 +133,11 @@ pub(crate) fn classify(point: &LandscapePoint) -> MinimapClass {
         WaterKind::River => return MinimapClass::River,
         WaterKind::Shallow => return MinimapClass::Shore,
         WaterKind::None => {}
+    }
+    match point.historical_land_use {
+        aoe_map::historical_parcels::LandUse::Crop => return MinimapClass::Cropland,
+        aoe_map::historical_parcels::LandUse::Grazing => return MinimapClass::Pasture,
+        _ => {}
     }
     if point.tile.appearance.canopy_strength > 0 {
         return MinimapClass::Forest;
@@ -279,7 +286,13 @@ pub(crate) fn minimap_raster(
     for y in 0..side {
         for x in 0..side {
             let class = classes[y * side + x];
-            let shade = if class as u8 >= MinimapClass::Shore as u8 {
+            let shade = if matches!(
+                class,
+                MinimapClass::Shore
+                    | MinimapClass::River
+                    | MinimapClass::Lake
+                    | MinimapClass::Ocean
+            ) {
                 FLAT_SHADE
             } else {
                 shades[y * side + x]

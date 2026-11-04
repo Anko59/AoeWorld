@@ -119,3 +119,24 @@ test("Ctrl right-click queues orders and F3 toggles developer tools", async ({
   await page.keyboard.press("F3");
   await expect(overlay).toBeHidden();
 });
+
+test("normal player navigation keeps developer timing disabled", async ({
+  page,
+}, info) => {
+  const renderer = info.project.name === "webgpu" ? "webgpu" : "webgl2";
+  await inputFixture(page, renderer);
+  await expect(page.locator("#performance-overlay")).toBeHidden();
+  expect((await metrics(page))?.enabled).toBe(false);
+  await page.evaluate(() => {
+    location.hash = "x=8192.5&y=8192.5&zoom=.04";
+  });
+  await expect(page.locator("#scene")).toHaveAttribute("data-lod", "markers");
+  await expect(page.locator("#performance-overlay")).toBeHidden();
+  expect((await metrics(page))?.enabled).toBe(false);
+  expect((await metrics(page))?.totalsMs).toEqual({
+    decode: 0,
+    upload: 0,
+    draw: 0,
+    ui: 0,
+  });
+});

@@ -159,7 +159,7 @@ test("minimap raster decoding is bounded and rejects malformed rasters", async (
         mutate((bytes) => (bytes[0] = 0)),
         mutate((bytes) => (bytes[6] = 1)),
         mutate((bytes) => (bytes[4] = 3)),
-        mutate((bytes) => (bytes[8] = 12)),
+        mutate((bytes) => (bytes[8] = 14)),
         module.decodeMinimap(valid.slice(0, 11).buffer) === null,
         module.decodeMinimap(new ArrayBuffer(0)) === null,
         module.decodeMinimap(raster(0, []).buffer) === null,
@@ -182,6 +182,8 @@ test("minimap raster decoding is bounded and rejects malformed rasters", async (
     "river",
     "lake",
     "ocean",
+    "cropland",
+    "pasture",
   ]);
   expect(result.maximumBytes).toBe(8 + 512 * 512);
   expect(result.samples).toBe(2);

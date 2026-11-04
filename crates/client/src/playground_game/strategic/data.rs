@@ -2,11 +2,11 @@
 //! per-frame scan or a client-side reconstruction of General membership.
 use super::super::{Client, village};
 use aoe_core::PlayerId;
-use aoe_protocol::{BuildingKind, GameplayUnitState, UnitKind};
+use aoe_protocol::{BuildingKind, GameplayBuildingState, GameplayUnitState, UnitKind};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(
-    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
+    inline_js = "export function strategic_update(a, e, b, c, w, o, s, counts, sites) { const v = window.aoeNavigation?.strategic; v?.receive(a, e, b, c, w, o); v?.cockpit?.(s, counts); v?.settlements?.(sites); } export function strategic_alert(t, x, y) { window.aoeNavigation?.views?.alert(t, x, y); }"
 )]
 extern "C" {
     fn strategic_alert(tick: f64, x: f64, y: f64);
@@ -19,7 +19,30 @@ extern "C" {
         orders: &[f64],
         summary: &[f64],
         counts: &[u32],
+        sites: &[f64],
     );
+}
+
+pub(in super::super) fn site_buildings<'a>(
+    buildings: &'a [GameplayBuildingState],
+    owner: PlayerId,
+    explored: impl Fn(&GameplayBuildingState) -> bool + 'a,
+) -> impl Iterator<Item = &'a GameplayBuildingState> {
+    [
+        Some(BuildingKind::TownCenter),
+        Some(BuildingKind::Castle),
+        None,
+    ]
+    .into_iter()
+    .flat_map(move |priority| {
+        buildings.iter().filter(move |b| {
+            let capital = b.player == owner
+                && matches!(b.kind, BuildingKind::TownCenter | BuildingKind::Castle);
+            priority.map_or(!capital, |kind| b.player == owner && b.kind == kind)
+        })
+    })
+    .filter(move |b| b.hp > 0 && (b.player == owner || explored(b)))
+    .take(2048)
 }
 
 fn report_hit(hit: Option<aoe_protocol::HitState>, position: [f64; 2], newest: &mut [f64; 3]) {
@@ -126,6 +149,26 @@ pub(in super::super) fn update(client: &Client) {
     }
     let mut economy = Vec::new();
     let mut bridges = Vec::new();
+    let sites: Vec<_> = site_buildings(&client.village.buildings, owner, |b| {
+        client
+            .fog
+            .state(village::building_center(b).map(|n| n.floor() as i32))
+            > 0
+    })
+    .flat_map(|b| {
+        let [r, g, blue] =
+            aoe_rendering::player_colour(b.player, owner, client.team_colour).map(u32::from);
+        [
+            f64::from(b.id.0),
+            f64::from(b.footprint.min.x),
+            f64::from(b.footprint.min.y),
+            f64::from(b.footprint.max.x),
+            f64::from(b.footprint.max.y),
+            b.kind as u8 as f64,
+            f64::from(r << 16 | g << 8 | blue),
+        ]
+    })
+    .collect();
     for b in &client.village.buildings {
         if b.player == owner && b.hp > 0 {
             report_hit(b.last_hit, village::building_center(b), &mut last_alert);
@@ -191,6 +234,7 @@ pub(in super::super) fn update(client: &Client) {
         &orders,
         &summary,
         player.map_or(&[], |p| p.unit_counts.as_slice()),
+        &sites,
     );
     strategic_alert(last_alert[0], last_alert[1], last_alert[2]);
 }

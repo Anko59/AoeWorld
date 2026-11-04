@@ -228,6 +228,10 @@ pub(in super::super) fn place(client: &mut Client, point: ScreenPoint, release: 
     } else {
         builders(client)
     };
+    if far && builder_ids.is_empty() {
+        strategic::no_nearby();
+        return;
+    }
     let message = if kind == BuildingKind::Bridge {
         Message::BuildBridgeOrder {
             sequence,
