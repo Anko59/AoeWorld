@@ -276,7 +276,7 @@ export function initNavigation() {
     production: strategic.production,
     views,
     overview: () => expanded,
-    fragment: () => parseCameraFragment(location.hash),
+    fragment: () => { strategic.cameraLink(); return parseCameraFragment(location.hash); },
     map: changeMap,
     present(state) {
       if (state.length !== 11 || !Array.from(state.slice(0, 4)).every(Number.isFinite)) {

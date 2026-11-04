@@ -9,6 +9,10 @@ export function navigation_frame(state) {
   if (output) state.set(output, 11);
 }
 export function navigation_present(state) { window.aoeNavigation?.present(state); }
+export function navigation_interrupt(state) {
+  const pose = window.aoeNavigation?.strategic?.interrupt();
+  if (pose) state.set(pose);
+}
 export function camera_fragment(state) {
   const values = window.aoeNavigation?.fragment();
   if (values) state.set(values);
@@ -48,6 +52,7 @@ export function gameplay_key(event) {
 extern "C" {
     fn navigation_frame(state: &mut [f64]);
     fn navigation_present(state: &[f64]);
+    fn navigation_interrupt(state: &mut [f64]);
     pub(in super::super) fn overview_active() -> bool;
     pub(in super::super) fn camera_fragment(state: &mut [f64]);
     pub(in super::super) fn capture_update(
@@ -69,6 +74,15 @@ extern "C" {
 
 pub(super) fn map_changed(hash: Option<[u8; 32]>) {
     navigation_map(hash.as_ref().map_or(&[], |hash| hash.as_slice()));
+}
+
+pub(super) fn interrupt_reveal(client: &mut Client) {
+    let mut pose = [f64::NAN; 3];
+    navigation_interrupt(&mut pose);
+    if pose.iter().all(|n| n.is_finite()) {
+        client.camera.zoom = pose[2].clamp(1.0 / 4096.0, 3.0);
+        map::center_on_world(client, [pose[0], pose[1]]);
+    }
 }
 
 fn frame_state(client: &Client, delta_ms: f64) -> [f64; 16] {

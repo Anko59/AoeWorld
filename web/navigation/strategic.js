@@ -39,8 +39,9 @@ export function initStrategic(fog, actors) {
     // Renderer fallback replaces a context-bound canvas during startup.
     const scene = document.getElementById('scene');
     const [worldWidth, worldHeight, cx, cy, width, height, zoom, level] = state;
+    const drawing = !!level || !!state[8];
     const lod = ['sprites', 'markers', 'map'][level];
-    tokens.show(!!level); layers.show(!!level); cockpit.show(!!level); reveal.show(!!level, state);
+    tokens.show(!!level); layers.show(!!level); cockpit.show(!!level); reveal.show(drawing, state);
     settlements.show(!!level);
     mapKey.show(!!level);
     window.aoeNavigation?.views?.show(!!level);
@@ -48,10 +49,10 @@ export function initStrategic(fog, actors) {
       scene.dataset.lod = lod;
       document.documentElement.dataset.lod = lod;
     }
-    if (level) canvas.hidden = label.hidden = false;
+    if (drawing) canvas.hidden = label.hidden = false;
     const title = `${level === 2 ? 'Kingdom' : 'Province'} · ${worldWidth.toLocaleString()} × ${worldHeight.toLocaleString()} tiles · ${(zoom * 100).toPrecision(3)}%`;
     if (label.textContent !== title) label.textContent = title;
-    if (!level || !context) {
+    if (!drawing || !context) {
       previous = ''; picks = [];
       return false;
     }
@@ -177,7 +178,7 @@ export function initStrategic(fog, actors) {
       if (next === modelSignature) return;
       modelSignature = next; tokens.update(a, e, b); modelRevision++;
   }
-  return { frame, pick, present, navigation: reveal.navigation, cinematic: reveal.active, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building,
+  return { frame, pick, present, navigation: reveal.navigation, cameraLink: reveal.link, interrupt: reveal.interrupt, cinematic: reveal.active, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building,
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
     // at HUD cadence, rather than retaining Rust map implementations in WASM.
     receive(a, castles, b, c, workers, orders) {

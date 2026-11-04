@@ -59,7 +59,8 @@ pub(super) fn render(client: &mut Client) -> bool {
         client.camera.viewport[0],
         client.camera.viewport[1],
         client.camera.zoom,
-        f64::from(level as u32),
+        f64::from(lod_for_viewport(client.camera.zoom, client.camera.viewport) as u32),
+        f64::from(u8::from(level != Lod::Sprites)),
     ];
     if strategic_frame(&state) {
         client.capture.frame = client.capture.frame.saturating_add(1);

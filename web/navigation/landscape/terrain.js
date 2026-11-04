@@ -1,7 +1,7 @@
 // One cartographic surface per authoritative AWMM raster. No generated terrain,
 // height, waterways or land-use guesses. Relief is the source-derived shade.
 const palette = [
-  [143,158,102], [185,172,111], [47,87,57], [155,124,84],
+  [124,164,82], [185,172,111], [47,87,57], [155,124,84],
   [215,195,143], [146,140,126], [235,236,220], [180,207,209],
   [108,165,167], [54,116,142], [44,101,132], [32,74,105],
   [190,164,93], [151,166,99],

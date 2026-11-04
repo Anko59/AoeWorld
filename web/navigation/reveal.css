@@ -17,4 +17,5 @@ html[data-cockpit-reveal=cockpit] :is(#strategic-cockpit,#strategic-layers,#stra
 @media(prefers-reduced-motion:reduce) { html[data-cockpit-reveal] :is(#cockpit-reveal,#strategic-cockpit,#strategic-layers,#strategic-views,#units-here,#strategic-tokens,#minimap) { animation:none; } }
 /* The retained, already-presented village is a compositor layer during the
    pull-back. Rust stays in strategic LOD, so no moving detail view is rebuilt. */
-html[data-cockpit-reveal=pullback] #scene[data-strategic-covered=true] { position:relative; z-index:1; opacity:var(--reveal-opacity,1); transform:scale(var(--reveal-scale,1)); transform-origin:50% 50%; }
+#cockpit-village { position:fixed; inset:0; width:100%; height:100%; z-index:1; pointer-events:none; }
+html[data-cockpit-reveal=pullback] #cockpit-village { opacity:var(--reveal-opacity,1); transform:scale(var(--reveal-scale,1)); transform-origin:50% 50%; }

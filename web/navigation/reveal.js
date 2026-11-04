@@ -7,6 +7,10 @@ export function initReveal() {
   panel.setAttribute('aria-label', 'Welcome to your kingdom');
   panel.innerHTML = '<div class="reveal-heading">Beyond your village</div><h2>A kingdom worth ruling</h2><p>The land is yours to discover.</p><button type="button" data-skip>Skip</button>';
   document.body.append(panel);
+  const village = document.createElement('canvas');
+  village.id = 'cockpit-village'; village.hidden = true;
+  village.width = village.height = 1;
+  document.getElementById('scene').after(village);
   let seen = false, checking = false, visible = false, generation = 0;
   let latest = null, near = null, motion = null, finish = null, requested = null, timers = [];
   function dismiss(complete = false, restore = false) {
@@ -14,15 +18,23 @@ export function initReveal() {
     if (requested) { generation++; checking = false; seen = true; requested = null; }
     finish = motion ? complete ? motion.to : restore ? motion.requested : null : null;
     motion = null; panel.hidden = true;
+    village.hidden = true; village.width = village.height = 1;
     document.documentElement.style.removeProperty('--reveal-scale');
     document.documentElement.style.removeProperty('--reveal-opacity');
     delete document.documentElement.dataset.cockpitReveal;
   }
-  function phase(value) { document.documentElement.dataset.cockpitReveal = value; }
+  function phase(value) {
+    document.documentElement.dataset.cockpitReveal = value;
+    if (value !== 'pullback') { village.hidden = true; village.width = village.height = 1; }
+  }
   function begin() {
     panel.hidden = false;
     const reduced = reducedMotion.matches;
     if (near && latest && !reduced) {
+      const scene = document.getElementById('scene');
+      village.width = scene.width; village.height = scene.height;
+      village.getContext('2d')?.drawImage(scene,0,0);
+      village.hidden = false;
       const [ww,wh,,,,,w,h] = latest;
       const zoom = Math.max(1/4096, Math.min(latest[8], (w-40)/(64*(ww+wh)), (h-100)/(32*(ww+wh))));
       motion = { from: near, to: [ww/2,wh/2,zoom], requested:[latest[2],latest[3],latest[8]], started: performance.now() };
@@ -41,16 +53,13 @@ export function initReveal() {
   });
   document.addEventListener('pointerdown', event => {
     if (!panel.hidden && !panel.contains(event.target)) {
-      const phase = document.documentElement.dataset.cockpitReveal;
-      if (motion && phase !== 'cockpit') {
-        event.preventDefault(); event.stopImmediatePropagation();
-      }
-      dismiss(false, phase === 'pullback');
+      dismiss();
     }
   }, true);
   document.addEventListener('wheel', () => { if (!panel.hidden) dismiss(); }, { passive:true });
   window.addEventListener('blur', () => dismiss());
-  window.addEventListener('hashchange', () => { if (!panel.hidden || finish || requested) dismiss(); });
+  function link() { dismiss(); near = null; }
+  window.addEventListener('hashchange', link);
   async function start() {
     checking = true;
     const current = generation;
@@ -111,6 +120,12 @@ export function initReveal() {
       else if (!seen && !checking) start().catch(() => { checking = false; seen = true; if (visible) begin(); });
     },
     active: () => !!(motion || finish),
+    link,
+    interrupt() {
+      const target = motion?.requested ?? (requested ? [requested[2],requested[3],requested[8]] : null);
+      dismiss();
+      return target;
+    },
     reset() { generation++; seen = false; checking = false; requested = motion = finish = near = latest = null; dismiss(); },
   };
 }

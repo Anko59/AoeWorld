@@ -174,3 +174,32 @@ test("pull-back reuses the village surface and a layer key restores the requeste
   expect(await camera(page)).toBeNull();
   await expect(page.locator("#cockpit-reveal")).toBeHidden();
 });
+
+test("the pull-back keeps the input canvas full size and delivers the first ground click", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() => {
+    const scene = document.getElementById("scene");
+    if (!scene) throw new Error("Input canvas missing");
+    scene.addEventListener("pointerdown", (event) =>
+      scene.setAttribute("data-first-button", String(event.button)),
+    );
+  });
+  await far(page);
+  await expect(page.locator("#cockpit-reveal")).toBeVisible();
+  await page.clock.install();
+  await page.clock.runFor(1200);
+  await camera(page);
+  const scene = page.locator("#scene");
+  await expect(scene).toHaveCSS("transform", "none");
+  expect(await scene.boundingBox()).toEqual({
+    x: 0,
+    y: 0,
+    width: 1280,
+    height: 720,
+  });
+  await page.mouse.click(900, 420, { button: "right" });
+  await expect(scene).toHaveAttribute("data-first-button", "2");
+  await expect(page.locator("#cockpit-reveal")).toBeHidden();
+});
