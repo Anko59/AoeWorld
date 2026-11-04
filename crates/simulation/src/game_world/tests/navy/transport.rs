@@ -1,5 +1,39 @@
 use super::*;
 
+#[test]
+fn vassal_owner_load_and_unload_keep_the_soldier_manual() {
+    let (mut world, transport, passenger, land, _) = fixture();
+    let castle = world
+        .insert_building(
+            PlayerId(0),
+            crate::BuildingKind::Castle,
+            TileRect::from_xywh(land.x - 8, land.y - 4, 4, 4),
+            true,
+        )
+        .unwrap();
+    let vassal = world
+        .spawn_kind(
+            PlayerId(0),
+            UnitKind::Vassal,
+            at(TileCoord::new(land.x - 1, land.y)),
+        )
+        .unwrap();
+    world.issue_garrison(PlayerId(0), vassal, castle).unwrap();
+    advance(&mut world, 400);
+    assert_eq!(world.vassal_controller(passenger), Some(vassal));
+    world
+        .issue_load(PlayerId(0), &[passenger], transport)
+        .unwrap();
+    assert_eq!(world.vassal_controller(passenger), None);
+    world.issue_unload(PlayerId(0), transport, land).unwrap();
+    advance(&mut world, 60);
+    assert_eq!(
+        world.vassal_controller(passenger),
+        None,
+        "an owner-commanded passenger must not be recruited again on landing"
+    );
+}
+
 fn fixture() -> (GameWorld, EntityId, EntityId, TileCoord, TileCoord) {
     let mut world = coast();
     let (land, water) = bank(&world);

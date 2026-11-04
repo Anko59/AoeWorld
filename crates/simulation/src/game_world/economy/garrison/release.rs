@@ -89,6 +89,9 @@ impl GameWorld {
         let mut state = occupant.unit;
         state.position = at;
         state.previous_position = at;
+        if state.kind == UnitKind::Vassal {
+            self.deactivate_vassal(state.id);
+        }
         if state.kind == UnitKind::Steward {
             self.set_steward_town_center(state.id, None);
         }

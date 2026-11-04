@@ -91,6 +91,7 @@ impl GameWorld {
         self.advance_research(&mut changed);
         self.advance_training(&mut changed);
         probe(TickPhase::ResearchTraining);
+        self.advance_vassals(&mut changed);
         self.advance_generals(&mut changed);
         self.advance_stewards(&mut changed);
         probe(TickPhase::StewardEconomy);

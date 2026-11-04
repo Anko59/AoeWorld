@@ -92,6 +92,7 @@ impl GameWorld {
             }
         }
         for &id in ids {
+            self.vassal_player_override(id);
             if self
                 .combat
                 .attackers

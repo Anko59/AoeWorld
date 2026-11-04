@@ -50,7 +50,9 @@ pub use steward::{
     STEWARD_RULES, STEWARD_STALL_SECONDS, StewardRules, StewardSettings, StewardStatus,
     StewardWait, StewardWork,
 };
+mod vassal;
 mod wall;
+pub use vassal::{VASSAL_LIMIT, VASSAL_RADIUS, VassalStatus, VassalWait};
 
 pub use buildings::{BUILDING_RULES, BuildingRules, MAX_WALL_SEGMENTS, trainable_units};
 pub use market::{MARKET_RULES, MarketPrices};

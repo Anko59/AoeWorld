@@ -90,6 +90,9 @@ impl GameWorld {
                 self.assign_group_slots(&mut group);
                 group.settled = false;
                 self.formations.insert(carrier, group);
+                for &id in &ids {
+                    self.vassal_player_override(id);
+                }
                 return Ok(());
             }
             self.formations.insert(carrier, group);

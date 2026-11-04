@@ -112,6 +112,7 @@ impl GameWorld {
             return Err(EconomyError::WrongUnitKind);
         }
         if enabled == unit.auto_scout {
+            self.vassal_player_override(id);
             return Ok(());
         }
         self.issue_stop(player, id)?;

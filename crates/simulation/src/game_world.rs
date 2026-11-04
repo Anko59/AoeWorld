@@ -42,7 +42,8 @@ pub use economy::{
     GeneralWork, MARKET_RULES, MAX_BUILD_GROUP, MAX_WALL_SEGMENTS, MarketPrices, PlayerEconomy,
     RallyPoint, RallyTarget, STEWARD_RULES, STEWARD_STALL_SECONDS, StewardRules, StewardSettings,
     StewardStatus, StewardWait, StewardWork, Stockpile, TickPhase, TrainingEntry, UnitKind,
-    UnitTask, VILLAGE_RULES, VillageRules, WorldLimits, trainable_units,
+    UnitTask, VASSAL_LIMIT, VASSAL_RADIUS, VILLAGE_RULES, VassalStatus, VassalWait, VillageRules,
+    WorldLimits, trainable_units,
 };
 pub use facing::Facing;
 pub(crate) use facing::facing_for;

@@ -5,6 +5,9 @@ pub(in crate::gameplay) fn apply(
     action: PendingAction,
 ) -> CommandResult {
     let result = match action {
+        PendingAction::VassalDevelopment { vassal_id, enabled } => {
+            world.issue_vassal_development(player, vassal_id, enabled)
+        }
         PendingAction::Stance { unit_ids, stance } => world.issue_stance(player, &unit_ids, stance),
         PendingAction::Garrison {
             entity_id,

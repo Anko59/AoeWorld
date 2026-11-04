@@ -18,7 +18,7 @@ pub use gameplay::{
     MapMetadata, MarketPrices, RallyPoint, RallyTarget, ResearchState, ResourceAmount,
     ResourceKind, ResourceState, ResumeToken, ServerMessage as GameplayServerMessage,
     StewardReport, StewardWait, Stockpile, Tech, TradeResource, TrainingState, UnitKind,
-    UnitState as GameplayUnitState, UnitTask, VERSION as GAMEPLAY_VERSION,
+    UnitState as GameplayUnitState, UnitTask, VERSION as GAMEPLAY_VERSION, VassalReport,
     decode_client as decode_gameplay_client, decode_server as decode_gameplay_server,
     encode_client as encode_gameplay_client, encode_server as encode_gameplay_server,
 };

@@ -350,3 +350,34 @@ the third Blacksmith tier and three economy upgrades.
 
 The [Steward](economy/steward.md) is trained at a Town Center and has a fixed
 100-tile home radius. It builds Houses before its population space runs out.
+
+## Defensive Vassal
+
+Garrison a Vassal in an owned Castle to activate a 24-tile defensive territory.
+It adopts only idle own units, up to 20 villagers and 20 military. Busy Steward
+workers keep their jobs. General army members are never recruited, including
+idle members during a recall or return. Accepted owner orders release Vassal
+control; a manually commanded soldier stays outside Vassal recruitment for its
+remaining lifetime, including after Stop or completion of its order.
+Ungarrisoning releases the domain.
+
+Development has a finite target: two Watch Towers (from Feudal Age), one
+Castle-side Barracks and a 21-by-21 wall perimeter with two four-tile gates.
+Castle Age uses stone walls; earlier ages use palisades. The panel counts all
+77 Castle Age sites and reports the next deficit, construction, reserve,
+blocked sites, missing builders, pause or completion. Completed land stops
+buying and releases its builders. Destruction reopens the relevant deficit.
+Each purchase preserves 200 food, 200 wood, 100 gold and 200 stone for the
+Steward economy. Stop/resume controls only development; defence stays active.
+
+Visible enemies inside the territory raise an alert. The garrison's soldiers
+engage them and friendly Generals within 100 tiles receive ordinary marches.
+Once the threat leaves, surviving Generals resume their saved destination or
+return to their previous position. A newer owner march or stop takes precedence.
+
+Roads and bridges are outside this slice. Roads need an authoritative movement
+cost benefit, terrain-aware connected routes and a finite maintenance budget.
+Bridges additionally need water-bank connectivity and span admission, builder
+access from a reachable bank, age/cost reserves and invalidation when a crossing
+is destroyed. Both need deterministic route selection and panel explanations
+before they can join this development plan.

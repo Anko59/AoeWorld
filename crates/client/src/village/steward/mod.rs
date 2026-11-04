@@ -7,6 +7,7 @@ use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
 mod territory;
+mod vassal;
 
 #[wasm_bindgen(
     inline_js = "export function steward_update(v, label, settings) { window.aoeSteward?.update(v, label, settings); } export function steward_bind(callback) { window.aoeSteward.bind(callback); } export function steward_settings() { return window.aoeSteward.settings(); }"
@@ -178,6 +179,7 @@ fn describe(report: Option<aoe_protocol::StewardReport>) -> String {
 }
 
 pub(super) fn present(client: &Client) {
+    vassal::present(client);
     let player = owner(client);
     let mut points = Vec::new();
     let mut label = String::new();
@@ -226,7 +228,8 @@ pub(super) fn present(client: &Client) {
         } else if u.managed_by.is_some() {
             label = "Managed by Steward".into();
         } else if u.kind == UnitKind::Vassal {
-            label = "Vassal · defensive and land development duties coming soon".into();
+            label = "Garrison this Vassal in a Castle to fortify and defend its 24-tile territory"
+                .into();
         } else if u.kind == UnitKind::Steward {
             label =
                 "Garrison in any owned Town Center without a Steward to manage its economy".into();
@@ -237,6 +240,7 @@ pub(super) fn present(client: &Client) {
 }
 
 pub(super) fn install(shared: Rc<RefCell<Client>>) -> Result<(), JsValue> {
+    vassal::install(shared.clone())?;
     let callback = Closure::<dyn FnMut(u32)>::new(move |action| {
         let mut client = shared.borrow_mut();
         let Some(steward_id) = super::production::selected(&client)

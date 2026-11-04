@@ -2,6 +2,7 @@ import { castleUnits, castleUnitNames, castleKinds } from '/interface/castle.js'
 import { imperialUnits, imperialUnitNames } from '/interface/imperial.js';
 import { initBuildings, buildingKinds, buildingNames } from '/interface/buildings.js';
 import { initArt, icon as packIcon, entityIcon, setEntityIcon } from '/interface/ui-art.js';
+import { initVassal } from '/interface/steward/vassal.js';
 import { initSteward } from '/interface/steward/panel.js';
 import { initGeneralPanel } from '/interface/general-panel.js';
 import { updateDetails } from '/interface/details.js';
@@ -16,6 +17,7 @@ const attribute = (node,name,value) => { if (node.getAttribute(name) !== value) 
 export function initInterface() {
   initBuildings();
   initSteward();
+  initVassal();
   initGeneralPanel();
   byId('move-units').querySelector('.icon').outerHTML=packIcon('commands','move','move');
   byId('stop-units').querySelector('.icon').outerHTML=packIcon('commands','stop','stop');

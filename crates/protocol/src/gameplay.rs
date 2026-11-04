@@ -12,7 +12,7 @@ mod sanitize;
 mod validation;
 pub use aoe_core::CombatStance;
 pub use aoe_core::Formation;
-pub use garrison::{GarrisonUnitState, StewardReport, StewardWait};
+pub use garrison::{GarrisonUnitState, StewardReport, StewardWait, VassalReport};
 #[cfg(feature = "server-repair")]
 pub use sanitize::sanitize_server;
 use validation::validate_server;

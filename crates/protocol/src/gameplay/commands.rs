@@ -218,6 +218,11 @@ pub enum ClientMessage {
         sequence: u64,
         steward_id: EntityId,
     },
+    VassalDevelopmentOrder {
+        sequence: u64,
+        vassal_id: EntityId,
+        enabled: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -124,6 +124,10 @@ impl PendingCommand {
 
 #[derive(Clone)]
 enum PendingAction {
+    VassalDevelopment {
+        vassal_id: EntityId,
+        enabled: bool,
+    },
     Stance {
         unit_ids: Vec<EntityId>,
         stance: aoe_core::CombatStance,

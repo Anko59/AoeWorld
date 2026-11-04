@@ -38,6 +38,9 @@ impl GameWorld {
                 return Err(EconomyError::OrderTooLarge);
             }
             group.queue.push_back((destination, attack_move));
+            for &id in &ids {
+                self.vassal_player_override(id);
+            }
             return Ok(());
         }
         let origin = self.formation_origin(&ids, centroid)?;
