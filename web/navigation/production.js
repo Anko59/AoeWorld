@@ -27,6 +27,7 @@ export function initProduction() {
     if (!Number.isInteger(total) || total < 1 || total > 10 || !trainingKinds[unit]) {
       status.textContent = 'Choose a whole count from 1 to 10.'; count.focus(); return;
     }
+    window.aoeBuildings?.command(11, 0);
     lastCount = total; lastKind = name(trainingKinds[unit]); request.set([unit, total]);
     armed = true; button.setAttribute('aria-pressed', 'true');
     document.documentElement.classList.add('units-here-armed');

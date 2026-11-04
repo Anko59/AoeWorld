@@ -107,6 +107,23 @@ with fog enabled, only connected viewers receive their own player report.
 with 100,000 units, 1,000 economy players and zero, one or 1,000 viewers. Setup,
 the initial census, simulation advancement and transport are outside the count.
 
+## Building from the cockpit
+
+At far zoom, choose a building in the kingdom panel, press Build here and
+choose its site. The ordinary footprint, exploration, terrain, age, resource
+and prerequisite checks apply, including wall and bridge spans. Only chunks
+under the proposed site load at far zoom. Red footprints explain a blocked or
+unavailable site; green is a local preview, not server acceptance.
+
+Each grouped order sends up to four nearest suitable villagers. Free idle
+workers take priority, then other free workers; managed workers can answer
+when no free workers are available. Workers already building, fighting or
+hunting are excluded. Ties use entity ID. No selection or zoom change is needed.
+Feedback says Submitting until the ordinary server acknowledgement arrives.
+One build can be pending at a time. The client tracks outgoing commands against
+the human burst of 20 and refill of 10 per second; the server retains authority.
+Esc, right-click, focus loss and returning to near zoom cancel placement.
+
 ## Local verification
 
 The focused browser regression is `tests/rendering/strategic.play.spec.ts`.

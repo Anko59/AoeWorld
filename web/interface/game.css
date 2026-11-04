@@ -1,3 +1,4 @@
+@import url('/navigation/building.css');
 :root { color-scheme: dark; --ink:#eee4ca; --muted:#b7b49e; --gold:#b39a63; --edge:#696756; --panel:#202620; --bottom:208px; }
 #strategic-cockpit { position:fixed; left:12px; top:104px; width:310px; max-height:calc(100vh - 330px); overflow:auto; z-index:4; padding:26px 14px 12px; color:#261d13; background:#d6c494; border:2px solid #9d8150; box-shadow:0 3px 12px #0009; font-size:12px; }
 #strategic-cockpit header { display:flex; flex-direction:column; border-bottom:1px solid #665438; margin-bottom:8px; }

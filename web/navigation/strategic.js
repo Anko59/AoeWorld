@@ -160,7 +160,7 @@ export function initStrategic(fog, actors) {
       if (next === modelSignature) return;
       modelSignature = next; tokens.update(a, e, b); modelRevision++;
   }
-  return { frame, pick, present, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production,
+  return { frame, pick, present, entity: tokens.entity, update, cockpit: cockpit.update, production: cockpit.production, building: cockpit.building,
     // All arrays are the bounded, authorized HUD stream. Aggregate jobs once
     // at HUD cadence, rather than retaining Rust map implementations in WASM.
     receive(a, castles, b, c, workers, orders) {

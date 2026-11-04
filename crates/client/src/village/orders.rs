@@ -4,6 +4,10 @@ use aoe_core::{FIXED_SUBUNITS_PER_TILE, ScreenPoint, WorldPosition};
 use aoe_protocol::{GameplayClientMessage as Message, UnitKind, encode_gameplay_client};
 
 pub(super) fn send(client: &mut Client, message: Message) {
+    client
+        .village
+        .build_admission
+        .sent(crate::playground::game::now());
     client.last_error = None;
     let sequence = client.next_sequence;
     client.next_sequence = sequence.saturating_add(1);
