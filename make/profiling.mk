@@ -32,3 +32,16 @@ perf-groups-profile-steps:
 	@$(MAKE) --no-print-directory analysis-tools
 	@make --no-print-directory perf-groups-steps
 	@make --no-print-directory perf-groups-instructions-steps
+
+# Private economy reports at the 1,000-player target; counts exclude fixture setup.
+.PHONY: perf-census-instructions perf-census-instructions-admitted perf-census-instructions-steps
+perf-census-instructions: resource-bootstrap
+	@$(RESOURCE_LONG) perf-census-instructions -- $(MAKE) --no-print-directory perf-census-instructions-admitted
+
+perf-census-instructions-admitted: job-bootstrap
+	@$(MAKE) --no-print-directory perf-census-instructions-steps
+
+perf-census-instructions-steps:
+	@$(MAKE) --no-print-directory analysis-tools
+	@mkdir -p reports/perf
+	@$(RESOURCE_RUN) docker run $(JOB_ENV) $(RESOURCE_CAP) --rm --init --user $(UID):$(GID) -e $(call MOUNT_QUOTE,CARGO_HOME=$(HARNESS_CARGO_CACHE)) -e GUNGRAUN_ALLOW_ASLR=yes -e CARGO_PROFILE_BENCH_DEBUG=1 $(ROOT_MOUNTS) -w $(ROOT) $(ANALYSIS_IMAGE) $(RESOURCE_OBSERVER) cargo bench --locked -p aoe-server --features bench-fixtures --bench census_instructions -- --output-format=json --save-summary=json > reports/perf/census-instructions.ndjson

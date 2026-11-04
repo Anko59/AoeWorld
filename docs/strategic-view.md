@@ -56,6 +56,57 @@ The camera focus can move outside the world, keeping map edges inspectable.
 Zoom preserves the ground under the pointer even when that requires an outside
 focus. Only the visible tile request is clipped to the map bounds.
 
+## Kingdom cockpit
+
+The far view has an original-art kingdom panel with held resources,
+population used/cap, recent credited deliveries, occupied building tiles and
+living owned military/support units by type, including embarked/garrisoned units and
+commanders. Villagers, Fishing Ships and Vassals are excluded from the army.
+The General token counts its soldiers; the kingdom total also counts the
+General himself. A missing economic report is shown as `?`.
+
+Collection numbers are actual deposits in the simulation's twelve live
+five-second buckets (55–60 seconds), without extrapolation. Spending, trade,
+refunds and stock edits do not count as collection. Occupied land sums living
+owned building footprints, including foundations and excluding water bridges;
+it does not claim territorial borders or Castle-domain ownership.
+
+## Saved views and jumps
+
+At far zoom, Ctrl+F1–F4 save the camera position and zoom for this world;
+Shift+F1–F4 recall them. The on-screen Save/View buttons do the same.
+Plain F1–F6 still control layers. H uses the existing main-base command.
+End jumps to the largest reported owned General army (soldier count, then
+lowest General ID). Space jumps to the newest observed damage to an owned
+unit or building. These jumps preserve zoom; a saved view restores zoom.
+Missing targets stay disabled. Bookmarks and alerts clear when the world resets.
+Typing in a form or opening a dialog suppresses these shortcuts.
+
+## Units here
+
+In the far-view production form, choose a type and a count from 1 to 10,
+press Units here, then click ground. Esc, right-click, leaving far zoom or
+losing focus cancels the destination. Feedback counts server-accepted training orders. A rejected rally sends no
+training to that producer. Each batch includes at most 20 commands, matching
+the human admission burst; large or unaffordable requests can be partial.
+
+Eligible producers must be owned, alive, complete and able to train the type
+at the reported age/research/resources. The split chooses the nearest ready
+producer by squared distance to the destination, balancing queues among equally
+near producers and breaking remaining ties by building ID. It uses farther
+producers only when nearer queues have no space.
+It includes pending training, reserves resources and population, and bounds
+the burst including one rally per chosen producer. Every chosen producer's
+rally is changed to the clicked ground. Existing queued units share that
+producer rally. Missing economic reports disable the action.
+
+The authoritative census is initialized on demand and then maintained by unit
+births, deaths, upgrades and garrison transfers. Reports reuse it across ticks;
+with fog enabled, only connected viewers receive their own player report.
+`make perf-census-instructions` counts the serial report kernel over 20 calls
+with 100,000 units, 1,000 economy players and zero, one or 1,000 viewers. Setup,
+the initial census, simulation advancement and transport are outside the count.
+
 ## Local verification
 
 The focused browser regression is `tests/rendering/strategic.play.spec.ts`.

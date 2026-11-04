@@ -6,6 +6,17 @@ fn at(x: i32, y: i32) -> WorldPosition {
     WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap()
 }
 
+#[test]
+fn cockpit_player_report_keeps_real_delivery_totals() {
+    let (mut world, _) = GameWorld::vassal_kingdom_demo(Seed(7)).unwrap();
+    for _ in 0..600 {
+        world.advance();
+    }
+    let expected = world.recent_deliveries(PlayerId(0));
+    assert!(expected.iter().any(|n| *n > 0));
+    assert_eq!(players(&world)[&PlayerId(0)].recent_deliveries, expected);
+}
+
 /// A Dying body keeps its General records in the simulation until removed; the
 /// wire must not carry them, or every Snapshot and Tick fails validation.
 #[test]

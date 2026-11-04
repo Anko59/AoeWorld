@@ -8,7 +8,7 @@ import {
 import {
   darkAgeState,
   feudalAgeState,
-  marketPrices,
+  playerEconomyTail,
 } from "../../wire/buildings.js";
 import { disabledFog } from "../../wire/fog.js";
 import { chunks } from "../../rendering/fixtures/hover.js";
@@ -194,7 +194,7 @@ export async function inputFixture(
             3,
             20,
             ...(navy ? feudalAgeState : darkAgeState),
-            ...marketPrices,
+            ...playerEconomyTail,
           ]),
           buildings.length,
           ...buildings.flat(),

@@ -167,12 +167,18 @@ fn castle_age_enables_war_galley_and_upgrades_existing_queued_and_future_ships()
             .issue_train(PlayerId(0), training_dock, UnitKind::Galley)
             .unwrap();
     }
+    let census_before_upgrade = world.unit_census();
     world
         .issue_research(PlayerId(0), research_dock, Tech::WarGalley)
         .unwrap();
     advance(&mut world, Tech::WarGalley.rules().seconds * 20 - 1);
     assert_eq!(world.unit(damaged).unwrap().kind, UnitKind::Galley);
     world.advance();
+    let counts = world.unit_census();
+    assert!(census_before_upgrade[&PlayerId(0)][UnitKind::Galley as usize] > 0);
+    assert_eq!(counts[&PlayerId(0)][UnitKind::Galley as usize], 0);
+    assert!(counts[&PlayerId(0)][UnitKind::WarGalley as usize] > 0);
+    assert_eq!(world.unit_census_rebuilds(), 1);
     let upgraded = world.unit(damaged).unwrap();
     assert_eq!(
         (upgraded.kind, upgraded.hp, upgraded.max_hp),

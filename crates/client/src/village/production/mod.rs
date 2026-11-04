@@ -4,14 +4,18 @@ use crate::building_ui::availability::{self, Availability};
 use aoe_core::{EntityId, PlayerId};
 use aoe_protocol::{CommandResult, GameplayBuildingState, GameplayPlayerState, UnitKind};
 
-#[derive(Default)]
+pub(in crate::playground::game) mod here;
+
+#[derive(Clone, Default)]
 pub(crate) struct PendingTraining {
     // Accepted requests remain reserved until the resulting tick arrives.
-    entries: Vec<(u64, EntityId, Option<u64>)>,
+    entries: Vec<(u64, EntityId, Option<u64>, UnitKind)>,
+    observed: u64,
 }
 impl PendingTraining {
     pub fn clear(&mut self) {
         self.entries.clear();
+        self.observed = 0;
     }
     pub fn can_send(&self) -> bool {
         self.entries.len() < aoe_protocol::MAX_PENDING_COMMANDS_PER_CONNECTION
@@ -19,9 +23,9 @@ impl PendingTraining {
     pub fn count(&self, id: EntityId) -> usize {
         self.entries.iter().filter(|entry| entry.1 == id).count()
     }
-    pub fn record(&mut self, sequence: u64, id: EntityId) {
+    pub fn record(&mut self, sequence: u64, id: EntityId, kind: UnitKind) {
         if self.can_send() {
-            self.entries.push((sequence, id, None));
+            self.entries.push((sequence, id, None, kind));
         }
     }
     pub fn acknowledge(
@@ -40,11 +44,12 @@ impl PendingTraining {
         });
     }
     pub fn observe(&mut self, tick: u64) {
+        self.observed = tick;
         self.entries
             .retain(|entry| entry.2.is_none_or(|applied| applied >= tick));
     }
     pub fn resident_bytes(&self) -> usize {
-        self.entries.capacity() * std::mem::size_of::<(u64, EntityId, Option<u64>)>()
+        self.entries.capacity() * std::mem::size_of::<(u64, EntityId, Option<u64>, UnitKind)>()
     }
 }
 
@@ -180,7 +185,7 @@ pub(super) fn train(client: &mut Client, kind: UnitKind) {
     client
         .village
         .pending_training
-        .record(sequence, building_id);
+        .record(sequence, building_id, kind);
 }
 
 #[cfg(test)]

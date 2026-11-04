@@ -2,7 +2,7 @@ import { expect, type Page } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
 import { syntheticChunk } from "../synthetic-map.js";
 import { disabledFog } from "../wire/fog.js";
-import { marketPrices } from "../wire/buildings.js";
+import { playerEconomyTail } from "../wire/buildings.js";
 import { position, sint, uint } from "../village/input/fixture.js";
 import {
   memorySnapshot,
@@ -99,7 +99,7 @@ export async function pressureProof(page: Page, url: string, phase: string) {
     ...uint(200),
     2,
     ...uint(4 + 16384),
-    ...marketPrices,
+    ...playerEconomyTail,
   ]).flat();
   const fixtureChunks = [-1, 0].flatMap((y) =>
     [-1, 0].map((x) => syntheticChunk(256 + x, 256 + y, false)),

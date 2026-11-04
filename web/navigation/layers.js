@@ -28,7 +28,7 @@ export function initLayers(changed) {
     changed();
   }
   document.addEventListener('keydown', event => {
-    if (control.hidden || event.repeat || event.ctrlKey || event.altKey || event.metaKey
+    if (control.hidden || event.defaultPrevented || event.repeat || event.ctrlKey || event.shiftKey || event.altKey || event.metaKey
       || document.querySelector('dialog[open]')
       || (event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable]'))) return;
     const i = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6'].indexOf(event.key);

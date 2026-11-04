@@ -87,3 +87,14 @@ impl Economy {
         true
     }
 }
+
+impl crate::GameWorld {
+    /// Actual credited Food/Wood/Gold/Stone deliveries in the twelve live
+    /// five-second simulation buckets (55–60 seconds). Stock edits, trade,
+    /// spending and refunds never enter this report.
+    pub fn recent_deliveries(&self, player: PlayerId) -> [u64; 4] {
+        self.economy.income.get(&player).map_or([0; 4], |income| {
+            income.recent(self.tick.0, self.config.tick_hz)
+        })
+    }
+}

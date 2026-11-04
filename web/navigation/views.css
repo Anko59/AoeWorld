@@ -1,0 +1,7 @@
+#strategic-views { position:fixed; right:12px; top:140px; z-index:4; width:320px; padding:10px; background:#262b22ed; border:1px solid #9d8150; box-shadow:0 3px 12px #0008; font-size:11px; }
+#strategic-views>b { font:small-caps bold 18px Georgia,serif; color:#ecd6a2; }
+#strategic-views button { padding:5px 6px; font-size:11px; background-image:var(--ui-button-image); background-size:var(--ui-button-size); background-position:var(--ui-button-position); }
+.view-targets { display:flex; flex-wrap:wrap; gap:4px; margin:6px 0; }
+.view-slots { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:6px; }
+.view-slots>span { display:flex; gap:3px; }
+.view-slots [data-view] { flex:1; }

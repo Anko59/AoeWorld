@@ -82,11 +82,14 @@ fn viewer_states(
             view.rebuild || view.fog_disabled != Some(world.fog_disabled());
     }
     let disabled = world.fog_disabled();
+    let mut all_players = None;
     let mut everything = None;
     let mut viewers = BTreeMap::new();
     for (viewer, rebuild) in rebuild {
         let players = if disabled {
-            economy::players(world)
+            all_players
+                .get_or_insert_with(|| economy::players(world))
+                .clone()
         } else {
             economy::player(world, viewer)
                 .map(|state| (state.player, state))
@@ -248,3 +251,7 @@ pub(super) mod subscription;
 #[path = "fanout/tests.rs"]
 #[cfg(test)]
 mod tests;
+
+#[cfg(any(test, feature = "bench-fixtures"))]
+#[path = "fanout/benchmark.rs"]
+mod benchmark;

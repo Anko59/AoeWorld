@@ -43,7 +43,11 @@ impl GameplayService {
             let (refill, burst, queue) = if session.ai {
                 (AI_ORDERS_PER_SECOND, AI_ORDER_BURST, AI_PENDING_COMMANDS)
             } else {
-                (10.0, 20.0, MAX_PENDING_COMMANDS_PER_CONNECTION)
+                (
+                    10.0,
+                    aoe_protocol::HUMAN_COMMAND_BURST as f64,
+                    MAX_PENDING_COMMANDS_PER_CONNECTION,
+                )
             };
             session.command_tokens = (session.command_tokens + elapsed * refill).min(burst);
             session.last_command_refill = now;

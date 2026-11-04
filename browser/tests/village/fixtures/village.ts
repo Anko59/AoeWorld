@@ -6,7 +6,7 @@ import {
 } from "../../wire/combat.js";
 import {
   darkAgeState,
-  marketPrices,
+  playerEconomyTail,
   feudalAgeState,
   townCenterState,
   fishingShipState,
@@ -111,7 +111,7 @@ export async function fiveVillagerFixture(
           6,
           10,
           ...(feudal ? feudalAgeState : darkAgeState),
-          ...marketPrices,
+          ...playerEconomyTail,
           1,
           1,
           0,

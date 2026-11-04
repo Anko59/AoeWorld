@@ -129,6 +129,8 @@ fn player(researched: u64, age: aoe_protocol::Age) -> GameplayPlayerState {
         population_cap: 5,
         age,
         researched,
+        recent_deliveries: [0; 4],
+        unit_counts: [0; 34],
         market_prices: MarketPrices::default(),
     }
 }
