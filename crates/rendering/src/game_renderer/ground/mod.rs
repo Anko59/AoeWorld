@@ -59,14 +59,14 @@ pub fn apply_building_foundations(
             } else {
                 building.and_then(|b| b.foundation_material).unwrap_or(2)
             };
-            // A farm being built shows its own DAT foundation terrain (the
-            // ploughed field, terrain 7) without crops; built farms add them.
+            // The native farm foundation sheet already contains crops. Keep
+            // shared dirt while seeding; expose that sheet only on completion.
             let crops = id == 50 && !unit.kind.is_foundation();
             Some(Foundation {
                 lower,
                 upper,
                 apron: dirt,
-                material: if id == 50 {
+                material: if crops {
                     building.and_then(|b| b.foundation_material).unwrap_or(2)
                 } else {
                     dirt

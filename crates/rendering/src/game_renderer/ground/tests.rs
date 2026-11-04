@@ -303,6 +303,34 @@ fn test_unit(kind: SceneUnitKind) -> SceneUnit {
 }
 
 #[wasm_bindgen_test]
+fn unfinished_farm_uses_dirt_until_the_native_crop_sheet_is_ready() {
+    let mut art = crate::surface_mesh::mix::fixture::art();
+    art.compositions.push(crate::BuildingArt {
+        unit_id: 50,
+        footprint: [3.0; 2],
+        foundation_material: Some(17),
+        parts: Vec::new(),
+        states: Vec::new(),
+        construction: Vec::new(),
+        damage: Vec::new(),
+    });
+    for (kind, expected) in [
+        (SceneUnitKind::ConstructionFarm, 2),
+        (SceneUnitKind::Farm, 17),
+    ] {
+        let mut tiles = [SceneTerrain {
+            position: [0.5; 2],
+            material: 0,
+            elevation_meters: 0.0,
+            surface: SceneTerrainSurface::flat(0.0),
+            appearance: None,
+        }];
+        apply_building_foundations(&mut tiles, &art, &[test_unit(kind)]);
+        assert_eq!(tiles[0].material, expected, "{kind:?}");
+    }
+}
+
+#[wasm_bindgen_test]
 fn feudal_and_imperial_buildings_paint_native_foundations_and_aprons_only_on_land() {
     for (slot, id) in [
         (26, 87),
