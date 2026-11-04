@@ -3,7 +3,7 @@
 use super::*;
 use std::collections::{BTreeMap, VecDeque};
 
-fn fixture() -> (GameWorld, Vec<EntityId>) {
+fn fixture(domains: usize, unfinished_mills: bool) -> (GameWorld, Vec<EntityId>) {
     let mut w = crate::game_world::terrain_fixtures::build("river").world;
     let old: Vec<_> = w.units().map(|u| u.id).collect();
     for id in old {
@@ -24,15 +24,31 @@ fn fixture() -> (GameWorld, Vec<EntityId>) {
     w.economy.players.get_mut(&PlayerId(0)).unwrap().age = Age::Castle;
     reserves(&mut w, 20_000, 20_000, 20_000, 20_000);
     let mut workers = Vec::new();
-    for x in [48, 120] {
-        let town_center = place_near(&mut w, BuildingKind::TownCenter, TileCoord::new(x, 40));
+    for &(x, base_y) in &[(48, 40), (120, 40), (48, 160), (120, 160)][..domains] {
+        let town_center = place_near(&mut w, BuildingKind::TownCenter, TileCoord::new(x, base_y));
         for y in [20, 25, 30, 35] {
-            place_near(&mut w, BuildingKind::House, TileCoord::new(x - 15, y));
+            place_near(
+                &mut w,
+                BuildingKind::House,
+                TileCoord::new(x - 15, base_y + y - 40),
+            );
         }
-        place_near(&mut w, BuildingKind::Mill, TileCoord::new(x, 55));
-        place_near(&mut w, BuildingKind::LumberCamp, TileCoord::new(x, 65));
+        let mill = place_near(&mut w, BuildingKind::Mill, TileCoord::new(x, base_y + 15));
+        if unfinished_mills {
+            let footprint = w.building(mill).unwrap().footprint;
+            w.remove_building(mill);
+            let pending = w
+                .insert_building(PlayerId(0), BuildingKind::Mill, footprint, false)
+                .unwrap();
+            assert!(!w.building(pending).unwrap().is_complete());
+        }
+        place_near(
+            &mut w,
+            BuildingKind::LumberCamp,
+            TileCoord::new(x, base_y + 25),
+        );
         if let Terrain::Map { generator, overlay } = &mut w.terrain {
-            for y in 70..76 {
+            for y in base_y + 30..base_y + 36 {
                 for dx in -8..8 {
                     overlay
                         .insert_starting_resource(
@@ -45,18 +61,18 @@ fn fixture() -> (GameWorld, Vec<EntityId>) {
             }
         }
         w.resource_collision_changed();
-        let king = workers_near(&mut w, TileCoord::new(x - 1, 40), 1)[0];
+        let king = workers_near(&mut w, TileCoord::new(x - 1, base_y), 1)[0];
         w.kill_unit(w.lookup[&king]);
         w.remove_unit(king);
         let king = w
             .spawn_kind(
                 PlayerId(0),
                 UnitKind::Steward,
-                position(TileCoord::new(x - 1, 40)),
+                position(TileCoord::new(x - 1, base_y)),
             )
             .unwrap();
         w.issue_garrison(PlayerId(0), king, town_center).unwrap();
-        workers.extend(workers_near(&mut w, TileCoord::new(x, 62), 20));
+        workers.extend(workers_near(&mut w, TileCoord::new(x, base_y + 22), 20));
     }
     let wolves: Vec<_> = w
         .animals()
@@ -66,7 +82,8 @@ fn fixture() -> (GameWorld, Vec<EntityId>) {
     for wolf in wolves {
         w.strike_animal(wolf, workers[0], u16::MAX);
     }
-    reserves(&mut w, 1_800, 1_200, 600, 400);
+    let scale = domains as u32;
+    reserves(&mut w, 900 * scale, 600 * scale, 300 * scale, 200 * scale);
     assert_eq!(
         w.player_economy(PlayerId(0)).unwrap().population_used as usize,
         w.units().count(),
@@ -139,21 +156,21 @@ struct Observation {
     hashes: Vec<String>,
 }
 
-fn run(threads: usize) -> Observation {
+fn run(threads: usize, domains: usize, unfinished_mills: bool) -> Observation {
     rayon::ThreadPoolBuilder::new()
         .num_threads(threads)
         .build()
         .unwrap()
         .install(|| {
-            let (mut w, workers) = fixture();
+            let (mut w, workers) = fixture(domains, unfinished_mills);
             let hz = w.config().tick_hz;
             let mut out = Observation::default();
             let mut previous: Vec<_> = workers.iter().map(|id| job(&w, *id)).collect();
             for tick in 1..=hz * 600 {
                 if tick > 1 && tick % (hz * 60) == 1 {
                     let stock = &mut w.economy.players.get_mut(&PlayerId(0)).unwrap().stockpile;
-                    stock.food = stock.food.saturating_sub(600);
-                    stock.wood = stock.wood.saturating_sub(400);
+                    stock.food = stock.food.saturating_sub(300 * domains as u32);
+                    stock.wood = stock.wood.saturating_sub(200 * domains as u32);
                 }
                 let before = w
                     .economy
@@ -191,13 +208,17 @@ fn run(threads: usize) -> Observation {
                 }
                 let work = w.steward_work();
                 assert!(
-                    work.orders <= 128 && work.resource_searches <= 16 && work.site_checks <= 64
+                    work.orders <= 64 * domains
+                        && work.resource_searches <= 8 * domains
+                        && work.site_checks <= 32 * domains
                 );
-                assert!(work.unit_visits <= 2_048 && work.building_visits <= 4_096);
+                assert!(
+                    work.unit_visits <= 1_024 * domains && work.building_visits <= 2_048 * domains
+                );
                 assert!(work.resource_nodes <= 1_608 * work.resource_searches);
                 assert!(work.resource_blocks <= 25 * work.resource_searches);
                 if tick % (hz * 60) == 0 {
-                    assert_eq!(work.domains, 2, "both Stewards must remain active");
+                    assert_eq!(work.domains, domains, "both Stewards must remain active");
                     let seen = components(&w);
                     let mut unreachable = 0;
                     let mut poaching = 0;
@@ -232,8 +253,8 @@ fn run(threads: usize) -> Observation {
 
 #[test]
 fn ten_minute_river_stewards_measure_churn_and_match_one_and_four_workers() {
-    let one = run(1);
-    let four = run(4);
+    let one = run(1, 2, false);
+    let four = run(4, 2, false);
     assert_eq!(
         one, four,
         "river_steward_one_and_four_worker_replay_matches"
@@ -251,18 +272,25 @@ fn ten_minute_river_stewards_measure_churn_and_match_one_and_four_workers() {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/steward-stability");
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("river.txt"), &report).unwrap();
-    // Baseline 4272cf15583b, identical workload: 701 changes, 3,095 actual
-    // deposits and 305,124 moving/planning worker ticks. Require a clear churn
-    // reduction with the brief's 3% maximum income loss and bounded idle.
+    // Current mature-work baseline 541b7a3f1a67: 421 changes, 3,910
+    // deposits and 261,613 walking ticks. Preserve it alongside the original
+    // 701-change churn floor; helper improvements are measured at Mill startup.
     assert!(
         reassignments * 5 <= 701 * 4,
         "at least 20% fewer job changes: {report}"
     );
     assert!(
-        one.delivered.iter().sum::<u64>() * 100 >= 3_095 * 97,
+        reassignments <= 421,
+        "mature-work churn must not rise: {report}"
+    );
+    assert!(
+        one.delivered.iter().sum::<u64>() * 100 >= 3_910 * 97,
         "income must stay within 3% of baseline: {report}"
     );
-    assert!(one.walking < 305_124, "walking must also fall: {report}");
+    assert!(
+        one.walking <= 261_613,
+        "mature-work walking must not rise: {report}"
+    );
     assert!(
         one.idle_minutes.iter().all(|&n| n <= 2) && one.idle_minutes.last() == Some(&0),
         "idle stays bounded and ends at zero: {report}"
@@ -275,4 +303,75 @@ fn ten_minute_river_stewards_measure_churn_and_match_one_and_four_workers() {
         one.poaching_minutes.iter().all(|&n| n == 0),
         "a controller must not adopt a job serving another domain: {report}"
     );
+}
+
+#[test]
+fn ten_minute_four_river_stewards_match_one_and_four_workers() {
+    let one = run(1, 4, false);
+    assert_eq!(
+        one,
+        run(4, 4, false),
+        "four_domain_river_one_and_four_worker_replay_matches"
+    );
+    let changes = one.resource_changes + one.node_changes + one.build_starts;
+    let report = format!(
+        "workers=80 minutes=10 job-changes={changes} resources/min={} mean-idle={}\n{one:#?}\n",
+        one.delivered.iter().sum::<u64>() as f64 / 10.0,
+        one.idle_ticks as f64 / 12_000.0
+    );
+    let root =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/steward-stability");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("four-river.txt"), &report).unwrap();
+    assert!(changes <= 736, "mature-work churn must not rise: {report}");
+    assert!(
+        one.delivered.iter().sum::<u64>() * 100 >= 7_300 * 97,
+        "income must stay within 3%: {report}"
+    );
+    assert_eq!(one.idle_minutes.last(), Some(&0), "{report}");
+    assert!(one.idle_minutes.iter().all(|&n| n <= 4), "{report}");
+    assert!(one.unreachable_minutes.iter().all(|&n| n == 0), "{report}");
+    assert!(one.poaching_minutes.iter().all(|&n| n == 0), "{report}");
+}
+
+#[test]
+fn ten_minute_four_river_stewards_finish_mills_without_helper_swarms() {
+    let one = run(1, 4, true);
+    assert_eq!(
+        one,
+        run(4, 4, true),
+        "four_domain_mill_startup_one_and_four_worker_replay_matches"
+    );
+    let changes = one.resource_changes + one.node_changes + one.build_starts;
+    let report = format!(
+        "workers=80 minutes=10 job-changes={changes} resources/min={} mean-idle={}\n{one:#?}\n",
+        one.delivered.iter().sum::<u64>() as f64 / 10.0,
+        one.idle_ticks as f64 / 12_000.0
+    );
+    let root =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/steward-stability");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("mill-startup.txt"), &report).unwrap();
+    // Same fixture on 541b7a3f1a67, before helper limits: 895 changes,
+    // 159 construction starts, 5,515 deposits, 628,919 walking worker ticks.
+    assert!(
+        changes < 895,
+        "helper teams must reduce job changes: {report}"
+    );
+    assert!(
+        one.build_starts < 159,
+        "construction must stop recruiting swarms: {report}"
+    );
+    assert!(
+        one.delivered.iter().sum::<u64>() * 100 >= 5_515 * 97,
+        "income must stay within 3%: {report}"
+    );
+    assert!(
+        one.walking < 628_919 && one.idle_ticks <= 2_508,
+        "walking and mean idle must not rise: {report}"
+    );
+    assert_eq!(one.idle_minutes.last(), Some(&0), "{report}");
+    assert!(one.idle_minutes.iter().all(|&n| n <= 4), "{report}");
+    assert!(one.unreachable_minutes.iter().all(|&n| n == 0), "{report}");
+    assert!(one.poaching_minutes.iter().all(|&n| n == 0), "{report}");
 }

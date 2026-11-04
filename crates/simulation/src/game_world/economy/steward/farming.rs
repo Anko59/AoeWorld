@@ -241,13 +241,12 @@ impl GameWorld {
                 work,
             );
         }
-        // Finish a new drop-off before opening another cluster.
-        if s.buildings
+        // A pending Mill must not idle everyone else: completed Town Centers
+        // and Mills can already serve new Farms. Only another Mill must wait.
+        let pending_mill = s
+            .buildings
             .iter()
-            .any(|b| b.kind == BuildingKind::Mill && !b.is_complete())
-        {
-            return false;
-        }
+            .any(|b| b.kind == BuildingKind::Mill && !b.is_complete());
         let anchors: Vec<_> = s
             .buildings
             .iter()
@@ -304,6 +303,9 @@ impl GameWorld {
                     TileCoord::new(rect.min.x + (x - 1) * 3, rect.min.y + (y - 1) * 3),
                 )
             } else {
+                if pending_mill {
+                    continue;
+                }
                 let offset = candidate - farm_slots;
                 let rect = anchors[offset / 8].1;
                 let dx = (rect.width() + 2) / 3 * 3 + 6;

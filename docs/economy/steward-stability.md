@@ -231,3 +231,107 @@ because farmers died before activation; it requires all forty to survive
 three game minutes. The same fixture-only patch is applied to the capture
 baseline at `aa24e196e`, leaving its Steward AI unchanged. Capture frames are
 illustrative; the prepared-river test remains the quantitative comparison.
+
+## Small construction teams
+
+Fresh comparisons use production baseline `541b7a3f1a67`. Other merged engine
+changes mean its original forty-worker river result is now 421 changes and
+391 resources/minute; the earlier Vassal numbers above are not its baseline.
+The existing workload, spending, finite trees and ordinary 20 Hz clock remain.
+The extended fixture adds two domains at y=160, giving four same-player Stewards
+and eighty villagers on the prepared river terrain. A startup variant inserts
+four ordinary unfinished Mills, with a guard proving they are foundations.
+It otherwise uses the same positions, supplies and measurement loop.
+
+The first focused helper regression failed with 25 builders on one House.
+It now checks House, Mill, Farm, Lumber Camp and Mining Camp teams, deliberately
+giving distant villagers lower IDs than nearby ones. It also requires the
+foundation to finish, and work elsewhere while an additional Mill builds.
+That last case supplies the completed Mill required to unlock Farms normally.
+An additional partial-census regression first recruited six builders for a
+three-person House team. It puts 1,200 soldiers between census slices, then
+checks that the next slice includes the already managed builders in its count.
+This bookkeeping adds at most the existing hundred managed workers to a helper
+check, without enlarging the spatial census or map-search budgets.
+
+### Trials, including rejected changes
+
+All numbers below are fresh before → after comparisons against `541b7a3f1a67`.
+Changes count resource-kind changes, same-kind target changes and construction
+starts. Idle is the mean number of idle villagers, not a percentage.
+
+| Forty-worker mature river trial | Job changes | Resources/min | Mean idle |
+|---|---:|---:|---:|
+| Three builders, eight-tile cutoff; rejected | 421 → 419 | 391 → 391 | 0.069 → 0.069 |
+| Above plus Farms during Mill work; rejected | 421 → 419 | 391 → 391 | 0.069 → 0.069 |
+| Remove cutoff; rejected | 421 → 421 | 391 → 391 | 0.069 → 0.069 |
+| Two builders; rejected | 421 → 428 | 391 → 398.5 | 0.069 → 0.070 |
+| Two builders, serialize camp construction; rejected | 421 → 409 | 391 → 350.5 | 0.069 → 0.069 |
+| Three House/Mill builders, four camp builders; accepted | 421 → 421 | 391 → 391 | 0.069 → 0.069 |
+
+| Eighty-worker mature river trial | Job changes | Resources/min | Mean idle |
+|---|---:|---:|---:|
+| Three builders, eight-tile cutoff; rejected | 736 → 732 | 730 → 731 | 0.138 → 0.136 |
+| Above plus Farms during Mill work; rejected | 736 → 732 | 730 → 731 | 0.138 → 0.136 |
+| Remove cutoff; rejected | 736 → 736 | 730 → 730 | 0.138 → 0.138 |
+| Two builders; rejected | 736 → 736 | 730 → 730 | 0.138 → 0.138 |
+| Two builders, serialize camp construction; rejected | 736 → 736 | 730 → 730 | 0.138 → 0.138 |
+| Three House/Mill builders, four camp builders; accepted | 736 → 736 | 730 → 730 | 0.138 → 0.138 |
+
+| Eighty-worker unfinished-Mill startup trial | Job changes | Resources/min | Mean idle |
+|---|---:|---:|---:|
+| Two builders; rejected | 895 → 772 | 551.5 → 658.5 | 0.209 → 0.155 |
+| Two builders, serialize camp construction; rejected | 895 → 754 | 551.5 → 678.5 | 0.209 → 0.158 |
+| Three House/Mill builders, four camp builders; accepted | 895 → 789 | 551.5 → 667.5 | 0.209 → 0.175 |
+
+The initial startup draft changed a completed Mill's work counter without
+changing its construction state. It did not exercise startup and is excluded
+from that table; ordinary foundation insertion replaced it before comparison.
+Startup was not measured for the first three trials.
+
+The first trials failed existing territory or early-income tests. Removing
+the cutoff did not restore early income: a team cap could leave a worker
+buying another camp before the first opened. Serializing camps then lost
+10.4% of mature-river income and failed the manual-stop adoption regression,
+so it was removed. The accepted four-person camp team preserves the existing
+early-income floor and ordinary late-game camp rebuilding. No test floor,
+gate, replay pin or performance baseline was lowered.
+
+### Accepted result and replay scope
+
+Small teams reduce startup job changes by 11.8% and raise delivered resources
+by 21.0%. Construction starts fall 159 → 55 and walking worker-ticks fall
+628,919 → 576,064. All ten idle, disconnected-target and outside-territory
+samples are zero. Mean idle falls as shown above. The two mature workloads
+stay unchanged; the improvement is construction startup, not productive
+resource rebalancing or exhausted-Dock management.
+
+The original twenty-worker flat workload now also records the river test's
+complete job-change definition, leaving its older movement/resource counters
+intact. Its secondary result is a small regression, not a universal churn win:
+
+| Single-domain metric | Before | After |
+|---|---:|---:|
+| Total job changes, ten minutes | 264 | 265 |
+| Movement starts/destination changes per minute | 70.6 | 71.2 |
+| Resource-kind changes per minute | 18.0 | 18.7 |
+| Delivered resources per minute | 204.5 | 204.5 |
+| Mean idle / final idle | 0.0421 / 0 | 0.0413 / 0 |
+
+The accepted construction-startup result does not resolve that one additional
+flat-workload job change. Productive Farm/tree continuity remains separate work.
+
+The tests require startup churn and construction starts to fall, income no
+worse than 3% down, walking and mean idle no higher, bounded sampled idle ending
+at zero, and zero sampled disconnected/foreign-domain targets. Mature-work
+churn and walking retain stricter current bounds alongside the original floor.
+
+Each river case compares complete observations and ten canonical hashes from
+independent one- and four-worker runs before checking its numeric acceptance:
+`river_steward_one_and_four_worker_replay_matches`,
+`four_domain_river_one_and_four_worker_replay_matches`, and
+`four_domain_mill_startup_one_and_four_worker_replay_matches`.
+No replay pin is regenerated. Local raw trials and commands are retained in
+ignored `.cache/churn/`; real-art recordings belong in `.cache/showcase/`.
+These are synthetic prepared river geography and bounded economy observations,
+not source-backed France, the owner's 99-AI game, or hardware qualification.
