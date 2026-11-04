@@ -97,7 +97,10 @@ for (const available of [false, true]) {
                   ...deArt,
                   page: "ui-de-menu.svg",
                   x: 36,
-                  page_width: 72,
+                  width: 800,
+                  height: 800,
+                  page_width: 836,
+                  page_height: 800,
                 },
               },
             },
@@ -134,7 +137,7 @@ for (const available of [false, true]) {
       if (route.request().url().endsWith("ui-de-menu.svg")) {
         return route.fulfill({
           contentType: "image/svg+xml",
-          body: '<svg xmlns="http://www.w3.org/2000/svg" width="72" height="36"><rect width="36" height="36" fill="#0f0"/><rect x="36" width="36" height="36" fill="#d43"/></svg>',
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="836" height="800"><defs><filter id="noise"><feTurbulence type="fractalNoise" baseFrequency=".95" numOctaves="3" seed="1"/></filter></defs><rect width="36" height="800" fill="#0f0"/><rect x="36" width="800" height="800" filter="url(#noise)"/><rect x="36" width="1" height="1" fill="#d43"/></svg>',
         });
       }
       return route.fallback();
@@ -187,7 +190,7 @@ for (const available of [false, true]) {
       );
       await expect(page.locator("html")).toHaveCSS(
         "--ui-menu-image",
-        /^url\(["']?data:image\/png;base64,/,
+        /^url\(["']?(?:blob:|data:image\/png;base64,)/,
       );
       const menuPixel = await page.evaluate(async () => {
         const value = getComputedStyle(document.documentElement)
@@ -200,7 +203,7 @@ for (const available of [false, true]) {
         canvas.width = canvas.height = 1;
         const context = canvas.getContext("2d");
         if (!context) throw new Error("No menu crop canvas");
-        context.drawImage(image, 0, 0, 1, 1);
+        context.drawImage(image, 0, 0);
         return Array.from(context.getImageData(0, 0, 1, 1).data);
       });
       expect(menuPixel).toEqual([221, 68, 51, 255]);
