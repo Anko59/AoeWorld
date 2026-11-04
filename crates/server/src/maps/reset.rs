@@ -25,7 +25,7 @@ pub(crate) async fn reset(
         Some(
             name @ ("feudal-economy" | "vassal-economy" | "vassal-territory" | "vassal-farming"
             | "vassal-kingdom" | "feudal-military" | "general-army" | "general-appearance"
-            | "imperial-army" | "vassal-fishing" | "vassal-throughput"),
+            | "imperial-army" | "vassal-fishing" | "vassal-throughput" | "vassal-stability"),
         ) => {
             let constructor = match name {
                 "feudal-economy" => GameplayService::feudal_demo,
@@ -33,6 +33,7 @@ pub(crate) async fn reset(
                 "vassal-territory" => GameplayService::vassal_territory_demo,
                 "vassal-farming" => GameplayService::vassal_farming_demo,
                 "vassal-kingdom" => GameplayService::vassal_kingdom_demo,
+                "vassal-stability" => GameplayService::vassal_stability_demo,
                 "vassal-fishing" => GameplayService::vassal_fishing_demo,
                 "vassal-throughput" => GameplayService::vassal_throughput_demo,
                 "general-army" => GameplayService::general_demo,

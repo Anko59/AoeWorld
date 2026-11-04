@@ -42,13 +42,14 @@ whose territory holds its centre, and must also lie wholly in the circle.
 
 **Adoption.** Each pass a Vassal scans its territory and adopts, in entity
 order, up to 100 of the owner's villagers: busy ones (gathering, farming,
-building) are taken over in place and keep working; idle ones are given work
-by the job pass. Villagers under a manual order (plain move, garrison order)
+building) are taken over in place when their existing job also belongs to
+this domain; idle ones are given work by the job pass. A worker crossing a
+neighbour's territory to serve its farm, resource or building keeps that job
+without being adopted there. It can be adopted when it enters the job's domain.
+Villagers under a manual order (plain move, garrison order)
 are left alone until idle again, and an accepted manual order releases a worker
 at once. Soldiers, foreign units and units outside the territory are never
-adopted. The old rule adopted only idle villagers, so a Castle built among
-busy workers showed a small "managed" count whatever the crowd; that was the
-reported "20 managed" confusion.
+adopted.
 
 **Training.** Training starts OFF. The selected occupied Castle exposes a
 training switch, four resource-mix sliders (0–100, at least one positive), and
@@ -99,6 +100,10 @@ Idle workers and unloaded managed gatherers respond to those kingdom needs.
 Carried loads finish their ordinary delivery first, and a refused replacement
 keeps the current productive job. Training retains its normal admission before
 productive reassignment; optional maintenance follows.
+Each domain pass adjusts at most one productive job for a moderate imbalance.
+Further changes require the new weighted projected reserve to be below one
+quarter of the current resource's reserve. Idle dispatch keeps its ordinary
+budget, and severe shortages can still redirect the available workforce.
 Known resources within ten tiles are preferred. A local miss can also probe a
 completed matching drop-off, rotating its building ID between queries. A
 retained search visits eight-tile blocks outward from the domain centre, so
@@ -178,6 +183,8 @@ For a repeatable local capture, `POST /maps/reset?scenario=vassal-territory`
 prepares two overlapping Castles, 40 busy farmers and two Vassals waiting
 outside (four-times clock). Garrison the first to watch it adopt every farmer,
 then the second to see the territory split with a double line.
+Fog is disabled, and inherited military opponents and Wolves are removed so
+the waiting farmers survive this management comparison.
 
 `POST /maps/reset?scenario=vassal-farming` prepares a resource-free plot with
 24 idle villagers, one Mill, a Vassal entering its Castle, and enough wood. The 20-times clock makes normal farm construction and reseeding
@@ -187,6 +194,13 @@ visible in a short capture; it does not change the manager's work budgets.
 forest and a completed Lumber Camp, with 30,000 Food/Gold/Stone and 1,000 Wood.
 Its four-times game clock preserves ordinary orders and manager budgets.
 Recenter on the stationary Scout to frame the farm clusters and forest.
+
+`POST /maps/reset?scenario=vassal-stability` uses the same paid working Farms
+with 1,800 Food, 1,000 Wood and a Vassal waiting in a clear spot outside its
+Castle. Garrison it during the headless showcase take to observe the first
+moderate productive adjustments. Farmers retain their real carried loads and
+finish normal deliveries before changing jobs. It uses the same four-times
+demo clock and ordinary management budgets.
 
 `POST /maps/reset?scenario=vassal-throughput` prepares forty idle villagers,
 known forest, a Lumber Camp and an ungarrisoned Vassal. Its ordinary 20 Hz clock

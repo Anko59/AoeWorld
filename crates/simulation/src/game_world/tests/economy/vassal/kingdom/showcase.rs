@@ -5,6 +5,83 @@ use aoe_map::ResourceKind;
 use std::collections::BTreeSet;
 
 #[test]
+fn stability_showcase_preserves_working_farms_until_the_owner_activates_management() {
+    let (mut w, _) = GameWorld::vassal_stability_demo(Seed(7)).unwrap();
+    let king = w.units().find(|u| u.kind == UnitKind::Vassal).unwrap().id;
+    let castle = w
+        .buildings()
+        .find(|b| b.kind == BuildingKind::Castle)
+        .unwrap()
+        .id;
+    let workers: Vec<_> = w
+        .units()
+        .filter(|u| u.kind == UnitKind::Villager)
+        .map(|u| u.id)
+        .collect();
+    assert_eq!(workers.len(), 20);
+    assert_eq!(
+        w.player_economy(PlayerId(0)).unwrap().population_used as usize,
+        w.units().count(),
+        "capture setup must keep the living population exact"
+    );
+    assert_eq!(w.vassal_status(king), None);
+    assert!(
+        w.movement_order(king).is_none(),
+        "the recording starts before activation"
+    );
+    assert_eq!(
+        w.player_economy(PlayerId(0)).unwrap().stockpile,
+        Stockpile {
+            food: 1_800,
+            wood: 1_000,
+            gold: 30_000,
+            stone: 30_000
+        }
+    );
+    assert!(
+        workers
+            .iter()
+            .all(|id| w.unit(*id).unwrap().task == UnitTask::Farming
+                && w.vassal_controller(*id).is_none())
+    );
+    w.issue_garrison(PlayerId(0), king, castle).unwrap();
+    for _ in 0..400 {
+        w.advance();
+        if w.vassal_work().domains == 1 && w.vassal_status(king).is_some_and(|s| s.managed == 20) {
+            break;
+        }
+    }
+    assert!(
+        workers
+            .iter()
+            .all(|id| w.vassal_controller(*id) == Some(king))
+    );
+    let wood = |w: &GameWorld| {
+        workers
+            .iter()
+            .filter(|id| w.gathering_kind(**id) == Some(ResourceKind::Wood))
+            .count()
+    };
+    let mut previous = wood(&w);
+    assert!(previous <= 1);
+    // These farmers already hold real Food loads: observe their deliveries,
+    // then the paced adjustments, rather than clearing loads for the film.
+    for _ in 0..200 {
+        w.advance();
+        let next = wood(&w);
+        assert!(
+            next <= previous + 1,
+            "one moderate productive change per pass"
+        );
+        previous = next;
+    }
+    assert!(
+        previous > 0 && previous < 20,
+        "the film exposes gradual real job changes"
+    );
+}
+
+#[test]
 fn kingdom_showcase_starts_with_twenty_distinct_working_farms_before_management() {
     let (w, primary) = GameWorld::vassal_kingdom_demo(Seed(7)).unwrap();
     assert_eq!(w.config().tick_hz, 5);

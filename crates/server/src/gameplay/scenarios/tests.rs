@@ -3,6 +3,29 @@ use aoe_core::TileRect;
 use aoe_protocol::{GameplayServerMessage, encode_gameplay_server};
 
 #[tokio::test]
+async fn stability_showcase_waits_for_the_recorded_garrison_order() {
+    let service = GameplayService::vassal_stability_demo(Seed(7)).unwrap();
+    for _ in 0..40 {
+        service.tick().await;
+    }
+    let world = service.world.read().await;
+    let king = world
+        .units()
+        .find(|u| u.kind == aoe_simulation::UnitKind::Vassal)
+        .unwrap();
+    assert!(world.movement_order(king.id).is_none());
+    assert!(world.vassal_status(king.id).is_none());
+    assert_eq!(
+        world
+            .units()
+            .filter(|u| u.kind == aoe_simulation::UnitKind::Villager
+                && world.gathering_kind(u.id) == Some(aoe_map::ResourceKind::Food))
+            .count(),
+        20
+    );
+}
+
+#[tokio::test]
 async fn farming_showcase_streams_valid_initial_and_active_economy_frames() {
     let service = GameplayService::vassal_farming_demo(Seed(7)).unwrap();
     let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);

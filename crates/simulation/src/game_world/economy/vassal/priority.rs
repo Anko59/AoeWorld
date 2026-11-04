@@ -46,16 +46,27 @@ impl Priority {
     /// A productive worker changes only for a meaningful improvement. This
     /// margin does not affect idle jobs, so real small income differences count.
     pub(super) fn improves(&self, next: ResourceKind, current: ResourceKind) -> bool {
+        self.improves_in_pass(next, current, false)
+    }
+
+    pub(super) fn improves_in_pass(
+        &self,
+        next: ResourceKind,
+        current: ResourceKind,
+        urgent_only: bool,
+    ) -> bool {
         let (next, current) = (next as usize, current as usize);
+        let margin = if urgent_only { 400_u128 } else { 105 };
         next != current
-            && u128::from(self.reserves[next]) * u128::from(self.weights[current]) * 105
+            && u128::from(self.reserves[next]) * u128::from(self.weights[current]) * margin
                 < u128::from(self.reserves[current]) * u128::from(self.weights[next]) * 100
     }
 }
 
 impl GameWorld {
-    /// Retask productive gatherers only after delivery. Ordinary command
-    /// admission preserves their existing work when a replacement is refused.
+    /// Adjust one productive job per pass before observing the next deliveries.
+    /// Fourfold shortages still dispatch the whole available workforce. Loaded
+    /// workers deliver first; refused replacements preserve their existing work.
     pub(super) fn vassal_rebalance(
         &mut self,
         s: &mut Snapshot,
@@ -88,7 +99,7 @@ impl GameWorld {
             let Some(current) = self.gathering_kind(worker) else {
                 continue;
             };
-            if !priority.improves(wanted, current) {
+            if !priority.improves_in_pass(wanted, current, budget.reassigned) {
                 continue;
             }
             if !budget.job() {
@@ -104,6 +115,7 @@ impl GameWorld {
             let job = self.vassal_job(worker, Some(current), s, budget, work);
             s.avoid = None;
             if let Some(kind) = job {
+                budget.reassigned = true;
                 self.claim_vassal_worker(s.vassal, worker, kind);
                 changed.push(worker);
             }

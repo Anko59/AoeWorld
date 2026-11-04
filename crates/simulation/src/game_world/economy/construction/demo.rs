@@ -150,6 +150,26 @@ impl GameWorld {
     pub fn vassal_territory_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         use crate::UnitKind;
         let (mut world, primary) = Self::military_demo(seed)?;
+        world.set_fog_disabled(true);
+        // The inherited military scene contains opponents. This comparison
+        // isolates management while the owner activates both Castles.
+        let enemies: Vec<_> = world
+            .units()
+            .filter(|u| u.player != PlayerId(0))
+            .map(|u| u.id)
+            .collect();
+        for id in enemies {
+            world.kill_unit(world.lookup[&id]);
+            world.remove_unit(id);
+        }
+        let wolves: Vec<_> = world
+            .animals()
+            .filter(|a| a.kind == crate::AnimalKind::Wolf)
+            .map(|a| a.id)
+            .collect();
+        for id in wolves {
+            world.strike_animal(id, primary, u16::MAX);
+        }
         world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
         for (x, y) in [(100, 100), (150, 100)] {
             let footprint = TileRect::from_xywh(x, y, 4, 4);
