@@ -22,6 +22,10 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/maps/{content_hash}/height-bounds", get(height_bounds))
         .route("/maps/{content_hash}/preview", get(preview))
         .route("/maps/{content_hash}/minimap", get(minimap))
+        .route(
+            "/maps/{content_hash}/minimap/coarse",
+            get(super::minimap::coarse_minimap),
+        )
         .route("/maps/{content_hash}", get(package).post(activate_package))
         .route("/maps/{content_hash}/chunks/{x}/{y}", get(chunk))
 }

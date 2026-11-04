@@ -196,9 +196,11 @@ test("a preset submits the creator request and loading waits for visible terrain
   releaseTerrain = true;
   await Promise.all(terrainRoutes.map((route) => route.continue()));
   await expect(page.locator("#start-sequence")).toBeHidden();
+  // The game opens before the bounded fine raster: the minimap is still
+  // pending, or already showing the coarse stage, but never ready.
   await expect(page.locator("#minimap")).toHaveAttribute(
     "data-raster",
-    "pending",
+    /^(pending|coarse)$/,
   );
   await rasterRoute.continue();
   await expect(page.locator("#scene")).toBeVisible();

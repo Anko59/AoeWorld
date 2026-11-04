@@ -313,6 +313,15 @@ async fn endpoint_serves_one_cached_binary_raster_per_package() {
         assert_eq!(body.as_ref(), expected.as_slice());
         assert_eq!(state.minimaps.lock().await.len(), 1);
     }
+    let coarse = super::super::minimap::coarse_minimap(Path(hash), State(state.clone()))
+        .await
+        .expect("coarse endpoint");
+    let body = to_bytes(coarse.into_body(), MAX_MINIMAP_BYTES)
+        .await
+        .expect("coarse body");
+    assert_eq!(u16::from_le_bytes([body[4], body[5]]), 64);
+    assert_eq!(body.len(), MINIMAP_HEADER_BYTES + 64 * 64);
+    assert_eq!(state.minimaps.lock().await.len(), 2);
     assert_eq!(
         minimap(Path("0".repeat(64)), State(state))
             .await
@@ -397,4 +406,38 @@ fn source_land_use_is_visible_without_guessing_fields_from_dirt() {
     assert_eq!(classify(&point), MinimapClass::Pasture);
     point.tile.terrain.water = aoe_map::WaterKind::River;
     assert_eq!(classify(&point), MinimapClass::River);
+}
+
+#[test]
+fn coarse_raster_uses_the_same_land_query_at_bounded_sample_centres() {
+    let package = small_fallback_package();
+    let generator = package.generator();
+    let raster = super::super::minimap::minimap_raster_at_samples(
+        &generator,
+        package.estimate.tiles_per_side,
+        package.estimate.geographic_millimeters_per_tile,
+        0,
+        16,
+        &|| false,
+    )
+    .unwrap();
+    assert_eq!(&raster[..4], b"AWMM");
+    assert_eq!(u16::from_le_bytes([raster[4], raster[5]]), 16);
+    assert_eq!(raster.len(), 8 + 16 * 16);
+    for y in 0..16 {
+        for x in 0..16 {
+            let at = TileCoord::new(
+                minimap_tile(package.estimate.tiles_per_side, 16, x).unwrap(),
+                minimap_tile(package.estimate.tiles_per_side, 16, y).unwrap(),
+            );
+            let point = generator
+                .landscape_point_with_cancel(at, &|| false)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                raster[8 + usize::from(y * 16 + x)] & 15,
+                classify(&point) as u8
+            );
+        }
+    }
 }

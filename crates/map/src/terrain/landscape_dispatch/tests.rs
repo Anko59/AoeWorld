@@ -409,3 +409,56 @@ fn source_provider_and_dense_dispatch_match_and_page_failures_never_fallback() {
             .is_none()
     );
 }
+
+#[test]
+fn surface_query_matches_composed_land_without_building_objects() {
+    for seed in [1, 7] {
+        let generator = MapChunkGenerator::new([seed; 32], u64::from(seed), 256);
+        for y in (0..256).step_by(17) {
+            for x in (0..256).step_by(19) {
+                let at = TileCoord::new(x, y);
+                let full = generator
+                    .landscape_point_with_cancel(at, &|| false)
+                    .unwrap()
+                    .unwrap();
+                let surface = generator
+                    .landscape_surface_with_cancel(at, &|| false)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(surface.tile, full.tile);
+                assert_eq!(surface.historical_land_use, full.historical_land_use);
+                assert!(surface.resource.is_none());
+                assert!(surface.decoration.is_none());
+            }
+        }
+        assert_eq!(
+            generator.landscape_surface_with_cancel(TileCoord::new(0, 0), &|| true),
+            Err(EnvironmentPageError::Cancelled)
+        );
+    }
+}
+
+#[test]
+fn query_workers_keep_identical_surfaces_with_independent_memos() {
+    let generator = flat(7, 256);
+    let worker = generator.fork_queries();
+    assert!(!Arc::ptr_eq(
+        &generator.river_queries,
+        &worker.river_queries
+    ));
+    assert!(!Arc::ptr_eq(&generator.derived, &worker.derived));
+    for at in [
+        TileCoord::new(12, 18),
+        TileCoord::new(128, 128),
+        TileCoord::new(255, 255),
+    ] {
+        assert_eq!(
+            generator.landscape_surface_with_cancel(at, &|| false),
+            worker.landscape_surface_with_cancel(at, &|| false)
+        );
+    }
+    assert_eq!(
+        worker.landscape_surface_with_cancel(TileCoord::new(0, 0), &|| true),
+        Err(EnvironmentPageError::Cancelled)
+    );
+}

@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 mod data;
 pub(super) use data::update;
 #[cfg(test)]
-pub(super) use data::{army_record, site_buildings};
+pub(super) use data::{army_record, site_buildings, site_record};
 
 #[wasm_bindgen(inline_js = "
 export function strategic_pick(point) {
