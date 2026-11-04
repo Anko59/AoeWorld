@@ -57,6 +57,14 @@ impl GameWorld {
     /// Persistent queues behind another group's parked bodies need a local
     /// detour. A group's own files retain their shared packing and route.
     pub(crate) fn stationary_external_traffic(&self, index: usize) -> bool {
+        self.stationary_external_body(index, false)
+    }
+
+    pub(crate) fn stationary_work_traffic(&self, index: usize) -> bool {
+        self.stationary_external_body(index, true)
+    }
+
+    fn stationary_external_body(&self, index: usize, working_only: bool) -> bool {
         let unit = &self.units[index];
         self.collisions.blocked(
             (
@@ -76,7 +84,8 @@ impl GameWorld {
                 id != unit.state.id
                     && other.state.hp > 0
                     && !other.state.moving
-                    && other.formation != unit.formation
+                    && (!working_only || other.state.working())
+                    && (unit.formation.is_none() || other.formation != unit.formation)
                     && dx * dx + dy * dy < r * r
             },
             |_| true,

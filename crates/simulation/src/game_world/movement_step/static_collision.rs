@@ -67,13 +67,78 @@ fn sweeps_corner(a: WorldPosition, b: WorldPosition, tile: TileCoord, radius: i6
 }
 
 impl GameWorld {
+    /// A newly placed building can overlap a body whose centre lies outside
+    /// its footprint. Permit ordinary short steps out of that existing overlap,
+    /// never a new overlap or a direction that deepens penetration.
+    fn static_overlap_escape(
+        &self,
+        kind: UnitKind,
+        from: WorldPosition,
+        to: WorldPosition,
+    ) -> bool {
+        if kind.is_naval()
+            || !self.config.valid_ground_position(to)
+            || self.economy.blocked_tiles.contains(&from.tile_floor())
+            || self.economy.blocked_tiles.contains(&to.tile_floor())
+        {
+            return false;
+        }
+        let r = kind.terrain_radius();
+        let min = WorldPosition::new(to.x - r, to.y - r).tile_floor();
+        let max = WorldPosition::new(to.x + r, to.y + r).tile_floor();
+        let mut overlapping = false;
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
+                let tile = TileCoord::new(x, y);
+                self.group_work.collision(1);
+                if point_distance(to, tile) >= i64::from(r).pow(2) {
+                    continue;
+                }
+                if !self.economy.blocked_tiles.contains(&tile) {
+                    if !self
+                        .unit_tile_passable(kind, tile, &|| false)
+                        .unwrap_or(false)
+                    {
+                        return false;
+                    }
+                    continue;
+                }
+                let Some(building) = self.building_at_tile(tile).and_then(|id| self.building(id))
+                else {
+                    return false;
+                };
+                let Some(rect) = building
+                    .kind
+                    .collision_rect(building.footprint, building.is_complete())
+                else {
+                    return false;
+                };
+                let dx = i64::from(from.x)
+                    - i64::from(from.x.clamp(rect.min.x * 1024, rect.max.x * 1024));
+                let dy = i64::from(from.y)
+                    - i64::from(from.y.clamp(rect.min.y * 1024, rect.max.y * 1024));
+                if dx * dx + dy * dy >= i64::from(r).pow(2)
+                    || dx * (i64::from(to.x) - i64::from(from.x))
+                        + dy * (i64::from(to.y) - i64::from(from.y))
+                        < 0
+                {
+                    return false;
+                }
+                overlapping = true;
+            }
+        }
+        overlapping
+    }
+
     pub(in crate::game_world) fn body_step_clear(
         &self,
         kind: UnitKind,
         from: WorldPosition,
         to: WorldPosition,
     ) -> bool {
-        if !self.body_position_clear(kind, to) || !self.bridge_body_sweep_clear(kind, from, to) {
+        if (!self.body_position_clear(kind, to) && !self.static_overlap_escape(kind, from, to))
+            || !self.bridge_body_sweep_clear(kind, from, to)
+        {
             return false;
         }
         // A half-tile axis step cannot pass a whole solid tile between two

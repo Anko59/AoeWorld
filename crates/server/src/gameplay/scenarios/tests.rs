@@ -206,3 +206,18 @@ async fn river_recording_rejects_uniform_world_without_replacing_it() {
     assert_eq!(service.world.read().await.canonical_hash(), before);
     assert!(service.map_content_hash.is_none());
 }
+
+#[tokio::test]
+async fn movement_recovery_recording_contains_the_army() {
+    for acquired in [false, true] {
+        let service = GameplayService::movement_recovery_demo(Seed(1), acquired).unwrap();
+        let world = service.world.read().await;
+        assert_eq!(world.unit_count(), 102);
+        assert!(
+            world
+                .units()
+                .any(|u| u.kind == aoe_simulation::UnitKind::General)
+        );
+        assert_eq!(world.buildings().count(), 48);
+    }
+}

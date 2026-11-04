@@ -12,6 +12,21 @@ pub(crate) async fn reset(
 ) -> StatusCode {
     let service = match options.scenario.as_deref() {
         None => GameplayService::new(state.diagnostic_scenario.seed),
+        Some("movement-lane") => {
+            match GameplayService::movement_lane_demo(state.diagnostic_scenario.seed) {
+                Ok(service) => service,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        }
+        Some(name @ ("movement-first-sight" | "movement-retained-target")) => {
+            match GameplayService::movement_recovery_demo(
+                state.diagnostic_scenario.seed,
+                name == "movement-retained-target",
+            ) {
+                Ok(service) => service,
+                Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
+            }
+        }
         Some("general-river") => {
             let active = state.gameplay.read().await.clone();
             match active.prepare_general_river_demo().await {
