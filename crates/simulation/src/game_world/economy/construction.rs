@@ -329,7 +329,7 @@ impl GameWorld {
         let mut held = ids
             .iter()
             .filter_map(|id| self.unit(*id))
-            .filter(|u| u.task == UnitTask::Building)
+            .filter(|u| matches!(u.task, UnitTask::Building | UnitTask::Seeding))
             .map(|u| u.position.tile_floor())
             .collect::<std::collections::BTreeSet<_>>();
         for id in ids {
@@ -349,6 +349,7 @@ impl GameWorld {
                 self.next_queued_build(id);
                 continue;
             };
+            let seeding = building.kind == BuildingKind::Farm && !building.is_complete();
             let (healthy, footprint) = (
                 building.is_complete() && building.hp == building.max_hp,
                 building.footprint,
@@ -366,7 +367,10 @@ impl GameWorld {
             // on first free contact that no other worker has reserved. Settled
             // builders retain their work spot when traffic or combat enters it.
             let tile = self.units[index].state.position.tile_floor();
-            let settled = self.units[index].state.task == UnitTask::Building;
+            let settled = matches!(
+                self.units[index].state.task,
+                UnitTask::Building | UnitTask::Seeding
+            );
             if adjacent(footprint, tile)
                 && ((self.units[index].order.is_none() && settled)
                     || ((self.units[index].order.is_none() || self.arrival_position_free(index))
@@ -378,7 +382,11 @@ impl GameWorld {
                     self.stop_movement(index);
                 }
                 self.units[index].state.face_footprint(footprint);
-                self.units[index].state.task = UnitTask::Building;
+                self.units[index].state.task = if seeding {
+                    UnitTask::Seeding
+                } else {
+                    UnitTask::Building
+                };
                 *working.entry(target).or_insert(0) += 1;
                 continue;
             }

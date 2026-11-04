@@ -254,7 +254,8 @@ impl GameWorld {
         {
             return false;
         }
-        if unit.is_some_and(|u| u.task == super::UnitTask::Building)
+        if unit
+            .is_some_and(|u| matches!(u.task, super::UnitTask::Building | super::UnitTask::Seeding))
             && let Some(job) = self.economy.builders.get(&id)
             && let Some(building) = self.building(job.building)
             && !super::placement::adjacent(building.footprint, tile)

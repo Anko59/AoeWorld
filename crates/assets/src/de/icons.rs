@@ -14,6 +14,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+mod ui;
 
 struct Source {
     icon: i16,
@@ -23,6 +24,7 @@ struct Source {
 }
 pub(super) struct Icons {
     sources: Vec<Source>,
+    ui: Vec<ui::Source>,
     units: Vec<(i16, i16)>,
     technologies: Vec<(i16, i16)>,
 }
@@ -120,8 +122,10 @@ pub(super) fn resolve(
             });
         }
     }
+    let ui = ui::resolve(install, hash)?;
     Ok(Icons {
         sources,
+        ui,
         units: units.into_iter().collect(),
         technologies,
     })
@@ -135,9 +139,25 @@ impl Icons {
                 hash: s.hash.clone(),
                 frames: 1,
             })
+            .chain(self.ui.iter().map(|s| SpriteRef {
+                id: s.id.clone(),
+                hash: s.hash.clone(),
+                frames: 1,
+            }))
             .collect()
     }
     pub(super) fn frame(&self, index: usize) -> Result<Planes, Error> {
+        if index >= self.sources.len() {
+            let s = self
+                .ui
+                .get(index - self.sources.len())
+                .ok_or_else(|| invalid("DE icons", 0, "source index"))?;
+            let bytes = read_bounded(&s.path)?;
+            if blake3::hash(&bytes).to_hex().as_str() != s.hash {
+                return Err(invalid("DE icons", 0, "source changed during import"));
+            }
+            return ui::frame(s, &bytes);
+        }
         let s = &self.sources[index];
         let bytes = read_bounded(&s.path)?;
         if blake3::hash(&bytes).to_hex().as_str() != s.hash {
@@ -149,7 +169,8 @@ impl Icons {
     pub(super) fn write(&self, directory: &Path) -> Result<(), Error> {
         let manifest: Manifest =
             serde_json::from_slice(&read_bounded(&directory.join("manifest.json"))?)?;
-        let icons = catalog(&manifest, &self.units, &self.technologies)?;
+        let mut icons = catalog(&manifest, &self.units, &self.technologies)?;
+        ui::apply(&manifest, &self.ui, &mut icons)?;
         fs::write(
             directory.join("interface.json"),
             serde_json::to_vec_pretty(&icons)?,

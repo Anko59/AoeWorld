@@ -237,7 +237,7 @@ pub(in super::super) fn update(client: &Client) {
             x,
             y,
             flag(client.selected.units.contains(&animal.id)),
-            12.0 + animal.task as u8 as f64,
+            13.0 + animal.task as u8 as f64,
             0.0,
             f64::from(animal.food_remaining),
             f64::from(animal.hp),
@@ -337,7 +337,11 @@ pub(in super::super) fn worker_resource(
     if unit.hp == 0
         || matches!(
             unit.task,
-            UnitTask::Idle | UnitTask::Building | UnitTask::Attacking | UnitTask::Dying
+            UnitTask::Idle
+                | UnitTask::Building
+                | UnitTask::Seeding
+                | UnitTask::Attacking
+                | UnitTask::Dying
         )
     {
         return None;

@@ -26,6 +26,7 @@ impl crate::GameUnit {
                 self.task,
                 UnitTask::Gathering
                     | UnitTask::Building
+                    | UnitTask::Seeding
                     | UnitTask::Farming
                     | UnitTask::Fishing
                     | UnitTask::Hunting

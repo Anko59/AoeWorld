@@ -45,6 +45,126 @@ fn farmers_and_builders_use_their_own_dat_task_art() {
 }
 
 #[wasm_bindgen_test]
+fn farm_seeders_use_native_seeding_only_while_alive_and_stationary() {
+    use crate::unit_visuals::{Pose, unit_pose};
+    let mut worker = villager(UnitTask::Seeding, None);
+    assert_eq!(unit_pose(&worker, None), Pose::FarmerSeed);
+    assert_ne!(unit_pose(&worker, None), Pose::FarmerWork);
+    assert_ne!(unit_pose(&worker, None), Pose::BuilderWork);
+    worker.moving = true;
+    assert_eq!(unit_pose(&worker, None), Pose::VillagerWalk);
+    worker.moving = false;
+    worker.hp = 0;
+    assert_eq!(unit_pose(&worker, None), Pose::VillagerDie);
+    worker.hp = 25;
+    worker.task = UnitTask::Building;
+    assert_eq!(unit_pose(&worker, None), Pose::BuilderWork);
+}
+
+#[wasm_bindgen_test]
+fn loaded_villagers_keep_resource_carry_walks_after_move_or_stop_orders() {
+    use crate::unit_visuals::{Pose, unit_pose};
+    use aoe_protocol::CarriedResource;
+    for (kind, expected) in [
+        (ResourceKind::Wood, Pose::CarryWood),
+        (ResourceKind::Food, Pose::CarryFood),
+        (ResourceKind::Gold, Pose::CarryGold),
+        (ResourceKind::Stone, Pose::CarryStone),
+    ] {
+        for task in [
+            UnitTask::Idle,
+            UnitTask::Moving,
+            UnitTask::Returning,
+            UnitTask::Carrying,
+            UnitTask::Gathering,
+        ] {
+            let mut u = villager(task, Some(kind));
+            u.moving = true;
+            u.carried = Some(CarriedResource { kind, amount: 3 });
+            assert_eq!(unit_pose(&u, None), expected, "{kind:?}, {task:?}");
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn stationary_loaded_villagers_have_resource_specific_idle_carry_poses() {
+    use crate::unit_visuals::{Pose, packed_frame, unit_pose};
+    use aoe_protocol::CarriedResource;
+    let mut idle_poses = Vec::new();
+    for (kind, walking) in [
+        (ResourceKind::Wood, Pose::CarryWood),
+        (ResourceKind::Food, Pose::CarryFood),
+        (ResourceKind::Gold, Pose::CarryGold),
+        (ResourceKind::Stone, Pose::CarryStone),
+    ] {
+        let mut u = villager(UnitTask::Idle, None);
+        u.carried = Some(CarriedResource { kind, amount: 3 });
+        let idle = unit_pose(&u, None);
+        assert_ne!(idle, Pose::VillagerStand, "{kind:?}: load disappeared");
+        assert_ne!(idle, walking, "{kind:?}: stationary feet must not walk");
+        for facing in 0..8 {
+            let stopped = packed_frame(idle, facing, 0.0, None, 0.0, 20);
+            assert_eq!(
+                packed_frame(idle, facing, 400.0, None, 0.0, 20),
+                stopped,
+                "{kind:?}: stationary feet animated"
+            );
+            assert_ne!(
+                packed_frame(walking, facing, 400.0, None, 0.0, 20),
+                packed_frame(walking, facing, 0.0, None, 0.0, 20),
+                "{kind:?}: moving carry must animate"
+            );
+        }
+        assert!(
+            crate::building_ui::content::sprites()[idle as usize].is_native(),
+            "{kind:?}: carry art must come from DE"
+        );
+        assert!(
+            !idle_poses.contains(&idle),
+            "{kind:?}: wrong carried resource"
+        );
+        idle_poses.push(idle);
+        for task in [UnitTask::Moving, UnitTask::Returning, UnitTask::Carrying] {
+            u.task = task;
+            assert_eq!(unit_pose(&u, None), idle, "{kind:?}, {task:?}");
+        }
+    }
+}
+
+#[wasm_bindgen_test]
+fn partial_loads_preserve_stationary_work_and_empty_loads_use_normal_villagers() {
+    use crate::unit_visuals::{Pose, unit_pose};
+    use aoe_protocol::CarriedResource;
+    for (kind, expected) in [
+        (ResourceKind::Wood, Pose::ChopperWork),
+        (ResourceKind::Food, Pose::ForagerWork),
+        (ResourceKind::Gold, Pose::MinerWork),
+        (ResourceKind::Stone, Pose::MinerWork),
+    ] {
+        let mut u = villager(UnitTask::Gathering, Some(kind));
+        u.carried = Some(CarriedResource { kind, amount: 3 });
+        assert_eq!(unit_pose(&u, None), expected, "{kind:?}");
+        u.task = UnitTask::Idle;
+        u.carried.as_mut().unwrap().amount = 0;
+        assert_eq!(unit_pose(&u, None), Pose::VillagerStand, "{kind:?}");
+        u.moving = true;
+        assert_eq!(unit_pose(&u, None), Pose::VillagerWalk, "{kind:?}");
+    }
+    for (task, expected) in [
+        (UnitTask::Farming, Pose::FarmerWork),
+        (UnitTask::Fishing, Pose::FisherWork),
+        (UnitTask::Building, Pose::BuilderWork),
+    ] {
+        let mut u = villager(task, Some(ResourceKind::Food));
+        u.carried = Some(CarriedResource {
+            kind: ResourceKind::Food,
+            amount: 3,
+        });
+        assert_eq!(unit_pose(&u, None), expected, "{task:?}");
+    }
+}
+
+#[wasm_bindgen_test]
 fn militia_combat_and_hunting_never_use_the_generic_worker_pose() {
     use crate::unit_visuals::{Pose, lifecycle_pose, packed_frame, unit_pose};
     let mut u = villager(UnitTask::Idle, None);
@@ -69,6 +189,11 @@ fn militia_combat_and_hunting_never_use_the_generic_worker_pose() {
     assert_eq!(unit_pose(&u, None), Pose::HunterWalk);
     u.moving = false;
     u.task = UnitTask::Returning;
+    u.carried = Some(aoe_protocol::CarriedResource {
+        kind: ResourceKind::Food,
+        amount: 3,
+    });
+    u.moving = true;
     assert_eq!(unit_pose(&u, None), Pose::HunterCarry);
     u.hp = 0;
     u.death_hunt = Some(aoe_protocol::AnimalKind::Sheep);
@@ -314,4 +439,42 @@ fn native_dat_replay_delay_holds_the_final_idle_cell_before_restarting() {
     assert_eq!(phase(4500.0), 59);
     assert_eq!(phase(5999.0), 59);
     assert_eq!(phase(6001.0), 0);
+}
+
+#[wasm_bindgen_test]
+fn loaded_hunters_keep_native_carry_idle_and_walk_after_stop_or_move() {
+    use crate::unit_visuals::{Pose, unit_pose, walks_as_villager};
+    let mut worker = villager(UnitTask::Returning, None);
+    worker.hunt_target = Some(EntityId(9));
+    worker.carried = Some(aoe_protocol::CarriedResource {
+        kind: ResourceKind::Food,
+        amount: 3,
+    });
+    let sheep = aoe_protocol::AnimalState {
+        id: EntityId(9),
+        kind: aoe_protocol::AnimalKind::Sheep,
+        owner: Some(PlayerId(0)),
+        hp: 0,
+        position: worker.position,
+        task: aoe_protocol::AnimalTask::Carcass,
+        food_remaining: 50,
+        target: None,
+        facing: 0,
+        moving: false,
+        death_tick: Some(aoe_core::Tick(1)),
+    };
+    for animal in [None, Some(&sheep)] {
+        for task in [UnitTask::Returning, UnitTask::Idle, UnitTask::Moving] {
+            worker.task = task;
+            worker.moving = false;
+            assert_eq!(
+                unit_pose(&worker, animal),
+                Pose::HunterCarryIdle,
+                "{task:?}"
+            );
+            worker.moving = true;
+            assert_eq!(unit_pose(&worker, animal), Pose::HunterCarry, "{task:?}");
+            assert!(!walks_as_villager(&worker, animal));
+        }
+    }
 }

@@ -209,7 +209,7 @@ class EconomyManager:
         pause = ASSIGN_PAUSE_SECONDS * ctx.world.tick_hz
         for worker in ctx.villagers:
             if (worker.gathering != KEYS[source] or worker.carrying is not None
-                    or worker.task in (UnitTask.HUNTING, UnitTask.FARMING, UnitTask.BUILDING)
+                    or worker.task in (UnitTask.HUNTING, UnitTask.FARMING, UnitTask.BUILDING, UnitTask.SEEDING)
                     or worker.id in ctx.busy or worker.id in ctx.board.builders
                     or worker.id in ctx.board.farmers.values()
                     or ctx.tick - ctx.board.assigned.get(worker.id, -pause) < pause):

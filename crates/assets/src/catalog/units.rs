@@ -226,6 +226,12 @@ pub enum Pose {
     OnagerAttack,
     OnagerDie,
     OnagerDecay,
+    CarryWoodIdle,
+    CarryFoodIdle,
+    CarryGoldIdle,
+    CarryStoneIdle,
+    FarmerSeed,
+    HunterCarryIdle,
 }
 
 #[derive(Clone, Copy)]

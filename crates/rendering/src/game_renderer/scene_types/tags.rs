@@ -348,4 +348,5 @@ pub enum SceneUnitKind {
     Actor204,
     Actor205,
     Actor206,
+    Actor207,
 }

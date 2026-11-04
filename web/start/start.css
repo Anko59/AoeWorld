@@ -24,7 +24,7 @@ body[data-start-state="game"] #playground { visibility: visible; }
 #start-sequence .quiet-button { background: transparent; color: #dac5a1; border: 0; box-shadow: none; padding: 12px 0; font-size: 12px; }
 #start-sequence .quiet-button:hover { color: #ffe6b2; background: transparent; }
 .start-footer { position: absolute; bottom: 26px; left: 5vw; right: 5vw; display: flex; justify-content: space-between; font: 9px Cinzel, Georgia, serif; letter-spacing: .18em; color: #bdaa88; }
-#main-menu { background: linear-gradient(90deg, #100b08f5 0%, #17100ce8 24%, #15100c50 48%, #0000 75%), linear-gradient(0deg, #100b08c9, #0000 35%), url('/art/royal-archive.webp') center / cover; }
+#main-menu { background: linear-gradient(90deg, #100b08f5 0%, #17100ce8 24%, #15100c50 48%, #0000 75%), linear-gradient(0deg, #100b08c9, #0000 35%), var(--ui-menu-image, url('/art/royal-archive.webp')) center / cover; }
 .menu-rail { position: relative; display: flex; flex-direction: column; justify-content: center; width: 320px; min-height: calc(100% - 90px); margin: 0 0 40px 6vw; }
 .menu-rail .start-wordmark { width: 360px; max-width: 112%; margin: 0 0 16px -18px; }
 .menu-subtitle { text-align: center; margin: 0; }
@@ -55,7 +55,7 @@ body[data-start-state="game"] #playground { visibility: visible; }
 #entry-intro.reveal .intro-caption { opacity: 0; transition: opacity .6s; }
 #skip-cinematic { position: absolute; bottom: 26px; right: 5vw; font-size: 11px !important; }
 #skip-cinematic span { font: 11px Georgia, serif; opacity: .75; }
-#skirmish-setup { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 5vw 60px; background: linear-gradient(#100b08a8, #100b08d9), url('/art/lakeside-citadel.webp') center / cover; }
+#skirmish-setup { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 5vw 60px; background: linear-gradient(#100b08a8, #100b08d9), var(--ui-menu-image, url('/art/lakeside-citadel.webp')) center / cover; }
 .setup-heading { text-align: center; margin-bottom: 20px; }
 .setup-heading .start-wordmark { width: 240px; margin: 0 auto 16px; }
 .setup-heading h1 { color: #f2d394; }
@@ -95,7 +95,7 @@ body[data-start-state="game"] #playground { visibility: visible; }
 .setup-actions { display: flex; justify-content: space-between; align-items: center; gap: 22px; margin-top: 22px; padding-top: 17px; border-top: 1px solid #89623999; }
 #setup-status { flex: 1; color: #c7b395; font: 12px/1.4 Georgia, serif; margin: 0; text-align: right; }
 #start-game { min-width: 195px; }
-#loading-screen { background: linear-gradient(0deg, #100b08ef, #100b0880 60%, #100b0870), url('/art/homecoming.webp') center / cover; display: flex; align-items: center; justify-content: center; }
+#loading-screen { background: linear-gradient(0deg, #100b08ef, #100b0880 60%, #100b0870), var(--ui-menu-image, url('/art/homecoming.webp')) center / cover; display: flex; align-items: center; justify-content: center; }
 .loading-content { width: min(550px, 82vw); text-align: center; margin-top: -65px; }
 .loading-content .start-wordmark { width: 420px; max-width: 100%; margin: 0 auto 28px; }
 .loading-content .gold-rule { width: 300px; max-width: 100%; margin: 0 auto 36px; }

@@ -219,6 +219,12 @@ impl SceneUnitKind {
     pub const OnagerAttack: Self = Self::Actor204;
     pub const OnagerDie: Self = Self::Actor205;
     pub const OnagerDecay: Self = Self::Actor206;
+    pub const CarryWoodIdle: Self = Self::Actor138;
+    pub const CarryFoodIdle: Self = Self::Actor140;
+    pub const CarryGoldIdle: Self = Self::Actor141;
+    pub const CarryStoneIdle: Self = Self::Actor142;
+    pub const FarmerSeed: Self = Self::Actor207;
+    pub const HunterCarryIdle: Self = Self::Actor10;
     pub const Scout: Self = Self::ScoutStand;
     pub const Villager: Self = Self::VillagerStand;
     pub const VillagerChopping: Self = Self::ChopperWork;

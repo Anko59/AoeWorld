@@ -28,6 +28,14 @@ fn import_de_keeps_pack_metacharacters_in_one_argument_and_preserves_failure() {
             "Docker failure was hidden: {output:?}"
         );
         let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            stdout
+                .lines()
+                .collect::<Vec<_>>()
+                .windows(4)
+                .any(|args| { args == ["cargo", "run", "--release", "--locked"] }),
+            "native DE conversion must use the optimized Docker build: {stdout:?}"
+        );
         assert_eq!(
             stdout.lines().last(),
             Some(pack),

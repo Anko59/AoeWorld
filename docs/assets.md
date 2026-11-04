@@ -127,9 +127,11 @@ wood chopping/carrying 1535/1536, berry foraging/food carrying 2589/2592 (forage
 the miners' shared pick 1560 with gold carrying 2117 and stone carrying 1552, each five
 rows of fifteen frames.
 The same eight-direction mirror mapping as the scout uses the native anchors.
-Authoritative Gathering tasks select the resource tool even with a partial
-load; Returning tasks select their carried resource, while idle/moving tasks
-retain ordinary standing/walking art. Buildings use imported DAT recipes:
+Stationary Gathering tasks select the resource tool even with a partial load.
+Moving villagers use their nonempty authoritative load's native carry art,
+including after new move orders; stopped loaded villagers hold its first native
+carry cell, preserving the resource without walking in place. Empty loads use
+ordinary standing/walking art. Buildings use imported DAT recipes:
 stand graphics and ordered deltas, annex tile displacements, shadows,
 construction graphics, footprints and foundation terrain. The Town Center's
 head is unit 109; unit 618 is its main-building annex, not the whole recipe.

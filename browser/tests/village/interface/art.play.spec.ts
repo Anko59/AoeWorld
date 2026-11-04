@@ -73,6 +73,7 @@ for (const available of [false, true]) {
       page_width: 36,
       page_height: 36,
     };
+    const deArt = { ...art, page: "ui-de.svg" };
     await page.route("**/asset-pack/**", (route) => {
       if (route.request().url().endsWith("interface.json") && !available) {
         return route.fulfill({ status: 404, body: "No local UI catalog" });
@@ -80,7 +81,26 @@ for (const available of [false, true]) {
       if (route.request().url().endsWith("interface.json") && available) {
         if (route.request().url().endsWith("buildings/interface.json")) {
           return route.fulfill({
-            json: { units: { 109: art }, technologies: { 22: art, 103: art } },
+            json: {
+              units: { 109: deArt },
+              technologies: { 22: deArt, 103: deArt },
+              commands: { stop: deArt, build: deArt },
+              resources: { wood: deArt },
+              panels: {
+                "western-commands": deArt,
+                "western-selection": deArt,
+                "western-minimap": deArt,
+                "western-top": deArt,
+                portrait: deArt,
+                button: deArt,
+                "menu-background": {
+                  ...deArt,
+                  page: "ui-de-menu.svg",
+                  x: 36,
+                  page_width: 72,
+                },
+              },
+            },
           });
         }
         return route.fulfill({
@@ -105,6 +125,18 @@ for (const available of [false, true]) {
           body: '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><rect width="36" height="36" fill="#abc"/></svg>',
         });
       }
+      if (route.request().url().endsWith("ui-de.svg")) {
+        return route.fulfill({
+          contentType: "image/svg+xml",
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><rect width="36" height="36" fill="#d43"/></svg>',
+        });
+      }
+      if (route.request().url().endsWith("ui-de-menu.svg")) {
+        return route.fulfill({
+          contentType: "image/svg+xml",
+          body: '<svg xmlns="http://www.w3.org/2000/svg" width="72" height="36"><rect width="36" height="36" fill="#0f0"/><rect x="36" width="36" height="36" fill="#d43"/></svg>',
+        });
+      }
       return route.fallback();
     });
     await fiveVillagerFixture(page);
@@ -127,13 +159,51 @@ for (const available of [false, true]) {
       ).toBeVisible();
       await expect(
         page.locator("#research-loom .original-icon image"),
-      ).toHaveAttribute("href", "/asset-pack/buildings/ui-test.svg");
+      ).toHaveAttribute("href", "/asset-pack/buildings/ui-de.svg");
       await expect(
         page.locator("#research-imperial-age .original-icon image"),
-      ).toHaveAttribute("href", "/asset-pack/buildings/ui-test.svg");
+      ).toHaveAttribute("href", "/asset-pack/buildings/ui-de.svg");
       await expect(
         page.locator('#top-bar [data-ui-id="wood"] .original-icon'),
       ).toBeVisible();
+      await expect(
+        page.locator('#top-bar [data-ui-id="wood"] .original-icon image'),
+      ).toHaveAttribute("href", "/asset-pack/buildings/ui-de.svg");
+      for (const selector of [
+        "#commands",
+        "#selection",
+        "#minimap",
+        "#top-bar",
+        "#selection-portrait",
+      ]) {
+        await expect(page.locator(selector)).toHaveCSS(
+          "background-image",
+          /\/asset-pack\/buildings\/ui-de\.svg/,
+        );
+      }
+      await expect(page.locator("html")).toHaveCSS(
+        "--ui-button-image",
+        /\/asset-pack\/buildings\/ui-de\.svg/,
+      );
+      await expect(page.locator("html")).toHaveCSS(
+        "--ui-menu-image",
+        /^url\(["']?data:image\/png;base64,/,
+      );
+      const menuPixel = await page.evaluate(async () => {
+        const value = getComputedStyle(document.documentElement)
+          .getPropertyValue("--ui-menu-image")
+          .trim();
+        const image = new Image();
+        image.src = value.replace(/^url\(["']?/, "").replace(/["']?\)$/, "");
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 1;
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("No menu crop canvas");
+        context.drawImage(image, 0, 0, 1, 1);
+        return Array.from(context.getImageData(0, 0, 1, 1).data);
+      });
+      expect(menuPixel).toEqual([221, 68, 51, 255]);
       await expect(page.locator("#research-feudal-age")).toBeDisabled();
       await expect(page.locator("#research-feudal-age")).toHaveCSS(
         "filter",
@@ -165,6 +235,9 @@ for (const available of [false, true]) {
       await expect(page.locator("#selected-icons .original-icon")).toHaveCount(
         5,
       );
+      await expect(
+        page.locator("#stop-units .original-icon image"),
+      ).toHaveAttribute("href", "/asset-pack/buildings/ui-de.svg");
       const token = await page
         .locator("#selected-icons .unit-token")
         .first()

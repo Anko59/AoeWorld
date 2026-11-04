@@ -100,7 +100,7 @@ pub(super) fn match_state(world: &GameWorld, seats: &[SlotInfo]) -> Value {
         player.unit_counts.0[unit.kind as usize] += 1;
         let activity = match unit.task {
             UnitTask::Attacking => 3,
-            UnitTask::Building => 1,
+            UnitTask::Building | UnitTask::Seeding => 1,
             UnitTask::Gathering
             | UnitTask::Returning
             | UnitTask::Farming

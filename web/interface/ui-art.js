@@ -4,7 +4,7 @@ import { imperialUnits } from '/interface/imperial.js';
 const entities = { Scout:448, Villager:83, TownCenter:109, House:70, LumberCamp:562,
   MiningCamp:584, Mill:68, Farm:50, Barracks:12, PalisadeWall:72, Outpost:598,
   Dock:45, ArcheryRange:87, Stable:101, Blacksmith:103, Market:84, WatchTower:79,
-  PalisadeGate:792, Militia:74, ManAtArms:75, FishingShip:13, Sheep:594,
+  PalisadeGate:792, StoneWall:117, StoneGate:64, Militia:74, ManAtArms:75, FishingShip:13, Sheep:594,
   Deer:65, Boar:48, Wolf:126, Archer:4, Skirmisher:7, Spearman:93, Castle:82, Monastery:104, University:209, SiegeWorkshop:49, LongSwordsman:77, Pikeman:358, Crossbowman:24, EliteSkirmisher:6, Knight:38, LightCavalry:546, Monk:125, Mangonel:280, BatteringRam:35, Galley:539, FireShip:529, DemolitionShip:527, TransportShip:545, WarGalley:21, Vassal:434, Steward:434, General:632,
   TwoHandedSwordsman:473, Champion:567, Halberdier:359, Arbalester:492, Cavalier:283, Paladin:569, Hussar:441, CappedRam:422, SiegeRam:548, Onager:550 };
 export const techIds = [22,8,101,202,14,55,278,213,222,67,74,81,199,211,102,207,197,100,98,254,249,280,68,76,82,200,212,13,203,182,50,93,321,34,103,217,264,429,237,209,265,428,96,255,257,75,77,80,201,219,12,221,279];
@@ -21,6 +21,7 @@ export function icon(group, id, symbol='villager', alt=-1) {
   return `<span class="art-icon" data-ui-group="${group}" data-ui-id="${id}" data-ui-alt="${alt}">${validArt(art)?original(art):fallback(symbol)}</span>`;
 }
 export function entityIcon(kind) {
+  if (kind==='Bridge') return icon('commands','build','towncenter');
   const symbol = ['Scout','Knight','LightCavalry','General','Cavalier','Paladin','Hussar'].includes(kind)?'scout':['Villager','Vassal','Steward'].includes(kind)?'villager':['FishingShip','Galley','FireShip','DemolitionShip','TransportShip','WarGalley'].includes(kind)?'ship':
     ['Militia','ManAtArms','Archer','Skirmisher','Spearman',...castleUnits,...imperialUnits].includes(kind)?'soldier':
     ['Sheep','Deer','Boar','Wolf'].includes(kind)?'animal':'towncenter';
@@ -58,17 +59,20 @@ export function panelArt(node, role) {
 }
 export function initArt() {
   document.documentElement.dataset.interfaceArt='fallback';
-  for (const node of document.querySelectorAll('#top-bar .counter>.icon, #top-bar .worker-count>.icon')) {
+  for (const node of document.querySelectorAll('#top-bar .counter>.icon, #top-bar .worker-count>.icon, #train-villager .cost>.icon')) {
     const name=node.querySelector('use')?.getAttribute('href')?.split('#')[1];
     if (name) node.outerHTML=name==='villager' && !node.closest('.population')?entityIcon('Villager'):
       icon('resources',node.closest('.population')?'population':name,name);
+  }
+  for (const [selector,kind] of [['#idle-villagers>.icon','Villager'],['#idle-military>.icon','Militia'],['#town-center>.icon','TownCenter']]) {
+    const node=document.querySelector(selector);if(node)node.outerHTML=entityIcon(kind);
   }
   Promise.all(['interface.json','buildings/interface.json'].map(path =>
     fetch(`/asset-pack/${path}`).then(response => response.ok?response.json():null).catch(() => null)
   )).then(async ([base, overlay]) => {
     if (!base && !overlay) return;
     const data=base ?? {};
-    for (const group of ['units','technologies']) if (overlay?.[group])
+    for (const group of ['units','technologies','commands','resources','panels']) if (overlay?.[group])
       data[group]={...data[group],...Object.fromEntries(
         Object.entries(overlay[group]).map(([id,art]) => [id,{...art,page:`buildings/${art.page}`}])
       )};
@@ -79,6 +83,16 @@ export function initArt() {
     })));
     catalog=data;
     hydrate();
+    const menu=catalog.panels?.['menu-background'];
+    if (validArt(menu)) {
+      const image=new Image();image.src=`/asset-pack/${menu.page}`;await image.decode();
+      const canvas=document.createElement('canvas');canvas.width=menu.width;canvas.height=menu.height;
+      const context=canvas.getContext('2d');
+      if(context){
+        context.drawImage(image,menu.x,menu.y,menu.width,menu.height,0,0,menu.width,menu.height);
+        document.documentElement.style.setProperty('--ui-menu-image',`url('${canvas.toDataURL()}')`);
+      }
+    }
     // Crop original cursor pixels only in browser memory; no derived assets
     // are published. Firefox accepts these bounded PNG cursor URLs.
     for (const [role,key] of [['attack','attack'],['build','build-cursor'],['garrison','garrison']]) {

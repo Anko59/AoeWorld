@@ -1,6 +1,21 @@
 use crate::catalog::units::{Pose, SPRITES};
 
 #[test]
+fn farm_seed_pose_resolves_the_farmers_native_seeding_action() {
+    use crate::de::unit_catalog::{Action, BINDINGS};
+    let binding = BINDINGS
+        .iter()
+        .find(|binding| binding.pose == Pose::FarmerSeed)
+        .expect("farm construction needs its own native seeding animation");
+    assert_eq!(binding.unit, 118);
+    assert!(matches!(binding.action, Action::Work));
+    let sprite = SPRITES[Pose::FarmerSeed as usize];
+    assert!(sprite.manifest_source().starts_with("de/"));
+    assert_eq!(sprite.sample_step(), 1);
+    assert!(sprite.stride > 1);
+}
+
+#[test]
 fn military_units_keep_complete_native_de_direction_blocks() {
     // The army roster, including all current promotion tiers and the Steward.
     let slots = (0..4)
@@ -45,7 +60,7 @@ fn militia_timelines_use_fractional_native_dat_durations() {
 
 #[test]
 fn every_spawned_unit_pose_uses_all_native_cells_and_dat_timing() {
-    assert_eq!(SPRITES.len(), 217);
+    assert_eq!(SPRITES.len(), 223);
     for (pose, source) in SPRITES.iter().copied().enumerate() {
         if matches!(pose, 72 | 73 | 120) {
             continue;

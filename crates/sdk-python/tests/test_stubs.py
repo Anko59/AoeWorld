@@ -35,6 +35,23 @@ def test_package_reexports_the_native_api():
     assert aoeworld.BuildingKind.TOWN_CENTER == aoeworld.BuildingKind.TOWN_CENTER
 
 
+def test_seeding_task_is_exported_and_declared_in_the_stub():
+    tree = ast.parse(STUB.read_text())
+    task = next(
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "UnitTask"
+    )
+    declared = {
+        node.target.id for node in task.body
+        if isinstance(node, ast.AnnAssign)
+    }
+    exported = {name for name in dir(_native.UnitTask) if name.isupper()}
+    assert declared == exported, declared ^ exported
+    assert "SEEDING" in declared
+    assert aoeworld.UnitTask.SEEDING != aoeworld.UnitTask.BUILDING
+    assert aoeworld.UnitTask.SEEDING != aoeworld.UnitTask.FARMING
+
+
 def test_command_result_stub_contains_every_native_member():
     tree = ast.parse(STUB.read_text())
     command_result = next(

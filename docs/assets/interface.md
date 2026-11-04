@@ -1,22 +1,61 @@
-# Original in-game interface
+# Native DE interface
 
 Original interface pixels remain exclusively in ignored `local-assets/` packs.
-`make assets-import` imports `trial/Data/interfac.drs` alongside the gameplay
-archives and writes `interface.json` beside the atlas manifest. The server's
-existing `/asset-pack/` mount serves both. No original PNG, screenshot or SLP
-belongs in Git or a Docker image.
+`make assets-import-de` exports native DE unit, building and technology icons,
+commands, resource counters, bottom panels and the menu background into the
+private overlay's `interface.json`. The server's existing `/asset-pack/` mount
+serves its atlas pages. No original PNG, screenshot, DDS or SLP belongs in Git
+or a Docker image.
 
-The UI catalog contains rectangles in private `interface-*.png` pages, composited
-from existing colour, player and shadow planes using the current blue player
-colour. Original planes remain unchanged. These UI pages do not
-increase the five-page gameplay atlas or add interface frames to that atlas.
+The UI catalog contains checked atlas rectangles. DE DDS and PNG pixels retain
+their alpha; base trial UI pages composite the existing colour, player and
+shadow planes using the current blue player colour. Original planes remain
+unchanged. The DOM's UI images do not occupy the gameplay GPU atlas.
 The DOM loads its pages once, hydrates icons once and uses cropped CSS atlas
 backgrounds for the panel compartments. A missing catalog or unavailable page
 retains the authored SVG interface. Selection and queue icons are rebuilt only
 when their identities or counts change; progress values use the normal bounded
 HUD refresh, never the renderer's frame loop.
 
-## Trial inventory
+The client merges all five overlay groups: `units`, `technologies`, `commands`,
+`resources` and `panels`. Overlay-local page paths remain under `buildings/`.
+Each group replaces matching base roles independently, so equal numeric unit,
+building and technology sheet indices never share the wrong image.
+
+## Current DE inventory
+
+| Role | Installed source and selection |
+| --- | --- |
+| Unit icons | DAT icon indices in `widgetui/textures/ingame/units`; includes the spawned army, workers, wildlife and resource selection portraits |
+| Building icons | All 55 gameplay building records, excluding the six bridge segments, select DAT icon indices in the separate `buildings` directory |
+| Technologies | All 53 current technologies select DAT research icon indices in the separate `tech` directory |
+| Commands | Native `actions/NNN_.png`: cancel 0, delete 1, ungarrison 2, stop 3, garrison 4, repair 28, economic build 30, military build 31, move 32, line 35, attack 41, box 43, staggered 62, flank 63, auto-scout 74 and attack-move 84 |
+| Counters | `icons/resource_{food,wood,gold,stone}.png` and `icons/pop.png` |
+| Bottom compartments | `panels/WEST/command-panel_extended.png`, `single-selection-panel.png`, `map-panel.png` and `topbar.png` |
+| Button and portrait frames | `panels/blank_icon.png` and `panels/frame_regular.png` |
+| Menu, setup and loading background | `widgetui/textures/backgrounds/mainmenu_bg.dds`, converted privately to the bounded menu image |
+
+The HUD has no civilisation identity yet. Both existing style keys use the DE
+WEST architecture. Stone Wall 117, Stone Gate 64 and Palisade Gate 792 resolve
+native building icons 31, 36 and 44. Resource portraits use DAT units 59, 349,
+66, 102 and 53, with native unit-sheet indices 6, 32, 14, 9 and 276. Bridge
+commands use DE's generic build icon; General-only movement uses the General's
+native portrait. Formations and auto-scout use native command icons.
+
+PNG decoding accepts bounded images up to 2048 per side and 4 Mi-pixels.
+Ordinary DDS icons keep their 256-pixel side limit. The menu adapter
+separately validates a block-aligned BC1 source up to 8192×4096, rejecting cubes
+and volumes, then averages each 4×4 block directly into one RGBA output pixel.
+The installed 5120×2160 painting becomes 1280×540 without allocating its full
+source-resolution pixel image. This does not raise the full DDS decoder cap.
+The browser crops the menu's atlas rectangle once into a private in-memory PNG
+URL, so unrelated pixels on that atlas page cannot enter the menu background.
+
+## Base pack inventory
+
+`make assets-import` also writes a base `interface.json` from the trial's
+`interfac.drs`. The complete DE overlay replaces these visible interface roles;
+the base catalog remains available to partial-pack inspection and fixtures.
 
 All resource numbers below identify SLPs in `interfac.drs`:
 
@@ -35,27 +74,24 @@ All resource numbers below identify SLPs in `interfac.drs`:
 | 50751 | Toolbar and frame pieces | Frame 36 is the selection portrait border |
 | 50745 | 26 health-bar states | Imported; live health/progress values remain semantic HTML progress controls |
 
-The native bottom strip starts at y=596, height 172. Its compartments span
+The base bottom strip starts at y=596, height 172. Its compartments span
 x=0..276, 276..680 and 680..1024. These rectangles are scaled independently for
-modern viewport widths. The current game does not expose civilisation identity
-to the HUD; Western is the default. `data-interface-style="celtic"` on the root
-selects the other catalogued frame before initialisation.
+modern viewport widths.
 
 ## DAT mapping
 
-The licensed DE overlay replaces unit icons and all 53 current technology icons
-with native DDS cells. The unit and research DAT indices select their own
-`units` and `tech` directories; equal numeric indices never merge these sheets.
+The licensed DE unit, building and research indices select their own sheets.
 Research language identities locate the supported VER 8.9 records, whose signed
 icon fields select the installed DDS numeric prefixes. Missing or ambiguous
-cells fail import. Both groups merge into the HUD catalog with overlay-local
-page paths, retaining base command, resource and panel art.
+cells fail import. The DE common unit reader preserves the signed icon field
+at byte 51 of the supported unit record.
 
 The unit field is signed `icon_id` at byte 47 of the measured VER 5.7 unit
 record. Negative IDs mean no icon. Building type 80 uses the building sheet;
 other unit types use the unit sheet. The decoder now walks all civilisations
 to reach the research table, preserving research slot ID, name, location and
-signed icon ID. The trial contains 426 research slots.
+signed icon ID. The trial contains 426 research slots. The following tables
+describe that base trial catalog rather than a separate current DE mapping.
 
 | Entity | DAT unit ID → icon frame |
 | --- | --- |
@@ -80,9 +116,8 @@ signed icon ID. The trial contains 426 research slots.
 
 Command assignments were cross-checked against
 [freeaoe ActionPanel.h](https://github.com/sandsmark/freeaoe/blob/master/src/ui/ActionPanel.h).
-AoK has no dedicated Move command button; our existing Move control reuses its
-original pointer cursor. Garrison is cursor frame 13, rather than the gate
-command icon.
+AoK has no dedicated Move command button; its base catalog uses the pointer
+cursor. The complete DE overlay supplies its native Move command instead.
 
 The full local mapping, including wildlife and Feudal building variants, is in
 `interface.json`. `make assets-dat-table` also records unit and technology icon
@@ -96,9 +131,11 @@ the unit field against
 `make test-assets-ui` runs synthetic decoder, sheet selection and crop bounds
 tests. `make test-assets-ui-local` checks the owner's trial DAT mappings against
 reviewed numeric IDs; it requires the local trial and embeds no original bytes.
-The village interface-art browser spec supplies synthetic metadata and SVG
-pixels to exercise pack hydration, fallback, selection DOM retention and the
-Barracks queue's actual unit identity.
+Focused `de::icons::ui::tests` exercise PNG alpha and bounds, exact sheet/frame
+selection, atlas crop bounds and streaming menu conversion without changing the
+DDS cap. The village interface-art browser spec supplies synthetic metadata and
+SVG pixels to exercise all five overlay groups, menu crop pixels, fallback,
+selection DOM retention and the Barracks queue's actual unit identity.
 
 `make ui-proof` runs the local real-server capture spec. It requires ignored
 `.cache/ui/proof.json` containing `{"phase":"after","url":"http://127.0.0.1:8141/"}`.
@@ -111,10 +148,9 @@ make Chromium's local-network checks reject its WebSocket.
 
 ## Data limits
 
-Only Western and Celtic complete gameplay HUD frames were found in this trial.
-It has no Palisade Gate unit 792, so that command retains its authored fallback
-icon. The portrait uses the native unit/building icon and imported portrait
-border: no separate large character portrait was found. Garrison, repair and
+The portrait uses the native unit/building icon and imported portrait
+border: no separate large character portrait is exported. Garrison, repair and
 other command art is inventoried without adding gameplay actions the client
 does not implement. Original fonts and unrelated menu screens are not exported
-as browser UI resources.
+as browser UI resources. Cursor installation retains its existing 64-pixel
+browser limit; the larger native command PNGs do not replace those cursors.

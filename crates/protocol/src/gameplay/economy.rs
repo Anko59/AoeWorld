@@ -88,6 +88,8 @@ pub enum UnitTask {
     Hunting,
     Shepherding,
     Fishing,
+    /// Adding construction progress to a farm by sowing seed.
+    Seeding,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ResourceKind {

@@ -40,7 +40,7 @@ pub(super) const fn get(id: u32) -> Option<Graphic> {
     if id <= 203178 {
         return super::lookup(part6::GRAPHICS, id);
     }
-    if id <= 206009 {
+    if id <= 206008 {
         return super::lookup(part7::GRAPHICS, id);
     }
     if id <= 206010 {
