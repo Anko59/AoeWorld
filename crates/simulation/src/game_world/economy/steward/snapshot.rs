@@ -61,6 +61,7 @@ impl GameWorld {
                     && u.hp > 0
                     && matches!(u.kind, UnitKind::Villager | UnitKind::FishingShip)
                     && !self.embarked(u.id)
+                    && self.vassal_controller(u.id).is_none()
                     && home.owns(u.position)
                 {
                     if u.kind == UnitKind::FishingShip {

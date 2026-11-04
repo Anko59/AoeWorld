@@ -158,6 +158,15 @@ pub(super) async fn read_requests(
                     .queue_set_rally(session_id, sequence, building_id, target)
                     .await
             }
+            Ok(GameplayClientMessage::VassalDevelopmentOrder {
+                sequence,
+                vassal_id,
+                enabled,
+            }) => {
+                service
+                    .queue_vassal_development(session_id, sequence, vassal_id, enabled)
+                    .await
+            }
             Ok(GameplayClientMessage::StewardDismissOrder {
                 sequence,
                 steward_id,

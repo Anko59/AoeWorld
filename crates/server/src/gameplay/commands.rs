@@ -27,6 +27,20 @@ mod queue;
 pub(super) use apply::apply;
 
 impl GameplayService {
+    pub async fn queue_vassal_development(
+        &self,
+        session_id: u64,
+        sequence: u64,
+        vassal_id: EntityId,
+        enabled: bool,
+    ) {
+        self.queue_command(
+            session_id,
+            sequence,
+            PendingAction::VassalDevelopment { vassal_id, enabled },
+        )
+        .await;
+    }
     pub async fn queue_stance(
         &self,
         session_id: u64,

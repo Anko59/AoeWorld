@@ -5,6 +5,10 @@ use super::{GameWorld, GameplayService, Seed};
 mod tests;
 
 impl GameplayService {
+    pub fn vassal_defense_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::vassal_defense_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
     /// Seed the existing geographic world off the async runtime. Its package,
     /// page provider and immutable navigation remain the source for the film.
     pub(crate) async fn prepare_general_river_demo(&self) -> Result<Self, String> {

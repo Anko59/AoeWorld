@@ -221,3 +221,46 @@ async fn movement_recovery_recording_contains_the_army() {
         assert_eq!(world.buildings().count(), 48);
     }
 }
+
+#[tokio::test]
+async fn vassal_demo_streams_castle_age_stocks_and_the_active_defensive_report() {
+    let service = GameplayService::vassal_defense_demo(Seed(7)).unwrap();
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
+    let (session, _) = service.register(None, sender).await;
+    service
+        .subscribe(session, 1, TileRect::from_xywh(70, 70, 90, 70))
+        .await;
+    let mut stocks = false;
+    let mut active = false;
+    for _ in 0..=40 {
+        while let Ok(message) = receiver.try_recv() {
+            encode_gameplay_server(&message)
+                .expect("Vassal demo must stream valid current wire state");
+            let buildings = match &message {
+                GameplayServerMessage::Snapshot {
+                    players, buildings, ..
+                } => {
+                    stocks |= players
+                        .iter()
+                        .any(|p| p.age == aoe_protocol::Age::Castle && p.stockpile.food == 20_000);
+                    buildings
+                }
+                GameplayServerMessage::Tick {
+                    changed_buildings, ..
+                } => changed_buildings,
+                _ => continue,
+            };
+            active |= buildings.iter().any(|b| {
+                b.garrison
+                    .iter()
+                    .any(|g| g.vassal.is_some_and(|r| r.villagers == 20))
+            });
+        }
+        service.tick().await;
+    }
+    assert!(
+        stocks,
+        "demo must show its real Castle Age economy instead of dropping an invalid player frame"
+    );
+    assert!(active, "demo must publish the authoritative Vassal report");
+}

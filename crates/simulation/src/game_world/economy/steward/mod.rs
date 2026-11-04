@@ -340,6 +340,7 @@ impl GameWorld {
     }
     pub(crate) fn player_override(&mut self, id: EntityId) {
         if !self.economy.stewards.automatic {
+            self.release_vassal_unit(id);
             self.economy.stewards.transfers.remove(&id);
             if self.economy.stewards.controlled.contains_key(&id) {
                 self.economy.stewards.manual.insert(id);
@@ -390,6 +391,9 @@ impl GameWorld {
             .is_some_and(|owner| *owner != steward)
         {
             self.forget_steward_refusals(worker);
+        }
+        if self.vassal_controller(worker).is_some() {
+            return;
         }
         let ship = self
             .unit(worker)

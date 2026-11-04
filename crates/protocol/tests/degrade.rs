@@ -205,6 +205,7 @@ fn one_bad_garrison_occupant_costs_only_itself() {
         hp,
         max_hp: 25,
         steward: None,
+        vassal: None,
     };
     let mut tc = building(10);
     tc.garrison = vec![occupant(1, 25), occupant(2, 0), occupant(3, 25)];
@@ -237,6 +238,7 @@ fn a_steward_report_on_a_non_steward_is_cleared_not_the_building() {
         hp: 25,
         max_hp: 25,
         steward: Some(report),
+        vassal: None,
     }];
     let mut message = snapshot(vec![], vec![tc]);
     let reported = sanitize_gameplay_server(&mut message);

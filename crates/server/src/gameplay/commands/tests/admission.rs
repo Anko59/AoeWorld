@@ -204,3 +204,44 @@ fn steward_controls_apply_owned_settings_and_dismiss_and_echo_only_to_owner() {
     );
     assert_eq!(world.unit(worker).unwrap().hp, 0);
 }
+
+#[test]
+fn vassal_development_cannot_be_changed_by_another_owner() {
+    use aoe_core::PlayerId;
+    use aoe_simulation::{GameWorld, UnitKind};
+    let (mut world, _) = GameWorld::vassal_defense_demo(Seed(7)).unwrap();
+    world.advance();
+    world.advance();
+    let vassal = world
+        .buildings()
+        .flat_map(|b| &b.garrison)
+        .find(|g| g.unit.kind == UnitKind::Vassal)
+        .unwrap()
+        .unit
+        .id;
+    let before = world.canonical_hash();
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(1),
+            PendingAction::VassalDevelopment {
+                vassal_id: vassal,
+                enabled: false
+            }
+        ),
+        CommandResult::RejectedNotOwner
+    );
+    assert_eq!(before, world.canonical_hash());
+    assert_eq!(
+        apply(
+            &mut world,
+            PlayerId(0),
+            PendingAction::VassalDevelopment {
+                vassal_id: vassal,
+                enabled: false
+            }
+        ),
+        CommandResult::Accepted
+    );
+    assert!(!world.vassal_status(vassal).unwrap().development);
+}

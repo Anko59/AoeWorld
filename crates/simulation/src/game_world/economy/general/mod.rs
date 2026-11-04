@@ -271,7 +271,8 @@ impl GameWorld {
         }
     }
     pub(super) fn claim_general_unit(&mut self, g: EntityId, u: GameUnit) {
-        if role(u.kind).is_none()
+        if self.vassal_controller(u.id).is_some()
+            || role(u.kind).is_none()
             || u.hp == 0
             || self.embarked(u.id)
             || self.economy.generals.controlled.contains_key(&u.id)

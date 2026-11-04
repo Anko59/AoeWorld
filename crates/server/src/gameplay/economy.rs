@@ -316,6 +316,21 @@ pub(super) fn wire_building_state(
             .iter()
             .filter(|_| viewer.is_none_or(|player| state.player == player))
             .map(|g| aoe_protocol::GarrisonUnitState {
+                vassal: g
+                    .vassal
+                    .filter(|_| g.unit.hp > 0)
+                    .map(|v| aoe_protocol::VassalReport {
+                        villagers: v.villagers,
+                        military: v.military,
+                        development: v.development,
+                        developed: v.developed,
+                        alert: v.alert,
+                        next: v.next.map(wire_building),
+                        wait: v.wait as u8,
+                        completed: v.completed,
+                        total: v.total,
+                        responding: v.responding,
+                    }),
                 id: g.unit.id,
                 kind: wire_kind(g.unit.kind),
                 hp: g.unit.hp,

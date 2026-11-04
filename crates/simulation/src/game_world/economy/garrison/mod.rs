@@ -14,6 +14,7 @@ pub struct GarrisonedUnit {
     pub(crate) heal_at: u64,
     /// Telemetry of an active Steward's economy; outside the canonical hash.
     pub steward: Option<crate::StewardStatus>,
+    pub vassal: Option<crate::VassalStatus>,
 }
 
 impl BuildingKind {
@@ -244,8 +245,12 @@ impl GameWorld {
                     next_hit_tick,
                     heal_at,
                     steward: None,
+                    vassal: None,
                 },
             );
+            if unit.kind == UnitKind::Vassal {
+                self.activate_vassal(id, building);
+            }
             if unit.kind == UnitKind::Steward {
                 self.set_steward_town_center(id, Some(building));
             }

@@ -11,6 +11,23 @@ pub struct GarrisonUnitState {
     pub max_hp: u16,
     /// Owner-only economy report of a garrisoned, active Steward.
     pub steward: Option<StewardReport>,
+    pub vassal: Option<VassalReport>,
+}
+
+/// Owner-only finite fortification progress and defence alert.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct VassalReport {
+    pub villagers: u8,
+    pub military: u8,
+    pub development: bool,
+    pub developed: bool,
+    pub alert: bool,
+    pub next: Option<BuildingKind>,
+    /// Building, reserve, builders, blocked, paused, developed, age.
+    pub wait: u8,
+    pub completed: u16,
+    pub total: u16,
+    pub responding: u16,
 }
 
 /// What the Steward's domain is doing and, if it is not growing, why not.
@@ -82,7 +99,9 @@ pub(super) fn valid(b: &GameplayBuildingState) -> bool {
         && b.garrison
             .iter()
             .all(|u| u.id != b.id && b.kind.admits(u.kind) && u.hp > 0 && u.hp <= u.max_hp)
-        && b.garrison.iter().all(steward_valid)
+        && b.garrison
+            .iter()
+            .all(|u| steward_valid(u) && vassal_valid(u))
 }
 
 /// A Steward report belongs to a Steward and stays within the managed bounds.
@@ -97,6 +116,18 @@ fn steward_valid(u: &GarrisonUnitState) -> bool {
     })
 }
 
+fn vassal_valid(u: &GarrisonUnitState) -> bool {
+    u.vassal.is_none_or(|r| {
+        u.kind == UnitKind::Vassal
+            && r.villagers <= 20
+            && r.military <= 20
+            && r.wait <= 6
+            && r.total <= 128
+            && r.completed <= r.total
+            && (!r.developed || r.completed == r.total)
+    })
+}
+
 /// Keeps the occupants `valid` accepts, in order and within capacity, so one
 /// bad occupant costs only itself.
 #[cfg(feature = "server-repair")]
@@ -107,6 +138,9 @@ pub(super) fn repair(b: &mut GameplayBuildingState) {
     }
     let (id, kind) = (b.id, b.kind);
     for u in &mut b.garrison {
+        if !vassal_valid(u) {
+            u.vassal = None;
+        }
         if !steward_valid(u) {
             u.steward = None;
         }
