@@ -45,7 +45,7 @@ pub(super) fn eligible(u: &GameplayUnitState, player: aoe_core::PlayerId) -> boo
         && u.kind == UnitKind::Villager
         && u.attack_target.is_none()
         && u.hunt_target.is_none()
-        && u.task != UnitTask::Building
+        && !matches!(u.task, UnitTask::Building | UnitTask::Seeding)
 }
 
 /// Track all outgoing human commands, so far builds leave room for other UI orders.
