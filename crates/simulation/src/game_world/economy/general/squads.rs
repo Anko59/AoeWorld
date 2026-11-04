@@ -152,6 +152,56 @@ impl GameWorld {
             .find(|&point| self.body_position_clear(kind, point))
     }
 
+    /// Fight rejection can precede the first march decision. Establish the
+    /// same stable heading for both admission and recovery.
+    fn general_march_heading(&mut self, g: EntityId, to: WorldPosition) -> Option<WorldPosition> {
+        let general = self.unit(g)?;
+        let army = self.economy.generals.armies.get_mut(&g)?;
+        if let Some((goal, heading)) = army.layout
+            && goal == to
+        {
+            return Some(heading);
+        }
+        let mut heading = WorldPosition::new(to.x - general.position.x, to.y - general.position.y);
+        if heading == WorldPosition::new(0, 0) {
+            heading = WorldPosition::new(1024, 0);
+        }
+        army.layout = Some((to, heading));
+        Some(heading)
+    }
+
+    /// Direct siege/building orders also retain the army's march when their
+    /// firing-position search proves the target unreachable.
+    pub(super) fn resume_general_fighter(
+        &mut self,
+        g: EntityId,
+        id: EntityId,
+        changed: &mut Vec<EntityId>,
+        work: &mut GeneralWork,
+    ) {
+        let army = &self.economy.generals.armies[&g];
+        let group = if id == g {
+            SQUAD_LIMIT
+        } else {
+            let Some(group) = army.squads.iter().position(|s| s.members.contains(&id)) else {
+                return;
+            };
+            group
+        };
+        let soldiers: Vec<_> = if group == SQUAD_LIMIT {
+            self.unit(g).into_iter().collect()
+        } else {
+            army.squads[group]
+                .members
+                .iter()
+                .filter_map(|&id| self.unit(id))
+                .collect()
+        };
+        if !soldiers.is_empty() {
+            self.resume_general_squad(g, group, &soldiers, changed, work);
+        }
+    }
+
     pub(super) fn resume_general_squad(
         &mut self,
         g: EntityId,
@@ -160,13 +210,13 @@ impl GameWorld {
         changed: &mut Vec<EntityId>,
         work: &mut GeneralWork,
     ) {
+        let Some(to) = self.economy.generals.armies[&g].destination else {
+            return;
+        };
+        let Some(heading) = self.general_march_heading(g, to) else {
+            return;
+        };
         let army = &self.economy.generals.armies[&g];
-        let Some(to) = army.destination else {
-            return;
-        };
-        let Some((_, heading)) = army.layout else {
-            return;
-        };
         let goal = if group == SQUAD_LIMIT {
             Some(to)
         } else {
@@ -229,21 +279,8 @@ impl GameWorld {
             return;
         }
         let Some(general) = self.unit(g) else { return };
-        let heading = match self.economy.generals.armies[&g].layout {
-            Some((goal, heading)) if goal == to => heading,
-            _ => {
-                let h = WorldPosition::new(to.x - general.position.x, to.y - general.position.y);
-                let h = if h == WorldPosition::new(0, 0) {
-                    WorldPosition::new(1024, 0)
-                } else {
-                    h
-                };
-                let Some(army) = self.economy.generals.armies.get_mut(&g) else {
-                    return;
-                };
-                army.layout = Some((to, h));
-                h
-            }
+        let Some(heading) = self.general_march_heading(g, to) else {
+            return;
         };
         let available: BTreeSet<_> = army.iter().map(|u| u.id).collect();
         let mut counts = [0; 4];

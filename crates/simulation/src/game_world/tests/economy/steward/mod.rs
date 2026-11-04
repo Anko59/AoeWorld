@@ -243,10 +243,7 @@ fn training_showcase_preserves_its_workers_for_the_economy_recording() {
         w.units().all(|u| u.player == PlayerId(0)),
         "economic footage must not inherit enemy combat units"
     );
-    assert!(
-        w.animals()
-            .all(|a| a.kind != crate::AnimalKind::Wolf || a.hp == 0)
-    );
+    assert!(w.animals().all(|a| a.kind != crate::AnimalKind::Wolf));
     let center = w
         .player_buildings_of(PlayerId(0), BuildingKind::TownCenter)
         .next()

@@ -99,9 +99,9 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(
         checkpoint,
-        // Current Steward controls and transfer reservations change this replay;
+        // Bounded detours around stationary work bodies change this replay;
         // the complete 1/4-worker comparison above still holds.
-        "3e7e90a05ce77ae131f54a9212567994d762cc530a596749896ac8baa4b0312d"
+        "94ae9d1304961bbd55c43e8cc63faa2ca2a87ff85723be392c1f3f8db7a8bd0c"
     );
 }
 

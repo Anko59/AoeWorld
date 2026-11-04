@@ -9,6 +9,8 @@ mod coast;
 mod imperial;
 #[path = "demo/kingdom.rs"]
 mod kingdom;
+#[path = "demo/recovery.rs"]
+mod recovery;
 #[path = "demo/river.rs"]
 mod river;
 
@@ -154,6 +156,8 @@ impl GameWorld {
     /// exactly the same orders as a match. The existing demo clock runs 4x.
     pub fn steward_demo(seed: Seed) -> Result<(Self, EntityId), EconomyError> {
         let (mut world, primary) = Self::military_demo(seed)?;
+        // Keep dev's training fixture wolf-free, including retained corpses.
+        world.remove_animals(crate::AnimalKind::Wolf);
         world.isolate_economy_demo(primary);
         world.complete_research(PlayerId(0), crate::Tech::CastleAge, &mut Vec::new());
         world.insert_building(
