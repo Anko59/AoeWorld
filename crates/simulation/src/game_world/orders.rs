@@ -9,9 +9,6 @@ impl GameWorld {
     ) -> Result<bool, GameWorldError> {
         let destination = self.spread_destination(id, destination)?;
         let result = self.issue_task_move(id, destination)?;
-        if !self.economy.stewards.automatic {
-            self.release_vassal_unit(id);
-        }
         self.cancel_transport_journey(id);
         self.cancel_auto_scout(id);
         self.stop_gathering(id);

@@ -131,7 +131,7 @@ impl GameWorld {
         let player = self.units[index].state.player;
         self.combat.hp_quarters[id.0 as usize] = 0;
         self.deactivate_vassal(id);
-        self.release_vassal_unit(id);
+        self.forget_vassal_unit(id);
         self.forget_steward(id);
         self.forget_general(id);
         self.sink_cargo(id);
@@ -191,7 +191,7 @@ impl GameWorld {
 
     /// Removes a unit from every index. Its slot is filled by the last unit.
     pub(crate) fn remove_unit(&mut self, id: EntityId) {
-        self.release_vassal_unit(id);
+        self.forget_vassal_unit(id);
         self.forget_steward_worker(id);
         self.stop_general(id);
         if let Some(g) = self.general_controller(id) {

@@ -2,11 +2,19 @@ use super::super::Economy;
 impl Economy {
     pub(crate) fn hash_vassals(&self, h: &mut blake3::Hasher) {
         let m = &self.vassals;
-        if m.domains.is_empty() && m.recalls.is_empty() && m.returns.is_empty() {
+        if m.domains.is_empty()
+            && m.recalls.is_empty()
+            && m.returns.is_empty()
+            && m.manual.is_empty()
+        {
             return;
         }
         h.update(b"vassal-defense");
         h.update(&m.cursor.map_or(u32::MAX, |id| id.0).to_le_bytes());
+        h.update(&(m.manual.len() as u64).to_le_bytes());
+        for id in &m.manual {
+            h.update(&id.0.to_le_bytes());
+        }
         h.update(&(m.domains.len() as u64).to_le_bytes());
         for (id, d) in &m.domains {
             for n in [id.0, d.castle.0, u32::from(d.player.0)] {

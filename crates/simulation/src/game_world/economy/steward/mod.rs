@@ -340,7 +340,7 @@ impl GameWorld {
     }
     pub(crate) fn player_override(&mut self, id: EntityId) {
         if !self.economy.stewards.automatic {
-            self.release_vassal_unit(id);
+            self.vassal_player_override(id);
             self.economy.stewards.transfers.remove(&id);
             if self.economy.stewards.controlled.contains_key(&id) {
                 self.economy.stewards.manual.insert(id);

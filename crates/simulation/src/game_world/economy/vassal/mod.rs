@@ -61,6 +61,8 @@ struct Recall {
 pub(crate) struct Manager {
     domains: BTreeMap<EntityId, Domain>,
     controlled: BTreeMap<EntityId, EntityId>,
+    /// An owner-commanded soldier is not recruited again when its order ends.
+    pub(super) manual: BTreeSet<EntityId>,
     recalls: BTreeMap<EntityId, Recall>,
     returns: BTreeMap<EntityId, WorldPosition>,
     cursor: Option<EntityId>,
@@ -159,6 +161,19 @@ impl GameWorld {
             d.soldiers.remove(&id);
         }
     }
+    pub(crate) fn vassal_player_override(&mut self, id: EntityId) {
+        if self.economy.stewards.automatic || self.vassal_controller(id).is_none() {
+            return;
+        }
+        if self.unit(id).is_some_and(|u| u.kind != UnitKind::Villager) {
+            self.economy.vassals.manual.insert(id);
+        }
+        self.release_vassal_unit(id);
+    }
+    pub(crate) fn forget_vassal_unit(&mut self, id: EntityId) {
+        self.release_vassal_unit(id);
+        self.economy.vassals.manual.remove(&id);
+    }
     pub(crate) fn advance_vassals(&mut self, changed: &mut Vec<EntityId>) {
         if (self.economy.vassals.domains.is_empty() && self.economy.vassals.returns.is_empty())
             || !self.tick.0.is_multiple_of(20)
@@ -216,6 +231,8 @@ impl GameWorld {
                 .filter(|u| u.player == player && u.hp > 0 && inside(center, u.position))
             {
                 if self.vassal_controller(u.id).is_some()
+                    || self.general_controller(u.id).is_some()
+                    || self.economy.vassals.manual.contains(&u.id)
                     || self.embarked(u.id)
                     || u.moving
                     || u.planning
@@ -236,7 +253,6 @@ impl GameWorld {
                     continue;
                 }
                 self.forget_steward_worker(u.id);
-                self.forget_general(u.id);
                 let Some(d) = self.economy.vassals.domains.get_mut(&id) else {
                     continue;
                 };

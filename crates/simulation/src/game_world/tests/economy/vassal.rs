@@ -1,6 +1,9 @@
 use super::*;
 use crate::{Age, Stockpile};
 
+#[path = "vassal/ownership.rs"]
+mod ownership;
+
 fn setup() -> (GameWorld, EntityId, EntityId) {
     let (mut w, _, _) = village();
     let p = w.economy.players.get_mut(&PlayerId(0)).unwrap();

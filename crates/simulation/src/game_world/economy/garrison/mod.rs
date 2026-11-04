@@ -230,7 +230,13 @@ impl GameWorld {
             } else {
                 UnitTask::Idle
             };
+            // Sheltering removes the map record, but retains the same living
+            // identity and its owner's opt-out from Vassal recruitment.
+            let vassal_manual = self.economy.vassals.manual.contains(&id);
             self.remove_unit(id);
+            if vassal_manual {
+                self.economy.vassals.manual.insert(id);
+            }
             self.change_unit_census(unit.player, None, Some(unit.kind), 1);
             let Some(shelter) = self.economy.buildings.get_mut(&building) else {
                 self.insert_map_unit(restored, next_hit_tick);

@@ -355,8 +355,11 @@ The [Steward](economy/steward.md) is trained at a Town Center and has a fixed
 
 Garrison a Vassal in an owned Castle to activate a 24-tile defensive territory.
 It adopts only idle own units, up to 20 villagers and 20 military. Busy Steward
-workers and General soldiers keep their current jobs. Explicit owner orders
-release Vassal control. Ungarrisoning releases the domain.
+workers keep their jobs. General army members are never recruited, including
+idle members during a recall or return. Accepted owner orders release Vassal
+control; a manually commanded soldier stays outside Vassal recruitment for its
+remaining lifetime, including after Stop or completion of its order.
+Ungarrisoning releases the domain.
 
 Development has a finite target: two Watch Towers (from Feudal Age), one
 Castle-side Barracks and a 21-by-21 wall perimeter with two four-tile gates.

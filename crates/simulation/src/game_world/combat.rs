@@ -210,6 +210,7 @@ impl GameWorld {
             if let Some(a) = self.combat.attackers.get_mut(&id) {
                 a.origin = None;
             }
+            self.vassal_player_override(id);
             return Ok(());
         }
         let range =
