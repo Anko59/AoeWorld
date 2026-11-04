@@ -51,11 +51,13 @@ impl GameWorld {
             w.spawn_kind(PlayerId(0), UnitKind::Knight, at(138 + i % 4, 94 + i / 4)?)?;
         }
         let general = w.spawn_kind(PlayerId(0), UnitKind::General, at(138, 92)?)?;
-        // An ordinary long approach leaves time to film the entire finite plan.
+        // Finish the approach from the south, outside the waiting General's
+        // sight. Coming from the north lured him into combat before the call
+        // and left only a brief alert during capture setup.
         // No tick-triggered purchases, damage, teleportation or injected alerts.
         for i in 0..4 {
             let enemy = w.spawn_kind(PlayerId(1), UnitKind::Knight, at(225 + i, 20)?)?;
-            for leg in 0..4 {
+            for leg in 0..5 {
                 w.issue_queued_move(enemy, at(225 + i, if leg % 2 == 0 { 230 } else { 20 })?)?;
             }
             w.issue_queued_move(enemy, at(106, 92)?)?;

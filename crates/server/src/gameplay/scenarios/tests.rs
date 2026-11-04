@@ -3,6 +3,138 @@ use aoe_core::TileRect;
 use aoe_protocol::{GameplayServerMessage, encode_gameplay_server};
 
 #[tokio::test]
+async fn vassal_demo_delivers_attack_recall_and_return() {
+    use aoe_core::PlayerId;
+    use aoe_protocol::UnitKind;
+    let service = GameplayService::vassal_defense_demo(Seed(7)).unwrap();
+    let (general, home) = {
+        let w = service.world.read().await;
+        let g = w
+            .units()
+            .find(|u| u.kind == aoe_simulation::UnitKind::General)
+            .unwrap();
+        (g.id, g.position)
+    };
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
+    let (session, _) = service.register(None, sender).await;
+    service
+        .subscribe(session, 1, TileRect::from_xywh(70, 70, 180, 180))
+        .await;
+    let (mut alert, mut called, mut arrived, mut returned) = (false, false, false, false);
+    let mut damaged = false;
+    for _ in 0..6_000 {
+        while let Ok(message) = receiver.try_recv() {
+            encode_gameplay_server(&message).expect("valid Vassal match wire frame");
+            let (tick, buildings, units) = match message {
+                GameplayServerMessage::Snapshot {
+                    tick,
+                    buildings,
+                    units,
+                    ..
+                } => (tick, buildings, units),
+                GameplayServerMessage::Tick {
+                    tick,
+                    changed_buildings,
+                    changed_units,
+                    ..
+                } => (tick, changed_buildings, changed_units),
+                _ => continue,
+            };
+            damaged |= units
+                .iter()
+                .any(|u| u.player == PlayerId(0) && u.last_hit.is_some());
+            for report in buildings
+                .iter()
+                .flat_map(|b| &b.garrison)
+                .filter_map(|g| g.vassal)
+            {
+                if report.alert && !alert {
+                    // The filmed call must cause the march: the approach must
+                    // not have lured the General into an earlier fight.
+                    assert_eq!(
+                        service
+                            .world
+                            .read()
+                            .await
+                            .unit(general)
+                            .unwrap()
+                            .position
+                            .tile_floor(),
+                        home.tile_floor(),
+                        "demo General must still be waiting when the Vassal calls"
+                    );
+                    let dx = i64::from(home.x) - 92 * 1024;
+                    let dy = i64::from(home.y) - 92 * 1024;
+                    assert!(dx * dx + dy * dy <= (100 * 1024_i64).pow(2));
+                    eprintln!(
+                        "Vassal alert at tick {}: {report:?}; recall position {home:?}",
+                        tick.0
+                    );
+                }
+                alert |= report.alert;
+                called |= report.responding > 0;
+            }
+            for g in units
+                .iter()
+                .filter(|u| u.id == general && u.kind == UnitKind::General)
+            {
+                let tile = g.position.tile_floor();
+                let dx = i64::from(g.position.x) - 92 * 1024;
+                let dy = i64::from(g.position.y) - 92 * 1024;
+                if called && dx * dx + dy * dy <= (24 * 1024_i64).pow(2) && !arrived {
+                    eprintln!("General arrived at tick {}: {tile:?}", tick.0);
+                    arrived = true;
+                }
+                if arrived
+                    && g.position.tile_floor() == home.tile_floor()
+                    && !g.moving
+                    && !g.planning
+                    && g.general
+                        .is_some_and(|s| s.state == aoe_protocol::GeneralState::Idle)
+                    && !returned
+                {
+                    eprintln!("General returned at tick {}: {tile:?}", tick.0);
+                    returned = true;
+                }
+            }
+        }
+        if returned {
+            break;
+        }
+        service.tick().await;
+    }
+    let w = service.world.read().await;
+    let enemies: Vec<_> = w
+        .units()
+        .filter(|u| u.player != PlayerId(0))
+        .map(|u| {
+            (
+                u.id,
+                u.position.tile_floor(),
+                u.task,
+                w.move_destinations(u.id),
+            )
+        })
+        .collect();
+    assert!(alert, "server must publish the attack; enemies {enemies:?}");
+    assert!(called, "server must publish the General recall");
+    assert!(
+        damaged,
+        "the recorded fight must include real damage to an owned unit"
+    );
+    assert!(
+        arrived,
+        "called General must reach the attacked territory; {:?}",
+        w.unit(general)
+    );
+    assert!(
+        returned,
+        "General must return to its earlier position; {:?}",
+        w.unit(general)
+    );
+}
+
+#[tokio::test]
 async fn stability_showcase_waits_for_the_recorded_garrison_order() {
     let service = GameplayService::steward_stability_demo(Seed(7)).unwrap();
     for _ in 0..40 {

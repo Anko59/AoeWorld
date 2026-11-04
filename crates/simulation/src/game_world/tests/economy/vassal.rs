@@ -224,6 +224,41 @@ fn vassal_demo_finishes_before_attack_and_general_response() {
 }
 
 #[test]
+fn vassal_called_general_with_an_army_returns_to_the_saved_position() {
+    let (mut w, v, _) = setup();
+    let at = |x, y| WorldPosition::from_tile_center(TileCoord::new(x, y)).unwrap();
+    let origin = at(145, 92);
+    for i in 0..12 {
+        w.spawn_kind(PlayerId(0), UnitKind::Knight, at(145 + i % 4, 94 + i / 4))
+            .unwrap();
+    }
+    let general = w
+        .spawn_kind(PlayerId(0), UnitKind::General, origin)
+        .unwrap();
+    w.set_fog_disabled(true);
+    advance(&mut w, 40);
+    assert!(w.general_status(general).unwrap().army_size > 0);
+    let enemy = w
+        .spawn_kind(PlayerId(1), UnitKind::Knight, at(110, 92))
+        .unwrap();
+    w.issue_stance(PlayerId(1), &[enemy], aoe_core::CombatStance::StandGround)
+        .unwrap();
+    advance(&mut w, 80);
+    assert!(w.vassal_status(v).unwrap().alert);
+    assert!(w.unit(general).unwrap().position.x < origin.x);
+    w.remove_unit(enemy);
+    advance(&mut w, 2_000);
+    assert_eq!(
+        w.unit(general).unwrap().position.tile_floor(),
+        origin.tile_floor()
+    );
+    assert_eq!(
+        w.general_status(general).unwrap().state,
+        crate::GeneralState::Idle
+    );
+}
+
+#[test]
 fn vassal_reuses_existing_buildings_and_skips_obstructed_tower_sites() {
     let (mut w, v, _) = setup();
     w.insert_building(
