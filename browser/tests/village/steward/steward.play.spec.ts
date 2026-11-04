@@ -60,7 +60,12 @@ test("train one Steward per Town Center and activate its visible economic domain
   page,
   request,
 }, info) => {
-  test.setTimeout(150_000);
+  // Real-time simulation waits (Steward and villager training plus the prepaid
+  // queue drain) take about 50 s on a fast renderer; browser-defaults draws
+  // through slower software GL and takes about 85 s locally. CI runners are
+  // slower again, so the earlier 150 s cap expired at the last assertion of an
+  // otherwise healthy run.
+  test.setTimeout(240_000);
   if (info.project.name === "canvas") await forceCanvas(page);
   if (info.project.name === "firefox-webgl2") await forceWebGl(page);
   // Optional capture uses only this checkout's own make dev DEV_PORT=8148.
