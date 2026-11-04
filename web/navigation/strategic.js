@@ -132,6 +132,9 @@ export function initStrategic(fog, actors) {
     canvas.dataset.clusters = String(picks.length);
     canvas.dataset.terrainDraws = terrain ? '1' : '0';
     canvas.dataset.territory = 'settlements';
+    // Retained GPU canvases can composite independently. Cover their whole
+    // surface until the detailed renderer presents a complete replacement.
+    scene.dataset.strategicCovered = 'true';
     canvas.dataset.redraws = String(++redraws);
     canvas.dataset.picks = JSON.stringify(picks.map(p => ({ x: p.x * scale, y: p.y * scale, count: p.count })));
     return true;
@@ -149,6 +152,7 @@ export function initStrategic(fog, actors) {
     return nearest;
   }
   function present() {
+    delete document.getElementById('scene').dataset.strategicCovered;
     canvas.hidden = label.hidden = true;
     tokens.show(false); layers.show(false); cockpit.show(false); reveal.show(false);
     window.aoeNavigation?.views?.show(false);

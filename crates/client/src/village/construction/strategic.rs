@@ -126,9 +126,12 @@ pub(crate) fn preview(client: &Client) {
     for tile in &tiles {
         for [x, y] in [
             [tile.x, tile.y],
-            [tile.x + kind.side(), tile.y],
-            [tile.x + kind.side(), tile.y + kind.depth()],
-            [tile.x, tile.y + kind.depth()],
+            [tile.x.saturating_add(kind.side()), tile.y],
+            [
+                tile.x.saturating_add(kind.side()),
+                tile.y.saturating_add(kind.depth()),
+            ],
+            [tile.x, tile.y.saturating_add(kind.depth())],
         ] {
             let p = crate::playground::game::strategic::screen_position(
                 client,
@@ -150,8 +153,8 @@ pub(crate) fn chunks(client: &Client) -> Vec<(i32, i32)> {
     };
     let mut chunks = std::collections::BTreeSet::new();
     for tile in tiles(client, at).unwrap_or_default() {
-        for x in tile.x..tile.x + kind.side() {
-            for y in tile.y..tile.y + kind.depth() {
+        for x in tile.x..tile.x.saturating_add(kind.side()) {
+            for y in tile.y..tile.y.saturating_add(kind.depth()) {
                 if x >= 0
                     && y >= 0
                     && x < client.config.width_tiles

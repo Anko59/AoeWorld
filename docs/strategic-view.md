@@ -44,7 +44,10 @@ records, 1,024 historical contacts and the existing 2,048 deposit markers. Nearb
 labels use a bounded screen-grid placement search and retain lines to their true
 locations. These bounds are not a qualification of a crowded 1,000-player RTS.
 The strategic scene retains one terrain raster and fog plane; zooming does not
-request detailed terrain for the whole map.
+request detailed terrain for the whole map. While it covers the detailed scene,
+the retained renderer canvas is transparent but remains the input surface. The
+strategic cover is removed only after a complete near frame is presented,
+including when terrain or art delays that replacement.
 
 Resource discovery retains exact resource IDs in a 2,048-entry browser cache.
 Accepted authoritative resource updates retire depleted IDs incrementally;
