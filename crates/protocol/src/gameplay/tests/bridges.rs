@@ -98,3 +98,23 @@ fn bridge_endpoint_wire_preserves_negative_slopes_and_rejects_noncanonical_endpo
     };
     assert!(!reversed.valid());
 }
+
+#[test]
+fn road_kind_appends_wire_value_and_line_order_roundtrips() {
+    assert_eq!(
+        postcard::to_allocvec(&BuildingKind::StoneGate).unwrap(),
+        [22]
+    );
+    assert_eq!(postcard::to_allocvec(&BuildingKind::Road).unwrap(), [23]);
+    let order = ClientMessage::BuildWallOrder {
+        sequence: 3,
+        builder_ids: vec![EntityId(7)],
+        kind: BuildingKind::Road,
+        from: TileCoord::new(29, 20),
+        to: TileCoord::new(34, 20),
+        queued: true,
+    };
+    let bytes = encode_client(&order).unwrap();
+    assert_eq!(decode_client(&bytes).unwrap(), order);
+    assert_eq!(bytes, [9, 3, 1, 7, 23, 58, 40, 68, 40, 1]);
+}

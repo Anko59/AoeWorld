@@ -21,6 +21,8 @@ mod market;
 mod rejections;
 #[path = "economy/navigation/resource_collision.rs"]
 mod resource_collision;
+#[path = "economy/navigation/roads.rs"]
+mod roads;
 mod steward;
 mod training;
 mod vassal;

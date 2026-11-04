@@ -253,3 +253,31 @@ fn a_reserved_recovery_endpoint_cannot_release_a_formation_member() {
     assert_eq!(w.formation_destination_slot(follower), slot);
     assert_eq!(w.units[index].order.unwrap().destination, recovery);
 }
+
+#[test]
+fn road_formation_certificate_covers_the_faster_physical_step() {
+    let mut w = GameWorld::new(WorldConfig::new(256, 256, aoe_core::Seed(1)).unwrap()).unwrap();
+    let at = WorldPosition::new(100 * 1024 + 512, 100 * 1024 + 512);
+    w.insert_building(
+        PlayerId(0),
+        crate::BuildingKind::Road,
+        aoe_core::TileRect::from_xywh(100, 100, 1, 1),
+        true,
+    )
+    .unwrap();
+    let id = w.spawn_kind(PlayerId(0), UnitKind::Militia, at).unwrap();
+    w.issue_formation_move(
+        PlayerId(0),
+        &[id],
+        Formation::Line,
+        WorldPosition::new(125 * 1024, at.y),
+        false,
+        false,
+    )
+    .unwrap();
+    w.formations.get_mut(&id).unwrap().members[0].carry = (1_u64 << 32) - 1;
+    let motion = w.formation_motion(w.lookup[&id]).unwrap();
+    let (speed, denominator) = w.movement_speed(UnitKind::Militia, PlayerId(0));
+    assert!(motion.budget > speed.div_ceil(denominator) as i32);
+    assert!(w.formation_step_bound() >= motion.budget + 2);
+}

@@ -184,6 +184,9 @@ pub fn sprite_slot(kind: BuildingKind, progress: u16, rubble: bool) -> usize {
     if let Some(slot) = stone_slot(kind, progress, rubble) {
         return slot;
     }
+    if kind == BuildingKind::Road {
+        return 9;
+    }
     if kind == BuildingKind::Bridge {
         return if rubble {
             20
@@ -302,6 +305,9 @@ pub fn age_sprite_slot(
             74, 75, 76, 77, 78, 5, 79, 7, 8, 80, 81, 82, 83, 84, 30, 31, 45, 85, 86, 87,
         ],
     ];
+    if kind == BuildingKind::Road {
+        return 9;
+    }
     if kind == BuildingKind::Bridge {
         return sprite_slot(kind, progress, rubble);
     }

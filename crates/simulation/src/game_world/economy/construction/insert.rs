@@ -145,6 +145,9 @@ impl GameWorld {
                 bridge_span,
             },
         );
+        if complete && kind == BuildingKind::Road {
+            self.economy.roads.insert(footprint.min);
+        }
         if kind == BuildingKind::Farm {
             self.reset_farm_production(id);
         }

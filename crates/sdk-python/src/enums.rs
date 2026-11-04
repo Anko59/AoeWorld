@@ -100,6 +100,7 @@ mirror!(
         Bridge,
         StoneWall,
         StoneGate,
+        Road,
     ]
 );
 mirror!(

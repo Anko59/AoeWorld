@@ -44,7 +44,7 @@ pub(super) fn present(client: &Client) {
         "holding territory · ".into()
     };
     let label = format!(
-        "Vassal · {alert}{}/20 villagers · {}/20 military · next: {next} · {why}. Developed when two towers, a barracks and the gated wall ring are complete: {}/{} sites. Territory: 24 tiles. Calls Generals within 100 tiles.",
+        "Vassal · {alert}{}/20 villagers · {}/20 military · next: {next} · {why}. Developed when two towers, a barracks, the gated wall ring and a road to the nearest Town Center are complete: {}/{} sites. Territory: 24 tiles. Calls Generals within 100 tiles.",
         r.villagers, r.military, r.completed, r.total
     );
     vassal_update(

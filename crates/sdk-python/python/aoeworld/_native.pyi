@@ -78,6 +78,7 @@ class BuildingKind:
     SIEGE_WORKSHOP: BuildingKind
     STONE_WALL: BuildingKind
     STONE_GATE: BuildingKind
+    ROAD: BuildingKind
     def __int__(self) -> int: ...
     def __hash__(self) -> int: ...
 

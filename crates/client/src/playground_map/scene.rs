@@ -5,8 +5,13 @@ use aoe_rendering::{ProjectedSurfaceTriangle, SceneCamera, WorldKeyIndex};
 mod actors;
 #[path = "scene/bridges.rs"]
 mod bridges;
+#[path = "scene/foundations.rs"]
+mod foundations;
 #[path = "scene/projectiles.rs"]
 mod projectiles;
+#[path = "scene/roads.rs"]
+mod roads;
+use foundations::{FoundationKey, foundation_key};
 
 #[cfg(test)]
 #[path = "scene/tests/cache.rs"]
@@ -20,7 +25,7 @@ mod worker_tests;
 
 pub(crate) struct PreparedScene {
     camera: Camera,
-    foundations: Vec<(aoe_rendering::SceneUnitKind, [f64; 2])>,
+    foundations: Vec<FoundationKey>,
     pub terrain: Vec<SceneTerrain>,
     pub decorations: Vec<SceneDecoration>,
     pub triangles: Vec<ProjectedSurfaceTriangle>,
@@ -44,13 +49,14 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
         .village
         .buildings
         .iter()
-        .map(|b| (building_kind(b), super::super::village::building_center(b)))
+        .map(foundation_key)
         .collect::<Vec<_>>();
     let mut terrain = scene_terrain(client);
     let units = client
         .village
         .buildings
         .iter()
+        .filter(|building| building.kind != aoe_protocol::BuildingKind::Road)
         .map(|building| aoe_rendering::SceneUnit {
             kind: building_kind(building),
             id: building.id,
@@ -61,6 +67,7 @@ pub(in super::super) fn prepare(client: &Client) -> Rc<PreparedScene> {
         })
         .collect::<Vec<_>>();
     aoe_rendering::apply_building_foundations(&mut terrain, &client.art, &units);
+    roads::paint(&mut terrain, &client.village.buildings);
     let mut scene = PreparedScene::new(client.camera, terrain);
     scene.foundations = foundations;
     scene.decorations = decorations::for_scene(client, &scene);
@@ -80,9 +87,11 @@ pub(in super::super) fn replace_buildings(
         .get_mut()
         .as_ref()
         .is_some_and(|scene| {
-            !scene.foundations.iter().copied().eq(buildings
+            !scene
+                .foundations
                 .iter()
-                .map(|b| (building_kind(b), super::super::village::building_center(b))))
+                .copied()
+                .eq(buildings.iter().map(foundation_key))
         });
     if changed {
         client.terrain_scene.get_mut().take();
@@ -96,7 +105,7 @@ impl PreparedScene {
             + self.terrain.capacity() * size_of::<SceneTerrain>()
             + self.decorations.capacity() * size_of::<SceneDecoration>()
             + self.triangles.capacity() * size_of::<ProjectedSurfaceTriangle>()
-            + self.foundations.capacity() * size_of::<(aoe_rendering::SceneUnitKind, [f64; 2])>()
+            + self.foundations.capacity() * size_of::<FoundationKey>()
             + self.buckets.capacity() * size_of::<Vec<usize>>()
             + self
                 .buckets
@@ -338,6 +347,9 @@ pub(in super::super) fn units(
         .map(|b| (b.footprint.min.x, b.footprint.min.y, b.kind))
         .collect();
     for building in &client.village.buildings {
+        if building.kind == aoe_protocol::BuildingKind::Road {
+            continue;
+        }
         if building.kind == aoe_protocol::BuildingKind::Bridge {
             bridges::append(client, scene, building, &mut units);
             continue;

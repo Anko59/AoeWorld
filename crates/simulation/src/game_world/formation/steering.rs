@@ -378,7 +378,12 @@ impl GameWorld {
                         // Every member has this current physical cap, including
                         // upgrades after anchor arrival. Mixed groups retain
                         // the conservative 1.5x-pace bound.
-                        let (speed, denominator) = self.movement_speed(unit.kind, unit.player);
+                        let (mut speed, denominator) = self.movement_speed(unit.kind, unit.player);
+                        // Members can stand on different tiles: cover the fastest
+                        // possible road step, even if the first member is on grass.
+                        if !self.economy.roads.is_empty() && !unit.kind.is_naval() {
+                            speed += speed / 4;
+                        }
                         bound = bound.min(u128::from(speed.div_ceil(denominator)));
                     }
                 }
@@ -401,7 +406,11 @@ impl GameWorld {
         let credit = member.carry
             + matched_speed(
                 group.pace,
-                self.movement_speed(unit.state.kind, unit.state.player),
+                self.road_speed(
+                    unit.state.kind,
+                    unit.state.position,
+                    self.movement_speed(unit.state.kind, unit.state.player),
+                ),
             );
         Some(Motion {
             target: member.target,

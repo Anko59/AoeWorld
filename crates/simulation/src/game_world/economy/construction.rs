@@ -464,6 +464,9 @@ impl GameWorld {
             return None;
         }
         self.economy.buildings.get_mut(&id)?.state = ConstructionState::Complete;
+        if kind == BuildingKind::Road {
+            self.economy.roads.insert(footprint.min);
+        }
         self.eject_from_footprint(kind, footprint);
         if kind == BuildingKind::Farm {
             self.reset_farm_production(id);

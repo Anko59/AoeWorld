@@ -449,3 +449,22 @@ fn bridge_crosses_shallow_coastal_water() {
     );
     assert_eq!(world.unit(walker).unwrap().position.tile_floor(), deck);
 }
+
+#[test]
+fn road_line_cannot_replace_water_with_a_free_bridge() {
+    let (mut w, worker) = setup_axis(true);
+    let before = w.player_economy(PlayerId(0)).unwrap().stockpile;
+    assert_eq!(
+        w.issue_build_wall(
+            PlayerId(0),
+            &[worker],
+            BuildingKind::Road,
+            TileCoord::new(29, 20),
+            TileCoord::new(34, 20),
+            false
+        ),
+        Err(EconomyError::InvalidFootprint)
+    );
+    assert_eq!(w.player_economy(PlayerId(0)).unwrap().stockpile, before);
+    assert!(!w.buildings().any(|b| b.kind == BuildingKind::Road));
+}

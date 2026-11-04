@@ -5,6 +5,10 @@ use super::{GameWorld, GameplayService, Seed};
 mod tests;
 
 impl GameplayService {
+    pub fn roads_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
+        let (world, primary) = GameWorld::roads_demo(seed)?;
+        Ok(Self::from_world(world, primary, None, None))
+    }
     pub fn vassal_defense_demo(seed: Seed) -> Result<Self, aoe_simulation::EconomyError> {
         let (world, primary) = GameWorld::vassal_defense_demo(seed)?;
         Ok(Self::from_world(world, primary, None, None))

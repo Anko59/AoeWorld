@@ -225,7 +225,11 @@ impl GameWorld {
         }
         let id = state.id;
         let economy = tables.economy(self, state.player);
-        let (speed, denominator) = self.movement_speed_with(state.kind, economy);
+        let (speed, denominator) = self.road_speed(
+            state.kind,
+            state.position,
+            self.movement_speed_with(state.kind, economy),
+        );
         let mut speed_budget = u128::from(order.speed_carry) + u128::from(speed);
         order.speed_carry = 0;
         let remaining = order.segment_length.saturating_sub(order.travelled);

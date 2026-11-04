@@ -46,6 +46,8 @@ pub(crate) struct Economy {
     /// without scanning the world. Maintained as buildings are placed and
     /// removed; completion is checked per query.
     pub(crate) dropoffs: BTreeMap<(PlayerId, BuildingKind), Vec<EntityId>>,
+    /// Derived complete road tiles; empty worlds skip all road lookups.
+    pub(crate) roads: BTreeSet<TileCoord>,
     pub(crate) blocked_tiles: BTreeSet<TileCoord>,
     pub(crate) open_gates: BTreeSet<EntityId>,
     pub(crate) scouts: BTreeMap<EntityId, scouting::AutoScout>,

@@ -40,7 +40,7 @@ pub enum ClientMessage {
     },
     /// Place a foundation of `kind` with its top-left tile at `origin` and send
     /// the named villagers to build it. The cost is paid on acceptance. Use
-    /// `BuildWallOrder` for walls.
+    /// `BuildWallOrder` for wall or road lines.
     BuildOrder {
         sequence: u64,
         #[serde(deserialize_with = "economy::bounded_builders")]
@@ -49,7 +49,7 @@ pub enum ClientMessage {
         origin: TileCoord,
         queued: bool,
     },
-    /// Lay wall segments (`kind` is a palisade or stone wall) on the line from
+    /// Lay wall or road segments (`kind` is a palisade wall, stone wall or road) from
     /// `from` to `to`, both included.
     BuildWallOrder {
         sequence: u64,

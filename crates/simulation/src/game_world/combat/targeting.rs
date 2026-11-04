@@ -228,7 +228,7 @@ impl GameWorld {
                     continue;
                 };
                 if b.kind.is_barrier()
-                    || b.kind == BuildingKind::Bridge
+                    || matches!(b.kind, BuildingKind::Bridge | BuildingKind::Road)
                     || !area.accepts(Goal::Building(b.footprint))
                     || !self.building_visible_to(area.player, b.footprint)
                 {

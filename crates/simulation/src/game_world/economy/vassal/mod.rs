@@ -7,6 +7,8 @@ mod demo;
 mod development;
 mod hash;
 mod plan;
+mod road_demo;
+mod roads;
 mod threat;
 
 pub const VASSAL_LIMIT: usize = 20;
@@ -210,7 +212,9 @@ impl GameWorld {
                 .filter(|&unit| {
                     self.unit(unit).is_none_or(|u| {
                         u.hp == 0
-                            || (u.kind == UnitKind::Villager && !inside(center, u.position))
+                            || (u.kind == UnitKind::Villager
+                                && !inside(center, u.position)
+                                && d.status.next != Some(BuildingKind::Road))
                             || self.embarked(unit)
                     })
                 })

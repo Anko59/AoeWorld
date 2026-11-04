@@ -122,10 +122,17 @@ impl GameWorld {
         let stage = |k| match k {
             BuildingKind::WatchTower => 0,
             BuildingKind::Barracks => 1,
+            BuildingKind::Road => 3,
             _ => 2,
         };
         let mut wait = VassalWait::Blocked;
-        let mut candidates: Vec<_> = deficits;
+        let fortifying = deficits
+            .iter()
+            .any(|(_, (kind, _))| *kind != BuildingKind::Road);
+        let mut candidates: Vec<_> = deficits
+            .into_iter()
+            .filter(|(_, (kind, _))| !fortifying || *kind != BuildingKind::Road)
+            .collect();
         candidates.sort_by_key(|(i, (kind, _))| (stage(*kind), *i < cursor, *i));
         for (i, (kind, tile)) in candidates
             .into_iter()

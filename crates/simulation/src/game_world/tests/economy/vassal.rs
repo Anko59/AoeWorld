@@ -3,6 +3,8 @@ use crate::{Age, Stockpile};
 
 #[path = "vassal/ownership.rs"]
 mod ownership;
+#[path = "vassal/roads.rs"]
+mod roads;
 
 fn setup() -> (GameWorld, EntityId, EntityId) {
     let (mut w, _, _) = village();
@@ -159,13 +161,17 @@ fn vassal_fortification_replay_agrees_with_one_and_four_workers() {
                 }
                 advance(&mut w, 18_000);
                 assert!(w.vassal_status(v).unwrap().developed);
+                assert!(
+                    w.buildings()
+                        .any(|b| b.kind == BuildingKind::Road && b.is_complete())
+                );
                 w.canonical_hash()
             })
     };
     assert_eq!(
         run(1),
         run(4),
-        "Vassal replay must agree across 1-worker and 4-worker execution"
+        "vassal_roads_one_and_four_worker_replay_matches"
     );
 }
 

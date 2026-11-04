@@ -15,6 +15,9 @@ impl GameWorld {
         {
             self.remove_bridge_deck(span);
         }
+        if building.kind == BuildingKind::Road {
+            self.economy.roads.remove(&building.footprint.min);
+        }
         self.economy.active_training.remove(&id);
         self.economy.active_research.remove(&id);
         self.forget_building(id, building.footprint);

@@ -13,7 +13,7 @@ export function initLayers(changed) {
     button.type = 'button';
     button.textContent = `${names[i]} F${i + 1}`;
     button.title = key === 'ownership' ? 'Building plots and active Town Center work domains; political territory unavailable'
-      : key === 'roads' ? 'Known bridges; road network data is unavailable'
+      : key === 'roads' ? 'Known roads and bridges'
       : key === 'threats' ? 'Last seen enemies, up to two minutes old; never live positions under fog'
       : `Toggle ${names[i].toLowerCase()}`;
     button.setAttribute('aria-pressed', 'true');

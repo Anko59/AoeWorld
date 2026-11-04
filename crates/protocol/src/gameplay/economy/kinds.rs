@@ -102,9 +102,10 @@ pub enum BuildingKind {
     Bridge,
     StoneWall,
     StoneGate,
+    Road,
 }
 impl BuildingKind {
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 24] = [
         Self::TownCenter,
         Self::House,
         Self::LumberCamp,
@@ -128,6 +129,7 @@ impl BuildingKind {
         Self::Bridge,
         Self::StoneWall,
         Self::StoneGate,
+        Self::Road,
     ];
     /// Footprint side in tiles; the single wire-level size table.
     pub const fn side(self) -> i32 {
@@ -151,12 +153,16 @@ impl BuildingKind {
             | Self::StoneWall
             | Self::Outpost
             | Self::WatchTower
-            | Self::Bridge => 1,
+            | Self::Bridge
+            | Self::Road => 1,
         }
     }
     /// A one-tile wall segment, laid by dragging a line.
     pub const fn is_wall(self) -> bool {
         matches!(self, Self::PalisadeWall | Self::StoneWall)
+    }
+    pub const fn is_line(self) -> bool {
+        self.is_wall() || matches!(self, Self::Road)
     }
     pub const fn is_gate(self) -> bool {
         matches!(self, Self::PalisadeGate | Self::StoneGate)

@@ -50,7 +50,7 @@ export function initSettlements() {
       const live = new Set(), occupied = new Set(); hits = [];
       for (const [id,x0,y0,x1,y1,kind,colour,owned] of rows) {
         if (live.size >= 192) break;
-        if ([5,7,15,20,21,22].includes(kind)) continue;
+        if ([5,7,15,20,21,22,23].includes(kind)) continue;
         const [x,y] = project([(x0+x1)/2,(y0+y1)/2]);
         if (x < -24 || y < -24 || x > width+24 || y > height+24) continue;
         const cell = `${Math.floor(x/24)},${Math.floor(y/24)}`;

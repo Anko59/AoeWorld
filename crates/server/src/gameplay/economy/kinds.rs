@@ -178,6 +178,7 @@ pub(in crate::gameplay) fn native_building(kind: BuildingKind) -> aoe_simulation
         BuildingKind::Dock => N::Dock,
         BuildingKind::StoneWall => N::StoneWall,
         BuildingKind::StoneGate => N::StoneGate,
+        BuildingKind::Road => N::Road,
     }
 }
 pub(super) fn wire_building(kind: aoe_simulation::BuildingKind) -> BuildingKind {
@@ -206,6 +207,7 @@ pub(super) fn wire_building(kind: aoe_simulation::BuildingKind) -> BuildingKind 
         N::Dock => BuildingKind::Dock,
         N::StoneWall => BuildingKind::StoneWall,
         N::StoneGate => BuildingKind::StoneGate,
+        N::Road => BuildingKind::Road,
     }
 }
 pub(super) fn wire_kind(kind: aoe_simulation::UnitKind) -> UnitKind {

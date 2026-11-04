@@ -133,6 +133,17 @@ fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId
     };
     let rendered = map::scene::units(client, &scene);
     let world = map::world_at_screen(client, point);
+    let road = world.and_then(|p| {
+        let tile = aoe_core::TileCoord::new(p[0].floor() as i32, p[1].floor() as i32);
+        client
+            .village
+            .buildings
+            .iter()
+            .find(|b| {
+                b.hp > 0 && b.kind == aoe_protocol::BuildingKind::Road && b.contains_tile(tile)
+            })
+            .map(|b| (p[0] + p[1] + 2.0 * scene.height(p).unwrap_or(0.0), b.id))
+    });
     client
         .village
         .buildings
@@ -173,6 +184,7 @@ fn building_target(client: &Client, point: ScreenPoint) -> Option<(f64, EntityId
                     )))
             .then_some((depth, u.id))
         })
+        .chain(road)
         .max_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)))
 }
 

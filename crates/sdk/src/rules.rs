@@ -38,6 +38,7 @@ fn native_building(kind: BuildingKind) -> sim::BuildingKind {
         BuildingKind::Bridge => N::Bridge,
         BuildingKind::StoneWall => N::StoneWall,
         BuildingKind::StoneGate => N::StoneGate,
+        BuildingKind::Road => N::Road,
     }
 }
 

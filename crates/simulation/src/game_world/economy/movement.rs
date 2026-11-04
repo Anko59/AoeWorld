@@ -176,6 +176,24 @@ impl GameWorld {
         self.movement_speed_with(kind, self.player_economy(player))
     }
 
+    /// Apply the same tile-local bonus to ordinary movers and formation members.
+    #[inline]
+    pub(crate) fn road_speed(
+        &self,
+        kind: UnitKind,
+        at: aoe_core::WorldPosition,
+        (speed, denominator): (u64, u64),
+    ) -> (u64, u64) {
+        if !self.economy.roads.is_empty()
+            && !kind.is_naval()
+            && self.economy.roads.contains(&at.tile_floor())
+        {
+            (speed + speed / 4, denominator)
+        } else {
+            (speed, denominator)
+        }
+    }
+
     /// `movement_speed` for an already fetched owner economy.
     pub(crate) fn movement_speed_with(
         &self,
