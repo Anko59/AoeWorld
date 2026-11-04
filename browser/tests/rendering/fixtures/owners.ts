@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { scoutCombat, villagerCombat } from "../../wire/combat.js";
 import {
   darkAgeState,
-  marketPrices,
+  playerEconomyTail,
   townCenterState,
 } from "../../wire/buildings.js";
 import { disabledFog } from "../../wire/fog.js";
@@ -88,7 +88,7 @@ export async function ownersFixture(page: Page) {
           3,
           5,
           ...darkAgeState,
-          ...marketPrices,
+          ...playerEconomyTail,
           1,
           40,
           3,

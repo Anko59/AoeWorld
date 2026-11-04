@@ -1,5 +1,6 @@
 //! Bounded, versioned binary WebSocket contract.
 mod gameplay;
+pub use gameplay::HUMAN_COMMAND_BURST;
 pub use gameplay::MoveQueue;
 pub use gameplay::{AnimalKind, AnimalState, AnimalTask, MAX_ANIMALS};
 pub use gameplay::{CombatStance, FogState, Formation};

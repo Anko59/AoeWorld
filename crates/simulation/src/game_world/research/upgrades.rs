@@ -119,6 +119,7 @@ impl GameWorld {
         to: UnitKind,
         changed: &mut Vec<EntityId>,
     ) {
+        let mut upgraded = 0;
         let bonus = crate::unit_combat(to)
             .hp
             .saturating_sub(crate::unit_combat(from).hp);
@@ -127,12 +128,14 @@ impl GameWorld {
             let s = &mut u.state;
             if s.player == player && s.kind == from && s.hp > 0 {
                 s.kind = to;
+                upgraded += 1;
                 s.hp += bonus;
                 s.max_hp += bonus;
                 changed.push(s.id);
                 vision.push(s.id);
             }
         }
+        self.change_unit_census(player, Some(from), Some(to), upgraded);
         for b in self
             .economy
             .buildings

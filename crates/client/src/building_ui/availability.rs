@@ -33,7 +33,7 @@ impl Availability {
     }
 }
 
-fn cost(have: Stockpile, need: Stockpile) -> Availability {
+pub(crate) fn cost(have: Stockpile, need: Stockpile) -> Availability {
     if have.food < need.food {
         Availability::Food
     } else if have.wood < need.wood {
@@ -145,14 +145,22 @@ pub(crate) fn training(
     if b.training_queue.len() >= aoe_protocol::MAX_TRAINING_QUEUE {
         return Availability::QueueFull;
     }
-    let need = if kind == UnitKind::Villager {
+    let Some(need) = training_cost(kind) else {
+        return Availability::Unavailable;
+    };
+    cost(p.stockpile, need)
+}
+
+pub(crate) fn training_cost(kind: UnitKind) -> Option<Stockpile> {
+    let unit = &super::content::rules().units[kind as usize];
+    Some(if kind == UnitKind::Villager {
         Stockpile {
             food: super::content::rules().villager_food,
             ..Default::default()
         }
     } else {
         let Some(t) = unit.combat.training else {
-            return Availability::Unavailable;
+            return None;
         };
         Stockpile {
             food: t.cost.food,
@@ -160,8 +168,7 @@ pub(crate) fn training(
             gold: t.cost.gold,
             stone: t.cost.stone,
         }
-    };
-    cost(p.stockpile, need)
+    })
 }
 
 pub(crate) fn primary_training(

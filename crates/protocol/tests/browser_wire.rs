@@ -175,6 +175,8 @@ fn snapshot() -> GameplayServerMessage {
             population_cap: 10,
             age: aoe_protocol::Age::Dark,
             researched: 0,
+            recent_deliveries: [0; 4],
+            unit_counts: [0; 34],
             market_prices: aoe_protocol::MarketPrices::default(),
         }],
         buildings: vec![GameplayBuildingState {
@@ -208,7 +210,7 @@ fn browser_bytes() -> Vec<u8> {
     ];
     bytes.extend(hex(include_str!("../../../browser/tests/wire/player.hex")));
     bytes.extend(hex(include_str!(
-        "../../../browser/tests/wire/market-prices.hex"
+        "../../../browser/tests/wire/player-economy-tail.hex"
     ))); // Market prices: 100 gold per 100 units each.
     bytes.extend([
         1, 1, 0, 0, // Building count, id, player, TownCenter.

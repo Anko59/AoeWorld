@@ -3,6 +3,7 @@ import { MAX_MINIMAP_BYTES, decodeMinimap } from '/minimap.js';
 import { initStrategic } from '/navigation/strategic.js';
 import { initMinimapView } from '/navigation/view.js';
 import { initFogMap } from '/navigation/fog.js';
+import { initViews } from '/navigation/views.js';
 
 const MAX_NUMBER_TEXT = 64;
 
@@ -122,6 +123,13 @@ export function initNavigation() {
   document.addEventListener('focusin', event => { if (editable(event.target)) stopPanning(); });
 
   const view = initMinimapView(svg, panel, point => { if (point) pending = point; });
+  const views = initViews(([x, y, zoom]) => {
+    const hash = `x=${x}&y=${y}&zoom=${zoom}`;
+    // Panning and H can move the camera while leaving this fragment intact.
+    // Deliver the ordinary camera-fragment event even for an unchanged URL.
+    if (location.hash === `#${hash}`) window.dispatchEvent(new HashChangeEvent('hashchange'));
+    else location.hash = hash;
+  });
   const strategic = initStrategic(fog, view);
   svg.addEventListener('keydown', event => {
     const delta = direction(event.key);
@@ -229,6 +237,7 @@ export function initNavigation() {
 
   window.aoeNavigation = {
     clearGroups() {
+      views.reset();
       strategic.reset();
       groups.forEach(group => group.clear());
       groupTap = null;
@@ -264,6 +273,8 @@ export function initNavigation() {
     actors: view.actors,
     resources: strategic.resources,
     strategic,
+    production: strategic.production,
+    views,
     overview: () => expanded,
     fragment: () => parseCameraFragment(location.hash),
     map: changeMap,
@@ -273,6 +284,7 @@ export function initNavigation() {
       }
       world = [Math.max(1, state[0]), Math.max(1, state[1])];
       center = [state[2], state[3]];
+      views.present(state);
       view.update(world, center);
       datum('worldWidth', world[0]);
       datum('worldHeight', world[1]);

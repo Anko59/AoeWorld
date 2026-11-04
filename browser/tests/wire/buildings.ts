@@ -13,8 +13,8 @@ function fragment(name: string): number[] {
 export const townCenterState = fragment("town-center.hex");
 // After population_cap: age (Dark), researched (empty bitset).
 export const darkAgeState = fragment("player.hex");
-// After researched: the three Market prices (wood, food, stone), 100 gold each.
-export const marketPrices = fragment("market-prices.hex");
+// After researched: three Market prices, then Food/Wood/Gold/Stone credited deliveries.
+export const playerEconomyTail = fragment("player-economy-tail.hex");
 export const dockState = fragment("dock.hex");
 export const fishingShipState = fragment("fishing-ship.hex");
 // Feudal Age researched, every other technology still available.

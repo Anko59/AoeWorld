@@ -121,6 +121,10 @@ impl GameWorld {
 
     /// Population is freed now; native death playback precedes thirty seconds of corpse decay.
     pub(crate) fn kill_unit(&mut self, index: usize) {
+        let unit = self.units[index].state;
+        if unit.death_tick.is_none() {
+            self.change_unit_census(unit.player, Some(unit.kind), None, 1);
+        }
         self.cancel_auto_scout(self.units[index].state.id);
         self.stop_movement(index);
         let id = self.units[index].state.id;
@@ -197,6 +201,10 @@ impl GameWorld {
         let Some(&index) = self.lookup.get(&id) else {
             return;
         };
+        let unit = self.units[index].state;
+        if unit.hp > 0 {
+            self.change_unit_census(unit.player, Some(unit.kind), None, 1);
+        }
         self.clear_planner(index);
         let at = self.units[index].state.position;
         self.untrack_unit_at(id, at);

@@ -5,6 +5,7 @@ use super::{
 };
 use aoe_core::{EntityId, PlayerId, TileCoord, TileRect};
 use std::collections::{BTreeMap, BTreeSet};
+mod census;
 mod income;
 
 #[cfg(test)]
@@ -17,6 +18,7 @@ pub(crate) struct TickWork {
 
 #[derive(Debug, Default)]
 pub(crate) struct Economy {
+    pub(crate) census: std::sync::Mutex<census::Cache>,
     pub(crate) generals: super::general::Manager,
     pub(crate) stewards: steward::Manager,
     pub(crate) steward_homes: BTreeMap<EntityId, steward::Home>,

@@ -178,16 +178,24 @@ impl GameWorld {
     }
 
     pub(crate) fn upgrade_galleys(&mut self, player: PlayerId, changed: &mut Vec<EntityId>) {
+        let mut upgraded = 0;
         for unit in &mut self.units {
             let u = &mut unit.state;
             if u.player == player && u.kind == UnitKind::Galley && u.hp > 0 {
                 let bonus = unit_combat(UnitKind::WarGalley).hp - unit_combat(UnitKind::Galley).hp;
                 u.kind = UnitKind::WarGalley;
+                upgraded += 1;
                 u.hp += bonus;
                 u.max_hp += bonus;
                 changed.push(u.id);
             }
         }
+        self.change_unit_census(
+            player,
+            Some(UnitKind::Galley),
+            Some(UnitKind::WarGalley),
+            upgraded,
+        );
         for building in self
             .economy
             .buildings

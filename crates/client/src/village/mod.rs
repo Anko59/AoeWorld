@@ -29,6 +29,7 @@ pub(crate) struct Village {
     pub buildings: Vec<GameplayBuildingState>,
     pub tick: u64,
     pub pending_training: production::PendingTraining,
+    pub here_orders: production::here::Batch,
     pub last_hud: f64,
     pub move_cursor: bool,
     pub garrison_cursor: bool,

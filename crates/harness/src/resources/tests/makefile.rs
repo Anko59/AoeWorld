@@ -72,6 +72,7 @@ fn every_make_workload_container_has_shared_caps_and_immediate_admission() {
 #[test]
 fn long_make_targets_acquire_before_workload_prerequisites_and_recipes() {
     let long = [
+        "perf-census-instructions",
         "coverage",
         "test-e2e",
         "perf-smoke",

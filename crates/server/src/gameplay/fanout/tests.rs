@@ -447,3 +447,6 @@ fn session_views_reuse_the_same_bounded_worker_pool_across_ticks() {
         }
     }
 }
+
+#[path = "tests/census.rs"]
+mod census;

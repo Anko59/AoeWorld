@@ -59,6 +59,11 @@ export function playerState(
     100,
     100,
     100,
+    0,
+    0,
+    0,
+    0, // Actual deliveries in the current player schema.
+    ...Array<number>(34).fill(0), // Current authoritative census.
   ];
 }
 
@@ -69,6 +74,7 @@ export async function productionFixture(
   buildings: ProductionBuilding[],
   age = 0,
   researched = 0,
+  verdicts: { rallyResult?: number; trainResults?: number[] } = {},
 ) {
   let revision: number[] = [1],
     socket: WebSocketRoute | undefined,
@@ -110,12 +116,25 @@ export async function productionFixture(
           if (byte < 128) break;
         }
       }
+      if (bytes[0] === 20) {
+        route.send(
+          Buffer.from([
+            3,
+            bytes[1] ?? 0,
+            verdicts.rallyResult ?? 0,
+            ...uint(tick),
+          ]),
+        );
+      }
       if (bytes[0] === 5) {
         const building = buildings.find((b) => b.id === bytes[2]);
         if (building) {
-          building.queue ??= [];
-          building.queue.push(bytes[3] ?? 0);
-          route.send(Buffer.from([3, bytes[1] ?? 0, 0, ...uint(tick)]));
+          const result = verdicts.trainResults?.shift() ?? 0;
+          if (result === 0) {
+            building.queue ??= [];
+            building.queue.push(bytes[3] ?? 0);
+          }
+          route.send(Buffer.from([3, bytes[1] ?? 0, result, ...uint(tick)]));
           update();
         }
       }

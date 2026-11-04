@@ -17,6 +17,8 @@ fn player(age: Age, researched: u64) -> GameplayPlayerState {
         population_cap: 5,
         age,
         researched,
+        recent_deliveries: [0; 4],
+        unit_counts: [0; 34],
         market_prices: MarketPrices::default(),
     }
 }
@@ -125,10 +127,9 @@ fn research_state_has_current_golden_wire_and_round_trips() {
 }
 
 const GOLDEN_TICK: &[u8] = &[
-    2, 2, 9, 0, 0, 1, 0, 0, 0, 0, 0, 4, 5, 1, 5, 100, 100, 100, 1, 1, 0, 0, 10, 10, 18, 18, 1, 232,
-    7, 224, 18, 224, 18, 8, 0, 0, 1, 0, 125, 244, 3, 0, 0, 0, 0, 0, 0,
-    0, // Empty garrison list.
-    0, // Raster bridge span is None for this Town Center: current wire pin.
+    2, 2, 9, 0, 0, 1, 0, 0, 0, 0, 0, 4, 5, 1, 5, 100, 100, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 10,
+    10, 18, 18, 1, 232, 7, 224, 18, 224, 18, 8, 0, 0, 1, 0, 125, 244, 3, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
 #[test]

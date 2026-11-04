@@ -44,6 +44,18 @@ function background(art) {
     size:`${100*art.page_width/art.width}% ${100*art.page_height/art.height}%`,
     position:`${100*art.x/(art.page_width-art.width || 1)}% ${100*art.y/(art.page_height-art.height || 1)}%` };
 }
+export function panelArt(node, role) {
+  const style = document.documentElement.dataset.interfaceStyle ?? 'western';
+  const art = catalog?.panels?.[`${style}-${role}`];
+  if (!validArt(art)) return;
+  const crop = background(art);
+  node.style.backgroundImage = crop.image; node.style.backgroundSize = crop.size;
+  node.style.backgroundPosition = crop.position;
+  for (const iconNode of node.querySelectorAll('.art-icon:not([data-hydrated])')) {
+    const cell = catalog?.[iconNode.dataset.uiGroup]?.[iconNode.dataset.uiId];
+    if (validArt(cell)) { iconNode.innerHTML = original(cell); iconNode.dataset.hydrated = 'true'; }
+  }
+}
 export function initArt() {
   document.documentElement.dataset.interfaceArt='fallback';
   for (const node of document.querySelectorAll('#top-bar .counter>.icon, #top-bar .worker-count>.icon')) {

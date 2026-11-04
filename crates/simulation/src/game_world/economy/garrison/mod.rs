@@ -230,6 +230,7 @@ impl GameWorld {
                 UnitTask::Idle
             };
             self.remove_unit(id);
+            self.change_unit_census(unit.player, None, Some(unit.kind), 1);
             let Some(shelter) = self.economy.buildings.get_mut(&building) else {
                 self.insert_map_unit(restored, next_hit_tick);
                 changed.push(id);

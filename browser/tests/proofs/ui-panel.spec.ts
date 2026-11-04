@@ -15,6 +15,7 @@ import { pressureProof } from "./pressure.js";
 import { townCenterProof } from "./town-center.js";
 import { imperialArtProof } from "./imperial/art.js";
 import { startupProof } from "./imperial/startup.js";
+import { skirmishStartupProof } from "./imperial/skirmish-startup.js";
 import { centerVillage } from "../village/fixtures/resources.js";
 
 test.use({ video: { mode: "on", size: { width: 1280, height: 720 } } });
@@ -51,6 +52,11 @@ test("local original panel proof with real selection and training", async ({
   expect(["8080", "8081", "8097"]).not.toContain(url.port);
   const health = await page.request.get(`${config.url}health`);
   expect(health.ok()).toBe(true);
+  if (config.phase.startsWith("skirmish-startup-")) {
+    test.setTimeout(600_000);
+    await skirmishStartupProof(page, config.url, config.phase.slice(17));
+    return;
+  }
   if (config.phase === "imperial-load-compare") {
     const browser = page.context().browser();
     if (!browser) throw new Error("A fresh browser context is required");

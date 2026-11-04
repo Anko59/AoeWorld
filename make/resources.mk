@@ -29,7 +29,7 @@ resource-browser-oom-child: .cache/browser-resource-tests
 	@$(BROWSER_RUN) $(ROOT)/.cache/browser-resource-tests --child
 
 # Probe before even building the launcher; the launcher still owns real admission.
-LONG_GOALS := coverage preflight preflight-unit test-e2e release-build scale-match scale-match-smoke perf-baseline-propose perf-instructions perf-scale perf-scale-smoke perf-groups perf-groups-instructions perf-groups-profile perf-smoke perf-late-game perf-late-game-instructions perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30
+LONG_GOALS := perf-census-instructions coverage preflight preflight-unit test-e2e release-build scale-match scale-match-smoke perf-baseline-propose perf-instructions perf-scale perf-scale-smoke perf-groups perf-groups-instructions perf-groups-profile perf-smoke perf-late-game perf-late-game-instructions perf-ci perf-full perf-pressure perf-stress perf-soak-10 perf-soak-30
 ifneq ($(strip $(filter $(LONG_GOALS),$(MAKECMDGOALS))),)
 ifneq ($(strip $(filter-out test-e2e,$(filter $(LONG_GOALS),$(MAKECMDGOALS)))$(if $(strip $(AOE_E2E_SPECS)),, $(filter test-e2e,$(MAKECMDGOALS)))),)
 .PHONY: long-precheck
