@@ -28,13 +28,14 @@ export function initStrategic(fog, actors) {
   let resourceSnapshot = false;
   let modelRevision = 0, modelSignature = '', lastState = null;
   const tokens = initTokens(), contacts = initContacts();
-  const cockpit = initCockpit(), reveal = initReveal();
+  const cockpit = initCockpit(() => { modelRevision++; previous = ''; if (lastState) frame(lastState); }), reveal = initReveal();
   const settlements = initSettlements();
   const mapKey = initMapKey();
   const layers = initLayers(() => {
     modelRevision++;
     if (lastState) frame(lastState);
   });
+  cockpit.mount();
   function frame(state) {
     // Renderer fallback replaces a context-bound canvas during startup.
     const scene = document.getElementById('scene');

@@ -5,11 +5,7 @@ html:is([data-lod=map],[data-lod=markers]) #bottom-panel > * { pointer-events:au
 html:is([data-lod=map],[data-lod=markers]) #bottom-panel:has(#selection[data-count="0"]) #commands,
 html:is([data-lod=map],[data-lod=markers]) #selection[data-count="0"] { visibility:hidden; }
 html:is([data-lod=map],[data-lod=markers]) #minimap { position:fixed; right:0; bottom:0; }
-html:is([data-lod=map],[data-lod=markers]):has(#selection:not([data-count="0"])) #strategic-views { left:auto; right:12px; top:140px; bottom:auto; width:320px; }
 html[data-lod=map] #minimap,html[data-lod=markers] #minimap { height:208px; width:230px; }
-html[data-lod=map] #strategic-views,html[data-lod=markers] #strategic-views { top:auto; bottom:16px; left:12px; right:auto; width:310px; }
-html[data-lod=map] #units-here,html[data-lod=markers] #units-here { top:auto; bottom:196px; max-height:220px; }
-html[data-lod=map] #strategic-cockpit,html[data-lod=markers] #strategic-cockpit { max-height:calc(100vh - 310px); }
 #strategic-map-key { position:fixed; left:50%; bottom:16px; translate:-50% 0; z-index:2; pointer-events:none; color:#eee2bb; text-shadow:0 1px 2px #101d20; background:#192725d9; border:1px solid #9c906455; padding:7px 12px; font:11px Georgia,serif; }
 #strategic-map-key>div { display:flex; align-items:center; justify-content:center; gap:12px; }
 #strategic-map-key span:before { content:''; display:inline-block; width:8px; height:8px; margin-right:4px; border:1px solid #ddd5ac66; }
@@ -19,3 +15,37 @@ html[data-lod=map] #strategic-cockpit,html[data-lod=markers] #strategic-cockpit 
 #strategic-map-key .holdings:before { background:#4191f577; border-color:#79b9ff; }
 #strategic-map-key .map-scale { margin-top:7px; gap:8px; font:10px system-ui,sans-serif; }
 .map-scale i { display:block; height:5px; border:1px solid #e3d6b0; border-top:0; transform:rotate(26.565deg); }
+
+/* One drawer ends above the ordinary General/Steward selection controls. */
+html:is([data-lod=map],[data-lod=markers]) #strategic-cockpit {
+  inset:58px 12px auto; width:auto; height:42px; max-height:none; overflow:visible;
+  display:flex; align-items:center; gap:20px; padding:4px 10px;
+}
+#strategic-cockpit > button { white-space:nowrap; font-size:12px; }
+#strategic-cockpit > .cockpit-resources { display:flex; flex:1; justify-content:space-around; gap:12px; }
+#strategic-cockpit > .cockpit-resources .icon { width:22px; height:22px; }
+#strategic-cockpit > .cockpit-resources b { font-size:14px; line-height:16px; }
+.cockpit-population { white-space:nowrap; }
+#cockpit-details {
+  position:fixed; left:12px; top:106px; bottom:calc(var(--bottom) + 12px);
+  width:328px; overflow:auto; padding:12px; background:#d6c494; color:#261d13;
+  border:2px solid #9d8150; box-shadow:0 3px 12px #0009;
+}
+#cockpit-details :is(#strategic-views,#strategic-layers,#units-here) {
+  position:static; inset:auto; width:auto; max-width:none; max-height:none;
+  margin:10px 0 0; box-shadow:none;
+}
+#cockpit-details #strategic-layers { justify-content:flex-start; }
+#cockpit-details #units-here { padding:10px; }
+#cockpit-details #strategic-views { padding:10px; }
+html:is([data-lod=map],[data-lod=markers]) #performance-overlay { top:110px; left:auto; right:12px; }
+
+/* A transformed strip would make its fixed drawer move during first reveal. */
+html[data-cockpit-reveal=cockpit] #strategic-cockpit { animation-name:cockpit-strip-arrives; }
+@keyframes cockpit-strip-arrives { from { opacity:0; } to { opacity:1; } }
+html:is([data-lod=map],[data-lod=markers]):has(#cockpit-details:not([hidden])) #general-panel { left:352px; max-height:calc(100vh - 330px); overflow:auto; }
+html:is([data-lod=map],[data-lod=markers]) #strategic-label { top:106px; }
+html:is([data-lod=map],[data-lod=markers]) #performance-overlay { top:138px; }
+html:is([data-lod=map],[data-lod=markers]):has(#selection:not([data-count="0"])) #strategic-map-key { left:auto; right:242px; translate:none; bottom:calc(var(--bottom) + 12px); }
+#strategic-cockpit > [data-army-total] { flex:none; min-width:72px; text-align:center; white-space:nowrap; }
+#strategic-cockpit > .cockpit-resources { min-width:0; }

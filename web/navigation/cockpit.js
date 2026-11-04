@@ -3,19 +3,52 @@ import { initFarBuilding } from '/navigation/building.js';
 import { initProduction } from '/navigation/production.js';
 
 // One retained panel; values are reports, never estimates from stock changes.
-export function initCockpit() {
+export function initCockpit(changed = () => {}) {
   const panel = document.createElement('aside');
   panel.id = 'strategic-cockpit'; panel.hidden = true;
   panel.setAttribute('aria-label', 'Kingdom cockpit');
-  panel.innerHTML = `<header><b>Kingdom cockpit</b><span>Held · collected / minute</span></header>
+  panel.innerHTML = `<button type="button" aria-label="Kingdom controls" aria-expanded="true" aria-controls="cockpit-details">Kingdom controls ▾</button>
     <div class="cockpit-resources">${['wood', 'food', 'gold', 'stone'].map(name =>
       `<div>${icon('resources', name, name)}<span><b data-stock="${name}">?</b><small data-income="${name}">?</small></span></div>`).join('')}</div>
-    <div class="cockpit-census"><span>Population <b data-population>?</b></span><span>Occupied land <b data-land>?</b></span></div>
+    <span class="cockpit-population">Population <b data-population>?</b></span><b data-army-total>Army ?</b>
+    <section id="cockpit-details" aria-label="Kingdom controls">
+    <header><b>Kingdom cockpit</b><span>Held · collected / minute</span></header>
+    <div class="cockpit-census"><span>Occupied land <b data-land>?</b></span></div>
     <p class="cockpit-note">Collections: last minute in 5s buckets (55–60s). Land: building footprints, not borders.</p>
-    <div class="cockpit-army" aria-label="Army by type"></div>`;
+    <div class="cockpit-army" aria-label="Army by type"></div></section>`;
   document.body.append(panel);
   const production = initProduction();
-  const building = initFarBuilding(panel);
+  const details = panel.querySelector('#cockpit-details');
+  const building = initFarBuilding(details);
+  const toggle = panel.querySelector('[aria-controls]');
+  let collapsed = false, identity = '', tokenSeen = null, generation = 0;
+  function collapse(value) {
+    collapsed = value; details.hidden = value;
+    toggle.setAttribute('aria-expanded', String(!value));
+    toggle.textContent = `Kingdom controls ${value ? '▸' : '▾'}`;
+  }
+  function persist() {
+    if (!identity) return;
+    try { sessionStorage.setItem('aoeworld.cockpit-layout', JSON.stringify({ identity, collapsed })); } catch { /* In-memory choice remains usable. */ }
+  }
+  toggle.addEventListener('click', () => { generation++; collapse(!collapsed); persist(); changed(); });
+  async function restore() {
+    let token = '';
+    try { token = localStorage.getItem('aoeworld.resume-token') ?? ''; } catch { /* In-memory fallback. */ }
+    if (token === tokenSeen) return;
+    tokenSeen = token;
+    const current = ++generation;
+    identity = '';
+    if (!token) return;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+    if (token !== tokenSeen) return;
+    identity = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+    if (current !== generation) { persist(); return; }
+    let saved;
+    try { saved = JSON.parse(sessionStorage.getItem('aoeworld.cockpit-layout') ?? 'null'); } catch { /* Default expanded. */ }
+    const next = saved?.identity === identity && saved.collapsed === true;
+    if (next !== collapsed) { collapse(next); changed(); }
+  }
   let signature = '';
   const number = value => Number.isFinite(value) ? value.toLocaleString('en-US') : '?';
   function text(selector, value) {
@@ -24,7 +57,7 @@ export function initCockpit() {
   }
   function update(values = [], census = []) {
     production.ready(Number.isFinite(values[4]) && document.getElementById('connection')?.textContent === 'connected');
-    panelArt(panel, 'selection');
+    panelArt(panel, 'selection'); panelArt(details, 'selection');
     // Decode borrowed WASM slices immediately; no retained WASM-memory view.
     ['wood', 'food', 'gold', 'stone'].forEach((name, index) => {
       text(`[data-stock="${name}"]`, number(values[index]));
@@ -40,6 +73,7 @@ export function initCockpit() {
     }
     const rows = [...counts].sort((a, b) => a[0] - b[0]);
     const known = census.length === trainingKinds.length;
+    text('[data-army-total]', `Army ${known ? number(rows.reduce((sum, [, n]) => sum + n, 0)) : '?'}`);
     const next = JSON.stringify([known, rows]);
     if (next !== signature) {
       signature = next;
@@ -48,5 +82,12 @@ export function initCockpit() {
         + rows.map(([kind, count]) => `<span>${entityIcon(trainingKinds[kind])}${trainingKinds[kind]}: ${number(count)}</span>`).join('');
     }
   }
-  return { update, production, building, show(value) { panel.hidden = !value; production.show(value); building.show(value); }, reset() { signature = ''; production.reset(); building.reset(); update(); } };
+  return { update, production, building,
+    mount() {
+      for (const id of ['strategic-layers', 'strategic-views', 'units-here']) {
+        const node = document.getElementById(id);
+        if (node) details.append(node);
+      }
+    },
+    show(value) { if (value) void restore(); panel.hidden = !value; production.show(value); building.show(value); }, reset() { generation++; tokenSeen = null; identity = ''; collapse(false); signature = ''; production.reset(); building.reset(); update(); } };
 }
