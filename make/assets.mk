@@ -11,7 +11,7 @@ export DE_DIR
 assets-unit-table-de:
 	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets unit-table /de-install
 assets-import-de:
-	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --locked -p aoe-harness -- assets import-de /de-install $(if $(AOE_ASSET_PACK),$(call MOUNT_QUOTE,$(AOE_ASSET_PACK)))
+	@$(subst $(TOOL_IMAGE),$(call BIND_MOUNT,$(DE_DIR),/de-install,1) $(TOOL_IMAGE),$(DOCKER_RUN)) cargo run --release --locked -p aoe-harness -- assets import-de /de-install $(if $(AOE_ASSET_PACK),$(call MOUNT_QUOTE,$(AOE_ASSET_PACK)))
 
 .PHONY: assets-de-reference
 assets-de-reference:
