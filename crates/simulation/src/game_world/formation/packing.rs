@@ -13,6 +13,10 @@ impl GameWorld {
         }
         group.packing_files = files;
         let count = group.members.len();
+        // A pair of sixteen-row cohorts still uses ordinary compact steering.
+        // Larger selections need an elastic approach once a file exceeds that
+        // window. Preserve the decision across later clearance changes.
+        group.long_files |= count > 32 && count.div_ceil(files.max(1)) > 16;
         let (x, y) = (i64::from(heading.x), i64::from(heading.y));
         let length = (x * x + y * y).isqrt().max(1);
         let mut positions = Vec::with_capacity(count);
@@ -29,6 +33,17 @@ impl GameWorld {
                 member.start_offset = WorldPosition::new(
                     ((-y * dx + x * dy) / length) as i32,
                     ((x * dx + y * dy) / length) as i32,
+                );
+            } else if group.long_files {
+                let (point, tangent) = group
+                    .path
+                    .corridor_point(member.progress, &mut member.cursor);
+                let (dx, dy) = (i64::from(p.x - point.x), i64::from(p.y - point.y));
+                let (tx, ty) = (i64::from(tangent.x), i64::from(tangent.y));
+                let length = (tx * tx + ty * ty).isqrt().max(1);
+                member.start_offset = WorldPosition::new(
+                    ((-ty * dx + tx * dy) / length) as i32,
+                    (member.progress - group.progress) as i32,
                 );
             }
             positions.push((
@@ -65,6 +80,42 @@ impl GameWorld {
                 group.members[at].rank = file * rows + row;
             }
         }
+        if !group.long_files {
+            return;
+        }
+        // Turning a compact crowd into a long column needs room to stretch.
+        // Reserve its file order now, but blend from each physical lane rather
+        // than pulling all rows into their narrow files in one tick.
+        let low = group
+            .members
+            .iter()
+            .map(|m| m.start_offset.y)
+            .min()
+            .unwrap_or(0);
+        let high = group
+            .members
+            .iter()
+            .map(|m| m.start_offset.y)
+            .max()
+            .unwrap_or(0);
+        let column = (rows.saturating_sub(1) as i64) * i64::from(group.narrow_gap);
+        group.form_start = group.progress;
+        group.form_distance = if column > i64::from(high - low) + 2 * 1024 {
+            group
+                .members
+                .iter()
+                .map(|m| {
+                    path::distance(
+                        m.start_offset,
+                        slots::packed(m.rank, count, files, group.narrow_gap),
+                    ) * 2
+                })
+                .max()
+                .unwrap_or(0)
+                .min(path::distance(group.anchor, group.destination) / 2)
+        } else {
+            0
+        };
     }
 }
 

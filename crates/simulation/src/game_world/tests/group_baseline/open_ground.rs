@@ -56,9 +56,9 @@ fn sixty_militia_in_line_cross_a_two_tile_forest_pass() {
         "pass/open must be at most 1.6: {pass:?} / {open:?}"
     );
     // The single-lane bridge rules lengthen this tail by one tile.
-    assert_eq!((pass.column_ticks, pass.longest_tiles), (0, 13));
+    assert_eq!((pass.column_ticks, pass.longest_tiles), (0, 12));
     assert_eq!(pass.min_frontage_when_long, i64::MAX);
     // The corridor through the pass and lateral squeeze files: 156 ticks
     // sooner; the ordered bridge-lane rules add 22 ticks here.
-    assert_eq!((pass.first(), pass.last()), (2232, 2381));
+    assert_eq!((pass.first(), pass.last()), (2218, 2375));
 }

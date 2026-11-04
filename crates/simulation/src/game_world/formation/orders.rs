@@ -140,6 +140,7 @@ impl GameWorld {
             narrow_gap: diameter + step + 16,
             slots_tight: false,
             packing_files: ids.len(),
+            long_files: false,
             form_start: 0,
             form_distance: 0,
             half_width: 0,

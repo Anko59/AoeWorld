@@ -48,10 +48,10 @@ fn run(case: &str, count: usize, limit: u32) {
         "river" => {
             result.assert_arrival_and_work(count);
             assert!(result.max_tick_route_work <= 24_576, "{result:?}");
-            assert_eq!((result.max_stuck_ticks, result.oscillations), (5, 2));
+            assert_eq!((result.max_stuck_ticks, result.oscillations), (8, 3));
             assert_eq!(
                 (result.last_tick, result.route_work, result.collision_work),
-                (5527, 55473, 5423087)
+                (5522, 55349, 5398824)
             );
         }
         "long" => {

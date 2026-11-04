@@ -94,7 +94,11 @@ fn late_game_full_population_replays_at_the_profile_checkpoint() {
     // give-up change it again, as do per-unit group exits, arrival and attack-move engagement. Preserve the
     // exact workload, activity floors and complete 1/4-worker comparison.
     let single = run(1);
-    assert_eq!(single, run(4));
+    assert_eq!(
+        single,
+        run(4),
+        "late_game_one_and_four_worker_replay_matches"
+    );
     // Regenerate with the focused late_game_full_population_replays test.
     let checkpoint: String = single.iter().map(|byte| format!("{byte:02x}")).collect();
     assert_eq!(

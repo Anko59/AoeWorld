@@ -18,7 +18,7 @@ impl GameWorld {
                 group.facing as u8,
                 u8::from(group.settled),
                 u8::from(group.direct),
-                u8::from(group.attack_move),
+                u8::from(group.attack_move) | (u8::from(group.long_files) << 1),
             ]);
             for p in [
                 group.anchor,

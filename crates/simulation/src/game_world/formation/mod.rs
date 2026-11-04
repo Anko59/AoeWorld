@@ -104,6 +104,8 @@ pub(crate) struct Group {
     /// Derived from the hashed offsets/gap whenever ranks or membership change.
     slots_tight: bool,
     packing_files: usize,
+    /// Long files retain their spacing across later clearance/rank changes.
+    long_files: bool,
     form_start: i64,
     form_distance: i64,
     half_width: i32,

@@ -15,7 +15,6 @@ impl GameWorld {
         }
         let leaders = self.formations.keys().copied().collect::<Vec<_>>();
         let mut movers = Vec::new();
-        // Groups read the same unit snapshot and own disjoint member state.
         // Temporarily detach the map so no parallel task can observe another
         // group's intermediate targets. Canonical apply order stays unchanged.
         {
@@ -47,7 +46,6 @@ impl GameWorld {
                 );
             }
         }
-        // The BTreeMap and canonical member storage give group-then-unit order.
         scratch.group_phase = true;
         {
             let _span = self
@@ -124,7 +122,6 @@ impl GameWorld {
         // has left it. Sample the corridor back to the rearmost member too, so
         // the block keeps its narrow files until the whole column is across
         // (a wider layout would aim members on the deck into the water).
-        // Open ground with an unpacked block needs no such scan.
         let rear = if clearance < 15 || group.packing_files < group.members.len() {
             group
                 .members
@@ -168,6 +165,7 @@ impl GameWorld {
         self.assign_packing_ranks(group, files.min(count), heading);
         let rotation = layout::Rotation::new(heading);
         let forming = (group.progress - group.form_start).clamp(0, group.form_distance);
+        let stretching = files < count && group.long_files;
         let last = group.path.points.len().saturating_sub(1);
         let end = group.path.points[last];
         let before = group.path.points[last.saturating_sub(1)];
@@ -180,17 +178,25 @@ impl GameWorld {
             // the route's bends. Keep its shared corridor until it catches up.
             let catching_up = group.progress - member.progress > i64::from(group.half_width) + 1024;
             member.following_corridor |= !navigating && !group.direct && catching_up;
+            let blend = |start: i32, end: i32| {
+                if group.form_distance == 0 {
+                    end
+                } else {
+                    (i64::from(start) + i64::from(end - start) * forming / group.form_distance)
+                        as i32
+                }
+            };
             let offset = if files < count {
-                slots::packed(member.rank, count, files, group.narrow_gap)
+                let packed = slots::packed(member.rank, count, files, group.narrow_gap);
+                if group.long_files {
+                    WorldPosition::new(
+                        blend(member.start_offset.x, packed.x),
+                        blend(member.start_offset.y, packed.y),
+                    )
+                } else {
+                    packed
+                }
             } else {
-                let blend = |start: i32, end: i32| {
-                    if group.form_distance == 0 {
-                        end
-                    } else {
-                        (i64::from(start) + i64::from(end - start) * forming / group.form_distance)
-                            as i32
-                    }
-                };
                 WorldPosition::new(
                     blend(member.start_offset.x, member.offset.x),
                     blend(member.start_offset.y, member.offset.y),
@@ -223,7 +229,14 @@ impl GameWorld {
                 member.cursor = projected_cursor;
             }
             member.target_progress = (group.progress + i64::from(offset.y))
-                .max(member.progress + if member.following_corridor { 1024 } else { 0 })
+                .max(
+                    member.progress
+                        + if member.following_corridor && !stretching {
+                            1024
+                        } else {
+                            0
+                        },
+                )
                 .min(member.progress + 1024);
             let mut at = member.cursor;
             let (point, next_heading) = if files < count || member.following_corridor {
@@ -324,7 +337,7 @@ impl GameWorld {
             if navigating
                 && !group.direct
                 && !member.arrived
-                && !member.following_corridor
+                && (!member.following_corridor || stretching)
                 && !final_approach
             {
                 // Keep advancing while forming; an ahead member may move
@@ -338,11 +351,17 @@ impl GameWorld {
                     member.target.y -= (y * dot / length) as i32;
                 }
                 if path::distance(member.target, unit.position) <= 1 && !group.attack_move {
-                    // An advanced row keeps walking at 3/4 of anchor pace,
-                    // retaining its lateral file while the rear catches up.
+                    // A long column leaves room for its following rows while
+                    // stretching. Ordinary compact blocks keep their 3/4 pace.
                     // A single file keeps the full pace so the exit of a
                     // one-lane passage never backs up into it.
-                    let quarters = if files == 1 { 4 } else { 3 };
+                    let quarters = if files == 1 {
+                        4
+                    } else if stretching {
+                        1
+                    } else {
+                        3
+                    };
                     let advance = (u128::from(group.pace.0) * quarters
                         / (u128::from(group.pace.1) * 4))
                         .clamp(1, 512) as i64;
